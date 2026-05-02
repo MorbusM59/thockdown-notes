@@ -76,17 +76,17 @@ export function computeWrappedLines(
         );
         let rowEnd = maxRowEnd;
 
-        // Prefer wrapping at whitespace to better match textarea pre-wrap behavior.
-        // CSS pre-wrap keeps trailing whitespace on the current visual line (the
-        // space "falls off" the right edge but is still part of that row). The
-        // next word begins on the following row.
+        // Prefer wrapping at whitespace while keeping wrapped rows free from
+        // leading spaces. When a boundary space would be the first char on the
+        // next row, move the entire trailing word to the next row as well.
         if (maxRowEnd < lineCharCount) {
           const charAtBoundary = logicalLine[maxRowEnd];
-          const isAtWordBoundary = charAtBoundary === ' ' || charAtBoundary === '\t';
-          if (isAtWordBoundary) {
-            // Include the trailing space/tab in this row so that the caret
-            // position after it maps to this row, matching browser behaviour.
-            rowEnd = maxRowEnd + 1;
+          const isBoundaryWhitespace = charAtBoundary === ' ' || charAtBoundary === '\t';
+          if (isBoundaryWhitespace) {
+            const trailingWordStart = findWordStartBeforeIndex(logicalLine, rowStart, maxRowEnd);
+            if (trailingWordStart > rowStart) {
+              rowEnd = trailingWordStart;
+            }
           } else {
             const breakPos = findWrapBreak(logicalLine, rowStart, maxRowEnd);
             if (breakPos > rowStart) {
@@ -196,6 +196,19 @@ function findWrapBreak(line: string, rowStart: number, maxRowEnd: number): numbe
   return maxRowEnd;
 }
 
+function findWordStartBeforeIndex(line: string, rowStart: number, index: number): number {
+  let cursor = index - 1;
+  while (cursor >= rowStart) {
+    const char = line[cursor];
+    if (char === ' ' || char === '\t') {
+      return cursor + 1;
+    }
+    cursor -= 1;
+  }
+
+  return rowStart;
+}
+
 /**
  * Find which wrapped row contains the given character position.
  */
@@ -221,22 +234,16 @@ export function findRowForCharIndex(
     }
   }
 
-  // Walk forward from candidate to resolve shared wrapped-row boundaries.
+  // Shared boundary between wrapped rows belongs to the previous visual row.
+  // This matches textarea caret placement for End/Home on soft wraps.
   for (let i = candidate; i < wrappedLines.length; i += 1) {
     const row = wrappedLines[i];
-    const isLastRow = i === wrappedLines.length - 1;
-    const isEmptyRow = row.startCharIndex === row.endCharIndex;
 
     if (charIndex < row.startCharIndex) {
       return i;
     }
 
-    if (charIndex < row.endCharIndex) {
-      return i;
-    }
-
-    // Shared boundary belongs to next wrapped row unless this row is terminal.
-    if (charIndex === row.endCharIndex && (row.isLineEnd || isLastRow || isEmptyRow)) {
+    if (charIndex <= row.endCharIndex) {
       return i;
     }
   }

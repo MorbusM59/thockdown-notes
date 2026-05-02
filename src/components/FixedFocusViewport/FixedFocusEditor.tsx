@@ -275,25 +275,38 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     }
   }, []);
 
-  // Build model for zone slicing + layout; viewport driven entirely by centerStartRow state
+  // Build model for zone slicing + layout; viewport driven entirely by centerStartRow state.
+  // Contract:
+  // - rightmost 1 column is the scrollbar indicator
+  // - next 2 columns are reserved visual-only columns (no text)
+  // - text wraps within the remaining columns
+  const totalColumnCount = Math.max(1, Math.floor(contentWidthPx / charCellWidthPx));
+  const gridColumnCount = Math.max(0, totalColumnCount - 1);
+  const reservedVisualOnlyColumns = 2;
+  const textColumnCount = Math.max(1, gridColumnCount - reservedVisualOnlyColumns);
+  const wrapWidthPx = Math.max(1, textColumnCount * charCellWidthPx);
+  const textareaRightPaddingPx = Math.max(
+    horizontalPaddingPx,
+    containerWidthPx - horizontalPaddingPx - wrapWidthPx
+  );
   const model = useMemo(() => {
     const m = new FixedFocusViewportModel(
       fontSizePx,
       spacingPreset,
-      contentWidthPx,
+      wrapWidthPx,
       drawableHeightPx,
       fontFamily,
       resolvedTopRowCount,
       resolvedBottomRowCount,
       charCellWidthPx
     );
-    m.setText(text, contentWidthPx);
+    m.setText(text, wrapWidthPx);
     return m;
   }, [
     text,
     fontSizePx,
     spacingPreset,
-    contentWidthPx,
+    wrapWidthPx,
     drawableHeightPx,
     fontFamily,
     resolvedTopRowCount,
@@ -320,9 +333,9 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   const topRows = model.getTopZoneRows();
   const centerRows = model.getCenterZoneRows();
   const bottomRows = model.getBottomZoneRows();
-  const gridColumnCount = Math.max(0, Math.floor(contentWidthPx / charCellWidthPx));
   const gridRowCount = Math.max(0, Math.floor(drawableHeightPx / metrics.rowHeightPx));
   const quantizedGridWidthPx = gridColumnCount * charCellWidthPx;
+  const quantizedBackgroundWidthPx = Math.max(0, quantizedGridWidthPx - charCellWidthPx);
   const quantizedGridHeightPx = gridRowCount * metrics.rowHeightPx;
   const totalVisibleRows = viewport.topRowCount + viewport.centerRowCount + viewport.bottomRowCount;
   const totalWrappedRowCount = Math.max(1, wrappedLines.length);
@@ -1145,11 +1158,13 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
 
         const orderedCells = [...occupiedCells.entries()].sort((left, right) => left[0] - right[0]);
         orderedCells.forEach(([cellIndex, kind]) => {
+          const leftPx = snapToDevicePixels(horizontalPaddingPx + (cellIndex * charCellWidthPx));
+          const rightPx = snapToDevicePixels(horizontalPaddingPx + ((cellIndex + 1) * charCellWidthPx));
           highlights.push({
             kind,
             topPx,
-            leftPx: horizontalPaddingPx + (cellIndex * charCellWidthPx),
-            widthPx: charCellWidthPx,
+            leftPx,
+            widthPx: Math.max(1, rightPx - leftPx),
             heightPx: metrics.rowHeightPx,
           });
         });
@@ -1207,6 +1222,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
           style={{
             '--grid-horizontal-padding': `${horizontalPaddingPx}px`,
             '--grid-quantized-width': `${quantizedGridWidthPx}px`,
+            '--grid-background-width': `${quantizedBackgroundWidthPx}px`,
             '--grid-top-height': `${layout.topHeightPx}px`,
             '--grid-center-top': `${layout.topHeightPx}px`,
             '--grid-center-height': `${layout.centerHeightPx}px`,
@@ -1316,6 +1332,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
               startRow={Math.max(0, effectiveCenterStartRow - topRows.length)}
               insetTopPx={topRowsInsetPx}
               horizontalPaddingPx={horizontalPaddingPx}
+              rightPaddingPx={textareaRightPaddingPx}
               textareaClassName={textareaClassName}
               textareaStyle={textareaStyle}
             />
@@ -1353,7 +1370,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
               height: `${textareaHeightPx}px`,
               fontSize: `${fontSizePx}px`,
               lineHeight: `${metrics.rowHeightPx}px`,
-              padding: `0 ${horizontalPaddingPx}px`,
+              padding: `0 ${textareaRightPaddingPx}px 0 ${horizontalPaddingPx}px`,
               margin: 0,
               border: 'none',
               resize: 'none',
@@ -1367,6 +1384,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
               overflow: 'hidden',
               whiteSpace: 'pre-wrap',
               wordWrap: 'break-word',
+              tabSize: 3,
               caretColor: 'transparent',
               ...textareaStyle,
             }}
@@ -1396,6 +1414,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
               startRow={effectiveCenterStartRow + viewport.centerRowCount}
               insetTopPx={0}
               horizontalPaddingPx={horizontalPaddingPx}
+              rightPaddingPx={textareaRightPaddingPx}
               textareaClassName={textareaClassName}
               textareaStyle={textareaStyle}
             />
@@ -1428,6 +1447,7 @@ interface MirroredTextLayerProps {
   startRow: number;
   insetTopPx?: number;
   horizontalPaddingPx?: number;
+  rightPaddingPx?: number;
   textareaClassName?: string;
   textareaStyle?: React.CSSProperties;
 }
@@ -1439,6 +1459,7 @@ const MirroredTextLayer: React.FC<MirroredTextLayerProps> = ({
   visibleHeightPx,
   startRow,
   insetTopPx = 0,
+  rightPaddingPx = 20,
   horizontalPaddingPx = 20,
   textareaClassName,
   textareaStyle,
@@ -1465,7 +1486,7 @@ const MirroredTextLayer: React.FC<MirroredTextLayerProps> = ({
         height: `${Math.max(visibleHeightPx, totalWrappedRowCount * metrics.rowHeightPx)}px`,
         fontSize: 'inherit',
         lineHeight: `${metrics.rowHeightPx}px`,
-        padding: `0 ${horizontalPaddingPx}px`,
+        padding: `0 ${rightPaddingPx}px 0 ${horizontalPaddingPx}px`,
         margin: 0,
         border: 'none',
         resize: 'none',
@@ -1479,6 +1500,7 @@ const MirroredTextLayer: React.FC<MirroredTextLayerProps> = ({
         overflow: 'hidden',
         whiteSpace: 'pre-wrap',
         wordWrap: 'break-word',
+        tabSize: 3,
         pointerEvents: 'none',
         userSelect: 'none',
         ...textareaStyle,
@@ -1601,5 +1623,11 @@ function getVisualColumnForCaretPosition(charIndex: number, wrappedLines: Wrappe
 
   const clampedCharIndex = Math.max(row.startCharIndex, Math.min(charIndex, row.endCharIndex));
   return countVisualCells(text.slice(row.startCharIndex, clampedCharIndex));
+}
+
+function snapToDevicePixels(valuePx: number): number {
+  if (typeof window === 'undefined') return valuePx;
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  return Math.round(valuePx * dpr) / dpr;
 }
 

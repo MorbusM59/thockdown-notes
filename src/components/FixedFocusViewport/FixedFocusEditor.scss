@@ -120,7 +120,7 @@
     .box-background {
       position: absolute;
       left: var(--grid-horizontal-padding);
-      width: var(--grid-quantized-width);
+      width: var(--grid-background-width, var(--grid-quantized-width));
     }
 
     .box-background--top {
