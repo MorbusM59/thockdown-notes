@@ -4,7 +4,7 @@
  * Architecture:
  * - Model manages all state (text, viewport, caret)
  * - Component renders three hard-clipped zones from model state
- * - Center zone is the only editable area (textarea)
+ * - Center zone is the only editable area (contenteditable div)
  * - Top/bottom are display-only divs
  */
 
@@ -14,6 +14,154 @@ import { WrappedLine, findRowForCharIndex } from './textWrapping';
 import { ComputedMetrics, heightForRows } from './lineMetrics';
 import './FixedFocusEditor.scss';
 
+// ─── Contenteditable helpers ─────────────────────────────────────────────────
+
+/**
+ * Returns the character offset of (node, offsetInNode) within a contenteditable
+ * container, counting text-node characters and <br> elements as 1 newline each.
+ *
+ * Two cases:
+ *  - node is a Text node: offsetInNode is a UTF-16 code-unit offset within that text.
+ *  - node is an Element: offsetInNode is a child index (the browser uses this form
+ *    when the caret sits on a <br>, e.g. on a blank line).  We count chars up to
+ *    (but not including) children[offsetInNode].
+ */
+function ceCharOffset(container: HTMLElement, node: Node, offsetInNode: number): number {
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_ALL, null);
+  let charCount = 0;
+  let current: Node | null = walker.nextNode();
+
+  if (node.nodeType !== Node.TEXT_NODE) {
+    // Element node: offsetInNode is a child index.  Stop counting when we reach
+    // children[offsetInNode]; if it's past the last child, consume everything.
+    const stopAt: Node | null = offsetInNode < node.childNodes.length
+      ? node.childNodes[offsetInNode]
+      : null;
+    while (current !== null) {
+      if (current === stopAt) return charCount;
+      if (current.nodeType === Node.TEXT_NODE) charCount += (current as Text).length;
+      else if ((current as Element).tagName === 'BR') charCount += 1;
+      current = walker.nextNode();
+    }
+    return charCount;
+  }
+
+  // Text node: offsetInNode is a character offset within the text.
+  while (current !== null) {
+    if (current === node) return charCount + offsetInNode;
+    if (current.nodeType === Node.TEXT_NODE) {
+      charCount += (current as Text).length;
+    } else if ((current as Element).tagName === 'BR') {
+      charCount += 1;
+    }
+    current = walker.nextNode();
+  }
+  return charCount + offsetInNode;
+}
+
+/** Reads the current selection start/end from a contenteditable element. */
+export function ceGetSelection(el: HTMLElement): { start: number; end: number } | null {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+  const range = sel.getRangeAt(0);
+  if (!el.contains(range.commonAncestorContainer)) return null;
+  const start = ceCharOffset(el, range.startContainer, range.startOffset);
+  const end = range.collapsed ? start : ceCharOffset(el, range.endContainer, range.endOffset);
+  return { start, end };
+}
+
+/** Sets the selection range in a contenteditable element by character offsets. */
+export function ceSetSelection(el: HTMLElement, start: number, end: number): void {
+  const sel = window.getSelection();
+  if (!sel) return;
+  let charCount = 0;
+  let startNode: Node | null = null; let startOff = 0;
+  let endNode: Node | null = null; let endOff = 0;
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_ALL, null);
+  let node: Node | null = walker.nextNode();
+  while (node !== null && (startNode === null || endNode === null)) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const len = (node as Text).length;
+      if (startNode === null && charCount + len >= start) { startNode = node; startOff = start - charCount; }
+      if (endNode === null && charCount + len >= end) { endNode = node; endOff = end - charCount; }
+      charCount += len;
+    } else if ((node as Element).tagName === 'BR') {
+      if (startNode === null && charCount >= start) {
+        startNode = node.parentNode!;
+        startOff = Array.prototype.indexOf.call(node.parentNode!.childNodes, node);
+      }
+      if (endNode === null && charCount >= end) {
+        endNode = node.parentNode!;
+        endOff = Array.prototype.indexOf.call(node.parentNode!.childNodes, node);
+      }
+      charCount += 1;
+    }
+    node = walker.nextNode();
+  }
+  if (startNode === null) { startNode = el; startOff = el.childNodes.length; }
+  if (endNode === null) { endNode = el; endOff = el.childNodes.length; }
+  try {
+    const range = document.createRange();
+    range.setStart(startNode, startOff);
+    range.setEnd(endNode, endOff);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } catch {
+    // stale node reference — ignore
+  }
+}
+
+/**
+ * Sets the text content of a contenteditable element by rebuilding child nodes
+ * from scratch (text nodes + <br> for newlines).  More reliable than innerText
+ * because it avoids browser-specific trailing-newline quirks.
+ */
+function ceSetText(el: HTMLElement, text: string): void {
+  el.textContent = '';
+  const lines = text.split('\n');
+  lines.forEach((line, i) => {
+    if (line) el.appendChild(document.createTextNode(line));
+    if (i < lines.length - 1) el.appendChild(document.createElement('br'));
+  });
+}
+
+/**
+ * Reads the text content of a contenteditable element, treating <br> as \n.
+ * Does NOT include any browser-injected sentinel <br> at the end.
+ */
+export function ceGetText(el: HTMLElement): string {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_ALL, null);
+  let result = '';
+  let node: Node | null = walker.nextNode();
+  while (node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      result += (node as Text).data;
+    } else if ((node as Element).tagName === 'BR') {
+      result += '\n';
+    }
+    node = walker.nextNode();
+  }
+  // Strip a single sentinel trailing newline that Chromium may inject
+  return result.endsWith('\n') && !result.endsWith('\n\n') ? result.slice(0, -1) : result;
+}
+
+/**
+ * Returns the bounding DOMRect of the current collapsed caret selection,
+ * or null if not available / selection is not collapsed.
+ */
+function getCaretBoundingRect(): DOMRect | null {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+  const range = sel.getRangeAt(0).cloneRange();
+  range.collapse(true);
+  const rect = range.getBoundingClientRect();
+  // A zero-size rect means the caret position couldn't be determined
+  if (rect.width === 0 && rect.height === 0) return null;
+  return rect;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const charWidthCache = new Map<string, number>();
 const VIEWPORT_JUMP_ANIMATION_DURATION_MS = 400;
 const VIEWPORT_JUMP_MAX_STEP_MS = 100;
@@ -22,15 +170,7 @@ const VIEWPORT_JUMP_CURVE_EXPONENT_DISTANCE_FACTOR = 0.002;
 const VIEWPORT_JUMP_CURVE_EXPONENT_MAX = 1.5;
 const VIEWPORT_JUMP_STEP_DURATION_OFFSET_MS = 0.05;
 const CARET_ANIMATION_RESUME_DELAY_MS = 200;
-const CELL_WIDTH_QUANTUM_PX = 1;
-const CSS_PX_PRECISION = 12;
 const GRID_STROKE_WIDTH_PX = 1;
-
-interface QuantizedCellMetrics {
-  measuredCellWidthPx: number;
-  quantizedCellWidthPx: number;
-  letterSpacingPx: number;
-}
 
 interface ViewportAnimationStep {
   atMs: number;
@@ -126,16 +266,16 @@ interface FixedFocusEditorProps {
   onTextChange: (newText: string, newSelectionStart: number, newSelectionEnd: number) => void;
   onCaretChange?: (newCaretPos: number) => void;
   onSelectionChange?: (selectionStart: number, selectionEnd: number) => void;
-  textareaRef?: React.MutableRefObject<HTMLTextAreaElement | null>;
+  textareaRef?: React.MutableRefObject<HTMLDivElement | null>;
   textareaClassName?: string;
   textareaStyle?: React.CSSProperties;
   placeholder?: string;
-  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
-  onKeyUp?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
-  onCopy?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
-  onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
-  onCompositionStart?: React.CompositionEventHandler<HTMLTextAreaElement>;
-  onCompositionEnd?: React.CompositionEventHandler<HTMLTextAreaElement>;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
+  onKeyUp?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
+  onCopy?: (e: React.ClipboardEvent<HTMLDivElement>) => void;
+  onPaste?: (e: React.ClipboardEvent<HTMLDivElement>) => void;
+  onCompositionStart?: React.CompositionEventHandler<HTMLDivElement>;
+  onCompositionEnd?: React.CompositionEventHandler<HTMLDivElement>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -184,7 +324,8 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   const [resizeAnchorViewportStartRow, setResizeAnchorViewportStartRow] = useState<number | null>(null);
   const editorRootRef = useRef<HTMLDivElement>(null);
   const scrollIndicatorRef = useRef<HTMLDivElement>(null);
-  const centerInputRef = useRef<HTMLTextAreaElement>(null);
+  const centerInputRef = useRef<HTMLDivElement>(null);
+  const caretOverlayRef = useRef<HTMLDivElement>(null);
   const resizeStateRef = useRef<{
     handle: 'top' | 'bottom';
     startY: number;
@@ -220,6 +361,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   const previousCaretPosRef = useRef(0);
   const previousViewportStartRowRef = useRef(0);
   const lastCaretViewportOffsetRef = useRef(0);
+  const previousWrapWidthPxRef = useRef<number | null>(null);
   const previousCaretPosForAnimationRef = useRef(caretPos);
   const caretAnimationResumeTimeoutRef = useRef<number | null>(null);
   const centerStartRow = viewportStartRow ?? uncontrolledViewportStartRow;
@@ -228,12 +370,10 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   const contentWidthPx = Math.max(1, containerWidthPx - (horizontalPaddingPx * 2));
   const topInsetPx = Math.max(0, computeTopInsetPx(spacingPreset));
   const drawableHeightPx = Math.max(1, containerHeightPx - topInsetPx);
-  const cellMetrics = useMemo(
-    () => measureQuantizedMonospaceCellMetrics(fontSizePx, fontFamily),
+  const charCellWidthPx = useMemo(
+    () => measureMonospaceCellWidthPx(fontSizePx, fontFamily),
     [fontFamily, fontSizePx]
   );
-  const charCellWidthPx = cellMetrics.quantizedCellWidthPx;
-  const cellLetterSpacingPx = cellMetrics.letterSpacingPx;
 
   const setViewportStartRow = useCallback((nextViewportStartRow: number | ((prev: number) => number)) => {
     const resolvedNextRow = typeof nextViewportStartRow === 'function'
@@ -266,6 +406,21 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     if (!textareaRef) return;
     textareaRef.current = centerInputRef.current;
   }, [textareaRef]);
+
+  // Sync external text-prop changes into the contenteditable DOM.
+  // When the user types, ceGetText(el) === text and this is a no-op.
+  // When undo/redo/programmatic changes arrive, we rebuild the DOM.
+  useLayoutEffect(() => {
+    const el = centerInputRef.current;
+    if (!el) return;
+    if (ceGetText(el) !== text) {
+      const savedSel = ceGetSelection(el);
+      ceSetText(el, text);
+      if (savedSel && document.activeElement === el) {
+        ceSetSelection(el, savedSel.start, savedSel.end);
+      }
+    }
+  }, [text]);
 
   useEffect(() => {
     if (caretPos === previousCaretPosForAnimationRef.current) return;
@@ -331,11 +486,8 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
 
   const wrappedLines = model.getWrappedLines();
   const provisionalViewport = model.getViewport();
-  const caretRow = resolveRowForCaretIndex(
-    caretPos,
-    wrappedLines,
-    boundaryCaretRowPreferenceRef.current
-  );
+  const caretGridCell = getCaretGridCell(caretPos, wrappedLines, text, boundaryCaretRowPreferenceRef.current);
+  const caretRow = caretGridCell.gridRow;
 
   const maxStart = Math.max(0, wrappedLines.length - provisionalViewport.centerRowCount);
   const maxViewportStartRow = Math.max(0, wrappedLines.length - 1);
@@ -533,6 +685,31 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   }, [onCaretChange]);
 
   useLayoutEffect(() => {
+    // Track wrap width changes and caret/viewport sync in a single effect so they
+    // can never conflict within the same commit.  Two separate effects both running
+    // in the same commit would leave effectiveCenterStartRow stale in the second
+    // effect while the first has already queued a viewport state update, causing
+    // the caret to be snapped to the old (wrong) viewport boundary.
+    const previousWrapWidthPx = previousWrapWidthPxRef.current;
+    previousWrapWidthPxRef.current = wrapWidthPx;
+    const wrapWidthJustChanged = previousWrapWidthPx !== null && wrapWidthPx !== previousWrapWidthPx;
+
+    // When the wrap width changes (window resize reflows text), re-anchor the
+    // viewport so the caret stays at its previous visual offset from the top of
+    // the center zone.  Skip caret-boundary clamping this render — effectiveCenterStartRow
+    // is still the pre-resize value, so clamping would snap the caret incorrectly.
+    if (wrapWidthJustChanged && !activeResizeHandle) {
+      const preferredOffset = Math.max(0, Math.min(viewport.centerRowCount - 1, lastCaretViewportOffsetRef.current));
+      const nextViewportStartRow = Math.max(0, Math.min(maxStart, caretRow - preferredOffset));
+      latestEffectiveViewportStartRowRef.current = nextViewportStartRow;
+      setViewportStartRow(nextViewportStartRow);
+      // Pre-seed the prev-state refs so the next render's effect does not see a
+      // phantom "caretMoved" or "viewportMoved" caused by this reanchor.
+      previousCaretPosRef.current = caretPos;
+      previousViewportStartRowRef.current = nextViewportStartRow;
+      return;
+    }
+
     if (activeResizeHandle || isScrollIndicatorDragging || isPointerSelecting || isViewportAnimating || selectionStart !== selectionEnd) {
       previousCaretPosRef.current = caretPos;
       previousViewportStartRowRef.current = effectiveCenterStartRow;
@@ -576,7 +753,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
 
     previousCaretPosRef.current = caretPos;
     previousViewportStartRowRef.current = effectiveCenterStartRow;
-  }, [activeResizeHandle, applyAutomaticCaretPos, caretPos, caretRow, effectiveCenterStartRow, getViewportBoundaryCaretPos, isPointerSelecting, isScrollIndicatorDragging, isViewportAnimating, selectionEnd, selectionStart, setViewportStartRow, viewport.centerRowCount, wrappedLines.length]);
+  }, [activeResizeHandle, applyAutomaticCaretPos, caretPos, caretRow, effectiveCenterStartRow, getViewportBoundaryCaretPos, isPointerSelecting, isScrollIndicatorDragging, isViewportAnimating, maxStart, selectionEnd, selectionStart, setViewportStartRow, viewport.centerRowCount, wrapWidthPx, wrappedLines.length]);
 
   const handleResizeMove = useCallback((event: PointerEvent) => {
     const resizeState = resizeStateRef.current;
@@ -663,35 +840,93 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     };
   }, [applyAutomaticCaretPos, caretPos, getViewportBoundaryCaretPos, handleScrollIndicatorPointerMove, isScrollIndicatorDragging]);
 
-  // Keep the browser's own textarea scrolling disabled and sync viewport to the caret
-  // when edits like Enter move it outside the visible center zone.
+  // Sync selection state into the contenteditable DOM (e.g. after programmatic
+  // caret moves from Up/Down/Home/End keys and after undo/redo).
   useEffect(() => {
-    const ta = centerInputRef.current;
-    if (!ta) return;
-
-    if (ta.selectionStart !== selectionStart || ta.selectionEnd !== selectionEnd) {
-      ta.setSelectionRange(selectionStart, selectionEnd);
+    const el = centerInputRef.current;
+    if (!el || document.activeElement !== el) return;
+    const live = ceGetSelection(el);
+    if (!live || live.start !== selectionStart || live.end !== selectionEnd) {
+      ceSetSelection(el, selectionStart, selectionEnd);
     }
-
-    // Reset scroll AFTER setSelectionRange: Chromium can internally scroll a textarea
-    // (even with overflow:hidden) to reveal the caret, which would desync the mirrored zones.
-    if (ta.scrollTop !== 0) ta.scrollTop = 0;
-    if (ta.scrollLeft !== 0) ta.scrollLeft = 0;
+    // Suppress any internal scroll the browser may apply
+    if (el.scrollTop) el.scrollTop = 0;
+    if (el.scrollLeft) el.scrollLeft = 0;
   }, [selectionEnd, selectionStart]);
 
-  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newText = e.currentTarget.value;
-    const newSelectionStart = e.currentTarget.selectionStart ?? 0;
-    const newSelectionEnd = e.currentTarget.selectionEnd ?? newSelectionStart;
+  // After every render, read the native caret rect and update the caret overlay
+  // div imperatively — no extra React render needed.
+  useLayoutEffect(() => {
+    const overlay = caretOverlayRef.current;
+    const container = editorRootRef.current;
+    const el = centerInputRef.current;
+    if (!overlay || !container || !el) return;
+
+    if (selectionStart !== selectionEnd || document.activeElement !== el) {
+      overlay.style.display = 'none';
+      return;
+    }
+
+    const caretRect = getCaretBoundingRect();
+
+    let cellCol: number;
+    let cellRow: number;
+
+    if (caretRect) {
+      const containerRect = container.getBoundingClientRect();
+      // Snap to grid cell so the box aligns with the background grid
+      const relLeft = caretRect.left - containerRect.left - horizontalPaddingPx;
+      const relTop = caretRect.top - containerRect.top;
+      cellCol = Math.max(0, Math.round(relLeft / charCellWidthPx));
+      cellRow = Math.max(0, Math.floor(relTop / metrics.rowHeightPx));
+    } else {
+      // Fallback for blank lines: Chrome returns an all-zero rect for a collapsed
+      // range sitting on a <br> node.  Derive position from the model instead.
+      cellCol = caretGridCell.gridColumn;
+      const relTopFallback = topInsetPx + layout.topHeightPx
+        + (caretRow - effectiveCenterStartRow) * metrics.rowHeightPx;
+      cellRow = Math.max(0, Math.floor(relTopFallback / metrics.rowHeightPx));
+    }
+
+    const cellLeftBoundaryPx = snapToDevicePixels(horizontalPaddingPx + cellCol * charCellWidthPx);
+    const cellRightBoundaryPx = snapToDevicePixels(horizontalPaddingPx + (cellCol + 1) * charCellWidthPx);
+    const cellTopBoundaryPx = snapToDevicePixels(cellRow * metrics.rowHeightPx);
+    const cellBottomBoundaryPx = snapToDevicePixels((cellRow + 1) * metrics.rowHeightPx);
+
+    overlay.style.display = 'block';
+    overlay.style.left = `${cellLeftBoundaryPx + GRID_STROKE_WIDTH_PX}px`;
+    overlay.style.top = `${cellTopBoundaryPx + GRID_STROKE_WIDTH_PX}px`;
+    overlay.style.width = `${Math.max(0, cellRightBoundaryPx - cellLeftBoundaryPx - GRID_STROKE_WIDTH_PX * 2)}px`;
+    overlay.style.height = `${Math.max(0, cellBottomBoundaryPx - cellTopBoundaryPx - GRID_STROKE_WIDTH_PX * 2)}px`;
+  });
+
+  const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const newText = ceGetText(el);
+    const sel = ceGetSelection(el);
+    const newSelectionStart = sel?.start ?? 0;
+    const newSelectionEnd = sel?.end ?? newSelectionStart;
     onTextChange(newText, newSelectionStart, newSelectionEnd);
   };
 
   // Track caret changes from mouse clicks / selection
-  const handleSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+  const handleSelect = (e: React.SyntheticEvent<HTMLDivElement>) => {
     if (selectionDragStateRef.current) return;
 
-    const newSelectionStart = e.currentTarget.selectionStart ?? 0;
-    const newSelectionEnd = e.currentTarget.selectionEnd ?? newSelectionStart;
+    const el = e.currentTarget;
+    const sel = ceGetSelection(el);
+    if (!sel) return;
+    const { start: newSelectionStart, end: newSelectionEnd } = sel;
+
+    // If this is a user-driven caret change (Left/Right arrows, click, etc.)
+    // and not a programmatic setSelectionRange we issued ourselves, clear any
+    // stale boundary-row preference.  Stale preferences cause the custom caret
+    // to land on a different row than the native caret at wrap boundaries.
+    if (newSelectionStart === newSelectionEnd &&
+        pendingAutomaticCaretPosRef.current !== newSelectionEnd) {
+      boundaryCaretRowPreferenceRef.current = null;
+    }
+
     onSelectionChange?.(newSelectionStart, newSelectionEnd);
   };
 
@@ -799,7 +1034,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     document.body.style.cursor = 'pointer';
   };
 
-  const handleCenterPointerDown = (event: React.PointerEvent<HTMLTextAreaElement>) => {
+  const handleCenterPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
 
     cancelViewportAnimation();
@@ -817,14 +1052,14 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
       const nextSelectionStart = Math.min(caretPos, clickedPos);
       const nextSelectionEnd = Math.max(caretPos, clickedPos);
       event.currentTarget.focus();
-      event.currentTarget.setSelectionRange(nextSelectionStart, nextSelectionEnd);
+      ceSetSelection(event.currentTarget, nextSelectionStart, nextSelectionEnd);
       onSelectionChange?.(nextSelectionStart, nextSelectionEnd);
       return;
     }
 
     const anchorPos = clickedPos;
     event.currentTarget.focus();
-    event.currentTarget.setSelectionRange(anchorPos, anchorPos);
+    ceSetSelection(event.currentTarget, anchorPos, anchorPos);
 
     selectionDragStateRef.current = {
       pointerId: event.pointerId,
@@ -867,7 +1102,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     return () => editorRoot.removeEventListener('wheel', onWheel);
   }, [applyAutomaticCaretPos, cancelViewportAnimation, caretPos, effectiveCenterStartRow, getViewportBoundaryCaretPos, isPointerSelecting, selectionEnd, selectionStart]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (!(e.shiftKey || e.ctrlKey || e.altKey)) {
       if (e.key === 'ArrowUp') {
         e.preventDefault();
@@ -933,7 +1168,12 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
           ? currentRow.startCharIndex
           : currentRow.endCharIndex;
 
-        boundaryCaretRowPreferenceRef.current = currentRowIndex;
+        // For Home: position is at the start of this row (= end of previous row),
+        // which the browser renders at the start of currentRowIndex — set that.
+        // For End: position is at the end of this row (= start of next row),
+        // which the browser renders at the start of the next row — clear the
+        // preference so the downstream default (baseRow + 1) handles it.
+        boundaryCaretRowPreferenceRef.current = e.key === 'Home' ? currentRowIndex : null;
 
         if (e.key === 'Home') {
           rememberPreferredCaretVisualColumn(0);
@@ -1192,10 +1432,9 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
         }
 
         if (selectionStart === selectionEnd && visibleRowIndex === caretRow) {
-          const clampedCaretPos = Math.max(row.startCharIndex, Math.min(caretPos, row.endCharIndex));
-          const rowPrefix = text.slice(row.startCharIndex, clampedCaretPos);
-          const caretColumn = countVisualCells(rowPrefix);
-          occupiedCells.set(caretColumn, 'caret');
+          // Caret cell is now positioned via native rect in the caretOverlayRef useLayoutEffect.
+          // Keep the occupiedCells entry only so leading/trailing whitespace highlights don't
+          // overlap the caret column in the center zone; but don't emit a 'caret' highlight.
         }
 
         if (row.isLineStart) {
@@ -1362,7 +1601,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
           {highlightSpans.map((highlight, index) => (
             <div
               key={`${highlight.topPx}-${highlight.leftPx}-${highlight.widthPx}-${index}`}
-              className={`cell-highlight cell-highlight--${highlight.kind}${highlight.kind === 'caret' && isCaretAnimationPaused ? ' cell-highlight--caret-paused' : ''}`}
+              className={`cell-highlight cell-highlight--${highlight.kind}`}
               style={{
                 top: `${highlight.topPx}px`,
                 left: `${highlight.leftPx}px`,
@@ -1371,6 +1610,12 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
               }}
             />
           ))}
+          {/* Native-caret overlay: position is set imperatively in useLayoutEffect */}
+          <div
+            ref={caretOverlayRef}
+            className={`cell-highlight cell-highlight--caret${isCaretAnimationPaused ? ' cell-highlight--caret-paused' : ''}`}
+            style={{ display: 'none', position: 'absolute' }}
+          />
         </div>
 
         {/* Top Zone (display-only) */}
@@ -1397,14 +1642,13 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
               insetTopPx={topRowsInsetPx}
               horizontalPaddingPx={horizontalPaddingPx}
               rightPaddingPx={textareaRightPaddingPx}
-              letterSpacingPx={cellLetterSpacingPx}
               textareaClassName={textareaClassName}
               textareaStyle={textareaStyle}
             />
           </div>
         )}
 
-        {/* Center Zone (editable textarea, no scroll) */}
+        {/* Center Zone (editable contenteditable, no scroll) */}
         <div
           className="zone zone-center"
           style={{
@@ -1413,11 +1657,12 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
             overflow: 'hidden',
           }}
         >
-          <textarea
+          <div
             ref={centerInputRef}
+            contentEditable="plaintext-only"
+            suppressContentEditableWarning
             className={textareaClassName ? `zone-textarea ${textareaClassName}` : 'zone-textarea'}
-            value={text}
-            onChange={handleInput}
+            onInput={handleInput}
             onSelect={handleSelect}
             onPointerDown={handleCenterPointerDown}
             onKeyDown={handleKeyDown}
@@ -1426,7 +1671,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
             onPaste={onPaste}
             onCompositionStart={onCompositionStart}
             onCompositionEnd={onCompositionEnd}
-            placeholder={placeholder}
+            data-placeholder={placeholder}
             style={{
               position: 'absolute',
               top: `${textareaTopPx}px`,
@@ -1444,7 +1689,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
               fontKerning: 'none',
               fontVariantLigatures: 'none',
               fontFeatureSettings: '"liga" 0, "calt" 0',
-              letterSpacing: formatPxForCss(cellLetterSpacingPx),
+              letterSpacing: '0',
               boxSizing: 'border-box',
               overflow: 'hidden',
               whiteSpace: 'pre-wrap',
@@ -1480,7 +1725,6 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
               insetTopPx={0}
               horizontalPaddingPx={horizontalPaddingPx}
               rightPaddingPx={textareaRightPaddingPx}
-              letterSpacingPx={cellLetterSpacingPx}
               textareaClassName={textareaClassName}
               textareaStyle={textareaStyle}
             />
@@ -1514,7 +1758,6 @@ interface MirroredTextLayerProps {
   insetTopPx?: number;
   horizontalPaddingPx?: number;
   rightPaddingPx?: number;
-  letterSpacingPx?: number;
   textareaClassName?: string;
   textareaStyle?: React.CSSProperties;
 }
@@ -1528,7 +1771,6 @@ const MirroredTextLayer: React.FC<MirroredTextLayerProps> = ({
   insetTopPx = 0,
   rightPaddingPx = 20,
   horizontalPaddingPx = 20,
-  letterSpacingPx = 0,
   textareaClassName,
   textareaStyle,
 }) => (
@@ -1563,7 +1805,7 @@ const MirroredTextLayer: React.FC<MirroredTextLayerProps> = ({
         fontKerning: 'none',
         fontVariantLigatures: 'none',
         fontFeatureSettings: '"liga" 0, "calt" 0',
-        letterSpacing: formatPxForCss(letterSpacingPx),
+        letterSpacing: '0',
         boxSizing: 'border-box',
         overflow: 'hidden',
         whiteSpace: 'pre-wrap',
@@ -1583,17 +1825,15 @@ function computeTopInsetPx(spacingPreset: string): number {
   return 15;
 }
 
-function measureQuantizedMonospaceCellMetrics(fontSizePx: number, fontFamily: string): QuantizedCellMetrics {
+function measureMonospaceCellWidthPx(fontSizePx: number, fontFamily: string): number {
   const cacheKey = `${fontSizePx}px|${fontFamily}`;
   const cached = charWidthCache.get(cacheKey);
-  if (cached !== undefined) {
-    return buildQuantizedCellMetrics(cached);
-  }
+  if (cached !== undefined) return cached;
 
   if (typeof document === 'undefined') {
     const fallback = Math.max(1, fontSizePx * 0.6);
     charWidthCache.set(cacheKey, fallback);
-    return buildQuantizedCellMetrics(fallback);
+    return fallback;
   }
 
   const measurementElement = document.createElement('span');
@@ -1620,24 +1860,7 @@ function measureQuantizedMonospaceCellMetrics(fontSizePx: number, fontFamily: st
 
   const measured = Math.max(1, width);
   charWidthCache.set(cacheKey, measured);
-  return buildQuantizedCellMetrics(measured);
-}
-
-function buildQuantizedCellMetrics(measuredCellWidthPx: number): QuantizedCellMetrics {
-  const quantizedCellWidthPx = Math.max(
-    CELL_WIDTH_QUANTUM_PX,
-    Math.ceil(measuredCellWidthPx / CELL_WIDTH_QUANTUM_PX) * CELL_WIDTH_QUANTUM_PX
-  );
-  const letterSpacingPx = quantizedCellWidthPx - measuredCellWidthPx;
-  return {
-    measuredCellWidthPx,
-    quantizedCellWidthPx,
-    letterSpacingPx,
-  };
-}
-
-function formatPxForCss(valuePx: number): string {
-  return `${valuePx.toFixed(CSS_PX_PRECISION)}px`;
+  return measured;
 }
 
 function countLeadingWhitespaceCells(text: string): number {
@@ -1729,8 +1952,15 @@ function resolveRowForCaretIndex(
     nextRow.startCharIndex === charIndex
   );
 
-  if (!isSharedBoundary || preferredBoundaryRow == null) {
+  if (!isSharedBoundary) {
     return baseRow;
+  }
+
+  // No explicit preference: use the downstream row (start of the next visual
+  // line), which is what the browser always renders for a textarea boundary
+  // caret regardless of how the cursor arrived there.
+  if (preferredBoundaryRow == null) {
+    return Math.min(baseRow + 1, wrappedLines.length - 1);
   }
 
   if (preferredBoundaryRow === baseRow || preferredBoundaryRow === baseRow + 1) {
@@ -1744,5 +1974,30 @@ function snapToDevicePixels(valuePx: number): number {
   if (typeof window === 'undefined') return valuePx;
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   return Math.round(valuePx * dpr) / dpr;
+}
+
+/**
+ * Returns the grid cell { gridRow, gridColumn } that the caret currently
+ * occupies, where gridRow is the absolute wrapped-row index and gridColumn is
+ * the 0-based visual cell index within that row (tabs count as 3 cells).
+ *
+ * Pass preferredBoundaryRow to resolve shared wrap-boundary indices the same
+ * way the rest of the editor does (via resolveRowForCaretIndex).
+ */
+export function getCaretGridCell(
+  caretPos: number,
+  wrappedLines: WrappedLine[],
+  text: string,
+  preferredBoundaryRow?: number | null
+): { gridRow: number; gridColumn: number } {
+  if (wrappedLines.length === 0) return { gridRow: 0, gridColumn: 0 };
+  const gridRow = preferredBoundaryRow !== undefined
+    ? resolveRowForCaretIndex(caretPos, wrappedLines, preferredBoundaryRow ?? null)
+    : findRowForCharIndex(caretPos, wrappedLines);
+  const row = wrappedLines[gridRow];
+  const gridColumn = row
+    ? countVisualCells(text.slice(row.startCharIndex, Math.min(caretPos, row.endCharIndex)))
+    : 0;
+  return { gridRow, gridColumn };
 }
 

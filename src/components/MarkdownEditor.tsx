@@ -9,7 +9,7 @@ import {
   NoteEditHistoryState,
   RecentEditHistoryEntry,
 } from '../shared/types';
-import { FixedFocusEditor } from './FixedFocusViewport';
+import { FixedFocusEditor, ceGetSelection, ceSetSelection, ceGetText } from './FixedFocusViewport';
 import './MarkdownEditor.scss';
 import './MarkdownThemes.scss';
 
@@ -328,7 +328,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
   const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
   const [editHistoryCount, setEditHistoryCount] = useState(0);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const textareaRef = useRef<HTMLDivElement | null>(null);
   const editorContentRef = useRef<HTMLDivElement | null>(null);
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedContentRef = useRef('');
@@ -356,13 +356,9 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   };
 
   const setTextareaSelection = useCallback((start: number, end = start) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    textarea.setSelectionRange(start, end);
-    // Reset scroll immediately: Chromium can internally scroll the textarea to reveal the
-    // caret even with overflow:hidden, which would desync the mirrored top/bottom zones.
-    if (textarea.scrollTop !== 0) textarea.scrollTop = 0;
-    if (textarea.scrollLeft !== 0) textarea.scrollLeft = 0;
+    const el = textareaRef.current;
+    if (!el) return;
+    ceSetSelection(el, start, end);
     setSelectionStart(start);
     setSelectionEnd(end);
     setCaretPos(end);
@@ -490,12 +486,14 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   const getEditStateKey = (noteId: number) => `${EDIT_STATE_KEY_PREFIX}${noteId}`;
 
   const saveEditState = async (noteId: number) => {
-    const ta = textareaRef.current;
+    const el = textareaRef.current;
     const editorContent = editorContentRef.current;
-    if (!ta || !editorContent) return;
+    if (!editorContent) return;
+    // Use live selection if element is focused, otherwise fall back to React state
+    const liveSel = el ? (ceGetSelection(el) ?? { start: selectionStart, end: selectionEnd }) : { start: selectionStart, end: selectionEnd };
     const persistedViewportStartRow = showPreview ? 0 : editViewportStartRow;
     const state: EditState = {
-      selectionStart: ta.selectionStart,
+      selectionStart: liveSel.start,
       scrollTop: showPreview ? editorContent.scrollTop : persistedViewportStartRow,
       viewportStartRow: persistedViewportStartRow,
     };
@@ -789,7 +787,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   }, [editorStyle]);
 
   // Autosize helper: set textarea height to its content height.
-  const autosizeTextarea = useCallback((ta?: HTMLTextAreaElement | null) => {
+  const autosizeTextarea = useCallback((ta?: HTMLElement | null) => {
     if (!showPreview) return;
     const el = ta ?? textareaRef.current;
     const editorContent = editorContentRef.current;
@@ -818,10 +816,9 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     if (!ta || !editorContent) return null;
 
     // Determine caret line number
-    const pos = ta.selectionStart ?? 0;
-    // Use ta.value (live DOM) not the React state `content`, which may be stale
-    // inside programmatic-insert timeouts (old closure).
-    const textUpToCursor = ta.value.substring(0, pos);
+    const pos = selectionStart;
+    // Use content state for line calculation (ceGetText could also be used but adds overhead)
+    const textUpToCursor = content.substring(0, pos);
     const lineIndex = textUpToCursor.split('\n').length - 1;
 
     const cs = window.getComputedStyle(ta);
@@ -924,13 +921,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
   // cursor / first line detection
   const checkCursorPosition = useCallback(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const cursorPos = textarea.selectionStart;
+    const cursorPos = selectionStart;
     const textBeforeCursor = content.substring(0, cursorPos);
     const lines = textBeforeCursor.split('\n');
     setIsOnFirstLine(lines.length === 1);
-  }, [content]);
+  }, [content, selectionStart]);
 
   // extract title
   const extractTitle = useCallback((text: string): string => {
@@ -1005,10 +1000,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
   // formatting detection
   const checkFormatting = useCallback(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
+    const start = selectionStart;
+    const end = selectionEnd;
     const active = new Set<string>();
 
     if (start === end && start === 0) {
@@ -1059,14 +1052,12 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     else if (currentLineNorm.match(/^\d+\. /)) active.add('number');
 
     setActiveFormats(active);
-  }, [content]);
+  }, [content, selectionEnd, selectionStart]);
 
-  // Formatting helpers (unchanged)
+  // Formatting helpers
   const wrapSelection = (before: string, after: string = before) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
+    const start = selectionStart;
+    const end = selectionEnd;
     const selectedText = content.substring(start, end);
 
     const isWrapped =
@@ -1093,17 +1084,15 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     handleContentChange(newText);
 
     scheduleTimeout(() => {
-      textarea.focus();
+      textareaRef.current?.focus();
       setTextareaSelection(newSelectionStart, newSelectionEnd);
       checkFormatting();
     }, 0);
   };
 
   const insertAtCursor = (text: string, historyReason?: HistoryBoundaryReason) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
+    const start = selectionStart;
+    const end = selectionEnd;
     const newText = content.substring(0, start) + text + content.substring(end);
     const afterSnapshot = buildSnapshot(newText, start + text.length, start + text.length);
     // mark this as a programmatic insert so autosize/ensureCaretVisible
@@ -1115,19 +1104,17 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       recordHistoryEntry(historyReason, lastCommittedSnapshotRef.current, afterSnapshot);
     }
     scheduleTimeout(() => {
-      textarea.focus();
+      textareaRef.current?.focus();
       setTextareaSelection(start + text.length, start + text.length);
-      autosizeTextarea(textarea);
+      autosizeTextarea(null);
       ensureCaretVisible();
       programmaticInsertRef.current = false;
     }, 0);
   };
 
   const prependToLines = (prefix: string, numbered = false) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
+    const start = selectionStart;
+    const end = selectionEnd;
     const lineStart = content.lastIndexOf('\n', start - 1) + 1;
     const lineEnd = content.indexOf('\n', end);
     const actualLineEnd = lineEnd === -1 ? content.length : lineEnd;
@@ -1157,15 +1144,13 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     handleContentChange(newText);
 
     scheduleTimeout(() => {
-      textarea.focus();
+      textareaRef.current?.focus();
       checkFormatting();
     }, 0);
   };
 
   const insertHeading = (level: number) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart;
+    const start = selectionStart;
     const lineStart = content.lastIndexOf('\n', start - 1) + 1;
     const lineEnd = content.indexOf('\n', start);
     const actualLineEnd = lineEnd === -1 ? content.length : lineEnd;
@@ -1191,7 +1176,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     handleContentChange(newText);
 
     scheduleTimeout(() => {
-      textarea.focus();
+      textareaRef.current?.focus();
       setTextareaSelection(newCursorPos, newCursorPos);
       checkFormatting();
     }, 0);
@@ -1206,12 +1191,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     return out;
   };
 
-  const handleCopy = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
-    const selected = ta.value.substring(start, end);
+  const handleCopy = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const sel = ceGetSelection(el) ?? { start: selectionStart, end: selectionEnd };
+    const selected = content.substring(sel.start, sel.end);
     try {
       e.clipboardData.setData('text/plain', selected || '');
       e.preventDefault();
@@ -1220,7 +1204,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     }
   };
 
-  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+  const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
     e.preventDefault();
     let plain = e.clipboardData.getData('text/plain') || '';
     if (!plain) {
@@ -1265,7 +1249,6 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   }, [buildSnapshot, recordHistoryEntry]);
 
   const applySnapshotProgrammatically = useCallback((snapshot: EditSnapshot) => {
-    const textarea = textareaRef.current;
     programmaticInsertRef.current = true;
     pendingHistoryBoundaryRef.current = null;
     handleContentChange(snapshot.content);
@@ -1273,10 +1256,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     lastCommittedSnapshotRef.current = snapshot;
 
     scheduleTimeout(() => {
-      if (textarea) {
-        textarea.focus();
+      const el = textareaRef.current;
+      if (el) {
+        el.focus();
         setTextareaSelection(snapshot.selectionStart, snapshot.selectionEnd);
-        autosizeTextarea(textarea);
+        autosizeTextarea(el);
         ensureCaretVisible();
         checkFormatting();
       }
@@ -1347,7 +1331,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     };
   }, []);
 
-  const handleTextareaKeyUp = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleTextareaKeyUp = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Enter') {
       if (!isOnFirstLine && note && content !== lastSavedContentRef.current) {
         if (autoSaveTimeoutRef.current) {
@@ -1359,7 +1343,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     }
   };
 
-  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (!showPreview && (e.ctrlKey || e.metaKey) && !e.altKey) {
       const lowerKey = e.key.toLowerCase();
       if (lowerKey === 'z' && !e.shiftKey) {
@@ -1381,11 +1365,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       // - Shift+Enter: insert a hard break (two trailing spaces) and continue indentation, but do NOT continue list markers.
       // - Ctrl+Enter: insert a blank line and start next line with no indentation.
       e.preventDefault();
-      const textarea = textareaRef.current;
-      if (!textarea) return;
-      const sourceText = textarea.value;
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
+      const el = textareaRef.current;
+      if (!el) return;
+      const sourceText = content;
+      const start = selectionStart;
+      const end = selectionEnd;
       const lineStart = sourceText.lastIndexOf('\n', start - 1) + 1;
       const currentLineBeforeCursor = sourceText.substring(lineStart, start);
       const currentLineFull = (() => {
@@ -1410,8 +1394,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         recordHistoryEntry('enter', lastCommittedSnapshotRef.current, afterSnapshot);
         syncSelectionState(newCursorPos, newCursorPos);
         scheduleTimeout(() => {
-          textarea.focus();
-          autosizeTextarea(textarea);
+          el.focus();
+          autosizeTextarea(el);
           ensureCaretVisible();
           programmaticInsertRef.current = false;
         }, 0);
@@ -1430,8 +1414,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         recordHistoryEntry('enter', lastCommittedSnapshotRef.current, afterSnapshot);
         syncSelectionState(newCursorPos, newCursorPos);
         scheduleTimeout(() => {
-          textarea.focus();
-          autosizeTextarea(textarea);
+          el.focus();
+          autosizeTextarea(el);
           ensureCaretVisible();
           programmaticInsertRef.current = false;
         }, 0);
@@ -1458,8 +1442,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       recordHistoryEntry('enter', lastCommittedSnapshotRef.current, afterSnapshot);
       syncSelectionState(newCursorPos, newCursorPos);
       scheduleTimeout(() => {
-        textarea.focus();
-        autosizeTextarea(textarea);
+        el.focus();
+        autosizeTextarea(el);
         ensureCaretVisible();
         programmaticInsertRef.current = false;
       }, 0);
@@ -1469,13 +1453,10 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     // Shift+Backspace: if current line is only whitespace, delete the current line
     // and move caret to end of previous line (also remove trailing spaces there).
     if (e.key === 'Backspace' && e.shiftKey && !showPreview) {
-      const textarea = textareaRef.current;
-      if (!textarea) return;
       // Only handle when there's no selection — otherwise leave native behavior
-      if (textarea.selectionStart !== textarea.selectionEnd) return;
-      const pos = textarea.selectionStart;
+      if (selectionStart !== selectionEnd) return;
+      const pos = selectionStart;
       const before = content.substring(0, pos);
-      const after = content.substring(pos);
       const lines = content.split('\n');
       const lineIndex = before.split('\n').length - 1;
       const currentLine = lines[lineIndex] ?? '';
@@ -1493,9 +1474,10 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           handleContentChange(newText);
           recordHistoryEntry('delete-boundary', lastCommittedSnapshotRef.current, afterSnapshot);
           scheduleTimeout(() => {
-            textarea.focus();
+            const edEl = textareaRef.current;
+            edEl?.focus();
             setTextareaSelection(0, 0);
-            autosizeTextarea(textarea);
+            autosizeTextarea(edEl);
             ensureCaretVisible();
             programmaticInsertRef.current = false;
           }, 0);
@@ -1528,9 +1510,10 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         handleContentChange(newText);
         recordHistoryEntry('delete-boundary', lastCommittedSnapshotRef.current, afterSnapshot);
         scheduleTimeout(() => {
-          textarea.focus();
+          const edEl = textareaRef.current;
+          edEl?.focus();
           setTextareaSelection(newCursorPos, newCursorPos);
-          autosizeTextarea(textarea);
+          autosizeTextarea(edEl);
           ensureCaretVisible();
           programmaticInsertRef.current = false;
         }, 0);
@@ -1539,10 +1522,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     }
 
     if (!showPreview && (e.key === 'Backspace' || e.key === 'Delete')) {
-      const textarea = textareaRef.current;
-      if (!textarea) return;
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
+      const start = selectionStart;
+      const end = selectionEnd;
 
       if (start !== end) {
         requestHistoryBoundary('delete-selection');
@@ -1574,10 +1555,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       e.preventDefault();
       if (e.shiftKey) {
         // remove up to three leading spaces from each selected line (or from current line)
-        const textarea = textareaRef.current;
-        if (!textarea) return;
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
+        const start = selectionStart;
+        const end = selectionEnd;
         const lineStart = content.lastIndexOf('\n', start - 1) + 1;
         const lineEnd = content.indexOf('\n', end);
         const actualLineEnd = lineEnd === -1 ? content.length : lineEnd;
@@ -1619,20 +1598,19 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         recordHistoryEntry('tab', lastCommittedSnapshotRef.current, afterSnapshot);
 
         scheduleTimeout(() => {
-          textarea.focus();
+          const edEl = textareaRef.current;
+          edEl?.focus();
           const newStart = Math.max(0, start - removedBeforeStart);
           const newEnd = Math.max(0, end - removedBeforeEnd);
           setTextareaSelection(newStart, newEnd);
-          autosizeTextarea(textarea);
+          autosizeTextarea(edEl);
           checkFormatting();
           programmaticInsertRef.current = false;
         }, 0);
       } else {
         // insert three spaces at the beginning of each selected line (or current line)
-        const textarea = textareaRef.current;
-        if (!textarea) return;
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
+        const start = selectionStart;
+        const end = selectionEnd;
         const lineStart = content.lastIndexOf('\n', start - 1) + 1;
         const lineEnd = content.indexOf('\n', end);
         const actualLineEnd = lineEnd === -1 ? content.length : lineEnd;
@@ -1656,9 +1634,10 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         recordHistoryEntry('tab', lastCommittedSnapshotRef.current, afterSnapshot);
 
         scheduleTimeout(() => {
-          textarea.focus();
+          const edEl = textareaRef.current;
+          edEl?.focus();
           setTextareaSelection(newStart, newEnd);
-          autosizeTextarea(textarea);
+          autosizeTextarea(edEl);
           checkFormatting();
           programmaticInsertRef.current = false;
         }, 0);
@@ -1668,12 +1647,14 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
   // selection listeners
   useEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
+    const el = textareaRef.current;
+    if (!el) return;
     const handleSelectionChange = () => {
+      const sel = ceGetSelection(el);
+      if (!sel) return;
       checkCursorPosition();
       checkFormatting();
-      syncSelectionState(textarea.selectionStart ?? 0, textarea.selectionEnd ?? textarea.selectionStart ?? 0);
+      syncSelectionState(sel.start, sel.end);
 
       // debounce save edit state for current note
       if (note?.id != null) {
@@ -1683,13 +1664,13 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             }, 250) as unknown as ReturnType<typeof setTimeout>;
       }
     };
-    textarea.addEventListener('click', handleSelectionChange);
-    textarea.addEventListener('keyup', handleSelectionChange);
-    textarea.addEventListener('select', handleSelectionChange);
+    el.addEventListener('click', handleSelectionChange);
+    el.addEventListener('keyup', handleSelectionChange);
+    el.addEventListener('select', handleSelectionChange);
     return () => {
-      textarea.removeEventListener('click', handleSelectionChange);
-      textarea.removeEventListener('keyup', handleSelectionChange);
-      textarea.removeEventListener('select', handleSelectionChange);
+      el.removeEventListener('click', handleSelectionChange);
+      el.removeEventListener('keyup', handleSelectionChange);
+      el.removeEventListener('select', handleSelectionChange);
       if (selectionSaveTimeout.current) {
         clearTimeout(selectionSaveTimeout.current);
         selectionSaveTimeout.current = null;
@@ -1746,9 +1727,9 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       if (showPreview) {
         const ta = textareaRef.current;
         if (!ta) return;
-        ta.style.display = 'none';
+        (ta as any).style.display = 'none';
         ta.offsetHeight;
-        ta.style.display = '';
+        (ta as any).style.display = '';
         autosizeTextarea(ta);
         return;
       }
@@ -1886,7 +1867,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         if (showPreview) {
           void window.electronAPI.saveNoteUiState(id, { progressPreview: ratio });
         } else {
-          void window.electronAPI.saveNoteUiState(id, { progressEdit: ratio, cursorPos: textareaRef.current?.selectionStart ?? null, scrollTop: el.scrollTop });
+          void window.electronAPI.saveNoteUiState(id, { progressEdit: ratio, cursorPos: textareaRef.current ? (ceGetSelection(textareaRef.current)?.start ?? null) : null, scrollTop: el.scrollTop });
         }
       }, 200);
     };
@@ -2109,8 +2090,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             }}
             onCaretChange={(newCaretPos) => {
               if (programmaticInsertRef.current) return;
-              const textarea = textareaRef.current;
-              if (!textarea) return;
+              if (!textareaRef.current) return;
               setTextareaSelection(newCaretPos, newCaretPos);
               checkCursorPosition();
               checkFormatting();

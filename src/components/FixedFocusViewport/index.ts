@@ -1,4 +1,5 @@
 export { FixedFocusEditor } from './FixedFocusEditor';
+export { ceGetSelection, ceSetSelection, ceGetText } from './FixedFocusEditor';
 export { FixedFocusViewportModel } from './viewportModel';
 export {
   PRESET_METRICS,
