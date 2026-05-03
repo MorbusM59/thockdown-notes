@@ -22,6 +22,15 @@ const VIEWPORT_JUMP_CURVE_EXPONENT_DISTANCE_FACTOR = 0.002;
 const VIEWPORT_JUMP_CURVE_EXPONENT_MAX = 1.5;
 const VIEWPORT_JUMP_STEP_DURATION_OFFSET_MS = 0.05;
 const CARET_ANIMATION_RESUME_DELAY_MS = 200;
+const CELL_WIDTH_QUANTUM_PX = 1;
+const CSS_PX_PRECISION = 12;
+const GRID_STROKE_WIDTH_PX = 1;
+
+interface QuantizedCellMetrics {
+  measuredCellWidthPx: number;
+  quantizedCellWidthPx: number;
+  letterSpacingPx: number;
+}
 
 interface ViewportAnimationStep {
   atMs: number;
@@ -219,10 +228,12 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   const contentWidthPx = Math.max(1, containerWidthPx - (horizontalPaddingPx * 2));
   const topInsetPx = Math.max(0, computeTopInsetPx(spacingPreset));
   const drawableHeightPx = Math.max(1, containerHeightPx - topInsetPx);
-  const charCellWidthPx = useMemo(
-    () => measureMonospaceCellWidthPx(fontSizePx, fontFamily),
+  const cellMetrics = useMemo(
+    () => measureQuantizedMonospaceCellMetrics(fontSizePx, fontFamily),
     [fontFamily, fontSizePx]
   );
+  const charCellWidthPx = cellMetrics.quantizedCellWidthPx;
+  const cellLetterSpacingPx = cellMetrics.letterSpacingPx;
 
   const setViewportStartRow = useCallback((nextViewportStartRow: number | ((prev: number) => number)) => {
     const resolvedNextRow = typeof nextViewportStartRow === 'function'
@@ -1158,7 +1169,12 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     ) => {
       rows.forEach((row, rowIndex) => {
         const rowText = text.slice(row.startCharIndex, row.endCharIndex);
-        const topPx = zoneTopPx + insetTopPx + (rowIndex * metrics.rowHeightPx);
+        const rowTopBoundaryPx = snapToDevicePixels(zoneTopPx + insetTopPx + (rowIndex * metrics.rowHeightPx));
+        const rowBottomBoundaryPx = snapToDevicePixels(rowTopBoundaryPx + metrics.rowHeightPx);
+        const interiorTopPx = Math.min(
+          rowBottomBoundaryPx,
+          rowTopBoundaryPx + GRID_STROKE_WIDTH_PX
+        );
         const occupiedCells = new Map<number, CellHighlightKind>();
         const rowCellCount = countVisualCells(rowText);
         const visibleRowIndex = zoneStartRow + rowIndex;
@@ -1203,14 +1219,17 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
 
         const orderedCells = [...occupiedCells.entries()].sort((left, right) => left[0] - right[0]);
         orderedCells.forEach(([cellIndex, kind]) => {
-          const leftPx = snapToDevicePixels(horizontalPaddingPx + (cellIndex * charCellWidthPx));
-          const rightPx = snapToDevicePixels(horizontalPaddingPx + ((cellIndex + 1) * charCellWidthPx));
+          const cellLeftBoundaryPx = snapToDevicePixels(horizontalPaddingPx + (cellIndex * charCellWidthPx));
+          const cellRightBoundaryPx = snapToDevicePixels(horizontalPaddingPx + ((cellIndex + 1) * charCellWidthPx));
+          const interiorLeftPx = Math.min(cellRightBoundaryPx, cellLeftBoundaryPx + GRID_STROKE_WIDTH_PX);
+          const interiorRightPx = Math.max(interiorLeftPx, cellRightBoundaryPx - GRID_STROKE_WIDTH_PX);
+          const interiorBottomPx = Math.max(interiorTopPx, rowBottomBoundaryPx - GRID_STROKE_WIDTH_PX);
           highlights.push({
             kind,
-            topPx,
-            leftPx,
-            widthPx: Math.max(1, rightPx - leftPx),
-            heightPx: metrics.rowHeightPx,
+            topPx: interiorTopPx,
+            leftPx: interiorLeftPx,
+            widthPx: Math.max(0, interiorRightPx - interiorLeftPx),
+            heightPx: Math.max(0, interiorBottomPx - interiorTopPx),
           });
         });
       });
@@ -1378,6 +1397,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
               insetTopPx={topRowsInsetPx}
               horizontalPaddingPx={horizontalPaddingPx}
               rightPaddingPx={textareaRightPaddingPx}
+              letterSpacingPx={cellLetterSpacingPx}
               textareaClassName={textareaClassName}
               textareaStyle={textareaStyle}
             />
@@ -1424,7 +1444,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
               fontKerning: 'none',
               fontVariantLigatures: 'none',
               fontFeatureSettings: '"liga" 0, "calt" 0',
-              letterSpacing: '0',
+              letterSpacing: formatPxForCss(cellLetterSpacingPx),
               boxSizing: 'border-box',
               overflow: 'hidden',
               whiteSpace: 'pre-wrap',
@@ -1460,6 +1480,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
               insetTopPx={0}
               horizontalPaddingPx={horizontalPaddingPx}
               rightPaddingPx={textareaRightPaddingPx}
+              letterSpacingPx={cellLetterSpacingPx}
               textareaClassName={textareaClassName}
               textareaStyle={textareaStyle}
             />
@@ -1493,6 +1514,7 @@ interface MirroredTextLayerProps {
   insetTopPx?: number;
   horizontalPaddingPx?: number;
   rightPaddingPx?: number;
+  letterSpacingPx?: number;
   textareaClassName?: string;
   textareaStyle?: React.CSSProperties;
 }
@@ -1506,6 +1528,7 @@ const MirroredTextLayer: React.FC<MirroredTextLayerProps> = ({
   insetTopPx = 0,
   rightPaddingPx = 20,
   horizontalPaddingPx = 20,
+  letterSpacingPx = 0,
   textareaClassName,
   textareaStyle,
 }) => (
@@ -1540,7 +1563,7 @@ const MirroredTextLayer: React.FC<MirroredTextLayerProps> = ({
         fontKerning: 'none',
         fontVariantLigatures: 'none',
         fontFeatureSettings: '"liga" 0, "calt" 0',
-        letterSpacing: '0',
+        letterSpacing: formatPxForCss(letterSpacingPx),
         boxSizing: 'border-box',
         overflow: 'hidden',
         whiteSpace: 'pre-wrap',
@@ -1560,19 +1583,21 @@ function computeTopInsetPx(spacingPreset: string): number {
   return 15;
 }
 
-function measureMonospaceCellWidthPx(fontSizePx: number, fontFamily: string): number {
+function measureQuantizedMonospaceCellMetrics(fontSizePx: number, fontFamily: string): QuantizedCellMetrics {
   const cacheKey = `${fontSizePx}px|${fontFamily}`;
   const cached = charWidthCache.get(cacheKey);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) {
+    return buildQuantizedCellMetrics(cached);
+  }
 
   if (typeof document === 'undefined') {
-    const fallback = Math.max(1, Math.round(fontSizePx * 0.6));
+    const fallback = Math.max(1, fontSizePx * 0.6);
     charWidthCache.set(cacheKey, fallback);
-    return fallback;
+    return buildQuantizedCellMetrics(fallback);
   }
 
   const measurementElement = document.createElement('span');
-  const sampleText = '0'.repeat(256);
+  const sampleText = '0'.repeat(4096);
   measurementElement.textContent = sampleText;
   measurementElement.style.position = 'absolute';
   measurementElement.style.visibility = 'hidden';
@@ -1593,9 +1618,26 @@ function measureMonospaceCellWidthPx(fontSizePx: number, fontFamily: string): nu
   const width = measurementElement.getBoundingClientRect().width / sampleText.length;
   measurementElement.remove();
 
-  const measured = Math.max(1, Math.round(width * 1000) / 1000);
+  const measured = Math.max(1, width);
   charWidthCache.set(cacheKey, measured);
-  return measured;
+  return buildQuantizedCellMetrics(measured);
+}
+
+function buildQuantizedCellMetrics(measuredCellWidthPx: number): QuantizedCellMetrics {
+  const quantizedCellWidthPx = Math.max(
+    CELL_WIDTH_QUANTUM_PX,
+    Math.ceil(measuredCellWidthPx / CELL_WIDTH_QUANTUM_PX) * CELL_WIDTH_QUANTUM_PX
+  );
+  const letterSpacingPx = quantizedCellWidthPx - measuredCellWidthPx;
+  return {
+    measuredCellWidthPx,
+    quantizedCellWidthPx,
+    letterSpacingPx,
+  };
+}
+
+function formatPxForCss(valuePx: number): string {
+  return `${valuePx.toFixed(CSS_PX_PRECISION)}px`;
 }
 
 function countLeadingWhitespaceCells(text: string): number {

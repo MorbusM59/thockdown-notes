@@ -156,8 +156,6 @@
     .cell-highlight {
       position: absolute;
       box-sizing: border-box;
-      background-clip: content-box;
-      padding: 1px;
 
       &.cell-highlight--caret {
         background: var(--highlight-caret-bg);
