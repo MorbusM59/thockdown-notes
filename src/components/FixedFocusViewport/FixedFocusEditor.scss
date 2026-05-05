@@ -23,7 +23,8 @@
     width: var(--grid-quantized-width);
     height: var(--grid-quantized-height);
     pointer-events: none;
-    z-index: 1;
+    /* Place grid above all content (including selection) */
+    z-index: 9999;
     --grid-line-color: rgba(90, 90, 90, 0.12);
     background-image:
       repeating-linear-gradient(
