@@ -1421,6 +1421,13 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       }
     }
 
+    // Allow fully native handling for Enter, Tab and Space in the editor.
+    // This avoids programmatic indentation/list continuation and prevents
+    // DOM/selection races that interfere with typing on the final line.
+    if (!showPreview && (e.key === 'Enter' || e.key === 'Tab' || e.key === ' ')) {
+      return;
+    }
+
     if (e.key === 'Enter' && !showPreview) {
       // New behaviour:
       // - Enter: continue indentation and continue list (bullets keep '-'/'*'/'+', numbered lists increment).

@@ -144,8 +144,9 @@ export function ceGetText(el: HTMLElement): string {
     }
     node = walker.nextNode();
   }
-  // Strip a single sentinel trailing newline that Chromium may inject
-  return result.endsWith('\n') && !result.endsWith('\n\n') ? result.slice(0, -1) : result;
+  // Return the text as-is. Do not strip a trailing newline — preserve the
+  // browser's sentinel <br> so native Enter produces a stable DOM state.
+  return result;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -257,6 +258,8 @@ interface FixedFocusEditorProps {
   textareaRef?: React.MutableRefObject<HTMLDivElement | null>;
   textareaClassName?: string;
   textareaStyle?: React.CSSProperties;
+  /** Optional ref for exposing editor programmatic API (applyProgrammaticEdit) */
+  editorApiRef?: React.MutableRefObject<any>;
   placeholder?: string;
   onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
   onKeyUp?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
@@ -293,6 +296,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   onCaretChange,
   onSelectionChange,
   textareaRef,
+  editorApiRef,
   textareaClassName,
   textareaStyle,
   placeholder,
@@ -398,6 +402,53 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     if (!textareaRef) return;
     textareaRef.current = centerInputRef.current;
   }, [textareaRef]);
+
+  useEffect(() => {
+    if (!editorApiRef) return;
+    editorApiRef.current = {
+      applyProgrammaticEdit: (edit: { start: number; deleteLen: number; insertText: string }) => {
+        const el = centerInputRef.current;
+        if (!el) return null;
+        try { el.focus(); } catch {}
+
+        const start = Math.max(0, Math.floor(edit.start ?? 0));
+        const deleteLen = Math.max(0, Math.floor(edit.deleteLen ?? 0));
+        const end = start + deleteLen;
+
+        try {
+          // Set selection to target range
+          ceSetSelection(el, start, end);
+          // Use execCommand to insert text so browser undo integrates
+          const success = document.execCommand('insertText', false, edit.insertText ?? '');
+          if (!success) {
+            // Fallback to DOM Range replacement
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0) {
+              const range = sel.getRangeAt(0);
+              range.deleteContents();
+              range.insertNode(document.createTextNode(edit.insertText ?? ''));
+              range.collapse(false);
+              sel.removeAllRanges();
+              sel.addRange(range);
+            }
+          }
+        } catch (err) {
+          // Fallback: apply text by rebuilding DOM (rare)
+          const currentText = ceGetText(el);
+          const newText = currentText.substring(0, start) + (edit.insertText ?? '') + currentText.substring(end);
+          ceSetText(el, newText);
+          ceSetSelection(el, start + (edit.insertText ?? '').length, start + (edit.insertText ?? '').length);
+        }
+
+        const newText = ceGetText(el);
+        const sel = ceGetSelection(el) ?? { start: 0, end: 0 };
+        onTextChange(newText, sel.start, sel.end);
+        return { newText, selectionStart: sel.start, selectionEnd: sel.end };
+      },
+    };
+
+    return () => { if (editorApiRef) editorApiRef.current = null; };
+  }, [editorApiRef, onTextChange]);
 
   // Sync external text-prop changes into the contenteditable DOM.
   // When the user types, ceGetText(el) === text and this is a no-op.
