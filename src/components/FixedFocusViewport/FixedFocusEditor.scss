@@ -62,19 +62,22 @@
     display: none;
     background: var(--highlight-caret-bg, rgba(0,0,0,0.35));
     opacity: 0.7; /* start at da (70%) */
-    transform-origin: center;
-    animation: ff-caret-heartbeat 1s infinite ease-in-out;
+    /* Keep rectangle size constant; animate only opacity for the heartbeat. */
+    transform: none;
+    /* 1.2s cycle: short subtle "ba" (~0.2s), longer main "boom" (~1.0s) */
+    animation: ff-caret-heartbeat 1.2s infinite cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   @keyframes ff-caret-heartbeat {
-    /* da (strong) at 0% -> opacity 0.7, quick drop, then dum (weaker) at 50% */
-    0%   { opacity: 0.7; transform: scaleY(1); }
-    10%  { opacity: 0.2; transform: scaleY(0.85); }
-    30%  { opacity: 0.45; transform: scaleY(0.95); }
-    50%  { opacity: 0.5; transform: scaleY(1); }
-    70%  { opacity: 0.25; transform: scaleY(0.9); }
-    90%  { opacity: 0.6; transform: scaleY(0.98); }
-    100% { opacity: 0.7; transform: scaleY(1); }
+     /* Pattern: initial short beat = 0.2s (≈16.667%), then main beat = 1.0s
+       (remaining ≈83.333%). Keyframe percentages reflect those absolute
+       timings within the 1.2s cycle.
+       Sequence: 70% -> 20% (0.2s) -> 100% (mid) -> 20% -> 70% (end). */
+     0%       { opacity: 0.7; }
+     16.667%  { opacity: 0.2; }
+     58.333%  { opacity: 1.0; }
+     83.333%  { opacity: 0.2; }
+     100%     { opacity: 0.7; }
   }
 
   .fixed-focus-scroll-indicator {
