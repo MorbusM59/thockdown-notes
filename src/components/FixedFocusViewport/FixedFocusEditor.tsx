@@ -158,7 +158,6 @@ const VIEWPORT_JUMP_CURVE_EXPONENT = 1;
 const VIEWPORT_JUMP_CURVE_EXPONENT_DISTANCE_FACTOR = 0.002;
 const VIEWPORT_JUMP_CURVE_EXPONENT_MAX = 1.5;
 const VIEWPORT_JUMP_STEP_DURATION_OFFSET_MS = 0.05;
-const CARET_ANIMATION_RESUME_DELAY_MS = 200;
 const GRID_STROKE_WIDTH_PX = 1;
 
 interface ViewportAnimationStep {
@@ -212,15 +211,7 @@ function buildViewportAnimationSchedule(
   });
 }
 
-interface IndentHighlight {
-  kind: CellHighlightKind;
-  topPx: number;
-  leftPx: number;
-  widthPx: number;
-  heightPx: number;
-}
-
-type CellHighlightKind = 'caret' | 'selection' | 'leading' | 'trailing';
+// Highlight overlay removed — rely on native selection and visual grid.
 
 interface HighlightColors {
   caret: string;
@@ -315,13 +306,12 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   const [isScrollIndicatorDragging, setIsScrollIndicatorDragging] = useState(false);
   const [isPointerSelecting, setIsPointerSelecting] = useState(false);
   const [isViewportAnimating, setIsViewportAnimating] = useState(false);
-  const [isCaretAnimationPaused, setIsCaretAnimationPaused] = useState(false);
   const [resizeAnchorViewportStartRow, setResizeAnchorViewportStartRow] = useState<number | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   const editorRootRef = useRef<HTMLDivElement>(null);
   const scrollIndicatorRef = useRef<HTMLDivElement>(null);
   const centerInputRef = useRef<HTMLDivElement>(null);
-  const caretOverlayRef = useRef<HTMLDivElement>(null);
+  
   const resizeStateRef = useRef<{
     handle: 'top' | 'bottom';
     startY: number;
@@ -358,8 +348,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   const previousViewportStartRowRef = useRef(0);
   const lastCaretViewportOffsetRef = useRef(0);
   const previousWrapWidthPxRef = useRef<number | null>(null);
-  const previousCaretPosForAnimationRef = useRef(caretPos);
-  const caretAnimationResumeTimeoutRef = useRef<number | null>(null);
+  
   const centerStartRow = viewportStartRow ?? uncontrolledViewportStartRow;
   const resolvedTopRowCount = topRowCount ?? uncontrolledTopRowCount;
   const resolvedBottomRowCount = bottomRowCount ?? uncontrolledBottomRowCount;
@@ -465,25 +454,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     }
   }, [text]);
 
-  useEffect(() => {
-    if (caretPos === previousCaretPosForAnimationRef.current) return;
-
-    previousCaretPosForAnimationRef.current = caretPos;
-    setIsCaretAnimationPaused(true);
-    if (caretAnimationResumeTimeoutRef.current != null) {
-      window.clearTimeout(caretAnimationResumeTimeoutRef.current);
-    }
-    caretAnimationResumeTimeoutRef.current = window.setTimeout(() => {
-      setIsCaretAnimationPaused(false);
-      caretAnimationResumeTimeoutRef.current = null;
-    }, CARET_ANIMATION_RESUME_DELAY_MS);
-  }, [caretPos]);
-
-  useEffect(() => () => {
-    if (caretAnimationResumeTimeoutRef.current != null) {
-      window.clearTimeout(caretAnimationResumeTimeoutRef.current);
-    }
-  }, []);
+  // No custom caret animation required when using native caret.
 
   // Build model for zone slicing + layout; viewport driven entirely by centerStartRow state.
   // Contract:
@@ -903,44 +874,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     if (el.scrollLeft) el.scrollLeft = 0;
   }, [isFocused, selectionEnd, selectionStart]);
 
-  // After every render, update the caret overlay div imperatively using the
-  // model-based caret position.  Using caretGridCell / caretRow (which are derived
-  // from resolveRowForCaretIndex with boundaryCaretRowPreferenceRef) rather than
-  // getCaretBoundingRect() means the overlay always respects the boundary-row
-  // preference.  Chrome renders wrap-boundary positions (e.g. the start of a
-  // wrapped word) at the END of the previous visual row; the model correctly places
-  // them on the row the user navigated to, matching visual expectations.
-  // This also handles blank lines naturally (no special-case needed).
-  useLayoutEffect(() => {
-    const overlay = caretOverlayRef.current;
-    const el = centerInputRef.current;
-    if (!overlay || !el) return;
-
-    if (selectionStart !== selectionEnd || !isFocused) {
-      overlay.style.display = 'none';
-      return;
-    }
-
-    // gridRowWithinOverlay: row index relative to the top of fixed-focus-editor-content.
-    // Center zone rows start at layout.topHeightPx inside the content div.
-    const gridRowWithinOverlay = caretRow - effectiveCenterStartRow;
-    if (gridRowWithinOverlay < 0 || gridRowWithinOverlay >= viewport.centerRowCount) {
-      overlay.style.display = 'none';
-      return;
-    }
-
-    const cellCol = caretGridCell.gridColumn;
-    const cellLeftBoundaryPx = snapToDevicePixels(horizontalPaddingPx + cellCol * charCellWidthPx);
-    const cellRightBoundaryPx = snapToDevicePixels(horizontalPaddingPx + (cellCol + 1) * charCellWidthPx);
-    const cellTopBoundaryPx = snapToDevicePixels(layout.topHeightPx + gridRowWithinOverlay * metrics.rowHeightPx);
-    const cellBottomBoundaryPx = snapToDevicePixels(layout.topHeightPx + (gridRowWithinOverlay + 1) * metrics.rowHeightPx);
-
-    overlay.style.display = 'block';
-    overlay.style.left = `${cellLeftBoundaryPx + GRID_STROKE_WIDTH_PX}px`;
-    overlay.style.top = `${cellTopBoundaryPx + GRID_STROKE_WIDTH_PX}px`;
-    overlay.style.width = `${Math.max(0, cellRightBoundaryPx - cellLeftBoundaryPx - GRID_STROKE_WIDTH_PX * 2)}px`;
-    overlay.style.height = `${Math.max(0, cellBottomBoundaryPx - cellTopBoundaryPx - GRID_STROKE_WIDTH_PX * 2)}px`;
-  });
+  // Native caret: no imperative overlay positioning — rely on browser caret.
 
   const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
@@ -1446,103 +1380,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     };
   }, [getAutoScrollRowsPerSecond, getCharIndexForPointer, getOutsideCenterScrollForPointer, isPointerSelecting, onSelectionChange, setViewportStartRow]);
 
-  const highlightSpans = useMemo(() => {
-    const highlights: IndentHighlight[] = [];
-    const appendZoneHighlights = (
-      rows: WrappedLine[],
-      zoneTopPx: number,
-      zoneStartRow: number,
-      insetTopPx = 0
-    ) => {
-      rows.forEach((row, rowIndex) => {
-        const rowText = text.slice(row.startCharIndex, row.endCharIndex);
-        const rowTopBoundaryPx = snapToDevicePixels(zoneTopPx + insetTopPx + (rowIndex * metrics.rowHeightPx));
-        const rowBottomBoundaryPx = snapToDevicePixels(rowTopBoundaryPx + metrics.rowHeightPx);
-        const interiorTopPx = Math.min(
-          rowBottomBoundaryPx,
-          rowTopBoundaryPx + GRID_STROKE_WIDTH_PX
-        );
-        const occupiedCells = new Map<number, CellHighlightKind>();
-        const rowCellCount = countVisualCells(rowText);
-        const visibleRowIndex = zoneStartRow + rowIndex;
-        const normalizedSelectionStart = Math.min(selectionStart, selectionEnd);
-        const normalizedSelectionEnd = Math.max(selectionStart, selectionEnd);
-        const rowSelectionStart = Math.max(row.startCharIndex, normalizedSelectionStart);
-        const rowSelectionEnd = Math.min(row.endCharIndex, normalizedSelectionEnd);
-
-        if (rowSelectionEnd > rowSelectionStart) {
-          const selectionStartCell = countVisualCells(text.slice(row.startCharIndex, rowSelectionStart));
-          const selectionEndCell = countVisualCells(text.slice(row.startCharIndex, rowSelectionEnd));
-          for (let cellIndex = selectionStartCell; cellIndex < selectionEndCell; cellIndex += 1) {
-            occupiedCells.set(cellIndex, 'selection');
-          }
-        }
-
-        if (selectionStart === selectionEnd && visibleRowIndex === caretRow) {
-          // Caret cell is now positioned via native rect in the caretOverlayRef useLayoutEffect.
-          // Keep the occupiedCells entry only so leading/trailing whitespace highlights don't
-          // overlap the caret column in the center zone; but don't emit a 'caret' highlight.
-        }
-
-        if (row.isLineStart) {
-          const leadingCellCount = countLeadingWhitespaceCells(rowText);
-          for (let cellIndex = 0; cellIndex < leadingCellCount; cellIndex += 1) {
-            if (!occupiedCells.has(cellIndex)) {
-              occupiedCells.set(cellIndex, 'leading');
-            }
-          }
-        }
-
-        if (row.isLineEnd) {
-          const trailingCellCount = countTrailingWhitespaceCells(rowText);
-          const trailingStartCell = Math.max(0, rowCellCount - trailingCellCount);
-          for (let cellIndex = trailingStartCell; cellIndex < rowCellCount; cellIndex += 1) {
-            if (!occupiedCells.has(cellIndex)) {
-              occupiedCells.set(cellIndex, 'trailing');
-            }
-          }
-        }
-
-        const orderedCells = [...occupiedCells.entries()].sort((left, right) => left[0] - right[0]);
-        orderedCells.forEach(([cellIndex, kind]) => {
-          const cellLeftBoundaryPx = snapToDevicePixels(horizontalPaddingPx + (cellIndex * charCellWidthPx));
-          const cellRightBoundaryPx = snapToDevicePixels(horizontalPaddingPx + ((cellIndex + 1) * charCellWidthPx));
-          const interiorLeftPx = Math.min(cellRightBoundaryPx, cellLeftBoundaryPx + GRID_STROKE_WIDTH_PX);
-          const interiorRightPx = Math.max(interiorLeftPx, cellRightBoundaryPx - GRID_STROKE_WIDTH_PX);
-          const interiorBottomPx = Math.max(interiorTopPx, rowBottomBoundaryPx - GRID_STROKE_WIDTH_PX);
-          highlights.push({
-            kind,
-            topPx: interiorTopPx,
-            leftPx: interiorLeftPx,
-            widthPx: Math.max(0, interiorRightPx - interiorLeftPx),
-            heightPx: Math.max(0, interiorBottomPx - interiorTopPx),
-          });
-        });
-      });
-    };
-
-    appendZoneHighlights(topRows, 0, centerStartRow - topRows.length, topRowsInsetPx);
-    appendZoneHighlights(centerRows, layout.topHeightPx, centerStartRow);
-    appendZoneHighlights(bottomRows, layout.topHeightPx + layout.centerHeightPx, centerStartRow + centerRows.length);
-
-    return highlights;
-  }, [
-    caretPos,
-    caretRow,
-    selectionStart,
-    selectionEnd,
-    centerRows,
-    centerStartRow,
-    charCellWidthPx,
-    horizontalPaddingPx,
-    layout.centerHeightPx,
-    layout.topHeightPx,
-    metrics.rowHeightPx,
-    text,
-    topRows,
-    topRowsInsetPx,
-    bottomRows,
-  ]);
+  // overlay highlighting removed — rely on native selection and grid visuals
 
   return (
     <div
@@ -1633,37 +1471,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
           <div className="scroll-indicator-grid" />
         </div>
 
-        <div
-          className="fixed-focus-cell-overlay"
-          aria-hidden
-          style={{
-            '--grid-row-height': `${metrics.rowHeightPx}px`,
-            '--grid-column-width': `${charCellWidthPx}px`,
-            '--highlight-caret-bg': highlightColors?.caret,
-            '--highlight-selection-bg': highlightColors?.selection,
-            '--highlight-leading-bg': highlightColors?.leading,
-            '--highlight-trailing-bg': highlightColors?.trailing,
-          } as React.CSSProperties}
-        >
-          {highlightSpans.map((highlight, index) => (
-            <div
-              key={`${highlight.topPx}-${highlight.leftPx}-${highlight.widthPx}-${index}`}
-              className={`cell-highlight cell-highlight--${highlight.kind}`}
-              style={{
-                top: `${highlight.topPx}px`,
-                left: `${highlight.leftPx}px`,
-                width: `${highlight.widthPx}px`,
-                height: `${highlight.heightPx}px`,
-              }}
-            />
-          ))}
-          {/* Native-caret overlay: position is set imperatively in useLayoutEffect */}
-          <div
-            ref={caretOverlayRef}
-            className={`cell-highlight cell-highlight--caret${isCaretAnimationPaused ? ' cell-highlight--caret-paused' : ''}`}
-            style={{ display: 'none', position: 'absolute' }}
-          />
-        </div>
+        {/* Overlay highlights removed; relying on grid + native selection */}
 
         {/* Top Zone (display-only) */}
         {layout.topHeightPx > 0 && (
@@ -1758,7 +1566,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
               whiteSpace: 'pre-wrap',
               wordWrap: 'break-word',
               tabSize: 3,
-              caretColor: 'transparent',
+              caretColor: 'auto',
               ...textareaStyle,
             }}
           />

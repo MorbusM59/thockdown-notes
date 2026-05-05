@@ -142,115 +142,7 @@
     }
   }
 
-  .fixed-focus-cell-overlay {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-
-    --highlight-caret-bg: rgba(255, 221, 85, 0.2);
-    --highlight-selection-bg: rgba(76, 151, 255, 0.25);
-    --highlight-leading-bg: rgba(120, 120, 120, 0.12);
-    --highlight-trailing-bg: rgba(245, 184, 85, 0.16);
-
-    .cell-highlight {
-      position: absolute;
-      box-sizing: border-box;
-
-      &.cell-highlight--caret {
-        background: var(--highlight-caret-bg);
-        animation: caret-heartbeat 1.4s linear infinite;
-        will-change: opacity;
-      }
-
-      &.cell-highlight--caret-paused {
-        animation: none;
-        opacity: 0.7;
-      }
-
-      &.cell-highlight--selection {
-        background: var(--highlight-selection-bg);
-      }
-
-      &.cell-highlight--leading {
-        background: var(--highlight-leading-bg);
-      }
-
-      &.cell-highlight--trailing {
-        background: var(--highlight-trailing-bg);
-      }
-    }
-  }
-
-  @keyframes caret-heartbeat {
-    0% {
-      opacity: 0.7;
-    }
-
-    3.571% {
-      opacity: 0.35;
-    }
-
-    7.143% {
-      opacity: 0.205;
-    }
-
-    10.714% {
-      opacity: 0.094;
-    }
-
-    14.286% {
-      opacity: 0;
-    }
-
-    17.857% {
-      opacity: 0.5;
-    }
-
-    21.429% {
-      opacity: 0.707;
-    }
-
-    25% {
-      opacity: 0.866;
-    }
-
-    28.571% {
-      opacity: 1;
-    }
-
-    42.857% {
-      opacity: 0.563;
-    }
-
-    57.143% {
-      opacity: 0.25;
-    }
-
-    71.429% {
-      opacity: 0.063;
-    }
-
-    85.714% {
-      opacity: 0;
-    }
-
-    89.286% {
-      opacity: 0.044;
-    }
-
-    92.857% {
-      opacity: 0.175;
-    }
-
-    96.429% {
-      opacity: 0.394;
-    }
-
-    100% {
-      opacity: 0.7;
-    }
-  }
+  /* Overlay highlights removed: rely on native selection and grid visuals */
 
   .zone {
     flex-shrink: 0;
@@ -267,7 +159,7 @@
       }
     }
 
-    &.zone-center {
+        &.zone-center {
       flex: 0 0 auto;
       position: relative;
       background: transparent;
@@ -284,21 +176,13 @@
         color: inherit;
         background: transparent;
         resize: none;
-        outline: none;
-        caret-color: transparent;
+        	  outline: none;
+        	  caret-color: auto;
         box-sizing: border-box;
         white-space: pre-wrap;
         word-wrap: break-word;
         
-        &::selection {
-          background-color: transparent;
-          color: inherit;
-        }
-
-        &::-moz-selection {
-          background-color: transparent;
-          color: inherit;
-        }
+        	  /* Use native selection styling */
       }
     }
 
