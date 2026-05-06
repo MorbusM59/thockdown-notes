@@ -409,9 +409,20 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   const contentWidthPx = Math.max(1, containerWidthPx - (leftPaddingPx + rightPaddingPx));
   const topInsetPx = Math.max(0, topPaddingPx);
   const drawableHeightPx = Math.max(1, containerHeightPx - topInsetPx - Math.max(0, bottomPaddingPx));
+
+  const [fontsLoadedInc, setFontsLoadedInc] = useState(0);
+  useEffect(() => {
+    if (typeof document !== 'undefined' && 'fonts' in document) {
+      document.fonts.ready.then(() => {
+        charWidthCache.clear();
+        setFontsLoadedInc(c => c + 1);
+      });
+    }
+  }, [fontFamily]);
+
   const charCellWidthPx = useMemo(
     () => measureMonospaceCellWidthPx(fontSizePx, fontFamily),
-    [fontFamily, fontSizePx]
+    [fontFamily, fontSizePx, fontsLoadedInc]
   );
 
   const setViewportStartRow = useCallback((nextViewportStartRow: number | ((prev: number) => number)) => {
