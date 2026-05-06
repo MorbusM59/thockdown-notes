@@ -310,7 +310,7 @@ export const App: React.FC = () => {
         const printable = document.createElement('div');
         printable.className = 'pdf-export-textarea-clone';
         printable.textContent = ta.value;
-        printable.style.whiteSpace = 'pre-wrap';
+        printable.style.whiteSpace = 'break-spaces';
         printable.style.wordBreak = 'break-word';
         printable.style.fontFamily = 'inherit';
         printable.style.fontSize = 'inherit';

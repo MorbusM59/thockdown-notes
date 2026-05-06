@@ -215,7 +215,7 @@
         	  outline: none;
         	  caret-color: transparent;
         box-sizing: border-box;
-        white-space: pre-wrap;
+        white-space: break-spaces;
         word-wrap: break-word;
         
         	  /* Use native selection styling */
@@ -253,7 +253,7 @@
     padding: 0 8px;
     margin: 0;
     box-sizing: border-box;
-    white-space: pre-wrap;
+    white-space: break-spaces;
     word-wrap: break-word;
     user-select: none;
 

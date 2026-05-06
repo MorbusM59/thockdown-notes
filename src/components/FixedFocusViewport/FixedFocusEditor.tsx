@@ -945,12 +945,12 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
       const rootRect = root.getBoundingClientRect();
       let rect = getCaretClientRectSafe(el);
 
-      // Compute overlay anchor cell in case we need to fall back to the grid.
-      let overlayCaretCell = caretGridCell;
-      if (isPointerSelecting) {
-        const anchorPos = selectionStart;
-        overlayCaretCell = getCaretGridCell(anchorPos, wrappedLines, text, boundaryCaretRowPreferenceRef.current);
-      }
+      // Compute overlay anchor cell to ensure horizontal and vertical metrics are in sync.
+      // We read the live selection from DOM to avoid React render lag causing broken pairs
+      // (e.g. DOM rect returns left from next line, but React state holds gridRow from prev line).
+      const liveSel = ceGetSelection(el);
+      const livePos = liveSel ? liveSel.start : selectionStart;
+      const overlayCaretCell = getCaretGridCell(livePos, wrappedLines, text, boundaryCaretRowPreferenceRef.current);
 
       // Horizontal metrics
       // If rect is unavailable (empty line, zero-width caret), fall back to
@@ -1767,7 +1767,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
               letterSpacing: '0',
               boxSizing: 'border-box',
               overflow: 'hidden',
-              whiteSpace: 'pre-wrap',
+              whiteSpace: 'break-spaces',
               wordWrap: 'break-word',
               tabSize: 3,
               caretColor: 'transparent',
@@ -1883,7 +1883,7 @@ const MirroredTextLayer: React.FC<MirroredTextLayerProps> = ({
         letterSpacing: '0',
         boxSizing: 'border-box',
         overflow: 'hidden',
-        whiteSpace: 'pre-wrap',
+        whiteSpace: 'break-spaces',
         wordWrap: 'break-word',
         tabSize: 3,
         pointerEvents: 'none',

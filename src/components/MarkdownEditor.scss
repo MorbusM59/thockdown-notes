@@ -223,7 +223,7 @@
 /* editor-style classes may override padding */
 .markdown-textarea.editor-style-syne,
 .markdown-textarea.editor-style-redhat {
-  white-space: pre-wrap;
+  white-space: break-spaces;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -302,7 +302,7 @@
   outline: none;
   overflow: hidden;
   -webkit-overflow-scrolling: touch;
-  white-space: pre-wrap;
+  white-space: break-spaces;
   word-wrap: break-word;
   overflow-wrap: anywhere;
   word-break: break-word;
