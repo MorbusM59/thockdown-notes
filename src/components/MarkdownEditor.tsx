@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { visit } from 'unist-util-visit';
+import { Node } from 'unist';
 import {
   ArchivedParagraphHistoryEntry,
   EditHistoryEntry,
@@ -290,6 +292,18 @@ type EditState = {
 
 const EDIT_STATE_KEY_PREFIX = 'md-edit-state-';
 
+const remarkSourcePos = () => {
+  return (tree: Node) => {
+    visit(tree, (node: any) => {
+      if (node.position && node.position.start) {
+        node.data = node.data || {};
+        node.data.hProperties = node.data.hProperties || {};
+        node.data.hProperties['data-line'] = node.position.start.line - 1; // 0-based to match logicalLineIndex
+      }
+    });
+  };
+};
+
 export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   note,
   onNoteUpdate,
@@ -356,6 +370,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   const liveSelectionStartRef = useRef(0);
   const liveSelectionEndRef = useRef(0);
   const liveViewportStartRowRef = useRef(0);
+  const liveViewportTopSourceLineRef = useRef(0);
 
   const scheduleTimeout = (cb: () => void, ms: number) => {
     const id = window.setTimeout(cb, ms);
@@ -634,12 +649,37 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       const totalRows = Math.max(1, totalWrappedRowsRef.current);
       if (!editorContent) return;
       
-      // Force initial layout calculation and immediately apply scroll position
-      const visibleRows = editorContent.clientHeight / 24; 
-      const scrollableRows = Math.max(1, totalRows - visibleRows);
-      const ratio = Math.min(1, liveViewportStartRowRef.current / scrollableRows);
+      const targetLine = liveViewportTopSourceLineRef.current;
+      const elements = Array.from(editorContent.querySelectorAll('[data-line]'));
+      let targetElement: Element | null = null;
+      let minDiff = Infinity;
       
-      editorContent.scrollTop = ratio * Math.max(0, editorContent.scrollHeight - editorContent.clientHeight);
+      for (const el of elements) {
+        const lineStr = el.getAttribute('data-line');
+        if (lineStr) {
+          const line = parseInt(lineStr, 10);
+          if (line <= targetLine) {
+            const diff = targetLine - line;
+            if (diff < minDiff) {
+              minDiff = diff;
+              targetElement = el;
+            }
+          }
+        }
+      }
+
+      if (targetElement && targetLine > 0) {
+        const topDiff = targetElement.getBoundingClientRect().top - editorContent.getBoundingClientRect().top;
+        editorContent.scrollTop = editorContent.scrollTop + topDiff;
+      } else if (targetLine === 0) {
+        editorContent.scrollTop = 0;
+      } else {
+        // Fallback to ratio
+        const visibleRows = editorContent.clientHeight / 24; 
+        const scrollableRows = Math.max(1, totalRows - visibleRows);
+        const ratio = Math.min(1, liveViewportStartRowRef.current / scrollableRows);
+        editorContent.scrollTop = ratio * Math.max(0, editorContent.scrollHeight - editorContent.clientHeight);
+      }
     }
   }, [showPreview]);
 
@@ -2178,6 +2218,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             containerHeightPx={Math.max(1, editorViewportSize.height)}
             viewportStartRow={editViewportStartRow}
             onViewportStartRowChange={setEditViewportStartRow}
+            onViewportTopSourceLineChange={(lineIndex) => { liveViewportTopSourceLineRef.current = lineIndex; }}
             onTopRowCountChange={handleFixedFocusTopRowCountChange}
             onBottomRowCountChange={handleFixedFocusBottomRowCountChange}
             onTotalWrappedRowCountChange={(count) => { totalWrappedRowsRef.current = count; }}
@@ -2216,7 +2257,7 @@ Start typing your note here...`}
         ) : (
           <div className={`markdown-preview style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}>
             <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
+              remarkPlugins={[remarkGfm, remarkSourcePos]}
               components={{
                 a: ({ node, ...props }) => {
                   const href = (props as any).href as string | undefined;

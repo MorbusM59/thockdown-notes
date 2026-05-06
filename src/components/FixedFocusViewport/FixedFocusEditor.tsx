@@ -287,6 +287,7 @@ interface FixedFocusEditorProps {
   containerHeightPx?: number;
   viewportStartRow?: number;
   onViewportStartRowChange?: (nextViewportStartRow: number) => void;
+  onViewportTopSourceLineChange?: (lineIndex: number) => void;
   onTopRowCountChange?: (nextTopRowCount: number) => void;
   onBottomRowCountChange?: (nextBottomRowCount: number) => void;
   onTextChange: (newText: string, newSelectionStart: number, newSelectionEnd: number) => void;
@@ -330,6 +331,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   containerHeightPx = 400,
   viewportStartRow,
   onViewportStartRowChange,
+  onViewportTopSourceLineChange,
   onTopRowCountChange,
   onBottomRowCountChange,
   onTextChange,
@@ -561,6 +563,15 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   const effectiveCenterStartRow = activeResizeHandle && resizeAnchorViewportStartRow != null
     ? Math.max(0, Math.min(resizeAnchorViewportStartRow, maxViewportStartRow))
     : clampedCenterStartRow;
+
+  useEffect(() => {
+    if (onViewportTopSourceLineChange && wrappedLines.length > 0) {
+      const topRow = wrappedLines[effectiveCenterStartRow];
+      if (topRow) {
+        onViewportTopSourceLineChange(topRow.logicalLineIndex);
+      }
+    }
+  }, [effectiveCenterStartRow, wrappedLines, onViewportTopSourceLineChange]);
 
   model.setViewportStartRow(effectiveCenterStartRow);
 
