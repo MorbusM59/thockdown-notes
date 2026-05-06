@@ -556,7 +556,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   const caretRow = caretGridCell.gridRow;
 
   const maxStart = Math.max(0, wrappedLines.length - provisionalViewport.centerRowCount);
-  const maxViewportStartRow = Math.max(0, wrappedLines.length - 1);
+  const maxViewportStartRow = maxStart; // Do not allow scrolling past the center zone bound
   const clampedCenterStartRow = Math.max(0, Math.min(centerStartRow, maxViewportStartRow));
   const effectiveCenterStartRow = activeResizeHandle && resizeAnchorViewportStartRow != null
     ? Math.max(0, Math.min(resizeAnchorViewportStartRow, maxViewportStartRow))
