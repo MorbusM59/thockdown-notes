@@ -2196,7 +2196,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         </div>
       </div>
 
-      <div className="editor-content" ref={editorContentRef} style={!showPreview ? { overflow: 'hidden' } : undefined}>
+      <div className={`editor-content ${showPreview ? 'is-preview' : 'is-editor'}`} ref={editorContentRef} style={!showPreview ? { overflow: 'hidden' } : undefined}>
         {!showPreview ? (
           <FixedFocusEditor
             key={`${editorStyle}-${editorFontSize}-${editorSpacing}-${layoutRevision}`}
