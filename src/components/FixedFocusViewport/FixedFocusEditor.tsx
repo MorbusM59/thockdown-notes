@@ -376,6 +376,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     scrollDirection: -1 | 0 | 1;
     scrollDistancePx: number;
     fractionalRows: number;
+    lastTimestamp: number | null;
   } | null>(null);
   const viewportAnimationRef = useRef<{
     frameId: number;
@@ -867,9 +868,16 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
 
   const getAutoScrollRowsPerSecond = useCallback((distancePx: number) => {
     if (distancePx <= 0) return 0;
-    if (distancePx <= 10) return 1;
-    if (distancePx >= 100) return 20;
-    return 1 + (((distancePx - 10) / 90) * 19);
+    
+    const minSpeed = 0.5;
+    const maxSpeed = 60;
+    const maxDistance = 200;
+    
+    if (distancePx >= maxDistance) return maxSpeed;
+    
+    // Calculate normalized progress (0 to 1) and apply an exponential curve for a smooth ramp-up
+    const t = distancePx / maxDistance;
+    return minSpeed + (maxSpeed - minSpeed) * Math.pow(t, 1.8);
   }, []);
 
   useEffect(() => {
@@ -1216,6 +1224,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
       scrollDirection: 0,
       scrollDistancePx: 0,
       fractionalRows: 0,
+      lastTimestamp: null,
     };
     onSelectionChange?.(anchorPos, anchorPos);
     setIsPointerSelecting(true);
@@ -1502,14 +1511,13 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     };
 
     let animationFrameId = 0;
-    let lastTimestamp: number | null = null;
 
     const step = (timestamp: number) => {
       const selectionDragState = selectionDragStateRef.current;
       if (!selectionDragState) return;
 
-      const previousTimestamp = lastTimestamp ?? timestamp;
-      lastTimestamp = timestamp;
+      const previousTimestamp = selectionDragState.lastTimestamp ?? timestamp;
+      selectionDragState.lastTimestamp = timestamp;
       const elapsedSeconds = (timestamp - previousTimestamp) / 1000;
 
       if (selectionDragState.scrollDirection !== 0) {
