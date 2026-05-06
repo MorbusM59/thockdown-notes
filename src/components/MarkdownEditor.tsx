@@ -1478,112 +1478,43 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   };
 
   const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!showPreview && (e.ctrlKey || e.metaKey) && !e.altKey) {
-      const lowerKey = e.key.toLowerCase();
-      if (lowerKey === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        handleUndo();
-        return;
-      }
+    if (showPreview) return;
 
-      if (lowerKey === 'y' || (lowerKey === 'z' && e.shiftKey)) {
-        e.preventDefault();
-        handleRedo();
-        return;
-      }
-    }
-
-    // Allow fully native handling for Enter, Tab and Space in the editor.
-    // This avoids programmatic indentation/list continuation and prevents
-    // DOM/selection races that interfere with typing on the final line.
-    if (!showPreview && (e.key === 'Enter' || e.key === 'Tab' || e.key === ' ')) {
-      return;
-    }
-
-    if (e.key === 'Enter' && !showPreview) {
-      // New behaviour:
-      // - Enter: continue indentation and continue list (bullets keep '-'/'*'/'+', numbered lists increment).
-      // - Shift+Enter: insert a hard break (two trailing spaces) and continue indentation, but do NOT continue list markers.
-      // - Ctrl+Enter: insert a blank line and start next line with no indentation.
+    if (e.key === 'Enter') {
       e.preventDefault();
       const el = textareaRef.current;
       if (!el) return;
-      const sourceText = content;
+
       const start = selectionStart;
       const end = selectionEnd;
-      const lineStart = sourceText.lastIndexOf('\n', start - 1) + 1;
-      const currentLineBeforeCursor = sourceText.substring(lineStart, start);
-      const currentLineFull = (() => {
-        const lineEnd = sourceText.indexOf('\n', lineStart);
-        return lineEnd === -1 ? sourceText.substring(lineStart) : sourceText.substring(lineStart, lineEnd);
-      })();
-
-      const leadingWhitespace = currentLineFull.match(/^[ \t]*/)?.[0] ?? '';
-
-      const normLine = normalizeForChecks(currentLineFull);
-      const bulletMatch = normLine.match(/^\s*([-*+])\s+(.*)$/);
-      const numberMatch = normLine.match(/^\s*(\d+)\.\s+(.*)$/);
-
-      // Ctrl+Enter: insert an extra blank line and start next line without indentation
-      if (e.ctrlKey || e.metaKey) {
-        const trimmedBefore = stripTrailingWhitespace(currentLineBeforeCursor);
-        const newText = sourceText.substring(0, lineStart) + trimmedBefore + '\n\n' + sourceText.substring(end);
-        const newCursorPos = lineStart + trimmedBefore.length + 2; // after the two newlines
-        const afterSnapshot = buildSnapshot(newText, newCursorPos, newCursorPos);
-        programmaticInsertRef.current = true;
-        handleContentChange(newText);
-        recordHistoryEntry('enter', lastCommittedSnapshotRef.current, afterSnapshot);
-        syncSelectionState(newCursorPos, newCursorPos);
-        scheduleTimeout(() => {
-          el.focus();
-          autosizeTextarea(el);
-          ensureCaretVisible();
-          programmaticInsertRef.current = false;
-        }, 0);
-        return;
+      const lineStart = content.lastIndexOf('\n', start - 1) + 1;
+      const currentLineBeforeCursor = content.substring(lineStart, start);
+      
+      const whitespaceMatch = currentLineBeforeCursor.match(/^[ \t]*/);
+      const leadingWhitespace = whitespaceMatch ? whitespaceMatch[0] : '';
+      
+      const listMatch = currentLineBeforeCursor.substring(leadingWhitespace.length).match(/^([-*+]|\d+\.)\s+/);
+      let listMarker = '';
+      if (listMatch) {
+        listMarker = listMatch[0];
+        const numMatch = listMarker.match(/^(\d+)\.\s+/);
+        if (numMatch) {
+          const num = parseInt(numMatch[1], 10);
+          listMarker = `${num + 1}. `;
+        }
       }
 
-      // Shift+Enter: hard break (two trailing spaces) + continue indentation, but DO NOT continue list markers
-      if (e.shiftKey) {
-        const trimmedBefore = stripTrailingWhitespace(currentLineBeforeCursor);
-        const insert = '  \n' + leadingWhitespace;
-        const newText = sourceText.substring(0, lineStart) + trimmedBefore + insert + sourceText.substring(end);
-        const newCursorPos = lineStart + trimmedBefore.length + 3 + leadingWhitespace.length;
-        const afterSnapshot = buildSnapshot(newText, newCursorPos, newCursorPos);
-        programmaticInsertRef.current = true;
-        handleContentChange(newText);
-        recordHistoryEntry('enter', lastCommittedSnapshotRef.current, afterSnapshot);
-        syncSelectionState(newCursorPos, newCursorPos);
-        scheduleTimeout(() => {
-          el.focus();
-          autosizeTextarea(el);
-          ensureCaretVisible();
-          programmaticInsertRef.current = false;
-        }, 0);
-        return;
-      }
+      const insert = '\n' + leadingWhitespace + listMarker;
+      const newText = content.substring(0, start) + insert + content.substring(end);
+      const newCursorPos = start + insert.length;
 
-      // Default Enter: continue list or just continue indentation
-      let markerText = '';
-      if (numberMatch) {
-        const num = parseInt(numberMatch[1], 10) || 0;
-        markerText = `${num + 1}. `;
-      } else if (bulletMatch) {
-        const ch = bulletMatch[1] || '-';
-        markerText = `${ch} `;
-      }
-
-      const trimmedBefore = stripTrailingWhitespace(currentLineBeforeCursor);
-      const insert = '\n' + leadingWhitespace + markerText;
-      const newText = sourceText.substring(0, lineStart) + trimmedBefore + insert + sourceText.substring(end);
-      const newCursorPos = lineStart + trimmedBefore.length + 1 + leadingWhitespace.length + markerText.length;
-      const afterSnapshot = buildSnapshot(newText, newCursorPos, newCursorPos);
       programmaticInsertRef.current = true;
+      setContent(newText);
       handleContentChange(newText);
-      recordHistoryEntry('enter', lastCommittedSnapshotRef.current, afterSnapshot);
-      syncSelectionState(newCursorPos, newCursorPos);
+      
       scheduleTimeout(() => {
         el.focus();
+        setTextareaSelection(newCursorPos, newCursorPos);
         autosizeTextarea(el);
         ensureCaretVisible();
         programmaticInsertRef.current = false;
@@ -1591,198 +1522,86 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       return;
     }
 
-    // Shift+Backspace: if current line is only whitespace, delete the current line
-    // and move caret to end of previous line (also remove trailing spaces there).
-    if (e.key === 'Backspace' && e.shiftKey && !showPreview) {
-      // Only handle when there's no selection — otherwise leave native behavior
-      if (selectionStart !== selectionEnd) return;
-      const pos = selectionStart;
-      const before = content.substring(0, pos);
-      const lines = content.split('\n');
-      const lineIndex = before.split('\n').length - 1;
-      const currentLine = lines[lineIndex] ?? '';
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const el = textareaRef.current;
+      if (!el) return;
 
-      // Only trigger when current line is empty or only spaces/tabs
-      if (normalizeForChecks(currentLine).trim() === '') {
-        e.preventDefault();
-        if (lineIndex === 0) {
-          // First line: remove it and place cursor at start
-          const newLines = lines.slice(1);
-          const newText = newLines.join('\n');
-          const afterSnapshot = buildSnapshot(newText, 0, 0);
-          programmaticInsertRef.current = true;
-          setContent(newText);
-          handleContentChange(newText);
-          recordHistoryEntry('delete-boundary', lastCommittedSnapshotRef.current, afterSnapshot);
-          scheduleTimeout(() => {
-            const edEl = textareaRef.current;
-            edEl?.focus();
-            setTextareaSelection(0, 0);
-            autosizeTextarea(edEl);
-            ensureCaretVisible();
-            programmaticInsertRef.current = false;
-          }, 0);
-          return;
-        }
-
-        // Remove current empty line and trim trailing whitespace from previous line
-        const prevLine = lines[lineIndex - 1] ?? '';
-        const prevTrimmed = stripTrailingWhitespace(prevLine);
-
-        const newLines = [] as string[];
-        for (let i = 0; i < lines.length; i++) {
-          if (i === lineIndex - 1) newLines.push(prevTrimmed);
-          else if (i === lineIndex) continue; // skip current (empty) line
-          else newLines.push(lines[i]);
-        }
-
-        const newText = newLines.join('\n');
-
-        // compute new cursor position: end of the previous (trimmed) line
-        let newCursorPos = 0;
-        for (let i = 0; i < lineIndex - 1; i++) {
-          newCursorPos += newLines[i].length + 1; // include newline
-        }
-        newCursorPos += prevTrimmed.length;
-        const afterSnapshot = buildSnapshot(newText, newCursorPos, newCursorPos);
-
-        programmaticInsertRef.current = true;
-        setContent(newText);
-        handleContentChange(newText);
-        recordHistoryEntry('delete-boundary', lastCommittedSnapshotRef.current, afterSnapshot);
-        scheduleTimeout(() => {
-          const edEl = textareaRef.current;
-          edEl?.focus();
-          setTextareaSelection(newCursorPos, newCursorPos);
-          autosizeTextarea(edEl);
-          ensureCaretVisible();
-          programmaticInsertRef.current = false;
-        }, 0);
-        return;
-      }
-    }
-
-    if (!showPreview && (e.key === 'Backspace' || e.key === 'Delete')) {
       const start = selectionStart;
       const end = selectionEnd;
+      const lineStart = content.lastIndexOf('\n', start - 1) + 1;
+      const lineEnd = content.indexOf('\n', end);
+      const actualLineEnd = lineEnd === -1 ? content.length : lineEnd;
+      const selectedLines = content.substring(lineStart, actualLineEnd).split('\n');
 
-      if (start !== end) {
-        requestHistoryBoundary('delete-selection');
-        return;
-      }
+      let pos = lineStart;
+      let selectionOffsetStart = 0;
+      let selectionOffsetEnd = 0;
 
-      if (e.key === 'Backspace' && start > 0) {
-        const deletedChar = content[start - 1];
-        if (deletedChar === ' ' || deletedChar === '\n') {
-          requestHistoryBoundary('delete-boundary');
-        }
-        return;
-      }
+      const newLines = selectedLines.map((ln, idx) => {
+        const leadMatch = ln.match(/^[ ]*/);
+        const leadSpaces = leadMatch ? leadMatch[0].length : 0;
+        const lineLen = ln.length;
+        
+        let modifiedLine = ln;
+        let changeCount = 0;
 
-      if (e.key === 'Delete' && start < content.length) {
-        const deletedChar = content[start];
-        if (deletedChar === ' ' || deletedChar === '\n') {
-          requestHistoryBoundary('delete-boundary');
-        }
-        return;
-      }
-    }
-
-    if (!showPreview && e.key === ' ' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      requestHistoryBoundary('space');
-    }
-
-    if (e.key === 'Tab' && !showPreview) {
-      e.preventDefault();
-      if (e.shiftKey) {
-        // remove up to three leading spaces from each selected line (or from current line)
-        const start = selectionStart;
-        const end = selectionEnd;
-        const lineStart = content.lastIndexOf('\n', start - 1) + 1;
-        const lineEnd = content.indexOf('\n', end);
-        const actualLineEnd = lineEnd === -1 ? content.length : lineEnd;
-        const selected = content.substring(lineStart, actualLineEnd);
-        const lines = selected.split('\n');
-
-        let pos = lineStart;
-        let removedBeforeStart = 0;
-        let removedBeforeEnd = 0;
-        const newLines = lines.map((ln, idx) => {
-          const leadLen = countLeadingSpaces(ln);
-          const toRemove = Math.min(3, leadLen);
-          // update removed counters relative to selection bounds
-          const origLen = ln.length;
-          if (start > pos) {
-            const within = Math.max(0, Math.min(start - pos, origLen));
-            removedBeforeStart += Math.min(toRemove, within);
+        if (e.shiftKey) {
+          if (leadSpaces > 0) {
+            const remainder = leadSpaces % 3;
+            const toRemove = remainder === 0 ? 3 : remainder;
+            modifiedLine = ln.substring(toRemove);
+            changeCount = -toRemove;
           }
-          if (end > pos) {
-            const withinEnd = Math.max(0, Math.min(end - pos, origLen));
-            removedBeforeEnd += Math.min(toRemove, withinEnd);
-          }
-          // advance pos: include newline for all but last line
-          pos += origLen + (idx < lines.length - 1 ? 1 : 0);
-          return ln.substring(toRemove);
-        });
+        } else {
+          const remainder = leadSpaces % 3;
+          const toAdd = remainder === 0 ? 3 : 3 - remainder;
+          modifiedLine = ' '.repeat(toAdd) + ln;
+          changeCount = toAdd;
+        }
 
-        const newText = content.substring(0, lineStart) + newLines.join('\n') + content.substring(actualLineEnd);
-        const afterSnapshot = buildSnapshot(
-          newText,
-          Math.max(0, start - removedBeforeStart),
-          Math.max(0, end - removedBeforeEnd)
-        );
-        // mark as programmatic change to avoid the autosize/ensureCaretVisible
-        // effect from running and jumping the scroll; run manual reflow instead
-        programmaticInsertRef.current = true;
-        setContent(newText);
-        handleContentChange(newText);
-        recordHistoryEntry('tab', lastCommittedSnapshotRef.current, afterSnapshot);
+        if (start > pos) {
+           const beforeStart = Math.min(start - pos, leadSpaces);
+           if (changeCount < 0) {
+             selectionOffsetStart += Math.max(changeCount, -beforeStart);
+           } else {
+             selectionOffsetStart += changeCount;
+           }
+        } else if (start === pos && changeCount > 0) {
+           selectionOffsetStart += changeCount;
+        }
 
-        scheduleTimeout(() => {
-          const edEl = textareaRef.current;
-          edEl?.focus();
-          const newStart = Math.max(0, start - removedBeforeStart);
-          const newEnd = Math.max(0, end - removedBeforeEnd);
-          setTextareaSelection(newStart, newEnd);
-          autosizeTextarea(edEl);
-          checkFormatting();
-          programmaticInsertRef.current = false;
-        }, 0);
-      } else {
-        // insert three spaces at the beginning of each selected line (or current line)
-        const start = selectionStart;
-        const end = selectionEnd;
-        const lineStart = content.lastIndexOf('\n', start - 1) + 1;
-        const lineEnd = content.indexOf('\n', end);
-        const actualLineEnd = lineEnd === -1 ? content.length : lineEnd;
-        const selected = content.substring(lineStart, actualLineEnd);
-        const lines = selected.split('\n');
+        if (end > pos) {
+           const beforeEnd = Math.min(end - pos, leadSpaces);
+           if (changeCount < 0) {
+             selectionOffsetEnd += Math.max(changeCount, -beforeEnd);
+           } else {
+             selectionOffsetEnd += changeCount;
+           }
+        } else if (end === pos && changeCount > 0) {
+           selectionOffsetEnd += changeCount;
+        }
 
-        const INDENT = '   ';
-        const newLines = lines.map(ln => INDENT + ln);
-        const addedPerLine = INDENT.length;
+        pos += lineLen + 1;
+        return modifiedLine;
+      });
 
-        const newText = content.substring(0, lineStart) + newLines.join('\n') + content.substring(actualLineEnd);
-        const linesBeforeStart = content.substring(lineStart, start).split('\n').length;
-        const linesBeforeEnd = content.substring(lineStart, end).split('\n').length;
-        const newStart = start + addedPerLine * linesBeforeStart;
-        const newEnd = end + addedPerLine * linesBeforeEnd;
-        const afterSnapshot = buildSnapshot(newText, newStart, newEnd);
+      const newText = content.substring(0, lineStart) + newLines.join('\n') + content.substring(actualLineEnd);
+      const newStart = Math.max(0, start + selectionOffsetStart);
+      const newEnd = Math.max(0, end + selectionOffsetEnd);
 
-        programmaticInsertRef.current = true;
-        setContent(newText);
-        handleContentChange(newText);
-        recordHistoryEntry('tab', lastCommittedSnapshotRef.current, afterSnapshot);
+      programmaticInsertRef.current = true;
+      setContent(newText);
+      handleContentChange(newText);
 
-        scheduleTimeout(() => {
-          const edEl = textareaRef.current;
-          edEl?.focus();
-          setTextareaSelection(newStart, newEnd);
-          autosizeTextarea(edEl);
-          checkFormatting();
-          programmaticInsertRef.current = false;
-        }, 0);
-      }
+      scheduleTimeout(() => {
+        el.focus();
+        setTextareaSelection(newStart, newEnd);
+        autosizeTextarea(el);
+        ensureCaretVisible();
+        programmaticInsertRef.current = false;
+      }, 0);
+      return;
     }
   };
 
