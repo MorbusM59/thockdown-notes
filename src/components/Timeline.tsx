@@ -25,6 +25,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   gridWidth
 }) => {
   const [armedSnapshotId, setArmedSnapshotId] = useState<number | null>(null);
+  const [openFlyoutCol, setOpenFlyoutCol] = useState<number | null>(null);
 
   // Snapshots are sorted DESC by timestamp (0 is newest).
   // However, we may want to render present at the right, oldest at the left.
@@ -45,21 +46,46 @@ export const Timeline: React.FC<TimelineProps> = ({
       
       const numSnapshotCols = Math.max(1, numCols - 2); // Exclude present box and gap
       
-      if (age <= ONE_DAY) return numSnapshotCols - 1;
-      if (age >= ONE_YEAR) return 0;
+      const documentAge = presentDateNum - oldestDate;
+      const timelineSpan = Math.max(ONE_DAY, Math.min(ONE_YEAR, documentAge));
+
+      if (age >= timelineSpan) return 0;
       
-      const logAge = Math.log(age) / Math.log(logBase);
-      const logMin = Math.log(ONE_DAY) / Math.log(logBase);
-      const logMax = Math.log(ONE_YEAR) / Math.log(logBase);
-      const perc = (logMax - logAge) / (logMax - logMin);
+      const b = Math.max(1, logBase);
+      const logAge = Math.log(age / b + 1);
+      const logSpan = Math.log(timelineSpan / b + 1);
+      const perc = (logSpan - logAge) / logSpan;
       
-  };
+      const rawCol = Math.floor(perc * numSnapshotCols);
+      return Math.max(0, Math.min(numSnapshotCols - 1, rawCol));
+    };
 
 
-  const handleBoxLeftClick = (index: number) => {
+  const handleBoxLeftClick = (e: React.MouseEvent, index: number, isMulti: boolean, colIndex: number) => {
+    if (isMulti) {
+      e.stopPropagation();
+      e.nativeEvent.stopImmediatePropagation();
+      setOpenFlyoutCol(openFlyoutCol === colIndex ? null : colIndex);
+      return;
+    }
     onNavigate(index);
     setArmedSnapshotId(null);
+    setOpenFlyoutCol(null);
   };
+
+  const handleFlyoutItemClick = (index: number) => {
+    onNavigate(index);
+    setArmedSnapshotId(null);
+    setOpenFlyoutCol(null);
+  };
+
+  React.useEffect(() => {
+    if (openFlyoutCol !== null) {
+      const globalClick = () => setOpenFlyoutCol(null);
+      document.addEventListener('click', globalClick);
+      return () => document.removeEventListener('click', globalClick);
+    }
+  }, [openFlyoutCol]);
 
   const handleBoxRightClick = (e: React.MouseEvent, index: number, snap: NoteSnapshot) => {
     e.preventDefault();
@@ -80,6 +106,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       onNavigate(-1);
     }
     setArmedSnapshotId(null);
+    setOpenFlyoutCol(null);
   };
 
   // We should cluster snapshots that share the same horizontal coordinate to avoid exact overlap.
@@ -126,7 +153,7 @@ export const Timeline: React.FC<TimelineProps> = ({
               <div 
                 className={`timeline-box ${isEmpty && !isPresentBox && !isGapBox ? 'empty-box' : 'base-box'} ${isGapBox ? 'gap-box' : ''} ${isActive ? 'active' : ''} ${isArmed && !isEmpty ? 'armed' : ''}`}
                 style={{ width: '100%', height: '100%' }}
-                  onClick={isPresentBox ? handlePresentLeftClick : (hasItems ? () => handleBoxLeftClick(primary.index) : undefined)}
+                  onClick={isPresentBox ? handlePresentLeftClick : (hasItems ? (e) => handleBoxLeftClick(e, primary.index, items.length > 1, colIndex) : undefined)}
                   onContextMenu={hasItems && !isPresentBox ? (e) => handleBoxRightClick(e, primary.index, primary.snapshot) : undefined}
                   title={isPresentBox ? (timeMachineIndex === -1 ? "Present (Auto)" : "Return to Present") : (hasItems ? new Date(primary.snapshot.timestamp).toLocaleString() : undefined)}
               >
@@ -136,13 +163,13 @@ export const Timeline: React.FC<TimelineProps> = ({
                 {hasItems && !isPresentBox && (
                  <>
                   {items.length > 1 && (
-                    <div className="timeline-flyout">
+                    <div className={`timeline-flyout ${openFlyoutCol === colIndex ? 'is-open' : ''}`}>
                       {items.map(item => (
                         <div 
                           key={item.snapshot.id} 
                           className={`timeline-box base-flyout-box ${item.index === timeMachineIndex ? 'active' : ''} ${item.snapshot.id === armedSnapshotId ? 'armed' : ''}`}
                           style={{ width: charWidth ? `${charWidth}px` : '100%', height: charWidth ? `${charWidth}px` : '100%' }}
-                          onClick={() => handleBoxLeftClick(item.index)}
+                          onClick={(e) => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); handleFlyoutItemClick(item.index); }}
                           onContextMenu={(e) => handleBoxRightClick(e, item.index, item.snapshot)}
                           title={new Date(item.snapshot.timestamp).toLocaleString()}
                         >
