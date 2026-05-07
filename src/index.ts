@@ -8,7 +8,7 @@ import {
   addTagToNote, removeTagFromNote, reorderNoteTags, getNoteTags,
   getAllTags, getTopTags, searchNotesByTag, getNotesByPrimaryTag, getCategoryHierarchy, getLastEditedNote,
   upsertNoteFts, removeNoteFts, searchNotes, saveNoteUiState, getNoteUiState, getHierarchyForTag, getNotesInTrash,
-  saveNoteEditHistory, getNoteEditHistory, clearNoteEditHistory, clearAllNoteEditHistories,
+  
   generateUniqueFileToken, setNoteFileToken, getNoteByToken, reconcileNotesWithFs, updateNoteCreatedAt, updateNoteLastEdited, renameTag } from './main/database';
 
 import { initFileSystem, saveNoteContent, loadNoteContent, deleteNoteFile, copyFileToNotes } from './main/fileSystem';
@@ -751,24 +751,13 @@ app.whenReady().then(async () => {
       try { return getNoteUiState(Number(noteId)); } catch (err) { console.warn('[main] getNoteUiState failed', err); return { progressPreview: null, progressEdit: null, cursorPos: null, scrollTop: null }; }
     });
 
-    ipcMain.handle('save-note-edit-history', async (_event, noteId: unknown, history: unknown) => {
-      if (!isPositiveInteger(noteId) || typeof history !== 'object' || history === null) throw new Error('Invalid args');
-      try { saveNoteEditHistory(Number(noteId), history as any); } catch (err) { console.warn('[main] saveNoteEditHistory failed', err); }
-    });
 
-    ipcMain.handle('get-note-edit-history', async (_event, noteId: unknown) => {
-      if (!isPositiveInteger(noteId)) throw new Error('Invalid args');
-      try { return getNoteEditHistory(Number(noteId)); } catch (err) { console.warn('[main] getNoteEditHistory failed', err); return { recent: [], archived: [], redo: [], storedChangeCount: 0 }; }
-    });
 
-    ipcMain.handle('clear-note-edit-history', async (_event, noteId: unknown) => {
-      if (!isPositiveInteger(noteId)) throw new Error('Invalid args');
-      try { clearNoteEditHistory(Number(noteId)); } catch (err) { console.warn('[main] clearNoteEditHistory failed', err); }
-    });
 
-    ipcMain.handle('clear-all-note-edit-histories', async () => {
-      try { clearAllNoteEditHistories(); } catch (err) { console.warn('[main] clearAllNoteEditHistories failed', err); }
-    });
+
+
+
+
 
     // request-force-save: send do-force-save with requestId to focused window and wait for completion or timeout
     ipcMain.handle('request-force-save', async () => {

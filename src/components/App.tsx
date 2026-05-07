@@ -213,17 +213,10 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleClearCurrentHistory = async () => {
-    if (!selectedNote) return;
-    await window.electronAPI.clearNoteEditHistory(selectedNote.id);
-    setSelectedNoteHistoryCount(0);
-    setHistoryResetSignal((value) => value + 1);
-  };
+  const handleClearCurrentHistory = async () => {};
 
   const handleClearAllHistory = async () => {
-    await window.electronAPI.clearAllNoteEditHistories();
-    setSelectedNoteHistoryCount(0);
-    setHistoryResetSignal((value) => value + 1);
+    // Clear history feature removed for now
   };
 
   const handleNoteUpdate = (updatedNote: Note) => {

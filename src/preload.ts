@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
-import { IElectronAPI, Note, NoteTag, Tag, SearchResult, CategoryHierarchyResult, NoteEditHistoryState } from './shared/types';
+import { IElectronAPI, Note, NoteTag, Tag, SearchResult, CategoryHierarchyResult } from './shared/types';
 
 /**
  * Simple runtime validators to avoid passing unexpected values to the main process.
@@ -171,41 +171,6 @@ const electronAPI: IElectronAPI & {
       return (await ipcRenderer.invoke('get-note-ui-state', noteId)) as { progressPreview: number | null; progressEdit: number | null; cursorPos: number | null; scrollTop: number | null };
     } catch (err) {
       return { progressPreview: null, progressEdit: null, cursorPos: null, scrollTop: null };
-    }
-  },
-
-  saveNoteEditHistory: async (noteId: number, history: NoteEditHistoryState) => {
-    assertPositiveInteger(noteId, 'noteId');
-    try {
-      await ipcRenderer.invoke('save-note-edit-history', noteId, history);
-    } catch (err) {
-      // non-fatal
-    }
-  },
-
-  getNoteEditHistory: async (noteId: number) => {
-    assertPositiveInteger(noteId, 'noteId');
-    try {
-      return (await ipcRenderer.invoke('get-note-edit-history', noteId)) as NoteEditHistoryState;
-    } catch (err) {
-      return { recent: [], archived: [], redo: [], storedChangeCount: 0 };
-    }
-  },
-
-  clearNoteEditHistory: async (noteId: number) => {
-    assertPositiveInteger(noteId, 'noteId');
-    try {
-      await ipcRenderer.invoke('clear-note-edit-history', noteId);
-    } catch (err) {
-      // non-fatal
-    }
-  },
-
-  clearAllNoteEditHistories: async () => {
-    try {
-      await ipcRenderer.invoke('clear-all-note-edit-histories');
-    } catch (err) {
-      // non-fatal
     }
   },
 

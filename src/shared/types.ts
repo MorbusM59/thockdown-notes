@@ -55,38 +55,6 @@ export interface EditSnapshot extends EditSelectionState {
   content: string;
 }
 
-export interface RecentEditHistoryEntry {
-  storage: 'recent';
-  kind: 'full';
-  reason: string;
-  before: EditSnapshot;
-  after: EditSnapshot;
-  timestamp: string;
-}
-
-export interface ArchivedParagraphHistoryEntry {
-  storage: 'archived';
-  kind: 'paragraph';
-  reason: string;
-  startLine: number;
-  beforeEndLine: number;
-  afterEndLine: number;
-  beforeLines: string[];
-  afterLines: string[];
-  beforeSelection: EditSelectionState;
-  afterSelection: EditSelectionState;
-  timestamp: string;
-}
-
-export type EditHistoryEntry = RecentEditHistoryEntry | ArchivedParagraphHistoryEntry;
-
-export interface NoteEditHistoryState {
-  recent: RecentEditHistoryEntry[];
-  archived: ArchivedParagraphHistoryEntry[];
-  redo: EditHistoryEntry[];
-  storedChangeCount: number;
-}
-
 /**
  * CategoryHierarchy describes the structure returned by getCategoryHierarchy():
  * {
@@ -161,10 +129,6 @@ export interface IElectronAPI {
   // Per-note UI state (progress/cursor) persistence
   saveNoteUiState: (noteId: number, state: { progressPreview?: number | null; progressEdit?: number | null; cursorPos?: number | null; scrollTop?: number | null }) => Promise<void>;
   getNoteUiState: (noteId: number) => Promise<{ progressPreview: number | null; progressEdit: number | null; cursorPos: number | null; scrollTop: number | null }>;
-  saveNoteEditHistory: (noteId: number, history: NoteEditHistoryState) => Promise<void>;
-  getNoteEditHistory: (noteId: number) => Promise<NoteEditHistoryState>;
-  clearNoteEditHistory: (noteId: number) => Promise<void>;
-  clearAllNoteEditHistories: () => Promise<void>;
   // PDF export helpers
   selectExportFolder: () => Promise<string | null>;
   exportPdf: (folderPath: string, fileName: string) => Promise<{ ok: boolean; path?: string; error?: string }>;

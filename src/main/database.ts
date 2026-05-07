@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { Note, Tag, NoteTag, SearchResult, SnippetSegment, NoteEditHistoryState } from '../shared/types';
+import { Note, Tag, NoteTag, SearchResult, SnippetSegment } from '../shared/types';
 import { getDataDir, getDbPath, getNotesDir } from './paths';
 
 let db: Database.Database;
@@ -196,43 +196,8 @@ export function saveNoteUiState(noteId: number, state: { progressPreview?: numbe
   db.prepare(sql).run(...values);
 }
 
-export function getNoteEditHistory(noteId: number): NoteEditHistoryState {
-  const stmt = db.prepare('SELECT editHistory FROM notes WHERE id = ?');
-  const row = stmt.get(noteId) as { editHistory?: string | null } | undefined;
-  if (!row?.editHistory) {
-    return { recent: [], archived: [], redo: [], storedChangeCount: 0 };
-  }
 
-  try {
-    const parsed = JSON.parse(row.editHistory) as Partial<NoteEditHistoryState>;
-    const recent = Array.isArray(parsed.recent) ? parsed.recent : [];
-    const archived = Array.isArray(parsed.archived) ? parsed.archived : [];
-    const redo = Array.isArray(parsed.redo) ? parsed.redo : [];
-    return {
-      recent,
-      archived,
-      redo,
-      storedChangeCount: Number.isFinite(parsed.storedChangeCount)
-        ? Number(parsed.storedChangeCount)
-        : (recent.length + archived.length),
-    };
-  } catch (err) {
-    console.warn('[db] failed to parse editHistory', err);
-    return { recent: [], archived: [], redo: [], storedChangeCount: 0 };
-  }
-}
 
-export function saveNoteEditHistory(noteId: number, history: NoteEditHistoryState): void {
-  db.prepare('UPDATE notes SET editHistory = ? WHERE id = ?').run(JSON.stringify(history), noteId);
-}
-
-export function clearNoteEditHistory(noteId: number): void {
-  db.prepare('UPDATE notes SET editHistory = NULL WHERE id = ?').run(noteId);
-}
-
-export function clearAllNoteEditHistories(): void {
-  db.prepare('UPDATE notes SET editHistory = NULL').run();
-}
 
 export function updateNote(id: number): void {
   const now = new Date().toISOString();
