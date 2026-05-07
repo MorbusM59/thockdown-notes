@@ -132,10 +132,9 @@ export const Timeline: React.FC<TimelineProps> = ({
       '--cell-size': charWidth ? `${charWidth}px` : '14px'
     } as React.CSSProperties}>
       <div className="timeline-track" style={{ 
-        display: 'flex', 
+        position: 'relative', 
         width: '100%', 
         height: '100%', 
-        flexDirection: 'row', 
         background: 'transparent' 
       }}>
         {Array.from({ length: numCols }).map((_, colIndex) => {
@@ -153,10 +152,11 @@ export const Timeline: React.FC<TimelineProps> = ({
               key={colIndex}
               className={`timeline-cluster ${isActive && !isEmpty ? 'active' : ''} ${isArmed ? 'armed' : ''} ${isEmpty ? 'empty' : ''} ${isPresentBox ? 'present-box' : ''}`}
               style={{ 
-                flex: `0 0 ${charWidth ? charWidth + 'px' : '2%'}`, 
-                width: charWidth ? `${charWidth}px` : '2%',
-                height: charWidth ? `${charWidth}px` : '100%',
-                position: 'relative'
+                position: 'absolute',
+                left: charWidth ? `${colIndex * charWidth}px` : `${(colIndex / numCols) * 100}%`,
+                bottom: 0,
+                width: charWidth ? `${charWidth}px` : `${100 / numCols}%`,
+                height: charWidth ? `${charWidth}px` : '100%'
               }}
             >
               <div 
