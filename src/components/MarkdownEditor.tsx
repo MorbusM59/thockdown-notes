@@ -949,6 +949,24 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     setHighlightColors(nextColors);
   };
 
+  const applyCurrentSliderValueToAllElements = (key: ColorSliderKey) => {
+    if (!colorSliderHsva) return;
+    const numeric = sliderKeyToInputValue(key, colorSliderHsva[sliderKeyToHsvaProp(key)] as number);
+    const nextValue = Math.max(0, Math.min(255, numeric));
+
+    const nextColors: HighlightColors = { ...highlightColors };
+    const prop = sliderKeyToHsvaProp(key);
+    (Object.keys(nextColors) as HighlightColorKey[]).forEach((colorKey) => {
+      const hsva = colorToHsva(nextColors[colorKey]) ?? { h: 210, s: 10, v: 90, a: 1 };
+      hsva[prop] = inputValueToSliderValue(key, nextValue);
+      const rgba = hsvaToRgbaString(hsva);
+      nextColors[colorKey] = rgba;
+      localStorage.setItem(HIGHLIGHT_COLOR_STORAGE_KEYS[colorKey], rgba);
+    });
+
+    setHighlightColors(nextColors);
+  };
+
   useEffect(() => {
     if (showPreview && secondaryToolbarPanel) {
       setSecondaryToolbarPanel(null);
@@ -2130,7 +2148,12 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                             className="toolbar-btn-icon slider-key-btn"
                             type="button"
                             onClick={() => openSliderKeyInput(slider.key)}
-                            title="Click to enter exact 0–255 value"
+                            onContextMenu={(e) => {
+                              if (!colorSliderHsva) return;
+                              e.preventDefault();
+                              applyCurrentSliderValueToAllElements(slider.key);
+                            }}
+                            title="Click to enter exact 0–255 value; right click to apply this channel value to all elements"
                           >
                             {slider.label}
                           </button>
