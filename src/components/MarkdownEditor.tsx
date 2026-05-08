@@ -14,6 +14,7 @@ import './MarkdownThemes.scss';
 type HighlightColorKey = 'caret' | 'selection' | 'leading' | 'trailing' | 'background' | 'topBackground' | 'bottomBackground';
 
 type HighlightColors = Record<HighlightColorKey, string>;
+type HSVA = { h: number; s: number; v: number; a: number };
 
 type FixedFocusHighlightColors = HighlightColors & { grid: string };
 type HistoryBoundaryReason = 'space' | 'enter' | 'delete-boundary' | 'paste' | 'delete-selection' | 'tab' | 'char';
@@ -139,6 +140,73 @@ function parseHighlightColor(color: string): { red: number; green: number; blue:
   };
 }
 
+function rgbToHsv(red: number, green: number, blue: number): { h: number; s: number; v: number } {
+  const r = red / 255;
+  const g = green / 255;
+  const b = blue / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+
+  let h = 0;
+  if (delta !== 0) {
+    if (max === r) {
+      h = ((g - b) / delta) % 6;
+    } else if (max === g) {
+      h = (b - r) / delta + 2;
+    } else {
+      h = (r - g) / delta + 4;
+    }
+  }
+
+  h = Math.round((h * 60 + 360) % 360);
+  const s = max === 0 ? 0 : delta / max;
+  const v = max;
+  return { h, s, v };
+}
+
+function hsvToRgb(h: number, s: number, v: number): { red: number; green: number; blue: number } {
+  const c = v * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = v - c;
+
+  let r = 0;
+  let g = 0;
+  let b = 0;
+
+  if (h >= 0 && h < 60) {
+    r = c; g = x; b = 0;
+  } else if (h >= 60 && h < 120) {
+    r = x; g = c; b = 0;
+  } else if (h >= 120 && h < 180) {
+    r = 0; g = c; b = x;
+  } else if (h >= 180 && h < 240) {
+    r = 0; g = x; b = c;
+  } else if (h >= 240 && h < 300) {
+    r = x; g = 0; b = c;
+  } else {
+    r = c; g = 0; b = x;
+  }
+
+  return {
+    red: Math.round((r + m) * 255),
+    green: Math.round((g + m) * 255),
+    blue: Math.round((b + m) * 255),
+  };
+}
+
+function colorToHsva(color: string): HSVA | null {
+  const parsed = parseHighlightColor(color);
+  if (!parsed) return null;
+  const hsv = rgbToHsv(parsed.red, parsed.green, parsed.blue);
+  return { h: hsv.h, s: Math.round(hsv.s * 100), v: Math.round(hsv.v * 100), a: parsed.alpha };
+}
+
+function hsvaToRgbaString(hsva: HSVA): string {
+  const rgb = hsvToRgb(hsva.h, hsva.s / 100, hsva.v / 100);
+  return `rgba(${rgb.red}, ${rgb.green}, ${rgb.blue}, ${Math.max(0, Math.min(1, hsva.a))})`;
+}
+
 function getHighlightLabelColor(color: string): string {
   const parsed = parseHighlightColor(color);
   if (!parsed) return '#111';
@@ -229,9 +297,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   const [highlightColors, setHighlightColors] = useState<HighlightColors>(DEFAULT_HIGHLIGHT_COLORS);
   const [editorPanelGridColor, setEditorPanelGridColor] = useState<string>('rgb(255, 255, 255)');
   const [activeHighlightColorKey, setActiveHighlightColorKey] = useState<HighlightColorKey | null>(null);
-  const [highlightColorInput, setHighlightColorInput] = useState('');
-  const [highlightColorInputInvalid, setHighlightColorInputInvalid] = useState(false);
   const [secondaryToolbarPanel, setSecondaryToolbarPanel] = useState<'color-settings' | null>(null);
+  const [colorSliderHsva, setColorSliderHsva] = useState<HSVA | null>(null);
 
   const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
   const [editHistoryCount, setEditHistoryCount] = useState(0);
@@ -769,42 +836,26 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   const openHighlightColorEditor = (key: HighlightColorKey) => {
     if (activeHighlightColorKey === key) {
       setActiveHighlightColorKey(null);
-      setHighlightColorInput('');
-      setHighlightColorInputInvalid(false);
+      setColorSliderHsva(null);
+      setSecondaryToolbarPanel(null);
       return;
     }
 
+    const currentHsva = colorToHsva(highlightColors[key]) ?? { h: 210, s: 10, v: 90, a: 1 };
     setActiveHighlightColorKey(key);
-    setHighlightColorInput(highlightColors[key]);
-    setHighlightColorInputInvalid(false);
+    setColorSliderHsva(currentHsva);
+    setSecondaryToolbarPanel('color-settings');
   };
-  const applyHighlightColor = () => {
-    if (!activeHighlightColorKey) return;
-    const normalizedColor = normalizeHighlightColorInput(highlightColorInput);
-    if (!normalizedColor) {
-      setHighlightColorInputInvalid(true);
-      return;
-    }
 
+  const updateColorSliderValue = (next: HSVA) => {
+    if (!activeHighlightColorKey) return;
+    setColorSliderHsva(next);
+    const rgba = hsvaToRgbaString(next);
     setHighlightColors((previousColors) => ({
       ...previousColors,
-      [activeHighlightColorKey]: normalizedColor,
+      [activeHighlightColorKey]: rgba,
     }));
-    localStorage.setItem(HIGHLIGHT_COLOR_STORAGE_KEYS[activeHighlightColorKey], normalizedColor);
-    setActiveHighlightColorKey(null);
-    setHighlightColorInput('');
-    setHighlightColorInputInvalid(false);
-  };
-  const handleHighlightColorInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      applyHighlightColor();
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      setActiveHighlightColorKey(null);
-      setHighlightColorInput('');
-      setHighlightColorInputInvalid(false);
-    }
+    localStorage.setItem(HIGHLIGHT_COLOR_STORAGE_KEYS[activeHighlightColorKey], rgba);
   };
 
   useEffect(() => {
@@ -1945,26 +1996,48 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                 </button>
               ))}
 
-              {activeHighlightColorKey && (
-                <div className="highlight-color-input-group">
-                  <input
-                    className={`highlight-color-input${highlightColorInputInvalid ? ' is-invalid' : ''}`}
-                    value={highlightColorInput}
-                    onChange={(e) => {
-                      setHighlightColorInput(e.target.value);
-                      if (highlightColorInputInvalid) setHighlightColorInputInvalid(false);
-                    }}
-                    onKeyDown={handleHighlightColorInputKeyDown}
-                    placeholder="#RRGGBBAA or (255,255,255,1)"
-                    title="Enter #RRGGBBAA or (255,255,255,1)"
-                  />
+              {activeHighlightColorKey && colorSliderHsva && (
+                <div className="highlight-color-panel">
+                  <div className="highlight-color-sliders-row">
+                    {[
+                      { key: 'hue', label: 'H', min: 0, max: 360, step: 1, value: colorSliderHsva.h },
+                      { key: 'saturation', label: 'S', min: 0, max: 100, step: 1, value: colorSliderHsva.s },
+                      { key: 'vibrancy', label: 'V', min: 0, max: 100, step: 1, value: colorSliderHsva.v },
+                      { key: 'alpha', label: 'A', min: 0, max: 100, step: 1, value: Math.round(colorSliderHsva.a * 100) },
+                    ].map((slider) => (
+                      <div key={slider.key} className="highlight-color-slider-cell">
+                        <span className="slider-label">{slider.label}</span>
+                        <input
+                          id={`color-slider-${slider.key}`}
+                          type="range"
+                          min={slider.min}
+                          max={slider.max}
+                          step={slider.step}
+                          value={slider.value}
+                          onChange={(e) => {
+                            const numeric = Number(e.target.value);
+                            const next = { ...colorSliderHsva };
+                            if (slider.key === 'hue') next.h = numeric;
+                            if (slider.key === 'saturation') next.s = numeric;
+                            if (slider.key === 'vibrancy') next.v = numeric;
+                            if (slider.key === 'alpha') next.a = numeric / 100;
+                            updateColorSliderValue(next);
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
                   <button
-                    className="toolbar-btn-icon color-apply-btn"
-                    onClick={applyHighlightColor}
-                    title="Apply color"
-                  >
-                    ✓
-                  </button>
+                    className="toolbar-btn-icon color-preview-btn"
+                    style={{
+                      background: hsvaToRgbaString(colorSliderHsva),
+                      color: getHighlightLabelColor(hsvaToRgbaString(colorSliderHsva)),
+                    }}
+                    title="Preview"
+                    aria-label="Current color preview"
+                    disabled
+                  />
                 </div>
               )}
             </div>
