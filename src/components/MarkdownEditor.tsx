@@ -233,16 +233,16 @@ function sliderKeyBackground(key: ColorSliderKey, hsva: HSVA): string {
       return `rgba(${rgb.red}, ${rgb.green}, ${rgb.blue}, 1)`;
     }
     case 'saturation': {
-      const gray = Math.round(255 - ((hsva.s / 100) * 255));
-      return `rgb(${gray}, ${gray}, ${gray})`;
+      const rgb = hsvToRgb(hsva.h, hsva.s / 100, 1);
+      return `rgba(${rgb.red}, ${rgb.green}, ${rgb.blue}, 1)`;
     }
     case 'vibrancy': {
-      const gray = Math.round(255 - ((hsva.v / 100) * 255));
-      return `rgb(${gray}, ${gray}, ${gray})`;
+      const rgb = hsvToRgb(hsva.h, 1, hsva.v / 100);
+      return `rgba(${rgb.red}, ${rgb.green}, ${rgb.blue}, 1)`;
     }
     case 'alpha': {
-      const gray = Math.round((1 - hsva.a) * 255);
-      return `rgb(${gray}, ${gray}, ${gray})`;
+      const rgb = hsvToRgb(hsva.h, 1, 1);
+      return `rgba(${rgb.red}, ${rgb.green}, ${rgb.blue}, ${hsva.a})`;
     }
   }
 }
