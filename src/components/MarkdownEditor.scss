@@ -181,17 +181,18 @@
 }
 
 .slider-key-input {
-  width: 54px;
-  min-width: 54px;
+  width: 28px;
+  min-width: 28px;
   height: 28px;
-  padding: 4px 8px;
+  padding: 0 2px;
   border: 1px solid #ddd;
   border-radius: 4px;
   background: white;
   color: #111;
-  font-size: 12px;
+  font-size: 11px;
   text-align: center;
   outline: none;
+  box-sizing: border-box;
 }
 
 .slider-key-input:focus {

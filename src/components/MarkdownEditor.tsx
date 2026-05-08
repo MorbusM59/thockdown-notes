@@ -2125,10 +2125,10 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                           <input
                             className="slider-key-input"
                             value={sliderInputValue}
-                            type="number"
-                            min={0}
-                            max={255}
-                            onChange={(e) => setSliderInputValue(e.target.value)}
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            onChange={(e) => setSliderInputValue(e.target.value.replace(/[^0-9]/g, ''))}
                             onBlur={commitSliderInput}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
