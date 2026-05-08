@@ -231,6 +231,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   const [activeHighlightColorKey, setActiveHighlightColorKey] = useState<HighlightColorKey | null>(null);
   const [highlightColorInput, setHighlightColorInput] = useState('');
   const [highlightColorInputInvalid, setHighlightColorInputInvalid] = useState(false);
+  const [secondaryToolbarPanel, setSecondaryToolbarPanel] = useState<'color-settings' | null>(null);
 
   const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
   const [editHistoryCount, setEditHistoryCount] = useState(0);
@@ -805,6 +806,13 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       setHighlightColorInputInvalid(false);
     }
   };
+
+  useEffect(() => {
+    if (showPreview && secondaryToolbarPanel) {
+      setSecondaryToolbarPanel(null);
+    }
+  }, [showPreview, secondaryToolbarPanel]);
+
   const handleFixedFocusTopRowCountChange = (rowCount: number) => {
     setFixedFocusTopRowCount(rowCount);
     localStorage.setItem(`markdown-editor-fixed-focus-top-rows-${editorSpacing}`, String(rowCount));
@@ -1875,45 +1883,13 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             </>
           ) : (
             <>
-              <div className="highlight-color-controls">
-                {(['caret', 'selection', 'background', 'topBackground', 'bottomBackground'] as HighlightColorKey[]).map((key) => (
-                  <button
-                    key={key}
-                    className={`toolbar-btn-icon color-swatch-btn${activeHighlightColorKey === key ? ' is-open' : ''}`}
-                    style={{
-                      background: highlightColors[key],
-                      color: getHighlightLabelColor(highlightColors[key]),
-                    }}
-                    onClick={() => openHighlightColorEditor(key)}
-                    title={HIGHLIGHT_COLOR_TITLES[key]}
-                  >
-                    {HIGHLIGHT_COLOR_LABELS[key]}
-                  </button>
-                ))}
-
-                {activeHighlightColorKey && (
-                  <div className="highlight-color-input-group">
-                    <input
-                      className={`highlight-color-input${highlightColorInputInvalid ? ' is-invalid' : ''}`}
-                      value={highlightColorInput}
-                      onChange={(e) => {
-                        setHighlightColorInput(e.target.value);
-                        if (highlightColorInputInvalid) setHighlightColorInputInvalid(false);
-                      }}
-                      onKeyDown={handleHighlightColorInputKeyDown}
-                      placeholder="#RRGGBBAA or (255,255,255,1)"
-                      title="Enter #RRGGBBAA or (255,255,255,1)"
-                    />
-                    <button
-                      className="toolbar-btn-icon color-apply-btn"
-                      onClick={applyHighlightColor}
-                      title="Apply color"
-                    >
-                      ✓
-                    </button>
-                  </div>
-                )}
-              </div>
+              <button
+                className={`toolbar-btn${secondaryToolbarPanel === 'color-settings' ? ' active' : ''}`}
+                onClick={() => setSecondaryToolbarPanel((current) => current === 'color-settings' ? null : 'color-settings')}
+                title="Toggle color settings"
+              >
+                Colors
+              </button>
 
               <div className="style-selector">
                 <label className="selector-label">Style:</label>
@@ -1947,6 +1923,53 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             </>
           )}
         </div>
+      </div>
+
+      <div className={`secondary-toolbar-panel${secondaryToolbarPanel ? ' is-visible' : ''}`}>
+        {secondaryToolbarPanel === 'color-settings' && (
+          <div className="secondary-toolbar-content">
+            <div className="secondary-toolbar-section-title">Color settings</div>
+            <div className="highlight-color-controls">
+              {(['caret', 'selection', 'background', 'topBackground', 'bottomBackground'] as HighlightColorKey[]).map((key) => (
+                <button
+                  key={key}
+                  className={`toolbar-btn-icon color-swatch-btn${activeHighlightColorKey === key ? ' is-open' : ''}`}
+                  style={{
+                    background: highlightColors[key],
+                    color: getHighlightLabelColor(highlightColors[key]),
+                  }}
+                  onClick={() => openHighlightColorEditor(key)}
+                  title={HIGHLIGHT_COLOR_TITLES[key]}
+                >
+                  {HIGHLIGHT_COLOR_LABELS[key]}
+                </button>
+              ))}
+
+              {activeHighlightColorKey && (
+                <div className="highlight-color-input-group">
+                  <input
+                    className={`highlight-color-input${highlightColorInputInvalid ? ' is-invalid' : ''}`}
+                    value={highlightColorInput}
+                    onChange={(e) => {
+                      setHighlightColorInput(e.target.value);
+                      if (highlightColorInputInvalid) setHighlightColorInputInvalid(false);
+                    }}
+                    onKeyDown={handleHighlightColorInputKeyDown}
+                    placeholder="#RRGGBBAA or (255,255,255,1)"
+                    title="Enter #RRGGBBAA or (255,255,255,1)"
+                  />
+                  <button
+                    className="toolbar-btn-icon color-apply-btn"
+                    onClick={applyHighlightColor}
+                    title="Apply color"
+                  >
+                    ✓
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className={`editor-content ${showPreview ? 'is-preview' : 'is-editor'}`} ref={editorContentRef} style={!showPreview ? { overflow: 'hidden' } : undefined}>

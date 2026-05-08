@@ -54,6 +54,32 @@
   font-weight: 500;
   transition: all 0.2s;
 }
+
+.secondary-toolbar-panel {
+  display: none;
+  margin: 0 4px 4px;
+  padding: 10px 12px;
+  background: var(--color-background-lighter, #f9f9f9);
+  border: 1px solid #ddd;
+  border-top: none;
+  border-radius: 0 0 var(--border-radius-regular) var(--border-radius-regular);
+  box-sizing: border-box;
+}
+.secondary-toolbar-panel.is-visible {
+  display: block;
+}
+.secondary-toolbar-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.secondary-toolbar-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #444;
+  margin-right: 8px;
+}
 .toolbar-toggle-btn:hover {
   background: #f0f0f0;
 }
