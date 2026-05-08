@@ -250,7 +250,8 @@ function sliderKeyBackground(key: ColorSliderKey, hsva: HSVA): string {
 function sliderKeyTextStyle(key: ColorSliderKey, hsva: HSVA): React.CSSProperties | undefined {
   if (key === 'hue') {
     return {
-      textShadow: '0 0 2px rgba(255,255,255,1), 0 0 4px rgba(255,255,255,1)',
+      color: '#fff',
+      textShadow: '0 0 2px rgba(0,0,0,1), 0 0 4px rgba(0,0,0,1)',
     };
   }
   let brightness: number;
@@ -262,7 +263,15 @@ function sliderKeyTextStyle(key: ColorSliderKey, hsva: HSVA): React.CSSPropertie
     brightness = 1 - hsva.a;
   }
 
-  if (brightness > 0.5) {
+  const isBright = brightness > 0.5;
+  if (key === 'vibrancy') {
+    return {
+      color: '#fff',
+      textShadow: '0 0 2px rgba(0,0,0,1), 0 0 4px rgba(0,0,0,1)',
+    };
+  }
+
+  if (isBright) {
     return {
       color: '#111',
       textShadow: '0 0 2px rgba(255,255,255,1), 0 0 4px rgba(255,255,255,1)',
