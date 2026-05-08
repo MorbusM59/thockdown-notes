@@ -858,6 +858,16 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     localStorage.setItem(HIGHLIGHT_COLOR_STORAGE_KEYS[activeHighlightColorKey], rgba);
   };
 
+  const applySelectedColorToKey = (key: HighlightColorKey) => {
+    if (!colorSliderHsva) return;
+    const rgba = hsvaToRgbaString(colorSliderHsva);
+    setHighlightColors((previousColors) => ({
+      ...previousColors,
+      [key]: rgba,
+    }));
+    localStorage.setItem(HIGHLIGHT_COLOR_STORAGE_KEYS[key], rgba);
+  };
+
   useEffect(() => {
     if (showPreview && secondaryToolbarPanel) {
       setSecondaryToolbarPanel(null);
@@ -1990,6 +2000,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                     color: getHighlightLabelColor(highlightColors[key]),
                   }}
                   onClick={() => openHighlightColorEditor(key)}
+                  onContextMenu={(e) => {
+                    if (!colorSliderHsva) return;
+                    e.preventDefault();
+                    applySelectedColorToKey(key);
+                  }}
                   title={HIGHLIGHT_COLOR_TITLES[key]}
                 >
                   {HIGHLIGHT_COLOR_LABELS[key]}
