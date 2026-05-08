@@ -1989,27 +1989,28 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       <div className={`secondary-toolbar-panel${secondaryToolbarPanel ? ' is-visible' : ''}`}>
         {secondaryToolbarPanel === 'color-settings' && (
           <div className="secondary-toolbar-content">
-            <div className="secondary-toolbar-section-title">Color settings</div>
             <div className="highlight-color-controls">
-              {(['caret', 'selection', 'background', 'topBackground', 'bottomBackground'] as HighlightColorKey[]).map((key) => (
-                <button
-                  key={key}
-                  className={`toolbar-btn-icon color-swatch-btn${activeHighlightColorKey === key ? ' is-open' : ''}`}
-                  style={{
-                    background: highlightColors[key],
-                    color: getHighlightLabelColor(highlightColors[key]),
-                  }}
-                  onClick={() => openHighlightColorEditor(key)}
-                  onContextMenu={(e) => {
-                    if (!colorSliderHsva) return;
-                    e.preventDefault();
-                    applySelectedColorToKey(key);
-                  }}
-                  title={HIGHLIGHT_COLOR_TITLES[key]}
-                >
-                  {HIGHLIGHT_COLOR_LABELS[key]}
-                </button>
-              ))}
+              <div className="highlight-color-buttons-row">
+                {(['caret', 'selection', 'background', 'topBackground', 'bottomBackground'] as HighlightColorKey[]).map((key) => (
+                  <button
+                    key={key}
+                    className={`toolbar-btn-icon color-swatch-btn${activeHighlightColorKey === key ? ' is-open' : ''}`}
+                    style={{
+                      background: highlightColors[key],
+                      color: getHighlightLabelColor(highlightColors[key]),
+                    }}
+                    onClick={() => openHighlightColorEditor(key)}
+                    onContextMenu={(e) => {
+                      if (!colorSliderHsva) return;
+                      e.preventDefault();
+                      applySelectedColorToKey(key);
+                    }}
+                    title={HIGHLIGHT_COLOR_TITLES[key]}
+                  >
+                    {HIGHLIGHT_COLOR_LABELS[key]}
+                  </button>
+                ))}
+              </div>
 
               {activeHighlightColorKey && colorSliderHsva && (
                 <div className="highlight-color-panel">
