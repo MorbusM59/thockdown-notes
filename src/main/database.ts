@@ -66,6 +66,10 @@ export async function initDatabase(): Promise<void> {
     if (!names.has('cursorPos')) db.prepare('ALTER TABLE notes ADD COLUMN cursorPos INTEGER DEFAULT 0').run();
     if (!names.has('scrollTop')) db.prepare('ALTER TABLE notes ADD COLUMN scrollTop REAL DEFAULT 0').run();
     if (!names.has('editHistory')) db.prepare('ALTER TABLE notes ADD COLUMN editHistory TEXT').run();
+
+    const snapCols = db.prepare("PRAGMA table_info(note_snapshots)").all() as Array<{ name: string }>;
+    const snapNames = new Set(snapCols.map(c => String(c.name)));
+    if (!snapNames.has('isManual')) db.prepare('ALTER TABLE note_snapshots ADD COLUMN isManual INTEGER DEFAULT 0').run();
   } catch (merr) {
     console.warn('[db] UI-state migration check failed', merr);
   }

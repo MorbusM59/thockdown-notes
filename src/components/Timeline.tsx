@@ -43,9 +43,9 @@ export const Timeline: React.FC<TimelineProps> = ({
 
     const calculateCol = (timestamp: string) => {
       const age = presentDate - new Date(timestamp).getTime();
-      if (age <= ONE_MINUTE) return numCols - 1; // 1 min or newer maps to rightmost col
-      
       const numSnapshotCols = Math.max(1, numCols - 2); // Exclude present box and gap
+      
+      if (age <= ONE_MINUTE) return numSnapshotCols - 1; // 1 min or newer maps to newest snapshot col
       
       const documentAge = presentDateNum - oldestDate;
       const timelineSpan = Math.max(ONE_DAY, Math.min(ONE_YEAR, documentAge));
@@ -146,6 +146,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           const isEmpty = items.length === 0 && !isPresentBox && !isGapBox;
           const hasItems = items.length > 0;
           const primary = items[0];
+          const hasManual = items.some(i => i.snapshot.isManual);
 
           return (
             <div 
@@ -165,7 +166,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                   onContextMenu={hasItems && !isPresentBox ? (e) => handleBoxRightClick(e, primary.index, primary.snapshot) : undefined}
                   title={isPresentBox ? (timeMachineIndex === -1 ? "Present (Auto)" : "Return to Present") : (hasItems ? new Date(primary.snapshot.timestamp).toLocaleString() : undefined)}
               >
-                  {hasItems && !isPresentBox && primary.snapshot.isManual && <div className="manual-dot" />}
+                  {hasItems && !isPresentBox && hasManual && <div className="manual-dot" />}
               </div>
 
                 {hasItems && !isPresentBox && (
