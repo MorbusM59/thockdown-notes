@@ -158,17 +158,18 @@
 
 .highlight-color-buttons-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
   gap: 0;
-  align-items: flex-start;
+  align-items: start;
   min-width: 0;
 }
 
 .highlight-color-column {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 0 10px;
+  gap: 8px;
+  padding: 0 14px;
+  min-width: 0;
 }
 
 .highlight-color-column + .highlight-color-column {
@@ -179,13 +180,13 @@
   font-size: 12px;
   font-weight: 700;
   color: #333;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .highlight-color-column-buttons {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 4px;
+  gap: 8px 6px;
   align-items: center;
 }
 

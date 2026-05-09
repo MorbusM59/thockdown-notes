@@ -11,7 +11,20 @@ import { FixedFocusEditor, ceGetSelection, ceSetSelection, ceGetText } from './F
 import './MarkdownEditor.scss';
 import './MarkdownThemes.scss';
 
-type HighlightColorKey = 'caret' | 'selection' | 'leading' | 'trailing' | 'background' | 'topBackground' | 'bottomBackground';
+type HighlightColorKey =
+  | 'caret'
+  | 'selection'
+  | 'leading'
+  | 'trailing'
+  | 'background'
+  | 'topBackground'
+  | 'bottomBackground'
+  | 'scrollbarBackground'
+  | 'scrollbarHandle'
+  | 'timelineBackground'
+  | 'timelineActive'
+  | 'timelineManual'
+  | 'timelineAutomatic';
 
 type HighlightColors = Record<HighlightColorKey, string>;
 type HSVA = { h: number; s: number; v: number; a: number };
@@ -31,6 +44,12 @@ const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   background: 'rgba(0, 0, 0, 0.05)',
   topBackground: 'rgba(0, 0, 0, 0.08)',
   bottomBackground: 'rgba(0, 0, 0, 0.08)',
+  scrollbarBackground: 'rgba(0, 0, 0, 0.08)',
+  scrollbarHandle: 'rgba(0, 0, 0, 0.25)',
+  timelineBackground: 'rgba(0, 0, 0, 0.05)',
+  timelineActive: 'rgba(40, 167, 69, 1)',
+  timelineManual: 'rgba(0, 123, 255, 0.75)',
+  timelineAutomatic: 'rgba(0, 0, 0, 0.25)',
 };
 
 const HIGHLIGHT_COLOR_STORAGE_KEYS: Record<HighlightColorKey, string> = {
@@ -41,6 +60,12 @@ const HIGHLIGHT_COLOR_STORAGE_KEYS: Record<HighlightColorKey, string> = {
   background: 'markdown-editor-highlight-background',
   topBackground: 'markdown-editor-highlight-top-background',
   bottomBackground: 'markdown-editor-highlight-bottom-background',
+  scrollbarBackground: 'markdown-editor-highlight-scrollbar-background',
+  scrollbarHandle: 'markdown-editor-highlight-scrollbar-handle',
+  timelineBackground: 'markdown-editor-highlight-timeline-background',
+  timelineActive: 'markdown-editor-highlight-timeline-active',
+  timelineManual: 'markdown-editor-highlight-timeline-manual',
+  timelineAutomatic: 'markdown-editor-highlight-timeline-automatic',
 };
 
 const HIGHLIGHT_COLOR_LABELS: Record<HighlightColorKey, string> = {
@@ -51,6 +76,12 @@ const HIGHLIGHT_COLOR_LABELS: Record<HighlightColorKey, string> = {
   background: 'B',
   topBackground: '↑',
   bottomBackground: '↓',
+  scrollbarBackground: 'SB',
+  scrollbarHandle: 'SH',
+  timelineBackground: 'TB',
+  timelineActive: 'AC',
+  timelineManual: 'M',
+  timelineAutomatic: 'AU',
 };
 
 const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
@@ -61,6 +92,12 @@ const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   background: 'Regular box background color',
   topBackground: 'Top section regular box background color',
   bottomBackground: 'Bottom section regular box background color',
+  scrollbarBackground: 'Scrollbar background boxes color',
+  scrollbarHandle: 'Scrollbar handle box color',
+  timelineBackground: 'Timeline background box color',
+  timelineActive: 'Timeline active box color',
+  timelineManual: 'Timeline manual save point box color',
+  timelineAutomatic: 'Timeline automatic save point box color',
 };
 
 function toOpaqueColor(color: string | null | undefined): string | null {
@@ -1016,6 +1053,12 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       background: localStorage.getItem(HIGHLIGHT_COLOR_STORAGE_KEYS.background) || DEFAULT_HIGHLIGHT_COLORS.background,
       topBackground: localStorage.getItem(HIGHLIGHT_COLOR_STORAGE_KEYS.topBackground) || DEFAULT_HIGHLIGHT_COLORS.topBackground,
       bottomBackground: localStorage.getItem(HIGHLIGHT_COLOR_STORAGE_KEYS.bottomBackground) || DEFAULT_HIGHLIGHT_COLORS.bottomBackground,
+      scrollbarBackground: localStorage.getItem(HIGHLIGHT_COLOR_STORAGE_KEYS.scrollbarBackground) || DEFAULT_HIGHLIGHT_COLORS.scrollbarBackground,
+      scrollbarHandle: localStorage.getItem(HIGHLIGHT_COLOR_STORAGE_KEYS.scrollbarHandle) || DEFAULT_HIGHLIGHT_COLORS.scrollbarHandle,
+      timelineBackground: localStorage.getItem(HIGHLIGHT_COLOR_STORAGE_KEYS.timelineBackground) || DEFAULT_HIGHLIGHT_COLORS.timelineBackground,
+      timelineActive: localStorage.getItem(HIGHLIGHT_COLOR_STORAGE_KEYS.timelineActive) || DEFAULT_HIGHLIGHT_COLORS.timelineActive,
+      timelineManual: localStorage.getItem(HIGHLIGHT_COLOR_STORAGE_KEYS.timelineManual) || DEFAULT_HIGHLIGHT_COLORS.timelineManual,
+      timelineAutomatic: localStorage.getItem(HIGHLIGHT_COLOR_STORAGE_KEYS.timelineAutomatic) || DEFAULT_HIGHLIGHT_COLORS.timelineAutomatic,
     };
 
     if (savedViewStyle) setViewStyle(savedViewStyle);
@@ -2380,17 +2423,37 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                     <button
                       type="button"
                       className="toolbar-btn-icon color-swatch-btn"
-                      title="Scrollbar background boxes"
+                      style={{
+                        background: highlightColors.scrollbarBackground,
+                        color: getHighlightLabelColor(highlightColors.scrollbarBackground),
+                      }}
+                      onClick={() => setPreviewColorFromElement('scrollbarBackground')}
+                      onContextMenu={(e) => {
+                        if (!colorSliderHsva) return;
+                        e.preventDefault();
+                        applyPreviewColorToElement('scrollbarBackground');
+                      }}
+                      title={HIGHLIGHT_COLOR_TITLES.scrollbarBackground}
                     >
-                      BG
+                      {HIGHLIGHT_COLOR_LABELS.scrollbarBackground}
                     </button>
 
                     <button
                       type="button"
                       className="toolbar-btn-icon color-swatch-btn"
-                      title="Scrollbar handle box"
+                      style={{
+                        background: highlightColors.scrollbarHandle,
+                        color: getHighlightLabelColor(highlightColors.scrollbarHandle),
+                      }}
+                      onClick={() => setPreviewColorFromElement('scrollbarHandle')}
+                      onContextMenu={(e) => {
+                        if (!colorSliderHsva) return;
+                        e.preventDefault();
+                        applyPreviewColorToElement('scrollbarHandle');
+                      }}
+                      title={HIGHLIGHT_COLOR_TITLES.scrollbarHandle}
                     >
-                      H
+                      {HIGHLIGHT_COLOR_LABELS.scrollbarHandle}
                     </button>
                   </div>
                 </div>
@@ -2401,33 +2464,73 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                     <button
                       type="button"
                       className="toolbar-btn-icon color-swatch-btn"
-                      title="Timeline background box"
+                      style={{
+                        background: highlightColors.timelineBackground,
+                        color: getHighlightLabelColor(highlightColors.timelineBackground),
+                      }}
+                      onClick={() => setPreviewColorFromElement('timelineBackground')}
+                      onContextMenu={(e) => {
+                        if (!colorSliderHsva) return;
+                        e.preventDefault();
+                        applyPreviewColorToElement('timelineBackground');
+                      }}
+                      title={HIGHLIGHT_COLOR_TITLES.timelineBackground}
                     >
-                      B
+                      {HIGHLIGHT_COLOR_LABELS.timelineBackground}
                     </button>
 
                     <button
                       type="button"
                       className="toolbar-btn-icon color-swatch-btn"
-                      title="Timeline active box"
+                      style={{
+                        background: highlightColors.timelineActive,
+                        color: getHighlightLabelColor(highlightColors.timelineActive),
+                      }}
+                      onClick={() => setPreviewColorFromElement('timelineActive')}
+                      onContextMenu={(e) => {
+                        if (!colorSliderHsva) return;
+                        e.preventDefault();
+                        applyPreviewColorToElement('timelineActive');
+                      }}
+                      title={HIGHLIGHT_COLOR_TITLES.timelineActive}
                     >
-                      A
+                      {HIGHLIGHT_COLOR_LABELS.timelineActive}
                     </button>
 
                     <button
                       type="button"
                       className="toolbar-btn-icon color-swatch-btn"
-                      title="Timeline manual save point box"
+                      style={{
+                        background: highlightColors.timelineManual,
+                        color: getHighlightLabelColor(highlightColors.timelineManual),
+                      }}
+                      onClick={() => setPreviewColorFromElement('timelineManual')}
+                      onContextMenu={(e) => {
+                        if (!colorSliderHsva) return;
+                        e.preventDefault();
+                        applyPreviewColorToElement('timelineManual');
+                      }}
+                      title={HIGHLIGHT_COLOR_TITLES.timelineManual}
                     >
-                      M
+                      {HIGHLIGHT_COLOR_LABELS.timelineManual}
                     </button>
 
                     <button
                       type="button"
                       className="toolbar-btn-icon color-swatch-btn"
-                      title="Timeline automatic save point box"
+                      style={{
+                        background: highlightColors.timelineAutomatic,
+                        color: getHighlightLabelColor(highlightColors.timelineAutomatic),
+                      }}
+                      onClick={() => setPreviewColorFromElement('timelineAutomatic')}
+                      onContextMenu={(e) => {
+                        if (!colorSliderHsva) return;
+                        e.preventDefault();
+                        applyPreviewColorToElement('timelineAutomatic');
+                      }}
+                      title={HIGHLIGHT_COLOR_TITLES.timelineAutomatic}
                     >
-                      A
+                      {HIGHLIGHT_COLOR_LABELS.timelineAutomatic}
                     </button>
                   </div>
                 </div>

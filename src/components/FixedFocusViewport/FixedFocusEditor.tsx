@@ -266,6 +266,12 @@ interface HighlightColors {
   background: string;
   topBackground: string;
   bottomBackground: string;
+  scrollbarBackground: string;
+  scrollbarHandle: string;
+  timelineBackground: string;
+  timelineActive: string;
+  timelineManual: string;
+  timelineAutomatic: string;
 }
 
 interface FixedFocusEditorProps {
@@ -1639,6 +1645,15 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
         '--grid-column-width': `${charCellWidthPx}px`,
         '--highlight-selection-bg': highlightColors?.selection,
         '--highlight-caret-bg': highlightColors?.caret,
+        '--markdown-editor-highlight-background': highlightColors?.background,
+        '--markdown-editor-highlight-top-background': highlightColors?.topBackground,
+        '--markdown-editor-highlight-bottom-background': highlightColors?.bottomBackground,
+        '--timeline-background': highlightColors?.timelineBackground,
+        '--timeline-active-bg': highlightColors?.timelineActive,
+        '--timeline-manual-bg': highlightColors?.timelineManual,
+        '--timeline-automatic-bg': highlightColors?.timelineAutomatic,
+        '--scroll-indicator-active-bg': highlightColors?.scrollbarHandle,
+        '--scroll-indicator-inactive-bg': highlightColors?.scrollbarBackground,
       } as React.CSSProperties}
     >
       <div ref={caretOverlayRef} className="fixed-focus-caret-rect" aria-hidden />

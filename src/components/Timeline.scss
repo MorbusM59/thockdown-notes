@@ -27,7 +27,7 @@
   width: 100%;
   height: 100%;
   /* background simulates scrollbar thumb */
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--timeline-automatic-bg, rgba(0, 0, 0, 0.25));
   box-sizing: border-box;
   /* Use transparent padding-box borders to create exactly 1px gaps that never overlap or miss physical sub-pixels */
   border-left: 1px solid transparent;
@@ -42,7 +42,7 @@
 }
 
 .timeline-box.empty-box {
-  background: var(--markdown-editor-highlight-background, rgba(0, 0, 0, 0.05));
+  background: var(--timeline-background, var(--markdown-editor-highlight-background, rgba(0, 0, 0, 0.05)));
   cursor: default;
 }
 
@@ -53,15 +53,23 @@
 }
 
 .timeline-box.empty-box:hover {
-  background: var(--markdown-editor-highlight-background, rgba(0, 0, 0, 0.05));
+  background: var(--timeline-background, var(--markdown-editor-highlight-background, rgba(0, 0, 0, 0.05)));
 }
 
 .timeline-box:hover {
   background: rgba(0, 0, 0, 0.45);
 }
 
+.timeline-box.manual-box {
+  background: var(--timeline-manual-bg, rgba(0, 123, 255, 0.75));
+}
+
+.timeline-box.automatic-box {
+  background: var(--timeline-automatic-bg, rgba(0, 0, 0, 0.25));
+}
+
 .timeline-box.active {
-  background: #28a745; /* Green as requested for active state */
+  background: var(--timeline-active-bg, #28a745); /* Green as requested for active state */
 }
 
 .timeline-box.armed {

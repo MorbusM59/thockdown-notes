@@ -146,7 +146,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           const isEmpty = items.length === 0 && !isPresentBox && !isGapBox;
           const hasItems = items.length > 0;
           const primary = items[0];
-          const hasManual = items.some(i => i.snapshot.isManual);
+          const isPrimaryManual = primary?.snapshot?.isManual === true;
 
           return (
             <div 
@@ -161,12 +161,12 @@ export const Timeline: React.FC<TimelineProps> = ({
               }}
             >
               <div 
-                className={`timeline-box ${isEmpty && !isPresentBox && !isGapBox ? 'empty-box' : 'base-box'} ${isGapBox ? 'gap-box' : ''} ${isActive ? 'active' : ''} ${isArmed && !isEmpty ? 'armed' : ''}`}
+                className={`timeline-box ${isEmpty && !isPresentBox && !isGapBox ? 'empty-box' : 'base-box'} ${isGapBox ? 'gap-box' : ''} ${hasItems && !isPresentBox ? (isPrimaryManual ? 'manual-box' : 'automatic-box') : ''} ${isActive ? 'active' : ''} ${isArmed && !isEmpty ? 'armed' : ''}`}
                   onClick={isPresentBox ? handlePresentLeftClick : (hasItems ? (e) => handleBoxLeftClick(e, primary.index, items.length > 1, colIndex) : undefined)}
                   onContextMenu={hasItems && !isPresentBox ? (e) => handleBoxRightClick(e, primary.index, primary.snapshot) : undefined}
                   title={isPresentBox ? (timeMachineIndex === -1 ? "Present (Auto)" : "Return to Present") : (hasItems ? new Date(primary.snapshot.timestamp).toLocaleString() : undefined)}
               >
-                  {hasItems && !isPresentBox && hasManual && <div className="manual-dot" />}
+                  {hasItems && !isPresentBox && isPrimaryManual && <div className="manual-dot" />}
               </div>
 
                 {hasItems && !isPresentBox && (
@@ -176,7 +176,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                       {items.map(item => (
                         <div 
                           key={item.snapshot.id} 
-                          className={`timeline-box base-flyout-box ${item.index === timeMachineIndex ? 'active' : ''} ${item.snapshot.id === armedSnapshotId ? 'armed' : ''}`}
+                          className={`timeline-box base-flyout-box ${item.snapshot.isManual ? 'manual-box' : 'automatic-box'} ${item.index === timeMachineIndex ? 'active' : ''} ${item.snapshot.id === armedSnapshotId ? 'armed' : ''}`}
                           onClick={(e) => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); handleFlyoutItemClick(item.index); }}
                           onContextMenu={(e) => handleBoxRightClick(e, item.index, item.snapshot)}
                           title={new Date(item.snapshot.timestamp).toLocaleString()}
