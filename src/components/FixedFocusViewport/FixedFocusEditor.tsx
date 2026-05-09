@@ -1163,6 +1163,145 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     return { start, end };
   }, [text]);
 
+  const isSpaceCharacter = (chr: string | null) => chr === ' ' || chr === '\t';
+  const isLineBreakCharacter = (chr: string | null) => chr === '\n' || chr === '\r';
+  const isSentenceTerminator = (chr: string | null) => chr === '.' || chr === ':' || chr === '?' || chr === '!';
+  const isTerminatorOrLineBreak = (chr: string | null) => isSentenceTerminator(chr) || isLineBreakCharacter(chr);
+
+  const trimSelectionSpaces = useCallback((start: number, end: number) => {
+    let trimmedStart = Math.max(0, Math.min(start, end));
+    let trimmedEnd = Math.max(0, Math.min(text.length, Math.max(start, end)));
+    while (trimmedStart < trimmedEnd && isSpaceCharacter(text[trimmedStart])) trimmedStart++;
+    while (trimmedEnd > trimmedStart && isSpaceCharacter(text[trimmedEnd - 1])) trimmedEnd--;
+    return { start: trimmedStart, end: trimmedEnd };
+  }, [text]);
+
+  const getRightClickExpandedSelection = useCallback((start: number, end: number) => {
+    if (start >= end) return null;
+    const textLength = text.length;
+    const normalizedStart = Math.max(0, Math.min(start, textLength));
+    const normalizedEnd = Math.max(0, Math.min(end, textLength));
+    const trimmed = trimSelectionSpaces(normalizedStart, normalizedEnd);
+    const trimmedStart = trimmed.start;
+    const trimmedEnd = trimmed.end;
+    const containsSpace = /[ \t]/.test(text.slice(trimmedStart, trimmedEnd));
+    const containsSentencePunctuation = /[^\w\s,]/.test(text.slice(trimmedStart, trimmedEnd));
+
+    const expandToSentence = (wordStart: number, wordEnd: number) => {
+      let left = wordStart;
+      let scan = wordStart - 1;
+      while (scan >= 0 && !isTerminatorOrLineBreak(text[scan])) scan--;
+      left = scan < 0 ? 0 : scan + 1;
+      while (left < wordStart && isSpaceCharacter(text[left])) left++;
+
+      let right = wordEnd;
+      let scanRight = wordEnd;
+      while (scanRight < textLength && !isTerminatorOrLineBreak(text[scanRight])) scanRight++;
+      if (scanRight >= textLength) {
+        right = textLength;
+      } else if (isLineBreakCharacter(text[scanRight])) {
+        right = scanRight;
+      } else {
+        right = scanRight + 1;
+      }
+      while (right > left && isSpaceCharacter(text[right - 1])) right--;
+      while (right > left && isLineBreakCharacter(text[right - 1])) right--;
+      return { start: left, end: right };
+    };
+
+    const expandToParagraph = (rangeStart: number, rangeEnd: number) => {
+      let left = rangeStart;
+      let scan = rangeStart - 1;
+      while (scan >= 0 && !isLineBreakCharacter(text[scan])) scan--;
+      left = scan < 0 ? 0 : scan + 1;
+      while (left < rangeStart && isSpaceCharacter(text[left])) left++;
+
+      let right = rangeEnd;
+      let scanRight = rangeEnd;
+      while (scanRight < textLength && !isLineBreakCharacter(text[scanRight])) scanRight++;
+      right = scanRight >= textLength ? textLength : scanRight;
+      while (right > left && isSpaceCharacter(text[right - 1])) right--;
+      return { start: left, end: right };
+    };
+
+    if (containsSentencePunctuation) {
+      return expandToParagraph(trimmedStart, trimmedEnd);
+    }
+
+    const sentenceRange = expandToSentence(trimmedStart, trimmedEnd);
+    if (sentenceRange.start === trimmedStart && sentenceRange.end === trimmedEnd) {
+      const paragraphRange = expandToParagraph(trimmedStart, trimmedEnd);
+      if (paragraphRange.start !== trimmedStart || paragraphRange.end !== trimmedEnd) {
+        return paragraphRange;
+      }
+    }
+
+    if (!containsSpace) {
+      let left = trimmedStart;
+      while (left > 0 && !isSpaceCharacter(text[left - 1])) left--;
+      let right = trimmedEnd;
+      while (right < textLength && !isSpaceCharacter(text[right])) right++;
+      if (left !== trimmedStart || right !== trimmedEnd) {
+        return { start: left, end: right };
+      }
+      const sentenceRange = expandToSentence(left, right);
+      if (sentenceRange.start !== left || sentenceRange.end !== right) {
+        return sentenceRange;
+      }
+      return { start: left, end: right };
+    }
+
+    const leftBoundaryChar = trimmedStart > 0 ? text[trimmedStart - 1] : null;
+    const rightBoundaryChar = trimmedEnd < textLength ? text[trimmedEnd] : null;
+    const leftLimitedBySpace = trimmedStart === 0 || isSpaceCharacter(leftBoundaryChar);
+    const rightLimitedBySpace = trimmedEnd === textLength || isSpaceCharacter(rightBoundaryChar);
+    const leftLimitedByTerminator = trimmedStart === 0 || isTerminatorOrLineBreak(leftBoundaryChar);
+    const rightLimitedByTerminator = trimmedEnd === textLength || isTerminatorOrLineBreak(rightBoundaryChar);
+
+    if (leftLimitedBySpace || rightLimitedBySpace) {
+      let left = trimmedStart;
+      let scan = trimmedStart - 1;
+      while (scan >= 0 && !isTerminatorOrLineBreak(text[scan])) scan--;
+      left = scan < 0 ? 0 : scan + 1;
+      while (left < trimmedStart && isSpaceCharacter(text[left])) left++;
+
+      let right = trimmedEnd;
+      let scanRight = trimmedEnd;
+      while (scanRight < textLength && !isTerminatorOrLineBreak(text[scanRight])) scanRight++;
+      if (scanRight >= textLength) {
+        right = textLength;
+      } else if (isLineBreakCharacter(text[scanRight])) {
+        right = scanRight;
+      } else {
+        right = scanRight + 1;
+      }
+      while (right > left && isSpaceCharacter(text[right - 1])) right--;
+      while (right > left && isLineBreakCharacter(text[right - 1])) right--;
+      return { start: left, end: right };
+    }
+
+    if (leftLimitedByTerminator || rightLimitedByTerminator) {
+      const startsAtLineBreak = trimmedStart === 0 || isLineBreakCharacter(leftBoundaryChar);
+      const endsAtLineBreak = trimmedEnd === textLength || isLineBreakCharacter(rightBoundaryChar);
+      if (startsAtLineBreak && endsAtLineBreak) {
+        return { start: trimmedStart, end: trimmedEnd };
+      }
+
+      const sentenceRange = expandToSentence(trimmedStart, trimmedEnd);
+      const paragraphRange = expandToParagraph(trimmedStart, trimmedEnd);
+      const isSentenceSelection = sentenceRange.start === trimmedStart && sentenceRange.end === trimmedEnd;
+      if (isSentenceSelection && (paragraphRange.start !== trimmedStart || paragraphRange.end !== trimmedEnd)) {
+        return paragraphRange;
+      }
+      if (sentenceRange.start !== trimmedStart || sentenceRange.end !== trimmedEnd) {
+        return sentenceRange;
+      }
+      return { start: trimmedStart, end: trimmedEnd };
+    }
+
+    return null;
+  }, [text, trimSelectionSpaces]);
+
   const moveCaretToWrappedRow = useCallback((targetRowIndex: number) => {
     if (wrappedLines.length === 0) return null;
 
@@ -1264,6 +1403,9 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   };
 
   const handleCenterPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button === 2) {
+      return;
+    }
     if (event.button !== 0) return;
 
     if (event.detail > 1) {
@@ -1548,6 +1690,65 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     boundaryCaretRowPreferenceRef.current = targetRowIndex;
     return getCharIndexForVisualCell(targetRow, targetCell);
   }, [charCellWidthPx, getCharIndexForVisualCell, getVisibleRowIndexForPointer, leftPaddingPx, wrappedLines]);
+
+  const handleCenterContextMenu = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const editor = event.currentTarget;
+    const sel = ceGetSelection(editor);
+    console.debug('[FixedFocusEditor] contextmenu', {
+      sel,
+      button: event.button,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
+    if (!sel || sel.start === sel.end) return;
+    const selectionStart = Math.min(sel.start, sel.end);
+    const selectionEnd = Math.max(sel.start, sel.end);
+
+    const expanded = getRightClickExpandedSelection(selectionStart, selectionEnd);
+    const skipped = !expanded || (expanded.start === selectionStart && expanded.end === selectionEnd);
+    console.debug('[FixedFocusEditor] contextmenu expanded selection', {
+      selectionStart,
+      selectionEnd,
+      expandedStart: expanded?.start,
+      expandedEnd: expanded?.end,
+      skipped,
+    });
+    if (skipped) return;
+
+    console.debug('[FixedFocusEditor] contextmenu would have applied expanded selection on mouseup', expanded);
+  }, [getRightClickExpandedSelection]);
+
+  const handleCenterPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 2) return;
+    const editor = event.currentTarget;
+    const sel = ceGetSelection(editor);
+    const clickedPos = getCharIndexForPointer(event.clientX, event.clientY);
+    console.debug('[FixedFocusEditor] pointerup button=2', {
+      sel,
+      clickedPos,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
+    if (sel && sel.start !== sel.end) {
+      const selectionStart = Math.min(sel.start, sel.end);
+      const selectionEnd = Math.max(sel.start, sel.end);
+      const expanded = getRightClickExpandedSelection(selectionStart, selectionEnd);
+      console.debug('[FixedFocusEditor] right-click selection range on mouseup', {
+        selectionStart,
+        selectionEnd,
+        expanded,
+      });
+      if (expanded && (expanded.start !== selectionStart || expanded.end !== selectionEnd)) {
+        event.preventDefault();
+        event.stopPropagation();
+        editor.focus();
+        ceSetSelection(editor, expanded.start, expanded.end);
+        const afterSel = ceGetSelection(editor);
+        console.debug('[FixedFocusEditor] pointerup after selection update', afterSel);
+        onSelectionChange?.(expanded.start, expanded.end);
+      }
+    }
+  };
 
   const handleCenterDoubleClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -1834,7 +2035,9 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
             onInput={handleInput}
             onSelect={handleSelect}
             onPointerDown={handleCenterPointerDown}
+            onPointerUp={handleCenterPointerUp}
             onDoubleClick={handleCenterDoubleClick}
+            onContextMenuCapture={handleCenterContextMenu}
             onKeyDown={handleKeyDown}
             onKeyUp={onKeyUp}
             onCopy={onCopy}
