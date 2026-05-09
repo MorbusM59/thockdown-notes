@@ -15,7 +15,7 @@ type HighlightColorKey = 'caret' | 'selection' | 'leading' | 'trailing' | 'backg
 
 type HighlightColors = Record<HighlightColorKey, string>;
 type HSVA = { h: number; s: number; v: number; a: number };
-type ColorSliderKey = 'hue' | 'saturation' | 'vibrancy' | 'alpha';
+type ColorSliderKey = 'hue' | 'saturation' | 'value' | 'alpha';
 
 type FixedFocusHighlightColors = HighlightColors & { grid: string };
 type HistoryBoundaryReason = 'space' | 'enter' | 'delete-boundary' | 'paste' | 'delete-selection' | 'tab' | 'char';
@@ -212,7 +212,7 @@ function sliderKeyToInputValue(key: ColorSliderKey, value: number): number {
   switch (key) {
     case 'hue': return Math.round((value / 360) * 255);
     case 'saturation':
-    case 'vibrancy': return Math.round((value / 100) * 255);
+    case 'value': return Math.round((value / 100) * 255);
     case 'alpha': return Math.round(value * 255);
   }
 }
@@ -221,7 +221,7 @@ function sliderKeyToHsvaProp(key: ColorSliderKey): keyof HSVA {
   switch (key) {
     case 'hue': return 'h';
     case 'saturation': return 's';
-    case 'vibrancy': return 'v';
+    case 'value': return 'v';
     case 'alpha': return 'a';
   }
 }
@@ -236,7 +236,7 @@ function sliderKeyBackground(key: ColorSliderKey, hsva: HSVA): string {
       const rgb = hsvToRgb(hsva.h, hsva.s / 100, 1);
       return `rgba(${rgb.red}, ${rgb.green}, ${rgb.blue}, 1)`;
     }
-    case 'vibrancy': {
+    case 'value': {
       const rgb = hsvToRgb(hsva.h, 1, hsva.v / 100);
       return `rgba(${rgb.red}, ${rgb.green}, ${rgb.blue}, 1)`;
     }
@@ -257,14 +257,14 @@ function sliderKeyTextStyle(key: ColorSliderKey, hsva: HSVA): React.CSSPropertie
   let brightness: number;
   if (key === 'saturation') {
     brightness = 1 - hsva.s / 100;
-  } else if (key === 'vibrancy') {
+  } else if (key === 'value') {
     brightness = 1 - hsva.v / 100;
   } else {
     brightness = 1 - hsva.a;
   }
 
   const isBright = brightness > 0.5;
-  if (key === 'vibrancy') {
+  if (key === 'value') {
     return {
       color: '#fff',
       textShadow: '0 0 2px rgba(0,0,0,1), 0 0 4px rgba(0,0,0,1)',
@@ -294,7 +294,7 @@ function inputValueToSliderValue(key: ColorSliderKey, value: number): number {
   switch (key) {
     case 'hue': return Math.round((clamped / 255) * 360);
     case 'saturation':
-    case 'vibrancy': return Math.round((clamped / 255) * 100);
+    case 'value': return Math.round((clamped / 255) * 100);
     case 'alpha': return clamped / 255;
   }
 }
@@ -329,7 +329,7 @@ const ColorSettingsPanel = React.memo(function ColorSettingsPanel({
   const sliderSettings = useMemo<Array<{ key: ColorSliderKey; label: string; min: number; max: number; step: number; value: number }>>(() => [
     { key: 'hue', label: 'H', min: 0, max: 360, step: 1, value: localHsva.h },
     { key: 'saturation', label: 'S', min: 0, max: 100, step: 1, value: localHsva.s },
-    { key: 'vibrancy', label: 'V', min: 0, max: 100, step: 1, value: localHsva.v },
+    { key: 'value', label: 'V', min: 0, max: 100, step: 1, value: localHsva.v },
     { key: 'alpha', label: 'A', min: 0, max: 100, step: 1, value: Math.round(localHsva.a * 100) },
   ], [localHsva]);
 
@@ -343,7 +343,7 @@ const ColorSettingsPanel = React.memo(function ColorSettingsPanel({
       const next = { ...prev };
       if (key === 'hue') next.h = numeric;
       if (key === 'saturation') next.s = numeric;
-      if (key === 'vibrancy') next.v = numeric;
+      if (key === 'value') next.v = numeric;
       if (key === 'alpha') next.a = numeric / 100;
       return next;
     });
