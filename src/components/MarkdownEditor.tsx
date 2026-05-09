@@ -2168,7 +2168,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             className={`toolbar-toggle-btn ${!showPreview ? 'active' : ''}`}
             onClick={() => onTogglePreview(!showPreview)}
           >
-            {showPreview ? 'Edit' : 'View'}
+            Edit
           </button>
 
           {/* left-aligned text editing tools - only in edit mode */}
