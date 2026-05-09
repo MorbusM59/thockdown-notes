@@ -1132,6 +1132,37 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     return getCharIndexForVisualCellInRow(row, text, targetCell);
   }, [text]);
 
+  const getWordSelectionRange = useCallback((pos: number) => {
+    const textLength = text.length;
+    if (textLength === 0) return { start: 0, end: 0 };
+
+    const isWordChar = (chr: string) => !/\s/.test(chr);
+    let index = Math.max(0, Math.min(pos, textLength - 1));
+    const targetChar = text[index];
+
+    if (isWordChar(targetChar)) {
+      let start = index;
+      while (start > 0 && isWordChar(text[start - 1])) start--;
+      let end = index + 1;
+      while (end < textLength && isWordChar(text[end])) end++;
+      return { start, end };
+    }
+
+    if (/\s/.test(targetChar)) {
+      let start = index;
+      while (start > 0 && /\s/.test(text[start - 1])) start--;
+      let end = index + 1;
+      while (end < textLength && /\s/.test(text[end])) end++;
+      return { start, end };
+    }
+
+    let start = index;
+    while (start > 0 && !/\s/.test(text[start - 1])) start--;
+    let end = index + 1;
+    while (end < textLength && !/\s/.test(text[end])) end++;
+    return { start, end };
+  }, [text]);
+
   const moveCaretToWrappedRow = useCallback((targetRowIndex: number) => {
     if (wrappedLines.length === 0) return null;
 
@@ -1234,6 +1265,16 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
 
   const handleCenterPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
+
+    if (event.detail > 1) {
+      const clickedPos = getCharIndexForPointer(event.clientX, event.clientY);
+      const { start, end } = getWordSelectionRange(clickedPos);
+      event.preventDefault();
+      event.currentTarget.focus();
+      ceSetSelection(event.currentTarget, start, end);
+      onSelectionChange?.(start, end);
+      return;
+    }
 
     cancelViewportAnimation();
     event.preventDefault();
@@ -1507,6 +1548,15 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     boundaryCaretRowPreferenceRef.current = targetRowIndex;
     return getCharIndexForVisualCell(targetRow, targetCell);
   }, [charCellWidthPx, getCharIndexForVisualCell, getVisibleRowIndexForPointer, leftPaddingPx, wrappedLines]);
+
+  const handleCenterDoubleClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const editor = event.currentTarget;
+    const clickedPos = getCharIndexForPointer(event.clientX, event.clientY);
+    const { start, end } = getWordSelectionRange(clickedPos);
+    ceSetSelection(editor, start, end);
+    onSelectionChange?.(start, end);
+  }, [getCharIndexForPointer, getWordSelectionRange, onSelectionChange]);
 
   const getCenterZoneBounds = useCallback(() => {
     const editorRoot = editorRootRef.current;
@@ -1784,6 +1834,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
             onInput={handleInput}
             onSelect={handleSelect}
             onPointerDown={handleCenterPointerDown}
+            onDoubleClick={handleCenterDoubleClick}
             onKeyDown={handleKeyDown}
             onKeyUp={onKeyUp}
             onCopy={onCopy}
