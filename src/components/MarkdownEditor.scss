@@ -195,12 +195,26 @@
 
 .highlight-color-panel {
   grid-column: 2 / 3;
-  display: grid;
-  grid-template-columns: repeat(2, 150px);
-  grid-template-rows: auto auto;
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   align-items: stretch;
   justify-content: start;
+  min-width: 0;
+}
+
+.highlight-color-slider-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+}
+
+.highlight-color-slider-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -208,6 +222,8 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
+  min-width: 0;
 }
 
 .slider-key-btn {
@@ -252,7 +268,7 @@
   accent-color: #007bff;
   -webkit-appearance: none;
   background: transparent;
-  height: 28px;
+  height: 10px;
   margin: 0;
 }
 

@@ -446,47 +446,79 @@ const ColorSettingsPanel = React.memo(function ColorSettingsPanel({
     onApplySliderInputValueToAllElements(key, numeric);
   }, [sliderInputValue, onApplySliderInputValueToAllElements]);
 
+  const sliderSettingsByKey = useMemo(() => sliderSettings.reduce((acc, slider) => {
+    acc[slider.key] = slider;
+    return acc;
+  }, {} as Record<ColorSliderKey, typeof sliderSettings[number]>), [sliderSettings]);
+
+  const sliderRows: Array<[ColorSliderKey, ColorSliderKey]> = [
+    ['hue', 'saturation'],
+    ['value', 'alpha'],
+  ];
+
+  const renderSliderButton = (sliderKey: ColorSliderKey) => {
+    const slider = sliderSettingsByKey[sliderKey];
+    return activeSliderInputKey === sliderKey ? (
+      <input
+        className="slider-key-input"
+        value={sliderInputValue}
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        onChange={(e) => handleSliderInputChange(e.target.value.replace(/[^0-9]/g, ''))}
+        onBlur={handleSliderInputBlur}
+        onKeyDown={handleSliderInputKeyDown}
+        onContextMenu={(e) => handleSliderInputContextMenu(sliderKey, e)}
+        title="Right click to apply this channel value to all elements"
+      />
+    ) : (
+      <button
+        className="toolbar-btn-icon slider-key-btn"
+        type="button"
+        style={{
+          backgroundColor: sliderKeyBackground(sliderKey, initialColorSliderHsva),
+          ...sliderKeyTextStyle(sliderKey, initialColorSliderHsva),
+        }}
+        onClick={() => handleSliderButtonClick(sliderKey)}
+        onContextMenu={(e) => handleSliderButtonContextMenu(sliderKey, e)}
+        title="Click to enter exact 0–255 value; right click to apply this channel value to all elements"
+      >
+        {slider.label}
+      </button>
+    );
+  };
+
+  const renderSliderInput = (sliderKey: ColorSliderKey) => {
+    const slider = sliderSettingsByKey[sliderKey];
+    return (
+      <div className="highlight-color-slider-cell" key={sliderKey}>
+        <input
+          id={`color-slider-${sliderKey}`}
+          type="range"
+          min={slider.min}
+          max={slider.max}
+          step={slider.step}
+          value={slider.value}
+          onChange={(e) => handleSliderRangeChange(sliderKey, Number(e.target.value))}
+        />
+      </div>
+    );
+  };
+
   return (
     <div className="highlight-color-panel" ref={panelRef}>
-      {sliderSettings.map((slider) => (
-        <div key={slider.key} className="highlight-color-slider-cell">
-          {activeSliderInputKey === slider.key ? (
-            <input
-              className="slider-key-input"
-              value={sliderInputValue}
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              onChange={(e) => handleSliderInputChange(e.target.value.replace(/[^0-9]/g, ''))}
-              onBlur={handleSliderInputBlur}
-              onKeyDown={handleSliderInputKeyDown}
-              onContextMenu={(e) => handleSliderInputContextMenu(slider.key, e)}
-              title="Right click to apply this channel value to all elements"
-            />
-          ) : (
-            <button
-              className="toolbar-btn-icon slider-key-btn"
-              type="button"
-              style={{
-                backgroundColor: sliderKeyBackground(slider.key, initialColorSliderHsva),
-                ...sliderKeyTextStyle(slider.key, initialColorSliderHsva),
-              }}
-              onClick={() => handleSliderButtonClick(slider.key)}
-              onContextMenu={(e) => handleSliderButtonContextMenu(slider.key, e)}
-              title="Click to enter exact 0–255 value; right click to apply this channel value to all elements"
-            >
-              {slider.label}
-            </button>
-          )}
-          <input
-            id={`color-slider-${slider.key}`}
-            type="range"
-            min={slider.min}
-            max={slider.max}
-            step={slider.step}
-            value={slider.value}
-            onChange={(e) => handleSliderRangeChange(slider.key, Number(e.target.value))}
-          />
+      {sliderRows.map(([firstKey, secondKey]) => (
+        <div className="highlight-color-slider-row" key={firstKey}>
+          <div className="highlight-color-slider-button-cell">
+            {renderSliderButton(firstKey)}
+          </div>
+          <div className="highlight-color-slider-stack">
+            {renderSliderInput(firstKey)}
+            {renderSliderInput(secondKey)}
+          </div>
+          <div className="highlight-color-slider-button-cell">
+            {renderSliderButton(secondKey)}
+          </div>
         </div>
       ))}
     </div>
