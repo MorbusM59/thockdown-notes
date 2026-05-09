@@ -2335,7 +2335,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                       }}
                       title={HIGHLIGHT_COLOR_TITLES.caret}
                     >
-                      {HIGHLIGHT_COLOR_LABELS.caret}
+                      <i className="fa-solid fa-i-cursor" aria-hidden="true" />
                     </button>
 
                     <button
@@ -2353,7 +2353,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                       }}
                       title={HIGHLIGHT_COLOR_TITLES.selection}
                     >
-                      {HIGHLIGHT_COLOR_LABELS.selection}
+                      <i className="fa-solid fa-arrow-pointer" aria-hidden="true" />
                     </button>
                   </div>
                 </div>
@@ -2376,7 +2376,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                       }}
                       title={HIGHLIGHT_COLOR_TITLES.background}
                     >
-                      {HIGHLIGHT_COLOR_LABELS.background}
+                      <i className="fa-solid fa-square" aria-hidden="true" />
                     </button>
 
                     <button
@@ -2394,7 +2394,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                       }}
                       title={HIGHLIGHT_COLOR_TITLES.topBackground}
                     >
-                      {HIGHLIGHT_COLOR_LABELS.topBackground}
+                      <i className="fa-solid fa-square-caret-up" aria-hidden="true" />
                     </button>
 
                     <button
@@ -2412,7 +2412,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                       }}
                       title={HIGHLIGHT_COLOR_TITLES.bottomBackground}
                     >
-                      {HIGHLIGHT_COLOR_LABELS.bottomBackground}
+                      <i className="fa-solid fa-square-caret-down" aria-hidden="true" />
                     </button>
                   </div>
                 </div>
@@ -2435,7 +2435,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                       }}
                       title={HIGHLIGHT_COLOR_TITLES.scrollbarBackground}
                     >
-                      {HIGHLIGHT_COLOR_LABELS.scrollbarBackground}
+                      <i className="fa-solid fa-square" aria-hidden="true" />
                     </button>
 
                     <button
@@ -2453,7 +2453,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                       }}
                       title={HIGHLIGHT_COLOR_TITLES.scrollbarHandle}
                     >
-                      {HIGHLIGHT_COLOR_LABELS.scrollbarHandle}
+                      <i className="fa-solid fa-grip-vertical" aria-hidden="true" />
                     </button>
                   </div>
                 </div>
@@ -2476,7 +2476,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                       }}
                       title={HIGHLIGHT_COLOR_TITLES.timelineBackground}
                     >
-                      {HIGHLIGHT_COLOR_LABELS.timelineBackground}
+                      <i className="fa-solid fa-square" aria-hidden="true" />
                     </button>
 
                     <button
@@ -2494,7 +2494,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                       }}
                       title={HIGHLIGHT_COLOR_TITLES.timelineActive}
                     >
-                      {HIGHLIGHT_COLOR_LABELS.timelineActive}
+                      <i className="fa-solid fa-circle-dot" aria-hidden="true" />
                     </button>
 
                     <button
@@ -2512,7 +2512,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                       }}
                       title={HIGHLIGHT_COLOR_TITLES.timelineManual}
                     >
-                      {HIGHLIGHT_COLOR_LABELS.timelineManual}
+                      <i className="fa-solid fa-floppy-disk" aria-hidden="true" />
                     </button>
 
                     <button
@@ -2530,7 +2530,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
                       }}
                       title={HIGHLIGHT_COLOR_TITLES.timelineAutomatic}
                     >
-                      {HIGHLIGHT_COLOR_LABELS.timelineAutomatic}
+                      <i className="fa-solid fa-cloud" aria-hidden="true" />
                     </button>
                   </div>
                 </div>

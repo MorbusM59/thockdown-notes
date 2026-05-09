@@ -33,6 +33,11 @@
   cursor: pointer;
 }
 
+.utility-btn i {
+  font-size: 14px;
+  line-height: 1;
+}
+
 .utility-btn--placeholder {
   visibility: hidden;
   pointer-events: none;

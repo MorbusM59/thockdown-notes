@@ -75,7 +75,7 @@ export const Utility: React.FC<UtilityProps> = ({
         title="Sync data folder"
         aria-label="Sync data folder"
       >
-        <span className="utility-icon utility-icon--sync" />
+        <i className="fa-solid fa-sync" aria-hidden="true" />
       </button>
       <button
         className="utility-btn"
@@ -84,7 +84,7 @@ export const Utility: React.FC<UtilityProps> = ({
         title="Import from folder"
         aria-label="Import from folder"
       >
-        <span className="utility-icon utility-icon--import" />
+        <i className="fa-solid fa-file-import" aria-hidden="true" />
       </button>
       <button
         className="utility-btn"
@@ -93,7 +93,7 @@ export const Utility: React.FC<UtilityProps> = ({
         title="Export to PDF. Shift-click to choose folder"
         aria-label="Export to PDF"
       >
-        <span className="utility-icon utility-icon--pdf" />
+        <i className="fa-solid fa-file-pdf" aria-hidden="true" />
       </button>
       <button
         className="utility-btn utility-btn--danger"
@@ -102,7 +102,7 @@ export const Utility: React.FC<UtilityProps> = ({
         title="Permanently purge Trash"
         aria-label="Permanently purge Trash"
       >
-        <span className="utility-icon utility-icon--clean" />
+        <i className="fa-solid fa-trash-can" aria-hidden="true" />
       </button>
 
       <div
@@ -149,7 +149,7 @@ export const Utility: React.FC<UtilityProps> = ({
             aria-label="Toggle Auto-Save"
             disabled={!hasSelectedNote}
           >
-            <span className="utility-icon utility-icon--history" style={{ opacity: autoSaveEnabled ? 1 : 0.5 }} />
+            <i className="fa-solid fa-clock-rotate-left" style={{ opacity: autoSaveEnabled ? 1 : 0.5 }} aria-hidden="true" />
           </button>
         )}
       </div>
