@@ -68,19 +68,10 @@ export const Timeline: React.FC<TimelineProps> = ({
 
 
   const handleBoxLeftClick = (e: React.MouseEvent, index: number, isMulti: boolean, colIndex: number) => {
-    console.debug('[Timeline] handleBoxLeftClick', {
-      colIndex,
-      index,
-      isMulti,
-      openFlyoutCol,
-      targetClass: (e.currentTarget as HTMLElement)?.className
-    });
-
     if (isMulti) {
       e.stopPropagation();
       e.nativeEvent.stopImmediatePropagation();
       const nextOpen = openFlyoutCol === colIndex ? null : colIndex;
-      console.debug('[Timeline] toggling flyout', { colIndex, nextOpen });
       setOpenFlyoutCol(nextOpen);
       return;
     }
@@ -90,7 +81,6 @@ export const Timeline: React.FC<TimelineProps> = ({
   };
 
   const handleFlyoutItemClick = (index: number) => {
-    console.debug('[Timeline] handleFlyoutItemClick', { index, openFlyoutCol });
     onNavigate(index);
     setArmedSnapshotId(null);
     setOpenFlyoutCol(null);
@@ -98,7 +88,6 @@ export const Timeline: React.FC<TimelineProps> = ({
 
   React.useEffect(() => {
     if (openFlyoutCol !== null) {
-      console.debug('[Timeline] flyout open', { openFlyoutCol });
       const globalClick = () => setOpenFlyoutCol(null);
       document.addEventListener('click', globalClick);
       return () => document.removeEventListener('click', globalClick);
@@ -143,7 +132,6 @@ export const Timeline: React.FC<TimelineProps> = ({
     count: items.length,
     ids: items.map(i => i.snapshot.id),
   }));
-  console.debug('[Timeline] clusterSummary', clusterSummary);
 
   return (
     <div className="timeline-container" style={{ 
@@ -167,19 +155,6 @@ export const Timeline: React.FC<TimelineProps> = ({
           const primary = items[0];
           const isPrimaryManual = primary?.snapshot?.isManual === true;
           const isCurrentMultiToggle = items.length > 1 && openFlyoutCol === colIndex;
-
-          if (items.length > 1 || openFlyoutCol === colIndex) {
-            console.debug('[Timeline] render column', {
-              colIndex,
-              itemCount: items.length,
-              ids: items.map(i => i.snapshot.id),
-              isPresentBox,
-              isGapBox,
-              isOpen: openFlyoutCol === colIndex,
-              isActive,
-              isArmed
-            });
-          }
 
           return (
             <div 
