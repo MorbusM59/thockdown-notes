@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import './Utility.scss';
 
 interface UtilityProps {
-  onActionComplete?: () => void;
+  onActionComplete?: (purgedNoteIds?: number[]) => void;
   onExportPdf?: (chooseFolder?: boolean) => Promise<void>;
   
   autoSaveEnabled?: boolean;
@@ -66,7 +66,10 @@ export const Utility: React.FC<UtilityProps> = ({
     }
 
     try {
-      await handleClean();
+      const result = await window.electronAPI.purgeTrash();
+      onActionComplete?.(result?.purgedNoteIds);
+    } catch (err) {
+      console.warn('purgeTrash failed', err);
     } finally {
       setTrashArmed(false);
     }

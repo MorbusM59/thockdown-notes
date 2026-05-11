@@ -712,47 +712,6 @@ app.whenReady().then(async () => {
         errors.push(String(err?.message ?? err));
       }
       const result = { purgedNoteIds, errors };
-      // create a report for purge
-      try {
-        const title = 'Report: Purge';
-        const note = createNote(title, '');
-        const token = generateUniqueFileToken();
-        try { setNoteFileToken(note.id, token); } catch (err) { console.warn('[main] setNoteFileToken failed for purge report', err); }
-        const nowIso = new Date().toISOString();
-        try { updateNoteCreatedAt(note.id, nowIso); } catch { void 0; }
-        try { updateNoteLastEdited(note.id, nowIso); } catch { void 0; }
-
-        const parts: string[] = [];
-        parts.push(`# ${title}`);
-        parts.push(`**Time:** ${nowIso}`);
-        parts.push('');
-        parts.push(`- Purged notes: ${result.purgedNoteIds.length}`);
-        if (result.purgedNoteIds.length) {
-          parts.push('');
-          parts.push('### Purged Note IDs');
-          for (const id of result.purgedNoteIds) parts.push(`- ${id}`);
-        }
-        if (result.errors && result.errors.length) {
-          parts.push('');
-          parts.push('### Errors');
-          for (const er of result.errors) parts.push(`- ${er}`);
-        }
-
-        const content = parts.join('\n');
-        const d = new Date(nowIso);
-        const yy = String(d.getFullYear()).slice(-2);
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        const hh = String(d.getHours()).padStart(2, '0');
-        const min = String(d.getMinutes()).padStart(2, '0');
-        const fname = `${yy}-${mm}-${dd}_${hh}-${min}_${token}.md`;
-        const pathSaved = await saveNoteContent(note.id, content, fname);
-        updateNoteFilePath(note.id, pathSaved);
-        try { upsertNoteFts(note.id, title, content); } catch { void 0; }
-        try { addTagToNote(note.id, 'report', 0); } catch { void 0; }
-      } catch (err) {
-        console.warn('[main] failed to create purge report', err);
-      }
       return result;
     });
     ipcMain.handle('get-last-edited-note', async () => getLastEditedNote() ?? null);

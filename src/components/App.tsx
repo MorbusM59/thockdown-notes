@@ -281,6 +281,26 @@ export const App: React.FC = () => {
     })();
   };
 
+  const handleUtilityActionComplete = async (purgedNoteIds?: number[]) => {
+    if (purgedNoteIds && selectedNote && purgedNoteIds.includes(selectedNote.id)) {
+      setSelectedNote(null);
+      setSnapshots([]);
+      setTimeMachineIndex(-1);
+    }
+
+    setSidebarRefreshTrigger(t => t + 1);
+    setRefreshKey(k => k + 1);
+
+    if (purgedNoteIds) {
+      try {
+        const all = await window.electronAPI.getAllNotes();
+        if (isMountedRef.current) setHasAnyNotes(Array.isArray(all) && all.length > 0);
+      } catch (e) {
+        // ignore
+      }
+    }
+  };
+
   const handleMonthToggle = (month: number, event: React.MouseEvent) => {
     if (month === CLEAR_MONTHS_SIGNAL && event.type === 'contextmenu') {
       setSelectedMonths(new Set());
@@ -638,7 +658,7 @@ export const App: React.FC = () => {
       <div className="utility-grid" style={{ gridArea: 'utility' }}>
         <div className="utility-area">
           <Utility
-            onActionComplete={() => setSidebarRefreshTrigger(t => t + 1)}
+            onActionComplete={handleUtilityActionComplete}
             onExportPdf={handleExportPdf}
             autoSaveEnabled={autoSaveEnabled}
             onToggleAutoSave={() => setAutoSaveEnabled(!autoSaveEnabled)}
