@@ -91,6 +91,21 @@ export const App: React.FC = () => {
   const appRef = useRef<HTMLDivElement | null>(null);
   const isMountedRef = useRef(true);
 
+  const handleAppPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+
+    // Only allow native text inputs to receive focus.
+    if (target.closest('input, textarea, select')) {
+      return;
+    }
+
+    // Keep the editor focused when clicking anywhere else in the app.
+    if (!target.closest('.fixed-focus-editor')) {
+      event.preventDefault();
+    }
+  };
+
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
@@ -573,6 +588,7 @@ export const App: React.FC = () => {
     <div
       className="app app-grid"
       ref={appRef}
+      onPointerDown={handleAppPointerDown}
       style={{
         gridTemplateColumns,
         gridTemplateRows,

@@ -194,6 +194,7 @@ export const Timeline: React.FC<TimelineProps> = ({
             >
               <div 
                 className={`timeline-box ${isEmpty && !isPresentBox && !isGapBox ? 'empty-box' : 'base-box'} ${isGapBox ? 'gap-box' : ''} ${hasItems && !isPresentBox ? (isPrimaryManual ? 'manual-box' : 'automatic-box') : ''} ${isActive ? 'active' : ''} ${isArmed && !isEmpty ? 'armed' : ''}`}
+                  onPointerDown={(e) => e.preventDefault()}
                   onClick={isPresentBox ? handlePresentLeftClick : (hasItems ? (e) => handleBoxLeftClick(e, primary.index, items.length > 1, colIndex) : undefined)}
                   onContextMenu={hasItems && !isPresentBox ? (e) => handleBoxRightClick(e, primary.index, primary.snapshot) : undefined}
                   title={isPresentBox ? (timeMachineIndex === -1 ? "Present (Auto)" : "Return to Present") : (hasItems ? new Date(primary.snapshot.timestamp).toLocaleString() : undefined)}
@@ -208,6 +209,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                         <div 
                           key={item.snapshot.id} 
                           className={`timeline-box base-flyout-box ${item.snapshot.isManual ? 'manual-box' : 'automatic-box'} ${item.index === timeMachineIndex ? 'active' : ''} ${item.snapshot.id === armedSnapshotId ? 'armed' : ''}`}
+                          onPointerDown={(e) => e.preventDefault()}
                           onClick={(e) => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); handleFlyoutItemClick(item.index); }}
                           onContextMenu={(e) => handleBoxRightClick(e, item.index, item.snapshot)}
                           title={new Date(item.snapshot.timestamp).toLocaleString()}
