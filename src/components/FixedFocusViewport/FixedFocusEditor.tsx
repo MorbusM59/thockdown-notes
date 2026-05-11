@@ -33,6 +33,13 @@ function ceCharOffset(container: HTMLElement, node: Node, offsetInNode: number):
   let current: Node | null = walker.nextNode();
 
   if (node.nodeType !== Node.TEXT_NODE) {
+    // Special-case direct BR selection because some browsers report the caret
+    // inside the <br> node rather than at its parent container offset.
+    if ((node as Element).tagName === 'BR') {
+      if (isManagedSentinelBr(node)) return charCount;
+      return offsetInNode === 0 ? charCount : charCount + 1;
+    }
+
     // Element node: offsetInNode is a child index.  Stop counting when we reach
     // children[offsetInNode]; if it's past the last child, consume everything.
     const stopAt: Node | null = offsetInNode < node.childNodes.length
@@ -41,7 +48,9 @@ function ceCharOffset(container: HTMLElement, node: Node, offsetInNode: number):
     while (current !== null) {
       if (current === stopAt) return charCount;
       if (current.nodeType === Node.TEXT_NODE) charCount += (current as Text).length;
-      else if ((current as Element).tagName === 'BR') charCount += 1;
+      else if ((current as Element).tagName === 'BR') {
+        if (!isManagedSentinelBr(current)) charCount += 1;
+      }
       current = walker.nextNode();
     }
     return charCount;
@@ -53,7 +62,7 @@ function ceCharOffset(container: HTMLElement, node: Node, offsetInNode: number):
     if (current.nodeType === Node.TEXT_NODE) {
       charCount += (current as Text).length;
     } else if ((current as Element).tagName === 'BR') {
-      charCount += 1;
+      if (!isManagedSentinelBr(current)) charCount += 1;
     }
     current = walker.nextNode();
   }
@@ -98,7 +107,9 @@ export function ceSetSelection(el: HTMLElement, start: number, end: number): voi
         endNode = node.parentNode!;
         endOff = Array.prototype.indexOf.call(node.parentNode!.childNodes, node);
       }
-      charCount += 1;
+      if (!isManagedSentinelBr(node)) {
+        charCount += 1;
+      }
     }
     node = walker.nextNode();
   }
@@ -115,23 +126,43 @@ export function ceSetSelection(el: HTMLElement, start: number, end: number): voi
   }
 }
 
-/**
- * Sets the text content of a contenteditable element by rebuilding child nodes
- * from scratch (text nodes + <br> for newlines).  More reliable than innerText
- * because it avoids browser-specific trailing-newline quirks.
- */
+function isManagedSentinelBr(node: Node): boolean {
+  return node.nodeType === Node.ELEMENT_NODE
+    && (node as Element).tagName === 'BR'
+    && ((node as HTMLElement).dataset['managedLineBreakSentinel'] === '1');
+}
+
 function ceSetText(el: HTMLElement, text: string): void {
   el.textContent = '';
+  if (text.length === 0) {
+    const sentinel = document.createElement('br');
+    sentinel.dataset['managedLineBreakSentinel'] = '1';
+    el.appendChild(sentinel);
+    return;
+  }
+
   const lines = text.split('\n');
   lines.forEach((line, i) => {
-    if (line) el.appendChild(document.createTextNode(line));
-    if (i < lines.length - 1) el.appendChild(document.createElement('br'));
+    if (line.length > 0) {
+      el.appendChild(document.createTextNode(line));
+    }
+    if (i < lines.length - 1) {
+      const br = document.createElement('br');
+      br.dataset['managedLineBreak'] = '1';
+      el.appendChild(br);
+    }
   });
+
+  if (text.endsWith('\n')) {
+    const sentinel = document.createElement('br');
+    sentinel.dataset['managedLineBreakSentinel'] = '1';
+    el.appendChild(sentinel);
+  }
 }
 
 /**
  * Reads the text content of a contenteditable element, treating <br> as \n.
- * Does NOT include any browser-injected sentinel <br> at the end.
+ * Ignores the managed sentinel <br> appended for an empty trailing line.
  */
 export function ceGetText(el: HTMLElement): string {
   const walker = document.createTreeWalker(el, NodeFilter.SHOW_ALL, null);
@@ -141,13 +172,36 @@ export function ceGetText(el: HTMLElement): string {
     if (node.nodeType === Node.TEXT_NODE) {
       result += (node as Text).data;
     } else if ((node as Element).tagName === 'BR') {
+      if (isManagedSentinelBr(node)) {
+        node = walker.nextNode();
+        continue;
+      }
       result += '\n';
     }
     node = walker.nextNode();
   }
-  // Return the text as-is. Do not strip a trailing newline — preserve the
-  // browser's sentinel <br> so native Enter produces a stable DOM state.
   return result;
+}
+
+function normalizeEditableDom(el: HTMLElement, text: string, selection: { start: number; end: number } | null): void {
+  let hasEmptyTextNodes = false;
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_ALL, null);
+  let node: Node | null = walker.nextNode();
+  while (node) {
+    if (node.nodeType === Node.TEXT_NODE && (node as Text).data.length === 0) {
+      hasEmptyTextNodes = true;
+      break;
+    }
+    node = walker.nextNode();
+  }
+
+  if (!hasEmptyTextNodes) return;
+
+  ceSetText(el, text);
+  if (selection) {
+    ceSetSelection(el, selection.start, selection.end);
+  }
+
 }
 
 /**
@@ -303,6 +357,7 @@ interface FixedFocusEditorProps {
   textareaRef?: React.MutableRefObject<HTMLDivElement | null>;
   textareaClassName?: string;
   textareaStyle?: React.CSSProperties;
+  showLineBreaks?: boolean;
   /** Optional ref for exposing editor programmatic API (applyProgrammaticEdit) */
   editorApiRef?: React.MutableRefObject<any>;
   placeholder?: string;
@@ -349,6 +404,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   editorApiRef,
   textareaClassName,
   textareaStyle,
+  showLineBreaks = false,
   placeholder,
   onKeyDown,
   onKeyUp,
@@ -606,6 +662,24 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   const topRows = model.getTopZoneRows();
   const centerRows = model.getCenterZoneRows();
   const bottomRows = model.getBottomZoneRows();
+  const lineBreakMarkers = useMemo(() => {
+    if (!showLineBreaks) return [] as Array<{ topPx: number; leftPx: number }>;
+    const markers: Array<{ topPx: number; leftPx: number }> = [];
+    const visibleStart = effectiveCenterStartRow;
+    for (let charIndex = 0; charIndex < text.length; charIndex += 1) {
+      if (text[charIndex] !== '\n') continue;
+      const rowIndex = findRowForCharIndex(charIndex, wrappedLines);
+      const row = wrappedLines[rowIndex];
+      if (!row) continue;
+      const rowText = text.slice(row.startCharIndex, Math.min(charIndex, row.endCharIndex));
+      const leftPx = leftPaddingPx + (countVisualCells(rowText) * charCellWidthPx);
+      markers.push({
+        topPx: (rowIndex - visibleStart) * metrics.rowHeightPx,
+        leftPx,
+      });
+    }
+    return markers;
+  }, [showLineBreaks, wrappedLines, text, effectiveCenterStartRow, leftPaddingPx, charCellWidthPx, metrics.rowHeightPx]);
   const gridRowCount = Math.max(0, Math.floor(drawableHeightPx / metrics.rowHeightPx));
   const quantizedGridWidthPx = gridColumnCount * charCellWidthPx;
   const timelineWidthPx = totalColumnCount * charCellWidthPx;
@@ -1098,13 +1172,75 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
 
   // Native caret: no imperative overlay positioning — rely on browser caret.
 
+  const normalizeTrailingNewlineSelection = (
+    el: HTMLElement,
+    text: string,
+    sel: { start: number; end: number } | null
+  ): { start: number; end: number } | null => {
+    if (!sel || sel.start !== sel.end) return sel;
+    if (!text.endsWith('\n')) return sel;
+    if (sel.start !== text.length - 1) return sel;
+
+    const browserSel = window.getSelection();
+    if (!browserSel || browserSel.rangeCount === 0) return sel;
+    const range = browserSel.getRangeAt(0);
+    if (!el.contains(range.startContainer)) return sel;
+
+    const isAtFinalBr = range.startContainer.nodeType === Node.ELEMENT_NODE
+      && (range.startContainer as Element).tagName === 'BR'
+      && range.startOffset === 0;
+    const isInTrailingEmptyText = range.startContainer.nodeType === Node.TEXT_NODE
+      && (range.startContainer as Text).length === 0
+      && range.startContainer.previousSibling instanceof Element
+      && range.startContainer.previousSibling.tagName === 'BR';
+    const isAtEndOfTextNodeBeforeBr = range.startContainer.nodeType === Node.TEXT_NODE
+      && (range.startContainer as Text).length === range.startOffset
+      && range.startContainer.nextSibling instanceof Element
+      && range.startContainer.nextSibling.tagName === 'BR';
+
+    if (isAtFinalBr || isInTrailingEmptyText || isAtEndOfTextNodeBeforeBr) {
+      return { start: text.length, end: text.length };
+    }
+
+    return sel;
+  };
+
   const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
     const newText = ceGetText(el);
-    const sel = ceGetSelection(el);
+    let sel = ceGetSelection(el);
+    sel = normalizeTrailingNewlineSelection(el, newText, sel);
     const newSelectionStart = sel?.start ?? 0;
     const newSelectionEnd = sel?.end ?? newSelectionStart;
+
+    normalizeEditableDom(el, newText, sel);
     onTextChange(newText, newSelectionStart, newSelectionEnd);
+  };
+
+  const handleBeforeInput = (e: React.FormEvent<HTMLDivElement>) => {
+    const inputEvent = e.nativeEvent as InputEvent;
+    const inputType = inputEvent.inputType;
+    const data = inputEvent.data;
+    if (inputEvent.isComposing) return;
+
+    const isNewlineInsert = inputType === 'insertParagraph'
+      || inputType === 'insertLineBreak'
+      || (inputType === 'insertText' && data === '\n');
+
+    if (isNewlineInsert || (inputType === 'insertText' && typeof data === 'string' && data.length > 0)) {
+      const el = e.currentTarget;
+      const sel = ceGetSelection(el) ?? { start: selectionStart, end: selectionEnd };
+      const start = Math.min(sel.start, sel.end);
+      const end = Math.max(sel.start, sel.end);
+      const insertText = isNewlineInsert ? '\n' : (data ?? '');
+      const newText = text.substring(0, start) + insertText + text.substring(end);
+      const nextCaretPos = start + insertText.length;
+
+      e.preventDefault();
+      pendingAutomaticCaretPosRef.current = nextCaretPos;
+      boundaryCaretRowPreferenceRef.current = null;
+      onTextChange(newText, nextCaretPos, nextCaretPos);
+    }
   };
 
   // Track caret changes from mouse clicks / selection
@@ -2009,6 +2145,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
             onPointerUp={handleCenterPointerUp}
             onDoubleClick={handleCenterDoubleClick}
             onContextMenuCapture={handleCenterContextMenu}
+            onBeforeInput={handleBeforeInput}
             onKeyDown={handleKeyDown}
             onKeyUp={onKeyUp}
             onCopy={onCopy}
@@ -2059,6 +2196,20 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
               ...textareaStyle,
             }}
           />
+          {showLineBreaks && (
+            <div className="line-break-marker-layer" aria-hidden>
+              {lineBreakMarkers.map((marker, index) => (
+                <div
+                  key={index}
+                  className="line-break-marker"
+                  style={{
+                    top: `${marker.topPx}px`,
+                    left: `${marker.leftPx}px`,
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Bottom Zone (display-only) */}

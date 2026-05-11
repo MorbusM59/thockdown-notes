@@ -617,6 +617,9 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   const [viewStyle, setViewStyle] = useState<string>('modern');
   const [viewFontSize, setViewFontSize] = useState<string>('m');
   const [viewSpacing, setViewSpacing] = useState<string>('cozy');
+  const [showLineBreaks, setShowLineBreaks] = useState<boolean>(() => {
+    return localStorage.getItem('markdown-editor-show-line-breaks') === 'true';
+  });
 
   // Editor settings (separate from view)
   const [editorStyle, setEditorStyle] = useState<string>('syne');
@@ -1111,6 +1114,10 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     if (savedEditorFontSize) setEditorFontSize(savedEditorFontSize);
     if (savedEditorSpacing) setEditorSpacing(savedEditorSpacing);
     setHighlightColors(savedHighlightColors);
+    const savedShowLineBreaks = localStorage.getItem('markdown-editor-show-line-breaks');
+    if (savedShowLineBreaks !== null) {
+      setShowLineBreaks(savedShowLineBreaks === 'true');
+    }
     
     const initialSpacing = savedEditorSpacing || 'cozy';
     const savedFixedFocusTopRowCount = localStorage.getItem(`markdown-editor-fixed-focus-top-rows-${initialSpacing}`) || localStorage.getItem('markdown-editor-fixed-focus-top-rows');
@@ -2271,6 +2278,17 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               <button className={`toolbar-btn-icon ${activeFormats.has('number') ? 'active' : ''}`} onClick={() => prependToLines('', true)} title="Numbered List">#</button>
               <button className={`toolbar-btn-icon ${activeFormats.has('blockquote') ? 'active' : ''}`} onClick={() => prependToLines('> ')} title="Blockquote">&quot;</button>
               <button className="toolbar-btn-icon" onClick={() => insertAtCursor('\n---\n')} title="Horizontal Rule">—</button>
+              <button
+                className={`toolbar-btn-icon ${showLineBreaks ? 'active' : ''}`}
+                onClick={() => {
+                  const next = !showLineBreaks;
+                  setShowLineBreaks(next);
+                  localStorage.setItem('markdown-editor-show-line-breaks', String(next));
+                }}
+                title="Toggle visible line break markers"
+              >
+                ⏎
+              </button>
             </div>
           )}
         </div>
@@ -2630,6 +2648,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             onBottomRowCountChange={handleFixedFocusBottomRowCountChange}
             onTotalWrappedRowCountChange={(count) => { totalWrappedRowsRef.current = count; }}
             timelineProps={timelineProps}
+            showLineBreaks={showLineBreaks}
             onTextChange={(newText, newSelectionStart, newSelectionEnd) => {
               onTimeMachineInterrupt?.();
               const beforeSnapshot = lastCommittedSnapshotRef.current;
@@ -2658,7 +2677,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               checkFormatting();
             }}
             textareaRef={textareaRef}
-            textareaClassName={`markdown-textarea editor-style-${editorStyle}`}
+            textareaClassName={`${showLineBreaks ? 'show-line-breaks ' : ''}markdown-textarea editor-style-${editorStyle}`}
             textareaStyle={editorInlineStyle}
             onCompositionStart={() => { isComposingRef.current = true; }}
             onCompositionEnd={() => { isComposingRef.current = false; }}
