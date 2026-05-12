@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer, IpcRendererEvent, webUtils } from 'electron';
 import { IElectronAPI, Note, NoteTag, Tag, SearchResult, CategoryHierarchyResult } from './shared/types';
 
 /**
@@ -55,6 +55,7 @@ const electronAPI: IElectronAPI & {
   writeFileContent: (filePath: string, content: string) => Promise<boolean>;
   showSaveDialog: (options: any) => Promise<any>;
   getFileBasename: (filePath: string) => Promise<string>;
+  getPathForFile: (file: File) => string;
 } = {
   // Notes
   createNote: async (title: string) => {
@@ -353,6 +354,8 @@ const electronAPI: IElectronAPI & {
     assertNonEmptyString(filePath, 'filePath');
     return (await ipcRenderer.invoke('get-file-basename', filePath)) as string;
   },
+
+  getPathForFile: (file: File): string => webUtils.getPathForFile(file),
 
   // File association
   getPendingFilePaths: async () => {

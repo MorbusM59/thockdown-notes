@@ -4,19 +4,19 @@ A full-featured Markdown-based note-taking application built with Electron, Reac
 
 ## Features
 
-### 🚀 Auto-Save
+###  Auto-Save
 - Automatic saving with 1-second debounce after typing stops
 - Title-aware auto-save that pauses while editing the first line
 - No manual Save button needed
 
-### 📝 Markdown Support
+###  Markdown Support
 - Full Markdown editing with live preview
 - Toggle between Edit and Preview modes
 - Support for GitHub Flavored Markdown (GFM)
 - Syntax highlighting for code blocks
 - Tables, lists, blockquotes, and more
 
-### 🏷️ Tagging System
+###  Tagging System
 - Add multiple tags to notes with position-based hierarchy (primary, secondary, tertiary)
 - Autocomplete suggestions when typing tags
 - Active tags (#tag) - click to remove
@@ -24,19 +24,19 @@ A full-featured Markdown-based note-taking application built with Electron, Reac
 - Drag-and-drop to reorder tag positions
 - Tags stored in SQLite database with proper relations
 
-### 📚 Smart Sidebar
+###  Smart Sidebar
 - **Date Mode**: View notes chronologically with pagination (20 per page)
 - **Category Mode**: Hierarchical tree view organized by tag positions
 - Collapsible categories for easy navigation
 - Note counts for each category
 
-### 🔍 Search Functionality
+###  Search Functionality
 - **Text Search**: Search across note titles and content
 - **Tag Search**: Use `#tagname` to search by tags
 - Results show ~50 character snippets around matches
 - Tag search prioritizes by tag position (primary → secondary → tertiary)
 
-### ⌨️ Keyboard Shortcuts
+###  Keyboard Shortcuts
 - **Ctrl+N**: Create a new note with `# ` pre-filled
 
 ## Technical Stack
@@ -163,7 +163,7 @@ npm run make
 
 ## Security
 
-- ✅ CodeQL security scan passed with 0 alerts
+-  CodeQL security scan passed with 0 alerts
 - Context isolation enabled
 - Node integration disabled
 - Secure IPC communication via contextBridge
@@ -174,4 +174,4 @@ MIT
 
 ## Credits
 
-Built with ❤️ using Electron and React
+Built with  using Electron and React

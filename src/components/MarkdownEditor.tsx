@@ -794,129 +794,63 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     setIsDragOver(false);
 
     const files = Array.from(e.dataTransfer.files);
-    console.log('Dropped files:', files.length, 'files');
-    files.forEach((f, i) => console.log(`File ${i}:`, f.name, f.size, f.type, 'has path:', 'path' in f));
     if (files.length === 0) return;
 
-    // Only handle the first file for now
     const file = files[0];
-    console.log('File object type:', typeof file, 'constructor:', file.constructor.name, 'instanceof File:', file instanceof File);
-    
-    // Check if it's a markdown file
-    if (!file.name.toLowerCase().endsWith('.md')) {
-      console.warn('Only .md files are supported for drag and drop');
-      return;
-    }
+    if (!file.name.toLowerCase().endsWith('.md')) return;
+
+    // Strip BOM, CRLF, HTML tags, emojis, and variation selectors from opened file content
+    const sanitize = (raw: string): string =>
+      raw
+        .replace(/^\uFEFF/, '')
+        .replace(/\r\n/g, '\n')
+        .replace(/<[^>]*>/g, '')
+        .replace(/\p{Extended_Pictographic}/gu, '')
+        .replace(/\uFE0F/g, '');
 
     try {
-      // Get the file path from the File object (Electron-specific)
-      // Try multiple ways to access the path
-      let filePath = (file as any).path;
-      
-      // Fallback: try other properties that might contain the path
-      if (!filePath && (file as any).fullPath) {
-        filePath = (file as any).fullPath;
+      // Use webUtils.getPathForFile (Electron 28+) via preload bridge
+      let filePath = '';
+      try {
+        filePath = window.electronAPI.getPathForFile(file);
+      } catch {
+        filePath = (file as any).path || '';
       }
-      if (!filePath && (file as any).filePath) {
-        filePath = (file as any).filePath;
-      }
-      
-      // Debug logging - log all properties of the file object
-      console.log('Dropped file object:', {
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        path: filePath,
-        hasPath: 'path' in file,
-        hasFullPath: 'fullPath' in file,
-        hasFilePath: 'filePath' in file,
-        pathType: typeof filePath,
-        pathLength: filePath?.length || 0
-      });
-      
-      // More robust path validation for Windows and other systems
-      const hasValidPath = typeof filePath === 'string' && 
-                          filePath.trim() !== '' && 
-                          (filePath.includes('\\') || filePath.includes('/') || 
-                           filePath.match(/^[A-Za-z]:/) || // Windows drive letter
-                           filePath.startsWith('\\\\') || // UNC path
-                           filePath.startsWith('/')); // Unix path
-      
+
+      const hasValidPath =
+        typeof filePath === 'string' &&
+        filePath.trim() !== '' &&
+        (filePath.includes('\\') || filePath.includes('/') || /^[A-Za-z]:/.test(filePath) || filePath.startsWith('//'));
+
       if (!hasValidPath) {
-        console.warn('File does not have a valid path. Path details:', {
-          path: filePath,
-          type: typeof filePath,
-          hasBackslash: filePath?.includes('\\'),
-          hasForwardSlash: filePath?.includes('/'),
-          matchesDriveLetter: filePath?.match(/^[A-Za-z]:/),
-          isUncPath: filePath?.startsWith('\\\\'),
-          isUnixPath: filePath?.startsWith('/')
-        });
-        console.warn('Creating a regular note instead of a temp note.');
-        
-        // Fallback: read the file content using the Web File API and create a regular note
-        try {
-          const content = await file.text();
-          
-          // Sanitize content - check for non-monospace characters
-          const hasSpecialChars = /[^\x20-\x7E\n\r\t]/.test(content); // Only allow printable ASCII, newlines, tabs
-          
-          const title = file.name.replace(/\.md$/, '');
-          
-          // Create a regular note
-          const newNote = await window.electronAPI.createNote(title);
-          if (newNote) {
-            await window.electronAPI.saveNote(newNote.id, content);
-            
-            // If content has special characters, mark as having unsaved changes
-            if (hasSpecialChars) {
-              await window.electronAPI.updateTempNoteState(newNote.id, true, false);
-            }
-            
-            // Switch to the new note
-            if (onNoteUpdate) {
-              onNoteUpdate(newNote);
-            }
-          }
-        } catch (fallbackError) {
-          console.error('Failed to create regular note from dropped file:', fallbackError);
+        // Fallback: use Web File API and create a regular (non-temp) note
+        const raw = await file.text();
+        const content = sanitize(raw);
+        const title = file.name.replace(/\.md$/, '');
+        const newNote = await window.electronAPI.createNote(title);
+        if (newNote) {
+          await window.electronAPI.saveNote(newNote.id, content);
+          if (onNoteUpdate) onNoteUpdate(newNote);
         }
         return;
       }
 
-      // Read the file content
-      const content = await window.electronAPI.readFileContent(filePath);
-      if (content === null) {
-        console.warn('Failed to read file content from:', filePath);
-        return;
+      // Read, sanitize, and optionally write back content
+      const raw = await window.electronAPI.readFileContent(filePath);
+      if (raw === null) return;
+      const content = sanitize(raw);
+      if (content !== raw) {
+        await window.electronAPI.writeFileContent(filePath, content);
       }
 
-      // Check for special characters that don't fit monospace layout
-      const hasSpecialChars = /[^\x20-\x7E\n\r\t]/.test(content); // Only allow printable ASCII, newlines, tabs
-
-      // Create a temp note
       const title = await window.electronAPI.getFileBasename(filePath);
       const newNote = await window.electronAPI.createTempNote(title, filePath, 'utf8');
-      
-      // Save the content to the temp note
       if (newNote) {
         await window.electronAPI.saveNote(newNote.id, content);
-        
-        // Switch to the new note
-        if (onNoteUpdate) {
-          onNoteUpdate(newNote);
-        }
-
-        // If content has special characters, mark as having unsaved changes
-        if (hasSpecialChars) {
-          console.log('File contains special characters, marking as having unsaved changes');
-          await window.electronAPI.updateTempNoteState(newNote.id, true, newNote.syncMode || false);
-        }
+        if (onNoteUpdate) onNoteUpdate(newNote);
       }
     } catch (err) {
-      console.warn('Failed to create temp note from dropped file:', err);
-      // Log the full error for debugging
-      console.error('Full error details:', err);
+      console.warn('Failed to create note from dropped file:', err);
     }
   }, [onNoteUpdate]);
 

@@ -255,7 +255,7 @@ export const TagInput: React.FC<TagInputPropsExtended> = ({ note, onTagsChanged,
         </div>
 
         <div className="tags-display" aria-live="polite">
-          {note.isTemp && (
+          {!!note.isTemp && (
             <div
               className="tag-pill active protected temp"
               title="Temp note. Click to save as a permanent note"

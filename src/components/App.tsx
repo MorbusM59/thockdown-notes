@@ -238,16 +238,30 @@ export const App: React.FC = () => {
           return;
         }
 
-        // Read the file content
-        const content = await window.electronAPI.readFileContent(filePath);
+        // Strip BOM, CRLF, HTML tags, emojis, and variation selectors
+        const sanitize = (raw: string): string =>
+          raw
+            .replace(/^\uFEFF/, '')
+            .replace(/\r\n/g, '\n')
+            .replace(/<[^>]*>/g, '')
+            .replace(/\p{Extended_Pictographic}/gu, '')
+            .replace(/\uFE0F/g, '');
+
+        const raw = await window.electronAPI.readFileContent(filePath);
+        const content = sanitize(raw ?? '');
+
+        // Write back to disk if sanitization changed the content
+        if (raw !== null && content !== raw) {
+          await window.electronAPI.writeFileContent(filePath, content);
+        }
+
         const title = await window.electronAPI.getFileBasename(filePath);
-        const titleWithoutExt = title.replace(/\.md$/, '');
 
         // Create a temp note
         const tempNote = await window.electronAPI.createTempNote(title, filePath, 'utf8');
         if (tempNote) {
           // Save the content to the temp note
-          await window.electronAPI.saveNote(tempNote.id, content ?? '');
+          await window.electronAPI.saveNote(tempNote.id, content);
 
           // Switch to the new temp note
           setSelectedNote(tempNote);
