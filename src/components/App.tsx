@@ -813,9 +813,9 @@ export const App: React.FC = () => {
           autoSaveEnabled={autoSaveEnabled}
           onToggleAutoSave={() => setAutoSaveEnabled(!autoSaveEnabled)}
           hasSelectedNote={selectedNote != null}
-          isTempNote={selectedNote?.isTemp === true}
-          tempHasUnsavedChanges={selectedNote?.hasUnsavedChanges === true}
-          tempSyncMode={selectedNote?.syncMode === true}
+          isTempNote={!!selectedNote?.isTemp}
+          tempHasUnsavedChanges={!!selectedNote?.hasUnsavedChanges}
+          tempSyncMode={!!selectedNote?.syncMode}
           onTempSave={handleTempNoteSave}
           onTempSyncToggle={handleTempNoteSyncToggle}
           logBase={logBase}

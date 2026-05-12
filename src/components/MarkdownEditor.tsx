@@ -1855,6 +1855,13 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   const handleContentChange = useCallback((newContent: string) => {
     setContent(newContent);
 
+    // For temp notes: immediately signal unsaved changes on the first content
+    // change after a save. Fires at most once per dirty period — no IPC, no DB,
+    // no timer; React batches this setState with the setContent above.
+    if (note?.isTemp && !note.hasUnsavedChanges) {
+      onNoteUpdate?.({ ...note, hasUnsavedChanges: true });
+    }
+
     if (autoSaveTimeoutRef.current) {
       clearTimeout(autoSaveTimeoutRef.current);
     }
@@ -1868,7 +1875,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         void autoSave();
       }, 1000) as unknown as ReturnType<typeof setTimeout>;
     }
-  }, [autoSave, isOnFirstLine, note, scheduleTimeout, showPreview]);
+  }, [autoSave, isOnFirstLine, note, onNoteUpdate, scheduleTimeout, showPreview]);
 
   const finalizePendingNativeBoundary = useCallback((newContent: string, newSelectionStart: number, newSelectionEnd: number) => {
     const pendingBoundary = pendingHistoryBoundaryRef.current;

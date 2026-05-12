@@ -913,7 +913,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             displayedNotes.map(note => (
             <div
               key={note.id}
-              className={`note-item ${selectedNote?.id === note.id ? 'selected' : ''} ${getDateIndicatorClass(note)} ${armed.kind === 'delete' && armed.noteId === note.id ? 'armed-delete' : ''} ${armed.kind === 'archive' && armed.noteId === note.id ? 'armed-archive' : ''} ${armed.kind === 'permanent' && armed.noteId === note.id ? 'armed-permanent' : ''} ${armed.kind === 'close-temp' && armed.noteId === note.id ? 'armed-close-temp' : ''} ${note.isTemp ? 'temp-note' : ''} ${note.isTemp && note.hasUnsavedChanges ? 'temp-unsaved' : ''}`}
+              className={`note-item ${selectedNote?.id === note.id ? 'selected' : ''} ${getDateIndicatorClass(note)} ${armed.kind === 'delete' && armed.noteId === note.id ? 'armed-delete' : ''} ${armed.kind === 'archive' && armed.noteId === note.id ? 'armed-archive' : ''} ${armed.kind === 'permanent' && armed.noteId === note.id ? 'armed-permanent' : ''} ${armed.kind === 'close-temp' && armed.noteId === note.id ? 'armed-close-temp' : ''} ${note.isTemp ? 'temp-note' : ''}`}
               onClick={() => { setArmed({ kind: 'none' }); onSelectNote(note); }}
               onContextMenu={(e) => handleNoteContextMenu(e, note)}
             >
