@@ -95,6 +95,69 @@
     0 0 2px var(--color-shadow-white);
 }
 
+/* Temp note indicator */
+.temp-note-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+  padding: 4px 8px;
+  background: rgba(76, 175, 80, 0.1);
+  border: 1px solid #4CAF50;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #2E7D32;
+}
+
+.temp-icon {
+  font-size: 14px;
+}
+
+.temp-label {
+  font-weight: 500;
+}
+
+.temp-path {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+.temp-save-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+  transition: background-color 0.2s;
+}
+
+.temp-save-btn:hover {
+  background: rgba(76, 175, 80, 0.2);
+}
+
+.temp-sync-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+  transition: background-color 0.2s;
+}
+
+.temp-sync-btn:hover {
+  background: rgba(76, 175, 80, 0.2);
+}
+
+.temp-sync-btn.active {
+  background: rgba(76, 175, 80, 0.3);
+  color: #1B5E20;
+}
+
 .markdown-toolbar {
   display: flex;
   align-items: center;

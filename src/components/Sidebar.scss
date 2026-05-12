@@ -139,12 +139,48 @@
   box-shadow: inset 0 0 6px #ff0000;
 }
 
+/* Temp note styling */
+.note-item.temp-note {
+  border-left: 4px solid #4CAF50;
+  background: linear-gradient(90deg, rgba(76, 175, 80, 0.1) 0%, var(--color-background-dark) 20px);
+}
+
+.note-item.temp-note.selected {
+  border-left: 4px solid #4CAF50;
+  background: linear-gradient(90deg, rgba(76, 175, 80, 0.2) 0%, #FFFFFF 20px);
+}
+
+.note-item.temp-note:hover {
+  border-left: 4px solid #4CAF50;
+  background: linear-gradient(90deg, rgba(76, 175, 80, 0.15) 0%, #ffffff 20px);
+}
+
 /* Note title/date/snippet */
 .note-title {
   font-weight: 500;
   margin-bottom: 4px;
   font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
+
+.temp-indicator {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.external-path {
+  font-size: 11px;
+  color: #666;
+  margin-left: 8px;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* Single-line truncation for titles in date/trash views */
 .date-view .note-title,
 .sidebar .date-view .note-title {

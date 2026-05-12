@@ -29,6 +29,10 @@ function assertStringArray(v: unknown, name = 'value'): asserts v is string[] {
   }
 }
 
+function assertBoolean(v: unknown, name = 'value'): asserts v is boolean {
+  if (typeof v !== 'boolean') throw new TypeError(`${name} must be a boolean`);
+}
+
 /**
  * Exposed API - minimal and validated.
  */
@@ -37,6 +41,20 @@ const electronAPI: IElectronAPI & {
   requestForceSave: () => Promise<{ ok: boolean }>;
   onForceSave: (cb: (requestId?: string) => void) => { unsubscribe: () => void };
   forceSaveComplete: (requestId?: string) => void;
+  // Temp note operations
+  createTempNote: (title: string, externalPath: string, originalEncoding?: string) => Promise<Note>;
+  updateTempNoteState: (noteId: number, hasUnsavedChanges: boolean, syncMode: boolean) => Promise<void>;
+  convertTempNoteToRegular: (noteId: number, newFilePath: string) => Promise<void>;
+  getTempNotes: () => Promise<Note[]>;
+  deleteTempNote: (noteId: number) => Promise<void>;
+  // File association
+  getPendingFilePaths: () => Promise<string[]>;
+  onOpenMdFile: (callback: (event: IpcRendererEvent, filePath: string) => void) => { unsubscribe: () => void };
+  // File operations for temp notes
+  readFileContent: (filePath: string) => Promise<string | null>;
+  writeFileContent: (filePath: string, content: string) => Promise<boolean>;
+  showSaveDialog: (options: any) => Promise<any>;
+  getFileBasename: (filePath: string) => Promise<string>;
 } = {
   // Notes
   createNote: async (title: string) => {
@@ -284,6 +302,69 @@ const electronAPI: IElectronAPI & {
     } catch (err) {
       // swallow - non-fatal
     }
+  },
+
+  // Temp note operations
+  createTempNote: async (title: string, externalPath: string, originalEncoding?: string) => {
+    assertNonEmptyString(title, 'title');
+    assertNonEmptyString(externalPath, 'externalPath');
+    return (await ipcRenderer.invoke('create-temp-note', title, externalPath, originalEncoding)) as Note | null;
+  },
+
+  updateTempNoteState: async (noteId: number, hasUnsavedChanges: boolean, syncMode: boolean) => {
+    assertPositiveInteger(noteId, 'noteId');
+    assertBoolean(hasUnsavedChanges, 'hasUnsavedChanges');
+    assertBoolean(syncMode, 'syncMode');
+    return (await ipcRenderer.invoke('update-temp-note-state', noteId, hasUnsavedChanges, syncMode)) as void;
+  },
+
+  convertTempNoteToRegular: async (noteId: number, newFilePath: string) => {
+    assertPositiveInteger(noteId, 'noteId');
+    assertNonEmptyString(newFilePath, 'newFilePath');
+    return (await ipcRenderer.invoke('convert-temp-note-to-regular', noteId, newFilePath)) as void;
+  },
+
+  getTempNotes: async () => {
+    return (await ipcRenderer.invoke('get-temp-notes')) as Note[];
+  },
+
+  deleteTempNote: async (noteId: number) => {
+    assertPositiveInteger(noteId, 'noteId');
+    return (await ipcRenderer.invoke('delete-temp-note', noteId)) as void;
+  },
+
+  // File operations for temp notes
+  readFileContent: async (filePath: string) => {
+    assertNonEmptyString(filePath, 'filePath');
+    return (await ipcRenderer.invoke('read-file-content', filePath)) as string | null;
+  },
+
+  writeFileContent: async (filePath: string, content: string) => {
+    assertNonEmptyString(filePath, 'filePath');
+    assertString(content, 'content');
+    return (await ipcRenderer.invoke('write-file-content', filePath, content)) as boolean;
+  },
+
+  showSaveDialog: async (options: any) => {
+    return (await ipcRenderer.invoke('show-save-dialog', options)) as any;
+  },
+
+  getFileBasename: async (filePath: string) => {
+    assertNonEmptyString(filePath, 'filePath');
+    return (await ipcRenderer.invoke('get-file-basename', filePath)) as string;
+  },
+
+  // File association
+  getPendingFilePaths: async () => {
+    return (await ipcRenderer.invoke('get-pending-file-paths')) as string[];
+  },
+
+  onOpenMdFile: (callback: (event: IpcRendererEvent, filePath: string) => void) => {
+    const listener = (event: IpcRendererEvent, filePath: string) => callback(event, filePath);
+    ipcRenderer.on('open-md-file', listener);
+    return {
+      unsubscribe: () => ipcRenderer.removeListener('open-md-file', listener)
+    };
   },
 };
 

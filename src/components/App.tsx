@@ -220,6 +220,56 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showPreview]);
 
+  // Handle opening .md files from external sources
+  useEffect(() => {
+    const handleOpenMdFile = async (_event: any, filePath: string) => {
+      try {
+        // Check if we already have a temp note for this file
+        const tempNotes = await window.electronAPI.getTempNotes();
+        const existingTempNote = tempNotes.find(note => note.externalPath === filePath);
+
+        if (existingTempNote) {
+          // Switch to existing temp note
+          setSelectedNote(existingTempNote);
+          setSnapshots([]);
+          setTimeMachineIndex(-1);
+          setViewMode('latest');
+          setRefreshKey(k => k + 1);
+          return;
+        }
+
+        // Read the file content
+        const content = await window.electronAPI.readFileContent(filePath);
+        const title = await window.electronAPI.getFileBasename(filePath);
+        const titleWithoutExt = title.replace(/\.md$/, '');
+
+        // Create a temp note
+        const tempNote = await window.electronAPI.createTempNote(title, filePath, 'utf8');
+        if (tempNote) {
+          // Save the content to the temp note
+          await window.electronAPI.saveNote(tempNote.id, content);
+
+          // Switch to the new temp note
+          setSelectedNote(tempNote);
+          setSnapshots([]);
+          setTimeMachineIndex(-1);
+          setViewMode('latest');
+          setRefreshKey(k => k + 1);
+          setHasAnyNotes(true);
+        }
+      } catch (err) {
+        console.warn('Failed to open .md file:', filePath, err);
+      }
+    };
+
+    // Listen for open-md-file events from main process
+    (window as any).electronAPI.onOpenMdFile(handleOpenMdFile);
+
+    return () => {
+      // Cleanup if needed
+    };
+  }, []);
+
   const handleCreateNote = async () => {
     try {
       await (window as any).electronAPI.requestForceSave();

@@ -13,6 +13,12 @@ export interface Note {
   progressEdit?: number | null;
   cursorPos?: number | null;
   scrollTop?: number | null;
+  // Temp note fields
+  isTemp?: boolean | null;
+  externalPath?: string | null;
+  hasUnsavedChanges?: boolean | null;
+  syncMode?: boolean | null;
+  originalEncoding?: string | null;
 }
 
 export interface Tag {
@@ -152,4 +158,18 @@ export interface IElectronAPI {
   triggerSync: () => Promise<{ createdNoteIds: number[]; updatedPaths: Array<{ noteId: number; oldPath: string; newPath: string }>; markedDeletedNoteIds: number[] }>;
   importFolder: () => Promise<{ imported: number; createdNoteIds: number[]; errors?: string[] }>;
   purgeTrash: () => Promise<{ purgedNoteIds: number[]; errors?: string[] }>;
+  // Temp note operations
+  createTempNote: (title: string, externalPath: string, originalEncoding?: string) => Promise<Note>;
+  updateTempNoteState: (noteId: number, hasUnsavedChanges: boolean, syncMode: boolean) => Promise<void>;
+  convertTempNoteToRegular: (noteId: number, newFilePath: string) => Promise<void>;
+  getTempNotes: () => Promise<Note[]>;
+  deleteTempNote: (noteId: number) => Promise<void>;
+  // File association
+  getPendingFilePaths: () => Promise<string[]>;
+  onOpenMdFile: (callback: (event: any, filePath: string) => void) => { unsubscribe: () => void };
+  // File operations for temp notes
+  readFileContent: (filePath: string) => Promise<string | null>;
+  writeFileContent: (filePath: string, content: string) => Promise<boolean>;
+  showSaveDialog: (options: any) => Promise<any>;
+  getFileBasename: (filePath: string) => Promise<string>;
 }

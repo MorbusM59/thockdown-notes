@@ -648,6 +648,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   const lastSavedContentRef = useRef('');
   const lastAutoSnapshotTimeRef = useRef(0);
   const lastSavedTitleRef = useRef('');
+  const [tempNoteBasename, setTempNoteBasename] = useState<string>('');
   const currentNoteIdRef = useRef<number | null>(null);
 
   // Short-lived UI timeouts that should be cleared on unmount
@@ -773,6 +774,25 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     document.addEventListener('request-manual-snapshot', handleManualSnapshot);
     return () => document.removeEventListener('request-manual-snapshot', handleManualSnapshot);
   }, [note, content]);
+
+  // Load basename for temp notes
+  useEffect(() => {
+    const loadTempNoteBasename = async () => {
+      if (note?.isTemp && note.externalPath) {
+        try {
+          const basename = await window.electronAPI.getFileBasename(note.externalPath);
+          setTempNoteBasename(basename);
+        } catch (err) {
+          console.warn('Failed to get basename for temp note', err);
+          setTempNoteBasename('');
+        }
+      } else {
+        setTempNoteBasename('');
+      }
+    };
+
+    loadTempNoteBasename();
+  }, [note]);
 
   useEffect(() => {
     if (!note) {
@@ -1434,6 +1454,22 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
     const savedNote = await window.electronAPI.saveNote(note.id, diskContent);
     lastSavedContentRef.current = diskContent;
+
+    // For temp notes, also save to external file if sync mode is enabled
+    if (note.isTemp && note.externalPath && note.syncMode) {
+      try {
+        const success = await window.electronAPI.writeFileContent(note.externalPath, diskContent);
+        if (success) {
+          await window.electronAPI.updateTempNoteState(note.id, false, true);
+        } else {
+          await window.electronAPI.updateTempNoteState(note.id, true, note.syncMode || false);
+        }
+      } catch (err) {
+        console.warn('Failed to save temp note to external file:', err);
+        // Mark as having unsaved changes
+        await window.electronAPI.updateTempNoteState(note.id, true, note.syncMode || false);
+      }
+    }
 
     const now = Date.now();
     if (now - lastAutoSnapshotTimeRef.current >= 5 * 60 * 1000) {
@@ -2294,6 +2330,52 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           >
             Edit
           </button>
+
+          {/* Temp note indicator */}
+          {note?.isTemp && (
+            <div className="temp-note-indicator">
+              <span className="temp-icon">📄</span>
+              <span className="temp-label">Temp Note</span>
+              {note.externalPath && (
+                <span className="temp-path" title={note.externalPath}>
+                  {tempNoteBasename || 'Loading...'}
+                </span>
+              )}
+              <button
+                className="temp-save-btn"
+                onClick={async () => {
+                  if (!note.externalPath) return;
+                  try {
+                    const content = await window.electronAPI.loadNote(note.id);
+                    const success = await window.electronAPI.writeFileContent(note.externalPath, content);
+                    if (success) {
+                      await window.electronAPI.updateTempNoteState(note.id, false, note.syncMode || false);
+                    }
+                  } catch (err) {
+                    console.warn('Failed to save temp note to external file:', err);
+                  }
+                }}
+                title="Save changes to external file"
+              >
+                💾
+              </button>
+              <button
+                className={`temp-sync-btn ${note.syncMode ? 'active' : ''}`}
+                onClick={async () => {
+                  const newSyncMode = !note.syncMode;
+                  await window.electronAPI.updateTempNoteState(note.id, note.hasUnsavedChanges || false, newSyncMode);
+                  // Force a re-render by updating the note
+                  if (onNoteUpdate) {
+                    const updatedNote = { ...note, syncMode: newSyncMode };
+                    onNoteUpdate(updatedNote);
+                  }
+                }}
+                title={note.syncMode ? "Disable auto-sync with external file" : "Enable auto-sync with external file"}
+              >
+                🔄
+              </button>
+            </div>
+          )}
 
           {/* left-aligned text editing tools - only in edit mode */}
           {!showPreview && (

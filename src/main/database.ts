@@ -67,6 +67,13 @@ export async function initDatabase(): Promise<void> {
     if (!names.has('scrollTop')) db.prepare('ALTER TABLE notes ADD COLUMN scrollTop REAL DEFAULT 0').run();
     if (!names.has('editHistory')) db.prepare('ALTER TABLE notes ADD COLUMN editHistory TEXT').run();
 
+    // Temp note fields
+    if (!names.has('isTemp')) db.prepare('ALTER TABLE notes ADD COLUMN isTemp INTEGER DEFAULT 0').run();
+    if (!names.has('externalPath')) db.prepare('ALTER TABLE notes ADD COLUMN externalPath TEXT').run();
+    if (!names.has('hasUnsavedChanges')) db.prepare('ALTER TABLE notes ADD COLUMN hasUnsavedChanges INTEGER DEFAULT 0').run();
+    if (!names.has('syncMode')) db.prepare('ALTER TABLE notes ADD COLUMN syncMode INTEGER DEFAULT 0').run();
+    if (!names.has('originalEncoding')) db.prepare('ALTER TABLE notes ADD COLUMN originalEncoding TEXT').run();
+
     const snapCols = db.prepare("PRAGMA table_info(note_snapshots)").all() as Array<{ name: string }>;
     const snapNames = new Set(snapCols.map(c => String(c.name)));
     if (!snapNames.has('isManual')) db.prepare('ALTER TABLE note_snapshots ADD COLUMN isManual INTEGER DEFAULT 0').run();
@@ -121,10 +128,11 @@ export function createNote(title: string, filePath: string): Note {
     // createOrGetTag is declared below; call via normalized names after it's available
     // We'll lazily ensure tags exist after function definitions by calling here is not safe,
     // so instead ensure at end of initDatabase by creating them directly via SQL if absent.
-    const existing = db.prepare('SELECT name FROM tags WHERE name IN (?, ?)').all('deleted', 'archived') as Array<{ name: string }>;
+    const existing = db.prepare('SELECT name FROM tags WHERE name IN (?, ?, ?)').all('deleted', 'archived', 'temp') as Array<{ name: string }>;
     const found = new Set(existing.map(r => r.name));
     if (!found.has('deleted')) db.prepare('INSERT INTO tags (name) VALUES (?)').run('deleted');
     if (!found.has('archived')) db.prepare('INSERT INTO tags (name) VALUES (?)').run('archived');
+    if (!found.has('temp')) db.prepare('INSERT INTO tags (name) VALUES (?)').run('temp');
   } catch (err) {
     console.warn('[db] ensure protected tags failed', err);
   }
@@ -145,6 +153,60 @@ export function createNote(title: string, filePath: string): Note {
     updatedAt: now,
     lastEdited: now,
   };
+}
+
+export function createTempNote(title: string, externalPath: string, originalEncoding?: string): Note {
+  const now = new Date().toISOString();
+  const stmt = db.prepare(`
+    INSERT INTO notes (title, filePath, createdAt, updatedAt, lastEdited, isTemp, externalPath, hasUnsavedChanges, syncMode, originalEncoding)
+    VALUES (?, ?, ?, ?, ?, 1, ?, 0, 0, ?)
+  `);
+
+  const result = stmt.run(title, externalPath, now, now, now, externalPath, originalEncoding || 'utf8');
+
+  return {
+    id: result.lastInsertRowid as number,
+    title,
+    filePath: externalPath, // Use external path as filePath for consistency
+    createdAt: now,
+    updatedAt: now,
+    lastEdited: now,
+    isTemp: true,
+    externalPath,
+    hasUnsavedChanges: false,
+    syncMode: false,
+    originalEncoding: originalEncoding || 'utf8',
+  };
+}
+
+export function updateTempNoteState(noteId: number, hasUnsavedChanges: boolean, syncMode: boolean): void {
+  const stmt = db.prepare(`
+    UPDATE notes 
+    SET hasUnsavedChanges = ?, syncMode = ?, updatedAt = ?
+    WHERE id = ? AND isTemp = 1
+  `);
+  stmt.run(hasUnsavedChanges ? 1 : 0, syncMode ? 1 : 0, new Date().toISOString(), noteId);
+}
+
+export function convertTempNoteToRegular(noteId: number, newFilePath: string): void {
+  const stmt = db.prepare(`
+    UPDATE notes 
+    SET isTemp = 0, externalPath = NULL, hasUnsavedChanges = 0, syncMode = 0, 
+        filePath = ?, updatedAt = ?, originalEncoding = NULL
+    WHERE id = ? AND isTemp = 1
+  `);
+  stmt.run(newFilePath, new Date().toISOString(), noteId);
+}
+
+export function getTempNotes(): Note[] {
+  const stmt = db.prepare('SELECT * FROM notes WHERE isTemp = 1 ORDER BY lastEdited DESC');
+  return stmt.all() as Note[];
+}
+
+export function deleteTempNote(noteId: number): void {
+  // Only delete if it's a temp note
+  const stmt = db.prepare('DELETE FROM notes WHERE id = ? AND isTemp = 1');
+  stmt.run(noteId);
 }
 
 export function getNoteByToken(token: string): Note | undefined {

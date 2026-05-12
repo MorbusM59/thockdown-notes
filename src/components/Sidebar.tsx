@@ -48,6 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [dateNotes, setDateNotes] = useState<Note[]>([]);
   const [categoryHierarchy, setCategoryHierarchy] = useState<CategoryHierarchy>({});
   const [uncategorizedNotes, setUncategorizedNotes] = useState<Note[]>([]);
+  const [tempNoteBasenames, setTempNoteBasenames] = useState<Map<number, string>>(new Map());
   const [currentPage, setCurrentPage] = useState(1);
   const [totalNotes, setTotalNotes] = useState(0);
   const [itemsPerPage, setItemsPerPage] = useState<number>(20);
@@ -169,6 +170,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
       console.warn('loadTrashNotes failed', err);
     }
   };
+
+  // Load basenames for temp notes
+  useEffect(() => {
+    const loadTempNoteBasenames = async () => {
+      const allNotes = [...dateNotes, ...uncategorizedNotes, ...Object.values(categoryHierarchy).flatMap(cat => 
+        cat.notes.concat(Object.values(cat.secondary).flatMap(sec => sec.notes))
+      )];
+      const tempNotes = allNotes.filter(note => note.isTemp && note.externalPath);
+      
+      const newBasenames = new Map<number, string>();
+      for (const note of tempNotes) {
+        try {
+          const basename = await window.electronAPI.getFileBasename(note.externalPath!);
+          newBasenames.set(note.id, basename);
+        } catch (err) {
+          console.warn('Failed to get basename for temp note', note.id, err);
+        }
+      }
+      
+      setTempNoteBasenames(newBasenames);
+    };
+
+    loadTempNoteBasenames();
+  }, [dateNotes, uncategorizedNotes, categoryHierarchy]);
 
   // Auto-expand relevant categories when the hierarchy reloads or the selected note changes.
   // This makes tag changes reflect immediately in the menu: the note's primary and
@@ -440,6 +465,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const handleNoteContextMenu = async (e: React.MouseEvent, note: Note) => {
     e.preventDefault();
     try {
+      // Special handling for temp notes
+      if (note.isTemp) {
+        // For temp notes, show different context menu options
+        if (e.ctrlKey) {
+          // Ctrl + right-click on temp note -> convert to regular note
+          try {
+            const result = await window.electronAPI.showSaveDialog({
+              title: 'Convert Temp Note to Regular Note',
+              defaultPath: note.externalPath ? await window.electronAPI.getFileBasename(note.externalPath) : undefined,
+              filters: [{ name: 'Markdown Files', extensions: ['md'] }]
+            });
+            
+            if (!result.canceled && result.filePath) {
+              await window.electronAPI.convertTempNoteToRegular(note.id, result.filePath);
+              if (!isMountedRef.current) return;
+              if (onNotesUpdate) onNotesUpdate();
+              if (searchMode === 'none') {
+                if (viewMode === 'latest') await loadDateNotes(); else await loadCategoryHierarchy();
+              }
+            }
+          } catch (err) {
+            console.warn('convert temp note failed', err);
+          }
+        } else {
+          // Right-click on temp note -> save changes back to external file
+          try {
+            const content = await window.electronAPI.loadNote(note.id);
+            const success = await window.electronAPI.writeFileContent(note.externalPath!, content);
+            if (success) {
+              await window.electronAPI.updateTempNoteState(note.id, false, note.syncMode || false);
+            }
+          } catch (err) {
+            console.warn('save temp note to external file failed', err);
+          }
+        }
+        return;
+      }
+
       // Ensure we derive the primary tag from the DB to be robust across views
       let primary: string | undefined | null = (note as any).primaryTag as string | undefined | null;
       try {
@@ -878,17 +941,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
             displayedNotes.map(note => (
             <div
               key={note.id}
-              className={`note-item ${selectedNote?.id === note.id ? 'selected' : ''} ${getDateIndicatorClass(note)} ${armed.kind === 'delete' && armed.noteId === note.id ? 'armed-delete' : ''} ${armed.kind === 'archive' && armed.noteId === note.id ? 'armed-archive' : ''} ${armed.kind === 'permanent' && armed.noteId === note.id ? 'armed-permanent' : ''}`}
+              className={`note-item ${selectedNote?.id === note.id ? 'selected' : ''} ${getDateIndicatorClass(note)} ${armed.kind === 'delete' && armed.noteId === note.id ? 'armed-delete' : ''} ${armed.kind === 'archive' && armed.noteId === note.id ? 'armed-archive' : ''} ${armed.kind === 'permanent' && armed.noteId === note.id ? 'armed-permanent' : ''} ${note.isTemp ? 'temp-note' : ''}`}
               onClick={() => { setArmed({ kind: 'none' }); onSelectNote(note); }}
               onContextMenu={(e) => handleNoteContextMenu(e, note)}
             >
               <div className="note-content">
-                <div className="note-title">{note.title}</div>
+                <div className="note-title">
+                  {note.title}
+                  {note.isTemp && <span className="temp-indicator">📄</span>}
+                </div>
                 <div className="note-date">
                   {new Date(note.updatedAt).toLocaleDateString()}
                   {note.lastEdited ? (
                     <span className="note-edited">[{formatLastEdited(note.lastEdited)}]</span>
                   ) : null}
+                  {note.isTemp && note.externalPath && (
+                    <span className="external-path" title={note.externalPath}>
+                      {tempNoteBasenames.get(note.id) || 'Loading...'}
+                    </span>
+                  )}
                 </div>
               </div>
               {/* delete button removed — use context menu (right-click) to arm/archive/delete */}

@@ -10,7 +10,7 @@ import {
   upsertNoteFts, removeNoteFts, searchNotes, saveNoteUiState, getNoteUiState, getHierarchyForTag, getNotesInTrash,
   
   generateUniqueFileToken, setNoteFileToken, getNoteByToken, reconcileNotesWithFs, updateNoteCreatedAt, updateNoteLastEdited, renameTag,
-  saveNoteSnapshot, getNoteSnapshots, deleteNoteSnapshot } from './main/database';
+  saveNoteSnapshot, getNoteSnapshots, deleteNoteSnapshot, createTempNote, updateTempNoteState, convertTempNoteToRegular, getTempNotes, deleteTempNote } from './main/database';
 
 import { initFileSystem, saveNoteContent, loadNoteContent, deleteNoteFile, copyFileToNotes } from './main/fileSystem';
 import { SearchResult } from './shared/types';
@@ -49,7 +49,8 @@ try {
 } catch (err) {
   console.warn('[main] squirrel check failed:', err);
 }
-
+// Global variable for pending file paths
+let pendingFilePaths: string[] = [];
 app.disableHardwareAcceleration();
 
 let mainWindow: BrowserWindow | null = null;
@@ -230,6 +231,17 @@ const createWindow = (): void => {
       }
     });
 
+    // Send pending file paths to renderer after window is ready
+    mainWindow.webContents.on('did-finish-load', () => {
+      if (pendingFilePaths.length > 0) {
+        const paths = [...pendingFilePaths];
+        pendingFilePaths = []; // Clear after sending
+        for (const filePath of paths) {
+          mainWindow?.webContents.send('open-md-file', filePath);
+        }
+      }
+    });
+
     if (process.env.NODE_ENV === 'development') {
       mainWindow.webContents.openDevTools();
     }
@@ -385,6 +397,106 @@ ipcMain.handle('rename-tag', async (event, tagId: number, newName: string) => {
   }
 });
 
+// Temp note operations
+ipcMain.handle('create-temp-note', async (_event, title: unknown, externalPath: unknown, originalEncoding: unknown) => {
+  if (typeof title !== 'string' || typeof externalPath !== 'string') return null;
+  try {
+    return createTempNote(String(title), String(externalPath), typeof originalEncoding === 'string' ? String(originalEncoding) : undefined);
+  } catch (err: any) {
+    console.warn('[main] create-temp-note failed', err);
+    return null;
+  }
+});
+
+ipcMain.handle('update-temp-note-state', async (_event, noteId: unknown, hasUnsavedChanges: unknown, syncMode: unknown) => {
+  if (typeof noteId !== 'number' || typeof hasUnsavedChanges !== 'boolean' || typeof syncMode !== 'boolean') return;
+  try {
+    updateTempNoteState(noteId, hasUnsavedChanges, syncMode);
+  } catch (err: any) {
+    console.warn('[main] update-temp-note-state failed', err);
+  }
+});
+
+ipcMain.handle('convert-temp-note-to-regular', async (_event, noteId: unknown, newFilePath: unknown) => {
+  if (typeof noteId !== 'number' || typeof newFilePath !== 'string') return;
+  try {
+    convertTempNoteToRegular(noteId, String(newFilePath));
+  } catch (err: any) {
+    console.warn('[main] convert-temp-note-to-regular failed', err);
+  }
+});
+
+ipcMain.handle('get-temp-notes', async () => {
+  try {
+    return getTempNotes();
+  } catch (err: any) {
+    console.warn('[main] get-temp-notes failed', err);
+    return [];
+  }
+});
+
+ipcMain.handle('delete-temp-note', async (_event, noteId: unknown) => {
+  if (typeof noteId !== 'number') return;
+  try {
+    deleteTempNote(noteId);
+  } catch (err: any) {
+    console.warn('[main] delete-temp-note failed', err);
+  }
+});
+
+ipcMain.handle('get-pending-file-paths', async () => {
+  try {
+    const paths = [...pendingFilePaths];
+    pendingFilePaths = []; // Clear after returning
+    return paths;
+  } catch (err: any) {
+    console.warn('[main] get-pending-file-paths failed', err);
+    return [];
+  }
+});
+
+// File operations for temp notes
+ipcMain.handle('read-file-content', async (_event, filePath: unknown) => {
+  if (typeof filePath !== 'string') return null;
+  try {
+    return fs.readFileSync(String(filePath), 'utf8');
+  } catch (err: any) {
+    console.warn('[main] read-file-content failed', err);
+    return null;
+  }
+});
+
+ipcMain.handle('write-file-content', async (_event, filePath: unknown, content: unknown) => {
+  if (typeof filePath !== 'string' || typeof content !== 'string') return false;
+  try {
+    fs.writeFileSync(String(filePath), String(content), 'utf8');
+    return true;
+  } catch (err: any) {
+    console.warn('[main] write-file-content failed', err);
+    return false;
+  }
+});
+
+ipcMain.handle('show-save-dialog', async (_event, options: unknown) => {
+  if (typeof options !== 'object' || !options) return null;
+  try {
+    return await dialog.showSaveDialog(mainWindow!, options as any);
+  } catch (err: any) {
+    console.warn('[main] show-save-dialog failed', err);
+    return null;
+  }
+});
+
+ipcMain.handle('get-file-basename', async (_event, filePath: unknown) => {
+  if (typeof filePath !== 'string') return '';
+  try {
+    return path.basename(String(filePath));
+  } catch (err: any) {
+    console.warn('[main] get-file-basename failed', err);
+    return '';
+  }
+});
+
 app.whenReady().then(async () => {
   console.log('[main] app.whenReady started');
   try {
@@ -425,6 +537,53 @@ app.whenReady().then(async () => {
     console.error('[main] initialization error', err && (err as any).stack ? (err as any).stack : err);
     throw err;
   }
+
+  // File association for .md files
+  if (process.platform === 'win32') {
+    app.setAsDefaultProtocolClient('measly-notes', process.execPath, [path.dirname(process.execPath)]);
+  }
+
+  // Handle file opening (double-click .md files or command line args)
+  // Check command line arguments for .md files
+  const args = process.argv.slice(1);
+  for (const arg of args) {
+    if (arg.endsWith('.md') && fs.existsSync(arg)) {
+      pendingFilePaths.push(path.resolve(arg));
+    }
+  }
+
+  // Handle second-instance events (when app is already running and user opens another .md file)
+  app.on('second-instance', (event, commandLine) => {
+    // Focus the main window
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+
+    // Check for .md files in the command line
+    const args = commandLine.slice(1);
+    for (const arg of args) {
+      if (arg.endsWith('.md') && fs.existsSync(arg)) {
+        pendingFilePaths.push(path.resolve(arg));
+        // Send to renderer to handle
+        if (mainWindow && mainWindow.webContents) {
+          mainWindow.webContents.send('open-md-file', path.resolve(arg));
+        }
+      }
+    }
+  });
+
+  // Handle open-file events (macOS)
+  app.on('open-file', (event, filePath) => {
+    event.preventDefault();
+    if (filePath.endsWith('.md') && fs.existsSync(filePath)) {
+      pendingFilePaths.push(path.resolve(filePath));
+      // Send to renderer to handle
+      if (mainWindow && mainWindow.webContents) {
+        mainWindow.webContents.send('open-md-file', path.resolve(filePath));
+      }
+    }
+  });
 
   // Register IPC handlers (validate inputs) - same set as before (create-note, save-note, etc.)
   try {
