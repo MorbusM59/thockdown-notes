@@ -620,6 +620,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   const [showLineBreaks, setShowLineBreaks] = useState<boolean>(() => {
     return localStorage.getItem('markdown-editor-show-line-breaks') === 'true';
   });
+  const isTimeTravelLocked = timeMachineSnapshotContent != null;
 
   // Editor settings (separate from view)
   const [editorStyle, setEditorStyle] = useState<string>('syne');
@@ -1860,6 +1861,16 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
   const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (showPreview) return;
+    if (isTimeTravelLocked) {
+      const allowedNavKeys = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', 'Escape']);
+      if (allowedNavKeys.has(e.key)) {
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && ['a', 'c'].includes(e.key.toLowerCase())) {
+        return;
+      }
+      return;
+    }
 
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
       e.preventDefault();
@@ -2682,6 +2693,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             timelineProps={timelineProps}
             showLineBreaks={showLineBreaks}
             onTextChange={(newText, newSelectionStart, newSelectionEnd) => {
+              if (isTimeTravelLocked) return;
               onTimeMachineInterrupt?.();
               const beforeSnapshot = lastCommittedSnapshotRef.current;
               if (beforeSnapshot.content !== newText) {
@@ -2695,7 +2707,6 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               checkCursorPosition();
             }}
             onSelectionChange={(start, end) => {
-              onTimeMachineInterrupt?.();
               // Programmatic transforms (Enter/list continuation/etc.) set an explicit
               // target selection. Ignore transient browser select events in that window.
               if (programmaticInsertRef.current) return;
@@ -2717,6 +2728,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             onKeyUp={handleTextareaKeyUp}
             onKeyDown={handleTextareaKeyDown}
             onPaste={handlePaste}
+            readOnly={isTimeTravelLocked}
             placeholder={`# Note Title
 
 Start typing your note here...`}

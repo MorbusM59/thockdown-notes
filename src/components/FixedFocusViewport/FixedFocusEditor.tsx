@@ -366,6 +366,7 @@ interface FixedFocusEditorProps {
   onCopy?: (e: React.ClipboardEvent<HTMLDivElement>) => void;
   onPaste?: (e: React.ClipboardEvent<HTMLDivElement>) => void;
   onCompositionStart?: React.CompositionEventHandler<HTMLDivElement>;
+  readOnly?: boolean;
   onCompositionEnd?: React.CompositionEventHandler<HTMLDivElement>;
   /** Called whenever the total wrapped row count changes (e.g. text reflows). */
   onTotalWrappedRowCountChange?: (count: number) => void;
@@ -414,7 +415,9 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   onCompositionEnd,
   onTotalWrappedRowCountChange,
   timelineProps,
+  readOnly = false,
 }) => {
+  const isReadOnly = Boolean(readOnly);
   const [uncontrolledViewportStartRow, setUncontrolledViewportStartRow] = useState(0);
   const [uncontrolledTopRowCount, setUncontrolledTopRowCount] = useState(topRowCount ?? 3);
   const [uncontrolledBottomRowCount, setUncontrolledBottomRowCount] = useState(bottomRowCount ?? 3);
@@ -1206,6 +1209,17 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   };
 
   const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
+    if (isReadOnly) {
+      const el = e.currentTarget;
+      const currentText = ceGetText(el);
+      if (currentText !== text) {
+        const sel = ceGetSelection(el) ?? { start: 0, end: 0 };
+        ceSetText(el, text);
+        ceSetSelection(el, sel.start, sel.end);
+      }
+      return;
+    }
+
     const el = e.currentTarget;
     const newText = ceGetText(el);
     let sel = ceGetSelection(el);
@@ -1218,6 +1232,11 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   };
 
   const handleBeforeInput = (e: React.FormEvent<HTMLDivElement>) => {
+    if (isReadOnly) {
+      e.preventDefault();
+      return;
+    }
+
     const inputEvent = e.nativeEvent as InputEvent;
     const inputType = inputEvent.inputType;
     const data = inputEvent.data;
@@ -1621,6 +1640,21 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   }, [applyAutomaticCaretPos, cancelViewportAnimation, caretPos, effectiveCenterStartRow, getViewportBoundaryCaretPos, isPointerSelecting, selectionEnd, selectionStart]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (isReadOnly) {
+      const allowedNavKeys = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', 'Escape']);
+      if (allowedNavKeys.has(e.key)) {
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && ['a', 'c'].includes(e.key.toLowerCase())) {
+        return;
+      }
+      if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') {
+        return;
+      }
+      e.preventDefault();
+      return;
+    }
+
     if (!(e.shiftKey || e.ctrlKey || e.altKey)) {
       if (e.key === 'ArrowUp') {
         e.preventDefault();
@@ -2145,11 +2179,13 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
             onPointerUp={handleCenterPointerUp}
             onDoubleClick={handleCenterDoubleClick}
             onContextMenuCapture={handleCenterContextMenu}
+            aria-readonly={isReadOnly}
             onBeforeInput={handleBeforeInput}
             onKeyDown={handleKeyDown}
             onKeyUp={onKeyUp}
             onCopy={onCopy}
-            onPaste={onPaste}
+            onPaste={isReadOnly ? (e) => { e.preventDefault(); } : onPaste}
+            onCut={isReadOnly ? (e) => { e.preventDefault(); } : undefined}
             onCompositionStart={onCompositionStart}
             onCompositionEnd={onCompositionEnd}
             onFocus={() => {
