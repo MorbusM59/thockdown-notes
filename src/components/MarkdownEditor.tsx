@@ -1552,7 +1552,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     // Only notify parent about the saved note when the title actually
     // changes. Avoid writing empty titles (e.g. when content is just "# ").
     const newTitleNonEmpty = newTitle.trim();
-    if (newTitle !== lastSavedTitleRef.current && newTitleNonEmpty.length > 0) {
+    if (!note.isTemp && newTitle !== lastSavedTitleRef.current && newTitleNonEmpty.length > 0) {
       await window.electronAPI.updateNoteTitle(note.id, newTitle);
       lastSavedTitleRef.current = newTitle;
 
