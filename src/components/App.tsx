@@ -343,11 +343,17 @@ export const App: React.FC = () => {
     setSelectedNote(updatedNote);
     // Targeted update: notify sidebar of the single-note change so it can
     // update its local state without a full remount/refresh.
-    setSidebarNoteUpdate(updatedNote);
-    // Give the Sidebar a short window to observe the update before clearing it
-    // so repeated title-saves for the same note still change the prop identity
-    // and trigger Sidebar's effect.
-    setTimeout(() => setSidebarNoteUpdate(null), 20);
+    // Skip if only hasUnsavedChanges changed — the sidebar only uses title/
+    // updatedAt/lastEdited, so pushing a hasUnsavedChanges-only update would
+    // cause two extra Sidebar re-renders (set + 20ms clear) per keypress.
+    if (selectedNote && (
+      updatedNote.title !== selectedNote.title ||
+      updatedNote.updatedAt !== selectedNote.updatedAt ||
+      updatedNote.lastEdited !== selectedNote.lastEdited
+    )) {
+      setSidebarNoteUpdate(updatedNote);
+      setTimeout(() => setSidebarNoteUpdate(null), 20);
+    }
   };
 
   const handleSidebarRefresh = () => {

@@ -650,6 +650,15 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   const lastSavedTitleRef = useRef('');
   const [isDragOver, setIsDragOver] = useState(false);
   const currentNoteIdRef = useRef<number | null>(null);
+  // Stable ref to the latest onNoteUpdate callback — allows handleContentChange
+  // to call it without adding it to deps and cascading callback recreation.
+  const onNoteUpdateRef = useRef(onNoteUpdate);
+  onNoteUpdateRef.current = onNoteUpdate;
+  // Stable ref to latest content — allows autoSave to read current content
+  // without having 'content' in its deps (which would recreate autoSave and the
+  // entire handleContentChange callback chain on every single keystroke).
+  const contentRef = useRef('');
+  contentRef.current = content;
 
   // Short-lived UI timeouts that should be cleared on unmount
   const loadNoteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -690,6 +699,20 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     setSelectionEnd(end);
     setCaretPos(end);
   }, []);
+
+  // Stable callback passed to FixedFocusEditor.onCaretChange. MUST be stable
+  // (useCallback with minimal deps) so that applyAutomaticCaretPos in
+  // FixedFocusEditor does not recreate on every MarkdownEditor render, which
+  // would cause useLayoutEffect to fire on every render and loop when the
+  // caret is outside the viewport.
+  // checkCursorPosition/checkFormatting are intentionally omitted here —
+  // they are called by the keyup listener and the formatting effect after
+  // the render, which is sufficient and avoids the extra setState cascade.
+  const handleCaretChange = useCallback((newCaretPos: number) => {
+    if (programmaticInsertRef.current) return;
+    if (!textareaRef.current) return;
+    setTextareaSelection(newCaretPos, newCaretPos);
+  }, [setTextareaSelection]);
 
   const buildSnapshot = useCallback((snapshotContent: string, start: number, end: number): EditSnapshot => ({
     content: snapshotContent,
@@ -1507,9 +1530,14 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   }, []);
 
   // autoSave (returns a promise)
+  // Reads content and onNoteUpdate via refs so that 'content' and 'onNoteUpdate'
+  // are not in the dep array. Without this, autoSave recreates on every keystroke,
+  // cascading to handleContentChange and every downstream callback, and
+  // re-registering the forceSave IPC listener on every keypress.
   const autoSave = useCallback(async () => {
-    if (!autoSaveEnabled || !note || content == null) return;
-    const diskContent = content;
+    const currentContent = contentRef.current;
+    if (!autoSaveEnabled || !note || currentContent == null) return;
+    const diskContent = currentContent;
     if (diskContent === lastSavedContentRef.current) return;
 
     const savedNote = await window.electronAPI.saveNote(note.id, diskContent);
@@ -1521,16 +1549,16 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         const success = await window.electronAPI.writeFileContent(note.externalPath, diskContent);
         const newUnsaved = !success;
         await window.electronAPI.updateTempNoteState(note.id, newUnsaved, true);
-        if (onNoteUpdate) onNoteUpdate({ ...note, hasUnsavedChanges: newUnsaved });
+        onNoteUpdateRef.current?.({ ...note, hasUnsavedChanges: newUnsaved });
       } catch (err) {
         console.warn('Failed to save temp note to external file:', err);
         await window.electronAPI.updateTempNoteState(note.id, true, note.syncMode || false);
-        if (onNoteUpdate) onNoteUpdate({ ...note, hasUnsavedChanges: true });
+        onNoteUpdateRef.current?.({ ...note, hasUnsavedChanges: true });
       }
     } else if (note.isTemp && note.externalPath && !note.syncMode) {
       // Mark as having unsaved changes since we only saved to DB, not to the external file
       await window.electronAPI.updateTempNoteState(note.id, true, false);
-      if (onNoteUpdate && !note.hasUnsavedChanges) onNoteUpdate({ ...note, hasUnsavedChanges: true });
+      if (!note.hasUnsavedChanges) onNoteUpdateRef.current?.({ ...note, hasUnsavedChanges: true });
     }
 
     const now = Date.now();
@@ -1551,12 +1579,10 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       await window.electronAPI.updateNoteTitle(note.id, newTitle);
       lastSavedTitleRef.current = newTitle;
 
-      if (onNoteUpdate) {
-        const payload = savedNote ? { ...savedNote, title: newTitle } : { ...note, title: newTitle };
-        onNoteUpdate(payload);
-      }
+      const payload = savedNote ? { ...savedNote, title: newTitle } : { ...note, title: newTitle };
+      onNoteUpdateRef.current?.(payload);
     }
-  }, [autoSaveEnabled, note, content, extractTitle, onNoteUpdate]);
+  }, [autoSaveEnabled, note, extractTitle]);
 
   // Register force-save listener from preload API; accept requestId and respond when done
   useEffect(() => {
@@ -1593,7 +1619,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     return () => {
       try { unsub?.unsubscribe(); } catch (err) { console.warn('failed to unsubscribe editor listeners', err); }
     };
-  }, [autoSave, note, content]);
+  }, [autoSave, note]);
 
   // formatting detection
   const findMarker = (marker: string, index: number, backward: boolean) => {
@@ -1858,8 +1884,10 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     // For temp notes: immediately signal unsaved changes on the first content
     // change after a save. Fires at most once per dirty period — no IPC, no DB,
     // no timer; React batches this setState with the setContent above.
+    // Uses a ref so this does not add onNoteUpdate to deps (which would cascade
+    // callback recreation on every App render and kill scroll performance).
     if (note?.isTemp && !note.hasUnsavedChanges) {
-      onNoteUpdate?.({ ...note, hasUnsavedChanges: true });
+      onNoteUpdateRef.current?.({ ...note, hasUnsavedChanges: true });
     }
 
     if (autoSaveTimeoutRef.current) {
@@ -1875,7 +1903,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         void autoSave();
       }, 1000) as unknown as ReturnType<typeof setTimeout>;
     }
-  }, [autoSave, isOnFirstLine, note, onNoteUpdate, scheduleTimeout, showPreview]);
+  }, [autoSave, isOnFirstLine, note, scheduleTimeout, showPreview]);
 
   const finalizePendingNativeBoundary = useCallback((newContent: string, newSelectionStart: number, newSelectionEnd: number) => {
     const pendingBoundary = pendingHistoryBoundaryRef.current;
@@ -2830,13 +2858,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               if (programmaticInsertRef.current) return;
               syncSelectionState(start, end);
             }}
-            onCaretChange={(newCaretPos) => {
-              if (programmaticInsertRef.current) return;
-              if (!textareaRef.current) return;
-              setTextareaSelection(newCaretPos, newCaretPos);
-              checkCursorPosition();
-              checkFormatting();
-            }}
+            onCaretChange={handleCaretChange}
             textareaRef={textareaRef}
             textareaClassName={`${showLineBreaks ? 'show-line-breaks ' : ''}markdown-textarea editor-style-${editorStyle}`}
             textareaStyle={editorInlineStyle}
