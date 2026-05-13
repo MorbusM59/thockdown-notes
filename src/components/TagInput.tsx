@@ -248,7 +248,7 @@ export const TagInput: React.FC<TagInputPropsExtended> = ({ note, onTagsChanged,
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder={note.isTemp ? 'Temp note — click "temp" pill to convert' : 'Type to add tag...'}
+              placeholder={note.isTemp ? 'Remove the temp tag to import this external file as a regular note.' : 'Type to add tag...'}
               disabled={!!note.isTemp}
               aria-label="Tag input"
             />
@@ -259,7 +259,7 @@ export const TagInput: React.FC<TagInputPropsExtended> = ({ note, onTagsChanged,
           {!!note.isTemp && (
             <div
               className="tag-pill active protected temp"
-              title="Remove the temp tag to import this external file as a regular note."
+              title="Click to remove."
               onClick={() => {
                 if (onConvertTempNote) onConvertTempNote();
               }}
