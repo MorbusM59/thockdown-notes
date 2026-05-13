@@ -459,7 +459,7 @@ ipcMain.handle('get-pending-file-paths', async () => {
 ipcMain.handle('read-file-content', async (_event, filePath: unknown) => {
   if (typeof filePath !== 'string') return null;
   try {
-    return fs.readFileSync(String(filePath), 'utf8');
+    return await loadNoteContent(filePath);
   } catch (err: any) {
     console.warn('[main] read-file-content failed', err);
     return null;

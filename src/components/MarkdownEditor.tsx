@@ -1108,6 +1108,23 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         setSelectionStart(0);
         setSelectionEnd(0);
 
+        // Sanity check for temp notes
+        if (note.isTemp && note.externalPath) {
+          window.electronAPI.readFileContent(note.externalPath).then(extContent => {
+            if (extContent !== null) {
+              const normalizedExt = extContent.replace(/\r\n/g, '\n');
+              const normalizedNote = noteContent.replace(/\r\n/g, '\n');
+              if (normalizedExt !== normalizedNote && !note.hasUnsavedChanges) {
+                window.electronAPI.updateTempNoteState(note.id, true, note.syncMode ?? false).then(() => {
+                  if (onNoteUpdateRef.current) {
+                    onNoteUpdateRef.current({ ...note, hasUnsavedChanges: true });
+                  }
+                }).catch(err => console.warn('Failed to update temp note state', err));
+              }
+            }
+          }).catch(err => console.warn('Failed to read external temp note content', err));
+        }
+
         // Focus & position cursor for edit mode
         if (!showPreview) {
           if (loadNoteTimeoutRef.current) {
