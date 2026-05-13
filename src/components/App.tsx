@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Note } from '../shared/types';
 import { Sidebar } from './Sidebar';
 import { MarkdownEditor, TimelineProps, extractNoteTitle } from './MarkdownEditor';
@@ -221,68 +221,76 @@ export const App: React.FC = () => {
   }, [showPreview]);
 
   // Handle opening .md files from external sources
-  useEffect(() => {
-    const handleOpenMdFile = async (_event: any, filePath: string) => {
-      try {
-        // Check if we already have a temp note for this file
-        const tempNotes = await window.electronAPI.getTempNotes();
-        const existingTempNote = tempNotes.find(note => note.externalPath === filePath);
+  const handleOpenMdFile = useCallback(async (filePath: string) => {
+    try {
+      // Check if we already have a temp note for this file
+      const tempNotes = await window.electronAPI.getTempNotes();
+      const existingTempNote = tempNotes.find(note => note.externalPath === filePath);
 
-        if (existingTempNote) {
-          // Switch to existing temp note
-          setSelectedNote(existingTempNote);
-          setSnapshots([]);
-          setTimeMachineIndex(-1);
-          setViewMode('latest');
-          setRefreshKey(k => k + 1);
-          return;
-        }
-
-        // Strip BOM, CRLF, HTML tags, emojis, and variation selectors
-        const sanitize = (raw: string): string =>
-          raw
-            .replace(/^\uFEFF/, '')
-            .replace(/\r\n/g, '\n')
-            .replace(/<[^>]*>/g, '')
-            .replace(/\p{Extended_Pictographic}/gu, '')
-            .replace(/\uFE0F/g, '');
-
-        const raw = await window.electronAPI.readFileContent(filePath);
-        const content = sanitize(raw ?? '');
-
-        // Write back to disk if sanitization changed the content
-        if (raw !== null && content !== raw) {
-          await window.electronAPI.writeFileContent(filePath, content);
-        }
-
-        const title = await window.electronAPI.getFileBasename(filePath);
-
-        // Create a temp note
-        const tempNote = await window.electronAPI.createTempNote(title, filePath, 'utf8');
-        if (tempNote) {
-          // Save the content to the temp note
-          await window.electronAPI.saveNote(tempNote.id, content);
-
-          // Switch to the new temp note
-          setSelectedNote(tempNote);
-          setSnapshots([]);
-          setTimeMachineIndex(-1);
-          setViewMode('latest');
-          setRefreshKey(k => k + 1);
-          setHasAnyNotes(true);
-        }
-      } catch (err) {
-        console.warn('Failed to open .md file:', filePath, err);
+      if (existingTempNote) {
+        // Switch to existing temp note
+        setSelectedNote(existingTempNote);
+        setSnapshots([]);
+        setTimeMachineIndex(-1);
+        setViewMode('latest');
+        setRefreshKey(k => k + 1);
+        return;
       }
-    };
 
+      // Strip BOM, CRLF, HTML tags, emojis, and variation selectors
+      const sanitize = (raw: string): string =>
+        raw
+          .replace(/^\uFEFF/, '')
+          .replace(/\r\n/g, '\n')
+          .replace(/<[^>]*>/g, '')
+          .replace(/\p{Extended_Pictographic}/gu, '')
+          .replace(/\uFE0F/g, '');
+
+      const raw = await window.electronAPI.readFileContent(filePath);
+      if (raw === null) return;
+      const content = sanitize(raw);
+      const wasModified = content !== raw;
+
+      const title = await window.electronAPI.getFileBasename(filePath);
+
+      // Create a temp note
+      const tempNote = await window.electronAPI.createTempNote(title, filePath, 'utf8');
+      if (tempNote) {
+        // If the file was sanitized/modified from original, ensure we flag it
+        if (wasModified) {
+          tempNote.hasUnsavedChanges = true;
+        }
+
+        // Save the content to the temp note (updates db)
+        await window.electronAPI.saveNote(tempNote.id, content);
+        
+        if (wasModified) {
+          // After saving to db, explicitely update the state to indicate unsaved changes (since saveNote clears the flag if it's the same as what's just been saved in memory)
+          await window.electronAPI.updateTempNoteState(tempNote.id, true, tempNote.syncMode || false);
+        }
+
+        // Switch to the new temp note
+        setSelectedNote(tempNote);
+        setSnapshots([]);
+        setTimeMachineIndex(-1);
+        setViewMode('latest');
+        setRefreshKey(k => k + 1);
+        setHasAnyNotes(true);
+      }
+    } catch (err) {
+      console.warn('Failed to open .md file:', filePath, err);
+    }
+  }, []);
+
+  useEffect(() => {
+    const ipcHandler = (_event: any, filePath: string) => handleOpenMdFile(filePath);
     // Listen for open-md-file events from main process
-    (window as any).electronAPI.onOpenMdFile(handleOpenMdFile);
+    (window as any).electronAPI.onOpenMdFile(ipcHandler);
 
     return () => {
       // Cleanup if needed
     };
-  }, []);
+  }, [handleOpenMdFile]);
 
   const handleCreateNote = async () => {
     try {
@@ -886,6 +894,7 @@ export const App: React.FC = () => {
         <MarkdownEditor
           note={selectedNote}
           onNoteUpdate={handleNoteUpdate}
+          onOpenExternalFile={handleOpenMdFile}
           showPreview={showPreview}
           onTogglePreview={(next: boolean) => togglePreview(next)}
           hasAnyNotes={hasAnyNotes}

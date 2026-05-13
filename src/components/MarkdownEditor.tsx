@@ -579,6 +579,7 @@ interface MarkdownEditorProps {
   timeMachineSnapshotContent?: string | null;
   onTimeMachineInterrupt?: () => void;
   timelineProps?: TimelineProps;
+  onOpenExternalFile?: (filePath: string) => void;
 }
 
 type EditState = {
@@ -610,7 +611,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   autoSaveEnabled = true,
   timeMachineSnapshotContent,
   onTimeMachineInterrupt,
-  timelineProps
+  timelineProps,
+  onOpenExternalFile
 }) => {
   const [content, setContent] = useState('');
   const [caretPos, setCaretPos] = useState(0);
@@ -815,15 +817,6 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     const file = files[0];
     if (!file.name.toLowerCase().endsWith('.md')) return;
 
-    // Strip BOM, CRLF, HTML tags, emojis, and variation selectors from opened file content
-    const sanitize = (raw: string): string =>
-      raw
-        .replace(/^\uFEFF/, '')
-        .replace(/\r\n/g, '\n')
-        .replace(/<[^>]*>/g, '')
-        .replace(/\p{Extended_Pictographic}/gu, '')
-        .replace(/\uFE0F/g, '');
-
     try {
       // Use webUtils.getPathForFile (Electron 28+) via preload bridge
       let filePath = '';
@@ -838,37 +831,16 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         filePath.trim() !== '' &&
         (filePath.includes('\\') || filePath.includes('/') || /^[A-Za-z]:/.test(filePath) || filePath.startsWith('//'));
 
-      if (!hasValidPath) {
-        // Fallback: use Web File API and create a regular (non-temp) note
-        const raw = await file.text();
-        const content = sanitize(raw);
-        const title = file.name.replace(/\.md$/, '');
-        const newNote = await window.electronAPI.createNote(title);
-        if (newNote) {
-          await window.electronAPI.saveNote(newNote.id, content);
-          if (onNoteUpdate) onNoteUpdate(newNote);
-        }
-        return;
-      }
-
-      // Read, sanitize, and optionally write back content
-      const raw = await window.electronAPI.readFileContent(filePath);
-      if (raw === null) return;
-      const content = sanitize(raw);
-      if (content !== raw) {
-        await window.electronAPI.writeFileContent(filePath, content);
-      }
-
-      const title = await window.electronAPI.getFileBasename(filePath);
-      const newNote = await window.electronAPI.createTempNote(title, filePath, 'utf8');
-      if (newNote) {
-        await window.electronAPI.saveNote(newNote.id, content);
-        if (onNoteUpdate) onNoteUpdate(newNote);
+      if (hasValidPath && onOpenExternalFile) {
+        // Delegate effectively exactly to OS file open handler so it traverses the same pipeline
+        onOpenExternalFile(filePath);
+      } else {
+        console.warn('Cannot open file: no valid file path found in drop event.');
       }
     } catch (err) {
-      console.warn('Failed to create note from dropped file:', err);
+      console.warn('Failed to handle dropped file:', err);
     }
-  }, [onNoteUpdate]);
+  }, [onOpenExternalFile]);
 
   useEffect(() => {
     if (!note) {
