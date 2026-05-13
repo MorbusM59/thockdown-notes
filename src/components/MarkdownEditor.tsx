@@ -558,6 +558,17 @@ export interface TimelineProps {
   onManualSnapshot: () => void;
 }
 
+export function extractNoteTitle(text: string): string {
+  const lines = text.split('\n');
+  const firstLine = lines[0] || '';
+  if (firstLine.startsWith('# ')) {
+    return firstLine.substring(2).trim() || 'Untitled';
+  } else if (firstLine.trim().length > 0) {
+    return firstLine.trim();
+  }
+  return 'Untitled';
+}
+
 interface MarkdownEditorProps {
   note: Note | null;
   onNoteUpdate?: (note: Note) => void;
@@ -1520,12 +1531,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
   // extract title
   const extractTitle = useCallback((text: string): string => {
-    const lines = text.split('\n');
-    const firstLine = lines[0] || '';
-    if (firstLine.startsWith('# ')) {
-      return firstLine.substring(2).trim();
-    }
-    return 'Untitled';
+    return extractNoteTitle(text);
   }, []);
 
   // autoSave (returns a promise)

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Note } from '../shared/types';
 import { Sidebar } from './Sidebar';
-import { MarkdownEditor, TimelineProps } from './MarkdownEditor';
+import { MarkdownEditor, TimelineProps, extractNoteTitle } from './MarkdownEditor';
 import { TagInput } from './TagInput';
 import {
   FILTER_MONTHS,
@@ -324,11 +324,18 @@ export const App: React.FC = () => {
       // 1. Get the current content
       const content = await window.electronAPI.loadNote(selectedNote.id);
 
+      // Extract title from first line using shared logic
+      const title = extractNoteTitle(content || '');
+
       // 2. Create a new note
-      const newNote = await window.electronAPI.createNote('Untitled');
+      const newNote = await window.electronAPI.createNote(title);
       
       // 3. Paste the contents
       await window.electronAPI.saveNote(newNote.id, content || '# ');
+
+      // Also update the title in db immediately to reflect in UI
+      await window.electronAPI.updateNoteTitle(newNote.id, title);
+      newNote.title = title; // update local object to reflect immediately
 
       // 4. Close the old temp note
       await window.electronAPI.deleteTempNote(selectedNote.id);
