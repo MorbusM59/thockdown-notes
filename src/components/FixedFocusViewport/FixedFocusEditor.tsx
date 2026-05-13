@@ -584,12 +584,25 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     const el = centerInputRef.current;
     if (!el) return;
     if (ceGetText(el) !== text) {
-      const savedSel = ceGetSelection(el);
       ceSetText(el, text);
-      if (savedSel && isFocused) {
-        ceSetSelection(el, savedSel.start, savedSel.end);
+      if (isFocused) {
+        // Use React-state selection positions (from the closure of this render),
+        // NOT ceGetSelection(el). For handleBeforeInput-handled keys, the browser
+        // never mutates the DOM (e.preventDefault() was called), so the DOM
+        // selection is stale (pre-keystroke position). Using stale savedSel would
+        // restore the wrong position → handleSelect fires → syncSelectionState
+        // overwrites the correct selection → cascade of state corrections →
+        // "Maximum update depth exceeded" under rapid/held-key input.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        ceSetSelection(el, selectionStart, selectionEnd);
       }
     }
+  // selectionStart/selectionEnd are intentionally read from the current render's
+  // closure but NOT listed as deps: this effect must only run when `text` changes.
+  // At that point the closure already holds the correct new positions. Adding them
+  // to deps would re-run this effect on every caret move (expensive ceGetText call
+  // on every selection change).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
 
   // No custom caret animation required when using native caret.

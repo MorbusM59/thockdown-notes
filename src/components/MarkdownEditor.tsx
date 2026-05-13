@@ -1739,7 +1739,6 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       newSelectionEnd = end + before.length;
     }
 
-    setContent(newText);
     handleContentChange(newText);
 
     scheduleTimeout(() => {
@@ -1749,21 +1748,34 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   };
 
   const insertAtCursor = (text: string, historyReason?: HistoryBoundaryReason) => {
-    const start = selectionStart;
-    const end = selectionEnd;
-    const newText = content.substring(0, start) + text + content.substring(end);
-    const afterSnapshot = buildSnapshot(newText, start + text.length, start + text.length);
+    // Read from live refs so rapid successive calls (e.g. holding Ctrl+V) get
+    // the correct current values rather than stale React state from the last render.
+    const start = liveSelectionStartRef.current;
+    const end = liveSelectionEndRef.current;
+    const currentContent = contentRef.current;
+    const newText = currentContent.substring(0, start) + text + currentContent.substring(end);
+    const newCursorPos = start + text.length;
+    const afterSnapshot = buildSnapshot(newText, newCursorPos, newCursorPos);
+
+    // Update refs synchronously so the next rapid paste in the same frame sees
+    // the correct position and content without waiting for React to re-render.
+    contentRef.current = newText;
+    liveSelectionStartRef.current = newCursorPos;
+    liveSelectionEndRef.current = newCursorPos;
+
     // mark this as a programmatic insert so autosize/ensureCaretVisible
     // triggered by the content-change effect do not run and cause jumps
     programmaticInsertRef.current = true;
-    setContent(newText);
+    // Only call handleContentChange (not setContent directly) — handleContentChange
+    // already calls setContent internally. Calling both caused a double setState
+    // which triggered "Maximum update depth exceeded" on rapid pastes.
     handleContentChange(newText);
     if (historyReason) {
       recordHistoryEntry(historyReason, lastCommittedSnapshotRef.current, afterSnapshot);
     }
     scheduleTimeout(() => {
       textareaRef.current?.focus();
-      setTextareaSelection(start + text.length, start + text.length);
+      setTextareaSelection(newCursorPos, newCursorPos);
       autosizeTextarea(null);
       ensureCaretVisible();
       programmaticInsertRef.current = false;
@@ -1798,7 +1810,6 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     }
 
     const newText = content.substring(0, lineStart) + newLines.join('\n') + content.substring(actualLineEnd);
-    setContent(newText);
     handleContentChange(newText);
 
     scheduleTimeout(() => {
@@ -1829,7 +1840,6 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       newCursorPos = headingMatch ? start - headingMatch[0].length + prefix.length : start + prefix.length;
     }
 
-    setContent(newText);
     handleContentChange(newText);
 
     scheduleTimeout(() => {
@@ -2058,9 +2068,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       recordHistoryEntry('enter', beforeSnapshot, afterSnapshot);
 
       programmaticInsertRef.current = true;
-      setContent(newText);
       handleContentChange(newText);
-      
       scheduleTimeout(() => {
         el.focus();
         setTextareaSelection(newCursorPos, newCursorPos);
@@ -2144,9 +2152,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       recordHistoryEntry('tab', beforeSnapshot, afterSnapshot);
 
       programmaticInsertRef.current = true;
-      setContent(newText);
       handleContentChange(newText);
-
       scheduleTimeout(() => {
         el.focus();
         setTextareaSelection(newStart, newEnd);
