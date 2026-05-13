@@ -741,33 +741,15 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     editHistoryCountRef.current = undoStackRef.current.length + redoStackRef.current.length;
   }, []);
 
-  const bundleRecentChars = useCallback(() => {
-    const stack = undoStackRef.current;
-    if (stack.length < 2) return;
-    let i = stack.length - 1;
-    while (i >= 0 && stack[i].type === 'char') { i--; }
-    const charCount = stack.length - 1 - i;
-    if (charCount > 1) {
-      const firstCharIdx = i + 1;
-      const firstCharSnapshot = stack[firstCharIdx].snapshot;
-      let totalDiff = 0;
-      for (let j = firstCharIdx; j < stack.length; j++) {
-        totalDiff += stack[j].diff;
-      }
-      stack.splice(firstCharIdx, charCount, { type: 'bundled', snapshot: firstCharSnapshot, diff: totalDiff });
-    }
-  }, []);
-
   const recordHistoryEntry = useCallback((reason: HistoryBoundaryReason, before: EditSnapshot, after: EditSnapshot) => {
     if (!note || before.content === after.content) {
       lastCommittedSnapshotRef.current = after;
       return;
     }
-    // calculate simple length diff
     const diff = Math.abs(after.content.length - before.content.length);
-    let type: 'char' | 'paste' | 'bundled' | 'boundary' = 'char';
+    let type: 'char' | 'paste' | 'bundled' | 'boundary' = 'boundary';
     if (reason === 'paste') type = 'paste';
-    else if (reason === 'enter' || reason === 'space' || reason === 'tab') type = 'boundary';
+    else if (reason === 'char') type = 'char';
     
     pushHistorySnapshot('undo', type, before, diff);
     redoStackRef.current = []; // clear redo on new action
@@ -2031,8 +2013,8 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       return;
     }
 
-    if (e.key === ' ' || e.key === 'Enter' || e.key === 'Tab') {
-      bundleRecentChars();
+    if (e.key === ' ') {
+      requestHistoryBoundary('space');
     }
 
     if (e.key === 'Enter') {
@@ -2847,14 +2829,9 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             onTextChange={(newText, newSelectionStart, newSelectionEnd) => {
               if (isTimeTravelLocked) return;
               onTimeMachineInterrupt?.();
-              const beforeSnapshot = lastCommittedSnapshotRef.current;
-              if (beforeSnapshot.content !== newText) {
-                const diff = Math.abs(newText.length - beforeSnapshot.content.length);
-                const reason = diff > 10 ? 'paste' : 'char';
-                const afterSnapshot = buildSnapshot(newText, newSelectionStart, newSelectionEnd);
-                recordHistoryEntry(reason, beforeSnapshot, afterSnapshot);
-              }
+              
               handleContentChange(newText);
+              finalizePendingNativeBoundary(newText, newSelectionStart, newSelectionEnd);
               syncSelectionState(newSelectionStart, newSelectionEnd);
               checkCursorPosition();
             }}
