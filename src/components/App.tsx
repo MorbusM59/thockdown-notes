@@ -309,6 +309,46 @@ export const App: React.FC = () => {
     setHasAnyNotes(true);
   };
 
+  const handleConvertTempNote = async () => {
+    if (!selectedNote || !selectedNote.isTemp) return;
+
+    try {
+      await (window as any).electronAPI.requestForceSave();
+    } catch (err) {
+      console.warn('requestForceSave failed', err);
+    }
+
+    if (!isMountedRef.current) return;
+    
+    try {
+      // 1. Get the current content
+      const content = await window.electronAPI.loadNote(selectedNote.id);
+
+      // 2. Create a new note
+      const newNote = await window.electronAPI.createNote('Untitled');
+      
+      // 3. Paste the contents
+      await window.electronAPI.saveNote(newNote.id, content || '# ');
+
+      // 4. Close the old temp note
+      await window.electronAPI.deleteTempNote(selectedNote.id);
+
+      if (!isMountedRef.current) return;
+      setShowPreview(false);
+      localStorage.setItem('markdown-show-preview', 'false');
+
+      // 5. Select the new file
+      setSelectedNote(newNote);
+      setSnapshots([]);
+      setTimeMachineIndex(-1);
+      setViewMode('latest');
+      setRefreshKey(k => k + 1);
+      setHasAnyNotes(true);
+    } catch (err) {
+      console.error('Failed to convert temp note', err);
+    }
+  };
+
   const handleSelectNote = async (note: Note) => {
     try {
       await (window as any).electronAPI.requestForceSave();
@@ -773,7 +813,13 @@ export const App: React.FC = () => {
 
       {/* Tag input */}
       <div className="tag-input-grid" style={{ gridArea: 'taginput' }}>
-          <TagInput note={selectedNote} onTagsChanged={handleSidebarRefresh} refreshTrigger={sidebarRefreshTrigger} hasAnyNotes={hasAnyNotes} />
+          <TagInput 
+            note={selectedNote} 
+            onTagsChanged={handleSidebarRefresh} 
+            refreshTrigger={sidebarRefreshTrigger} 
+            hasAnyNotes={hasAnyNotes} 
+            onConvertTempNote={handleConvertTempNote}
+          />
       </div>
 
       {/* Left divider between tag and suggested (draggable) */}

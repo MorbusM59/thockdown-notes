@@ -10,6 +10,7 @@ interface TagInputProps {
 
 interface TagInputPropsExtended extends TagInputProps {
   hasAnyNotes?: boolean;
+  onConvertTempNote?: () => void;
 }
 
 /*
@@ -19,7 +20,7 @@ interface TagInputPropsExtended extends TagInputProps {
   refreshTrigger: when parent increments this, component reloads tags.
 */
 
-export const TagInput: React.FC<TagInputPropsExtended> = ({ note, onTagsChanged, refreshTrigger, hasAnyNotes }) => {
+export const TagInput: React.FC<TagInputPropsExtended> = ({ note, onTagsChanged, refreshTrigger, hasAnyNotes, onConvertTempNote }) => {
   const [inputValue, setInputValue] = useState('');
   const [noteTags, setNoteTags] = useState<NoteTag[]>([]);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -258,20 +259,9 @@ export const TagInput: React.FC<TagInputPropsExtended> = ({ note, onTagsChanged,
           {!!note.isTemp && (
             <div
               className="tag-pill active protected temp"
-              title="Temp note. Click to save as a permanent note"
-              onClick={async () => {
-                try {
-                  const result = await window.electronAPI.showSaveDialog({
-                    title: 'Save note as...',
-                    defaultPath: note.externalPath || 'note.md',
-                    filters: [{ name: 'Markdown', extensions: ['md'] }],
-                  });
-                  if (!result || result.canceled || !result.filePath) return;
-                  await window.electronAPI.convertTempNoteToRegular(note.id, result.filePath);
-                  if (onTagsChanged) onTagsChanged();
-                } catch (err) {
-                  console.warn('convertTempNoteToRegular failed', err);
-                }
+              title="Temp note. Click to convert into a regular note"
+              onClick={() => {
+                if (onConvertTempNote) onConvertTempNote();
               }}
             >
               temp
