@@ -1770,6 +1770,63 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
       return;
     }
 
+    // ── Slice-boundary cross-edits ──────────────────────────────────────────
+    // The contenteditable holds only the visible center slice.  At the very
+    // start/end of that slice, the native browser cannot see the adjacent
+    // characters that live in the top/bottom zones, so Delete / Backspace /
+    // ArrowLeft / ArrowRight silently no-op at the boundary.  Intercept those
+    // cases and apply the edit / caret move against the full document text.
+    if (!e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      const collapsed = selectionStart === selectionEnd;
+      const sliceEnd = centerCharsOffset + centerText.length;
+      const atSliceStart = collapsed && caretPos === centerCharsOffset;
+      const atSliceEnd = collapsed && caretPos === sliceEnd;
+
+      if (e.key === 'Delete' && atSliceEnd && caretPos < text.length) {
+        e.preventDefault();
+        const newText = text.slice(0, caretPos) + text.slice(caretPos + 1);
+        onTextChange(newText, caretPos, caretPos);
+        return;
+      }
+
+      if (e.key === 'Backspace' && atSliceStart && caretPos > 0) {
+        e.preventDefault();
+        const newText = text.slice(0, caretPos - 1) + text.slice(caretPos);
+        const nextCaret = caretPos - 1;
+        onTextChange(newText, nextCaret, nextCaret);
+        // Caret has crossed back into what was the top zone; scroll the viewport
+        // up one row so the new caret position remains inside the center.
+        setViewportStartRow(row => Math.max(0, row - 1));
+        return;
+      }
+
+      if (e.key === 'ArrowRight' && atSliceEnd && caretPos < text.length) {
+        e.preventDefault();
+        const next = caretPos + 1;
+        boundaryCaretRowPreferenceRef.current = null;
+        pendingAutomaticCaretPosRef.current = next;
+        onCaretChange?.(next);
+        const nextRow = findRowForCharIndex(next, wrappedLines);
+        if (nextRow >= effectiveCenterStartRow + viewport.centerRowCount) {
+          setViewportStartRow(row => Math.min(maxStartRef.current, row + 1));
+        }
+        return;
+      }
+
+      if (e.key === 'ArrowLeft' && atSliceStart && caretPos > 0) {
+        e.preventDefault();
+        const next = caretPos - 1;
+        boundaryCaretRowPreferenceRef.current = null;
+        pendingAutomaticCaretPosRef.current = next;
+        onCaretChange?.(next);
+        const nextRow = findRowForCharIndex(next, wrappedLines);
+        if (nextRow < effectiveCenterStartRow) {
+          setViewportStartRow(row => Math.max(0, row - 1));
+        }
+        return;
+      }
+    }
+
     if (!(e.shiftKey || e.ctrlKey || e.altKey)) {
       if (e.key === 'ArrowUp') {
         e.preventDefault();
