@@ -1111,22 +1111,6 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     onTotalWrappedRowCountChange?.(wrappedLines.length);
   }, [wrappedLines.length, onTotalWrappedRowCountChange]);
 
-  // Sync selection state into the contenteditable DOM (e.g. after programmatic
-  // caret moves from Up/Down/Home/End keys and after undo/redo).
-  useEffect(() => {
-    const el = centerInputRef.current;
-    if (!el || !isFocused) return;
-    const live = ceGetSelection(el);
-    const relStart = Math.max(0, selectionStart - centerCharsOffset);
-    const relEnd = Math.max(0, selectionEnd - centerCharsOffset);
-    if (!live || live.start !== relStart || live.end !== relEnd) {
-      ceSetSelection(el, relStart, relEnd);
-    }
-    // Suppress any internal scroll the browser may apply
-    if (el.scrollTop) el.scrollTop = 0;
-    if (el.scrollLeft) el.scrollLeft = 0;
-  }, [isFocused, selectionEnd, selectionStart, centerCharsOffset]);
-
   // Canvas POC removed — using DOM overlay caret only.
 
   // Rectangle overlay caret with heartbeat animation.
@@ -1157,7 +1141,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
       // We read the live selection from DOM to avoid React render lag causing broken pairs
       // (e.g. DOM rect returns left from next line, but React state holds gridRow from prev line).
       const liveSel = ceGetSelection(el);
-      const livePos = liveSel ? liveSel.start : selectionStart;
+      const livePos = liveSel ? (liveSel.start + centerCharsOffset) : selectionStart;
       const overlayCaretCell = getCaretGridCell(livePos, wrappedLines, text, boundaryCaretRowPreferenceRef.current);
 
       // Horizontal metrics
@@ -1719,11 +1703,9 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
 
     if (!(e.shiftKey || e.ctrlKey || e.altKey)) {
       if (e.key === 'ArrowUp') {
-        e.preventDefault();
         const caretRow = resolveRowForCaretIndex(caretPos, wrappedLines, boundaryCaretRowPreferenceRef.current);
         if (caretRow > 0) {
           const prevRow = caretRow - 1;
-          moveCaretToWrappedRow(prevRow);
           if (prevRow < centerStartRow) {
             setViewportStartRow(row => Math.max(0, row - 1));
           }
@@ -1732,11 +1714,9 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
       }
 
       if (e.key === 'ArrowDown') {
-        e.preventDefault();
         const caretRow = resolveRowForCaretIndex(caretPos, wrappedLines, boundaryCaretRowPreferenceRef.current);
         if (caretRow < wrappedLines.length - 1) {
           const nextRow = caretRow + 1;
-          moveCaretToWrappedRow(nextRow);
           if (nextRow >= effectiveCenterStartRow + viewport.centerRowCount) {
             setViewportStartRow(row => Math.min(Math.max(maxStartRef.current, row), row + 1));
           }
@@ -1894,61 +1874,60 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
           const el = centerInputRef.current;
           if (el && el.contains(pos.offsetNode)) {
             const charIndex = ceCharOffset(el, pos.offsetNode, pos.offset);
-            return Math.max(0, Math.min(text.length, charIndex));
+              return Math.max(0, Math.min(text.length, charIndex + centerCharsOffset));
+            }
+          }
+        } else if (typeof doc.caretRangeFromPoint === 'function') {
+          // WebKit / older: caretRangeFromPoint
+          const range: Range | null = doc.caretRangeFromPoint(clientX, clientY);
+          if (range && range.startContainer) {
+            const el = centerInputRef.current;
+            if (el && el.contains(range.startContainer)) {
+              const charIndex = ceCharOffset(el, range.startContainer, range.startOffset);
+              return Math.max(0, Math.min(text.length, charIndex + centerCharsOffset));
+            }
           }
         }
-      } else if (typeof doc.caretRangeFromPoint === 'function') {
-        // WebKit / older: caretRangeFromPoint
-        const range: Range | null = doc.caretRangeFromPoint(clientX, clientY);
-        if (range && range.startContainer) {
-          const el = centerInputRef.current;
-          if (el && el.contains(range.startContainer)) {
-            const charIndex = ceCharOffset(el, range.startContainer, range.startOffset);
-            return Math.max(0, Math.min(text.length, charIndex));
-          }
-        }
+      } catch {
+        // ignore and fall back to grid math
       }
-    } catch {
-      // ignore and fall back to grid math
-    }
 
-    // Fallback: approximate using visible row / cell grid math
-    const targetRowIndex = getVisibleRowIndexForPointer(clientY);
-    const targetRow = wrappedLines[targetRowIndex];
-    if (!targetRow) return 0;
+      // Fallback: approximate using visible row / cell grid math
+      const targetRowIndex = getVisibleRowIndexForPointer(clientY);
+      const targetRow = wrappedLines[targetRowIndex];
+      if (!targetRow) return 0;
 
-    const rootBounds = editorRoot.getBoundingClientRect();
-    const relativeX = clientX - rootBounds.left - leftPaddingPx;
-    const targetCell = Math.max(0, Math.round(relativeX / charCellWidthPx));
-    boundaryCaretRowPreferenceRef.current = targetRowIndex;
-    return getCharIndexForVisualCell(targetRow, targetCell);
-  }, [charCellWidthPx, getCharIndexForVisualCell, getVisibleRowIndexForPointer, leftPaddingPx, wrappedLines]);
-
+      const rootBounds = editorRoot.getBoundingClientRect();
+      const relativeX = clientX - rootBounds.left - leftPaddingPx;
+      const targetCell = Math.max(0, Math.round(relativeX / charCellWidthPx));
+      boundaryCaretRowPreferenceRef.current = targetRowIndex;
+      return getCharIndexForVisualCell(targetRow, targetCell);
+    }, [charCellWidthPx, getCharIndexForVisualCell, getVisibleRowIndexForPointer, leftPaddingPx, wrappedLines, text, centerCharsOffset]);
   const handleCenterContextMenu = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     const editor = event.currentTarget;
     const sel = ceGetSelection(editor);
     if (!sel || sel.start === sel.end) return;
-    const selectionStart = Math.min(sel.start, sel.end);
-    const selectionEnd = Math.max(sel.start, sel.end);
+    const selectionStart = Math.min(sel.start, sel.end) + centerCharsOffset;
+    const selectionEnd = Math.max(sel.start, sel.end) + centerCharsOffset;
 
     const expanded = getRightClickExpandedSelection(selectionStart, selectionEnd);
     const skipped = !expanded || (expanded.start === selectionStart && expanded.end === selectionEnd);
     if (skipped) return;
-  }, [getRightClickExpandedSelection]);
+  }, [getRightClickExpandedSelection, centerCharsOffset]);
 
   const handleCenterPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 2) return;
     const editor = event.currentTarget;
     const sel = ceGetSelection(editor);
     if (sel && sel.start !== sel.end) {
-      const selectionStart = Math.min(sel.start, sel.end);
-      const selectionEnd = Math.max(sel.start, sel.end);
+      const selectionStart = Math.min(sel.start, sel.end) + centerCharsOffset;
+      const selectionEnd = Math.max(sel.start, sel.end) + centerCharsOffset;
       const expanded = getRightClickExpandedSelection(selectionStart, selectionEnd);
       if (expanded && (expanded.start !== selectionStart || expanded.end !== selectionEnd)) {
         event.preventDefault();
         event.stopPropagation();
         editor.focus();
-        ceSetSelection(editor, expanded.start, expanded.end);
+        ceSetSelection(editor, Math.max(0, expanded.start - centerCharsOffset), Math.max(0, expanded.end - centerCharsOffset));
         onSelectionChange?.(expanded.start, expanded.end);
       }
     }
@@ -2217,6 +2196,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
               insetTopPx={topRowsInsetPx}
               leftPaddingPx={leftPaddingPx}
               rightPaddingPx={textareaRightPaddingPx}
+              wrapWidthPx={wrapWidthPx}
               textareaClassName={textareaClassName}
               textareaStyle={textareaStyle}
             />
@@ -2272,12 +2252,12 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
             style={{
               position: 'absolute',
               top: `${textareaTopPx}px`,
-              left: 0,
-              width: '100%',
+              left: `${leftPaddingPx}px`,
+              width: `${wrapWidthPx}px`,
               height: `${textareaHeightPx}px`,
               fontSize: `${fontSizePx}px`,
               lineHeight: `${metrics.rowHeightPx}px`,
-              padding: `0 ${textareaRightPaddingPx}px 0 ${leftPaddingPx}px`,
+              padding: 0,
               margin: 0,
               border: 'none',
               resize: 'none',
@@ -2337,6 +2317,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
               insetTopPx={0}
               leftPaddingPx={leftPaddingPx}
               rightPaddingPx={textareaRightPaddingPx}
+              wrapWidthPx={wrapWidthPx}
               textareaClassName={textareaClassName}
               textareaStyle={textareaStyle}
             />
@@ -2392,6 +2373,7 @@ interface MirroredTextLayerProps {
   insetTopPx?: number;
   leftPaddingPx?: number;
   rightPaddingPx?: number;
+  wrapWidthPx?: number;
   textareaClassName?: string;
   textareaStyle?: React.CSSProperties;
 }
@@ -2406,6 +2388,7 @@ const MirroredTextLayer: React.FC<MirroredTextLayerProps> = ({
   insetTopPx = 0,
   rightPaddingPx = 20,
   leftPaddingPx = 20,
+  wrapWidthPx,
   textareaClassName,
   textareaStyle,
 }) => (
@@ -2426,14 +2409,14 @@ const MirroredTextLayer: React.FC<MirroredTextLayerProps> = ({
       style={{
         position: 'absolute',
         top: isSlicedText ? `${insetTopPx}px` : `${insetTopPx - (startRow * metrics.rowHeightPx)}px`,
-        left: 0,
-        width: '100%',
+        left: wrapWidthPx !== undefined ? `${leftPaddingPx}px` : 0,
+        width: wrapWidthPx !== undefined ? `${wrapWidthPx}px` : '100%',
         height: isSlicedText
           ? `${Math.max(visibleHeightPx, totalWrappedRowCount * metrics.rowHeightPx)}px`
           : `${Math.max(visibleHeightPx, totalWrappedRowCount * metrics.rowHeightPx)}px`,
         fontSize: 'inherit',
         lineHeight: `${metrics.rowHeightPx}px`,
-        padding: `0 ${rightPaddingPx}px 0 ${leftPaddingPx}px`,
+        padding: wrapWidthPx !== undefined ? 0 : `0 ${rightPaddingPx}px 0 ${leftPaddingPx}px`,
         margin: 0,
         border: 'none',
         resize: 'none',
