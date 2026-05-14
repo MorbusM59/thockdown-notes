@@ -135,6 +135,9 @@ function isManagedSentinelBr(node: Node): boolean {
 function ceSetText(el: HTMLElement, text: string): void {
   el.textContent = '';
   if (text.length === 0) {
+    // Empty text node so the caret has a real text-node home; without it,
+    // browsers may refuse to place the caret at all or snap it elsewhere.
+    el.appendChild(document.createTextNode(''));
     const sentinel = document.createElement('br');
     sentinel.dataset['managedLineBreakSentinel'] = '1';
     el.appendChild(sentinel);
@@ -145,6 +148,12 @@ function ceSetText(el: HTMLElement, text: string): void {
   lines.forEach((line, i) => {
     if (line.length > 0) {
       el.appendChild(document.createTextNode(line));
+    } else if (i < lines.length - 1) {
+      // Empty intermediate line — add an empty text node so the caret can land
+      // inside a real text node on that line instead of between adjacent <br>s.
+      // Without this, typing on a blank middle line gets appended to whichever
+      // adjacent text node the browser decides to merge into.
+      el.appendChild(document.createTextNode(''));
     }
     if (i < lines.length - 1) {
       const br = document.createElement('br');
@@ -154,6 +163,12 @@ function ceSetText(el: HTMLElement, text: string): void {
   });
 
   if (text.endsWith('\n')) {
+    // Empty text node BEFORE the sentinel so the caret has a text-node home on
+    // the trailing empty line.  Without this, ceSetSelection lands the caret
+    // at (el, sentinel_index), which browsers interpret as "between the last
+    // <br> and the sentinel <br>" — but on typing they snap the new character
+    // into the previous text node, putting input on the wrong line.
+    el.appendChild(document.createTextNode(''));
     const sentinel = document.createElement('br');
     sentinel.dataset['managedLineBreakSentinel'] = '1';
     el.appendChild(sentinel);
@@ -469,6 +484,11 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   const boundaryCaretRowPreferenceRef = useRef<number | null>(null);
   const pendingAutomaticCaretPosRef = useRef<number | null>(null);
   const pendingPreferredCaretVisualColumnRef = useRef<number | null>(null);
+  // Re-entrancy guard: set to true around our internal ceSetSelection writes so
+  // the synchronous selectionchange / onSelect handlers don't read STALE closure
+  // values (e.g. centerCharsOffset from before a viewport scroll) and report a
+  // bogus selection back to the parent.
+  const programmaticSelectionInFlightRef = useRef(false);
   const latestEffectiveViewportStartRowRef = useRef(0);
   const previousCaretPosRef = useRef(0);
   const previousViewportStartRowRef = useRef(0);
@@ -723,12 +743,24 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
       // We must explicitly sync the DOM to exactly match this center text.
       reportedTextQueueRef.current = []; // flush queue
       if (ceGetText(el) !== centerText) {
-        ceSetText(el, centerText);
-        if (isFocused) {
-          // Use React-state selection positions (from the closure of this render),
-          // NOT ceGetSelection(el).
-          // eslint-disable-next-line react-hooks/exhaustive-deps
-          ceSetSelection(el, Math.max(0, selectionStart - centerCharsOffset), Math.max(0, selectionEnd - centerCharsOffset));
+        programmaticSelectionInFlightRef.current = true;
+        try {
+          ceSetText(el, centerText);
+          if (isFocused) {
+            // Use React-state selection positions (from the closure of this render).
+            // If the selection falls outside the freshly-rendered slice, skip the DOM
+            // selection assignment — the dedicated selection-sync effect will handle
+            // it once the viewport has caught up.  Avoid clamping, which would silently
+            // snap the visible caret to position 0.
+            const relStart = selectionStart - centerCharsOffset;
+            const relEnd = selectionEnd - centerCharsOffset;
+            if (relStart >= 0 && relEnd >= 0 && relStart <= centerText.length && relEnd <= centerText.length) {
+              // eslint-disable-next-line react-hooks/exhaustive-deps
+              ceSetSelection(el, relStart, relEnd);
+            }
+          }
+        } finally {
+          programmaticSelectionInFlightRef.current = false;
         }
       }
     }
@@ -740,7 +772,35 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [centerText]);
 
-  // No custom caret animation required when using native caret.
+  // Sync React selection state into the contenteditable DOM whenever
+  // selectionStart/selectionEnd change (programmatic moves from Up/Down/Home/End,
+  // undo/redo, parent-driven setSelection) OR when the slice offset shifts
+  // (viewport scroll changes which characters live in the DOM).
+  useEffect(() => {
+    const el = centerInputRef.current;
+    if (!el || !isFocused) return;
+    const relStart = selectionStart - centerCharsOffset;
+    const relEnd = selectionEnd - centerCharsOffset;
+    // Selection lies outside the currently-rendered slice — viewport sync logic
+    // (the other useLayoutEffect chains) will adjust the viewport on the next
+    // commit so we'll be re-invoked with a valid slice.  Skip rather than clamp,
+    // because clamping silently snaps the native caret to (0,0).
+    if (relStart < 0 || relEnd < 0 || relStart > centerText.length || relEnd > centerText.length) {
+      return;
+    }
+    const live = ceGetSelection(el);
+    if (!live || live.start !== relStart || live.end !== relEnd) {
+      programmaticSelectionInFlightRef.current = true;
+      try {
+        ceSetSelection(el, relStart, relEnd);
+      } finally {
+        programmaticSelectionInFlightRef.current = false;
+      }
+    }
+    // Suppress any internal scroll the browser may apply
+    if (el.scrollTop) el.scrollTop = 0;
+    if (el.scrollLeft) el.scrollLeft = 0;
+  }, [isFocused, selectionEnd, selectionStart, centerCharsOffset, centerText]);
 
   const lineBreakMarkers = useMemo(() => {
     if (!showLineBreaks) return [] as Array<{ topPx: number; leftPx: number }>;
@@ -1286,7 +1346,8 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
 
     const el = e.currentTarget;
     const newText = ceGetText(el);
-    let sel = ceGetSelection(el);
+    const rawSel = ceGetSelection(el);
+    let sel = rawSel;
     sel = normalizeTrailingNewlineSelection(el, newText, sel);
     const newSelectionStart = sel?.start ?? 0;
     const newSelectionEnd = sel?.end ?? newSelectionStart;
@@ -1297,7 +1358,7 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     const prefix = text.substring(0, centerCharsOffset);
     const suffix = text.substring(centerCharsOffset + centerText.length);
     const globalNewText = prefix + newText + suffix;
-    
+
     onTextChange(globalNewText, newSelectionStart + centerCharsOffset, newSelectionEnd + centerCharsOffset);
   };
 
@@ -1310,6 +1371,14 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   // Track caret changes from mouse clicks / selection
   const handleSelect = (e: React.SyntheticEvent<HTMLDivElement>) => {
     if (selectionDragStateRef.current) return;
+    // When our own selSync / centerTextEffect just wrote the DOM selection,
+    // the resulting synchronous selectionchange event must NOT be reported back
+    // to the parent: this handler's closure may hold a stale centerCharsOffset
+    // from before a viewport scroll, which would compute the wrong global index
+    // and clobber React state.
+    if (programmaticSelectionInFlightRef.current) {
+      return;
+    }
 
     const el = e.currentTarget;
     const sel = ceGetSelection(el);
@@ -1703,9 +1772,11 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
 
     if (!(e.shiftKey || e.ctrlKey || e.altKey)) {
       if (e.key === 'ArrowUp') {
+        e.preventDefault();
         const caretRow = resolveRowForCaretIndex(caretPos, wrappedLines, boundaryCaretRowPreferenceRef.current);
         if (caretRow > 0) {
           const prevRow = caretRow - 1;
+          moveCaretToWrappedRow(prevRow);
           if (prevRow < centerStartRow) {
             setViewportStartRow(row => Math.max(0, row - 1));
           }
@@ -1714,9 +1785,11 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
       }
 
       if (e.key === 'ArrowDown') {
+        e.preventDefault();
         const caretRow = resolveRowForCaretIndex(caretPos, wrappedLines, boundaryCaretRowPreferenceRef.current);
         if (caretRow < wrappedLines.length - 1) {
           const nextRow = caretRow + 1;
+          moveCaretToWrappedRow(nextRow);
           if (nextRow >= effectiveCenterStartRow + viewport.centerRowCount) {
             setViewportStartRow(row => Math.min(Math.max(maxStartRef.current, row), row + 1));
           }
@@ -1874,35 +1947,35 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
           const el = centerInputRef.current;
           if (el && el.contains(pos.offsetNode)) {
             const charIndex = ceCharOffset(el, pos.offsetNode, pos.offset);
-              return Math.max(0, Math.min(text.length, charIndex + centerCharsOffset));
-            }
-          }
-        } else if (typeof doc.caretRangeFromPoint === 'function') {
-          // WebKit / older: caretRangeFromPoint
-          const range: Range | null = doc.caretRangeFromPoint(clientX, clientY);
-          if (range && range.startContainer) {
-            const el = centerInputRef.current;
-            if (el && el.contains(range.startContainer)) {
-              const charIndex = ceCharOffset(el, range.startContainer, range.startOffset);
-              return Math.max(0, Math.min(text.length, charIndex + centerCharsOffset));
-            }
+            return Math.max(0, Math.min(text.length, charIndex + centerCharsOffset));
           }
         }
-      } catch {
-        // ignore and fall back to grid math
+      } else if (typeof doc.caretRangeFromPoint === 'function') {
+        // WebKit / older: caretRangeFromPoint
+        const range: Range | null = doc.caretRangeFromPoint(clientX, clientY);
+        if (range && range.startContainer) {
+          const el = centerInputRef.current;
+          if (el && el.contains(range.startContainer)) {
+            const charIndex = ceCharOffset(el, range.startContainer, range.startOffset);
+            return Math.max(0, Math.min(text.length, charIndex + centerCharsOffset));
+          }
+        }
       }
+    } catch {
+      // ignore and fall back to grid math
+    }
 
-      // Fallback: approximate using visible row / cell grid math
-      const targetRowIndex = getVisibleRowIndexForPointer(clientY);
-      const targetRow = wrappedLines[targetRowIndex];
-      if (!targetRow) return 0;
+    // Fallback: approximate using visible row / cell grid math
+    const targetRowIndex = getVisibleRowIndexForPointer(clientY);
+    const targetRow = wrappedLines[targetRowIndex];
+    if (!targetRow) return 0;
 
-      const rootBounds = editorRoot.getBoundingClientRect();
-      const relativeX = clientX - rootBounds.left - leftPaddingPx;
-      const targetCell = Math.max(0, Math.round(relativeX / charCellWidthPx));
-      boundaryCaretRowPreferenceRef.current = targetRowIndex;
-      return getCharIndexForVisualCell(targetRow, targetCell);
-    }, [charCellWidthPx, getCharIndexForVisualCell, getVisibleRowIndexForPointer, leftPaddingPx, wrappedLines, text, centerCharsOffset]);
+    const rootBounds = editorRoot.getBoundingClientRect();
+    const relativeX = clientX - rootBounds.left - leftPaddingPx;
+    const targetCell = Math.max(0, Math.round(relativeX / charCellWidthPx));
+    boundaryCaretRowPreferenceRef.current = targetRowIndex;
+    return getCharIndexForVisualCell(targetRow, targetCell);
+  }, [charCellWidthPx, getCharIndexForVisualCell, getVisibleRowIndexForPointer, leftPaddingPx, wrappedLines, text, centerCharsOffset]);
   const handleCenterContextMenu = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     const editor = event.currentTarget;
     const sel = ceGetSelection(editor);

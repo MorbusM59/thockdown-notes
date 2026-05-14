@@ -7,7 +7,7 @@ import {
   EditSnapshot,
   Note,
 } from '../shared/types';
-import { FixedFocusEditor, ceGetSelection, ceSetSelection, ceGetText } from './FixedFocusViewport';
+import { FixedFocusEditor, ceGetSelection, ceGetText } from './FixedFocusViewport';
 import './MarkdownEditor.scss';
 import './MarkdownThemes.scss';
 
@@ -705,9 +705,12 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   };
 
   const setTextareaSelection = useCallback((start: number, end = start) => {
-    const el = textareaRef.current;
-    if (!el) return;
-    ceSetSelection(el, start, end);
+    // NOTE: do NOT call ceSetSelection here.  The FixedFocusEditor's contenteditable
+    // only ever contains the currently-visible slice of `content`, so the (start,end)
+    // pair — which are GLOBAL indices into `content` — cannot be applied to the DOM
+    // directly without first subtracting `centerCharsOffset`.  Translation lives
+    // inside the editor; updating React state below triggers its selection-sync
+    // useEffect which performs the correct global→slice mapping.
     setSelectionStart(start);
     setSelectionEnd(end);
     setCaretPos(end);
@@ -2143,37 +2146,43 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   };
 
   // selection listeners
+  //
+  // PRE-FFE NOTE: this effect used to subscribe to native click/keyup/select
+  // events on the textarea and read `ceGetSelection(el)` to push the caret
+  // position back into React state.  That path is now WRONG: `textareaRef`
+  // points at the FixedFocusEditor contenteditable, which only contains the
+  // currently-visible *slice* of `content`.  `ceGetSelection` therefore
+  // returns slice-relative offsets, and calling `syncSelectionState` with
+  // them silently subtracts `centerCharsOffset` from the true caret position
+  // every time the viewport has scrolled.  Symptom: after each keystroke at
+  // the bottom of the visible area, the caret jumps backwards by exactly
+  // `centerCharsOffset` characters.
+  //
+  // FixedFocusEditor already invokes `onSelectionChange` / `onTextChange`
+  // with correctly-translated GLOBAL indices, and the props wired below
+  // (`syncSelectionState`) keep React state authoritative.  We just need to
+  // run the side-effects (cursor/formatting checks + debounced save) off
+  // that authoritative state.
   useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    const handleSelectionChange = () => {
-      const sel = ceGetSelection(el);
-      if (!sel) return;
-      syncSelectionState(sel.start, sel.end);
-      checkCursorPosition(sel.start);
-      checkFormatting(sel.start, sel.end);
+    if (programmaticInsertRef.current) return;
+    checkCursorPosition(selectionStart);
+    checkFormatting(selectionStart, selectionEnd);
 
-      // debounce save edit state for current note
-      if (note?.id != null) {
-        if (selectionSaveTimeout.current) clearTimeout(selectionSaveTimeout.current);
-            selectionSaveTimeout.current = scheduleTimeout(() => {
-              void saveEditState(note.id as number);
-            }, 250) as unknown as ReturnType<typeof setTimeout>;
-      }
-    };
-    el.addEventListener('click', handleSelectionChange);
-    el.addEventListener('keyup', handleSelectionChange);
-    el.addEventListener('select', handleSelectionChange);
+    if (note?.id != null) {
+      if (selectionSaveTimeout.current) clearTimeout(selectionSaveTimeout.current);
+      selectionSaveTimeout.current = scheduleTimeout(() => {
+        void saveEditState(note.id as number);
+      }, 250) as unknown as ReturnType<typeof setTimeout>;
+    }
+
     return () => {
-      el.removeEventListener('click', handleSelectionChange);
-      el.removeEventListener('keyup', handleSelectionChange);
-      el.removeEventListener('select', handleSelectionChange);
       if (selectionSaveTimeout.current) {
         clearTimeout(selectionSaveTimeout.current);
         selectionSaveTimeout.current = null;
       }
     };
-  }, [checkCursorPosition, checkFormatting, note, syncSelectionState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectionStart, selectionEnd, note?.id]);
 
   // trigger auto-save when moving off first line
   useEffect(() => {
