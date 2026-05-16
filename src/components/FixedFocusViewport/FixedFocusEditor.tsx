@@ -210,7 +210,21 @@ function normalizeEditableDom(el: HTMLElement, text: string, selection: { start:
     node = walker.nextNode();
   }
 
-  if (!hasEmptyTextNodes) return;
+  // Detect stale managed sentinel <br>: ceSetText only appends one when the
+  // text ends with '\n' (or is empty).  A native edit (e.g. Backspace that
+  // removes a trailing '\n') can leave a previous sentinel behind in the DOM
+  // even though ceGetText filters it out, which makes the text-equality check
+  // in the centerText sync effect pass while a phantom blank row remains
+  // visible — the row is not selectable by click, and edit keys that target
+  // text past the slice end become no-ops because the model believes the row
+  // doesn't exist.  Symmetrically, native typing can leave the DOM in a state
+  // where a sentinel is required but missing.
+  const lastChild = el.lastChild;
+  const hasSentinel = lastChild != null && isManagedSentinelBr(lastChild);
+  const wantsSentinel = text.length === 0 || text.endsWith('\n');
+  const sentinelMismatch = hasSentinel !== wantsSentinel;
+
+  if (!hasEmptyTextNodes && !sentinelMismatch) return;
 
   ceSetText(el, text);
   if (selection) {
@@ -592,6 +606,12 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
       || lp.resolvedBottomRowCount !== resolvedBottomRowCount
       || lp.charCellWidthPx !== charCellWidthPx
     ) {
+       
+      console.log('[FFE modelRecreate]', {
+        reason: !modelRef.current ? 'init' : 'layoutChange',
+        before: { ...lp },
+        after: { fontSizePx, spacingPreset, wrapWidthPx, drawableHeightPx, fontFamily, resolvedTopRowCount, resolvedBottomRowCount, charCellWidthPx },
+      });
       modelRef.current = new FixedFocusViewportModel(
         fontSizePx,
         spacingPreset,
@@ -656,6 +676,22 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
   const bottomText = bottomRows.length > 0
     ? text.slice(bottomRows[0].startCharIndex, bottomRows[bottomRows.length - 1].endCharIndex)
     : '';
+
+  // ─── DEBUG: render-time layout snapshot ─────────────────────────────────
+   
+  console.log('[FFE render]', {
+    textLen: text.length,
+    wrappedLinesLen: wrappedLines.length,
+    centerStartRow: viewport.centerStartRow,
+    centerRowCount: viewport.centerRowCount,
+    centerRowsLen: centerRows.length,
+    bottomRowsLen: bottomRows.length,
+    centerHeightPx: layout.centerHeightPx,
+    bottomHeightPx: layout.bottomHeightPx,
+    topHeightPx: layout.topHeightPx,
+    centerText: JSON.stringify(centerText.length > 40 ? centerText.slice(0, 20) + '…' + centerText.slice(-20) : centerText),
+    bottomText: JSON.stringify(bottomText.length > 40 ? bottomText.slice(0, 20) + '…' + bottomText.slice(-20) : bottomText),
+  });
 
   useEffect(() => {
     if (!editorApiRef) return;
@@ -733,6 +769,52 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     // Check if the current React `text` is a state we generated during typing
     // Now comparing against centerText since reportedTextQueueRef gets the newText slice
     const queueIndex = reportedTextQueueRef.current.indexOf(centerText);
+    // ─── DEBUG ──────────────────────────────────────────────────────────────
+    const lastChildEff = el.lastChild;
+    const hasSentinelEff = lastChildEff != null && isManagedSentinelBr(lastChildEff);
+    const wantsSentinelEff = centerText.length === 0 || centerText.endsWith('\n');
+    const ceGetTextEff = ceGetText(el);
+    const domEff = Array.from(el.childNodes).map(n => {
+      if (n.nodeType === Node.TEXT_NODE) return `TXT(${JSON.stringify((n as Text).data)})`;
+      if ((n as Element).tagName === 'BR') {
+        return isManagedSentinelBr(n) ? 'BR.sentinel' : 'BR';
+      }
+      return `${(n as Element).tagName}`;
+    }).join(' | ');
+
+    // First-mismatch index between ceGetText and centerText
+    let mismatchIdx = -1;
+    const minLen = Math.min(ceGetTextEff.length, centerText.length);
+    for (let i = 0; i < minLen; i++) {
+      if (ceGetTextEff[i] !== centerText[i]) { mismatchIdx = i; break; }
+    }
+    if (mismatchIdx === -1 && ceGetTextEff.length !== centerText.length) mismatchIdx = minLen;
+
+    // First-mismatch index between queue[0] and centerText (to diagnose queue miss)
+    const q0 = reportedTextQueueRef.current[0] ?? '';
+    let queueMismatchIdx = -1;
+    const minLenQ = Math.min(q0.length, centerText.length);
+    for (let i = 0; i < minLenQ; i++) {
+      if (q0[i] !== centerText[i]) { queueMismatchIdx = i; break; }
+    }
+    if (queueMismatchIdx === -1 && q0.length !== centerText.length) queueMismatchIdx = minLenQ;
+     
+    console.log('[FFE centerTextEffect]', {
+      centerTextLen: centerText.length,
+      ceGetTextEffLen: ceGetTextEff.length,
+      queueLen: reportedTextQueueRef.current.length,
+      queueIndex,
+      queue0Len: q0.length,
+      mismatchIdx,
+      queueMismatchIdx,
+      mismatchSliceCe: mismatchIdx >= 0 ? JSON.stringify(ceGetTextEff.slice(Math.max(0, mismatchIdx - 5), mismatchIdx + 10)) : null,
+      mismatchSliceCenter: mismatchIdx >= 0 ? JSON.stringify(centerText.slice(Math.max(0, mismatchIdx - 5), mismatchIdx + 10)) : null,
+      queueMismatchSliceQ: queueMismatchIdx >= 0 ? JSON.stringify(q0.slice(Math.max(0, queueMismatchIdx - 5), queueMismatchIdx + 10)) : null,
+      queueMismatchSliceCenter: queueMismatchIdx >= 0 ? JSON.stringify(centerText.slice(Math.max(0, queueMismatchIdx - 5), queueMismatchIdx + 10)) : null,
+      hasSentinelEff,
+      wantsSentinelEff,
+      domEff,
+    });
     if (queueIndex !== -1) {
       // It's a lagging (or caught-up) render of our own typing.
       // Remove this and everything before it from the queue.
@@ -1352,12 +1434,78 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
     const newSelectionStart = sel?.start ?? 0;
     const newSelectionEnd = sel?.end ?? newSelectionStart;
 
+    // ─── DEBUG: snapshot DOM before/after normalize ──────────────────────
+    const inputEvent = e.nativeEvent as InputEvent;
+    const inputType = inputEvent.inputType;
+    const domBefore = Array.from(el.childNodes).map(n => {
+      if (n.nodeType === Node.TEXT_NODE) return `TXT(${JSON.stringify((n as Text).data)})`;
+      if ((n as Element).tagName === 'BR') {
+        return isManagedSentinelBr(n) ? 'BR.sentinel' : 'BR';
+      }
+      return `${(n as Element).tagName}`;
+    }).join(' | ');
+    const lastChildBefore = el.lastChild;
+    const hasSentinelBefore = lastChildBefore != null && isManagedSentinelBr(lastChildBefore);
+    const wantsSentinel = newText.length === 0 || newText.endsWith('\n');
+
+    // Find first-mismatch char index between newText (from DOM) and the old centerText (closure).
+    let inputMismatchIdx = -1;
+    const minLenInput = Math.min(newText.length, centerText.length);
+    for (let i = 0; i < minLenInput; i++) {
+      if (newText[i] !== centerText[i]) { inputMismatchIdx = i; break; }
+    }
+    if (inputMismatchIdx === -1 && newText.length !== centerText.length) inputMismatchIdx = minLenInput;
+     
+    console.log('[FFE handleInput]', {
+      inputType,
+      newTextLen: newText.length,
+      centerTextOldLen: centerText.length,
+      textLen: text.length,
+      centerCharsOffset,
+      sliceEnd: centerCharsOffset + centerText.length,
+      identical: newText === centerText,
+      inputMismatchIdx,
+      mismatchSliceNew: inputMismatchIdx >= 0 ? JSON.stringify(newText.slice(Math.max(0, inputMismatchIdx - 5), inputMismatchIdx + 10)) : null,
+      mismatchSliceOld: inputMismatchIdx >= 0 ? JSON.stringify(centerText.slice(Math.max(0, inputMismatchIdx - 5), inputMismatchIdx + 10)) : null,
+      tailNew: JSON.stringify(newText.slice(-10)),
+      tailOld: JSON.stringify(centerText.slice(-10)),
+      sel,
+      domBefore,
+      hasSentinelBefore,
+      wantsSentinel,
+      sentinelMismatch: hasSentinelBefore !== wantsSentinel,
+    });
+
     normalizeEditableDom(el, newText, sel);
+
+    const ceGetTextAfter = ceGetText(el);
+    const domAfter = Array.from(el.childNodes).map(n => {
+      if (n.nodeType === Node.TEXT_NODE) return `TXT(${JSON.stringify((n as Text).data)})`;
+      if ((n as Element).tagName === 'BR') {
+        return isManagedSentinelBr(n) ? 'BR.sentinel' : 'BR';
+      }
+      return `${(n as Element).tagName}`;
+    }).join(' | ');
+     
+    console.log('[FFE handleInput]  afterNormalize:', {
+      ceGetTextAfterLen: ceGetTextAfter.length,
+      matchesNewText: ceGetTextAfter === newText,
+      domAfter,
+    });
+
     reportedTextQueueRef.current.push(newText);
     
     const prefix = text.substring(0, centerCharsOffset);
     const suffix = text.substring(centerCharsOffset + centerText.length);
     const globalNewText = prefix + newText + suffix;
+
+     
+    console.log('[FFE handleInput]  callingOnTextChange:', {
+      prefixLen: prefix.length,
+      suffixLen: suffix.length,
+      globalNewTextLen: globalNewText.length,
+      caret: newSelectionStart + centerCharsOffset,
+    });
 
     onTextChange(globalNewText, newSelectionStart + centerCharsOffset, newSelectionEnd + centerCharsOffset);
   };
@@ -1781,6 +1929,12 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
       const sliceEnd = centerCharsOffset + centerText.length;
       const atSliceStart = collapsed && caretPos === centerCharsOffset;
       const atSliceEnd = collapsed && caretPos === sliceEnd;
+      const lastCenterRow = centerRows.length > 0 ? centerRows[centerRows.length - 1] : null;
+      const atStartOfLastCenterRow = collapsed && lastCenterRow != null
+        && caretPos === lastCenterRow.startCharIndex
+        // Guard against single-row center where start-of-last == start-of-slice;
+        // the symmetric case at the top boundary is intentionally left to native.
+        && lastCenterRow.startCharIndex !== centerCharsOffset;
 
       if (e.key === 'Delete' && atSliceEnd && caretPos < text.length) {
         e.preventDefault();
@@ -1823,6 +1977,28 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
         if (nextRow < effectiveCenterStartRow) {
           setViewportStartRow(row => Math.max(0, row - 1));
         }
+        return;
+      }
+
+      // Enter at the start of the last visible center row.  Native handling
+      // inserts a \n at the caret and advances the caret one character forward
+      // — but the new caret position lands one row past the center slice, which
+      // triggers the boundary-clamp effect to scroll the viewport down so the
+      // caret stays in view.  The visible result is: the new blank row gets
+      // pushed up to the second-to-last position, the row content the user was
+      // splitting away stays anchored at the last position, and the bottom zone
+      // briefly bounces during the same-commit scroll.  Instead, intercept the
+      // key, insert the \n directly into global text, and leave the caret at
+      // the insertion index.  `resolveRowForCaretIndex` resolves the shared
+      // boundary downstream to the new empty row, so the caret appears on the
+      // blank line at the last center position, and the original content drops
+      // naturally into the bottom zone with no viewport scroll.
+      if (e.key === 'Enter' && atStartOfLastCenterRow) {
+        e.preventDefault();
+        const newText = text.slice(0, caretPos) + '\n' + text.slice(caretPos);
+        boundaryCaretRowPreferenceRef.current = null;
+        pendingAutomaticCaretPosRef.current = caretPos;
+        onTextChange(newText, caretPos, caretPos);
         return;
       }
     }
