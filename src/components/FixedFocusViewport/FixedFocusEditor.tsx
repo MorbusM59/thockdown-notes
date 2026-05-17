@@ -1796,16 +1796,6 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
       const sliceEnd = centerCharsOffset + centerText.length;
       const atSliceStart = collapsed && caretPos === centerCharsOffset;
       const atSliceEnd = collapsed && caretPos === sliceEnd;
-      const lastCenterRow = centerRows.length > 0 ? centerRows[centerRows.length - 1] : null;
-      // Caret is on the last center row, at any position before the row-end \n.
-      // Empty-row special case: startCharIndex === endCharIndex, so caret === both;
-      // the < endCharIndex check would fail, but we still want to intercept.
-      // Guard: single-row center (start-of-last === start-of-slice) is left to native.
-      const onLastCenterRowBeforeEnd = collapsed && lastCenterRow != null
-        && lastCenterRow.startCharIndex !== centerCharsOffset
-        && caretPos >= lastCenterRow.startCharIndex
-        && (caretPos < lastCenterRow.endCharIndex
-          || lastCenterRow.startCharIndex === lastCenterRow.endCharIndex);
 
       if (e.key === 'Delete' && atSliceEnd && caretPos < text.length) {
         e.preventDefault();
@@ -1851,30 +1841,6 @@ export const FixedFocusEditor: React.FC<FixedFocusEditorProps> = ({
         return;
       }
 
-      // Enter anywhere on the last center row (before the row-end boundary, plus the
-      // empty-row case).
-      //
-      // Steps (per user contract):
-      //   1. Capture remainder — text between the caret and the end of the row.
-      //   2. Remove remainder from that position in the text.
-      //   3. Insert \n at caretPos (regular line break on the now-trimmed line).
-      //   4. Re-insert remainder immediately after the new \n.
-      //
-      // Result: caret at caretPos + 1 (start of remainder / new empty line).
-      // That position is one row past the current center zone →
-      // caretOutsideVisibleCenter fires in useLayoutEffect → viewport scrolls up
-      // one row before the browser paints → the new row (with remainder, or empty)
-      // becomes the last center row; the bottom zone content is entirely unchanged.
-      if (e.key === 'Enter' && onLastCenterRowBeforeEnd) {
-        e.preventDefault();
-        const remainder = text.slice(caretPos, lastCenterRow!.endCharIndex);
-        const newText = text.slice(0, caretPos) + '\n' + remainder + text.slice(lastCenterRow!.endCharIndex);
-        const newCaret = caretPos + 1;
-        boundaryCaretRowPreferenceRef.current = null;
-        pendingAutomaticCaretPosRef.current = newCaret;
-        onTextChange(newText, newCaret, newCaret);
-        return;
-      }
     }
 
     if (!(e.shiftKey || e.ctrlKey || e.altKey)) {
