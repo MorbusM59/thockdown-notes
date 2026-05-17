@@ -186,12 +186,19 @@ export function ceGetText(el: HTMLElement): string {
   while (node) {
     if (node.nodeType === Node.TEXT_NODE) {
       result += (node as Text).data;
-    } else if ((node as Element).tagName === 'BR') {
-      if (isManagedSentinelBr(node)) {
-        node = walker.nextNode();
-        continue;
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const elNode = node as Element;
+      if (elNode.tagName === 'BR') {
+        if (isManagedSentinelBr(node)) {
+          node = walker.nextNode();
+          continue;
+        }
+        result += '\n';
+      } else if (elNode.tagName === 'DIV' || elNode.tagName === 'P') {
+        if (result.length > 0 && !result.endsWith('\n')) {
+          result += '\n';
+        }
       }
-      result += '\n';
     }
     node = walker.nextNode();
   }

@@ -2021,8 +2021,9 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       const el = textareaRef.current;
       if (!el) return;
 
-      const start = selectionStart;
-      const end = selectionEnd;
+      const liveSel = ceGetSelection(el) ?? { start: selectionStart, end: selectionEnd };
+      const start = liveSel.start;
+      const end = liveSel.end;
       const lineStart = content.lastIndexOf('\n', start - 1) + 1;
       const currentLineBeforeCursor = content.substring(lineStart, start);
       
