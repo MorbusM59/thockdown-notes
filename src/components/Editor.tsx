@@ -5,6 +5,8 @@ import { ContentEditable } from '@lexical/react/LexicalContentEditable';
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
 import { CagedScrollPlugin } from '../plugins/CagedScrollPlugin';
+import { SyntaxHighlightPlugin } from '../plugins/SyntaxHighlightPlugin';
+import { MeaslyTokenNode } from '../nodes/MeaslyTokenNode';
 
 const theme = {
   paragraph: 'editor-paragraph',
@@ -18,83 +20,158 @@ export function Editor() {
   const scrollerRef = useRef<HTMLDivElement>(null);
   
   // Here are our user-configurable boundaries!
-  const [topBoundary, setTopBoundary] = useState(150);
-  const [bottomBoundary, setBottomBoundary] = useState(150);
+  const [topBoundary, setTopBoundary] = useState(144); // 6 * 24px
+  const [bottomBoundary, setBottomBoundary] = useState(144); // 6 * 24px
 
-  // We explicitly calculate the center offset to ALWAYS be an exact multiple of 24px (our line-height).
-  // This physically guarantees the text node will perfectly sit on the background grid lines.
-  const [paddingY, setPaddingY] = useState(400);
+  // Dragging state
+  const [isDraggingTop, setIsDraggingTop] = useState(false);
+  const [isDraggingBottom, setIsDraggingBottom] = useState(false);
 
   useEffect(() => {
-    const updatePadding = () => {
-      const half = Math.floor(window.innerHeight / 2);
-      // Strip away fractional lines to align exactly to the 24px grid
-      setPaddingY(half - (half % 24));
+    const updateLayout = () => {
+      const scroller = scrollerRef.current;
+      if (!scroller) return;
+      const h = scroller.clientHeight;
+      
+      // Auto-snap the bottom boundary to the absolute grid based on the current height!
+      // This forces the "invisible line" to land flush with a grid row.
+      setBottomBoundary(prev => {
+        const topEdge = h - prev;
+        const snappedTopEdge = Math.round(topEdge / 24) * 24;
+        return h - snappedTopEdge;
+      });
     };
-    updatePadding();
-    window.addEventListener('resize', updatePadding);
-    return () => window.removeEventListener('resize', updatePadding);
+    
+    // We defer slightly on mount so the container size is physically resolved in the DOM
+    setTimeout(updateLayout, 0);
+    window.addEventListener('resize', updateLayout);
+    return () => window.removeEventListener('resize', updateLayout);
   }, []);
+
+  // Retro Quantized Scroll Listener
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      // Only hijack vertical scrolls
+      if (Math.abs(e.deltaY) > 0) {
+        e.preventDefault(); // Stop native smooth scrolling
+
+        // Calculate scroll direction and force movement by exactly 3 lines (72px)
+        const scrollAmount = Math.sign(e.deltaY) * 24 * 3;
+        
+        // Calculate new target and rigidly snap to the 24px grid rows
+        const target = scroller.scrollTop + scrollAmount;
+        const snappedTarget = Math.round(target / 24) * 24;
+        
+        scroller.scrollTo({
+          top: snappedTarget,
+          behavior: 'auto' // Instant jump
+        });
+      }
+    };
+
+    // Passive: false is crucial here so we can call e.preventDefault()
+    scroller.addEventListener('wheel', handleWheel, { passive: false });
+    return () => scroller.removeEventListener('wheel', handleWheel);
+  }, []);
+
+  // Global Mouse listeners for Dragging
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!scrollerRef.current) return;
+      const rect = scrollerRef.current.getBoundingClientRect();
+      const relativeY = e.clientY - rect.top;
+
+      if (isDraggingTop) {
+        // Snap to 24px increments
+        const snappedY = Math.max(0, Math.round(relativeY / 24) * 24);
+        setTopBoundary(snappedY);
+      } else if (isDraggingBottom) {
+        // Quantize the top edge of the bottom boundary to land EXACTLY on an absolute grid line!
+        // We do this by measuring from grid zero (relativeY) instead of window coordinates.
+        const snappedTopEdge = Math.max(0, Math.round(relativeY / 24) * 24);
+        setBottomBoundary(rect.height - snappedTopEdge);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingTop(false);
+      setIsDraggingBottom(false);
+    };
+
+    if (isDraggingTop || isDraggingBottom) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingTop, isDraggingBottom]);
 
   const initialConfig = {
     namespace: 'MeaslyNotes',
     theme,
     onError,
+    nodes: [MeaslyTokenNode],
   };
 
   return (
     <LexicalComposer initialConfig={initialConfig}>
       {/* Editor Container */}
-      <div className="w-full h-full flex flex-col relative text-left">
+      <div 
+        className="w-full h-full flex flex-col relative text-left"
+        style={{ cursor: (isDraggingTop || isDraggingBottom) ? 'ns-resize' : 'auto' }}
+      >
         
-        {/* Development GUI for testing the cage variables */}
-        <div className="bg-gray-100 border-b border-gray-200 p-2 flex gap-4 text-sm justify-center flex-shrink-0 z-20">
-          <label className="flex items-center gap-2">
-            Top Boundary (px):
-            <input type="range" min="0" max="400" value={topBoundary} onChange={e => setTopBoundary(Number(e.target.value))} />
-            <span className="w-10 text-right">{topBoundary}px</span>
-          </label>
-          <label className="flex items-center gap-2">
-            Bottom Boundary (px):
-            <input type="range" min="0" max="400" value={bottomBoundary} onChange={e => setBottomBoundary(Number(e.target.value))} />
-            <span className="w-10 text-right">{bottomBoundary}px</span>
-          </label>
-        </div>
-
         {/* Scrollable Viewport Wrapper */}
-        <div className="flex-1 relative min-h-0">
-          {/* Visual debug lines showing the exact cage dynamically! Absolute to this wrapper. */}
-          <div className="absolute left-0 right-0 border-t-2 border-dashed border-orange-400 pointer-events-none opacity-50 z-10" style={{ top: topBoundary }} />
-          <div className="absolute left-0 right-0 border-b-2 border-dashed border-orange-400 pointer-events-none opacity-50 z-10" style={{ bottom: bottomBoundary }} />
+        <div className="flex-1 relative min-h-0 relative">
+          
+          {/* Top Zone Overlay */}
+          <div className="zone-overlay" style={{ top: 0, height: topBoundary }} />
+          {/* Top Drag Handle (Invisible, centered on the boundary line) */}
+          <div 
+            className="zone-drag-handle" 
+            style={{ top: topBoundary - 12 }} 
+            onMouseDown={(e) => { e.preventDefault(); setIsDraggingTop(true); }}
+          />
+
+          {/* Bottom Zone Overlay */}
+          <div className="zone-overlay" style={{ bottom: 0, height: bottomBoundary }} />
+          {/* Bottom Drag Handle */}
+          <div 
+            className="zone-drag-handle" 
+            style={{ bottom: bottomBoundary - 12 }} 
+            onMouseDown={(e) => { e.preventDefault(); setIsDraggingBottom(true); }}
+          />
 
           {/* Actual Scroller */}
           <div 
             ref={scrollerRef}
             className="h-full w-full overflow-y-auto outline-none measly-grid-bg"
           >
-            {/* 
-              Padding must perfectly align with line-height so the text 
-              sits directly on the background grid lines.
-              
-              We replace 'px-10' (which is 40px, a random width) with exact `ch` math!
-             */}
-            <div style={{ paddingTop: paddingY, paddingBottom: paddingY, paddingLeft: 40, paddingRight: 40 }}>
-              <RichTextPlugin
-                contentEditable={
-                  <ContentEditable className="outline-none text-gray-800 editor-text min-h-[50px]" />
-                }
-                placeholder={
-                  <div className="absolute text-gray-400 pointer-events-none select-none editor-text" style={{ top: paddingY, left: 40 }}>
-                    Jot down a measly note...
-                  </div>
-                }
-                ErrorBoundary={LexicalErrorBoundary}
-              />
-            </div>
+            <RichTextPlugin
+              contentEditable={
+                <ContentEditable 
+                  className="outline-none text-gray-800 editor-text min-h-full w-full"
+                  style={{ paddingTop: topBoundary + 4, paddingBottom: bottomBoundary, paddingLeft: 40, paddingRight: 40 }}
+                  spellCheck={false} 
+                />
+              }
+              placeholder={
+                <div className="absolute text-gray-400 pointer-events-none select-none editor-text" style={{ top: topBoundary + 4, left: 40 }}>
+                  Jot down a measly note...
+                </div>
+              }
+              ErrorBoundary={LexicalErrorBoundary}
+            />
           </div>
         </div>
         
         <HistoryPlugin />
+        <SyntaxHighlightPlugin />
         
         {/* The Magic Cage Scroller! */}
         <CagedScrollPlugin scrollerRef={scrollerRef} topBoundaryPx={topBoundary} bottomBoundaryPx={bottomBoundary} />

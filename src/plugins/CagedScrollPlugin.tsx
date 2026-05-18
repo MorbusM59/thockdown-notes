@@ -24,14 +24,27 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       const caretRect = range.getBoundingClientRect();
       const scrollerRect = scroller.getBoundingClientRect();
 
-      // If the selection has no width/height, it might be an empty line / unmeasurable.
-      if (caretRect.height === 0 && caretRect.width === 0) {
-        return false;
-      }
-
       // Calculate absolute positions relative to the viewport
-      const caretTop = caretRect.top;
-      const caretBottom = caretRect.bottom;
+      let caretTop = caretRect.top;
+      let caretBottom = caretRect.bottom;
+
+      // When the selection is on a completely empty line (mostly due to a collapsed range in an empty text node),
+      // the browser frequently returns 0 for all bounds. Fall back to the parent DOM element's boundary.
+      if (caretTop === 0 && caretBottom === 0) {
+        const anchorNode = domSelection.anchorNode;
+        const element = anchorNode?.nodeType === Node.ELEMENT_NODE 
+          ? (anchorNode as Element) 
+          : anchorNode?.parentElement;
+          
+        if (element) {
+          const rect = element.getBoundingClientRect();
+          caretTop = rect.top;
+          // Force a 24px height on the assumption of a single empty line
+          caretBottom = caretTop + 24; 
+        } else {
+          return false;
+        }
+      }
 
       const cageTop = scrollerRect.top + topBoundaryPx;
       const cageBottom = scrollerRect.bottom - bottomBoundaryPx;
@@ -48,6 +61,9 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         targetScrollTop += difference;
       }
 
+      // Fix: Quantize scrolling to strictly snap to our 24px grid rows!
+      targetScrollTop = Math.round(targetScrollTop / 24) * 24;
+
       if (targetScrollTop !== scroller.scrollTop) {
         // Use 'auto' instead of 'smooth' to prevent fighting with 
         // the browser's native scroll-to-caret speed. We instantly clamp it.
@@ -62,16 +78,17 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
 
     const removeUpdateListener = editor.registerUpdateListener(({ editorState }) => {
       editorState.read(() => {
-        // Defer to allow the DOM to paint the new lines
-        setTimeout(checkScroll, 0);
+        // Execute synchronously after DOM mutation but BEFORE the browser paints!
+        // This completely eliminates the visual "flicker".
+        checkScroll();
       });
     });
 
     const removeSelectionListener = editor.registerCommand(
       SELECTION_CHANGE_COMMAND,
       () => {
-        // Defer selection scroll checks as well
-        setTimeout(checkScroll, 0);
+        // Execute synchronously
+        checkScroll();
         return false;
       },
       COMMAND_PRIORITY_LOW

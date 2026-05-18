@@ -57,8 +57,43 @@ body {
     repeating-linear-gradient(to bottom, var(--color-grid) 0, var(--color-grid) 1px, transparent 1px, transparent var(--editor-line-height));
   background-size: 100% 100%;
   
-  /* Start exactly at 0px X, and shift Y by 4px so text 'sits' on the line */
-  background-position: 0px 4px;
+  /* FLUSH ALIGNMENT: Start exactly at 0px 0px so grid lines land perfectly on 24px row boundaries */
+  background-position: 0px 0px;
+}
+
+/* Hide native scrollbars for the retro typewriter feel */
+.measly-grid-bg::-webkit-scrollbar {
+  display: none;
+}
+.measly-grid-bg {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Caret Box Tricks */
+.editor-text {
+  caret-color: var(--color-caret);
+  caret-shape: block; /* Native retro block caret! Available in modern Chromium/Electron */
+}
+
+/* Zone Overlay styling */
+.zone-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background-color: var(--color-bg-leading);
+  pointer-events: none; /* Let clicks pass through to text */
+  z-index: 5;
+}
+
+.zone-drag-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 24px; /* Hitbox height */
+  cursor: ns-resize;
+  z-index: 15;
+  background: transparent; /* Invisible but clickable */
 }
 
 /* Lexical Editor Text Styles */
@@ -80,6 +115,34 @@ body {
 .editor-text p, .editor-text div {
   margin: 0;
   padding: 0;
+}
+
+/* Syntax Highlighting Base Colors */
+.measly-token-heading,
+.measly-token-list,
+.measly-token-quote {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.measly-token-heading {
+  color: #1e3a8a;
+  font-weight: bold;
+  background-color: rgba(30, 58, 138, 0.1);
+}
+
+.measly-token-list {
+  color: #047857;
+  font-weight: bold;
+  background-color: rgba(4, 120, 87, 0.1);
+}
+
+.measly-token-quote {
+  color: #b45309;
+  font-style: italic;
+  background-color: rgba(180, 83, 9, 0.1);
 }
 
 /* We will apply this to all standard text nodes */
