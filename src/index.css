@@ -72,8 +72,22 @@ body {
 
 /* Caret Box Tricks */
 .editor-text {
-  caret-color: var(--color-caret);
-  caret-shape: block; /* Native retro block caret! Available in modern Chromium/Electron */
+  caret-color: transparent; /* Hide the native OS caret */
+}
+
+/* Custom Lexical Retro Block Caret */
+.measly-block-caret {
+  background-color: var(--color-caret);
+  animation: measly-blink 1.2s infinite cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes measly-blink {
+  /* Restore the beloved ff-caret-heartbeat rhythm! */
+  0%       { opacity: 0.7; }
+  16.667%  { opacity: 0.2; }
+  58.333%  { opacity: 1.0; }
+  83.333%  { opacity: 0.2; }
+  100%     { opacity: 0.7; }
 }
 
 /* Zone Overlay styling */
@@ -104,6 +118,11 @@ body {
   
   /* THE GOLDEN FIX: Pads the character advance-width so it equals exactly the grid box */
   letter-spacing: calc(var(--editor-cell-width) - 1ch); 
+
+  /* CENTER THE GLYPHS: Shifts the entire text layer halfway across the remaining letter-spacing space.
+     Adjust the -1px vertically if the font baseline feels slightly too high or low!
+     Zero overhead: performed entirely by the browser renderer on the container. */
+  transform: translate(calc((var(--editor-cell-width) - 1ch) / 2), -1px);
   
   font-variant-ligatures: none; 
   font-variant-numeric: tabular-nums;
