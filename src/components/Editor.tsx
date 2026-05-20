@@ -43,6 +43,19 @@ const CELL_WIDTH_PX = 10;
 const ENABLE_CONTRACT_ASSERTIONS = import.meta.env.DEV;
 const ENABLE_SCENARIO_PROBES = import.meta.env.DEV;
 
+const quantizeTopEdge = (valuePx: number) => Math.max(0, Math.round(valuePx / LINE_HEIGHT_PX) * LINE_HEIGHT_PX);
+
+const bottomBoundaryFromTopEdge = (heightPx: number, topEdgePx: number) => {
+  const h = Math.max(0, Math.round(heightPx));
+  const topEdge = Math.max(0, Math.min(h, quantizeTopEdge(topEdgePx)));
+  return h - topEdge;
+};
+
+const topEdgeFromBottomBoundary = (heightPx: number, bottomBoundaryPx: number) => {
+  const h = Math.max(0, Math.round(heightPx));
+  return Math.max(0, Math.min(h, h - bottomBoundaryPx));
+};
+
 export function Editor({ bindings, adapterRef }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -162,15 +175,15 @@ export function Editor({ bindings, adapterRef }: EditorProps) {
         const nextViewport = snapshot.viewport;
         if (!nextViewport) return;
 
-        const maxBoundary = Math.max(0, scrollerRef.current?.clientHeight ?? 0);
+        const h = Math.max(0, scrollerRef.current?.clientHeight ?? 0);
 
         if (typeof nextViewport.topBoundaryPx === 'number') {
           const quantized = Math.max(0, Math.round(nextViewport.topBoundaryPx / LINE_HEIGHT_PX) * LINE_HEIGHT_PX);
-          setTopBoundary(Math.min(quantized, maxBoundary));
+          setTopBoundary(Math.min(quantized, h));
         }
         if (typeof nextViewport.bottomBoundaryPx === 'number') {
-          const quantized = Math.max(0, Math.round(nextViewport.bottomBoundaryPx / LINE_HEIGHT_PX) * LINE_HEIGHT_PX);
-          setBottomBoundary(Math.min(quantized, maxBoundary));
+          const requestedTopEdge = topEdgeFromBottomBoundary(h, nextViewport.bottomBoundaryPx);
+          setBottomBoundary(bottomBoundaryFromTopEdge(h, requestedTopEdge));
         }
         if (typeof nextViewport.scrollTopPx === 'number' && scrollerRef.current) {
           scrollerRef.current.scrollTo({ top: Math.max(0, nextViewport.scrollTopPx), behavior: 'auto' });
@@ -191,10 +204,10 @@ export function Editor({ bindings, adapterRef }: EditorProps) {
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
       
-      // Calculate exact multiples of box dimensions (10px wide, 24px high),
-      // then strictly add +1px to perfectly render the concluding grid border line!
+      // Keep the editor viewport on exact cell multiples so separator math,
+      // scroll cage math, and rendered grid rows share the same lattice.
       const snappedWidth = Math.max(1, Math.floor((rect.width - 1) / 10) * 10 + 1);
-      const snappedHeight = Math.max(1, Math.floor((rect.height - 1) / 24) * 24 + 1);
+      const snappedHeight = Math.max(24, Math.floor(rect.height / 24) * 24);
       
       const left = Math.floor((rect.width - snappedWidth) / 2);
       const top = Math.floor((rect.height - snappedHeight) / 2);
@@ -213,14 +226,13 @@ export function Editor({ bindings, adapterRef }: EditorProps) {
     const updateLayout = () => {
       const scroller = scrollerRef.current;
       if (!scroller) return;
-      const h = scroller.clientHeight;
+      const h = Math.max(0, scroller.clientHeight);
       
       // Auto-snap the bottom boundary to the absolute grid based on the current height!
       // This forces the "invisible line" to land flush with a grid row.
       setBottomBoundary(prev => {
-        const topEdge = h - prev;
-        const snappedTopEdge = Math.round(topEdge / 24) * 24;
-        return h - snappedTopEdge;
+        const topEdge = topEdgeFromBottomBoundary(h, prev);
+        return bottomBoundaryFromTopEdge(h, topEdge);
       });
     };
     
@@ -235,18 +247,18 @@ export function Editor({ bindings, adapterRef }: EditorProps) {
     const handleMouseMove = (e: MouseEvent) => {
       if (!scrollerRef.current) return;
       const rect = scrollerRef.current.getBoundingClientRect();
+      const h = Math.max(0, scrollerRef.current.clientHeight);
       const relativeY = e.clientY - rect.top;
-      const clampedY = Math.max(0, Math.min(relativeY, rect.height));
+      const clampedY = Math.max(0, Math.min(relativeY, h));
 
       if (isDraggingTop) {
         // Snap to 24px increments
-        const snappedY = Math.max(0, Math.round(clampedY / 24) * 24);
-        setTopBoundary(Math.min(snappedY, rect.height));
+        const snappedY = quantizeTopEdge(clampedY);
+        setTopBoundary(Math.min(snappedY, h));
       } else if (isDraggingBottom) {
         // Quantize the top edge of the bottom boundary to land EXACTLY on an absolute grid line!
         // We do this by measuring from grid zero (relativeY) instead of window coordinates.
-        const snappedTopEdge = Math.max(0, Math.round(clampedY / 24) * 24);
-        setBottomBoundary(Math.max(0, rect.height - snappedTopEdge));
+        setBottomBoundary(bottomBoundaryFromTopEdge(h, clampedY));
       }
     };
 
@@ -382,19 +394,19 @@ export function Editor({ bindings, adapterRef }: EditorProps) {
             {/* Actual Scroller */}
             <div 
               ref={scrollerRef}
-              className="absolute inset-0 overflow-y-auto outline-none z-10 measly-custom-scrollbar"
+              className="absolute inset-0 overflow-y-auto overflow-x-hidden outline-none z-10 measly-custom-scrollbar"
               style={{ scrollBehavior: 'auto' }}
             >
               <RichTextPlugin
                 contentEditable={
                   <ContentEditable 
                     className="outline-none text-gray-800 editor-text min-h-full w-full relative z-10"
-                    style={{ paddingTop: topBoundary + 4, paddingBottom: bottomBoundary, paddingLeft: 40, paddingRight: 40 }}
+                    style={{ paddingTop: topBoundary, paddingBottom: bottomBoundary, paddingLeft: 40, paddingRight: 40, boxSizing: 'border-box' }}
                     spellCheck={false} 
                   />
                 }
                 placeholder={
-                  <div className="absolute text-gray-400 pointer-events-none select-none editor-text z-0" style={{ top: topBoundary + 4, left: 40 }}>
+                  <div className="absolute text-gray-400 pointer-events-none select-none editor-text z-0" style={{ top: topBoundary, left: 40 }}>
                     Jot down a measly note...
                   </div>
                 }

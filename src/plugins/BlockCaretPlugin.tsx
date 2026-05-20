@@ -82,7 +82,7 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
       absoluteLeft = Math.round(absoluteLeft / CELL_WIDTH_PX) * CELL_WIDTH_PX;
       absoluteTop = Math.round(absoluteTop / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
 
-      // Keep the visual caret strictly inside the caged middle section.
+      // Keep the visual caret strictly inside the fixed middle section.
       const minTop = scroller.scrollTop + effective.topPx;
       const maxTop = scroller.scrollTop + Math.max(effective.topPx, scroller.clientHeight - effective.bottomPx - LINE_HEIGHT_PX);
       absoluteTop = Math.max(minTop, Math.min(maxTop, absoluteTop));

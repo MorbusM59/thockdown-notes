@@ -56,19 +56,24 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         }
       }
 
-      const cageTop = scrollerRect.top + effective.topPx;
-      const cageBottom = scrollerRect.bottom - effective.bottomPx;
+      // Convert to scroll-space and quantize to exact row boxes.
+      const caretTopInScroll = (caretTop - scrollerRect.top) + scroller.scrollTop;
+      const quantizedRowTop = Math.round(caretTopInScroll / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
+      const quantizedRowBottom = quantizedRowTop + LINE_HEIGHT_PX;
+
+      const cageTopInScroll = scroller.scrollTop + effective.topPx;
+      const cageBottomInScroll = scroller.scrollTop + scroller.clientHeight - effective.bottomPx;
 
       let targetScrollTop = scroller.scrollTop;
 
-      if (caretTop < cageTop) {
+      if (quantizedRowTop < cageTopInScroll) {
         // Move in hard row increments until the caret reaches the cage.
-        const difference = cageTop - caretTop;
+        const difference = cageTopInScroll - quantizedRowTop;
         const rows = Math.ceil(difference / LINE_HEIGHT_PX);
         targetScrollTop -= rows * LINE_HEIGHT_PX;
-      } else if (caretBottom > cageBottom) {
+      } else if (quantizedRowBottom > cageBottomInScroll) {
         // Move in hard row increments until the caret reaches the cage.
-        const difference = caretBottom - cageBottom;
+        const difference = quantizedRowBottom - cageBottomInScroll;
         const rows = Math.ceil(difference / LINE_HEIGHT_PX);
         targetScrollTop += rows * LINE_HEIGHT_PX;
       }
