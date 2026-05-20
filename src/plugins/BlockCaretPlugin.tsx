@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { $getSelection, $isRangeSelection } from 'lexical';
-import { getEffectiveCageBoundaries } from '../editor/ViewportCage';
 
 interface BlockCaretPluginProps {
   scrollerRef: React.RefObject<HTMLElement>;
@@ -19,8 +18,7 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
   const updateCaret = useCallback(() => {
     editor.getEditorState().read(() => {
       const selection = $getSelection();
-      
-      // Only render caret when selection is a collapsed single point
+
       if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
         setCaretStyle(null);
         return;
@@ -32,7 +30,6 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
         return;
       }
 
-      // Hide custom caret if the editor does not have focus
       if (document.activeElement !== editor.getRootElement()) {
         setCaretStyle(null);
         return;
@@ -43,11 +40,11 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
       let top = rect.top;
       let left = rect.left;
 
-      // Handle completely empty lines returning 0,0 bounding box
+      // Some empty-line selections can report a zero rect; fall back to parent bounds.
       if (top === 0 && left === 0) {
         const anchorNode = domSelection.anchorNode;
-        const element = anchorNode?.nodeType === Node.ELEMENT_NODE 
-          ? (anchorNode as Element) 
+        const element = anchorNode?.nodeType === Node.ELEMENT_NODE
+          ? (anchorNode as Element)
           : anchorNode?.parentElement;
         if (element) {
           const elementRect = element.getBoundingClientRect();
@@ -61,30 +58,19 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
         return;
       }
 
-      // We need absolute coordinates scoped entirely inside our scrolling <div>!
       const scroller = scrollerRef.current;
       if (!scroller) return;
-      
+
       const scrollerRect = scroller.getBoundingClientRect();
-      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-      const effective = getEffectiveCageBoundaries({
-        scrollTop: scroller.scrollTop,
-        maxScrollTop,
-        topBoundaryPx,
-        bottomBoundaryPx,
-      });
 
       let absoluteTop = (top - scrollerRect.top) + scroller.scrollTop;
       let absoluteLeft = (left - scrollerRect.left) + scroller.scrollLeft;
 
-      // Quantize coordinates to lock perfectly into the CRT grid.
-      // Since our grid background is aligned to 0px 0px, our caret should snap to exact multiples of 10 and 24.
       absoluteLeft = Math.round(absoluteLeft / CELL_WIDTH_PX) * CELL_WIDTH_PX;
       absoluteTop = Math.round(absoluteTop / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
 
-      // Keep the visual caret strictly inside the fixed middle section.
-      const minTop = scroller.scrollTop + effective.topPx;
-      const maxTop = scroller.scrollTop + Math.max(effective.topPx, scroller.clientHeight - effective.bottomPx - LINE_HEIGHT_PX);
+      const minTop = scroller.scrollTop + topBoundaryPx;
+      const maxTop = scroller.scrollTop + Math.max(topBoundaryPx, scroller.clientHeight - bottomBoundaryPx - LINE_HEIGHT_PX);
       absoluteTop = Math.max(minTop, Math.min(maxTop, absoluteTop));
 
       setCaretStyle({
@@ -101,7 +87,6 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
     document.addEventListener('selectionchange', updateCaret);
     window.addEventListener('resize', updateCaret);
 
-    // Track scroll events explicitly
     const scroller = scrollerRef.current;
     if (scroller) {
       scroller.addEventListener('scroll', updateCaret);
