@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { $getSelection, $isRangeSelection } from 'lexical';
+import { getEffectiveCageBoundaries } from '../editor/ViewportCage';
 
 interface BlockCaretPluginProps {
   scrollerRef: React.RefObject<HTMLElement>;
@@ -65,6 +66,13 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
       if (!scroller) return;
       
       const scrollerRect = scroller.getBoundingClientRect();
+      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      const effective = getEffectiveCageBoundaries({
+        scrollTop: scroller.scrollTop,
+        maxScrollTop,
+        topBoundaryPx,
+        bottomBoundaryPx,
+      });
 
       let absoluteTop = (top - scrollerRect.top) + scroller.scrollTop;
       let absoluteLeft = (left - scrollerRect.left) + scroller.scrollLeft;
@@ -75,8 +83,8 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
       absoluteTop = Math.round(absoluteTop / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
 
       // Keep the visual caret strictly inside the caged middle section.
-      const minTop = scroller.scrollTop + topBoundaryPx;
-      const maxTop = scroller.scrollTop + Math.max(topBoundaryPx, scroller.clientHeight - bottomBoundaryPx - LINE_HEIGHT_PX);
+      const minTop = scroller.scrollTop + effective.topPx;
+      const maxTop = scroller.scrollTop + Math.max(effective.topPx, scroller.clientHeight - effective.bottomPx - LINE_HEIGHT_PX);
       absoluteTop = Math.max(minTop, Math.min(maxTop, absoluteTop));
 
       setCaretStyle({

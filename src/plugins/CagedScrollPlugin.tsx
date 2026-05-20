@@ -1,6 +1,7 @@
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useEffect } from 'react';
 import { SELECTION_CHANGE_COMMAND, COMMAND_PRIORITY_LOW } from 'lexical';
+import { getEffectiveCageBoundaries } from '../editor/ViewportCage';
 
 interface CagedScrollPluginProps {
   scrollerRef: React.RefObject<HTMLElement>;
@@ -25,6 +26,13 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       const range = domSelection.getRangeAt(0);
       const caretRect = range.getBoundingClientRect();
       const scrollerRect = scroller.getBoundingClientRect();
+      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      const effective = getEffectiveCageBoundaries({
+        scrollTop: scroller.scrollTop,
+        maxScrollTop,
+        topBoundaryPx,
+        bottomBoundaryPx,
+      });
 
       // Calculate absolute positions relative to the viewport
       let caretTop = caretRect.top;
@@ -48,8 +56,8 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         }
       }
 
-      const cageTop = scrollerRect.top + topBoundaryPx;
-      const cageBottom = scrollerRect.bottom - bottomBoundaryPx;
+      const cageTop = scrollerRect.top + effective.topPx;
+      const cageBottom = scrollerRect.bottom - effective.bottomPx;
 
       let targetScrollTop = scroller.scrollTop;
 
@@ -67,7 +75,6 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
 
       // Quantize and clamp to valid scroll range.
       targetScrollTop = Math.round(targetScrollTop / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
-      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
       targetScrollTop = Math.max(0, Math.min(maxScrollTop, targetScrollTop));
 
       if (targetScrollTop !== scroller.scrollTop) {
