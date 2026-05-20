@@ -24,7 +24,7 @@ export class MeaslyTokenNode extends TextNode {
   }
 
   updateDOM(
-    prevNode: MeaslyTokenNode,
+    prevNode: this,
     dom: HTMLElement,
     config: EditorConfig,
   ): boolean {

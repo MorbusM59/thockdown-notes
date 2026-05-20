@@ -10,6 +10,8 @@ interface CagedScrollPluginProps {
 
 export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx }: CagedScrollPluginProps) {
   const [editor] = useLexicalComposerContext();
+  const LINE_HEIGHT_PX = 24;
+  const PIXELS_PER_WHEEL_UNIT = 100;
 
   useEffect(() => {
     // We register a listener for off-screen selection changes
@@ -52,21 +54,24 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       let targetScrollTop = scroller.scrollTop;
 
       if (caretTop < cageTop) {
-        // Caret went above the cage, scroll up!
+        // Move in hard row increments until the caret reaches the cage.
         const difference = cageTop - caretTop;
-        targetScrollTop -= difference;
+        const rows = Math.ceil(difference / LINE_HEIGHT_PX);
+        targetScrollTop -= rows * LINE_HEIGHT_PX;
       } else if (caretBottom > cageBottom) {
-        // Caret went below the cage, scroll down!
+        // Move in hard row increments until the caret reaches the cage.
         const difference = caretBottom - cageBottom;
-        targetScrollTop += difference;
+        const rows = Math.ceil(difference / LINE_HEIGHT_PX);
+        targetScrollTop += rows * LINE_HEIGHT_PX;
       }
 
-      // Fix: Quantize scrolling to strictly snap to our 24px grid rows!
-      targetScrollTop = Math.round(targetScrollTop / 24) * 24;
+      // Quantize and clamp to valid scroll range.
+      targetScrollTop = Math.round(targetScrollTop / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
+      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      targetScrollTop = Math.max(0, Math.min(maxScrollTop, targetScrollTop));
 
       if (targetScrollTop !== scroller.scrollTop) {
-        // Use 'auto' instead of 'smooth' to prevent fighting with 
-        // the browser's native scroll-to-caret speed. We instantly clamp it.
+        // Never smooth-scroll; force deterministic row jumps.
         scroller.scrollTo({
           top: targetScrollTop,
           behavior: 'auto',
@@ -94,7 +99,47 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       COMMAND_PRIORITY_LOW
     );
 
+    const scroller = scrollerRef.current;
+    let pendingWheelPx = 0;
+
+    const handleWheel = (event: WheelEvent) => {
+      if (!scroller) return;
+      if (event.deltaY === 0) return;
+
+      event.preventDefault();
+
+      let units = 0;
+
+      if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+        // One wheel line unit maps to one editor row step.
+        const lineUnits = Math.trunc(Math.abs(event.deltaY));
+        units = Math.max(1, lineUnits) * (event.deltaY > 0 ? 1 : -1);
+      } else if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+        // Page wheel intent still moves in row units; use at least one unit.
+        const pageUnits = Math.trunc(Math.abs(event.deltaY));
+        units = Math.max(1, pageUnits) * (event.deltaY > 0 ? 1 : -1);
+      } else {
+        // Pixel mode (common touchpad/mouse on Windows): accumulate and convert
+        // each full wheel unit worth of pixels into exactly one row step.
+        pendingWheelPx += event.deltaY;
+        const stepSign = pendingWheelPx < 0 ? -1 : 1;
+        const unitCount = Math.floor(Math.abs(pendingWheelPx) / PIXELS_PER_WHEEL_UNIT);
+        if (unitCount === 0) return;
+        units = unitCount * stepSign;
+        pendingWheelPx -= unitCount * PIXELS_PER_WHEEL_UNIT * stepSign;
+      }
+
+      if (units === 0) return;
+
+      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      const target = Math.max(0, Math.min(maxScrollTop, scroller.scrollTop + units * LINE_HEIGHT_PX));
+      scroller.scrollTop = Math.round(target / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
+    };
+
+    scroller?.addEventListener('wheel', handleWheel, { passive: false });
+
     return () => {
+      scroller?.removeEventListener('wheel', handleWheel);
       removeUpdateListener();
       removeSelectionListener();
     };

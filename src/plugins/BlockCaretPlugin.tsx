@@ -2,7 +2,16 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { $getSelection, $isRangeSelection } from 'lexical';
 
-export function BlockCaretPlugin({ scrollerRef }: { scrollerRef: React.RefObject<HTMLElement> }) {
+interface BlockCaretPluginProps {
+  scrollerRef: React.RefObject<HTMLElement>;
+  topBoundaryPx: number;
+  bottomBoundaryPx: number;
+}
+
+const LINE_HEIGHT_PX = 24;
+const CELL_WIDTH_PX = 10;
+
+export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx }: BlockCaretPluginProps) {
   const [editor] = useLexicalComposerContext();
   const [caretStyle, setCaretStyle] = useState<React.CSSProperties | null>(null);
 
@@ -62,17 +71,22 @@ export function BlockCaretPlugin({ scrollerRef }: { scrollerRef: React.RefObject
 
       // Quantize coordinates to lock perfectly into the CRT grid.
       // Since our grid background is aligned to 0px 0px, our caret should snap to exact multiples of 10 and 24.
-      absoluteLeft = Math.round(absoluteLeft / 10) * 10;
-      absoluteTop = Math.round(absoluteTop / 24) * 24;
+      absoluteLeft = Math.round(absoluteLeft / CELL_WIDTH_PX) * CELL_WIDTH_PX;
+      absoluteTop = Math.round(absoluteTop / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
+
+      // Keep the visual caret strictly inside the caged middle section.
+      const minTop = scroller.scrollTop + topBoundaryPx;
+      const maxTop = scroller.scrollTop + Math.max(topBoundaryPx, scroller.clientHeight - bottomBoundaryPx - LINE_HEIGHT_PX);
+      absoluteTop = Math.max(minTop, Math.min(maxTop, absoluteTop));
 
       setCaretStyle({
         top: absoluteTop,
         left: absoluteLeft,
-        width: 10,   // var(--editor-cell-width)
-        height: 24,  // var(--editor-line-height)
+        width: CELL_WIDTH_PX,
+        height: LINE_HEIGHT_PX,
       });
     });
-  }, [editor, scrollerRef]);
+  }, [editor, scrollerRef, topBoundaryPx, bottomBoundaryPx]);
 
   useEffect(() => {
     const removeUpdateListener = editor.registerUpdateListener(() => updateCaret());

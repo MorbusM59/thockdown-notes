@@ -2,10 +2,19 @@ import { defineConfig } from 'vite'
 import path from 'node:path'
 import electron from 'vite-plugin-electron/simple'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  server: {
+    watch: {
+      // Packaging artifacts create massive reload noise during dev and can
+      // mask real editor behavior while we tune motion/quantization.
+      ignored: ['**/release/**'],
+    },
+  },
   plugins: [
+    tailwindcss(),
     react(),
     electron({
       main: {

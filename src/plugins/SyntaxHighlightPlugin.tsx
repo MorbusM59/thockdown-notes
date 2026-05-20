@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { TextNode, $isTextNode, $createTextNode } from 'lexical';
+import { TextNode, $createTextNode } from 'lexical';
 import { $createMeaslyTokenNode, $isMeaslyTokenNode, MeaslyTokenNode } from '../nodes/MeaslyTokenNode';
 
 export function SyntaxHighlightPlugin() {
