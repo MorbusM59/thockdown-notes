@@ -1,6 +1,8 @@
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useEffect } from 'react';
-import { SELECTION_CHANGE_COMMAND, COMMAND_PRIORITY_LOW } from 'lexical';
+import { $getRoot, SELECTION_CHANGE_COMMAND, COMMAND_PRIORITY_LOW } from 'lexical';
+import { readSelectionRect } from '../editor/CaretRect';
+import { normalizePlainText, readSelectionStateFromDom } from '../editor/SelectionOffsets';
 
 interface CagedScrollPluginProps {
   scrollerRef: React.RefObject<HTMLElement>;
@@ -21,34 +23,30 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       const domSelection = window.getSelection();
       if (!domSelection || domSelection.rangeCount === 0) return false;
 
-      const range = domSelection.getRangeAt(0);
-      const caretRect = range.getBoundingClientRect();
       const scrollerRect = scroller.getBoundingClientRect();
       const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      const caretRect = readSelectionRect(domSelection, LINE_HEIGHT_PX);
+      if (!caretRect) return false;
 
-      // Calculate absolute positions relative to the viewport
-      let caretTop = caretRect.top;
-      let caretBottom = caretRect.bottom;
+      let terminalVisualOffsetPx = 0;
+      if (caretRect.source === 'adjacent-probe' || caretRect.source === 'anchor-fallback') {
+        editor.getEditorState().read(() => {
+          const rootEl = editor.getRootElement();
+          if (!rootEl) return;
+          const normalizedText = normalizePlainText($getRoot().getTextContent());
+          const selectionState = readSelectionStateFromDom(rootEl, domSelection, normalizedText.length);
+          const trailingNewlines = normalizedText.match(/\n+$/)?.[0].length ?? 0;
+          const trailingExtraRows = Math.max(0, trailingNewlines - 1);
 
-      // Some empty-line selections can report a zero rect; fall back to parent element bounds.
-      if (caretTop === 0 && caretBottom === 0) {
-        const anchorNode = domSelection.anchorNode;
-        const element = anchorNode?.nodeType === Node.ELEMENT_NODE
-          ? (anchorNode as Element)
-          : anchorNode?.parentElement;
-
-        if (element) {
-          const rect = element.getBoundingClientRect();
-          caretTop = rect.top;
-          caretBottom = caretTop + LINE_HEIGHT_PX;
-        } else {
-          return false;
-        }
+          if (selectionState.isCollapsed && selectionState.anchor === normalizedText.length && trailingExtraRows > 0) {
+            terminalVisualOffsetPx = trailingExtraRows * LINE_HEIGHT_PX;
+          }
+        });
       }
 
       // Convert to scroll-space and quantize to exact row boxes.
-      const caretTopInScroll = (caretTop - scrollerRect.top) + scroller.scrollTop;
-      const quantizedRowTop = Math.round(caretTopInScroll / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
+      const caretTopInScroll = (caretRect.top - scrollerRect.top) + scroller.scrollTop + terminalVisualOffsetPx;
+      const quantizedRowTop = Math.floor(caretTopInScroll / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
       const quantizedRowBottom = quantizedRowTop + LINE_HEIGHT_PX;
 
       const cageTopInScroll = scroller.scrollTop + topBoundaryPx;

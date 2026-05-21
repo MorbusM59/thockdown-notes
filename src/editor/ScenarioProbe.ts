@@ -1,3 +1,5 @@
+import { readSelectionRect } from './CaretRect';
+
 export interface CaretGeometry {
   top: number;
   bottom: number;
@@ -8,23 +10,8 @@ export interface CaretGeometry {
 export function readCaretGeometry(): CaretGeometry | null {
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0) return null;
-  const range = selection.getRangeAt(0);
-  const rect = range.getBoundingClientRect();
-
-  if (rect.width === 0 && rect.height === 0) {
-    const anchorNode = selection.anchorNode;
-    const element = anchorNode?.nodeType === Node.ELEMENT_NODE
-      ? (anchorNode as Element)
-      : anchorNode?.parentElement;
-    if (!element) return null;
-    const fallback = element.getBoundingClientRect();
-    return {
-      top: fallback.top,
-      bottom: fallback.bottom,
-      left: fallback.left,
-      right: fallback.right,
-    };
-  }
+  const rect = readSelectionRect(selection, 24);
+  if (!rect) return null;
 
   return {
     top: rect.top,

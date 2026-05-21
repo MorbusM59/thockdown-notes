@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { $getSelection, $isRangeSelection } from 'lexical';
+import { $getRoot, $getSelection, $isRangeSelection } from 'lexical';
+import { readSelectionRect } from '../editor/CaretRect';
+import { normalizePlainText, readSelectionStateFromDom } from '../editor/SelectionOffsets';
 
 interface BlockCaretPluginProps {
   scrollerRef: React.RefObject<HTMLElement>;
@@ -35,25 +37,8 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
         return;
       }
 
-      const range = domSelection.getRangeAt(0);
-      const rect = range.getBoundingClientRect();
-      let top = rect.top;
-      let left = rect.left;
-
-      // Some empty-line selections can report a zero rect; fall back to parent bounds.
-      if (top === 0 && left === 0) {
-        const anchorNode = domSelection.anchorNode;
-        const element = anchorNode?.nodeType === Node.ELEMENT_NODE
-          ? (anchorNode as Element)
-          : anchorNode?.parentElement;
-        if (element) {
-          const elementRect = element.getBoundingClientRect();
-          top = elementRect.top;
-          left = elementRect.left;
-        }
-      }
-
-      if (top === 0 && left === 0) {
+      const caretRect = readSelectionRect(domSelection, LINE_HEIGHT_PX);
+      if (!caretRect) {
         setCaretStyle(null);
         return;
       }
@@ -63,11 +48,26 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
 
       const scrollerRect = scroller.getBoundingClientRect();
 
-      let absoluteTop = (top - scrollerRect.top) + scroller.scrollTop;
-      let absoluteLeft = (left - scrollerRect.left) + scroller.scrollLeft;
+      let terminalVisualOffsetPx = 0;
+      if (caretRect.source === 'adjacent-probe' || caretRect.source === 'anchor-fallback') {
+        const rootEl = editor.getRootElement();
+        if (rootEl) {
+          const normalizedText = normalizePlainText($getRoot().getTextContent());
+          const selectionState = readSelectionStateFromDom(rootEl, domSelection, normalizedText.length);
+          const trailingNewlines = normalizedText.match(/\n+$/)?.[0].length ?? 0;
+          const trailingExtraRows = Math.max(0, trailingNewlines - 1);
+
+          if (selectionState.isCollapsed && selectionState.anchor === normalizedText.length && trailingExtraRows > 0) {
+            terminalVisualOffsetPx = trailingExtraRows * LINE_HEIGHT_PX;
+          }
+        }
+      }
+
+      let absoluteTop = (caretRect.top - scrollerRect.top) + scroller.scrollTop + terminalVisualOffsetPx;
+      let absoluteLeft = (caretRect.left - scrollerRect.left) + scroller.scrollLeft;
 
       absoluteLeft = Math.round(absoluteLeft / CELL_WIDTH_PX) * CELL_WIDTH_PX;
-      absoluteTop = Math.round(absoluteTop / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
+      absoluteTop = Math.floor(absoluteTop / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
 
       const minTop = scroller.scrollTop + topBoundaryPx;
       const maxTop = scroller.scrollTop + Math.max(topBoundaryPx, scroller.clientHeight - bottomBoundaryPx - LINE_HEIGHT_PX);
