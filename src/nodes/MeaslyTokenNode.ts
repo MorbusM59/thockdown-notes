@@ -59,6 +59,6 @@ export function $createMeaslyTokenNode(text: string, tokenType: string): MeaslyT
   return new MeaslyTokenNode(text, tokenType);
 }
 
-export function $isMeaslyTokenNode(node: any): node is MeaslyTokenNode {
+export function $isMeaslyTokenNode(node: unknown): node is MeaslyTokenNode {
   return node instanceof MeaslyTokenNode;
 }

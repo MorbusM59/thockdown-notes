@@ -25,7 +25,7 @@ Exit criteria:
 - Typed editor adapter contract defined (text, selection, viewport, lifecycle events).
 - Event semantics documented for line breaks, caret movement, and scroll boundaries.
 - Integration API is stable enough to build app features against.
-Status: IN PROGRESS
+Status: DONE
 
 ### Phase 2 - Fixed Focus Engine Stability
 Goal: Achieve deterministic fixed-focus behavior and line-break/scroll mechanics.
@@ -34,7 +34,7 @@ Exit criteria:
 - Line break handling is stable at all boundary conditions.
 - Caret rendering and selection remain consistent under rapid input.
 - No visible flicker/jitter in normal editing paths.
-Status: PENDING
+Status: IN PROGRESS
 
 ### Phase 3 - Pixel-Perfect Visual Alignment
 Goal: Grid, glyphs, and custom caret align exactly and remain aligned under resize/zoom/font load.
@@ -86,6 +86,6 @@ At end of session:
 - Write next-session objective and first action.
 
 ## Current Focus
-- Active phase: Phase 1 - Editor Core Contract
-- Active objective: Activate text and selection events on the contract and remove placeholder snapshot content.
-- Out of scope: Porting feature modules before contract finalization.
+- Active phase: Phase 2 - Fixed Focus Engine Stability
+- Active objective: Finalize deterministic caret/scroll behavior under paste, wrapped lines, and boundary navigation; close remaining Phase 2 checklist items through targeted validation.
+- Out of scope: Phase 4+ persistence/feature carryover implementation before Phase 2 gate completion.

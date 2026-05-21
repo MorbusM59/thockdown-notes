@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
@@ -114,13 +114,13 @@ export function Editor({ bindings, adapterRef }: EditorProps) {
     bindings?.onSelectionChange?.(event);
   };
 
-  const buildViewport = (): EditorViewportState => ({
+  const buildViewport = useCallback((): EditorViewportState => ({
     topBoundaryPx: topBoundary,
     bottomBoundaryPx: bottomBoundary,
     scrollTopPx: scrollerRef.current?.scrollTop ?? 0,
     lineHeightPx: LINE_HEIGHT_PX,
     cellWidthPx: CELL_WIDTH_PX,
-  });
+  }), [topBoundary, bottomBoundary]);
 
   useEffect(() => {
     bindings?.onLifecycle?.({ phase: 'mounted' });
@@ -134,7 +134,7 @@ export function Editor({ bindings, adapterRef }: EditorProps) {
     const viewport = buildViewport();
     reportInvariantIssues('viewport-change', validateViewportInvariants(viewport));
     bindings?.onViewportChange?.({ source: 'programmatic', viewport });
-  }, [bindings, topBoundary, bottomBoundary]);
+  }, [bindings, buildViewport]);
 
   useEffect(() => {
     const scroller = scrollerRef.current;
@@ -148,7 +148,7 @@ export function Editor({ bindings, adapterRef }: EditorProps) {
 
     scroller.addEventListener('scroll', onScroll, { passive: true });
     return () => scroller.removeEventListener('scroll', onScroll);
-  }, [bindings, topBoundary, bottomBoundary]);
+  }, [bindings, buildViewport]);
 
   useEffect(() => {
     if (!adapterRef) return;
@@ -196,7 +196,7 @@ export function Editor({ bindings, adapterRef }: EditorProps) {
         adapterRef.current = null;
       }
     };
-  }, [adapterRef, topBoundary, bottomBoundary]);
+  }, [adapterRef, buildViewport]);
 
   useEffect(() => {
     const updateSize = () => {

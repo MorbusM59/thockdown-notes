@@ -326,3 +326,51 @@ Address observed cage escape and jitter by enforcing hard quantized movement and
 ### Next Session
 - Objective: Validate user-perceived movement quality and, if clean, mark first review gate reached.
 - First action: User performs quick interaction pass on latest build and reports residual artifacts.
+
+---
+
+## Session Entry
+
+### Session Date
+2026-05-21
+
+### Active Phase
+Phase 2 - Fixed Focus Engine Stability
+
+### Objective
+Drive editor codebase toward pristine, maintainable state while preserving fixed-focus behavior and eliminating drift-prone duplicated logic.
+
+### Out of Scope
+- Phase 4 persistence/IPC restoration.
+- Phase 5 feature carryover modules.
+- Packaging/release tasks.
+
+### Work Completed
+- Removed obsolete experimental selection-mutation paste correction and cleaned plugin chain.
+- Consolidated terminal trailing-newline visual compensation into `src/editor/CaretTerminalOffset.ts`.
+- Consolidated caret top-in-scroll resolution into `src/editor/CaretVisualPosition.ts` and consumed it from both caret/scroll plugins.
+- Centralized geometry constants in `src/editor/LayoutConstants.ts` and removed duplicated literals.
+- Refactored `src/editor/CaretRect.ts` to simplify adjacent-probe mapping and document explicit non-mutating fallback order.
+- Scoped editor diagnostics keydown listener to editor scroller instead of global window.
+- Replaced timeout-based layout defer with requestAnimationFrame scheduling and cleanup.
+- Resolved lint blockers (`react-hooks/exhaustive-deps` warnings in `Editor.tsx`, `no-explicit-any` in `MeaslyTokenNode.ts`).
+- Revalidated with `npx tsc --noEmit` and `npm run lint`.
+
+### Decisions
+- Decision: Keep selection state immutable during caret-geometry reads; only visual compensation is allowed.
+  - Reason: DOM/selection mutation during geometry probes destabilized focus and caused editor clickability regressions.
+- Decision: Extract shared caret/terminal offset policy into editor utilities consumed by both scroll and caret plugins.
+  - Reason: Prevents policy drift and eliminates duplicated symptom patches across runtime paths.
+
+### Risks or Blockers
+- Risk/Blocker: Terminal trailing-newline caret placement still depends on fallback geometry heuristics in edge browser states.
+  - Impact: Rare paste-tail display mismatches may still appear in specific collapsed-range conditions.
+  - Mitigation: Add focused scenario validation set for CRLF/blank-tail paste cases before marking Phase 2 complete.
+
+### Checklist Deltas
+- Checked: Process control continuity maintained and quality gates (type/lint) satisfied for this stabilization batch.
+- Unchecked/Reopened: Phase 2 behavioral gate items remain open pending explicit validation pass.
+
+### Next Session
+- Objective: Execute and document Phase 2 gate validation (Enter near boundaries, rapid key repeat, undo/redo, flicker/jump checks).
+- First action: Run scripted/manual validation matrix and update `docs/V2_PARITY_CHECKLIST.md` with concrete pass/fail outcomes.
