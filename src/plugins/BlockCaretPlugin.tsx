@@ -2,16 +2,14 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { $getRoot, $getSelection, $isRangeSelection } from 'lexical';
 import { readSelectionRect } from '../editor/CaretRect';
-import { normalizePlainText, readSelectionStateFromDom } from '../editor/SelectionOffsets';
+import { resolveCaretTopInScroll } from '../editor/CaretVisualPosition';
+import { CELL_WIDTH_PX, LINE_HEIGHT_PX } from '../editor/LayoutConstants';
 
 interface BlockCaretPluginProps {
   scrollerRef: React.RefObject<HTMLElement>;
   topBoundaryPx: number;
   bottomBoundaryPx: number;
 }
-
-const LINE_HEIGHT_PX = 24;
-const CELL_WIDTH_PX = 10;
 
 export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx }: BlockCaretPluginProps) {
   const [editor] = useLexicalComposerContext();
@@ -48,22 +46,15 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
 
       const scrollerRect = scroller.getBoundingClientRect();
 
-      let terminalVisualOffsetPx = 0;
-      if (caretRect.source === 'adjacent-probe' || caretRect.source === 'anchor-fallback') {
-        const rootEl = editor.getRootElement();
-        if (rootEl) {
-          const normalizedText = normalizePlainText($getRoot().getTextContent());
-          const selectionState = readSelectionStateFromDom(rootEl, domSelection, normalizedText.length);
-          const trailingNewlines = normalizedText.match(/\n+$/)?.[0].length ?? 0;
-          const trailingExtraRows = Math.max(0, trailingNewlines - 1);
-
-          if (selectionState.isCollapsed && selectionState.anchor === normalizedText.length && trailingExtraRows > 0) {
-            terminalVisualOffsetPx = trailingExtraRows * LINE_HEIGHT_PX;
-          }
-        }
-      }
-
-      let absoluteTop = (caretRect.top - scrollerRect.top) + scroller.scrollTop + terminalVisualOffsetPx;
+      let absoluteTop = resolveCaretTopInScroll({
+        caretRect,
+        scrollerRectTop: scrollerRect.top,
+        scrollerScrollTop: scroller.scrollTop,
+        rootEl: editor.getRootElement(),
+        domSelection,
+        rawText: $getRoot().getTextContent(),
+        lineHeightPx: LINE_HEIGHT_PX,
+      });
       let absoluteLeft = (caretRect.left - scrollerRect.left) + scroller.scrollLeft;
 
       absoluteLeft = Math.round(absoluteLeft / CELL_WIDTH_PX) * CELL_WIDTH_PX;

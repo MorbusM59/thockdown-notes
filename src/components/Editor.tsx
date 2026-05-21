@@ -24,6 +24,7 @@ import {
   validateViewportInvariants,
 } from '../editor/ContractInvariantHarness';
 import { logScenarioProbe, readCaretGeometry } from '../editor/ScenarioProbe';
+import { CELL_WIDTH_PX, LINE_HEIGHT_PX } from '../editor/LayoutConstants';
 
 const theme = {
   paragraph: 'editor-paragraph',
@@ -38,8 +39,6 @@ interface EditorProps {
   adapterRef?: React.MutableRefObject<EditorAdapter | null>;
 }
 
-const LINE_HEIGHT_PX = 24;
-const CELL_WIDTH_PX = 10;
 const ENABLE_CONTRACT_ASSERTIONS = import.meta.env.DEV;
 const ENABLE_SCENARIO_PROBES = import.meta.env.DEV;
 
@@ -235,11 +234,14 @@ export function Editor({ bindings, adapterRef }: EditorProps) {
         return bottomBoundaryFromTopEdge(h, topEdge);
       });
     };
-    
-    // We defer slightly on mount so the container size is physically resolved in the DOM
-    setTimeout(updateLayout, 0);
+
+    // Defer to next paint so the container size is resolved before quantizing boundaries.
+    const frame = requestAnimationFrame(updateLayout);
     window.addEventListener('resize', updateLayout);
-    return () => window.removeEventListener('resize', updateLayout);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', updateLayout);
+    };
   }, []);
 
   // Global Mouse listeners for Dragging
@@ -340,8 +342,11 @@ export function Editor({ bindings, adapterRef }: EditorProps) {
       }
     };
 
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+
+    scroller.addEventListener('keydown', onKeyDown);
+    return () => scroller.removeEventListener('keydown', onKeyDown);
   }, [topBoundary, bottomBoundary]);
 
   const initialConfig = {

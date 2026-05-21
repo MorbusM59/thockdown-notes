@@ -3,6 +3,7 @@ export interface SelectionRect {
   bottom: number;
   left: number;
   right: number;
+  // Tracks which geometry source produced the rect for downstream policy decisions.
   source: 'primary' | 'client-rect' | 'adjacent-probe' | 'anchor-fallback';
 }
 
@@ -23,12 +24,25 @@ function isUsableRect(rect: SelectionRect): boolean {
   return Number.isFinite(rect.top) && Number.isFinite(rect.bottom) && (rect.bottom - rect.top) > 0;
 }
 
+function pointAtRectEdge(rect: SelectionRect, edge: 'left' | 'right'): SelectionRect {
+  const x = edge === 'right' ? rect.right : rect.left;
+  return {
+    top: rect.top,
+    bottom: rect.bottom,
+    left: x,
+    right: x,
+    source: 'adjacent-probe',
+  };
+}
+
 function tryProbeRangeRect(probe: Range): SelectionRect | null {
   const rect = rectFromDomRect(probe.getBoundingClientRect(), 'adjacent-probe');
   return isUsableRect(rect) ? rect : null;
 }
 
 function readCollapsedCaretFromAdjacentContent(range: Range): SelectionRect | null {
+  // Browser range rects can be zero-sized at collapsed caret positions in trailing empty lines.
+  // Probe adjacent rendered content to recover row-aligned geometry without mutating DOM.
   const container = range.startContainer;
   const offset = range.startOffset;
 
@@ -41,15 +55,7 @@ function readCollapsedCaretFromAdjacentContent(range: Range): SelectionRect | nu
       probe.setStart(text, offset - 1);
       probe.setEnd(text, offset);
       const rect = tryProbeRangeRect(probe);
-      if (rect) {
-        return {
-          top: rect.top,
-          bottom: rect.bottom,
-          left: rect.right,
-          right: rect.right,
-          source: 'adjacent-probe',
-        };
-      }
+      if (rect) return pointAtRectEdge(rect, 'right');
     }
 
     if (offset < len) {
@@ -57,15 +63,7 @@ function readCollapsedCaretFromAdjacentContent(range: Range): SelectionRect | nu
       probe.setStart(text, offset);
       probe.setEnd(text, offset + 1);
       const rect = tryProbeRangeRect(probe);
-      if (rect) {
-        return {
-          top: rect.top,
-          bottom: rect.bottom,
-          left: rect.left,
-          right: rect.left,
-          source: 'adjacent-probe',
-        };
-      }
+      if (rect) return pointAtRectEdge(rect, 'left');
     }
   }
 
@@ -78,15 +76,7 @@ function readCollapsedCaretFromAdjacentContent(range: Range): SelectionRect | nu
       const probe = range.cloneRange();
       probe.selectNode(before);
       const rect = tryProbeRangeRect(probe);
-      if (rect) {
-        return {
-          top: rect.top,
-          bottom: rect.bottom,
-          left: rect.right,
-          right: rect.right,
-          source: 'adjacent-probe',
-        };
-      }
+      if (rect) return pointAtRectEdge(rect, 'right');
     }
 
     if (offset < childCount) {
@@ -94,15 +84,7 @@ function readCollapsedCaretFromAdjacentContent(range: Range): SelectionRect | nu
       const probe = range.cloneRange();
       probe.selectNode(after);
       const rect = tryProbeRangeRect(probe);
-      if (rect) {
-        return {
-          top: rect.top,
-          bottom: rect.bottom,
-          left: rect.left,
-          right: rect.left,
-          source: 'adjacent-probe',
-        };
-      }
+      if (rect) return pointAtRectEdge(rect, 'left');
     }
   }
 
@@ -112,6 +94,8 @@ function readCollapsedCaretFromAdjacentContent(range: Range): SelectionRect | nu
 export function readSelectionRect(selection: Selection, fallbackLineHeightPx: number): SelectionRect | null {
   if (selection.rangeCount === 0) return null;
 
+  // Fallback order is intentionally non-mutating:
+  // 1) range rect, 2) client rect list, 3) adjacent content probes, 4) anchor element box.
   const range = selection.getRangeAt(0);
   const primary = rectFromDomRect(range.getBoundingClientRect(), 'primary');
   if (isUsableRect(primary)) return primary;

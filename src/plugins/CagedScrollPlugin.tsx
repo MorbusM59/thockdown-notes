@@ -2,7 +2,8 @@ import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext
 import { useEffect } from 'react';
 import { $getRoot, SELECTION_CHANGE_COMMAND, COMMAND_PRIORITY_LOW } from 'lexical';
 import { readSelectionRect } from '../editor/CaretRect';
-import { normalizePlainText, readSelectionStateFromDom } from '../editor/SelectionOffsets';
+import { resolveCaretTopInScroll } from '../editor/CaretVisualPosition';
+import { LINE_HEIGHT_PX, PIXELS_PER_WHEEL_UNIT } from '../editor/LayoutConstants';
 
 interface CagedScrollPluginProps {
   scrollerRef: React.RefObject<HTMLElement>;
@@ -12,8 +13,6 @@ interface CagedScrollPluginProps {
 
 export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx }: CagedScrollPluginProps) {
   const [editor] = useLexicalComposerContext();
-  const LINE_HEIGHT_PX = 24;
-  const PIXELS_PER_WHEEL_UNIT = 100;
 
   useEffect(() => {
     const checkScroll = () => {
@@ -28,24 +27,17 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       const caretRect = readSelectionRect(domSelection, LINE_HEIGHT_PX);
       if (!caretRect) return false;
 
-      let terminalVisualOffsetPx = 0;
-      if (caretRect.source === 'adjacent-probe' || caretRect.source === 'anchor-fallback') {
-        editor.getEditorState().read(() => {
-          const rootEl = editor.getRootElement();
-          if (!rootEl) return;
-          const normalizedText = normalizePlainText($getRoot().getTextContent());
-          const selectionState = readSelectionStateFromDom(rootEl, domSelection, normalizedText.length);
-          const trailingNewlines = normalizedText.match(/\n+$/)?.[0].length ?? 0;
-          const trailingExtraRows = Math.max(0, trailingNewlines - 1);
-
-          if (selectionState.isCollapsed && selectionState.anchor === normalizedText.length && trailingExtraRows > 0) {
-            terminalVisualOffsetPx = trailingExtraRows * LINE_HEIGHT_PX;
-          }
-        });
-      }
+      const caretTopInScroll = resolveCaretTopInScroll({
+        caretRect,
+        scrollerRectTop: scrollerRect.top,
+        scrollerScrollTop: scroller.scrollTop,
+        rootEl: editor.getRootElement(),
+        domSelection,
+        rawText: $getRoot().getTextContent(),
+        lineHeightPx: LINE_HEIGHT_PX,
+      });
 
       // Convert to scroll-space and quantize to exact row boxes.
-      const caretTopInScroll = (caretRect.top - scrollerRect.top) + scroller.scrollTop + terminalVisualOffsetPx;
       const quantizedRowTop = Math.floor(caretTopInScroll / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
       const quantizedRowBottom = quantizedRowTop + LINE_HEIGHT_PX;
 

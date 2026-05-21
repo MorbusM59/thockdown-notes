@@ -1,4 +1,5 @@
 import { readSelectionRect } from './CaretRect';
+import { LINE_HEIGHT_PX } from './LayoutConstants';
 
 export interface CaretGeometry {
   top: number;
@@ -10,7 +11,7 @@ export interface CaretGeometry {
 export function readCaretGeometry(): CaretGeometry | null {
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0) return null;
-  const rect = readSelectionRect(selection, 24);
+  const rect = readSelectionRect(selection, LINE_HEIGHT_PX);
   if (!rect) return null;
 
   return {
