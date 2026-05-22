@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { $getRoot, $getSelection, $isRangeSelection } from 'lexical';
 import { readSelectionRect } from '../editor/CaretRect';
 import { resolveCaretTopInScroll } from '../editor/CaretVisualPosition';
 import { CELL_WIDTH_PX, LINE_HEIGHT_PX } from '../editor/LayoutConstants';
+import { resolveCagedScrollTarget } from '../editor/CageMath';
 
 interface BlockCaretPluginProps {
   scrollerRef: React.RefObject<HTMLElement>;
@@ -14,6 +15,7 @@ interface BlockCaretPluginProps {
 export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx }: BlockCaretPluginProps) {
   const [editor] = useLexicalComposerContext();
   const [caretStyle, setCaretStyle] = useState<React.CSSProperties | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
   const updateCaret = useCallback(() => {
     editor.getEditorState().read(() => {
@@ -46,7 +48,7 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
 
       const scrollerRect = scroller.getBoundingClientRect();
 
-      let absoluteTop = resolveCaretTopInScroll({
+      const caretTopInScroll = resolveCaretTopInScroll({
         caretRect,
         scrollerRectTop: scrollerRect.top,
         scrollerScrollTop: scroller.scrollTop,
@@ -55,17 +57,35 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
         rawText: $getRoot().getTextContent(),
         lineHeightPx: LINE_HEIGHT_PX,
       });
-      let absoluteLeft = (caretRect.left - scrollerRect.left) + scroller.scrollLeft;
+
+      const { targetScrollTopPx } = resolveCagedScrollTarget({
+        caretTopInScrollPx: caretTopInScroll,
+        scrollerScrollTopPx: scroller.scrollTop,
+        scrollerClientHeightPx: scroller.clientHeight,
+        scrollerScrollHeightPx: scroller.scrollHeight,
+        topBoundaryPx,
+        bottomBoundaryPx,
+        lineHeightPx: LINE_HEIGHT_PX,
+      });
+
+      // Never paint from a pre-correction state; reconcile scroll first.
+      if (targetScrollTopPx !== scroller.scrollTop) {
+        scroller.scrollTop = targetScrollTopPx;
+      }
+
+      const quantizedRowTopInScroll = Math.floor(caretTopInScroll / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
+      const topInViewport = quantizedRowTopInScroll - targetScrollTopPx;
+
+      let absoluteLeft = caretRect.left - scrollerRect.left;
 
       absoluteLeft = Math.round(absoluteLeft / CELL_WIDTH_PX) * CELL_WIDTH_PX;
-      absoluteTop = Math.floor(absoluteTop / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
 
-      const minTop = scroller.scrollTop + topBoundaryPx;
-      const maxTop = scroller.scrollTop + Math.max(topBoundaryPx, scroller.clientHeight - bottomBoundaryPx - LINE_HEIGHT_PX);
-      absoluteTop = Math.max(minTop, Math.min(maxTop, absoluteTop));
+      const minTop = topBoundaryPx;
+      const maxTop = Math.max(topBoundaryPx, scroller.clientHeight - bottomBoundaryPx - LINE_HEIGHT_PX);
+      const clampedTop = Math.max(minTop, Math.min(maxTop, topInViewport));
 
       setCaretStyle({
-        top: absoluteTop,
+        top: clampedTop,
         left: absoluteLeft,
         width: CELL_WIDTH_PX,
         height: LINE_HEIGHT_PX,
@@ -73,25 +93,41 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
     });
   }, [editor, scrollerRef, topBoundaryPx, bottomBoundaryPx]);
 
+  const scheduleCaretUpdate = useCallback(() => {
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+
+    // Resolve geometry once per frame after selection/scroll layout has settled.
+    animationFrameRef.current = requestAnimationFrame(() => {
+      animationFrameRef.current = null;
+      updateCaret();
+    });
+  }, [updateCaret]);
+
   useEffect(() => {
-    const removeUpdateListener = editor.registerUpdateListener(() => updateCaret());
-    document.addEventListener('selectionchange', updateCaret);
-    window.addEventListener('resize', updateCaret);
+    const removeUpdateListener = editor.registerUpdateListener(() => scheduleCaretUpdate());
+    window.addEventListener('resize', scheduleCaretUpdate);
 
     const scroller = scrollerRef.current;
     if (scroller) {
-      scroller.addEventListener('scroll', updateCaret);
+      scroller.addEventListener('scroll', scheduleCaretUpdate);
     }
 
+    scheduleCaretUpdate();
+
     return () => {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
       removeUpdateListener();
-      document.removeEventListener('selectionchange', updateCaret);
-      window.removeEventListener('resize', updateCaret);
+      window.removeEventListener('resize', scheduleCaretUpdate);
       if (scroller) {
-        scroller.removeEventListener('scroll', updateCaret);
+        scroller.removeEventListener('scroll', scheduleCaretUpdate);
       }
     };
-  }, [editor, updateCaret, scrollerRef]);
+  }, [editor, scheduleCaretUpdate, scrollerRef]);
 
   if (!caretStyle) return null;
 

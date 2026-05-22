@@ -374,3 +374,45 @@ Drive editor codebase toward pristine, maintainable state while preserving fixed
 ### Next Session
 - Objective: Execute and document Phase 2 gate validation (Enter near boundaries, rapid key repeat, undo/redo, flicker/jump checks).
 - First action: Run scripted/manual validation matrix and update `docs/V2_PARITY_CHECKLIST.md` with concrete pass/fail outcomes.
+
+---
+
+## Session Entry
+
+### Session Date
+2026-05-22
+
+### Active Phase
+Phase 2 - Fixed Focus Engine Stability
+
+### Objective
+Execute the Phase 2 validation matrix and convert results into objective gate evidence.
+
+### Out of Scope
+- New architecture refactors.
+- Phase 4+ persistence and feature-carryover implementation.
+
+### Work Completed
+- Executed automated browser validation for undo/redo scenario.
+- Executed paste-tail (`CRLF+CRLF`) scenario and verified insertion point consistency.
+- Executed post-paste ArrowUp/ArrowDown navigation validation.
+- Ran additional structural automation for resize and boundary-handle drag quantization.
+- Updated `docs/V2_PHASE2_VALIDATION_MATRIX.md` with explicit PASS/PARTIAL/MANUAL-PENDING outcomes.
+- Updated `docs/V2_PARITY_CHECKLIST.md` to check off undo/redo stability item.
+
+### Decisions
+- Decision: Keep Phase 2 gate OPEN until perceptual interaction checks (jitter/flicker/feel) are manually verified.
+  - Reason: Structural and state-level automation cannot fully certify visual smoothness or user-perceived drift.
+
+### Risks or Blockers
+- Risk/Blocker: Remaining open Phase 2 items depend on human-perception validation (top/bottom Enter behavior, rapid-repeat feel, flicker/jump presence).
+  - Impact: Gate closure cannot be claimed solely from automation.
+  - Mitigation: Run focused manual pass using matrix scenarios and immediately record PASS/FAIL evidence.
+
+### Checklist Deltas
+- Checked: Undo/redo maintains consistent caret and viewport behavior.
+- Unchecked/Reopened: Enter-near-boundary determinism, rapid-repeat stability, and anti-flicker item remain open.
+
+### Next Session
+- Objective: Complete final manual Phase 2 validation and decide READY TO CLOSE vs OPEN with defects.
+- First action: Run P2-01, P2-02, P2-03, and perceptual portions of P2-05/P2-08/P2-09/P2-10 directly in-app and record each outcome in `docs/V2_PHASE2_VALIDATION_MATRIX.md`.

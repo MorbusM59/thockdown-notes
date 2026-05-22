@@ -4,6 +4,7 @@ import { $getRoot, SELECTION_CHANGE_COMMAND, COMMAND_PRIORITY_LOW } from 'lexica
 import { readSelectionRect } from '../editor/CaretRect';
 import { resolveCaretTopInScroll } from '../editor/CaretVisualPosition';
 import { LINE_HEIGHT_PX, PIXELS_PER_WHEEL_UNIT } from '../editor/LayoutConstants';
+import { resolveCagedScrollTarget } from '../editor/CageMath';
 
 interface CagedScrollPluginProps {
   scrollerRef: React.RefObject<HTMLElement>;
@@ -23,7 +24,6 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       if (!domSelection || domSelection.rangeCount === 0) return false;
 
       const scrollerRect = scroller.getBoundingClientRect();
-      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
       const caretRect = readSelectionRect(domSelection, LINE_HEIGHT_PX);
       if (!caretRect) return false;
 
@@ -37,31 +37,19 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         lineHeightPx: LINE_HEIGHT_PX,
       });
 
-      // Convert to scroll-space and quantize to exact row boxes.
-      const quantizedRowTop = Math.floor(caretTopInScroll / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
-      const quantizedRowBottom = quantizedRowTop + LINE_HEIGHT_PX;
+      const { targetScrollTopPx } = resolveCagedScrollTarget({
+        caretTopInScrollPx: caretTopInScroll,
+        scrollerScrollTopPx: scroller.scrollTop,
+        scrollerClientHeightPx: scroller.clientHeight,
+        scrollerScrollHeightPx: scroller.scrollHeight,
+        topBoundaryPx,
+        bottomBoundaryPx,
+        lineHeightPx: LINE_HEIGHT_PX,
+      });
 
-      const cageTopInScroll = scroller.scrollTop + topBoundaryPx;
-      const cageBottomInScroll = scroller.scrollTop + scroller.clientHeight - bottomBoundaryPx;
-
-      let targetScrollTop = scroller.scrollTop;
-
-      if (quantizedRowTop < cageTopInScroll) {
-        const difference = cageTopInScroll - quantizedRowTop;
-        const rows = Math.ceil(difference / LINE_HEIGHT_PX);
-        targetScrollTop -= rows * LINE_HEIGHT_PX;
-      } else if (quantizedRowBottom > cageBottomInScroll) {
-        const difference = quantizedRowBottom - cageBottomInScroll;
-        const rows = Math.ceil(difference / LINE_HEIGHT_PX);
-        targetScrollTop += rows * LINE_HEIGHT_PX;
-      }
-
-      targetScrollTop = Math.round(targetScrollTop / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
-      targetScrollTop = Math.max(0, Math.min(maxScrollTop, targetScrollTop));
-
-      if (targetScrollTop !== scroller.scrollTop) {
+      if (targetScrollTopPx !== scroller.scrollTop) {
         scroller.scrollTo({
-          top: targetScrollTop,
+          top: targetScrollTopPx,
           behavior: 'auto',
         });
       }

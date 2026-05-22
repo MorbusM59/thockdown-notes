@@ -417,13 +417,14 @@ export function Editor({ bindings, adapterRef }: EditorProps) {
                 }
                 ErrorBoundary={LexicalErrorBoundary}
               />
-              {/* Native Caret Replacement! */}
-              <BlockCaretPlugin
-                scrollerRef={scrollerRef}
-                topBoundaryPx={topBoundary}
-                bottomBoundaryPx={bottomBoundary}
-              />
             </div>
+
+            {/* Native Caret Replacement overlayed in viewport space */}
+            <BlockCaretPlugin
+              scrollerRef={scrollerRef}
+              topBoundaryPx={topBoundary}
+              bottomBoundaryPx={bottomBoundary}
+            />
         
             <HistoryPlugin />
             <SyntaxHighlightPlugin />

@@ -87,5 +87,5 @@ At end of session:
 
 ## Current Focus
 - Active phase: Phase 2 - Fixed Focus Engine Stability
-- Active objective: Finalize deterministic caret/scroll behavior under paste, wrapped lines, and boundary navigation; close remaining Phase 2 checklist items through targeted validation.
+- Active objective: Complete remaining manual perceptual checks (boundary Enter behavior, rapid-repeat stability, flicker/jump absence) and close the Phase 2 gate using the validation matrix evidence.
 - Out of scope: Phase 4+ persistence/feature carryover implementation before Phase 2 gate completion.
