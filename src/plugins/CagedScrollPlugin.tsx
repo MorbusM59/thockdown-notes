@@ -32,6 +32,25 @@ const computeVisibleMiddleRows = (
   return Math.max(1, Math.floor(middleHeightPx / LINE_HEIGHT_PX));
 };
 
+const isAlignedToRowGrid = (valuePx: number) => Math.abs(valuePx % LINE_HEIGHT_PX) < 0.01;
+
+const resolveDirectionalQuantizedScrollTop = (
+  currentScrollTopPx: number,
+  previousScrollTopPx: number,
+  maxScrollTopPx: number,
+) => {
+  const delta = currentScrollTopPx - previousScrollTopPx;
+  if (Math.abs(delta) < 0.01) {
+    return Math.max(0, Math.min(maxScrollTopPx, Math.round(currentScrollTopPx / LINE_HEIGHT_PX) * LINE_HEIGHT_PX));
+  }
+
+  if (delta > 0) {
+    return Math.max(0, Math.min(maxScrollTopPx, Math.ceil(currentScrollTopPx / LINE_HEIGHT_PX) * LINE_HEIGHT_PX));
+  }
+
+  return Math.max(0, Math.min(maxScrollTopPx, Math.floor(currentScrollTopPx / LINE_HEIGHT_PX) * LINE_HEIGHT_PX));
+};
+
 export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx }: CagedScrollPluginProps) {
   const [editor] = useLexicalComposerContext();
 
@@ -102,6 +121,9 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     let pendingIntent: ViewportIntent = 'none';
     let refocusFrame: number | null = null;
     const pressedRefocusKeys = new Set<string>();
+    let isPointerDragSelectionActive = false;
+    let lastDragScrollTopPx = 0;
+    let isApplyingDragQuantizedCorrection = false;
 
     const clearCagedRefocusState = () => {
       if (!scroller) return;
@@ -110,6 +132,10 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         pendingIntent = 'none';
       }
       deactivateRefocusTransaction(scroller);
+    };
+
+    const endPointerDragSelection = () => {
+      isPointerDragSelectionActive = false;
     };
 
     const scheduleRefocus = () => {
@@ -137,6 +163,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     const scroller = scrollerRef.current;
     if (scroller) {
       deactivateRefocusTransaction(scroller);
+      lastDragScrollTopPx = scroller.scrollTop;
     }
     let pendingWheelPx = 0;
 
@@ -246,12 +273,74 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       pendingIntent = 'ensure-visible';
     };
 
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!scroller) return;
+      if (event.button !== 0) return;
+
+      const root = editor.getRootElement();
+      if (!root) return;
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!root.contains(target)) return;
+
+      isPointerDragSelectionActive = true;
+      lastDragScrollTopPx = scroller.scrollTop;
+    };
+
+    const handlePointerUp = () => {
+      endPointerDragSelection();
+    };
+
+    const handlePointerCancel = () => {
+      endPointerDragSelection();
+    };
+
+    const handleSelectionDragScrollQuantization = () => {
+      if (!scroller) return;
+
+      const currentScrollTopPx = scroller.scrollTop;
+
+      if (isApplyingDragQuantizedCorrection) {
+        lastDragScrollTopPx = currentScrollTopPx;
+        return;
+      }
+
+      if (!isPointerDragSelectionActive) {
+        lastDragScrollTopPx = currentScrollTopPx;
+        return;
+      }
+
+      if (isAlignedToRowGrid(currentScrollTopPx)) {
+        lastDragScrollTopPx = currentScrollTopPx;
+        return;
+      }
+
+      const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      const quantizedTargetPx = resolveDirectionalQuantizedScrollTop(
+        currentScrollTopPx,
+        lastDragScrollTopPx,
+        maxScrollTopPx,
+      );
+
+      if (Math.abs(quantizedTargetPx - currentScrollTopPx) < 0.01) {
+        lastDragScrollTopPx = currentScrollTopPx;
+        return;
+      }
+
+      isApplyingDragQuantizedCorrection = true;
+      scroller.scrollTop = quantizedTargetPx;
+      isApplyingDragQuantizedCorrection = false;
+      lastDragScrollTopPx = quantizedTargetPx;
+    };
+
     const handleWindowBlur = () => {
+      endPointerDragSelection();
       clearCagedRefocusState();
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState !== 'visible') {
+        endPointerDragSelection();
         clearCagedRefocusState();
       }
     };
@@ -260,6 +349,10 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     scroller?.addEventListener('keyup', handleKeyUp);
     scroller?.addEventListener('paste', handlePaste);
     scroller?.addEventListener('wheel', handleWheel, { passive: false });
+    scroller?.addEventListener('pointerdown', handlePointerDown, { passive: true });
+    scroller?.addEventListener('scroll', handleSelectionDragScrollQuantization, { passive: true });
+    window.addEventListener('pointerup', handlePointerUp, { passive: true });
+    window.addEventListener('pointercancel', handlePointerCancel, { passive: true });
     window.addEventListener('blur', handleWindowBlur);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
@@ -272,6 +365,10 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       scroller?.removeEventListener('keyup', handleKeyUp);
       scroller?.removeEventListener('paste', handlePaste);
       scroller?.removeEventListener('wheel', handleWheel);
+      scroller?.removeEventListener('pointerdown', handlePointerDown);
+      scroller?.removeEventListener('scroll', handleSelectionDragScrollQuantization);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
       window.removeEventListener('blur', handleWindowBlur);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (scroller) {

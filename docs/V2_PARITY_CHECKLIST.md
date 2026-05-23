@@ -25,9 +25,9 @@ Use this checklist as the single source of truth for parity and stability. Do no
 - [x] No forced browser behavior fight that causes flicker or jump.
 
 ## D. Visual Alignment (Phase 3)
-- [ ] Glyph advance aligns to grid cell width.
-- [ ] Baseline and row height alignment are stable across content.
-- [ ] Custom caret aligns to glyph grid in empty and non-empty lines.
+- [x] Glyph advance aligns to grid cell width.
+- [x] Baseline and row height alignment are stable across content.
+- [x] Custom caret aligns to glyph grid in empty and non-empty lines.
 - [ ] Selection highlight does not break alignment perception.
 - [ ] Resize/font-ready/initial render keep alignment stable.
 

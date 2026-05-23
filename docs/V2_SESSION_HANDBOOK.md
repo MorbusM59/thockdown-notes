@@ -291,6 +291,48 @@ Start invariant-driven stabilization by adding a contract verification harness f
 ## Session Entry
 
 ### Session Date
+2026-05-23
+
+### Active Phase
+Phase 2 - Fixed Focus Engine Stability
+
+### Objective
+Investigate reported CRLF-tail bottom-of-document disagreement between wheel scroll and ArrowDown caret traversal with root-cause-level evidence.
+
+### Out of Scope
+- Phase 4 persistence spine implementation.
+- Feature carryover beyond Phase 2 stability.
+
+### Work Completed
+- Reproduced and instrumented terminal empty-line behavior under real clipboard paste using CRLF+CRLF tails.
+- Verified current live state where wheel and ArrowDown are now in sync for the reported scenario.
+- Captured detailed caret/selection telemetry for terminal paragraphs and wrapped-line traversal.
+- Benchmarked selection-offset range mapping at large document sizes; no immediate performance ceiling observed in current workloads.
+
+### Decisions
+- Decision: Treat the CRLF-tail wheel/ArrowDown disagreement as currently resolved in the live app state, not an active blocker.
+  - Reason: User manual validation and repeated probes both confirmed synchronized behavior.
+- Decision: Keep the deeper terminal-offset model risk documented, but do not patch without a deterministic failing repro.
+  - Reason: Proper process requires evidence-driven changes to avoid introducing regressions in already-stable paths.
+
+### Risks or Blockers
+- Risk/Blocker: Terminal collapsed-caret geometry still relies on fallback rect sources in empty paragraphs.
+  - Impact: Future edge regressions remain possible under specific content/layout combinations.
+  - Mitigation: Preserve instrumentation path and only implement fix design after deterministic failing capture.
+
+### Checklist Deltas
+- Checked: CRLF-tail wheel/ArrowDown sync issue currently non-repro and user-confirmed clean.
+- Unchecked/Reopened: Long-run traversal and broader perceptual gate checks remain open.
+
+### Next Session
+- Objective: Continue Phase 2 closure with remaining long-run traversal and perceptual stability checks.
+- First action: Run prolonged manual traversal pass with mixed paste + wrap + boundary navigation and log any deterministic failures.
+
+---
+
+## Session Entry
+
+### Session Date
 2026-05-19
 
 ### Active Phase
@@ -380,6 +422,85 @@ Drive editor codebase toward pristine, maintainable state while preserving fixed
 ## Session Entry
 
 ### Session Date
+2026-05-23
+
+### Active Phase
+Phase 2 - Fixed Focus Engine Stability
+
+### Objective
+Close Phase 2 with final manual stability confirmation under large-document stress.
+
+### Out of Scope
+- Phase 4 persistence spine implementation.
+- Feature carryover work before visual alignment gate starts.
+
+### Work Completed
+- User completed final manual perceptual validation and reported smooth/correct behavior.
+- User confirmed stability with extreme paste-scale stress (~10,000 lines) and no interaction desync.
+- Updated validation matrix to pass long-document traversal and promote gate decision state.
+- Updated master execution map to mark Phase 2 done and shift active focus to Phase 3.
+
+### Decisions
+- Decision: Treat Phase 2 as complete and advance to Phase 3 alignment work.
+  - Reason: Gate-critical behavioral criteria are now met with both automation evidence and explicit manual sign-off.
+
+### Risks or Blockers
+- Risk/Blocker: Terminal empty-line fallback geometry remains an architectural sensitivity.
+  - Impact: Could reappear in future if alignment refactors alter caret geometry ordering.
+  - Mitigation: Keep existing instrumentation path and use it as a guardrail during Phase 3 caret/grid updates.
+
+### Checklist Deltas
+- Checked: Phase 2 long-run traversal/stress confidence established.
+- Unchecked/Reopened: Phase 3 visual alignment checklist remains entirely open.
+
+### Next Session
+- Objective: Begin Phase 3 by validating grid/glyph/caret alignment invariants under resize + font-ready transitions.
+- First action: Capture a deterministic alignment baseline (row/column snap assertions + visual probe logs) before any alignment code changes.
+
+---
+
+## Session Entry
+
+### Session Date
+2026-05-23
+
+### Active Phase
+Phase 3 - Pixel-Perfect Visual Alignment
+
+### Objective
+Capture deterministic pre-change alignment baseline for grid, glyph, and caret geometry.
+
+### Out of Scope
+- Phase 4 persistence spine implementation.
+- Feature carryover while Phase 3 baseline is still being established.
+
+### Work Completed
+- Captured style/metric baseline for font, line lattice, cell width, and caret probe points.
+- Verified font-readiness stability (`document.fonts.ready`) with zero measured metric drift.
+- Logged baseline artifact at `docs/V3_ALIGNMENT_BASELINE.md`.
+
+### Decisions
+- Decision: Treat current baseline as valid for runtime/style state, but incomplete for true Electron window resize semantics.
+  - Reason: Shared browser instrumentation cannot fully represent app-window resize behavior in this environment.
+
+### Risks or Blockers
+- Risk/Blocker: Caret geometry probes rely primarily on fallback rect sources in collapsed/empty states.
+  - Impact: Alignment regressions may hide in fallback ordering changes.
+  - Mitigation: Keep fallback-source ratio tracked in baseline and reevaluate after each alignment change.
+
+### Checklist Deltas
+- Checked: Phase 3 baseline artifact created before code changes.
+- Unchecked/Reopened: Full resize matrix and visual acceptance thresholds still pending.
+
+### Next Session
+- Objective: Build resize-aware alignment matrix and set explicit acceptance thresholds for snap error.
+- First action: Run Electron-window manual resize pass while collecting probe logs tied to `docs/V3_ALIGNMENT_BASELINE.md` metrics.
+
+---
+
+## Session Entry
+
+### Session Date
 2026-05-22
 
 ### Active Phase
@@ -416,3 +537,155 @@ Execute the Phase 2 validation matrix and convert results into objective gate ev
 ### Next Session
 - Objective: Complete final manual Phase 2 validation and decide READY TO CLOSE vs OPEN with defects.
 - First action: Run P2-01, P2-02, P2-03, and perceptual portions of P2-05/P2-08/P2-09/P2-10 directly in-app and record each outcome in `docs/V2_PHASE2_VALIDATION_MATRIX.md`.
+
+---
+
+## Session Entry
+
+### Session Date
+2026-05-23
+
+### Active Phase
+Phase 3 - Pixel-Perfect Visual Alignment
+
+### Objective
+Close the resize-perception gap and convert the baseline into threshold-driven execution criteria.
+
+### Out of Scope
+- Phase 4 persistence spine implementation.
+- Feature carryover modules while alignment thresholds are being established.
+
+### Work Completed
+- User manually validated resize behavior in live app and reported clean feel.
+- Updated `docs/V3_ALIGNMENT_BASELINE.md` with manual confirmation evidence.
+- Added provisional numeric acceptance thresholds for top/left snap error and resize stability.
+
+### Decisions
+- Decision: Treat manual resize confirmation as sufficient to proceed from pure baseline capture to threshold-driven Phase 3 implementation.
+  - Reason: The primary environment limitation (shared browser vs app window resize semantics) is now covered by explicit user confirmation.
+
+### Risks or Blockers
+- Risk/Blocker: Vertical snap offset baseline remains at ~2px and may represent intentional baseline policy or real drift.
+  - Impact: Misclassification could cause unnecessary churn or accidental regressions.
+  - Mitigation: Make first Phase 3 code change contingent on proving whether this offset is policy vs defect.
+
+### Checklist Deltas
+- Checked: Resize perception gap addressed with manual confirmation evidence.
+- Unchecked/Reopened: Phase 3 visual-alignment checklist items remain open pending threshold-verified implementation passes.
+
+### Next Session
+- Objective: Execute first alignment change candidate and validate against newly defined thresholds.
+- First action: Build a focused probe for non-empty/wrapped/empty/terminal caret rows and compare measured snap errors pre/post change.
+
+---
+
+## Session Entry
+
+### Session Date
+2026-05-23
+
+### Active Phase
+Phase 3 - Pixel-Perfect Visual Alignment
+
+### Objective
+Resolve whether the persistent ~2px vertical offset indicates a real alignment defect or a measurement artifact.
+
+### Out of Scope
+- Phase 4 persistence spine implementation.
+- Feature carryover while Phase 3 alignment criteria are still open.
+
+### Work Completed
+- Ran focused rendered-caret lattice probe across non-empty, wrapped, empty, and terminal-empty states.
+- Confirmed rendered block caret snaps exactly to both row (`24px`) and cell (`10px`) lattices.
+- Updated baseline docs and checklist evidence accordingly.
+
+### Decisions
+- Decision: Classify the ~2px signal as raw selection-rect artifact, not rendered alignment defect.
+  - Reason: Primary rendered-caret metrics show exact lattice snap with zero error at sampled points.
+
+### Risks or Blockers
+- Risk/Blocker: Remaining Phase 3 items still require selection-highlight and glyph-advance validation under real app interactions.
+  - Impact: Phase 3 cannot close until these criteria are explicitly evidenced.
+  - Mitigation: Run targeted highlight/glyph probes and then request focused manual perception pass for final sign-off.
+
+### Checklist Deltas
+- Checked: Custom caret aligns to glyph grid in empty and non-empty lines.
+- Unchecked/Reopened: Glyph advance, baseline/row stability, selection highlight, and resize/font-ready final criteria remain open.
+
+### Next Session
+- Objective: Close the next two highest-value Phase 3 criteria (glyph advance + baseline/row stability).
+- First action: Build probe that compares effective glyph advance to cell lattice across representative glyph sets and wrapped lines.
+
+---
+
+## Session Entry
+
+### Session Date
+2026-05-23
+
+### Active Phase
+Phase 3 - Pixel-Perfect Visual Alignment
+
+### Objective
+Close glyph-advance and row-lattice stability criteria using deterministic probes.
+
+### Out of Scope
+- Phase 4 persistence spine implementation.
+- Feature carryover until remaining Phase 3 visual criteria are confirmed.
+
+### Work Completed
+- Probed effective glyph advance across mixed glyph sets and confirmed exact `10px` cell alignment.
+- Probed row-lattice behavior across non-empty, wrapped, and empty lines.
+- Confirmed all row tops snap to 24px lattice; wrapped lines expand in exact line-height multiples.
+- Updated checklist and baseline evidence docs.
+
+### Decisions
+- Decision: Mark glyph-advance and baseline/row-stability criteria as complete.
+  - Reason: Probe evidence met thresholds with exact or better-than-threshold values.
+
+### Risks or Blockers
+- Risk/Blocker: Selection highlight perceptual quality is still unverified.
+  - Impact: Phase 3 cannot close without confirming highlight does not break alignment perception.
+  - Mitigation: Run focused manual highlight perception pass next.
+
+### Checklist Deltas
+- Checked: Glyph advance aligns to grid cell width.
+- Checked: Baseline and row height alignment are stable across content.
+- Unchecked/Reopened: Selection highlight and resize/font-ready/initial-render final criterion remain open.
+
+### Next Session
+- Objective: Validate selection-highlight alignment perception and close remaining Phase 3 criterion candidates.
+- First action: Run manual selection sweep across mixed content (short, wrapped, empty, terminal) and record PASS/FAIL evidence.
+
+---
+
+## Session Entry
+
+### Session Date
+2026-05-23
+
+### Active Phase
+Phase 3 - Pixel-Perfect Visual Alignment
+
+### Objective
+Address drag-selection auto-scroll desync by quantizing viewport movement during native pointer drag.
+
+### Work Completed
+- Implemented in-flight drag scroll quantization in `CagedScrollPlugin`.
+- Added pointer-driven drag lifecycle guards (start/end/cancel/blur/visibility).
+- Added direction-aware row snapping during drag scroll correction to avoid backward jitter.
+- Preserved existing wheel/key/paste intent behavior and refocus transaction semantics.
+- Verified lint and TypeScript compile success after change.
+
+### Decisions
+- Decision: Prefer in-operation quantization over post-selection snap.
+  - Reason: Keeps viewport/grid contract true at all times and avoids visible correction artifacts after selection ends.
+
+### Risks or Blockers
+- Risk/Blocker: Final acceptance still requires manual perceptual confirmation during real drag-to-boundary selection.
+  - Impact: Phase 3 selection-highlight criterion remains open until manual pass is recorded.
+  - Mitigation: Execute focused drag-selection manual suite next and log outcomes.
+
+### Next Session
+- Objective: Manually validate drag-selection smoothness and continuous grid alignment under boundary auto-scroll.
+- First action: Perform top-to-bottom and bottom-to-top drag sweeps with crossed boundaries and confirm no perceived misalignment.

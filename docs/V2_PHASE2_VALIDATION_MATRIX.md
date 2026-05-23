@@ -33,7 +33,8 @@ Use this matrix to close Phase 2 gate criteria with explicit evidence.
 | P2-07 | Boundary navigation after paste | From end of pasted text, ArrowUp/ArrowDown across wrapped and empty lines. | No line skip, no sticky end behavior, no mismatch after movement. | PASS (AUTO) | After paste-tail case, ArrowUp/ArrowDown moved selection line index deterministically between adjacent lines. |
 | P2-08 | Resize during editing | Resize window while editing near both boundaries. | Separator, cage, and caret remain aligned; no boundary drift. | PARTIAL (AUTO) | Structural check passed: boundary handles remained row-quantized (`mod 24 = 0`) through multiple viewport resizes; perceptual alignment still manual. |
 | P2-09 | Drag boundary handles | Drag top and bottom handles across multiple positions. | Visual separator and internal cage stay synchronized to row grid. | PARTIAL (AUTO) | Programmatic drag (~53px) snapped to row grid (`bottom: 132 -> 180`, quantized); perceptual sync still manual. |
-| P2-10 | Long document traversal | Navigate and edit through large multi-paragraph content. | Stable behavior over time; no cumulative drift. | MANUAL PENDING | Needs prolonged exploratory run. |
+| P2-10 | Long document traversal | Navigate and edit through large multi-paragraph content. | Stable behavior over time; no cumulative drift. | PASS (MANUAL) | User validated smooth behavior in prolonged run, including paste-scale stress at ~10,000 lines. |
+| P2-11 | CRLF-tail bottom sync (wheel vs ArrowDown) | Paste text ending with CRLF+CRLF repeatedly, move to bottom, compare wheel-down end position with ArrowDown traversal through trailing empties. | Wheel and ArrowDown agree on terminal empty-line reachability and visible bottom state. | PASS (MANUAL + AUTO) | User confirms issue no longer reproducible in live app; instrumentation also shows ArrowDown reaches both trailing empty paragraphs in current state. |
 
 ## Defect Logging
 - Severity levels: HIGH, MEDIUM, LOW.
@@ -46,5 +47,5 @@ Use this matrix to close Phase 2 gate criteria with explicit evidence.
   - Status/owner
 
 ## Gate Decision
-- Phase 2 status: `OPEN` / `READY TO CLOSE`
-- Decision notes: OPEN. Top/bottom Enter and rapid-repeat/flicker scenarios are manually validated PASS. P2-05 criteria were updated to the new free-scroll policy and now require manual sign-off, along with resize/drag/traversal checks.
+- Phase 2 status: `READY TO CLOSE`
+- Decision notes: All gate-critical stability scenarios are now validated with manual + automated evidence, including large-document traversal and CRLF-tail boundary behavior.

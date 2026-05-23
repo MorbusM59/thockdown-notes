@@ -34,7 +34,7 @@ Exit criteria:
 - Line break handling is stable at all boundary conditions.
 - Caret rendering and selection remain consistent under rapid input.
 - No visible flicker/jitter in normal editing paths.
-Status: IN PROGRESS
+Status: DONE
 
 ### Phase 3 - Pixel-Perfect Visual Alignment
 Goal: Grid, glyphs, and custom caret align exactly and remain aligned under resize/zoom/font load.
@@ -86,6 +86,6 @@ At end of session:
 - Write next-session objective and first action.
 
 ## Current Focus
-- Active phase: Phase 2 - Fixed Focus Engine Stability
-- Active objective: Complete remaining manual perceptual checks (boundary Enter behavior, rapid-repeat stability, flicker/jump absence) and close the Phase 2 gate using the validation matrix evidence.
-- Out of scope: Phase 4+ persistence/feature carryover implementation before Phase 2 gate completion.
+- Active phase: Phase 3 - Pixel-Perfect Visual Alignment
+- Active objective: Lock deterministic glyph/grid/caret alignment under resize and font-ready conditions without regressing Phase 2 interaction stability.
+- Out of scope: Phase 4+ persistence/feature carryover implementation before Phase 3 gate completion.
