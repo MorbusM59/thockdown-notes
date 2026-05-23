@@ -16,6 +16,7 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
   const [editor] = useLexicalComposerContext();
   const [caretStyle, setCaretStyle] = useState<React.CSSProperties | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const scheduleCaretUpdateRef = useRef<() => void>(() => {});
 
   const updateCaret = useCallback(() => {
     editor.getEditorState().read(() => {
@@ -58,34 +59,40 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
         lineHeightPx: LINE_HEIGHT_PX,
       });
 
-      const { targetScrollTopPx } = resolveCagedScrollTarget({
-        caretTopInScrollPx: caretTopInScroll,
-        scrollerScrollTopPx: scroller.scrollTop,
-        scrollerClientHeightPx: scroller.clientHeight,
-        scrollerScrollHeightPx: scroller.scrollHeight,
-        topBoundaryPx,
-        bottomBoundaryPx,
-        lineHeightPx: LINE_HEIGHT_PX,
-      });
+      const isCagedRefocusActive = scroller.dataset.cagedRefocusActive === '1';
+      if (isCagedRefocusActive) {
+        const { targetScrollTopPx } = resolveCagedScrollTarget({
+          caretTopInScrollPx: caretTopInScroll,
+          scrollerScrollTopPx: scroller.scrollTop,
+          scrollerClientHeightPx: scroller.clientHeight,
+          scrollerScrollHeightPx: scroller.scrollHeight,
+          topBoundaryPx,
+          bottomBoundaryPx,
+          lineHeightPx: LINE_HEIGHT_PX,
+        });
 
-      // Never paint from a pre-correction state; reconcile scroll first.
-      if (targetScrollTopPx !== scroller.scrollTop) {
-        scroller.scrollTop = targetScrollTopPx;
+        // Never render a transient pre-refocus row.
+        if (targetScrollTopPx !== scroller.scrollTop) {
+          scroller.scrollTop = targetScrollTopPx;
+          scheduleCaretUpdateRef.current();
+          return;
+        }
       }
 
       const quantizedRowTopInScroll = Math.floor(caretTopInScroll / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
-      const topInViewport = quantizedRowTopInScroll - targetScrollTopPx;
+      const topInViewport = quantizedRowTopInScroll - scroller.scrollTop;
+
+      if (topInViewport < 0 || topInViewport > scroller.clientHeight - LINE_HEIGHT_PX) {
+        setCaretStyle(null);
+        return;
+      }
 
       let absoluteLeft = caretRect.left - scrollerRect.left;
 
       absoluteLeft = Math.round(absoluteLeft / CELL_WIDTH_PX) * CELL_WIDTH_PX;
 
-      const minTop = topBoundaryPx;
-      const maxTop = Math.max(topBoundaryPx, scroller.clientHeight - bottomBoundaryPx - LINE_HEIGHT_PX);
-      const clampedTop = Math.max(minTop, Math.min(maxTop, topInViewport));
-
       setCaretStyle({
-        top: clampedTop,
+        top: topInViewport,
         left: absoluteLeft,
         width: CELL_WIDTH_PX,
         height: LINE_HEIGHT_PX,
@@ -104,6 +111,8 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
       updateCaret();
     });
   }, [updateCaret]);
+
+  scheduleCaretUpdateRef.current = scheduleCaretUpdate;
 
   useEffect(() => {
     const removeUpdateListener = editor.registerUpdateListener(() => scheduleCaretUpdate());

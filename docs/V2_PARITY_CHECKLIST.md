@@ -20,9 +20,9 @@ Use this checklist as the single source of truth for parity and stability. Do no
 ## C. Fixed Focus Stability (Phase 2)
 - [x] Enter at/near top boundary behaves deterministically.
 - [x] Enter at/near bottom boundary behaves deterministically.
-- [ ] Rapid key repeat does not desync caret and text.
+- [x] Rapid key repeat does not desync caret and text.
 - [x] Undo/redo maintains consistent caret and viewport behavior.
-- [ ] No forced browser behavior fight that causes flicker or jump.
+- [x] No forced browser behavior fight that causes flicker or jump.
 
 ## D. Visual Alignment (Phase 3)
 - [ ] Glyph advance aligns to grid cell width.

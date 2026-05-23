@@ -27,21 +27,22 @@ export function resolveCagedScrollTarget(
 
   const maxScrollTopPx = Math.max(0, scrollerScrollHeightPx - scrollerClientHeightPx);
   const quantizedRowTopPx = Math.floor(caretTopInScrollPx / lineHeightPx) * lineHeightPx;
-  const quantizedRowBottomPx = quantizedRowTopPx + lineHeightPx;
 
   const cageTopInScrollPx = scrollerScrollTopPx + topBoundaryPx;
-  const cageBottomInScrollPx = scrollerScrollTopPx + scrollerClientHeightPx - bottomBoundaryPx;
+  const lastRowTopOffsetPx = Math.max(
+    topBoundaryPx,
+    scrollerClientHeightPx - bottomBoundaryPx - lineHeightPx,
+  );
+  const cageLastRowTopInScrollPx = scrollerScrollTopPx + lastRowTopOffsetPx;
 
   let targetScrollTopPx = scrollerScrollTopPx;
 
   if (quantizedRowTopPx < cageTopInScrollPx) {
-    const differencePx = cageTopInScrollPx - quantizedRowTopPx;
-    const rows = Math.ceil(differencePx / lineHeightPx);
-    targetScrollTopPx -= rows * lineHeightPx;
-  } else if (quantizedRowBottomPx > cageBottomInScrollPx) {
-    const differencePx = quantizedRowBottomPx - cageBottomInScrollPx;
-    const rows = Math.ceil(differencePx / lineHeightPx);
-    targetScrollTopPx += rows * lineHeightPx;
+    // Place caret exactly on the first row of the middle section.
+    targetScrollTopPx = quantizedRowTopPx - topBoundaryPx;
+  } else if (quantizedRowTopPx > cageLastRowTopInScrollPx) {
+    // Place caret exactly on the last row of the middle section.
+    targetScrollTopPx = quantizedRowTopPx - lastRowTopOffsetPx;
   }
 
   targetScrollTopPx = Math.round(targetScrollTopPx / lineHeightPx) * lineHeightPx;
