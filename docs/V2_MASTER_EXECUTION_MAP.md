@@ -42,7 +42,7 @@ Exit criteria:
 - Grid-cell and glyph advance alignment is repeatable.
 - Caret snaps correctly in all supported editing contexts.
 - Resize and font readiness do not desync alignment.
-Status: PENDING
+Status: DONE
 
 ### Phase 4 - Persistence Spine
 Goal: Reintroduce V1-grade persistence and process boundaries.
@@ -86,6 +86,6 @@ At end of session:
 - Write next-session objective and first action.
 
 ## Current Focus
-- Active phase: Phase 3 - Pixel-Perfect Visual Alignment
-- Active objective: Lock deterministic glyph/grid/caret alignment under resize and font-ready conditions without regressing Phase 2 interaction stability.
-- Out of scope: Phase 4+ persistence/feature carryover implementation before Phase 3 gate completion.
+- Active phase: Phase 4 - Persistence Spine
+- Active objective: Re-establish V1-grade note lifecycle persistence contracts (renderer/main/preload) against the stable editor adapter.
+- Out of scope: Phase 5+ feature carryover implementation before Phase 4 persistence gates are complete.

@@ -121,9 +121,10 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     let pendingIntent: ViewportIntent = 'none';
     let refocusFrame: number | null = null;
     const pressedRefocusKeys = new Set<string>();
-    let isPointerDragSelectionActive = false;
+    let isPrimaryPointerDown = false;
     let lastDragScrollTopPx = 0;
     let isApplyingDragQuantizedCorrection = false;
+    let dragCorrectionFrame: number | null = null;
 
     const clearCagedRefocusState = () => {
       if (!scroller) return;
@@ -135,7 +136,11 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     };
 
     const endPointerDragSelection = () => {
-      isPointerDragSelectionActive = false;
+      isPrimaryPointerDown = false;
+      if (dragCorrectionFrame !== null) {
+        cancelAnimationFrame(dragCorrectionFrame);
+        dragCorrectionFrame = null;
+      }
     };
 
     const scheduleRefocus = () => {
@@ -276,14 +281,14 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     const handlePointerDown = (event: PointerEvent) => {
       if (!scroller) return;
       if (event.button !== 0) return;
+      isPrimaryPointerDown = true;
+      lastDragScrollTopPx = scroller.scrollTop;
+    };
 
-      const root = editor.getRootElement();
-      if (!root) return;
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (!root.contains(target)) return;
-
-      isPointerDragSelectionActive = true;
+    const handleMouseDown = (event: MouseEvent) => {
+      if (!scroller) return;
+      if (event.button !== 0) return;
+      isPrimaryPointerDown = true;
       lastDragScrollTopPx = scroller.scrollTop;
     };
 
@@ -298,39 +303,62 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     const handleSelectionDragScrollQuantization = () => {
       if (!scroller) return;
 
-      const currentScrollTopPx = scroller.scrollTop;
+      const observedScrollTopPx = scroller.scrollTop;
 
       if (isApplyingDragQuantizedCorrection) {
-        lastDragScrollTopPx = currentScrollTopPx;
+        lastDragScrollTopPx = observedScrollTopPx;
         return;
       }
 
-      if (!isPointerDragSelectionActive) {
-        lastDragScrollTopPx = currentScrollTopPx;
+      if (!isPrimaryPointerDown) {
+        lastDragScrollTopPx = observedScrollTopPx;
         return;
       }
 
-      if (isAlignedToRowGrid(currentScrollTopPx)) {
-        lastDragScrollTopPx = currentScrollTopPx;
+      const root = editor.getRootElement();
+      const domSelection = window.getSelection();
+      if (!root || !domSelection || domSelection.rangeCount === 0 || domSelection.isCollapsed) {
+        lastDragScrollTopPx = observedScrollTopPx;
         return;
       }
 
-      const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-      const quantizedTargetPx = resolveDirectionalQuantizedScrollTop(
-        currentScrollTopPx,
-        lastDragScrollTopPx,
-        maxScrollTopPx,
-      );
-
-      if (Math.abs(quantizedTargetPx - currentScrollTopPx) < 0.01) {
-        lastDragScrollTopPx = currentScrollTopPx;
+      const range = domSelection.getRangeAt(0);
+      if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) {
+        lastDragScrollTopPx = observedScrollTopPx;
         return;
       }
 
-      isApplyingDragQuantizedCorrection = true;
-      scroller.scrollTop = quantizedTargetPx;
-      isApplyingDragQuantizedCorrection = false;
-      lastDragScrollTopPx = quantizedTargetPx;
+      if (dragCorrectionFrame !== null) {
+        cancelAnimationFrame(dragCorrectionFrame);
+      }
+
+      dragCorrectionFrame = requestAnimationFrame(() => {
+        dragCorrectionFrame = null;
+        if (!scroller || !isPrimaryPointerDown) return;
+
+        const currentScrollTopPx = scroller.scrollTop;
+        if (isAlignedToRowGrid(currentScrollTopPx)) {
+          lastDragScrollTopPx = currentScrollTopPx;
+          return;
+        }
+
+        const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        const quantizedTargetPx = resolveDirectionalQuantizedScrollTop(
+          currentScrollTopPx,
+          lastDragScrollTopPx,
+          maxScrollTopPx,
+        );
+
+        if (Math.abs(quantizedTargetPx - currentScrollTopPx) < 0.01) {
+          lastDragScrollTopPx = currentScrollTopPx;
+          return;
+        }
+
+        isApplyingDragQuantizedCorrection = true;
+        scroller.scrollTop = quantizedTargetPx;
+        isApplyingDragQuantizedCorrection = false;
+        lastDragScrollTopPx = quantizedTargetPx;
+      });
     };
 
     const handleWindowBlur = () => {
@@ -349,9 +377,11 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     scroller?.addEventListener('keyup', handleKeyUp);
     scroller?.addEventListener('paste', handlePaste);
     scroller?.addEventListener('wheel', handleWheel, { passive: false });
-    scroller?.addEventListener('pointerdown', handlePointerDown, { passive: true });
+    document.addEventListener('pointerdown', handlePointerDown, { capture: true, passive: true });
+    document.addEventListener('mousedown', handleMouseDown, { capture: true, passive: true });
     scroller?.addEventListener('scroll', handleSelectionDragScrollQuantization, { passive: true });
     window.addEventListener('pointerup', handlePointerUp, { passive: true });
+    window.addEventListener('mouseup', handlePointerUp, { passive: true });
     window.addEventListener('pointercancel', handlePointerCancel, { passive: true });
     window.addEventListener('blur', handleWindowBlur);
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -361,13 +391,19 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         cancelAnimationFrame(refocusFrame);
         refocusFrame = null;
       }
+      if (dragCorrectionFrame !== null) {
+        cancelAnimationFrame(dragCorrectionFrame);
+        dragCorrectionFrame = null;
+      }
       scroller?.removeEventListener('keydown', handleKeyDown);
       scroller?.removeEventListener('keyup', handleKeyUp);
       scroller?.removeEventListener('paste', handlePaste);
       scroller?.removeEventListener('wheel', handleWheel);
-      scroller?.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('mousedown', handleMouseDown, true);
       scroller?.removeEventListener('scroll', handleSelectionDragScrollQuantization);
       window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('mouseup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerCancel);
       window.removeEventListener('blur', handleWindowBlur);
       document.removeEventListener('visibilitychange', handleVisibilityChange);

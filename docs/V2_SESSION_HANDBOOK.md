@@ -689,3 +689,42 @@ Address drag-selection auto-scroll desync by quantizing viewport movement during
 ### Next Session
 - Objective: Manually validate drag-selection smoothness and continuous grid alignment under boundary auto-scroll.
 - First action: Perform top-to-bottom and bottom-to-top drag sweeps with crossed boundaries and confirm no perceived misalignment.
+
+---
+
+## Session Entry
+
+### Session Date
+2026-05-24
+
+### Active Phase
+Phase 3 - Pixel-Perfect Visual Alignment
+
+### Objective
+Execute final manual perception gate and close Phase 3 if criteria pass.
+
+### Out of Scope
+- Phase 4 persistence implementation changes.
+- Phase 5 feature carryover work.
+
+### Work Completed
+- User executed manual selection perception suite and reported `PASS all 3`.
+- Confirmed startup/font-ready initial alignment probe remained row-lattice aligned.
+- Updated checklist and master execution map to reflect Phase 3 completion.
+
+### Decisions
+- Decision: Close Phase 3 and advance active focus to Phase 4.
+  - Reason: All Phase 3 checklist criteria are now satisfied with both objective probes and manual perception evidence.
+
+### Risks or Blockers
+- Risk/Blocker: Persistence spine contracts are still pending.
+  - Impact: Note lifecycle reliability and V1 data-path parity are not yet restored.
+  - Mitigation: Begin Phase 4 with contract-first IPC and storage-path restoration sequence.
+
+### Checklist Deltas
+- Checked: Selection highlight does not break alignment perception.
+- Checked: Resize/font-ready/initial render keep alignment stable.
+
+### Next Session
+- Objective: Start Phase 4 by restoring main/preload/renderer persistence contracts for note lifecycle.
+- First action: Enumerate and implement typed IPC contract surface for list/load/save/create/delete note actions.

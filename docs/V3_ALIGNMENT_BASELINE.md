@@ -131,6 +131,28 @@ Result:
 Interpretation:
 - Row/baseline lattice behavior is stable across mixed content, including wraps and empty lines.
 
+## Manual Selection Perception Gate (2026-05-24)
+User-run manual suite outcome: `PASS all 3`
+
+Scenarios passed:
+- Downward drag selection across bottom boundary with sustained auto-scroll.
+- Upward drag selection across top boundary with sustained auto-scroll.
+- Mixed-content drag across short, wrapped, and empty-line regions.
+
+Interpretation:
+- Selection highlight perception remained aligned during drag-extension and boundary auto-scroll.
+- No post-selection corrective snap was required for acceptable visual alignment.
+
+## Startup + Font-Ready + Initial Render Check (2026-05-24)
+Probe result:
+- `document.fonts.status` before/after ready: `loaded` -> `loaded`
+- Initial scroll position: `0`
+- First paragraph top in scroller: `144px` (24px lattice aligned)
+
+Interpretation:
+- Initial render and font-ready state are aligned with the row lattice in current runtime conditions.
+- Combined with manual resize confirmation, this closes the Phase 3 resize/font-ready/initial-render criterion.
+
 ## Phase 3 Immediate Next Actions
 1. Verify whether the consistent `~2px` vertical offset is intentional (font baseline policy) or drift.
 2. Use the provisional thresholds above to evaluate each alignment change before merge.
