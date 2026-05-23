@@ -5,6 +5,7 @@ import { readSelectionRect } from '../editor/CaretRect';
 import { resolveCaretTopInScroll } from '../editor/CaretVisualPosition';
 import { CELL_WIDTH_PX, LINE_HEIGHT_PX } from '../editor/LayoutConstants';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
+import { isRefocusTransactionActive } from '../editor/RefocusTransaction';
 
 interface BlockCaretPluginProps {
   scrollerRef: React.RefObject<HTMLElement>;
@@ -59,7 +60,7 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
         lineHeightPx: LINE_HEIGHT_PX,
       });
 
-      const isCagedRefocusActive = scroller.dataset.cagedRefocusActive === '1';
+      const isCagedRefocusActive = isRefocusTransactionActive(scroller);
       if (isCagedRefocusActive) {
         const { targetScrollTopPx } = resolveCagedScrollTarget({
           caretTopInScrollPx: caretTopInScroll,

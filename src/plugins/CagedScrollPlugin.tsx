@@ -5,6 +5,12 @@ import { readSelectionRect } from '../editor/CaretRect';
 import { resolveCaretTopInScroll } from '../editor/CaretVisualPosition';
 import { LINE_HEIGHT_PX, PIXELS_PER_WHEEL_UNIT } from '../editor/LayoutConstants';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
+import {
+  activateRefocusTransaction,
+  clearRefocusTransaction,
+  deactivateRefocusTransaction,
+  scheduleRefocusTransactionDeactivation,
+} from '../editor/RefocusTransaction';
 
 interface CagedScrollPluginProps {
   scrollerRef: React.RefObject<HTMLElement>;
@@ -89,37 +95,21 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       }
 
       if (intent === 'ensure-visible') {
-        if (clearRefocusFlagFrame !== null) {
-          cancelAnimationFrame(clearRefocusFlagFrame);
-        }
-        clearRefocusFlagFrame = requestAnimationFrame(() => {
-          clearRefocusFlagFrame = null;
-          scroller.dataset.cagedRefocusActive = '0';
-        });
+        scheduleRefocusTransactionDeactivation(scroller);
       }
     };
 
     let pendingIntent: ViewportIntent = 'none';
     let refocusFrame: number | null = null;
-    let clearRefocusFlagFrame: number | null = null;
-    let clearRefocusFallbackTimeout: ReturnType<typeof setTimeout> | null = null;
     const pressedRefocusKeys = new Set<string>();
 
     const clearCagedRefocusState = () => {
       if (!scroller) return;
-      if (clearRefocusFlagFrame !== null) {
-        cancelAnimationFrame(clearRefocusFlagFrame);
-        clearRefocusFlagFrame = null;
-      }
-      if (clearRefocusFallbackTimeout !== null) {
-        clearTimeout(clearRefocusFallbackTimeout);
-        clearRefocusFallbackTimeout = null;
-      }
       pressedRefocusKeys.clear();
       if (pendingIntent === 'refocus-caged') {
         pendingIntent = 'none';
       }
-      scroller.dataset.cagedRefocusActive = '0';
+      deactivateRefocusTransaction(scroller);
     };
 
     const scheduleRefocus = () => {
@@ -146,7 +136,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
 
     const scroller = scrollerRef.current;
     if (scroller) {
-      scroller.dataset.cagedRefocusActive = '0';
+      deactivateRefocusTransaction(scroller);
     }
     let pendingWheelPx = 0;
 
@@ -197,19 +187,8 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
 
       if (isRefocusKey(event)) {
         pressedRefocusKeys.add(event.key);
-        scroller.dataset.cagedRefocusActive = '1';
+        activateRefocusTransaction(scroller);
         pendingIntent = 'refocus-caged';
-
-        // Fail-safe: never allow caged refocus to remain latched indefinitely.
-        if (clearRefocusFallbackTimeout !== null) {
-          clearTimeout(clearRefocusFallbackTimeout);
-        }
-        clearRefocusFallbackTimeout = setTimeout(() => {
-          clearRefocusFallbackTimeout = null;
-          if (pendingIntent === 'none') {
-            clearCagedRefocusState();
-          }
-        }, 350);
       }
     };
 
@@ -220,15 +199,9 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       pressedRefocusKeys.delete(event.key);
       if (pressedRefocusKeys.size > 0) return;
 
-      if (clearRefocusFlagFrame !== null) {
-        cancelAnimationFrame(clearRefocusFlagFrame);
+      if (pendingIntent === 'none') {
+        scheduleRefocusTransactionDeactivation(scroller);
       }
-      clearRefocusFlagFrame = requestAnimationFrame(() => {
-        clearRefocusFlagFrame = null;
-        if (pendingIntent === 'none') {
-          scroller.dataset.cagedRefocusActive = '0';
-        }
-      });
     };
 
     const handleWheel = (event: WheelEvent) => {
@@ -268,35 +241,41 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       clearCagedRefocusState();
       if (scroller) {
         // Use guarded transaction so paste reconcile cannot flash a pre-cage frame.
-        scroller.dataset.cagedRefocusActive = '1';
+        activateRefocusTransaction(scroller);
       }
       pendingIntent = 'ensure-visible';
+    };
+
+    const handleWindowBlur = () => {
+      clearCagedRefocusState();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') {
+        clearCagedRefocusState();
+      }
     };
 
     scroller?.addEventListener('keydown', handleKeyDown);
     scroller?.addEventListener('keyup', handleKeyUp);
     scroller?.addEventListener('paste', handlePaste);
     scroller?.addEventListener('wheel', handleWheel, { passive: false });
+    window.addEventListener('blur', handleWindowBlur);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       if (refocusFrame !== null) {
         cancelAnimationFrame(refocusFrame);
         refocusFrame = null;
       }
-      if (clearRefocusFlagFrame !== null) {
-        cancelAnimationFrame(clearRefocusFlagFrame);
-        clearRefocusFlagFrame = null;
-      }
-      if (clearRefocusFallbackTimeout !== null) {
-        clearTimeout(clearRefocusFallbackTimeout);
-        clearRefocusFallbackTimeout = null;
-      }
       scroller?.removeEventListener('keydown', handleKeyDown);
       scroller?.removeEventListener('keyup', handleKeyUp);
       scroller?.removeEventListener('paste', handlePaste);
       scroller?.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('blur', handleWindowBlur);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (scroller) {
-        delete scroller.dataset.cagedRefocusActive;
+        clearRefocusTransaction(scroller);
       }
       removeUpdateListener();
     };

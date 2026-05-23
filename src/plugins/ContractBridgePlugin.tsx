@@ -17,21 +17,44 @@ interface ContractBridgePluginProps {
   onSelectionChange: (event: EditorSelectionChangeEvent) => void;
 }
 
+function resolveChangeSource(tags: Set<string>): EditorTextChangeEvent['source'] {
+  if (tags.has('restore')) return 'programmatic';
+  if (tags.has('history-redo')) return 'history-redo';
+  if (tags.has('historic')) return 'history-undo';
+  return 'user-input';
+}
+
 export function ContractBridgePlugin({ onTextChange, onSelectionChange }: ContractBridgePluginProps) {
   const [editor] = useLexicalComposerContext();
   const previousTextRef = useRef('');
   const previousSelectionRef = useRef<EditorSelectionState>(EMPTY_SELECTION);
 
   useEffect(() => {
-    // Emit stable initial state for consumers that subscribe before first input.
+    // Emit stable initial state from current editor content.
+    let initialText = '';
+    let initialSelection = EMPTY_SELECTION;
+    editor.getEditorState().read(() => {
+      const root = $getRoot();
+      const normalizedText = normalizePlainText(root.getTextContent());
+      initialText = normalizedText;
+
+      const rootEl = editor.getRootElement();
+      const lexicalSelection = $getSelection();
+      if (rootEl && $isRangeSelection(lexicalSelection)) {
+        initialSelection = readSelectionStateFromDom(rootEl, window.getSelection(), normalizedText.length);
+      }
+    });
+
     onTextChange({
       source: 'initial-load',
-      text: '',
+      text: initialText,
       previousText: '',
-      selection: EMPTY_SELECTION,
+      selection: initialSelection,
     });
-    onSelectionChange({ source: 'initial-load', selection: EMPTY_SELECTION });
-  }, [onSelectionChange, onTextChange]);
+    onSelectionChange({ source: 'initial-load', selection: initialSelection });
+    previousTextRef.current = initialText;
+    previousSelectionRef.current = initialSelection;
+  }, [editor, onSelectionChange, onTextChange]);
 
   useEffect(() => {
     const removeListener = editor.registerUpdateListener(({ editorState, tags }) => {
@@ -50,11 +73,7 @@ export function ContractBridgePlugin({ onTextChange, onSelectionChange }: Contra
         const previousSelection = previousSelectionRef.current;
 
         if (normalizedText !== previousText) {
-          const source = tags.has('historic')
-            ? 'history-undo'
-            : tags.has('restore')
-              ? 'programmatic'
-              : 'user-input';
+          const source = resolveChangeSource(tags);
 
           onTextChange({
             source,
@@ -73,7 +92,7 @@ export function ContractBridgePlugin({ onTextChange, onSelectionChange }: Contra
           nextSelection.isCollapsed !== previousSelection.isCollapsed
         ) {
           onSelectionChange({
-            source: 'user-input',
+            source: resolveChangeSource(tags),
             selection: nextSelection,
           });
           previousSelectionRef.current = nextSelection;

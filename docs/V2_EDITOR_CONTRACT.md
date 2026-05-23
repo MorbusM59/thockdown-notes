@@ -35,19 +35,27 @@ This contract isolates app features from editor engine internals. All carryover 
   - `source = user-input` for user-driven scrolling.
   - `source = programmatic` for boundary updates and snapshot application.
 - `onTextChange` and `onSelectionChange` are active.
-- Current source mapping is conservative (`user-input` default unless explicit update tags indicate otherwise).
+- Current source mapping is conservative but deterministic:
+  - `restore` updates map to `programmatic`.
+  - `history-redo` tag maps to `history-redo`.
+  - `historic` updates map to `history-undo`.
+  - default remains `user-input`.
 
 ## Adapter Semantics
 - `getCapabilities()` must be checked by callers before relying on a capability.
 - `getSnapshot()` returns current integration-safe state.
 - `applySnapshot()` restores supported subsets without forcing unsupported behavior.
+- Unsupported snapshot fields must be treated as no-ops by callers unless the corresponding granular capability is true.
 
 ## Current Capability Status
 - `textEvents`: true
 - `selectionEvents`: true
 - `viewportEvents`: true
 - `snapshotRead`: true
-- `snapshotWrite`: true
+- `snapshotWrite`: false
+- `snapshotWriteText`: false
+- `snapshotWriteSelection`: false
+- `snapshotWriteViewport`: true
 
 ## Usage Example
 ```ts

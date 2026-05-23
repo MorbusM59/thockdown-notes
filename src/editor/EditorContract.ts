@@ -55,7 +55,12 @@ export interface EditorCapabilityMap {
   selectionEvents: boolean;
   viewportEvents: boolean;
   snapshotRead: boolean;
+  // True only when applySnapshot can restore text + selection + viewport.
   snapshotWrite: boolean;
+  // Granular snapshot restore capability flags for partial implementations.
+  snapshotWriteText: boolean;
+  snapshotWriteSelection: boolean;
+  snapshotWriteViewport: boolean;
 }
 
 // This is the stable contract app modules integrate against. Implementations

@@ -141,6 +141,7 @@ export function Editor({ bindings, adapterRef }: EditorProps) {
     if (!scroller) return;
 
     const onScroll = () => {
+      lastScrollEventAtRef.current = performance.now();
       const viewport = buildViewport();
       reportInvariantIssues('viewport-scroll', validateViewportInvariants(viewport));
       bindings?.onViewportChange?.({ source: 'user-input', viewport });
@@ -160,7 +161,10 @@ export function Editor({ bindings, adapterRef }: EditorProps) {
           selectionEvents: true,
           viewportEvents: true,
           snapshotRead: true,
-          snapshotWrite: true,
+          snapshotWrite: false,
+          snapshotWriteText: false,
+          snapshotWriteSelection: false,
+          snapshotWriteViewport: true,
         };
       },
       getSnapshot(): EditorSnapshot | null {
@@ -172,6 +176,23 @@ export function Editor({ bindings, adapterRef }: EditorProps) {
       },
       applySnapshot(snapshot: Partial<EditorSnapshot>) {
         const nextViewport = snapshot.viewport;
+
+        if (ENABLE_CONTRACT_ASSERTIONS) {
+          const unsupported: string[] = [];
+          if (typeof snapshot.text === 'string') {
+            unsupported.push('text');
+          }
+          if (snapshot.selection) {
+            unsupported.push('selection');
+          }
+          if (unsupported.length > 0) {
+            console.warn(
+              '[editor-contract:snapshot-apply] Ignoring unsupported snapshot fields:',
+              unsupported,
+            );
+          }
+        }
+
         if (!nextViewport) return;
 
         const h = Math.max(0, scrollerRef.current?.clientHeight ?? 0);
@@ -278,18 +299,6 @@ export function Editor({ bindings, adapterRef }: EditorProps) {
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isDraggingTop, isDraggingBottom]);
-
-  useEffect(() => {
-    const scroller = scrollerRef.current;
-    if (!scroller) return;
-
-    const onScroll = () => {
-      lastScrollEventAtRef.current = performance.now();
-    };
-
-    scroller.addEventListener('scroll', onScroll, { passive: true });
-    return () => scroller.removeEventListener('scroll', onScroll);
-  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
