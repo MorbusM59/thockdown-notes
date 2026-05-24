@@ -8,6 +8,7 @@ This file is the continuity ledger across sessions. Append one entry per session
 - Record decisions with reasons.
 - Record blockers immediately.
 - Use final-form structural planning by default; placeholders must preserve intended full-feature component boundaries and extension seams.
+- For every UI carryover element: audit V1 first, publish behavior report, declare exact-repro viability, list caveats, request user confirmation if caveats exist, then implement.
 - End every session with the next exact first action.
 
 ---
@@ -622,6 +623,134 @@ Capture deterministic pre-change alignment baseline for grid, glyph, and caret g
 ## Session Entry
 
 ### Session Date
+2026-05-24
+
+### Active Phase
+Phase 5 - Feature Parity Carryover
+
+### Objective
+Restore suggested tags and replace the right-side tag placeholder with a functional collection panel.
+
+### Out of Scope
+- Timeline/time machine carryover.
+- Utility actions carryover (import/export/pdf/trash controls).
+
+### Work Completed
+- Implemented global tag collection derivation in `src/App.tsx` from current note summaries.
+- Added suggested tags list for the active note, excluding already-attached and protected tags.
+- Wired one-click suggested-tag add through the existing serialized tag mutation flow.
+- Replaced right-side tag placeholder with functional Suggested Tags + Tag Collection panels.
+- Added UI styles for tag chips and collection rows in `src/App.css`.
+
+### Decisions
+- Decision: Build suggested tags from canonical note-summary tags already loaded in renderer state.
+  - Reason: Preserves markdown-authoritative model while avoiding extra IPC/race surfaces for this UI layer.
+
+### Risks or Blockers
+- Risk/Blocker: Suggested ranking currently uses usage-count + alpha tie-break only.
+  - Impact: Relevance may feel generic for very large tag sets.
+  - Mitigation: Revisit ranking with recency/context weighting during future search/tag UX parity pass.
+
+### Checklist Deltas
+- Checked: Suggested tags restored.
+- Unchecked/Reopened: Timeline/time machine; utility actions.
+
+### Next Session
+- Objective: Begin timeline/time machine carryover with minimal structural intrusion.
+- First action: Restore timeline panel skeleton with canonical data plumbing and deterministic note activation flow.
+
+---
+
+## Session Entry
+
+### Session Date
+2026-05-24
+
+### Active Phase
+Phase 5 - Feature Parity Carryover
+
+### Objective
+Execute confirmed V1-accurate carryover for suggested tags/tag collection as a single lean surface.
+
+### Out of Scope
+- Timeline/time machine carryover implementation.
+- Utility action carryover implementation.
+
+### Work Completed
+- Audited V1 `SuggestedPanel` and `TagInput` behavior before implementation changes.
+- Replaced the split V2 suggested/collection panel with a single compact suggested chip surface in `src/App.tsx`.
+- Removed extra labels/counters and reduced inline tag-input row stacking to eliminate wasted space.
+- Applied V1-style compact chip wrapping and max-height behavior in `src/App.css`.
+- Revalidated with `npm run build`.
+
+### Decisions
+- Decision: Treat suggested tags and tag collection as one UI surface for Phase 5 parity.
+  - Reason: Matches V1 lean UX and avoids redundant labels/panels that consume screen space.
+- Decision: Keep protected tags excluded from suggestions and preserve top-used ranking with alphabetical tie-break.
+  - Reason: Reproduces V1 interaction safety and suggestion ordering semantics.
+
+### Risks or Blockers
+- Risk/Blocker: Suggested ranking still reflects global usage only.
+  - Impact: Context-specific relevance may be lower for very large tag vocabularies.
+  - Mitigation: Revisit ranking strategy only after parity closure, as a deliberate post-parity optimization.
+
+### Checklist Deltas
+- Checked: V1-first audit gate was executed before implementation for this UI element.
+- Unchecked/Reopened: Timeline/time machine; utility actions.
+
+### Next Session
+- Objective: Run V1-first audit for timeline/time machine carryover.
+- First action: Extract V1 timeline component behavior and produce exact-repro viability report before coding.
+
+---
+
+## Session Entry
+
+### Session Date
+2026-05-24
+
+### Active Phase
+Phase 5 - Feature Parity Carryover
+
+### Objective
+Restore Date view menu pagination and date-filter interactions to V1 behavior and visual density.
+
+### Out of Scope
+- Timeline/time machine carryover implementation.
+- Utility action carryover implementation.
+
+### Work Completed
+- Ran V1-first audit for `Sidebar` and `DateFilter` behavior before coding.
+- Added shared V1-compatible filter semantics utility at `src/shared/filterConstants.ts`.
+- Replaced Date/Trash filter controls with V1-style two-row button matrix and right-click row clear behavior in `src/App.tsx`.
+- Restored V1 multi-select semantics (exclusive, ctrl/cmd toggle, shift range) for month/year filters in `src/App.tsx`.
+- Added V1-style minimal pagination controls (`<`, current page, `>`) for Date/Trash views in `src/App.tsx`.
+- Added date-view fixed-row pagination density computation (items-per-page based on sidebar content height) in `src/App.tsx`.
+- Updated date filter and pagination styling for compact V1-like UX in `src/App.css`.
+- Revalidated with `npm run build`.
+
+### Decisions
+- Decision: Keep pagination client-side on the current `listNotes` data source for now.
+  - Reason: Preserves V1-visible UX without introducing a new IPC pagination contract in this brick.
+
+### Risks or Blockers
+- Risk/Blocker: Client-side pagination over full note list can become heavier than DB paging for very large datasets.
+  - Impact: Potential future performance cost at scale.
+  - Mitigation: If needed after parity closure, introduce optional paged IPC API without changing restored UI semantics.
+
+### Checklist Deltas
+- Checked: Date view month/year filter rail restored in compact two-line interaction model (now behavior-aligned with V1 interactions).
+- Unchecked/Reopened: Timeline/time machine; utility actions.
+
+### Next Session
+- Objective: Run V1-first audit for timeline/time machine carryover.
+- First action: Extract V1 timeline component behavior and produce exact-repro viability report before coding.
+
+---
+
+## Session Entry
+
+### Session Date
 2026-05-22
 
 ### Active Phase
@@ -1066,3 +1195,49 @@ Complete full V1->V2 persistence-model audit and publish canonical data model re
 ### Next Session
 - Objective: Implement ordered note-tag relation contract and write paths (primary/secondary/tertiary + protected-tag enforcement).
 - First action: Extend shared note lifecycle/tag contracts and main-process persistence handlers for add/remove/reorder/rename tag flows.
+
+---
+
+## Session Entry
+
+### Session Date
+2026-05-24
+
+### Active Phase
+Phase 5 - Feature Parity Carryover
+
+### Objective
+Stabilize note creation/editing UX parity and align governance artifacts with completed carryover behavior.
+
+### Out of Scope
+- Suggested tags implementation details.
+- Timeline/time machine implementation details.
+- Utility action parity implementation.
+
+### Work Completed
+- Restored and validated keyboard shortcuts: Ctrl+N, Ctrl+Shift+N, and Escape search-reset behavior.
+- Implemented new-note template as `# ` and enforced immediate caret placement after the heading marker.
+- Hardened active-note title synchronization so menu cards update live while typing.
+- Removed save-indicator UI and associated renderer logic.
+- Added runtime-data repository hygiene policy (`data/**` ignored with `.gitkeep` exception).
+- Updated parity checklist to reflect completed Search and Keyboard carryover items.
+
+### Decisions
+- Decision: Use optimistic title projection in renderer plus save-response reconciliation from persistence.
+  - Reason: Maintains immediate UI coherence while preserving markdown-authoritative persistence ordering.
+- Decision: Keep runtime user data excluded from source control except for directory sentinel.
+  - Reason: Prevents accidental data churn in commits while preserving expected local storage shape.
+
+### Risks or Blockers
+- Risk/Blocker: Suggested tags, timeline, and utility actions remain unimplemented.
+  - Impact: Phase 5 remains open despite major interaction parity completion.
+  - Mitigation: Execute remaining carryover bricks in isolation with checklist-gated validation.
+
+### Checklist Deltas
+- Checked: Search restored (text + #tag).
+- Checked: Keyboard shortcuts restored (Ctrl+N, Ctrl+Shift+N, Escape).
+- Unchecked/Reopened: Suggested tags, timeline/time machine, utility actions.
+
+### Next Session
+- Objective: Implement Suggested tags parity on top of the current canonical tag model.
+- First action: Add deterministic suggestion derivation pipeline and sidebar interaction hooks without violating markdown source-of-truth flow.

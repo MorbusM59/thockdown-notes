@@ -11,15 +11,18 @@ import type {
 import type { PersistedViewportState } from './shared/appState'
 import type { NoteSummary } from './shared/noteLifecycle'
 import { CELL_WIDTH_PX, LINE_HEIGHT_PX } from './editor/LayoutConstants'
+import {
+  FILTER_MONTHS,
+  FILTER_YEARS,
+  handleMultiSelect,
+} from './shared/filterConstants'
 
 const SAVE_DEBOUNCE_MS = 350
 const NEW_NOTE_TEMPLATE = '# '
-
-const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
+const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
 const PROTECTED_TAGS = new Set(['archived', 'deleted', 'temp'])
 
 type SidebarMode = 'date' | 'category' | 'archive' | 'trash'
-type DateFilterValue = 'all' | number
 
 const SIDEBAR_MODES: Array<{ mode: SidebarMode; label: string }> = [
   { mode: 'date', label: 'Date' },
@@ -136,6 +139,15 @@ function deriveNoteTitleFromText(text: string): string {
   return firstContent?.trim() ?? 'Untitled'
 }
 
+function sanitizeClipboardTitle(raw: string): string {
+  const normalized = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const firstLine = normalized.split('\n').map((line) => line.trim()).find((line) => line.length > 0)
+  if (!firstLine) return FALLBACK_NEW_NOTE_TITLE
+
+  const withoutHeadingPrefix = firstLine.replace(/^#+\s*/, '').trim()
+  return withoutHeadingPrefix || FALLBACK_NEW_NOTE_TITLE
+}
+
 function isSameNoteSummary(a: NoteSummary, b: NoteSummary): boolean {
   return (
     a.id === b.id &&
@@ -173,13 +185,14 @@ function mergeNoteSummaries(previous: NoteSummary[], next: NoteSummary[]): NoteS
   return changed ? merged : previous
 }
 
-async function waitForNotesBridge(timeoutMs: number): Promise<boolean> {
-  const startedAt = Date.now()
-  while (Date.now() - startedAt < timeoutMs) {
-    if (window.measlyNotes) return true
+async function waitForNotesBridge(shouldStop: () => boolean): Promise<boolean> {
+  while (!shouldStop()) {
+    if (window.measlyNotes) {
+      return true
+    }
     await new Promise((resolve) => window.setTimeout(resolve, 40))
   }
-  return Boolean(window.measlyNotes)
+  return false
 }
 
 type NoteListItemProps = {
@@ -316,17 +329,20 @@ function matchesSearchQuery(note: NoteSummary, query: string): boolean {
 
 function App() {
   const adapterRef = useRef<EditorAdapter | null>(null)
+  const sidebarContentRef = useRef<HTMLDivElement | null>(null)
   const [notes, setNotes] = useState<NoteSummary[]>([])
   const [newTagName, setNewTagName] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [isTagMutationPending, setIsTagMutationPending] = useState(false)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('date')
-  const [dateFilterYear, setDateFilterYear] = useState<DateFilterValue>('all')
-  const [dateFilterMonth, setDateFilterMonth] = useState<DateFilterValue>('all')
+  const [selectedMonths, setSelectedMonths] = useState<Set<number>>(new Set())
+  const [selectedYears, setSelectedYears] = useState<Set<number | 'older'>>(new Set())
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(20)
+  const [showPagination, setShowPagination] = useState(false)
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null)
   const [activeNoteText, setActiveNoteText] = useState('')
   const [persistenceReady, setPersistenceReady] = useState(false)
-  const [lastSavedAtMs, setLastSavedAtMs] = useState<number | null>(null)
   const pendingSaveTextRef = useRef<string | null>(null)
   const latestEditorTextRef = useRef('')
   const saveTimerRef = useRef<number | null>(null)
@@ -375,7 +391,6 @@ function App() {
         next[index] = savedSummary
         return next
       })
-      setLastSavedAtMs(Date.now())
     } catch (error) {
       console.error('Failed to persist note', error)
     }
@@ -405,7 +420,6 @@ function App() {
     latestEditorTextRef.current = hydratedText
     setActiveNoteId(loaded.id)
     setActiveNoteText(hydratedText)
-    setLastSavedAtMs(loaded.updatedAtMs)
     pendingViewportRestoreRef.current = null
     await saveSelectedNoteState(loaded.id)
   }, [saveSelectedNoteState])
@@ -512,7 +526,7 @@ function App() {
     })
   }, [activeNoteId])
 
-  const createNote = useCallback(async () => {
+  const createNote = useCallback(async (initialText = NEW_NOTE_TEMPLATE) => {
     if (!window.measlyNotes) return
     if (!persistenceReady) return
     if (noteTransitionLockRef.current) return
@@ -520,7 +534,7 @@ function App() {
     noteTransitionLockRef.current = true
     try {
       await flushPendingSaveNow()
-      const created = await window.measlyNotes.createNote({ initialText: NEW_NOTE_TEMPLATE })
+      const created = await window.measlyNotes.createNote({ initialText })
       await refreshNotes(created.id)
       await activateNote(created.id)
       setSidebarMode('date')
@@ -531,12 +545,48 @@ function App() {
     }
   }, [activateNote, flushPendingSaveNow, persistenceReady, refreshNotes])
 
+  const createNoteFromClipboardTitle = useCallback(async () => {
+    let title = FALLBACK_NEW_NOTE_TITLE
+
+    try {
+      const clipboardText = await navigator.clipboard.readText()
+      title = sanitizeClipboardTitle(clipboardText)
+    } catch {
+      title = FALLBACK_NEW_NOTE_TITLE
+    }
+
+    await createNote(`# ${title}\n\n`)
+  }, [createNote])
+
   const activeNoteSummary = useMemo(() => {
     if (!activeNoteId) return null
     return notes.find((note) => note.id === activeNoteId) ?? null
   }, [activeNoteId, notes])
 
   const orderedActiveTags = activeNoteSummary?.tags ?? []
+
+  const suggestedTags = useMemo(() => {
+    const usageByName = new Map<string, number>()
+
+    for (const note of notes) {
+      for (const tag of note.tags) {
+        usageByName.set(tag, (usageByName.get(tag) ?? 0) + 1)
+      }
+    }
+
+    const activeTagSet = new Set(orderedActiveTags)
+
+    return [...usageByName.entries()]
+      .filter(([name]) => !PROTECTED_TAGS.has(name) && !activeTagSet.has(name))
+      .sort((a, b) => {
+        if (b[1] !== a[1]) {
+          return b[1] - a[1]
+        }
+        return a[0].localeCompare(b[0], undefined, { sensitivity: 'base' })
+      })
+      .map(([name]) => name)
+        .slice(0, 15)
+  }, [notes, orderedActiveTags])
 
   const runActiveNoteTagMutation = useCallback(async (mutate: (noteId: string) => Promise<void>) => {
     if (!window.measlyNotes) return
@@ -593,6 +643,18 @@ function App() {
     })
   }, [orderedActiveTags, runActiveNoteTagMutation])
 
+  const handleAddSuggestedTag = useCallback((tagName: string) => {
+    if (orderedActiveTags.includes(tagName)) return
+
+    void runActiveNoteTagMutation(async (noteId) => {
+      await window.measlyNotes!.addTagToNote({
+        id: noteId,
+        tagName,
+        position: orderedActiveTags.length,
+      })
+    })
+  }, [orderedActiveTags, runActiveNoteTagMutation])
+
   const queueSave = useCallback((text: string) => {
     if (!persistenceReady) return
     pendingSaveTextRef.current = toPersistenceText(text)
@@ -610,7 +672,7 @@ function App() {
     let disposed = false
 
     const bootstrap = async () => {
-      const hasBridge = await waitForNotesBridge(2000)
+      const hasBridge = await waitForNotesBridge(() => disposed)
       if (!hasBridge) {
         return
       }
@@ -619,53 +681,56 @@ function App() {
         return
       }
 
-      try {
-        setPersistenceReady(false)
-        const notes = await measlyNotes.listNotes()
-        if (disposed) return
-        setNotes((previous) => mergeNoteSummaries(previous, notes))
+      setPersistenceReady(false)
 
-        const appState = window.measlyState ? await window.measlyState.loadAppState() : { selectedNoteId: null }
-        if (disposed) return
-        pendingViewportRestoreRef.current = appState.viewport ?? null
-        latestViewportRef.current = appState.viewport ?? null
-
-        if (notes.length === 0) {
-          const created = await measlyNotes.createNote({ initialText: NEW_NOTE_TEMPLATE })
+      let attempt = 0
+      while (!disposed) {
+        try {
+          let listed = await measlyNotes.listNotes()
           if (disposed) return
-          setNotes((previous) => mergeNoteSummaries(previous, [created]))
-          setActiveNoteId(created.id)
-          const hydratedText = fromPersistenceText(created.text)
+
+          if (listed.length === 0) {
+            await measlyNotes.createNote({ initialText: NEW_NOTE_TEMPLATE })
+            listed = await measlyNotes.listNotes()
+            if (listed.length === 0) {
+              throw new Error('Notes list remained empty after creating bootstrap note')
+            }
+          }
+
+          const appState = window.measlyState ? await window.measlyState.loadAppState() : { selectedNoteId: null }
+          if (disposed) return
+
+          const preferredId = appState.selectedNoteId
+          const selectedSummary = (
+            preferredId
+              ? listed.find((note) => note.id === preferredId)
+              : undefined
+          ) ?? listed[0]
+
+          const loaded = await measlyNotes.loadNote({ id: selectedSummary.id })
+          if (disposed) return
+
+          setNotes((previous) => mergeNoteSummaries(previous, listed))
+          setActiveNoteId(loaded.id)
+
+          const hydratedText = fromPersistenceText(loaded.text)
           latestEditorTextRef.current = hydratedText
           setActiveNoteText(hydratedText)
+
+          pendingViewportRestoreRef.current = appState.viewport ?? null
+          latestViewportRef.current = appState.viewport ?? null
+
           if (window.measlyState) {
-            await window.measlyState.saveAppState({ selectedNoteId: created.id })
+            await window.measlyState.saveAppState({ selectedNoteId: loaded.id })
           }
+
           setPersistenceReady(true)
-          setLastSavedAtMs(created.updatedAtMs)
           return
+        } catch (error) {
+          attempt += 1
+          console.error(`Failed to initialize note lifecycle (attempt ${attempt})`, error)
+          await new Promise((resolve) => window.setTimeout(resolve, Math.min(1500, 200 * attempt)))
         }
-
-        const preferredId = appState.selectedNoteId
-        const selectedSummary = (
-          preferredId
-            ? notes.find((note) => note.id === preferredId)
-            : undefined
-        ) ?? notes[0]
-
-        const loaded = await measlyNotes.loadNote({ id: selectedSummary.id })
-        if (disposed) return
-        setActiveNoteId(loaded.id)
-        const hydratedText = fromPersistenceText(loaded.text)
-        latestEditorTextRef.current = hydratedText
-        setActiveNoteText(hydratedText)
-        if (window.measlyState) {
-          await window.measlyState.saveAppState({ selectedNoteId: loaded.id })
-        }
-        setPersistenceReady(true)
-        setLastSavedAtMs(loaded.updatedAtMs)
-      } catch (error) {
-        console.error('Failed to initialize note lifecycle', error)
       }
     }
 
@@ -753,11 +818,6 @@ function App() {
     queueAppStateSave(activeNoteId)
   }, [activeNoteId, queueAppStateSave])
 
-  const lastSaveLabel = useMemo(() => {
-    if (!lastSavedAtMs) return 'Last save: --'
-    return `Last save: ${new Date(lastSavedAtMs).toLocaleString()}`
-  }, [lastSavedAtMs])
-
   const sortedNotes = useMemo(() => {
     return [...notes].sort((a, b) => b.updatedAtMs - a.updatedAtMs)
   }, [notes])
@@ -766,9 +826,21 @@ function App() {
     return sortedNotes.filter((note) => matchesSearchQuery(note, searchQuery))
   }, [searchQuery, sortedNotes])
 
+  const hasMonthFilter = selectedMonths.size > 0
+  const hasYearFilter = selectedYears.size > 0
+  const hasDateFilter = hasMonthFilter || hasYearFilter
+
   const dateEligibleNotes = useMemo(() => {
-    return searchedNotes.filter((note) => !isArchivedNote(note) && !isDeletedNote(note))
-  }, [searchedNotes])
+    return searchedNotes.filter((note) => {
+      if (isDeletedNote(note)) {
+        return false
+      }
+      if (isArchivedNote(note) && !hasDateFilter) {
+        return false
+      }
+      return true
+    })
+  }, [hasDateFilter, searchedNotes])
 
   const categoryEligibleNotes = useMemo(() => {
     return dateEligibleNotes
@@ -782,50 +854,30 @@ function App() {
     return searchedNotes.filter((note) => isDeletedNote(note))
   }, [searchedNotes])
 
-  const availableYears = useMemo(() => {
-    const years = new Set<number>()
-    for (const note of dateEligibleNotes) {
-      years.add(new Date(note.updatedAtMs).getFullYear())
-    }
-    return [...years].sort((a, b) => b - a)
-  }, [dateEligibleNotes])
-
-  const availableMonths = useMemo(() => {
-    const months = new Set<number>()
-    for (const note of dateEligibleNotes) {
-      const date = new Date(note.updatedAtMs)
-      if (dateFilterYear === 'all' || date.getFullYear() === dateFilterYear) {
-        months.add(date.getMonth() + 1)
-      }
-    }
-    return [...months].sort((a, b) => a - b)
-  }, [dateEligibleNotes, dateFilterYear])
-
   const dateFilteredNotes = useMemo(() => {
     return dateEligibleNotes.filter((note) => {
       const date = new Date(note.updatedAtMs)
-      if (dateFilterYear !== 'all' && date.getFullYear() !== dateFilterYear) {
-        return false
+      const noteMonth = date.getMonth() + 1
+      const noteYear = date.getFullYear()
+
+      const monthMatch = !hasMonthFilter || selectedMonths.has(noteMonth)
+
+      let yearMatch = !hasYearFilter
+      if (hasYearFilter) {
+        if (selectedYears.has(noteYear)) {
+          yearMatch = true
+        } else if (selectedYears.has('older') && noteYear <= 2021) {
+          yearMatch = true
+        }
       }
-      if (dateFilterMonth !== 'all' && date.getMonth() + 1 !== dateFilterMonth) {
-        return false
-      }
-      return true
+
+      return monthMatch && yearMatch
     })
-  }, [dateEligibleNotes, dateFilterMonth, dateFilterYear])
+  }, [dateEligibleNotes, hasMonthFilter, hasYearFilter, selectedMonths, selectedYears])
 
   const trashFilteredNotes = useMemo(() => {
-    return trashEligibleNotes.filter((note) => {
-      const date = new Date(note.updatedAtMs)
-      if (dateFilterYear !== 'all' && date.getFullYear() !== dateFilterYear) {
-        return false
-      }
-      if (dateFilterMonth !== 'all' && date.getMonth() + 1 !== dateFilterMonth) {
-        return false
-      }
-      return true
-    })
-  }, [dateFilterMonth, dateFilterYear, trashEligibleNotes])
+    return trashEligibleNotes
+  }, [trashEligibleNotes])
 
   const categoryTree = useMemo<PrimaryGroup[]>(() => {
     return buildHierarchyGroups(categoryEligibleNotes)
@@ -856,22 +908,148 @@ function App() {
     return []
   }, [dateFilteredNotes, sidebarMode, trashFilteredNotes])
 
+  const isSearchActive = searchQuery.trim().length > 0
+  const totalPagedNotes = sidebarMode === 'date' ? searchedNotes.length : trashFilteredNotes.length
+  const totalPages = Math.max(1, Math.ceil(totalPagedNotes / Math.max(1, itemsPerPage)))
+
+  const isVisibleInDateView = useCallback((note: NoteSummary) => {
+    if (isDeletedNote(note)) {
+      return false
+    }
+
+    if (isArchivedNote(note) && !hasDateFilter) {
+      return false
+    }
+
+    const date = new Date(note.updatedAtMs)
+    const noteMonth = date.getMonth() + 1
+    const noteYear = date.getFullYear()
+
+    const monthMatch = !hasMonthFilter || selectedMonths.has(noteMonth)
+
+    let yearMatch = !hasYearFilter
+    if (hasYearFilter) {
+      if (selectedYears.has(noteYear)) {
+        yearMatch = true
+      } else if (selectedYears.has('older') && noteYear <= 2021) {
+        yearMatch = true
+      }
+    }
+
+    return monthMatch && yearMatch
+  }, [hasDateFilter, hasMonthFilter, hasYearFilter, selectedMonths, selectedYears])
+
+  const pagedVisibleNotes = useMemo(() => {
+    if (isSearchActive || (sidebarMode !== 'date' && sidebarMode !== 'trash')) {
+      return visibleNotes
+    }
+
+    if (sidebarMode === 'date') {
+      const startIndex = (currentPage - 1) * itemsPerPage
+      const pageSlice = searchedNotes.slice(startIndex, startIndex + itemsPerPage)
+      return pageSlice.filter(isVisibleInDateView)
+    }
+
+    const startIndex = (currentPage - 1) * itemsPerPage
+    return visibleNotes.slice(startIndex, startIndex + itemsPerPage)
+  }, [currentPage, isSearchActive, isVisibleInDateView, itemsPerPage, searchedNotes, sidebarMode, visibleNotes])
+
+  const handleMonthToggle = useCallback((month: number, event: MouseEvent<HTMLButtonElement>) => {
+    handleMultiSelect(month, event, selectedMonths, FILTER_MONTHS, setSelectedMonths)
+  }, [selectedMonths])
+
+  const handleYearToggle = useCallback((year: number | 'older', event: MouseEvent<HTMLButtonElement>) => {
+    handleMultiSelect(year, event, selectedYears, FILTER_YEARS, setSelectedYears)
+  }, [selectedYears])
+
+  const handleMonthRowContextMenu = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setSelectedMonths(new Set())
+  }, [])
+
+  const handleYearRowContextMenu = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setSelectedYears(new Set())
+  }, [])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [sidebarMode, selectedMonths, selectedYears, searchQuery])
+
+  useEffect(() => {
+    const ITEM_HEIGHT = 56
+    const ITEM_GAP = 8
+    const ITEM_TOTAL = ITEM_HEIGHT + ITEM_GAP
+    const PAGINATION_HEIGHT = 40
+
+    const compute = () => {
+      const container = sidebarContentRef.current
+      if (!container) return
+
+      const contentHeight = container.clientHeight
+      let nextItemsPerPage = Math.floor(contentHeight / ITEM_TOTAL)
+      if (nextItemsPerPage < 1) nextItemsPerPage = 1
+
+      if (totalPagedNotes > nextItemsPerPage) {
+        while (nextItemsPerPage > 1 && (nextItemsPerPage * ITEM_TOTAL + PAGINATION_HEIGHT) > contentHeight) {
+          nextItemsPerPage -= 1
+        }
+      }
+
+      if (nextItemsPerPage !== itemsPerPage) {
+        setItemsPerPage(nextItemsPerPage)
+      }
+
+      const shouldShowPagination =
+        (sidebarMode === 'date' || sidebarMode === 'trash') &&
+        !isSearchActive &&
+        Math.ceil(totalPagedNotes / Math.max(1, nextItemsPerPage)) > 1
+
+      setShowPagination(shouldShowPagination)
+    }
+
+    compute()
+    window.addEventListener('resize', compute)
+    return () => window.removeEventListener('resize', compute)
+  }, [isSearchActive, itemsPerPage, sidebarMode, totalPagedNotes])
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
+
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'n') {
+        event.preventDefault()
+        void createNoteFromClipboardTitle()
+        return
+      }
+
       if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'n') {
         event.preventDefault()
         void createNote()
         return
       }
 
-      if (event.key === 'Escape' && sidebarMode !== 'date') {
-        setSidebarMode('date')
+      if (event.key === 'Escape') {
+        if (searchQuery.trim().length > 0) {
+          event.preventDefault()
+          setSearchQuery('')
+          return
+        }
+
+        if (sidebarMode !== 'date') {
+          event.preventDefault()
+          setSidebarMode('date')
+        }
       }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [createNote, sidebarMode])
+  }, [createNote, createNoteFromClipboardTitle, searchQuery, sidebarMode])
 
   return (
     <div className="app-shell app-grid">
@@ -907,10 +1085,10 @@ function App() {
           })}
         </div>
 
-        <div className="sidebar-content">
+        <div className="sidebar-content" ref={sidebarContentRef}>
           {(sidebarMode === 'date' || sidebarMode === 'trash') ? (
-            <div className="notes-list" role="listbox" aria-label="Note list">
-              {visibleNotes.map((note) => {
+            <div className="notes-list date-view" role="listbox" aria-label="Note list">
+              {pagedVisibleNotes.map((note) => {
                 const isActive = note.id === activeNoteId
                 return (
                   <NoteListItem
@@ -923,7 +1101,7 @@ function App() {
                   />
                 )
               })}
-              {visibleNotes.length === 0 ? (
+              {pagedVisibleNotes.length === 0 ? (
                 <div className="notes-empty-state">
                   {searchQuery.trim()
                     ? 'No notes match the current search.'
@@ -944,49 +1122,59 @@ function App() {
           )}
         </div>
 
+        {showPagination ? (
+          <div className="sidebar-pagination" aria-label="Sidebar pagination">
+            <button
+              type="button"
+              className="sidebar-page-btn"
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage((previous) => Math.max(1, previous - 1))}
+            >
+              &lt;
+            </button>
+            <span className="sidebar-page-number">{currentPage}</span>
+            <button
+              type="button"
+              className="sidebar-page-btn"
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage((previous) => Math.min(totalPages, previous + 1))}
+            >
+              &gt;
+            </button>
+          </div>
+        ) : null}
+
         {(sidebarMode === 'date' || sidebarMode === 'trash') ? (
           <div className="date-filter-rail" aria-label="Date filters">
-            <div className="date-filter-line">
-              <button
-                type="button"
-                className={`date-filter-chip${dateFilterYear === 'all' ? ' is-active' : ''}`}
-                onClick={() => {
-                  setDateFilterYear('all')
-                  setDateFilterMonth('all')
-                }}
-              >
-                All Years
-              </button>
-              {availableYears.map((year) => (
-                <button
-                  key={year}
-                  type="button"
-                  className={`date-filter-chip${dateFilterYear === year ? ' is-active' : ''}`}
-                  onClick={() => {
-                    setDateFilterYear(year)
-                    setDateFilterMonth('all')
-                  }}
-                >
-                  {year}
-                </button>
-              ))}
-            </div>
-            <div className="date-filter-line">
-              <button
-                type="button"
-                className={`date-filter-chip${dateFilterMonth === 'all' ? ' is-active' : ''}`}
-                onClick={() => setDateFilterMonth('all')}
-              >
-                All Months
-              </button>
-              {availableMonths.map((month) => (
+            <div
+              className="date-filter-line"
+              onContextMenu={handleMonthRowContextMenu}
+            >
+              {FILTER_MONTHS.map((month) => (
                 <button
                   key={month}
                   type="button"
-                  className={`date-filter-chip${dateFilterMonth === month ? ' is-active' : ''}`}
-                  onClick={() => setDateFilterMonth(month)}
+                  className={`date-filter-chip${selectedMonths.has(month) ? ' is-active' : ''}`}
+                  onClick={(event) => handleMonthToggle(month, event)}
+                  onContextMenu={(event) => event.preventDefault()}
                 >
-                  {MONTH_LABELS[month - 1]}
+                  {month}
+                </button>
+              ))}
+            </div>
+            <div
+              className="date-filter-line"
+              onContextMenu={handleYearRowContextMenu}
+            >
+              {FILTER_YEARS.map((year) => (
+                <button
+                  key={year}
+                  type="button"
+                  className={`date-filter-chip${selectedYears.has(year) ? ' is-active' : ''}`}
+                  onClick={(event) => handleYearToggle(year, event)}
+                  onContextMenu={(event) => event.preventDefault()}
+                >
+                  {year === 'older' ? 'Older' : year}
                 </button>
               ))}
             </div>
@@ -1023,9 +1211,6 @@ function App() {
               >
                 Add
               </button>
-            </div>
-            <div className="tag-collection-inline-placeholder" role="note" aria-label="Tag collection placeholder">
-              Tag collection placeholder
             </div>
           </div>
           <div className="tag-manager-list">
@@ -1073,10 +1258,26 @@ function App() {
 
       <div className="grid-divider divider-left" style={{ gridArea: 'd-left' }} aria-hidden="true" />
 
-      <section className="suggested-grid" style={{ gridArea: 'suggested' }} aria-label="Tag collection panel placeholder">
-        <div className="panel-placeholder">
-          <div className="panel-placeholder-title">Tag Collection</div>
-          <div className="panel-placeholder-text">Placeholder for the right-side tag collection panel.</div>
+      <section className="suggested-grid" style={{ gridArea: 'suggested' }} aria-label="Suggested tags panel">
+        <div className="suggested-tags" aria-hidden={suggestedTags.length === 0}>
+          {suggestedTags.map((tagName) => (
+            <div
+              key={tagName}
+              className="tag-pill suggested"
+              onClick={() => handleAddSuggestedTag(tagName)}
+              title={`Add ${tagName}`}
+              aria-disabled={!activeNoteId || isTagMutationPending}
+            >
+              {tagName}
+            </div>
+          ))}
+          {suggestedTags.length === 0 ? (
+            <div className="suggested-empty">
+              {activeNoteId
+                ? ''
+                : 'Tags you have used before will appear here. Click them to quickly assign them to your current note. If a tag is no longer in use, it will disappear from this list.'}
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -1094,10 +1295,8 @@ function App() {
       </section>
 
       <main className="editor-shell" style={{ gridArea: 'viewer' }}>
-        <div className="save-indicator">{lastSaveLabel}</div>
         <div className="editor-stage">
           <Editor
-            key={activeNoteId ?? 'note-bootstrap'}
             bindings={bindings}
             adapterRef={adapterRef}
             initialText={activeNoteText}

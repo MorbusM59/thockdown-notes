@@ -8,6 +8,7 @@ Use this checklist as the single source of truth for parity and stability. Do no
 - [x] Current phase and objective reviewed at session start.
 - [x] Performance-first rule enforced (minimal redraw/update path preferred by default).
 - [x] Holistic structure-first rule enforced (placeholders must fit final full-feature architecture without structural rework).
+- [x] V1-first audit gate enforced for every UI carryover element (audit report -> exact-repro decision -> user confirmation -> implementation).
 - [x] Session end update completed (map + checklist + handbook).
 
 ## B. Editor Contract (Phase 1)
@@ -45,12 +46,12 @@ Use this checklist as the single source of truth for parity and stability. Do no
 - [x] Sidebar view model restored (Date/Category/Archive/Trash) with canonical semantics.
 - [x] Date view month/year filter rail restored in compact two-line interaction model.
 - [x] Category and Archive hierarchical grouping restored (primary -> secondary -> tertiary).
-- [ ] Search restored (text + #tag).
+- [x] Search restored (text + #tag).
 - [x] Tag model restored (add/remove/reorder/protected tags).
-- [ ] Suggested tags restored.
+- [x] Suggested tags restored.
 - [ ] Timeline/time machine restored.
 - [ ] Utility actions restored (import/export/pdf/trash controls).
-- [ ] Keyboard shortcuts restored (Ctrl+N, Ctrl+Shift+N, Escape).
+- [x] Keyboard shortcuts restored (Ctrl+N, Ctrl+Shift+N, Escape).
 
 ## G. Hardening (Phase 6)
 - [ ] Performance baseline measured and accepted.

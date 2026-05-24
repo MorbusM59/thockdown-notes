@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { AppState, PersistedViewportState, WindowState } from '../src/shared/appState';
+import type { AppState, PersistedMenuState, PersistedViewportState, SidebarMode, WindowState } from '../src/shared/appState';
 
 const APP_STATE_FILE = 'app-state.json';
 const WINDOW_STATE_FILE = 'window-state.json';
@@ -8,6 +8,12 @@ const WINDOW_STATE_FILE = 'window-state.json';
 const DEFAULT_APP_STATE: AppState = {
   selectedNoteId: null,
   viewport: undefined,
+  menu: {
+    sidebarMode: 'date',
+    selectedMonths: [],
+    selectedYears: [],
+    searchQuery: '',
+  },
 };
 
 const DEFAULT_WINDOW_STATE: WindowState = {
@@ -26,6 +32,30 @@ function sanitizeViewport(input: Partial<PersistedViewportState> | undefined): P
     topBoundaryPx,
     bottomBoundaryPx,
     scrollTopPx,
+  };
+}
+
+function sanitizeSidebarMode(input: unknown): SidebarMode {
+  if (input === 'date' || input === 'category' || input === 'archive' || input === 'trash') {
+    return input;
+  }
+  return 'date';
+}
+
+function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): PersistedMenuState {
+  const selectedMonths = Array.isArray(input?.selectedMonths)
+    ? input.selectedMonths.filter((value): value is number => Number.isInteger(value) && value >= 1 && value <= 12)
+    : [];
+
+  const selectedYears = Array.isArray(input?.selectedYears)
+    ? input.selectedYears.filter((value): value is number | 'older' => value === 'older' || Number.isInteger(value))
+    : [];
+
+  return {
+    sidebarMode: sanitizeSidebarMode(input?.sidebarMode),
+    selectedMonths,
+    selectedYears,
+    searchQuery: typeof input?.searchQuery === 'string' ? input.searchQuery : '',
   };
 }
 
@@ -63,6 +93,7 @@ export class StateService {
       return {
         selectedNoteId: typeof parsed.selectedNoteId === 'string' ? parsed.selectedNoteId : null,
         viewport: sanitizeViewport(parsed.viewport),
+        menu: sanitizeMenu(parsed.menu),
       };
     } catch {
       return DEFAULT_APP_STATE;
@@ -74,6 +105,7 @@ export class StateService {
     const payload: AppState = {
       selectedNoteId: typeof state.selectedNoteId === 'string' ? state.selectedNoteId : null,
       viewport: sanitizeViewport(state.viewport),
+      menu: sanitizeMenu(state.menu),
     };
     await fs.writeFile(this.appStatePath, JSON.stringify(payload, null, 2), 'utf8');
   }

@@ -189,40 +189,80 @@
 }
 
 .date-filter-rail {
-  border: 1px solid #d2cec9;
-  border-left: none;
-  border-top: none;
+  border-style: solid solid none none;
+  border-color: #ffffff22;
   border-radius: 0 8px 0 0;
-  padding: 8px 10px;
+  padding: 4px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
+  background: rgba(255, 255, 255, 0.24);
 }
 
 .date-filter-line {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 6px;
-  overflow-x: auto;
-  padding-bottom: 2px;
+  width: 100%;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.date-filter-line:last-child {
+  margin-bottom: 0;
 }
 
 .date-filter-chip {
-  border: 1px solid #c4b9ae;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.55);
+  flex: 1;
+  min-width: 0;
+  height: 20px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  background: #fff;
   color: #4a3f35;
-  padding: 3px 8px;
-  font-size: 11px;
-  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 300;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .date-filter-chip.is-active {
-  border-color: #82614a;
+  border-color: #8d6f59;
   background: #ece0d0;
   color: #241b16;
   font-weight: 700;
+}
+
+.sidebar-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+}
+
+.sidebar-page-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 16px;
+  color: #5b4c40;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sidebar-page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sidebar-page-number {
+  padding: 0 8px;
+  font-size: 13px;
+  color: #666;
 }
 
 .notes-mode-bar {
@@ -275,20 +315,8 @@
 
 .tag-input-bar-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
-}
-
-.tag-collection-inline-placeholder {
-  border: 1px dashed #c5b9ae;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.35);
-  color: #6f6257;
-  font-size: 11px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 8px;
 }
 
 .tag-manager-list {
@@ -353,6 +381,41 @@
 .panel-placeholder-text {
   font-size: 11px;
   color: #716255;
+}
+
+.suggested-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  overflow: hidden;
+  max-height: 80px;
+}
+
+.tag-pill.suggested {
+  border: 1px solid #bfb6ad;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #3f342b;
+  padding: 2px 6px;
+  font-size: 11px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.tag-pill.suggested:hover {
+  background: #e8e8e8;
+  border-color: #bbb;
+}
+
+.tag-pill.suggested[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.suggested-empty {
+  font-size: 11px;
+  color: #716255;
+  padding: 8px 0;
 }
 
 .tag-manager-header {
@@ -508,6 +571,12 @@
   transition: border-color 120ms ease, background-color 120ms ease;
 }
 
+.date-view .note-list-item {
+  height: 56px;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
 .note-list-item:hover {
   border-color: #ab8f74;
   background: rgba(255, 255, 255, 0.8);
@@ -621,27 +690,9 @@
   overflow: hidden;
 }
 
-.save-indicator {
-  position: absolute;
-  right: 16px;
-  top: 14px;
-  z-index: 50;
-  pointer-events: none;
-  user-select: none;
-  background: #9dc89b;
-  color: #122812;
-  font-size: 12px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  border: 1px solid rgba(0, 0, 0, 0.18);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-  font-family: 'Syne Mono', monospace;
-}
-
 .editor-stage {
   width: 100%;
   height: 100%;
-  padding-top: 22px;
   box-sizing: border-box;
 }
 
@@ -656,9 +707,5 @@
 
   .tag-input-bar-row {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .tag-collection-inline-placeholder {
-    min-height: 28px;
   }
 }

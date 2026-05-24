@@ -5,6 +5,15 @@ export const APP_STATE_CHANNELS = {
   saveWindowState: 'state:window:save',
 } as const;
 
+export type SidebarMode = 'date' | 'category' | 'archive' | 'trash';
+
+export interface PersistedMenuState {
+  sidebarMode: SidebarMode;
+  selectedMonths: number[];
+  selectedYears: Array<number | 'older'>;
+  searchQuery: string;
+}
+
 export interface PersistedViewportState {
   topBoundaryPx: number;
   bottomBoundaryPx: number;
@@ -14,6 +23,7 @@ export interface PersistedViewportState {
 export interface AppState {
   selectedNoteId: string | null;
   viewport?: PersistedViewportState;
+  menu?: PersistedMenuState;
 }
 
 export interface WindowState {
