@@ -8,6 +8,7 @@ Deliver a visually and functionally identical app to V1, with a rock-solid edito
 - Visual parity with V1 editor experience is required.
 - No workaround that violates browser/editor lifecycle correctness.
 - Performance-first execution is required: prefer minimal/targeted updates over broad redraws or wide invalidation.
+- Build toward final-form architecture at every phase: placeholders are allowed only when their structure and extension seams already match the intended full feature set.
 - No phase advancement without passing gate criteria.
 - One active focus area at a time, but full-map tracking always maintained.
 
@@ -56,10 +57,34 @@ Status: DONE
 ### Phase 5 - Feature Parity Carryover
 Goal: Port V1 features behind stable editor and persistence contracts.
 Exit criteria:
-- Sidebar modes, search, tags, timeline, utilities restored.
+- Sidebar view model restored with canonical modes: Date, Category, Archive, Trash.
+- Search, tags, timeline, utilities restored.
 - Keyboard flows and note lifecycle parity restored.
 - No regressions against editor core behavior.
 Status: PENDING
+
+## Canonical Sidebar View Model (V2)
+- Date view:
+	- Recency-ordered note list.
+	- Includes compact two-line month/year filter rail (carry over from V1 behavior).
+	- Excludes notes with protected tags `archived` and `deleted`.
+- Category view:
+	- Hierarchical categorized browser by primary -> secondary -> tertiary tag grouping.
+	- Excludes notes with protected tags `archived` and `deleted`.
+- Archive view:
+	- Same hierarchical category browser as Category view.
+	- Includes archived notes only.
+	- Excludes deleted notes.
+- Trash view:
+	- Recency-ordered deleted-note list.
+	- Includes notes with protected tag `deleted`.
+
+Terminology boundary:
+- View naming uses Date/Category/Archive/Trash.
+- `tag`/`tags` naming is reserved for note classification metadata and tag-management surfaces, not for top-level view labels.
+
+Reference spec:
+- `docs/V2_SIDEBAR_VIEW_ARCHITECTURE.md`
 
 ### Phase 6 - Hardening and Release Readiness
 Goal: Remove instability and prove runtime consistency.
@@ -81,6 +106,7 @@ During session:
 - If work touches out-of-scope areas, stop and log rationale before proceeding.
 - Record every architectural decision in the session handbook.
 - If a feature requires a measurable performance sacrifice, log the tradeoff, rejected alternatives, and acceptance rationale before merging.
+- If introducing placeholders, verify they do not create dead-end component structure; document the future fit path in the session handbook.
 
 At end of session:
 - Update status in this map.
@@ -89,5 +115,8 @@ At end of session:
 
 ## Current Focus
 - Active phase: Phase 5 - Feature Parity Carryover
-- Active objective: Reintroduce the sidebar/list surface so note management, search, and view modes are available for parity testing.
+- Active objective: Complete canonical data-model parity planning so Date/Category/Archive/Trash, search, tags, timeline, and UI state all map to explicit required entities before further carryover.
 - Out of scope: Phase 6 hardening/release readiness until core Phase 5 parity surfaces exist.
+
+Model reference:
+- `docs/V5_CANONICAL_DATA_MODEL.md`

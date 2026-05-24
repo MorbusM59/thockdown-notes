@@ -14,6 +14,86 @@ import { CELL_WIDTH_PX, LINE_HEIGHT_PX } from './editor/LayoutConstants'
 
 const SAVE_DEBOUNCE_MS = 350
 
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
+const PROTECTED_TAGS = new Set(['archived', 'deleted', 'temp'])
+
+type SidebarMode = 'date' | 'category' | 'archive' | 'trash'
+type DateFilterValue = 'all' | number
+
+const SIDEBAR_MODES: Array<{ mode: SidebarMode; label: string }> = [
+  { mode: 'date', label: 'Date' },
+  { mode: 'category', label: 'Category' },
+  { mode: 'archive', label: 'Archive' },
+  { mode: 'trash', label: 'Trash' },
+]
+
+type TertiaryGroup = {
+  name: string
+  notes: NoteSummary[]
+}
+
+type SecondaryGroup = {
+  name: string
+  tertiary: TertiaryGroup[]
+}
+
+type PrimaryGroup = {
+  name: string
+  secondary: SecondaryGroup[]
+}
+
+function hierarchyFromTags(tags: string[]): { primary: string; secondary: string; tertiary: string } {
+  const nonProtected = tags.filter((tag) => !PROTECTED_TAGS.has(tag))
+  return {
+    primary: nonProtected[0] ?? 'Uncategorized',
+    secondary: nonProtected[1] ?? 'General',
+    tertiary: nonProtected[2] ?? 'Notes',
+  }
+}
+
+function buildHierarchyGroups(notes: NoteSummary[]): PrimaryGroup[] {
+  const sortedNotes = [...notes].sort((a, b) => b.updatedAtMs - a.updatedAtMs)
+  const primaryMap = new Map<string, Map<string, Map<string, NoteSummary[]>>>()
+
+  for (const note of sortedNotes) {
+    const { primary, secondary, tertiary } = hierarchyFromTags(note.tags)
+
+    if (!primaryMap.has(primary)) {
+      primaryMap.set(primary, new Map())
+    }
+    const secondaryMap = primaryMap.get(primary)!
+
+    if (!secondaryMap.has(secondary)) {
+      secondaryMap.set(secondary, new Map())
+    }
+    const tertiaryMap = secondaryMap.get(secondary)!
+
+    if (!tertiaryMap.has(tertiary)) {
+      tertiaryMap.set(tertiary, [])
+    }
+    tertiaryMap.get(tertiary)!.push(note)
+  }
+
+  const compareLabel = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' })
+
+  return [...primaryMap.entries()]
+    .sort(([a], [b]) => compareLabel(a, b))
+    .map(([primaryName, secondaryMap]) => ({
+      name: primaryName,
+      secondary: [...secondaryMap.entries()]
+        .sort(([a], [b]) => compareLabel(a, b))
+        .map(([secondaryName, tertiaryMap]) => ({
+          name: secondaryName,
+          tertiary: [...tertiaryMap.entries()]
+            .sort(([a], [b]) => compareLabel(a, b))
+            .map(([tertiaryName, groupedNotes]) => ({
+              name: tertiaryName,
+              notes: groupedNotes,
+            })),
+        })),
+    }))
+}
+
 function newlineRuns(text: string): number[] {
   const matches = text.match(/\n+/g)
   if (!matches) return []
@@ -55,6 +135,8 @@ function isSameNoteSummary(a: NoteSummary, b: NoteSummary): boolean {
     a.id === b.id &&
     a.fileName === b.fileName &&
     a.title === b.title &&
+    a.tags.length === b.tags.length &&
+    a.tags.every((tag, index) => tag === b.tags[index]) &&
     a.createdAtMs === b.createdAtMs &&
     a.updatedAtMs === b.updatedAtMs &&
     a.sizeBytes === b.sizeBytes
@@ -151,9 +233,72 @@ const NoteListItem = memo(function NoteListItem({
   )
 })
 
+type CategoryTreeViewProps = {
+  groups: PrimaryGroup[]
+  activeNoteId: string | null
+  persistenceReady: boolean
+  onSelect: (noteId: string) => void
+  onDelete: (noteId: string) => void
+}
+
+const CategoryTreeView = memo(function CategoryTreeView({
+  groups,
+  activeNoteId,
+  persistenceReady,
+  onSelect,
+  onDelete,
+}: CategoryTreeViewProps) {
+  if (groups.length === 0) {
+    return <div className="notes-empty-state">No notes available for this category view.</div>
+  }
+
+  return (
+    <div className="category-tree-root" aria-label="Category tree">
+      {groups.map((primary) => (
+        <details key={primary.name} className="category-primary" open>
+          <summary className="category-primary-summary">{primary.name}</summary>
+          {primary.secondary.map((secondary) => (
+            <details key={`${primary.name}:${secondary.name}`} className="category-secondary" open>
+              <summary className="category-secondary-summary">{secondary.name}</summary>
+              {secondary.tertiary.map((tertiary) => (
+                <div key={`${primary.name}:${secondary.name}:${tertiary.name}`} className="category-tertiary-block">
+                  <div className="category-tertiary-heading">{tertiary.name}</div>
+                  {tertiary.notes.map((note) => (
+                    <NoteListItem
+                      key={note.id}
+                      note={note}
+                      isActive={note.id === activeNoteId}
+                      persistenceReady={persistenceReady}
+                      onSelect={onSelect}
+                      onDelete={onDelete}
+                    />
+                  ))}
+                </div>
+              ))}
+            </details>
+          ))}
+        </details>
+      ))}
+    </div>
+  )
+})
+
+function isArchivedNote(note: NoteSummary): boolean {
+  return note.tags.includes('archived')
+}
+
+function isDeletedNote(note: NoteSummary): boolean {
+  return note.tags.includes('deleted')
+}
+
 function App() {
   const adapterRef = useRef<EditorAdapter | null>(null)
   const [notes, setNotes] = useState<NoteSummary[]>([])
+  const [newTagName, setNewTagName] = useState('')
+  const [isTagMutationPending, setIsTagMutationPending] = useState(false)
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>('date')
+  const [dateFilterYear, setDateFilterYear] = useState<DateFilterValue>('all')
+  const [dateFilterMonth, setDateFilterMonth] = useState<DateFilterValue>('all')
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null)
   const [activeNoteText, setActiveNoteText] = useState('')
   const [persistenceReady, setPersistenceReady] = useState(false)
@@ -331,6 +476,111 @@ function App() {
     void createNote()
   }, [createNote])
 
+  const updateActiveNoteTagState = useCallback(async (nextState: 'archive' | 'trash' | 'restore') => {
+    if (!window.measlyNotes) return
+    if (!persistenceReady) return
+    if (!activeNoteId) return
+    if (noteTransitionLockRef.current) return
+
+    noteTransitionLockRef.current = true
+    try {
+      await flushPendingSaveNow()
+      await window.measlyNotes.removeTagFromNote({ id: activeNoteId, tagName: 'archived' })
+      await window.measlyNotes.removeTagFromNote({ id: activeNoteId, tagName: 'deleted' })
+
+      if (nextState === 'archive') {
+        await window.measlyNotes.addTagToNote({ id: activeNoteId, tagName: 'archived', position: 0 })
+        setSidebarMode('archive')
+      } else if (nextState === 'trash') {
+        await window.measlyNotes.addTagToNote({ id: activeNoteId, tagName: 'deleted', position: 0 })
+        setSidebarMode('trash')
+      } else {
+        setSidebarMode('date')
+      }
+
+      await refreshNotes(activeNoteId)
+      await activateNote(activeNoteId)
+    } catch (error) {
+      console.error('Failed to update note tag state', error)
+    } finally {
+      noteTransitionLockRef.current = false
+    }
+  }, [activeNoteId, activateNote, flushPendingSaveNow, persistenceReady, refreshNotes])
+
+  const handleArchiveActiveNote = useCallback(() => {
+    void updateActiveNoteTagState('archive')
+  }, [updateActiveNoteTagState])
+
+  const handleTrashActiveNote = useCallback(() => {
+    void updateActiveNoteTagState('trash')
+  }, [updateActiveNoteTagState])
+
+  const handleRestoreActiveNote = useCallback(() => {
+    void updateActiveNoteTagState('restore')
+  }, [updateActiveNoteTagState])
+
+  const activeNoteSummary = useMemo(() => {
+    if (!activeNoteId) return null
+    return notes.find((note) => note.id === activeNoteId) ?? null
+  }, [activeNoteId, notes])
+
+  const orderedActiveTags = activeNoteSummary?.tags ?? []
+
+  const runActiveNoteTagMutation = useCallback(async (mutate: (noteId: string) => Promise<void>) => {
+    if (!window.measlyNotes) return
+    if (!persistenceReady) return
+    if (!activeNoteId) return
+    if (noteTransitionLockRef.current) return
+
+    noteTransitionLockRef.current = true
+    setIsTagMutationPending(true)
+    try {
+      await flushPendingSaveNow()
+      await mutate(activeNoteId)
+      await refreshNotes(activeNoteId)
+      await activateNote(activeNoteId)
+    } catch (error) {
+      console.error('Failed to mutate active note tags', error)
+    } finally {
+      setIsTagMutationPending(false)
+      noteTransitionLockRef.current = false
+    }
+  }, [activeNoteId, activateNote, flushPendingSaveNow, persistenceReady, refreshNotes])
+
+  const handleAddTag = useCallback(() => {
+    const tagName = newTagName.trim()
+    if (!tagName) return
+    void runActiveNoteTagMutation(async (noteId) => {
+      await window.measlyNotes!.addTagToNote({
+        id: noteId,
+        tagName,
+        position: orderedActiveTags.length,
+      })
+    })
+    setNewTagName('')
+  }, [newTagName, orderedActiveTags.length, runActiveNoteTagMutation])
+
+  const handleRemoveTag = useCallback((tagName: string) => {
+    void runActiveNoteTagMutation(async (noteId) => {
+      await window.measlyNotes!.removeTagFromNote({ id: noteId, tagName })
+    })
+  }, [runActiveNoteTagMutation])
+
+  const handleMoveTag = useCallback((tagName: string, direction: -1 | 1) => {
+    const currentIndex = orderedActiveTags.indexOf(tagName)
+    if (currentIndex < 0) return
+    const targetIndex = currentIndex + direction
+    if (targetIndex < 0 || targetIndex >= orderedActiveTags.length) return
+
+    const reordered = [...orderedActiveTags]
+    const [tag] = reordered.splice(currentIndex, 1)
+    reordered.splice(targetIndex, 0, tag)
+
+    void runActiveNoteTagMutation(async (noteId) => {
+      await window.measlyNotes!.reorderNoteTags({ id: noteId, tagNames: reordered })
+    })
+  }, [orderedActiveTags, runActiveNoteTagMutation])
+
   const queueSave = useCallback((text: string) => {
     if (!persistenceReady) return
     pendingSaveTextRef.current = toPersistenceText(text)
@@ -504,9 +754,114 @@ function App() {
     return `Last save: ${new Date(lastSavedAtMs).toLocaleString()}`
   }, [lastSavedAtMs])
 
+  const sortedNotes = useMemo(() => {
+    return [...notes].sort((a, b) => b.updatedAtMs - a.updatedAtMs)
+  }, [notes])
+
+  const dateEligibleNotes = useMemo(() => {
+    return sortedNotes.filter((note) => !isArchivedNote(note) && !isDeletedNote(note))
+  }, [sortedNotes])
+
+  const categoryEligibleNotes = useMemo(() => {
+    return dateEligibleNotes
+  }, [dateEligibleNotes])
+
+  const archiveEligibleNotes = useMemo(() => {
+    return sortedNotes.filter((note) => isArchivedNote(note) && !isDeletedNote(note))
+  }, [sortedNotes])
+
+  const trashEligibleNotes = useMemo(() => {
+    return sortedNotes.filter((note) => isDeletedNote(note))
+  }, [sortedNotes])
+
+  const availableYears = useMemo(() => {
+    const years = new Set<number>()
+    for (const note of dateEligibleNotes) {
+      years.add(new Date(note.updatedAtMs).getFullYear())
+    }
+    return [...years].sort((a, b) => b - a)
+  }, [dateEligibleNotes])
+
+  const availableMonths = useMemo(() => {
+    const months = new Set<number>()
+    for (const note of dateEligibleNotes) {
+      const date = new Date(note.updatedAtMs)
+      if (dateFilterYear === 'all' || date.getFullYear() === dateFilterYear) {
+        months.add(date.getMonth() + 1)
+      }
+    }
+    return [...months].sort((a, b) => a - b)
+  }, [dateEligibleNotes, dateFilterYear])
+
+  const dateFilteredNotes = useMemo(() => {
+    return dateEligibleNotes.filter((note) => {
+      const date = new Date(note.updatedAtMs)
+      if (dateFilterYear !== 'all' && date.getFullYear() !== dateFilterYear) {
+        return false
+      }
+      if (dateFilterMonth !== 'all' && date.getMonth() + 1 !== dateFilterMonth) {
+        return false
+      }
+      return true
+    })
+  }, [dateEligibleNotes, dateFilterMonth, dateFilterYear])
+
+  const trashFilteredNotes = useMemo(() => {
+    return trashEligibleNotes.filter((note) => {
+      const date = new Date(note.updatedAtMs)
+      if (dateFilterYear !== 'all' && date.getFullYear() !== dateFilterYear) {
+        return false
+      }
+      if (dateFilterMonth !== 'all' && date.getMonth() + 1 !== dateFilterMonth) {
+        return false
+      }
+      return true
+    })
+  }, [dateFilterMonth, dateFilterYear, trashEligibleNotes])
+
+  const categoryTree = useMemo<PrimaryGroup[]>(() => {
+    return buildHierarchyGroups(categoryEligibleNotes)
+  }, [categoryEligibleNotes])
+
+  const archiveTree = useMemo<PrimaryGroup[]>(() => {
+    return buildHierarchyGroups(archiveEligibleNotes)
+  }, [archiveEligibleNotes])
+
+  const modeCounts = useMemo(() => {
+    return {
+      date: dateEligibleNotes.length,
+      category: categoryEligibleNotes.length,
+      archive: archiveEligibleNotes.length,
+      trash: trashEligibleNotes.length,
+    }
+  }, [archiveEligibleNotes.length, categoryEligibleNotes.length, dateEligibleNotes.length, trashEligibleNotes.length])
+
+  const visibleNotes = useMemo(() => {
+    if (sidebarMode === 'date') {
+      return dateFilteredNotes
+    }
+
+    if (sidebarMode === 'trash') {
+      return trashFilteredNotes
+    }
+
+    return []
+  }, [dateFilteredNotes, sidebarMode, trashFilteredNotes])
+
+  useEffect(() => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape' && sidebarMode !== 'date') {
+        setSidebarMode('date')
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [sidebarMode])
+
   return (
-    <div className="app-shell">
-      <aside className="notes-sidebar">
+    <div className="app-shell app-grid">
+      <aside className="notes-sidebar" style={{ gridArea: 'sidebar' }}>
         <div className="notes-sidebar-header">
           <h1 className="notes-sidebar-title">Notes</h1>
           <button
@@ -518,24 +873,231 @@ function App() {
             New
           </button>
         </div>
-        <div className="notes-list" role="listbox" aria-label="Note list">
-          {notes.map((note) => {
-            const isActive = note.id === activeNoteId
+        <div className="notes-quick-actions" aria-label="Active note actions">
+          <button
+            type="button"
+            className="notes-mini-action"
+            onClick={handleArchiveActiveNote}
+            disabled={!persistenceReady || !activeNoteId}
+          >
+            Archive
+          </button>
+          <button
+            type="button"
+            className="notes-mini-action"
+            onClick={handleTrashActiveNote}
+            disabled={!persistenceReady || !activeNoteId}
+          >
+            Trash
+          </button>
+          <button
+            type="button"
+            className="notes-mini-action"
+            onClick={handleRestoreActiveNote}
+            disabled={!persistenceReady || !activeNoteId}
+          >
+            Restore
+          </button>
+        </div>
+        <div className="notes-mode-bar" role="tablist" aria-label="Note view modes">
+          {SIDEBAR_MODES.map(({ mode, label }) => {
+            const isActive = sidebarMode === mode
+            const count = modeCounts[mode]
             return (
-              <NoteListItem
-                key={note.id}
-                note={note}
-                isActive={isActive}
-                persistenceReady={persistenceReady}
-                onSelect={handleSelectNote}
-                onDelete={handleDeleteNote}
-              />
+              <button
+                key={mode}
+                className={`notes-mode-button${isActive ? ' is-active' : ''}`}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setSidebarMode(mode)}
+              >
+                <span>{label}</span>
+                <span className="notes-mode-count">{count}</span>
+              </button>
             )
           })}
         </div>
+        {(sidebarMode === 'date' || sidebarMode === 'trash') ? (
+          <>
+            <div className="date-filter-rail" aria-label="Date filters">
+              <div className="date-filter-line">
+                <button
+                  type="button"
+                  className={`date-filter-chip${dateFilterYear === 'all' ? ' is-active' : ''}`}
+                  onClick={() => {
+                    setDateFilterYear('all')
+                    setDateFilterMonth('all')
+                  }}
+                >
+                  All Years
+                </button>
+                {availableYears.map((year) => (
+                  <button
+                    key={year}
+                    type="button"
+                    className={`date-filter-chip${dateFilterYear === year ? ' is-active' : ''}`}
+                    onClick={() => {
+                      setDateFilterYear(year)
+                      setDateFilterMonth('all')
+                    }}
+                  >
+                    {year}
+                  </button>
+                ))}
+              </div>
+              <div className="date-filter-line">
+                <button
+                  type="button"
+                  className={`date-filter-chip${dateFilterMonth === 'all' ? ' is-active' : ''}`}
+                  onClick={() => setDateFilterMonth('all')}
+                >
+                  All Months
+                </button>
+                {availableMonths.map((month) => (
+                  <button
+                    key={month}
+                    type="button"
+                    className={`date-filter-chip${dateFilterMonth === month ? ' is-active' : ''}`}
+                    onClick={() => setDateFilterMonth(month)}
+                  >
+                    {MONTH_LABELS[month - 1]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="notes-list" role="listbox" aria-label="Note list">
+              {visibleNotes.map((note) => {
+                const isActive = note.id === activeNoteId
+                return (
+                  <NoteListItem
+                    key={note.id}
+                    note={note}
+                    isActive={isActive}
+                    persistenceReady={persistenceReady}
+                    onSelect={handleSelectNote}
+                    onDelete={handleDeleteNote}
+                  />
+                )
+              })}
+              {visibleNotes.length === 0 ? (
+                <div className="notes-empty-state">No notes match the current date filters.</div>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <div className="notes-list">
+            <CategoryTreeView
+              groups={sidebarMode === 'category' ? categoryTree : archiveTree}
+              activeNoteId={activeNoteId}
+              persistenceReady={persistenceReady}
+              onSelect={handleSelectNote}
+              onDelete={handleDeleteNote}
+            />
+          </div>
+        )}
       </aside>
 
-      <main className="editor-shell">
+      <div className="grid-divider divider-sidebar" style={{ gridArea: 'd-sidebar' }} aria-hidden="true" />
+
+      <section className="tag-input-grid" style={{ gridArea: 'taginput' }} aria-label="Tag input manager">
+        <div className="tag-input-shell">
+          <div className="tag-manager-header">Tags</div>
+          <div className="tag-input-bar-row">
+            <div className="tag-manager-input-row">
+              <input
+                className="tag-manager-input"
+                type="text"
+                value={newTagName}
+                placeholder="Add tag"
+                onChange={(event) => setNewTagName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    handleAddTag()
+                  }
+                }}
+                disabled={!persistenceReady || !activeNoteId || isTagMutationPending}
+              />
+              <button
+                className="notes-mini-action"
+                type="button"
+                onClick={handleAddTag}
+                disabled={!persistenceReady || !activeNoteId || !newTagName.trim() || isTagMutationPending}
+              >
+                Add
+              </button>
+            </div>
+            <div className="tag-collection-inline-placeholder" role="note" aria-label="Tag collection placeholder">
+              Tag collection placeholder
+            </div>
+          </div>
+          <div className="tag-manager-list">
+            {orderedActiveTags.length === 0 ? (
+              <div className="tag-manager-empty">No tags on active note.</div>
+            ) : (
+              orderedActiveTags.map((tagName, index) => (
+                <div key={tagName} className="tag-row">
+                  <span className={`tag-name${PROTECTED_TAGS.has(tagName) ? ' is-protected' : ''}`}>{tagName}</span>
+                  <div className="tag-row-actions">
+                    <button
+                      type="button"
+                      className="tag-mini-btn"
+                      onClick={() => handleMoveTag(tagName, -1)}
+                      disabled={isTagMutationPending || index === 0}
+                      aria-label={`Move ${tagName} up`}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="tag-mini-btn"
+                      onClick={() => handleMoveTag(tagName, 1)}
+                      disabled={isTagMutationPending || index === orderedActiveTags.length - 1}
+                      aria-label={`Move ${tagName} down`}
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      className="tag-mini-btn"
+                      onClick={() => handleRemoveTag(tagName)}
+                      disabled={isTagMutationPending}
+                      aria-label={`Remove ${tagName}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </section>
+
+      <div className="grid-divider divider-left" style={{ gridArea: 'd-left' }} aria-hidden="true" />
+
+      <section className="suggested-grid" style={{ gridArea: 'suggested' }} aria-label="Tag collection panel placeholder">
+        <div className="panel-placeholder">
+          <div className="panel-placeholder-title">Tag Collection</div>
+          <div className="panel-placeholder-text">Placeholder for the right-side tag collection panel.</div>
+        </div>
+      </section>
+
+      <div className="grid-divider divider-right" style={{ gridArea: 'd-right' }} aria-hidden="true" />
+
+      <section className="utility-grid" style={{ gridArea: 'utility' }} aria-label="Utility grid placeholder">
+        <div className="panel-placeholder utility-panel-placeholder">
+          <div className="panel-placeholder-title">Utility Grid</div>
+          <div className="panel-placeholder-text">Placeholder for utility actions and controls.</div>
+        </div>
+      </section>
+
+      <section className="toolbar-grid" style={{ gridArea: 'toolbar' }} aria-label="Toolbar panel placeholder">
+        <div className="toolbar-placeholder">Toolbar panel placeholder between tag manager and editor.</div>
+      </section>
+
+      <main className="editor-shell" style={{ gridArea: 'viewer' }}>
         <div className="save-indicator">{lastSaveLabel}</div>
         <div className="editor-stage">
           <Editor

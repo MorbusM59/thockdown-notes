@@ -42,6 +42,7 @@ All payload/result types are shared in `src/shared/noteLifecycle.ts`.
 - `id: string`
 - `fileName: string`
 - `title: string`
+- `tags: string[]`
 - `createdAtMs: number`
 - `updatedAtMs: number`
 - `sizeBytes: number`
@@ -126,3 +127,6 @@ Exit condition for this item:
 ## Next Contract Increment
 - Add error-code semantics for missing/deleted notes.
 - Extend UI-state persistence surface as additional V2 panels return (Phase 5).
+
+Cross-reference:
+- `docs/V5_CANONICAL_DATA_MODEL.md` defines the full parity data-set requirements for Phase 5+.

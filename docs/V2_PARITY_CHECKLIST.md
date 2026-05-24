@@ -7,6 +7,7 @@ Use this checklist as the single source of truth for parity and stability. Do no
 - [x] Session handbook exists.
 - [x] Current phase and objective reviewed at session start.
 - [x] Performance-first rule enforced (minimal redraw/update path preferred by default).
+- [x] Holistic structure-first rule enforced (placeholders must fit final full-feature architecture without structural rework).
 - [x] Session end update completed (map + checklist + handbook).
 
 ## B. Editor Contract (Phase 1)
@@ -40,9 +41,12 @@ Use this checklist as the single source of truth for parity and stability. Do no
 - [x] Last-edited note and UI state persistence restored.
 
 ## F. Feature Carryover (Phase 5)
-- [ ] Sidebar view modes restored (latest/active/archived/trash).
+- [x] Canonical data model parity spec documented (markdown source-of-truth + required projection entities).
+- [x] Sidebar view model restored (Date/Category/Archive/Trash) with canonical semantics.
+- [x] Date view month/year filter rail restored in compact two-line interaction model.
+- [x] Category and Archive hierarchical grouping restored (primary -> secondary -> tertiary).
 - [ ] Search restored (text + #tag).
-- [ ] Tag model restored (add/remove/reorder/protected tags).
+- [x] Tag model restored (add/remove/reorder/protected tags).
 - [ ] Suggested tags restored.
 - [ ] Timeline/time machine restored.
 - [ ] Utility actions restored (import/export/pdf/trash controls).

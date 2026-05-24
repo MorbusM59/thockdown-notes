@@ -1,9 +1,14 @@
 import { ipcRenderer, contextBridge } from 'electron'
 import type {
+  AddTagInput,
   CreateNoteInput,
   DeleteNoteInput,
   LoadNoteInput,
+  NoteTagsInput,
   NoteLifecycleApi,
+  RemoveTagInput,
+  RenameTagInput,
+  ReorderTagsInput,
   SaveNoteInput,
 } from '../src/shared/noteLifecycle'
 import { NOTE_LIFECYCLE_CHANNELS } from '../src/shared/noteLifecycle'
@@ -39,6 +44,12 @@ const noteLifecycleApi: NoteLifecycleApi = {
   createNote: (input?: CreateNoteInput) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.create, input),
   saveNote: (input: SaveNoteInput) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.save, input),
   deleteNote: (input: DeleteNoteInput) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.remove, input),
+  getNoteTags: (input: NoteTagsInput) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.getNoteTags, input),
+  addTagToNote: (input: AddTagInput) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.addTag, input),
+  removeTagFromNote: (input: RemoveTagInput) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.removeTag, input),
+  reorderNoteTags: (input: ReorderTagsInput) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.reorderTags, input),
+  renameTag: (input: RenameTagInput) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.renameTag, input),
+  listTags: () => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.listTags),
 }
 
 contextBridge.exposeInMainWorld('measlyNotes', noteLifecycleApi)

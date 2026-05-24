@@ -66,6 +66,12 @@ Legend:
 1. `EXPLICIT` - Four primary modes: `latest`, `active`, `archived`, `trash`.
    - Source ref: `main:src/components/Sidebar.tsx`
 
+   V2 canonical terminology mapping (naming cleanup only):
+   - `latest` -> `Date`
+   - `active` -> `Category`
+   - `archived` -> `Archive`
+   - `trash` -> `Trash`
+
 2. `EXPLICIT` - Date mode filters by month/year and suppresses deleted notes; archived notes are hidden unless date filters are active.
    - Source ref: `main:src/components/Sidebar.tsx`
 

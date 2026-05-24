@@ -7,6 +7,7 @@ This file is the continuity ledger across sessions. Append one entry per session
 - Keep all out-of-scope items explicit.
 - Record decisions with reasons.
 - Record blockers immediately.
+- Use final-form structural planning by default; placeholders must preserve intended full-feature component boundaries and extension seams.
 - End every session with the next exact first action.
 
 ---
@@ -501,6 +502,87 @@ Close Phase 2 with final manual stability confirmation under large-document stre
 ## Session Entry
 
 ### Session Date
+2026-05-24
+
+### Active Phase
+Phase 5 - Feature Parity Carryover
+
+### Objective
+Standardize sidebar view naming and lock conceptual architecture semantics to prevent internal/external terminology drift.
+
+### Out of Scope
+- Search implementation details.
+- Tag CRUD implementation details.
+
+### Work Completed
+- Finalized canonical view labels as Date, Category, Archive, Trash.
+- Documented canonical behavior boundaries for each view.
+- Updated phase gate/checklist artifacts to enforce canonical terminology and structure.
+
+---
+
+## Session Entry
+
+### Session Date
+2026-05-24
+
+### Active Phase
+Phase 5 - Feature Parity Carryover
+
+### Objective
+Implement active-note tag management UI (add/remove/reorder) using the new persistence contract.
+
+### Out of Scope
+- Suggested tags UX.
+- Search and timeline carryover.
+
+### Work Completed
+- Added sidebar tag manager for the active note in `src/App.tsx`.
+- Wired add/remove/reorder controls to `window.measlyNotes` tag APIs.
+- Added mutation serialization and save-first flow before tag operations.
+- Added compact tag manager styling in `src/App.css`.
+- Updated Phase 5 checklist items for sidebar/date/category/tag carryover completion.
+
+### Decisions
+- Decision: Serialize tag mutations through the same note transition lock and save-flush path used by note activation.
+  - Reason: Preserves markdown-authoritative persistence ordering and avoids renderer/main race windows.
+
+### Risks or Blockers
+- Risk/Blocker: `npm run lint` currently fails in this environment with a launcher error (`The system cannot execute the specified program`).
+  - Impact: Full lint gate is temporarily blocked despite clean file diagnostics.
+  - Mitigation: Continue validating with `npm run build` + `get_errors` until environment runner issue is resolved.
+
+### Checklist Deltas
+- Checked: Sidebar view model, Date filter rail, Category/Archive hierarchy, Tag model carryover items.
+- Unchecked/Reopened: Search, suggested tags, timeline, utility actions, keyboard shortcuts.
+
+### Next Session
+- Objective: Implement Phase 5 search carryover (text + #tag) on top of current canonical sidebar/tag model.
+- First action: Add a single search query state and deterministic filter pipeline shared across Date/Category/Archive/Trash lists.
+
+### Decisions
+- Decision: Replace V1 labels (`latest`, `active`) with V2 canonical labels (`Date`, `Category`) across development artifacts.
+  - Reason: Avoid semantic conflict between list recency and categorized hierarchy concepts, and avoid confusion with tag-management surfaces.
+- Decision: Reserve `tag` terminology for note metadata and tag management, not top-level view labels.
+  - Reason: Keeps architecture language unambiguous across UI and implementation.
+
+### Risks or Blockers
+- Risk/Blocker: Existing in-progress code may still contain transitional labels.
+  - Impact: Temporary naming inconsistency in implementation phase.
+  - Mitigation: Apply rename sweep during next sidebar/search increment before feature completion gate sign-off.
+
+### Checklist Deltas
+- Checked: Canonical sidebar view model captured in process artifacts.
+
+### Next Session
+- Objective: Continue Phase 5 implementation using canonical Date/Category/Archive/Trash naming in code-level mode state.
+- First action: Rename current mode constants/UI labels and align filtering logic to the canonical semantics.
+
+---
+
+## Session Entry
+
+### Session Date
 2026-05-23
 
 ### Active Phase
@@ -943,3 +1025,44 @@ Finalize autosave/title behavior and close Phase 4.
 ### Next Session
 - Objective: Start Phase 5 with sidebar/list surface restoration to enable practical note-management parity.
 - First action: Define minimal sidebar contract and render note list + selection actions against current persistence API.
+
+---
+
+## Session Entry
+
+### Session Date
+2026-05-24
+
+### Active Phase
+Phase 5 - Feature Parity Carryover
+
+### Objective
+Complete full V1->V2 persistence-model audit and publish canonical data model requirements before further carryover implementation.
+
+### Out of Scope
+- Phase 6 hardening/release baseline work.
+- UI polish iterations unrelated to data coverage.
+
+### Work Completed
+- Audited full V1 database/types/filesystem model against current V2 contracts/services.
+- Identified parity-critical missing entities (ordered tag relations, search projection, snapshots, per-note UI state).
+- Documented canonical V2 data model requirements in `docs/V5_CANONICAL_DATA_MODEL.md`.
+- Synced master execution map/checklist/persistence contract docs to the new model reference.
+
+### Decisions
+- Decision: Keep markdown note files as authoritative content source in V2.
+  - Reason: This is a core product design requirement for portability and shareability.
+- Decision: Treat DB/JSON stores as derivative projections for query, timeline, and UI continuity only.
+  - Reason: Preserves source-of-truth clarity while enabling full feature parity.
+
+### Risks or Blockers
+- Risk/Blocker: Current V2 implementation still lacks full projection entities for search/snapshot/per-note UI state.
+  - Impact: Full Phase 5 parity remains blocked until projection contracts are implemented.
+  - Mitigation: Implement projection entities in planned sequence from `docs/V5_CANONICAL_DATA_MODEL.md`.
+
+### Checklist Deltas
+- Checked: Canonical data model parity spec documented.
+
+### Next Session
+- Objective: Implement ordered note-tag relation contract and write paths (primary/secondary/tertiary + protected-tag enforcement).
+- First action: Extend shared note lifecycle/tag contracts and main-process persistence handlers for add/remove/reorder/rename tag flows.
