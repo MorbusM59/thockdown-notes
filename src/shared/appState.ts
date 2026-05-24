@@ -12,6 +12,8 @@ export interface PersistedMenuState {
   selectedMonths: number[];
   selectedYears: Array<number | 'older'>;
   searchQuery: string;
+  sidebarWidthRatio: number;
+  tagSplitRatio: number;
 }
 
 export interface PersistedViewportState {

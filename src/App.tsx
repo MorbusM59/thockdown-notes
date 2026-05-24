@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { KeyboardEvent, MouseEvent } from 'react'
+import type { DragEvent, KeyboardEvent, MouseEvent } from 'react'
 import { Editor } from './components/Editor'
 import './App.css'
 import type {
@@ -8,7 +8,7 @@ import type {
   EditorTextChangeEvent,
   EditorViewportChangeEvent,
 } from './editor/EditorContract'
-import type { PersistedViewportState } from './shared/appState'
+import type { PersistedMenuState, PersistedViewportState } from './shared/appState'
 import type { NoteSummary } from './shared/noteLifecycle'
 import { CELL_WIDTH_PX, LINE_HEIGHT_PX } from './editor/LayoutConstants'
 import {
@@ -21,6 +21,14 @@ const SAVE_DEBOUNCE_MS = 350
 const NEW_NOTE_TEMPLATE = '# '
 const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
 const PROTECTED_TAGS = new Set(['archived', 'deleted', 'temp'])
+const GRID_DIVIDER_PX = 8
+const SIDEBAR_MIN_WIDTH_PX = 240
+const SIDEBAR_MAX_WIDTH_PX = 520
+const TAG_INPUT_MIN_WIDTH_PX = 320
+const SUGGESTED_MIN_WIDTH_PX = 220
+const UTILITY_WIDTH_PX = 160
+const DEFAULT_SIDEBAR_RATIO = 0.306
+const DEFAULT_TAG_SPLIT_RATIO = 0.645
 
 type SidebarMode = 'date' | 'category' | 'archive' | 'trash'
 
@@ -139,6 +147,14 @@ function deriveNoteTitleFromText(text: string): string {
   return firstContent?.trim() ?? 'Untitled'
 }
 
+function normalizeTagName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, '-')
+}
+
+function isProtectedTagName(name: string): boolean {
+  return PROTECTED_TAGS.has(normalizeTagName(name))
+}
+
 function sanitizeClipboardTitle(raw: string): string {
   const normalized = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
   const firstLine = normalized.split('\n').map((line) => line.trim()).find((line) => line.length > 0)
@@ -183,6 +199,10 @@ function mergeNoteSummaries(previous: NoteSummary[], next: NoteSummary[]): NoteS
   }
 
   return changed ? merged : previous
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
 }
 
 async function waitForNotesBridge(shouldStop: () => boolean): Promise<boolean> {
@@ -329,11 +349,15 @@ function matchesSearchQuery(note: NoteSummary, query: string): boolean {
 
 function App() {
   const adapterRef = useRef<EditorAdapter | null>(null)
+  const appShellRef = useRef<HTMLDivElement | null>(null)
   const sidebarContentRef = useRef<HTMLDivElement | null>(null)
   const [notes, setNotes] = useState<NoteSummary[]>([])
-  const [newTagName, setNewTagName] = useState('')
+  const [tagInputValue, setTagInputValue] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [isTagMutationPending, setIsTagMutationPending] = useState(false)
+  const [deleteArmedTagName, setDeleteArmedTagName] = useState<string | null>(null)
+  const [renamingTagName, setRenamingTagName] = useState<string | null>(null)
+  const [draggedTagIndex, setDraggedTagIndex] = useState<number | null>(null)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('date')
   const [selectedMonths, setSelectedMonths] = useState<Set<number>>(new Set())
   const [selectedYears, setSelectedYears] = useState<Set<number | 'older'>>(new Set())
@@ -343,6 +367,10 @@ function App() {
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null)
   const [activeNoteText, setActiveNoteText] = useState('')
   const [persistenceReady, setPersistenceReady] = useState(false)
+  const [appShellWidthPx, setAppShellWidthPx] = useState(980)
+  const [sidebarWidthRatio, setSidebarWidthRatio] = useState(DEFAULT_SIDEBAR_RATIO)
+  const [tagSplitRatio, setTagSplitRatio] = useState(DEFAULT_TAG_SPLIT_RATIO)
+  const [activeDividerDrag, setActiveDividerDrag] = useState<'sidebar' | 'tag-split' | null>(null)
   const pendingSaveTextRef = useRef<string | null>(null)
   const latestEditorTextRef = useRef('')
   const saveTimerRef = useRef<number | null>(null)
@@ -351,8 +379,49 @@ function App() {
   const pendingViewportRestoreRef = useRef<PersistedViewportState | null>(null)
   const latestViewportRef = useRef<PersistedViewportState | null>(null)
   const isApplyingInitialViewportRef = useRef(false)
+  const dividerDragStartXRef = useRef(0)
+  const dividerStartSidebarWidthRef = useRef(0)
+  const dividerStartTagInputWidthRef = useRef(0)
+  const dividerStartMainWidthRef = useRef(0)
 
-  const queueAppStateSave = useCallback((selectedNoteId: string | null) => {
+  const menuState = useMemo<PersistedMenuState>(() => ({
+    sidebarMode,
+    selectedMonths: [...selectedMonths],
+    selectedYears: [...selectedYears],
+    searchQuery,
+    sidebarWidthRatio,
+    tagSplitRatio,
+  }), [searchQuery, selectedMonths, selectedYears, sidebarMode, sidebarWidthRatio, tagSplitRatio])
+
+  const layout = useMemo(() => {
+    const dividerTotalWidthPx = GRID_DIVIDER_PX * 3
+    const maxSidebarWidthPx = Math.max(
+      SIDEBAR_MIN_WIDTH_PX,
+      Math.min(
+        SIDEBAR_MAX_WIDTH_PX,
+        appShellWidthPx - dividerTotalWidthPx - UTILITY_WIDTH_PX - TAG_INPUT_MIN_WIDTH_PX - SUGGESTED_MIN_WIDTH_PX,
+      ),
+    )
+
+    const sidebarWidthPx = clamp(appShellWidthPx * sidebarWidthRatio, SIDEBAR_MIN_WIDTH_PX, maxSidebarWidthPx)
+    const mainColumnsWidthPx = Math.max(
+      TAG_INPUT_MIN_WIDTH_PX + SUGGESTED_MIN_WIDTH_PX,
+      appShellWidthPx - dividerTotalWidthPx - UTILITY_WIDTH_PX - sidebarWidthPx,
+    )
+
+    const tagInputWidthPx = clamp(mainColumnsWidthPx * tagSplitRatio, TAG_INPUT_MIN_WIDTH_PX, mainColumnsWidthPx - SUGGESTED_MIN_WIDTH_PX)
+    const suggestedWidthPx = Math.max(SUGGESTED_MIN_WIDTH_PX, mainColumnsWidthPx - tagInputWidthPx)
+
+    return {
+      sidebarWidthPx,
+      mainColumnsWidthPx,
+      tagInputWidthPx,
+      suggestedWidthPx,
+      gridTemplateColumns: `${Math.round(sidebarWidthPx)}px ${GRID_DIVIDER_PX}px ${Math.round(tagInputWidthPx)}px ${GRID_DIVIDER_PX}px ${Math.round(suggestedWidthPx)}px ${GRID_DIVIDER_PX}px ${UTILITY_WIDTH_PX}px`,
+    }
+  }, [appShellWidthPx, sidebarWidthRatio, tagSplitRatio])
+
+  const queueAppStateSave = useCallback((selectedNoteId: string | null, menuOverride?: PersistedMenuState) => {
     if (!window.measlyState) return
     if (!persistenceReady) return
     if (isApplyingInitialViewportRef.current) return
@@ -366,9 +435,10 @@ function App() {
       void window.measlyState?.saveAppState({
         selectedNoteId,
         viewport: latestViewportRef.current ?? undefined,
+        menu: menuOverride ?? menuState,
       })
     }, 150)
-  }, [persistenceReady])
+  }, [menuState, persistenceReady])
 
   const flushSave = useCallback(async () => {
     if (!window.measlyNotes || !activeNoteId) return
@@ -409,8 +479,9 @@ function App() {
     await window.measlyState.saveAppState({
       selectedNoteId,
       viewport: latestViewportRef.current ?? undefined,
+      menu: menuState,
     })
-  }, [])
+  }, [menuState])
 
   const activateNote = useCallback(async (noteId: string) => {
     if (!window.measlyNotes) return
@@ -609,40 +680,6 @@ function App() {
     }
   }, [activeNoteId, activateNote, flushPendingSaveNow, persistenceReady, refreshNotes])
 
-  const handleAddTag = useCallback(() => {
-    const tagName = newTagName.trim()
-    if (!tagName) return
-    void runActiveNoteTagMutation(async (noteId) => {
-      await window.measlyNotes!.addTagToNote({
-        id: noteId,
-        tagName,
-        position: orderedActiveTags.length,
-      })
-    })
-    setNewTagName('')
-  }, [newTagName, orderedActiveTags.length, runActiveNoteTagMutation])
-
-  const handleRemoveTag = useCallback((tagName: string) => {
-    void runActiveNoteTagMutation(async (noteId) => {
-      await window.measlyNotes!.removeTagFromNote({ id: noteId, tagName })
-    })
-  }, [runActiveNoteTagMutation])
-
-  const handleMoveTag = useCallback((tagName: string, direction: -1 | 1) => {
-    const currentIndex = orderedActiveTags.indexOf(tagName)
-    if (currentIndex < 0) return
-    const targetIndex = currentIndex + direction
-    if (targetIndex < 0 || targetIndex >= orderedActiveTags.length) return
-
-    const reordered = [...orderedActiveTags]
-    const [tag] = reordered.splice(currentIndex, 1)
-    reordered.splice(targetIndex, 0, tag)
-
-    void runActiveNoteTagMutation(async (noteId) => {
-      await window.measlyNotes!.reorderNoteTags({ id: noteId, tagNames: reordered })
-    })
-  }, [orderedActiveTags, runActiveNoteTagMutation])
-
   const handleAddSuggestedTag = useCallback((tagName: string) => {
     if (orderedActiveTags.includes(tagName)) return
 
@@ -654,6 +691,133 @@ function App() {
       })
     })
   }, [orderedActiveTags, runActiveNoteTagMutation])
+
+  const handleTagInputEnter = useCallback(() => {
+    if (!activeNoteId || !persistenceReady) return
+
+    const normalized = normalizeTagName(tagInputValue)
+    if (!normalized) return
+
+    if (renamingTagName) {
+      const fromName = normalizeTagName(renamingTagName)
+      const toName = normalized
+      setRenamingTagName(null)
+      setTagInputValue('')
+
+      if (fromName === toName) {
+        return
+      }
+
+      if (isProtectedTagName(fromName)) {
+        return
+      }
+
+      if (!window.measlyNotes) return
+      if (noteTransitionLockRef.current) return
+
+      noteTransitionLockRef.current = true
+      setIsTagMutationPending(true)
+      void (async () => {
+        try {
+          await flushPendingSaveNow()
+          await window.measlyNotes!.renameTag({ fromName, toName })
+          await refreshNotes(activeNoteId)
+          await activateNote(activeNoteId)
+        } catch (error) {
+          console.error('Failed to rename tag', error)
+        } finally {
+          setIsTagMutationPending(false)
+          noteTransitionLockRef.current = false
+        }
+      })()
+      return
+    }
+
+    if (isProtectedTagName(normalized)) {
+      setTagInputValue('')
+      return
+    }
+
+    if (orderedActiveTags.map(normalizeTagName).includes(normalized)) {
+      setTagInputValue('')
+      return
+    }
+
+    void runActiveNoteTagMutation(async (noteId) => {
+      await window.measlyNotes!.addTagToNote({
+        id: noteId,
+        tagName: normalized,
+        position: orderedActiveTags.length,
+      })
+    })
+    setTagInputValue('')
+  }, [
+    activeNoteId,
+    activateNote,
+    flushPendingSaveNow,
+    orderedActiveTags,
+    persistenceReady,
+    refreshNotes,
+    renamingTagName,
+    runActiveNoteTagMutation,
+    tagInputValue,
+  ])
+
+  const handleTagChipClick = useCallback((tagName: string) => {
+    if (deleteArmedTagName === tagName) {
+      setDeleteArmedTagName(null)
+      void runActiveNoteTagMutation(async (noteId) => {
+        await window.measlyNotes!.removeTagFromNote({ id: noteId, tagName })
+      })
+      return
+    }
+
+    setDeleteArmedTagName(tagName)
+  }, [deleteArmedTagName, runActiveNoteTagMutation])
+
+  const handleTagChipMouseLeave = useCallback((tagName: string) => {
+    if (deleteArmedTagName === tagName) {
+      setDeleteArmedTagName(null)
+    }
+  }, [deleteArmedTagName])
+
+  const handleTagDragStart = useCallback((index: number) => {
+    const tagName = orderedActiveTags[index] ?? ''
+    if (isProtectedTagName(tagName)) return
+    setDraggedTagIndex(index)
+  }, [orderedActiveTags])
+
+  const handleTagDrop = useCallback((event: DragEvent<HTMLDivElement>, targetIndex: number) => {
+    event.preventDefault()
+
+    if (draggedTagIndex === null || draggedTagIndex === targetIndex) {
+      setDraggedTagIndex(null)
+      return
+    }
+
+    const targetTag = orderedActiveTags[targetIndex] ?? ''
+    if (isProtectedTagName(targetTag)) {
+      setDraggedTagIndex(null)
+      return
+    }
+
+    const reordered = [...orderedActiveTags]
+    const [moved] = reordered.splice(draggedTagIndex, 1)
+    reordered.splice(targetIndex, 0, moved)
+    setDraggedTagIndex(null)
+
+    void runActiveNoteTagMutation(async (noteId) => {
+      await window.measlyNotes!.reorderNoteTags({ id: noteId, tagNames: reordered })
+    })
+  }, [draggedTagIndex, orderedActiveTags, runActiveNoteTagMutation])
+
+  const handleTagContextMenu = useCallback((event: MouseEvent<HTMLDivElement>, tagName: string) => {
+    event.preventDefault()
+    if (isProtectedTagName(tagName)) return
+
+    setRenamingTagName(tagName)
+    setTagInputValue(tagName)
+  }, [])
 
   const queueSave = useCallback((text: string) => {
     if (!persistenceReady) return
@@ -700,6 +864,15 @@ function App() {
           const appState = window.measlyState ? await window.measlyState.loadAppState() : { selectedNoteId: null }
           if (disposed) return
 
+          if (appState.menu) {
+            setSidebarMode(appState.menu.sidebarMode)
+            setSelectedMonths(new Set(appState.menu.selectedMonths))
+            setSelectedYears(new Set(appState.menu.selectedYears))
+            setSearchQuery(appState.menu.searchQuery)
+            setSidebarWidthRatio(appState.menu.sidebarWidthRatio)
+            setTagSplitRatio(appState.menu.tagSplitRatio)
+          }
+
           const preferredId = appState.selectedNoteId
           const selectedSummary = (
             preferredId
@@ -721,7 +894,11 @@ function App() {
           latestViewportRef.current = appState.viewport ?? null
 
           if (window.measlyState) {
-            await window.measlyState.saveAppState({ selectedNoteId: loaded.id })
+            await window.measlyState.saveAppState({
+              selectedNoteId: loaded.id,
+              viewport: appState.viewport,
+              menu: appState.menu,
+            })
           }
 
           setPersistenceReady(true)
@@ -816,7 +993,85 @@ function App() {
   useEffect(() => {
     if (!window.measlyState || !activeNoteId) return
     queueAppStateSave(activeNoteId)
-  }, [activeNoteId, queueAppStateSave])
+  }, [activeNoteId, menuState, queueAppStateSave])
+
+  useEffect(() => {
+    const shellElement = appShellRef.current
+    if (!shellElement) return
+
+    const updateShellWidth = () => {
+      setAppShellWidthPx(Math.max(980, Math.round(shellElement.clientWidth)))
+    }
+
+    updateShellWidth()
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (!entry) return
+      setAppShellWidthPx(Math.max(980, Math.round(entry.contentRect.width)))
+    })
+
+    observer.observe(shellElement)
+    return () => observer.disconnect()
+  }, [])
+
+  const handleDividerMouseDown = useCallback((divider: 'sidebar' | 'tag-split', event: MouseEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    dividerDragStartXRef.current = event.clientX
+    dividerStartSidebarWidthRef.current = layout.sidebarWidthPx
+    dividerStartTagInputWidthRef.current = layout.tagInputWidthPx
+    dividerStartMainWidthRef.current = layout.mainColumnsWidthPx
+    setActiveDividerDrag(divider)
+  }, [layout.mainColumnsWidthPx, layout.sidebarWidthPx, layout.tagInputWidthPx])
+
+  useEffect(() => {
+    if (!activeDividerDrag) return
+
+    const onPointerMove = (event: globalThis.MouseEvent) => {
+      const deltaX = event.clientX - dividerDragStartXRef.current
+
+      if (activeDividerDrag === 'sidebar') {
+        const maxSidebarWidthPx = Math.max(
+          SIDEBAR_MIN_WIDTH_PX,
+          Math.min(
+            SIDEBAR_MAX_WIDTH_PX,
+            appShellWidthPx - (GRID_DIVIDER_PX * 3) - UTILITY_WIDTH_PX - TAG_INPUT_MIN_WIDTH_PX - SUGGESTED_MIN_WIDTH_PX,
+          ),
+        )
+
+        const nextSidebarWidthPx = clamp(
+          dividerStartSidebarWidthRef.current + deltaX,
+          SIDEBAR_MIN_WIDTH_PX,
+          maxSidebarWidthPx,
+        )
+
+        setSidebarWidthRatio(nextSidebarWidthPx / appShellWidthPx)
+        return
+      }
+
+      const nextTagInputWidthPx = clamp(
+        dividerStartTagInputWidthRef.current + deltaX,
+        TAG_INPUT_MIN_WIDTH_PX,
+        dividerStartMainWidthRef.current - SUGGESTED_MIN_WIDTH_PX,
+      )
+
+      setTagSplitRatio(nextTagInputWidthPx / dividerStartMainWidthRef.current)
+    }
+
+    const onPointerUp = () => {
+      setActiveDividerDrag(null)
+    }
+
+    document.body.classList.add('splitter-dragging')
+    window.addEventListener('mousemove', onPointerMove)
+    window.addEventListener('mouseup', onPointerUp)
+
+    return () => {
+      document.body.classList.remove('splitter-dragging')
+      window.removeEventListener('mousemove', onPointerMove)
+      window.removeEventListener('mouseup', onPointerUp)
+    }
+  }, [activeDividerDrag, appShellWidthPx])
 
   const sortedNotes = useMemo(() => {
     return [...notes].sort((a, b) => b.updatedAtMs - a.updatedAtMs)
@@ -977,6 +1232,10 @@ function App() {
   }, [sidebarMode, selectedMonths, selectedYears, searchQuery])
 
   useEffect(() => {
+    setDeleteArmedTagName(null)
+  }, [activeNoteId, orderedActiveTags])
+
+  useEffect(() => {
     const ITEM_HEIGHT = 56
     const ITEM_GAP = 8
     const ITEM_TOTAL = ITEM_HEIGHT + ITEM_GAP
@@ -1052,7 +1311,11 @@ function App() {
   }, [createNote, createNoteFromClipboardTitle, searchQuery, sidebarMode])
 
   return (
-    <div className="app-shell app-grid">
+    <div
+      className="app-shell app-grid"
+      ref={appShellRef}
+      style={{ gridTemplateColumns: layout.gridTemplateColumns }}
+    >
       <aside className="notes-sidebar" style={{ gridArea: 'sidebar' }}>
         <div className="search-box" aria-label="Search panel">
           <input
@@ -1182,81 +1445,87 @@ function App() {
         ) : null}
       </aside>
 
-      <div className="grid-divider divider-sidebar" style={{ gridArea: 'd-sidebar' }} aria-hidden="true" />
+      <div
+        className={`grid-divider divider-sidebar divider-handle${activeDividerDrag === 'sidebar' ? ' is-dragging' : ''}`}
+        style={{ gridArea: 'd-sidebar' }}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+        onMouseDown={(event) => handleDividerMouseDown('sidebar', event)}
+      />
 
       <section className="tag-input-grid" style={{ gridArea: 'taginput' }} aria-label="Tag input manager">
-        <div className="tag-input-shell">
-          <div className="tag-manager-header">Tags</div>
-          <div className="tag-input-bar-row">
-            <div className="tag-manager-input-row">
-              <input
-                className="tag-manager-input"
-                type="text"
-                value={newTagName}
-                placeholder="Add tag"
-                onChange={(event) => setNewTagName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    handleAddTag()
+        <div className="tag-input-container">
+          <div className="tag-input-section">
+            <div className="tag-input-bar">
+              <div className="tag-input-wrapper">
+                <input
+                  className="tag-input"
+                  type="text"
+                  value={tagInputValue}
+                  placeholder={
+                    !activeNoteId
+                      ? (notes.length > 0 ? 'Select a note to edit tags.' : 'Once you have created a note, you can add tags here.')
+                      : (renamingTagName ? 'Rename tag and press Enter...' : 'Type to add tag...')
                   }
-                }}
-                disabled={!persistenceReady || !activeNoteId || isTagMutationPending}
-              />
-              <button
-                className="notes-mini-action"
-                type="button"
-                onClick={handleAddTag}
-                disabled={!persistenceReady || !activeNoteId || !newTagName.trim() || isTagMutationPending}
-              >
-                Add
-              </button>
+                  onChange={(event) => setTagInputValue(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      handleTagInputEnter()
+                    }
+                    if (event.key === 'Escape' && renamingTagName) {
+                      event.preventDefault()
+                      setRenamingTagName(null)
+                      setTagInputValue('')
+                    }
+                  }}
+                  disabled={!persistenceReady || !activeNoteId || isTagMutationPending}
+                  aria-label="Tag input"
+                />
+              </div>
             </div>
-          </div>
-          <div className="tag-manager-list">
-            {orderedActiveTags.length === 0 ? (
-              <div className="tag-manager-empty">No tags on active note.</div>
-            ) : (
-              orderedActiveTags.map((tagName, index) => (
-                <div key={tagName} className="tag-row">
-                  <span className={`tag-name${PROTECTED_TAGS.has(tagName) ? ' is-protected' : ''}`}>{tagName}</span>
-                  <div className="tag-row-actions">
-                    <button
-                      type="button"
-                      className="tag-mini-btn"
-                      onClick={() => handleMoveTag(tagName, -1)}
-                      disabled={isTagMutationPending || index === 0}
-                      aria-label={`Move ${tagName} up`}
+
+            <div className="tags-display" aria-live="polite">
+              {!activeNoteId ? (
+                <div className="tag-empty-state">Tags appear here. Drag to change order, left click to remove or right click to rename across all notes.</div>
+              ) : orderedActiveTags.length === 0 ? (
+                <div className="tag-empty-state">No tags on active note.</div>
+              ) : (
+                orderedActiveTags.map((tagName, index) => {
+                  const normalized = normalizeTagName(tagName)
+                  const isProtected = isProtectedTagName(tagName)
+                  return (
+                    <div
+                      key={tagName}
+                      className={`tag-pill active${deleteArmedTagName === tagName ? ' armed' : ''}${isProtected ? ` protected ${normalized}` : ''}`}
+                      draggable={!isProtected}
+                      onDragStart={() => handleTagDragStart(index)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => handleTagDrop(event, index)}
+                      onClick={() => handleTagChipClick(tagName)}
+                      onContextMenu={(event) => handleTagContextMenu(event, tagName)}
+                      onMouseLeave={() => handleTagChipMouseLeave(tagName)}
+                      title={deleteArmedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion'}
                     >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      className="tag-mini-btn"
-                      onClick={() => handleMoveTag(tagName, 1)}
-                      disabled={isTagMutationPending || index === orderedActiveTags.length - 1}
-                      aria-label={`Move ${tagName} down`}
-                    >
-                      ↓
-                    </button>
-                    <button
-                      type="button"
-                      className="tag-mini-btn"
-                      onClick={() => handleRemoveTag(tagName)}
-                      disabled={isTagMutationPending}
-                      aria-label={`Remove ${tagName}`}
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
+                      {tagName}
+                    </div>
+                  )
+                })
+              )}
+            </div>
           </div>
         </div>
       </section>
 
-      <div className="grid-divider divider-left" style={{ gridArea: 'd-left' }} aria-hidden="true" />
+      <div
+        className={`grid-divider divider-left divider-handle${activeDividerDrag === 'tag-split' ? ' is-dragging' : ''}`}
+        style={{ gridArea: 'd-left' }}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize tag panels"
+        onMouseDown={(event) => handleDividerMouseDown('tag-split', event)}
+      />
 
       <section className="suggested-grid" style={{ gridArea: 'suggested' }} aria-label="Suggested tags panel">
         <div className="suggested-tags" aria-hidden={suggestedTags.length === 0}>

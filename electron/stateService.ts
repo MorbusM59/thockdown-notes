@@ -13,6 +13,8 @@ const DEFAULT_APP_STATE: AppState = {
     selectedMonths: [],
     selectedYears: [],
     searchQuery: '',
+    sidebarWidthRatio: 0.306,
+    tagSplitRatio: 0.645,
   },
 };
 
@@ -56,6 +58,14 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     selectedMonths,
     selectedYears,
     searchQuery: typeof input?.searchQuery === 'string' ? input.searchQuery : '',
+    sidebarWidthRatio:
+      typeof input?.sidebarWidthRatio === 'number'
+        ? Math.max(0.2, Math.min(0.6, input.sidebarWidthRatio))
+        : DEFAULT_APP_STATE.menu!.sidebarWidthRatio,
+    tagSplitRatio:
+      typeof input?.tagSplitRatio === 'number'
+        ? Math.max(0.35, Math.min(0.8, input.tagSplitRatio))
+        : DEFAULT_APP_STATE.menu!.tagSplitRatio,
   };
 }
 
