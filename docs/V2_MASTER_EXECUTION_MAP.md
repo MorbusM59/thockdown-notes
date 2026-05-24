@@ -7,6 +7,7 @@ Deliver a visually and functionally identical app to V1, with a rock-solid edito
 - Functional parity with V1 behavior is required.
 - Visual parity with V1 editor experience is required.
 - No workaround that violates browser/editor lifecycle correctness.
+- Performance-first execution is required: prefer minimal/targeted updates over broad redraws or wide invalidation.
 - No phase advancement without passing gate criteria.
 - One active focus area at a time, but full-map tracking always maintained.
 
@@ -50,7 +51,7 @@ Exit criteria:
 - Main/preload/renderer contracts restored for note lifecycle.
 - DB + markdown file persistence paths are stable.
 - Autosave contract works with new editor adapter.
-Status: PENDING
+Status: DONE
 
 ### Phase 5 - Feature Parity Carryover
 Goal: Port V1 features behind stable editor and persistence contracts.
@@ -79,6 +80,7 @@ At the start of each work session:
 During session:
 - If work touches out-of-scope areas, stop and log rationale before proceeding.
 - Record every architectural decision in the session handbook.
+- If a feature requires a measurable performance sacrifice, log the tradeoff, rejected alternatives, and acceptance rationale before merging.
 
 At end of session:
 - Update status in this map.
@@ -86,6 +88,6 @@ At end of session:
 - Write next-session objective and first action.
 
 ## Current Focus
-- Active phase: Phase 4 - Persistence Spine
-- Active objective: Re-establish V1-grade note lifecycle persistence contracts (renderer/main/preload) against the stable editor adapter.
-- Out of scope: Phase 5+ feature carryover implementation before Phase 4 persistence gates are complete.
+- Active phase: Phase 5 - Feature Parity Carryover
+- Active objective: Reintroduce the sidebar/list surface so note management, search, and view modes are available for parity testing.
+- Out of scope: Phase 6 hardening/release readiness until core Phase 5 parity surfaces exist.

@@ -318,6 +318,45 @@ Investigate reported CRLF-tail bottom-of-document disagreement between wheel scr
 ### Risks or Blockers
 - Risk/Blocker: Terminal collapsed-caret geometry still relies on fallback rect sources in empty paragraphs.
   - Impact: Future edge regressions remain possible under specific content/layout combinations.
+
+---
+
+## Session Entry
+
+### Session Date
+2026-05-24
+
+### Active Phase
+Phase 5 - Feature Parity Carryover
+
+### Objective
+Remove sidebar flicker on note switch and formalize a permanent performance-first update policy.
+
+### Out of Scope
+- Search/tag/timeline carryover implementation details.
+- Phase 6 hardening baselines.
+
+### Work Completed
+- Replaced visual note-transition state toggles with non-visual lock refs to avoid whole-menu disabled redraw.
+- Memoized sidebar note rows and stabilized callbacks.
+- Implemented identity-preserving note list merge so unchanged note rows keep object references across refresh.
+- Updated governance docs to make minimal targeted redraws a non-negotiable process rule.
+
+### Decisions
+- Decision: Default to least-invasive render/update path for all UI work.
+  - Reason: Large-note loading and transition paths expose avoidable UI repaint costs and visible flicker.
+
+### Risks or Blockers
+- Risk/Blocker: Some future features may require broader invalidation.
+  - Impact: Potential measurable UI performance regression if not controlled.
+  - Mitigation: Require explicit tradeoff logging and rejected alternatives before accepting broader redraw scope.
+
+### Checklist Deltas
+- Checked: Performance-first rule enforced (minimal redraw/update path preferred by default).
+
+### Next Session
+- Objective: Continue Phase 5 feature carryover with sidebar modes while preserving selective render boundaries.
+- First action: Add mode state and filtering mechanics without breaking note row identity guarantees.
   - Mitigation: Preserve instrumentation path and only implement fix design after deterministic failing capture.
 
 ### Checklist Deltas
@@ -728,3 +767,179 @@ Execute final manual perception gate and close Phase 3 if criteria pass.
 ### Next Session
 - Objective: Start Phase 4 by restoring main/preload/renderer persistence contracts for note lifecycle.
 - First action: Enumerate and implement typed IPC contract surface for list/load/save/create/delete note actions.
+
+---
+
+## Session Entry
+
+### Session Date
+2026-05-24
+
+### Active Phase
+Phase 4 - Persistence Spine
+
+### Objective
+Implement typed note lifecycle persistence contract across renderer, preload, and main process.
+
+### Out of Scope
+- SQLite compatibility and migration mapping.
+- Timeline/trash/archive parity semantics.
+- Phase 5 feature carryover.
+
+### Work Completed
+- Added shared note lifecycle types and channel map.
+- Added main-process note lifecycle filesystem service.
+- Registered typed IPC handlers for list/load/create/save/delete.
+- Exposed narrow preload bridge API as `window.measlyNotes`.
+- Wired renderer bootstrap + debounced autosave to the new API.
+- Added Phase 4 contract documentation.
+
+### Decisions
+- Decision: Use markdown-filesystem lifecycle as the first persistence spine slice.
+  - Reason: Establishes deterministic renderer/main contract first, then allows DB/state parity to layer on cleanly.
+- Decision: Use repo `data/notes` in development and userData-backed `data/notes` when packaged.
+  - Reason: Preserves local dev observability while keeping packaged runtime storage correct.
+
+### Risks or Blockers
+- Risk/Blocker: Browser automation cannot validate preload-exposed APIs because they exist only in Electron runtime.
+  - Impact: Final persistence gate needs live app verification.
+  - Mitigation: Run focused manual Electron save/reload/delete lifecycle checks.
+
+### Checklist Deltas
+- Checked: No checklist item fully closed yet in Phase 4 (implementation baseline complete, runtime verification pending).
+- Unchecked/Reopened: All Phase 4 gates remain open until manual runtime verification is recorded.
+
+### Next Session
+- Objective: Validate runtime persistence behavior in Electron and close first Phase 4 gate if passing.
+- First action: Execute manual lifecycle test (create/edit/save/relaunch/load/delete) and record pass/fail evidence.
+
+---
+
+## Session Entry
+
+### Session Date
+2026-05-24
+
+### Active Phase
+Phase 4 - Persistence Spine
+
+### Objective
+Close the first persistence runtime gate with manual save/relaunch/load evidence and resolve restart hydration regressions.
+
+### Out of Scope
+- Full note-management behavior parity (sidebar-driven lifecycle flows).
+- DB migration and schema-compatibility layer.
+
+### Work Completed
+- User manually validated save/relaunch/load path in app runtime.
+- Fixed startup hydration bug that caused blank editor on relaunch.
+- Fixed newline round-trip mismatch where loaded text showed extra blank rows.
+- Confirmed intentional empty lines persist correctly after relaunch.
+- Updated Phase 4 contract and checklist evidence.
+
+### Decisions
+- Decision: Mark note lifecycle IPC + markdown persistence path as complete.
+  - Reason: Runtime manual validation now confirms stable create/edit/save/relaunch/load behavior for current app surface.
+- Decision: Defer delete-path acceptance until note-management UI surface is restored.
+  - Reason: Current Edit > Delete affordance is not yet backed by full V1 note management semantics.
+
+### Risks or Blockers
+- Risk/Blocker: Autosave/title-aware policy parity remains incomplete.
+  - Impact: Behavior may differ from V1 title-edit save cadence.
+  - Mitigation: Add explicit title-line-aware autosave policy and validation in next Phase 4 increment.
+- Risk/Blocker: Last-edited note + UI state restoration contract still missing.
+  - Impact: Startup selection and layout continuity can drift between sessions.
+  - Mitigation: Implement typed app-state/window-state persistence contract next.
+
+### Checklist Deltas
+- Checked: Main/preload IPC contract for note lifecycle restored.
+- Checked: Markdown file persistence path restored.
+- Unchecked/Reopened: Autosave/title-aware parity, DB migration path, and last-edited/UI-state persistence remain open.
+
+### Next Session
+- Objective: Implement typed app-state/window-state persistence and last-edited note restore.
+- First action: Define shared state contract and wire load/save flows for selected note id + UI state at startup/shutdown.
+
+---
+
+## Session Entry
+
+### Session Date
+2026-05-24
+
+### Active Phase
+Phase 4 - Persistence Spine
+
+### Objective
+Implement typed app-state/window-state persistence and restore last-edited note continuity.
+
+### Out of Scope
+- DB migration compatibility work.
+- Title-aware autosave parity policy.
+
+### Work Completed
+- Added shared typed app/window state contract and IPC channels.
+- Added main-process `StateService` for `app-state.json` and `window-state.json`.
+- Wired preload bridge as `window.measlyState`.
+- Restored selected note from persisted app state on startup, with fallback to most recently updated note.
+- Persisted selected note id on bootstrap and active-note changes.
+- Restored and persisted window bounds/maximized state in main process.
+
+### Decisions
+- Decision: Treat selected note + window bounds as the current minimal UI-state continuity baseline.
+  - Reason: Phase 5 sidebar/panel surfaces are not yet restored, so broader UI-state parity is deferred.
+
+### Risks or Blockers
+- Risk/Blocker: Title-aware autosave policy is still incomplete.
+  - Impact: Save cadence may differ from V1 during title edits.
+  - Mitigation: Implement explicit title-line save suppression/flush policy next.
+- Risk/Blocker: DB compatibility/migration path still undocumented.
+  - Impact: Persistence spine is not fully parity-safe for V1 data model reintroduction.
+  - Mitigation: Draft and validate migration strategy before Phase 4 closure.
+
+### Checklist Deltas
+- Checked: Last-edited note and UI state persistence restored.
+- Unchecked/Reopened: DB migration path and title-aware autosave parity remain open.
+
+### Next Session
+- Objective: Close remaining Phase 4 items (title-aware autosave parity and DB compatibility path).
+- First action: Implement title-line-aware autosave behavior and validate with restart/save matrix.
+
+---
+
+## Session Entry
+
+### Session Date
+2026-05-24
+
+### Active Phase
+Phase 4 - Persistence Spine
+
+### Objective
+Finalize autosave/title behavior and close Phase 4.
+
+### Out of Scope
+- Phase 5 sidebar/search/tag/timeline feature carryover implementation details.
+
+### Work Completed
+- Simplified autosave decision path to post-edit evaluation only.
+- Removed predictive title-focus logic used only for indicator/test signaling.
+- Simplified save indicator to display last save timestamp only.
+- Accepted current behavior as sufficient to proceed; marked Phase 4 complete.
+
+### Decisions
+- Decision: Treat title-edit save nuance as non-blocking for forward progress.
+  - Reason: User accepted current behavior and explicitly prioritized moving on.
+
+### Risks or Blockers
+- Risk/Blocker: Title-edit autosave UX may still be tuned later.
+  - Impact: Minor behavior polish, not architectural risk.
+  - Mitigation: Revisit only if future feature carryover exposes practical issues.
+
+### Checklist Deltas
+- Checked: Autosave cadence and title-aware save behavior restored.
+- Checked: Phase 4 is complete.
+
+### Next Session
+- Objective: Start Phase 5 with sidebar/list surface restoration to enable practical note-management parity.
+- First action: Define minimal sidebar contract and render note list + selection actions against current persistence API.

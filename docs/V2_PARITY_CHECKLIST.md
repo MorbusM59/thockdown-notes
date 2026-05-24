@@ -6,6 +6,7 @@ Use this checklist as the single source of truth for parity and stability. Do no
 - [x] Master execution map exists.
 - [x] Session handbook exists.
 - [x] Current phase and objective reviewed at session start.
+- [x] Performance-first rule enforced (minimal redraw/update path preferred by default).
 - [x] Session end update completed (map + checklist + handbook).
 
 ## B. Editor Contract (Phase 1)
@@ -32,11 +33,11 @@ Use this checklist as the single source of truth for parity and stability. Do no
 - [x] Resize/font-ready/initial render keep alignment stable.
 
 ## E. Persistence Spine (Phase 4)
-- [ ] Main/preload IPC contract for note lifecycle restored.
-- [ ] DB model compatibility and migration path documented.
-- [ ] Markdown file persistence path restored.
-- [ ] Autosave cadence and title-aware save behavior restored.
-- [ ] Last-edited note and UI state persistence restored.
+- [x] Main/preload IPC contract for note lifecycle restored.
+- [x] DB model compatibility and migration path documented.
+- [x] Markdown file persistence path restored.
+- [x] Autosave cadence and title-aware save behavior restored.
+- [x] Last-edited note and UI state persistence restored.
 
 ## F. Feature Carryover (Phase 5)
 - [ ] Sidebar view modes restored (latest/active/archived/trash).
