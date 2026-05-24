@@ -410,24 +410,6 @@ function App() {
     }
   }, [activeNoteId, activateNote, flushPendingSaveNow, persistenceReady])
 
-  const createNote = useCallback(async () => {
-    if (!window.measlyNotes) return
-    if (!persistenceReady) return
-    if (noteTransitionLockRef.current) return
-
-    noteTransitionLockRef.current = true
-    try {
-      await flushPendingSaveNow()
-      const created = await window.measlyNotes.createNote({ initialText: '' })
-      await refreshNotes(created.id)
-      await activateNote(created.id)
-    } catch (error) {
-      console.error('Failed to create note', error)
-    } finally {
-      noteTransitionLockRef.current = false
-    }
-  }, [activateNote, flushPendingSaveNow, persistenceReady, refreshNotes])
-
   const deleteNote = useCallback(async (noteId: string) => {
     if (!window.measlyNotes) return
     if (!persistenceReady) return
@@ -471,53 +453,6 @@ function App() {
   const handleDeleteNote = useCallback((noteId: string) => {
     void deleteNote(noteId)
   }, [deleteNote])
-
-  const handleCreateNote = useCallback(() => {
-    void createNote()
-  }, [createNote])
-
-  const updateActiveNoteTagState = useCallback(async (nextState: 'archive' | 'trash' | 'restore') => {
-    if (!window.measlyNotes) return
-    if (!persistenceReady) return
-    if (!activeNoteId) return
-    if (noteTransitionLockRef.current) return
-
-    noteTransitionLockRef.current = true
-    try {
-      await flushPendingSaveNow()
-      await window.measlyNotes.removeTagFromNote({ id: activeNoteId, tagName: 'archived' })
-      await window.measlyNotes.removeTagFromNote({ id: activeNoteId, tagName: 'deleted' })
-
-      if (nextState === 'archive') {
-        await window.measlyNotes.addTagToNote({ id: activeNoteId, tagName: 'archived', position: 0 })
-        setSidebarMode('archive')
-      } else if (nextState === 'trash') {
-        await window.measlyNotes.addTagToNote({ id: activeNoteId, tagName: 'deleted', position: 0 })
-        setSidebarMode('trash')
-      } else {
-        setSidebarMode('date')
-      }
-
-      await refreshNotes(activeNoteId)
-      await activateNote(activeNoteId)
-    } catch (error) {
-      console.error('Failed to update note tag state', error)
-    } finally {
-      noteTransitionLockRef.current = false
-    }
-  }, [activeNoteId, activateNote, flushPendingSaveNow, persistenceReady, refreshNotes])
-
-  const handleArchiveActiveNote = useCallback(() => {
-    void updateActiveNoteTagState('archive')
-  }, [updateActiveNoteTagState])
-
-  const handleTrashActiveNote = useCallback(() => {
-    void updateActiveNoteTagState('trash')
-  }, [updateActiveNoteTagState])
-
-  const handleRestoreActiveNote = useCallback(() => {
-    void updateActiveNoteTagState('restore')
-  }, [updateActiveNoteTagState])
 
   const activeNoteSummary = useMemo(() => {
     if (!activeNoteId) return null
@@ -862,54 +797,27 @@ function App() {
   return (
     <div className="app-shell app-grid">
       <aside className="notes-sidebar" style={{ gridArea: 'sidebar' }}>
-        <div className="notes-sidebar-header">
-          <h1 className="notes-sidebar-title">Notes</h1>
-          <button
-            className="notes-action-button"
-            type="button"
-            onClick={handleCreateNote}
-            disabled={!persistenceReady}
-          >
-            New
-          </button>
+        <div className="search-box" aria-label="Search panel">
+          <input
+            type="text"
+            placeholder="Search notes or #tag..."
+            disabled
+          />
         </div>
-        <div className="notes-quick-actions" aria-label="Active note actions">
-          <button
-            type="button"
-            className="notes-mini-action"
-            onClick={handleArchiveActiveNote}
-            disabled={!persistenceReady || !activeNoteId}
-          >
-            Archive
-          </button>
-          <button
-            type="button"
-            className="notes-mini-action"
-            onClick={handleTrashActiveNote}
-            disabled={!persistenceReady || !activeNoteId}
-          >
-            Trash
-          </button>
-          <button
-            type="button"
-            className="notes-mini-action"
-            onClick={handleRestoreActiveNote}
-            disabled={!persistenceReady || !activeNoteId}
-          >
-            Restore
-          </button>
-        </div>
-        <div className="notes-mode-bar" role="tablist" aria-label="Note view modes">
+
+        <div className="view-toggle" role="tablist" aria-label="Note view modes">
           {SIDEBAR_MODES.map(({ mode, label }) => {
             const isActive = sidebarMode === mode
             const count = modeCounts[mode]
             return (
               <button
                 key={mode}
-                className={`notes-mode-button${isActive ? ' is-active' : ''}`}
+                className={`toggle-btn notes-mode-button${isActive ? ' is-active' : ''}`}
                 type="button"
                 role="tab"
                 aria-selected={isActive}
+                title={label}
+                aria-label={label}
                 onClick={() => setSidebarMode(mode)}
               >
                 <span>{label}</span>
@@ -918,54 +826,9 @@ function App() {
             )
           })}
         </div>
-        {(sidebarMode === 'date' || sidebarMode === 'trash') ? (
-          <>
-            <div className="date-filter-rail" aria-label="Date filters">
-              <div className="date-filter-line">
-                <button
-                  type="button"
-                  className={`date-filter-chip${dateFilterYear === 'all' ? ' is-active' : ''}`}
-                  onClick={() => {
-                    setDateFilterYear('all')
-                    setDateFilterMonth('all')
-                  }}
-                >
-                  All Years
-                </button>
-                {availableYears.map((year) => (
-                  <button
-                    key={year}
-                    type="button"
-                    className={`date-filter-chip${dateFilterYear === year ? ' is-active' : ''}`}
-                    onClick={() => {
-                      setDateFilterYear(year)
-                      setDateFilterMonth('all')
-                    }}
-                  >
-                    {year}
-                  </button>
-                ))}
-              </div>
-              <div className="date-filter-line">
-                <button
-                  type="button"
-                  className={`date-filter-chip${dateFilterMonth === 'all' ? ' is-active' : ''}`}
-                  onClick={() => setDateFilterMonth('all')}
-                >
-                  All Months
-                </button>
-                {availableMonths.map((month) => (
-                  <button
-                    key={month}
-                    type="button"
-                    className={`date-filter-chip${dateFilterMonth === month ? ' is-active' : ''}`}
-                    onClick={() => setDateFilterMonth(month)}
-                  >
-                    {MONTH_LABELS[month - 1]}
-                  </button>
-                ))}
-              </div>
-            </div>
+
+        <div className="sidebar-content">
+          {(sidebarMode === 'date' || sidebarMode === 'trash') ? (
             <div className="notes-list" role="listbox" aria-label="Note list">
               {visibleNotes.map((note) => {
                 const isActive = note.id === activeNoteId
@@ -984,18 +847,67 @@ function App() {
                 <div className="notes-empty-state">No notes match the current date filters.</div>
               ) : null}
             </div>
-          </>
-        ) : (
-          <div className="notes-list">
-            <CategoryTreeView
-              groups={sidebarMode === 'category' ? categoryTree : archiveTree}
-              activeNoteId={activeNoteId}
-              persistenceReady={persistenceReady}
-              onSelect={handleSelectNote}
-              onDelete={handleDeleteNote}
-            />
+          ) : (
+            <div className="notes-list">
+              <CategoryTreeView
+                groups={sidebarMode === 'category' ? categoryTree : archiveTree}
+                activeNoteId={activeNoteId}
+                persistenceReady={persistenceReady}
+                onSelect={handleSelectNote}
+                onDelete={handleDeleteNote}
+              />
+            </div>
+          )}
+        </div>
+
+        {(sidebarMode === 'date' || sidebarMode === 'trash') ? (
+          <div className="date-filter-rail" aria-label="Date filters">
+            <div className="date-filter-line">
+              <button
+                type="button"
+                className={`date-filter-chip${dateFilterYear === 'all' ? ' is-active' : ''}`}
+                onClick={() => {
+                  setDateFilterYear('all')
+                  setDateFilterMonth('all')
+                }}
+              >
+                All Years
+              </button>
+              {availableYears.map((year) => (
+                <button
+                  key={year}
+                  type="button"
+                  className={`date-filter-chip${dateFilterYear === year ? ' is-active' : ''}`}
+                  onClick={() => {
+                    setDateFilterYear(year)
+                    setDateFilterMonth('all')
+                  }}
+                >
+                  {year}
+                </button>
+              ))}
+            </div>
+            <div className="date-filter-line">
+              <button
+                type="button"
+                className={`date-filter-chip${dateFilterMonth === 'all' ? ' is-active' : ''}`}
+                onClick={() => setDateFilterMonth('all')}
+              >
+                All Months
+              </button>
+              {availableMonths.map((month) => (
+                <button
+                  key={month}
+                  type="button"
+                  className={`date-filter-chip${dateFilterMonth === month ? ' is-active' : ''}`}
+                  onClick={() => setDateFilterMonth(month)}
+                >
+                  {MONTH_LABELS[month - 1]}
+                </button>
+              ))}
+            </div>
           </div>
-        )}
+        ) : null}
       </aside>
 
       <div className="grid-divider divider-sidebar" style={{ gridArea: 'd-sidebar' }} aria-hidden="true" />
