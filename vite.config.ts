@@ -10,7 +10,11 @@ export default defineConfig({
     watch: {
       // Packaging artifacts create massive reload noise during dev and can
       // mask real editor behavior while we tune motion/quantization.
-      ignored: ['**/release/**'],
+      ignored: [
+        '**/release/**',
+        '**/data/**',
+        '**/docs/**',
+      ],
     },
   },
   plugins: [

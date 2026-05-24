@@ -9,6 +9,7 @@ import { SyntaxHighlightPlugin } from '../plugins/SyntaxHighlightPlugin';
 import { BlockCaretPlugin } from '../plugins/BlockCaretPlugin';
 import { MeaslyTokenNode } from '../nodes/MeaslyTokenNode';
 import { ContractBridgePlugin } from '../plugins/ContractBridgePlugin';
+import { NoteTextHydrationPlugin } from '../plugins/NoteTextHydrationPlugin';
 import type {
   EditorAdapter,
   EditorBindings,
@@ -37,6 +38,7 @@ function onError(error: Error) {
 interface EditorProps {
   bindings?: EditorBindings;
   adapterRef?: React.MutableRefObject<EditorAdapter | null>;
+  initialText?: string;
 }
 
 const ENABLE_CONTRACT_ASSERTIONS = import.meta.env.DEV;
@@ -55,7 +57,7 @@ const topEdgeFromBottomBoundary = (heightPx: number, bottomBoundaryPx: number) =
   return Math.max(0, Math.min(h, h - bottomBoundaryPx));
 };
 
-export function Editor({ bindings, adapterRef }: EditorProps) {
+export function Editor({ bindings, adapterRef, initialText = '' }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const lastInvariantKeyRef = useRef('');
@@ -437,6 +439,7 @@ export function Editor({ bindings, adapterRef }: EditorProps) {
         
             <HistoryPlugin />
             <SyntaxHighlightPlugin />
+            <NoteTextHydrationPlugin text={initialText} />
             <ContractBridgePlugin
               onTextChange={handleTextChange}
               onSelectionChange={handleSelectionChange}
