@@ -13,6 +13,7 @@ import type { NoteSummary } from './shared/noteLifecycle'
 import { CELL_WIDTH_PX, LINE_HEIGHT_PX } from './editor/LayoutConstants'
 
 const SAVE_DEBOUNCE_MS = 350
+const NEW_NOTE_TEMPLATE = '# '
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
 const PROTECTED_TAGS = new Set(['archived', 'deleted', 'temp'])
@@ -120,14 +121,19 @@ function fromPersistenceText(storedText: string): string {
   return storedText
 }
 
-function titleSegment(text: string): string {
-  const firstNewline = text.indexOf('\n')
-  if (firstNewline === -1) return text
-  return text.slice(0, firstNewline)
-}
+function deriveNoteTitleFromText(text: string): string {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+  const heading = lines.find((line) => line.startsWith('# ') && line.trim().length > 2)
+  if (heading) {
+    return heading.slice(2).trim()
+  }
 
-function didTitleSegmentChange(previousText: string, nextText: string): boolean {
-  return titleSegment(previousText) !== titleSegment(nextText)
+  const firstContent = lines.find((line) => {
+    const trimmed = line.trim()
+    return trimmed.length > 0 && trimmed !== '#'
+  })
+
+  return firstContent?.trim() ?? 'Untitled'
 }
 
 function isSameNoteSummary(a: NoteSummary, b: NoteSummary): boolean {
@@ -291,10 +297,28 @@ function isDeletedNote(note: NoteSummary): boolean {
   return note.tags.includes('deleted')
 }
 
+function matchesSearchQuery(note: NoteSummary, query: string): boolean {
+  const normalized = query.trim().toLowerCase()
+  if (!normalized) return true
+
+  if (normalized.startsWith('#')) {
+    const tagQuery = normalized.slice(1).trim()
+    if (!tagQuery) return true
+    return note.tags.some((tag) => tag.toLowerCase().includes(tagQuery))
+  }
+
+  return (
+    note.title.toLowerCase().includes(normalized) ||
+    note.fileName.toLowerCase().includes(normalized) ||
+    note.tags.some((tag) => tag.toLowerCase().includes(normalized))
+  )
+}
+
 function App() {
   const adapterRef = useRef<EditorAdapter | null>(null)
   const [notes, setNotes] = useState<NoteSummary[]>([])
   const [newTagName, setNewTagName] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
   const [isTagMutationPending, setIsTagMutationPending] = useState(false)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('date')
   const [dateFilterYear, setDateFilterYear] = useState<DateFilterValue>('all')
@@ -305,7 +329,6 @@ function App() {
   const [lastSavedAtMs, setLastSavedAtMs] = useState<number | null>(null)
   const pendingSaveTextRef = useRef<string | null>(null)
   const latestEditorTextRef = useRef('')
-  const isTitleSavePausedRef = useRef(false)
   const saveTimerRef = useRef<number | null>(null)
   const appStateSaveTimerRef = useRef<number | null>(null)
   const noteTransitionLockRef = useRef(false)
@@ -338,7 +361,20 @@ function App() {
 
     pendingSaveTextRef.current = null
     try {
-      await window.measlyNotes.saveNote({ id: activeNoteId, text: nextText })
+      const savedSummary = await window.measlyNotes.saveNote({ id: activeNoteId, text: nextText })
+      setNotes((previous) => {
+        const index = previous.findIndex((note) => note.id === savedSummary.id)
+        if (index < 0) return previous
+
+        const existing = previous[index]
+        if (isSameNoteSummary(existing, savedSummary)) {
+          return previous
+        }
+
+        const next = [...previous]
+        next[index] = savedSummary
+        return next
+      })
       setLastSavedAtMs(Date.now())
     } catch (error) {
       console.error('Failed to persist note', error)
@@ -428,7 +464,7 @@ function App() {
       }
 
       if (notes.length <= 1) {
-        const replacement = await window.measlyNotes.createNote({ initialText: '' })
+        const replacement = await window.measlyNotes.createNote({ initialText: NEW_NOTE_TEMPLATE })
         await window.measlyNotes.deleteNote({ id: noteId })
         await refreshNotes(replacement.id)
         await activateNote(replacement.id)
@@ -453,6 +489,47 @@ function App() {
   const handleDeleteNote = useCallback((noteId: string) => {
     void deleteNote(noteId)
   }, [deleteNote])
+
+  const updateActiveNoteTitlePreview = useCallback((nextText: string) => {
+    if (!activeNoteId) return
+
+    const nextTitle = deriveNoteTitleFromText(nextText)
+    setNotes((previous) => {
+      const index = previous.findIndex((note) => note.id === activeNoteId)
+      if (index < 0) return previous
+
+      const existing = previous[index]
+      if (existing.title === nextTitle) {
+        return previous
+      }
+
+      const next = [...previous]
+      next[index] = {
+        ...existing,
+        title: nextTitle,
+      }
+      return next
+    })
+  }, [activeNoteId])
+
+  const createNote = useCallback(async () => {
+    if (!window.measlyNotes) return
+    if (!persistenceReady) return
+    if (noteTransitionLockRef.current) return
+
+    noteTransitionLockRef.current = true
+    try {
+      await flushPendingSaveNow()
+      const created = await window.measlyNotes.createNote({ initialText: NEW_NOTE_TEMPLATE })
+      await refreshNotes(created.id)
+      await activateNote(created.id)
+      setSidebarMode('date')
+    } catch (error) {
+      console.error('Failed to create note', error)
+    } finally {
+      noteTransitionLockRef.current = false
+    }
+  }, [activateNote, flushPendingSaveNow, persistenceReady, refreshNotes])
 
   const activeNoteSummary = useMemo(() => {
     if (!activeNoteId) return null
@@ -554,7 +631,7 @@ function App() {
         latestViewportRef.current = appState.viewport ?? null
 
         if (notes.length === 0) {
-          const created = await measlyNotes.createNote({ initialText: '' })
+          const created = await measlyNotes.createNote({ initialText: NEW_NOTE_TEMPLATE })
           if (disposed) return
           setNotes((previous) => mergeNoteSummaries(previous, [created]))
           setActiveNoteId(created.id)
@@ -658,15 +735,7 @@ function App() {
         return
       }
 
-      // Pause autosave whenever the title segment itself is changing.
-      // This avoids boundary-offset ambiguity at the first line break.
-      if (didTitleSegmentChange(event.previousText, event.text)) {
-        isTitleSavePausedRef.current = true
-        pendingSaveTextRef.current = toPersistenceText(event.text)
-        return
-      }
-
-      isTitleSavePausedRef.current = false
+      updateActiveNoteTitlePreview(event.text)
       queueSave(event.text)
     },
     onViewportChange: (event: EditorViewportChangeEvent) => {
@@ -677,7 +746,7 @@ function App() {
       }
       queueAppStateSave(activeNoteId)
     },
-  }), [activeNoteId, persistenceReady, queueSave, queueAppStateSave])
+  }), [activeNoteId, persistenceReady, queueSave, queueAppStateSave, updateActiveNoteTitlePreview])
 
   useEffect(() => {
     if (!window.measlyState || !activeNoteId) return
@@ -693,21 +762,25 @@ function App() {
     return [...notes].sort((a, b) => b.updatedAtMs - a.updatedAtMs)
   }, [notes])
 
+  const searchedNotes = useMemo(() => {
+    return sortedNotes.filter((note) => matchesSearchQuery(note, searchQuery))
+  }, [searchQuery, sortedNotes])
+
   const dateEligibleNotes = useMemo(() => {
-    return sortedNotes.filter((note) => !isArchivedNote(note) && !isDeletedNote(note))
-  }, [sortedNotes])
+    return searchedNotes.filter((note) => !isArchivedNote(note) && !isDeletedNote(note))
+  }, [searchedNotes])
 
   const categoryEligibleNotes = useMemo(() => {
     return dateEligibleNotes
   }, [dateEligibleNotes])
 
   const archiveEligibleNotes = useMemo(() => {
-    return sortedNotes.filter((note) => isArchivedNote(note) && !isDeletedNote(note))
-  }, [sortedNotes])
+    return searchedNotes.filter((note) => isArchivedNote(note) && !isDeletedNote(note))
+  }, [searchedNotes])
 
   const trashEligibleNotes = useMemo(() => {
-    return sortedNotes.filter((note) => isDeletedNote(note))
-  }, [sortedNotes])
+    return searchedNotes.filter((note) => isDeletedNote(note))
+  }, [searchedNotes])
 
   const availableYears = useMemo(() => {
     const years = new Set<number>()
@@ -785,6 +858,12 @@ function App() {
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'n') {
+        event.preventDefault()
+        void createNote()
+        return
+      }
+
       if (event.key === 'Escape' && sidebarMode !== 'date') {
         setSidebarMode('date')
       }
@@ -792,7 +871,7 @@ function App() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [sidebarMode])
+  }, [createNote, sidebarMode])
 
   return (
     <div className="app-shell app-grid">
@@ -801,7 +880,8 @@ function App() {
           <input
             type="text"
             placeholder="Search notes or #tag..."
-            disabled
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
           />
         </div>
 
@@ -844,7 +924,11 @@ function App() {
                 )
               })}
               {visibleNotes.length === 0 ? (
-                <div className="notes-empty-state">No notes match the current date filters.</div>
+                <div className="notes-empty-state">
+                  {searchQuery.trim()
+                    ? 'No notes match the current search.'
+                    : 'No notes match the current date filters.'}
+                </div>
               ) : null}
             </div>
           ) : (

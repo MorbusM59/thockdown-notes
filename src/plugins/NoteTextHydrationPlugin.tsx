@@ -25,6 +25,16 @@ function replaceEditorText(nextText: string): void {
     }
     root.append(paragraph);
   }
+
+  // New note template should be title-ready: `# ` with caret after the space.
+  if (normalized === '# ') {
+    const firstText = root.getFirstDescendant();
+    if (firstText) {
+      firstText.selectEnd();
+    } else {
+      root.selectStart();
+    }
+  }
 }
 
 export function NoteTextHydrationPlugin({ text }: NoteTextHydrationPluginProps) {

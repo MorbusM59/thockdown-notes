@@ -23,3 +23,7 @@ release
 *.njsproj
 *.sln
 *.sw?
+
+# Runtime app data (notes, state, local DB) should stay out of version control
+data/**
+!data/.gitkeep

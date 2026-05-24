@@ -34,7 +34,10 @@ function titleFromText(text: string): string {
   const heading = lines.find((line) => line.startsWith('# ') && line.trim().length > 2);
   if (heading) return heading.slice(2).trim();
 
-  const firstContent = lines.find((line) => line.trim().length > 0);
+  const firstContent = lines.find((line) => {
+    const trimmed = line.trim();
+    return trimmed.length > 0 && trimmed !== '#';
+  });
   return firstContent?.trim() ?? 'Untitled';
 }
 
