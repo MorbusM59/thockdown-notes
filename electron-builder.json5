@@ -1,9 +1,9 @@
 // @see - https://www.electron.build/configuration/configuration
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "YourAppID",
+  "appId": "com.morbusm59.measlynotes",
   "asar": true,
-  "productName": "YourAppName",
+  "productName": "Measly Notes",
   "directories": {
     "output": "release/${version}"
   },
@@ -39,5 +39,19 @@
       "AppImage"
     ],
     "artifactName": "${productName}-Linux-${version}.${ext}"
-  }
+  },
+  "fileAssociations": [
+    {
+      "ext": "md",
+      "name": "Markdown Document",
+      "description": "Measly Notes Markdown File",
+      "role": "Editor"
+    },
+    {
+      "ext": "txt",
+      "name": "Text Document",
+      "description": "Measly Notes Text File",
+      "role": "Editor"
+    }
+  ]
 }

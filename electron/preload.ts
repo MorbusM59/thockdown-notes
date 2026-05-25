@@ -14,6 +14,10 @@ import type {
 import { NOTE_LIFECYCLE_CHANNELS } from '../src/shared/noteLifecycle'
 import type { AppStateApi } from '../src/shared/appState'
 import { APP_STATE_CHANNELS } from '../src/shared/appState'
+import type { ExternalFilesApi } from '../src/shared/externalFiles'
+import { EXTERNAL_FILE_CHANNELS } from '../src/shared/externalFiles'
+import type { LegacyDbApi, NoteUiStatePayload } from '../src/shared/legacyDbFeatures'
+import { LEGACY_DB_CHANNELS } from '../src/shared/legacyDbFeatures'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
@@ -62,3 +66,49 @@ const appStateApi: AppStateApi = {
 }
 
 contextBridge.exposeInMainWorld('measlyState', appStateApi)
+
+const externalFilesApi: ExternalFilesApi = {
+  getPendingFilePaths: () => ipcRenderer.invoke(EXTERNAL_FILE_CHANNELS.getPendingPaths),
+  readFileContent: (filePath: string) => ipcRenderer.invoke(EXTERNAL_FILE_CHANNELS.readContent, filePath),
+  writeFileContent: (filePath: string, content: string) =>
+    ipcRenderer.invoke(EXTERNAL_FILE_CHANNELS.writeContent, filePath, content),
+  getFileBasename: (filePath: string) => ipcRenderer.invoke(EXTERNAL_FILE_CHANNELS.basename, filePath),
+  onOpenFile: (callback: (filePath: string) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, filePath: string) => {
+      callback(filePath)
+    }
+    ipcRenderer.on(EXTERNAL_FILE_CHANNELS.opened, listener)
+    return () => {
+      ipcRenderer.off(EXTERNAL_FILE_CHANNELS.opened, listener)
+    }
+  },
+}
+
+contextBridge.exposeInMainWorld('measlyExternalFiles', externalFilesApi)
+
+const legacyDbApi: LegacyDbApi = {
+  getLastEditedNoteId: () => ipcRenderer.invoke(LEGACY_DB_CHANNELS.getLastEditedNoteId),
+  getTrashNoteIds: () => ipcRenderer.invoke(LEGACY_DB_CHANNELS.getTrashNoteIds),
+  searchNoteIdsByTag: (tagQuery: string) => ipcRenderer.invoke(LEGACY_DB_CHANNELS.searchNoteIdsByTag, tagQuery),
+  saveNoteUiState: (noteId: string, payload: NoteUiStatePayload) =>
+    ipcRenderer.invoke(LEGACY_DB_CHANNELS.saveNoteUiState, noteId, payload),
+  getNoteUiState: (noteId: string) => ipcRenderer.invoke(LEGACY_DB_CHANNELS.getNoteUiState, noteId),
+  saveNoteSnapshot: (noteId: string, content: string, isManual?: boolean) =>
+    ipcRenderer.invoke(LEGACY_DB_CHANNELS.saveNoteSnapshot, noteId, content, isManual),
+  getNoteSnapshots: (noteId: string) => ipcRenderer.invoke(LEGACY_DB_CHANNELS.getNoteSnapshots, noteId),
+  deleteNoteSnapshot: (snapshotId: number) => ipcRenderer.invoke(LEGACY_DB_CHANNELS.deleteNoteSnapshot, snapshotId),
+  createTempNote: (title: string, externalPath: string, originalEncoding?: string) =>
+    ipcRenderer.invoke(LEGACY_DB_CHANNELS.createTempNote, title, externalPath, originalEncoding),
+  updateTempNoteState: (noteId: string, hasUnsavedChanges: boolean, syncMode: boolean) =>
+    ipcRenderer.invoke(LEGACY_DB_CHANNELS.updateTempNoteState, noteId, hasUnsavedChanges, syncMode),
+  convertTempNoteToRegular: (noteId: string, newFilePath: string) =>
+    ipcRenderer.invoke(LEGACY_DB_CHANNELS.convertTempNoteToRegular, noteId, newFilePath),
+  getTempNoteIds: () => ipcRenderer.invoke(LEGACY_DB_CHANNELS.getTempNoteIds),
+  getTempNoteIdByExternalPath: (externalPath: string) =>
+    ipcRenderer.invoke(LEGACY_DB_CHANNELS.getTempNoteIdByExternalPath, externalPath),
+  syncExternalNoteToFile: (noteId: string) => ipcRenderer.invoke(LEGACY_DB_CHANNELS.syncExternalNoteToFile, noteId),
+  getExternalSyncState: (noteId: string) => ipcRenderer.invoke(LEGACY_DB_CHANNELS.getExternalSyncState, noteId),
+  deleteTempNote: (noteId: string) => ipcRenderer.invoke(LEGACY_DB_CHANNELS.deleteTempNote, noteId),
+}
+
+contextBridge.exposeInMainWorld('measlyLegacyDb', legacyDbApi)

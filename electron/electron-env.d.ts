@@ -26,4 +26,6 @@ interface Window {
   ipcRenderer?: import('electron').IpcRenderer
   measlyNotes?: import('../src/shared/noteLifecycle').NoteLifecycleApi
   measlyState?: import('../src/shared/appState').AppStateApi
+  measlyExternalFiles?: import('../src/shared/externalFiles').ExternalFilesApi
+  measlyLegacyDb?: import('../src/shared/legacyDbFeatures').LegacyDbApi
 }

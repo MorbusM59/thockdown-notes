@@ -1,10 +1,14 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { NoteLifecycleService } from './noteLifecycleService'
 import { NOTE_LIFECYCLE_CHANNELS } from '../src/shared/noteLifecycle'
 import { APP_STATE_CHANNELS, type WindowState } from '../src/shared/appState'
 import { StateService } from './stateService'
+import { DatabaseService } from './databaseService'
+import { EXTERNAL_FILE_CHANNELS } from '../src/shared/externalFiles'
+import { LEGACY_DB_CHANNELS } from '../src/shared/legacyDbFeatures'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -29,6 +33,48 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 let win: BrowserWindow | null
 let noteLifecycleService: NoteLifecycleService | null = null;
 let stateService: StateService | null = null;
+let databaseService: DatabaseService | null = null;
+let pendingExternalFilePaths: string[] = [];
+
+const OPENABLE_EXTENSIONS = new Set(['.md', '.txt']);
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
+
+function isOpenableExternalFile(filePath: string): boolean {
+  const ext = path.extname(filePath).toLowerCase();
+  return OPENABLE_EXTENSIONS.has(ext) && existsSync(filePath);
+}
+
+function extractOpenablePaths(argv: string[]): string[] {
+  return argv
+    .map((value) => value.replace(/^"|"$/g, ''))
+    .filter((value) => value.length > 0)
+    .filter((value) => path.isAbsolute(value))
+    .filter((value) => isOpenableExternalFile(value));
+}
+
+function enqueueExternalFilePaths(filePaths: string[]): void {
+  const seen = new Set(pendingExternalFilePaths);
+  for (const filePath of filePaths) {
+    if (seen.has(filePath)) continue;
+    seen.add(filePath);
+    pendingExternalFilePaths.push(filePath);
+  }
+}
+
+function flushPendingExternalPathsToRenderer(): void {
+  if (!win || win.isDestroyed()) return;
+  if (pendingExternalFilePaths.length === 0) return;
+
+  const paths = [...pendingExternalFilePaths];
+  pendingExternalFilePaths = [];
+  for (const filePath of paths) {
+    win.webContents.send(EXTERNAL_FILE_CHANNELS.opened, filePath);
+  }
+}
 
 function resolveDataRoot(): string {
   if (app.isPackaged) {
@@ -38,8 +84,11 @@ function resolveDataRoot(): string {
 }
 
 function registerIpcHandlers() {
+  if (!databaseService) {
+    databaseService = new DatabaseService(resolveDataRoot())
+  }
   if (!noteLifecycleService) {
-    noteLifecycleService = new NoteLifecycleService(resolveDataRoot());
+    noteLifecycleService = new NoteLifecycleService(resolveDataRoot(), databaseService);
   }
   if (!stateService) {
     stateService = new StateService(resolveDataRoot());
@@ -61,6 +110,100 @@ function registerIpcHandlers() {
   ipcMain.handle(APP_STATE_CHANNELS.saveAppState, async (_event, payload) => stateService!.saveAppState(payload));
   ipcMain.handle(APP_STATE_CHANNELS.loadWindowState, async () => stateService!.loadWindowState());
   ipcMain.handle(APP_STATE_CHANNELS.saveWindowState, async (_event, payload) => stateService!.saveWindowState(payload));
+
+  ipcMain.handle(EXTERNAL_FILE_CHANNELS.getPendingPaths, async () => {
+    const paths = [...pendingExternalFilePaths];
+    pendingExternalFilePaths = [];
+    return paths;
+  });
+
+  ipcMain.handle(EXTERNAL_FILE_CHANNELS.readContent, async (_event, filePath: unknown) => {
+    if (typeof filePath !== 'string' || !isOpenableExternalFile(filePath)) return null;
+    try {
+      return readFileSync(filePath, 'utf8');
+    } catch {
+      return null;
+    }
+  });
+
+  ipcMain.handle(EXTERNAL_FILE_CHANNELS.writeContent, async (_event, filePath: unknown, content: unknown) => {
+    if (typeof filePath !== 'string' || typeof content !== 'string') return false;
+    if (!isOpenableExternalFile(filePath)) return false;
+    try {
+      writeFileSync(filePath, content, 'utf8');
+      return true;
+    } catch {
+      return false;
+    }
+  });
+
+  ipcMain.handle(EXTERNAL_FILE_CHANNELS.basename, async (_event, filePath: unknown) => {
+    if (typeof filePath !== 'string') return '';
+    try {
+      return path.basename(filePath);
+    } catch {
+      return '';
+    }
+  });
+
+  ipcMain.handle(LEGACY_DB_CHANNELS.getLastEditedNoteId, async () => databaseService!.getLastEditedNoteId());
+  ipcMain.handle(LEGACY_DB_CHANNELS.getTrashNoteIds, async () => databaseService!.getTrashNoteIds());
+  ipcMain.handle(LEGACY_DB_CHANNELS.searchNoteIdsByTag, async (_event, tagQuery: string) =>
+    databaseService!.searchNoteIdsByTag(tagQuery),
+  );
+  ipcMain.handle(LEGACY_DB_CHANNELS.saveNoteUiState, async (_event, noteId: string, payload) => {
+    databaseService!.saveNoteUiState(noteId, payload ?? {});
+  });
+  ipcMain.handle(LEGACY_DB_CHANNELS.getNoteUiState, async (_event, noteId: string) =>
+    databaseService!.getNoteUiState(noteId),
+  );
+  ipcMain.handle(LEGACY_DB_CHANNELS.saveNoteSnapshot, async (_event, noteId: string, content: string, isManual?: boolean) => {
+    databaseService!.saveNoteSnapshot(noteId, content, Boolean(isManual));
+  });
+  ipcMain.handle(LEGACY_DB_CHANNELS.getNoteSnapshots, async (_event, noteId: string) =>
+    databaseService!.getNoteSnapshots(noteId),
+  );
+  ipcMain.handle(LEGACY_DB_CHANNELS.deleteNoteSnapshot, async (_event, snapshotId: number) => {
+    databaseService!.deleteNoteSnapshot(snapshotId);
+  });
+  ipcMain.handle(LEGACY_DB_CHANNELS.createTempNote, async (_event, title: string, externalPath: string, originalEncoding?: string) =>
+    databaseService!.createTempNote({ title, externalPath, originalEncoding }),
+  );
+  ipcMain.handle(LEGACY_DB_CHANNELS.updateTempNoteState, async (_event, noteId: string, hasUnsavedChanges: boolean, syncMode: boolean) => {
+    databaseService!.updateTempNoteState(noteId, hasUnsavedChanges, syncMode);
+  });
+  ipcMain.handle(LEGACY_DB_CHANNELS.convertTempNoteToRegular, async (_event, noteId: string, newFilePath: string) => {
+    databaseService!.convertTempNoteToRegular(noteId, newFilePath);
+  });
+  ipcMain.handle(LEGACY_DB_CHANNELS.getTempNoteIds, async () => databaseService!.getTempNoteIds());
+  ipcMain.handle(LEGACY_DB_CHANNELS.getTempNoteIdByExternalPath, async (_event, externalPath: string) =>
+    databaseService!.getTempNoteIdByExternalPath(externalPath),
+  );
+  ipcMain.handle(LEGACY_DB_CHANNELS.getExternalSyncState, async (_event, noteId: string) =>
+    databaseService!.getExternalSyncState(noteId),
+  );
+  ipcMain.handle(LEGACY_DB_CHANNELS.syncExternalNoteToFile, async (_event, noteId: string) => {
+    const record = databaseService!.getNoteRecord(noteId);
+    if (!record?.isTemp || !record.externalPath) {
+      return false;
+    }
+
+    const content = databaseService!.getNoteContentSnapshot(noteId);
+    if (content === null) {
+      return false;
+    }
+
+    try {
+      writeFileSync(record.externalPath, content, 'utf8');
+      databaseService!.markExternalNoteSynced(noteId);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  ipcMain.handle(LEGACY_DB_CHANNELS.deleteTempNote, async (_event, noteId: string) => {
+    databaseService!.deleteTempNote(noteId);
+  });
 }
 
 function readCurrentWindowState(windowRef: BrowserWindow): WindowState {
@@ -110,6 +253,7 @@ async function createWindow() {
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
+    flushPendingExternalPathsToRenderer()
   })
 
   if (VITE_DEV_SERVER_URL) {
@@ -119,6 +263,26 @@ async function createWindow() {
     win.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
 }
+
+app.on('second-instance', (_event, argv) => {
+  const paths = extractOpenablePaths(argv);
+  enqueueExternalFilePaths(paths);
+
+  if (win && !win.isDestroyed()) {
+    if (win.isMinimized()) {
+      win.restore();
+    }
+    win.focus();
+    flushPendingExternalPathsToRenderer();
+  }
+});
+
+app.on('open-file', (event, filePath) => {
+  event.preventDefault();
+  if (!isOpenableExternalFile(filePath)) return;
+  enqueueExternalFilePaths([filePath]);
+  flushPendingExternalPathsToRenderer();
+});
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
@@ -139,6 +303,23 @@ app.on('activate', () => {
 })
 
 app.whenReady().then(async () => {
+  enqueueExternalFilePaths(extractOpenablePaths(process.argv));
+  if (!databaseService) {
+    databaseService = new DatabaseService(resolveDataRoot())
+  }
+  await databaseService.initialize()
+  await databaseService.bootstrapFromFilesystem()
+  const sanity = databaseService.runSanityChecks()
+  if (sanity.missingNoteFiles.length > 0 || sanity.orphanedTagRows > 0) {
+    console.warn('[db] startup sanity issues', sanity)
+  }
   registerIpcHandlers()
   await createWindow()
+}).catch((error) => {
+  console.error('[main] fatal startup failure', error)
+  app.quit()
+})
+
+app.on('before-quit', () => {
+  databaseService?.close()
 })

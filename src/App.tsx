@@ -20,7 +20,7 @@ import {
 const SAVE_DEBOUNCE_MS = 350
 const NEW_NOTE_TEMPLATE = '# '
 const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
-const PROTECTED_TAGS = new Set(['archived', 'deleted', 'temp'])
+const PROTECTED_TAGS = new Set(['archived', 'deleted', 'external'])
 const GRID_DIVIDER_PX = 8
 const SIDEBAR_MIN_WIDTH_PX = 240
 const SIDEBAR_MAX_WIDTH_PX = 520
@@ -155,6 +155,10 @@ function isProtectedTagName(name: string): boolean {
   return PROTECTED_TAGS.has(normalizeTagName(name))
 }
 
+function isExternalTagName(name: string): boolean {
+  return normalizeTagName(name) === 'external'
+}
+
 function sanitizeClipboardTitle(raw: string): string {
   const normalized = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
   const firstLine = normalized.split('\n').map((line) => line.trim()).find((line) => line.length > 0)
@@ -162,6 +166,14 @@ function sanitizeClipboardTitle(raw: string): string {
 
   const withoutHeadingPrefix = firstLine.replace(/^#+\s*/, '').trim()
   return withoutHeadingPrefix || FALLBACK_NEW_NOTE_TITLE
+}
+
+function titleFromFileBasename(fileName: string): string {
+  const withoutExtension = fileName.replace(/\.[^./\\]+$/, '').trim()
+  if (!withoutExtension) return FALLBACK_NEW_NOTE_TITLE
+
+  const normalized = withoutExtension.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
+  return normalized || FALLBACK_NEW_NOTE_TITLE
 }
 
 function isSameNoteSummary(a: NoteSummary, b: NoteSummary): boolean {
@@ -330,6 +342,10 @@ function isDeletedNote(note: NoteSummary): boolean {
   return note.tags.includes('deleted')
 }
 
+function isExternalNote(note: NoteSummary): boolean {
+  return note.tags.some((tag) => isExternalTagName(tag))
+}
+
 function matchesSearchQuery(note: NoteSummary, query: string): boolean {
   const normalized = query.trim().toLowerCase()
   if (!normalized) return true
@@ -383,6 +399,7 @@ function App() {
   const dividerStartSidebarWidthRef = useRef(0)
   const dividerStartTagInputWidthRef = useRef(0)
   const dividerStartMainWidthRef = useRef(0)
+  const externalOpenQueueRef = useRef<Promise<void>>(Promise.resolve())
 
   const menuState = useMemo<PersistedMenuState>(() => ({
     sidebarMode,
@@ -629,12 +646,65 @@ function App() {
     await createNote(`# ${title}\n\n`)
   }, [createNote])
 
+  const importExternalFileAsTempNote = useCallback(async (filePath: string) => {
+    const externalApi = window.measlyExternalFiles
+    const legacyDbApi = window.measlyLegacyDb
+    const notesApi = window.measlyNotes
+    if (!externalApi || !legacyDbApi || !notesApi) return
+    if (!persistenceReady) return
+
+    if (noteTransitionLockRef.current) {
+      return
+    }
+
+    noteTransitionLockRef.current = true
+    try {
+      await flushPendingSaveNow()
+
+      const [fileName, content] = await Promise.all([
+        externalApi.getFileBasename(filePath),
+        externalApi.readFileContent(filePath),
+      ])
+
+      if (content === null) {
+        return
+      }
+
+      const initialTitle = titleFromFileBasename(fileName)
+      let noteId = await legacyDbApi.getTempNoteIdByExternalPath(filePath)
+
+      if (!noteId) {
+        noteId = await legacyDbApi.createTempNote(initialTitle, filePath, 'utf8')
+      }
+
+      await notesApi.saveNote({ id: noteId, text: toPersistenceText(content) })
+      await legacyDbApi.updateTempNoteState(noteId, false, true)
+      await refreshNotes(noteId)
+      await activateNote(noteId)
+      setSidebarMode('date')
+    } catch (error) {
+      console.error('Failed to import external file', error)
+    } finally {
+      noteTransitionLockRef.current = false
+    }
+  }, [activateNote, flushPendingSaveNow, persistenceReady, refreshNotes])
+
+  const enqueueExternalFileImport = useCallback((filePath: string) => {
+    const queue = externalOpenQueueRef.current
+    externalOpenQueueRef.current = queue
+      .then(() => importExternalFileAsTempNote(filePath))
+      .catch((error) => {
+        console.error('External file import queue error', error)
+      })
+  }, [importExternalFileAsTempNote])
+
   const activeNoteSummary = useMemo(() => {
     if (!activeNoteId) return null
     return notes.find((note) => note.id === activeNoteId) ?? null
   }, [activeNoteId, notes])
 
   const orderedActiveTags = activeNoteSummary?.tags ?? []
+  const activeNoteIsExternal = orderedActiveTags.some((tag) => isExternalTagName(tag))
 
   const suggestedTags = useMemo(() => {
     const usageByName = new Map<string, number>()
@@ -648,7 +718,7 @@ function App() {
     const activeTagSet = new Set(orderedActiveTags)
 
     return [...usageByName.entries()]
-      .filter(([name]) => !PROTECTED_TAGS.has(name) && !activeTagSet.has(name))
+      .filter(([name]) => !PROTECTED_TAGS.has(normalizeTagName(name)) && !activeTagSet.has(name))
       .sort((a, b) => {
         if (b[1] !== a[1]) {
           return b[1] - a[1]
@@ -681,6 +751,7 @@ function App() {
   }, [activeNoteId, activateNote, flushPendingSaveNow, persistenceReady, refreshNotes])
 
   const handleAddSuggestedTag = useCallback((tagName: string) => {
+    if (activeNoteIsExternal) return
     if (orderedActiveTags.includes(tagName)) return
 
     void runActiveNoteTagMutation(async (noteId) => {
@@ -690,10 +761,11 @@ function App() {
         position: orderedActiveTags.length,
       })
     })
-  }, [orderedActiveTags, runActiveNoteTagMutation])
+  }, [activeNoteIsExternal, orderedActiveTags, runActiveNoteTagMutation])
 
   const handleTagInputEnter = useCallback(() => {
     if (!activeNoteId || !persistenceReady) return
+    if (activeNoteIsExternal) return
 
     const normalized = normalizeTagName(tagInputValue)
     if (!normalized) return
@@ -761,6 +833,7 @@ function App() {
     renamingTagName,
     runActiveNoteTagMutation,
     tagInputValue,
+    activeNoteIsExternal,
   ])
 
   const handleTagChipClick = useCallback((tagName: string) => {
@@ -996,6 +1069,35 @@ function App() {
   }, [activeNoteId, menuState, queueAppStateSave])
 
   useEffect(() => {
+    if (!persistenceReady) return
+
+    const externalApi = window.measlyExternalFiles
+    if (!externalApi || !window.measlyLegacyDb || !window.measlyNotes) return
+
+    let disposed = false
+
+    const processPending = async () => {
+      const pendingPaths = await externalApi.getPendingFilePaths()
+      if (disposed) return
+      for (const filePath of pendingPaths) {
+        enqueueExternalFileImport(filePath)
+      }
+    }
+
+    void processPending()
+
+    const unsubscribe = externalApi.onOpenFile((filePath) => {
+      if (disposed) return
+      enqueueExternalFileImport(filePath)
+    })
+
+    return () => {
+      disposed = true
+      unsubscribe()
+    }
+  }, [enqueueExternalFileImport, persistenceReady])
+
+  useEffect(() => {
     const shellElement = appShellRef.current
     if (!shellElement) return
 
@@ -1098,15 +1200,15 @@ function App() {
   }, [hasDateFilter, searchedNotes])
 
   const categoryEligibleNotes = useMemo(() => {
-    return dateEligibleNotes
+    return dateEligibleNotes.filter((note) => !isExternalNote(note))
   }, [dateEligibleNotes])
 
   const archiveEligibleNotes = useMemo(() => {
-    return searchedNotes.filter((note) => isArchivedNote(note) && !isDeletedNote(note))
+    return searchedNotes.filter((note) => isArchivedNote(note) && !isDeletedNote(note) && !isExternalNote(note))
   }, [searchedNotes])
 
   const trashEligibleNotes = useMemo(() => {
-    return searchedNotes.filter((note) => isDeletedNote(note))
+    return searchedNotes.filter((note) => isDeletedNote(note) && !isExternalNote(note))
   }, [searchedNotes])
 
   const dateFilteredNotes = useMemo(() => {
@@ -1141,15 +1243,6 @@ function App() {
   const archiveTree = useMemo<PrimaryGroup[]>(() => {
     return buildHierarchyGroups(archiveEligibleNotes)
   }, [archiveEligibleNotes])
-
-  const modeCounts = useMemo(() => {
-    return {
-      date: dateEligibleNotes.length,
-      category: categoryEligibleNotes.length,
-      archive: archiveEligibleNotes.length,
-      trash: trashEligibleNotes.length,
-    }
-  }, [archiveEligibleNotes.length, categoryEligibleNotes.length, dateEligibleNotes.length, trashEligibleNotes.length])
 
   const visibleNotes = useMemo(() => {
     if (sidebarMode === 'date') {
@@ -1329,11 +1422,16 @@ function App() {
         <div className="view-toggle" role="tablist" aria-label="Note view modes">
           {SIDEBAR_MODES.map(({ mode, label }) => {
             const isActive = sidebarMode === mode
-            const count = modeCounts[mode]
+            const iconClassByMode: Record<SidebarMode, string> = {
+              date: 'btn-date',
+              category: 'btn-category',
+              archive: 'btn-archived',
+              trash: 'btn-deleted',
+            }
             return (
               <button
                 key={mode}
-                className={`toggle-btn notes-mode-button${isActive ? ' is-active' : ''}`}
+                className={`toggle-btn notes-mode-button icon-btn ${iconClassByMode[mode]}${isActive ? ' is-active' : ''}`}
                 type="button"
                 role="tab"
                 aria-selected={isActive}
@@ -1341,8 +1439,7 @@ function App() {
                 aria-label={label}
                 onClick={() => setSidebarMode(mode)}
               >
-                <span>{label}</span>
-                <span className="notes-mode-count">{count}</span>
+                <span className="sr-only-mode-label">{label}</span>
               </button>
             )
           })}
@@ -1480,7 +1577,7 @@ function App() {
                       setTagInputValue('')
                     }
                   }}
-                  disabled={!persistenceReady || !activeNoteId || isTagMutationPending}
+                  disabled={!persistenceReady || !activeNoteId || isTagMutationPending || activeNoteIsExternal}
                   aria-label="Tag input"
                 />
               </div>
@@ -1535,7 +1632,7 @@ function App() {
               className="tag-pill suggested"
               onClick={() => handleAddSuggestedTag(tagName)}
               title={`Add ${tagName}`}
-              aria-disabled={!activeNoteId || isTagMutationPending}
+              aria-disabled={!activeNoteId || isTagMutationPending || activeNoteIsExternal}
             >
               {tagName}
             </div>

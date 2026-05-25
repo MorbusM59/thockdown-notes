@@ -3,4 +3,6 @@
 interface Window {
 	measlyNotes?: import('./shared/noteLifecycle').NoteLifecycleApi;
 	measlyState?: import('./shared/appState').AppStateApi;
+	measlyExternalFiles?: import('./shared/externalFiles').ExternalFilesApi;
+	measlyLegacyDb?: import('./shared/legacyDbFeatures').LegacyDbApi;
 }
