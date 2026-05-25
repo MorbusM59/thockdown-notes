@@ -31,8 +31,10 @@ const DEFAULT_SIDEBAR_RATIO = 0.306
 const DEFAULT_TAG_SPLIT_RATIO = 0.645
 const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28
 const SCROLL_TRACK_EDGE_GAP_PX = 3
+const NOTE_RIGHT_CLICK_HOLD_MS = 200
 
 type SidebarMode = 'date' | 'category' | 'archive' | 'trash'
+type NoteArmedAction = 'archive' | 'deletion'
 
 const SIDEBAR_MODES: Array<{ mode: SidebarMode; label: string }> = [
   { mode: 'date', label: 'Date' },
@@ -255,6 +257,10 @@ type NoteListItemProps = {
   note: NoteSummary
   isActive: boolean
   onSelect: (noteId: string) => void
+  onArmedLeftClick: (noteId: string) => void
+  armedAction?: NoteArmedAction | null
+  onRightPressStart: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
+  onRightPressEnd: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   variant?: 'default' | 'tree'
 }
 
@@ -262,14 +268,25 @@ const NoteListItem = memo(function NoteListItem({
   note,
   isActive,
   onSelect,
+  onArmedLeftClick,
+  armedAction = null,
+  onRightPressStart,
+  onRightPressEnd,
   variant = 'default',
 }: NoteListItemProps) {
   const isTreeVariant = variant === 'tree'
   const createdDate = isTreeVariant ? '' : formatCreatedDate(note.createdAtMs)
 
-  const handleSelect = useCallback(() => {
+  const handleSelect = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if (armedAction) {
+      event.preventDefault()
+      event.stopPropagation()
+      onArmedLeftClick(note.id)
+      return
+    }
+
     onSelect(note.id)
-  }, [note.id, onSelect])
+  }, [armedAction, note.id, onArmedLeftClick, onSelect])
 
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -278,13 +295,35 @@ const NoteListItem = memo(function NoteListItem({
     }
   }, [note.id, onSelect])
 
+  const handleMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 2) return
+    event.preventDefault()
+    event.stopPropagation()
+    onRightPressStart(note.id, event)
+  }, [note.id, onRightPressStart])
+
+  const handleMouseUp = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 2) return
+    event.preventDefault()
+    event.stopPropagation()
+    onRightPressEnd(note.id, event)
+  }, [note.id, onRightPressEnd])
+
+  const handleContextMenu = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+  }, [])
+
   return (
     <div
-      className={`note-list-item${isActive ? ' is-active' : ''}${isTreeVariant ? ' is-tree-card' : ''}`}
+      className={`note-list-item${isActive ? ' is-active' : ''}${isTreeVariant ? ' is-tree-card' : ''}${armedAction === 'archive' ? ' is-armed-for-archiving' : ''}${armedAction === 'deletion' ? ' is-armed-for-deletion' : ''}`}
       role="option"
       aria-selected={isActive}
       onClick={handleSelect}
       onKeyDown={handleKeyDown}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
+      onContextMenu={handleContextMenu}
       tabIndex={0}
     >
       <div className="note-list-content">
@@ -305,6 +344,10 @@ type CategoryTreeViewProps = {
   treeMode: 'category' | 'archive'
   activeNoteId: string | null
   onSelect: (noteId: string) => void
+  onArmedLeftClick: (noteId: string) => void
+  armedNoteActionById: Map<string, NoteArmedAction>
+  onNoteRightPressStart: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
+  onNoteRightPressEnd: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
 }
 
 const CategoryTreeView = memo(function CategoryTreeView({
@@ -312,6 +355,10 @@ const CategoryTreeView = memo(function CategoryTreeView({
   treeMode,
   activeNoteId,
   onSelect,
+  onArmedLeftClick,
+  armedNoteActionById,
+  onNoteRightPressStart,
+  onNoteRightPressEnd,
 }: CategoryTreeViewProps) {
   const [collapsedPrimary, setCollapsedPrimary] = useState<Set<string>>(new Set())
   const [collapsedSecondary, setCollapsedSecondary] = useState<Set<string>>(new Set())
@@ -497,6 +544,10 @@ const CategoryTreeView = memo(function CategoryTreeView({
                       note={note}
                       isActive={note.id === activeNoteId}
                       onSelect={onSelect}
+                      onArmedLeftClick={onArmedLeftClick}
+                      armedAction={armedNoteActionById.get(note.id) ?? null}
+                      onRightPressStart={onNoteRightPressStart}
+                      onRightPressEnd={onNoteRightPressEnd}
                       variant="tree"
                     />
                   ))}
@@ -585,6 +636,22 @@ function App() {
   const [sidebarScrollThumbHeightPx, setSidebarScrollThumbHeightPx] = useState(0)
   const [isSidebarScrollThumbActive, setIsSidebarScrollThumbActive] = useState(false)
   const [isDraggingSidebarScrollThumb, setIsDraggingSidebarScrollThumb] = useState(false)
+  const [armedNoteActionState, setArmedNoteActionState] = useState<{ noteId: string; action: NoteArmedAction } | null>(null)
+  const noteArmTimerRef = useRef<{ noteId: string; timeoutId: number } | null>(null)
+
+  const armedNoteActionById = useMemo(() => {
+    if (!armedNoteActionState) {
+      return new Map<string, NoteArmedAction>()
+    }
+
+    return new Map<string, NoteArmedAction>([[armedNoteActionState.noteId, armedNoteActionState.action]])
+  }, [armedNoteActionState])
+
+  const clearNoteArmTimer = useCallback(() => {
+    if (!noteArmTimerRef.current) return
+    window.clearTimeout(noteArmTimerRef.current.timeoutId)
+    noteArmTimerRef.current = null
+  }, [])
 
   const menuState = useMemo<PersistedMenuState>(() => ({
     sidebarMode,
@@ -1036,6 +1103,113 @@ function App() {
     setRenamingTagName(tagName)
     setTagInputValue(tagName)
   }, [])
+
+  const applyProtectedNoteDestination = useCallback(async (noteId: string, destination: 'archived' | 'deleted') => {
+    if (!window.measlyNotes) return
+
+    const summary = notes.find((note) => note.id === noteId)
+    const existingTags = summary?.tags ?? []
+    const opposite = destination === 'archived' ? 'deleted' : 'archived'
+
+    const hasDestination = existingTags.some((tag) => normalizeTagName(tag) === destination)
+    const hasOpposite = existingTags.some((tag) => normalizeTagName(tag) === opposite)
+
+    if (hasOpposite) {
+      await window.measlyNotes.removeTagFromNote({ id: noteId, tagName: opposite })
+    }
+
+    if (!hasDestination) {
+      await window.measlyNotes.addTagToNote({
+        id: noteId,
+        tagName: destination,
+        position: 0,
+      })
+    }
+
+    const reordered = [
+      destination,
+      ...existingTags.filter((tag) => {
+        const normalized = normalizeTagName(tag)
+        return normalized !== destination && normalized !== opposite
+      }),
+    ]
+
+    await window.measlyNotes.reorderNoteTags({ id: noteId, tagNames: reordered })
+  }, [notes])
+
+  const executeArmedNoteAction = useCallback(async (noteId: string, action: NoteArmedAction) => {
+    if (!window.measlyNotes) return
+    if (!persistenceReady) return
+    if (noteTransitionLockRef.current) return
+
+    noteTransitionLockRef.current = true
+    try {
+      await flushPendingSaveNow()
+
+      if (action === 'archive') {
+        await applyProtectedNoteDestination(noteId, 'archived')
+      } else {
+        await applyProtectedNoteDestination(noteId, 'deleted')
+      }
+
+      await refreshNotes(activeNoteId ?? noteId)
+      if (activeNoteId === noteId) {
+        await activateNote(noteId)
+      }
+    } catch (error) {
+      console.error('Failed to apply note action', error)
+    } finally {
+      noteTransitionLockRef.current = false
+    }
+  }, [activateNote, activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, persistenceReady, refreshNotes])
+
+  const handleNoteRightPressStart = useCallback((noteId: string, event: MouseEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    clearNoteArmTimer()
+    setArmedNoteActionState({ noteId, action: 'archive' })
+
+    const timeoutId = window.setTimeout(() => {
+      setArmedNoteActionState((previous) => {
+        if (!previous || previous.noteId !== noteId) {
+          return previous
+        }
+
+        return {
+          noteId,
+          action: 'deletion',
+        }
+      })
+
+      if (noteArmTimerRef.current?.noteId === noteId) {
+        noteArmTimerRef.current = null
+      }
+    }, NOTE_RIGHT_CLICK_HOLD_MS)
+
+    noteArmTimerRef.current = { noteId, timeoutId }
+  }, [clearNoteArmTimer])
+
+  const handleNoteRightPressEnd = useCallback((noteId: string, event: MouseEvent<HTMLDivElement>) => {
+    event.preventDefault()
+
+    const pendingArm = noteArmTimerRef.current
+    if (!pendingArm || pendingArm.noteId !== noteId) {
+      return
+    }
+
+    // Quick right click consumes the arm cycle as archive-armed and prevents escalation.
+    clearNoteArmTimer()
+  }, [clearNoteArmTimer])
+
+  const handleArmedNoteLeftClick = useCallback((noteId: string) => {
+    const armed = armedNoteActionState
+    if (!armed || armed.noteId !== noteId) {
+      return
+    }
+
+    clearNoteArmTimer()
+    setArmedNoteActionState(null)
+    void executeArmedNoteAction(noteId, armed.action)
+  }, [armedNoteActionState, clearNoteArmTimer, executeArmedNoteAction])
 
   const queueSave = useCallback((text: string) => {
     if (!persistenceReady) return
@@ -1517,6 +1691,20 @@ function App() {
   }, [activeNoteId, orderedActiveTags])
 
   useEffect(() => {
+    if (!armedNoteActionState) return
+    if (!notes.some((note) => note.id === armedNoteActionState.noteId)) {
+      clearNoteArmTimer()
+      setArmedNoteActionState(null)
+    }
+  }, [armedNoteActionState, clearNoteArmTimer, notes])
+
+  useEffect(() => {
+    return () => {
+      clearNoteArmTimer()
+    }
+  }, [clearNoteArmTimer])
+
+  useEffect(() => {
     const ITEM_HEIGHT = 56
     const ITEM_GAP = 8
     const ITEM_TOTAL = ITEM_HEIGHT + ITEM_GAP
@@ -1759,6 +1947,10 @@ function App() {
                       note={note}
                       isActive={isActive}
                       onSelect={handleSelectNote}
+                      onArmedLeftClick={handleArmedNoteLeftClick}
+                      armedAction={armedNoteActionById.get(note.id) ?? null}
+                      onRightPressStart={handleNoteRightPressStart}
+                      onRightPressEnd={handleNoteRightPressEnd}
                     />
                   )
                 })}
@@ -1780,6 +1972,10 @@ function App() {
                   groups={sidebarMode === 'category' ? categoryTree : archiveTree}
                   activeNoteId={activeNoteId}
                   onSelect={handleSelectNote}
+                  onArmedLeftClick={handleArmedNoteLeftClick}
+                  armedNoteActionById={armedNoteActionById}
+                  onNoteRightPressStart={handleNoteRightPressStart}
+                  onNoteRightPressEnd={handleNoteRightPressEnd}
                 />
               </div>
             )}

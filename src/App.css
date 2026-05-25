@@ -643,6 +643,19 @@ body.splitter-dragging {
   transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
 }
 
+.note-list-item.is-armed-for-archiving,
+.note-list-item.is-armed-for-archiving:hover {
+  background-color: #0077FF22;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.5), 0 0 6px rgba(0, 0, 0, 0.2), inset 0 0 5px var(--color-shadow-white), inset 0 0 20px var(--color-shadow-white), inset 0 0 55px var(--color-shadow-white);
+}
+
+.note-list-item.is-armed-for-deletion,
+.note-list-item.is-armed-for-deletion:hover {
+  background-color: #ff000022;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.5), 0 0 6px rgba(0, 0, 0, 0.2), inset 0 0 5px var(--color-shadow-white), inset 0 0 20px var(--color-shadow-white), inset 0 0 55px var(--color-shadow-white);
+  transition: background-color 200ms;
+}
+
 .note-list-item.is-tree-card {
   padding: 0 0 2px 4px;
   margin: 0;
