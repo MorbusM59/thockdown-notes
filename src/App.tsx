@@ -380,6 +380,7 @@ function App() {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(20)
   const [showPagination, setShowPagination] = useState(false)
+  const [scrollbarHostEl, setScrollbarHostEl] = useState<HTMLDivElement | null>(null)
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null)
   const [activeNoteText, setActiveNoteText] = useState('')
   const [persistenceReady, setPersistenceReady] = useState(false)
@@ -1660,15 +1661,21 @@ function App() {
         <div className="toolbar-placeholder">Toolbar panel placeholder between tag manager and editor.</div>
       </section>
 
-      <main className="editor-shell" style={{ gridArea: 'viewer' }}>
-        <div className="editor-stage">
-          <Editor
-            bindings={bindings}
-            adapterRef={adapterRef}
-            initialText={activeNoteText}
-          />
-        </div>
-      </main>
+      <div className="editor-viewer-frame" style={{ gridArea: 'viewer' }}>
+        <main className="editor-shell">
+          <div className="editor-stage">
+            <Editor
+              bindings={bindings}
+              adapterRef={adapterRef}
+              initialText={activeNoteText}
+              scrollbarHost={scrollbarHostEl}
+            />
+          </div>
+        </main>
+        <aside className="editor-scrollbar-slot" aria-hidden="true">
+          <div className="editor-scrollbar-slot-inner" ref={setScrollbarHostEl} />
+        </aside>
+      </div>
     </div>
   )
 }

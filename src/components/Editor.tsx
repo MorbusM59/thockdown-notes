@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
@@ -39,10 +40,13 @@ interface EditorProps {
   bindings?: EditorBindings;
   adapterRef?: React.MutableRefObject<EditorAdapter | null>;
   initialText?: string;
+  scrollbarHost?: HTMLElement | null;
 }
 
 const ENABLE_CONTRACT_ASSERTIONS = import.meta.env.DEV;
 const ENABLE_SCENARIO_PROBES = import.meta.env.DEV;
+const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28;
+const SCROLL_TRACK_EDGE_GAP_PX = 3;
 
 const quantizeTopEdge = (valuePx: number) => Math.max(0, Math.round(valuePx / LINE_HEIGHT_PX) * LINE_HEIGHT_PX);
 
@@ -57,9 +61,10 @@ const topEdgeFromBottomBoundary = (heightPx: number, bottomBoundaryPx: number) =
   return Math.max(0, Math.min(h, h - bottomBoundaryPx));
 };
 
-export function Editor({ bindings, adapterRef, initialText = '' }: EditorProps) {
+export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost = null }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const scrollbarTrackRef = useRef<HTMLDivElement>(null);
   const lastInvariantKeyRef = useRef('');
   const lastProbeKeyRef = useRef('');
   const lastTypingEventAtRef = useRef(0);
@@ -83,6 +88,10 @@ export function Editor({ bindings, adapterRef, initialText = '' }: EditorProps) 
   // Dragging state
   const [isDraggingTop, setIsDraggingTop] = useState(false);
   const [isDraggingBottom, setIsDraggingBottom] = useState(false);
+  const [scrollThumbTopPx, setScrollThumbTopPx] = useState(0);
+  const [scrollThumbHeightPx, setScrollThumbHeightPx] = useState(0);
+  const [isDraggingScrollThumb, setIsDraggingScrollThumb] = useState(false);
+  const scrollThumbDragOriginRef = useRef<{ pointerY: number; thumbTopPx: number } | null>(null);
 
   const reportInvariantIssues = (context: string, issues: string[]) => {
     if (!ENABLE_CONTRACT_ASSERTIONS || issues.length === 0) return;
@@ -124,6 +133,58 @@ export function Editor({ bindings, adapterRef, initialText = '' }: EditorProps) 
     cellWidthPx: CELL_WIDTH_PX,
   }), [topBoundary, bottomBoundary]);
 
+  const syncCustomScrollbar = useCallback(() => {
+    const scroller = scrollerRef.current;
+    const track = scrollbarTrackRef.current;
+    if (!scroller || !track) return;
+
+    const viewportHeight = scroller.clientHeight;
+    const contentHeight = scroller.scrollHeight;
+    const trackHeight = track.clientHeight;
+    const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2));
+    if (viewportHeight <= 0 || contentHeight <= 0 || trackHeight <= 0) {
+      setScrollThumbHeightPx(0);
+      setScrollThumbTopPx(0);
+      return;
+    }
+
+    if (contentHeight <= viewportHeight) {
+      setScrollThumbHeightPx(usableTrackHeight);
+      setScrollThumbTopPx(SCROLL_TRACK_EDGE_GAP_PX);
+      return;
+    }
+
+    const visibleRatio = viewportHeight / contentHeight;
+    const nextThumbHeight = Math.max(
+      SCROLL_TRACK_MIN_THUMB_HEIGHT_PX,
+      Math.min(usableTrackHeight, Math.round(usableTrackHeight * visibleRatio)),
+    );
+
+    const maxScrollTop = contentHeight - viewportHeight;
+    const maxThumbTop = Math.max(0, usableTrackHeight - nextThumbHeight);
+    const scrollRatio = maxScrollTop > 0 ? scroller.scrollTop / maxScrollTop : 0;
+    const nextThumbTop = SCROLL_TRACK_EDGE_GAP_PX + Math.round(maxThumbTop * scrollRatio);
+
+    setScrollThumbHeightPx(nextThumbHeight);
+    setScrollThumbTopPx(nextThumbTop);
+  }, []);
+
+  const scrollFromThumbTop = useCallback((thumbTopPx: number) => {
+    const scroller = scrollerRef.current;
+    const track = scrollbarTrackRef.current;
+    if (!scroller || !track) return;
+
+    const trackHeight = track.clientHeight;
+    const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2));
+    const maxThumbTravel = Math.max(0, usableTrackHeight - scrollThumbHeightPx);
+    const minThumbTop = SCROLL_TRACK_EDGE_GAP_PX;
+    const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel;
+    const clampedTop = Math.max(minThumbTop, Math.min(thumbTopPx, maxThumbTop));
+    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0;
+    scroller.scrollTop = ratio * maxScrollTop;
+  }, [scrollThumbHeightPx]);
+
   useEffect(() => {
     bindings?.onLifecycle?.({ phase: 'mounted' });
     bindings?.onLifecycle?.({ phase: 'ready' });
@@ -139,6 +200,10 @@ export function Editor({ bindings, adapterRef, initialText = '' }: EditorProps) 
   }, [bindings, buildViewport]);
 
   useEffect(() => {
+    syncCustomScrollbar();
+  }, [syncCustomScrollbar, editorSize.width, editorSize.height, initialText, topBoundary, bottomBoundary]);
+
+  useEffect(() => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
 
@@ -147,11 +212,12 @@ export function Editor({ bindings, adapterRef, initialText = '' }: EditorProps) 
       const viewport = buildViewport();
       reportInvariantIssues('viewport-scroll', validateViewportInvariants(viewport));
       bindings?.onViewportChange?.({ source: 'user-input', viewport });
+      syncCustomScrollbar();
     };
 
     scroller.addEventListener('scroll', onScroll, { passive: true });
     return () => scroller.removeEventListener('scroll', onScroll);
-  }, [bindings, buildViewport]);
+  }, [bindings, buildViewport, syncCustomScrollbar]);
 
   useEffect(() => {
     if (!adapterRef) return;
@@ -303,6 +369,30 @@ export function Editor({ bindings, adapterRef, initialText = '' }: EditorProps) 
   }, [isDraggingTop, isDraggingBottom]);
 
   useEffect(() => {
+    if (!isDraggingScrollThumb) return;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const origin = scrollThumbDragOriginRef.current;
+      if (!origin) return;
+      const deltaY = event.clientY - origin.pointerY;
+      scrollFromThumbTop(origin.thumbTopPx + deltaY);
+      syncCustomScrollbar();
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingScrollThumb(false);
+      scrollThumbDragOriginRef.current = null;
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingScrollThumb, scrollFromThumbTop, syncCustomScrollbar]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const activeElement = document.activeElement as HTMLElement | null;
       if (!activeElement || !activeElement.classList.contains('editor-text')) return;
@@ -360,12 +450,52 @@ export function Editor({ bindings, adapterRef, initialText = '' }: EditorProps) 
     return () => scroller.removeEventListener('keydown', onKeyDown);
   }, [topBoundary, bottomBoundary]);
 
+  const handleTrackMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    const track = scrollbarTrackRef.current;
+    if (!track) return;
+
+    const rect = track.getBoundingClientRect();
+    const clickY = event.clientY - rect.top;
+    const targetThumbTop = clickY - (scrollThumbHeightPx / 2);
+    scrollFromThumbTop(targetThumbTop);
+    syncCustomScrollbar();
+  };
+
+  const handleThumbMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDraggingScrollThumb(true);
+    scrollThumbDragOriginRef.current = {
+      pointerY: event.clientY,
+      thumbTopPx: scrollThumbTopPx,
+    };
+  };
+
   const initialConfig = {
     namespace: 'MeaslyNotes',
     theme,
     onError,
     nodes: [MeaslyTokenNode],
   };
+
+  const scrollbarRail = (
+    <div className="measly-scroll-rail">
+      <div
+        ref={scrollbarTrackRef}
+        className="measly-scroll-track"
+        onMouseDown={handleTrackMouseDown}
+      >
+        <div
+          className={`measly-scroll-thumb${isDraggingScrollThumb ? ' is-dragging' : ''}`}
+          style={{
+            top: `${scrollThumbTopPx}px`,
+            height: `${Math.max(0, scrollThumbHeightPx)}px`,
+          }}
+          onMouseDown={handleThumbMouseDown}
+        />
+      </div>
+    </div>
+  );
 
   return (
     <div className="absolute inset-0 overflow-hidden min-w-0 min-h-0">
@@ -387,8 +517,22 @@ export function Editor({ bindings, adapterRef, initialText = '' }: EditorProps) 
             }}
           >
             {/* Background color for top and bottom zones */}
-            <div className="absolute left-0 right-0 pointer-events-none" style={{ top: 0, height: topBoundary, backgroundColor: 'var(--color-bg-leading)' }} />
-            <div className="absolute left-0 right-0 pointer-events-none" style={{ bottom: 0, height: bottomBoundary, backgroundColor: 'var(--color-bg-trailing)' }} />
+            <div
+              className="absolute left-0 right-0 pointer-events-none"
+              style={{
+                top: 0,
+                height: topBoundary,
+                backgroundColor: 'var(--color-bg-leading)',
+              }}
+            />
+            <div
+              className="absolute left-0 right-0 pointer-events-none"
+              style={{
+                bottom: 0,
+                height: bottomBoundary,
+                backgroundColor: 'var(--color-bg-trailing)',
+              }}
+            />
 
             {/* The single unified full-screen grid lines */}
             <div className="absolute inset-0 pointer-events-none measly-grid-lines" />
@@ -450,6 +594,7 @@ export function Editor({ bindings, adapterRef, initialText = '' }: EditorProps) 
           </div>
         </LexicalComposer>
       )}
+      {scrollbarHost ? createPortal(scrollbarRail, scrollbarHost) : null}
     </div>
   );
 }
