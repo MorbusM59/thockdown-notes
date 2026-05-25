@@ -255,14 +255,17 @@ type NoteListItemProps = {
   note: NoteSummary
   isActive: boolean
   onSelect: (noteId: string) => void
+  variant?: 'default' | 'tree'
 }
 
 const NoteListItem = memo(function NoteListItem({
   note,
   isActive,
   onSelect,
+  variant = 'default',
 }: NoteListItemProps) {
-  const createdDate = formatCreatedDate(note.createdAtMs)
+  const isTreeVariant = variant === 'tree'
+  const createdDate = isTreeVariant ? '' : formatCreatedDate(note.createdAtMs)
 
   const handleSelect = useCallback(() => {
     onSelect(note.id)
@@ -277,7 +280,7 @@ const NoteListItem = memo(function NoteListItem({
 
   return (
     <div
-      className={`note-list-item${isActive ? ' is-active' : ''}`}
+      className={`note-list-item${isActive ? ' is-active' : ''}${isTreeVariant ? ' is-tree-card' : ''}`}
       role="option"
       aria-selected={isActive}
       onClick={handleSelect}
@@ -286,10 +289,12 @@ const NoteListItem = memo(function NoteListItem({
     >
       <div className="note-list-content">
         <div className="note-list-title">{note.title || 'Untitled'}</div>
-        <div className="note-list-meta-row">
-          <span className="note-list-meta-left">{createdDate}</span>
-          <span className="note-list-meta-right">{formatModifiedDate(note.updatedAtMs)}</span>
-        </div>
+        {isTreeVariant ? null : (
+          <div className="note-list-meta-row">
+            <span className="note-list-meta-left">{createdDate}</span>
+            <span className="note-list-meta-right">{formatModifiedDate(note.updatedAtMs)}</span>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -327,6 +332,7 @@ const CategoryTreeView = memo(function CategoryTreeView({
                       note={note}
                       isActive={note.id === activeNoteId}
                       onSelect={onSelect}
+                      variant="tree"
                     />
                   ))}
                 </div>

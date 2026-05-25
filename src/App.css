@@ -585,8 +585,6 @@ body.splitter-dragging {
   text-overflow: ellipsis;
 }
 
-
-
 .tag-pill.active.protected {
   background: #fff;
 }
@@ -644,6 +642,33 @@ body.splitter-dragging {
   border: 1px solid var(--color-border-highlight);
   box-shadow: 0 0 2px rgba(0, 0, 0, 0.5), 0 0 6px rgba(0, 0, 0, 0.2), inset 0 0 2px var(--color-shadow-white);
   transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.note-list-item.is-tree-card {
+  padding: 0 0 2px 4px;
+  margin: 0;
+  background-color: #00000000;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  font-weight: 200;
+}
+
+.is-tree-card .note-list-title {
+  font-weight: 400;
+}
+
+.is-tree-card.is-active .note-list-title  {
+  font-weight: 600;
+}
+
+.note-list-item.is-tree-card.is-active {
+  background-color: #00000000;
+  border: none;
+  border-right: 2px solid #999999;
+  background-color: #FFFFFF;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .date-view .note-list-item {
@@ -736,21 +761,38 @@ body.splitter-dragging {
   gap: 10px;
 }
 
-.category-primary,
-.category-secondary {
+.category-primary-summary{
   border: 1px solid #d2cec9;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.45);
-}
-
-.category-primary-summary,
-.category-secondary-summary {
+  background: rgba(255, 255, 255, 0.6);
   list-style: none;
   cursor: pointer;
-  padding: 8px 10px;
+  padding: 4px;
   color: #3b3028;
   font-size: 12px;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  text-align: center;
+}
+
+.category-secondary-summary{
+  list-style: none;
+  cursor: pointer;
+  margin: 0;
+  padding: 2px 4px;
+  color: #3b3028;
+  font-size: 12px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  background-color: #00000011;
+  border-right: 2px solid #999999;
+}
+
+.category-secondary {
+  border-left: 2px solid #999999;
+  margin: 8px 0;
 }
 
 .category-primary-summary::-webkit-details-marker,
@@ -761,16 +803,12 @@ body.splitter-dragging {
 .category-tertiary-block {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 8px;
+  gap: 0;
+  padding: 2px 0;
 }
 
 .category-tertiary-heading {
-  font-size: 11px;
-  color: #6d5e52;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 0 4px;
+  display: none;
 }
 
 .editor-viewer-frame {
