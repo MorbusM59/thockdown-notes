@@ -61,6 +61,143 @@ const topEdgeFromBottomBoundary = (heightPx: number, bottomBoundaryPx: number) =
   return Math.max(0, Math.min(h, h - bottomBoundaryPx));
 };
 
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+// Lexical plain-text extraction can represent paragraph separators as doubled newlines.
+// Collapse to canonical single separators to align with App-level find offsets.
+function collapseEditorSeparators(text: string): string {
+  return text.replace(/\n{2,}/g, (run) => '\n'.repeat(Math.ceil(run.length / 2)));
+}
+
+type DomPoint = { node: Node; offset: number };
+
+function collectParagraphTextNodes(paragraphEl: HTMLElement): Text[] {
+  const walker = document.createTreeWalker(paragraphEl, NodeFilter.SHOW_TEXT);
+  const nodes: Text[] = [];
+  while (walker.nextNode()) {
+    const current = walker.currentNode;
+    if (current instanceof Text) {
+      nodes.push(current);
+    }
+  }
+  return nodes;
+}
+
+function paragraphStartPoint(paragraphEl: HTMLElement, textNodes: Text[]): DomPoint {
+  if (textNodes.length > 0) {
+    return { node: textNodes[0], offset: 0 };
+  }
+  return { node: paragraphEl, offset: 0 };
+}
+
+function paragraphEndPoint(paragraphEl: HTMLElement, textNodes: Text[]): DomPoint {
+  if (textNodes.length > 0) {
+    const last = textNodes[textNodes.length - 1];
+    return { node: last, offset: last.data.length };
+  }
+  return { node: paragraphEl, offset: paragraphEl.childNodes.length };
+}
+
+function resolveDomPointForTextOffset(rootEl: HTMLElement, canonicalText: string, targetOffset: number): DomPoint | null {
+  const safeTargetOffset = clampNumber(targetOffset, 0, canonicalText.length);
+  const paragraphs = Array.from(rootEl.children).filter((child): child is HTMLElement => child instanceof HTMLElement);
+
+  if (paragraphs.length === 0) {
+    const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT);
+    let fallback: DomPoint | null = null;
+    let traversed = 0;
+
+    while (walker.nextNode()) {
+      const current = walker.currentNode;
+      if (!(current instanceof Text)) continue;
+
+      const length = current.data.length;
+      fallback = { node: current, offset: length };
+      if (safeTargetOffset <= traversed + length) {
+        return { node: current, offset: clampNumber(safeTargetOffset - traversed, 0, length) };
+      }
+      traversed += length;
+    }
+
+    return fallback;
+  }
+
+  const prefix = canonicalText.slice(0, safeTargetOffset);
+  const lineBreaks = prefix.match(/\n/g);
+  const lineIndex = lineBreaks ? lineBreaks.length : 0;
+  const lineStart = prefix.lastIndexOf('\n') + 1;
+  const column = safeTargetOffset - lineStart;
+
+  const paragraphIndex = clampNumber(lineIndex, 0, paragraphs.length - 1);
+  const paragraph = paragraphs[paragraphIndex];
+  const textNodes = collectParagraphTextNodes(paragraph);
+
+  if (textNodes.length === 0) {
+    return paragraphStartPoint(paragraph, textNodes);
+  }
+
+  let remaining = Math.max(0, column);
+  for (const node of textNodes) {
+    const length = node.data.length;
+    if (remaining <= length) {
+      return { node, offset: remaining };
+    }
+    remaining -= length;
+  }
+
+  return paragraphEndPoint(paragraph, textNodes);
+}
+
+function applyDomSelectionFromOffsets(rootEl: HTMLElement, canonicalText: string, anchor: number, focus: number): void {
+  const safeAnchor = Math.max(0, anchor);
+  const safeFocus = Math.max(0, focus);
+  const anchorPoint = resolveDomPointForTextOffset(rootEl, canonicalText, safeAnchor);
+  const focusPoint = resolveDomPointForTextOffset(rootEl, canonicalText, safeFocus);
+  if (!anchorPoint || !focusPoint) return;
+
+  const range = document.createRange();
+  range.setStart(anchorPoint.node, anchorPoint.offset);
+  range.setEnd(focusPoint.node, focusPoint.offset);
+
+  const selection = window.getSelection();
+  if (!selection) return;
+
+  rootEl.focus();
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function centerSelectionInCagedMiddle(scroller: HTMLElement, topBoundaryPx: number, bottomBoundaryPx: number): void {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return;
+
+  const range = selection.getRangeAt(0);
+  const rect = range.getBoundingClientRect();
+  if (rect.height === 0 && rect.width === 0) return;
+
+  const scrollerRect = scroller.getBoundingClientRect();
+  const middleTopPx = topBoundaryPx;
+  const middleBottomPx = Math.max(middleTopPx + LINE_HEIGHT_PX, scroller.clientHeight - bottomBoundaryPx);
+  const middleCenterPx = (middleTopPx + middleBottomPx) / 2;
+
+  const selectionCenterInViewportPx = ((rect.top + rect.bottom) / 2) - scrollerRect.top;
+  const deltaPx = selectionCenterInViewportPx - middleCenterPx;
+  if (Math.abs(deltaPx) < 0.5) return;
+
+  const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+  const nextScrollTopPx = clampNumber(
+    Math.round((scroller.scrollTop + deltaPx) / LINE_HEIGHT_PX) * LINE_HEIGHT_PX,
+    0,
+    maxScrollTopPx,
+  );
+
+  if (nextScrollTopPx !== scroller.scrollTop) {
+    scroller.scrollTop = nextScrollTopPx;
+  }
+}
+
 export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost = null }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -277,7 +414,7 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
           snapshotRead: true,
           snapshotWrite: false,
           snapshotWriteText: false,
-          snapshotWriteSelection: false,
+          snapshotWriteSelection: true,
           snapshotWriteViewport: true,
         };
       },
@@ -290,14 +427,12 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
       },
       applySnapshot(snapshot: Partial<EditorSnapshot>) {
         const nextViewport = snapshot.viewport;
+        let appliedViewport = false;
 
         if (ENABLE_CONTRACT_ASSERTIONS) {
           const unsupported: string[] = [];
           if (typeof snapshot.text === 'string') {
             unsupported.push('text');
-          }
-          if (snapshot.selection) {
-            unsupported.push('selection');
           }
           if (unsupported.length > 0) {
             console.warn(
@@ -307,22 +442,44 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
           }
         }
 
-        if (!nextViewport) return;
+        if (nextViewport) {
+          const h = Math.max(0, scrollerRef.current?.clientHeight ?? 0);
 
-        const h = Math.max(0, scrollerRef.current?.clientHeight ?? 0);
+          if (typeof nextViewport.topBoundaryPx === 'number') {
+            const quantized = Math.max(0, Math.round(nextViewport.topBoundaryPx / LINE_HEIGHT_PX) * LINE_HEIGHT_PX);
+            setTopBoundary(Math.min(quantized, h));
+          }
+          if (typeof nextViewport.bottomBoundaryPx === 'number') {
+            const requestedTopEdge = topEdgeFromBottomBoundary(h, nextViewport.bottomBoundaryPx);
+            setBottomBoundary(bottomBoundaryFromTopEdge(h, requestedTopEdge));
+          }
+          if (typeof nextViewport.scrollTopPx === 'number' && scrollerRef.current) {
+            scrollerRef.current.scrollTo({ top: Math.max(0, nextViewport.scrollTopPx), behavior: 'auto' });
+          }
+          appliedViewport = true;
+        }
 
-        if (typeof nextViewport.topBoundaryPx === 'number') {
-          const quantized = Math.max(0, Math.round(nextViewport.topBoundaryPx / LINE_HEIGHT_PX) * LINE_HEIGHT_PX);
-          setTopBoundary(Math.min(quantized, h));
+        if (snapshot.selection) {
+          const rootEl = scrollerRef.current?.querySelector('.editor-text');
+          if (rootEl instanceof HTMLElement) {
+            const canonicalText = collapseEditorSeparators(latestTextRef.current);
+            const textLength = canonicalText.length;
+            const anchor = clampNumber(snapshot.selection.anchor, 0, textLength);
+            const focus = clampNumber(snapshot.selection.focus, 0, textLength);
+            applyDomSelectionFromOffsets(rootEl, canonicalText, anchor, focus);
+
+            const scroller = scrollerRef.current;
+            if (scroller) {
+              // Reconcile after selection is in DOM so focus stays inside the middle cage.
+              centerSelectionInCagedMiddle(scroller, topBoundary, bottomBoundary);
+              requestAnimationFrame(() => centerSelectionInCagedMiddle(scroller, topBoundary, bottomBoundary));
+            }
+          }
         }
-        if (typeof nextViewport.bottomBoundaryPx === 'number') {
-          const requestedTopEdge = topEdgeFromBottomBoundary(h, nextViewport.bottomBoundaryPx);
-          setBottomBoundary(bottomBoundaryFromTopEdge(h, requestedTopEdge));
+
+        if (appliedViewport) {
+          reportInvariantIssues('snapshot-apply', validateViewportInvariants(buildViewport()));
         }
-        if (typeof nextViewport.scrollTopPx === 'number' && scrollerRef.current) {
-          scrollerRef.current.scrollTo({ top: Math.max(0, nextViewport.scrollTopPx), behavior: 'auto' });
-        }
-        reportInvariantIssues('snapshot-apply', validateViewportInvariants(buildViewport()));
       },
     };
 

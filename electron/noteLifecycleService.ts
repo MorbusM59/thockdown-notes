@@ -72,10 +72,6 @@ function idToFileName(id: string): string {
   return `${safe}.md`;
 }
 
-function fileNameToId(fileName: string): string {
-  return fileName.replace(/\.md$/i, '');
-}
-
 function buildNoteId(now: Date): string {
   const yy = String(now.getFullYear()).slice(-2);
   const mm = String(now.getMonth() + 1).padStart(2, '0');

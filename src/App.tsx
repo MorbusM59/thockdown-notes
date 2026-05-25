@@ -22,7 +22,7 @@ const NEW_NOTE_TEMPLATE = '# '
 const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
 const PROTECTED_TAGS = new Set(['archived', 'deleted', 'external'])
 const GRID_DIVIDER_PX = 8
-const SIDEBAR_MIN_WIDTH_PX = 232
+const SIDEBAR_MIN_WIDTH_PX = 288
 const SIDEBAR_MAX_WIDTH_PX = 520
 const TAG_INPUT_MIN_WIDTH_PX = 320
 const SUGGESTED_MIN_WIDTH_PX = 220
@@ -32,16 +32,29 @@ const DEFAULT_TAG_SPLIT_RATIO = 0.645
 const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28
 const SCROLL_TRACK_EDGE_GAP_PX = 3
 const NOTE_RIGHT_CLICK_HOLD_MS = 200
+const DOCUMENT_FIND_SNIPPET_RADIUS = 50
 
-type SidebarMode = 'date' | 'category' | 'archive' | 'trash'
+type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find'
 type NoteArmedAction = 'archive' | 'deletion'
 type ProtectedQuickReleaseAction = 'remove-archived' | 'remove-deleted' | null
+type DocumentFindHit = {
+  id: string
+  index: number
+  matchLength: number
+  line: number
+  snippetBefore: string
+  snippetMatch: string
+  snippetAfter: string
+  hasSnippetPrefixEllipsis: boolean
+  hasSnippetSuffixEllipsis: boolean
+}
 
 const SIDEBAR_MODES: Array<{ mode: SidebarMode; label: string }> = [
   { mode: 'date', label: 'Date' },
   { mode: 'category', label: 'Category' },
   { mode: 'archive', label: 'Archive' },
   { mode: 'trash', label: 'Trash' },
+  { mode: 'find', label: 'Find' },
 ]
 
 type TertiaryGroup = {
@@ -601,13 +614,41 @@ function matchesSearchQuery(note: NoteSummary, query: string): boolean {
   )
 }
 
+function normalizeSnippetText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim()
+}
+
+function buildDocumentFindSnippet(text: string, matchIndex: number, queryLength: number): {
+  before: string
+  match: string
+  after: string
+  hasPrefixEllipsis: boolean
+  hasSuffixEllipsis: boolean
+} {
+  const beforeStart = Math.max(0, matchIndex - DOCUMENT_FIND_SNIPPET_RADIUS)
+  const before = normalizeSnippetText(text.slice(beforeStart, matchIndex))
+  const matchText = normalizeSnippetText(text.slice(matchIndex, matchIndex + queryLength))
+  const after = normalizeSnippetText(text.slice(matchIndex + queryLength, matchIndex + queryLength + DOCUMENT_FIND_SNIPPET_RADIUS))
+
+  return {
+    before,
+    match: matchText,
+    after,
+    hasPrefixEllipsis: beforeStart > 0,
+    hasSuffixEllipsis: (matchIndex + queryLength + DOCUMENT_FIND_SNIPPET_RADIUS) < text.length,
+  }
+}
+
 function App() {
   const adapterRef = useRef<EditorAdapter | null>(null)
   const appShellRef = useRef<HTMLDivElement | null>(null)
   const sidebarContentRef = useRef<HTMLDivElement | null>(null)
+  const sidebarSearchInputRef = useRef<HTMLInputElement | null>(null)
   const [notes, setNotes] = useState<NoteSummary[]>([])
   const [tagInputValue, setTagInputValue] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [documentFindQuery, setDocumentFindQuery] = useState('')
+  const [isDocumentFindCaseSensitive, setIsDocumentFindCaseSensitive] = useState(false)
   const [isTagMutationPending, setIsTagMutationPending] = useState(false)
   const [deleteArmedTagName, setDeleteArmedTagName] = useState<string | null>(null)
   const [renamingTagName, setRenamingTagName] = useState<string | null>(null)
@@ -677,9 +718,10 @@ function App() {
     selectedMonths: [...selectedMonths],
     selectedYears: [...selectedYears],
     searchQuery,
+    documentFindCaseSensitive: isDocumentFindCaseSensitive,
     sidebarWidthRatio,
     tagSplitRatio,
-  }), [searchQuery, selectedMonths, selectedYears, sidebarMode, sidebarWidthRatio, tagSplitRatio])
+  }), [isDocumentFindCaseSensitive, searchQuery, selectedMonths, selectedYears, sidebarMode, sidebarWidthRatio, tagSplitRatio])
 
   const layout = useMemo(() => {
     const dividerTotalWidthPx = GRID_DIVIDER_PX * 3
@@ -1401,9 +1443,21 @@ function App() {
       return
     }
 
+    if (mode === 'find') {
+      setIsTrashViewDeleteArmed(false)
+      clearTrashButtonArmTimer()
+      setSidebarMode('find')
+      requestAnimationFrame(() => {
+        sidebarSearchInputRef.current?.focus()
+        sidebarSearchInputRef.current?.select()
+      })
+      return
+    }
+
     setIsTrashViewDeleteArmed(false)
+    clearTrashButtonArmTimer()
     setSidebarMode(mode)
-  }, [isTrashViewDeleteArmed, purgeDeletedNotesPermanently])
+  }, [clearTrashButtonArmTimer, isTrashViewDeleteArmed, purgeDeletedNotesPermanently])
 
   const queueSave = useCallback((text: string) => {
     if (!persistenceReady) return
@@ -1455,6 +1509,7 @@ function App() {
             setSelectedMonths(new Set(appState.menu.selectedMonths))
             setSelectedYears(new Set(appState.menu.selectedYears))
             setSearchQuery(appState.menu.searchQuery)
+            setIsDocumentFindCaseSensitive(appState.menu.documentFindCaseSensitive ?? false)
             setSidebarWidthRatio(appState.menu.sidebarWidthRatio)
             setTagSplitRatio(appState.menu.tagSplitRatio)
           }
@@ -1675,6 +1730,9 @@ function App() {
 
     const onPointerUp = () => {
       setActiveDividerDrag(null)
+      if (persistenceReady && activeNoteId) {
+        queueAppStateSave(activeNoteId)
+      }
     }
 
     document.body.classList.add('splitter-dragging')
@@ -1686,7 +1744,7 @@ function App() {
       window.removeEventListener('mousemove', onPointerMove)
       window.removeEventListener('mouseup', onPointerUp)
     }
-  }, [activeDividerDrag, appShellWidthPx])
+  }, [activeDividerDrag, activeNoteId, appShellWidthPx, persistenceReady, queueAppStateSave])
 
   const sortedNotes = useMemo(() => {
     return [...notes].sort((a, b) => b.updatedAtMs - a.updatedAtMs)
@@ -1695,6 +1753,54 @@ function App() {
   const searchedNotes = useMemo(() => {
     return sortedNotes.filter((note) => matchesSearchQuery(note, searchQuery))
   }, [searchQuery, sortedNotes])
+
+  const isFindMode = sidebarMode === 'find'
+  const documentFindHits = useMemo<DocumentFindHit[]>(() => {
+    const query = documentFindQuery.trim()
+    if (!query || !activeNoteText) {
+      return []
+    }
+
+    const sourceText = activeNoteText
+    const haystack = isDocumentFindCaseSensitive ? sourceText : sourceText.toLowerCase()
+    const needle = isDocumentFindCaseSensitive ? query : query.toLowerCase()
+    const queryLength = query.length
+    const hits: DocumentFindHit[] = []
+
+    let nextSearchIndex = 0
+    let line = 0
+    let scannedUntil = 0
+
+    while (nextSearchIndex <= haystack.length - needle.length) {
+      const foundAt = haystack.indexOf(needle, nextSearchIndex)
+      if (foundAt < 0) break
+
+      for (let index = scannedUntil; index < foundAt; index += 1) {
+        if (sourceText[index] === '\n') {
+          line += 1
+        }
+      }
+      scannedUntil = foundAt
+
+      const snippet = buildDocumentFindSnippet(sourceText, foundAt, queryLength)
+
+      hits.push({
+        id: `${foundAt}:${hits.length}`,
+        index: foundAt,
+        matchLength: queryLength,
+        line,
+        snippetBefore: snippet.before,
+        snippetMatch: snippet.match,
+        snippetAfter: snippet.after,
+        hasSnippetPrefixEllipsis: snippet.hasPrefixEllipsis,
+        hasSnippetSuffixEllipsis: snippet.hasSuffixEllipsis,
+      })
+
+      nextSearchIndex = foundAt + Math.max(1, queryLength)
+    }
+
+    return hits
+  }, [activeNoteText, documentFindQuery, isDocumentFindCaseSensitive])
 
   const hasMonthFilter = selectedMonths.size > 0
   const hasYearFilter = selectedYears.size > 0
@@ -1786,9 +1892,10 @@ function App() {
     : 0
   const totalPages = Math.max(1, Math.ceil(totalPagedNotes / Math.max(1, itemsPerPage)))
   const isSidebarTreeMode = sidebarMode === 'category' || sidebarMode === 'archive'
+  const isSidebarCustomScrollbarMode = isSidebarTreeMode || isFindMode
 
   const syncSidebarCustomScrollbar = useCallback(() => {
-    if (!isSidebarTreeMode) {
+    if (!isSidebarCustomScrollbarMode) {
       setSidebarScrollThumbHeightPx(0)
       setSidebarScrollThumbTopPx(0)
       setIsSidebarScrollThumbActive(false)
@@ -1831,7 +1938,7 @@ function App() {
     setSidebarScrollThumbHeightPx(nextThumbHeight)
     setSidebarScrollThumbTopPx(nextThumbTop)
     setIsSidebarScrollThumbActive(true)
-  }, [isSidebarTreeMode, sidebarTreeScrollerEl])
+  }, [isSidebarCustomScrollbarMode, sidebarTreeScrollerEl])
 
   const sidebarScrollFromThumbTop = useCallback((thumbTopPx: number) => {
     const scroller = sidebarTreeScrollerEl
@@ -1857,6 +1964,21 @@ function App() {
     const startIndex = (currentPage - 1) * itemsPerPage
     return visibleNotes.slice(startIndex, startIndex + itemsPerPage)
   }, [currentPage, itemsPerPage, sidebarMode, visibleNotes])
+
+  const handleJumpToDocumentFindHit = useCallback((hit: DocumentFindHit) => {
+    const adapter = adapterRef.current
+    if (!adapter) return
+
+    adapter.applySnapshot({
+      selection: {
+        anchor: hit.index,
+        focus: hit.index + hit.matchLength,
+        start: hit.index,
+        end: hit.index + hit.matchLength,
+        isCollapsed: false,
+      },
+    })
+  }, [])
 
   const handleMonthToggle = useCallback((month: number, event: MouseEvent<HTMLButtonElement>) => {
     handleMultiSelect(month, event, selectedMonths, FILTER_MONTHS, setSelectedMonths)
@@ -1943,12 +2065,12 @@ function App() {
   }, [itemsPerPage, sidebarMode, totalPagedNotes])
 
   useEffect(() => {
-    if (!isSidebarTreeMode) return
+    if (!isSidebarCustomScrollbarMode) return
     syncSidebarCustomScrollbar()
-  }, [isSidebarTreeMode, syncSidebarCustomScrollbar, sidebarMode, categoryTree, archiveTree])
+  }, [isSidebarCustomScrollbarMode, syncSidebarCustomScrollbar, sidebarMode, categoryTree, archiveTree, documentFindHits])
 
   useEffect(() => {
-    if (!isSidebarTreeMode || !sidebarTreeScrollerEl) return
+    if (!isSidebarCustomScrollbarMode || !sidebarTreeScrollerEl) return
 
     const onScroll = () => {
       syncSidebarCustomScrollbar()
@@ -1956,10 +2078,10 @@ function App() {
 
     sidebarTreeScrollerEl.addEventListener('scroll', onScroll, { passive: true })
     return () => sidebarTreeScrollerEl.removeEventListener('scroll', onScroll)
-  }, [isSidebarTreeMode, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
+  }, [isSidebarCustomScrollbarMode, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
 
   useEffect(() => {
-    if (!isSidebarTreeMode || !sidebarTreeScrollerEl) return
+    if (!isSidebarCustomScrollbarMode || !sidebarTreeScrollerEl) return
 
     const scheduleSync = () => {
       if (sidebarScrollbarRafRef.current !== null) {
@@ -1991,7 +2113,7 @@ function App() {
     })
 
     const onDetailsToggle = (event: Event) => {
-      if (event.target instanceof HTMLDetailsElement) {
+      if (isSidebarTreeMode && event.target instanceof HTMLDetailsElement) {
         scheduleSync()
       }
     }
@@ -2007,7 +2129,7 @@ function App() {
         sidebarScrollbarRafRef.current = null
       }
     }
-  }, [isSidebarTreeMode, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
+  }, [isSidebarCustomScrollbarMode, isSidebarTreeMode, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
 
   useEffect(() => {
     if (!isDraggingSidebarScrollThumb) return
@@ -2062,6 +2184,16 @@ function App() {
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'f') {
+        event.preventDefault()
+        setSidebarMode('find')
+        requestAnimationFrame(() => {
+          sidebarSearchInputRef.current?.focus()
+          sidebarSearchInputRef.current?.select()
+        })
+        return
+      }
+
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'n') {
         event.preventDefault()
         void createNoteFromClipboardTitle()
@@ -2075,7 +2207,13 @@ function App() {
       }
 
       if (event.key === 'Escape') {
-        if (searchQuery.trim().length > 0) {
+        if (isFindMode && documentFindQuery.trim().length > 0) {
+          event.preventDefault()
+          setDocumentFindQuery('')
+          return
+        }
+
+        if (!isFindMode && searchQuery.trim().length > 0) {
           event.preventDefault()
           setSearchQuery('')
           return
@@ -2090,7 +2228,7 @@ function App() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [createNote, createNoteFromClipboardTitle, searchQuery, sidebarMode])
+  }, [createNote, createNoteFromClipboardTitle, documentFindQuery, isFindMode, searchQuery, sidebarMode])
 
   return (
     <div
@@ -2101,10 +2239,18 @@ function App() {
       <aside className="notes-sidebar" style={{ gridArea: 'sidebar' }}>
         <div className="search-box" aria-label="Search panel">
           <input
+            ref={sidebarSearchInputRef}
             type="text"
-            placeholder="Search notes or #tag..."
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder={isFindMode ? 'Find in current note...' : 'Search notes or #tag...'}
+            value={isFindMode ? documentFindQuery : searchQuery}
+            onChange={(event) => {
+              const value = event.target.value
+              if (isFindMode) {
+                setDocumentFindQuery(value)
+              } else {
+                setSearchQuery(value)
+              }
+            }}
           />
         </div>
 
@@ -2116,6 +2262,7 @@ function App() {
               category: 'btn-category',
               archive: 'btn-archived',
               trash: 'btn-deleted',
+              find: 'btn-find',
             }
             return (
               <button
@@ -2135,15 +2282,15 @@ function App() {
                   setIsTrashViewDeleteArmed(false)
                 } : undefined}
               >
-                <span className="sr-only-mode-label">{label}</span>
+                {mode === 'find' ? <span aria-hidden="true">F</span> : <span className="sr-only-mode-label">{label}</span>}
               </button>
             )
           })}
         </div>
 
-        <div className={`sidebar-scroll-frame${isSidebarTreeMode ? ' is-tree-mode' : ''}`}>
+        <div className={`sidebar-scroll-frame${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}`}>
           <div
-            className={`sidebar-content${(sidebarMode === 'date' || sidebarMode === 'trash') ? ' is-paged-mode' : ''}${isSidebarTreeMode ? ' is-tree-mode' : ''}`}
+            className={`sidebar-content${(sidebarMode === 'date' || sidebarMode === 'trash') ? ' is-paged-mode' : ''}${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}`}
             ref={sidebarContentRef}
           >
             {(sidebarMode === 'date' || sidebarMode === 'trash') ? (
@@ -2172,6 +2319,36 @@ function App() {
                   </div>
                 ) : null}
               </div>
+            ) : isFindMode ? (
+              <div
+                className="notes-list find-view measly-custom-scrollbar"
+                ref={setSidebarTreeScrollerEl}
+              >
+                {documentFindHits.map((hit, index) => (
+                  <button
+                    key={hit.id}
+                    type="button"
+                    className="find-hit-item"
+                    onClick={() => handleJumpToDocumentFindHit(hit)}
+                    title={`Jump to occurrence ${index + 1}`}
+                  >
+                    <span className="find-hit-snippet">
+                      {hit.hasSnippetPrefixEllipsis ? '... ' : ''}
+                      {hit.snippetBefore ? `${hit.snippetBefore} ` : ''}
+                      <span className="find-hit-match">{hit.snippetMatch}</span>
+                      {hit.snippetAfter ? ` ${hit.snippetAfter}` : ''}
+                      {hit.hasSnippetSuffixEllipsis ? ' ...' : ''}
+                    </span>
+                  </button>
+                ))}
+                {documentFindHits.length === 0 ? (
+                  <div className="notes-empty-state">
+                    {documentFindQuery.trim()
+                      ? 'No matches in the current note.'
+                      : 'Type in the search field to find text in the current note.'}
+                  </div>
+                ) : null}
+              </div>
             ) : (
               <div
                 className="notes-list tree-view measly-custom-scrollbar"
@@ -2192,7 +2369,7 @@ function App() {
             )}
           </div>
 
-          {isSidebarTreeMode ? (
+          {isSidebarCustomScrollbarMode ? (
             <aside className="sidebar-scrollbar-slot" aria-hidden="true">
               <div className="sidebar-scrollbar-slot-inner">
                 <div className="measly-scroll-rail sidebar-measly-scroll-rail">
@@ -2238,7 +2415,19 @@ function App() {
           </div>
         ) : null}
 
-        {(sidebarMode === 'date' || sidebarMode === 'trash' || isSidebarTreeMode) ? (
+        {isFindMode ? (
+          <div className="find-options-rail" aria-label="Find options">
+            <button
+              type="button"
+              className={`find-option-btn${isDocumentFindCaseSensitive ? ' is-active' : ''}`}
+              aria-pressed={isDocumentFindCaseSensitive}
+              title="Match letter case"
+              onClick={() => setIsDocumentFindCaseSensitive((previous) => !previous)}
+            >
+              Case
+            </button>
+          </div>
+        ) : (sidebarMode === 'date' || sidebarMode === 'trash' || isSidebarTreeMode) ? (
           <div className="date-filter-rail" aria-label="Date filters">
             <div
               className="date-filter-line"

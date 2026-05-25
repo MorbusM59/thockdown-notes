@@ -34,8 +34,8 @@
   --sidebar-view-padding-left: 8px;
   --sidebar-padding-right: 8px;
   --sidebar-min-width: calc(
-    (var(--sidebar-view-button-size) * 4) +
-    (var(--sidebar-view-gap-min) * 3) +
+    (var(--sidebar-view-button-size) * 5) +
+    (var(--sidebar-view-gap-min) * 4) +
     var(--sidebar-view-padding-left) +
     var(--sidebar-padding-right)
   );
@@ -230,6 +230,14 @@ body.splitter-dragging {
   background-image: url('/assets/buttons/deleted.png');
 }
 
+.notes-sidebar .view-toggle .icon-btn.btn-find {
+  background-image: none;
+  font-family: 'Syne Mono', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: #4a3f35;
+}
+
 .icon-btn.btn-deleted.is-armed-for-deletion,
 .icon-btn.btn-deleted.is-armed-for-deletion:hover,
 .icon-btn.btn-deleted.is-armed-for-deletion.is-active,
@@ -294,6 +302,13 @@ body.splitter-dragging {
   overflow-y: auto;
 }
 
+.notes-list.find-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  gap: 6px;
+}
+
 .sidebar-scroll-frame {
   flex: 1 1 auto;
   display: flex;
@@ -348,6 +363,31 @@ body.splitter-dragging {
   display: flex;
   flex-direction: column;
   gap: 0;
+}
+
+.date-filter-rail.date-filter-rail-placeholder {
+  min-height: 20px;
+  height: 20px;
+  padding: 0;
+}
+
+.find-options-rail {
+  min-height: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  padding: 0 0 4px 8px;
+}
+
+.find-option-btn {
+  height: 20px;
+  min-width: 52px;
+  padding: 0 8px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #4a4a4a;
+  line-height: 1;
 }
 
 .date-filter-line {
@@ -791,6 +831,38 @@ body.splitter-dragging {
   font-size: 12px;
   padding: 14px 10px;
   text-align: center;
+}
+
+.find-hit-item {
+  width: 100%;
+  display: block;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #d2cec9;
+  background: rgba(255, 255, 255, 0.62);
+  color: #3c312a;
+  text-align: left;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.find-hit-item:hover {
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.find-hit-item:focus-visible {
+  outline: 1px solid #8d7a68;
+  outline-offset: 1px;
+}
+
+.find-hit-snippet {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #2f2721;
+}
+
+.find-hit-match {
+  font-weight: 700;
 }
 
 .category-tree-root {

@@ -5,13 +5,14 @@ export const APP_STATE_CHANNELS = {
   saveWindowState: 'state:window:save',
 } as const;
 
-export type SidebarMode = 'date' | 'category' | 'archive' | 'trash';
+export type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find';
 
 export interface PersistedMenuState {
   sidebarMode: SidebarMode;
   selectedMonths: number[];
   selectedYears: Array<number | 'older'>;
   searchQuery: string;
+  documentFindCaseSensitive?: boolean;
   sidebarWidthRatio: number;
   tagSplitRatio: number;
 }
