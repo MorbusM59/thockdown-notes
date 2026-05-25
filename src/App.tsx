@@ -217,6 +217,28 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 
+function pad2(value: number): string {
+  return String(value).padStart(2, '0')
+}
+
+function formatCreatedDate(timestampMs: number): string {
+  const date = new Date(timestampMs)
+  const day = pad2(date.getDate())
+  const month = date.toLocaleString(undefined, { month: 'long' })
+  const year2 = String(date.getFullYear()).slice(-2)
+  return `${day} ${month} ${year2}`
+}
+
+function formatModifiedDate(timestampMs: number): string {
+  const date = new Date(timestampMs)
+  const year = date.getFullYear()
+  const month = pad2(date.getMonth() + 1)
+  const day = pad2(date.getDate())
+  const hours = pad2(date.getHours())
+  const minutes = pad2(date.getMinutes())
+  return `[ ${year}/${month}/${day} | ${hours}:${minutes} ]`
+}
+
 async function waitForNotesBridge(shouldStop: () => boolean): Promise<boolean> {
   while (!shouldStop()) {
     if (window.measlyNotes) {
@@ -238,6 +260,8 @@ const NoteListItem = memo(function NoteListItem({
   isActive,
   onSelect,
 }: NoteListItemProps) {
+  const createdDate = formatCreatedDate(note.createdAtMs)
+
   const handleSelect = useCallback(() => {
     onSelect(note.id)
   }, [note.id, onSelect])
@@ -260,7 +284,10 @@ const NoteListItem = memo(function NoteListItem({
     >
       <div className="note-list-content">
         <div className="note-list-title">{note.title || 'Untitled'}</div>
-        <div className="note-list-meta">{new Date(note.updatedAtMs).toLocaleDateString()}</div>
+        <div className="note-list-meta-row">
+          <span className="note-list-meta-left">{createdDate}</span>
+          <span className="note-list-meta-right">{formatModifiedDate(note.updatedAtMs)}</span>
+        </div>
       </div>
     </div>
   )
@@ -1193,51 +1220,19 @@ function App() {
     return []
   }, [dateFilteredNotes, sidebarMode, trashFilteredNotes])
 
-  const isSearchActive = searchQuery.trim().length > 0
-  const totalPagedNotes = sidebarMode === 'date' ? searchedNotes.length : trashFilteredNotes.length
+  const totalPagedNotes = (sidebarMode === 'date' || sidebarMode === 'trash')
+    ? visibleNotes.length
+    : 0
   const totalPages = Math.max(1, Math.ceil(totalPagedNotes / Math.max(1, itemsPerPage)))
 
-  const isVisibleInDateView = useCallback((note: NoteSummary) => {
-    if (isDeletedNote(note)) {
-      return false
-    }
-
-    if (isArchivedNote(note) && !hasDateFilter) {
-      return false
-    }
-
-    const date = new Date(note.updatedAtMs)
-    const noteMonth = date.getMonth() + 1
-    const noteYear = date.getFullYear()
-
-    const monthMatch = !hasMonthFilter || selectedMonths.has(noteMonth)
-
-    let yearMatch = !hasYearFilter
-    if (hasYearFilter) {
-      if (selectedYears.has(noteYear)) {
-        yearMatch = true
-      } else if (selectedYears.has('older') && noteYear <= 2021) {
-        yearMatch = true
-      }
-    }
-
-    return monthMatch && yearMatch
-  }, [hasDateFilter, hasMonthFilter, hasYearFilter, selectedMonths, selectedYears])
-
   const pagedVisibleNotes = useMemo(() => {
-    if (isSearchActive || (sidebarMode !== 'date' && sidebarMode !== 'trash')) {
+    if (sidebarMode !== 'date' && sidebarMode !== 'trash') {
       return visibleNotes
-    }
-
-    if (sidebarMode === 'date') {
-      const startIndex = (currentPage - 1) * itemsPerPage
-      const pageSlice = searchedNotes.slice(startIndex, startIndex + itemsPerPage)
-      return pageSlice.filter(isVisibleInDateView)
     }
 
     const startIndex = (currentPage - 1) * itemsPerPage
     return visibleNotes.slice(startIndex, startIndex + itemsPerPage)
-  }, [currentPage, isSearchActive, isVisibleInDateView, itemsPerPage, searchedNotes, sidebarMode, visibleNotes])
+  }, [currentPage, itemsPerPage, sidebarMode, visibleNotes])
 
   const handleMonthToggle = useCallback((month: number, event: MouseEvent<HTMLButtonElement>) => {
     handleMultiSelect(month, event, selectedMonths, FILTER_MONTHS, setSelectedMonths)
@@ -1291,7 +1286,6 @@ function App() {
 
       const shouldShowPagination =
         (sidebarMode === 'date' || sidebarMode === 'trash') &&
-        !isSearchActive &&
         Math.ceil(totalPagedNotes / Math.max(1, nextItemsPerPage)) > 1
 
       setShowPagination(shouldShowPagination)
@@ -1300,7 +1294,7 @@ function App() {
     compute()
     window.addEventListener('resize', compute)
     return () => window.removeEventListener('resize', compute)
-  }, [isSearchActive, itemsPerPage, sidebarMode, totalPagedNotes])
+  }, [itemsPerPage, sidebarMode, totalPagedNotes])
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -1382,7 +1376,10 @@ function App() {
           })}
         </div>
 
-        <div className="sidebar-content" ref={sidebarContentRef}>
+        <div
+          className={`sidebar-content${(sidebarMode === 'date' || sidebarMode === 'trash') ? ' is-paged-mode' : ''}`}
+          ref={sidebarContentRef}
+        >
           {(sidebarMode === 'date' || sidebarMode === 'trash') ? (
             <div className="notes-list date-view" role="listbox" aria-label="Note list">
               {pagedVisibleNotes.map((note) => {

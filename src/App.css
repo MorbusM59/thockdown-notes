@@ -276,6 +276,10 @@ body.splitter-dragging {
   gap: 8px;
 }
 
+.notes-list.date-view {
+  overflow-y: hidden;
+}
+
 .sidebar-content {
   flex: 1;
   overflow-y: auto;
@@ -285,6 +289,10 @@ body.splitter-dragging {
   border-left: none;
   border-radius: 0 9px 9px 0;
   box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.5), inset 0 0 6px rgba(0, 0, 0, 0.2), 0 0 2px var(--color-shadow-white);
+}
+
+.sidebar-content.is-paged-mode {
+  overflow-y: hidden;
 }
 
 .date-filter-rail {
@@ -619,6 +627,11 @@ body.splitter-dragging {
 }
 
 .note-list-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
   min-width: 0;
 }
 
@@ -631,9 +644,39 @@ body.splitter-dragging {
   text-overflow: ellipsis;
 }
 
-.note-list-meta {
+.note-list-meta-row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 11px;
   color: #736455;
+  font-weight: 400;
+}
+
+.note-list-meta-left,
+.note-list-meta-right {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.note-list-meta-month-day {
+  font-weight: 400;
+}
+
+.note-list-meta-year {
+  font-style: normal;
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+.note-list-meta-right {
+  margin-left: auto;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
 }
 
 .notes-empty-state {
