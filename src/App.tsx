@@ -29,6 +29,8 @@ const SUGGESTED_MIN_WIDTH_PX = 220
 const UTILITY_WIDTH_PX = 160
 const DEFAULT_SIDEBAR_RATIO = 0.306
 const DEFAULT_TAG_SPLIT_RATIO = 0.645
+const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28
+const SCROLL_TRACK_EDGE_GAP_PX = 3
 
 type SidebarMode = 'date' | 'category' | 'archive' | 'trash'
 
@@ -384,6 +386,7 @@ function App() {
   const [itemsPerPage, setItemsPerPage] = useState(20)
   const [showPagination, setShowPagination] = useState(false)
   const [scrollbarHostEl, setScrollbarHostEl] = useState<HTMLDivElement | null>(null)
+  const [sidebarTreeScrollerEl, setSidebarTreeScrollerEl] = useState<HTMLDivElement | null>(null)
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null)
   const [activeNoteText, setActiveNoteText] = useState('')
   const [persistenceReady, setPersistenceReady] = useState(false)
@@ -404,6 +407,13 @@ function App() {
   const dividerStartTagInputWidthRef = useRef(0)
   const dividerStartMainWidthRef = useRef(0)
   const externalOpenQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const sidebarScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
+  const sidebarScrollbarRafRef = useRef<number | null>(null)
+  const sidebarScrollbarDragOriginRef = useRef<{ pointerY: number; thumbTopPx: number } | null>(null)
+  const [sidebarScrollThumbTopPx, setSidebarScrollThumbTopPx] = useState(0)
+  const [sidebarScrollThumbHeightPx, setSidebarScrollThumbHeightPx] = useState(0)
+  const [isSidebarScrollThumbActive, setIsSidebarScrollThumbActive] = useState(false)
+  const [isDraggingSidebarScrollThumb, setIsDraggingSidebarScrollThumb] = useState(false)
 
   const menuState = useMemo<PersistedMenuState>(() => ({
     sidebarMode,
@@ -1224,6 +1234,69 @@ function App() {
     ? visibleNotes.length
     : 0
   const totalPages = Math.max(1, Math.ceil(totalPagedNotes / Math.max(1, itemsPerPage)))
+  const isSidebarTreeMode = sidebarMode === 'category' || sidebarMode === 'archive'
+
+  const syncSidebarCustomScrollbar = useCallback(() => {
+    if (!isSidebarTreeMode) {
+      setSidebarScrollThumbHeightPx(0)
+      setSidebarScrollThumbTopPx(0)
+      setIsSidebarScrollThumbActive(false)
+      return
+    }
+
+    const scroller = sidebarTreeScrollerEl
+    const track = sidebarScrollbarTrackRef.current
+    if (!scroller || !track) return
+
+    const viewportHeight = scroller.clientHeight
+    const contentHeight = scroller.scrollHeight
+    const trackHeight = track.clientHeight
+    const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
+    if (viewportHeight <= 0 || contentHeight <= 0 || trackHeight <= 0) {
+      setSidebarScrollThumbHeightPx(0)
+      setSidebarScrollThumbTopPx(0)
+      setIsSidebarScrollThumbActive(false)
+      return
+    }
+
+    if (contentHeight <= viewportHeight) {
+      setSidebarScrollThumbHeightPx(usableTrackHeight)
+      setSidebarScrollThumbTopPx(SCROLL_TRACK_EDGE_GAP_PX)
+      setIsSidebarScrollThumbActive(false)
+      return
+    }
+
+    const visibleRatio = viewportHeight / contentHeight
+    const nextThumbHeight = Math.max(
+      SCROLL_TRACK_MIN_THUMB_HEIGHT_PX,
+      Math.min(usableTrackHeight, Math.round(usableTrackHeight * visibleRatio)),
+    )
+
+    const maxScrollTop = contentHeight - viewportHeight
+    const maxThumbTop = Math.max(0, usableTrackHeight - nextThumbHeight)
+    const scrollRatio = maxScrollTop > 0 ? scroller.scrollTop / maxScrollTop : 0
+    const nextThumbTop = SCROLL_TRACK_EDGE_GAP_PX + Math.round(maxThumbTop * scrollRatio)
+
+    setSidebarScrollThumbHeightPx(nextThumbHeight)
+    setSidebarScrollThumbTopPx(nextThumbTop)
+    setIsSidebarScrollThumbActive(true)
+  }, [isSidebarTreeMode, sidebarTreeScrollerEl])
+
+  const sidebarScrollFromThumbTop = useCallback((thumbTopPx: number) => {
+    const scroller = sidebarTreeScrollerEl
+    const track = sidebarScrollbarTrackRef.current
+    if (!scroller || !track) return
+
+    const trackHeight = track.clientHeight
+    const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
+    const maxThumbTravel = Math.max(0, usableTrackHeight - sidebarScrollThumbHeightPx)
+    const minThumbTop = SCROLL_TRACK_EDGE_GAP_PX
+    const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel
+    const clampedTop = Math.max(minThumbTop, Math.min(thumbTopPx, maxThumbTop))
+    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+    const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0
+    scroller.scrollTop = ratio * maxScrollTop
+  }, [sidebarScrollThumbHeightPx, sidebarTreeScrollerEl])
 
   const pagedVisibleNotes = useMemo(() => {
     if (sidebarMode !== 'date' && sidebarMode !== 'trash') {
@@ -1295,6 +1368,103 @@ function App() {
     window.addEventListener('resize', compute)
     return () => window.removeEventListener('resize', compute)
   }, [itemsPerPage, sidebarMode, totalPagedNotes])
+
+  useEffect(() => {
+    if (!isSidebarTreeMode) return
+    syncSidebarCustomScrollbar()
+  }, [isSidebarTreeMode, syncSidebarCustomScrollbar, sidebarMode, categoryTree, archiveTree])
+
+  useEffect(() => {
+    if (!isSidebarTreeMode || !sidebarTreeScrollerEl) return
+
+    const onScroll = () => {
+      syncSidebarCustomScrollbar()
+    }
+
+    sidebarTreeScrollerEl.addEventListener('scroll', onScroll, { passive: true })
+    return () => sidebarTreeScrollerEl.removeEventListener('scroll', onScroll)
+  }, [isSidebarTreeMode, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
+
+  useEffect(() => {
+    if (!isSidebarTreeMode || !sidebarTreeScrollerEl) return
+
+    const scheduleSync = () => {
+      if (sidebarScrollbarRafRef.current !== null) {
+        cancelAnimationFrame(sidebarScrollbarRafRef.current)
+      }
+
+      sidebarScrollbarRafRef.current = requestAnimationFrame(() => {
+        sidebarScrollbarRafRef.current = null
+        syncSidebarCustomScrollbar()
+      })
+    }
+
+    scheduleSync()
+
+    const resizeObserver = new ResizeObserver(() => scheduleSync())
+    resizeObserver.observe(sidebarTreeScrollerEl)
+
+    const mutationObserver = new MutationObserver(() => scheduleSync())
+    mutationObserver.observe(sidebarTreeScrollerEl, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    })
+
+    return () => {
+      mutationObserver.disconnect()
+      resizeObserver.disconnect()
+      if (sidebarScrollbarRafRef.current !== null) {
+        cancelAnimationFrame(sidebarScrollbarRafRef.current)
+        sidebarScrollbarRafRef.current = null
+      }
+    }
+  }, [isSidebarTreeMode, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
+
+  useEffect(() => {
+    if (!isDraggingSidebarScrollThumb) return
+
+    const onMouseMove = (event: globalThis.MouseEvent) => {
+      const origin = sidebarScrollbarDragOriginRef.current
+      if (!origin) return
+      const deltaY = event.clientY - origin.pointerY
+      sidebarScrollFromThumbTop(origin.thumbTopPx + deltaY)
+      syncSidebarCustomScrollbar()
+    }
+
+    const onMouseUp = () => {
+      setIsDraggingSidebarScrollThumb(false)
+      sidebarScrollbarDragOriginRef.current = null
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [isDraggingSidebarScrollThumb, sidebarScrollFromThumbTop, syncSidebarCustomScrollbar])
+
+  const handleSidebarTrackMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    const track = sidebarScrollbarTrackRef.current
+    if (!track) return
+
+    const rect = track.getBoundingClientRect()
+    const clickY = event.clientY - rect.top
+    const targetThumbTop = clickY - (sidebarScrollThumbHeightPx / 2)
+    sidebarScrollFromThumbTop(targetThumbTop)
+    syncSidebarCustomScrollbar()
+  }, [sidebarScrollFromThumbTop, sidebarScrollThumbHeightPx, syncSidebarCustomScrollbar])
+
+  const handleSidebarThumbMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setIsDraggingSidebarScrollThumb(true)
+    sidebarScrollbarDragOriginRef.current = {
+      pointerY: event.clientY,
+      thumbTopPx: sidebarScrollThumbTopPx,
+    }
+  }, [sidebarScrollThumbTopPx])
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -1376,40 +1546,68 @@ function App() {
           })}
         </div>
 
-        <div
-          className={`sidebar-content${(sidebarMode === 'date' || sidebarMode === 'trash') ? ' is-paged-mode' : ''}`}
-          ref={sidebarContentRef}
-        >
-          {(sidebarMode === 'date' || sidebarMode === 'trash') ? (
-            <div className="notes-list date-view" role="listbox" aria-label="Note list">
-              {pagedVisibleNotes.map((note) => {
-                const isActive = note.id === activeNoteId
-                return (
-                  <NoteListItem
-                    key={note.id}
-                    note={note}
-                    isActive={isActive}
-                    onSelect={handleSelectNote}
-                  />
-                )
-              })}
-              {pagedVisibleNotes.length === 0 ? (
-                <div className="notes-empty-state">
-                  {searchQuery.trim()
-                    ? 'No notes match the current search.'
-                    : 'No notes match the current date filters.'}
+        <div className={`sidebar-scroll-frame${isSidebarTreeMode ? ' is-tree-mode' : ''}`}>
+          <div
+            className={`sidebar-content${(sidebarMode === 'date' || sidebarMode === 'trash') ? ' is-paged-mode' : ''}${isSidebarTreeMode ? ' is-tree-mode' : ''}`}
+            ref={sidebarContentRef}
+          >
+            {(sidebarMode === 'date' || sidebarMode === 'trash') ? (
+              <div className="notes-list date-view" role="listbox" aria-label="Note list">
+                {pagedVisibleNotes.map((note) => {
+                  const isActive = note.id === activeNoteId
+                  return (
+                    <NoteListItem
+                      key={note.id}
+                      note={note}
+                      isActive={isActive}
+                      onSelect={handleSelectNote}
+                    />
+                  )
+                })}
+                {pagedVisibleNotes.length === 0 ? (
+                  <div className="notes-empty-state">
+                    {searchQuery.trim()
+                      ? 'No notes match the current search.'
+                      : 'No notes match the current date filters.'}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div
+                className="notes-list tree-view measly-custom-scrollbar"
+                ref={setSidebarTreeScrollerEl}
+              >
+                <CategoryTreeView
+                  groups={sidebarMode === 'category' ? categoryTree : archiveTree}
+                  activeNoteId={activeNoteId}
+                  onSelect={handleSelectNote}
+                />
+              </div>
+            )}
+          </div>
+
+          {isSidebarTreeMode ? (
+            <aside className="sidebar-scrollbar-slot" aria-hidden="true">
+              <div className="sidebar-scrollbar-slot-inner">
+                <div className="measly-scroll-rail sidebar-measly-scroll-rail">
+                  <div
+                    ref={sidebarScrollbarTrackRef}
+                    className="measly-scroll-track"
+                    onMouseDown={handleSidebarTrackMouseDown}
+                  >
+                    <div
+                      className={`measly-scroll-thumb${isDraggingSidebarScrollThumb ? ' is-dragging' : ''}${isSidebarScrollThumbActive ? '' : ' is-inactive'}`}
+                      style={{
+                        top: `${sidebarScrollThumbTopPx}px`,
+                        height: `${Math.max(0, sidebarScrollThumbHeightPx)}px`,
+                      }}
+                      onMouseDown={handleSidebarThumbMouseDown}
+                    />
+                  </div>
                 </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="notes-list">
-              <CategoryTreeView
-                groups={sidebarMode === 'category' ? categoryTree : archiveTree}
-                activeNoteId={activeNoteId}
-                onSelect={handleSelectNote}
-              />
-            </div>
-          )}
+              </div>
+            </aside>
+          ) : null}
         </div>
 
         {showPagination ? (
