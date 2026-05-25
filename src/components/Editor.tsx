@@ -90,8 +90,10 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
   const [isDraggingBottom, setIsDraggingBottom] = useState(false);
   const [scrollThumbTopPx, setScrollThumbTopPx] = useState(0);
   const [scrollThumbHeightPx, setScrollThumbHeightPx] = useState(0);
+  const [isScrollThumbActive, setIsScrollThumbActive] = useState(false);
   const [isDraggingScrollThumb, setIsDraggingScrollThumb] = useState(false);
   const scrollThumbDragOriginRef = useRef<{ pointerY: number; thumbTopPx: number } | null>(null);
+  const scrollbarSyncRafRef = useRef<number | null>(null);
 
   const reportInvariantIssues = (context: string, issues: string[]) => {
     if (!ENABLE_CONTRACT_ASSERTIONS || issues.length === 0) return;
@@ -145,12 +147,14 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
     if (viewportHeight <= 0 || contentHeight <= 0 || trackHeight <= 0) {
       setScrollThumbHeightPx(0);
       setScrollThumbTopPx(0);
+      setIsScrollThumbActive(false);
       return;
     }
 
     if (contentHeight <= viewportHeight) {
       setScrollThumbHeightPx(usableTrackHeight);
       setScrollThumbTopPx(SCROLL_TRACK_EDGE_GAP_PX);
+      setIsScrollThumbActive(false);
       return;
     }
 
@@ -167,6 +171,7 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
 
     setScrollThumbHeightPx(nextThumbHeight);
     setScrollThumbTopPx(nextThumbTop);
+    setIsScrollThumbActive(true);
   }, []);
 
   const scrollFromThumbTop = useCallback((thumbTopPx: number) => {
@@ -202,6 +207,47 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
   useEffect(() => {
     syncCustomScrollbar();
   }, [syncCustomScrollbar, editorSize.width, editorSize.height, initialText, topBoundary, bottomBoundary]);
+
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+
+    const scheduleSync = () => {
+      if (scrollbarSyncRafRef.current !== null) {
+        cancelAnimationFrame(scrollbarSyncRafRef.current);
+      }
+      scrollbarSyncRafRef.current = requestAnimationFrame(() => {
+        scrollbarSyncRafRef.current = null;
+        syncCustomScrollbar();
+      });
+    };
+
+    scheduleSync();
+
+    const resizeObserver = new ResizeObserver(() => scheduleSync());
+    resizeObserver.observe(scroller);
+
+    const editable = scroller.querySelector('.editor-text');
+    if (editable instanceof HTMLElement) {
+      resizeObserver.observe(editable);
+    }
+
+    const mutationObserver = new MutationObserver(() => scheduleSync());
+    mutationObserver.observe(scroller, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    });
+
+    return () => {
+      mutationObserver.disconnect();
+      resizeObserver.disconnect();
+      if (scrollbarSyncRafRef.current !== null) {
+        cancelAnimationFrame(scrollbarSyncRafRef.current);
+        scrollbarSyncRafRef.current = null;
+      }
+    };
+  }, [syncCustomScrollbar, initialText]);
 
   useEffect(() => {
     const scroller = scrollerRef.current;
@@ -486,7 +532,7 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
         onMouseDown={handleTrackMouseDown}
       >
         <div
-          className={`measly-scroll-thumb${isDraggingScrollThumb ? ' is-dragging' : ''}`}
+          className={`measly-scroll-thumb${isDraggingScrollThumb ? ' is-dragging' : ''}${isScrollThumbActive ? '' : ' is-inactive'}`}
           style={{
             top: `${scrollThumbTopPx}px`,
             height: `${Math.max(0, scrollThumbHeightPx)}px`,

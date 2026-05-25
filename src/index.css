@@ -105,16 +105,19 @@ body {
   position: absolute;
   left: 3px;
   right: 3px;
-  border: 1px solid rgba(81, 73, 66, 0.82);
+  border: 1px solid rgba(81, 73, 66, 0.6);
   border-radius: 999px;
   box-sizing: border-box;
   background: linear-gradient(135deg, #f5f3f2, #e9e5e2);
   cursor: ns-resize;
 }
 
-.measly-scroll-thumb:hover,
-.measly-scroll-thumb.is-dragging {
-  background: linear-gradient(180deg, rgba(112, 101, 91, 0.94), rgba(90, 79, 70, 0.95));
+.measly-scroll-thumb:hover.is-inactive,
+.measly-scroll-thumb.is-dragging.is-inactive,
+.measly-scroll-thumb.is-inactive {
+  border-color: rgba(81, 73, 66, 0.30);
+  background: linear-gradient(135deg, #f5f3f2, #e9e5e2);
+  cursor: default;
 }
 
 /* Caret Box Tricks */
