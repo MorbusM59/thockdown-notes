@@ -302,15 +302,160 @@ const NoteListItem = memo(function NoteListItem({
 
 type CategoryTreeViewProps = {
   groups: PrimaryGroup[]
+  treeMode: 'category' | 'archive'
   activeNoteId: string | null
   onSelect: (noteId: string) => void
 }
 
 const CategoryTreeView = memo(function CategoryTreeView({
   groups,
+  treeMode,
   activeNoteId,
   onSelect,
 }: CategoryTreeViewProps) {
+  const [collapsedPrimary, setCollapsedPrimary] = useState<Set<string>>(new Set())
+  const [collapsedSecondary, setCollapsedSecondary] = useState<Set<string>>(new Set())
+  const previousTreeModeRef = useRef<'category' | 'archive'>(treeMode)
+  const [pendingCategoryAutoFocus, setPendingCategoryAutoFocus] = useState(treeMode === 'category')
+
+  useEffect(() => {
+    setCollapsedPrimary(new Set())
+    setCollapsedSecondary(new Set())
+  }, [treeMode])
+
+  useEffect(() => {
+    const previousTreeMode = previousTreeModeRef.current
+    previousTreeModeRef.current = treeMode
+    if (treeMode === 'category' && previousTreeMode !== 'category') {
+      setPendingCategoryAutoFocus(true)
+    }
+  }, [treeMode])
+
+  useEffect(() => {
+    const validPrimary = new Set(groups.map((group) => group.name))
+    const validSecondaryKeys = new Set(
+      groups.flatMap((group) => group.secondary.map((secondary) => `${group.name}:${secondary.name}`)),
+    )
+
+    setCollapsedPrimary((previous) => new Set([...previous].filter((primaryName) => validPrimary.has(primaryName))))
+    setCollapsedSecondary((previous) => new Set([...previous].filter((secondaryKey) => validSecondaryKeys.has(secondaryKey))))
+  }, [groups])
+
+  useEffect(() => {
+    if (!pendingCategoryAutoFocus || treeMode !== 'category' || !activeNoteId || groups.length === 0) {
+      return
+    }
+
+    let targetPrimaryName: string | null = null
+    let targetSecondaryName: string | null = null
+
+    for (const primary of groups) {
+      for (const secondary of primary.secondary) {
+        for (const tertiary of secondary.tertiary) {
+          if (tertiary.notes.some((note) => note.id === activeNoteId)) {
+            targetPrimaryName = primary.name
+            targetSecondaryName = secondary.name
+            break
+          }
+        }
+
+        if (targetPrimaryName) {
+          break
+        }
+      }
+
+      if (targetPrimaryName) {
+        break
+      }
+    }
+
+    if (!targetPrimaryName || !targetSecondaryName) {
+      setPendingCategoryAutoFocus(false)
+      return
+    }
+
+    const nextCollapsedPrimary = new Set(
+      groups
+        .map((primary) => primary.name)
+        .filter((primaryName) => primaryName !== targetPrimaryName),
+    )
+
+    const nextCollapsedSecondary = new Set<string>()
+    for (const primary of groups) {
+      for (const secondary of primary.secondary) {
+        const secondaryKey = `${primary.name}:${secondary.name}`
+        const keepOpen = primary.name === targetPrimaryName && secondary.name === targetSecondaryName
+        if (!keepOpen) {
+          nextCollapsedSecondary.add(secondaryKey)
+        }
+      }
+    }
+
+    setCollapsedPrimary(nextCollapsedPrimary)
+    setCollapsedSecondary(nextCollapsedSecondary)
+    setPendingCategoryAutoFocus(false)
+  }, [activeNoteId, groups, pendingCategoryAutoFocus, treeMode])
+
+  const togglePrimaryCategory = useCallback((categoryName: string) => {
+    const allPrimary = groups.map((group) => group.name)
+    const selectedPrimary = groups.find((group) => group.name === categoryName)
+    const secondaryKeys = (selectedPrimary?.secondary ?? []).map((secondary) => `${categoryName}:${secondary.name}`)
+
+    if (collapsedPrimary.has(categoryName)) {
+      setCollapsedPrimary(new Set(allPrimary.filter((primaryName) => primaryName !== categoryName)))
+      setCollapsedSecondary((previous) => {
+        const next = new Set(previous)
+        secondaryKeys.forEach((secondaryKey) => next.add(secondaryKey))
+        return next
+      })
+      return
+    }
+
+    setCollapsedPrimary(new Set(allPrimary.filter((primaryName) => primaryName !== categoryName)))
+    if (secondaryKeys.length === 0) {
+      return
+    }
+
+    setCollapsedSecondary((previous) => {
+      const allExpanded = secondaryKeys.every((secondaryKey) => !previous.has(secondaryKey))
+      const next = new Set(previous)
+
+      if (allExpanded) {
+        secondaryKeys.forEach((secondaryKey) => next.add(secondaryKey))
+      } else {
+        secondaryKeys.forEach((secondaryKey) => next.delete(secondaryKey))
+      }
+
+      return next
+    })
+  }, [collapsedPrimary, groups])
+
+  const toggleSecondaryCategory = useCallback((primaryName: string, secondaryName: string) => {
+    const key = `${primaryName}:${secondaryName}`
+    const allPrimary = groups.map((group) => group.name)
+    const selectedPrimary = groups.find((group) => group.name === primaryName)
+    const secondaryKeys = (selectedPrimary?.secondary ?? []).map((secondary) => `${primaryName}:${secondary.name}`)
+
+    setCollapsedPrimary(new Set(allPrimary.filter((primary) => primary !== primaryName)))
+
+    setCollapsedSecondary((previous) => {
+      const next = new Set(previous)
+
+      if (next.has(key)) {
+        secondaryKeys.forEach((secondaryKey) => {
+          if (secondaryKey !== key) {
+            next.add(secondaryKey)
+          }
+        })
+        next.delete(key)
+        return next
+      }
+
+      next.add(key)
+      return next
+    })
+  }, [groups])
+
   if (groups.length === 0) {
     return <div className="notes-empty-state">No notes available for this category view.</div>
   }
@@ -318,11 +463,31 @@ const CategoryTreeView = memo(function CategoryTreeView({
   return (
     <div className="category-tree-root" aria-label="Category tree">
       {groups.map((primary) => (
-        <details key={primary.name} className="category-primary" open>
-          <summary className="category-primary-summary">{primary.name}</summary>
+        <details key={primary.name} className="category-primary" open={!collapsedPrimary.has(primary.name)}>
+          <summary
+            className="category-primary-summary"
+            onClick={(event) => {
+              event.preventDefault()
+              togglePrimaryCategory(primary.name)
+            }}
+          >
+            {primary.name}
+          </summary>
           {primary.secondary.map((secondary) => (
-            <details key={`${primary.name}:${secondary.name}`} className="category-secondary" open>
-              <summary className="category-secondary-summary">{secondary.name}</summary>
+            <details
+              key={`${primary.name}:${secondary.name}`}
+              className="category-secondary"
+              open={!collapsedSecondary.has(`${primary.name}:${secondary.name}`)}
+            >
+              <summary
+                className="category-secondary-summary"
+                onClick={(event) => {
+                  event.preventDefault()
+                  toggleSecondaryCategory(primary.name, secondary.name)
+                }}
+              >
+                {secondary.name}
+              </summary>
               {secondary.tertiary.map((tertiary) => (
                 <div key={`${primary.name}:${secondary.name}:${tertiary.name}`} className="category-tertiary-block">
                   <div className="category-tertiary-heading">{tertiary.name}</div>
@@ -1611,6 +1776,7 @@ function App() {
                 ref={setSidebarTreeScrollerEl}
               >
                 <CategoryTreeView
+                  treeMode={sidebarMode === 'category' ? 'category' : 'archive'}
                   groups={sidebarMode === 'category' ? categoryTree : archiveTree}
                   activeNoteId={activeNoteId}
                   onSelect={handleSelectNote}
