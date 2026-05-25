@@ -1167,6 +1167,33 @@ function App() {
   const hasYearFilter = selectedYears.size > 0
   const hasDateFilter = hasMonthFilter || hasYearFilter
 
+  const matchesSelectedDateFilter = useCallback((timestampMs: number) => {
+    const date = new Date(timestampMs)
+    const noteMonth = date.getMonth() + 1
+    const noteYear = date.getFullYear()
+
+    const monthMatch = !hasMonthFilter || selectedMonths.has(noteMonth)
+
+    let yearMatch = !hasYearFilter
+    if (hasYearFilter) {
+      if (selectedYears.has(noteYear)) {
+        yearMatch = true
+      } else if (selectedYears.has('older') && noteYear <= 2021) {
+        yearMatch = true
+      }
+    }
+
+    return monthMatch && yearMatch
+  }, [hasMonthFilter, hasYearFilter, selectedMonths, selectedYears])
+
+  const filterNotesBySelectedDate = useCallback((source: NoteSummary[]) => {
+    if (!hasDateFilter) {
+      return source
+    }
+
+    return source.filter((note) => matchesSelectedDateFilter(note.updatedAtMs))
+  }, [hasDateFilter, matchesSelectedDateFilter])
+
   const dateEligibleNotes = useMemo(() => {
     return searchedNotes.filter((note) => {
       if (isDeletedNote(note)) {
@@ -1180,37 +1207,22 @@ function App() {
   }, [hasDateFilter, searchedNotes])
 
   const categoryEligibleNotes = useMemo(() => {
-    return dateEligibleNotes.filter((note) => !isExternalNote(note))
-  }, [dateEligibleNotes])
+    const categoryNotes = dateEligibleNotes.filter((note) => !isExternalNote(note))
+    return filterNotesBySelectedDate(categoryNotes)
+  }, [dateEligibleNotes, filterNotesBySelectedDate])
 
   const archiveEligibleNotes = useMemo(() => {
-    return searchedNotes.filter((note) => isArchivedNote(note) && !isDeletedNote(note) && !isExternalNote(note))
-  }, [searchedNotes])
+    const archiveNotes = searchedNotes.filter((note) => isArchivedNote(note) && !isDeletedNote(note) && !isExternalNote(note))
+    return filterNotesBySelectedDate(archiveNotes)
+  }, [filterNotesBySelectedDate, searchedNotes])
 
   const trashEligibleNotes = useMemo(() => {
     return searchedNotes.filter((note) => isDeletedNote(note) && !isExternalNote(note))
   }, [searchedNotes])
 
   const dateFilteredNotes = useMemo(() => {
-    return dateEligibleNotes.filter((note) => {
-      const date = new Date(note.updatedAtMs)
-      const noteMonth = date.getMonth() + 1
-      const noteYear = date.getFullYear()
-
-      const monthMatch = !hasMonthFilter || selectedMonths.has(noteMonth)
-
-      let yearMatch = !hasYearFilter
-      if (hasYearFilter) {
-        if (selectedYears.has(noteYear)) {
-          yearMatch = true
-        } else if (selectedYears.has('older') && noteYear <= 2021) {
-          yearMatch = true
-        }
-      }
-
-      return monthMatch && yearMatch
-    })
-  }, [dateEligibleNotes, hasMonthFilter, hasYearFilter, selectedMonths, selectedYears])
+    return filterNotesBySelectedDate(dateEligibleNotes)
+  }, [dateEligibleNotes, filterNotesBySelectedDate])
 
   const trashFilteredNotes = useMemo(() => {
     return trashEligibleNotes
@@ -1406,18 +1418,33 @@ function App() {
     }
 
     scheduleSync()
+    const treeContentEl = sidebarTreeScrollerEl.firstElementChild as HTMLElement | null
 
     const resizeObserver = new ResizeObserver(() => scheduleSync())
     resizeObserver.observe(sidebarTreeScrollerEl)
+    if (treeContentEl) {
+      resizeObserver.observe(treeContentEl)
+    }
 
     const mutationObserver = new MutationObserver(() => scheduleSync())
     mutationObserver.observe(sidebarTreeScrollerEl, {
       subtree: true,
       childList: true,
       characterData: true,
+      attributes: true,
+      attributeFilter: ['open'],
     })
 
+    const onDetailsToggle = (event: Event) => {
+      if (event.target instanceof HTMLDetailsElement) {
+        scheduleSync()
+      }
+    }
+
+    sidebarTreeScrollerEl.addEventListener('toggle', onDetailsToggle, true)
+
     return () => {
+      sidebarTreeScrollerEl.removeEventListener('toggle', onDetailsToggle, true)
       mutationObserver.disconnect()
       resizeObserver.disconnect()
       if (sidebarScrollbarRafRef.current !== null) {
@@ -1638,7 +1665,7 @@ function App() {
           </div>
         ) : null}
 
-        {(sidebarMode === 'date' || sidebarMode === 'trash') ? (
+        {(sidebarMode === 'date' || sidebarMode === 'trash' || isSidebarTreeMode) ? (
           <div className="date-filter-rail" aria-label="Date filters">
             <div
               className="date-filter-line"
