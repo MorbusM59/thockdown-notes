@@ -35,6 +35,7 @@ const NOTE_RIGHT_CLICK_HOLD_MS = 200
 
 type SidebarMode = 'date' | 'category' | 'archive' | 'trash'
 type NoteArmedAction = 'archive' | 'deletion'
+type ProtectedQuickReleaseAction = 'remove-archived' | 'remove-deleted' | null
 
 const SIDEBAR_MODES: Array<{ mode: SidebarMode; label: string }> = [
   { mode: 'date', label: 'Date' },
@@ -261,6 +262,7 @@ type NoteListItemProps = {
   armedAction?: NoteArmedAction | null
   onRightPressStart: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   onRightPressEnd: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
+  onArmHoverLeave: (noteId: string) => void
   variant?: 'default' | 'tree'
 }
 
@@ -272,6 +274,7 @@ const NoteListItem = memo(function NoteListItem({
   armedAction = null,
   onRightPressStart,
   onRightPressEnd,
+  onArmHoverLeave,
   variant = 'default',
 }: NoteListItemProps) {
   const isTreeVariant = variant === 'tree'
@@ -314,6 +317,10 @@ const NoteListItem = memo(function NoteListItem({
     event.stopPropagation()
   }, [])
 
+  const handleMouseLeave = useCallback(() => {
+    onArmHoverLeave(note.id)
+  }, [note.id, onArmHoverLeave])
+
   return (
     <div
       className={`note-list-item${isActive ? ' is-active' : ''}${isTreeVariant ? ' is-tree-card' : ''}${armedAction === 'archive' ? ' is-armed-for-archiving' : ''}${armedAction === 'deletion' ? ' is-armed-for-deletion' : ''}`}
@@ -323,6 +330,7 @@ const NoteListItem = memo(function NoteListItem({
       onKeyDown={handleKeyDown}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseLeave}
       onContextMenu={handleContextMenu}
       tabIndex={0}
     >
@@ -348,6 +356,7 @@ type CategoryTreeViewProps = {
   armedNoteActionById: Map<string, NoteArmedAction>
   onNoteRightPressStart: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   onNoteRightPressEnd: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
+  onNoteArmHoverLeave: (noteId: string) => void
 }
 
 const CategoryTreeView = memo(function CategoryTreeView({
@@ -359,6 +368,7 @@ const CategoryTreeView = memo(function CategoryTreeView({
   armedNoteActionById,
   onNoteRightPressStart,
   onNoteRightPressEnd,
+  onNoteArmHoverLeave,
 }: CategoryTreeViewProps) {
   const [collapsedPrimary, setCollapsedPrimary] = useState<Set<string>>(new Set())
   const [collapsedSecondary, setCollapsedSecondary] = useState<Set<string>>(new Set())
@@ -548,6 +558,7 @@ const CategoryTreeView = memo(function CategoryTreeView({
                       armedAction={armedNoteActionById.get(note.id) ?? null}
                       onRightPressStart={onNoteRightPressStart}
                       onRightPressEnd={onNoteRightPressEnd}
+                      onArmHoverLeave={onNoteArmHoverLeave}
                       variant="tree"
                     />
                   ))}
@@ -636,8 +647,10 @@ function App() {
   const [sidebarScrollThumbHeightPx, setSidebarScrollThumbHeightPx] = useState(0)
   const [isSidebarScrollThumbActive, setIsSidebarScrollThumbActive] = useState(false)
   const [isDraggingSidebarScrollThumb, setIsDraggingSidebarScrollThumb] = useState(false)
+  const [isTrashViewDeleteArmed, setIsTrashViewDeleteArmed] = useState(false)
   const [armedNoteActionState, setArmedNoteActionState] = useState<{ noteId: string; action: NoteArmedAction } | null>(null)
-  const noteArmTimerRef = useRef<{ noteId: string; timeoutId: number } | null>(null)
+  const noteArmTimerRef = useRef<{ noteId: string; timeoutId: number; quickReleaseAction: ProtectedQuickReleaseAction } | null>(null)
+  const trashButtonArmTimerRef = useRef<number | null>(null)
 
   const armedNoteActionById = useMemo(() => {
     if (!armedNoteActionState) {
@@ -651,6 +664,12 @@ function App() {
     if (!noteArmTimerRef.current) return
     window.clearTimeout(noteArmTimerRef.current.timeoutId)
     noteArmTimerRef.current = null
+  }, [])
+
+  const clearTrashButtonArmTimer = useCallback(() => {
+    if (trashButtonArmTimerRef.current === null) return
+    window.clearTimeout(trashButtonArmTimerRef.current)
+    trashButtonArmTimerRef.current = null
   }, [])
 
   const menuState = useMemo<PersistedMenuState>(() => ({
@@ -1142,9 +1161,30 @@ function App() {
     if (!persistenceReady) return
     if (noteTransitionLockRef.current) return
 
+    const summary = notes.find((note) => note.id === noteId)
+    const isCurrentlyDeleted = summary ? isDeletedNote(summary) : false
+
     noteTransitionLockRef.current = true
     try {
       await flushPendingSaveNow()
+
+      if (action === 'deletion' && isCurrentlyDeleted) {
+        await window.measlyNotes.deleteNote({ id: noteId })
+
+        const preferredId = activeNoteId === noteId ? null : (activeNoteId ?? null)
+        const nextActiveId = await refreshNotes(preferredId)
+
+        if (activeNoteId === noteId) {
+          if (nextActiveId) {
+            await activateNote(nextActiveId)
+          } else {
+            setActiveNoteId(null)
+            setActiveNoteText('')
+          }
+        }
+
+        return
+      }
 
       if (action === 'archive') {
         await applyProtectedNoteDestination(noteId, 'archived')
@@ -1161,15 +1201,61 @@ function App() {
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [activateNote, activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, persistenceReady, refreshNotes])
+  }, [activateNote, activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes])
+
+  const applyQuickProtectedRightClickAction = useCallback(async (noteId: string, action: Exclude<ProtectedQuickReleaseAction, null>) => {
+    if (!window.measlyNotes) return
+    if (!persistenceReady) return
+    if (noteTransitionLockRef.current) return
+
+    noteTransitionLockRef.current = true
+    try {
+      await flushPendingSaveNow()
+
+      if (action === 'remove-archived') {
+        await window.measlyNotes.removeTagFromNote({ id: noteId, tagName: 'archived' })
+      } else {
+        await window.measlyNotes.removeTagFromNote({ id: noteId, tagName: 'deleted' })
+      }
+
+      await refreshNotes(activeNoteId ?? noteId)
+      if (activeNoteId === noteId) {
+        await activateNote(noteId)
+      }
+    } catch (error) {
+      console.error('Failed to apply protected right-click action', error)
+    } finally {
+      noteTransitionLockRef.current = false
+    }
+  }, [activateNote, activeNoteId, flushPendingSaveNow, persistenceReady, refreshNotes])
 
   const handleNoteRightPressStart = useCallback((noteId: string, event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()
     clearNoteArmTimer()
-    setArmedNoteActionState({ noteId, action: 'archive' })
+
+    const summary = notes.find((note) => note.id === noteId)
+    const isNoteArchived = summary ? isArchivedNote(summary) : false
+    const isNoteDeleted = summary ? isDeletedNote(summary) : false
+
+    if (isNoteArchived || isNoteDeleted) {
+      setArmedNoteActionState(null)
+    } else {
+      setArmedNoteActionState({ noteId, action: 'archive' })
+    }
+
+    const quickReleaseAction: ProtectedQuickReleaseAction = isNoteDeleted
+      ? 'remove-deleted'
+      : (isNoteArchived ? 'remove-archived' : null)
 
     const timeoutId = window.setTimeout(() => {
       setArmedNoteActionState((previous) => {
+        if (quickReleaseAction) {
+          return {
+            noteId,
+            action: 'deletion',
+          }
+        }
+
         if (!previous || previous.noteId !== noteId) {
           return previous
         }
@@ -1185,8 +1271,8 @@ function App() {
       }
     }, NOTE_RIGHT_CLICK_HOLD_MS)
 
-    noteArmTimerRef.current = { noteId, timeoutId }
-  }, [clearNoteArmTimer])
+    noteArmTimerRef.current = { noteId, timeoutId, quickReleaseAction }
+  }, [clearNoteArmTimer, notes])
 
   const handleNoteRightPressEnd = useCallback((noteId: string, event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -1196,9 +1282,15 @@ function App() {
       return
     }
 
-    // Quick right click consumes the arm cycle as archive-armed and prevents escalation.
+    // Quick release consumes the current cycle before hold-escalation.
+    const quickReleaseAction = pendingArm.quickReleaseAction
     clearNoteArmTimer()
-  }, [clearNoteArmTimer])
+
+    if (quickReleaseAction) {
+      setArmedNoteActionState(null)
+      void applyQuickProtectedRightClickAction(noteId, quickReleaseAction)
+    }
+  }, [applyQuickProtectedRightClickAction, clearNoteArmTimer])
 
   const handleArmedNoteLeftClick = useCallback((noteId: string) => {
     const armed = armedNoteActionState
@@ -1210,6 +1302,108 @@ function App() {
     setArmedNoteActionState(null)
     void executeArmedNoteAction(noteId, armed.action)
   }, [armedNoteActionState, clearNoteArmTimer, executeArmedNoteAction])
+
+  const handleNoteArmHoverLeave = useCallback((noteId: string) => {
+    const pendingArm = noteArmTimerRef.current
+    if (pendingArm && pendingArm.noteId === noteId) {
+      clearNoteArmTimer()
+    }
+
+    setArmedNoteActionState((previous) => {
+      if (!previous || previous.noteId !== noteId) {
+        return previous
+      }
+
+      return null
+    })
+  }, [clearNoteArmTimer])
+
+  const purgeDeletedNotesPermanently = useCallback(async () => {
+    if (!window.measlyNotes) return
+    if (!persistenceReady) return
+    if (noteTransitionLockRef.current) return
+
+    const deletedNoteIds = notes
+      .filter((note) => isDeletedNote(note))
+      .map((note) => note.id)
+
+    if (deletedNoteIds.length === 0) {
+      return
+    }
+
+    noteTransitionLockRef.current = true
+    try {
+      await flushPendingSaveNow()
+
+      for (const noteId of deletedNoteIds) {
+        await window.measlyNotes.deleteNote({ id: noteId })
+      }
+
+      const activeDeleted = activeNoteId ? deletedNoteIds.includes(activeNoteId) : false
+      const preferredId = activeDeleted ? null : (activeNoteId ?? null)
+      const nextActiveId = await refreshNotes(preferredId)
+
+      if (activeDeleted) {
+        if (nextActiveId) {
+          await activateNote(nextActiveId)
+        } else {
+          setActiveNoteId(null)
+          setActiveNoteText('')
+        }
+      }
+    } catch (error) {
+      console.error('Failed to permanently purge deleted notes', error)
+    } finally {
+      noteTransitionLockRef.current = false
+    }
+  }, [activateNote, activeNoteId, flushPendingSaveNow, notes, persistenceReady, refreshNotes])
+
+  const handleTrashViewButtonMouseDown = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    if (event.button !== 2) return
+    event.preventDefault()
+    event.stopPropagation()
+    clearTrashButtonArmTimer()
+    setIsTrashViewDeleteArmed(false)
+
+    trashButtonArmTimerRef.current = window.setTimeout(() => {
+      setIsTrashViewDeleteArmed(true)
+      trashButtonArmTimerRef.current = null
+    }, NOTE_RIGHT_CLICK_HOLD_MS)
+  }, [clearTrashButtonArmTimer])
+
+  const handleTrashViewButtonMouseUp = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    if (event.button !== 2) return
+    event.preventDefault()
+    event.stopPropagation()
+
+    // Quick release before timeout should not arm the trash purge action.
+    if (trashButtonArmTimerRef.current !== null) {
+      clearTrashButtonArmTimer()
+      setIsTrashViewDeleteArmed(false)
+    }
+  }, [clearTrashButtonArmTimer])
+
+  const handleTrashViewButtonContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+  }, [])
+
+  const handleViewModeButtonClick = useCallback((mode: SidebarMode) => {
+    if (mode === 'trash') {
+      if (isTrashViewDeleteArmed) {
+        setIsTrashViewDeleteArmed(false)
+        void purgeDeletedNotesPermanently()
+        setSidebarMode('trash')
+        return
+      }
+
+      setSidebarMode('trash')
+      return
+    }
+
+    setIsTrashViewDeleteArmed(false)
+    setSidebarMode(mode)
+  }, [isTrashViewDeleteArmed, purgeDeletedNotesPermanently])
 
   const queueSave = useCallback((text: string) => {
     if (!persistenceReady) return
@@ -1699,10 +1893,18 @@ function App() {
   }, [armedNoteActionState, clearNoteArmTimer, notes])
 
   useEffect(() => {
+    if (!isTrashViewDeleteArmed) return
+    if (!notes.some((note) => isDeletedNote(note))) {
+      setIsTrashViewDeleteArmed(false)
+    }
+  }, [isTrashViewDeleteArmed, notes])
+
+  useEffect(() => {
     return () => {
       clearNoteArmTimer()
+      clearTrashButtonArmTimer()
     }
-  }, [clearNoteArmTimer])
+  }, [clearNoteArmTimer, clearTrashButtonArmTimer])
 
   useEffect(() => {
     const ITEM_HEIGHT = 56
@@ -1918,13 +2120,20 @@ function App() {
             return (
               <button
                 key={mode}
-                className={`toggle-btn notes-mode-button icon-btn ${iconClassByMode[mode]}${isActive ? ' is-active' : ''}`}
+                className={`toggle-btn notes-mode-button icon-btn ${iconClassByMode[mode]}${isActive ? ' is-active' : ''}${mode === 'trash' && isTrashViewDeleteArmed ? ' is-armed-for-deletion' : ''}`}
                 type="button"
                 role="tab"
                 aria-selected={isActive}
                 title={label}
                 aria-label={label}
-                onClick={() => setSidebarMode(mode)}
+                onClick={() => handleViewModeButtonClick(mode)}
+                onContextMenu={mode === 'trash' ? handleTrashViewButtonContextMenu : undefined}
+                onMouseDown={mode === 'trash' ? handleTrashViewButtonMouseDown : undefined}
+                onMouseUp={mode === 'trash' ? handleTrashViewButtonMouseUp : undefined}
+                onMouseLeave={mode === 'trash' ? () => {
+                  clearTrashButtonArmTimer()
+                  setIsTrashViewDeleteArmed(false)
+                } : undefined}
               >
                 <span className="sr-only-mode-label">{label}</span>
               </button>
@@ -1951,6 +2160,7 @@ function App() {
                       armedAction={armedNoteActionById.get(note.id) ?? null}
                       onRightPressStart={handleNoteRightPressStart}
                       onRightPressEnd={handleNoteRightPressEnd}
+                      onArmHoverLeave={handleNoteArmHoverLeave}
                     />
                   )
                 })}
@@ -1976,6 +2186,7 @@ function App() {
                   armedNoteActionById={armedNoteActionById}
                   onNoteRightPressStart={handleNoteRightPressStart}
                   onNoteRightPressEnd={handleNoteRightPressEnd}
+                  onNoteArmHoverLeave={handleNoteArmHoverLeave}
                 />
               </div>
             )}

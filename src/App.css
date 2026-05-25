@@ -230,6 +230,14 @@ body.splitter-dragging {
   background-image: url('/assets/buttons/deleted.png');
 }
 
+.icon-btn.btn-deleted.is-armed-for-deletion,
+.icon-btn.btn-deleted.is-armed-for-deletion:hover,
+.icon-btn.btn-deleted.is-armed-for-deletion.is-active,
+.icon-btn.btn-deleted.is-armed-for-deletion.is-active:hover {
+  background-color: #FF000022;
+  transition: all 300ms;
+}
+
 .sr-only-mode-label {
   position: absolute;
   width: 1px;
@@ -654,6 +662,24 @@ body.splitter-dragging {
   background-color: #ff000022;
   box-shadow: 0 0 2px rgba(0, 0, 0, 0.5), 0 0 6px rgba(0, 0, 0, 0.2), inset 0 0 5px var(--color-shadow-white), inset 0 0 20px var(--color-shadow-white), inset 0 0 55px var(--color-shadow-white);
   transition: background-color 200ms;
+}
+
+.note-list-item.is-armed-for-archiving.is-tree-card,
+.note-list-item.is-armed-for-archiving.is-tree-card:hover,
+.note-list-item.is-armed-for-archiving.is-tree-card.is-active,
+.note-list-item.is-armed-for-archiving.is-tree-card.is-active:hover {
+  border-right: 2px solid #0077FF;
+  background-color: #0077FF33;
+  box-shadow: none;
+}
+
+.note-list-item.is-armed-for-deletion.is-tree-card,
+.note-list-item.is-armed-for-deletion.is-tree-card:hover,
+.note-list-item.is-armed-for-deletion.is-tree-card.is-active,
+.note-list-item.is-armed-for-deletion.is-tree-card.is-active:hover {
+  border-right: 2px solid #AA0000;
+  background-color: #FF000033;
+  box-shadow: none;
 }
 
 .note-list-item.is-tree-card {
