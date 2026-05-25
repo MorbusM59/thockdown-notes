@@ -22,7 +22,7 @@ const NEW_NOTE_TEMPLATE = '# '
 const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
 const PROTECTED_TAGS = new Set(['archived', 'deleted', 'external'])
 const GRID_DIVIDER_PX = 8
-const SIDEBAR_MIN_WIDTH_PX = 240
+const SIDEBAR_MIN_WIDTH_PX = 200
 const SIDEBAR_MAX_WIDTH_PX = 520
 const TAG_INPUT_MIN_WIDTH_PX = 320
 const SUGGESTED_MIN_WIDTH_PX = 220
@@ -230,17 +230,13 @@ async function waitForNotesBridge(shouldStop: () => boolean): Promise<boolean> {
 type NoteListItemProps = {
   note: NoteSummary
   isActive: boolean
-  persistenceReady: boolean
   onSelect: (noteId: string) => void
-  onDelete: (noteId: string) => void
 }
 
 const NoteListItem = memo(function NoteListItem({
   note,
   isActive,
-  persistenceReady,
   onSelect,
-  onDelete,
 }: NoteListItemProps) {
   const handleSelect = useCallback(() => {
     onSelect(note.id)
@@ -252,11 +248,6 @@ const NoteListItem = memo(function NoteListItem({
       onSelect(note.id)
     }
   }, [note.id, onSelect])
-
-  const handleDelete = useCallback((event: MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation()
-    onDelete(note.id)
-  }, [note.id, onDelete])
 
   return (
     <div
@@ -271,15 +262,6 @@ const NoteListItem = memo(function NoteListItem({
         <div className="note-list-title">{note.title || 'Untitled'}</div>
         <div className="note-list-meta">{new Date(note.updatedAtMs).toLocaleDateString()}</div>
       </div>
-      <button
-        className="note-delete-button"
-        type="button"
-        onClick={handleDelete}
-        disabled={!persistenceReady}
-        aria-label={`Delete note ${note.title || note.fileName}`}
-      >
-        Delete
-      </button>
     </div>
   )
 })
@@ -287,17 +269,13 @@ const NoteListItem = memo(function NoteListItem({
 type CategoryTreeViewProps = {
   groups: PrimaryGroup[]
   activeNoteId: string | null
-  persistenceReady: boolean
   onSelect: (noteId: string) => void
-  onDelete: (noteId: string) => void
 }
 
 const CategoryTreeView = memo(function CategoryTreeView({
   groups,
   activeNoteId,
-  persistenceReady,
   onSelect,
-  onDelete,
 }: CategoryTreeViewProps) {
   if (groups.length === 0) {
     return <div className="notes-empty-state">No notes available for this category view.</div>
@@ -319,9 +297,7 @@ const CategoryTreeView = memo(function CategoryTreeView({
                       key={note.id}
                       note={note}
                       isActive={note.id === activeNoteId}
-                      persistenceReady={persistenceReady}
                       onSelect={onSelect}
-                      onDelete={onDelete}
                     />
                   ))}
                 </div>
@@ -549,49 +525,9 @@ function App() {
     }
   }, [activeNoteId, activateNote, flushPendingSaveNow, persistenceReady])
 
-  const deleteNote = useCallback(async (noteId: string) => {
-    if (!window.measlyNotes) return
-    if (!persistenceReady) return
-    if (noteTransitionLockRef.current) return
-
-    const deletingActive = noteId === activeNoteId
-    const noteIndex = notes.findIndex((note) => note.id === noteId)
-    const fallbackId = noteIndex >= 0
-      ? (notes[noteIndex + 1]?.id ?? notes[noteIndex - 1]?.id ?? null)
-      : null
-
-    noteTransitionLockRef.current = true
-    try {
-      if (deletingActive) {
-        await flushPendingSaveNow()
-      }
-
-      if (notes.length <= 1) {
-        const replacement = await window.measlyNotes.createNote({ initialText: NEW_NOTE_TEMPLATE })
-        await window.measlyNotes.deleteNote({ id: noteId })
-        await refreshNotes(replacement.id)
-        await activateNote(replacement.id)
-      } else {
-        await window.measlyNotes.deleteNote({ id: noteId })
-        const nextId = await refreshNotes(fallbackId)
-        if (deletingActive && nextId) {
-          await activateNote(nextId)
-        }
-      }
-    } catch (error) {
-      console.error('Failed to delete note', error)
-    } finally {
-      noteTransitionLockRef.current = false
-    }
-  }, [activeNoteId, activateNote, flushPendingSaveNow, notes, persistenceReady, refreshNotes])
-
   const handleSelectNote = useCallback((noteId: string) => {
     void selectNote(noteId)
   }, [selectNote])
-
-  const handleDeleteNote = useCallback((noteId: string) => {
-    void deleteNote(noteId)
-  }, [deleteNote])
 
   const updateActiveNoteTitlePreview = useCallback((nextText: string) => {
     if (!activeNoteId) return
@@ -1456,9 +1392,7 @@ function App() {
                     key={note.id}
                     note={note}
                     isActive={isActive}
-                    persistenceReady={persistenceReady}
                     onSelect={handleSelectNote}
-                    onDelete={handleDeleteNote}
                   />
                 )
               })}
@@ -1475,9 +1409,7 @@ function App() {
               <CategoryTreeView
                 groups={sidebarMode === 'category' ? categoryTree : archiveTree}
                 activeNoteId={activeNoteId}
-                persistenceReady={persistenceReady}
                 onSelect={handleSelectNote}
-                onDelete={handleDeleteNote}
               />
             </div>
           )}

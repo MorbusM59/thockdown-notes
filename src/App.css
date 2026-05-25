@@ -32,10 +32,10 @@
 
   /* Unified button template (sourced from V1 edit toggle button) */
   --btn-border-default: #ddd;
-  --btn-border-hover: #bbb;
+  --btn-border-hover: #999;
   --btn-border-active: var(--color-border-selected);
   --btn-bg-default: white;
-  --btn-bg-hover: #f0f0f0;
+  --btn-bg-hover: white;
   --btn-bg-pressed: #d8d8d8;
   --btn-bg-active: var(--color-input-backdrop);
   --btn-shadow-active:
@@ -59,6 +59,7 @@ button,
 button:hover,
 .ui-btn:hover {
   background: var(--btn-bg-hover);
+  border: 1px solid var(--btn-border-hover);
 }
 
 button:active,
@@ -135,7 +136,7 @@ body.splitter-dragging {
 }
 
 .notes-sidebar {
-  min-width: 260px;
+  min-width: 200px;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -175,9 +176,9 @@ body.splitter-dragging {
 .view-toggle {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: start;
   padding: 4px 0 4px 8px;
-  gap: 6px;
+  gap: 8px;
   margin: 0;
 }
 
@@ -186,19 +187,20 @@ body.splitter-dragging {
 }
 
 .notes-sidebar .view-toggle .icon-btn {
-  width: 40px;
-  height: 40px;
-  padding: 0;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  flex: 0 0 48px;
+  padding: 4px;
   margin: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--btn-border-default);
   border-radius: 6px;
   background-size: auto;
   background-repeat: no-repeat;
   background-position: center;
-  background-color: var(--btn-bg-default);
   position: relative;
 }
 
@@ -216,16 +218,6 @@ body.splitter-dragging {
 
 .notes-sidebar .view-toggle .icon-btn.btn-deleted {
   background-image: url('/assets/buttons/deleted.png');
-}
-
-.notes-sidebar .view-toggle .icon-btn:hover {
-  border-color: rgba(255, 255, 255, 0.6);
-  background-color: rgba(255, 255, 255, 0.16);
-}
-
-.notes-sidebar .view-toggle .icon-btn.is-active {
-  filter: drop-shadow(-1px -1px 1px rgba(255, 255, 255, 1)) drop-shadow(1px -1px 1px rgba(255, 255, 255, 1)) drop-shadow(1px 1px 1px rgba(255, 255, 255, 1)) drop-shadow(-1px 1px 1px rgba(255, 255, 255, 1));
-  box-shadow: inset 0 0 3px rgba(0, 0, 0, 0.5), inset 0 0 6px rgba(0, 0, 0, 0.1), 0 0 5px rgba(255, 255, 255, 0.2);
 }
 
 .sr-only-mode-label {
@@ -279,11 +271,10 @@ body.splitter-dragging {
   overflow-y: auto;
   margin: 0;
   padding: 0;
-  border: 1px solid #d1c4b8;
+  border: 1px solid var(--color-border-highlight);
   border-left: none;
   border-radius: 0 9px 9px 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.52), rgba(244, 239, 232, 0.5));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.5), inset 0 0 6px rgba(0, 0, 0, 0.2), 0 0 2px var(--color-shadow-white);
 }
 
 .date-filter-rail {
@@ -588,11 +579,11 @@ body.splitter-dragging {
   justify-content: space-between;
   gap: 12px;
   padding: 10px 8px;
-  border: 1px solid #cbbeb2;
   border-radius: 8px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(242, 236, 229, 0.9));
-  cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65), 0 1px 1px rgba(104, 79, 58, 0.12);
+  background: #ffffff55;
+  cursor: default;
+  border: 1px solid var(--color-border-highlight);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.5), 0 0 6px rgba(0, 0, 0, 0.2), inset 0 0 2px var(--color-shadow-white);
   transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
 }
 
@@ -603,9 +594,7 @@ body.splitter-dragging {
 }
 
 .note-list-item:hover {
-  border-color: #a4866b;
-  background: linear-gradient(180deg, #ffffff, #efe6da);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 2px 3px rgba(91, 66, 45, 0.16);
+  background: #ffffffBB;
 }
 
 .note-list-item:focus-visible {
@@ -615,8 +604,8 @@ body.splitter-dragging {
 
 .note-list-item.is-active {
   border-color: #80604a;
-  background: linear-gradient(180deg, #ebddc9, #dcc7af);
-  box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.24), 0 0 0 1px rgba(255, 255, 255, 0.24);
+  background: #ffffff11;
+  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.4), inset 0 0 3px rgba(0, 0, 0, 0.2), 0 0 2px var(--color-shadow-white);
 }
 
 .note-list-content {
@@ -635,16 +624,6 @@ body.splitter-dragging {
 .note-list-meta {
   font-size: 11px;
   color: #736455;
-}
-
-.note-delete-button {
-  color: #222222;
-  padding: 6px 16px;
-}
-
-.note-delete-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 
 .notes-empty-state {
