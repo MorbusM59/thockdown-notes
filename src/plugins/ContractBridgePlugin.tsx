@@ -6,9 +6,9 @@ import type {
   EditorSelectionState,
   EditorTextChangeEvent,
 } from '../editor/EditorContract';
+import { canonicalizeParagraphSegments } from '../editor/TextPolicy';
 import {
   EMPTY_SELECTION,
-  normalizePlainText,
   readSelectionStateFromDom,
 } from '../editor/SelectionOffsets';
 
@@ -24,6 +24,19 @@ function resolveChangeSource(tags: Set<string>): EditorTextChangeEvent['source']
   return 'user-input';
 }
 
+function readCanonicalRootText(): string {
+  const root = $getRoot();
+  const children = root.getChildren();
+  if (children.length === 0) {
+    return '';
+  }
+
+  // Canonical model: one LF separator between logical paragraphs.
+  return canonicalizeParagraphSegments(
+    children.map((child) => child.getTextContent()),
+  );
+}
+
 export function ContractBridgePlugin({ onTextChange, onSelectionChange }: ContractBridgePluginProps) {
   const [editor] = useLexicalComposerContext();
   const previousTextRef = useRef('');
@@ -34,8 +47,7 @@ export function ContractBridgePlugin({ onTextChange, onSelectionChange }: Contra
     let initialText = '';
     let initialSelection = EMPTY_SELECTION;
     editor.getEditorState().read(() => {
-      const root = $getRoot();
-      const normalizedText = normalizePlainText(root.getTextContent());
+      const normalizedText = readCanonicalRootText();
       initialText = normalizedText;
 
       const rootEl = editor.getRootElement();
@@ -59,8 +71,7 @@ export function ContractBridgePlugin({ onTextChange, onSelectionChange }: Contra
   useEffect(() => {
     const removeListener = editor.registerUpdateListener(({ editorState, tags }) => {
       editorState.read(() => {
-        const root = $getRoot();
-        const normalizedText = normalizePlainText(root.getTextContent());
+        const normalizedText = readCanonicalRootText();
         const rootEl = editor.getRootElement();
         const lexicalSelection = $getSelection();
 

@@ -12,6 +12,13 @@ import type { PersistedMenuState, PersistedViewportState } from './shared/appSta
 import type { NoteSummary } from './shared/noteLifecycle'
 import { CELL_WIDTH_PX, LINE_HEIGHT_PX } from './editor/LayoutConstants'
 import {
+  buildDocumentFindHits,
+  resolveDocumentFindDirective,
+  type DocumentFindDirective,
+  type DocumentFindHit,
+} from './editor/FindReplaceEngine'
+import { normalizeInternalText } from './editor/TextPolicy'
+import {
   FILTER_MONTHS,
   FILTER_YEARS,
   handleMultiSelect,
@@ -32,22 +39,10 @@ const DEFAULT_TAG_SPLIT_RATIO = 0.645
 const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28
 const SCROLL_TRACK_EDGE_GAP_PX = 3
 const NOTE_RIGHT_CLICK_HOLD_MS = 200
-const DOCUMENT_FIND_SNIPPET_RADIUS = 50
 
 type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find'
 type NoteArmedAction = 'archive' | 'deletion'
 type ProtectedQuickReleaseAction = 'remove-archived' | 'remove-deleted' | null
-type DocumentFindHit = {
-  id: string
-  index: number
-  matchLength: number
-  line: number
-  snippetBefore: string
-  snippetMatch: string
-  snippetAfter: string
-  hasSnippetPrefixEllipsis: boolean
-  hasSnippetSuffixEllipsis: boolean
-}
 
 const SIDEBAR_MODES: Array<{ mode: SidebarMode; label: string }> = [
   { mode: 'date', label: 'Date' },
@@ -124,34 +119,8 @@ function buildHierarchyGroups(notes: NoteSummary[]): PrimaryGroup[] {
     }))
 }
 
-function newlineRuns(text: string): number[] {
-  const matches = text.match(/\n+/g)
-  if (!matches) return []
-  return matches.map((run) => run.length)
-}
-
-// Lexical plain-text extraction uses doubled paragraph separators.
-// Persist canonical text with single separators while preserving intentional blank lines.
-function toPersistenceText(editorText: string): string {
-  return editorText.replace(/\n{2,}/g, (run) => '\n'.repeat(Math.ceil(run.length / 2)))
-}
-
-// Migrate legacy files that were previously persisted with Lexical's doubled separators.
-function fromPersistenceText(storedText: string): string {
-  const runs = newlineRuns(storedText)
-  const hasRuns = runs.length > 0
-  const hasSingleRun = runs.some((len) => len === 1)
-  const allRunsEven = runs.every((len) => len % 2 === 0)
-
-  if (hasRuns && !hasSingleRun && allRunsEven) {
-    return storedText.replace(/\n{2,}/g, (run) => '\n'.repeat(run.length / 2))
-  }
-
-  return storedText
-}
-
 function deriveNoteTitleFromText(text: string): string {
-  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+  const lines = normalizeInternalText(text).split('\n')
   const heading = lines.find((line) => line.startsWith('# ') && line.trim().length > 2)
   if (heading) {
     return heading.slice(2).trim()
@@ -178,7 +147,7 @@ function isExternalTagName(name: string): boolean {
 }
 
 function sanitizeClipboardTitle(raw: string): string {
-  const normalized = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const normalized = normalizeInternalText(raw)
   const firstLine = normalized.split('\n').map((line) => line.trim()).find((line) => line.length > 0)
   if (!firstLine) return FALLBACK_NEW_NOTE_TITLE
 
@@ -614,31 +583,6 @@ function matchesSearchQuery(note: NoteSummary, query: string): boolean {
   )
 }
 
-function normalizeSnippetText(text: string): string {
-  return text.replace(/\s+/g, ' ').trim()
-}
-
-function buildDocumentFindSnippet(text: string, matchIndex: number, queryLength: number): {
-  before: string
-  match: string
-  after: string
-  hasPrefixEllipsis: boolean
-  hasSuffixEllipsis: boolean
-} {
-  const beforeStart = Math.max(0, matchIndex - DOCUMENT_FIND_SNIPPET_RADIUS)
-  const before = normalizeSnippetText(text.slice(beforeStart, matchIndex))
-  const matchText = normalizeSnippetText(text.slice(matchIndex, matchIndex + queryLength))
-  const after = normalizeSnippetText(text.slice(matchIndex + queryLength, matchIndex + queryLength + DOCUMENT_FIND_SNIPPET_RADIUS))
-
-  return {
-    before,
-    match: matchText,
-    after,
-    hasPrefixEllipsis: beforeStart > 0,
-    hasSuffixEllipsis: (matchIndex + queryLength + DOCUMENT_FIND_SNIPPET_RADIUS) < text.length,
-  }
-}
-
 function App() {
   const adapterRef = useRef<EditorAdapter | null>(null)
   const appShellRef = useRef<HTMLDivElement | null>(null)
@@ -659,6 +603,7 @@ function App() {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(20)
   const [showPagination, setShowPagination] = useState(false)
+  const [editorTextVersion, setEditorTextVersion] = useState(0)
   const [scrollbarHostEl, setScrollbarHostEl] = useState<HTMLDivElement | null>(null)
   const [sidebarTreeScrollerEl, setSidebarTreeScrollerEl] = useState<HTMLDivElement | null>(null)
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null)
@@ -777,7 +722,7 @@ function App() {
 
     pendingSaveTextRef.current = null
     try {
-      const savedSummary = await window.measlyNotes.saveNote({ id: activeNoteId, text: nextText })
+      const savedSummary = await window.measlyNotes.saveNote({ id: activeNoteId, text: normalizeInternalText(nextText) })
       setNotes((previous) => {
         const index = previous.findIndex((note) => note.id === savedSummary.id)
         if (index < 0) return previous
@@ -817,7 +762,7 @@ function App() {
     if (!window.measlyNotes) return
 
     const loaded = await window.measlyNotes.loadNote({ id: noteId })
-    const hydratedText = fromPersistenceText(loaded.text)
+    const hydratedText = normalizeInternalText(loaded.text)
     latestEditorTextRef.current = hydratedText
     setActiveNoteId(loaded.id)
     setActiveNoteText(hydratedText)
@@ -950,7 +895,7 @@ function App() {
         noteId = await legacyDbApi.createTempNote(initialTitle, filePath, 'utf8')
       }
 
-      await notesApi.saveNote({ id: noteId, text: toPersistenceText(content) })
+      await notesApi.saveNote({ id: noteId, text: normalizeInternalText(content) })
       await legacyDbApi.updateTempNoteState(noteId, false, true)
       await refreshNotes(noteId)
       await activateNote(noteId)
@@ -1461,7 +1406,7 @@ function App() {
 
   const queueSave = useCallback((text: string) => {
     if (!persistenceReady) return
-    pendingSaveTextRef.current = toPersistenceText(text)
+    pendingSaveTextRef.current = normalizeInternalText(text)
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current)
     }
@@ -1527,7 +1472,7 @@ function App() {
           setNotes((previous) => mergeNoteSummaries(previous, listed))
           setActiveNoteId(loaded.id)
 
-          const hydratedText = fromPersistenceText(loaded.text)
+          const hydratedText = normalizeInternalText(loaded.text)
           latestEditorTextRef.current = hydratedText
           setActiveNoteText(hydratedText)
 
@@ -1607,8 +1552,11 @@ function App() {
 
   const bindings = useMemo<EditorBindings>(() => ({
     onTextChange: (event: EditorTextChangeEvent) => {
+      const normalizedText = normalizeInternalText(event.text)
+      latestEditorTextRef.current = normalizedText
+      setEditorTextVersion((previous) => previous + 1)
+
       if (!activeNoteId || !persistenceReady) return
-      latestEditorTextRef.current = event.text
 
       const isUserEditableSource =
         event.source === 'user-input' || event.source === 'history-undo' || event.source === 'history-redo'
@@ -1618,8 +1566,8 @@ function App() {
         return
       }
 
-      updateActiveNoteTitlePreview(event.text)
-      queueSave(event.text)
+      updateActiveNoteTitlePreview(normalizedText)
+      queueSave(normalizedText)
     },
     onViewportChange: (event: EditorViewportChangeEvent) => {
       latestViewportRef.current = {
@@ -1755,52 +1703,16 @@ function App() {
   }, [searchQuery, sortedNotes])
 
   const isFindMode = sidebarMode === 'find'
+  const currentEditorText = useMemo(() => {
+    return normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+  }, [activeNoteText, editorTextVersion])
+  const documentFindDirective = useMemo<DocumentFindDirective>(() => {
+    return resolveDocumentFindDirective(documentFindQuery, currentEditorText, isDocumentFindCaseSensitive)
+  }, [currentEditorText, documentFindQuery, isDocumentFindCaseSensitive])
+
   const documentFindHits = useMemo<DocumentFindHit[]>(() => {
-    const query = documentFindQuery.trim()
-    if (!query || !activeNoteText) {
-      return []
-    }
-
-    const sourceText = activeNoteText
-    const haystack = isDocumentFindCaseSensitive ? sourceText : sourceText.toLowerCase()
-    const needle = isDocumentFindCaseSensitive ? query : query.toLowerCase()
-    const queryLength = query.length
-    const hits: DocumentFindHit[] = []
-
-    let nextSearchIndex = 0
-    let line = 0
-    let scannedUntil = 0
-
-    while (nextSearchIndex <= haystack.length - needle.length) {
-      const foundAt = haystack.indexOf(needle, nextSearchIndex)
-      if (foundAt < 0) break
-
-      for (let index = scannedUntil; index < foundAt; index += 1) {
-        if (sourceText[index] === '\n') {
-          line += 1
-        }
-      }
-      scannedUntil = foundAt
-
-      const snippet = buildDocumentFindSnippet(sourceText, foundAt, queryLength)
-
-      hits.push({
-        id: `${foundAt}:${hits.length}`,
-        index: foundAt,
-        matchLength: queryLength,
-        line,
-        snippetBefore: snippet.before,
-        snippetMatch: snippet.match,
-        snippetAfter: snippet.after,
-        hasSnippetPrefixEllipsis: snippet.hasPrefixEllipsis,
-        hasSnippetSuffixEllipsis: snippet.hasSuffixEllipsis,
-      })
-
-      nextSearchIndex = foundAt + Math.max(1, queryLength)
-    }
-
-    return hits
-  }, [activeNoteText, documentFindQuery, isDocumentFindCaseSensitive])
+    return buildDocumentFindHits(currentEditorText, documentFindDirective.findText, isDocumentFindCaseSensitive)
+  }, [currentEditorText, documentFindDirective.findText, isDocumentFindCaseSensitive])
 
   const hasMonthFilter = selectedMonths.size > 0
   const hasYearFilter = selectedYears.size > 0
@@ -1979,6 +1891,87 @@ function App() {
       },
     })
   }, [])
+
+  const applyProgrammaticEditorText = useCallback((nextText: string, selectionStart?: number, selectionEnd?: number) => {
+    const normalizedText = normalizeInternalText(nextText)
+    latestEditorTextRef.current = normalizedText
+    setActiveNoteText(normalizedText)
+    setEditorTextVersion((previous) => previous + 1)
+    updateActiveNoteTitlePreview(normalizedText)
+    queueSave(normalizedText)
+
+    if (typeof selectionStart === 'number' && typeof selectionEnd === 'number') {
+      const safeSelectionStart = Math.max(0, Math.min(selectionStart, normalizedText.length))
+      const safeSelectionEnd = Math.max(0, Math.min(selectionEnd, normalizedText.length))
+      requestAnimationFrame(() => {
+        adapterRef.current?.applySnapshot({
+          selection: {
+            anchor: safeSelectionStart,
+            focus: safeSelectionEnd,
+            start: Math.min(safeSelectionStart, safeSelectionEnd),
+            end: Math.max(safeSelectionStart, safeSelectionEnd),
+            isCollapsed: safeSelectionStart === safeSelectionEnd,
+          },
+        })
+      })
+    }
+  }, [queueSave, updateActiveNoteTitlePreview])
+
+  const replaceDocumentFindHit = useCallback((hit: DocumentFindHit) => {
+    const sourceText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+    const directive = resolveDocumentFindDirective(documentFindQuery, sourceText, isDocumentFindCaseSensitive)
+
+    // Right-click should still behave like a normal jump when replace mode is not active.
+    if (!directive.isReplaceMode || !directive.findText) {
+      handleJumpToDocumentFindHit(hit)
+      return
+    }
+
+    const selectedText = sourceText.slice(hit.index, hit.index + hit.matchLength)
+    const selectedComparable = isDocumentFindCaseSensitive ? selectedText : selectedText.toLowerCase()
+    const findComparable = isDocumentFindCaseSensitive ? directive.findText : directive.findText.toLowerCase()
+    if (selectedComparable !== findComparable) {
+      // If content shifted since hit computation, just jump to keep behavior predictable.
+      handleJumpToDocumentFindHit(hit)
+      return
+    }
+
+    const nextText = `${sourceText.slice(0, hit.index)}${directive.replaceText}${sourceText.slice(hit.index + hit.matchLength)}`
+    const replacementEnd = hit.index + directive.replaceText.length
+    applyProgrammaticEditorText(nextText, hit.index, replacementEnd)
+  }, [activeNoteText, applyProgrammaticEditorText, documentFindQuery, handleJumpToDocumentFindHit, isDocumentFindCaseSensitive])
+
+  const replaceAllDocumentFindHits = useCallback(() => {
+    const sourceText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+    const directive = resolveDocumentFindDirective(documentFindQuery, sourceText, isDocumentFindCaseSensitive)
+    if (!directive.isReplaceMode || !directive.findText) {
+      return
+    }
+
+    const hits = buildDocumentFindHits(sourceText, directive.findText, isDocumentFindCaseSensitive)
+    if (hits.length === 0) {
+      return
+    }
+
+    let cursor = 0
+    let nextText = ''
+    for (const hit of hits) {
+      nextText += sourceText.slice(cursor, hit.index)
+      nextText += directive.replaceText
+      cursor = hit.index + hit.matchLength
+    }
+    nextText += sourceText.slice(cursor)
+
+    const firstHitStart = hits[0]?.index ?? 0
+    const firstHitEnd = firstHitStart + directive.replaceText.length
+    applyProgrammaticEditorText(nextText, firstHitStart, firstHitEnd)
+  }, [activeNoteText, applyProgrammaticEditorText, documentFindQuery, isDocumentFindCaseSensitive])
+
+  const handleFindViewButtonContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    replaceAllDocumentFindHits()
+  }, [replaceAllDocumentFindHits])
 
   const handleMonthToggle = useCallback((month: number, event: MouseEvent<HTMLButtonElement>) => {
     handleMultiSelect(month, event, selectedMonths, FILTER_MONTHS, setSelectedMonths)
@@ -2184,6 +2177,12 @@ function App() {
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (isFindMode && event.ctrlKey && !event.shiftKey && event.key === 'Enter') {
+        event.preventDefault()
+        replaceAllDocumentFindHits()
+        return
+      }
+
       if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'f') {
         event.preventDefault()
         setSidebarMode('find')
@@ -2228,7 +2227,7 @@ function App() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [createNote, createNoteFromClipboardTitle, documentFindQuery, isFindMode, searchQuery, sidebarMode])
+  }, [createNote, createNoteFromClipboardTitle, documentFindQuery, isFindMode, replaceAllDocumentFindHits, searchQuery, sidebarMode])
 
   return (
     <div
@@ -2274,7 +2273,13 @@ function App() {
                 title={label}
                 aria-label={label}
                 onClick={() => handleViewModeButtonClick(mode)}
-                onContextMenu={mode === 'trash' ? handleTrashViewButtonContextMenu : undefined}
+                onContextMenu={
+                  mode === 'trash'
+                    ? handleTrashViewButtonContextMenu
+                    : mode === 'find'
+                      ? handleFindViewButtonContextMenu
+                      : undefined
+                }
                 onMouseDown={mode === 'trash' ? handleTrashViewButtonMouseDown : undefined}
                 onMouseUp={mode === 'trash' ? handleTrashViewButtonMouseUp : undefined}
                 onMouseLeave={mode === 'trash' ? () => {
@@ -2330,6 +2335,10 @@ function App() {
                     type="button"
                     className="find-hit-item"
                     onClick={() => handleJumpToDocumentFindHit(hit)}
+                    onContextMenu={(event) => {
+                      event.preventDefault()
+                      replaceDocumentFindHit(hit)
+                    }}
                     title={`Jump to occurrence ${index + 1}`}
                   >
                     <span className="find-hit-snippet">

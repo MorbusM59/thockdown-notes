@@ -284,4 +284,8 @@ body {
 .relative { position: relative; }
 .bg-white { background-color: #fff; }
 
-.editor-paragraph { margin: 0; padding: 0; }
+.editor-paragraph {
+  margin: 0;
+  padding: 0;
+  min-height: var(--editor-line-height);
+}

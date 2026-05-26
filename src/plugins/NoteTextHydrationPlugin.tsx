@@ -1,6 +1,7 @@
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useLayoutEffect, useRef } from 'react';
 import { $createParagraphNode, $createTextNode, $getRoot } from 'lexical';
+import { normalizeInternalText } from '../editor/TextPolicy';
 
 interface NoteTextHydrationPluginProps {
   text: string;
@@ -10,7 +11,7 @@ function replaceEditorText(nextText: string): void {
   const root = $getRoot();
   root.clear();
 
-  const normalized = nextText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const normalized = normalizeInternalText(nextText);
   const lines = normalized.split('\n');
 
   if (lines.length === 0) {

@@ -1,4 +1,5 @@
 import type { EditorSelectionState } from './EditorContract';
+import { normalizeInternalText } from './TextPolicy';
 
 export const EMPTY_SELECTION: EditorSelectionState = {
   anchor: 0,
@@ -9,7 +10,7 @@ export const EMPTY_SELECTION: EditorSelectionState = {
 };
 
 export function normalizePlainText(input: string): string {
-  return input.replace(/\r\n/g, '\n');
+  return normalizeInternalText(input);
 }
 
 function clamp(value: number, min: number, max: number): number {

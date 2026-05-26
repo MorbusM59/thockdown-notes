@@ -27,6 +27,7 @@ import {
 } from '../editor/ContractInvariantHarness';
 import { logScenarioProbe, readCaretGeometry } from '../editor/ScenarioProbe';
 import { CELL_WIDTH_PX, LINE_HEIGHT_PX } from '../editor/LayoutConstants';
+import { normalizeInternalText } from '../editor/TextPolicy';
 
 const theme = {
   paragraph: 'editor-paragraph',
@@ -65,10 +66,8 @@ function clampNumber(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-// Lexical plain-text extraction can represent paragraph separators as doubled newlines.
-// Collapse to canonical single separators to align with App-level find offsets.
 function collapseEditorSeparators(text: string): string {
-  return text.replace(/\n{2,}/g, (run) => '\n'.repeat(Math.ceil(run.length / 2)));
+  return normalizeInternalText(text);
 }
 
 type DomPoint = { node: Node; offset: number };
