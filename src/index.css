@@ -28,6 +28,7 @@
   --editor-font-size: 16px;
   --editor-line-height: 24px;
   --editor-cell-width: 10px; /* EXACT absolute pixel width for boxes */
+  --editor-frame-padding: 8px;
   
   /* Grid & Box Colors */
   --color-grid-bg: #f9f6f3;       /* Bright paper background */

@@ -66,6 +66,15 @@ function clampNumber(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function readEditorFramePaddingPx(element: HTMLElement): number {
+  const raw = getComputedStyle(element).getPropertyValue('--editor-frame-padding').trim();
+  const parsed = Number.parseFloat(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0;
+  }
+  return parsed;
+}
+
 function collapseEditorSeparators(text: string): string {
   return normalizeInternalText(text);
 }
@@ -492,12 +501,18 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
   useEffect(() => {
     const updateSize = () => {
       if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
+      const container = containerRef.current;
+      const rect = container.getBoundingClientRect();
+      const framePaddingPx = readEditorFramePaddingPx(container);
+      const availableInnerWidth = Math.max(1, rect.width - (framePaddingPx * 2));
+      const availableInnerHeight = Math.max(LINE_HEIGHT_PX, rect.height - (framePaddingPx * 2));
       
       // Keep the editor viewport on exact cell multiples so separator math,
       // scroll cage math, and rendered grid rows share the same lattice.
-      const snappedWidth = Math.max(1, Math.floor((rect.width - 1) / 10) * 10 + 1);
-      const snappedHeight = Math.max(24, Math.floor(rect.height / 24) * 24);
+      const snappedInnerWidth = Math.max(1, Math.floor((availableInnerWidth - 1) / CELL_WIDTH_PX) * CELL_WIDTH_PX + 1);
+      const snappedInnerHeight = Math.max(LINE_HEIGHT_PX, Math.floor(availableInnerHeight / LINE_HEIGHT_PX) * LINE_HEIGHT_PX);
+      const snappedWidth = snappedInnerWidth + (framePaddingPx * 2);
+      const snappedHeight = snappedInnerHeight + (framePaddingPx * 2);
       
       const left = Math.floor((rect.width - snappedWidth) / 2);
       const top = Math.floor((rect.height - snappedHeight) / 2);
@@ -715,14 +730,25 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
               left: editorSize.left,
               top: editorSize.top,
               cursor: (isDraggingTop || isDraggingBottom) ? 'ns-resize' : 'auto',
-              backgroundColor: 'var(--color-bg-regular)'
+              backgroundColor: 'transparent',
             }}
           >
+            {/* Inset content surface: keeps frame gap transparent while preserving editor background. */}
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                inset: 'var(--editor-frame-padding)',
+                backgroundColor: 'var(--color-bg-regular)',
+              }}
+            />
+
             {/* Background color for top and bottom zones */}
             <div
               className="absolute left-0 right-0 pointer-events-none"
               style={{
-                top: 0,
+                top: 'var(--editor-frame-padding)',
+                left: 'var(--editor-frame-padding)',
+                right: 'var(--editor-frame-padding)',
                 height: topBoundary,
                 backgroundColor: 'var(--color-bg-leading)',
               }}
@@ -730,45 +756,47 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
             <div
               className="absolute left-0 right-0 pointer-events-none"
               style={{
-                bottom: 0,
+                bottom: 'var(--editor-frame-padding)',
+                left: 'var(--editor-frame-padding)',
+                right: 'var(--editor-frame-padding)',
                 height: bottomBoundary,
                 backgroundColor: 'var(--color-bg-trailing)',
               }}
             />
 
             {/* The single unified full-screen grid lines */}
-            <div className="absolute inset-0 pointer-events-none measly-grid-lines" />
+            <div className="absolute pointer-events-none measly-grid-lines" style={{ inset: 'var(--editor-frame-padding)' }} />
             
             {/* Top Drag Handle (Invisible, centered on the boundary line) */}
             <div 
               className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize" 
-              style={{ top: topBoundary - 12, height: 24 }} 
+              style={{ top: `calc(var(--editor-frame-padding) + ${topBoundary}px - 12px)`, left: 'var(--editor-frame-padding)', right: 'var(--editor-frame-padding)', height: 24 }} 
               onMouseDown={(e) => { e.preventDefault(); setIsDraggingTop(true); }}
             />
 
             {/* Bottom Drag Handle */}
             <div 
               className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize" 
-              style={{ bottom: bottomBoundary - 12, height: 24 }} 
+              style={{ bottom: `calc(var(--editor-frame-padding) + ${bottomBoundary}px - 12px)`, left: 'var(--editor-frame-padding)', right: 'var(--editor-frame-padding)', height: 24 }} 
               onMouseDown={(e) => { e.preventDefault(); setIsDraggingBottom(true); }}
             />
 
             {/* Actual Scroller */}
             <div 
               ref={scrollerRef}
-              className="absolute inset-0 overflow-y-auto overflow-x-hidden outline-none z-10 measly-custom-scrollbar"
-              style={{ scrollBehavior: 'auto' }}
+              className="absolute overflow-y-auto overflow-x-hidden outline-none z-10 measly-custom-scrollbar"
+              style={{ inset: 'var(--editor-frame-padding)', scrollBehavior: 'auto' }}
             >
               <RichTextPlugin
                 contentEditable={
                   <ContentEditable 
                     className="outline-none text-gray-800 editor-text min-h-full w-full relative z-10"
-                    style={{ paddingTop: topBoundary, paddingBottom: bottomBoundary, paddingLeft: 40, paddingRight: 40, boxSizing: 'border-box' }}
+                    style={{ paddingTop: topBoundary, paddingBottom: bottomBoundary, paddingLeft: 0, paddingRight: 0, boxSizing: 'border-box' }}
                     spellCheck={false} 
                   />
                 }
                 placeholder={
-                  <div className="absolute text-gray-400 pointer-events-none select-none editor-text z-0" style={{ top: topBoundary, left: 40 }}>
+                  <div className="absolute text-gray-400 pointer-events-none select-none editor-text z-0" style={{ top: topBoundary, left: 0 }}>
                     Jot down a measly note...
                   </div>
                 }
