@@ -147,7 +147,6 @@ function containsDocumentMatch(sourceText: string, query: string, caseSensitive:
 function normalizeSnippetText(value: string): string {
   return value
     .replace(/\n/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+    .replace(/\s+/g, ' ');
 }
 

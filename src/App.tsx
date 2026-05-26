@@ -2343,9 +2343,9 @@ function App() {
                   >
                     <span className="find-hit-snippet">
                       {hit.hasSnippetPrefixEllipsis ? '... ' : ''}
-                      {hit.snippetBefore ? `${hit.snippetBefore} ` : ''}
+                      {hit.snippetBefore}
                       <span className="find-hit-match">{hit.snippetMatch}</span>
-                      {hit.snippetAfter ? ` ${hit.snippetAfter}` : ''}
+                      {hit.snippetAfter}
                       {hit.hasSnippetSuffixEllipsis ? ' ...' : ''}
                     </span>
                   </button>
