@@ -298,10 +298,16 @@ function sanitizeViewport(input) {
   };
 }
 function sanitizeSidebarMode(input) {
-  if (input === "date" || input === "category" || input === "archive" || input === "trash") {
+  if (input === "date" || input === "category" || input === "archive" || input === "trash" || input === "find") {
     return input;
   }
   return "date";
+}
+function sanitizeRatio(input, fallback) {
+  if (typeof input !== "number" || !Number.isFinite(input)) {
+    return fallback;
+  }
+  return Math.max(0, Math.min(1, input));
 }
 function sanitizeMenu(input) {
   const selectedMonths = Array.isArray(input == null ? void 0 : input.selectedMonths) ? input.selectedMonths.filter((value) => Number.isInteger(value) && value >= 1 && value <= 12) : [];
@@ -311,8 +317,9 @@ function sanitizeMenu(input) {
     selectedMonths,
     selectedYears,
     searchQuery: typeof (input == null ? void 0 : input.searchQuery) === "string" ? input.searchQuery : "",
-    sidebarWidthRatio: typeof (input == null ? void 0 : input.sidebarWidthRatio) === "number" ? Math.max(0.2, Math.min(0.6, input.sidebarWidthRatio)) : DEFAULT_APP_STATE.menu.sidebarWidthRatio,
-    tagSplitRatio: typeof (input == null ? void 0 : input.tagSplitRatio) === "number" ? Math.max(0.35, Math.min(0.8, input.tagSplitRatio)) : DEFAULT_APP_STATE.menu.tagSplitRatio
+    documentFindCaseSensitive: Boolean(input == null ? void 0 : input.documentFindCaseSensitive),
+    sidebarWidthRatio: sanitizeRatio(input == null ? void 0 : input.sidebarWidthRatio, DEFAULT_APP_STATE.menu.sidebarWidthRatio),
+    tagSplitRatio: sanitizeRatio(input == null ? void 0 : input.tagSplitRatio, DEFAULT_APP_STATE.menu.tagSplitRatio)
   };
 }
 async function fileExists(filePath) {
