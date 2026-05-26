@@ -4,6 +4,7 @@
   display: grid;
   overflow: hidden;
   background: linear-gradient(135deg, #f5f3f2, #e9e5e2);
+  text-shadow: var(--text-shadow-emboss-base);
 }
 
 :root {
@@ -33,6 +34,9 @@
   --sidebar-view-gap-min: 8px;
   --sidebar-view-padding-left: 8px;
   --sidebar-padding-right: 8px;
+  --text-shadow-emboss-base: 0 -1px 0px #55000022, 0 1px 0px #ffffff;
+  --text-shadow-emboss-panel: 0 1px 1px rgba(255,255,255,1), 0 -1px 0 rgba(0,0,0,0.2);
+  --text-shadow-emboss-heading-glow: 0 0 8px #FFFFFF, 0 0 4px #FFFFFF, 0 0 2px #FFFFFF99, 0 1px 0 #FFFFFF;
   --sidebar-min-width: calc(
     (var(--sidebar-view-button-size) * 5) +
     (var(--sidebar-view-gap-min) * 4) +
@@ -271,6 +275,7 @@ body.splitter-dragging {
   font-size: 18px;
   color: #23201d;
   letter-spacing: 0.04em;
+  text-shadow: var(--text-shadow-emboss-panel);
 }
 
 .notes-action-button {
@@ -884,6 +889,7 @@ body.splitter-dragging {
   text-transform: uppercase;
   letter-spacing: 0.2em;
   text-align: center;
+  text-shadow: var(--text-shadow-emboss-panel);
 }
 
 .category-secondary-summary{
@@ -898,6 +904,7 @@ body.splitter-dragging {
   letter-spacing: 0.1em;
   background-color: #00000011;
   border-right: 2px solid #999999;
+  text-shadow: var(--text-shadow-emboss-panel);
 }
 
 .category-secondary {

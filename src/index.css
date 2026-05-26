@@ -179,6 +179,7 @@ body {
 .measly-token-heading {
   color: #1e3a8a;
   font-weight: bold;
+  text-shadow: 0 0 8px #FFFFFF, 0 0 4px #FFFFFF, 0 0 2px #FFFFFF99, 0 1px 0 #FFFFFF;
 }
 
 .measly-token-list {
