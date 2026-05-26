@@ -30,6 +30,7 @@ import {
 import { logScenarioProbe, readCaretGeometry } from '../editor/ScenarioProbe';
 import { CELL_WIDTH_PX, LINE_HEIGHT_PX } from '../editor/LayoutConstants';
 import { normalizeInternalText } from '../editor/TextPolicy';
+import { scrollToQuantizedEase } from '../editor/QuantizedEaseScroll';
 
 const theme = {
   paragraph: 'editor-paragraph',
@@ -179,7 +180,12 @@ function applyDomSelectionFromOffsets(rootEl: HTMLElement, canonicalText: string
   selection.addRange(range);
 }
 
-function centerSelectionInCagedMiddle(scroller: HTMLElement, topBoundaryPx: number, bottomBoundaryPx: number): void {
+function centerSelectionInCagedMiddle(
+  scroller: HTMLElement,
+  topBoundaryPx: number,
+  bottomBoundaryPx: number,
+  options?: { animate?: boolean },
+): void {
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0) return;
 
@@ -204,7 +210,13 @@ function centerSelectionInCagedMiddle(scroller: HTMLElement, topBoundaryPx: numb
   );
 
   if (nextScrollTopPx !== scroller.scrollTop) {
-    scroller.scrollTop = nextScrollTopPx;
+    if (options?.animate) {
+      scrollToQuantizedEase(scroller, nextScrollTopPx, {
+        lineHeightPx: LINE_HEIGHT_PX,
+      });
+    } else {
+      scroller.scrollTop = nextScrollTopPx;
+    }
   }
 }
 
@@ -487,8 +499,13 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
             const scroller = scrollerRef.current;
             if (scroller) {
               // Reconcile after selection is in DOM so focus stays inside the middle cage.
-              centerSelectionInCagedMiddle(scroller, topBoundary, bottomBoundary);
-              requestAnimationFrame(() => centerSelectionInCagedMiddle(scroller, topBoundary, bottomBoundary));
+              const shouldAnimateSelectionJump = !snapshot.selection.isCollapsed;
+              centerSelectionInCagedMiddle(scroller, topBoundary, bottomBoundary, {
+                animate: shouldAnimateSelectionJump,
+              });
+              requestAnimationFrame(() => centerSelectionInCagedMiddle(scroller, topBoundary, bottomBoundary, {
+                animate: shouldAnimateSelectionJump,
+              }));
             }
           }
         }
@@ -677,13 +694,25 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
 
   const handleTrackMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     const track = scrollbarTrackRef.current;
-    if (!track) return;
+    const scroller = scrollerRef.current;
+    if (!track || !scroller) return;
 
     const rect = track.getBoundingClientRect();
     const clickY = event.clientY - rect.top;
     const targetThumbTop = clickY - (scrollThumbHeightPx / 2);
-    scrollFromThumbTop(targetThumbTop);
-    syncCustomScrollbar();
+    const trackHeight = track.clientHeight;
+    const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2));
+    const maxThumbTravel = Math.max(0, usableTrackHeight - scrollThumbHeightPx);
+    const minThumbTop = SCROLL_TRACK_EDGE_GAP_PX;
+    const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel;
+    const clampedTop = Math.max(minThumbTop, Math.min(targetThumbTop, maxThumbTop));
+    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0;
+    const targetScrollTop = ratio * maxScrollTop;
+
+    scrollToQuantizedEase(scroller, targetScrollTop, {
+      lineHeightPx: LINE_HEIGHT_PX,
+    });
   };
 
   const handleThumbMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {

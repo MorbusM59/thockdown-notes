@@ -94,10 +94,9 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
           lineHeightPx: LINE_HEIGHT_PX,
         });
 
-        // Never render a transient pre-refocus row.
+        // While refocus is active, hide caret until centralized caged easing settles.
         if (targetScrollTopPx !== scroller.scrollTop) {
-          scroller.scrollTop = targetScrollTopPx;
-          scheduleCaretUpdateRef.current();
+          setCaretStyle(null);
           return;
         }
       }

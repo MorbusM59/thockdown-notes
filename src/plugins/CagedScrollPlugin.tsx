@@ -1,10 +1,18 @@
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useEffect } from 'react';
-import { $getRoot } from 'lexical';
+import {
+  $addUpdateTag,
+  $getRoot,
+  COMMAND_PRIORITY_CRITICAL,
+  KEY_DOWN_COMMAND,
+  SKIP_SCROLL_INTO_VIEW_TAG,
+  SKIP_SELECTION_FOCUS_TAG,
+} from 'lexical';
 import { readSelectionRect } from '../editor/CaretRect';
 import { resolveCaretTopInScroll } from '../editor/CaretVisualPosition';
 import { LINE_HEIGHT_PX, PIXELS_PER_WHEEL_UNIT } from '../editor/LayoutConstants';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
+import { scrollToQuantizedEase } from '../editor/QuantizedEaseScroll';
 import {
   activateRefocusTransaction,
   clearRefocusTransaction,
@@ -106,7 +114,13 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       if (targetScrollTopPx === null) return;
 
       if (targetScrollTopPx !== scroller.scrollTop) {
-        scroller.scrollTop = targetScrollTopPx;
+        if (intent === 'refocus-caged') {
+          scrollToQuantizedEase(scroller, targetScrollTopPx, {
+            lineHeightPx: LINE_HEIGHT_PX,
+          });
+        } else {
+          scroller.scrollTop = targetScrollTopPx;
+        }
       }
 
       if (intent === 'refocus-caged') {
@@ -119,16 +133,29 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     };
 
     let pendingIntent: ViewportIntent = 'none';
-    let refocusFrame: number | null = null;
+    let isRefocusReconcileQueued = false;
     const pressedRefocusKeys = new Set<string>();
+    let initialRefocusAnchorScrollTopPx: number | null = null;
+    let shouldSuppressInitialNativeJump = false;
     let isPrimaryPointerDown = false;
     let lastDragScrollTopPx = 0;
     let isApplyingDragQuantizedCorrection = false;
     let dragCorrectionFrame: number | null = null;
 
+    const resolveQuantizedAnchorScrollTopPx = () => {
+      if (!scroller || initialRefocusAnchorScrollTopPx === null) return null;
+      const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      return Math.max(
+        0,
+        Math.min(maxScrollTopPx, Math.round(initialRefocusAnchorScrollTopPx / LINE_HEIGHT_PX) * LINE_HEIGHT_PX),
+      );
+    };
+
     const clearCagedRefocusState = () => {
       if (!scroller) return;
       pressedRefocusKeys.clear();
+      initialRefocusAnchorScrollTopPx = null;
+      shouldSuppressInitialNativeJump = false;
       if (pendingIntent === 'refocus-caged') {
         pendingIntent = 'none';
       }
@@ -145,15 +172,16 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
 
     const scheduleRefocus = () => {
       if (pendingIntent === 'none') return;
-      if (refocusFrame !== null) {
-        cancelAnimationFrame(refocusFrame);
-      }
+      if (isRefocusReconcileQueued) return;
 
-      // Reconcile after native selection/caret movement has been applied.
-      refocusFrame = requestAnimationFrame(() => {
-        refocusFrame = null;
+      isRefocusReconcileQueued = true;
+      // Reconcile in the same task tick after Lexical applies selection changes,
+      // avoiding a one-frame paint window where native auto-scroll can flicker.
+      queueMicrotask(() => {
+        isRefocusReconcileQueued = false;
         const intent = pendingIntent;
         pendingIntent = 'none';
+        shouldSuppressInitialNativeJump = false;
         if (intent === 'none') return;
         applyIntentReconcile(intent);
       });
@@ -178,7 +206,9 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         event.key === 'ArrowUp' ||
         event.key === 'ArrowDown' ||
         event.key === 'ArrowLeft' ||
-        event.key === 'ArrowRight'
+        event.key === 'ArrowRight' ||
+        event.key === 'Home' ||
+        event.key === 'End'
       ) {
         return true;
       }
@@ -192,11 +222,42 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       key === 'ArrowDown' ||
       key === 'ArrowLeft' ||
       key === 'ArrowRight' ||
+      key === 'Home' ||
+      key === 'End' ||
       key === 'Enter' ||
       key === 'Backspace' ||
       key === 'Delete' ||
       key === 'Tab'
     );
+
+    const shouldSuppressNativeCaretScroll = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return false;
+      return isRefocusKey(event) || event.key === 'PageUp' || event.key === 'PageDown';
+    };
+
+    const removeKeyDownScrollSuppressor = editor.registerCommand(
+      KEY_DOWN_COMMAND,
+      (event: KeyboardEvent) => {
+        if (!scroller) return false;
+        const isRefocusActive = pendingIntent === 'refocus-caged' || pressedRefocusKeys.size > 0;
+        if (!isRefocusActive) return false;
+        if (!shouldSuppressNativeCaretScroll(event)) return false;
+
+        // Surgical suppression: keep native key handling, but stop Lexical/browser
+        // from auto-focusing the caret into viewport during this refocus transaction.
+        $addUpdateTag(SKIP_SCROLL_INTO_VIEW_TAG);
+        $addUpdateTag(SKIP_SELECTION_FOCUS_TAG);
+        return false;
+      },
+      COMMAND_PRIORITY_CRITICAL,
+    );
+
+    const runQuantizedJump = (targetScrollTopPx: number) => {
+      if (!scroller) return;
+      scrollToQuantizedEase(scroller, targetScrollTopPx, {
+        lineHeightPx: LINE_HEIGHT_PX,
+      });
+    };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!scroller) return;
@@ -213,15 +274,33 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         const target = Math.max(0, Math.min(maxScrollTop, currentAligned + delta));
         const quantizedTarget = Math.round(target / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
 
-        scroller.scrollTo({ top: quantizedTarget, behavior: 'auto' });
+        runQuantizedJump(quantizedTarget);
         return;
       }
 
       if (isRefocusKey(event)) {
+        initialRefocusAnchorScrollTopPx = scroller.scrollTop;
+        shouldSuppressInitialNativeJump = true;
         pressedRefocusKeys.add(event.key);
         activateRefocusTransaction(scroller);
         pendingIntent = 'refocus-caged';
       }
+    };
+
+    const handleInitialRefocusNativeJumpSuppression = () => {
+      if (!scroller) return;
+      if (!shouldSuppressInitialNativeJump) return;
+      if (pendingIntent !== 'refocus-caged') return;
+
+      const quantizedAnchorPx = resolveQuantizedAnchorScrollTopPx();
+      if (quantizedAnchorPx === null) return;
+
+      if (Math.abs(scroller.scrollTop - quantizedAnchorPx) >= 0.01) {
+        // One-shot corrective write for the native jump frame only.
+        scroller.scrollTop = quantizedAnchorPx;
+      }
+
+      shouldSuppressInitialNativeJump = false;
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
@@ -377,6 +456,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     scroller?.addEventListener('keyup', handleKeyUp);
     scroller?.addEventListener('paste', handlePaste);
     scroller?.addEventListener('wheel', handleWheel, { passive: false });
+    scroller?.addEventListener('scroll', handleInitialRefocusNativeJumpSuppression, { passive: true });
     document.addEventListener('pointerdown', handlePointerDown, { capture: true, passive: true });
     document.addEventListener('mousedown', handleMouseDown, { capture: true, passive: true });
     scroller?.addEventListener('scroll', handleSelectionDragScrollQuantization, { passive: true });
@@ -387,10 +467,6 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      if (refocusFrame !== null) {
-        cancelAnimationFrame(refocusFrame);
-        refocusFrame = null;
-      }
       if (dragCorrectionFrame !== null) {
         cancelAnimationFrame(dragCorrectionFrame);
         dragCorrectionFrame = null;
@@ -399,6 +475,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       scroller?.removeEventListener('keyup', handleKeyUp);
       scroller?.removeEventListener('paste', handlePaste);
       scroller?.removeEventListener('wheel', handleWheel);
+      scroller?.removeEventListener('scroll', handleInitialRefocusNativeJumpSuppression);
       document.removeEventListener('pointerdown', handlePointerDown, true);
       document.removeEventListener('mousedown', handleMouseDown, true);
       scroller?.removeEventListener('scroll', handleSelectionDragScrollQuantization);
@@ -410,6 +487,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       if (scroller) {
         clearRefocusTransaction(scroller);
       }
+      removeKeyDownScrollSuppressor();
       removeUpdateListener();
     };
   }, [editor, scrollerRef, topBoundaryPx, bottomBoundaryPx]);
