@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type {
@@ -14,6 +14,7 @@ import type {
   SaveNoteInput,
   TagSummary,
 } from '../src/shared/noteLifecycle';
+import { sanitizeDocumentText } from '../src/shared/textSanitization';
 import type { DatabaseService, NoteRecord } from './databaseService';
 
 const NOTES_DIR_NAME = 'notes';
@@ -26,7 +27,19 @@ type ParsedNoteMetadata = {
 };
 
 function normalizeText(text: string): string {
-  return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  return sanitizeDocumentText(text);
+}
+
+function normalizeLineEndingsOnly(text: string): string {
+  return text
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/[\u2028\u2029]/g, '\n');
+}
+
+function checksumText(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
 function titleFromText(text: string): string {
@@ -41,8 +54,8 @@ function titleFromText(text: string): string {
   return firstContent?.trim() ?? 'Untitled';
 }
 
-function parseNoteMetadata(rawText: string): ParsedNoteMetadata {
-  const normalized = normalizeText(rawText);
+function parseNoteMetadata(rawText: string, sanitize: boolean): ParsedNoteMetadata {
+  const normalized = sanitize ? normalizeText(rawText) : normalizeLineEndingsOnly(rawText);
   const lines = normalized.split('\n');
   const firstLine = lines[0]?.trim() ?? '';
 
@@ -117,7 +130,7 @@ export class NoteLifecycleService {
           }
         : await fs.stat(record.filePath);
 
-      const parsed = parseNoteMetadata(text);
+      const parsed = parseNoteMetadata(text, true);
       const fileName = path.basename(record.filePath);
 
       return {
@@ -147,18 +160,58 @@ export class NoteLifecycleService {
     const record = this.databaseService.getNoteRecord(input.id);
     const filePath = record?.filePath ?? path.join(this.notesDir, idToFileName(input.id));
     const fileName = path.basename(filePath);
-    const text = record?.isTemp
+    const rawText = record?.isTemp
       ? (this.databaseService.getNoteContentSnapshot(input.id) ?? '')
       : await fs.readFile(filePath, 'utf8');
     const stat = record?.isTemp
       ? {
           birthtimeMs: record.createdAtMs,
           mtimeMs: record.updatedAtMs,
-          size: Buffer.byteLength(text, 'utf8'),
+          size: Buffer.byteLength(rawText, 'utf8'),
         }
       : await fs.stat(filePath);
 
-    const parsed = parseNoteMetadata(text);
+    let text = rawText;
+    let shouldSanitize = true;
+
+    // External/temp notes are always full-pass sanitized.
+    if (!record?.isTemp) {
+      const storedChecksum = record?.contentChecksum;
+      const currentChecksum = checksumText(rawText);
+      // Trusted fast path for internal notes: unchanged content bypasses sanitizer.
+      shouldSanitize = !(storedChecksum && storedChecksum === currentChecksum);
+    }
+
+    if (shouldSanitize) {
+      const sanitizedText = normalizeText(rawText);
+      text = sanitizedText;
+
+      if (record?.isTemp) {
+        this.databaseService.upsertNoteContent({
+          id: input.id,
+          title: titleFromText(sanitizedText),
+          filePath,
+          text: sanitizedText,
+          createdAtMs: record.createdAtMs,
+          updatedAtMs: Date.now(),
+        });
+      } else {
+        if (sanitizedText !== rawText) {
+          await fs.writeFile(filePath, sanitizedText, 'utf8');
+        }
+
+        this.databaseService.upsertNoteContent({
+          id: input.id,
+          title: titleFromText(sanitizedText),
+          filePath,
+          text: sanitizedText,
+          createdAtMs: stat.birthtimeMs || record?.createdAtMs || stat.mtimeMs,
+          updatedAtMs: stat.mtimeMs,
+        });
+      }
+    }
+
+    const parsed = parseNoteMetadata(text, shouldSanitize);
 
     return {
       id: input.id,
@@ -167,7 +220,7 @@ export class NoteLifecycleService {
       tags: this.databaseService.getNoteTags(input.id),
       createdAtMs: stat.birthtimeMs || record?.createdAtMs || stat.mtimeMs,
       updatedAtMs: stat.mtimeMs,
-      sizeBytes: stat.size,
+      sizeBytes: Buffer.byteLength(text, 'utf8'),
       text: parsed.bodyText,
     };
   }
@@ -215,6 +268,7 @@ export class NoteLifecycleService {
         filePath,
         createdAtMs: record.createdAtMs,
         updatedAtMs: nowMs,
+        contentChecksum: null,
         isTemp: true,
         externalPath: record.externalPath,
         hasUnsavedChanges: true,
@@ -244,6 +298,7 @@ export class NoteLifecycleService {
       filePath,
       createdAtMs: stat.birthtimeMs || stat.mtimeMs,
       updatedAtMs: stat.mtimeMs,
+      contentChecksum: null,
       isTemp: false,
       externalPath: null,
       hasUnsavedChanges: false,

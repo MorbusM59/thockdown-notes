@@ -11,6 +11,8 @@ import { BlockCaretPlugin } from '../plugins/BlockCaretPlugin';
 import { MeaslyTokenNode } from '../nodes/MeaslyTokenNode';
 import { ContractBridgePlugin } from '../plugins/ContractBridgePlugin';
 import { NoteTextHydrationPlugin } from '../plugins/NoteTextHydrationPlugin';
+import { TextSanitizationPlugin } from '../plugins/TextSanitizationPlugin';
+import { PasteSanitizationPlugin } from '../plugins/PasteSanitizationPlugin';
 import type {
   EditorAdapter,
   EditorBindings,
@@ -765,7 +767,7 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
             />
 
             {/* The single unified full-screen grid lines */}
-            <div className="absolute pointer-events-none measly-grid-lines" style={{ inset: 'var(--editor-frame-padding)' }} />
+            <div className="absolute pointer-events-none measly-grid-lines" style={{ inset: 'var(--editor-frame-padding)', zIndex: 30 }} />
             
             {/* Top Drag Handle (Invisible, centered on the boundary line) */}
             <div 
@@ -812,6 +814,8 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
             />
         
             <HistoryPlugin />
+            <PasteSanitizationPlugin />
+            <TextSanitizationPlugin />
             <SyntaxHighlightPlugin />
             <NoteTextHydrationPlugin text={initialText} />
             <ContractBridgePlugin

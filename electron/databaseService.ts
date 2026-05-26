@@ -1,6 +1,8 @@
+import { createHash } from 'node:crypto';
 import { existsSync, promises as fs } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { sanitizeDocumentText } from '../src/shared/textSanitization';
 
 const require = createRequire(import.meta.url);
 const BetterSqlite3 = require('better-sqlite3') as typeof import('better-sqlite3');
@@ -29,6 +31,7 @@ type NoteRecordRow = {
   filePath: string;
   createdAt: string;
   updatedAt: string;
+  contentChecksum: string | null;
   isTemp: number;
   externalPath: string | null;
   hasUnsavedChanges: number;
@@ -41,6 +44,7 @@ export type NoteRecord = {
   filePath: string;
   createdAtMs: number;
   updatedAtMs: number;
+  contentChecksum: string | null;
   isTemp: boolean;
   externalPath: string | null;
   hasUnsavedChanges: boolean;
@@ -95,7 +99,11 @@ function hasExternalTag(tags: string[]): boolean {
 }
 
 function normalizeText(text: string): string {
-  return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  return sanitizeDocumentText(text);
+}
+
+function checksumText(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
 function titleFromText(text: string): string {
@@ -234,17 +242,19 @@ export class DatabaseService {
         createdAt,
         updatedAt,
         lastEdited,
+        contentChecksum,
         isTemp,
         hasUnsavedChanges,
         syncMode
       )
-      VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         filePath = excluded.filePath,
         createdAt = excluded.createdAt,
         updatedAt = excluded.updatedAt,
-        lastEdited = excluded.lastEdited
+        lastEdited = excluded.lastEdited,
+        contentChecksum = excluded.contentChecksum
     `);
 
     const deleteMissingNotesStmt = db.prepare('DELETE FROM notes WHERE id = ?');
@@ -285,6 +295,7 @@ export class DatabaseService {
           createdAtIso,
           updatedAtIso,
           updatedAtIso,
+          checksumText(row.text),
         );
 
         deleteNoteTagsStmt.run(row.id);
@@ -363,6 +374,8 @@ export class DatabaseService {
     const db = this.requireDb();
     const createdAtIso = new Date(input.createdAtMs).toISOString();
     const updatedAtIso = new Date(input.updatedAtMs).toISOString();
+    const normalizedText = normalizeText(input.text);
+    const contentChecksum = checksumText(normalizedText);
 
     db.prepare(`
       INSERT INTO notes (
@@ -372,17 +385,19 @@ export class DatabaseService {
         createdAt,
         updatedAt,
         lastEdited,
+        contentChecksum,
         isTemp,
         hasUnsavedChanges,
         syncMode
       )
-      VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         filePath = excluded.filePath,
         createdAt = excluded.createdAt,
         updatedAt = excluded.updatedAt,
-        lastEdited = excluded.lastEdited
+        lastEdited = excluded.lastEdited,
+        contentChecksum = excluded.contentChecksum
     `).run(
       input.id,
       input.title,
@@ -390,16 +405,17 @@ export class DatabaseService {
       createdAtIso,
       updatedAtIso,
       updatedAtIso,
+      contentChecksum,
     );
 
     db.prepare('INSERT OR REPLACE INTO notes_fts (noteId, title, content) VALUES (?, ?, ?)')
-      .run(input.id, input.title, normalizeText(input.text));
+      .run(input.id, input.title, normalizedText);
   }
 
   listNoteRecords(): NoteRecord[] {
     const db = this.requireDb();
     const rows = db.prepare(`
-      SELECT id, title, filePath, createdAt, updatedAt, isTemp, externalPath, hasUnsavedChanges, syncMode
+      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode
       FROM notes
       ORDER BY datetime(updatedAt) DESC
     `).all() as NoteRecordRow[];
@@ -410,6 +426,7 @@ export class DatabaseService {
       filePath: row.filePath,
       createdAtMs: parseIsoToMs(row.createdAt),
       updatedAtMs: parseIsoToMs(row.updatedAt),
+      contentChecksum: row.contentChecksum,
       isTemp: Boolean(row.isTemp),
       externalPath: row.externalPath,
       hasUnsavedChanges: Boolean(row.hasUnsavedChanges),
@@ -420,7 +437,7 @@ export class DatabaseService {
   getNoteRecord(noteId: string): NoteRecord | null {
     const db = this.requireDb();
     const row = db.prepare(`
-      SELECT id, title, filePath, createdAt, updatedAt, isTemp, externalPath, hasUnsavedChanges, syncMode
+      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode
       FROM notes
       WHERE id = ?
       LIMIT 1
@@ -436,6 +453,7 @@ export class DatabaseService {
       filePath: row.filePath,
       createdAtMs: parseIsoToMs(row.createdAt),
       updatedAtMs: parseIsoToMs(row.updatedAt),
+      contentChecksum: row.contentChecksum,
       isTemp: Boolean(row.isTemp),
       externalPath: row.externalPath,
       hasUnsavedChanges: Boolean(row.hasUnsavedChanges),
@@ -759,13 +777,14 @@ export class DatabaseService {
         createdAt,
         updatedAt,
         lastEdited,
+        contentChecksum,
         isTemp,
         externalPath,
         hasUnsavedChanges,
         syncMode,
         originalEncoding
       )
-      VALUES (?, ?, ?, ?, ?, ?, 1, ?, 0, 0, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, 0, 0, ?)
     `).run(
       id,
       input.title,
@@ -773,6 +792,7 @@ export class DatabaseService {
       now,
       now,
       now,
+      null,
       input.externalPath,
       input.originalEncoding ?? null,
     );
@@ -864,6 +884,7 @@ export class DatabaseService {
         progressEdit REAL,
         cursorPos INTEGER,
         scrollTop INTEGER,
+        contentChecksum TEXT,
         isTemp INTEGER DEFAULT 0,
         externalPath TEXT,
         hasUnsavedChanges INTEGER DEFAULT 0,
@@ -907,6 +928,18 @@ export class DatabaseService {
         content
       );
     `);
+
+    this.ensureNotesColumn('contentChecksum', 'TEXT');
+  }
+
+  private ensureNotesColumn(columnName: string, columnDefinition: string): void {
+    const db = this.requireDb();
+    const columns = db.prepare('PRAGMA table_info(notes)').all() as Array<{ name: string }>;
+    if (columns.some((column) => column.name === columnName)) {
+      return;
+    }
+
+    db.exec(`ALTER TABLE notes ADD COLUMN ${columnName} ${columnDefinition}`);
   }
 
   private ensureProtectedTags(): void {

@@ -5,14 +5,33 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { promises, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
+const CONTROL_AND_INVISIBLE_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B-\u200F\u2060\uFEFF]/g;
+const VARIATION_SELECTORS = /[\uFE0E\uFE0F]/g;
+const EMOJI_PICTOGRAPHICS = new RegExp("\\p{Extended_Pictographic}", "gu");
+const HTML_TAGS = /<[^>\n]*>/g;
+function normalizeLineSeparators(input) {
+  return input.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/[\u2028\u2029]/g, "\n");
+}
+function sanitizeTextFragment(input) {
+  return normalizeLineSeparators(input).replace(EMOJI_PICTOGRAPHICS, "").replace(VARIATION_SELECTORS, "").replace(CONTROL_AND_INVISIBLE_CHARS, "");
+}
+function sanitizeDocumentText(input) {
+  return sanitizeTextFragment(input).replace(HTML_TAGS, "");
+}
 const NOTES_DIR_NAME = "notes";
 const META_PREFIX$1 = "<!-- measly-meta:";
 const META_SUFFIX$1 = "-->";
 const EXTERNAL_TAG$1 = "EXTERNAL";
 function normalizeText$1(text) {
-  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  return sanitizeDocumentText(text);
+}
+function normalizeLineEndingsOnly(text) {
+  return text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/[\u2028\u2029]/g, "\n");
+}
+function checksumText$1(text) {
+  return createHash("sha256").update(text, "utf8").digest("hex");
 }
 function titleFromText$1(text) {
   const lines = normalizeText$1(text).split("\n");
@@ -24,9 +43,9 @@ function titleFromText$1(text) {
   });
   return (firstContent == null ? void 0 : firstContent.trim()) ?? "Untitled";
 }
-function parseNoteMetadata(rawText) {
+function parseNoteMetadata(rawText, sanitize) {
   var _a;
-  const normalized = normalizeText$1(rawText);
+  const normalized = sanitize ? normalizeText$1(rawText) : normalizeLineEndingsOnly(rawText);
   const lines = normalized.split("\n");
   const firstLine = ((_a = lines[0]) == null ? void 0 : _a.trim()) ?? "";
   if (!firstLine.startsWith(META_PREFIX$1) || !firstLine.endsWith(META_SUFFIX$1)) {
@@ -83,7 +102,7 @@ class NoteLifecycleService {
         mtimeMs: record.updatedAtMs,
         size: Buffer.byteLength(text, "utf8")
       } : await promises.stat(record.filePath);
-      const parsed = parseNoteMetadata(text);
+      const parsed = parseNoteMetadata(text, true);
       const fileName = path.basename(record.filePath);
       return {
         id: record.id,
@@ -107,13 +126,46 @@ class NoteLifecycleService {
     const record = this.databaseService.getNoteRecord(input.id);
     const filePath = (record == null ? void 0 : record.filePath) ?? path.join(this.notesDir, idToFileName(input.id));
     const fileName = path.basename(filePath);
-    const text = (record == null ? void 0 : record.isTemp) ? this.databaseService.getNoteContentSnapshot(input.id) ?? "" : await promises.readFile(filePath, "utf8");
+    const rawText = (record == null ? void 0 : record.isTemp) ? this.databaseService.getNoteContentSnapshot(input.id) ?? "" : await promises.readFile(filePath, "utf8");
     const stat = (record == null ? void 0 : record.isTemp) ? {
       birthtimeMs: record.createdAtMs,
       mtimeMs: record.updatedAtMs,
-      size: Buffer.byteLength(text, "utf8")
+      size: Buffer.byteLength(rawText, "utf8")
     } : await promises.stat(filePath);
-    const parsed = parseNoteMetadata(text);
+    let text = rawText;
+    let shouldSanitize = true;
+    if (!(record == null ? void 0 : record.isTemp)) {
+      const storedChecksum = record == null ? void 0 : record.contentChecksum;
+      const currentChecksum = checksumText$1(rawText);
+      shouldSanitize = !(storedChecksum && storedChecksum === currentChecksum);
+    }
+    if (shouldSanitize) {
+      const sanitizedText = normalizeText$1(rawText);
+      text = sanitizedText;
+      if (record == null ? void 0 : record.isTemp) {
+        this.databaseService.upsertNoteContent({
+          id: input.id,
+          title: titleFromText$1(sanitizedText),
+          filePath,
+          text: sanitizedText,
+          createdAtMs: record.createdAtMs,
+          updatedAtMs: Date.now()
+        });
+      } else {
+        if (sanitizedText !== rawText) {
+          await promises.writeFile(filePath, sanitizedText, "utf8");
+        }
+        this.databaseService.upsertNoteContent({
+          id: input.id,
+          title: titleFromText$1(sanitizedText),
+          filePath,
+          text: sanitizedText,
+          createdAtMs: stat.birthtimeMs || (record == null ? void 0 : record.createdAtMs) || stat.mtimeMs,
+          updatedAtMs: stat.mtimeMs
+        });
+      }
+    }
+    const parsed = parseNoteMetadata(text, shouldSanitize);
     return {
       id: input.id,
       fileName,
@@ -121,7 +173,7 @@ class NoteLifecycleService {
       tags: this.databaseService.getNoteTags(input.id),
       createdAtMs: stat.birthtimeMs || (record == null ? void 0 : record.createdAtMs) || stat.mtimeMs,
       updatedAtMs: stat.mtimeMs,
-      sizeBytes: stat.size,
+      sizeBytes: Buffer.byteLength(text, "utf8"),
       text: parsed.bodyText
     };
   }
@@ -164,6 +216,7 @@ class NoteLifecycleService {
         filePath,
         createdAtMs: record.createdAtMs,
         updatedAtMs: nowMs,
+        contentChecksum: null,
         isTemp: true,
         externalPath: record.externalPath,
         hasUnsavedChanges: true,
@@ -190,6 +243,7 @@ class NoteLifecycleService {
       filePath,
       createdAtMs: stat.birthtimeMs || stat.mtimeMs,
       updatedAtMs: stat.mtimeMs,
+      contentChecksum: null,
       isTemp: false,
       externalPath: null,
       hasUnsavedChanges: false,
@@ -433,7 +487,10 @@ function hasExternalTag(tags) {
   return tags.includes(EXTERNAL_TAG);
 }
 function normalizeText(text) {
-  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  return sanitizeDocumentText(text);
+}
+function checksumText(text) {
+  return createHash("sha256").update(text, "utf8").digest("hex");
 }
 function titleFromText(text) {
   const lines = normalizeText(text).split("\n");
@@ -543,17 +600,19 @@ class DatabaseService {
         createdAt,
         updatedAt,
         lastEdited,
+        contentChecksum,
         isTemp,
         hasUnsavedChanges,
         syncMode
       )
-      VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         filePath = excluded.filePath,
         createdAt = excluded.createdAt,
         updatedAt = excluded.updatedAt,
-        lastEdited = excluded.lastEdited
+        lastEdited = excluded.lastEdited,
+        contentChecksum = excluded.contentChecksum
     `);
     const deleteMissingNotesStmt = db.prepare("DELETE FROM notes WHERE id = ?");
     const deleteNoteTagsStmt = db.prepare("DELETE FROM note_tags WHERE noteId = ?");
@@ -585,7 +644,8 @@ class DatabaseService {
           row.filePath,
           createdAtIso,
           updatedAtIso,
-          updatedAtIso
+          updatedAtIso,
+          checksumText(row.text)
         );
         deleteNoteTagsStmt.run(row.id);
         row.tags.forEach((tagName, position) => {
@@ -639,6 +699,8 @@ class DatabaseService {
     const db = this.requireDb();
     const createdAtIso = new Date(input.createdAtMs).toISOString();
     const updatedAtIso = new Date(input.updatedAtMs).toISOString();
+    const normalizedText = normalizeText(input.text);
+    const contentChecksum = checksumText(normalizedText);
     db.prepare(`
       INSERT INTO notes (
         id,
@@ -647,31 +709,34 @@ class DatabaseService {
         createdAt,
         updatedAt,
         lastEdited,
+        contentChecksum,
         isTemp,
         hasUnsavedChanges,
         syncMode
       )
-      VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         filePath = excluded.filePath,
         createdAt = excluded.createdAt,
         updatedAt = excluded.updatedAt,
-        lastEdited = excluded.lastEdited
+        lastEdited = excluded.lastEdited,
+        contentChecksum = excluded.contentChecksum
     `).run(
       input.id,
       input.title,
       input.filePath,
       createdAtIso,
       updatedAtIso,
-      updatedAtIso
+      updatedAtIso,
+      contentChecksum
     );
-    db.prepare("INSERT OR REPLACE INTO notes_fts (noteId, title, content) VALUES (?, ?, ?)").run(input.id, input.title, normalizeText(input.text));
+    db.prepare("INSERT OR REPLACE INTO notes_fts (noteId, title, content) VALUES (?, ?, ?)").run(input.id, input.title, normalizedText);
   }
   listNoteRecords() {
     const db = this.requireDb();
     const rows = db.prepare(`
-      SELECT id, title, filePath, createdAt, updatedAt, isTemp, externalPath, hasUnsavedChanges, syncMode
+      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode
       FROM notes
       ORDER BY datetime(updatedAt) DESC
     `).all();
@@ -681,6 +746,7 @@ class DatabaseService {
       filePath: row.filePath,
       createdAtMs: parseIsoToMs(row.createdAt),
       updatedAtMs: parseIsoToMs(row.updatedAt),
+      contentChecksum: row.contentChecksum,
       isTemp: Boolean(row.isTemp),
       externalPath: row.externalPath,
       hasUnsavedChanges: Boolean(row.hasUnsavedChanges),
@@ -690,7 +756,7 @@ class DatabaseService {
   getNoteRecord(noteId) {
     const db = this.requireDb();
     const row = db.prepare(`
-      SELECT id, title, filePath, createdAt, updatedAt, isTemp, externalPath, hasUnsavedChanges, syncMode
+      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode
       FROM notes
       WHERE id = ?
       LIMIT 1
@@ -704,6 +770,7 @@ class DatabaseService {
       filePath: row.filePath,
       createdAtMs: parseIsoToMs(row.createdAt),
       updatedAtMs: parseIsoToMs(row.updatedAt),
+      contentChecksum: row.contentChecksum,
       isTemp: Boolean(row.isTemp),
       externalPath: row.externalPath,
       hasUnsavedChanges: Boolean(row.hasUnsavedChanges),
@@ -958,13 +1025,14 @@ class DatabaseService {
         createdAt,
         updatedAt,
         lastEdited,
+        contentChecksum,
         isTemp,
         externalPath,
         hasUnsavedChanges,
         syncMode,
         originalEncoding
       )
-      VALUES (?, ?, ?, ?, ?, ?, 1, ?, 0, 0, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, 0, 0, ?)
     `).run(
       id,
       input.title,
@@ -972,6 +1040,7 @@ class DatabaseService {
       now,
       now,
       now,
+      null,
       input.externalPath,
       input.originalEncoding ?? null
     );
@@ -1051,6 +1120,7 @@ class DatabaseService {
         progressEdit REAL,
         cursorPos INTEGER,
         scrollTop INTEGER,
+        contentChecksum TEXT,
         isTemp INTEGER DEFAULT 0,
         externalPath TEXT,
         hasUnsavedChanges INTEGER DEFAULT 0,
@@ -1094,6 +1164,15 @@ class DatabaseService {
         content
       );
     `);
+    this.ensureNotesColumn("contentChecksum", "TEXT");
+  }
+  ensureNotesColumn(columnName, columnDefinition) {
+    const db = this.requireDb();
+    const columns = db.prepare("PRAGMA table_info(notes)").all();
+    if (columns.some((column) => column.name === columnName)) {
+      return;
+    }
+    db.exec(`ALTER TABLE notes ADD COLUMN ${columnName} ${columnDefinition}`);
   }
   ensureProtectedTags() {
     const db = this.requireDb();

@@ -173,28 +173,22 @@ body {
 .measly-token-heading,
 .measly-token-list,
 .measly-token-quote {
-  padding-top: 4px;
-  padding-bottom: 4px;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
+  background: transparent;
 }
 
 .measly-token-heading {
   color: #1e3a8a;
   font-weight: bold;
-  background-color: rgba(30, 58, 138, 0.1);
 }
 
 .measly-token-list {
   color: #047857;
   font-weight: bold;
-  background-color: rgba(4, 120, 87, 0.1);
 }
 
 .measly-token-quote {
   color: #b45309;
   font-style: italic;
-  background-color: rgba(180, 83, 9, 0.1);
 }
 
 /* We will apply this to all standard text nodes */
