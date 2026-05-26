@@ -334,7 +334,13 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
     const clampedTop = Math.max(minThumbTop, Math.min(thumbTopPx, maxThumbTop));
     const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0;
-    scroller.scrollTop = ratio * maxScrollTop;
+    const targetScrollTop = ratio * maxScrollTop;
+    const quantizedScrollTop = clampNumber(
+      Math.round(targetScrollTop / LINE_HEIGHT_PX) * LINE_HEIGHT_PX,
+      0,
+      maxScrollTop,
+    );
+    scroller.scrollTop = quantizedScrollTop;
   }, [scrollThumbHeightPx]);
 
   useEffect(() => {
