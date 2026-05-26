@@ -725,6 +725,30 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
     };
   };
 
+  const forwardHandleWheelToScroller = (event: React.WheelEvent<HTMLDivElement>) => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+
+    event.preventDefault();
+
+    const forwardedWheelEvent = new WheelEvent('wheel', {
+      deltaX: event.deltaX,
+      deltaY: event.deltaY,
+      deltaZ: event.deltaZ,
+      deltaMode: event.deltaMode,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey,
+      bubbles: true,
+      cancelable: true,
+    });
+
+    scroller.dispatchEvent(forwardedWheelEvent);
+  };
+
   const initialConfig = {
     namespace: 'MeaslyNotes',
     theme,
@@ -808,6 +832,7 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
             <div 
               className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize" 
               style={{ top: `calc(var(--editor-frame-padding) + ${topBoundary}px - 12px)`, left: 'var(--editor-frame-padding)', right: 'var(--editor-frame-padding)', height: 24 }} 
+              onWheel={forwardHandleWheelToScroller}
               onMouseDown={(e) => { e.preventDefault(); setIsDraggingTop(true); }}
             />
 
@@ -815,6 +840,7 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
             <div 
               className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize" 
               style={{ bottom: `calc(var(--editor-frame-padding) + ${bottomBoundary}px - 12px)`, left: 'var(--editor-frame-padding)', right: 'var(--editor-frame-padding)', height: 24 }} 
+              onWheel={forwardHandleWheelToScroller}
               onMouseDown={(e) => { e.preventDefault(); setIsDraggingBottom(true); }}
             />
 
