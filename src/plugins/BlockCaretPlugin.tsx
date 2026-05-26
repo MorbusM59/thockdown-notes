@@ -13,6 +13,22 @@ interface BlockCaretPluginProps {
   bottomBoundaryPx: number;
 }
 
+const CARET_INSET_PX = 1;
+
+function resolveRuntimeCellWidthPx(rootEl: HTMLElement | null): number {
+  if (!rootEl) {
+    return CELL_WIDTH_PX;
+  }
+
+  const cssValue = getComputedStyle(rootEl).getPropertyValue('--editor-cell-width').trim();
+  const parsed = Number.parseFloat(cssValue);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return CELL_WIDTH_PX;
+  }
+
+  return parsed;
+}
+
 export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx }: BlockCaretPluginProps) {
   const [editor] = useLexicalComposerContext();
   const [caretStyle, setCaretStyle] = useState<React.CSSProperties | null>(null);
@@ -47,8 +63,14 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
 
       const scroller = scrollerRef.current;
       if (!scroller) return;
+      const caretLayerEl = scroller.parentElement;
+      if (!(caretLayerEl instanceof HTMLElement)) {
+        setCaretStyle(null);
+        return;
+      }
 
       const scrollerRect = scroller.getBoundingClientRect();
+      const caretLayerRect = caretLayerEl.getBoundingClientRect();
 
       const caretTopInScroll = resolveCaretTopInScroll({
         caretRect,
@@ -88,15 +110,21 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
         return;
       }
 
+      const runtimeCellWidthPx = resolveRuntimeCellWidthPx(editor.getRootElement());
+      const scrollerLeftInLayer = scrollerRect.left - caretLayerRect.left;
+      const scrollerTopInLayer = scrollerRect.top - caretLayerRect.top;
       let absoluteLeft = caretRect.left - scrollerRect.left;
 
-      absoluteLeft = Math.round(absoluteLeft / CELL_WIDTH_PX) * CELL_WIDTH_PX;
+      absoluteLeft = Math.round(absoluteLeft / runtimeCellWidthPx) * runtimeCellWidthPx;
+
+      const caretWidthPx = Math.max(1, runtimeCellWidthPx - CARET_INSET_PX);
+      const caretHeightPx = Math.max(1, LINE_HEIGHT_PX - CARET_INSET_PX);
 
       setCaretStyle({
-        top: topInViewport,
-        left: absoluteLeft,
-        width: CELL_WIDTH_PX,
-        height: LINE_HEIGHT_PX,
+        top: scrollerTopInLayer + topInViewport + CARET_INSET_PX,
+        left: scrollerLeftInLayer + absoluteLeft + CARET_INSET_PX,
+        width: caretWidthPx,
+        height: caretHeightPx,
       });
     });
   }, [editor, scrollerRef, topBoundaryPx, bottomBoundaryPx]);
