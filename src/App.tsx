@@ -19,6 +19,16 @@ import {
 } from './editor/FindReplaceEngine'
 import { normalizeInternalText } from './editor/TextPolicy'
 import {
+  getScrollBaseDistanceRows,
+  getScrollDistanceTimeInfluence,
+  getScrollEaseMultiplier,
+  getScrollMaxDurationMultiplier,
+  setScrollBaseDistanceRows as applyScrollBaseDistanceRows,
+  setScrollDistanceTimeInfluence as applyScrollDistanceTimeInfluence,
+  setScrollEaseMultiplier as applyScrollEaseMultiplier,
+  setScrollMaxDurationMultiplier as applyScrollMaxDurationMultiplier,
+} from './editor/QuantizedEaseScroll'
+import {
   FILTER_MONTHS,
   FILTER_YEARS,
   handleMultiSelect,
@@ -202,6 +212,211 @@ function mergeNoteSummaries(previous: NoteSummary[], next: NoteSummary[]): NoteS
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
+}
+
+function formatCompactSettingNumber(value: number, step: number): string {
+  const normalizedStep = String(step)
+  const decimalIndex = normalizedStep.indexOf('.')
+  const decimalPlaces = decimalIndex >= 0 ? normalizedStep.length - decimalIndex - 1 : 0
+  return value.toFixed(decimalPlaces).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
+}
+
+type CompactSettingInputProps = {
+  id: string
+  value: number
+  min: number
+  max: number
+  step: number
+  descriptor: string
+  ariaLabel: string
+  onCommit: (value: number) => void
+}
+
+function CompactSettingInput({
+  id,
+  value,
+  min,
+  max,
+  step,
+  descriptor,
+  ariaLabel,
+  onCommit,
+}: CompactSettingInputProps) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [draftValue, setDraftValue] = useState(() => formatCompactSettingNumber(value, step))
+
+  useEffect(() => {
+    if (!isEditing) {
+      setDraftValue(formatCompactSettingNumber(value, step))
+    }
+  }, [isEditing, step, value])
+
+  const commitDraft = useCallback(() => {
+    const parsed = Number(draftValue)
+    if (Number.isFinite(parsed)) {
+      onCommit(clamp(parsed, min, max))
+    }
+    setIsEditing(false)
+  }, [draftValue, max, min, onCommit])
+
+  const cancelDraft = useCallback(() => {
+    setDraftValue(formatCompactSettingNumber(value, step))
+    setIsEditing(false)
+  }, [step, value])
+
+  return (
+    <input
+      id={id}
+      className="utility-setting-compact-input"
+      type="text"
+      inputMode="decimal"
+      aria-label={ariaLabel}
+      value={isEditing ? draftValue : `${formatCompactSettingNumber(value, step)} (${descriptor})`}
+      onFocus={() => {
+        setDraftValue(formatCompactSettingNumber(value, step))
+        setIsEditing(true)
+      }}
+      onChange={(event) => setDraftValue(event.target.value)}
+      onBlur={commitDraft}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          ;(event.currentTarget as HTMLInputElement).blur()
+          return
+        }
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          cancelDraft()
+          ;(event.currentTarget as HTMLInputElement).blur()
+        }
+      }}
+    />
+  )
+}
+
+type CompactRangeSliderProps = {
+  id: string
+  value: number
+  min: number
+  max: number
+  step: number
+  ariaLabel: string
+  onChange: (value: number) => void
+}
+
+function CompactRangeSlider({
+  id,
+  value,
+  min,
+  max,
+  step,
+  ariaLabel,
+  onChange,
+}: CompactRangeSliderProps) {
+  const railRef = useRef<HTMLDivElement | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+
+  const valueSpan = Math.max(max - min, Number.EPSILON)
+  const ratio = clamp((value - min) / valueSpan, 0, 1)
+
+  const snapValue = useCallback((nextValue: number) => {
+    const steps = Math.round((nextValue - min) / step)
+    return clamp(min + (steps * step), min, max)
+  }, [max, min, step])
+
+  const applyPointerValue = useCallback((clientX: number) => {
+    const rail = railRef.current
+    if (!rail) return
+
+    const rect = rail.getBoundingClientRect()
+    if (rect.width <= 0) return
+
+    const styles = getComputedStyle(rail)
+    const gap = Number.parseFloat(styles.getPropertyValue('--canonical-scroll-handle-gap')) || 3
+    const thumbSize = Number.parseFloat(styles.getPropertyValue('--canonical-scroll-handle-thickness')) || 10
+    const startX = rect.left + gap + (thumbSize / 2)
+    const travel = Math.max(1, rect.width - (gap * 2) - thumbSize)
+    const nextRatio = clamp((clientX - startX) / travel, 0, 1)
+    onChange(snapValue(min + (nextRatio * valueSpan)))
+  }, [min, onChange, snapValue, valueSpan])
+
+  const nudgeBy = useCallback((delta: number) => {
+    onChange(snapValue(value + delta))
+  }, [onChange, snapValue, value])
+
+  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
+      event.preventDefault()
+      nudgeBy(-step)
+      return
+    }
+    if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      nudgeBy(step)
+      return
+    }
+    if (event.key === 'PageDown') {
+      event.preventDefault()
+      nudgeBy(-(step * 10))
+      return
+    }
+    if (event.key === 'PageUp') {
+      event.preventDefault()
+      nudgeBy(step * 10)
+      return
+    }
+    if (event.key === 'Home') {
+      event.preventDefault()
+      onChange(min)
+      return
+    }
+    if (event.key === 'End') {
+      event.preventDefault()
+      onChange(max)
+    }
+  }, [max, min, nudgeBy, onChange, step])
+
+  return (
+    <div
+      id={id}
+      role="slider"
+      tabIndex={0}
+      aria-label={ariaLabel}
+      aria-orientation="horizontal"
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuenow={Number(formatCompactSettingNumber(value, step))}
+      className={`utility-setting-range-shell${isDragging ? ' is-dragging' : ''}`}
+      onKeyDown={handleKeyDown}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return
+        event.preventDefault()
+        event.currentTarget.setPointerCapture(event.pointerId)
+        setIsDragging(true)
+        applyPointerValue(event.clientX)
+      }}
+      onPointerMove={(event) => {
+        if (!isDragging) return
+        applyPointerValue(event.clientX)
+      }}
+      onPointerUp={(event) => {
+        if (!isDragging) return
+        event.currentTarget.releasePointerCapture(event.pointerId)
+        setIsDragging(false)
+      }}
+      onPointerCancel={() => setIsDragging(false)}
+    >
+      <div className="utility-setting-range-rail" ref={railRef} aria-hidden="true">
+        <span className="utility-setting-range-track-label">scaling</span>
+        <div
+          className="utility-setting-range-thumb"
+          style={{
+            left: `calc(var(--canonical-scroll-handle-gap) + (${ratio} * (100% - (var(--canonical-scroll-handle-gap) * 2) - var(--canonical-scroll-handle-thickness))))`,
+          }}
+        />
+      </div>
+    </div>
+  )
 }
 
 function pad2(value: number): string {
@@ -612,6 +827,11 @@ function App() {
   const [appShellWidthPx, setAppShellWidthPx] = useState(980)
   const [sidebarWidthRatio, setSidebarWidthRatio] = useState(DEFAULT_SIDEBAR_RATIO)
   const [tagSplitRatio, setTagSplitRatio] = useState(DEFAULT_TAG_SPLIT_RATIO)
+  const [scrollEaseMultiplier, setScrollEaseMultiplier] = useState(() => getScrollEaseMultiplier())
+  const [scrollDistanceTimeInfluence, setScrollDistanceTimeInfluence] = useState(() => getScrollDistanceTimeInfluence())
+  const [scrollBaseDistanceRows, setScrollBaseDistanceRows] = useState(() => getScrollBaseDistanceRows())
+  const [scrollMaxDurationMultiplier, setScrollMaxDurationMultiplier] = useState(() => getScrollMaxDurationMultiplier())
+  const [isScrollSettingsOpen, setIsScrollSettingsOpen] = useState(false)
   const [activeDividerDrag, setActiveDividerDrag] = useState<'sidebar' | 'tag-split' | null>(null)
   const pendingSaveTextRef = useRef<string | null>(null)
   const latestEditorTextRef = useRef('')
@@ -666,7 +886,39 @@ function App() {
     documentFindCaseSensitive: isDocumentFindCaseSensitive,
     sidebarWidthRatio,
     tagSplitRatio,
-  }), [isDocumentFindCaseSensitive, searchQuery, selectedMonths, selectedYears, sidebarMode, sidebarWidthRatio, tagSplitRatio])
+    scrollEaseMultiplier,
+    scrollDistanceTimeInfluence,
+    scrollBaseDistanceRows,
+    scrollMaxDurationMultiplier,
+  }), [
+    isDocumentFindCaseSensitive,
+    searchQuery,
+    selectedMonths,
+    selectedYears,
+    sidebarMode,
+    sidebarWidthRatio,
+    tagSplitRatio,
+    scrollEaseMultiplier,
+    scrollDistanceTimeInfluence,
+    scrollBaseDistanceRows,
+    scrollMaxDurationMultiplier,
+  ])
+
+  useEffect(() => {
+    applyScrollEaseMultiplier(scrollEaseMultiplier)
+  }, [scrollEaseMultiplier])
+
+  useEffect(() => {
+    applyScrollDistanceTimeInfluence(scrollDistanceTimeInfluence)
+  }, [scrollDistanceTimeInfluence])
+
+  useEffect(() => {
+    applyScrollBaseDistanceRows(scrollBaseDistanceRows)
+  }, [scrollBaseDistanceRows])
+
+  useEffect(() => {
+    applyScrollMaxDurationMultiplier(scrollMaxDurationMultiplier)
+  }, [scrollMaxDurationMultiplier])
 
   const layout = useMemo(() => {
     const dividerTotalWidthPx = GRID_DIVIDER_PX * 3
@@ -1457,6 +1709,10 @@ function App() {
             setIsDocumentFindCaseSensitive(appState.menu.documentFindCaseSensitive ?? false)
             setSidebarWidthRatio(appState.menu.sidebarWidthRatio)
             setTagSplitRatio(appState.menu.tagSplitRatio)
+            setScrollEaseMultiplier(appState.menu.scrollEaseMultiplier ?? getScrollEaseMultiplier())
+            setScrollDistanceTimeInfluence(appState.menu.scrollDistanceTimeInfluence ?? getScrollDistanceTimeInfluence())
+            setScrollBaseDistanceRows(appState.menu.scrollBaseDistanceRows ?? getScrollBaseDistanceRows())
+            setScrollMaxDurationMultiplier(appState.menu.scrollMaxDurationMultiplier ?? getScrollMaxDurationMultiplier())
           }
 
           const preferredId = appState.selectedNoteId
@@ -2287,7 +2543,7 @@ function App() {
                   setIsTrashViewDeleteArmed(false)
                 } : undefined}
               >
-                {mode === 'find' ? <span aria-hidden="true">F</span> : <span className="sr-only-mode-label">{label}</span>}
+                {mode === 'find' ? <span className="find-mode-glyph fa-solid fa-magnifying-glass" aria-hidden="true" /> : <span className="sr-only-mode-label">{label}</span>}
               </button>
             )
           })}
@@ -2589,7 +2845,82 @@ function App() {
       </section>
 
       <section className="toolbar-grid" style={{ gridArea: 'toolbar' }} aria-label="Toolbar panel placeholder">
-        <div className="toolbar-placeholder">Toolbar panel placeholder between tag manager and editor.</div>
+        <div className={`toolbar-settings-shell${isScrollSettingsOpen ? ' is-open' : ''}`}>
+          <div className="toolbar-settings-header">
+            <div className="toolbar-placeholder">Toolbar panel</div>
+            <button
+              className={`toggle-btn icon-btn toolbar-settings-toggle-btn${isScrollSettingsOpen ? ' is-active' : ''}`}
+              type="button"
+              title="Scroll settings"
+              aria-label="Scroll settings"
+              aria-expanded={isScrollSettingsOpen}
+              onClick={() => setIsScrollSettingsOpen((open) => !open)}
+            >
+              <span className="toolbar-settings-toggle-glyph fa-solid fa-gear" aria-hidden="true" />
+            </button>
+          </div>
+
+          {isScrollSettingsOpen ? (
+            <div className="toolbar-settings-content" aria-label="Scroll settings panel">
+              <section className="toolbar-settings-section toolbar-settings-section-scrolling" aria-label="Scrolling settings">
+                <div className="panel-placeholder-title">Scrolling</div>
+                <div className="utility-setting-row utility-setting-row-range">
+                  <CompactRangeSlider
+                    id="scroll-distance-influence"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={scrollDistanceTimeInfluence}
+                    onChange={(value) => setScrollDistanceTimeInfluence(Math.max(0, Math.min(1, value)))}
+                    ariaLabel="Distance scaling"
+                  />
+                </div>
+                <div className="utility-setting-stack" aria-label="Scrolling numeric settings">
+                  <CompactSettingInput
+                    id="scroll-ease-multiplier"
+                    min={0.1}
+                    max={10}
+                    step={0.1}
+                    value={scrollEaseMultiplier}
+                    descriptor="speed"
+                    ariaLabel="Scroll speed"
+                    onCommit={(value) => setScrollEaseMultiplier(Math.max(0.1, value))}
+                  />
+                  <CompactSettingInput
+                    id="scroll-base-distance"
+                    min={1}
+                    max={200}
+                    step={1}
+                    value={scrollBaseDistanceRows}
+                    descriptor="base"
+                    ariaLabel="Scroll base rows"
+                    onCommit={(value) => setScrollBaseDistanceRows(Math.max(1, Math.round(value)))}
+                  />
+                  <CompactSettingInput
+                    id="scroll-max-multiplier"
+                    min={1}
+                    max={20}
+                    step={0.5}
+                    value={scrollMaxDurationMultiplier}
+                    descriptor="t_max"
+                    ariaLabel="Scroll max multiplier"
+                    onCommit={(value) => setScrollMaxDurationMultiplier(Math.max(1, value))}
+                  />
+                </div>
+              </section>
+
+              <section className="toolbar-settings-section toolbar-settings-section-placeholder" aria-label="Editor settings placeholder">
+                <div className="panel-placeholder-title">Editor</div>
+                <div className="toolbar-settings-placeholder-text">Soon</div>
+              </section>
+
+              <section className="toolbar-settings-section toolbar-settings-section-placeholder" aria-label="Layout settings placeholder">
+                <div className="panel-placeholder-title">Layout</div>
+                <div className="toolbar-settings-placeholder-text">Soon</div>
+              </section>
+            </div>
+          ) : null}
+        </div>
       </section>
 
       <div className="editor-viewer-frame" style={{ gridArea: 'viewer' }}>

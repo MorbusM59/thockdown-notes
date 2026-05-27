@@ -93,23 +93,24 @@ body {
 
 .measly-scroll-track {
   position: relative;
-  width: 16px;
+  width: var(--canonical-scroll-thickness);
   height: 100%;
-  border: 1px solid var(--color-border-highlight);
+  border: 1px solid var(--canonical-scroll-track-border);
   border-radius: var(--border-radius-regular);
-  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.5), inset 0 0 6px rgba(0, 0, 0, 0.2), 0 0 2px var(--color-shadow-white);
-  background: var(--color-input-backdrop);
+  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.25), inset 0 0 6px rgba(0, 0, 0, 0.14), 0 0 2px var(--color-shadow-white);
+  background: var(--canonical-scroll-track-bg);
   box-sizing: border-box;
 }
 
 .measly-scroll-thumb {
   position: absolute;
-  left: 3px;
-  right: 3px;
-  border: 1px solid rgba(81, 73, 66, 0.6);
+  left: var(--canonical-scroll-handle-gap);
+  right: var(--canonical-scroll-handle-gap);
+  border: 1px solid var(--canonical-handle-border);
   border-radius: 999px;
   box-sizing: border-box;
-  background: linear-gradient(135deg, #f5f3f2, #e9e5e2);
+  background: var(--canonical-handle-bg);
+  box-shadow: var(--canonical-handle-shadow);
   cursor: ns-resize;
 }
 
@@ -117,7 +118,7 @@ body {
 .measly-scroll-thumb.is-dragging.is-inactive,
 .measly-scroll-thumb.is-inactive {
   border-color: rgba(81, 73, 66, 0.30);
-  background: linear-gradient(135deg, #f5f3f2, #e9e5e2);
+  background: var(--canonical-handle-bg);
   cursor: default;
 }
 

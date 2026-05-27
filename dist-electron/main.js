@@ -332,7 +332,11 @@ const DEFAULT_APP_STATE = {
     selectedYears: [],
     searchQuery: "",
     sidebarWidthRatio: 0.306,
-    tagSplitRatio: 0.645
+    tagSplitRatio: 0.645,
+    scrollEaseMultiplier: 1.5,
+    scrollDistanceTimeInfluence: 0.1,
+    scrollBaseDistanceRows: 20,
+    scrollMaxDurationMultiplier: 4
   }
 };
 const DEFAULT_WINDOW_STATE = {
@@ -363,6 +367,12 @@ function sanitizeRatio(input, fallback) {
   }
   return Math.max(0, Math.min(1, input));
 }
+function sanitizePositive(input, fallback) {
+  if (typeof input !== "number" || !Number.isFinite(input) || input <= 0) {
+    return fallback;
+  }
+  return input;
+}
 function sanitizeMenu(input) {
   const selectedMonths = Array.isArray(input == null ? void 0 : input.selectedMonths) ? input.selectedMonths.filter((value) => Number.isInteger(value) && value >= 1 && value <= 12) : [];
   const selectedYears = Array.isArray(input == null ? void 0 : input.selectedYears) ? input.selectedYears.filter((value) => value === "older" || Number.isInteger(value)) : [];
@@ -373,7 +383,11 @@ function sanitizeMenu(input) {
     searchQuery: typeof (input == null ? void 0 : input.searchQuery) === "string" ? input.searchQuery : "",
     documentFindCaseSensitive: Boolean(input == null ? void 0 : input.documentFindCaseSensitive),
     sidebarWidthRatio: sanitizeRatio(input == null ? void 0 : input.sidebarWidthRatio, DEFAULT_APP_STATE.menu.sidebarWidthRatio),
-    tagSplitRatio: sanitizeRatio(input == null ? void 0 : input.tagSplitRatio, DEFAULT_APP_STATE.menu.tagSplitRatio)
+    tagSplitRatio: sanitizeRatio(input == null ? void 0 : input.tagSplitRatio, DEFAULT_APP_STATE.menu.tagSplitRatio),
+    scrollEaseMultiplier: sanitizePositive(input == null ? void 0 : input.scrollEaseMultiplier, DEFAULT_APP_STATE.menu.scrollEaseMultiplier ?? 1),
+    scrollDistanceTimeInfluence: sanitizeRatio(input == null ? void 0 : input.scrollDistanceTimeInfluence, DEFAULT_APP_STATE.menu.scrollDistanceTimeInfluence ?? 0),
+    scrollBaseDistanceRows: sanitizePositive(input == null ? void 0 : input.scrollBaseDistanceRows, DEFAULT_APP_STATE.menu.scrollBaseDistanceRows ?? 1),
+    scrollMaxDurationMultiplier: sanitizePositive(input == null ? void 0 : input.scrollMaxDurationMultiplier, DEFAULT_APP_STATE.menu.scrollMaxDurationMultiplier ?? 1)
   };
 }
 async function fileExists(filePath) {

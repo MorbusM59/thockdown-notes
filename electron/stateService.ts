@@ -15,6 +15,10 @@ const DEFAULT_APP_STATE: AppState = {
     searchQuery: '',
     sidebarWidthRatio: 0.306,
     tagSplitRatio: 0.645,
+    scrollEaseMultiplier: 1.5,
+    scrollDistanceTimeInfluence: 0.1,
+    scrollBaseDistanceRows: 20,
+    scrollMaxDurationMultiplier: 4,
   },
 };
 
@@ -52,6 +56,13 @@ function sanitizeRatio(input: unknown, fallback: number): number {
   return Math.max(0, Math.min(1, input));
 }
 
+function sanitizePositive(input: unknown, fallback: number): number {
+  if (typeof input !== 'number' || !Number.isFinite(input) || input <= 0) {
+    return fallback;
+  }
+  return input;
+}
+
 function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): PersistedMenuState {
   const selectedMonths = Array.isArray(input?.selectedMonths)
     ? input.selectedMonths.filter((value): value is number => Number.isInteger(value) && value >= 1 && value <= 12)
@@ -69,6 +80,10 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     documentFindCaseSensitive: Boolean(input?.documentFindCaseSensitive),
     sidebarWidthRatio: sanitizeRatio(input?.sidebarWidthRatio, DEFAULT_APP_STATE.menu!.sidebarWidthRatio),
     tagSplitRatio: sanitizeRatio(input?.tagSplitRatio, DEFAULT_APP_STATE.menu!.tagSplitRatio),
+    scrollEaseMultiplier: sanitizePositive(input?.scrollEaseMultiplier, DEFAULT_APP_STATE.menu!.scrollEaseMultiplier ?? 1),
+    scrollDistanceTimeInfluence: sanitizeRatio(input?.scrollDistanceTimeInfluence, DEFAULT_APP_STATE.menu!.scrollDistanceTimeInfluence ?? 0),
+    scrollBaseDistanceRows: sanitizePositive(input?.scrollBaseDistanceRows, DEFAULT_APP_STATE.menu!.scrollBaseDistanceRows ?? 1),
+    scrollMaxDurationMultiplier: sanitizePositive(input?.scrollMaxDurationMultiplier, DEFAULT_APP_STATE.menu!.scrollMaxDurationMultiplier ?? 1),
   };
 }
 

@@ -15,6 +15,10 @@ export interface PersistedMenuState {
   documentFindCaseSensitive?: boolean;
   sidebarWidthRatio: number;
   tagSplitRatio: number;
+  scrollEaseMultiplier?: number;
+  scrollDistanceTimeInfluence?: number;
+  scrollBaseDistanceRows?: number;
+  scrollMaxDurationMultiplier?: number;
 }
 
 export interface PersistedViewportState {
