@@ -973,7 +973,6 @@ body.splitter-dragging {
 .note-list-item.is-armed-for-archiving.is-tree-card:hover,
 .note-list-item.is-armed-for-archiving.is-tree-card.is-active,
 .note-list-item.is-armed-for-archiving.is-tree-card.is-active:hover {
-  border-right: 2px solid #0077FF;
   background-color: #0077FF33;
   box-shadow: none;
 }
@@ -982,7 +981,6 @@ body.splitter-dragging {
 .note-list-item.is-armed-for-deletion.is-tree-card:hover,
 .note-list-item.is-armed-for-deletion.is-tree-card.is-active,
 .note-list-item.is-armed-for-deletion.is-tree-card.is-active:hover {
-  border-right: 2px solid #AA0000;
   background-color: #FF000033;
   box-shadow: none;
 }
@@ -1008,7 +1006,6 @@ body.splitter-dragging {
 .note-list-item.is-tree-card.is-active {
   background-color: #00000000;
   border: none;
-  border-right: 2px solid #999999;
   background-color: #FFFFFF;
   border-radius: 0;
   box-shadow: none;
@@ -1163,12 +1160,14 @@ body.splitter-dragging {
   text-transform: uppercase;
   letter-spacing: 0.1em;
   background-color: #00000011;
-  border-right: 2px solid #999999;
   text-shadow: var(--text-shadow-emboss-panel);
+  border-bottom: 1px solid #999999;
 }
 
 .category-secondary {
-  border-left: 2px solid #999999;
+  border: 1px solid #999999;
+  border-top: 2px solid #999999;
+  border-radius: var(--border-radius-regular);
   margin: 8px 0;
 }
 
