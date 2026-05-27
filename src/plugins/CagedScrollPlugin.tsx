@@ -332,8 +332,11 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       }
 
       if (isRefocusKey(event)) {
-        initialRefocusAnchorScrollTopPx = scroller.scrollTop;
-        shouldSuppressInitialNativeJump = true;
+        const isNewRefocusPress = !pressedRefocusKeys.has(event.key);
+        if (isNewRefocusPress) {
+          initialRefocusAnchorScrollTopPx = scroller.scrollTop;
+          shouldSuppressInitialNativeJump = true;
+        }
         if (event.key === 'Enter') {
           const domSelection = window.getSelection();
           const caretRect = domSelection ? readSelectionRect(domSelection, LINE_HEIGHT_PX) : null;
@@ -364,6 +367,9 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         pressedRefocusKeys.add(event.key);
         activateRefocusTransaction(scroller);
         pendingIntent = 'refocus-caged';
+        // Drive caged refocus from keydown (including key-repeat) so Enter
+        // boundary scroll does not defer until key release.
+        scheduleRefocus();
       }
     };
 
@@ -385,13 +391,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
 
     const handleKeyUp = (event: KeyboardEvent) => {
       if (!scroller) return;
-      if (!pressedRefocusKeys.has(event.key)) {
-        if (event.key === 'Enter') {
-          pendingIntent = 'refocus-caged';
-          scheduleRefocus();
-        }
-        return;
-      }
+      if (!pressedRefocusKeys.has(event.key)) return;
 
       pressedRefocusKeys.delete(event.key);
       if (pressedRefocusKeys.size > 0) return;
