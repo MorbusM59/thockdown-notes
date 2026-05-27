@@ -41,6 +41,13 @@ export function ContractBridgePlugin({ onTextChange, onSelectionChange }: Contra
   const [editor] = useLexicalComposerContext();
   const previousTextRef = useRef('');
   const previousSelectionRef = useRef<EditorSelectionState>(EMPTY_SELECTION);
+  const onTextChangeRef = useRef(onTextChange);
+  const onSelectionChangeRef = useRef(onSelectionChange);
+
+  useEffect(() => {
+    onTextChangeRef.current = onTextChange;
+    onSelectionChangeRef.current = onSelectionChange;
+  }, [onTextChange, onSelectionChange]);
 
   useEffect(() => {
     // Emit stable initial state from current editor content.
@@ -57,16 +64,16 @@ export function ContractBridgePlugin({ onTextChange, onSelectionChange }: Contra
       }
     });
 
-    onTextChange({
+    onTextChangeRef.current({
       source: 'initial-load',
       text: initialText,
       previousText: '',
       selection: initialSelection,
     });
-    onSelectionChange({ source: 'initial-load', selection: initialSelection });
+    onSelectionChangeRef.current({ source: 'initial-load', selection: initialSelection });
     previousTextRef.current = initialText;
     previousSelectionRef.current = initialSelection;
-  }, [editor, onSelectionChange, onTextChange]);
+  }, [editor]);
 
   useEffect(() => {
     const removeListener = editor.registerUpdateListener(({ editorState, tags }) => {
@@ -86,7 +93,7 @@ export function ContractBridgePlugin({ onTextChange, onSelectionChange }: Contra
         if (normalizedText !== previousText) {
           const source = resolveChangeSource(tags);
 
-          onTextChange({
+          onTextChangeRef.current({
             source,
             text: normalizedText,
             previousText,
@@ -102,7 +109,7 @@ export function ContractBridgePlugin({ onTextChange, onSelectionChange }: Contra
           nextSelection.end !== previousSelection.end ||
           nextSelection.isCollapsed !== previousSelection.isCollapsed
         ) {
-          onSelectionChange({
+          onSelectionChangeRef.current({
             source: resolveChangeSource(tags),
             selection: nextSelection,
           });
@@ -114,7 +121,7 @@ export function ContractBridgePlugin({ onTextChange, onSelectionChange }: Contra
     return () => {
       removeListener();
     };
-  }, [editor, onSelectionChange, onTextChange]);
+  }, [editor]);
 
   return null;
 }

@@ -28,6 +28,12 @@ interface CagedScrollPluginProps {
 
 type ViewportIntent = 'none' | 'refocus-caged' | 'ensure-visible';
 
+type ResolveIntentResult = {
+  targetScrollTopPx: number | null;
+  reason: string;
+  caretTopInScrollPx?: number;
+};
+
 const computeVisibleMiddleRows = (
   scrollerClientHeightPx: number,
   topBoundaryPx: number,
@@ -65,14 +71,20 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
   useEffect(() => {
     const resolveIntentScrollTarget = (intent: Exclude<ViewportIntent, 'none'>) => {
       const scroller = scrollerRef.current;
-      if (!scroller) return null;
+      if (!scroller) {
+        return { targetScrollTopPx: null, reason: 'no-scroller' } satisfies ResolveIntentResult;
+      }
 
       const domSelection = window.getSelection();
-      if (!domSelection || domSelection.rangeCount === 0) return null;
+      if (!domSelection || domSelection.rangeCount === 0) {
+        return { targetScrollTopPx: null, reason: 'no-dom-selection' } satisfies ResolveIntentResult;
+      }
 
       const scrollerRect = scroller.getBoundingClientRect();
       const caretRect = readSelectionRect(domSelection, LINE_HEIGHT_PX);
-      if (!caretRect) return null;
+      if (!caretRect) {
+        return { targetScrollTopPx: null, reason: 'no-caret-rect' } satisfies ResolveIntentResult;
+      }
 
       let rawText = '';
       editor.getEditorState().read(() => {
@@ -100,18 +112,24 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
           lineHeightPx: LINE_HEIGHT_PX,
         });
 
-        return targetScrollTopPx;
+        return {
+          targetScrollTopPx,
+          reason: 'ok',
+          caretTopInScrollPx: caretTopInScroll,
+        } satisfies ResolveIntentResult;
       }
 
-      return null;
+      return { targetScrollTopPx: null, reason: 'unsupported-intent' } satisfies ResolveIntentResult;
     };
 
     const applyIntentReconcile = (intent: Exclude<ViewportIntent, 'none'>) => {
       const scroller = scrollerRef.current;
-      if (!scroller) return;
+      if (!scroller) return false;
 
-      const targetScrollTopPx = resolveIntentScrollTarget(intent);
-      if (targetScrollTopPx === null) return;
+      const result = resolveIntentScrollTarget(intent);
+      if (result.targetScrollTopPx === null) return false;
+
+      const targetScrollTopPx = result.targetScrollTopPx;
 
       if (targetScrollTopPx !== scroller.scrollTop) {
         if (intent === 'refocus-caged') {
@@ -130,10 +148,14 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       if (intent === 'ensure-visible') {
         scheduleRefocusTransactionDeactivation(scroller);
       }
+
+      return true;
     };
 
     let pendingIntent: ViewportIntent = 'none';
     let isRefocusReconcileQueued = false;
+    let refocusRetryFrameId: number | null = null;
+    let deterministicEnterBoundaryScrollTopPx: number | null = null;
     const pressedRefocusKeys = new Set<string>();
     let initialRefocusAnchorScrollTopPx: number | null = null;
     let shouldSuppressInitialNativeJump = false;
@@ -156,6 +178,11 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       pressedRefocusKeys.clear();
       initialRefocusAnchorScrollTopPx = null;
       shouldSuppressInitialNativeJump = false;
+      deterministicEnterBoundaryScrollTopPx = null;
+      if (refocusRetryFrameId !== null) {
+        cancelAnimationFrame(refocusRetryFrameId);
+        refocusRetryFrameId = null;
+      }
       if (pendingIntent === 'refocus-caged') {
         pendingIntent = 'none';
       }
@@ -181,9 +208,49 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         isRefocusReconcileQueued = false;
         const intent = pendingIntent;
         pendingIntent = 'none';
-        shouldSuppressInitialNativeJump = false;
         if (intent === 'none') return;
-        applyIntentReconcile(intent);
+
+        if (intent === 'refocus-caged' && deterministicEnterBoundaryScrollTopPx !== null) {
+          const currentScroller = scrollerRef.current;
+          if (currentScroller) {
+            const maxScrollTopPx = Math.max(0, currentScroller.scrollHeight - currentScroller.clientHeight);
+            const deterministicTargetPx = Math.max(
+              0,
+              Math.min(
+                maxScrollTopPx,
+                Math.round((deterministicEnterBoundaryScrollTopPx + LINE_HEIGHT_PX) / LINE_HEIGHT_PX) * LINE_HEIGHT_PX,
+              ),
+            );
+
+            if (deterministicTargetPx > currentScroller.scrollTop) {
+              currentScroller.scrollTop = deterministicTargetPx;
+            }
+          }
+
+          deterministicEnterBoundaryScrollTopPx = null;
+        }
+
+        const didReconcile = applyIntentReconcile(intent);
+        if (didReconcile) {
+          shouldSuppressInitialNativeJump = false;
+          return;
+        }
+
+        // Enter at the cage edge can temporarily produce no measurable caret rect.
+        // Retry on the next frame so the scroll-up reconcile still happens immediately.
+        if (intent === 'refocus-caged' && pressedRefocusKeys.size > 0) {
+          pendingIntent = 'refocus-caged';
+          if (refocusRetryFrameId !== null) {
+            cancelAnimationFrame(refocusRetryFrameId);
+          }
+          refocusRetryFrameId = requestAnimationFrame(() => {
+            refocusRetryFrameId = null;
+            scheduleRefocus();
+          });
+          return;
+        }
+
+        shouldSuppressInitialNativeJump = false;
       });
     };
 
@@ -201,7 +268,6 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     let pendingWheelPx = 0;
 
     const isRefocusKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return false;
       if (
         event.key === 'ArrowUp' ||
         event.key === 'ArrowDown' ||
@@ -216,19 +282,6 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       if (event.key.length === 1) return true;
       return event.key === 'Enter' || event.key === 'Backspace' || event.key === 'Delete' || event.key === 'Tab';
     };
-
-    const isRefocusKeyName = (key: string) => (
-      key === 'ArrowUp' ||
-      key === 'ArrowDown' ||
-      key === 'ArrowLeft' ||
-      key === 'ArrowRight' ||
-      key === 'Home' ||
-      key === 'End' ||
-      key === 'Enter' ||
-      key === 'Backspace' ||
-      key === 'Delete' ||
-      key === 'Tab'
-    );
 
     const shouldSuppressNativeCaretScroll = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return false;
@@ -281,6 +334,33 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       if (isRefocusKey(event)) {
         initialRefocusAnchorScrollTopPx = scroller.scrollTop;
         shouldSuppressInitialNativeJump = true;
+        if (event.key === 'Enter') {
+          const domSelection = window.getSelection();
+          const caretRect = domSelection ? readSelectionRect(domSelection, LINE_HEIGHT_PX) : null;
+          if (domSelection && caretRect) {
+            let rawText = '';
+            editor.getEditorState().read(() => {
+              rawText = $getRoot().getTextContent();
+            });
+
+            const scrollerRect = scroller.getBoundingClientRect();
+            const caretTopInScroll = resolveCaretTopInScroll({
+              caretRect,
+              scrollerRectTop: scrollerRect.top,
+              scrollerScrollTop: scroller.scrollTop,
+              rootEl: editor.getRootElement(),
+              domSelection,
+              rawText,
+              lineHeightPx: LINE_HEIGHT_PX,
+            });
+
+            const middleBottomInScrollPx = scroller.scrollTop + scroller.clientHeight - bottomBoundaryPx;
+            const isAtLastMiddleRow = caretTopInScroll >= (middleBottomInScrollPx - LINE_HEIGHT_PX);
+            if (isAtLastMiddleRow) {
+              deterministicEnterBoundaryScrollTopPx = scroller.scrollTop;
+            }
+          }
+        }
         pressedRefocusKeys.add(event.key);
         activateRefocusTransaction(scroller);
         pendingIntent = 'refocus-caged';
@@ -305,10 +385,23 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
 
     const handleKeyUp = (event: KeyboardEvent) => {
       if (!scroller) return;
-      if (!isRefocusKeyName(event.key)) return;
+      if (!pressedRefocusKeys.has(event.key)) {
+        if (event.key === 'Enter') {
+          pendingIntent = 'refocus-caged';
+          scheduleRefocus();
+        }
+        return;
+      }
 
       pressedRefocusKeys.delete(event.key);
       if (pressedRefocusKeys.size > 0) return;
+
+      if (pendingIntent === 'refocus-caged') {
+        // Key was released before another Lexical update tick arrived.
+        // Force reconcile now so deterministic Enter shift executes immediately.
+        scheduleRefocus();
+        return;
+      }
 
       if (pendingIntent === 'none') {
         scheduleRefocusTransactionDeactivation(scroller);
@@ -467,6 +560,10 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
+      if (refocusRetryFrameId !== null) {
+        cancelAnimationFrame(refocusRetryFrameId);
+        refocusRetryFrameId = null;
+      }
       if (dragCorrectionFrame !== null) {
         cancelAnimationFrame(dragCorrectionFrame);
         dragCorrectionFrame = null;

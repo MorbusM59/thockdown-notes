@@ -27,7 +27,6 @@ import {
   validateTextInvariants,
   validateViewportInvariants,
 } from '../editor/ContractInvariantHarness';
-import { logScenarioProbe, readCaretGeometry } from '../editor/ScenarioProbe';
 import { CELL_WIDTH_PX, LINE_HEIGHT_PX } from '../editor/LayoutConstants';
 import { normalizeInternalText } from '../editor/TextPolicy';
 import { scrollToQuantizedEase } from '../editor/QuantizedEaseScroll';
@@ -48,7 +47,6 @@ interface EditorProps {
 }
 
 const ENABLE_CONTRACT_ASSERTIONS = import.meta.env.DEV;
-const ENABLE_SCENARIO_PROBES = import.meta.env.DEV;
 const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28;
 const SCROLL_TRACK_EDGE_GAP_PX = 3;
 
@@ -225,10 +223,6 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
   const scrollerRef = useRef<HTMLDivElement>(null);
   const scrollbarTrackRef = useRef<HTMLDivElement>(null);
   const lastInvariantKeyRef = useRef('');
-  const lastProbeKeyRef = useRef('');
-  const lastTypingEventAtRef = useRef(0);
-  const rapidTypingBurstRef = useRef(0);
-  const lastScrollEventAtRef = useRef(0);
   const latestTextRef = useRef('');
   const latestSelectionRef = useRef<EditorSelectionState>({
     anchor: 0,
@@ -262,15 +256,7 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
     console.warn(`[editor-contract:${context}]`, issues);
   };
 
-  const reportProbe = (context: string, payload: Record<string, unknown>) => {
-    if (!ENABLE_SCENARIO_PROBES) return;
-    const key = `${context}|${JSON.stringify(payload)}`;
-    if (key === lastProbeKeyRef.current) return;
-    lastProbeKeyRef.current = key;
-    logScenarioProbe(context, payload, true);
-  };
-
-  const handleTextChange = (event: EditorTextChangeEvent) => {
+  const handleTextChange = useCallback((event: EditorTextChangeEvent) => {
     latestTextRef.current = event.text;
     latestSelectionRef.current = event.selection;
     reportInvariantIssues('text-change', [
@@ -278,13 +264,13 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
       ...validateSelectionInvariants(event.text, event.selection),
     ]);
     bindings?.onTextChange?.(event);
-  };
+  }, [bindings]);
 
-  const handleSelectionChange = (event: EditorSelectionChangeEvent) => {
+  const handleSelectionChange = useCallback((event: EditorSelectionChangeEvent) => {
     latestSelectionRef.current = event.selection;
     reportInvariantIssues('selection-change', validateSelectionInvariants(latestTextRef.current, event.selection));
     bindings?.onSelectionChange?.(event);
-  };
+  }, [bindings]);
 
   const buildViewport = useCallback((): EditorViewportState => ({
     topBoundaryPx: topBoundary,
@@ -419,7 +405,6 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
     if (!scroller) return;
 
     const onScroll = () => {
-      lastScrollEventAtRef.current = performance.now();
       const viewport = buildViewport();
       reportInvariantIssues('viewport-scroll', validateViewportInvariants(viewport));
       bindings?.onViewportChange?.({ source: 'user-input', viewport });
@@ -633,64 +618,6 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isDraggingScrollThumb, scrollFromThumbTop, syncCustomScrollbar]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const activeElement = document.activeElement as HTMLElement | null;
-      if (!activeElement || !activeElement.classList.contains('editor-text')) return;
-
-      const now = performance.now();
-      const key = event.key;
-      const isTypingKey = key.length === 1 || key === 'Enter' || key === 'Backspace' || key === 'Tab';
-      if (!isTypingKey) return;
-
-      const delta = now - lastTypingEventAtRef.current;
-      rapidTypingBurstRef.current = delta < 90 ? rapidTypingBurstRef.current + 1 : 1;
-      lastTypingEventAtRef.current = now;
-
-      if (rapidTypingBurstRef.current >= 5) {
-        reportProbe('rapid-input-burst', {
-          key,
-          burstCount: rapidTypingBurstRef.current,
-          deltaMs: Math.round(delta),
-          recentScrollMs: Math.round(now - lastScrollEventAtRef.current),
-        });
-      }
-
-      if (key === 'Enter') {
-        const scroller = scrollerRef.current;
-        const caret = readCaretGeometry();
-        if (!scroller || !caret) return;
-
-        const scrollerRect = scroller.getBoundingClientRect();
-        const cageTop = scrollerRect.top + topBoundary;
-        const cageBottom = scrollerRect.bottom - bottomBoundary;
-        const distanceToTop = caret.top - cageTop;
-        const distanceToBottom = cageBottom - caret.bottom;
-        const nearTop = distanceToTop <= LINE_HEIGHT_PX;
-        const nearBottom = distanceToBottom <= LINE_HEIGHT_PX;
-
-        if (nearTop || nearBottom) {
-          reportProbe('enter-near-boundary', {
-            nearTop,
-            nearBottom,
-            distanceToTop: Math.round(distanceToTop),
-            distanceToBottom: Math.round(distanceToBottom),
-            topBoundary,
-            bottomBoundary,
-            scrollTop: scroller.scrollTop,
-            recentScrollMs: Math.round(now - lastScrollEventAtRef.current),
-          });
-        }
-      }
-    };
-
-    const scroller = scrollerRef.current;
-    if (!scroller) return;
-
-    scroller.addEventListener('keydown', onKeyDown);
-    return () => scroller.removeEventListener('keydown', onKeyDown);
-  }, [topBoundary, bottomBoundary]);
 
   const handleTrackMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     const track = scrollbarTrackRef.current;
