@@ -341,6 +341,13 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
           const domSelection = window.getSelection();
           const caretRect = domSelection ? readSelectionRect(domSelection, LINE_HEIGHT_PX) : null;
           if (domSelection && caretRect) {
+            const isAuthoritativeRect = caretRect.source === 'primary' || caretRect.source === 'client-rect';
+            if (!isAuthoritativeRect) {
+              // Adjacent/anchor fallback can point at neighboring rows around empty trailing lines.
+              // Skip deterministic arming in that case to avoid false boundary promotion.
+              deterministicEnterBoundaryScrollTopPx = null;
+            }
+
             let rawText = '';
             editor.getEditorState().read(() => {
               rawText = $getRoot().getTextContent();
@@ -358,7 +365,9 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
             });
 
             const middleBottomInScrollPx = scroller.scrollTop + scroller.clientHeight - bottomBoundaryPx;
-            const isAtLastMiddleRow = caretTopInScroll >= (middleBottomInScrollPx - LINE_HEIGHT_PX);
+            const quantizedCaretRowTopPx = Math.round(caretTopInScroll / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
+            const lastMiddleRowTopPx = Math.round((middleBottomInScrollPx - LINE_HEIGHT_PX) / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
+            const isAtLastMiddleRow = isAuthoritativeRect && Math.abs(quantizedCaretRowTopPx - lastMiddleRowTopPx) < 0.01;
             if (isAtLastMiddleRow) {
               deterministicEnterBoundaryScrollTopPx = scroller.scrollTop;
             }
@@ -367,9 +376,11 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         pressedRefocusKeys.add(event.key);
         activateRefocusTransaction(scroller);
         pendingIntent = 'refocus-caged';
-        // Drive caged refocus from keydown (including key-repeat) so Enter
-        // boundary scroll does not defer until key release.
-        scheduleRefocus();
+        // Enter needs immediate keydown reconcile to avoid release-timed behavior.
+        // Arrow/navigation keys should reconcile on the post-move editor update.
+        if (event.key === 'Enter') {
+          scheduleRefocus();
+        }
       }
     };
 
@@ -395,13 +406,6 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
 
       pressedRefocusKeys.delete(event.key);
       if (pressedRefocusKeys.size > 0) return;
-
-      if (pendingIntent === 'refocus-caged') {
-        // Key was released before another Lexical update tick arrived.
-        // Force reconcile now so deterministic Enter shift executes immediately.
-        scheduleRefocus();
-        return;
-      }
 
       if (pendingIntent === 'none') {
         scheduleRefocusTransactionDeactivation(scroller);

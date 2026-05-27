@@ -1,5 +1,9 @@
 # React + TypeScript + Vite
 
+## Project Docs
+
+- [Interaction Design Philosophy](docs/interaction-design-philosophy.md)
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

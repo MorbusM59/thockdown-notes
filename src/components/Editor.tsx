@@ -656,7 +656,11 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
     const scroller = scrollerRef.current;
     if (!scroller) return;
 
-    event.preventDefault();
+    // Some wheel events can arrive as non-cancelable after focus transitions.
+    // Guard preventDefault to avoid noisy passive/cancelable warnings.
+    if (event.cancelable) {
+      event.preventDefault();
+    }
 
     const forwardedWheelEvent = new WheelEvent('wheel', {
       deltaX: event.deltaX,

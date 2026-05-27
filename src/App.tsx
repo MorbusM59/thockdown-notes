@@ -1041,10 +1041,10 @@ function App() {
     return listed[0].id
   }, [])
 
-  const selectNote = useCallback(async (noteId: string) => {
+  const selectNote = useCallback(async (noteId: string, options?: { forceReload?: boolean }) => {
     if (!window.measlyNotes) return
     if (!persistenceReady) return
-    if (noteId === activeNoteId) return
+    if (noteId === activeNoteId && !options?.forceReload) return
     if (noteTransitionLockRef.current) return
 
     noteTransitionLockRef.current = true
@@ -1059,7 +1059,8 @@ function App() {
   }, [activeNoteId, activateNote, flushPendingSaveNow, persistenceReady])
 
   const handleSelectNote = useCallback((noteId: string) => {
-    void selectNote(noteId)
+    // Force a reload even for the active card to recover from any stale editor state.
+    void selectNote(noteId, { forceReload: true })
   }, [selectNote])
 
   const updateActiveNoteTitlePreview = useCallback((nextText: string) => {
@@ -2927,6 +2928,7 @@ function App() {
         <main className="editor-shell">
           <div className="editor-stage">
             <Editor
+              key={activeNoteId ?? 'no-active-note'}
               bindings={bindings}
               adapterRef={adapterRef}
               initialText={activeNoteText}
