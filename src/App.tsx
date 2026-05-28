@@ -5,6 +5,8 @@ import './App.css'
 import type {
   EditorAdapter,
   EditorBindings,
+  EditorSelectionChangeEvent,
+  EditorSelectionState,
   EditorTextChangeEvent,
   EditorViewportChangeEvent,
 } from './editor/EditorContract'
@@ -53,6 +55,13 @@ const NOTE_RIGHT_CLICK_HOLD_MS = 200
 type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find'
 type NoteArmedAction = 'archive' | 'deletion'
 type ProtectedQuickReleaseAction = 'remove-archived' | 'remove-deleted' | null
+type TextDecorationFormat = 'bold' | 'italic' | 'strikethrough'
+
+const TEXT_DECORATION_MARKERS: Record<TextDecorationFormat, { open: string; close: string }> = {
+  bold: { open: '**', close: '**' },
+  italic: { open: '*', close: '*' },
+  strikethrough: { open: '~~', close: '~~' },
+}
 
 const SIDEBAR_MODES: Array<{ mode: SidebarMode; label: string }> = [
   { mode: 'date', label: 'Date' },
@@ -823,6 +832,13 @@ function App() {
   const [sidebarTreeScrollerEl, setSidebarTreeScrollerEl] = useState<HTMLDivElement | null>(null)
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null)
   const [activeNoteText, setActiveNoteText] = useState('')
+  const [editorSelection, setEditorSelection] = useState<EditorSelectionState>({
+    anchor: 0,
+    focus: 0,
+    start: 0,
+    end: 0,
+    isCollapsed: true,
+  })
   const [persistenceReady, setPersistenceReady] = useState(false)
   const [appShellWidthPx, setAppShellWidthPx] = useState(980)
   const [sidebarWidthRatio, setSidebarWidthRatio] = useState(DEFAULT_SIDEBAR_RATIO)
@@ -1811,6 +1827,7 @@ function App() {
     onTextChange: (event: EditorTextChangeEvent) => {
       const normalizedText = normalizeInternalText(event.text)
       latestEditorTextRef.current = normalizedText
+      setEditorSelection(event.selection)
       setEditorTextVersion((previous) => previous + 1)
 
       if (!activeNoteId || !persistenceReady) return
@@ -1825,6 +1842,9 @@ function App() {
 
       updateActiveNoteTitlePreview(normalizedText)
       queueSave(normalizedText)
+    },
+    onSelectionChange: (event: EditorSelectionChangeEvent) => {
+      setEditorSelection(event.selection)
     },
     onViewportChange: (event: EditorViewportChangeEvent) => {
       latestViewportRef.current = {
@@ -2223,6 +2243,59 @@ function App() {
     const firstHitEnd = firstHitStart + directive.replaceText.length
     applyProgrammaticEditorText(nextText, firstHitStart, firstHitEnd)
   }, [activeNoteText, applyProgrammaticEditorText, documentFindQuery, isDocumentFindCaseSensitive])
+
+  const isSelectionWrappedBy = useCallback((text: string, selection: EditorSelectionState, open: string, close: string) => {
+    const start = Math.max(0, Math.min(selection.start, text.length))
+    const end = Math.max(start, Math.min(selection.end, text.length))
+
+    return (
+      start >= open.length &&
+      text.slice(start - open.length, start) === open &&
+      text.slice(end, end + close.length) === close
+    )
+  }, [])
+
+  const activeDecorationFormats = useMemo(() => {
+    const active = new Set<TextDecorationFormat>()
+
+    for (const format of Object.keys(TEXT_DECORATION_MARKERS) as TextDecorationFormat[]) {
+      const marker = TEXT_DECORATION_MARKERS[format]
+      if (isSelectionWrappedBy(currentEditorText, editorSelection, marker.open, marker.close)) {
+        active.add(format)
+      }
+    }
+
+    return active
+  }, [currentEditorText, editorSelection, isSelectionWrappedBy])
+
+  const applyTextDecoration = useCallback((format: TextDecorationFormat) => {
+    if (!activeNoteId) return
+
+    const marker = TEXT_DECORATION_MARKERS[format]
+    const sourceText = currentEditorText
+    const start = Math.max(0, Math.min(editorSelection.start, sourceText.length))
+    const end = Math.max(start, Math.min(editorSelection.end, sourceText.length))
+    const hasWrapping = isSelectionWrappedBy(sourceText, editorSelection, marker.open, marker.close)
+
+    if (hasWrapping) {
+      const unwrapped = `${sourceText.slice(0, start - marker.open.length)}${sourceText.slice(start, end)}${sourceText.slice(end + marker.close.length)}`
+      const nextStart = start - marker.open.length
+      const nextEnd = nextStart + (end - start)
+      applyProgrammaticEditorText(unwrapped, nextStart, nextEnd)
+      return
+    }
+
+    const nextText = `${sourceText.slice(0, start)}${marker.open}${sourceText.slice(start, end)}${marker.close}${sourceText.slice(end)}`
+    if (editorSelection.isCollapsed) {
+      const cursor = start + marker.open.length
+      applyProgrammaticEditorText(nextText, cursor, cursor)
+      return
+    }
+
+    const nextStart = start + marker.open.length
+    const nextEnd = nextStart + (end - start)
+    applyProgrammaticEditorText(nextText, nextStart, nextEnd)
+  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, editorSelection, isSelectionWrappedBy])
 
   const handleFindViewButtonContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
@@ -2845,25 +2918,113 @@ function App() {
         </div>
       </section>
 
-      <section className="toolbar-grid" style={{ gridArea: 'toolbar' }} aria-label="Toolbar panel placeholder">
-        <div className={`toolbar-settings-shell${isScrollSettingsOpen ? ' is-open' : ''}`}>
-          <div className="toolbar-settings-header">
-            <div className="toolbar-placeholder">Toolbar panel</div>
+      <section className="toolbar-grid" style={{ gridArea: 'toolbar' }} aria-label="Editor toolbar">
+        <div className="editor-toolbar">
+          <div className="toolbar-left-tools">
             <button
-              className={`toggle-btn icon-btn toolbar-settings-toggle-btn${isScrollSettingsOpen ? ' is-active' : ''}`}
+              className="toolbar-toggle-btn active"
+              type="button"
+              title="Edit"
+              aria-label="Edit mode"
+            >
+              Edit
+            </button>
+
+            <div className="markdown-toolbar" aria-label="Markdown toolbar">
+              <button
+                type="button"
+                className={`toolbar-btn-icon ${activeDecorationFormats.has('bold') ? 'active' : ''}`}
+                onClick={() => applyTextDecoration('bold')}
+                title="Bold"
+                aria-label="Bold"
+                disabled={!activeNoteId}
+              >
+                <strong>B</strong>
+              </button>
+              <button
+                type="button"
+                className={`toolbar-btn-icon ${activeDecorationFormats.has('italic') ? 'active' : ''}`}
+                onClick={() => applyTextDecoration('italic')}
+                title="Italic"
+                aria-label="Italic"
+                disabled={!activeNoteId}
+              >
+                <em>I</em>
+              </button>
+              <button
+                type="button"
+                className={`toolbar-btn-icon ${activeDecorationFormats.has('strikethrough') ? 'active' : ''}`}
+                onClick={() => applyTextDecoration('strikethrough')}
+                title="Strikethrough"
+                aria-label="Strikethrough"
+                disabled={!activeNoteId}
+              >
+                <span style={{ textDecoration: 'line-through' }}>S</span>
+              </button>
+
+              <span className="toolbar-divider">|</span>
+
+              <button type="button" className="toolbar-btn-icon" disabled title="Heading 1 (placeholder)">H1</button>
+              <button type="button" className="toolbar-btn-icon" disabled title="Heading 2 (placeholder)">H2</button>
+              <button type="button" className="toolbar-btn-icon" disabled title="Heading 3 (placeholder)">H3</button>
+
+              <span className="toolbar-divider">|</span>
+
+              <button type="button" className="toolbar-btn-icon" disabled title="Bulleted list (placeholder)">≡</button>
+              <button type="button" className="toolbar-btn-icon" disabled title="Numbered list (placeholder)">#</button>
+              <button type="button" className="toolbar-btn-icon" disabled title="Link (placeholder)">🔗</button>
+
+              <span className="toolbar-divider">|</span>
+
+              <button type="button" className="toolbar-btn-icon" disabled title="Blockquote (placeholder)">&quot;</button>
+              <button type="button" className="toolbar-btn-icon" disabled title="Code block (placeholder)">{'{ }'}</button>
+              <button type="button" className="toolbar-btn-icon" disabled title="Inline code (placeholder)">{'<>'}</button>
+
+              <span className="toolbar-divider">|</span>
+
+              <button type="button" className="toolbar-btn-icon" disabled title="Horizontal rule (placeholder)">—</button>
+            </div>
+          </div>
+
+          <div className="toolbar-right-tools" aria-label="Toolbar right controls">
+            <div className="style-selector">
+              <label className="selector-label">Style:</label>
+              <select disabled aria-label="Style placeholder">
+                <option>Placeholder</option>
+              </select>
+            </div>
+
+            <div className="style-selector">
+              <label className="selector-label">Size:</label>
+              <select disabled aria-label="Size placeholder">
+                <option>Placeholder</option>
+              </select>
+            </div>
+
+            <div className="style-selector">
+              <label className="selector-label">Spacing:</label>
+              <select disabled aria-label="Spacing placeholder">
+                <option>Placeholder</option>
+              </select>
+            </div>
+
+            <button
+              className={`toggle-btn icon-btn toolbar-gear-btn${isScrollSettingsOpen ? ' is-active' : ''}`}
               type="button"
               title="Scroll settings"
               aria-label="Scroll settings"
               aria-expanded={isScrollSettingsOpen}
               onClick={() => setIsScrollSettingsOpen((open) => !open)}
             >
-              <span className="toolbar-settings-toggle-glyph fa-solid fa-gear" aria-hidden="true" />
+              <span className="toolbar-gear-glyph fa-solid fa-gear" aria-hidden="true" />
             </button>
           </div>
+        </div>
 
-          {isScrollSettingsOpen ? (
-            <div className="toolbar-settings-content" aria-label="Scroll settings panel">
-              <section className="toolbar-settings-section toolbar-settings-section-scrolling" aria-label="Scrolling settings">
+        {isScrollSettingsOpen ? (
+          <div className="toolbar-flyout-panel" aria-label="Toolbar flyout panel">
+            <div className="toolbar-flyout-content" aria-label="Scroll settings panel">
+              <section className="toolbar-flyout-section toolbar-flyout-section-scrolling" aria-label="Scrolling settings">
                 <div className="panel-placeholder-title">Scrolling</div>
                 <div className="utility-setting-row utility-setting-row-range">
                   <CompactRangeSlider
@@ -2910,18 +3071,18 @@ function App() {
                 </div>
               </section>
 
-              <section className="toolbar-settings-section toolbar-settings-section-placeholder" aria-label="Editor settings placeholder">
+              <section className="toolbar-flyout-section toolbar-flyout-section-placeholder" aria-label="Editor settings placeholder">
                 <div className="panel-placeholder-title">Editor</div>
-                <div className="toolbar-settings-placeholder-text">Soon</div>
+                <div className="toolbar-flyout-placeholder-text">Soon</div>
               </section>
 
-              <section className="toolbar-settings-section toolbar-settings-section-placeholder" aria-label="Layout settings placeholder">
+              <section className="toolbar-flyout-section toolbar-flyout-section-placeholder" aria-label="Layout settings placeholder">
                 <div className="panel-placeholder-title">Layout</div>
-                <div className="toolbar-settings-placeholder-text">Soon</div>
+                <div className="toolbar-flyout-placeholder-text">Soon</div>
               </section>
             </div>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </section>
 
       <div className="editor-viewer-frame" style={{ gridArea: 'viewer' }}>

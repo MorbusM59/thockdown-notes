@@ -17,16 +17,40 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function getOffsetWithinRoot(rootEl: HTMLElement, node: Node, offset: number): number {
+function getOffsetWithinContainer(container: Node, node: Node, offset: number): number {
   try {
     const range = document.createRange();
-    range.setStart(rootEl, 0);
+    range.setStart(container, 0);
     range.setEnd(node, offset);
     return normalizePlainText(range.toString()).length;
   } catch {
-    // Invalid DOM positions can happen briefly during editor updates.
     return 0;
   }
+}
+
+function getOffsetWithinRoot(rootEl: HTMLElement, node: Node, offset: number): number {
+  const paragraphs = Array.from(rootEl.children);
+  if (paragraphs.length === 0) {
+    return getOffsetWithinContainer(rootEl, node, offset);
+  }
+
+  let accumulated = 0;
+
+  for (let index = 0; index < paragraphs.length; index += 1) {
+    const paragraph = paragraphs[index];
+    if (paragraph.contains(node) || paragraph === node) {
+      return accumulated + getOffsetWithinContainer(paragraph, node, offset);
+    }
+
+    accumulated += normalizePlainText(paragraph.textContent ?? '').length;
+    if (index < paragraphs.length - 1) {
+      // Canonical model inserts a single LF between root paragraphs.
+      accumulated += 1;
+    }
+  }
+
+  // Invalid DOM positions can happen briefly during editor updates.
+  return 0;
 }
 
 export function readSelectionStateFromDom(
