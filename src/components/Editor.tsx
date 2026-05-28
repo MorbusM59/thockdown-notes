@@ -759,10 +759,10 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
             {/* The single unified full-screen grid lines */}
             <div className="absolute pointer-events-none measly-grid-lines" style={{ inset: 'var(--editor-frame-padding)', zIndex: 30 }} />
             
-            {/* Top Drag Handle (Invisible, centered on the boundary line) */}
+            {/* Top Drag Handle */}
             <div 
               className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize" 
-              style={{ top: `calc(var(--editor-frame-padding) + ${topBoundary}px - 12px)`, left: 'var(--editor-frame-padding)', right: 'var(--editor-frame-padding)', height: 24 }} 
+              style={{ top: `calc(var(--editor-frame-padding) + ${topBoundary}px - 24px)`, left: 'var(--editor-frame-padding)', right: 'var(--editor-frame-padding)', height: 24 }} 
               onWheel={forwardHandleWheelToScroller}
               onMouseDown={(e) => { e.preventDefault(); setIsDraggingTop(true); }}
             />
@@ -770,7 +770,7 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
             {/* Bottom Drag Handle */}
             <div 
               className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize" 
-              style={{ bottom: `calc(var(--editor-frame-padding) + ${bottomBoundary}px - 12px)`, left: 'var(--editor-frame-padding)', right: 'var(--editor-frame-padding)', height: 24 }} 
+              style={{ bottom: `calc(var(--editor-frame-padding) + ${bottomBoundary}px - 24px)`, left: 'var(--editor-frame-padding)', right: 'var(--editor-frame-padding)', height: 24 }} 
               onWheel={forwardHandleWheelToScroller}
               onMouseDown={(e) => { e.preventDefault(); setIsDraggingBottom(true); }}
             />
