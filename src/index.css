@@ -32,21 +32,84 @@
 @font-face {
   font-family: 'Roboto Condensed';
   src: url('./fonts/RobotoCondensed-Regular.woff2') format('woff2');
-  font-weight: normal;
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Roboto Condensed';
+  src: url('./fonts/RobotoCondensed-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Roboto Condensed';
+  src: url('./fonts/RobotoCondensed-Bold.woff2') format('woff2');
+  font-weight: 700;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'Quicksand';
   src: url('./fonts/Quicksand-Regular.woff2') format('woff2');
-  font-weight: normal;
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Quicksand';
+  src: url('./fonts/Quicksand-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Quicksand';
+  src: url('./fonts/Quicksand-Bold.woff2') format('woff2');
+  font-weight: 700;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'Sour Gummy';
   src: url('./fonts/SourGummy-Regular.woff2') format('woff2');
-  font-weight: normal;
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Sour Gummy';
+  src: url('./fonts/SourGummy-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Sour Gummy';
+  src: url('./fonts/SourGummy-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Alumni Sans';
+  src: url('./fonts/AlumniSans-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Big Shoulders';
+  src: url('./fonts/BigShoulders-ExtraLight.woff2') format('woff2');
+  font-weight: 200;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Share Tech Mono';
+  src: url('./fonts/ShareTechMono-Regular.woff2') format('woff2');
+  font-weight: 400;
   font-style: normal;
 }
 
