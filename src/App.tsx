@@ -2297,6 +2297,146 @@ function App() {
     applyProgrammaticEditorText(nextText, nextStart, nextEnd)
   }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, editorSelection, isSelectionWrappedBy])
 
+  const resolveSelectionBounds = useCallback((text: string) => {
+    const start = Math.max(0, Math.min(editorSelection.start, text.length))
+    const end = Math.max(start, Math.min(editorSelection.end, text.length))
+    return { start, end }
+  }, [editorSelection.end, editorSelection.start])
+
+  const applyWrappedMarker = useCallback((open: string, close: string, collapsedPlaceholder = '') => {
+    if (!activeNoteId) return
+
+    const sourceText = currentEditorText
+    const { start, end } = resolveSelectionBounds(sourceText)
+    const hasWrapping = isSelectionWrappedBy(sourceText, editorSelection, open, close)
+
+    if (hasWrapping) {
+      const unwrapped = `${sourceText.slice(0, start - open.length)}${sourceText.slice(start, end)}${sourceText.slice(end + close.length)}`
+      const nextStart = start - open.length
+      const nextEnd = nextStart + (end - start)
+      applyProgrammaticEditorText(unwrapped, nextStart, nextEnd)
+      return
+    }
+
+    if (editorSelection.isCollapsed && collapsedPlaceholder.length > 0) {
+      const nextText = `${sourceText.slice(0, start)}${open}${collapsedPlaceholder}${close}${sourceText.slice(end)}`
+      const nextStart = start + open.length
+      const nextEnd = nextStart + collapsedPlaceholder.length
+      applyProgrammaticEditorText(nextText, nextStart, nextEnd)
+      return
+    }
+
+    const nextText = `${sourceText.slice(0, start)}${open}${sourceText.slice(start, end)}${close}${sourceText.slice(end)}`
+    if (editorSelection.isCollapsed) {
+      const cursor = start + open.length
+      applyProgrammaticEditorText(nextText, cursor, cursor)
+      return
+    }
+
+    const nextStart = start + open.length
+    const nextEnd = nextStart + (end - start)
+    applyProgrammaticEditorText(nextText, nextStart, nextEnd)
+  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, editorSelection, isSelectionWrappedBy, resolveSelectionBounds])
+
+  const resolveLineRange = useCallback((text: string, start: number, end: number) => {
+    const lineStart = text.lastIndexOf('\n', Math.max(0, start - 1)) + 1
+    const endProbe = end > start ? end - 1 : end
+    const lineEndNewline = text.indexOf('\n', endProbe)
+    const lineEndExclusive = lineEndNewline === -1 ? text.length : lineEndNewline
+    return { lineStart, lineEndExclusive }
+  }, [])
+
+  const transformSelectedLines = useCallback((transform: (line: string, index: number) => string) => {
+    if (!activeNoteId) return
+
+    const sourceText = currentEditorText
+    const { start, end } = resolveSelectionBounds(sourceText)
+    const { lineStart, lineEndExclusive } = resolveLineRange(sourceText, start, end)
+    const selectedBlock = sourceText.slice(lineStart, lineEndExclusive)
+    const lines = selectedBlock.split('\n')
+    const nextLines = lines.map((line, index) => transform(line, index))
+    const nextBlock = nextLines.join('\n')
+    const nextText = `${sourceText.slice(0, lineStart)}${nextBlock}${sourceText.slice(lineEndExclusive)}`
+    applyProgrammaticEditorText(nextText, lineStart, lineStart + nextBlock.length)
+  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, resolveLineRange, resolveSelectionBounds])
+
+  const applyHeading = useCallback((level: 1 | 2 | 3) => {
+    const headingPrefix = `${'#'.repeat(level)} `
+
+    transformSelectedLines((line) => {
+      const withoutAnyHeading = line.replace(/^#{1,6}\s+/, '')
+      const alreadyAtLevel = line.startsWith(headingPrefix)
+      return alreadyAtLevel ? withoutAnyHeading : `${headingPrefix}${withoutAnyHeading}`
+    })
+  }, [transformSelectedLines])
+
+  const toggleBulletedList = useCallback(() => {
+    const bulletPattern = /^[-*]\s+/
+    const sourceText = currentEditorText
+    const { start, end } = resolveSelectionBounds(sourceText)
+    const { lineStart, lineEndExclusive } = resolveLineRange(sourceText, start, end)
+    const lines = sourceText.slice(lineStart, lineEndExclusive).split('\n')
+    const allBulleted = lines.every((line) => line.trim().length === 0 || bulletPattern.test(line))
+
+    transformSelectedLines((line) => {
+      if (line.trim().length === 0) return line
+      return allBulleted ? line.replace(bulletPattern, '') : `- ${line}`
+    })
+  }, [currentEditorText, resolveLineRange, resolveSelectionBounds, transformSelectedLines])
+
+  const toggleNumberedList = useCallback(() => {
+    const numberedPattern = /^\d+\.\s+/
+    const sourceText = currentEditorText
+    const { start, end } = resolveSelectionBounds(sourceText)
+    const { lineStart, lineEndExclusive } = resolveLineRange(sourceText, start, end)
+    const lines = sourceText.slice(lineStart, lineEndExclusive).split('\n')
+    const allNumbered = lines.every((line) => line.trim().length === 0 || numberedPattern.test(line))
+
+    transformSelectedLines((line, index) => {
+      if (line.trim().length === 0) return line
+      return allNumbered ? line.replace(numberedPattern, '') : `${index + 1}. ${line}`
+    })
+  }, [currentEditorText, resolveLineRange, resolveSelectionBounds, transformSelectedLines])
+
+  const toggleBlockquote = useCallback(() => {
+    const quotePattern = /^>\s?/
+    const sourceText = currentEditorText
+    const { start, end } = resolveSelectionBounds(sourceText)
+    const { lineStart, lineEndExclusive } = resolveLineRange(sourceText, start, end)
+    const lines = sourceText.slice(lineStart, lineEndExclusive).split('\n')
+    const allQuoted = lines.every((line) => line.trim().length === 0 || quotePattern.test(line))
+
+    transformSelectedLines((line) => {
+      if (line.trim().length === 0) return line
+      return allQuoted ? line.replace(quotePattern, '') : `> ${line}`
+    })
+  }, [currentEditorText, resolveLineRange, resolveSelectionBounds, transformSelectedLines])
+
+  const applyLink = useCallback(() => {
+    applyWrappedMarker('[', '](url)', 'link')
+  }, [applyWrappedMarker])
+
+  const applyInlineCode = useCallback(() => {
+    applyWrappedMarker('`', '`', 'code')
+  }, [applyWrappedMarker])
+
+  const applyCodeBlock = useCallback(() => {
+    applyWrappedMarker('```\n', '\n```', 'code')
+  }, [applyWrappedMarker])
+
+  const insertHorizontalRule = useCallback(() => {
+    if (!activeNoteId) return
+
+    const sourceText = currentEditorText
+    const { start, end } = resolveSelectionBounds(sourceText)
+    const needsLeadingNewline = start > 0 && sourceText[start - 1] !== '\n'
+    const needsTrailingNewline = end < sourceText.length && sourceText[end] !== '\n'
+    const inserted = `${needsLeadingNewline ? '\n' : ''}---${needsTrailingNewline ? '\n' : ''}`
+    const nextText = `${sourceText.slice(0, start)}${inserted}${sourceText.slice(end)}`
+    const cursor = start + inserted.length
+    applyProgrammaticEditorText(nextText, cursor, cursor)
+  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, resolveSelectionBounds])
+
   const handleFindViewButtonContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
     event.stopPropagation()
@@ -2964,25 +3104,25 @@ function App() {
 
               <span className="toolbar-divider">|</span>
 
-              <button type="button" className="toolbar-btn-icon" disabled title="Heading 1 (placeholder)">H1</button>
-              <button type="button" className="toolbar-btn-icon" disabled title="Heading 2 (placeholder)">H2</button>
-              <button type="button" className="toolbar-btn-icon" disabled title="Heading 3 (placeholder)">H3</button>
+              <button type="button" className="toolbar-btn-icon" title="Heading 1" onClick={() => applyHeading(1)} disabled={!activeNoteId}>H1</button>
+              <button type="button" className="toolbar-btn-icon" title="Heading 2" onClick={() => applyHeading(2)} disabled={!activeNoteId}>H2</button>
+              <button type="button" className="toolbar-btn-icon" title="Heading 3" onClick={() => applyHeading(3)} disabled={!activeNoteId}>H3</button>
 
               <span className="toolbar-divider">|</span>
 
-              <button type="button" className="toolbar-btn-icon" disabled title="Bulleted list (placeholder)">≡</button>
-              <button type="button" className="toolbar-btn-icon" disabled title="Numbered list (placeholder)">#</button>
-              <button type="button" className="toolbar-btn-icon" disabled title="Link (placeholder)">🔗</button>
+              <button type="button" className="toolbar-btn-icon" title="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>≡</button>
+              <button type="button" className="toolbar-btn-icon" title="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>#</button>
+              <button type="button" className="toolbar-btn-icon" title="Link" onClick={applyLink} disabled={!activeNoteId}>🔗</button>
 
               <span className="toolbar-divider">|</span>
 
-              <button type="button" className="toolbar-btn-icon" disabled title="Blockquote (placeholder)">&quot;</button>
-              <button type="button" className="toolbar-btn-icon" disabled title="Code block (placeholder)">{'{ }'}</button>
-              <button type="button" className="toolbar-btn-icon" disabled title="Inline code (placeholder)">{'<>'}</button>
+              <button type="button" className="toolbar-btn-icon" title="Blockquote" onClick={toggleBlockquote} disabled={!activeNoteId}>&quot;</button>
+              <button type="button" className="toolbar-btn-icon" title="Code block" onClick={applyCodeBlock} disabled={!activeNoteId}>{'{ }'}</button>
+              <button type="button" className="toolbar-btn-icon" title="Inline code" onClick={applyInlineCode} disabled={!activeNoteId}>{'<>'}</button>
 
               <span className="toolbar-divider">|</span>
 
-              <button type="button" className="toolbar-btn-icon" disabled title="Horizontal rule (placeholder)">—</button>
+              <button type="button" className="toolbar-btn-icon" title="Horizontal rule" onClick={insertHorizontalRule} disabled={!activeNoteId}>—</button>
             </div>
           </div>
 
