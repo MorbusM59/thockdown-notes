@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
@@ -27,7 +27,6 @@ import {
   validateTextInvariants,
   validateViewportInvariants,
 } from '../editor/ContractInvariantHarness';
-import { CELL_WIDTH_PX, LINE_HEIGHT_PX } from '../editor/LayoutConstants';
 import { normalizeInternalText } from '../editor/TextPolicy';
 import { scrollToQuantizedEase } from '../editor/QuantizedEaseScroll';
 
@@ -44,23 +43,27 @@ interface EditorProps {
   adapterRef?: React.MutableRefObject<EditorAdapter | null>;
   initialText?: string;
   scrollbarHost?: HTMLElement | null;
+  fontFamily: string;
+  fontSizePx: number;
+  lineHeightPx: number;
+  cellWidthPx: number;
 }
 
 const ENABLE_CONTRACT_ASSERTIONS = import.meta.env.DEV;
 const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28;
 const SCROLL_TRACK_EDGE_GAP_PX = 3;
 
-const quantizeTopEdge = (valuePx: number) => Math.max(0, Math.round(valuePx / LINE_HEIGHT_PX) * LINE_HEIGHT_PX);
+const quantizeTopEdge = (valuePx: number, lineHeightPx: number) => Math.max(0, Math.round(valuePx / lineHeightPx) * lineHeightPx);
 
-const bottomBoundaryFromTopEdge = (heightPx: number, topEdgePx: number) => {
+const bottomBoundaryFromTopEdge = (heightPx: number, topEdgePx: number, lineHeightPx: number) => {
   const h = Math.max(0, Math.round(heightPx));
-  const topEdge = Math.max(0, Math.min(h, quantizeTopEdge(topEdgePx)));
+  const topEdge = Math.max(0, Math.min(h, quantizeTopEdge(topEdgePx, lineHeightPx)));
   return h - topEdge;
 };
 
-const topEdgeFromBottomBoundary = (heightPx: number, bottomBoundaryPx: number) => {
+const topEdgeFromBottomBoundary = (heightPx: number, bottomBoundaryPx: number, lineHeightPx: number) => {
   const h = Math.max(0, Math.round(heightPx));
-  return Math.max(0, Math.min(h, h - bottomBoundaryPx));
+  return Math.max(0, Math.min(h, quantizeTopEdge(h - bottomBoundaryPx, lineHeightPx)));
 };
 
 function clampNumber(value: number, min: number, max: number): number {
@@ -182,6 +185,7 @@ function centerSelectionInCagedMiddle(
   scroller: HTMLElement,
   topBoundaryPx: number,
   bottomBoundaryPx: number,
+  lineHeightPx: number,
   options?: { animate?: boolean },
 ): void {
   const selection = window.getSelection();
@@ -193,7 +197,7 @@ function centerSelectionInCagedMiddle(
 
   const scrollerRect = scroller.getBoundingClientRect();
   const middleTopPx = topBoundaryPx;
-  const middleBottomPx = Math.max(middleTopPx + LINE_HEIGHT_PX, scroller.clientHeight - bottomBoundaryPx);
+  const middleBottomPx = Math.max(middleTopPx + lineHeightPx, scroller.clientHeight - bottomBoundaryPx);
   const middleCenterPx = (middleTopPx + middleBottomPx) / 2;
 
   const selectionCenterInViewportPx = ((rect.top + rect.bottom) / 2) - scrollerRect.top;
@@ -202,7 +206,7 @@ function centerSelectionInCagedMiddle(
 
   const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
   const nextScrollTopPx = clampNumber(
-    Math.round((scroller.scrollTop + deltaPx) / LINE_HEIGHT_PX) * LINE_HEIGHT_PX,
+    Math.round((scroller.scrollTop + deltaPx) / lineHeightPx) * lineHeightPx,
     0,
     maxScrollTopPx,
   );
@@ -210,7 +214,7 @@ function centerSelectionInCagedMiddle(
   if (nextScrollTopPx !== scroller.scrollTop) {
     if (options?.animate) {
       scrollToQuantizedEase(scroller, nextScrollTopPx, {
-        lineHeightPx: LINE_HEIGHT_PX,
+        lineHeightPx,
       });
     } else {
       scroller.scrollTop = nextScrollTopPx;
@@ -218,7 +222,16 @@ function centerSelectionInCagedMiddle(
   }
 }
 
-export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost = null }: EditorProps) {
+export function Editor({
+  bindings,
+  adapterRef,
+  initialText = '',
+  scrollbarHost = null,
+  fontFamily,
+  fontSizePx,
+  lineHeightPx,
+  cellWidthPx,
+}: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const scrollbarTrackRef = useRef<HTMLDivElement>(null);
@@ -235,8 +248,8 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
   const [editorSize, setEditorSize] = useState({ width: 0, height: 0, top: 0, left: 0 });
 
   // Here are our user-configurable boundaries!
-  const [topBoundary, setTopBoundary] = useState(144); // 6 * 24px
-  const [bottomBoundary, setBottomBoundary] = useState(144); // 6 * 24px
+  const [topBoundary, setTopBoundary] = useState(6 * lineHeightPx);
+  const [bottomBoundary, setBottomBoundary] = useState(6 * lineHeightPx);
 
   // Dragging state
   const [isDraggingTop, setIsDraggingTop] = useState(false);
@@ -276,9 +289,9 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
     topBoundaryPx: topBoundary,
     bottomBoundaryPx: bottomBoundary,
     scrollTopPx: scrollerRef.current?.scrollTop ?? 0,
-    lineHeightPx: LINE_HEIGHT_PX,
-    cellWidthPx: CELL_WIDTH_PX,
-  }), [topBoundary, bottomBoundary]);
+    lineHeightPx,
+    cellWidthPx,
+  }), [topBoundary, bottomBoundary, lineHeightPx, cellWidthPx]);
 
   const syncCustomScrollbar = useCallback(() => {
     const scroller = scrollerRef.current;
@@ -334,12 +347,12 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
     const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0;
     const targetScrollTop = ratio * maxScrollTop;
     const quantizedScrollTop = clampNumber(
-      Math.round(targetScrollTop / LINE_HEIGHT_PX) * LINE_HEIGHT_PX,
+      Math.round(targetScrollTop / lineHeightPx) * lineHeightPx,
       0,
       maxScrollTop,
     );
     scroller.scrollTop = quantizedScrollTop;
-  }, [scrollThumbHeightPx]);
+  }, [scrollThumbHeightPx, lineHeightPx]);
 
   useEffect(() => {
     bindings?.onLifecycle?.({ phase: 'mounted' });
@@ -459,12 +472,12 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
           const h = Math.max(0, scrollerRef.current?.clientHeight ?? 0);
 
           if (typeof nextViewport.topBoundaryPx === 'number') {
-            const quantized = Math.max(0, Math.round(nextViewport.topBoundaryPx / LINE_HEIGHT_PX) * LINE_HEIGHT_PX);
+            const quantized = Math.max(0, Math.round(nextViewport.topBoundaryPx / lineHeightPx) * lineHeightPx);
             setTopBoundary(Math.min(quantized, h));
           }
           if (typeof nextViewport.bottomBoundaryPx === 'number') {
-            const requestedTopEdge = topEdgeFromBottomBoundary(h, nextViewport.bottomBoundaryPx);
-            setBottomBoundary(bottomBoundaryFromTopEdge(h, requestedTopEdge));
+            const requestedTopEdge = topEdgeFromBottomBoundary(h, nextViewport.bottomBoundaryPx, lineHeightPx);
+            setBottomBoundary(bottomBoundaryFromTopEdge(h, requestedTopEdge, lineHeightPx));
           }
           if (typeof nextViewport.scrollTopPx === 'number' && scrollerRef.current) {
             scrollerRef.current.scrollTo({ top: Math.max(0, nextViewport.scrollTopPx), behavior: 'auto' });
@@ -485,10 +498,10 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
             if (scroller) {
               // Reconcile after selection is in DOM so focus stays inside the middle cage.
               const shouldAnimateSelectionJump = !snapshot.selection.isCollapsed;
-              centerSelectionInCagedMiddle(scroller, topBoundary, bottomBoundary, {
+              centerSelectionInCagedMiddle(scroller, topBoundary, bottomBoundary, lineHeightPx, {
                 animate: shouldAnimateSelectionJump,
               });
-              requestAnimationFrame(() => centerSelectionInCagedMiddle(scroller, topBoundary, bottomBoundary, {
+              requestAnimationFrame(() => centerSelectionInCagedMiddle(scroller, topBoundary, bottomBoundary, lineHeightPx, {
                 animate: shouldAnimateSelectionJump,
               }));
             }
@@ -506,28 +519,61 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
         adapterRef.current = null;
       }
     };
-  }, [adapterRef, buildViewport]);
+  }, [adapterRef, buildViewport, topBoundary, bottomBoundary, lineHeightPx]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const updateSize = () => {
       if (!containerRef.current) return;
       const container = containerRef.current;
       const rect = container.getBoundingClientRect();
       const framePaddingPx = readEditorFramePaddingPx(container);
       const availableInnerWidth = Math.max(1, rect.width - (framePaddingPx * 2));
-      const availableInnerHeight = Math.max(LINE_HEIGHT_PX, rect.height - (framePaddingPx * 2));
+      const availableInnerHeight = Math.max(lineHeightPx, rect.height - (framePaddingPx * 2));
       
       // Keep the editor viewport on exact cell multiples so separator math,
       // scroll cage math, and rendered grid rows share the same lattice.
-      const snappedInnerWidth = Math.max(1, Math.floor((availableInnerWidth - 1) / CELL_WIDTH_PX) * CELL_WIDTH_PX + 1);
-      const snappedInnerHeight = Math.max(LINE_HEIGHT_PX, Math.floor(availableInnerHeight / LINE_HEIGHT_PX) * LINE_HEIGHT_PX);
+      const snappedInnerWidth = Math.max(1, Math.floor((availableInnerWidth - 1) / cellWidthPx) * cellWidthPx + 1);
+      const snappedInnerHeight = Math.max(lineHeightPx, Math.floor(availableInnerHeight / lineHeightPx) * lineHeightPx);
       const snappedWidth = snappedInnerWidth + (framePaddingPx * 2);
       const snappedHeight = snappedInnerHeight + (framePaddingPx * 2);
       
       const left = Math.floor((rect.width - snappedWidth) / 2);
       const top = Math.floor((rect.height - snappedHeight) / 2);
-      
-      setEditorSize({ width: snappedWidth, height: snappedHeight, left, top });
+
+      setEditorSize((previous) => {
+        if (
+          previous.width === snappedWidth &&
+          previous.height === snappedHeight &&
+          previous.left === left &&
+          previous.top === top
+        ) {
+          return previous;
+        }
+        return { width: snappedWidth, height: snappedHeight, left, top };
+      });
+
+      // Typography switches must reconcile viewport geometry in one deterministic pass
+      // so boundaries and scroll lattice cannot race each other across frames.
+      const viewportHeightPx = Math.max(0, snappedInnerHeight);
+
+      setTopBoundary((previous) => Math.min(quantizeTopEdge(previous, lineHeightPx), viewportHeightPx));
+      setBottomBoundary((previous) => {
+        const requestedTopEdge = topEdgeFromBottomBoundary(viewportHeightPx, previous, lineHeightPx);
+        return bottomBoundaryFromTopEdge(viewportHeightPx, requestedTopEdge, lineHeightPx);
+      });
+
+      const scroller = scrollerRef.current;
+      if (scroller) {
+        const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        const quantizedScrollTopPx = clampNumber(
+          Math.round(scroller.scrollTop / lineHeightPx) * lineHeightPx,
+          0,
+          maxScrollTopPx,
+        );
+        if (Math.abs(quantizedScrollTopPx - scroller.scrollTop) > 0.01) {
+          scroller.scrollTop = quantizedScrollTopPx;
+        }
+      }
     };
 
     const resizeObserver = new ResizeObserver(() => updateSize());
@@ -535,30 +581,7 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
     
     updateSize();
     return () => resizeObserver.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const updateLayout = () => {
-      const scroller = scrollerRef.current;
-      if (!scroller) return;
-      const h = Math.max(0, scroller.clientHeight);
-      
-      // Auto-snap the bottom boundary to the absolute grid based on the current height!
-      // This forces the "invisible line" to land flush with a grid row.
-      setBottomBoundary(prev => {
-        const topEdge = topEdgeFromBottomBoundary(h, prev);
-        return bottomBoundaryFromTopEdge(h, topEdge);
-      });
-    };
-
-    // Defer to next paint so the container size is resolved before quantizing boundaries.
-    const frame = requestAnimationFrame(updateLayout);
-    window.addEventListener('resize', updateLayout);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener('resize', updateLayout);
-    };
-  }, []);
+  }, [cellWidthPx, lineHeightPx]);
 
   // Global Mouse listeners for Dragging
   useEffect(() => {
@@ -571,12 +594,12 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
 
       if (isDraggingTop) {
         // Snap to 24px increments
-        const snappedY = quantizeTopEdge(clampedY);
+        const snappedY = quantizeTopEdge(clampedY, lineHeightPx);
         setTopBoundary(Math.min(snappedY, h));
       } else if (isDraggingBottom) {
         // Quantize the top edge of the bottom boundary to land EXACTLY on an absolute grid line!
         // We do this by measuring from grid zero (relativeY) instead of window coordinates.
-        setBottomBoundary(bottomBoundaryFromTopEdge(h, clampedY));
+        setBottomBoundary(bottomBoundaryFromTopEdge(h, clampedY, lineHeightPx));
       }
     };
 
@@ -593,7 +616,7 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDraggingTop, isDraggingBottom]);
+  }, [isDraggingTop, isDraggingBottom, lineHeightPx]);
 
   useEffect(() => {
     if (!isDraggingScrollThumb) return;
@@ -638,7 +661,7 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
     const targetScrollTop = ratio * maxScrollTop;
 
     scrollToQuantizedEase(scroller, targetScrollTop, {
-      lineHeightPx: LINE_HEIGHT_PX,
+      lineHeightPx,
     });
   };
 
@@ -717,6 +740,12 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
           <div 
             className="absolute text-left"
             style={{ 
+              ...({
+                '--editor-font': fontFamily,
+                '--editor-font-size': `${fontSizePx}px`,
+                '--editor-line-height': `${lineHeightPx}px`,
+                '--editor-cell-width': `${cellWidthPx}px`,
+              } as React.CSSProperties),
               width: editorSize.width, 
               height: editorSize.height,
               left: editorSize.left,
@@ -762,7 +791,7 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
             {/* Top Drag Handle */}
             <div 
               className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize" 
-              style={{ top: `calc(var(--editor-frame-padding) + ${topBoundary}px - 24px)`, left: 'var(--editor-frame-padding)', right: 'var(--editor-frame-padding)', height: 24 }} 
+              style={{ top: `calc(var(--editor-frame-padding) + ${topBoundary}px - ${lineHeightPx}px)`, left: 'var(--editor-frame-padding)', right: 'var(--editor-frame-padding)', height: lineHeightPx }} 
               onWheel={forwardHandleWheelToScroller}
               onMouseDown={(e) => { e.preventDefault(); setIsDraggingTop(true); }}
             />
@@ -770,7 +799,7 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
             {/* Bottom Drag Handle */}
             <div 
               className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize" 
-              style={{ bottom: `calc(var(--editor-frame-padding) + ${bottomBoundary}px - 24px)`, left: 'var(--editor-frame-padding)', right: 'var(--editor-frame-padding)', height: 24 }} 
+              style={{ bottom: `calc(var(--editor-frame-padding) + ${bottomBoundary}px - ${lineHeightPx}px)`, left: 'var(--editor-frame-padding)', right: 'var(--editor-frame-padding)', height: lineHeightPx }} 
               onWheel={forwardHandleWheelToScroller}
               onMouseDown={(e) => { e.preventDefault(); setIsDraggingBottom(true); }}
             />
@@ -803,6 +832,8 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
               scrollerRef={scrollerRef}
               topBoundaryPx={topBoundary}
               bottomBoundaryPx={bottomBoundary}
+              lineHeightPx={lineHeightPx}
+              cellWidthPx={cellWidthPx}
             />
         
             <HistoryPlugin />
@@ -816,7 +847,12 @@ export function Editor({ bindings, adapterRef, initialText = '', scrollbarHost =
             />
             
             {/* The Magic Cage Scroller! */}
-            <CagedScrollPlugin scrollerRef={scrollerRef} topBoundaryPx={topBoundary} bottomBoundaryPx={bottomBoundary} />
+            <CagedScrollPlugin
+              scrollerRef={scrollerRef}
+              topBoundaryPx={topBoundary}
+              bottomBoundaryPx={bottomBoundary}
+              lineHeightPx={lineHeightPx}
+            />
           </div>
         </LexicalComposer>
       )}

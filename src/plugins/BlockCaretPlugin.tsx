@@ -3,7 +3,6 @@ import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext
 import { $getRoot, $getSelection, $isRangeSelection } from 'lexical';
 import { readSelectionRect } from '../editor/CaretRect';
 import { resolveCaretTopInScroll } from '../editor/CaretVisualPosition';
-import { CELL_WIDTH_PX, LINE_HEIGHT_PX } from '../editor/LayoutConstants';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
 import { isRefocusTransactionActive } from '../editor/RefocusTransaction';
 
@@ -11,25 +10,27 @@ interface BlockCaretPluginProps {
   scrollerRef: React.RefObject<HTMLElement>;
   topBoundaryPx: number;
   bottomBoundaryPx: number;
+  lineHeightPx: number;
+  cellWidthPx: number;
 }
 
 const CARET_INSET_PX = 1;
 
-function resolveRuntimeCellWidthPx(rootEl: HTMLElement | null): number {
+function resolveRuntimeCellWidthPx(rootEl: HTMLElement | null, fallbackCellWidthPx: number): number {
   if (!rootEl) {
-    return CELL_WIDTH_PX;
+    return fallbackCellWidthPx;
   }
 
   const cssValue = getComputedStyle(rootEl).getPropertyValue('--editor-cell-width').trim();
   const parsed = Number.parseFloat(cssValue);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    return CELL_WIDTH_PX;
+    return fallbackCellWidthPx;
   }
 
   return parsed;
 }
 
-export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx }: BlockCaretPluginProps) {
+export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx, lineHeightPx, cellWidthPx }: BlockCaretPluginProps) {
   const [editor] = useLexicalComposerContext();
   const [caretStyle, setCaretStyle] = useState<React.CSSProperties | null>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -55,7 +56,7 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
         return;
       }
 
-      const caretRect = readSelectionRect(domSelection, LINE_HEIGHT_PX);
+      const caretRect = readSelectionRect(domSelection, lineHeightPx);
       if (!caretRect) {
         setCaretStyle(null);
         return;
@@ -79,7 +80,7 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
         rootEl: editor.getRootElement(),
         domSelection,
         rawText: $getRoot().getTextContent(),
-        lineHeightPx: LINE_HEIGHT_PX,
+        lineHeightPx,
       });
 
       const isCagedRefocusActive = isRefocusTransactionActive(scroller);
@@ -91,7 +92,7 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
           scrollerScrollHeightPx: scroller.scrollHeight,
           topBoundaryPx,
           bottomBoundaryPx,
-          lineHeightPx: LINE_HEIGHT_PX,
+          lineHeightPx,
         });
 
         // While refocus is active, hide caret until centralized caged easing settles.
@@ -101,15 +102,15 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
         }
       }
 
-      const quantizedRowTopInScroll = Math.floor(caretTopInScroll / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
+      const quantizedRowTopInScroll = Math.floor(caretTopInScroll / lineHeightPx) * lineHeightPx;
       const topInViewport = quantizedRowTopInScroll - scroller.scrollTop;
 
-      if (topInViewport < 0 || topInViewport > scroller.clientHeight - LINE_HEIGHT_PX) {
+      if (topInViewport < 0 || topInViewport > scroller.clientHeight - lineHeightPx) {
         setCaretStyle(null);
         return;
       }
 
-      const runtimeCellWidthPx = resolveRuntimeCellWidthPx(editor.getRootElement());
+      const runtimeCellWidthPx = resolveRuntimeCellWidthPx(editor.getRootElement(), cellWidthPx);
       const scrollerLeftInLayer = scrollerRect.left - caretLayerRect.left;
       const scrollerTopInLayer = scrollerRect.top - caretLayerRect.top;
       let absoluteLeft = caretRect.left - scrollerRect.left;
@@ -117,7 +118,7 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
       absoluteLeft = Math.round(absoluteLeft / runtimeCellWidthPx) * runtimeCellWidthPx;
 
       const caretWidthPx = Math.max(1, runtimeCellWidthPx - CARET_INSET_PX);
-      const caretHeightPx = Math.max(1, LINE_HEIGHT_PX - CARET_INSET_PX);
+      const caretHeightPx = Math.max(1, lineHeightPx - CARET_INSET_PX);
 
       setCaretStyle({
         top: scrollerTopInLayer + topInViewport + CARET_INSET_PX,
@@ -126,7 +127,7 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx 
         height: caretHeightPx,
       });
     });
-  }, [editor, scrollerRef, topBoundaryPx, bottomBoundaryPx]);
+  }, [editor, scrollerRef, topBoundaryPx, bottomBoundaryPx, lineHeightPx, cellWidthPx]);
 
   const scheduleCaretUpdate = useCallback(() => {
     if (animationFrameRef.current !== null) {

@@ -13,6 +13,9 @@ const DEFAULT_APP_STATE: AppState = {
     selectedMonths: [],
     selectedYears: [],
     searchQuery: '',
+    editorStyle: 'syne',
+    editorFontSize: 'm',
+    editorSpacing: 'cozy',
     sidebarWidthRatio: 0.306,
     tagSplitRatio: 0.645,
     scrollEaseMultiplier: 1.5,
@@ -48,6 +51,27 @@ function sanitizeSidebarMode(input: unknown): SidebarMode {
   return 'date';
 }
 
+function sanitizeEditorStyle(input: unknown): 'syne' | 'redhat' {
+  if (input === 'syne' || input === 'redhat') {
+    return input;
+  }
+  return DEFAULT_APP_STATE.menu!.editorStyle ?? 'syne';
+}
+
+function sanitizeEditorFontSize(input: unknown): 'xs' | 's' | 'm' | 'l' | 'xl' {
+  if (input === 'xs' || input === 's' || input === 'm' || input === 'l' || input === 'xl') {
+    return input;
+  }
+  return DEFAULT_APP_STATE.menu!.editorFontSize ?? 'm';
+}
+
+function sanitizeEditorSpacing(input: unknown): 'tight' | 'compact' | 'cozy' | 'wide' {
+  if (input === 'tight' || input === 'compact' || input === 'cozy' || input === 'wide') {
+    return input;
+  }
+  return DEFAULT_APP_STATE.menu!.editorSpacing ?? 'cozy';
+}
+
 function sanitizeRatio(input: unknown, fallback: number): number {
   if (typeof input !== 'number' || !Number.isFinite(input)) {
     return fallback;
@@ -78,6 +102,9 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     selectedYears,
     searchQuery: typeof input?.searchQuery === 'string' ? input.searchQuery : '',
     documentFindCaseSensitive: Boolean(input?.documentFindCaseSensitive),
+    editorStyle: sanitizeEditorStyle(input?.editorStyle),
+    editorFontSize: sanitizeEditorFontSize(input?.editorFontSize),
+    editorSpacing: sanitizeEditorSpacing(input?.editorSpacing),
     sidebarWidthRatio: sanitizeRatio(input?.sidebarWidthRatio, DEFAULT_APP_STATE.menu!.sidebarWidthRatio),
     tagSplitRatio: sanitizeRatio(input?.tagSplitRatio, DEFAULT_APP_STATE.menu!.tagSplitRatio),
     scrollEaseMultiplier: sanitizePositive(input?.scrollEaseMultiplier, DEFAULT_APP_STATE.menu!.scrollEaseMultiplier ?? 1),

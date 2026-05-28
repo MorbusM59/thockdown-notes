@@ -10,7 +10,7 @@ import {
 } from 'lexical';
 import { readSelectionRect } from '../editor/CaretRect';
 import { resolveCaretTopInScroll } from '../editor/CaretVisualPosition';
-import { LINE_HEIGHT_PX, PIXELS_PER_WHEEL_UNIT } from '../editor/LayoutConstants';
+import { PIXELS_PER_WHEEL_UNIT } from '../editor/LayoutConstants';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
 import { scrollToQuantizedEase } from '../editor/QuantizedEaseScroll';
 import {
@@ -24,6 +24,7 @@ interface CagedScrollPluginProps {
   scrollerRef: React.RefObject<HTMLElement>;
   topBoundaryPx: number;
   bottomBoundaryPx: number;
+  lineHeightPx: number;
 }
 
 type ViewportIntent = 'none' | 'refocus-caged' | 'ensure-visible';
@@ -38,34 +39,36 @@ const computeVisibleMiddleRows = (
   scrollerClientHeightPx: number,
   topBoundaryPx: number,
   bottomBoundaryPx: number,
+  lineHeightPx: number,
 ) => {
   const middleHeightPx = Math.max(
-    LINE_HEIGHT_PX,
+    lineHeightPx,
     Math.round(scrollerClientHeightPx) - Math.round(topBoundaryPx) - Math.round(bottomBoundaryPx),
   );
-  return Math.max(1, Math.floor(middleHeightPx / LINE_HEIGHT_PX));
+  return Math.max(1, Math.floor(middleHeightPx / lineHeightPx));
 };
 
-const isAlignedToRowGrid = (valuePx: number) => Math.abs(valuePx % LINE_HEIGHT_PX) < 0.01;
+const isAlignedToRowGrid = (valuePx: number, lineHeightPx: number) => Math.abs(valuePx % lineHeightPx) < 0.01;
 
 const resolveDirectionalQuantizedScrollTop = (
   currentScrollTopPx: number,
   previousScrollTopPx: number,
   maxScrollTopPx: number,
+  lineHeightPx: number,
 ) => {
   const delta = currentScrollTopPx - previousScrollTopPx;
   if (Math.abs(delta) < 0.01) {
-    return Math.max(0, Math.min(maxScrollTopPx, Math.round(currentScrollTopPx / LINE_HEIGHT_PX) * LINE_HEIGHT_PX));
+    return Math.max(0, Math.min(maxScrollTopPx, Math.round(currentScrollTopPx / lineHeightPx) * lineHeightPx));
   }
 
   if (delta > 0) {
-    return Math.max(0, Math.min(maxScrollTopPx, Math.ceil(currentScrollTopPx / LINE_HEIGHT_PX) * LINE_HEIGHT_PX));
+    return Math.max(0, Math.min(maxScrollTopPx, Math.ceil(currentScrollTopPx / lineHeightPx) * lineHeightPx));
   }
 
-  return Math.max(0, Math.min(maxScrollTopPx, Math.floor(currentScrollTopPx / LINE_HEIGHT_PX) * LINE_HEIGHT_PX));
+  return Math.max(0, Math.min(maxScrollTopPx, Math.floor(currentScrollTopPx / lineHeightPx) * lineHeightPx));
 };
 
-export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx }: CagedScrollPluginProps) {
+export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx, lineHeightPx }: CagedScrollPluginProps) {
   const [editor] = useLexicalComposerContext();
 
   useEffect(() => {
@@ -81,7 +84,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       }
 
       const scrollerRect = scroller.getBoundingClientRect();
-      const caretRect = readSelectionRect(domSelection, LINE_HEIGHT_PX);
+      const caretRect = readSelectionRect(domSelection, lineHeightPx);
       if (!caretRect) {
         return { targetScrollTopPx: null, reason: 'no-caret-rect' } satisfies ResolveIntentResult;
       }
@@ -98,7 +101,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         rootEl: editor.getRootElement(),
         domSelection,
         rawText,
-        lineHeightPx: LINE_HEIGHT_PX,
+        lineHeightPx,
       });
 
       if (intent === 'refocus-caged' || intent === 'ensure-visible') {
@@ -109,7 +112,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
           scrollerScrollHeightPx: scroller.scrollHeight,
           topBoundaryPx,
           bottomBoundaryPx,
-          lineHeightPx: LINE_HEIGHT_PX,
+          lineHeightPx,
         });
 
         return {
@@ -134,7 +137,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       if (targetScrollTopPx !== scroller.scrollTop) {
         if (intent === 'refocus-caged') {
           scrollToQuantizedEase(scroller, targetScrollTopPx, {
-            lineHeightPx: LINE_HEIGHT_PX,
+            lineHeightPx,
           });
         } else {
           scroller.scrollTop = targetScrollTopPx;
@@ -169,7 +172,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
       return Math.max(
         0,
-        Math.min(maxScrollTopPx, Math.round(initialRefocusAnchorScrollTopPx / LINE_HEIGHT_PX) * LINE_HEIGHT_PX),
+        Math.min(maxScrollTopPx, Math.round(initialRefocusAnchorScrollTopPx / lineHeightPx) * lineHeightPx),
       );
     };
 
@@ -218,7 +221,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
               0,
               Math.min(
                 maxScrollTopPx,
-                Math.round((deterministicEnterBoundaryScrollTopPx + LINE_HEIGHT_PX) / LINE_HEIGHT_PX) * LINE_HEIGHT_PX,
+                Math.round((deterministicEnterBoundaryScrollTopPx + lineHeightPx) / lineHeightPx) * lineHeightPx,
               ),
             );
 
@@ -308,7 +311,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     const runQuantizedJump = (targetScrollTopPx: number) => {
       if (!scroller) return;
       scrollToQuantizedEase(scroller, targetScrollTopPx, {
-        lineHeightPx: LINE_HEIGHT_PX,
+            lineHeightPx,
       });
     };
 
@@ -319,13 +322,13 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         event.preventDefault();
         clearCagedRefocusState();
 
-        const visibleRows = computeVisibleMiddleRows(scroller.clientHeight, topBoundaryPx, bottomBoundaryPx);
-        const delta = (event.key === 'PageDown' ? 1 : -1) * visibleRows * LINE_HEIGHT_PX;
+        const visibleRows = computeVisibleMiddleRows(scroller.clientHeight, topBoundaryPx, bottomBoundaryPx, lineHeightPx);
+        const delta = (event.key === 'PageDown' ? 1 : -1) * visibleRows * lineHeightPx;
 
         const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-        const currentAligned = Math.round(scroller.scrollTop / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
+        const currentAligned = Math.round(scroller.scrollTop / lineHeightPx) * lineHeightPx;
         const target = Math.max(0, Math.min(maxScrollTop, currentAligned + delta));
-        const quantizedTarget = Math.round(target / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
+        const quantizedTarget = Math.round(target / lineHeightPx) * lineHeightPx;
 
         runQuantizedJump(quantizedTarget);
         return;
@@ -339,7 +342,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         }
         if (event.key === 'Enter') {
           const domSelection = window.getSelection();
-          const caretRect = domSelection ? readSelectionRect(domSelection, LINE_HEIGHT_PX) : null;
+          const caretRect = domSelection ? readSelectionRect(domSelection, lineHeightPx) : null;
           if (domSelection && caretRect) {
             const isAuthoritativeRect = caretRect.source === 'primary' || caretRect.source === 'client-rect';
             if (!isAuthoritativeRect) {
@@ -361,12 +364,12 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
               rootEl: editor.getRootElement(),
               domSelection,
               rawText,
-              lineHeightPx: LINE_HEIGHT_PX,
+              lineHeightPx,
             });
 
             const middleBottomInScrollPx = scroller.scrollTop + scroller.clientHeight - bottomBoundaryPx;
-            const quantizedCaretRowTopPx = Math.round(caretTopInScroll / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
-            const lastMiddleRowTopPx = Math.round((middleBottomInScrollPx - LINE_HEIGHT_PX) / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
+            const quantizedCaretRowTopPx = Math.round(caretTopInScroll / lineHeightPx) * lineHeightPx;
+            const lastMiddleRowTopPx = Math.round((middleBottomInScrollPx - lineHeightPx) / lineHeightPx) * lineHeightPx;
             const isAtLastMiddleRow = isAuthoritativeRect && Math.abs(quantizedCaretRowTopPx - lastMiddleRowTopPx) < 0.01;
             if (isAtLastMiddleRow) {
               deterministicEnterBoundaryScrollTopPx = scroller.scrollTop;
@@ -441,8 +444,8 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       if (units === 0) return;
 
       const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-      const target = Math.max(0, Math.min(maxScrollTop, scroller.scrollTop + units * LINE_HEIGHT_PX));
-      scroller.scrollTop = Math.round(target / LINE_HEIGHT_PX) * LINE_HEIGHT_PX;
+      const target = Math.max(0, Math.min(maxScrollTop, scroller.scrollTop + units * lineHeightPx));
+      scroller.scrollTop = Math.round(target / lineHeightPx) * lineHeightPx;
     };
 
     const handlePaste = () => {
@@ -513,7 +516,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         if (!scroller || !isPrimaryPointerDown) return;
 
         const currentScrollTopPx = scroller.scrollTop;
-        if (isAlignedToRowGrid(currentScrollTopPx)) {
+        if (isAlignedToRowGrid(currentScrollTopPx, lineHeightPx)) {
           lastDragScrollTopPx = currentScrollTopPx;
           return;
         }
@@ -523,6 +526,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
           currentScrollTopPx,
           lastDragScrollTopPx,
           maxScrollTopPx,
+          lineHeightPx,
         );
 
         if (Math.abs(quantizedTargetPx - currentScrollTopPx) < 0.01) {
@@ -591,7 +595,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       removeKeyDownScrollSuppressor();
       removeUpdateListener();
     };
-  }, [editor, scrollerRef, topBoundaryPx, bottomBoundaryPx]);
+  }, [editor, scrollerRef, topBoundaryPx, bottomBoundaryPx, lineHeightPx]);
 
   return null;
 }

@@ -13,6 +13,9 @@ export interface PersistedMenuState {
   selectedYears: Array<number | 'older'>;
   searchQuery: string;
   documentFindCaseSensitive?: boolean;
+  editorStyle?: 'syne' | 'redhat';
+  editorFontSize?: 'xs' | 's' | 'm' | 'l' | 'xl';
+  editorSpacing?: 'tight' | 'compact' | 'cozy' | 'wide';
   sidebarWidthRatio: number;
   tagSplitRatio: number;
   scrollEaseMultiplier?: number;

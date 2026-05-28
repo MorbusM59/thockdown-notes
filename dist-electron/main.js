@@ -331,6 +331,9 @@ const DEFAULT_APP_STATE = {
     selectedMonths: [],
     selectedYears: [],
     searchQuery: "",
+    editorStyle: "syne",
+    editorFontSize: "m",
+    editorSpacing: "cozy",
     sidebarWidthRatio: 0.306,
     tagSplitRatio: 0.645,
     scrollEaseMultiplier: 1.5,
@@ -361,6 +364,24 @@ function sanitizeSidebarMode(input) {
   }
   return "date";
 }
+function sanitizeEditorStyle(input) {
+  if (input === "syne" || input === "redhat") {
+    return input;
+  }
+  return DEFAULT_APP_STATE.menu.editorStyle ?? "syne";
+}
+function sanitizeEditorFontSize(input) {
+  if (input === "xs" || input === "s" || input === "m" || input === "l" || input === "xl") {
+    return input;
+  }
+  return DEFAULT_APP_STATE.menu.editorFontSize ?? "m";
+}
+function sanitizeEditorSpacing(input) {
+  if (input === "tight" || input === "compact" || input === "cozy" || input === "wide") {
+    return input;
+  }
+  return DEFAULT_APP_STATE.menu.editorSpacing ?? "cozy";
+}
 function sanitizeRatio(input, fallback) {
   if (typeof input !== "number" || !Number.isFinite(input)) {
     return fallback;
@@ -382,6 +403,9 @@ function sanitizeMenu(input) {
     selectedYears,
     searchQuery: typeof (input == null ? void 0 : input.searchQuery) === "string" ? input.searchQuery : "",
     documentFindCaseSensitive: Boolean(input == null ? void 0 : input.documentFindCaseSensitive),
+    editorStyle: sanitizeEditorStyle(input == null ? void 0 : input.editorStyle),
+    editorFontSize: sanitizeEditorFontSize(input == null ? void 0 : input.editorFontSize),
+    editorSpacing: sanitizeEditorSpacing(input == null ? void 0 : input.editorSpacing),
     sidebarWidthRatio: sanitizeRatio(input == null ? void 0 : input.sidebarWidthRatio, DEFAULT_APP_STATE.menu.sidebarWidthRatio),
     tagSplitRatio: sanitizeRatio(input == null ? void 0 : input.tagSplitRatio, DEFAULT_APP_STATE.menu.tagSplitRatio),
     scrollEaseMultiplier: sanitizePositive(input == null ? void 0 : input.scrollEaseMultiplier, DEFAULT_APP_STATE.menu.scrollEaseMultiplier ?? 1),

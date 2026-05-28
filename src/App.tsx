@@ -12,7 +12,19 @@ import type {
 } from './editor/EditorContract'
 import type { PersistedMenuState, PersistedViewportState } from './shared/appState'
 import type { NoteSummary } from './shared/noteLifecycle'
-import { CELL_WIDTH_PX, LINE_HEIGHT_PX } from './editor/LayoutConstants'
+import {
+  DEFAULT_EDITOR_FONT_SIZE,
+  DEFAULT_EDITOR_SPACING,
+  DEFAULT_EDITOR_STYLE,
+  EDITOR_FONT_SIZE_OPTIONS,
+  EDITOR_SPACING_OPTIONS,
+  EDITOR_STYLE_OPTIONS,
+  resolveEditorFontFamily,
+  resolveEditorRuntimeMetrics,
+  type EditorFontSizeKey,
+  type EditorSpacingKey,
+  type EditorStyleKey,
+} from './editor/EditorTypography'
 import {
   buildDocumentFindHits,
   resolveDocumentFindDirective,
@@ -817,6 +829,9 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('')
   const [documentFindQuery, setDocumentFindQuery] = useState('')
   const [isDocumentFindCaseSensitive, setIsDocumentFindCaseSensitive] = useState(false)
+  const [editorStyle, setEditorStyle] = useState<EditorStyleKey>(DEFAULT_EDITOR_STYLE)
+  const [editorFontSize, setEditorFontSize] = useState<EditorFontSizeKey>(DEFAULT_EDITOR_FONT_SIZE)
+  const [editorSpacing, setEditorSpacing] = useState<EditorSpacingKey>(DEFAULT_EDITOR_SPACING)
   const [isTagMutationPending, setIsTagMutationPending] = useState(false)
   const [deleteArmedTagName, setDeleteArmedTagName] = useState<string | null>(null)
   const [renamingTagName, setRenamingTagName] = useState<string | null>(null)
@@ -874,6 +889,12 @@ function App() {
   const noteArmTimerRef = useRef<{ noteId: string; timeoutId: number; quickReleaseAction: ProtectedQuickReleaseAction } | null>(null)
   const trashButtonArmTimerRef = useRef<number | null>(null)
 
+  const editorRuntimeMetrics = useMemo(
+    () => resolveEditorRuntimeMetrics(editorFontSize, editorSpacing),
+    [editorFontSize, editorSpacing],
+  )
+  const editorFontFamily = useMemo(() => resolveEditorFontFamily(editorStyle), [editorStyle])
+
   const armedNoteActionById = useMemo(() => {
     if (!armedNoteActionState) {
       return new Map<string, NoteArmedAction>()
@@ -900,6 +921,9 @@ function App() {
     selectedYears: [...selectedYears],
     searchQuery,
     documentFindCaseSensitive: isDocumentFindCaseSensitive,
+    editorStyle,
+    editorFontSize,
+    editorSpacing,
     sidebarWidthRatio,
     tagSplitRatio,
     scrollEaseMultiplier,
@@ -912,6 +936,9 @@ function App() {
     selectedMonths,
     selectedYears,
     sidebarMode,
+    editorStyle,
+    editorFontSize,
+    editorSpacing,
     sidebarWidthRatio,
     tagSplitRatio,
     scrollEaseMultiplier,
@@ -1724,6 +1751,9 @@ function App() {
             setSelectedYears(new Set(appState.menu.selectedYears))
             setSearchQuery(appState.menu.searchQuery)
             setIsDocumentFindCaseSensitive(appState.menu.documentFindCaseSensitive ?? false)
+            setEditorStyle(appState.menu.editorStyle ?? DEFAULT_EDITOR_STYLE)
+            setEditorFontSize(appState.menu.editorFontSize ?? DEFAULT_EDITOR_FONT_SIZE)
+            setEditorSpacing(appState.menu.editorSpacing ?? DEFAULT_EDITOR_SPACING)
             setSidebarWidthRatio(appState.menu.sidebarWidthRatio)
             setTagSplitRatio(appState.menu.tagSplitRatio)
             setScrollEaseMultiplier(appState.menu.scrollEaseMultiplier ?? getScrollEaseMultiplier())
@@ -1806,8 +1836,8 @@ function App() {
           topBoundaryPx: pending.topBoundaryPx,
           bottomBoundaryPx: pending.bottomBoundaryPx,
           scrollTopPx: pending.scrollTopPx,
-          lineHeightPx: LINE_HEIGHT_PX,
-          cellWidthPx: CELL_WIDTH_PX,
+          lineHeightPx: editorRuntimeMetrics.lineHeightPx,
+          cellWidthPx: editorRuntimeMetrics.cellWidthPx,
         },
       })
 
@@ -1821,7 +1851,7 @@ function App() {
       cancelled = true
       isApplyingInitialViewportRef.current = false
     }
-  }, [persistenceReady, activeNoteId])
+  }, [persistenceReady, activeNoteId, editorRuntimeMetrics.lineHeightPx, editorRuntimeMetrics.cellWidthPx])
 
   const bindings = useMemo<EditorBindings>(() => ({
     onTextChange: (event: EditorTextChangeEvent) => {
@@ -3129,22 +3159,43 @@ function App() {
           <div className="toolbar-right-tools" aria-label="Toolbar right controls">
             <div className="style-selector">
               <label className="selector-label">Style:</label>
-              <select disabled aria-label="Style placeholder">
-                <option>Placeholder</option>
+              <select
+                value={editorStyle}
+                onChange={(event) => setEditorStyle(event.target.value as EditorStyleKey)}
+                aria-label="Editor style"
+                disabled={!activeNoteId}
+              >
+                {EDITOR_STYLE_OPTIONS.map((option) => (
+                  <option key={option.key} value={option.key}>{option.label}</option>
+                ))}
               </select>
             </div>
 
             <div className="style-selector">
               <label className="selector-label">Size:</label>
-              <select disabled aria-label="Size placeholder">
-                <option>Placeholder</option>
+              <select
+                value={editorFontSize}
+                onChange={(event) => setEditorFontSize(event.target.value as EditorFontSizeKey)}
+                aria-label="Editor font size"
+                disabled={!activeNoteId}
+              >
+                {EDITOR_FONT_SIZE_OPTIONS.map((option) => (
+                  <option key={option.key} value={option.key}>{option.label}</option>
+                ))}
               </select>
             </div>
 
             <div className="style-selector">
               <label className="selector-label">Spacing:</label>
-              <select disabled aria-label="Spacing placeholder">
-                <option>Placeholder</option>
+              <select
+                value={editorSpacing}
+                onChange={(event) => setEditorSpacing(event.target.value as EditorSpacingKey)}
+                aria-label="Editor spacing"
+                disabled={!activeNoteId}
+              >
+                {EDITOR_SPACING_OPTIONS.map((option) => (
+                  <option key={option.key} value={option.key}>{option.label}</option>
+                ))}
               </select>
             </div>
 
@@ -3234,6 +3285,10 @@ function App() {
               adapterRef={adapterRef}
               initialText={activeNoteText}
               scrollbarHost={scrollbarHostEl}
+              fontFamily={editorFontFamily}
+              fontSizePx={editorRuntimeMetrics.fontSizePx}
+              lineHeightPx={editorRuntimeMetrics.lineHeightPx}
+              cellWidthPx={editorRuntimeMetrics.cellWidthPx}
             />
           </div>
         </main>
