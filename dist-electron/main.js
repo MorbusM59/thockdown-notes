@@ -331,6 +331,10 @@ const DEFAULT_APP_STATE = {
     selectedMonths: [],
     selectedYears: [],
     searchQuery: "",
+    isPreviewMode: false,
+    viewStyle: "modern",
+    viewFontSize: "m",
+    viewSpacing: "cozy",
     editorStyle: "syne",
     editorFontSize: "m",
     editorSpacing: "cozy",
@@ -370,6 +374,12 @@ function sanitizeEditorStyle(input) {
   }
   return DEFAULT_APP_STATE.menu.editorStyle ?? "syne";
 }
+function sanitizeViewStyle(input) {
+  if (input === "modern" || input === "narrow" || input === "cute" || input === "print") {
+    return input;
+  }
+  return DEFAULT_APP_STATE.menu.viewStyle ?? "modern";
+}
 function sanitizeEditorFontSize(input) {
   if (input === "xs" || input === "s" || input === "m" || input === "l" || input === "xl") {
     return input;
@@ -403,6 +413,10 @@ function sanitizeMenu(input) {
     selectedYears,
     searchQuery: typeof (input == null ? void 0 : input.searchQuery) === "string" ? input.searchQuery : "",
     documentFindCaseSensitive: Boolean(input == null ? void 0 : input.documentFindCaseSensitive),
+    isPreviewMode: Boolean(input == null ? void 0 : input.isPreviewMode),
+    viewStyle: sanitizeViewStyle(input == null ? void 0 : input.viewStyle),
+    viewFontSize: sanitizeEditorFontSize(input == null ? void 0 : input.viewFontSize),
+    viewSpacing: sanitizeEditorSpacing(input == null ? void 0 : input.viewSpacing),
     editorStyle: sanitizeEditorStyle(input == null ? void 0 : input.editorStyle),
     editorFontSize: sanitizeEditorFontSize(input == null ? void 0 : input.editorFontSize),
     editorSpacing: sanitizeEditorSpacing(input == null ? void 0 : input.editorSpacing),

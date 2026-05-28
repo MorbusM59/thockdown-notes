@@ -13,6 +13,10 @@ const DEFAULT_APP_STATE: AppState = {
     selectedMonths: [],
     selectedYears: [],
     searchQuery: '',
+    isPreviewMode: false,
+    viewStyle: 'modern',
+    viewFontSize: 'm',
+    viewSpacing: 'cozy',
     editorStyle: 'syne',
     editorFontSize: 'm',
     editorSpacing: 'cozy',
@@ -56,6 +60,13 @@ function sanitizeEditorStyle(input: unknown): 'syne' | 'redhat' {
     return input;
   }
   return DEFAULT_APP_STATE.menu!.editorStyle ?? 'syne';
+}
+
+function sanitizeViewStyle(input: unknown): 'modern' | 'narrow' | 'cute' | 'print' {
+  if (input === 'modern' || input === 'narrow' || input === 'cute' || input === 'print') {
+    return input;
+  }
+  return DEFAULT_APP_STATE.menu!.viewStyle ?? 'modern';
 }
 
 function sanitizeEditorFontSize(input: unknown): 'xs' | 's' | 'm' | 'l' | 'xl' {
@@ -102,6 +113,10 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     selectedYears,
     searchQuery: typeof input?.searchQuery === 'string' ? input.searchQuery : '',
     documentFindCaseSensitive: Boolean(input?.documentFindCaseSensitive),
+    isPreviewMode: Boolean(input?.isPreviewMode),
+    viewStyle: sanitizeViewStyle(input?.viewStyle),
+    viewFontSize: sanitizeEditorFontSize(input?.viewFontSize),
+    viewSpacing: sanitizeEditorSpacing(input?.viewSpacing),
     editorStyle: sanitizeEditorStyle(input?.editorStyle),
     editorFontSize: sanitizeEditorFontSize(input?.editorFontSize),
     editorSpacing: sanitizeEditorSpacing(input?.editorSpacing),

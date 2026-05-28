@@ -1,5 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent, KeyboardEvent, MouseEvent } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { Editor } from './components/Editor'
 import './App.css'
 import type {
@@ -68,6 +70,9 @@ type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find'
 type NoteArmedAction = 'archive' | 'deletion'
 type ProtectedQuickReleaseAction = 'remove-archived' | 'remove-deleted' | null
 type TextDecorationFormat = 'bold' | 'italic' | 'strikethrough'
+type ViewStyleKey = 'modern' | 'narrow' | 'cute' | 'print'
+type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
+type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
 
 const TEXT_DECORATION_MARKERS: Record<TextDecorationFormat, { open: string; close: string }> = {
   bold: { open: '**', close: '**' },
@@ -184,6 +189,16 @@ function sanitizeClipboardTitle(raw: string): string {
 
   const withoutHeadingPrefix = firstLine.replace(/^#+\s*/, '').trim()
   return withoutHeadingPrefix || FALLBACK_NEW_NOTE_TITLE
+}
+
+function isSafePreviewHref(href: string | undefined): boolean {
+  if (!href) return false
+  try {
+    const parsed = new URL(href)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'mailto:' || parsed.protocol === 'tel:'
+  } catch {
+    return false
+  }
 }
 
 function titleFromFileBasename(fileName: string): string {
@@ -829,6 +844,10 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('')
   const [documentFindQuery, setDocumentFindQuery] = useState('')
   const [isDocumentFindCaseSensitive, setIsDocumentFindCaseSensitive] = useState(false)
+  const [isPreviewMode, setIsPreviewMode] = useState(false)
+  const [viewStyle, setViewStyle] = useState<ViewStyleKey>('modern')
+  const [viewFontSize, setViewFontSize] = useState<ViewSizeKey>('m')
+  const [viewSpacing, setViewSpacing] = useState<ViewSpacingKey>('cozy')
   const [editorStyle, setEditorStyle] = useState<EditorStyleKey>(DEFAULT_EDITOR_STYLE)
   const [editorFontSize, setEditorFontSize] = useState<EditorFontSizeKey>(DEFAULT_EDITOR_FONT_SIZE)
   const [editorSpacing, setEditorSpacing] = useState<EditorSpacingKey>(DEFAULT_EDITOR_SPACING)
@@ -888,6 +907,15 @@ function App() {
   const [armedNoteActionState, setArmedNoteActionState] = useState<{ noteId: string; action: NoteArmedAction } | null>(null)
   const noteArmTimerRef = useRef<{ noteId: string; timeoutId: number; quickReleaseAction: ProtectedQuickReleaseAction } | null>(null)
   const trashButtonArmTimerRef = useRef<number | null>(null)
+  const previewScrollRef = useRef<HTMLDivElement | null>(null)
+  const previewScrollSaveTimerRef = useRef<number | null>(null)
+  const previewScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
+  const previewScrollbarRafRef = useRef<number | null>(null)
+  const previewScrollbarDragOriginRef = useRef<{ pointerY: number; thumbTopPx: number } | null>(null)
+  const [previewScrollThumbTopPx, setPreviewScrollThumbTopPx] = useState(0)
+  const [previewScrollThumbHeightPx, setPreviewScrollThumbHeightPx] = useState(0)
+  const [isPreviewScrollThumbActive, setIsPreviewScrollThumbActive] = useState(false)
+  const [isDraggingPreviewScrollThumb, setIsDraggingPreviewScrollThumb] = useState(false)
 
   const editorRuntimeMetrics = useMemo(
     () => resolveEditorRuntimeMetrics(editorFontSize, editorSpacing),
@@ -921,6 +949,10 @@ function App() {
     selectedYears: [...selectedYears],
     searchQuery,
     documentFindCaseSensitive: isDocumentFindCaseSensitive,
+    isPreviewMode,
+    viewStyle,
+    viewFontSize,
+    viewSpacing,
     editorStyle,
     editorFontSize,
     editorSpacing,
@@ -936,6 +968,10 @@ function App() {
     selectedMonths,
     selectedYears,
     sidebarMode,
+    isPreviewMode,
+    viewStyle,
+    viewFontSize,
+    viewSpacing,
     editorStyle,
     editorFontSize,
     editorSpacing,
@@ -962,6 +998,10 @@ function App() {
   useEffect(() => {
     applyScrollMaxDurationMultiplier(scrollMaxDurationMultiplier)
   }, [scrollMaxDurationMultiplier])
+
+  useEffect(() => {
+    setIsScrollSettingsOpen(false)
+  }, [isPreviewMode])
 
   const layout = useMemo(() => {
     const dividerTotalWidthPx = GRID_DIVIDER_PX * 3
@@ -1751,6 +1791,10 @@ function App() {
             setSelectedYears(new Set(appState.menu.selectedYears))
             setSearchQuery(appState.menu.searchQuery)
             setIsDocumentFindCaseSensitive(appState.menu.documentFindCaseSensitive ?? false)
+            setIsPreviewMode(appState.menu.isPreviewMode ?? false)
+            setViewStyle(appState.menu.viewStyle ?? 'modern')
+            setViewFontSize(appState.menu.viewFontSize ?? 'm')
+            setViewSpacing(appState.menu.viewSpacing ?? 'cozy')
             setEditorStyle(appState.menu.editorStyle ?? DEFAULT_EDITOR_STYLE)
             setEditorFontSize(appState.menu.editorFontSize ?? DEFAULT_EDITOR_FONT_SIZE)
             setEditorSpacing(appState.menu.editorSpacing ?? DEFAULT_EDITOR_SPACING)
@@ -1890,6 +1934,74 @@ function App() {
     if (!window.measlyState || !activeNoteId) return
     queueAppStateSave(activeNoteId)
   }, [activeNoteId, menuState, queueAppStateSave])
+
+  useEffect(() => {
+    if (!isPreviewMode) return
+    if (!activeNoteId) return
+
+    let cancelled = false
+
+    const restorePreviewScroll = async () => {
+      try {
+        const uiState = await window.measlyLegacyDb?.getNoteUiState(activeNoteId)
+        if (cancelled) return
+
+        const ratio = uiState?.progressPreview
+        if (typeof ratio !== 'number' || Number.isNaN(ratio)) {
+          if (previewScrollRef.current) {
+            previewScrollRef.current.scrollTop = 0
+          }
+          return
+        }
+
+        requestAnimationFrame(() => {
+          if (cancelled) return
+          const container = previewScrollRef.current
+          if (!container) return
+          const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
+          container.scrollTop = Math.max(0, Math.min(maxScrollTop, ratio * maxScrollTop))
+        })
+      } catch (error) {
+        console.warn('Failed to restore preview scroll state', error)
+      }
+    }
+
+    void restorePreviewScroll()
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeNoteId, isPreviewMode])
+
+  useEffect(() => {
+    if (!isPreviewMode) return
+    if (!activeNoteId) return
+
+    const container = previewScrollRef.current
+    if (!container) return
+
+    const persistPreviewScroll = () => {
+      if (previewScrollSaveTimerRef.current !== null) {
+        window.clearTimeout(previewScrollSaveTimerRef.current)
+      }
+
+      previewScrollSaveTimerRef.current = window.setTimeout(() => {
+        previewScrollSaveTimerRef.current = null
+        const maxScrollTop = Math.max(1, container.scrollHeight - container.clientHeight)
+        const ratio = maxScrollTop <= 0 ? 0 : (container.scrollTop / maxScrollTop)
+        void window.measlyLegacyDb?.saveNoteUiState(activeNoteId, { progressPreview: ratio })
+      }, 120)
+    }
+
+    container.addEventListener('scroll', persistPreviewScroll, { passive: true })
+    return () => {
+      container.removeEventListener('scroll', persistPreviewScroll)
+      if (previewScrollSaveTimerRef.current !== null) {
+        window.clearTimeout(previewScrollSaveTimerRef.current)
+        previewScrollSaveTimerRef.current = null
+      }
+    }
+  }, [activeNoteId, isPreviewMode])
 
   useEffect(() => {
     if (!persistenceReady) return
@@ -2112,6 +2224,68 @@ function App() {
   const totalPages = Math.max(1, Math.ceil(totalPagedNotes / Math.max(1, itemsPerPage)))
   const isSidebarTreeMode = sidebarMode === 'category' || sidebarMode === 'archive'
   const isSidebarCustomScrollbarMode = isSidebarTreeMode || isFindMode
+
+  const syncPreviewCustomScrollbar = useCallback(() => {
+    if (!isPreviewMode) {
+      setPreviewScrollThumbHeightPx(0)
+      setPreviewScrollThumbTopPx(0)
+      setIsPreviewScrollThumbActive(false)
+      return
+    }
+
+    const scroller = previewScrollRef.current
+    const track = previewScrollbarTrackRef.current
+    if (!scroller || !track) return
+
+    const viewportHeight = scroller.clientHeight
+    const contentHeight = scroller.scrollHeight
+    const trackHeight = track.clientHeight
+    const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
+    if (viewportHeight <= 0 || contentHeight <= 0 || trackHeight <= 0) {
+      setPreviewScrollThumbHeightPx(0)
+      setPreviewScrollThumbTopPx(0)
+      setIsPreviewScrollThumbActive(false)
+      return
+    }
+
+    if (contentHeight <= viewportHeight) {
+      setPreviewScrollThumbHeightPx(usableTrackHeight)
+      setPreviewScrollThumbTopPx(SCROLL_TRACK_EDGE_GAP_PX)
+      setIsPreviewScrollThumbActive(false)
+      return
+    }
+
+    const visibleRatio = viewportHeight / contentHeight
+    const nextThumbHeight = Math.max(
+      SCROLL_TRACK_MIN_THUMB_HEIGHT_PX,
+      Math.min(usableTrackHeight, Math.round(usableTrackHeight * visibleRatio)),
+    )
+
+    const maxScrollTop = contentHeight - viewportHeight
+    const maxThumbTop = Math.max(0, usableTrackHeight - nextThumbHeight)
+    const scrollRatio = maxScrollTop > 0 ? scroller.scrollTop / maxScrollTop : 0
+    const nextThumbTop = SCROLL_TRACK_EDGE_GAP_PX + Math.round(maxThumbTop * scrollRatio)
+
+    setPreviewScrollThumbHeightPx(nextThumbHeight)
+    setPreviewScrollThumbTopPx(nextThumbTop)
+    setIsPreviewScrollThumbActive(true)
+  }, [isPreviewMode])
+
+  const previewScrollFromThumbTop = useCallback((thumbTopPx: number) => {
+    const scroller = previewScrollRef.current
+    const track = previewScrollbarTrackRef.current
+    if (!scroller || !track) return
+
+    const trackHeight = track.clientHeight
+    const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
+    const maxThumbTravel = Math.max(0, usableTrackHeight - previewScrollThumbHeightPx)
+    const minThumbTop = SCROLL_TRACK_EDGE_GAP_PX
+    const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel
+    const clampedTop = Math.max(minThumbTop, Math.min(thumbTopPx, maxThumbTop))
+    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+    const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0
+    scroller.scrollTop = ratio * maxScrollTop
+  }, [previewScrollThumbHeightPx])
 
   const syncSidebarCustomScrollbar = useCallback(() => {
     if (!isSidebarCustomScrollbarMode) {
@@ -2563,6 +2737,125 @@ function App() {
   }, [isSidebarCustomScrollbarMode, syncSidebarCustomScrollbar, sidebarMode, categoryTree, archiveTree, documentFindHits])
 
   useEffect(() => {
+    if (!isPreviewMode) return
+    syncPreviewCustomScrollbar()
+  }, [isPreviewMode, syncPreviewCustomScrollbar, activeNoteId, currentEditorText, viewStyle, viewFontSize, viewSpacing])
+
+  useEffect(() => {
+    if (!isPreviewMode) return
+
+    const scroller = previewScrollRef.current
+    if (!scroller) return
+
+    const onScroll = () => {
+      syncPreviewCustomScrollbar()
+    }
+
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    return () => scroller.removeEventListener('scroll', onScroll)
+  }, [isPreviewMode, syncPreviewCustomScrollbar])
+
+  useEffect(() => {
+    if (!isPreviewMode) return
+
+    const scroller = previewScrollRef.current
+    if (!scroller) return
+
+    const scheduleSync = () => {
+      if (previewScrollbarRafRef.current !== null) {
+        cancelAnimationFrame(previewScrollbarRafRef.current)
+      }
+
+      previewScrollbarRafRef.current = requestAnimationFrame(() => {
+        previewScrollbarRafRef.current = null
+        syncPreviewCustomScrollbar()
+      })
+    }
+
+    scheduleSync()
+    const previewContentEl = scroller.firstElementChild as HTMLElement | null
+
+    const resizeObserver = new ResizeObserver(() => scheduleSync())
+    resizeObserver.observe(scroller)
+    if (previewContentEl) {
+      resizeObserver.observe(previewContentEl)
+    }
+
+    const mutationObserver = new MutationObserver(() => scheduleSync())
+    mutationObserver.observe(scroller, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    })
+
+    return () => {
+      mutationObserver.disconnect()
+      resizeObserver.disconnect()
+      if (previewScrollbarRafRef.current !== null) {
+        cancelAnimationFrame(previewScrollbarRafRef.current)
+        previewScrollbarRafRef.current = null
+      }
+    }
+  }, [isPreviewMode, syncPreviewCustomScrollbar])
+
+  useEffect(() => {
+    if (!isDraggingPreviewScrollThumb) return
+
+    const onMouseMove = (event: globalThis.MouseEvent) => {
+      const origin = previewScrollbarDragOriginRef.current
+      if (!origin) return
+      const deltaY = event.clientY - origin.pointerY
+      previewScrollFromThumbTop(origin.thumbTopPx + deltaY)
+      syncPreviewCustomScrollbar()
+    }
+
+    const onMouseUp = () => {
+      setIsDraggingPreviewScrollThumb(false)
+      previewScrollbarDragOriginRef.current = null
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [isDraggingPreviewScrollThumb, previewScrollFromThumbTop, syncPreviewCustomScrollbar])
+
+  const handlePreviewTrackMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    const track = previewScrollbarTrackRef.current
+    const scroller = previewScrollRef.current
+    if (!track || !scroller) return
+
+    const rect = track.getBoundingClientRect()
+    const clickY = event.clientY - rect.top
+    const targetThumbTop = clickY - (previewScrollThumbHeightPx / 2)
+
+    const trackHeight = track.clientHeight
+    const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
+    const maxThumbTravel = Math.max(0, usableTrackHeight - previewScrollThumbHeightPx)
+    const minThumbTop = SCROLL_TRACK_EDGE_GAP_PX
+    const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel
+    const clampedTop = Math.max(minThumbTop, Math.min(targetThumbTop, maxThumbTop))
+    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+    const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0
+    const targetScrollTop = ratio * maxScrollTop
+
+    scroller.scrollTo({ top: targetScrollTop, behavior: 'smooth' })
+    syncPreviewCustomScrollbar()
+  }, [previewScrollThumbHeightPx, syncPreviewCustomScrollbar])
+
+  const handlePreviewThumbMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setIsDraggingPreviewScrollThumb(true)
+    previewScrollbarDragOriginRef.current = {
+      pointerY: event.clientY,
+      thumbTopPx: previewScrollThumbTopPx,
+    }
+  }, [previewScrollThumbTopPx])
+
+  useEffect(() => {
     if (!isSidebarCustomScrollbarMode || !sidebarTreeScrollerEl) return
 
     const onScroll = () => {
@@ -2706,28 +2999,27 @@ function App() {
       }
 
       if (event.key === 'Escape') {
-        if (isFindMode && documentFindQuery.trim().length > 0) {
+        const activeElement = document.activeElement
+        const isEditableField =
+          activeElement instanceof HTMLInputElement ||
+          activeElement instanceof HTMLTextAreaElement ||
+          activeElement instanceof HTMLSelectElement ||
+          Boolean(activeElement && (activeElement as HTMLElement).isContentEditable)
+
+        if (isEditableField && activeElement instanceof HTMLElement) {
           event.preventDefault()
-          setDocumentFindQuery('')
+          activeElement.blur()
           return
         }
 
-        if (!isFindMode && searchQuery.trim().length > 0) {
-          event.preventDefault()
-          setSearchQuery('')
-          return
-        }
-
-        if (sidebarMode !== 'date') {
-          event.preventDefault()
-          setSidebarMode('date')
-        }
+        event.preventDefault()
+        setIsPreviewMode((previous) => !previous)
       }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [createNote, createNoteFromClipboardTitle, documentFindQuery, isFindMode, replaceAllDocumentFindHits, searchQuery, sidebarMode])
+  }, [createNote, createNoteFromClipboardTitle, isFindMode, replaceAllDocumentFindHits])
 
   return (
     <div
@@ -3092,15 +3384,17 @@ function App() {
         <div className="editor-toolbar">
           <div className="toolbar-left-tools">
             <button
-              className="toolbar-toggle-btn active"
+              className={`toolbar-toggle-btn ${!isPreviewMode ? 'active' : ''}`}
               type="button"
-              title="Edit"
-              aria-label="Edit mode"
+              title={isPreviewMode ? 'Edit mode inactive' : 'Edit mode active'}
+              aria-label={isPreviewMode ? 'Edit mode inactive' : 'Edit mode active'}
+              onClick={() => setIsPreviewMode((previous) => !previous)}
             >
               Edit
             </button>
 
-            <div className="markdown-toolbar" aria-label="Markdown toolbar">
+            {!isPreviewMode ? (
+              <div className="markdown-toolbar" aria-label="Markdown toolbar">
               <button
                 type="button"
                 className={`toolbar-btn-icon ${activeDecorationFormats.has('bold') ? 'active' : ''}`}
@@ -3153,57 +3447,110 @@ function App() {
               <span className="toolbar-divider">|</span>
 
               <button type="button" className="toolbar-btn-icon" title="Horizontal rule" onClick={insertHorizontalRule} disabled={!activeNoteId}>—</button>
-            </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="toolbar-right-tools" aria-label="Toolbar right controls">
-            <div className="style-selector">
-              <label className="selector-label">Style:</label>
-              <select
-                value={editorStyle}
-                onChange={(event) => setEditorStyle(event.target.value as EditorStyleKey)}
-                aria-label="Editor style"
-                disabled={!activeNoteId}
-              >
-                {EDITOR_STYLE_OPTIONS.map((option) => (
-                  <option key={option.key} value={option.key}>{option.label}</option>
-                ))}
-              </select>
-            </div>
+            {isPreviewMode ? (
+              <>
+                <div className="style-selector">
+                  <label className="selector-label">Style:</label>
+                  <select
+                    value={viewStyle}
+                    onChange={(event) => setViewStyle(event.target.value as ViewStyleKey)}
+                    aria-label="Render style"
+                    disabled={!activeNoteId}
+                  >
+                    <option value="modern">Modern</option>
+                    <option value="narrow">Narrow</option>
+                    <option value="cute">Cute</option>
+                    <option value="print">Print</option>
+                  </select>
+                </div>
 
-            <div className="style-selector">
-              <label className="selector-label">Size:</label>
-              <select
-                value={editorFontSize}
-                onChange={(event) => setEditorFontSize(event.target.value as EditorFontSizeKey)}
-                aria-label="Editor font size"
-                disabled={!activeNoteId}
-              >
-                {EDITOR_FONT_SIZE_OPTIONS.map((option) => (
-                  <option key={option.key} value={option.key}>{option.label}</option>
-                ))}
-              </select>
-            </div>
+                <div className="style-selector">
+                  <label className="selector-label">Size:</label>
+                  <select
+                    value={viewFontSize}
+                    onChange={(event) => setViewFontSize(event.target.value as ViewSizeKey)}
+                    aria-label="Render font size"
+                    disabled={!activeNoteId}
+                  >
+                    <option value="xs">XS</option>
+                    <option value="s">S</option>
+                    <option value="m">M</option>
+                    <option value="l">L</option>
+                    <option value="xl">XL</option>
+                  </select>
+                </div>
 
-            <div className="style-selector">
-              <label className="selector-label">Spacing:</label>
-              <select
-                value={editorSpacing}
-                onChange={(event) => setEditorSpacing(event.target.value as EditorSpacingKey)}
-                aria-label="Editor spacing"
-                disabled={!activeNoteId}
-              >
-                {EDITOR_SPACING_OPTIONS.map((option) => (
-                  <option key={option.key} value={option.key}>{option.label}</option>
-                ))}
-              </select>
-            </div>
+                <div className="style-selector">
+                  <label className="selector-label">Spacing:</label>
+                  <select
+                    value={viewSpacing}
+                    onChange={(event) => setViewSpacing(event.target.value as ViewSpacingKey)}
+                    aria-label="Render spacing"
+                    disabled={!activeNoteId}
+                  >
+                    <option value="tight">Tight</option>
+                    <option value="compact">Compact</option>
+                    <option value="cozy">Cozy</option>
+                    <option value="wide">Wide</option>
+                  </select>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="style-selector">
+                  <label className="selector-label">Style:</label>
+                  <select
+                    value={editorStyle}
+                    onChange={(event) => setEditorStyle(event.target.value as EditorStyleKey)}
+                    aria-label="Editor style"
+                    disabled={!activeNoteId}
+                  >
+                    {EDITOR_STYLE_OPTIONS.map((option) => (
+                      <option key={option.key} value={option.key}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="style-selector">
+                  <label className="selector-label">Size:</label>
+                  <select
+                    value={editorFontSize}
+                    onChange={(event) => setEditorFontSize(event.target.value as EditorFontSizeKey)}
+                    aria-label="Editor font size"
+                    disabled={!activeNoteId}
+                  >
+                    {EDITOR_FONT_SIZE_OPTIONS.map((option) => (
+                      <option key={option.key} value={option.key}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="style-selector">
+                  <label className="selector-label">Spacing:</label>
+                  <select
+                    value={editorSpacing}
+                    onChange={(event) => setEditorSpacing(event.target.value as EditorSpacingKey)}
+                    aria-label="Editor spacing"
+                    disabled={!activeNoteId}
+                  >
+                    {EDITOR_SPACING_OPTIONS.map((option) => (
+                      <option key={option.key} value={option.key}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
 
             <button
               className={`toggle-btn icon-btn toolbar-gear-btn${isScrollSettingsOpen ? ' is-active' : ''}`}
               type="button"
-              title="Scroll settings"
-              aria-label="Scroll settings"
+              title="View settings"
+              aria-label="View settings"
               aria-expanded={isScrollSettingsOpen}
               onClick={() => setIsScrollSettingsOpen((open) => !open)}
             >
@@ -3214,8 +3561,11 @@ function App() {
 
         {isScrollSettingsOpen ? (
           <div className="toolbar-flyout-panel" aria-label="Toolbar flyout panel">
-            <div className="toolbar-flyout-content" aria-label="Scroll settings panel">
-              <section className="toolbar-flyout-section toolbar-flyout-section-scrolling" aria-label="Scrolling settings">
+            <div
+              className={`toolbar-flyout-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`}
+              aria-label="Settings panel"
+            >
+              <section className="toolbar-flyout-section toolbar-flyout-section-scrolling display-in-view display-in-edit" aria-label="Scrolling settings">
                 <div className="panel-placeholder-title">Scrolling</div>
                 <div className="utility-setting-row utility-setting-row-range">
                   <CompactRangeSlider
@@ -3262,14 +3612,24 @@ function App() {
                 </div>
               </section>
 
-              <section className="toolbar-flyout-section toolbar-flyout-section-placeholder" aria-label="Editor settings placeholder">
+              <section className="toolbar-flyout-section toolbar-flyout-section-placeholder display-in-edit" aria-label="Editor settings placeholder">
                 <div className="panel-placeholder-title">Editor</div>
                 <div className="toolbar-flyout-placeholder-text">Soon</div>
               </section>
 
-              <section className="toolbar-flyout-section toolbar-flyout-section-placeholder" aria-label="Layout settings placeholder">
+              <section className="toolbar-flyout-section toolbar-flyout-section-placeholder display-in-edit" aria-label="Layout settings placeholder">
                 <div className="panel-placeholder-title">Layout</div>
                 <div className="toolbar-flyout-placeholder-text">Soon</div>
+              </section>
+
+              <section className="toolbar-flyout-section toolbar-flyout-section-placeholder display-in-view" aria-label="Render settings placeholder">
+                <div className="panel-placeholder-title">Render</div>
+                <div className="toolbar-flyout-placeholder-text">Soon</div>
+              </section>
+
+              <section className="toolbar-flyout-section toolbar-flyout-section-placeholder display-in-view" aria-label="Navigation settings placeholder">
+                <div className="panel-placeholder-title">Navigation</div>
+                <div className="toolbar-flyout-placeholder-text">Smooth</div>
               </section>
             </div>
           </div>
@@ -3278,22 +3638,75 @@ function App() {
 
       <div className="editor-viewer-frame" style={{ gridArea: 'viewer' }}>
         <main className="editor-shell">
-          <div className="editor-stage">
-            <Editor
-              key={activeNoteId ?? 'no-active-note'}
-              bindings={bindings}
-              adapterRef={adapterRef}
-              initialText={activeNoteText}
-              scrollbarHost={scrollbarHostEl}
-              fontFamily={editorFontFamily}
-              fontSizePx={editorRuntimeMetrics.fontSizePx}
-              lineHeightPx={editorRuntimeMetrics.lineHeightPx}
-              cellWidthPx={editorRuntimeMetrics.cellWidthPx}
-            />
+          <div className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
+            {!isPreviewMode ? (
+              <Editor
+                key={activeNoteId ?? 'no-active-note'}
+                bindings={bindings}
+                adapterRef={adapterRef}
+                initialText={activeNoteText}
+                scrollbarHost={scrollbarHostEl}
+                fontFamily={editorFontFamily}
+                fontSizePx={editorRuntimeMetrics.fontSizePx}
+                lineHeightPx={editorRuntimeMetrics.lineHeightPx}
+                cellWidthPx={editorRuntimeMetrics.cellWidthPx}
+              />
+            ) : (
+              <div
+                ref={previewScrollRef}
+                className={`markdown-preview measly-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
+              >
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    a: ({ children, href }) => {
+                      const normalizedHref = typeof href === 'string' ? href : undefined
+                      const isLiteralHrefChild =
+                        normalizedHref !== undefined &&
+                        typeof children === 'string' &&
+                        children.trim() === normalizedHref.trim()
+
+                      if (isLiteralHrefChild) {
+                        return <span>{children}</span>
+                      }
+
+                      if (isSafePreviewHref(normalizedHref)) {
+                        return <a href={normalizedHref} target="_blank" rel="noopener noreferrer">{children}</a>
+                      }
+
+                      return <span>{children}</span>
+                    },
+                  }}
+                >
+                  {currentEditorText}
+                </ReactMarkdown>
+              </div>
+            )}
           </div>
         </main>
         <aside className="editor-scrollbar-slot" aria-hidden="true">
-          <div className="editor-scrollbar-slot-inner" ref={setScrollbarHostEl} />
+          <div className="editor-scrollbar-slot-inner">
+            {!isPreviewMode ? (
+              <div ref={setScrollbarHostEl} className="editor-scrollbar-slot-inner" />
+            ) : (
+              <div className="measly-scroll-rail">
+                <div
+                  ref={previewScrollbarTrackRef}
+                  className="measly-scroll-track"
+                  onMouseDown={handlePreviewTrackMouseDown}
+                >
+                  <div
+                    className={`measly-scroll-thumb${isDraggingPreviewScrollThumb ? ' is-dragging' : ''}${isPreviewScrollThumbActive ? '' : ' is-inactive'}`}
+                    style={{
+                      top: `${previewScrollThumbTopPx}px`,
+                      height: `${Math.max(0, previewScrollThumbHeightPx)}px`,
+                    }}
+                    onMouseDown={handlePreviewThumbMouseDown}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </aside>
       </div>
     </div>

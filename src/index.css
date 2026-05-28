@@ -29,6 +29,27 @@
   font-style: normal;
 }
 
+@font-face {
+  font-family: 'Roboto Condensed';
+  src: url('./fonts/RobotoCondensed-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Quicksand';
+  src: url('./fonts/Quicksand-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Sour Gummy';
+  src: url('./fonts/SourGummy-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+}
+
 :root {
   /* Core Editor Variables */
   --editor-font: 'Syne Mono', monospace;
