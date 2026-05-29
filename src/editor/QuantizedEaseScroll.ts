@@ -97,6 +97,10 @@ const cancelExistingAnimation = (scroller: HTMLElement) => {
   activeAnimations.delete(scroller);
 };
 
+export function cancelQuantizedEaseScroll(scroller: HTMLElement): void {
+  cancelExistingAnimation(scroller);
+}
+
 const resolveDurationMs = (distanceRows: number, requestedDurationMs?: number) => {
   const applyScaling = (durationMs: number) => {
     const distanceScaleFactor = resolveDistanceScaleFactor(distanceRows);

@@ -110,6 +110,13 @@ button,
   cursor: pointer;
 }
 
+.app-shell button:focus,
+.app-shell button:focus-visible,
+.app-shell select:focus,
+.app-shell select:focus-visible {
+  outline: none;
+}
+
 button:hover,
 .ui-btn:hover {
   background: var(--btn-bg-hover);
@@ -751,6 +758,14 @@ body.splitter-dragging {
   animation: toolbar-settings-expand 180ms ease;
 }
 
+.toolbar-flyout-content.mode-view .toolbar-flyout-section.display-in-edit:not(.display-in-view) {
+  display: none;
+}
+
+.toolbar-flyout-content.mode-edit .toolbar-flyout-section.display-in-view:not(.display-in-edit) {
+  display: none;
+}
+
 .toolbar-flyout-section {
   border: 1px dashed #bcb0a4;
   border-radius: 6px;
@@ -1250,11 +1265,21 @@ body.splitter-dragging {
   position: relative;
   padding: 0;
   box-sizing: border-box;
-  border: 1px solid #c2b4a6;
-  border-radius: 8px;
+  border: 1px solid var(--color-border-highlight);
+  border-radius: var(--border-radius-regular);
   background: linear-gradient(180deg, rgba(249, 245, 240, 0.92), rgba(243, 236, 229, 0.88));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.44);
+  box-shadow: 0 0 2px var(--color-shadow-white);
   overflow: hidden;
+}
+
+.editor-shell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.5), inset 0 0 6px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  z-index: 4;
 }
 
 .editor-stage {
@@ -1264,6 +1289,197 @@ body.splitter-dragging {
   box-sizing: border-box;
   border-radius: 6px;
   overflow: hidden;
+  z-index: 1;
+}
+
+.editor-stage.is-preview-mode::before,
+.editor-stage.is-preview-mode::after {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  height: 4px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.editor-stage.is-preview-mode::before {
+  top: 0;
+  background: linear-gradient(to bottom, var(--preview-edge-fade-color, var(--color-background-light)), transparent);
+}
+
+.editor-stage.is-preview-mode::after {
+  bottom: 0;
+  background: linear-gradient(to top, var(--preview-edge-fade-color, var(--color-background-light)), transparent);
+}
+
+.markdown-preview {
+  --preview-edge-padding: 18px;
+  --preview-edge-fade-color: var(--color-background-light);
+  --preview-code-font: 'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
+  --preview-inline-code-size: 0.95em;
+  --preview-inline-code-padding: 0.08em 0.35em;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  padding-top: var(--preview-edge-padding);
+  padding-right: var(--preview-edge-padding);
+  padding-bottom: var(--preview-edge-padding);
+  padding-left: var(--preview-edge-padding);
+  box-sizing: border-box;
+  color: #2f2721;
+  background: var(--color-background-light);
+  text-shadow: var(--text-shadow-emboss-base);
+  position: relative;
+  z-index: 1;
+}
+
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4,
+.markdown-preview h5,
+.markdown-preview h6 {
+  margin: 0.75em 0 0.45em;
+  line-height: 1.25;
+  color: #211b16;
+  text-shadow: var(--text-shadow-emboss-heading-glow);
+}
+
+.markdown-preview h1 { font-size: 1.9em; }
+.markdown-preview h2 { font-size: 1.55em; }
+.markdown-preview h3 { font-size: 1.28em; }
+
+.markdown-preview p,
+.markdown-preview ul,
+.markdown-preview ol,
+.markdown-preview blockquote,
+.markdown-preview pre,
+.markdown-preview table {
+  margin: 0.55em 0;
+}
+
+.markdown-preview > *:first-child {
+  margin-top: 0;
+}
+
+.markdown-preview a {
+  color: #0e4ea2;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-preview code {
+  font-family: var(--preview-code-font);
+  font-size: var(--preview-inline-code-size);
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(120, 106, 93, 0.28);
+  border-radius: 4px;
+  padding: var(--preview-inline-code-padding);
+}
+
+.markdown-preview pre {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(120, 106, 93, 0.34);
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow-x: auto;
+}
+
+.markdown-preview pre code {
+  border: none;
+  background: transparent;
+  font-size: 1em;
+  padding: 0;
+}
+
+.markdown-preview blockquote {
+  border-left: 3px solid rgba(124, 91, 67, 0.42);
+  padding-left: 10px;
+  color: #5f4f42;
+}
+
+.markdown-preview hr {
+  border: none;
+  border-top: 1px solid rgba(83, 69, 58, 0.25);
+  margin: 0.8em 0;
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+  padding-left: 1.35em;
+}
+
+.markdown-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.markdown-preview th,
+.markdown-preview td {
+  border: 1px solid rgba(121, 107, 94, 0.25);
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.markdown-preview img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+
+.markdown-preview.style-modern {
+  font-family: 'Quicksand', 'Segoe UI', sans-serif;
+}
+
+.markdown-preview.style-narrow {
+  font-family: 'Roboto Condensed', 'Segoe UI', sans-serif;
+  --preview-code-font: 'Share Tech Mono', 'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
+}
+
+.markdown-preview.style-cute {
+  font-family: 'Sour Gummy', 'Quicksand', 'Segoe UI', sans-serif;
+  --preview-code-font: 'Syne Mono', 'Red Hat Mono', 'Menlo', 'Monaco', monospace;
+}
+
+.markdown-preview.style-print {
+  font-family: 'Big Shoulders', 'Times New Roman', Georgia, serif;
+  --preview-code-font: 'Share Tech Mono', 'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
+  --preview-inline-code-size: 0.82em;
+  --preview-inline-code-padding: 0.06em 0.3em;
+  letter-spacing: 0.02em;
+  font-weight: 200;
+  color: #2b241d;
+}
+
+.markdown-preview.size-xs { font-size: 12px; }
+.markdown-preview.size-s { font-size: 14px; }
+.markdown-preview.size-m { font-size: 16px; }
+.markdown-preview.size-l { font-size: 18px; }
+.markdown-preview.size-xl { font-size: 20px; }
+
+.markdown-preview.spacing-tight {
+  line-height: 1.2;
+  --preview-edge-padding: 9px;
+}
+
+.markdown-preview.spacing-compact {
+  line-height: 1.4;
+  --preview-edge-padding: 12px;
+}
+
+.markdown-preview.spacing-cozy {
+  line-height: 1.6;
+  --preview-edge-padding: 18px;
+}
+
+.markdown-preview.spacing-wide {
+  line-height: 1.8;
+  --preview-edge-padding: 24px;
 }
 
 .editor-scrollbar-slot {

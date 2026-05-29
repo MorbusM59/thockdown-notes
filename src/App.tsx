@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent, KeyboardEvent, MouseEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -73,6 +73,19 @@ type TextDecorationFormat = 'bold' | 'italic' | 'strikethrough'
 type ViewStyleKey = 'modern' | 'narrow' | 'cute' | 'print'
 type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
 type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
+
+type EditRestoreSnapshot = {
+  noteId: string
+  collapsedSelection: EditorSelectionState
+  fullSelection: EditorSelectionState
+  viewport: PersistedViewportState
+}
+
+type EditViewportTelemetry = {
+  scrollTopPx: number
+  scrollHeightPx: number
+  clientHeightPx: number
+}
 
 const TEXT_DECORATION_MARKERS: Record<TextDecorationFormat, { open: string; close: string }> = {
   bold: { open: '**', close: '**' },
@@ -248,6 +261,37 @@ function mergeNoteSummaries(previous: NoteSummary[], next: NoteSummary[]): NoteS
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
+}
+
+function resolvePreviewAnchorRatioFromEditState(params: {
+  text: string
+  selectionEnd: number
+  viewport: PersistedViewportState | null
+  telemetry?: EditViewportTelemetry | null
+  lineHeightPx: number
+}): number {
+  const { text, selectionEnd, viewport, telemetry, lineHeightPx } = params
+
+  const safeTextLength = Math.max(1, text.length)
+  const cursorRatio = clamp(selectionEnd / safeTextLength, 0, 1)
+
+  if (telemetry) {
+    const maxScrollTopPx = Math.max(0, telemetry.scrollHeightPx - telemetry.clientHeightPx)
+    if (maxScrollTopPx > 0) {
+      return clamp(telemetry.scrollTopPx / maxScrollTopPx, 0, 1)
+    }
+  }
+
+  if (!viewport) {
+    return cursorRatio
+  }
+
+  const totalRows = Math.max(1, text.split('\n').length)
+  const safeLineHeight = Math.max(1, lineHeightPx)
+  const scrolledRows = Math.max(0, viewport.scrollTopPx / safeLineHeight)
+  const viewportRatio = clamp(scrolledRows / Math.max(1, totalRows - 1), 0, 1)
+
+  return viewportRatio
 }
 
 function formatCompactSettingNumber(value: number, step: number): string {
@@ -885,10 +929,25 @@ function App() {
   const [activeDividerDrag, setActiveDividerDrag] = useState<'sidebar' | 'tag-split' | null>(null)
   const pendingSaveTextRef = useRef<string | null>(null)
   const latestEditorTextRef = useRef('')
+  const latestEditorSelectionRef = useRef<EditorSelectionState>({
+    anchor: 0,
+    focus: 0,
+    start: 0,
+    end: 0,
+    isCollapsed: true,
+  })
   const saveTimerRef = useRef<number | null>(null)
   const appStateSaveTimerRef = useRef<number | null>(null)
   const noteTransitionLockRef = useRef(false)
   const pendingViewportRestoreRef = useRef<PersistedViewportState | null>(null)
+  const latestEditViewportRef = useRef<PersistedViewportState | null>(null)
+  const latestEditViewportTelemetryRef = useRef<EditViewportTelemetry | null>(null)
+  const editUiStateSaveTimerRef = useRef<number | null>(null)
+  const lastPersistedEditUiStateRef = useRef<{ noteId: string; progressEdit: number; cursorPos: number; scrollTop: number } | null>(null)
+  const pendingEditRestoreSnapshotRef = useRef<EditRestoreSnapshot | null>(null)
+  const pendingPreviewAnchorRatioRef = useRef<number | null>(null)
+  const previousPreviewModeRef = useRef(false)
+  const hasPreviewModeBaselineRef = useRef(false)
   const latestViewportRef = useRef<PersistedViewportState | null>(null)
   const isApplyingInitialViewportRef = useRef(false)
   const dividerDragStartXRef = useRef(0)
@@ -1256,6 +1315,113 @@ function App() {
     if (!activeNoteId) return null
     return notes.find((note) => note.id === activeNoteId) ?? null
   }, [activeNoteId, notes])
+
+  const persistEditUiState = useCallback((noteId: string, options?: { immediate?: boolean }) => {
+    const legacyDb = window.measlyLegacyDb
+    if (!legacyDb) return
+
+    const persistNow = () => {
+      const selection = latestEditorSelectionRef.current
+      const viewport = latestEditViewportRef.current ?? latestViewportRef.current
+      if (!viewport) return
+
+      const scrollTop = Math.max(0, Math.round(viewport.scrollTopPx))
+      const lineHeight = Math.max(1, editorRuntimeMetrics.lineHeightPx)
+      const progressEdit = scrollTop / lineHeight
+      const cursorPos = Math.max(0, selection.end)
+
+      const previousPersisted = lastPersistedEditUiStateRef.current
+      if (
+        previousPersisted &&
+        previousPersisted.noteId === noteId &&
+        previousPersisted.scrollTop === scrollTop &&
+        previousPersisted.cursorPos === cursorPos &&
+        Math.abs(previousPersisted.progressEdit - progressEdit) < 0.0001
+      ) {
+        return
+      }
+
+      lastPersistedEditUiStateRef.current = {
+        noteId,
+        progressEdit,
+        cursorPos,
+        scrollTop,
+      }
+
+      void legacyDb.saveNoteUiState(noteId, {
+        progressEdit,
+        cursorPos,
+        scrollTop,
+      })
+    }
+
+    if (options?.immediate) {
+      if (editUiStateSaveTimerRef.current !== null) {
+        window.clearTimeout(editUiStateSaveTimerRef.current)
+        editUiStateSaveTimerRef.current = null
+      }
+      persistNow()
+      return
+    }
+
+    if (editUiStateSaveTimerRef.current !== null) {
+      window.clearTimeout(editUiStateSaveTimerRef.current)
+    }
+
+    editUiStateSaveTimerRef.current = window.setTimeout(() => {
+      editUiStateSaveTimerRef.current = null
+      persistNow()
+    }, 280)
+  }, [editorRuntimeMetrics.lineHeightPx])
+
+  const applyEditRestoreSnapshot = useCallback((snapshot: EditRestoreSnapshot, options?: { restoreFullSelection?: boolean }) => {
+    const restoreFullSelection = options?.restoreFullSelection ?? true
+    let cancelled = false
+
+    const applyWhenReady = () => {
+      if (cancelled) return
+      const adapter = adapterRef.current
+      if (!adapter) {
+        requestAnimationFrame(applyWhenReady)
+        return
+      }
+
+      adapter.applySnapshot({
+        selection: snapshot.collapsedSelection,
+        viewport: {
+          topBoundaryPx: snapshot.viewport.topBoundaryPx,
+          bottomBoundaryPx: snapshot.viewport.bottomBoundaryPx,
+          scrollTopPx: snapshot.viewport.scrollTopPx,
+          lineHeightPx: editorRuntimeMetrics.lineHeightPx,
+          cellWidthPx: editorRuntimeMetrics.cellWidthPx,
+        },
+      })
+
+      latestViewportRef.current = {
+        topBoundaryPx: snapshot.viewport.topBoundaryPx,
+        bottomBoundaryPx: snapshot.viewport.bottomBoundaryPx,
+        scrollTopPx: snapshot.viewport.scrollTopPx,
+      }
+      latestEditViewportRef.current = latestViewportRef.current
+
+      if (!restoreFullSelection || snapshot.fullSelection.isCollapsed) {
+        return
+      }
+
+      requestAnimationFrame(() => {
+        if (cancelled) return
+        adapterRef.current?.applySnapshot({
+          selection: snapshot.fullSelection,
+        })
+      })
+    }
+
+    requestAnimationFrame(applyWhenReady)
+
+    return () => {
+      cancelled = true
+    }
+  }, [editorRuntimeMetrics.cellWidthPx, editorRuntimeMetrics.lineHeightPx])
 
   const orderedActiveTags = activeNoteSummary?.tags ?? []
   const activeNoteIsExternal = orderedActiveTags.some((tag) => isExternalTagName(tag))
@@ -1848,6 +2014,10 @@ function App() {
 
     return () => {
       disposed = true
+      if (editUiStateSaveTimerRef.current !== null) {
+        window.clearTimeout(editUiStateSaveTimerRef.current)
+        editUiStateSaveTimerRef.current = null
+      }
       if (saveTimerRef.current !== null) {
         window.clearTimeout(saveTimerRef.current)
         saveTimerRef.current = null
@@ -1885,6 +2055,12 @@ function App() {
         },
       })
 
+      latestEditViewportRef.current = {
+        topBoundaryPx: pending.topBoundaryPx,
+        bottomBoundaryPx: pending.bottomBoundaryPx,
+        scrollTopPx: pending.scrollTopPx,
+      }
+
       pendingViewportRestoreRef.current = null
       isApplyingInitialViewportRef.current = false
     }
@@ -1901,6 +2077,7 @@ function App() {
     onTextChange: (event: EditorTextChangeEvent) => {
       const normalizedText = normalizeInternalText(event.text)
       latestEditorTextRef.current = normalizedText
+      latestEditorSelectionRef.current = event.selection
       setEditorSelection(event.selection)
       setEditorTextVersion((previous) => previous + 1)
 
@@ -1918,28 +2095,182 @@ function App() {
       queueSave(normalizedText)
     },
     onSelectionChange: (event: EditorSelectionChangeEvent) => {
+      latestEditorSelectionRef.current = event.selection
       setEditorSelection(event.selection)
     },
     onViewportChange: (event: EditorViewportChangeEvent) => {
-      latestViewportRef.current = {
+      const nextViewport = {
         topBoundaryPx: Math.round(event.viewport.topBoundaryPx),
         bottomBoundaryPx: Math.round(event.viewport.bottomBoundaryPx),
         scrollTopPx: Math.round(event.viewport.scrollTopPx),
       }
+      const nextTelemetry = {
+        scrollTopPx: Math.round(event.viewport.scrollTopPx),
+        scrollHeightPx: Math.max(0, Math.round(event.viewport.scrollHeightPx ?? 0)),
+        clientHeightPx: Math.max(0, Math.round(event.viewport.clientHeightPx ?? 0)),
+      }
+      latestViewportRef.current = nextViewport
+      latestEditViewportRef.current = nextViewport
+      latestEditViewportTelemetryRef.current = nextTelemetry
+
       queueAppStateSave(activeNoteId)
     },
   }), [activeNoteId, persistenceReady, queueSave, queueAppStateSave, updateActiveNoteTitlePreview])
+
+  useEffect(() => {
+    latestEditorSelectionRef.current = editorSelection
+  }, [editorSelection])
+
+  useEffect(() => {
+    if (!hasPreviewModeBaselineRef.current) {
+      previousPreviewModeRef.current = isPreviewMode
+      if (persistenceReady) {
+        hasPreviewModeBaselineRef.current = true
+      }
+      return
+    }
+
+    const wasPreviewMode = previousPreviewModeRef.current
+    previousPreviewModeRef.current = isPreviewMode
+
+    if (!persistenceReady || !activeNoteId) return
+
+    const activeText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+
+    if (!wasPreviewMode && isPreviewMode) {
+      const selection = latestEditorSelectionRef.current
+      const viewport = latestEditViewportRef.current ?? latestViewportRef.current
+      if (viewport) {
+        const collapsedSelection: EditorSelectionState = {
+          anchor: selection.end,
+          focus: selection.end,
+          start: selection.end,
+          end: selection.end,
+          isCollapsed: true,
+        }
+
+        pendingEditRestoreSnapshotRef.current = {
+          noteId: activeNoteId,
+          collapsedSelection,
+          fullSelection: selection,
+          viewport,
+        }
+      }
+
+      const cursorPos = Math.max(0, Math.min(selection.end, Math.max(1, activeText.length)))
+      pendingPreviewAnchorRatioRef.current = resolvePreviewAnchorRatioFromEditState({
+        text: activeText,
+        selectionEnd: cursorPos,
+        viewport,
+        telemetry: latestEditViewportTelemetryRef.current,
+        lineHeightPx: editorRuntimeMetrics.lineHeightPx,
+      })
+      persistEditUiState(activeNoteId, { immediate: true })
+      return
+    }
+
+    if (!wasPreviewMode || isPreviewMode) {
+      return
+    }
+
+    const cachedSnapshot = pendingEditRestoreSnapshotRef.current
+    if (cachedSnapshot && cachedSnapshot.noteId === activeNoteId) {
+      pendingEditRestoreSnapshotRef.current = null
+      return applyEditRestoreSnapshot(cachedSnapshot, { restoreFullSelection: true })
+    }
+
+    let cancelled = false
+
+    const restoreFromPersistedEditState = async () => {
+      try {
+        const uiState = await window.measlyLegacyDb?.getNoteUiState(activeNoteId)
+        if (cancelled) return
+
+        const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
+        const storedScrollTop =
+          typeof uiState?.scrollTop === 'number' && Number.isFinite(uiState.scrollTop)
+            ? Math.max(0, Math.round(uiState.scrollTop))
+            : 0
+        const fallbackTopBoundary = fallbackViewport?.topBoundaryPx ?? 0
+        const fallbackBottomBoundary = fallbackViewport?.bottomBoundaryPx ?? (editorRuntimeMetrics.lineHeightPx * 6)
+
+        const selectionTextLength = Math.max(0, activeText.length)
+        const persistedCursor =
+          typeof uiState?.cursorPos === 'number' && Number.isFinite(uiState.cursorPos)
+            ? Math.max(0, Math.min(Math.round(uiState.cursorPos), selectionTextLength))
+            : 0
+
+        const collapsedSelection: EditorSelectionState = {
+          anchor: persistedCursor,
+          focus: persistedCursor,
+          start: persistedCursor,
+          end: persistedCursor,
+          isCollapsed: true,
+        }
+
+        const fallbackSnapshot: EditRestoreSnapshot = {
+          noteId: activeNoteId,
+          collapsedSelection,
+          fullSelection: collapsedSelection,
+          viewport: {
+            topBoundaryPx: fallbackTopBoundary,
+            bottomBoundaryPx: fallbackBottomBoundary,
+            scrollTopPx: storedScrollTop,
+          },
+        }
+
+        applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false })
+      } catch (error) {
+        console.warn('Failed to restore edit mode state from persisted UI data', error)
+      }
+    }
+
+    void restoreFromPersistedEditState()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    activeNoteText,
+    activeNoteId,
+    applyEditRestoreSnapshot,
+    editorRuntimeMetrics.lineHeightPx,
+    isPreviewMode,
+    persistEditUiState,
+    persistenceReady,
+  ])
 
   useEffect(() => {
     if (!window.measlyState || !activeNoteId) return
     queueAppStateSave(activeNoteId)
   }, [activeNoteId, menuState, queueAppStateSave])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isPreviewMode) return
     if (!activeNoteId) return
 
     let cancelled = false
+
+    const applyPreviewRatio = (ratio: number) => {
+      const container = previewScrollRef.current
+      if (!container) return
+      const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
+      container.scrollTop = Math.max(0, Math.min(maxScrollTop, ratio * maxScrollTop))
+    }
+
+    const pendingAnchorRatio = pendingPreviewAnchorRatioRef.current
+    if (typeof pendingAnchorRatio === 'number') {
+      pendingPreviewAnchorRatioRef.current = null
+      applyPreviewRatio(pendingAnchorRatio)
+      requestAnimationFrame(() => {
+        if (cancelled) return
+        applyPreviewRatio(pendingAnchorRatio)
+      })
+
+      return () => {
+        cancelled = true
+      }
+    }
 
     const restorePreviewScroll = async () => {
       try {
@@ -1956,10 +2287,7 @@ function App() {
 
         requestAnimationFrame(() => {
           if (cancelled) return
-          const container = previewScrollRef.current
-          if (!container) return
-          const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
-          container.scrollTop = Math.max(0, Math.min(maxScrollTop, ratio * maxScrollTop))
+          applyPreviewRatio(ratio)
         })
       } catch (error) {
         console.warn('Failed to restore preview scroll state', error)
@@ -1996,6 +2324,9 @@ function App() {
     container.addEventListener('scroll', persistPreviewScroll, { passive: true })
     return () => {
       container.removeEventListener('scroll', persistPreviewScroll)
+      const maxScrollTop = Math.max(1, container.scrollHeight - container.clientHeight)
+      const ratio = maxScrollTop <= 0 ? 0 : (container.scrollTop / maxScrollTop)
+      void window.measlyLegacyDb?.saveNoteUiState(activeNoteId, { progressPreview: ratio })
       if (previewScrollSaveTimerRef.current !== null) {
         window.clearTimeout(previewScrollSaveTimerRef.current)
         previewScrollSaveTimerRef.current = null
@@ -2225,7 +2556,11 @@ function App() {
   const isSidebarTreeMode = sidebarMode === 'category' || sidebarMode === 'archive'
   const isSidebarCustomScrollbarMode = isSidebarTreeMode || isFindMode
 
-  const syncPreviewCustomScrollbar = useCallback(() => {
+  const syncPreviewCustomScrollbar = useCallback((options?: { force?: boolean }) => {
+    if (isDraggingPreviewScrollThumb && !options?.force) {
+      return
+    }
+
     if (!isPreviewMode) {
       setPreviewScrollThumbHeightPx(0)
       setPreviewScrollThumbTopPx(0)
@@ -2269,7 +2604,7 @@ function App() {
     setPreviewScrollThumbHeightPx(nextThumbHeight)
     setPreviewScrollThumbTopPx(nextThumbTop)
     setIsPreviewScrollThumbActive(true)
-  }, [isPreviewMode])
+  }, [isDraggingPreviewScrollThumb, isPreviewMode])
 
   const previewScrollFromThumbTop = useCallback((thumbTopPx: number) => {
     const scroller = previewScrollRef.current
@@ -2282,6 +2617,7 @@ function App() {
     const minThumbTop = SCROLL_TRACK_EDGE_GAP_PX
     const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel
     const clampedTop = Math.max(minThumbTop, Math.min(thumbTopPx, maxThumbTop))
+    setPreviewScrollThumbTopPx(clampedTop)
     const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
     const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0
     scroller.scrollTop = ratio * maxScrollTop
@@ -2806,12 +3142,12 @@ function App() {
       if (!origin) return
       const deltaY = event.clientY - origin.pointerY
       previewScrollFromThumbTop(origin.thumbTopPx + deltaY)
-      syncPreviewCustomScrollbar()
     }
 
     const onMouseUp = () => {
       setIsDraggingPreviewScrollThumb(false)
       previewScrollbarDragOriginRef.current = null
+      requestAnimationFrame(() => syncPreviewCustomScrollbar({ force: true }))
     }
 
     window.addEventListener('mousemove', onMouseMove)
@@ -2821,6 +3157,17 @@ function App() {
       window.removeEventListener('mouseup', onMouseUp)
     }
   }, [isDraggingPreviewScrollThumb, previewScrollFromThumbTop, syncPreviewCustomScrollbar])
+
+  useEffect(() => {
+    const scroller = previewScrollRef.current
+    if (!scroller) return
+
+    scroller.style.scrollBehavior = isDraggingPreviewScrollThumb ? 'auto' : ''
+
+    return () => {
+      scroller.style.scrollBehavior = ''
+    }
+  }, [isDraggingPreviewScrollThumb])
 
   const handlePreviewTrackMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
     const track = previewScrollbarTrackRef.current
@@ -2848,6 +3195,10 @@ function App() {
   const handlePreviewThumbMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()
     event.stopPropagation()
+    const scroller = previewScrollRef.current
+    if (scroller) {
+      scroller.style.scrollBehavior = 'auto'
+    }
     setIsDraggingPreviewScrollThumb(true)
     previewScrollbarDragOriginRef.current = {
       pointerY: event.clientY,

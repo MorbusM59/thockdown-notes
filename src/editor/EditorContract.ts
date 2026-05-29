@@ -21,6 +21,8 @@ export interface EditorViewportState {
   scrollTopPx: number;
   lineHeightPx: number;
   cellWidthPx: number;
+  scrollHeightPx?: number;
+  clientHeightPx?: number;
 }
 
 export interface EditorTextChangeEvent {

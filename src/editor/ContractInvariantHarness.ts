@@ -56,6 +56,13 @@ export function validateViewportInvariants(viewport: EditorViewportState): strin
     issues.push(`Viewport scrollTopPx must be >= 0; got ${viewport.scrollTopPx}.`);
   }
 
+  if (typeof viewport.scrollHeightPx === 'number' && viewport.scrollHeightPx < 0) {
+    issues.push(`Viewport scrollHeightPx must be >= 0; got ${viewport.scrollHeightPx}.`);
+  }
+  if (typeof viewport.clientHeightPx === 'number' && viewport.clientHeightPx < 0) {
+    issues.push(`Viewport clientHeightPx must be >= 0; got ${viewport.clientHeightPx}.`);
+  }
+
   if (viewport.topBoundaryPx % line !== 0) {
     issues.push(`topBoundaryPx ${viewport.topBoundaryPx} is not quantized to lineHeightPx ${line}.`);
   }

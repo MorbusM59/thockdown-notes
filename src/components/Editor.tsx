@@ -5,6 +5,7 @@ import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
+import { cancelQuantizedEaseScroll, scrollToQuantizedEase } from '../editor/QuantizedEaseScroll';
 import { CagedScrollPlugin } from '../plugins/CagedScrollPlugin';
 import { SyntaxHighlightPlugin } from '../plugins/SyntaxHighlightPlugin';
 import { BlockCaretPlugin } from '../plugins/BlockCaretPlugin';
@@ -28,7 +29,6 @@ import {
   validateViewportInvariants,
 } from '../editor/ContractInvariantHarness';
 import { normalizeInternalText } from '../editor/TextPolicy';
-import { scrollToQuantizedEase } from '../editor/QuantizedEaseScroll';
 
 const theme = {
   paragraph: 'editor-paragraph',
@@ -52,6 +52,16 @@ interface EditorProps {
 const ENABLE_CONTRACT_ASSERTIONS = import.meta.env.DEV;
 const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28;
 const SCROLL_TRACK_EDGE_GAP_PX = 3;
+
+type ScrollbarGeometry = {
+  viewportHeight: number;
+  contentHeight: number;
+  trackHeight: number;
+  usableTrackHeight: number;
+  thumbHeightPx: number;
+  maxThumbTravelPx: number;
+  maxScrollTopPx: number;
+};
 
 const quantizeTopEdge = (valuePx: number, lineHeightPx: number) => Math.max(0, Math.round(valuePx / lineHeightPx) * lineHeightPx);
 
@@ -260,6 +270,12 @@ export function Editor({
   const [isDraggingScrollThumb, setIsDraggingScrollThumb] = useState(false);
   const scrollThumbDragOriginRef = useRef<{ pointerY: number; thumbTopPx: number } | null>(null);
   const scrollbarSyncRafRef = useRef<number | null>(null);
+  const lastPassiveScrollbarMetricsRef = useRef<{
+    scrollTopPx: number;
+    scrollHeightPx: number;
+    clientHeightPx: number;
+    trackHeightPx: number;
+  } | null>(null);
 
   const reportInvariantIssues = (context: string, issues: string[]) => {
     if (!ENABLE_CONTRACT_ASSERTIONS || issues.length === 0) return;
@@ -291,59 +307,106 @@ export function Editor({
     scrollTopPx: scrollerRef.current?.scrollTop ?? 0,
     lineHeightPx,
     cellWidthPx,
+    scrollHeightPx: scrollerRef.current?.scrollHeight ?? 0,
+    clientHeightPx: scrollerRef.current?.clientHeight ?? 0,
   }), [topBoundary, bottomBoundary, lineHeightPx, cellWidthPx]);
 
-  const syncCustomScrollbar = useCallback(() => {
+  const readScrollbarGeometry = useCallback((): ScrollbarGeometry | null => {
     const scroller = scrollerRef.current;
     const track = scrollbarTrackRef.current;
-    if (!scroller || !track) return;
+    if (!scroller || !track) return null;
 
     const viewportHeight = scroller.clientHeight;
     const contentHeight = scroller.scrollHeight;
     const trackHeight = track.clientHeight;
     const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2));
+    const maxScrollTopPx = Math.max(0, contentHeight - viewportHeight);
+
     if (viewportHeight <= 0 || contentHeight <= 0 || trackHeight <= 0) {
+      return {
+        viewportHeight,
+        contentHeight,
+        trackHeight,
+        usableTrackHeight,
+        thumbHeightPx: 0,
+        maxThumbTravelPx: 0,
+        maxScrollTopPx,
+      };
+    }
+
+    if (contentHeight <= viewportHeight) {
+      return {
+        viewportHeight,
+        contentHeight,
+        trackHeight,
+        usableTrackHeight,
+        thumbHeightPx: usableTrackHeight,
+        maxThumbTravelPx: 0,
+        maxScrollTopPx,
+      };
+    }
+
+    const visibleRatio = viewportHeight / contentHeight;
+    const thumbHeightPx = Math.max(
+      SCROLL_TRACK_MIN_THUMB_HEIGHT_PX,
+      Math.min(usableTrackHeight, Math.round(usableTrackHeight * visibleRatio)),
+    );
+    const maxThumbTravelPx = Math.max(0, usableTrackHeight - thumbHeightPx);
+
+    return {
+      viewportHeight,
+      contentHeight,
+      trackHeight,
+      usableTrackHeight,
+      thumbHeightPx,
+      maxThumbTravelPx,
+      maxScrollTopPx,
+    };
+  }, []);
+
+  const syncCustomScrollbar = useCallback((options?: { force?: boolean }) => {
+    if (isDraggingScrollThumb && !options?.force) {
+      return;
+    }
+
+    const scroller = scrollerRef.current;
+    const geometry = readScrollbarGeometry();
+    if (!scroller || !geometry) return;
+
+    if (geometry.viewportHeight <= 0 || geometry.contentHeight <= 0 || geometry.trackHeight <= 0) {
       setScrollThumbHeightPx(0);
       setScrollThumbTopPx(0);
       setIsScrollThumbActive(false);
       return;
     }
 
-    if (contentHeight <= viewportHeight) {
-      setScrollThumbHeightPx(usableTrackHeight);
+    if (geometry.contentHeight <= geometry.viewportHeight) {
+      setScrollThumbHeightPx(geometry.usableTrackHeight);
       setScrollThumbTopPx(SCROLL_TRACK_EDGE_GAP_PX);
       setIsScrollThumbActive(false);
       return;
     }
 
-    const visibleRatio = viewportHeight / contentHeight;
-    const nextThumbHeight = Math.max(
-      SCROLL_TRACK_MIN_THUMB_HEIGHT_PX,
-      Math.min(usableTrackHeight, Math.round(usableTrackHeight * visibleRatio)),
-    );
+    const scrollRatio = geometry.maxScrollTopPx > 0 ? scroller.scrollTop / geometry.maxScrollTopPx : 0;
+    const nextThumbTop = SCROLL_TRACK_EDGE_GAP_PX + Math.round(geometry.maxThumbTravelPx * scrollRatio);
 
-    const maxScrollTop = contentHeight - viewportHeight;
-    const maxThumbTop = Math.max(0, usableTrackHeight - nextThumbHeight);
-    const scrollRatio = maxScrollTop > 0 ? scroller.scrollTop / maxScrollTop : 0;
-    const nextThumbTop = SCROLL_TRACK_EDGE_GAP_PX + Math.round(maxThumbTop * scrollRatio);
-
-    setScrollThumbHeightPx(nextThumbHeight);
+    setScrollThumbHeightPx(geometry.thumbHeightPx);
     setScrollThumbTopPx(nextThumbTop);
     setIsScrollThumbActive(true);
-  }, []);
+  }, [isDraggingScrollThumb, readScrollbarGeometry]);
 
   const scrollFromThumbTop = useCallback((thumbTopPx: number) => {
     const scroller = scrollerRef.current;
-    const track = scrollbarTrackRef.current;
-    if (!scroller || !track) return;
+    const geometry = readScrollbarGeometry();
+    if (!scroller || !geometry) return;
 
-    const trackHeight = track.clientHeight;
-    const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2));
-    const maxThumbTravel = Math.max(0, usableTrackHeight - scrollThumbHeightPx);
+    const maxThumbTravel = geometry.maxThumbTravelPx;
     const minThumbTop = SCROLL_TRACK_EDGE_GAP_PX;
     const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel;
     const clampedTop = Math.max(minThumbTop, Math.min(thumbTopPx, maxThumbTop));
-    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    setScrollThumbTopPx(clampedTop);
+
+    const maxScrollTop = geometry.maxScrollTopPx;
     const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0;
     const targetScrollTop = ratio * maxScrollTop;
     const quantizedScrollTop = clampNumber(
@@ -352,7 +415,7 @@ export function Editor({
       maxScrollTop,
     );
     scroller.scrollTop = quantizedScrollTop;
-  }, [scrollThumbHeightPx, lineHeightPx]);
+  }, [lineHeightPx, readScrollbarGeometry]);
 
   useEffect(() => {
     bindings?.onLifecycle?.({ phase: 'mounted' });
@@ -367,6 +430,11 @@ export function Editor({
     reportInvariantIssues('viewport-change', validateViewportInvariants(viewport));
     bindings?.onViewportChange?.({ source: 'programmatic', viewport });
   }, [bindings, buildViewport]);
+
+  useLayoutEffect(() => {
+    syncCustomScrollbar();
+    requestAnimationFrame(() => syncCustomScrollbar());
+  }, [syncCustomScrollbar, scrollbarHost]);
 
   useEffect(() => {
     syncCustomScrollbar();
@@ -391,6 +459,11 @@ export function Editor({
     const resizeObserver = new ResizeObserver(() => scheduleSync());
     resizeObserver.observe(scroller);
 
+    const track = scrollbarTrackRef.current;
+    if (track) {
+      resizeObserver.observe(track);
+    }
+
     const editable = scroller.querySelector('.editor-text');
     if (editable instanceof HTMLElement) {
       resizeObserver.observe(editable);
@@ -411,7 +484,7 @@ export function Editor({
         scrollbarSyncRafRef.current = null;
       }
     };
-  }, [syncCustomScrollbar, initialText]);
+  }, [syncCustomScrollbar, initialText, scrollbarHost]);
 
   useEffect(() => {
     const scroller = scrollerRef.current;
@@ -427,6 +500,48 @@ export function Editor({
     scroller.addEventListener('scroll', onScroll, { passive: true });
     return () => scroller.removeEventListener('scroll', onScroll);
   }, [bindings, buildViewport, syncCustomScrollbar]);
+
+  useEffect(() => {
+    let rafId: number | null = null;
+
+    const runPassiveSync = () => {
+      const scroller = scrollerRef.current;
+      const track = scrollbarTrackRef.current;
+
+      if (scroller && track) {
+        const nextMetrics = {
+          scrollTopPx: Math.round(scroller.scrollTop),
+          scrollHeightPx: Math.round(scroller.scrollHeight),
+          clientHeightPx: Math.round(scroller.clientHeight),
+          trackHeightPx: Math.round(track.clientHeight),
+        };
+
+        const previousMetrics = lastPassiveScrollbarMetricsRef.current;
+        const changed =
+          !previousMetrics ||
+          previousMetrics.scrollTopPx !== nextMetrics.scrollTopPx ||
+          previousMetrics.scrollHeightPx !== nextMetrics.scrollHeightPx ||
+          previousMetrics.clientHeightPx !== nextMetrics.clientHeightPx ||
+          previousMetrics.trackHeightPx !== nextMetrics.trackHeightPx;
+
+        if (changed) {
+          lastPassiveScrollbarMetricsRef.current = nextMetrics;
+          syncCustomScrollbar();
+        }
+      }
+
+      rafId = requestAnimationFrame(runPassiveSync);
+    };
+
+    rafId = requestAnimationFrame(runPassiveSync);
+
+    return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      lastPassiveScrollbarMetricsRef.current = null;
+    };
+  }, [syncCustomScrollbar]);
 
   useEffect(() => {
     if (!adapterRef) return;
@@ -626,12 +741,12 @@ export function Editor({
       if (!origin) return;
       const deltaY = event.clientY - origin.pointerY;
       scrollFromThumbTop(origin.thumbTopPx + deltaY);
-      syncCustomScrollbar();
     };
 
     const handleMouseUp = () => {
       setIsDraggingScrollThumb(false);
       scrollThumbDragOriginRef.current = null;
+      requestAnimationFrame(() => syncCustomScrollbar({ force: true }));
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -649,25 +764,31 @@ export function Editor({
 
     const rect = track.getBoundingClientRect();
     const clickY = event.clientY - rect.top;
-    const targetThumbTop = clickY - (scrollThumbHeightPx / 2);
-    const trackHeight = track.clientHeight;
-    const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2));
-    const maxThumbTravel = Math.max(0, usableTrackHeight - scrollThumbHeightPx);
+    const geometry = readScrollbarGeometry();
+    if (!geometry) return;
+
+    const targetThumbTop = clickY - (geometry.thumbHeightPx / 2);
+    const maxThumbTravel = geometry.maxThumbTravelPx;
     const minThumbTop = SCROLL_TRACK_EDGE_GAP_PX;
     const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel;
     const clampedTop = Math.max(minThumbTop, Math.min(targetThumbTop, maxThumbTop));
-    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    const maxScrollTop = geometry.maxScrollTopPx;
     const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0;
     const targetScrollTop = ratio * maxScrollTop;
 
     scrollToQuantizedEase(scroller, targetScrollTop, {
       lineHeightPx,
+      onStep: syncCustomScrollbar,
     });
   };
 
   const handleThumbMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
+    const scroller = scrollerRef.current;
+    if (scroller) {
+      cancelQuantizedEaseScroll(scroller);
+    }
     setIsDraggingScrollThumb(true);
     scrollThumbDragOriginRef.current = {
       pointerY: event.clientY,
