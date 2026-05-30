@@ -35,6 +35,7 @@ import {
 } from './editor/FindReplaceEngine'
 import { normalizeInternalText } from './editor/TextPolicy'
 import {
+  cancelNonQuantizedSmoothScroll,
   getRenderScrollDynamic,
   getRenderScrollResponsiveness,
   getRenderScrollTotalTimeSec,
@@ -70,6 +71,7 @@ const DEFAULT_TAG_SPLIT_RATIO = 0.645
 const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28
 const SCROLL_TRACK_EDGE_GAP_PX = 3
 const NOTE_RIGHT_CLICK_HOLD_MS = 200
+const PREVIEW_CONTINUOUS_SCROLL_SPEED_FACTOR = 0.2
 
 type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find'
 type NoteArmedAction = 'archive' | 'deletion'
@@ -1109,6 +1111,10 @@ function App() {
   const previewScrollbarThumbRef = useRef<HTMLDivElement | null>(null)
   const previewScrollThumbTopRef = useRef(0)
   const previewScrollThumbHeightRef = useRef(0)
+  const previewContinuousScrollDirectionRef = useRef<-1 | 0 | 1>(0)
+  const previewContinuousScrollRafRef = useRef<number | null>(null)
+  const previewContinuousScrollLastTsRef = useRef<number | null>(null)
+  const previewContinuousPreviousScrollBehaviorRef = useRef<string | null>(null)
   const [isPreviewScrollThumbActive, setIsPreviewScrollThumbActive] = useState(false)
   const [isDraggingPreviewScrollThumb, setIsDraggingPreviewScrollThumb] = useState(false)
 
@@ -4084,6 +4090,154 @@ function App() {
       thumbTopPx: previewScrollThumbTopRef.current,
     }
   }, [])
+
+  const stopPreviewContinuousScroll = useCallback(() => {
+    previewContinuousScrollDirectionRef.current = 0
+    previewContinuousScrollLastTsRef.current = null
+    if (previewContinuousScrollRafRef.current !== null) {
+      cancelAnimationFrame(previewContinuousScrollRafRef.current)
+      previewContinuousScrollRafRef.current = null
+    }
+
+    const scroller = previewScrollRef.current
+    if (scroller && previewContinuousPreviousScrollBehaviorRef.current !== null) {
+      scroller.style.scrollBehavior = previewContinuousPreviousScrollBehaviorRef.current
+      previewContinuousPreviousScrollBehaviorRef.current = null
+    }
+  }, [])
+
+  const runPreviewContinuousScroll = useCallback((nowMs: number) => {
+    const direction = previewContinuousScrollDirectionRef.current
+    if (direction === 0) {
+      previewContinuousScrollRafRef.current = null
+      previewContinuousScrollLastTsRef.current = null
+      return
+    }
+
+    const scroller = previewScrollRef.current
+    if (!scroller || !isPreviewMode) {
+      previewContinuousScrollDirectionRef.current = 0
+      previewContinuousScrollRafRef.current = null
+      previewContinuousScrollLastTsRef.current = null
+      return
+    }
+
+    const previousTs = previewContinuousScrollLastTsRef.current
+    previewContinuousScrollLastTsRef.current = nowMs
+    if (previousTs !== null) {
+      const deltaSec = Math.max(0, (nowMs - previousTs) / 1000)
+      const speedPxPerSec = Math.max(
+        1,
+        getRenderScrollMaxSpeedPxPerSec() * PREVIEW_CONTINUOUS_SCROLL_SPEED_FACTOR,
+      )
+      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+      const nextScrollTop = clamp(
+        scroller.scrollTop + (direction * speedPxPerSec * deltaSec),
+        0,
+        maxScrollTop,
+      )
+
+      if (Math.abs(nextScrollTop - scroller.scrollTop) > 0.01) {
+        scroller.scrollTop = nextScrollTop
+        syncPreviewCustomScrollbar()
+      }
+
+      const hitBoundary = (direction < 0 && nextScrollTop <= 0.01)
+        || (direction > 0 && nextScrollTop >= maxScrollTop - 0.01)
+      if (hitBoundary) {
+        previewContinuousScrollDirectionRef.current = 0
+        previewContinuousScrollRafRef.current = null
+        previewContinuousScrollLastTsRef.current = null
+        return
+      }
+    }
+
+    previewContinuousScrollRafRef.current = requestAnimationFrame(runPreviewContinuousScroll)
+  }, [isPreviewMode, syncPreviewCustomScrollbar])
+
+  const startPreviewContinuousScroll = useCallback((direction: -1 | 1) => {
+    if (!isPreviewMode) return
+    const scroller = previewScrollRef.current
+    if (!scroller) return
+
+    cancelNonQuantizedSmoothScroll(scroller)
+
+    if (previewContinuousPreviousScrollBehaviorRef.current === null) {
+      previewContinuousPreviousScrollBehaviorRef.current = scroller.style.scrollBehavior
+    }
+    scroller.style.scrollBehavior = 'auto'
+
+    const previousDirection = previewContinuousScrollDirectionRef.current
+    previewContinuousScrollDirectionRef.current = direction
+
+    // Do not reset timing on every key-repeat event; that throttles effective
+    // speed. Only reset when direction changes or when starting from idle.
+    if (previewContinuousScrollRafRef.current === null || previousDirection !== direction) {
+      previewContinuousScrollLastTsRef.current = null
+    }
+
+    if (previewContinuousScrollRafRef.current === null) {
+      previewContinuousScrollRafRef.current = requestAnimationFrame(runPreviewContinuousScroll)
+    }
+  }, [isPreviewMode, runPreviewContinuousScroll])
+
+  useEffect(() => {
+    if (!isPreviewMode) {
+      stopPreviewContinuousScroll()
+      return
+    }
+
+    const isEditableTarget = (target: EventTarget | null): boolean => {
+      if (!(target instanceof HTMLElement)) return false
+      if (target.isContentEditable) return true
+      const tagName = target.tagName
+      return tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT'
+    }
+
+    const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.defaultPrevented) return
+      if (isEditableTarget(event.target)) return
+      if (event.key !== 'PageDown' && event.key !== 'PageUp') return
+
+      const scroller = previewScrollRef.current
+      if (!scroller) return
+
+      event.preventDefault()
+      const direction: -1 | 1 = event.key === 'PageDown' ? 1 : -1
+
+      if (event.repeat) {
+        startPreviewContinuousScroll(direction)
+        return
+      }
+
+      stopPreviewContinuousScroll()
+      const pageStepPx = Math.max(1, scroller.clientHeight * 0.9)
+      const targetScrollTop = scroller.scrollTop + (direction * pageStepPx)
+      scrollToNonQuantizedSmooth(scroller, targetScrollTop, {
+        onStep: () => syncPreviewCustomScrollbar(),
+      })
+    }
+
+    const onWindowKeyUp = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'PageDown' || event.key === 'PageUp') {
+        stopPreviewContinuousScroll()
+      }
+    }
+
+    const onWindowBlur = () => {
+      stopPreviewContinuousScroll()
+    }
+
+    window.addEventListener('keydown', onWindowKeyDown)
+    window.addEventListener('keyup', onWindowKeyUp)
+    window.addEventListener('blur', onWindowBlur)
+    return () => {
+      window.removeEventListener('keydown', onWindowKeyDown)
+      window.removeEventListener('keyup', onWindowKeyUp)
+      window.removeEventListener('blur', onWindowBlur)
+      stopPreviewContinuousScroll()
+    }
+  }, [isPreviewMode, startPreviewContinuousScroll, stopPreviewContinuousScroll, syncPreviewCustomScrollbar])
 
   useEffect(() => {
     if (!isSidebarCustomScrollbarMode || !sidebarTreeScrollerEl) return
