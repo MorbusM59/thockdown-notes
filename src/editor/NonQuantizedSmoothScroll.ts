@@ -20,6 +20,7 @@ import {
 } from './ScrollCurvePlan';
 
 export {
+  CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER,
   DEFAULT_RENDER_SCROLL_DYNAMIC,
   DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC,
   DEFAULT_RENDER_SCROLL_RESPONSIVENESS,
@@ -27,11 +28,13 @@ export {
   DEFAULT_RENDER_SCROLL_TOTAL_TIME_SEC,
   RENDER_SCROLL_SKEW_MAX,
   RENDER_SCROLL_SKEW_MIN,
+  resolveApexSpeedPxPerSecFromCurrentParams,
   getRenderScrollDynamic,
   getRenderScrollMaxSpeedPxPerSec,
   getRenderScrollResponsiveness,
   getRenderScrollSkew,
   getRenderScrollTotalTimeSec,
+  resolveRampCrossingTimeSecFromCurrentParams,
   setRenderScrollDynamic,
   setRenderScrollMaxSpeedPxPerSec,
   setRenderScrollResponsiveness,

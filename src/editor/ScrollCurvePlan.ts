@@ -25,6 +25,7 @@ export const DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC = 6000;
 export const DEFAULT_RENDER_SCROLL_SKEW = 0.5;
 export const RENDER_SCROLL_SKEW_MIN = 0.1;
 export const RENDER_SCROLL_SKEW_MAX = 0.9;
+export const CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER = 1.5;
 
 // Fixed internal CDF resolution. Coarse enough to stay cheap, fine enough that
 // piecewise-linear sampling never produces visible velocity steps at 60+ fps.
@@ -304,4 +305,67 @@ export const buildScrollPlanFromCurrentParams = (signedDistance: number): Scroll
   );
   const curve = buildCurvePlan(a, b, tSec, skew);
   return buildScrollPlan(curve, tSec, signedDistance, maxSpeedPxPerSec);
+};
+
+// Returns elapsed seconds from animation start to the first point where the
+// bell ramp reaches targetSpeedPxPerSec, using current params. If the target
+// speed is never reached for this distance/curve, falls back to the bell apex
+// timing (tSec * skew), i.e. handoff at max natural speed.
+export const resolveRampCrossingTimeSecFromCurrentParams = (
+  signedDistance: number,
+  targetSpeedPxPerSec: number,
+): number | null => {
+  const absDistance = Math.abs(signedDistance);
+  if (absDistance <= 0.0001) return null;
+
+  const a = Math.max(0.0001, renderScrollDynamic);
+  const b = Math.max(0.0001, renderScrollResponsiveness);
+  const tSec = Math.max(0.0001, renderScrollTotalTimeSec);
+  const skew = Math.max(
+    RENDER_SCROLL_SKEW_MIN,
+    Math.min(RENDER_SCROLL_SKEW_MAX, renderScrollSkew),
+  );
+  const apexTimeSec = tSec * skew;
+  const curve = buildCurvePlan(a, b, tSec, skew);
+
+  const effectiveTargetSpeed = Math.max(0, targetSpeedPxPerSec);
+  if (effectiveTargetSpeed <= 0) return 0;
+
+  const naturalPeakSpeed = (absDistance * curve.peakSlope) / tSec;
+  if (naturalPeakSpeed < effectiveTargetSpeed) {
+    return apexTimeSec;
+  }
+
+  const thresholdSlope = (effectiveTargetSpeed * tSec) / absDistance;
+  let iLow = -1;
+  for (let i = 0; i < curve.slopes.length; i += 1) {
+    if (curve.slopes[i] >= thresholdSlope) {
+      iLow = i;
+      break;
+    }
+  }
+
+  if (iLow < 0) return apexTimeSec;
+
+  const lastIndex = curve.cdf.length - 1;
+  const x = iLow / Math.max(1, lastIndex);
+  return x * tSec;
+};
+
+// Returns the natural (unclamped) bell apex speed for this distance using
+// current curve parameters.
+export const resolveApexSpeedPxPerSecFromCurrentParams = (signedDistance: number): number => {
+  const absDistance = Math.abs(signedDistance);
+  if (absDistance <= 0.0001) return 0;
+
+  const a = Math.max(0.0001, renderScrollDynamic);
+  const b = Math.max(0.0001, renderScrollResponsiveness);
+  const tSec = Math.max(0.0001, renderScrollTotalTimeSec);
+  const skew = Math.max(
+    RENDER_SCROLL_SKEW_MIN,
+    Math.min(RENDER_SCROLL_SKEW_MAX, renderScrollSkew),
+  );
+
+  const curve = buildCurvePlan(a, b, tSec, skew);
+  return (absDistance * curve.peakSlope) / tSec;
 };

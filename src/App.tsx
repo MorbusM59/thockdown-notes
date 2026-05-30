@@ -36,11 +36,14 @@ import {
 import { normalizeInternalText } from './editor/TextPolicy'
 import {
   cancelNonQuantizedSmoothScroll,
+  CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER,
+  resolveApexSpeedPxPerSecFromCurrentParams,
   getRenderScrollDynamic,
   getRenderScrollResponsiveness,
   getRenderScrollTotalTimeSec,
   getRenderScrollMaxSpeedPxPerSec,
   getRenderScrollSkew,
+  resolveRampCrossingTimeSecFromCurrentParams,
   RENDER_SCROLL_SKEW_MIN,
   RENDER_SCROLL_SKEW_MAX,
   setRenderScrollDynamic as applyRenderScrollDynamic,
@@ -71,7 +74,7 @@ const DEFAULT_TAG_SPLIT_RATIO = 0.645
 const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28
 const SCROLL_TRACK_EDGE_GAP_PX = 3
 const NOTE_RIGHT_CLICK_HOLD_MS = 200
-const PREVIEW_CONTINUOUS_SCROLL_SPEED_FACTOR = 0.2
+const PREVIEW_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER
 
 type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find'
 type NoteArmedAction = 'archive' | 'deletion'
@@ -1115,6 +1118,8 @@ function App() {
   const previewContinuousScrollRafRef = useRef<number | null>(null)
   const previewContinuousScrollLastTsRef = useRef<number | null>(null)
   const previewContinuousPreviousScrollBehaviorRef = useRef<string | null>(null)
+  const previewPageKeysHeldRef = useRef(new Set<string>())
+  const previewContinuousHandoffTimeoutRef = useRef<number | null>(null)
   const [isPreviewScrollThumbActive, setIsPreviewScrollThumbActive] = useState(false)
   const [isDraggingPreviewScrollThumb, setIsDraggingPreviewScrollThumb] = useState(false)
 
@@ -4106,6 +4111,13 @@ function App() {
     }
   }, [])
 
+  const clearPreviewContinuousHandoff = useCallback(() => {
+    if (previewContinuousHandoffTimeoutRef.current !== null) {
+      window.clearTimeout(previewContinuousHandoffTimeoutRef.current)
+      previewContinuousHandoffTimeoutRef.current = null
+    }
+  }, [])
+
   const runPreviewContinuousScroll = useCallback((nowMs: number) => {
     const direction = previewContinuousScrollDirectionRef.current
     if (direction === 0) {
@@ -4128,7 +4140,8 @@ function App() {
       const deltaSec = Math.max(0, (nowMs - previousTs) / 1000)
       const speedPxPerSec = Math.max(
         1,
-        getRenderScrollMaxSpeedPxPerSec() * PREVIEW_CONTINUOUS_SCROLL_SPEED_FACTOR,
+        resolveApexSpeedPxPerSecFromCurrentParams(scroller.clientHeight * 0.9)
+          * PREVIEW_CONTINUOUS_SCROLL_APEX_MULTIPLIER,
       )
       const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
       const nextScrollTop = clamp(
@@ -4183,6 +4196,8 @@ function App() {
 
   useEffect(() => {
     if (!isPreviewMode) {
+      previewPageKeysHeldRef.current.clear()
+      clearPreviewContinuousHandoff()
       stopPreviewContinuousScroll()
       return
     }
@@ -4204,27 +4219,56 @@ function App() {
 
       event.preventDefault()
       const direction: -1 | 1 = event.key === 'PageDown' ? 1 : -1
+      previewPageKeysHeldRef.current.add(event.key)
 
       if (event.repeat) {
-        startPreviewContinuousScroll(direction)
+        if (previewContinuousHandoffTimeoutRef.current === null) {
+          startPreviewContinuousScroll(direction)
+        }
         return
       }
 
+      clearPreviewContinuousHandoff()
       stopPreviewContinuousScroll()
       const pageStepPx = Math.max(1, scroller.clientHeight * 0.9)
+      const startScrollTop = scroller.scrollTop
       const targetScrollTop = scroller.scrollTop + (direction * pageStepPx)
       scrollToNonQuantizedSmooth(scroller, targetScrollTop, {
         onStep: () => syncPreviewCustomScrollbar(),
       })
+
+      const targetContinuousSpeedPxPerSec = Math.max(
+        1,
+        resolveApexSpeedPxPerSecFromCurrentParams(targetScrollTop - startScrollTop)
+          * PREVIEW_CONTINUOUS_SCROLL_APEX_MULTIPLIER,
+      )
+      const crossingTimeSec = resolveRampCrossingTimeSecFromCurrentParams(
+        targetScrollTop - startScrollTop,
+        targetContinuousSpeedPxPerSec,
+      )
+
+      if (crossingTimeSec !== null) {
+        const delayMs = Math.max(0, Math.round(crossingTimeSec * 1000))
+        previewContinuousHandoffTimeoutRef.current = window.setTimeout(() => {
+          previewContinuousHandoffTimeoutRef.current = null
+          if (!isPreviewMode) return
+          if (!previewPageKeysHeldRef.current.has(event.key)) return
+          startPreviewContinuousScroll(direction)
+        }, delayMs)
+      }
     }
 
     const onWindowKeyUp = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'PageDown' || event.key === 'PageUp') {
+        previewPageKeysHeldRef.current.delete(event.key)
+        clearPreviewContinuousHandoff()
         stopPreviewContinuousScroll()
       }
     }
 
     const onWindowBlur = () => {
+      previewPageKeysHeldRef.current.clear()
+      clearPreviewContinuousHandoff()
       stopPreviewContinuousScroll()
     }
 
@@ -4235,9 +4279,17 @@ function App() {
       window.removeEventListener('keydown', onWindowKeyDown)
       window.removeEventListener('keyup', onWindowKeyUp)
       window.removeEventListener('blur', onWindowBlur)
+      previewPageKeysHeldRef.current.clear()
+      clearPreviewContinuousHandoff()
       stopPreviewContinuousScroll()
     }
-  }, [isPreviewMode, startPreviewContinuousScroll, stopPreviewContinuousScroll, syncPreviewCustomScrollbar])
+  }, [
+    clearPreviewContinuousHandoff,
+    isPreviewMode,
+    startPreviewContinuousScroll,
+    stopPreviewContinuousScroll,
+    syncPreviewCustomScrollbar,
+  ])
 
   useEffect(() => {
     if (!isSidebarCustomScrollbarMode || !sidebarTreeScrollerEl) return
