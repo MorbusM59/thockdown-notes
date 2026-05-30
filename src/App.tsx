@@ -4822,8 +4822,12 @@ function App() {
           </div>
         </div>
 
-        {isScrollSettingsOpen ? (
-          <div className="toolbar-flyout-panel" aria-label="Toolbar flyout panel">
+        <div
+          className={`toolbar-flyout-panel${isScrollSettingsOpen ? ' is-open' : ''}`}
+          aria-label="Toolbar flyout panel"
+          aria-hidden={!isScrollSettingsOpen}
+        >
+          <div className="toolbar-flyout-panel-inner">
             <div
               className={`toolbar-flyout-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`}
               aria-label="Settings panel"
@@ -4908,7 +4912,7 @@ function App() {
               </section>
             </div>
           </div>
-        ) : null}
+        </div>
       </section>
 
       <div className="editor-viewer-frame" style={{ gridArea: 'viewer' }}>
