@@ -4237,7 +4237,6 @@ function App() {
     const ITEM_HEIGHT = 56
     const ITEM_GAP = 8
     const ITEM_TOTAL = ITEM_HEIGHT + ITEM_GAP
-    const PAGINATION_HEIGHT = 40
 
     const compute = () => {
       const container = sidebarContentRef.current
@@ -4246,12 +4245,6 @@ function App() {
       const contentHeight = container.clientHeight
       let nextItemsPerPage = Math.floor(contentHeight / ITEM_TOTAL)
       if (nextItemsPerPage < 1) nextItemsPerPage = 1
-
-      if (totalPagedNotes > nextItemsPerPage) {
-        while (nextItemsPerPage > 1 && (nextItemsPerPage * ITEM_TOTAL + PAGINATION_HEIGHT) > contentHeight) {
-          nextItemsPerPage -= 1
-        }
-      }
 
       if (nextItemsPerPage !== itemsPerPage) {
         setItemsPerPage(nextItemsPerPage)

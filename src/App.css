@@ -453,7 +453,7 @@ body.splitter-dragging {
   display: flex;
   width: 100%;
   gap: 3px;
-  margin-bottom: 6px;
+  margin-bottom: 3px;
 }
 
 .date-filter-line:last-child {
@@ -475,7 +475,7 @@ body.splitter-dragging {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 4px 0 3px;
+  padding: 0;
   margin: 0;
   background: transparent;
   border: none;
