@@ -674,19 +674,27 @@ export class DatabaseService {
     scrollTop?: number | null;
   }): void {
     const db = this.requireDb();
+    const hasProgressPreview = Object.prototype.hasOwnProperty.call(payload, 'progressPreview');
+    const hasProgressEdit = Object.prototype.hasOwnProperty.call(payload, 'progressEdit');
+    const hasCursorPos = Object.prototype.hasOwnProperty.call(payload, 'cursorPos');
+    const hasScrollTop = Object.prototype.hasOwnProperty.call(payload, 'scrollTop');
 
     db.prepare(`
       UPDATE notes
       SET
-        progressPreview = ?,
-        progressEdit = ?,
-        cursorPos = ?,
-        scrollTop = ?
+        progressPreview = CASE WHEN ? THEN ? ELSE progressPreview END,
+        progressEdit = CASE WHEN ? THEN ? ELSE progressEdit END,
+        cursorPos = CASE WHEN ? THEN ? ELSE cursorPos END,
+        scrollTop = CASE WHEN ? THEN ? ELSE scrollTop END
       WHERE id = ?
     `).run(
+      hasProgressPreview ? 1 : 0,
       payload.progressPreview ?? null,
+      hasProgressEdit ? 1 : 0,
       payload.progressEdit ?? null,
+      hasCursorPos ? 1 : 0,
       payload.cursorPos ?? null,
+      hasScrollTop ? 1 : 0,
       payload.scrollTop ?? null,
       noteId,
     );

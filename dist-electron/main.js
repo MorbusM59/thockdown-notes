@@ -343,7 +343,14 @@ const DEFAULT_APP_STATE = {
     scrollEaseMultiplier: 1.5,
     scrollDistanceTimeInfluence: 0.1,
     scrollBaseDistanceRows: 20,
-    scrollMaxDurationMultiplier: 4
+    scrollMaxDurationMultiplier: 4,
+    sidebarViewState: {
+      date: { page: 1, scrollTop: 0 },
+      category: { scrollTop: 0, collapsedPrimary: [], collapsedSecondary: [] },
+      archive: { scrollTop: 0, collapsedPrimary: [], collapsedSecondary: [] },
+      trash: { page: 1, scrollTop: 0 },
+      find: { scrollTop: 0 }
+    }
   }
 };
 const DEFAULT_WINDOW_STATE = {
@@ -404,6 +411,31 @@ function sanitizePositive(input, fallback) {
   }
   return input;
 }
+function sanitizeCollapsedList(input) {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+  return Array.from(
+    new Set(input.filter((value) => typeof value === "string" && value.trim().length > 0))
+  );
+}
+function sanitizeSidebarViewStateEntry(input) {
+  return {
+    scrollTop: typeof (input == null ? void 0 : input.scrollTop) === "number" && Number.isFinite(input.scrollTop) ? Math.max(0, Math.round(input.scrollTop)) : 0,
+    page: typeof (input == null ? void 0 : input.page) === "number" && Number.isFinite(input.page) ? Math.max(1, Math.round(input.page)) : 1,
+    collapsedPrimary: sanitizeCollapsedList(input == null ? void 0 : input.collapsedPrimary),
+    collapsedSecondary: sanitizeCollapsedList(input == null ? void 0 : input.collapsedSecondary)
+  };
+}
+function sanitizeSidebarViewState(input) {
+  return {
+    date: sanitizeSidebarViewStateEntry(input == null ? void 0 : input.date),
+    category: sanitizeSidebarViewStateEntry(input == null ? void 0 : input.category),
+    archive: sanitizeSidebarViewStateEntry(input == null ? void 0 : input.archive),
+    trash: sanitizeSidebarViewStateEntry(input == null ? void 0 : input.trash),
+    find: sanitizeSidebarViewStateEntry(input == null ? void 0 : input.find)
+  };
+}
 function sanitizeMenu(input) {
   const selectedMonths = Array.isArray(input == null ? void 0 : input.selectedMonths) ? input.selectedMonths.filter((value) => Number.isInteger(value) && value >= 1 && value <= 12) : [];
   const selectedYears = Array.isArray(input == null ? void 0 : input.selectedYears) ? input.selectedYears.filter((value) => value === "older" || Number.isInteger(value)) : [];
@@ -425,7 +457,8 @@ function sanitizeMenu(input) {
     scrollEaseMultiplier: sanitizePositive(input == null ? void 0 : input.scrollEaseMultiplier, DEFAULT_APP_STATE.menu.scrollEaseMultiplier ?? 1),
     scrollDistanceTimeInfluence: sanitizeRatio(input == null ? void 0 : input.scrollDistanceTimeInfluence, DEFAULT_APP_STATE.menu.scrollDistanceTimeInfluence ?? 0),
     scrollBaseDistanceRows: sanitizePositive(input == null ? void 0 : input.scrollBaseDistanceRows, DEFAULT_APP_STATE.menu.scrollBaseDistanceRows ?? 1),
-    scrollMaxDurationMultiplier: sanitizePositive(input == null ? void 0 : input.scrollMaxDurationMultiplier, DEFAULT_APP_STATE.menu.scrollMaxDurationMultiplier ?? 1)
+    scrollMaxDurationMultiplier: sanitizePositive(input == null ? void 0 : input.scrollMaxDurationMultiplier, DEFAULT_APP_STATE.menu.scrollMaxDurationMultiplier ?? 1),
+    sidebarViewState: sanitizeSidebarViewState(input == null ? void 0 : input.sidebarViewState)
   };
 }
 async function fileExists(filePath) {
@@ -1007,18 +1040,26 @@ class DatabaseService {
   }
   saveNoteUiState(noteId, payload) {
     const db = this.requireDb();
+    const hasProgressPreview = Object.prototype.hasOwnProperty.call(payload, "progressPreview");
+    const hasProgressEdit = Object.prototype.hasOwnProperty.call(payload, "progressEdit");
+    const hasCursorPos = Object.prototype.hasOwnProperty.call(payload, "cursorPos");
+    const hasScrollTop = Object.prototype.hasOwnProperty.call(payload, "scrollTop");
     db.prepare(`
       UPDATE notes
       SET
-        progressPreview = ?,
-        progressEdit = ?,
-        cursorPos = ?,
-        scrollTop = ?
+        progressPreview = CASE WHEN ? THEN ? ELSE progressPreview END,
+        progressEdit = CASE WHEN ? THEN ? ELSE progressEdit END,
+        cursorPos = CASE WHEN ? THEN ? ELSE cursorPos END,
+        scrollTop = CASE WHEN ? THEN ? ELSE scrollTop END
       WHERE id = ?
     `).run(
+      hasProgressPreview ? 1 : 0,
       payload.progressPreview ?? null,
+      hasProgressEdit ? 1 : 0,
       payload.progressEdit ?? null,
+      hasCursorPos ? 1 : 0,
       payload.cursorPos ?? null,
+      hasScrollTop ? 1 : 0,
       payload.scrollTop ?? null,
       noteId
     );

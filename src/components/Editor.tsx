@@ -568,6 +568,7 @@ export function Editor({
       },
       applySnapshot(snapshot: Partial<EditorSnapshot>) {
         const nextViewport = snapshot.viewport;
+        const hasViewportSnapshot = Boolean(nextViewport);
         let appliedViewport = false;
 
         if (ENABLE_CONTRACT_ASSERTIONS) {
@@ -610,7 +611,7 @@ export function Editor({
             applyDomSelectionFromOffsets(rootEl, canonicalText, anchor, focus);
 
             const scroller = scrollerRef.current;
-            if (scroller) {
+            if (scroller && !hasViewportSnapshot) {
               // Reconcile after selection is in DOM so focus stays inside the middle cage.
               const shouldAnimateSelectionJump = !snapshot.selection.isCollapsed;
               centerSelectionInCagedMiddle(scroller, topBoundary, bottomBoundary, lineHeightPx, {

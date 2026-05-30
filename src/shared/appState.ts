@@ -7,6 +7,13 @@ export const APP_STATE_CHANNELS = {
 
 export type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find';
 
+export interface PersistedSidebarViewState {
+  scrollTop?: number;
+  page?: number;
+  collapsedPrimary?: string[];
+  collapsedSecondary?: string[];
+}
+
 export interface PersistedMenuState {
   sidebarMode: SidebarMode;
   selectedMonths: number[];
@@ -26,6 +33,7 @@ export interface PersistedMenuState {
   scrollDistanceTimeInfluence?: number;
   scrollBaseDistanceRows?: number;
   scrollMaxDurationMultiplier?: number;
+  sidebarViewState?: Partial<Record<SidebarMode, PersistedSidebarViewState>>;
 }
 
 export interface PersistedViewportState {

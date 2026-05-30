@@ -12,7 +12,7 @@ import type {
   EditorTextChangeEvent,
   EditorViewportChangeEvent,
 } from './editor/EditorContract'
-import type { PersistedMenuState, PersistedViewportState } from './shared/appState'
+import type { PersistedMenuState, PersistedSidebarViewState, PersistedViewportState } from './shared/appState'
 import type { NoteSummary } from './shared/noteLifecycle'
 import {
   DEFAULT_EDITOR_FONT_SIZE,
@@ -74,6 +74,15 @@ type ViewStyleKey = 'modern' | 'narrow' | 'cute' | 'print'
 type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
 type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
 
+type SidebarViewState = {
+  scrollTop: number
+  page: number
+  collapsedPrimary: string[]
+  collapsedSecondary: string[]
+}
+
+type SidebarViewStateByMode = Record<SidebarMode, SidebarViewState>
+
 type EditRestoreSnapshot = {
   noteId: string
   collapsedSelection: EditorSelectionState
@@ -85,6 +94,11 @@ type EditViewportTelemetry = {
   scrollTopPx: number
   scrollHeightPx: number
   clientHeightPx: number
+}
+
+type DebugEditUiData = {
+  scrollTop: number | null
+  cursorPos: number | null
 }
 
 const TEXT_DECORATION_MARKERS: Record<TextDecorationFormat, { open: string; close: string }> = {
@@ -100,6 +114,44 @@ const SIDEBAR_MODES: Array<{ mode: SidebarMode; label: string }> = [
   { mode: 'trash', label: 'Trash' },
   { mode: 'find', label: 'Find' },
 ]
+
+function sanitizeCollapsedList(input: unknown): string[] {
+  if (!Array.isArray(input)) return []
+  return Array.from(new Set(input.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)))
+}
+
+function areStringArraysEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return false
+  }
+  return true
+}
+
+function sanitizeSidebarViewState(value: PersistedSidebarViewState | undefined): SidebarViewState {
+  return {
+    scrollTop:
+      typeof value?.scrollTop === 'number' && Number.isFinite(value.scrollTop)
+        ? Math.max(0, Math.round(value.scrollTop))
+        : 0,
+    page:
+      typeof value?.page === 'number' && Number.isFinite(value.page)
+        ? Math.max(1, Math.round(value.page))
+        : 1,
+    collapsedPrimary: sanitizeCollapsedList(value?.collapsedPrimary),
+    collapsedSecondary: sanitizeCollapsedList(value?.collapsedSecondary),
+  }
+}
+
+function createDefaultSidebarViewStateByMode(): SidebarViewStateByMode {
+  return {
+    date: sanitizeSidebarViewState(undefined),
+    category: sanitizeSidebarViewState(undefined),
+    archive: sanitizeSidebarViewState(undefined),
+    trash: sanitizeSidebarViewState(undefined),
+    find: sanitizeSidebarViewState(undefined),
+  }
+}
 
 type TertiaryGroup = {
   name: string
@@ -601,6 +653,7 @@ const NoteListItem = memo(function NoteListItem({
   return (
     <div
       className={`note-list-item${isActive ? ' is-active' : ''}${isTreeVariant ? ' is-tree-card' : ''}${armedAction === 'archive' ? ' is-armed-for-archiving' : ''}${armedAction === 'deletion' ? ' is-armed-for-deletion' : ''}`}
+      data-note-id={note.id}
       role="option"
       aria-selected={isActive}
       onClick={handleSelect}
@@ -626,8 +679,11 @@ const NoteListItem = memo(function NoteListItem({
 
 type CategoryTreeViewProps = {
   groups: PrimaryGroup[]
-  treeMode: 'category' | 'archive'
   activeNoteId: string | null
+  persistedCollapsedPrimary: string[]
+  persistedCollapsedSecondary: string[]
+  focusNoteRequestKey: number
+  onCollapseChange: (next: { collapsedPrimary: string[]; collapsedSecondary: string[] }) => void
   onSelect: (noteId: string) => void
   onArmedLeftClick: (noteId: string) => void
   armedNoteActionById: Map<string, NoteArmedAction>
@@ -638,8 +694,11 @@ type CategoryTreeViewProps = {
 
 const CategoryTreeView = memo(function CategoryTreeView({
   groups,
-  treeMode,
   activeNoteId,
+  persistedCollapsedPrimary,
+  persistedCollapsedSecondary,
+  focusNoteRequestKey,
+  onCollapseChange,
   onSelect,
   onArmedLeftClick,
   armedNoteActionById,
@@ -647,37 +706,13 @@ const CategoryTreeView = memo(function CategoryTreeView({
   onNoteRightPressEnd,
   onNoteArmHoverLeave,
 }: CategoryTreeViewProps) {
-  const [collapsedPrimary, setCollapsedPrimary] = useState<Set<string>>(new Set())
-  const [collapsedSecondary, setCollapsedSecondary] = useState<Set<string>>(new Set())
-  const previousTreeModeRef = useRef<'category' | 'archive'>(treeMode)
-  const [pendingCategoryAutoFocus, setPendingCategoryAutoFocus] = useState(treeMode === 'category')
+  const collapsedPrimary = useMemo(() => new Set(persistedCollapsedPrimary), [persistedCollapsedPrimary])
+  const collapsedSecondary = useMemo(() => new Set(persistedCollapsedSecondary), [persistedCollapsedSecondary])
+  const lastHandledFocusRequestKeyRef = useRef(focusNoteRequestKey)
 
-  useEffect(() => {
-    setCollapsedPrimary(new Set())
-    setCollapsedSecondary(new Set())
-  }, [treeMode])
-
-  useEffect(() => {
-    const previousTreeMode = previousTreeModeRef.current
-    previousTreeModeRef.current = treeMode
-    if (treeMode === 'category' && previousTreeMode !== 'category') {
-      setPendingCategoryAutoFocus(true)
-    }
-  }, [treeMode])
-
-  useEffect(() => {
-    const validPrimary = new Set(groups.map((group) => group.name))
-    const validSecondaryKeys = new Set(
-      groups.flatMap((group) => group.secondary.map((secondary) => `${group.name}:${secondary.name}`)),
-    )
-
-    setCollapsedPrimary((previous) => new Set([...previous].filter((primaryName) => validPrimary.has(primaryName))))
-    setCollapsedSecondary((previous) => new Set([...previous].filter((secondaryKey) => validSecondaryKeys.has(secondaryKey))))
-  }, [groups])
-
-  useEffect(() => {
-    if (!pendingCategoryAutoFocus || treeMode !== 'category' || !activeNoteId || groups.length === 0) {
-      return
+  const unfoldPathForActiveNote = useCallback(() => {
+    if (!activeNoteId || groups.length === 0) {
+      return false
     }
 
     let targetPrimaryName: string | null = null
@@ -704,8 +739,7 @@ const CategoryTreeView = memo(function CategoryTreeView({
     }
 
     if (!targetPrimaryName || !targetSecondaryName) {
-      setPendingCategoryAutoFocus(false)
-      return
+      return false
     }
 
     const nextCollapsedPrimary = new Set(
@@ -725,70 +759,167 @@ const CategoryTreeView = memo(function CategoryTreeView({
       }
     }
 
-    setCollapsedPrimary(nextCollapsedPrimary)
-    setCollapsedSecondary(nextCollapsedSecondary)
-    setPendingCategoryAutoFocus(false)
-  }, [activeNoteId, groups, pendingCategoryAutoFocus, treeMode])
+    const nextCollapsedPrimaryList = [...nextCollapsedPrimary]
+    const nextCollapsedSecondaryList = [...nextCollapsedSecondary]
+
+    if (
+      areStringArraysEqual(nextCollapsedPrimaryList, persistedCollapsedPrimary)
+      && areStringArraysEqual(nextCollapsedSecondaryList, persistedCollapsedSecondary)
+    ) {
+      return false
+    }
+
+    onCollapseChange({
+      collapsedPrimary: nextCollapsedPrimaryList,
+      collapsedSecondary: nextCollapsedSecondaryList,
+    })
+    return true
+  }, [activeNoteId, groups, onCollapseChange, persistedCollapsedPrimary, persistedCollapsedSecondary])
+
+  const ensureActiveNoteVisible = useCallback(() => {
+    if (!activeNoteId) {
+      return
+    }
+
+    const selector = `.note-list-item.is-tree-card[data-note-id="${escapeAttributeSelectorValue(activeNoteId)}"]`
+    const activeNoteElement = document.querySelector<HTMLElement>(selector)
+    if (!activeNoteElement) {
+      return
+    }
+
+    const scrollContainer =
+      activeNoteElement.closest<HTMLElement>('.notes-list.tree-view')
+      ?? activeNoteElement.closest<HTMLElement>('.sidebar-content')
+
+    if (!scrollContainer) {
+      return
+    }
+
+    const containerRect = scrollContainer.getBoundingClientRect()
+    const noteRect = activeNoteElement.getBoundingClientRect()
+    const visibilityPaddingPx = 8
+    const visibleTop = containerRect.top + visibilityPaddingPx
+    const visibleBottom = containerRect.bottom - visibilityPaddingPx
+
+    if (noteRect.top < visibleTop) {
+      scrollContainer.scrollTop -= (visibleTop - noteRect.top)
+      return
+    }
+
+    if (noteRect.bottom > visibleBottom) {
+      scrollContainer.scrollTop += (noteRect.bottom - visibleBottom)
+    }
+  }, [activeNoteId])
+
+  useEffect(() => {
+    if (focusNoteRequestKey <= 0) {
+      return
+    }
+
+    if (focusNoteRequestKey === lastHandledFocusRequestKeyRef.current) {
+      return
+    }
+
+    lastHandledFocusRequestKeyRef.current = focusNoteRequestKey
+
+    unfoldPathForActiveNote()
+
+    let cancelled = false
+    const firstFrame = requestAnimationFrame(() => {
+      const secondFrame = requestAnimationFrame(() => {
+        if (cancelled) {
+          return
+        }
+        ensureActiveNoteVisible()
+      })
+
+      if (cancelled) {
+        cancelAnimationFrame(secondFrame)
+      }
+    })
+
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(firstFrame)
+    }
+  }, [ensureActiveNoteVisible, focusNoteRequestKey, unfoldPathForActiveNote])
 
   const togglePrimaryCategory = useCallback((categoryName: string) => {
     const allPrimary = groups.map((group) => group.name)
     const selectedPrimary = groups.find((group) => group.name === categoryName)
     const secondaryKeys = (selectedPrimary?.secondary ?? []).map((secondary) => `${categoryName}:${secondary.name}`)
 
+    const nextCollapsedPrimary = new Set<string>()
+    const nextCollapsedSecondary = new Set(collapsedSecondary)
+
     if (collapsedPrimary.has(categoryName)) {
-      setCollapsedPrimary(new Set(allPrimary.filter((primaryName) => primaryName !== categoryName)))
-      setCollapsedSecondary((previous) => {
-        const next = new Set(previous)
-        secondaryKeys.forEach((secondaryKey) => next.add(secondaryKey))
-        return next
-      })
-      return
-    }
+      allPrimary
+        .filter((primaryName) => primaryName !== categoryName)
+        .forEach((primaryName) => nextCollapsedPrimary.add(primaryName))
+      secondaryKeys.forEach((secondaryKey) => nextCollapsedSecondary.add(secondaryKey))
+    } else {
+      allPrimary
+        .filter((primaryName) => primaryName !== categoryName)
+        .forEach((primaryName) => nextCollapsedPrimary.add(primaryName))
 
-    setCollapsedPrimary(new Set(allPrimary.filter((primaryName) => primaryName !== categoryName)))
-    if (secondaryKeys.length === 0) {
-      return
-    }
-
-    setCollapsedSecondary((previous) => {
-      const allExpanded = secondaryKeys.every((secondaryKey) => !previous.has(secondaryKey))
-      const next = new Set(previous)
-
-      if (allExpanded) {
-        secondaryKeys.forEach((secondaryKey) => next.add(secondaryKey))
-      } else {
-        secondaryKeys.forEach((secondaryKey) => next.delete(secondaryKey))
+      if (secondaryKeys.length > 0) {
+        const allExpanded = secondaryKeys.every((secondaryKey) => !collapsedSecondary.has(secondaryKey))
+        if (allExpanded) {
+          secondaryKeys.forEach((secondaryKey) => nextCollapsedSecondary.add(secondaryKey))
+        } else {
+          secondaryKeys.forEach((secondaryKey) => nextCollapsedSecondary.delete(secondaryKey))
+        }
       }
+    }
 
-      return next
+    const nextCollapsedPrimaryList = [...nextCollapsedPrimary]
+    const nextCollapsedSecondaryList = [...nextCollapsedSecondary]
+    if (
+      areStringArraysEqual(nextCollapsedPrimaryList, persistedCollapsedPrimary)
+      && areStringArraysEqual(nextCollapsedSecondaryList, persistedCollapsedSecondary)
+    ) {
+      return
+    }
+
+    onCollapseChange({
+      collapsedPrimary: nextCollapsedPrimaryList,
+      collapsedSecondary: nextCollapsedSecondaryList,
     })
-  }, [collapsedPrimary, groups])
+  }, [collapsedPrimary, collapsedSecondary, groups, onCollapseChange, persistedCollapsedPrimary, persistedCollapsedSecondary])
 
   const toggleSecondaryCategory = useCallback((primaryName: string, secondaryName: string) => {
     const key = `${primaryName}:${secondaryName}`
     const allPrimary = groups.map((group) => group.name)
     const selectedPrimary = groups.find((group) => group.name === primaryName)
     const secondaryKeys = (selectedPrimary?.secondary ?? []).map((secondary) => `${primaryName}:${secondary.name}`)
+    const nextCollapsedPrimary = new Set(allPrimary.filter((primary) => primary !== primaryName))
+    const nextCollapsedSecondary = new Set(collapsedSecondary)
 
-    setCollapsedPrimary(new Set(allPrimary.filter((primary) => primary !== primaryName)))
+    if (nextCollapsedSecondary.has(key)) {
+      secondaryKeys.forEach((secondaryKey) => {
+        if (secondaryKey !== key) {
+          nextCollapsedSecondary.add(secondaryKey)
+        }
+      })
+      nextCollapsedSecondary.delete(key)
+    } else {
+      nextCollapsedSecondary.add(key)
+    }
 
-    setCollapsedSecondary((previous) => {
-      const next = new Set(previous)
+    const nextCollapsedPrimaryList = [...nextCollapsedPrimary]
+    const nextCollapsedSecondaryList = [...nextCollapsedSecondary]
+    if (
+      areStringArraysEqual(nextCollapsedPrimaryList, persistedCollapsedPrimary)
+      && areStringArraysEqual(nextCollapsedSecondaryList, persistedCollapsedSecondary)
+    ) {
+      return
+    }
 
-      if (next.has(key)) {
-        secondaryKeys.forEach((secondaryKey) => {
-          if (secondaryKey !== key) {
-            next.add(secondaryKey)
-          }
-        })
-        next.delete(key)
-        return next
-      }
-
-      next.add(key)
-      return next
+    onCollapseChange({
+      collapsedPrimary: nextCollapsedPrimaryList,
+      collapsedSecondary: nextCollapsedSecondaryList,
     })
-  }, [groups])
+  }, [collapsedSecondary, groups, onCollapseChange, persistedCollapsedPrimary, persistedCollapsedSecondary])
 
   if (groups.length === 0) {
     return <div className="notes-empty-state">No notes available for this category view.</div>
@@ -861,6 +992,10 @@ function isExternalNote(note: NoteSummary): boolean {
   return note.tags.some((tag) => isExternalTagName(tag))
 }
 
+function escapeAttributeSelectorValue(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
 function matchesSearchQuery(note: NoteSummary, query: string): boolean {
   const normalized = query.trim().toLowerCase()
   if (!normalized) return true
@@ -900,9 +1035,16 @@ function App() {
   const [renamingTagName, setRenamingTagName] = useState<string | null>(null)
   const [draggedTagIndex, setDraggedTagIndex] = useState<number | null>(null)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('date')
+  const [sidebarViewStateByMode, setSidebarViewStateByMode] = useState<SidebarViewStateByMode>(() => createDefaultSidebarViewStateByMode())
   const [selectedMonths, setSelectedMonths] = useState<Set<number>>(new Set())
   const [selectedYears, setSelectedYears] = useState<Set<number | 'older'>>(new Set())
   const [currentPage, setCurrentPage] = useState(1)
+  const [categoryCollapsedPrimary, setCategoryCollapsedPrimary] = useState<string[]>([])
+  const [categoryCollapsedSecondary, setCategoryCollapsedSecondary] = useState<string[]>([])
+  const [archiveCollapsedPrimary, setArchiveCollapsedPrimary] = useState<string[]>([])
+  const [archiveCollapsedSecondary, setArchiveCollapsedSecondary] = useState<string[]>([])
+  const [categoryFocusRequestKey, setCategoryFocusRequestKey] = useState(0)
+  const [archiveFocusRequestKey, setArchiveFocusRequestKey] = useState(0)
   const [itemsPerPage, setItemsPerPage] = useState(20)
   const [showPagination, setShowPagination] = useState(false)
   const [editorTextVersion, setEditorTextVersion] = useState(0)
@@ -940,16 +1082,22 @@ function App() {
   const appStateSaveTimerRef = useRef<number | null>(null)
   const noteTransitionLockRef = useRef(false)
   const pendingViewportRestoreRef = useRef<PersistedViewportState | null>(null)
+  const pendingSidebarScrollRestoreRef = useRef<{ mode: SidebarMode; scrollTop: number } | null>(null)
   const latestEditViewportRef = useRef<PersistedViewportState | null>(null)
   const latestEditViewportTelemetryRef = useRef<EditViewportTelemetry | null>(null)
   const editUiStateSaveTimerRef = useRef<number | null>(null)
   const lastPersistedEditUiStateRef = useRef<{ noteId: string; progressEdit: number; cursorPos: number; scrollTop: number } | null>(null)
   const pendingEditRestoreSnapshotRef = useRef<EditRestoreSnapshot | null>(null)
+  const previousActiveNoteIdForEditRestoreRef = useRef<string | null>(null)
   const pendingPreviewAnchorRatioRef = useRef<number | null>(null)
   const previousPreviewModeRef = useRef(false)
   const hasPreviewModeBaselineRef = useRef(false)
   const latestViewportRef = useRef<PersistedViewportState | null>(null)
   const isApplyingInitialViewportRef = useRef(false)
+  const dateFilteredNotesRef = useRef<NoteSummary[]>([])
+  const trashFilteredNotesRef = useRef<NoteSummary[]>([])
+  const categoryTreeRef = useRef<PrimaryGroup[]>([])
+  const archiveTreeRef = useRef<PrimaryGroup[]>([])
   const dividerDragStartXRef = useRef(0)
   const dividerStartSidebarWidthRef = useRef(0)
   const dividerStartTagInputWidthRef = useRef(0)
@@ -976,11 +1124,64 @@ function App() {
   const [isPreviewScrollThumbActive, setIsPreviewScrollThumbActive] = useState(false)
   const [isDraggingPreviewScrollThumb, setIsDraggingPreviewScrollThumb] = useState(false)
 
+  const toDebugEditUiData = useCallback((uiState: { scrollTop?: unknown; cursorPos?: unknown } | null | undefined): DebugEditUiData => ({
+    scrollTop:
+      typeof uiState?.scrollTop === 'number' && Number.isFinite(uiState.scrollTop)
+        ? Math.max(0, Math.round(uiState.scrollTop))
+        : null,
+    cursorPos:
+      typeof uiState?.cursorPos === 'number' && Number.isFinite(uiState.cursorPos)
+        ? Math.max(0, Math.round(uiState.cursorPos))
+        : null,
+  }), [])
+
+  const logEditUiData = useCallback((label: string, data: DebugEditUiData) => {
+    void label
+    void data
+  }, [])
+
   const editorRuntimeMetrics = useMemo(
     () => resolveEditorRuntimeMetrics(editorFontSize, editorSpacing),
     [editorFontSize, editorSpacing],
   )
   const editorFontFamily = useMemo(() => resolveEditorFontFamily(editorStyle), [editorStyle])
+
+  const readCurrentEditUiPayload = useCallback((): { progressEdit: number; cursorPos: number; scrollTop: number } | null => {
+    const selection = latestEditorSelectionRef.current
+
+    const snapshotViewport = adapterRef.current?.getSnapshot()?.viewport
+    let snapshotViewportState: PersistedViewportState | null = null
+
+    if (snapshotViewport) {
+      snapshotViewportState = {
+        topBoundaryPx: Math.round(snapshotViewport.topBoundaryPx),
+        bottomBoundaryPx: Math.round(snapshotViewport.bottomBoundaryPx),
+        scrollTopPx: Math.round(snapshotViewport.scrollTopPx),
+      }
+
+      latestViewportRef.current = snapshotViewportState
+      latestEditViewportRef.current = snapshotViewportState
+      latestEditViewportTelemetryRef.current = {
+        scrollTopPx: Math.round(snapshotViewport.scrollTopPx),
+        scrollHeightPx: Math.max(0, Math.round(snapshotViewport.scrollHeightPx ?? 0)),
+        clientHeightPx: Math.max(0, Math.round(snapshotViewport.clientHeightPx ?? 0)),
+      }
+    }
+
+    const viewport = snapshotViewportState ?? latestEditViewportRef.current ?? latestViewportRef.current
+    if (!viewport) return null
+
+    const scrollTop = Math.max(0, Math.round(viewport.scrollTopPx))
+    const lineHeight = Math.max(1, editorRuntimeMetrics.lineHeightPx)
+    const progressEdit = scrollTop / lineHeight
+    const cursorPos = Math.max(0, selection.end)
+
+    return {
+      progressEdit,
+      cursorPos,
+      scrollTop,
+    }
+  }, [editorRuntimeMetrics.lineHeightPx])
 
   const armedNoteActionById = useMemo(() => {
     if (!armedNoteActionState) {
@@ -1002,44 +1203,256 @@ function App() {
     trashButtonArmTimerRef.current = null
   }, [])
 
-  const menuState = useMemo<PersistedMenuState>(() => ({
-    sidebarMode,
-    selectedMonths: [...selectedMonths],
-    selectedYears: [...selectedYears],
-    searchQuery,
-    documentFindCaseSensitive: isDocumentFindCaseSensitive,
-    isPreviewMode,
-    viewStyle,
-    viewFontSize,
-    viewSpacing,
-    editorStyle,
+  const persistedMenuStateRef = useRef<PersistedMenuState | null>(null)
+
+  const buildMenuStateSnapshot = useCallback((overrides?: {
+    sidebarMode?: SidebarMode
+    sidebarViewStateByMode?: SidebarViewStateByMode
+  }): PersistedMenuState => {
+    const effectiveViewStateByMode = overrides?.sidebarViewStateByMode ?? sidebarViewStateByMode
+
+    return {
+      sidebarMode: overrides?.sidebarMode ?? sidebarMode,
+      selectedMonths: [...selectedMonths],
+      selectedYears: [...selectedYears],
+      searchQuery,
+      documentFindCaseSensitive: isDocumentFindCaseSensitive,
+      isPreviewMode,
+      viewStyle,
+      viewFontSize,
+      viewSpacing,
+      editorStyle,
+      editorFontSize,
+      editorSpacing,
+      sidebarWidthRatio,
+      tagSplitRatio,
+      scrollEaseMultiplier,
+      scrollDistanceTimeInfluence,
+      scrollBaseDistanceRows,
+      scrollMaxDurationMultiplier,
+      sidebarViewState: {
+        ...effectiveViewStateByMode,
+        category: {
+          ...effectiveViewStateByMode.category,
+          collapsedPrimary: categoryCollapsedPrimary,
+          collapsedSecondary: categoryCollapsedSecondary,
+        },
+        archive: {
+          ...effectiveViewStateByMode.archive,
+          collapsedPrimary: archiveCollapsedPrimary,
+          collapsedSecondary: archiveCollapsedSecondary,
+        },
+      },
+    }
+  }, [
+    archiveCollapsedPrimary,
+    archiveCollapsedSecondary,
+    categoryCollapsedPrimary,
+    categoryCollapsedSecondary,
     editorFontSize,
     editorSpacing,
-    sidebarWidthRatio,
-    tagSplitRatio,
-    scrollEaseMultiplier,
-    scrollDistanceTimeInfluence,
-    scrollBaseDistanceRows,
-    scrollMaxDurationMultiplier,
-  }), [
+    editorStyle,
     isDocumentFindCaseSensitive,
+    isPreviewMode,
+    scrollBaseDistanceRows,
+    scrollDistanceTimeInfluence,
+    scrollEaseMultiplier,
+    scrollMaxDurationMultiplier,
     searchQuery,
     selectedMonths,
     selectedYears,
     sidebarMode,
-    isPreviewMode,
-    viewStyle,
-    viewFontSize,
-    viewSpacing,
-    editorStyle,
-    editorFontSize,
-    editorSpacing,
+    sidebarViewStateByMode,
     sidebarWidthRatio,
     tagSplitRatio,
-    scrollEaseMultiplier,
-    scrollDistanceTimeInfluence,
-    scrollBaseDistanceRows,
-    scrollMaxDurationMultiplier,
+    viewFontSize,
+    viewSpacing,
+    viewStyle,
+  ])
+
+  const getSidebarScrollerForMode = useCallback((mode: SidebarMode): HTMLDivElement | null => {
+    if (mode === 'category' || mode === 'archive' || mode === 'find') {
+      return sidebarTreeScrollerEl
+    }
+
+    return sidebarContentRef.current
+  }, [sidebarTreeScrollerEl])
+
+  const captureSidebarModeState = useCallback((mode: SidebarMode): SidebarViewState => {
+    const baseline = sidebarViewStateByMode[mode] ?? sanitizeSidebarViewState(undefined)
+    const scroller = getSidebarScrollerForMode(mode)
+    const scrollTop = scroller
+      ? Math.max(0, Math.round(scroller.scrollTop))
+      : baseline.scrollTop
+
+    const base: SidebarViewState = {
+      scrollTop,
+      page: baseline.page,
+      collapsedPrimary: baseline.collapsedPrimary,
+      collapsedSecondary: baseline.collapsedSecondary,
+    }
+
+    if (mode === 'date' || mode === 'trash') {
+      base.page = Math.max(1, currentPage)
+    }
+
+    if (mode === 'category') {
+      base.collapsedPrimary = categoryCollapsedPrimary
+      base.collapsedSecondary = categoryCollapsedSecondary
+    }
+
+    if (mode === 'archive') {
+      base.collapsedPrimary = archiveCollapsedPrimary
+      base.collapsedSecondary = archiveCollapsedSecondary
+    }
+
+    return base
+  }, [
+    archiveCollapsedPrimary,
+    archiveCollapsedSecondary,
+    categoryCollapsedPrimary,
+    categoryCollapsedSecondary,
+    currentPage,
+    getSidebarScrollerForMode,
+    sidebarViewStateByMode,
+  ])
+
+  const restoreSidebarModeStateFrom = useCallback((
+    mode: SidebarMode,
+    viewStateByMode: SidebarViewStateByMode,
+  ) => {
+    const snapshot = viewStateByMode[mode] ?? sanitizeSidebarViewState(undefined)
+    pendingSidebarScrollRestoreRef.current = {
+      mode,
+      scrollTop: snapshot.scrollTop,
+    }
+
+    if (mode === 'date' || mode === 'trash') {
+      setCurrentPage(Math.max(1, snapshot.page || 1))
+    }
+
+    if (mode === 'category') {
+      setCategoryCollapsedPrimary(snapshot.collapsedPrimary)
+      setCategoryCollapsedSecondary(snapshot.collapsedSecondary)
+    }
+
+    if (mode === 'archive') {
+      setArchiveCollapsedPrimary(snapshot.collapsedPrimary)
+      setArchiveCollapsedSecondary(snapshot.collapsedSecondary)
+    }
+  }, [])
+
+  const persistMenuStateOnce = useCallback(async (
+    nextSidebarMode: SidebarMode,
+    nextSidebarViewStateByMode: SidebarViewStateByMode,
+  ) => {
+    if (!window.measlyState || !persistenceReady) return
+
+    const snapshot = buildMenuStateSnapshot({
+      sidebarMode: nextSidebarMode,
+      sidebarViewStateByMode: nextSidebarViewStateByMode,
+    })
+
+    persistedMenuStateRef.current = snapshot
+
+    await window.measlyState.saveAppState({
+      selectedNoteId: activeNoteId,
+      viewport: latestViewportRef.current ?? undefined,
+      menu: snapshot,
+    })
+  }, [activeNoteId, buildMenuStateSnapshot, persistenceReady])
+
+  const persistMenuStateOnUnload = useCallback(() => {
+    if (!window.measlyState || !persistenceReady) return
+
+    const currentModeSnapshot = captureSidebarModeState(sidebarMode)
+    const nextSidebarViewStateByMode: SidebarViewStateByMode = {
+      ...sidebarViewStateByMode,
+      [sidebarMode]: currentModeSnapshot,
+    }
+
+    const snapshot = buildMenuStateSnapshot({
+      sidebarMode,
+      sidebarViewStateByMode: nextSidebarViewStateByMode,
+    })
+
+    persistedMenuStateRef.current = snapshot
+
+    void window.measlyState.saveAppState({
+      selectedNoteId: activeNoteId,
+      viewport: latestViewportRef.current ?? undefined,
+      menu: snapshot,
+    })
+  }, [
+    activeNoteId,
+    buildMenuStateSnapshot,
+    captureSidebarModeState,
+    persistenceReady,
+    sidebarMode,
+    sidebarViewStateByMode,
+  ])
+
+  const focusActiveNoteInSidebarMode = useCallback((mode: SidebarMode): boolean => {
+    if (!activeNoteId) {
+      return false
+    }
+
+    if (mode === 'date' || mode === 'trash') {
+      const source = mode === 'date' ? dateFilteredNotesRef.current : trashFilteredNotesRef.current
+      const noteIndex = source.findIndex((note) => note.id === activeNoteId)
+      if (noteIndex < 0) {
+        return false
+      }
+
+      const safeItemsPerPage = Math.max(1, itemsPerPage)
+      const targetPage = Math.floor(noteIndex / safeItemsPerPage) + 1
+      setCurrentPage(targetPage)
+      return true
+    }
+
+    if (mode === 'category' || mode === 'archive') {
+      const source = mode === 'category' ? categoryTreeRef.current : archiveTreeRef.current
+      const noteExists = source.some((primary) =>
+        primary.secondary.some((secondary) => secondary.tertiary.some((tertiary) => tertiary.notes.some((note) => note.id === activeNoteId))),
+      )
+
+      if (!noteExists) {
+        return false
+      }
+
+      if (mode === 'category') {
+        setCategoryFocusRequestKey((previous) => previous + 1)
+      } else {
+        setArchiveFocusRequestKey((previous) => previous + 1)
+      }
+
+      return true
+    }
+
+    return false
+  }, [activeNoteId, itemsPerPage])
+
+  const runSidebarMenuTransition = useCallback((nextMode: SidebarMode) => {
+    if (nextMode === sidebarMode) {
+      return
+    }
+
+    const leavingSnapshot = captureSidebarModeState(sidebarMode)
+    const nextSidebarViewStateByMode: SidebarViewStateByMode = {
+      ...sidebarViewStateByMode,
+      [sidebarMode]: leavingSnapshot,
+    }
+
+    setSidebarViewStateByMode(nextSidebarViewStateByMode)
+    setSidebarMode(nextMode)
+    restoreSidebarModeStateFrom(nextMode, nextSidebarViewStateByMode)
+    void persistMenuStateOnce(nextMode, nextSidebarViewStateByMode)
+  }, [
+    captureSidebarModeState,
+    persistMenuStateOnce,
+    restoreSidebarModeStateFrom,
+    sidebarMode,
+    sidebarViewStateByMode,
   ])
 
   useEffect(() => {
@@ -1090,7 +1503,7 @@ function App() {
     }
   }, [appShellWidthPx, sidebarWidthRatio, tagSplitRatio])
 
-  const queueAppStateSave = useCallback((selectedNoteId: string | null, menuOverride?: PersistedMenuState) => {
+  const queueAppStateSave = useCallback((selectedNoteId: string | null) => {
     if (!window.measlyState) return
     if (!persistenceReady) return
     if (isApplyingInitialViewportRef.current) return
@@ -1104,10 +1517,10 @@ function App() {
       void window.measlyState?.saveAppState({
         selectedNoteId,
         viewport: latestViewportRef.current ?? undefined,
-        menu: menuOverride ?? menuState,
+        menu: persistedMenuStateRef.current ?? buildMenuStateSnapshot(),
       })
     }, 150)
-  }, [menuState, persistenceReady])
+  }, [buildMenuStateSnapshot, persistenceReady])
 
   const flushSave = useCallback(async () => {
     if (!window.measlyNotes || !activeNoteId) return
@@ -1148,21 +1561,58 @@ function App() {
     await window.measlyState.saveAppState({
       selectedNoteId,
       viewport: latestViewportRef.current ?? undefined,
-      menu: menuState,
+      menu: persistedMenuStateRef.current ?? buildMenuStateSnapshot(),
     })
-  }, [menuState])
+  }, [buildMenuStateSnapshot])
 
   const activateNote = useCallback(async (noteId: string) => {
     if (!window.measlyNotes) return
 
+    const previousNoteId = activeNoteId
+    if (persistenceReady && previousNoteId && previousNoteId !== noteId) {
+      const legacyDb = window.measlyLegacyDb
+      const payload = readCurrentEditUiPayload()
+      if (legacyDb && payload) {
+        const { progressEdit, cursorPos, scrollTop } = payload
+
+        const previousPersisted = lastPersistedEditUiStateRef.current
+        if (
+          !previousPersisted ||
+          previousPersisted.noteId !== previousNoteId ||
+          previousPersisted.scrollTop !== scrollTop ||
+          previousPersisted.cursorPos !== cursorPos ||
+          Math.abs(previousPersisted.progressEdit - progressEdit) >= 0.0001
+        ) {
+          logEditUiData('[edit-ui][note-switch][write]', toDebugEditUiData(payload))
+
+          lastPersistedEditUiStateRef.current = {
+            noteId: previousNoteId,
+            progressEdit,
+            cursorPos,
+            scrollTop,
+          }
+          await legacyDb.saveNoteUiState(previousNoteId, payload)
+
+          const storedUiState = await legacyDb.getNoteUiState(previousNoteId)
+          logEditUiData('[edit-ui][note-switch][stored-after-write]', toDebugEditUiData(storedUiState))
+        } else {
+          logEditUiData('[edit-ui][note-switch][write-skipped]', toDebugEditUiData(payload))
+          const storedUiState = await legacyDb.getNoteUiState(previousNoteId)
+          logEditUiData('[edit-ui][note-switch][stored-current]', toDebugEditUiData(storedUiState))
+        }
+      }
+    }
+
     const loaded = await window.measlyNotes.loadNote({ id: noteId })
     const hydratedText = normalizeInternalText(loaded.text)
     latestEditorTextRef.current = hydratedText
+    pendingEditRestoreSnapshotRef.current = null
+    pendingPreviewAnchorRatioRef.current = null
     setActiveNoteId(loaded.id)
     setActiveNoteText(hydratedText)
     pendingViewportRestoreRef.current = null
     await saveSelectedNoteState(loaded.id)
-  }, [saveSelectedNoteState])
+  }, [activeNoteId, logEditUiData, persistenceReady, readCurrentEditUiPayload, saveSelectedNoteState, toDebugEditUiData])
 
   const refreshNotes = useCallback(async (preferredId?: string | null) => {
     if (!window.measlyNotes) return null
@@ -1320,15 +1770,10 @@ function App() {
     const legacyDb = window.measlyLegacyDb
     if (!legacyDb) return
 
-    const persistNow = () => {
-      const selection = latestEditorSelectionRef.current
-      const viewport = latestEditViewportRef.current ?? latestViewportRef.current
-      if (!viewport) return
-
-      const scrollTop = Math.max(0, Math.round(viewport.scrollTopPx))
-      const lineHeight = Math.max(1, editorRuntimeMetrics.lineHeightPx)
-      const progressEdit = scrollTop / lineHeight
-      const cursorPos = Math.max(0, selection.end)
+    const persistNow = async () => {
+      const payload = readCurrentEditUiPayload()
+      if (!payload) return
+      const { progressEdit, cursorPos, scrollTop } = payload
 
       const previousPersisted = lastPersistedEditUiStateRef.current
       if (
@@ -1338,8 +1783,13 @@ function App() {
         previousPersisted.cursorPos === cursorPos &&
         Math.abs(previousPersisted.progressEdit - progressEdit) < 0.0001
       ) {
+        logEditUiData('[edit-ui][preview-enter][write-skipped]', toDebugEditUiData(payload))
+        const storedUiState = await legacyDb.getNoteUiState(noteId)
+        logEditUiData('[edit-ui][preview-enter][stored-current]', toDebugEditUiData(storedUiState))
         return
       }
+
+      logEditUiData('[edit-ui][preview-enter][write]', toDebugEditUiData(payload))
 
       lastPersistedEditUiStateRef.current = {
         noteId,
@@ -1348,11 +1798,9 @@ function App() {
         scrollTop,
       }
 
-      void legacyDb.saveNoteUiState(noteId, {
-        progressEdit,
-        cursorPos,
-        scrollTop,
-      })
+      await legacyDb.saveNoteUiState(noteId, payload)
+      const storedUiState = await legacyDb.getNoteUiState(noteId)
+      logEditUiData('[edit-ui][preview-enter][stored-after-write]', toDebugEditUiData(storedUiState))
     }
 
     if (options?.immediate) {
@@ -1360,7 +1808,7 @@ function App() {
         window.clearTimeout(editUiStateSaveTimerRef.current)
         editUiStateSaveTimerRef.current = null
       }
-      persistNow()
+      void persistNow()
       return
     }
 
@@ -1370,13 +1818,47 @@ function App() {
 
     editUiStateSaveTimerRef.current = window.setTimeout(() => {
       editUiStateSaveTimerRef.current = null
-      persistNow()
+      void persistNow()
     }, 280)
-  }, [editorRuntimeMetrics.lineHeightPx])
+  }, [logEditUiData, readCurrentEditUiPayload, toDebugEditUiData])
 
   const applyEditRestoreSnapshot = useCallback((snapshot: EditRestoreSnapshot, options?: { restoreFullSelection?: boolean }) => {
     const restoreFullSelection = options?.restoreFullSelection ?? true
     let cancelled = false
+    const targetScrollTop = Math.max(0, Math.round(snapshot.viewport.scrollTopPx))
+
+    const applyViewportSnapshot = () => {
+      adapterRef.current?.applySnapshot({
+        viewport: {
+          topBoundaryPx: snapshot.viewport.topBoundaryPx,
+          bottomBoundaryPx: snapshot.viewport.bottomBoundaryPx,
+          scrollTopPx: targetScrollTop,
+          lineHeightPx: editorRuntimeMetrics.lineHeightPx,
+          cellWidthPx: editorRuntimeMetrics.cellWidthPx,
+        },
+      })
+    }
+
+    const scheduleViewportReconcile = (attempt: number) => {
+      if (cancelled) return
+
+      const viewport = adapterRef.current?.getSnapshot()?.viewport
+      const observedScrollTop = typeof viewport?.scrollTopPx === 'number' ? Math.round(viewport.scrollTopPx) : null
+      const maxScrollTop = viewport
+        ? Math.max(0, Math.round((viewport.scrollHeightPx ?? 0) - (viewport.clientHeightPx ?? 0)))
+        : 0
+      const hasScrollableContent = maxScrollTop > 0
+      const scrollDelta = observedScrollTop === null ? Number.POSITIVE_INFINITY : Math.abs(observedScrollTop - targetScrollTop)
+      const isSettled = scrollDelta <= 1
+      const maxAttempts = hasScrollableContent ? 18 : 10
+
+      if (isSettled || attempt >= maxAttempts) {
+        return
+      }
+
+      applyViewportSnapshot()
+      requestAnimationFrame(() => scheduleViewportReconcile(attempt + 1))
+    }
 
     const applyWhenReady = () => {
       if (cancelled) return
@@ -1391,7 +1873,7 @@ function App() {
         viewport: {
           topBoundaryPx: snapshot.viewport.topBoundaryPx,
           bottomBoundaryPx: snapshot.viewport.bottomBoundaryPx,
-          scrollTopPx: snapshot.viewport.scrollTopPx,
+          scrollTopPx: targetScrollTop,
           lineHeightPx: editorRuntimeMetrics.lineHeightPx,
           cellWidthPx: editorRuntimeMetrics.cellWidthPx,
         },
@@ -1400,9 +1882,11 @@ function App() {
       latestViewportRef.current = {
         topBoundaryPx: snapshot.viewport.topBoundaryPx,
         bottomBoundaryPx: snapshot.viewport.bottomBoundaryPx,
-        scrollTopPx: snapshot.viewport.scrollTopPx,
+        scrollTopPx: targetScrollTop,
       }
       latestEditViewportRef.current = latestViewportRef.current
+
+      requestAnimationFrame(() => scheduleViewportReconcile(0))
 
       if (!restoreFullSelection || snapshot.fullSelection.isCollapsed) {
         return
@@ -1878,22 +2362,27 @@ function App() {
   }, [])
 
   const handleViewModeButtonClick = useCallback((mode: SidebarMode) => {
-    if (mode === 'trash') {
-      if (isTrashViewDeleteArmed) {
-        setIsTrashViewDeleteArmed(false)
-        void purgeDeletedNotesPermanently()
-        setSidebarMode('trash')
-        return
-      }
+    if (mode === 'trash' && isTrashViewDeleteArmed) {
+      setIsTrashViewDeleteArmed(false)
+      void purgeDeletedNotesPermanently()
+      runSidebarMenuTransition('trash')
+      return
+    }
 
-      setSidebarMode('trash')
+    if (mode === sidebarMode) {
+      void focusActiveNoteInSidebarMode(mode)
+      return
+    }
+
+    if (mode === 'trash') {
+      runSidebarMenuTransition('trash')
       return
     }
 
     if (mode === 'find') {
       setIsTrashViewDeleteArmed(false)
       clearTrashButtonArmTimer()
-      setSidebarMode('find')
+      runSidebarMenuTransition('find')
       requestAnimationFrame(() => {
         sidebarSearchInputRef.current?.focus()
         sidebarSearchInputRef.current?.select()
@@ -1903,8 +2392,15 @@ function App() {
 
     setIsTrashViewDeleteArmed(false)
     clearTrashButtonArmTimer()
-    setSidebarMode(mode)
-  }, [clearTrashButtonArmTimer, isTrashViewDeleteArmed, purgeDeletedNotesPermanently])
+    runSidebarMenuTransition(mode)
+  }, [
+    clearTrashButtonArmTimer,
+    focusActiveNoteInSidebarMode,
+    isTrashViewDeleteArmed,
+    purgeDeletedNotesPermanently,
+    runSidebarMenuTransition,
+    sidebarMode,
+  ])
 
   const queueSave = useCallback((text: string) => {
     if (!persistenceReady) return
@@ -1952,6 +2448,15 @@ function App() {
           if (disposed) return
 
           if (appState.menu) {
+            const loadedSidebarViewState: SidebarViewStateByMode = {
+              date: sanitizeSidebarViewState(appState.menu.sidebarViewState?.date),
+              category: sanitizeSidebarViewState(appState.menu.sidebarViewState?.category),
+              archive: sanitizeSidebarViewState(appState.menu.sidebarViewState?.archive),
+              trash: sanitizeSidebarViewState(appState.menu.sidebarViewState?.trash),
+              find: sanitizeSidebarViewState(appState.menu.sidebarViewState?.find),
+            }
+
+            setSidebarViewStateByMode(loadedSidebarViewState)
             setSidebarMode(appState.menu.sidebarMode)
             setSelectedMonths(new Set(appState.menu.selectedMonths))
             setSelectedYears(new Set(appState.menu.selectedYears))
@@ -1970,6 +2475,23 @@ function App() {
             setScrollDistanceTimeInfluence(appState.menu.scrollDistanceTimeInfluence ?? getScrollDistanceTimeInfluence())
             setScrollBaseDistanceRows(appState.menu.scrollBaseDistanceRows ?? getScrollBaseDistanceRows())
             setScrollMaxDurationMultiplier(appState.menu.scrollMaxDurationMultiplier ?? getScrollMaxDurationMultiplier())
+
+            setCurrentPage(loadedSidebarViewState[appState.menu.sidebarMode].page)
+            setCategoryCollapsedPrimary(loadedSidebarViewState.category.collapsedPrimary)
+            setCategoryCollapsedSecondary(loadedSidebarViewState.category.collapsedSecondary)
+            setArchiveCollapsedPrimary(loadedSidebarViewState.archive.collapsedPrimary)
+            setArchiveCollapsedSecondary(loadedSidebarViewState.archive.collapsedSecondary)
+            pendingSidebarScrollRestoreRef.current = {
+              mode: appState.menu.sidebarMode,
+              scrollTop: loadedSidebarViewState[appState.menu.sidebarMode].scrollTop,
+            }
+
+            persistedMenuStateRef.current = {
+              ...appState.menu,
+              sidebarViewState: loadedSidebarViewState,
+            }
+          } else {
+            persistedMenuStateRef.current = null
           }
 
           const preferredId = appState.selectedNoteId
@@ -1996,7 +2518,7 @@ function App() {
             await window.measlyState.saveAppState({
               selectedNoteId: loaded.id,
               viewport: appState.viewport,
-              menu: appState.menu,
+              menu: persistedMenuStateRef.current ?? undefined,
             })
           }
 
@@ -2185,6 +2707,7 @@ function App() {
       try {
         const uiState = await window.measlyLegacyDb?.getNoteUiState(activeNoteId)
         if (cancelled) return
+        logEditUiData('[edit-ui][editor-read][preview-exit]', toDebugEditUiData(uiState))
 
         const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
         const storedScrollTop =
@@ -2243,13 +2766,99 @@ function App() {
   useEffect(() => {
     if (!window.measlyState || !activeNoteId) return
     queueAppStateSave(activeNoteId)
-  }, [activeNoteId, menuState, queueAppStateSave])
+  }, [activeNoteId, queueAppStateSave])
+
+  useEffect(() => {
+    if (isPreviewMode) return
+    if (!persistenceReady || !activeNoteId) return
+
+    const previousActiveNoteId = previousActiveNoteIdForEditRestoreRef.current
+    previousActiveNoteIdForEditRestoreRef.current = activeNoteId
+    if (previousActiveNoteId === activeNoteId) {
+      // Note identity did not change; avoid re-restoring on edit/render mode toggles.
+      return
+    }
+
+    const cachedSnapshot = pendingEditRestoreSnapshotRef.current
+    if (cachedSnapshot && cachedSnapshot.noteId === activeNoteId) {
+      return
+    }
+
+    let cancelled = false
+
+    const restorePersistedEditState = async () => {
+      try {
+        const uiState = await window.measlyLegacyDb?.getNoteUiState(activeNoteId)
+        if (cancelled) return
+        logEditUiData('[edit-ui][editor-read][note-activation]', toDebugEditUiData(uiState))
+
+        const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
+        const storedScrollTop =
+          typeof uiState?.scrollTop === 'number' && Number.isFinite(uiState.scrollTop)
+            ? Math.max(0, Math.round(uiState.scrollTop))
+            : 0
+        const fallbackTopBoundary = fallbackViewport?.topBoundaryPx ?? 0
+        const fallbackBottomBoundary = fallbackViewport?.bottomBoundaryPx ?? (editorRuntimeMetrics.lineHeightPx * 6)
+
+        const activeText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+        const selectionTextLength = Math.max(0, activeText.length)
+        const persistedCursor =
+          typeof uiState?.cursorPos === 'number' && Number.isFinite(uiState.cursorPos)
+            ? Math.max(0, Math.min(Math.round(uiState.cursorPos), selectionTextLength))
+            : 0
+
+        const collapsedSelection: EditorSelectionState = {
+          anchor: persistedCursor,
+          focus: persistedCursor,
+          start: persistedCursor,
+          end: persistedCursor,
+          isCollapsed: true,
+        }
+
+        const restoreSnapshot: EditRestoreSnapshot = {
+          noteId: activeNoteId,
+          collapsedSelection,
+          fullSelection: collapsedSelection,
+          viewport: {
+            topBoundaryPx: fallbackTopBoundary,
+            bottomBoundaryPx: fallbackBottomBoundary,
+            scrollTopPx: storedScrollTop,
+          },
+        }
+
+        applyEditRestoreSnapshot(restoreSnapshot, { restoreFullSelection: false })
+      } catch (error) {
+        console.warn('Failed to restore persisted edit state on note activation', error)
+      }
+    }
+
+    void restorePersistedEditState()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    activeNoteId,
+    activeNoteText,
+    applyEditRestoreSnapshot,
+    editorRuntimeMetrics.lineHeightPx,
+    isPreviewMode,
+    logEditUiData,
+    persistenceReady,
+    toDebugEditUiData,
+  ])
 
   useLayoutEffect(() => {
     if (!isPreviewMode) return
     if (!activeNoteId) return
 
     let cancelled = false
+
+    const setPreviewScrollBehavior = (behavior: '' | 'auto') => {
+      const container = previewScrollRef.current
+      if (!container) return
+      container.style.scrollBehavior = behavior
+    }
 
     const applyPreviewRatio = (ratio: number) => {
       const container = previewScrollRef.current
@@ -2258,17 +2867,53 @@ function App() {
       container.scrollTop = Math.max(0, Math.min(maxScrollTop, ratio * maxScrollTop))
     }
 
+    const applyPreviewRatioImmediate = (ratio: number) => {
+      const clampedRatio = clamp(ratio, 0, 1)
+      setPreviewScrollBehavior('auto')
+
+      const reconcilePreviewRatio = (attempt: number, previousMaxScrollTop: number, stableFrames: number) => {
+        if (cancelled) return
+
+        const container = previewScrollRef.current
+        if (!container) {
+          setPreviewScrollBehavior('')
+          return
+        }
+
+        const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
+        const targetScrollTop = Math.max(0, Math.min(maxScrollTop, clampedRatio * maxScrollTop))
+        if (Math.abs(container.scrollTop - targetScrollTop) > 0.5) {
+          container.scrollTop = targetScrollTop
+        }
+
+        const observedDelta = Math.abs(container.scrollTop - targetScrollTop)
+        const maxScrollStable = Math.abs(maxScrollTop - previousMaxScrollTop) <= 0.5
+        const nextStableFrames = maxScrollStable && observedDelta <= 1 ? (stableFrames + 1) : 0
+
+        if (nextStableFrames >= 2 || attempt >= 24) {
+          setPreviewScrollBehavior('')
+          return
+        }
+
+        requestAnimationFrame(() => {
+          reconcilePreviewRatio(attempt + 1, maxScrollTop, nextStableFrames)
+        })
+      }
+
+      applyPreviewRatio(clampedRatio)
+      requestAnimationFrame(() => {
+        reconcilePreviewRatio(0, -1, 0)
+      })
+    }
+
     const pendingAnchorRatio = pendingPreviewAnchorRatioRef.current
     if (typeof pendingAnchorRatio === 'number') {
       pendingPreviewAnchorRatioRef.current = null
-      applyPreviewRatio(pendingAnchorRatio)
-      requestAnimationFrame(() => {
-        if (cancelled) return
-        applyPreviewRatio(pendingAnchorRatio)
-      })
+      applyPreviewRatioImmediate(pendingAnchorRatio)
 
       return () => {
         cancelled = true
+        setPreviewScrollBehavior('')
       }
     }
 
@@ -2280,15 +2925,17 @@ function App() {
         const ratio = uiState?.progressPreview
         if (typeof ratio !== 'number' || Number.isNaN(ratio)) {
           if (previewScrollRef.current) {
+            setPreviewScrollBehavior('auto')
             previewScrollRef.current.scrollTop = 0
+            requestAnimationFrame(() => {
+              if (cancelled) return
+              setPreviewScrollBehavior('')
+            })
           }
           return
         }
 
-        requestAnimationFrame(() => {
-          if (cancelled) return
-          applyPreviewRatio(ratio)
-        })
+        applyPreviewRatioImmediate(ratio)
       } catch (error) {
         console.warn('Failed to restore preview scroll state', error)
       }
@@ -2298,6 +2945,7 @@ function App() {
 
     return () => {
       cancelled = true
+      setPreviewScrollBehavior('')
     }
   }, [activeNoteId, isPreviewMode])
 
@@ -2537,6 +3185,22 @@ function App() {
     return buildHierarchyGroups(archiveEligibleNotes)
   }, [archiveEligibleNotes])
 
+  useEffect(() => {
+    dateFilteredNotesRef.current = dateFilteredNotes
+  }, [dateFilteredNotes])
+
+  useEffect(() => {
+    trashFilteredNotesRef.current = trashFilteredNotes
+  }, [trashFilteredNotes])
+
+  useEffect(() => {
+    categoryTreeRef.current = categoryTree
+  }, [categoryTree])
+
+  useEffect(() => {
+    archiveTreeRef.current = archiveTree
+  }, [archiveTree])
+
   const visibleNotes = useMemo(() => {
     if (sidebarMode === 'date') {
       return dateFilteredNotes
@@ -2693,6 +3357,46 @@ function App() {
     const startIndex = (currentPage - 1) * itemsPerPage
     return visibleNotes.slice(startIndex, startIndex + itemsPerPage)
   }, [currentPage, itemsPerPage, sidebarMode, visibleNotes])
+
+  useEffect(() => {
+    const pending = pendingSidebarScrollRestoreRef.current
+    if (!pending || pending.mode !== sidebarMode) {
+      return
+    }
+
+    let cancelled = false
+    let attempts = 0
+
+    const apply = () => {
+      if (cancelled) return
+
+      const scroller = getSidebarScrollerForMode(sidebarMode)
+      if (!scroller) {
+        if (attempts < 8) {
+          attempts += 1
+          requestAnimationFrame(apply)
+        }
+        return
+      }
+
+      scroller.scrollTop = pending.scrollTop
+      pendingSidebarScrollRestoreRef.current = null
+      syncSidebarCustomScrollbar()
+    }
+
+    requestAnimationFrame(apply)
+    return () => {
+      cancelled = true
+    }
+  }, [
+    archiveTree,
+    categoryTree,
+    documentFindHits.length,
+    getSidebarScrollerForMode,
+    pagedVisibleNotes.length,
+    sidebarMode,
+    syncSidebarCustomScrollbar,
+  ])
 
   const handleJumpToDocumentFindHit = useCallback((hit: DocumentFindHit) => {
     const adapter = adapterRef.current
@@ -3001,9 +3705,51 @@ function App() {
     setSelectedYears(new Set())
   }, [])
 
+  const handleCategoryCollapseChange = useCallback((next: { collapsedPrimary: string[]; collapsedSecondary: string[] }) => {
+    setCategoryCollapsedPrimary((previous) => (
+      areStringArraysEqual(previous, next.collapsedPrimary) ? previous : next.collapsedPrimary
+    ))
+    setCategoryCollapsedSecondary((previous) => (
+      areStringArraysEqual(previous, next.collapsedSecondary) ? previous : next.collapsedSecondary
+    ))
+    setSidebarViewStateByMode((previous) => ({
+      ...previous,
+      category: {
+        ...previous.category,
+        collapsedPrimary: areStringArraysEqual(previous.category.collapsedPrimary, next.collapsedPrimary)
+          ? previous.category.collapsedPrimary
+          : next.collapsedPrimary,
+        collapsedSecondary: areStringArraysEqual(previous.category.collapsedSecondary, next.collapsedSecondary)
+          ? previous.category.collapsedSecondary
+          : next.collapsedSecondary,
+      },
+    }))
+  }, [])
+
+  const handleArchiveCollapseChange = useCallback((next: { collapsedPrimary: string[]; collapsedSecondary: string[] }) => {
+    setArchiveCollapsedPrimary((previous) => (
+      areStringArraysEqual(previous, next.collapsedPrimary) ? previous : next.collapsedPrimary
+    ))
+    setArchiveCollapsedSecondary((previous) => (
+      areStringArraysEqual(previous, next.collapsedSecondary) ? previous : next.collapsedSecondary
+    ))
+    setSidebarViewStateByMode((previous) => ({
+      ...previous,
+      archive: {
+        ...previous.archive,
+        collapsedPrimary: areStringArraysEqual(previous.archive.collapsedPrimary, next.collapsedPrimary)
+          ? previous.archive.collapsedPrimary
+          : next.collapsedPrimary,
+        collapsedSecondary: areStringArraysEqual(previous.archive.collapsedSecondary, next.collapsedSecondary)
+          ? previous.archive.collapsedSecondary
+          : next.collapsedSecondary,
+      },
+    }))
+  }, [])
+
   useEffect(() => {
     setCurrentPage(1)
-  }, [sidebarMode, selectedMonths, selectedYears, searchQuery])
+  }, [selectedMonths, selectedYears, searchQuery])
 
   useEffect(() => {
     setDeleteArmedTagName(null)
@@ -3329,7 +4075,7 @@ function App() {
 
       if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'f') {
         event.preventDefault()
-        setSidebarMode('find')
+        runSidebarMenuTransition('find')
         requestAnimationFrame(() => {
           sidebarSearchInputRef.current?.focus()
           sidebarSearchInputRef.current?.select()
@@ -3370,7 +4116,22 @@ function App() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [createNote, createNoteFromClipboardTitle, isFindMode, replaceAllDocumentFindHits])
+  }, [
+    createNote,
+    createNoteFromClipboardTitle,
+    isFindMode,
+    runSidebarMenuTransition,
+    replaceAllDocumentFindHits,
+  ])
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      persistMenuStateOnUnload()
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [persistMenuStateOnUnload])
 
   return (
     <div
@@ -3507,9 +4268,12 @@ function App() {
                 ref={setSidebarTreeScrollerEl}
               >
                 <CategoryTreeView
-                  treeMode={sidebarMode === 'category' ? 'category' : 'archive'}
                   groups={sidebarMode === 'category' ? categoryTree : archiveTree}
                   activeNoteId={activeNoteId}
+                  persistedCollapsedPrimary={sidebarMode === 'category' ? categoryCollapsedPrimary : archiveCollapsedPrimary}
+                  persistedCollapsedSecondary={sidebarMode === 'category' ? categoryCollapsedSecondary : archiveCollapsedSecondary}
+                  focusNoteRequestKey={sidebarMode === 'category' ? categoryFocusRequestKey : archiveFocusRequestKey}
+                  onCollapseChange={sidebarMode === 'category' ? handleCategoryCollapseChange : handleArchiveCollapseChange}
                   onSelect={handleSelectNote}
                   onArmedLeftClick={handleArmedNoteLeftClick}
                   armedNoteActionById={armedNoteActionById}

@@ -1,6 +1,13 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { AppState, PersistedMenuState, PersistedViewportState, SidebarMode, WindowState } from '../src/shared/appState';
+import type {
+  AppState,
+  PersistedMenuState,
+  PersistedSidebarViewState,
+  PersistedViewportState,
+  SidebarMode,
+  WindowState,
+} from '../src/shared/appState';
 
 const APP_STATE_FILE = 'app-state.json';
 const WINDOW_STATE_FILE = 'window-state.json';
@@ -26,6 +33,13 @@ const DEFAULT_APP_STATE: AppState = {
     scrollDistanceTimeInfluence: 0.1,
     scrollBaseDistanceRows: 20,
     scrollMaxDurationMultiplier: 4,
+    sidebarViewState: {
+      date: { page: 1, scrollTop: 0 },
+      category: { scrollTop: 0, collapsedPrimary: [], collapsedSecondary: [] },
+      archive: { scrollTop: 0, collapsedPrimary: [], collapsedSecondary: [] },
+      trash: { page: 1, scrollTop: 0 },
+      find: { scrollTop: 0 },
+    },
   },
 };
 
@@ -98,6 +112,41 @@ function sanitizePositive(input: unknown, fallback: number): number {
   return input;
 }
 
+function sanitizeCollapsedList(input: unknown): string[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(input.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)),
+  );
+}
+
+function sanitizeSidebarViewStateEntry(input: PersistedSidebarViewState | undefined): PersistedSidebarViewState {
+  return {
+    scrollTop: typeof input?.scrollTop === 'number' && Number.isFinite(input.scrollTop)
+      ? Math.max(0, Math.round(input.scrollTop))
+      : 0,
+    page: typeof input?.page === 'number' && Number.isFinite(input.page)
+      ? Math.max(1, Math.round(input.page))
+      : 1,
+    collapsedPrimary: sanitizeCollapsedList(input?.collapsedPrimary),
+    collapsedSecondary: sanitizeCollapsedList(input?.collapsedSecondary),
+  };
+}
+
+function sanitizeSidebarViewState(
+  input: Partial<Record<SidebarMode, PersistedSidebarViewState>> | undefined,
+): Partial<Record<SidebarMode, PersistedSidebarViewState>> {
+  return {
+    date: sanitizeSidebarViewStateEntry(input?.date),
+    category: sanitizeSidebarViewStateEntry(input?.category),
+    archive: sanitizeSidebarViewStateEntry(input?.archive),
+    trash: sanitizeSidebarViewStateEntry(input?.trash),
+    find: sanitizeSidebarViewStateEntry(input?.find),
+  };
+}
+
 function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): PersistedMenuState {
   const selectedMonths = Array.isArray(input?.selectedMonths)
     ? input.selectedMonths.filter((value): value is number => Number.isInteger(value) && value >= 1 && value <= 12)
@@ -126,6 +175,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     scrollDistanceTimeInfluence: sanitizeRatio(input?.scrollDistanceTimeInfluence, DEFAULT_APP_STATE.menu!.scrollDistanceTimeInfluence ?? 0),
     scrollBaseDistanceRows: sanitizePositive(input?.scrollBaseDistanceRows, DEFAULT_APP_STATE.menu!.scrollBaseDistanceRows ?? 1),
     scrollMaxDurationMultiplier: sanitizePositive(input?.scrollMaxDurationMultiplier, DEFAULT_APP_STATE.menu!.scrollMaxDurationMultiplier ?? 1),
+    sidebarViewState: sanitizeSidebarViewState(input?.sidebarViewState),
   };
 }
 
