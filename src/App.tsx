@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { DragEvent, KeyboardEvent, MouseEvent } from 'react'
+import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Editor } from './components/Editor'
@@ -44,6 +44,17 @@ import {
   setScrollEaseMultiplier as applyScrollEaseMultiplier,
   setScrollMaxDurationMultiplier as applyScrollMaxDurationMultiplier,
 } from './editor/QuantizedEaseScroll'
+import {
+  getRenderScrollDynamic,
+  getRenderScrollResponsiveness,
+  getRenderScrollTotalTimeSec,
+  getRenderScrollSmoothnessSec,
+  setRenderScrollDynamic as applyRenderScrollDynamic,
+  setRenderScrollResponsiveness as applyRenderScrollResponsiveness,
+  setRenderScrollTotalTimeSec as applyRenderScrollTotalTimeSec,
+  setRenderScrollSmoothnessSec as applyRenderScrollSmoothnessSec,
+  scrollToNonQuantizedSmooth,
+} from './editor/NonQuantizedSmoothScroll'
 import {
   FILTER_MONTHS,
   FILTER_YEARS,
@@ -267,6 +278,30 @@ function isSafePreviewHref(href: string | undefined): boolean {
     return false
   }
 }
+
+// Stable references for ReactMarkdown so per-frame App re-renders (e.g. from
+// scroll-driven thumb state updates) don't force a full markdown reconciliation.
+const PREVIEW_MARKDOWN_REMARK_PLUGINS = [remarkGfm]
+
+const PREVIEW_MARKDOWN_COMPONENTS = {
+  a: ({ children, href }: { children?: ReactNode; href?: string }) => {
+    const normalizedHref = typeof href === 'string' ? href : undefined
+    const isLiteralHrefChild =
+      normalizedHref !== undefined &&
+      typeof children === 'string' &&
+      children.trim() === normalizedHref.trim()
+
+    if (isLiteralHrefChild) {
+      return <span>{children}</span>
+    }
+
+    if (isSafePreviewHref(normalizedHref)) {
+      return <a href={normalizedHref} target="_blank" rel="noopener noreferrer">{children}</a>
+    }
+
+    return <span>{children}</span>
+  },
+} as const
 
 function titleFromFileBasename(fileName: string): string {
   const withoutExtension = fileName.replace(/\.[^./\\]+$/, '').trim()
@@ -1081,6 +1116,10 @@ function App() {
   const [scrollDistanceTimeInfluence, setScrollDistanceTimeInfluence] = useState(() => getScrollDistanceTimeInfluence())
   const [scrollBaseDistanceRows, setScrollBaseDistanceRows] = useState(() => getScrollBaseDistanceRows())
   const [scrollMaxDurationMultiplier, setScrollMaxDurationMultiplier] = useState(() => getScrollMaxDurationMultiplier())
+  const [renderScrollDynamic, setRenderScrollDynamic] = useState(() => getRenderScrollDynamic())
+  const [renderScrollResponsiveness, setRenderScrollResponsiveness] = useState(() => getRenderScrollResponsiveness())
+  const [renderScrollTotalTimeSec, setRenderScrollTotalTimeSec] = useState(() => getRenderScrollTotalTimeSec())
+  const [renderScrollSmoothnessSec, setRenderScrollSmoothnessSec] = useState(() => getRenderScrollSmoothnessSec())
   const [isScrollSettingsOpen, setIsScrollSettingsOpen] = useState(false)
   const [activeDividerDrag, setActiveDividerDrag] = useState<'sidebar' | 'tag-split' | null>(null)
   const pendingSaveTextRef = useRef<string | null>(null)
@@ -1120,8 +1159,9 @@ function App() {
   const sidebarScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const sidebarScrollbarRafRef = useRef<number | null>(null)
   const sidebarScrollbarDragOriginRef = useRef<{ pointerY: number; thumbTopPx: number } | null>(null)
-  const [sidebarScrollThumbTopPx, setSidebarScrollThumbTopPx] = useState(0)
-  const [sidebarScrollThumbHeightPx, setSidebarScrollThumbHeightPx] = useState(0)
+  const sidebarScrollbarThumbRef = useRef<HTMLDivElement | null>(null)
+  const sidebarScrollThumbTopRef = useRef(0)
+  const sidebarScrollThumbHeightRef = useRef(0)
   const [isSidebarScrollThumbActive, setIsSidebarScrollThumbActive] = useState(false)
   const [isDraggingSidebarScrollThumb, setIsDraggingSidebarScrollThumb] = useState(false)
   const [isTrashViewDeleteArmed, setIsTrashViewDeleteArmed] = useState(false)
@@ -1133,8 +1173,9 @@ function App() {
   const previewScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const previewScrollbarRafRef = useRef<number | null>(null)
   const previewScrollbarDragOriginRef = useRef<{ pointerY: number; thumbTopPx: number } | null>(null)
-  const [previewScrollThumbTopPx, setPreviewScrollThumbTopPx] = useState(0)
-  const [previewScrollThumbHeightPx, setPreviewScrollThumbHeightPx] = useState(0)
+  const previewScrollbarThumbRef = useRef<HTMLDivElement | null>(null)
+  const previewScrollThumbTopRef = useRef(0)
+  const previewScrollThumbHeightRef = useRef(0)
   const [isPreviewScrollThumbActive, setIsPreviewScrollThumbActive] = useState(false)
   const [isDraggingPreviewScrollThumb, setIsDraggingPreviewScrollThumb] = useState(false)
 
@@ -1244,6 +1285,10 @@ function App() {
       scrollDistanceTimeInfluence,
       scrollBaseDistanceRows,
       scrollMaxDurationMultiplier,
+      renderScrollDynamic,
+      renderScrollResponsiveness,
+      renderScrollTotalTimeSec,
+      renderScrollSmoothnessSec,
       sidebarViewState: {
         ...effectiveViewStateByMode,
         category: {
@@ -1272,6 +1317,10 @@ function App() {
     scrollDistanceTimeInfluence,
     scrollEaseMultiplier,
     scrollMaxDurationMultiplier,
+    renderScrollDynamic,
+    renderScrollResponsiveness,
+    renderScrollSmoothnessSec,
+    renderScrollTotalTimeSec,
     searchQuery,
     selectedMonths,
     selectedYears,
@@ -1484,6 +1533,22 @@ function App() {
   useEffect(() => {
     applyScrollMaxDurationMultiplier(scrollMaxDurationMultiplier)
   }, [scrollMaxDurationMultiplier])
+
+  useEffect(() => {
+    applyRenderScrollDynamic(renderScrollDynamic)
+  }, [renderScrollDynamic])
+
+  useEffect(() => {
+    applyRenderScrollResponsiveness(renderScrollResponsiveness)
+  }, [renderScrollResponsiveness])
+
+  useEffect(() => {
+    applyRenderScrollTotalTimeSec(renderScrollTotalTimeSec)
+  }, [renderScrollTotalTimeSec])
+
+  useEffect(() => {
+    applyRenderScrollSmoothnessSec(renderScrollSmoothnessSec)
+  }, [renderScrollSmoothnessSec])
 
   useEffect(() => {
     setIsScrollSettingsOpen(false)
@@ -2489,6 +2554,10 @@ function App() {
             setScrollDistanceTimeInfluence(appState.menu.scrollDistanceTimeInfluence ?? getScrollDistanceTimeInfluence())
             setScrollBaseDistanceRows(appState.menu.scrollBaseDistanceRows ?? getScrollBaseDistanceRows())
             setScrollMaxDurationMultiplier(appState.menu.scrollMaxDurationMultiplier ?? getScrollMaxDurationMultiplier())
+            setRenderScrollDynamic(appState.menu.renderScrollDynamic ?? appState.menu.renderScrollEaseMultiplier ?? getRenderScrollDynamic())
+            setRenderScrollResponsiveness(appState.menu.renderScrollResponsiveness ?? appState.menu.renderScrollDistanceTimeInfluence ?? getRenderScrollResponsiveness())
+            setRenderScrollTotalTimeSec(appState.menu.renderScrollTotalTimeSec ?? getRenderScrollTotalTimeSec())
+            setRenderScrollSmoothnessSec(appState.menu.renderScrollSmoothnessSec ?? getRenderScrollSmoothnessSec())
 
             setCurrentPage(loadedSidebarViewState[appState.menu.sidebarMode].page)
             setCategoryCollapsedPrimary(loadedSidebarViewState.category.collapsedPrimary)
@@ -3118,6 +3187,18 @@ function App() {
   const currentEditorText = useMemo(() => {
     return normalizeInternalText(latestEditorTextRef.current || activeNoteText)
   }, [activeNoteText, editorTextVersion])
+
+  // Memoized so per-frame App re-renders (scroll thumb state, etc.) do not
+  // trigger a full ReactMarkdown reconciliation of long notes. That heavy
+  // reconciliation was stalling the main thread and freezing rAF mid-scroll.
+  const previewMarkdownElement = useMemo(() => (
+    <ReactMarkdown
+      remarkPlugins={PREVIEW_MARKDOWN_REMARK_PLUGINS}
+      components={PREVIEW_MARKDOWN_COMPONENTS}
+    >
+      {currentEditorText}
+    </ReactMarkdown>
+  ), [currentEditorText])
   const documentFindDirective = useMemo<DocumentFindDirective>(() => {
     return resolveDocumentFindDirective(documentFindQuery, currentEditorText, isDocumentFindCaseSensitive)
   }, [currentEditorText, documentFindQuery, isDocumentFindCaseSensitive])
@@ -3234,14 +3315,36 @@ function App() {
   const isSidebarTreeMode = sidebarMode === 'category' || sidebarMode === 'archive'
   const isSidebarCustomScrollbarMode = isSidebarTreeMode || isFindMode
 
+  // Direct-DOM helpers: per-frame scroll events would otherwise trigger React
+  // state updates that re-render the entire App component (heavy for long
+  // notes), starving rAF and producing slow/standstill/fast scroll artefacts.
+  // We mutate thumb DOM nodes imperatively and reserve React state only for
+  // visibility toggles (rare).
+  const applyPreviewThumbDom = useCallback((topPx: number, heightPx: number) => {
+    previewScrollThumbTopRef.current = topPx
+    previewScrollThumbHeightRef.current = heightPx
+    const thumbEl = previewScrollbarThumbRef.current
+    if (!thumbEl) return
+    thumbEl.style.top = `${topPx}px`
+    thumbEl.style.height = `${Math.max(0, heightPx)}px`
+  }, [])
+
+  const applySidebarThumbDom = useCallback((topPx: number, heightPx: number) => {
+    sidebarScrollThumbTopRef.current = topPx
+    sidebarScrollThumbHeightRef.current = heightPx
+    const thumbEl = sidebarScrollbarThumbRef.current
+    if (!thumbEl) return
+    thumbEl.style.top = `${topPx}px`
+    thumbEl.style.height = `${Math.max(0, heightPx)}px`
+  }, [])
+
   const syncPreviewCustomScrollbar = useCallback((options?: { force?: boolean }) => {
     if (isDraggingPreviewScrollThumb && !options?.force) {
       return
     }
 
     if (!isPreviewMode) {
-      setPreviewScrollThumbHeightPx(0)
-      setPreviewScrollThumbTopPx(0)
+      applyPreviewThumbDom(0, 0)
       setIsPreviewScrollThumbActive(false)
       return
     }
@@ -3255,15 +3358,13 @@ function App() {
     const trackHeight = track.clientHeight
     const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
     if (viewportHeight <= 0 || contentHeight <= 0 || trackHeight <= 0) {
-      setPreviewScrollThumbHeightPx(0)
-      setPreviewScrollThumbTopPx(0)
+      applyPreviewThumbDom(0, 0)
       setIsPreviewScrollThumbActive(false)
       return
     }
 
     if (contentHeight <= viewportHeight) {
-      setPreviewScrollThumbHeightPx(usableTrackHeight)
-      setPreviewScrollThumbTopPx(SCROLL_TRACK_EDGE_GAP_PX)
+      applyPreviewThumbDom(SCROLL_TRACK_EDGE_GAP_PX, usableTrackHeight)
       setIsPreviewScrollThumbActive(false)
       return
     }
@@ -3279,10 +3380,9 @@ function App() {
     const scrollRatio = maxScrollTop > 0 ? scroller.scrollTop / maxScrollTop : 0
     const nextThumbTop = SCROLL_TRACK_EDGE_GAP_PX + Math.round(maxThumbTop * scrollRatio)
 
-    setPreviewScrollThumbHeightPx(nextThumbHeight)
-    setPreviewScrollThumbTopPx(nextThumbTop)
+    applyPreviewThumbDom(nextThumbTop, nextThumbHeight)
     setIsPreviewScrollThumbActive(true)
-  }, [isDraggingPreviewScrollThumb, isPreviewMode])
+  }, [applyPreviewThumbDom, isDraggingPreviewScrollThumb, isPreviewMode])
 
   const previewScrollFromThumbTop = useCallback((thumbTopPx: number) => {
     const scroller = previewScrollRef.current
@@ -3291,20 +3391,19 @@ function App() {
 
     const trackHeight = track.clientHeight
     const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
-    const maxThumbTravel = Math.max(0, usableTrackHeight - previewScrollThumbHeightPx)
+    const maxThumbTravel = Math.max(0, usableTrackHeight - previewScrollThumbHeightRef.current)
     const minThumbTop = SCROLL_TRACK_EDGE_GAP_PX
     const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel
     const clampedTop = Math.max(minThumbTop, Math.min(thumbTopPx, maxThumbTop))
-    setPreviewScrollThumbTopPx(clampedTop)
+    applyPreviewThumbDom(clampedTop, previewScrollThumbHeightRef.current)
     const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
     const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0
     scroller.scrollTop = ratio * maxScrollTop
-  }, [previewScrollThumbHeightPx])
+  }, [applyPreviewThumbDom])
 
   const syncSidebarCustomScrollbar = useCallback(() => {
     if (!isSidebarCustomScrollbarMode) {
-      setSidebarScrollThumbHeightPx(0)
-      setSidebarScrollThumbTopPx(0)
+      applySidebarThumbDom(0, 0)
       setIsSidebarScrollThumbActive(false)
       return
     }
@@ -3318,15 +3417,13 @@ function App() {
     const trackHeight = track.clientHeight
     const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
     if (viewportHeight <= 0 || contentHeight <= 0 || trackHeight <= 0) {
-      setSidebarScrollThumbHeightPx(0)
-      setSidebarScrollThumbTopPx(0)
+      applySidebarThumbDom(0, 0)
       setIsSidebarScrollThumbActive(false)
       return
     }
 
     if (contentHeight <= viewportHeight) {
-      setSidebarScrollThumbHeightPx(usableTrackHeight)
-      setSidebarScrollThumbTopPx(SCROLL_TRACK_EDGE_GAP_PX)
+      applySidebarThumbDom(SCROLL_TRACK_EDGE_GAP_PX, usableTrackHeight)
       setIsSidebarScrollThumbActive(false)
       return
     }
@@ -3342,10 +3439,9 @@ function App() {
     const scrollRatio = maxScrollTop > 0 ? scroller.scrollTop / maxScrollTop : 0
     const nextThumbTop = SCROLL_TRACK_EDGE_GAP_PX + Math.round(maxThumbTop * scrollRatio)
 
-    setSidebarScrollThumbHeightPx(nextThumbHeight)
-    setSidebarScrollThumbTopPx(nextThumbTop)
+    applySidebarThumbDom(nextThumbTop, nextThumbHeight)
     setIsSidebarScrollThumbActive(true)
-  }, [isSidebarCustomScrollbarMode, sidebarTreeScrollerEl])
+  }, [applySidebarThumbDom, isSidebarCustomScrollbarMode, sidebarTreeScrollerEl])
 
   const sidebarScrollFromThumbTop = useCallback((thumbTopPx: number) => {
     const scroller = sidebarTreeScrollerEl
@@ -3354,14 +3450,14 @@ function App() {
 
     const trackHeight = track.clientHeight
     const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
-    const maxThumbTravel = Math.max(0, usableTrackHeight - sidebarScrollThumbHeightPx)
+    const maxThumbTravel = Math.max(0, usableTrackHeight - sidebarScrollThumbHeightRef.current)
     const minThumbTop = SCROLL_TRACK_EDGE_GAP_PX
     const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel
     const clampedTop = Math.max(minThumbTop, Math.min(thumbTopPx, maxThumbTop))
     const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
     const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0
     scroller.scrollTop = ratio * maxScrollTop
-  }, [sidebarScrollThumbHeightPx, sidebarTreeScrollerEl])
+  }, [sidebarTreeScrollerEl])
 
   const pagedVisibleNotes = useMemo(() => {
     if (sidebarMode !== 'date' && sidebarMode !== 'trash') {
@@ -3412,7 +3508,118 @@ function App() {
     syncSidebarCustomScrollbar,
   ])
 
+  const jumpToPreviewDocumentFindHit = useCallback((hit: DocumentFindHit) => {
+    const scroller = previewScrollRef.current
+    if (!scroller) return
+
+    const normalizedNeedle = normalizeInternalText(documentFindDirective.findText)
+    if (!normalizedNeedle) return
+
+    const hitOrdinal = documentFindHits.findIndex((candidate) => candidate.id === hit.id)
+    const compareNeedle = isDocumentFindCaseSensitive ? normalizedNeedle : normalizedNeedle.toLocaleLowerCase()
+
+    type TextSegment = {
+      node: Text
+      start: number
+      end: number
+    }
+
+    const segments: TextSegment[] = []
+    let aggregateText = ''
+    const walker = document.createTreeWalker(scroller, NodeFilter.SHOW_TEXT)
+    let node = walker.nextNode()
+    while (node) {
+      if (node instanceof Text && node.nodeValue && node.nodeValue.length > 0) {
+        const value = node.nodeValue
+        const start = aggregateText.length
+        aggregateText += value
+        segments.push({
+          node,
+          start,
+          end: aggregateText.length,
+        })
+      }
+      node = walker.nextNode()
+    }
+
+    const haystack = isDocumentFindCaseSensitive ? aggregateText : aggregateText.toLocaleLowerCase()
+    const resolvedOrdinal = hitOrdinal >= 0 ? hitOrdinal : 0
+
+    let occurrence = -1
+    let cursor = 0
+    for (let index = 0; index <= resolvedOrdinal; index += 1) {
+      const foundIndex = haystack.indexOf(compareNeedle, cursor)
+      if (foundIndex < 0) {
+        occurrence = -1
+        break
+      }
+      occurrence = foundIndex
+      cursor = foundIndex + Math.max(1, compareNeedle.length)
+    }
+
+    const fallbackTarget = (() => {
+      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+      if (maxScrollTop <= 0) return 0
+      const ratio = clamp(hit.index / Math.max(1, currentEditorText.length), 0, 1)
+      return ratio * maxScrollTop
+    })()
+
+    if (occurrence < 0 || segments.length === 0) {
+      scrollToNonQuantizedSmooth(scroller, fallbackTarget, {
+        onStep: () => syncPreviewCustomScrollbar(),
+      })
+      return
+    }
+
+    const startSegment = segments.find((segment) => occurrence >= segment.start && occurrence < segment.end)
+    if (!startSegment) {
+      scrollToNonQuantizedSmooth(scroller, fallbackTarget, {
+        onStep: () => syncPreviewCustomScrollbar(),
+      })
+      return
+    }
+
+    const endOffsetGlobal = occurrence + Math.max(1, hit.matchLength)
+    const endSegment = segments.find((segment) => endOffsetGlobal > segment.start && endOffsetGlobal <= segment.end) ?? startSegment
+
+    const startOffsetInNode = Math.max(0, Math.min(startSegment.node.nodeValue?.length ?? 0, occurrence - startSegment.start))
+    const endOffsetInNode = Math.max(
+      startOffsetInNode,
+      Math.min(endSegment.node.nodeValue?.length ?? 0, endOffsetGlobal - endSegment.start),
+    )
+
+    const range = document.createRange()
+    range.setStart(startSegment.node, startOffsetInNode)
+    range.setEnd(endSegment.node, endOffsetInNode)
+
+    const rect = range.getBoundingClientRect()
+    if (rect.height <= 0 && rect.width <= 0) {
+      scrollToNonQuantizedSmooth(scroller, fallbackTarget, {
+        onStep: () => syncPreviewCustomScrollbar(),
+      })
+      return
+    }
+
+    const scrollerRect = scroller.getBoundingClientRect()
+    const absoluteTop = scroller.scrollTop + (rect.top - scrollerRect.top)
+    const targetScrollTop = absoluteTop - (scroller.clientHeight * 0.35)
+    scrollToNonQuantizedSmooth(scroller, targetScrollTop, {
+      onStep: () => syncPreviewCustomScrollbar(),
+    })
+  }, [
+    currentEditorText.length,
+    documentFindDirective.findText,
+    documentFindHits,
+    isDocumentFindCaseSensitive,
+    syncPreviewCustomScrollbar,
+  ])
+
   const handleJumpToDocumentFindHit = useCallback((hit: DocumentFindHit) => {
+    if (isPreviewMode) {
+      jumpToPreviewDocumentFindHit(hit)
+      return
+    }
+
     const adapter = adapterRef.current
     if (!adapter) return
 
@@ -3425,7 +3632,7 @@ function App() {
         isCollapsed: false,
       },
     })
-  }, [])
+  }, [isPreviewMode, jumpToPreviewDocumentFindHit])
 
   const applyProgrammaticEditorText = useCallback((nextText: string, selectionStart?: number, selectionEnd?: number) => {
     const normalizedText = normalizeInternalText(nextText)
@@ -3936,11 +4143,12 @@ function App() {
 
     const rect = track.getBoundingClientRect()
     const clickY = event.clientY - rect.top
-    const targetThumbTop = clickY - (previewScrollThumbHeightPx / 2)
+    const thumbHeightPx = previewScrollThumbHeightRef.current
+    const targetThumbTop = clickY - (thumbHeightPx / 2)
 
     const trackHeight = track.clientHeight
     const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
-    const maxThumbTravel = Math.max(0, usableTrackHeight - previewScrollThumbHeightPx)
+    const maxThumbTravel = Math.max(0, usableTrackHeight - thumbHeightPx)
     const minThumbTop = SCROLL_TRACK_EDGE_GAP_PX
     const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel
     const clampedTop = Math.max(minThumbTop, Math.min(targetThumbTop, maxThumbTop))
@@ -3948,9 +4156,8 @@ function App() {
     const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0
     const targetScrollTop = ratio * maxScrollTop
 
-    scroller.scrollTo({ top: targetScrollTop, behavior: 'smooth' })
-    syncPreviewCustomScrollbar()
-  }, [previewScrollThumbHeightPx, syncPreviewCustomScrollbar])
+    scrollToNonQuantizedSmooth(scroller, targetScrollTop)
+  }, [])
 
   const handlePreviewThumbMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -3962,9 +4169,9 @@ function App() {
     setIsDraggingPreviewScrollThumb(true)
     previewScrollbarDragOriginRef.current = {
       pointerY: event.clientY,
-      thumbTopPx: previewScrollThumbTopPx,
+      thumbTopPx: previewScrollThumbTopRef.current,
     }
-  }, [previewScrollThumbTopPx])
+  }, [])
 
   useEffect(() => {
     if (!isSidebarCustomScrollbarMode || !sidebarTreeScrollerEl) return
@@ -4058,10 +4265,28 @@ function App() {
 
     const rect = track.getBoundingClientRect()
     const clickY = event.clientY - rect.top
-    const targetThumbTop = clickY - (sidebarScrollThumbHeightPx / 2)
-    sidebarScrollFromThumbTop(targetThumbTop)
-    syncSidebarCustomScrollbar()
-  }, [sidebarScrollFromThumbTop, sidebarScrollThumbHeightPx, syncSidebarCustomScrollbar])
+    const thumbHeightPx = sidebarScrollThumbHeightRef.current
+    const targetThumbTop = clickY - (thumbHeightPx / 2)
+    const trackHeight = track.clientHeight
+    const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
+    const maxThumbTravel = Math.max(0, usableTrackHeight - thumbHeightPx)
+    const minThumbTop = SCROLL_TRACK_EDGE_GAP_PX
+    const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel
+    const clampedTop = Math.max(minThumbTop, Math.min(targetThumbTop, maxThumbTop))
+
+    const scroller = sidebarTreeScrollerEl
+    if (!scroller) {
+      sidebarScrollFromThumbTop(clampedTop)
+      syncSidebarCustomScrollbar()
+      return
+    }
+
+    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+    const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0
+    const targetScrollTop = ratio * maxScrollTop
+
+    scrollToNonQuantizedSmooth(scroller, targetScrollTop)
+  }, [sidebarScrollFromThumbTop, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
 
   const handleSidebarThumbMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -4069,9 +4294,9 @@ function App() {
     setIsDraggingSidebarScrollThumb(true)
     sidebarScrollbarDragOriginRef.current = {
       pointerY: event.clientY,
-      thumbTopPx: sidebarScrollThumbTopPx,
+      thumbTopPx: sidebarScrollThumbTopRef.current,
     }
-  }, [sidebarScrollThumbTopPx])
+  }, [])
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -4309,11 +4534,8 @@ function App() {
                     onMouseDown={handleSidebarTrackMouseDown}
                   >
                     <div
+                      ref={sidebarScrollbarThumbRef}
                       className={`measly-scroll-thumb${isDraggingSidebarScrollThumb ? ' is-dragging' : ''}${isSidebarScrollThumbActive ? '' : ' is-inactive'}`}
-                      style={{
-                        top: `${sidebarScrollThumbTopPx}px`,
-                        height: `${Math.max(0, sidebarScrollThumbHeightPx)}px`,
-                      }}
                       onMouseDown={handleSidebarThumbMouseDown}
                     />
                   </div>
@@ -4695,50 +4917,109 @@ function App() {
               aria-label="Settings panel"
             >
               <section className="toolbar-flyout-section toolbar-flyout-section-scrolling display-in-view display-in-edit" aria-label="Scrolling settings">
-                <div className="panel-placeholder-title">Scrolling</div>
-                <div className="utility-setting-row utility-setting-row-range">
-                  <CompactRangeSlider
-                    id="scroll-distance-influence"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={scrollDistanceTimeInfluence}
-                    onChange={(value) => setScrollDistanceTimeInfluence(Math.max(0, Math.min(1, value)))}
-                    ariaLabel="Distance scaling"
-                  />
-                </div>
-                <div className="utility-setting-stack" aria-label="Scrolling numeric settings">
-                  <CompactSettingInput
-                    id="scroll-ease-multiplier"
-                    min={0.1}
-                    max={10}
-                    step={0.1}
-                    value={scrollEaseMultiplier}
-                    descriptor="speed"
-                    ariaLabel="Scroll speed"
-                    onCommit={(value) => setScrollEaseMultiplier(Math.max(0.1, value))}
-                  />
-                  <CompactSettingInput
-                    id="scroll-base-distance"
-                    min={1}
-                    max={200}
-                    step={1}
-                    value={scrollBaseDistanceRows}
-                    descriptor="base"
-                    ariaLabel="Scroll base rows"
-                    onCommit={(value) => setScrollBaseDistanceRows(Math.max(1, Math.round(value)))}
-                  />
-                  <CompactSettingInput
-                    id="scroll-max-multiplier"
-                    min={1}
-                    max={20}
-                    step={0.5}
-                    value={scrollMaxDurationMultiplier}
-                    descriptor="t_max"
-                    ariaLabel="Scroll max multiplier"
-                    onCommit={(value) => setScrollMaxDurationMultiplier(Math.max(1, value))}
-                  />
-                </div>
+                <div className="panel-placeholder-title">{isPreviewMode ? 'Render + Menu Scrolling' : 'Editor Scrolling'}</div>
+                {isPreviewMode ? (
+                  <div className="utility-setting-stack" aria-label="Render curve settings">
+                    <CompactSettingInput
+                      id="render-scroll-dynamic"
+                      min={0.1}
+                      max={20}
+                      step={0.1}
+                      value={renderScrollDynamic}
+                      descriptor="a"
+                      ariaLabel="Curve dynamic parameter a"
+                      onCommit={(value) => setRenderScrollDynamic(Math.max(0.1, value))}
+                    />
+                    <CompactSettingInput
+                      id="render-scroll-responsiveness"
+                      min={0.05}
+                      max={5}
+                      step={0.05}
+                      value={renderScrollResponsiveness}
+                      descriptor="b"
+                      ariaLabel="Curve responsiveness parameter b"
+                      onCommit={(value) => setRenderScrollResponsiveness(Math.max(0.05, value))}
+                    />
+                    <CompactSettingInput
+                      id="render-scroll-total-time"
+                      min={0.05}
+                      max={5}
+                      step={0.05}
+                      value={renderScrollTotalTimeSec}
+                      descriptor="t(s)"
+                      ariaLabel="Total time parameter t in seconds"
+                      onCommit={(value) => setRenderScrollTotalTimeSec(Math.max(0.05, value))}
+                    />
+                    <CompactSettingInput
+                      id="render-scroll-smoothness"
+                      min={0.01}
+                      max={1}
+                      step={0.01}
+                      value={renderScrollSmoothnessSec}
+                      descriptor="d(s)"
+                      ariaLabel="Smoothness parameter d in seconds"
+                      onCommit={(value) => setRenderScrollSmoothnessSec(Math.max(0.01, value))}
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <div className="utility-setting-row utility-setting-row-range">
+                      <CompactRangeSlider
+                        id="scroll-distance-influence"
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        value={scrollDistanceTimeInfluence}
+                        onChange={(value) => {
+                          const clampedValue = Math.max(0, Math.min(1, value))
+                          setScrollDistanceTimeInfluence(clampedValue)
+                        }}
+                        ariaLabel="Distance scaling"
+                      />
+                    </div>
+                    <div className="utility-setting-stack" aria-label="Scrolling numeric settings">
+                      <CompactSettingInput
+                        id="scroll-ease-multiplier"
+                        min={0.1}
+                        max={10}
+                        step={0.1}
+                        value={scrollEaseMultiplier}
+                        descriptor="speed"
+                        ariaLabel="Scroll speed"
+                        onCommit={(value) => {
+                          const nextValue = Math.max(0.1, value)
+                          setScrollEaseMultiplier(nextValue)
+                        }}
+                      />
+                      <CompactSettingInput
+                        id="scroll-base-distance"
+                        min={1}
+                        max={200}
+                        step={1}
+                        value={scrollBaseDistanceRows}
+                        descriptor="base"
+                        ariaLabel="Scroll base rows"
+                        onCommit={(value) => {
+                          const nextValue = Math.max(1, Math.round(value))
+                          setScrollBaseDistanceRows(nextValue)
+                        }}
+                      />
+                      <CompactSettingInput
+                        id="scroll-max-multiplier"
+                        min={1}
+                        max={20}
+                        step={0.5}
+                        value={scrollMaxDurationMultiplier}
+                        descriptor="t_max"
+                        ariaLabel="Scroll max multiplier"
+                        onCommit={(value) => {
+                          const nextValue = Math.max(1, value)
+                          setScrollMaxDurationMultiplier(nextValue)
+                        }}
+                      />
+                    </div>
+                  </>
+                )}
               </section>
 
               <section className="toolbar-flyout-section toolbar-flyout-section-placeholder display-in-edit" aria-label="Editor settings placeholder">
@@ -4785,30 +5066,7 @@ function App() {
                 ref={previewScrollRef}
                 className={`markdown-preview measly-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
               >
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    a: ({ children, href }) => {
-                      const normalizedHref = typeof href === 'string' ? href : undefined
-                      const isLiteralHrefChild =
-                        normalizedHref !== undefined &&
-                        typeof children === 'string' &&
-                        children.trim() === normalizedHref.trim()
-
-                      if (isLiteralHrefChild) {
-                        return <span>{children}</span>
-                      }
-
-                      if (isSafePreviewHref(normalizedHref)) {
-                        return <a href={normalizedHref} target="_blank" rel="noopener noreferrer">{children}</a>
-                      }
-
-                      return <span>{children}</span>
-                    },
-                  }}
-                >
-                  {currentEditorText}
-                </ReactMarkdown>
+                {previewMarkdownElement}
               </div>
             )}
           </div>
@@ -4825,11 +5083,8 @@ function App() {
                   onMouseDown={handlePreviewTrackMouseDown}
                 >
                   <div
+                    ref={previewScrollbarThumbRef}
                     className={`measly-scroll-thumb${isDraggingPreviewScrollThumb ? ' is-dragging' : ''}${isPreviewScrollThumbActive ? '' : ' is-inactive'}`}
-                    style={{
-                      top: `${previewScrollThumbTopPx}px`,
-                      height: `${Math.max(0, previewScrollThumbHeightPx)}px`,
-                    }}
                     onMouseDown={handlePreviewThumbMouseDown}
                   />
                 </div>

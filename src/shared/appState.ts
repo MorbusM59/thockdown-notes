@@ -33,6 +33,15 @@ export interface PersistedMenuState {
   scrollDistanceTimeInfluence?: number;
   scrollBaseDistanceRows?: number;
   scrollMaxDurationMultiplier?: number;
+  renderScrollDynamic?: number;
+  renderScrollResponsiveness?: number;
+  renderScrollTotalTimeSec?: number;
+  renderScrollSmoothnessSec?: number;
+  // Legacy render smooth-scroll keys (pre curve-model migration).
+  renderScrollEaseMultiplier?: number;
+  renderScrollDistanceTimeInfluence?: number;
+  renderScrollBaseDistanceRows?: number;
+  renderScrollMaxDurationMultiplier?: number;
   sidebarViewState?: Partial<Record<SidebarMode, PersistedSidebarViewState>>;
 }
 
