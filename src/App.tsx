@@ -4854,13 +4854,13 @@ function App() {
                   <CompactScrollbarSlider
                     id="render-scroll-total-time"
                     min={0}
-                    max={5}
+                    max={2}
                     step={0.05}
                     value={renderScrollTotalTimeSec}
                     trackLabel="speed"
                     ariaLabel="Total time parameter t in seconds"
                     reverseScale
-                    onCommit={(value) => setRenderScrollTotalTimeSec(clamp(value, 0, 5))}
+                    onCommit={(value) => setRenderScrollTotalTimeSec(clamp(value, 0, 2))}
                   />
                   <CompactScrollbarSlider
                     id="render-scroll-max-speed"
