@@ -20,6 +20,7 @@ import {
 } from './ScrollCurvePlan';
 
 export {
+  buildReleaseRampDownPlanFromCurrentParams,
   CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER,
   DEFAULT_RENDER_SCROLL_DYNAMIC,
   DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC,
@@ -34,6 +35,7 @@ export {
   getRenderScrollResponsiveness,
   getRenderScrollSkew,
   getRenderScrollTotalTimeSec,
+  sampleReleaseRampDownPlan,
   resolveRampCrossingTimeSecFromCurrentParams,
   setRenderScrollDynamic,
   setRenderScrollMaxSpeedPxPerSec,

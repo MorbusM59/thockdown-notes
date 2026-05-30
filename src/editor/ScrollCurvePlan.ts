@@ -369,3 +369,65 @@ export const resolveApexSpeedPxPerSecFromCurrentParams = (signedDistance: number
   const curve = buildCurvePlan(a, b, tSec, skew);
   return (absDistance * curve.peakSlope) / tSec;
 };
+
+export interface ReleaseRampDownPlan {
+  cdf: Float64Array;
+  tSec: number;
+  apexX: number;
+  apexProgress: number;
+  signedDistanceForFullCurve: number;
+  tailDurationSec: number;
+}
+
+// Build a post-apex-only decay plan that starts at the bell apex and follows
+// the natural bell tail down to zero velocity.
+export const buildReleaseRampDownPlanFromCurrentParams = (
+  direction: -1 | 1,
+  initialSpeedPxPerSec: number,
+): ReleaseRampDownPlan | null => {
+  const speed = Math.max(0, initialSpeedPxPerSec);
+  if (speed <= 0) return null;
+
+  const a = Math.max(0.0001, renderScrollDynamic);
+  const b = Math.max(0.0001, renderScrollResponsiveness);
+  const tSec = Math.max(0.0001, renderScrollTotalTimeSec);
+  const skew = Math.max(
+    RENDER_SCROLL_SKEW_MIN,
+    Math.min(RENDER_SCROLL_SKEW_MAX, renderScrollSkew),
+  );
+
+  const curve = buildCurvePlan(a, b, tSec, skew);
+  const apexX = skew;
+  const apexProgress = sampleCdf(curve.cdf, apexX);
+  const tailDurationSec = Math.max(0, (1 - apexX) * tSec);
+  if (tailDurationSec <= 0.0001) return null;
+
+  const slopeIndex = Math.max(0, Math.min(curve.slopes.length - 1, Math.floor(apexX * curve.slopes.length)));
+  const slopeAtApex = Math.max(0.0001, curve.slopes[slopeIndex]);
+  const signedDistanceForFullCurve = direction * ((speed * tSec) / slopeAtApex);
+
+  return {
+    cdf: curve.cdf,
+    tSec,
+    apexX,
+    apexProgress,
+    signedDistanceForFullCurve,
+    tailDurationSec,
+  };
+};
+
+// Returns signed displacement from the release point for the decay plan.
+export const sampleReleaseRampDownPlan = (
+  plan: ReleaseRampDownPlan,
+  elapsedSec: number,
+): number => {
+  if (elapsedSec <= 0) return 0;
+
+  if (elapsedSec >= plan.tailDurationSec) {
+    return plan.signedDistanceForFullCurve * (1 - plan.apexProgress);
+  }
+
+  const xNorm = plan.apexX + (elapsedSec / plan.tSec);
+  const progress = sampleCdf(plan.cdf, xNorm) - plan.apexProgress;
+  return plan.signedDistanceForFullCurve * progress;
+};

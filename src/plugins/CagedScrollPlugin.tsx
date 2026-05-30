@@ -13,9 +13,11 @@ import { resolveCaretTopInScroll } from '../editor/CaretVisualPosition';
 import { PIXELS_PER_WHEEL_UNIT } from '../editor/LayoutConstants';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
 import {
+  buildReleaseRampDownPlanFromCurrentParams,
   CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER,
   resolveApexSpeedPxPerSecFromCurrentParams,
   resolveRampCrossingTimeSecFromCurrentParams,
+  sampleReleaseRampDownPlan,
 } from '../editor/NonQuantizedSmoothScroll';
 import { cancelQuantizedSmoothScroll, scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
 import {
@@ -281,6 +283,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     let pageContinuousRafId: number | null = null;
     let pageContinuousLastTs: number | null = null;
     let pageContinuousHandoffTimeoutId: number | null = null;
+    let pageReleaseRampDownRafId: number | null = null;
 
     const clearPageContinuousHandoff = () => {
       if (pageContinuousHandoffTimeoutId !== null) {
@@ -296,6 +299,76 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         cancelAnimationFrame(pageContinuousRafId);
         pageContinuousRafId = null;
       }
+      if (pageReleaseRampDownRafId !== null) {
+        cancelAnimationFrame(pageReleaseRampDownRafId);
+        pageReleaseRampDownRafId = null;
+      }
+    };
+
+    const startPageReleaseRampDown = (direction: -1 | 1) => {
+      if (!scroller) {
+        stopPageContinuousScroll();
+        return;
+      }
+
+      const visibleRows = computeVisibleMiddleRows(scroller.clientHeight, topBoundaryPx, bottomBoundaryPx, lineHeightPx);
+      const pageStepDistancePx = visibleRows * lineHeightPx;
+      const releaseSpeedPxPerSec = Math.max(
+        1,
+        resolveApexSpeedPxPerSecFromCurrentParams(pageStepDistancePx)
+          * EDITOR_PAGE_CONTINUOUS_SCROLL_APEX_MULTIPLIER,
+      );
+      const rampDownPlan = buildReleaseRampDownPlanFromCurrentParams(direction, releaseSpeedPxPerSec);
+      if (!rampDownPlan) {
+        stopPageContinuousScroll();
+        return;
+      }
+
+      if (pageContinuousRafId !== null) {
+        cancelAnimationFrame(pageContinuousRafId);
+        pageContinuousRafId = null;
+      }
+      pageContinuousDirection = 0;
+      pageContinuousLastTs = null;
+
+      if (pageReleaseRampDownRafId !== null) {
+        cancelAnimationFrame(pageReleaseRampDownRafId);
+        pageReleaseRampDownRafId = null;
+      }
+
+      const startScrollTop = scroller.scrollTop;
+      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      let startMs: number | null = null;
+
+      const animateRampDown = (nowMs: number) => {
+        if (!scroller) {
+          stopPageContinuousScroll();
+          return;
+        }
+
+        if (startMs === null) {
+          startMs = nowMs;
+        }
+
+        const elapsedSec = Math.max(0, (nowMs - startMs) / 1000);
+        const displacement = sampleReleaseRampDownPlan(rampDownPlan, elapsedSec);
+        const nextScrollTop = Math.max(0, Math.min(maxScrollTop, startScrollTop + displacement));
+        const quantizedTarget = Math.round(nextScrollTop / lineHeightPx) * lineHeightPx;
+
+        if (Math.abs(quantizedTarget - scroller.scrollTop) > 0.01) {
+          scroller.scrollTop = quantizedTarget;
+        }
+
+        const hitBoundary = quantizedTarget <= 0.01 || quantizedTarget >= maxScrollTop - 0.01;
+        if (elapsedSec >= rampDownPlan.tailDurationSec || hitBoundary) {
+          pageReleaseRampDownRafId = null;
+          return;
+        }
+
+        pageReleaseRampDownRafId = requestAnimationFrame(animateRampDown);
+      };
+
+      pageReleaseRampDownRafId = requestAnimationFrame(animateRampDown);
     };
 
     const runPageContinuousScroll = (nowMs: number) => {
@@ -521,7 +594,14 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       if (event.key === 'PageUp' || event.key === 'PageDown') {
         pageKeysHeld.delete(event.key);
         clearPageContinuousHandoff();
-        stopPageContinuousScroll();
+        if (pageKeysHeld.size === 0) {
+          const activeDirection = pageContinuousDirection;
+          if (activeDirection !== 0) {
+            startPageReleaseRampDown(activeDirection);
+          } else {
+            stopPageContinuousScroll();
+          }
+        }
       }
 
       if (!scroller) return;

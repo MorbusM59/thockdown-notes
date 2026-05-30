@@ -35,6 +35,7 @@ import {
 } from './editor/FindReplaceEngine'
 import { normalizeInternalText } from './editor/TextPolicy'
 import {
+  buildReleaseRampDownPlanFromCurrentParams,
   cancelNonQuantizedSmoothScroll,
   CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER,
   resolveApexSpeedPxPerSecFromCurrentParams,
@@ -43,6 +44,7 @@ import {
   getRenderScrollTotalTimeSec,
   getRenderScrollMaxSpeedPxPerSec,
   getRenderScrollSkew,
+  sampleReleaseRampDownPlan,
   resolveRampCrossingTimeSecFromCurrentParams,
   RENDER_SCROLL_SKEW_MIN,
   RENDER_SCROLL_SKEW_MAX,
@@ -1117,6 +1119,7 @@ function App() {
   const previewContinuousScrollDirectionRef = useRef<-1 | 0 | 1>(0)
   const previewContinuousScrollRafRef = useRef<number | null>(null)
   const previewContinuousScrollLastTsRef = useRef<number | null>(null)
+  const previewReleaseRampDownRafRef = useRef<number | null>(null)
   const previewContinuousPreviousScrollBehaviorRef = useRef<string | null>(null)
   const previewPageKeysHeldRef = useRef(new Set<string>())
   const previewContinuousHandoffTimeoutRef = useRef<number | null>(null)
@@ -4103,6 +4106,10 @@ function App() {
       cancelAnimationFrame(previewContinuousScrollRafRef.current)
       previewContinuousScrollRafRef.current = null
     }
+    if (previewReleaseRampDownRafRef.current !== null) {
+      cancelAnimationFrame(previewReleaseRampDownRafRef.current)
+      previewReleaseRampDownRafRef.current = null
+    }
 
     const scroller = previewScrollRef.current
     if (scroller && previewContinuousPreviousScrollBehaviorRef.current !== null) {
@@ -4167,6 +4174,85 @@ function App() {
 
     previewContinuousScrollRafRef.current = requestAnimationFrame(runPreviewContinuousScroll)
   }, [isPreviewMode, syncPreviewCustomScrollbar])
+
+  const startPreviewReleaseRampDown = useCallback((direction: -1 | 1) => {
+    if (!isPreviewMode) {
+      stopPreviewContinuousScroll()
+      return
+    }
+
+    const scroller = previewScrollRef.current
+    if (!scroller) {
+      stopPreviewContinuousScroll()
+      return
+    }
+
+    const releaseSpeedPxPerSec = Math.max(
+      1,
+      resolveApexSpeedPxPerSecFromCurrentParams(scroller.clientHeight * 0.9)
+        * PREVIEW_CONTINUOUS_SCROLL_APEX_MULTIPLIER,
+    )
+    const rampDownPlan = buildReleaseRampDownPlanFromCurrentParams(direction, releaseSpeedPxPerSec)
+    if (!rampDownPlan) {
+      stopPreviewContinuousScroll()
+      return
+    }
+
+    if (previewContinuousScrollRafRef.current !== null) {
+      cancelAnimationFrame(previewContinuousScrollRafRef.current)
+      previewContinuousScrollRafRef.current = null
+    }
+    previewContinuousScrollDirectionRef.current = 0
+    previewContinuousScrollLastTsRef.current = null
+
+    if (previewReleaseRampDownRafRef.current !== null) {
+      cancelAnimationFrame(previewReleaseRampDownRafRef.current)
+      previewReleaseRampDownRafRef.current = null
+    }
+
+    if (previewContinuousPreviousScrollBehaviorRef.current === null) {
+      previewContinuousPreviousScrollBehaviorRef.current = scroller.style.scrollBehavior
+    }
+    scroller.style.scrollBehavior = 'auto'
+
+    const startScrollTop = scroller.scrollTop
+    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+    let startMs: number | null = null
+
+    const animateRampDown = (nowMs: number) => {
+      if (!isPreviewMode) {
+        stopPreviewContinuousScroll()
+        return
+      }
+
+      if (startMs === null) {
+        startMs = nowMs
+      }
+
+      const elapsedSec = Math.max(0, (nowMs - startMs) / 1000)
+      const displacement = sampleReleaseRampDownPlan(rampDownPlan, elapsedSec)
+      const nextScrollTop = clamp(startScrollTop + displacement, 0, maxScrollTop)
+
+      if (Math.abs(nextScrollTop - scroller.scrollTop) > 0.01) {
+        scroller.scrollTop = nextScrollTop
+        syncPreviewCustomScrollbar()
+      }
+
+      const hitBoundary = nextScrollTop <= 0.01 || nextScrollTop >= maxScrollTop - 0.01
+      if (elapsedSec >= rampDownPlan.tailDurationSec || hitBoundary) {
+        previewReleaseRampDownRafRef.current = null
+        if (previewContinuousPreviousScrollBehaviorRef.current !== null) {
+          scroller.style.scrollBehavior = previewContinuousPreviousScrollBehaviorRef.current
+          previewContinuousPreviousScrollBehaviorRef.current = null
+        }
+        return
+      }
+
+      previewReleaseRampDownRafRef.current = requestAnimationFrame(animateRampDown)
+    }
+
+    previewReleaseRampDownRafRef.current = requestAnimationFrame(animateRampDown)
+  }, [isPreviewMode, stopPreviewContinuousScroll, syncPreviewCustomScrollbar])
 
   const startPreviewContinuousScroll = useCallback((direction: -1 | 1) => {
     if (!isPreviewMode) return
@@ -4262,7 +4348,14 @@ function App() {
       if (event.key === 'PageDown' || event.key === 'PageUp') {
         previewPageKeysHeldRef.current.delete(event.key)
         clearPreviewContinuousHandoff()
-        stopPreviewContinuousScroll()
+        if (previewPageKeysHeldRef.current.size === 0) {
+          const activeDirection = previewContinuousScrollDirectionRef.current
+          if (activeDirection !== 0) {
+            startPreviewReleaseRampDown(activeDirection)
+          } else {
+            stopPreviewContinuousScroll()
+          }
+        }
       }
     }
 
@@ -4286,6 +4379,7 @@ function App() {
   }, [
     clearPreviewContinuousHandoff,
     isPreviewMode,
+    startPreviewReleaseRampDown,
     startPreviewContinuousScroll,
     stopPreviewContinuousScroll,
     syncPreviewCustomScrollbar,
