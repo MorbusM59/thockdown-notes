@@ -11,11 +11,6 @@
 
 import {
   buildScrollPlanFromCurrentParams,
-  getRenderScrollDynamic,
-  getRenderScrollMaxSpeedPxPerSec,
-  getRenderScrollResponsiveness,
-  getRenderScrollSkew,
-  getRenderScrollTotalTimeSec,
   sampleScrollPlan,
 } from './ScrollCurvePlan';
 
@@ -55,7 +50,6 @@ interface AnimationState {
 }
 
 const activeAnimations = new WeakMap<HTMLElement, AnimationState>();
-let loadFingerprintLogged = false;
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
@@ -76,17 +70,6 @@ export function scrollToNonQuantizedSmooth(
   targetScrollTopPx: number,
   options?: NonQuantizedSmoothScrollOptions,
 ): void {
-  if (!loadFingerprintLogged) {
-    loadFingerprintLogged = true;
-    console.log('[NonQuantizedSmoothScroll] CDF + plateau-clamp + skew engine active', {
-      a: getRenderScrollDynamic(),
-      b: getRenderScrollResponsiveness(),
-      t: getRenderScrollTotalTimeSec(),
-      maxSpeedPxPerSec: getRenderScrollMaxSpeedPxPerSec(),
-      skew: getRenderScrollSkew(),
-    });
-  }
-
   const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
   const startPx = clamp(scroller.scrollTop, 0, maxScrollTopPx);
   const targetPx = clamp(targetScrollTopPx, 0, maxScrollTopPx);

@@ -27,7 +27,6 @@ interface AnimationState {
 }
 
 const activeAnimations = new WeakMap<HTMLElement, AnimationState>();
-let loadFingerprintLogged = false;
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
@@ -53,11 +52,6 @@ export function scrollToQuantizedSmooth(
 ): void {
   const { lineHeightPx, onStep } = options;
   if (!Number.isFinite(lineHeightPx) || lineHeightPx <= 0) return;
-
-  if (!loadFingerprintLogged) {
-    loadFingerprintLogged = true;
-    console.log('[QuantizedSmoothScroll] CDF + plateau-clamp + skew engine active');
-  }
 
   const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
   const quantizedStartPx = clamp(quantizeToRow(scroller.scrollTop, lineHeightPx), 0, maxScrollTopPx);

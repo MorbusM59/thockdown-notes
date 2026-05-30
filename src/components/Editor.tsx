@@ -65,14 +65,20 @@ type ScrollbarGeometry = {
 
 const quantizeTopEdge = (valuePx: number, lineHeightPx: number) => Math.max(0, Math.round(valuePx / lineHeightPx) * lineHeightPx);
 
-const bottomBoundaryFromTopEdge = (heightPx: number, topEdgePx: number, lineHeightPx: number) => {
+const quantizeViewportHeightToGrid = (heightPx: number, lineHeightPx: number) => {
   const h = Math.max(0, Math.round(heightPx));
+  const line = Math.max(1, Math.round(lineHeightPx));
+  return Math.floor(h / line) * line;
+};
+
+const bottomBoundaryFromTopEdge = (heightPx: number, topEdgePx: number, lineHeightPx: number) => {
+  const h = quantizeViewportHeightToGrid(heightPx, lineHeightPx);
   const topEdge = Math.max(0, Math.min(h, quantizeTopEdge(topEdgePx, lineHeightPx)));
   return h - topEdge;
 };
 
 const topEdgeFromBottomBoundary = (heightPx: number, bottomBoundaryPx: number, lineHeightPx: number) => {
-  const h = Math.max(0, Math.round(heightPx));
+  const h = quantizeViewportHeightToGrid(heightPx, lineHeightPx);
   return Math.max(0, Math.min(h, quantizeTopEdge(h - bottomBoundaryPx, lineHeightPx)));
 };
 
@@ -302,8 +308,8 @@ export function Editor({
   }, [bindings]);
 
   const buildViewport = useCallback((): EditorViewportState => ({
-    topBoundaryPx: topBoundary,
-    bottomBoundaryPx: bottomBoundary,
+    topBoundaryPx: quantizeTopEdge(topBoundary, lineHeightPx),
+    bottomBoundaryPx: quantizeTopEdge(bottomBoundary, lineHeightPx),
     scrollTopPx: scrollerRef.current?.scrollTop ?? 0,
     lineHeightPx,
     cellWidthPx,
@@ -586,10 +592,11 @@ export function Editor({
 
         if (nextViewport) {
           const h = Math.max(0, scrollerRef.current?.clientHeight ?? 0);
+          const quantizedViewportHeight = quantizeViewportHeightToGrid(h, lineHeightPx);
 
           if (typeof nextViewport.topBoundaryPx === 'number') {
             const quantized = Math.max(0, Math.round(nextViewport.topBoundaryPx / lineHeightPx) * lineHeightPx);
-            setTopBoundary(Math.min(quantized, h));
+            setTopBoundary(Math.min(quantized, quantizedViewportHeight));
           }
           if (typeof nextViewport.bottomBoundaryPx === 'number') {
             const requestedTopEdge = topEdgeFromBottomBoundary(h, nextViewport.bottomBoundaryPx, lineHeightPx);

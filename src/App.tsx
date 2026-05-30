@@ -77,7 +77,6 @@ const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28
 const SCROLL_TRACK_EDGE_GAP_PX = 3
 const NOTE_RIGHT_CLICK_HOLD_MS = 200
 const PREVIEW_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER
-const NOTE_SWITCH_DEBUG_LOGS = true
 
 type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find'
 type NoteArmedAction = 'archive' | 'deletion'
@@ -107,11 +106,6 @@ type EditViewportTelemetry = {
   scrollTopPx: number
   scrollHeightPx: number
   clientHeightPx: number
-}
-
-type DebugEditUiData = {
-  scrollTop: number | null
-  cursorPos: number | null
 }
 
 const TEXT_DECORATION_MARKERS: Record<TextDecorationFormat, { open: string; close: string }> = {
@@ -1174,34 +1168,6 @@ function App() {
   const [isPreviewScrollThumbActive, setIsPreviewScrollThumbActive] = useState(false)
   const [isDraggingPreviewScrollThumb, setIsDraggingPreviewScrollThumb] = useState(false)
 
-  const toDebugEditUiData = useCallback((uiState: { scrollTop?: unknown; cursorPos?: unknown } | null | undefined): DebugEditUiData => ({
-    scrollTop:
-      typeof uiState?.scrollTop === 'number' && Number.isFinite(uiState.scrollTop)
-        ? Math.max(0, Math.round(uiState.scrollTop))
-        : null,
-    cursorPos:
-      typeof uiState?.cursorPos === 'number' && Number.isFinite(uiState.cursorPos)
-        ? Math.max(0, Math.round(uiState.cursorPos))
-        : null,
-  }), [])
-
-  const logEditUiData = useCallback((label: string, data: DebugEditUiData) => {
-    if (!NOTE_SWITCH_DEBUG_LOGS) return
-
-    const isNoteSwitchLabel =
-      label.includes('[note-switch]')
-      || label.includes('[note-activation]')
-      || label.includes('[preview-exit]')
-      || label.includes('[before-unload]')
-
-    if (!isNoteSwitchLabel) return
-    console.log(label, {
-      noteId: activeNoteId,
-      mode: isPreviewMode ? 'render-view' : 'edit-mode',
-      ...data,
-    })
-  }, [activeNoteId, isPreviewMode])
-
   const editorRuntimeMetrics = useMemo(
     () => resolveEditorRuntimeMetrics(editorFontSize, editorSpacing),
     [editorFontSize, editorSpacing],
@@ -1302,7 +1268,6 @@ function App() {
   const persistEditUiPayloadForNote = useCallback(async (
     noteId: string,
     payload: { progressEdit: number; cursorPos: number; scrollTop: number },
-    logPrefix: string,
   ) => {
     const legacyDb = window.measlyLegacyDb
     if (!legacyDb) return
@@ -1317,7 +1282,6 @@ function App() {
       || Math.abs(previousPersisted.progressEdit - progressEdit) >= 0.0001
 
     if (changed) {
-      logEditUiData(`${logPrefix}[write]`, toDebugEditUiData(payload))
       lastPersistedEditUiStateRef.current = {
         noteId,
         progressEdit,
@@ -1325,15 +1289,9 @@ function App() {
         scrollTop,
       }
       await legacyDb.saveNoteUiState(noteId, payload)
-      const storedUiState = await legacyDb.getNoteUiState(noteId)
-      logEditUiData(`${logPrefix}[stored-after-write]`, toDebugEditUiData(storedUiState))
       return
     }
-
-    logEditUiData(`${logPrefix}[write-skipped]`, toDebugEditUiData(payload))
-    const storedUiState = await legacyDb.getNoteUiState(noteId)
-    logEditUiData(`${logPrefix}[stored-current]`, toDebugEditUiData(storedUiState))
-  }, [logEditUiData, toDebugEditUiData])
+  }, [])
 
   const armedNoteActionById = useMemo(() => {
     if (!armedNoteActionState) {
@@ -1729,34 +1687,11 @@ function App() {
 
     const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
     const ratio = maxScrollTop <= 0 ? 0 : clamp(container.scrollTop / maxScrollTop, 0, 1)
-    if (NOTE_SWITCH_DEBUG_LOGS) {
-      console.log('[render-view][note-switch][write-progressPreview]', {
-        noteId,
-        ratio,
-        scrollTop: Math.round(container.scrollTop),
-        maxScrollTop: Math.round(maxScrollTop),
-      })
-    }
     await window.measlyLegacyDb?.saveNoteUiState(noteId, { progressPreview: ratio })
-    if (NOTE_SWITCH_DEBUG_LOGS) {
-      const stored = await window.measlyLegacyDb?.getNoteUiState(noteId)
-      console.log('[render-view][note-switch][stored-progressPreview]', {
-        noteId,
-        storedProgressPreview: stored?.progressPreview ?? null,
-      })
-    }
   }, [])
 
   const activateNote = useCallback(async (noteId: string) => {
     if (!window.measlyNotes) return
-
-    if (NOTE_SWITCH_DEBUG_LOGS) {
-      console.log('[note-switch][activate-begin]', {
-        previousNoteId: activeNoteId,
-        nextNoteId: noteId,
-        mode: isPreviewMode ? 'render-view' : 'edit-mode',
-      })
-    }
 
     const previousNoteId = activeNoteId
     if (persistenceReady && previousNoteId && previousNoteId !== noteId) {
@@ -1771,15 +1706,7 @@ function App() {
       const payload = snapshotPayload
 
       if (payload) {
-        if (NOTE_SWITCH_DEBUG_LOGS) {
-          console.log('[edit-ui][note-switch][persist-payload]', {
-            previousNoteId,
-            progressEdit: payload.progressEdit,
-            cursorPos: payload.cursorPos,
-            scrollTop: payload.scrollTop,
-          })
-        }
-        await persistEditUiPayloadForNote(previousNoteId, payload, '[edit-ui][note-switch]')
+        await persistEditUiPayloadForNote(previousNoteId, payload)
       }
     }
 
@@ -1789,15 +1716,6 @@ function App() {
     ])
     const hydratedText = normalizeInternalText(loaded.text)
     const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
-    if (NOTE_SWITCH_DEBUG_LOGS) {
-      console.log('[note-switch][load-note-ui-state]', {
-        noteId,
-        loadedUiState: toDebugEditUiData(nextUiState),
-        loadedProgressPreview: typeof nextUiState?.progressPreview === 'number'
-          ? nextUiState.progressPreview
-          : null,
-      })
-    }
     const preloadedSnapshot = buildEditRestoreSnapshotFromUiState({
       noteId,
       text: hydratedText,
@@ -1805,13 +1723,6 @@ function App() {
       fallbackViewport,
       lineHeightPx: editorRuntimeMetrics.lineHeightPx,
     })
-    if (NOTE_SWITCH_DEBUG_LOGS) {
-      console.log('[note-switch][preloaded-edit-snapshot]', {
-        noteId,
-        scrollTopPx: preloadedSnapshot.viewport.scrollTopPx,
-        cursorPos: preloadedSnapshot.fullSelection.end,
-      })
-    }
     updateEditModeSnapshotCache(preloadedSnapshot)
 
     latestEditorTextRef.current = hydratedText
@@ -1824,11 +1735,9 @@ function App() {
   }, [
     activeNoteId,
     editorRuntimeMetrics.lineHeightPx,
-    isPreviewMode,
     persistEditUiPayloadForNote,
     persistenceReady,
     saveSelectedNoteState,
-    toDebugEditUiData,
     updateEditModeSnapshotCache,
   ])
 
@@ -1859,16 +1768,6 @@ function App() {
 
     noteTransitionLockRef.current = true
     try {
-      if (NOTE_SWITCH_DEBUG_LOGS) {
-        const cached = activeNoteId ? editModeSnapshotByNoteIdRef.current.get(activeNoteId) : null
-        console.log('[note-switch][select-intent]', {
-          fromNoteId: activeNoteId,
-          toNoteId: noteId,
-          mode: isPreviewMode ? 'render-view' : 'edit-mode',
-          cachedEditScrollTop: cached?.viewport.scrollTopPx ?? null,
-          cachedCursorPos: cached?.fullSelection.end ?? null,
-        })
-      }
       if (!isPreviewMode && activeNoteId && noteId !== activeNoteId) {
         captureEditModeSnapshotFromEditor(activeNoteId)
       }
@@ -2050,13 +1949,8 @@ function App() {
         previousPersisted.cursorPos === cursorPos &&
         Math.abs(previousPersisted.progressEdit - progressEdit) < 0.0001
       ) {
-        logEditUiData('[edit-ui][preview-enter][write-skipped]', toDebugEditUiData(payload))
-        const storedUiState = await legacyDb.getNoteUiState(noteId)
-        logEditUiData('[edit-ui][preview-enter][stored-current]', toDebugEditUiData(storedUiState))
         return
       }
-
-      logEditUiData('[edit-ui][preview-enter][write]', toDebugEditUiData(payload))
 
       lastPersistedEditUiStateRef.current = {
         noteId,
@@ -2066,8 +1960,6 @@ function App() {
       }
 
       await legacyDb.saveNoteUiState(noteId, payload)
-      const storedUiState = await legacyDb.getNoteUiState(noteId)
-      logEditUiData('[edit-ui][preview-enter][stored-after-write]', toDebugEditUiData(storedUiState))
     }
 
     if (options?.immediate) {
@@ -2087,7 +1979,7 @@ function App() {
       editUiStateSaveTimerRef.current = null
       void persistNow()
     }, 280)
-  }, [editorRuntimeMetrics.lineHeightPx, logEditUiData, readCurrentEditUiPayload, toDebugEditUiData, updateEditModeSnapshotCache])
+  }, [editorRuntimeMetrics.lineHeightPx, readCurrentEditUiPayload, updateEditModeSnapshotCache])
 
   const persistActiveNoteEditModeStateNow = useCallback(() => {
     if (!activeNoteId) return
@@ -2107,7 +1999,7 @@ function App() {
     const payload = snapshotPayload
     if (!payload) return
 
-    void persistEditUiPayloadForNote(activeNoteId, payload, '[edit-ui][before-unload]')
+    void persistEditUiPayloadForNote(activeNoteId, payload)
   }, [
     activeNoteId,
     captureEditModeSnapshotFromEditor,
@@ -2120,14 +2012,6 @@ function App() {
     const restoreFullSelection = options?.restoreFullSelection ?? true
     let cancelled = false
     const targetScrollTop = Math.max(0, Math.round(snapshot.viewport.scrollTopPx))
-    if (NOTE_SWITCH_DEBUG_LOGS) {
-      console.log('[edit-ui][note-activation][apply-snapshot]', {
-        noteId: snapshot.noteId,
-        targetScrollTop,
-        cursorPos: snapshot.fullSelection.end,
-        restoreFullSelection,
-      })
-    }
 
     const applyViewportSnapshot = () => {
       adapterRef.current?.applySnapshot({
@@ -3070,6 +2954,11 @@ function App() {
       return
     }
 
+    // Single-owner restore rule: render->edit transition owns restore for the
+    // current note. Mark this note as handled so the note-activation effect
+    // does not race in with a second restore source.
+    previousActiveNoteIdForEditRestoreRef.current = activeNoteId
+
     const cachedSnapshot = pendingEditRestoreSnapshotRef.current
 
     if (cachedSnapshot && cachedSnapshot.noteId === activeNoteId) {
@@ -3088,7 +2977,6 @@ function App() {
       try {
         const uiState = await window.measlyLegacyDb?.getNoteUiState(activeNoteId)
         if (cancelled) return
-        logEditUiData('[edit-ui][editor-read][preview-exit]', toDebugEditUiData(uiState))
 
         const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
         const fallbackSnapshot = buildEditRestoreSnapshotFromUiState({
@@ -3216,7 +3104,6 @@ function App() {
       try {
         const uiState = await window.measlyLegacyDb?.getNoteUiState(activeNoteId)
         if (cancelled) return
-        logEditUiData('[edit-ui][editor-read][note-activation]', toDebugEditUiData(uiState))
 
         const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
         const activeText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
@@ -3246,9 +3133,7 @@ function App() {
     applyEditRestoreSnapshot,
     editorRuntimeMetrics.lineHeightPx,
     isPreviewMode,
-    logEditUiData,
     persistenceReady,
-    toDebugEditUiData,
     updateEditModeSnapshotCache,
   ])
 
@@ -3325,13 +3210,6 @@ function App() {
       try {
         const uiState = await window.measlyLegacyDb?.getNoteUiState(activeNoteId)
         if (cancelled) return
-
-        if (NOTE_SWITCH_DEBUG_LOGS) {
-          console.log('[render-view][note-activation][load-ui-state]', {
-            noteId: activeNoteId,
-            progressPreview: typeof uiState?.progressPreview === 'number' ? uiState.progressPreview : null,
-          })
-        }
 
         const ratio = uiState?.progressPreview
         if (typeof ratio !== 'number' || Number.isNaN(ratio)) {

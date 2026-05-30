@@ -21,9 +21,3 @@ export function readCaretGeometry(): CaretGeometry | null {
     right: rect.right,
   };
 }
-
-export function logScenarioProbe(name: string, payload: Record<string, unknown>, enabled: boolean): void {
-  if (!enabled) return;
-  // Keep this machine-readable for quick grep in devtools output.
-  console.log(`[scenario-probe:${name}]`, payload);
-}
