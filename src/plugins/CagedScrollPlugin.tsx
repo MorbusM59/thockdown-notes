@@ -12,7 +12,8 @@ import { readSelectionRect } from '../editor/CaretRect';
 import { resolveCaretTopInScroll } from '../editor/CaretVisualPosition';
 import { PIXELS_PER_WHEEL_UNIT } from '../editor/LayoutConstants';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
-import { scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
+import { getRenderScrollMaxSpeedPxPerSec } from '../editor/NonQuantizedSmoothScroll';
+import { cancelQuantizedSmoothScroll, scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
 import {
   activateRefocusTransaction,
   clearRefocusTransaction,
@@ -34,6 +35,8 @@ type ResolveIntentResult = {
   reason: string;
   caretTopInScrollPx?: number;
 };
+
+const EDITOR_PAGE_CONTINUOUS_SCROLL_SPEED_FACTOR = 0.2;
 
 const computeVisibleMiddleRows = (
   scrollerClientHeightPx: number,
@@ -269,6 +272,69 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       lastDragScrollTopPx = scroller.scrollTop;
     }
     let pendingWheelPx = 0;
+    let pageContinuousDirection: -1 | 0 | 1 = 0;
+    let pageContinuousRafId: number | null = null;
+    let pageContinuousLastTs: number | null = null;
+
+    const stopPageContinuousScroll = () => {
+      pageContinuousDirection = 0;
+      pageContinuousLastTs = null;
+      if (pageContinuousRafId !== null) {
+        cancelAnimationFrame(pageContinuousRafId);
+        pageContinuousRafId = null;
+      }
+    };
+
+    const runPageContinuousScroll = (nowMs: number) => {
+      if (!scroller || pageContinuousDirection === 0) {
+        pageContinuousRafId = null;
+        pageContinuousLastTs = null;
+        return;
+      }
+
+      const previousTs = pageContinuousLastTs;
+      pageContinuousLastTs = nowMs;
+
+      if (previousTs !== null) {
+        const deltaSec = Math.max(0, (nowMs - previousTs) / 1000);
+        const speedPxPerSec = Math.max(
+          1,
+          getRenderScrollMaxSpeedPxPerSec() * EDITOR_PAGE_CONTINUOUS_SCROLL_SPEED_FACTOR,
+        );
+        const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        const nextScrollTop = Math.max(
+          0,
+          Math.min(maxScrollTop, scroller.scrollTop + pageContinuousDirection * speedPxPerSec * deltaSec),
+        );
+        const quantizedTarget = Math.round(nextScrollTop / lineHeightPx) * lineHeightPx;
+
+        if (Math.abs(quantizedTarget - scroller.scrollTop) > 0.01) {
+          scroller.scrollTop = quantizedTarget;
+        }
+
+        const hitBoundary = (pageContinuousDirection < 0 && quantizedTarget <= 0.01)
+          || (pageContinuousDirection > 0 && quantizedTarget >= maxScrollTop - 0.01);
+        if (hitBoundary) {
+          stopPageContinuousScroll();
+          return;
+        }
+      }
+
+      pageContinuousRafId = requestAnimationFrame(runPageContinuousScroll);
+    };
+
+    const startPageContinuousScroll = (direction: -1 | 1) => {
+      if (!scroller) return;
+      cancelQuantizedSmoothScroll(scroller);
+      const previousDirection = pageContinuousDirection;
+      pageContinuousDirection = direction;
+      if (pageContinuousRafId === null || previousDirection !== direction) {
+        pageContinuousLastTs = null;
+      }
+      if (pageContinuousRafId === null) {
+        pageContinuousRafId = requestAnimationFrame(runPageContinuousScroll);
+      }
+    };
 
     const isRefocusKey = (event: KeyboardEvent) => {
       if (
@@ -321,9 +387,17 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       if (event.key === 'PageUp' || event.key === 'PageDown') {
         event.preventDefault();
         clearCagedRefocusState();
+        const direction: -1 | 1 = event.key === 'PageDown' ? 1 : -1;
+
+        if (event.repeat) {
+          startPageContinuousScroll(direction);
+          return;
+        }
+
+        stopPageContinuousScroll();
 
         const visibleRows = computeVisibleMiddleRows(scroller.clientHeight, topBoundaryPx, bottomBoundaryPx, lineHeightPx);
-        const delta = (event.key === 'PageDown' ? 1 : -1) * visibleRows * lineHeightPx;
+        const delta = direction * visibleRows * lineHeightPx;
 
         const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
         const currentAligned = Math.round(scroller.scrollTop / lineHeightPx) * lineHeightPx;
@@ -404,6 +478,10 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'PageUp' || event.key === 'PageDown') {
+        stopPageContinuousScroll();
+      }
+
       if (!scroller) return;
       if (!pressedRefocusKeys.has(event.key)) return;
 
@@ -542,12 +620,14 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     };
 
     const handleWindowBlur = () => {
+      stopPageContinuousScroll();
       endPointerDragSelection();
       clearCagedRefocusState();
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState !== 'visible') {
+        stopPageContinuousScroll();
         endPointerDragSelection();
         clearCagedRefocusState();
       }
@@ -568,6 +648,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
+      stopPageContinuousScroll();
       if (refocusRetryFrameId !== null) {
         cancelAnimationFrame(refocusRetryFrameId);
         refocusRetryFrameId = null;
