@@ -1050,6 +1050,7 @@ function App() {
   const appShellRef = useRef<HTMLDivElement | null>(null)
   const sidebarContentRef = useRef<HTMLDivElement | null>(null)
   const sidebarSearchInputRef = useRef<HTMLInputElement | null>(null)
+  const tagInputRef = useRef<HTMLInputElement | null>(null)
   const [notes, setNotes] = useState<NoteSummary[]>([])
   const [tagInputValue, setTagInputValue] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -1795,6 +1796,36 @@ function App() {
     // Force a reload even for the active card to recover from any stale editor state.
     void selectNote(noteId, { forceReload: true })
   }, [selectNote])
+
+  const focusEditorInEditMode = useCallback(() => {
+    if (isPreviewMode || !activeNoteId) return
+
+    const editorRoot = document.querySelector<HTMLElement>('.editor-stage .editor-text[contenteditable="true"]')
+    if (!editorRoot) return
+    if (document.activeElement === editorRoot) return
+
+    editorRoot.focus({ preventScroll: true })
+  }, [activeNoteId, isPreviewMode])
+
+  const scheduleFocusEditorInEditMode = useCallback(() => {
+    window.setTimeout(() => {
+      focusEditorInEditMode()
+    }, 0)
+  }, [focusEditorInEditMode])
+
+  const isAllowedNonEditorFocusTarget = useCallback((target: EventTarget | null): boolean => {
+    if (!(target instanceof HTMLElement)) return false
+
+    if (target instanceof HTMLSelectElement) {
+      return true
+    }
+
+    if (target === sidebarSearchInputRef.current || target === tagInputRef.current) {
+      return true
+    }
+
+    return false
+  }, [])
 
   const updateActiveNoteTitlePreview = useCallback((nextText: string) => {
     if (!activeNoteId) return
@@ -3029,6 +3060,7 @@ function App() {
     setIsPreviewMode((previous) => {
       if (!previous && activeNoteId) {
         const activeText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+        setActiveNoteText(activeText)
         captureEditModeSnapshotForRenderView(activeNoteId, activeText)
       } else if (previous && activeNoteId) {
         void persistRenderViewStateForNoteNow(activeNoteId)
@@ -4854,6 +4886,28 @@ function App() {
   ])
 
   useEffect(() => {
+    if (isPreviewMode || !activeNoteId) return
+
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target
+      if (!(target instanceof HTMLElement)) return
+
+      if (target.closest('.editor-stage .editor-text[contenteditable="true"]')) {
+        return
+      }
+
+      if (isAllowedNonEditorFocusTarget(target)) {
+        return
+      }
+
+      scheduleFocusEditorInEditMode()
+    }
+
+    window.addEventListener('focusin', onFocusIn)
+    return () => window.removeEventListener('focusin', onFocusIn)
+  }, [activeNoteId, isAllowedNonEditorFocusTarget, isPreviewMode, scheduleFocusEditorInEditMode])
+
+  useEffect(() => {
     const handleBeforeUnload = () => {
       persistActiveNoteEditModeStateNow()
       if (isPreviewMode && activeNoteId) {
@@ -5126,6 +5180,7 @@ function App() {
             <div className="tag-input-bar">
               <div className="tag-input-wrapper">
                 <input
+                  ref={tagInputRef}
                   className="tag-input"
                   type="text"
                   value={tagInputValue}
@@ -5351,7 +5406,10 @@ function App() {
                   <label className="selector-label">Style:</label>
                   <select
                     value={editorStyle}
-                    onChange={(event) => setEditorStyle(event.target.value as EditorStyleKey)}
+                    onChange={(event) => {
+                      setEditorStyle(event.target.value as EditorStyleKey)
+                      scheduleFocusEditorInEditMode()
+                    }}
                     aria-label="Editor style"
                     disabled={!activeNoteId}
                   >
@@ -5365,7 +5423,10 @@ function App() {
                   <label className="selector-label">Size:</label>
                   <select
                     value={editorFontSize}
-                    onChange={(event) => setEditorFontSize(event.target.value as EditorFontSizeKey)}
+                    onChange={(event) => {
+                      setEditorFontSize(event.target.value as EditorFontSizeKey)
+                      scheduleFocusEditorInEditMode()
+                    }}
                     aria-label="Editor font size"
                     disabled={!activeNoteId}
                   >
@@ -5379,7 +5440,10 @@ function App() {
                   <label className="selector-label">Spacing:</label>
                   <select
                     value={editorSpacing}
-                    onChange={(event) => setEditorSpacing(event.target.value as EditorSpacingKey)}
+                    onChange={(event) => {
+                      setEditorSpacing(event.target.value as EditorSpacingKey)
+                      scheduleFocusEditorInEditMode()
+                    }}
                     aria-label="Editor spacing"
                     disabled={!activeNoteId}
                   >
