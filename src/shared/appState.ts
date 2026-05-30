@@ -38,6 +38,10 @@ export interface PersistedMenuState {
   renderScrollTotalTimeSec?: number;
   renderScrollMaxSpeedPxPerSec?: number;
   renderScrollSkew?: number;
+  highlightSelectionColor?: string;
+  highlightBackgroundColor?: string;
+  highlightTopBackgroundColor?: string;
+  highlightBottomBackgroundColor?: string;
   // Legacy render smooth-scroll keys (pre curve-model / pre maxSpeed migration).
   renderScrollSmoothnessSec?: number;
   renderScrollEaseMultiplier?: number;

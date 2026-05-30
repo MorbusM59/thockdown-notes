@@ -261,6 +261,13 @@ body {
   padding: 0;
 }
 
+.editor-text::selection,
+.editor-text *::selection,
+.markdown-preview::selection,
+.markdown-preview *::selection {
+  background: var(--color-selection);
+}
+
 /* Syntax Highlighting Base Colors */
 .measly-token-heading,
 .measly-token-list,

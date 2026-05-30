@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
+import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Editor } from './components/Editor'
@@ -77,6 +77,21 @@ const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28
 const SCROLL_TRACK_EDGE_GAP_PX = 3
 const NOTE_RIGHT_CLICK_HOLD_MS = 200
 const PREVIEW_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER
+const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
+  selection: 'rgba(199, 94, 0, 0.49)',
+  background: '#e9e6e3',
+  topBackground: 'rgba(196, 187, 182, 0.49)',
+  bottomBackground: 'rgba(196, 187, 182, 0.49)',
+}
+
+const HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['background', 'topBackground', 'bottomBackground', 'selection']
+
+const HIGHLIGHT_COLOR_LABELS: Record<HighlightColorKey, string> = {
+  background: 'Background',
+  topBackground: 'Upper Box',
+  bottomBackground: 'Lower Box',
+  selection: 'Selection',
+}
 
 type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find'
 type NoteArmedAction = 'archive' | 'deletion'
@@ -85,6 +100,17 @@ type TextDecorationFormat = 'bold' | 'italic' | 'strikethrough'
 type ViewStyleKey = 'modern' | 'narrow' | 'cute' | 'print'
 type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
 type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
+type HighlightColorKey = 'selection' | 'background' | 'topBackground' | 'bottomBackground'
+type HighlightColorChannel = 'r' | 'g' | 'b' | 'a'
+
+type HighlightColors = Record<HighlightColorKey, string>
+
+type RgbaColor = {
+  r: number
+  g: number
+  b: number
+  a: number
+}
 
 type SidebarViewState = {
   scrollTop: number
@@ -263,6 +289,63 @@ function sanitizeClipboardTitle(raw: string): string {
 
   const withoutHeadingPrefix = firstLine.replace(/^#+\s*/, '').trim()
   return withoutHeadingPrefix || FALLBACK_NEW_NOTE_TITLE
+}
+
+function clampColorChannel(value: number): number {
+  if (!Number.isFinite(value)) return 0
+  return Math.max(0, Math.min(255, Math.round(value)))
+}
+
+function clampAlphaChannel(value: number): number {
+  if (!Number.isFinite(value)) return 1
+  return Math.max(0, Math.min(1, value))
+}
+
+function parseCssColorToRgba(color: string): RgbaColor | null {
+  const raw = color.trim()
+  if (!raw) return null
+
+  const hexMatch = raw.match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/)
+  if (hexMatch) {
+    const value = hexMatch[1]
+    if (value.length === 3 || value.length === 4) {
+      const r = Number.parseInt(value[0] + value[0], 16)
+      const g = Number.parseInt(value[1] + value[1], 16)
+      const b = Number.parseInt(value[2] + value[2], 16)
+      const a = value.length === 4 ? Number.parseInt(value[3] + value[3], 16) / 255 : 1
+      return { r, g, b, a }
+    }
+
+    const r = Number.parseInt(value.slice(0, 2), 16)
+    const g = Number.parseInt(value.slice(2, 4), 16)
+    const b = Number.parseInt(value.slice(4, 6), 16)
+    const a = value.length === 8 ? Number.parseInt(value.slice(6, 8), 16) / 255 : 1
+    return { r, g, b, a }
+  }
+
+  const rgbMatch = raw.match(/^rgba?\(([^)]+)\)$/i)
+  if (rgbMatch) {
+    const parts = rgbMatch[1].split(',').map((part) => part.trim())
+    if (parts.length !== 3 && parts.length !== 4) return null
+
+    const r = clampColorChannel(Number.parseFloat(parts[0]))
+    const g = clampColorChannel(Number.parseFloat(parts[1]))
+    const b = clampColorChannel(Number.parseFloat(parts[2]))
+    const a = parts.length === 4 ? clampAlphaChannel(Number.parseFloat(parts[3])) : 1
+    return { r, g, b, a }
+  }
+
+  return null
+}
+
+function rgbaToCssColor(color: RgbaColor): string {
+  const alpha = Number(clampAlphaChannel(color.a).toFixed(3))
+  return `rgba(${clampColorChannel(color.r)}, ${clampColorChannel(color.g)}, ${clampColorChannel(color.b)}, ${alpha})`
+}
+
+function rgbaToHex(color: RgbaColor): string {
+  const toHex = (value: number) => clampColorChannel(value).toString(16).padStart(2, '0')
+  return `#${toHex(color.r)}${toHex(color.g)}${toHex(color.b)}`
 }
 
 function isSafePreviewHref(href: string | undefined): boolean {
@@ -1103,6 +1186,8 @@ function App() {
   const [renderScrollMaxSpeedPxPerSec, setRenderScrollMaxSpeedPxPerSec] = useState(() => getRenderScrollMaxSpeedPxPerSec())
   const [renderScrollSkew, setRenderScrollSkew] = useState(() => getRenderScrollSkew())
   const [isScrollSettingsOpen, setIsScrollSettingsOpen] = useState(false)
+  const [highlightColors, setHighlightColors] = useState<HighlightColors>(DEFAULT_HIGHLIGHT_COLORS)
+  const [activeHighlightColorKey, setActiveHighlightColorKey] = useState<HighlightColorKey>('background')
   const [activeDividerDrag, setActiveDividerDrag] = useState<'sidebar' | 'tag-split' | null>(null)
   const pendingSaveTextRef = useRef<string | null>(null)
   const latestEditorTextRef = useRef('')
@@ -1174,6 +1259,36 @@ function App() {
     [editorFontSize, editorSpacing],
   )
   const editorFontFamily = useMemo(() => resolveEditorFontFamily(editorStyle), [editorStyle])
+  const activeHighlightColor = useMemo(() => {
+    return parseCssColorToRgba(highlightColors[activeHighlightColorKey])
+      ?? parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS[activeHighlightColorKey])
+      ?? { r: 233, g: 230, b: 227, a: 1 }
+  }, [activeHighlightColorKey, highlightColors])
+
+  const updateHighlightColor = useCallback((key: HighlightColorKey, color: RgbaColor) => {
+    setHighlightColors((previous) => ({
+      ...previous,
+      [key]: rgbaToCssColor(color),
+    }))
+  }, [])
+
+  const applyHighlightChannelToAll = useCallback((channel: HighlightColorChannel) => {
+    const source = parseCssColorToRgba(highlightColors[activeHighlightColorKey])
+      ?? parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS[activeHighlightColorKey])
+    if (!source) return
+
+    setHighlightColors((previous) => {
+      const next: HighlightColors = { ...previous }
+      for (const key of HIGHLIGHT_COLOR_ORDER) {
+        const current = parseCssColorToRgba(previous[key])
+          ?? parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS[key])
+          ?? source
+        const updated: RgbaColor = { ...current, [channel]: source[channel] }
+        next[key] = rgbaToCssColor(updated)
+      }
+      return next
+    })
+  }, [activeHighlightColorKey, highlightColors])
 
   const readCurrentEditUiPayload = useCallback((): { progressEdit: number; cursorPos: number; scrollTop: number } | null => {
     const selection = latestEditorSelectionRef.current
@@ -1342,6 +1457,10 @@ function App() {
       renderScrollTotalTimeSec,
       renderScrollMaxSpeedPxPerSec,
       renderScrollSkew,
+      highlightSelectionColor: highlightColors.selection,
+      highlightBackgroundColor: highlightColors.background,
+      highlightTopBackgroundColor: highlightColors.topBackground,
+      highlightBottomBackgroundColor: highlightColors.bottomBackground,
       sidebarViewState: {
         ...effectiveViewStateByMode,
         category: {
@@ -1371,6 +1490,7 @@ function App() {
     renderScrollMaxSpeedPxPerSec,
     renderScrollSkew,
     renderScrollTotalTimeSec,
+    highlightColors,
     searchQuery,
     selectedMonths,
     selectedYears,
@@ -1619,6 +1739,17 @@ function App() {
       gridTemplateColumns: `${Math.round(sidebarWidthPx)}px ${GRID_DIVIDER_PX}px ${Math.round(tagInputWidthPx)}px ${GRID_DIVIDER_PX}px ${Math.round(suggestedWidthPx)}px ${GRID_DIVIDER_PX}px ${UTILITY_WIDTH_PX}px`,
     }
   }, [appShellWidthPx, sidebarWidthRatio, tagSplitRatio])
+
+  const appShellStyle = useMemo(() => {
+    const style: CSSProperties & Record<string, string> = {
+      gridTemplateColumns: layout.gridTemplateColumns,
+      '--color-bg-regular': highlightColors.background,
+      '--color-bg-leading': highlightColors.topBackground,
+      '--color-bg-trailing': highlightColors.bottomBackground,
+      '--color-selection': highlightColors.selection,
+    }
+    return style
+  }, [highlightColors, layout.gridTemplateColumns])
 
   const queueAppStateSave = useCallback((selectedNoteId: string | null) => {
     if (!window.measlyState) return
@@ -2697,6 +2828,12 @@ function App() {
             setRenderScrollTotalTimeSec(appState.menu.renderScrollTotalTimeSec ?? getRenderScrollTotalTimeSec())
             setRenderScrollMaxSpeedPxPerSec(appState.menu.renderScrollMaxSpeedPxPerSec ?? getRenderScrollMaxSpeedPxPerSec())
             setRenderScrollSkew(appState.menu.renderScrollSkew ?? getRenderScrollSkew())
+            setHighlightColors({
+              selection: appState.menu.highlightSelectionColor ?? DEFAULT_HIGHLIGHT_COLORS.selection,
+              background: appState.menu.highlightBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.background,
+              topBackground: appState.menu.highlightTopBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.topBackground,
+              bottomBackground: appState.menu.highlightBottomBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.bottomBackground,
+            })
 
             setCurrentPage(loadedSidebarViewState[appState.menu.sidebarMode].page)
             setCategoryCollapsedPrimary(loadedSidebarViewState.category.collapsedPrimary)
@@ -4917,7 +5054,7 @@ function App() {
     <div
       className="app-shell app-grid"
       ref={appShellRef}
-      style={{ gridTemplateColumns: layout.gridTemplateColumns }}
+      style={appShellStyle}
     >
       <aside className="notes-sidebar" style={{ gridArea: 'sidebar' }}>
         <div className="search-box" aria-label="Search panel">
@@ -5530,9 +5667,66 @@ function App() {
                 </div>
               </section>
 
-              <section className="toolbar-flyout-section toolbar-flyout-section-placeholder display-in-edit" aria-label="Editor settings placeholder">
-                <div className="panel-placeholder-title">Editor</div>
-                <div className="toolbar-flyout-placeholder-text">Soon</div>
+              <section className="toolbar-flyout-section toolbar-flyout-section-colors display-in-edit" aria-label="Color settings">
+                <div className="panel-placeholder-title">Colors</div>
+
+                <div className="toolbar-flyout-color-grid" role="group" aria-label="Editor highlight colors">
+                  {HIGHLIGHT_COLOR_ORDER.map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`toolbar-flyout-color-swatch${activeHighlightColorKey === key ? ' is-active' : ''}`}
+                      onClick={() => setActiveHighlightColorKey(key)}
+                      title={HIGHLIGHT_COLOR_LABELS[key]}
+                    >
+                      <span className="toolbar-flyout-color-swatch-chip" style={{ background: highlightColors[key] }} aria-hidden="true" />
+                      <span className="toolbar-flyout-color-swatch-label">{HIGHLIGHT_COLOR_LABELS[key]}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="toolbar-flyout-color-editors" aria-label="Selected color editor">
+                  <input
+                    className="toolbar-flyout-color-picker"
+                    type="color"
+                    value={rgbaToHex(activeHighlightColor)}
+                    onChange={(event) => {
+                      const parsed = parseCssColorToRgba(event.target.value)
+                      if (!parsed) return
+                      updateHighlightColor(activeHighlightColorKey, {
+                        ...parsed,
+                        a: activeHighlightColor.a,
+                      })
+                    }}
+                    aria-label="Selected color RGB"
+                  />
+
+                  <label className="toolbar-flyout-alpha-control" aria-label="Selected color alpha">
+                    <span>A</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={Math.round(activeHighlightColor.a * 100)}
+                      onChange={(event) => {
+                        const nextAlpha = clampAlphaChannel(Number.parseFloat(event.target.value) / 100)
+                        updateHighlightColor(activeHighlightColorKey, {
+                          ...activeHighlightColor,
+                          a: nextAlpha,
+                        })
+                      }}
+                      aria-label="Alpha channel"
+                    />
+                  </label>
+                </div>
+
+                <div className="toolbar-flyout-channel-actions" aria-label="Apply selected channel to all colors">
+                  <button type="button" className="toolbar-btn-icon" title="Apply red channel to all" onClick={() => applyHighlightChannelToAll('r')}>R</button>
+                  <button type="button" className="toolbar-btn-icon" title="Apply green channel to all" onClick={() => applyHighlightChannelToAll('g')}>G</button>
+                  <button type="button" className="toolbar-btn-icon" title="Apply blue channel to all" onClick={() => applyHighlightChannelToAll('b')}>B</button>
+                  <button type="button" className="toolbar-btn-icon" title="Apply alpha channel to all" onClick={() => applyHighlightChannelToAll('a')}>A</button>
+                </div>
               </section>
 
               <section className="toolbar-flyout-section toolbar-flyout-section-placeholder display-in-edit" aria-label="Layout settings placeholder">
