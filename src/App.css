@@ -980,7 +980,6 @@ body.splitter-dragging {
 }
 
 .tag-pill.active.armed {
-  outline: 2px solid #d9534f;
   background: #feecec;
   color: #b71c1c;
 }
@@ -1224,6 +1223,15 @@ body.splitter-dragging {
   background-color: #00000011;
   text-shadow: var(--text-shadow-emboss-panel);
   border-bottom: 1px solid #999999;
+}
+
+.category-secondary-summary.is-general-secondary {
+  height: 12px;
+  min-height: 6px;
+  padding: 0;
+  font-size: 0;
+  letter-spacing: 0;
+  text-shadow: none;
 }
 
 .category-secondary {

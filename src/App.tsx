@@ -168,11 +168,13 @@ type PrimaryGroup = {
   secondary: SecondaryGroup[]
 }
 
+const GENERAL_SECONDARY_NAME = 'General'
+
 function hierarchyFromTags(tags: string[]): { primary: string; secondary: string; tertiary: string } {
   const nonProtected = tags.filter((tag) => !PROTECTED_TAGS.has(tag))
   return {
     primary: nonProtected[0] ?? 'Uncategorized',
-    secondary: nonProtected[1] ?? 'General',
+    secondary: nonProtected[1] ?? GENERAL_SECONDARY_NAME,
     tertiary: nonProtected[2] ?? 'Notes',
   }
 }
@@ -848,6 +850,7 @@ const CategoryTreeView = memo(function CategoryTreeView({
     const allPrimary = groups.map((group) => group.name)
     const selectedPrimary = groups.find((group) => group.name === categoryName)
     const secondaryKeys = (selectedPrimary?.secondary ?? []).map((secondary) => `${categoryName}:${secondary.name}`)
+    const generalSecondaryKey = `${categoryName}:${GENERAL_SECONDARY_NAME}`
 
     const nextCollapsedPrimary = new Set<string>()
     const nextCollapsedSecondary = new Set(collapsedSecondary)
@@ -856,7 +859,15 @@ const CategoryTreeView = memo(function CategoryTreeView({
       allPrimary
         .filter((primaryName) => primaryName !== categoryName)
         .forEach((primaryName) => nextCollapsedPrimary.add(primaryName))
-      secondaryKeys.forEach((secondaryKey) => nextCollapsedSecondary.add(secondaryKey))
+
+      // Keep the fallback/general bucket visible whenever a primary is expanded.
+      nextCollapsedSecondary.delete(generalSecondaryKey)
+
+      secondaryKeys.forEach((secondaryKey) => {
+        if (secondaryKey !== generalSecondaryKey) {
+          nextCollapsedSecondary.add(secondaryKey)
+        }
+      })
     } else {
       allPrimary
         .filter((primaryName) => primaryName !== categoryName)
@@ -869,6 +880,8 @@ const CategoryTreeView = memo(function CategoryTreeView({
         } else {
           secondaryKeys.forEach((secondaryKey) => nextCollapsedSecondary.delete(secondaryKey))
         }
+
+        nextCollapsedSecondary.delete(generalSecondaryKey)
       }
     }
 
@@ -945,13 +958,14 @@ const CategoryTreeView = memo(function CategoryTreeView({
               open={!collapsedSecondary.has(`${primary.name}:${secondary.name}`)}
             >
               <summary
-                className="category-secondary-summary"
+                className={`category-secondary-summary${secondary.name === GENERAL_SECONDARY_NAME ? ' is-general-secondary' : ''}`}
+                aria-label={secondary.name === GENERAL_SECONDARY_NAME ? 'General' : undefined}
                 onClick={(event) => {
                   event.preventDefault()
                   toggleSecondaryCategory(primary.name, secondary.name)
                 }}
               >
-                {secondary.name}
+                {secondary.name === GENERAL_SECONDARY_NAME ? <span className="sr-only-mode-label">General</span> : secondary.name}
               </summary>
               {secondary.tertiary.map((tertiary) => (
                 <div key={`${primary.name}:${secondary.name}:${tertiary.name}`} className="category-tertiary-block">
