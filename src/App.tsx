@@ -384,76 +384,143 @@ function formatCompactSettingNumber(value: number, step: number): string {
   return value.toFixed(decimalPlaces).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
 }
 
-type CompactSettingInputProps = {
+type CompactScrollbarSliderProps = {
   id: string
   value: number
   min: number
   max: number
   step: number
-  descriptor: string
+  trackLabel: string
   ariaLabel: string
+  reverseScale?: boolean
   onCommit: (value: number) => void
 }
 
-function CompactSettingInput({
+function CompactScrollbarSlider({
   id,
   value,
   min,
   max,
   step,
-  descriptor,
+  trackLabel,
   ariaLabel,
+  reverseScale = false,
   onCommit,
-}: CompactSettingInputProps) {
-  const [isEditing, setIsEditing] = useState(false)
-  const [draftValue, setDraftValue] = useState(() => formatCompactSettingNumber(value, step))
+}: CompactScrollbarSliderProps) {
+  const railRef = useRef<HTMLDivElement | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
 
-  useEffect(() => {
-    if (!isEditing) {
-      setDraftValue(formatCompactSettingNumber(value, step))
-    }
-  }, [isEditing, step, value])
+  const valueSpan = Math.max(max - min, Number.EPSILON)
 
-  const commitDraft = useCallback(() => {
-    const parsed = Number(draftValue)
-    if (Number.isFinite(parsed)) {
-      onCommit(clamp(parsed, min, max))
-    }
-    setIsEditing(false)
-  }, [draftValue, max, min, onCommit])
+  const valueToRatio = useCallback((nextValue: number) => {
+    const normalized = clamp((nextValue - min) / valueSpan, 0, 1)
+    return reverseScale ? 1 - normalized : normalized
+  }, [min, reverseScale, valueSpan])
 
-  const cancelDraft = useCallback(() => {
-    setDraftValue(formatCompactSettingNumber(value, step))
-    setIsEditing(false)
-  }, [step, value])
+  const ratioToValue = useCallback((ratioFromLeft: number) => {
+    const normalized = reverseScale ? 1 - ratioFromLeft : ratioFromLeft
+    return min + (clamp(normalized, 0, 1) * valueSpan)
+  }, [min, reverseScale, valueSpan])
+
+  const ratio = valueToRatio(value)
+
+  const snapValue = useCallback((nextValue: number) => {
+    const steps = Math.round((nextValue - min) / step)
+    return clamp(min + (steps * step), min, max)
+  }, [max, min, step])
+
+  const applyPointerValue = useCallback((clientX: number) => {
+    const rail = railRef.current
+    if (!rail) return
+
+    const rect = rail.getBoundingClientRect()
+    if (rect.width <= 0) return
+
+    const styles = getComputedStyle(rail)
+    const gap = Number.parseFloat(styles.getPropertyValue('--canonical-scroll-handle-gap')) || 3
+    const baseThumbSize = Number.parseFloat(styles.getPropertyValue('--canonical-scroll-handle-thickness')) || 10
+    const thumbSize = baseThumbSize + 2
+    const thumbInset = gap - 1
+    const startX = rect.left + thumbInset + (thumbSize / 2)
+    const travel = Math.max(1, rect.width - (thumbInset * 2) - thumbSize)
+    const nextRatio = clamp((clientX - startX) / travel, 0, 1)
+    onCommit(snapValue(ratioToValue(nextRatio)))
+  }, [onCommit, ratioToValue, snapValue])
+
+  const nudgeBy = useCallback((delta: number) => {
+    onCommit(snapValue(value + delta))
+  }, [onCommit, snapValue, value])
 
   return (
-    <input
+    <div
       id={id}
-      className="utility-setting-compact-input"
-      type="text"
-      inputMode="decimal"
+      role="slider"
+      tabIndex={0}
       aria-label={ariaLabel}
-      value={isEditing ? draftValue : `${formatCompactSettingNumber(value, step)} (${descriptor})`}
-      onFocus={() => {
-        setDraftValue(formatCompactSettingNumber(value, step))
-        setIsEditing(true)
-      }}
-      onChange={(event) => setDraftValue(event.target.value)}
-      onBlur={commitDraft}
+      aria-orientation="horizontal"
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuenow={Number(formatCompactSettingNumber(value, step))}
+      className={`utility-setting-scrollbar-shell${isDragging ? ' is-dragging' : ''}`}
       onKeyDown={(event) => {
-        if (event.key === 'Enter') {
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
           event.preventDefault()
-          ;(event.currentTarget as HTMLInputElement).blur()
+          nudgeBy(-step)
           return
         }
-        if (event.key === 'Escape') {
+        if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
           event.preventDefault()
-          cancelDraft()
-          ;(event.currentTarget as HTMLInputElement).blur()
+          nudgeBy(step)
+          return
+        }
+        if (event.key === 'PageUp') {
+          event.preventDefault()
+          nudgeBy(step * 10)
+          return
+        }
+        if (event.key === 'PageDown') {
+          event.preventDefault()
+          nudgeBy(-(step * 10))
+          return
+        }
+        if (event.key === 'Home') {
+          event.preventDefault()
+          onCommit(reverseScale ? max : min)
+          return
+        }
+        if (event.key === 'End') {
+          event.preventDefault()
+          onCommit(reverseScale ? min : max)
         }
       }}
-    />
+      onPointerDown={(event) => {
+        if (event.button !== 0) return
+        event.preventDefault()
+        event.currentTarget.setPointerCapture(event.pointerId)
+        setIsDragging(true)
+        applyPointerValue(event.clientX)
+      }}
+      onPointerMove={(event) => {
+        if (!isDragging) return
+        applyPointerValue(event.clientX)
+      }}
+      onPointerUp={(event) => {
+        if (!isDragging) return
+        event.currentTarget.releasePointerCapture(event.pointerId)
+        setIsDragging(false)
+      }}
+      onPointerCancel={() => setIsDragging(false)}
+    >
+      <div className="utility-setting-scrollbar-rail" ref={railRef} aria-hidden="true">
+        <span className="utility-setting-scrollbar-track-label">{trackLabel}</span>
+        <div
+          className="utility-setting-scrollbar-thumb"
+          style={{
+            left: `calc((var(--canonical-scroll-handle-gap) - 1px) + (${ratio} * (100% - ((var(--canonical-scroll-handle-gap) - 1px) * 2) - (var(--canonical-scroll-handle-thickness) + 2px))))`,
+          }}
+        />
+      </div>
+    </div>
   )
 }
 
@@ -4763,60 +4830,61 @@ function App() {
             >
               <section className="toolbar-flyout-section toolbar-flyout-section-scrolling display-in-view display-in-edit" aria-label="Scrolling settings">
                 <div className="panel-placeholder-title">Scrolling</div>
-                <div className="utility-setting-stack" aria-label="Scroll curve settings">
-                    <CompactSettingInput
-                      id="render-scroll-dynamic"
-                      min={0.1}
-                      max={20}
-                      step={0.1}
-                      value={renderScrollDynamic}
-                      descriptor="a"
-                      ariaLabel="Curve dynamic parameter a"
-                      onCommit={(value) => setRenderScrollDynamic(Math.max(0.1, value))}
-                    />
-                    <CompactSettingInput
-                      id="render-scroll-responsiveness"
-                      min={0.05}
-                      max={5}
-                      step={0.05}
-                      value={renderScrollResponsiveness}
-                      descriptor="b"
-                      ariaLabel="Curve responsiveness parameter b"
-                      onCommit={(value) => setRenderScrollResponsiveness(Math.max(0.05, value))}
-                    />
-                    <CompactSettingInput
-                      id="render-scroll-total-time"
-                      min={0.05}
-                      max={5}
-                      step={0.05}
-                      value={renderScrollTotalTimeSec}
-                      descriptor="t(s)"
-                      ariaLabel="Total time parameter t in seconds"
-                      onCommit={(value) => setRenderScrollTotalTimeSec(Math.max(0.05, value))}
-                    />
-                    <CompactSettingInput
-                      id="render-scroll-max-speed"
-                      min={50}
-                      max={50000}
-                      step={50}
-                      value={renderScrollMaxSpeedPxPerSec}
-                      descriptor="max(px/s)"
-                      ariaLabel="Maximum scroll speed in pixels per second"
-                      onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(Math.max(50, value))}
-                    />
-                    <CompactSettingInput
-                      id="render-scroll-skew"
-                      min={RENDER_SCROLL_SKEW_MIN}
-                      max={RENDER_SCROLL_SKEW_MAX}
-                      step={0.05}
-                      value={renderScrollSkew}
-                      descriptor="skew"
-                      ariaLabel="Curve skew (apex bias)"
-                      onCommit={(value) => setRenderScrollSkew(
-                        Math.max(RENDER_SCROLL_SKEW_MIN, Math.min(RENDER_SCROLL_SKEW_MAX, value)),
-                      )}
-                    />
-                  </div>
+                <div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
+                  <CompactScrollbarSlider
+                    id="render-scroll-dynamic"
+                    min={0.1}
+                    max={5}
+                    step={0.05}
+                    value={renderScrollDynamic}
+                    trackLabel="ramp"
+                    ariaLabel="Curve dynamic parameter a"
+                    onCommit={(value) => setRenderScrollDynamic(clamp(value, 0.1, 5))}
+                  />
+                  <CompactScrollbarSlider
+                    id="render-scroll-responsiveness"
+                    min={0.1}
+                    max={5}
+                    step={0.05}
+                    value={renderScrollResponsiveness}
+                    trackLabel="response"
+                    ariaLabel="Curve responsiveness parameter b"
+                    onCommit={(value) => setRenderScrollResponsiveness(clamp(value, 0.1, 5))}
+                  />
+                  <CompactScrollbarSlider
+                    id="render-scroll-total-time"
+                    min={0}
+                    max={5}
+                    step={0.05}
+                    value={renderScrollTotalTimeSec}
+                    trackLabel="speed"
+                    ariaLabel="Total time parameter t in seconds"
+                    reverseScale
+                    onCommit={(value) => setRenderScrollTotalTimeSec(clamp(value, 0, 5))}
+                  />
+                  <CompactScrollbarSlider
+                    id="render-scroll-max-speed"
+                    min={1000}
+                    max={100000}
+                    step={1000}
+                    value={renderScrollMaxSpeedPxPerSec}
+                    trackLabel="max speed"
+                    ariaLabel="Maximum scroll speed in pixels per second"
+                    onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(clamp(value, 1000, 100000))}
+                  />
+                  <CompactScrollbarSlider
+                    id="render-scroll-skew"
+                    min={RENDER_SCROLL_SKEW_MIN}
+                    max={RENDER_SCROLL_SKEW_MAX}
+                    step={0.01}
+                    value={renderScrollSkew}
+                    trackLabel="shape"
+                    ariaLabel="Curve skew (apex bias)"
+                    onCommit={(value) => setRenderScrollSkew(
+                      Math.max(RENDER_SCROLL_SKEW_MIN, Math.min(RENDER_SCROLL_SKEW_MAX, value)),
+                    )}
+                  />
+                </div>
               </section>
 
               <section className="toolbar-flyout-section toolbar-flyout-section-placeholder display-in-edit" aria-label="Editor settings placeholder">

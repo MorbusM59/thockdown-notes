@@ -276,7 +276,7 @@ export function setRenderScrollResponsiveness(next: number): void {
 export function getRenderScrollResponsiveness(): number { return renderScrollResponsiveness; }
 
 export function setRenderScrollTotalTimeSec(next: number): void {
-  renderScrollTotalTimeSec = Number.isFinite(next) && next > 0 ? next : DEFAULT_RENDER_SCROLL_TOTAL_TIME_SEC;
+  renderScrollTotalTimeSec = Number.isFinite(next) && next >= 0 ? next : DEFAULT_RENDER_SCROLL_TOTAL_TIME_SEC;
 }
 export function getRenderScrollTotalTimeSec(): number { return renderScrollTotalTimeSec; }
 
