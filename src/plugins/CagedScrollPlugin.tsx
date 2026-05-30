@@ -12,7 +12,7 @@ import { readSelectionRect } from '../editor/CaretRect';
 import { resolveCaretTopInScroll } from '../editor/CaretVisualPosition';
 import { PIXELS_PER_WHEEL_UNIT } from '../editor/LayoutConstants';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
-import { scrollToQuantizedEase } from '../editor/QuantizedEaseScroll';
+import { scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
 import {
   activateRefocusTransaction,
   clearRefocusTransaction,
@@ -136,7 +136,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
 
       if (targetScrollTopPx !== scroller.scrollTop) {
         if (intent === 'refocus-caged') {
-          scrollToQuantizedEase(scroller, targetScrollTopPx, {
+          scrollToQuantizedSmooth(scroller, targetScrollTopPx, {
             lineHeightPx,
           });
         } else {
@@ -310,7 +310,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
 
     const runQuantizedJump = (targetScrollTopPx: number) => {
       if (!scroller) return;
-      scrollToQuantizedEase(scroller, targetScrollTopPx, {
+      scrollToQuantizedSmooth(scroller, targetScrollTopPx, {
             lineHeightPx,
       });
     };

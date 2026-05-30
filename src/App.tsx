@@ -35,24 +35,18 @@ import {
 } from './editor/FindReplaceEngine'
 import { normalizeInternalText } from './editor/TextPolicy'
 import {
-  getScrollBaseDistanceRows,
-  getScrollDistanceTimeInfluence,
-  getScrollEaseMultiplier,
-  getScrollMaxDurationMultiplier,
-  setScrollBaseDistanceRows as applyScrollBaseDistanceRows,
-  setScrollDistanceTimeInfluence as applyScrollDistanceTimeInfluence,
-  setScrollEaseMultiplier as applyScrollEaseMultiplier,
-  setScrollMaxDurationMultiplier as applyScrollMaxDurationMultiplier,
-} from './editor/QuantizedEaseScroll'
-import {
   getRenderScrollDynamic,
   getRenderScrollResponsiveness,
   getRenderScrollTotalTimeSec,
-  getRenderScrollSmoothnessSec,
+  getRenderScrollMaxSpeedPxPerSec,
+  getRenderScrollSkew,
+  RENDER_SCROLL_SKEW_MIN,
+  RENDER_SCROLL_SKEW_MAX,
   setRenderScrollDynamic as applyRenderScrollDynamic,
   setRenderScrollResponsiveness as applyRenderScrollResponsiveness,
   setRenderScrollTotalTimeSec as applyRenderScrollTotalTimeSec,
-  setRenderScrollSmoothnessSec as applyRenderScrollSmoothnessSec,
+  setRenderScrollMaxSpeedPxPerSec as applyRenderScrollMaxSpeedPxPerSec,
+  setRenderScrollSkew as applyRenderScrollSkew,
   scrollToNonQuantizedSmooth,
 } from './editor/NonQuantizedSmoothScroll'
 import {
@@ -460,131 +454,6 @@ function CompactSettingInput({
         }
       }}
     />
-  )
-}
-
-type CompactRangeSliderProps = {
-  id: string
-  value: number
-  min: number
-  max: number
-  step: number
-  ariaLabel: string
-  onChange: (value: number) => void
-}
-
-function CompactRangeSlider({
-  id,
-  value,
-  min,
-  max,
-  step,
-  ariaLabel,
-  onChange,
-}: CompactRangeSliderProps) {
-  const railRef = useRef<HTMLDivElement | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
-
-  const valueSpan = Math.max(max - min, Number.EPSILON)
-  const ratio = clamp((value - min) / valueSpan, 0, 1)
-
-  const snapValue = useCallback((nextValue: number) => {
-    const steps = Math.round((nextValue - min) / step)
-    return clamp(min + (steps * step), min, max)
-  }, [max, min, step])
-
-  const applyPointerValue = useCallback((clientX: number) => {
-    const rail = railRef.current
-    if (!rail) return
-
-    const rect = rail.getBoundingClientRect()
-    if (rect.width <= 0) return
-
-    const styles = getComputedStyle(rail)
-    const gap = Number.parseFloat(styles.getPropertyValue('--canonical-scroll-handle-gap')) || 3
-    const thumbSize = Number.parseFloat(styles.getPropertyValue('--canonical-scroll-handle-thickness')) || 10
-    const startX = rect.left + gap + (thumbSize / 2)
-    const travel = Math.max(1, rect.width - (gap * 2) - thumbSize)
-    const nextRatio = clamp((clientX - startX) / travel, 0, 1)
-    onChange(snapValue(min + (nextRatio * valueSpan)))
-  }, [min, onChange, snapValue, valueSpan])
-
-  const nudgeBy = useCallback((delta: number) => {
-    onChange(snapValue(value + delta))
-  }, [onChange, snapValue, value])
-
-  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
-      event.preventDefault()
-      nudgeBy(-step)
-      return
-    }
-    if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
-      event.preventDefault()
-      nudgeBy(step)
-      return
-    }
-    if (event.key === 'PageDown') {
-      event.preventDefault()
-      nudgeBy(-(step * 10))
-      return
-    }
-    if (event.key === 'PageUp') {
-      event.preventDefault()
-      nudgeBy(step * 10)
-      return
-    }
-    if (event.key === 'Home') {
-      event.preventDefault()
-      onChange(min)
-      return
-    }
-    if (event.key === 'End') {
-      event.preventDefault()
-      onChange(max)
-    }
-  }, [max, min, nudgeBy, onChange, step])
-
-  return (
-    <div
-      id={id}
-      role="slider"
-      tabIndex={0}
-      aria-label={ariaLabel}
-      aria-orientation="horizontal"
-      aria-valuemin={min}
-      aria-valuemax={max}
-      aria-valuenow={Number(formatCompactSettingNumber(value, step))}
-      className={`utility-setting-range-shell${isDragging ? ' is-dragging' : ''}`}
-      onKeyDown={handleKeyDown}
-      onPointerDown={(event) => {
-        if (event.button !== 0) return
-        event.preventDefault()
-        event.currentTarget.setPointerCapture(event.pointerId)
-        setIsDragging(true)
-        applyPointerValue(event.clientX)
-      }}
-      onPointerMove={(event) => {
-        if (!isDragging) return
-        applyPointerValue(event.clientX)
-      }}
-      onPointerUp={(event) => {
-        if (!isDragging) return
-        event.currentTarget.releasePointerCapture(event.pointerId)
-        setIsDragging(false)
-      }}
-      onPointerCancel={() => setIsDragging(false)}
-    >
-      <div className="utility-setting-range-rail" ref={railRef} aria-hidden="true">
-        <span className="utility-setting-range-track-label">scaling</span>
-        <div
-          className="utility-setting-range-thumb"
-          style={{
-            left: `calc(var(--canonical-scroll-handle-gap) + (${ratio} * (100% - (var(--canonical-scroll-handle-gap) * 2) - var(--canonical-scroll-handle-thickness))))`,
-          }}
-        />
-      </div>
-    </div>
   )
 }
 
@@ -1112,14 +981,11 @@ function App() {
   const [appShellWidthPx, setAppShellWidthPx] = useState(980)
   const [sidebarWidthRatio, setSidebarWidthRatio] = useState(DEFAULT_SIDEBAR_RATIO)
   const [tagSplitRatio, setTagSplitRatio] = useState(DEFAULT_TAG_SPLIT_RATIO)
-  const [scrollEaseMultiplier, setScrollEaseMultiplier] = useState(() => getScrollEaseMultiplier())
-  const [scrollDistanceTimeInfluence, setScrollDistanceTimeInfluence] = useState(() => getScrollDistanceTimeInfluence())
-  const [scrollBaseDistanceRows, setScrollBaseDistanceRows] = useState(() => getScrollBaseDistanceRows())
-  const [scrollMaxDurationMultiplier, setScrollMaxDurationMultiplier] = useState(() => getScrollMaxDurationMultiplier())
   const [renderScrollDynamic, setRenderScrollDynamic] = useState(() => getRenderScrollDynamic())
   const [renderScrollResponsiveness, setRenderScrollResponsiveness] = useState(() => getRenderScrollResponsiveness())
   const [renderScrollTotalTimeSec, setRenderScrollTotalTimeSec] = useState(() => getRenderScrollTotalTimeSec())
-  const [renderScrollSmoothnessSec, setRenderScrollSmoothnessSec] = useState(() => getRenderScrollSmoothnessSec())
+  const [renderScrollMaxSpeedPxPerSec, setRenderScrollMaxSpeedPxPerSec] = useState(() => getRenderScrollMaxSpeedPxPerSec())
+  const [renderScrollSkew, setRenderScrollSkew] = useState(() => getRenderScrollSkew())
   const [isScrollSettingsOpen, setIsScrollSettingsOpen] = useState(false)
   const [activeDividerDrag, setActiveDividerDrag] = useState<'sidebar' | 'tag-split' | null>(null)
   const pendingSaveTextRef = useRef<string | null>(null)
@@ -1281,14 +1147,11 @@ function App() {
       editorSpacing,
       sidebarWidthRatio,
       tagSplitRatio,
-      scrollEaseMultiplier,
-      scrollDistanceTimeInfluence,
-      scrollBaseDistanceRows,
-      scrollMaxDurationMultiplier,
       renderScrollDynamic,
       renderScrollResponsiveness,
       renderScrollTotalTimeSec,
-      renderScrollSmoothnessSec,
+      renderScrollMaxSpeedPxPerSec,
+      renderScrollSkew,
       sidebarViewState: {
         ...effectiveViewStateByMode,
         category: {
@@ -1313,13 +1176,10 @@ function App() {
     editorStyle,
     isDocumentFindCaseSensitive,
     isPreviewMode,
-    scrollBaseDistanceRows,
-    scrollDistanceTimeInfluence,
-    scrollEaseMultiplier,
-    scrollMaxDurationMultiplier,
     renderScrollDynamic,
     renderScrollResponsiveness,
-    renderScrollSmoothnessSec,
+    renderScrollMaxSpeedPxPerSec,
+    renderScrollSkew,
     renderScrollTotalTimeSec,
     searchQuery,
     selectedMonths,
@@ -1519,22 +1379,6 @@ function App() {
   ])
 
   useEffect(() => {
-    applyScrollEaseMultiplier(scrollEaseMultiplier)
-  }, [scrollEaseMultiplier])
-
-  useEffect(() => {
-    applyScrollDistanceTimeInfluence(scrollDistanceTimeInfluence)
-  }, [scrollDistanceTimeInfluence])
-
-  useEffect(() => {
-    applyScrollBaseDistanceRows(scrollBaseDistanceRows)
-  }, [scrollBaseDistanceRows])
-
-  useEffect(() => {
-    applyScrollMaxDurationMultiplier(scrollMaxDurationMultiplier)
-  }, [scrollMaxDurationMultiplier])
-
-  useEffect(() => {
     applyRenderScrollDynamic(renderScrollDynamic)
   }, [renderScrollDynamic])
 
@@ -1547,8 +1391,12 @@ function App() {
   }, [renderScrollTotalTimeSec])
 
   useEffect(() => {
-    applyRenderScrollSmoothnessSec(renderScrollSmoothnessSec)
-  }, [renderScrollSmoothnessSec])
+    applyRenderScrollMaxSpeedPxPerSec(renderScrollMaxSpeedPxPerSec)
+  }, [renderScrollMaxSpeedPxPerSec])
+
+  useEffect(() => {
+    applyRenderScrollSkew(renderScrollSkew)
+  }, [renderScrollSkew])
 
   useEffect(() => {
     setIsScrollSettingsOpen(false)
@@ -2550,14 +2398,11 @@ function App() {
             setEditorSpacing(appState.menu.editorSpacing ?? DEFAULT_EDITOR_SPACING)
             setSidebarWidthRatio(appState.menu.sidebarWidthRatio)
             setTagSplitRatio(appState.menu.tagSplitRatio)
-            setScrollEaseMultiplier(appState.menu.scrollEaseMultiplier ?? getScrollEaseMultiplier())
-            setScrollDistanceTimeInfluence(appState.menu.scrollDistanceTimeInfluence ?? getScrollDistanceTimeInfluence())
-            setScrollBaseDistanceRows(appState.menu.scrollBaseDistanceRows ?? getScrollBaseDistanceRows())
-            setScrollMaxDurationMultiplier(appState.menu.scrollMaxDurationMultiplier ?? getScrollMaxDurationMultiplier())
             setRenderScrollDynamic(appState.menu.renderScrollDynamic ?? appState.menu.renderScrollEaseMultiplier ?? getRenderScrollDynamic())
             setRenderScrollResponsiveness(appState.menu.renderScrollResponsiveness ?? appState.menu.renderScrollDistanceTimeInfluence ?? getRenderScrollResponsiveness())
             setRenderScrollTotalTimeSec(appState.menu.renderScrollTotalTimeSec ?? getRenderScrollTotalTimeSec())
-            setRenderScrollSmoothnessSec(appState.menu.renderScrollSmoothnessSec ?? getRenderScrollSmoothnessSec())
+            setRenderScrollMaxSpeedPxPerSec(appState.menu.renderScrollMaxSpeedPxPerSec ?? getRenderScrollMaxSpeedPxPerSec())
+            setRenderScrollSkew(appState.menu.renderScrollSkew ?? getRenderScrollSkew())
 
             setCurrentPage(loadedSidebarViewState[appState.menu.sidebarMode].page)
             setCategoryCollapsedPrimary(loadedSidebarViewState.category.collapsedPrimary)
@@ -4917,9 +4762,8 @@ function App() {
               aria-label="Settings panel"
             >
               <section className="toolbar-flyout-section toolbar-flyout-section-scrolling display-in-view display-in-edit" aria-label="Scrolling settings">
-                <div className="panel-placeholder-title">{isPreviewMode ? 'Render + Menu Scrolling' : 'Editor Scrolling'}</div>
-                {isPreviewMode ? (
-                  <div className="utility-setting-stack" aria-label="Render curve settings">
+                <div className="panel-placeholder-title">Scrolling</div>
+                <div className="utility-setting-stack" aria-label="Scroll curve settings">
                     <CompactSettingInput
                       id="render-scroll-dynamic"
                       min={0.1}
@@ -4951,75 +4795,28 @@ function App() {
                       onCommit={(value) => setRenderScrollTotalTimeSec(Math.max(0.05, value))}
                     />
                     <CompactSettingInput
-                      id="render-scroll-smoothness"
-                      min={0.01}
-                      max={1}
-                      step={0.01}
-                      value={renderScrollSmoothnessSec}
-                      descriptor="d(s)"
-                      ariaLabel="Smoothness parameter d in seconds"
-                      onCommit={(value) => setRenderScrollSmoothnessSec(Math.max(0.01, value))}
+                      id="render-scroll-max-speed"
+                      min={50}
+                      max={50000}
+                      step={50}
+                      value={renderScrollMaxSpeedPxPerSec}
+                      descriptor="max(px/s)"
+                      ariaLabel="Maximum scroll speed in pixels per second"
+                      onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(Math.max(50, value))}
+                    />
+                    <CompactSettingInput
+                      id="render-scroll-skew"
+                      min={RENDER_SCROLL_SKEW_MIN}
+                      max={RENDER_SCROLL_SKEW_MAX}
+                      step={0.05}
+                      value={renderScrollSkew}
+                      descriptor="skew"
+                      ariaLabel="Curve skew (apex bias)"
+                      onCommit={(value) => setRenderScrollSkew(
+                        Math.max(RENDER_SCROLL_SKEW_MIN, Math.min(RENDER_SCROLL_SKEW_MAX, value)),
+                      )}
                     />
                   </div>
-                ) : (
-                  <>
-                    <div className="utility-setting-row utility-setting-row-range">
-                      <CompactRangeSlider
-                        id="scroll-distance-influence"
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        value={scrollDistanceTimeInfluence}
-                        onChange={(value) => {
-                          const clampedValue = Math.max(0, Math.min(1, value))
-                          setScrollDistanceTimeInfluence(clampedValue)
-                        }}
-                        ariaLabel="Distance scaling"
-                      />
-                    </div>
-                    <div className="utility-setting-stack" aria-label="Scrolling numeric settings">
-                      <CompactSettingInput
-                        id="scroll-ease-multiplier"
-                        min={0.1}
-                        max={10}
-                        step={0.1}
-                        value={scrollEaseMultiplier}
-                        descriptor="speed"
-                        ariaLabel="Scroll speed"
-                        onCommit={(value) => {
-                          const nextValue = Math.max(0.1, value)
-                          setScrollEaseMultiplier(nextValue)
-                        }}
-                      />
-                      <CompactSettingInput
-                        id="scroll-base-distance"
-                        min={1}
-                        max={200}
-                        step={1}
-                        value={scrollBaseDistanceRows}
-                        descriptor="base"
-                        ariaLabel="Scroll base rows"
-                        onCommit={(value) => {
-                          const nextValue = Math.max(1, Math.round(value))
-                          setScrollBaseDistanceRows(nextValue)
-                        }}
-                      />
-                      <CompactSettingInput
-                        id="scroll-max-multiplier"
-                        min={1}
-                        max={20}
-                        step={0.5}
-                        value={scrollMaxDurationMultiplier}
-                        descriptor="t_max"
-                        ariaLabel="Scroll max multiplier"
-                        onCommit={(value) => {
-                          const nextValue = Math.max(1, value)
-                          setScrollMaxDurationMultiplier(nextValue)
-                        }}
-                      />
-                    </div>
-                  </>
-                )}
               </section>
 
               <section className="toolbar-flyout-section toolbar-flyout-section-placeholder display-in-edit" aria-label="Editor settings placeholder">

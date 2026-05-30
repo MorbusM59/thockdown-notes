@@ -5,7 +5,7 @@ import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
-import { cancelQuantizedEaseScroll, scrollToQuantizedEase } from '../editor/QuantizedEaseScroll';
+import { cancelQuantizedSmoothScroll, scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
 import { CagedScrollPlugin } from '../plugins/CagedScrollPlugin';
 import { SyntaxHighlightPlugin } from '../plugins/SyntaxHighlightPlugin';
 import { BlockCaretPlugin } from '../plugins/BlockCaretPlugin';
@@ -223,7 +223,7 @@ function centerSelectionInCagedMiddle(
 
   if (nextScrollTopPx !== scroller.scrollTop) {
     if (options?.animate) {
-      scrollToQuantizedEase(scroller, nextScrollTopPx, {
+      scrollToQuantizedSmooth(scroller, nextScrollTopPx, {
         lineHeightPx,
       });
     } else {
@@ -777,7 +777,7 @@ export function Editor({
     const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0;
     const targetScrollTop = ratio * maxScrollTop;
 
-    scrollToQuantizedEase(scroller, targetScrollTop, {
+    scrollToQuantizedSmooth(scroller, targetScrollTop, {
       lineHeightPx,
       onStep: syncCustomScrollbar,
     });
@@ -788,7 +788,7 @@ export function Editor({
     event.stopPropagation();
     const scroller = scrollerRef.current;
     if (scroller) {
-      cancelQuantizedEaseScroll(scroller);
+      cancelQuantizedSmoothScroll(scroller);
     }
     setIsDraggingScrollThumb(true);
     scrollThumbDragOriginRef.current = {

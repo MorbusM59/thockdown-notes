@@ -36,8 +36,10 @@ export interface PersistedMenuState {
   renderScrollDynamic?: number;
   renderScrollResponsiveness?: number;
   renderScrollTotalTimeSec?: number;
+  renderScrollMaxSpeedPxPerSec?: number;
+  renderScrollSkew?: number;
+  // Legacy render smooth-scroll keys (pre curve-model / pre maxSpeed migration).
   renderScrollSmoothnessSec?: number;
-  // Legacy render smooth-scroll keys (pre curve-model migration).
   renderScrollEaseMultiplier?: number;
   renderScrollDistanceTimeInfluence?: number;
   renderScrollBaseDistanceRows?: number;
