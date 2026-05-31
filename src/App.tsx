@@ -4424,16 +4424,23 @@ function App() {
     if (typeof selectionStart === 'number' && typeof selectionEnd === 'number') {
       const safeSelectionStart = Math.max(0, Math.min(selectionStart, normalizedText.length))
       const safeSelectionEnd = Math.max(0, Math.min(selectionEnd, normalizedText.length))
+      const nextSelection: EditorSelectionState = {
+        anchor: safeSelectionStart,
+        focus: safeSelectionEnd,
+        start: Math.min(safeSelectionStart, safeSelectionEnd),
+        end: Math.max(safeSelectionStart, safeSelectionEnd),
+        isCollapsed: safeSelectionStart === safeSelectionEnd,
+      }
+
+      // Keep local selection state in sync with programmatic transforms so
+      // subsequent operations never remap from stale offsets.
+      latestEditorSelectionRef.current = nextSelection
+      setEditorSelection(nextSelection)
+
       requestAnimationFrame(() => {
         adapterRef.current?.applySnapshot({
           selectionScrollBehavior: 'preserve-scroll',
-          selection: {
-            anchor: safeSelectionStart,
-            focus: safeSelectionEnd,
-            start: Math.min(safeSelectionStart, safeSelectionEnd),
-            end: Math.max(safeSelectionStart, safeSelectionEnd),
-            isCollapsed: safeSelectionStart === safeSelectionEnd,
-          },
+          selection: nextSelection,
         })
       })
     }
@@ -4645,41 +4652,74 @@ function App() {
     return { lineStart, lineEndExclusive }
   }, [])
 
-  const resolveNearestHeadingLevelAboveCaret = useCallback((text: string, selection: EditorSelectionState): 1 | 2 | 3 | 4 | 5 | 6 | null => {
-    const caret = Math.max(0, Math.min(selection.focus, text.length))
-    const currentLineStart = text.lastIndexOf('\n', Math.max(0, caret - 1)) + 1
-    let lineEndExclusive = currentLineStart > 0 ? currentLineStart - 1 : -1
-
-    while (lineEndExclusive >= 0) {
-      const lineStart = text.lastIndexOf('\n', Math.max(0, lineEndExclusive - 1)) + 1
-      const lineText = text.slice(lineStart, lineEndExclusive + 1)
-      const headingMatch = lineText.match(/^\s*(?:>\s*)*(#{1,6})(?:\s|$)/)
-      if (headingMatch) {
-        return headingMatch[1].length as 1 | 2 | 3 | 4 | 5 | 6
-      }
-
-      if (lineStart === 0) {
-        break
-      }
-      lineEndExclusive = lineStart - 2
-    }
-
-    return null
-  }, [])
-
   const transformSelectedLines = useCallback((transform: (line: string, index: number) => string) => {
     if (!activeNoteId) return
 
     const sourceText = currentEditorText
-    const { start, end } = resolveSelectionBounds(sourceText)
+    const baseSelection = latestEditorSelectionRef.current
+    const start = Math.max(0, Math.min(baseSelection.start, sourceText.length))
+    const end = Math.max(start, Math.min(baseSelection.end, sourceText.length))
     const { lineStart, lineEndExclusive } = resolveLineRange(sourceText, start, end)
     const selectedBlock = sourceText.slice(lineStart, lineEndExclusive)
     const lines = selectedBlock.split('\n')
     const nextLines = lines.map((line, index) => transform(line, index))
     const nextBlock = nextLines.join('\n')
     const nextText = `${sourceText.slice(0, lineStart)}${nextBlock}${sourceText.slice(lineEndExclusive)}`
-    applyProgrammaticEditorText(nextText, lineStart, lineStart + nextBlock.length)
-  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, resolveLineRange, resolveSelectionBounds])
+
+    const lengthDelta = nextBlock.length - selectedBlock.length
+    const remapOffset = (offset: number) => {
+      if (offset <= lineStart) {
+        return offset
+      }
+      if (offset >= lineEndExclusive) {
+        return offset + lengthDelta
+      }
+
+      const localOffset = offset - lineStart
+      let oldCursor = 0
+      let newCursor = 0
+
+      for (let index = 0; index < lines.length; index += 1) {
+        const oldLineLength = lines[index].length
+        const newLineLength = nextLines[index].length
+        const oldLineEnd = oldCursor + oldLineLength
+        const isLastLine = index === lines.length - 1
+
+        if (localOffset < oldLineEnd) {
+          return lineStart + newCursor + Math.min(localOffset - oldCursor, newLineLength)
+        }
+
+        if (localOffset === oldLineEnd) {
+          return lineStart + newCursor + newLineLength
+        }
+
+        if (!isLastLine) {
+          const oldNewlineOffset = oldLineEnd + 1
+          const newNewlineOffset = newCursor + newLineLength + 1
+          if (localOffset === oldNewlineOffset) {
+            return lineStart + newNewlineOffset
+          }
+
+          oldCursor = oldNewlineOffset
+          newCursor = newNewlineOffset
+          continue
+        }
+
+        return lineStart + newCursor + newLineLength
+      }
+
+      return lineStart + nextBlock.length
+    }
+
+    const nextAnchor = Math.max(0, Math.min(nextText.length, remapOffset(baseSelection.anchor)))
+    const nextFocus = Math.max(0, Math.min(nextText.length, remapOffset(baseSelection.focus)))
+    applyProgrammaticEditorText(nextText, nextAnchor, nextFocus)
+  }, [
+    activeNoteId,
+    applyProgrammaticEditorText,
+    currentEditorText,
+    resolveLineRange,
+  ])
 
   const applyHeading = useCallback((level: 1 | 2 | 3 | 4 | 5 | 6) => {
     lastHeadlineLevelRef.current = level
@@ -4695,23 +4735,74 @@ function App() {
   const toggleCurrentLineHeading = useCallback(() => {
     if (!activeNoteId) return
 
-    if (activeHeadingLevel > 0) {
-      transformSelectedLines((line) => line.replace(/^#{1,6}\s+/, ''))
+    const sourceText = normalizeInternalText(latestEditorTextRef.current || currentEditorText)
+    const baseSelection = latestEditorSelectionRef.current
+    const clampOffset = (offset: number) => Math.max(0, Math.min(offset, sourceText.length))
+    const caret = clampOffset(baseSelection.focus)
+    const lineStart = sourceText.lastIndexOf('\n', Math.max(0, caret - 1)) + 1
+    const lineEndNewline = sourceText.indexOf('\n', caret)
+    const lineEndExclusive = lineEndNewline === -1 ? sourceText.length : lineEndNewline
+    const lineText = sourceText.slice(lineStart, lineEndExclusive)
+
+    const currentHeadingPrefixMatch = lineText.match(/^(#{1,6}\s*)/)
+    if (currentHeadingPrefixMatch) {
+      const removedPrefix = currentHeadingPrefixMatch[1]
+      const removedLength = removedPrefix.length
+      const nextLineText = lineText.slice(removedLength)
+      const nextText = `${sourceText.slice(0, lineStart)}${nextLineText}${sourceText.slice(lineEndExclusive)}`
+
+      const remapOffset = (offset: number) => {
+        const safeOffset = clampOffset(offset)
+        if (safeOffset <= lineStart) return safeOffset
+        if (safeOffset <= lineStart + removedLength) return lineStart
+        return safeOffset - removedLength
+      }
+
+      const nextAnchor = Math.max(0, Math.min(nextText.length, remapOffset(baseSelection.anchor)))
+      const nextFocus = Math.max(0, Math.min(nextText.length, remapOffset(baseSelection.focus)))
+      applyProgrammaticEditorText(nextText, nextAnchor, nextFocus)
       return
     }
 
-    const sourceText = normalizeInternalText(latestEditorTextRef.current || currentEditorText)
-    const inferredHeadingLevel = resolveNearestHeadingLevelAboveCaret(sourceText, editorSelection) ?? lastHeadlineLevelRef.current
-    lastHeadlineLevelRef.current = inferredHeadingLevel
-    applyHeading(inferredHeadingLevel)
+    let searchLineEnd = lineStart > 0 ? lineStart - 1 : -1
+    let inheritedPrefix: string | null = null
+
+    while (searchLineEnd >= 0) {
+      const searchLineStart = sourceText.lastIndexOf('\n', Math.max(0, searchLineEnd - 1)) + 1
+      const previousLine = sourceText.slice(searchLineStart, searchLineEnd + 1)
+      const previousHeadingPrefixMatch = previousLine.match(/^(#{1,6}\s*)/)
+      if (previousHeadingPrefixMatch) {
+        inheritedPrefix = previousHeadingPrefixMatch[1]
+        break
+      }
+
+      if (searchLineStart === 0) {
+        break
+      }
+      searchLineEnd = searchLineStart - 2
+    }
+
+    if (!inheritedPrefix) {
+      inheritedPrefix = `${'#'.repeat(lastHeadlineLevelRef.current)} `
+    }
+
+    const addedLength = inheritedPrefix.length
+    const nextLineText = `${inheritedPrefix}${lineText}`
+    const nextText = `${sourceText.slice(0, lineStart)}${nextLineText}${sourceText.slice(lineEndExclusive)}`
+
+    const remapOffset = (offset: number) => {
+      const safeOffset = clampOffset(offset)
+      if (safeOffset <= lineStart) return safeOffset
+      return safeOffset + addedLength
+    }
+
+    const nextAnchor = Math.max(0, Math.min(nextText.length, remapOffset(baseSelection.anchor)))
+    const nextFocus = Math.max(0, Math.min(nextText.length, remapOffset(baseSelection.focus)))
+    applyProgrammaticEditorText(nextText, nextAnchor, nextFocus)
   }, [
-    activeHeadingLevel,
     activeNoteId,
-    applyHeading,
+    applyProgrammaticEditorText,
     currentEditorText,
-    editorSelection,
-    resolveNearestHeadingLevelAboveCaret,
-    transformSelectedLines,
   ])
 
   const toggleBulletedList = useCallback(() => {
