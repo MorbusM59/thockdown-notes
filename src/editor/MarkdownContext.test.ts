@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { EditorSelectionState } from './EditorContract'
 import { applyMarkdownEnter, indentSelectionByStep, resolveMarkdownSelectionContext } from './MarkdownContext'
+import { normalizeInternalText } from './TextPolicy'
 
 function collapsedSelection(offset: number): EditorSelectionState {
   return {
@@ -274,6 +275,21 @@ describe('applyMarkdownEnter', () => {
     expect(result).toBeNull()
   })
 
+  it('returns null for cross-line non-collapsed selections', () => {
+    const text = ['- first', '- second'].join('\n')
+    const selection: EditorSelectionState = {
+      anchor: 1,
+      focus: text.length - 1,
+      start: 1,
+      end: text.length - 1,
+      isCollapsed: false,
+    }
+
+    const result = applyMarkdownEnter(text, selection)
+
+    expect(result).toBeNull()
+  })
+
   it('returns null inside fenced code blocks', () => {
     const text = ['```md', '- item', '```'].join('\n')
     const selection = collapsedSelection(text.indexOf('item'))
@@ -281,5 +297,31 @@ describe('applyMarkdownEnter', () => {
     const result = applyMarkdownEnter(text, selection)
 
     expect(result).toBeNull()
+  })
+
+  it('normalizes mixed tabs/spaces before list continuation logic', () => {
+    const raw = '\t  - item'
+    const text = normalizeInternalText(raw)
+    const selection = collapsedSelection(text.length)
+
+    const result = applyMarkdownEnter(text, selection)
+
+    expect(text).toBe('     - item')
+    expect(result).not.toBeNull()
+    expect(result?.text).toBe('     - item\n     - ')
+  })
+
+  it('normalizes tabs before empty-list Enter termination logic', () => {
+    const raw = '\t- '
+    const text = normalizeInternalText(raw)
+    const selection = collapsedSelection(text.length)
+
+    const result = applyMarkdownEnter(text, selection)
+
+    expect(text).toBe('   - ')
+    expect(result).not.toBeNull()
+    expect(result?.text).toBe('')
+    expect(result?.selection.anchor).toBe(0)
+    expect(result?.selection.focus).toBe(0)
   })
 })
