@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
+import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Editor } from './components/Editor'
@@ -133,6 +133,7 @@ type HsvaControlKey = 'h' | 's' | 'v' | 'a'
 
 type HsvaDragState = {
   control: HsvaControlKey
+  pointerId: number
   startX: number
   baseValue: number
 }
@@ -1460,13 +1461,14 @@ function App() {
   const updateHsvaControlValue = useCallback((control: HsvaControlKey, rawValue: number) => {
     setActiveColorHsva((previous) => {
       if (control === 'h') {
+        const nextHue = Math.max(0, Math.min(360, rawValue))
         return {
           ...previous,
-          h: Math.max(0, Math.min(360, Math.round(rawValue))),
+          h: nextHue,
         }
       }
 
-      const normalized = Math.max(0, Math.min(255, Math.round(rawValue))) / 255
+      const normalized = Math.max(0, Math.min(1, rawValue / 255))
       return {
         ...previous,
         [control]: normalized,
@@ -1474,44 +1476,63 @@ function App() {
     })
   }, [])
 
-  const startHsvaDrag = useCallback((control: HsvaControlKey, event: MouseEvent<HTMLButtonElement>) => {
+  const startHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return
+    if (armedColorSource?.kind === 'element') return
+
     event.preventDefault()
 
     const baseValue = control === 'h'
       ? activeColorHsva.h
-      : Math.round(activeColorHsva[control] * 255)
+      : activeColorHsva[control] * 255
+
+    event.currentTarget.setPointerCapture(event.pointerId)
 
     setHsvaDragState({
       control,
+      pointerId: event.pointerId,
       startX: event.clientX,
       baseValue,
     })
-  }, [activeColorHsva])
+
+    updateHsvaControlValue(control, baseValue)
+  }, [activeColorHsva, armedColorSource, updateHsvaControlValue])
+
+  const handleHsvaDragMove = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
+    const currentDrag = hsvaDragState
+    if (!currentDrag) return
+    if (currentDrag.control !== control) return
+    if (currentDrag.pointerId !== event.pointerId) return
+
+    event.preventDefault()
+    const delta = event.clientX - currentDrag.startX
+    updateHsvaControlValue(control, currentDrag.baseValue + delta)
+  }, [hsvaDragState, updateHsvaControlValue])
+
+  const stopHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
+    const currentDrag = hsvaDragState
+    if (!currentDrag) return
+    if (currentDrag.control !== control) return
+    if (currentDrag.pointerId !== event.pointerId) return
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+
+    setHsvaDragState(null)
+  }, [hsvaDragState])
 
   useEffect(() => {
-    if (!hsvaDragState) return
+    if (!hsvaDragState) {
+      document.body.classList.remove('hsva-dragging')
+      return
+    }
 
     document.body.classList.add('hsva-dragging')
-
-    const handleMouseMove = (event: globalThis.MouseEvent) => {
-      const delta = event.clientX - hsvaDragState.startX
-      updateHsvaControlValue(hsvaDragState.control, hsvaDragState.baseValue + delta)
-    }
-
-    const stopDrag = () => {
-      setHsvaDragState(null)
-    }
-
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', stopDrag)
-
     return () => {
       document.body.classList.remove('hsva-dragging')
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', stopDrag)
     }
-  }, [hsvaDragState, updateHsvaControlValue])
+  }, [hsvaDragState])
 
   useEffect(() => {
     return () => {
@@ -5984,13 +6005,24 @@ function App() {
                         if (armedColorSource?.kind !== 'element') return
                         applyElementValueToHsvaControl(armedColorSource.key, 'h')
                       }}
-                      onMouseDown={(event) => {
-                        if (event.button === 0 && armedColorSource?.kind === 'element') return
-                        if (event.button === 2) {
-                          startColorArmHold({ kind: 'hsva', key: 'h' }, event)
-                          return
-                        }
+                      onPointerDown={(event) => {
                         startHsvaDrag('h', event)
+                      }}
+                      onPointerMove={(event) => {
+                        handleHsvaDragMove('h', event)
+                      }}
+                      onPointerUp={(event) => {
+                        stopHsvaDrag('h', event)
+                      }}
+                      onPointerCancel={(event) => {
+                        stopHsvaDrag('h', event)
+                      }}
+                      onLostPointerCapture={(event) => {
+                        stopHsvaDrag('h', event)
+                      }}
+                      onMouseDown={(event) => {
+                        if (event.button !== 2) return
+                        startColorArmHold({ kind: 'hsva', key: 'h' }, event)
                       }}
                       onMouseUp={(event) => {
                         if (event.button !== 2) return
@@ -6011,13 +6043,24 @@ function App() {
                         if (armedColorSource?.kind !== 'element') return
                         applyElementValueToHsvaControl(armedColorSource.key, 's')
                       }}
-                      onMouseDown={(event) => {
-                        if (event.button === 0 && armedColorSource?.kind === 'element') return
-                        if (event.button === 2) {
-                          startColorArmHold({ kind: 'hsva', key: 's' }, event)
-                          return
-                        }
+                      onPointerDown={(event) => {
                         startHsvaDrag('s', event)
+                      }}
+                      onPointerMove={(event) => {
+                        handleHsvaDragMove('s', event)
+                      }}
+                      onPointerUp={(event) => {
+                        stopHsvaDrag('s', event)
+                      }}
+                      onPointerCancel={(event) => {
+                        stopHsvaDrag('s', event)
+                      }}
+                      onLostPointerCapture={(event) => {
+                        stopHsvaDrag('s', event)
+                      }}
+                      onMouseDown={(event) => {
+                        if (event.button !== 2) return
+                        startColorArmHold({ kind: 'hsva', key: 's' }, event)
                       }}
                       onMouseUp={(event) => {
                         if (event.button !== 2) return
@@ -6038,13 +6081,24 @@ function App() {
                         if (armedColorSource?.kind !== 'element') return
                         applyElementValueToHsvaControl(armedColorSource.key, 'v')
                       }}
-                      onMouseDown={(event) => {
-                        if (event.button === 0 && armedColorSource?.kind === 'element') return
-                        if (event.button === 2) {
-                          startColorArmHold({ kind: 'hsva', key: 'v' }, event)
-                          return
-                        }
+                      onPointerDown={(event) => {
                         startHsvaDrag('v', event)
+                      }}
+                      onPointerMove={(event) => {
+                        handleHsvaDragMove('v', event)
+                      }}
+                      onPointerUp={(event) => {
+                        stopHsvaDrag('v', event)
+                      }}
+                      onPointerCancel={(event) => {
+                        stopHsvaDrag('v', event)
+                      }}
+                      onLostPointerCapture={(event) => {
+                        stopHsvaDrag('v', event)
+                      }}
+                      onMouseDown={(event) => {
+                        if (event.button !== 2) return
+                        startColorArmHold({ kind: 'hsva', key: 'v' }, event)
                       }}
                       onMouseUp={(event) => {
                         if (event.button !== 2) return
@@ -6065,13 +6119,24 @@ function App() {
                         if (armedColorSource?.kind !== 'element') return
                         applyElementValueToHsvaControl(armedColorSource.key, 'a')
                       }}
-                      onMouseDown={(event) => {
-                        if (event.button === 0 && armedColorSource?.kind === 'element') return
-                        if (event.button === 2) {
-                          startColorArmHold({ kind: 'hsva', key: 'a' }, event)
-                          return
-                        }
+                      onPointerDown={(event) => {
                         startHsvaDrag('a', event)
+                      }}
+                      onPointerMove={(event) => {
+                        handleHsvaDragMove('a', event)
+                      }}
+                      onPointerUp={(event) => {
+                        stopHsvaDrag('a', event)
+                      }}
+                      onPointerCancel={(event) => {
+                        stopHsvaDrag('a', event)
+                      }}
+                      onLostPointerCapture={(event) => {
+                        stopHsvaDrag('a', event)
+                      }}
+                      onMouseDown={(event) => {
+                        if (event.button !== 2) return
+                        startColorArmHold({ kind: 'hsva', key: 'a' }, event)
                       }}
                       onMouseUp={(event) => {
                         if (event.button !== 2) return

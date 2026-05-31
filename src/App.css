@@ -870,6 +870,7 @@ body.splitter-dragging {
   width: 100%;
   height: 100%;
   color: #2f241a;
+  transition: none;
 }
 
 .toolbar-flyout-color-swatch-glyph {
@@ -880,6 +881,7 @@ body.splitter-dragging {
 
 .toolbar-flyout-hsva-control {
   cursor: w-resize;
+  transition: none;
 }
 
 .toolbar-flyout-hsva-control.is-dragging {
@@ -911,6 +913,7 @@ body.splitter-dragging {
   height: calc(100% - 2px);
   justify-self: center;
   align-self: center;
+  transition: none;
 }
 
 body.hsva-dragging,
