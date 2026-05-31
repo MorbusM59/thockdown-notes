@@ -2,6 +2,8 @@ const CONTROL_AND_INVISIBLE_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u00
 const VARIATION_SELECTORS = /[\uFE0E\uFE0F]/g;
 const EMOJI_PICTOGRAPHICS = /\p{Extended_Pictographic}/gu;
 const HTML_TAGS = /<[^>\n]*>/g;
+const TAB_CHARACTERS = /\t/g;
+const SANITIZED_TAB_SPACES = '   ';
 
 function normalizeLineSeparators(input: string): string {
   return input
@@ -13,6 +15,7 @@ function normalizeLineSeparators(input: string): string {
 
 export function sanitizeTextFragment(input: string): string {
   return normalizeLineSeparators(input)
+    .replace(TAB_CHARACTERS, SANITIZED_TAB_SPACES)
     .replace(EMOJI_PICTOGRAPHICS, '')
     .replace(VARIATION_SELECTORS, '')
     .replace(CONTROL_AND_INVISIBLE_CHARS, '');

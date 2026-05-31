@@ -78,4 +78,11 @@ export interface EditorBindings {
   onTextChange?: (event: EditorTextChangeEvent) => void;
   onSelectionChange?: (event: EditorSelectionChangeEvent) => void;
   onViewportChange?: (event: EditorViewportChangeEvent) => void;
+  onTabIndent?: (event: { shiftKey: boolean }) => void;
+  onEnterKey?: (event: {
+    shiftKey: boolean;
+    altKey: boolean;
+    ctrlKey: boolean;
+    metaKey: boolean;
+  }) => boolean;
 }

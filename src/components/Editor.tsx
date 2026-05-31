@@ -985,6 +985,8 @@ export function Editor({
             <ContractBridgePlugin
               onTextChange={handleTextChange}
               onSelectionChange={handleSelectionChange}
+              onTabIndent={bindings?.onTabIndent}
+              onEnterKey={bindings?.onEnterKey}
             />
             
             {/* The Magic Cage Scroller! */}

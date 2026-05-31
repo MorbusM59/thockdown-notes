@@ -33,6 +33,11 @@ import {
   type DocumentFindDirective,
   type DocumentFindHit,
 } from './editor/FindReplaceEngine'
+import {
+  applyMarkdownEnter,
+  indentSelectionByStep,
+  resolveMarkdownSelectionContext,
+} from './editor/MarkdownContext'
 import { normalizeInternalText } from './editor/TextPolicy'
 import {
   buildReleaseRampDownPlanFromCurrentParams,
@@ -3270,6 +3275,70 @@ function App() {
         }
       }
     },
+    onTabIndent: (event) => {
+      if (!activeNoteId) return
+
+      const sourceText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+      const direction = event.shiftKey ? 'outdent' : 'indent'
+      const next = indentSelectionByStep(sourceText, editorSelection, direction, 3)
+
+      const didTextChange = next.text !== sourceText
+      const didSelectionChange =
+        next.selection.anchor !== editorSelection.anchor ||
+        next.selection.focus !== editorSelection.focus
+
+      if (!didTextChange && !didSelectionChange) {
+        return
+      }
+
+      latestEditorTextRef.current = next.text
+      setActiveNoteText(next.text)
+      setEditorTextVersion((previous) => previous + 1)
+      updateActiveNoteTitlePreview(next.text)
+      queueSave(next.text)
+
+      requestAnimationFrame(() => {
+        adapterRef.current?.applySnapshot({
+          selection: {
+            anchor: next.selection.anchor,
+            focus: next.selection.focus,
+            start: next.selection.start,
+            end: next.selection.end,
+            isCollapsed: next.selection.isCollapsed,
+          },
+        })
+      })
+    },
+    onEnterKey: (event) => {
+      if (!activeNoteId) return false
+      if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false
+
+      const sourceText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+      const next = applyMarkdownEnter(sourceText, editorSelection)
+      if (!next) {
+        return false
+      }
+
+      latestEditorTextRef.current = next.text
+      setActiveNoteText(next.text)
+      setEditorTextVersion((previous) => previous + 1)
+      updateActiveNoteTitlePreview(next.text)
+      queueSave(next.text)
+
+      requestAnimationFrame(() => {
+        adapterRef.current?.applySnapshot({
+          selection: {
+            anchor: next.selection.anchor,
+            focus: next.selection.focus,
+            start: next.selection.start,
+            end: next.selection.end,
+            isCollapsed: next.selection.isCollapsed,
+          },
+        })
+      })
+
+      return true
+    },
     onViewportChange: (event: EditorViewportChangeEvent) => {
       const nextViewport = {
         topBoundaryPx: Math.round(event.viewport.topBoundaryPx),
@@ -3309,6 +3378,8 @@ function App() {
     persistenceReady,
     queueSave,
     queueAppStateSave,
+    activeNoteText,
+    editorSelection,
     updateActiveNoteTitlePreview,
     updateEditModeSnapshotCache,
   ])
@@ -4366,18 +4437,33 @@ function App() {
     )
   }, [])
 
+  const markdownSelectionContext = useMemo(
+    () => resolveMarkdownSelectionContext(currentEditorText, editorSelection),
+    [currentEditorText, editorSelection],
+  )
+
   const activeDecorationFormats = useMemo(() => {
     const active = new Set<TextDecorationFormat>()
 
-    for (const format of Object.keys(TEXT_DECORATION_MARKERS) as TextDecorationFormat[]) {
-      const marker = TEXT_DECORATION_MARKERS[format]
-      if (isSelectionWrappedBy(currentEditorText, editorSelection, marker.open, marker.close)) {
-        active.add(format)
-      }
+    if (markdownSelectionContext.inline.inBold) {
+      active.add('bold')
+    }
+    if (markdownSelectionContext.inline.inItalic) {
+      active.add('italic')
+    }
+    if (markdownSelectionContext.inline.inStrikethrough) {
+      active.add('strikethrough')
     }
 
     return active
-  }, [currentEditorText, editorSelection, isSelectionWrappedBy])
+  }, [markdownSelectionContext])
+
+  const activeHeadingLevel = markdownSelectionContext.line.headingLevel
+  const isBulletedListActive = markdownSelectionContext.line.listKind === 'unordered'
+  const isNumberedListActive = markdownSelectionContext.line.listKind === 'ordered'
+  const isBlockquoteActive = markdownSelectionContext.line.blockquoteDepth > 0
+  const isCodeBlockActive = markdownSelectionContext.inline.inFencedCodeBlock
+  const isInlineCodeActive = markdownSelectionContext.inline.inInlineCode
 
   const applyTextDecoration = useCallback((format: TextDecorationFormat) => {
     if (!activeNoteId) return
@@ -5732,21 +5818,21 @@ function App() {
 
               <span className="toolbar-divider">|</span>
 
-              <button type="button" className="toolbar-btn-icon" title="Heading 1" onClick={() => applyHeading(1)} disabled={!activeNoteId}>H1</button>
-              <button type="button" className="toolbar-btn-icon" title="Heading 2" onClick={() => applyHeading(2)} disabled={!activeNoteId}>H2</button>
-              <button type="button" className="toolbar-btn-icon" title="Heading 3" onClick={() => applyHeading(3)} disabled={!activeNoteId}>H3</button>
+              <button type="button" className={`toolbar-btn-icon ${activeHeadingLevel === 1 ? 'active' : ''}`} title="Heading 1" onClick={() => applyHeading(1)} disabled={!activeNoteId}>H1</button>
+              <button type="button" className={`toolbar-btn-icon ${activeHeadingLevel === 2 ? 'active' : ''}`} title="Heading 2" onClick={() => applyHeading(2)} disabled={!activeNoteId}>H2</button>
+              <button type="button" className={`toolbar-btn-icon ${activeHeadingLevel === 3 ? 'active' : ''}`} title="Heading 3" onClick={() => applyHeading(3)} disabled={!activeNoteId}>H3</button>
 
               <span className="toolbar-divider">|</span>
 
-              <button type="button" className="toolbar-btn-icon" title="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>≡</button>
-              <button type="button" className="toolbar-btn-icon" title="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>#</button>
+              <button type="button" className={`toolbar-btn-icon ${isBulletedListActive ? 'active' : ''}`} title="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>≡</button>
+              <button type="button" className={`toolbar-btn-icon ${isNumberedListActive ? 'active' : ''}`} title="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>#</button>
               <button type="button" className="toolbar-btn-icon" title="Link" onClick={applyLink} disabled={!activeNoteId}>🔗</button>
 
               <span className="toolbar-divider">|</span>
 
-              <button type="button" className="toolbar-btn-icon" title="Blockquote" onClick={toggleBlockquote} disabled={!activeNoteId}>&quot;</button>
-              <button type="button" className="toolbar-btn-icon" title="Code block" onClick={applyCodeBlock} disabled={!activeNoteId}>{'{ }'}</button>
-              <button type="button" className="toolbar-btn-icon" title="Inline code" onClick={applyInlineCode} disabled={!activeNoteId}>{'<>'}</button>
+              <button type="button" className={`toolbar-btn-icon ${isBlockquoteActive ? 'active' : ''}`} title="Blockquote" onClick={toggleBlockquote} disabled={!activeNoteId}>&quot;</button>
+              <button type="button" className={`toolbar-btn-icon ${isCodeBlockActive ? 'active' : ''}`} title="Code block" onClick={applyCodeBlock} disabled={!activeNoteId}>{'{ }'}</button>
+              <button type="button" className={`toolbar-btn-icon ${isInlineCodeActive ? 'active' : ''}`} title="Inline code" onClick={applyInlineCode} disabled={!activeNoteId}>{'<>'}</button>
 
               <span className="toolbar-divider">|</span>
 

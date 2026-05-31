@@ -2,7 +2,8 @@ export function normalizeInternalText(input: string): string {
   return stripBom(input)
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
-    .replace(/[\u2028\u2029]/g, '\n');
+    .replace(/[\u2028\u2029]/g, '\n')
+    .replace(/\t/g, '   ');
 }
 
 export function canonicalizeParagraphSegments(segments: string[]): string {
