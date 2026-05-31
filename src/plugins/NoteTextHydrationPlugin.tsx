@@ -1,18 +1,26 @@
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useLayoutEffect, useRef } from 'react';
-import { $createParagraphNode, $createTextNode, $getRoot } from 'lexical';
-import { normalizeInternalText } from '../editor/TextPolicy';
+import {
+  $addUpdateTag,
+  $createParagraphNode,
+  $createTextNode,
+  $getRoot,
+  SKIP_SCROLL_INTO_VIEW_TAG,
+  SKIP_SELECTION_FOCUS_TAG,
+} from 'lexical';
+import { canonicalizeParagraphSegments, normalizeInternalText } from '../editor/TextPolicy';
 import { sanitizeDocumentText } from '../shared/textSanitization';
 
 interface NoteTextHydrationPluginProps {
   text: string;
+  scrollerRef?: React.RefObject<HTMLElement>;
 }
 
 function replaceEditorText(nextText: string): void {
   const root = $getRoot();
   root.clear();
 
-  const normalized = normalizeInternalText(sanitizeDocumentText(nextText));
+  const normalized = nextText;
   const lines = normalized.split('\n');
 
   if (lines.length === 0) {
@@ -39,19 +47,56 @@ function replaceEditorText(nextText: string): void {
   }
 }
 
-export function NoteTextHydrationPlugin({ text }: NoteTextHydrationPluginProps) {
+function readCanonicalRootText(): string {
+  const root = $getRoot();
+  const children = root.getChildren();
+  if (children.length === 0) {
+    return '';
+  }
+
+  return canonicalizeParagraphSegments(children.map((child) => child.getTextContent()));
+}
+
+export function NoteTextHydrationPlugin({ text, scrollerRef }: NoteTextHydrationPluginProps) {
   const [editor] = useLexicalComposerContext();
   const appliedTextRef = useRef<string | null>(null);
 
   useLayoutEffect(() => {
     if (appliedTextRef.current === text) return;
 
+    const normalizedIncomingText = normalizeInternalText(sanitizeDocumentText(text));
+    let shouldHydrate = false;
+
+    editor.getEditorState().read(() => {
+      shouldHydrate = readCanonicalRootText() !== normalizedIncomingText;
+    });
+
+    if (!shouldHydrate) {
+      appliedTextRef.current = text;
+      return;
+    }
+
+    const scrollerEl = (scrollerRef?.current ?? null);
+    const preservedScrollTop = scrollerEl ? scrollerEl.scrollTop : null;
+
+    const restoreScroll = () => {
+      if (!scrollerEl || preservedScrollTop === null) return;
+      scrollerEl.scrollTop = preservedScrollTop;
+      requestAnimationFrame(() => {
+        scrollerEl.scrollTop = preservedScrollTop;
+      });
+    };
+
     editor.update(() => {
-      replaceEditorText(text);
+      $addUpdateTag(SKIP_SCROLL_INTO_VIEW_TAG);
+      $addUpdateTag(SKIP_SELECTION_FOCUS_TAG);
+      replaceEditorText(normalizedIncomingText);
     }, { tag: 'restore' });
 
+    restoreScroll();
+
     appliedTextRef.current = text;
-  }, [editor, text]);
+  }, [editor, text, scrollerRef]);
 
   return null;
 }

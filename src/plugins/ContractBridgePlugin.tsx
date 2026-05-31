@@ -1,11 +1,15 @@
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useEffect, useRef } from 'react';
 import {
+  $createParagraphNode,
+  $createTextNode,
   $getRoot,
   $getSelection,
   $isRangeSelection,
   COMMAND_PRIORITY_BEFORE_EDITOR,
+  COMMAND_PRIORITY_CRITICAL,
   COMMAND_PRIORITY_LOW,
+  KEY_DOWN_COMMAND,
   KEY_ENTER_COMMAND,
   KEY_TAB_COMMAND,
   SELECTION_CHANGE_COMMAND,
@@ -27,6 +31,22 @@ interface ContractBridgePluginProps {
   onTextChange: (event: EditorTextChangeEvent) => void;
   onSelectionChange: (event: EditorSelectionChangeEvent) => void;
   onTabIndent?: (event: { shiftKey: boolean }) => void;
+  onTabIndentTransform?: (event: {
+    shiftKey: boolean;
+    text: string;
+    selection: EditorSelectionState;
+  }) => {
+    text: string;
+    selection: EditorSelectionState;
+  } | null;
+  onMarkdownShortcutTransform?: (event: {
+    shortcut: 'bold' | 'italic' | 'strikethrough' | 'heading-toggle' | 'unordered-list' | 'ordered-list';
+    text: string;
+    selection: EditorSelectionState;
+  }) => {
+    text: string;
+    selection: EditorSelectionState;
+  } | null;
   onEnterKey?: (event: {
     shiftKey: boolean;
     altKey: boolean;
@@ -57,7 +77,33 @@ function readCanonicalRootText(): string {
   );
 }
 
-export function ContractBridgePlugin({ onTextChange, onSelectionChange, onTabIndent, onEnterKey }: ContractBridgePluginProps) {
+function replaceEditorTextFromCanonical(nextText: string): void {
+  const root = $getRoot();
+  root.clear();
+
+  const lines = nextText.split('\n');
+  if (lines.length === 0) {
+    root.append($createParagraphNode());
+    return;
+  }
+
+  for (const line of lines) {
+    const paragraph = $createParagraphNode();
+    if (line.length > 0) {
+      paragraph.append($createTextNode(line));
+    }
+    root.append(paragraph);
+  }
+}
+
+export function ContractBridgePlugin({
+  onTextChange,
+  onSelectionChange,
+  onTabIndent,
+  onTabIndentTransform,
+  onMarkdownShortcutTransform,
+  onEnterKey,
+}: ContractBridgePluginProps) {
   const [editor] = useLexicalComposerContext();
   const previousTextRef = useRef('');
   const previousSelectionRef = useRef<EditorSelectionState>(EMPTY_SELECTION);
@@ -71,14 +117,18 @@ export function ContractBridgePlugin({ onTextChange, onSelectionChange, onTabInd
   const onTextChangeRef = useRef(onTextChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
   const onTabIndentRef = useRef(onTabIndent);
+  const onTabIndentTransformRef = useRef(onTabIndentTransform);
+  const onMarkdownShortcutTransformRef = useRef(onMarkdownShortcutTransform);
   const onEnterKeyRef = useRef(onEnterKey);
 
   useEffect(() => {
     onTextChangeRef.current = onTextChange;
     onSelectionChangeRef.current = onSelectionChange;
     onTabIndentRef.current = onTabIndent;
+    onTabIndentTransformRef.current = onTabIndentTransform;
+    onMarkdownShortcutTransformRef.current = onMarkdownShortcutTransform;
     onEnterKeyRef.current = onEnterKey;
-  }, [onTextChange, onSelectionChange, onTabIndent, onEnterKey]);
+  }, [onTextChange, onSelectionChange, onTabIndent, onTabIndentTransform, onMarkdownShortcutTransform, onEnterKey]);
 
   useEffect(() => {
     // Emit stable initial state from current editor content.
@@ -531,6 +581,45 @@ export function ContractBridgePlugin({ onTextChange, onSelectionChange, onTabInd
     const removeTabCommand = editor.registerCommand(
       KEY_TAB_COMMAND,
       (event: KeyboardEvent) => {
+        const transformCallback = onTabIndentTransformRef.current;
+        if (transformCallback) {
+          let canonicalText = '';
+          let currentSelection = previousSelectionRef.current;
+
+          editor.getEditorState().read(() => {
+            canonicalText = readCanonicalRootText();
+            const rootEl = editor.getRootElement();
+            const lexicalSelection = $getSelection();
+            if (rootEl && $isRangeSelection(lexicalSelection)) {
+              currentSelection = readSelectionStateFromDom(rootEl, window.getSelection(), canonicalText.length);
+            }
+          });
+
+          const next = transformCallback({
+            shiftKey: event.shiftKey,
+            text: canonicalText,
+            selection: currentSelection,
+          });
+          if (!next) return false;
+
+          event.preventDefault();
+
+          editor.update(() => {
+            replaceEditorTextFromCanonical(next.text);
+          }, { tag: 'tab-indent' });
+
+          requestAnimationFrame(() => {
+            const rootEl = editor.getRootElement();
+            if (!rootEl) return;
+            const applied = applySelectionStateToDom(rootEl, next.text, next.selection);
+            if (!applied) return;
+            previousSelectionRef.current = next.selection;
+            onSelectionChangeRef.current({ source: 'user-input', selection: next.selection });
+          });
+
+          return true;
+        }
+
         const callback = onTabIndentRef.current;
         if (!callback) return false;
 
@@ -539,6 +628,74 @@ export function ContractBridgePlugin({ onTextChange, onSelectionChange, onTabInd
         return true;
       },
       COMMAND_PRIORITY_BEFORE_EDITOR,
+    );
+
+    const removeMarkdownShortcutCommand = editor.registerCommand(
+      KEY_DOWN_COMMAND,
+      (event: KeyboardEvent) => {
+        const callback = onMarkdownShortcutTransformRef.current;
+        if (!callback) return false;
+
+        if (!event.ctrlKey || event.metaKey || event.altKey) {
+          return false;
+        }
+
+        let shortcut: 'bold' | 'italic' | 'strikethrough' | 'heading-toggle' | 'unordered-list' | 'ordered-list' | null = null;
+        const key = event.key.toLowerCase();
+        if (!event.shiftKey && key === 'b') {
+          shortcut = 'bold';
+        } else if (!event.shiftKey && key === 'i') {
+          shortcut = 'italic';
+        } else if (!event.shiftKey && key === 'j') {
+          shortcut = 'strikethrough';
+        } else if (!event.shiftKey && key === 'h') {
+          shortcut = 'heading-toggle';
+        } else if (!event.shiftKey && event.key === '-') {
+          shortcut = 'unordered-list';
+        } else if ((event.shiftKey && event.key === '3') || event.key === '#') {
+          shortcut = 'ordered-list';
+        }
+
+        if (!shortcut) return false;
+
+        let canonicalText = '';
+        let currentSelection = previousSelectionRef.current;
+
+        editor.getEditorState().read(() => {
+          canonicalText = readCanonicalRootText();
+          const rootEl = editor.getRootElement();
+          const lexicalSelection = $getSelection();
+          if (rootEl && $isRangeSelection(lexicalSelection)) {
+            currentSelection = readSelectionStateFromDom(rootEl, window.getSelection(), canonicalText.length);
+          }
+        });
+
+        const next = callback({
+          shortcut,
+          text: canonicalText,
+          selection: currentSelection,
+        });
+
+        if (!next) return false;
+
+        event.preventDefault();
+
+        editor.update(() => {
+          replaceEditorTextFromCanonical(next.text);
+        }, { tag: 'shortcut-transform' });
+
+        requestAnimationFrame(() => {
+          const rootEl = editor.getRootElement();
+          if (!rootEl) return;
+          const applied = applySelectionStateToDom(rootEl, next.text, next.selection);
+          if (!applied) return;
+          previousSelectionRef.current = next.selection;
+          onSelectionChangeRef.current({ source: 'user-input', selection: next.selection });
+        });
+
+        return true;
+      },
+      COMMAND_PRIORITY_CRITICAL,
     );
 
     const removeEnterCommand = editor.registerCommand(
@@ -572,6 +729,7 @@ export function ContractBridgePlugin({ onTextChange, onSelectionChange, onTabInd
       removeListener();
       removeSelectionCommand();
       removeTabCommand();
+      removeMarkdownShortcutCommand();
       removeEnterCommand();
     };
   }, [editor]);

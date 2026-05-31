@@ -3276,14 +3276,14 @@ function App() {
         }
       }
     },
-    onTabIndent: (event) => {
-      if (!activeNoteId) return
+    onTabIndentTransform: ({ shiftKey, text, selection }) => {
+      if (!activeNoteId) return null
 
-      const sourceText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
-      const lineContext = resolveMarkdownSelectionContext(sourceText, editorSelection).line
+      const sourceText = normalizeInternalText(text)
+      const lineContext = resolveMarkdownSelectionContext(sourceText, selection).line
 
       if (lineContext.headingLevel > 0) {
-        const nextHeadingLevel = event.shiftKey
+        const nextHeadingLevel = shiftKey
           ? Math.max(1, lineContext.headingLevel - 1)
           : Math.min(6, lineContext.headingLevel + 1)
 
@@ -3309,8 +3309,8 @@ function App() {
               return offset + headingDelta
             }
 
-            const nextAnchor = Math.max(0, Math.min(nextText.length, remapSelectionOffset(editorSelection.anchor)))
-            const nextFocus = Math.max(0, Math.min(nextText.length, remapSelectionOffset(editorSelection.focus)))
+            const nextAnchor = Math.max(0, Math.min(nextText.length, remapSelectionOffset(selection.anchor)))
+            const nextFocus = Math.max(0, Math.min(nextText.length, remapSelectionOffset(selection.focus)))
             const nextSelection: EditorSelectionState = {
               anchor: nextAnchor,
               focus: nextFocus,
@@ -3325,32 +3325,23 @@ function App() {
             updateActiveNoteTitlePreview(nextText)
             queueSave(nextText)
 
-            requestAnimationFrame(() => {
-              adapterRef.current?.applySnapshot({
-                selection: {
-                  anchor: nextSelection.anchor,
-                  focus: nextSelection.focus,
-                  start: nextSelection.start,
-                  end: nextSelection.end,
-                  isCollapsed: nextSelection.isCollapsed,
-                },
-              })
-            })
-            return
+            latestEditorSelectionRef.current = nextSelection
+            setEditorSelection(nextSelection)
+            return { text: nextText, selection: nextSelection }
           }
         }
       }
 
-      const direction = event.shiftKey ? 'outdent' : 'indent'
-      const next = indentSelectionByStep(sourceText, editorSelection, direction, 3)
+      const direction = shiftKey ? 'outdent' : 'indent'
+      const next = indentSelectionByStep(sourceText, selection, direction, 3)
 
       const didTextChange = next.text !== sourceText
       const didSelectionChange =
-        next.selection.anchor !== editorSelection.anchor ||
-        next.selection.focus !== editorSelection.focus
+        next.selection.anchor !== selection.anchor ||
+        next.selection.focus !== selection.focus
 
       if (!didTextChange && !didSelectionChange) {
-        return
+        return null
       }
 
       latestEditorTextRef.current = next.text
@@ -3359,17 +3350,36 @@ function App() {
       updateActiveNoteTitlePreview(next.text)
       queueSave(next.text)
 
-      requestAnimationFrame(() => {
-        adapterRef.current?.applySnapshot({
-          selection: {
-            anchor: next.selection.anchor,
-            focus: next.selection.focus,
-            start: next.selection.start,
-            end: next.selection.end,
-            isCollapsed: next.selection.isCollapsed,
-          },
-        })
-      })
+      latestEditorSelectionRef.current = next.selection
+      setEditorSelection(next.selection)
+      return { text: next.text, selection: next.selection }
+    },
+    onMarkdownShortcutTransform: ({ shortcut, text, selection }) => {
+      if (!activeNoteId) return null
+
+      const sourceText = normalizeInternalText(text)
+      let next: { text: string; selection: EditorSelectionState } | null = null
+
+      if (shortcut === 'bold' || shortcut === 'italic' || shortcut === 'strikethrough') {
+        next = buildTextDecorationTransform(sourceText, selection, shortcut)
+      } else if (shortcut === 'heading-toggle') {
+        next = buildToggleCurrentLineHeadingTransform(sourceText, selection)
+      } else if (shortcut === 'unordered-list') {
+        next = buildToggleBulletedListTransform(sourceText, selection)
+      } else if (shortcut === 'ordered-list') {
+        next = buildToggleNumberedListTransform(sourceText, selection)
+      }
+
+      if (!next) return null
+
+      latestEditorTextRef.current = next.text
+      setActiveNoteText(next.text)
+      setEditorTextVersion((previous) => previous + 1)
+      updateActiveNoteTitlePreview(next.text)
+      queueSave(next.text)
+      latestEditorSelectionRef.current = next.selection
+      setEditorSelection(next.selection)
+      return next
     },
     onEnterKey: (event) => {
       if (!activeNoteId) return false
@@ -3389,6 +3399,7 @@ function App() {
 
       requestAnimationFrame(() => {
         adapterRef.current?.applySnapshot({
+          selectionScrollBehavior: 'preserve-scroll',
           selection: {
             anchor: next.selection.anchor,
             focus: next.selection.focus,
@@ -4541,21 +4552,22 @@ function App() {
     }
   }, [activeHeadingLevel])
 
-  const applyTextDecoration = useCallback((format: TextDecorationFormat) => {
-    if (!activeNoteId) return
-
+  const buildTextDecorationTransform = useCallback((
+    sourceText: string,
+    baseSelection: EditorSelectionState,
+    format: TextDecorationFormat,
+  ): { text: string; selection: EditorSelectionState } | null => {
     const marker = TEXT_DECORATION_MARKERS[format]
-    const sourceText = currentEditorText
-    const baseStart = Math.max(0, Math.min(editorSelection.start, sourceText.length))
-    const baseEnd = Math.max(baseStart, Math.min(editorSelection.end, sourceText.length))
+    const selectionStart = Math.max(0, Math.min(baseSelection.start, sourceText.length))
+    const selectionEnd = Math.max(selectionStart, Math.min(baseSelection.end, sourceText.length))
 
     const isWordChar = (char: string) => /[A-Za-z0-9_]/.test(char)
-    let start = baseStart
-    let end = baseEnd
+    let start = selectionStart
+    let end = selectionEnd
 
-    if (editorSelection.isCollapsed) {
-      let left = baseStart
-      let right = baseStart
+    if (baseSelection.isCollapsed) {
+      let left = selectionStart
+      let right = selectionStart
 
       while (left > 0 && isWordChar(sourceText[left - 1])) {
         left -= 1
@@ -4578,36 +4590,77 @@ function App() {
       isCollapsed: start === end,
     }
 
+    const inlineContext = resolveMarkdownSelectionContext(sourceText, selectionForOperation).inline
+    const isFormatActive = (
+      (format === 'bold' && inlineContext.inBold)
+      || (format === 'italic' && inlineContext.inItalic)
+      || (format === 'strikethrough' && inlineContext.inStrikethrough)
+    )
     const hasWrapping = isSelectionWrappedBy(sourceText, selectionForOperation, marker.open, marker.close)
-    const isFormatActive = activeDecorationFormats.has(format)
 
-    // Only unwrap when that format is actually active for the current selection.
-    // This avoids false unwraps like italic-on-bold where '*' neighbors exist from '**'.
     if (isFormatActive && hasWrapping) {
       const unwrapped = `${sourceText.slice(0, start - marker.open.length)}${sourceText.slice(start, end)}${sourceText.slice(end + marker.close.length)}`
       const nextStart = start - marker.open.length
       const nextEnd = nextStart + (end - start)
-      applyProgrammaticEditorText(unwrapped, nextStart, nextEnd)
-      return
+      return {
+        text: unwrapped,
+        selection: {
+          anchor: nextStart,
+          focus: nextEnd,
+          start: nextStart,
+          end: nextEnd,
+          isCollapsed: nextStart === nextEnd,
+        },
+      }
     }
 
     const nextText = `${sourceText.slice(0, start)}${marker.open}${sourceText.slice(start, end)}${marker.close}${sourceText.slice(end)}`
     if (selectionForOperation.isCollapsed) {
       const cursor = start + marker.open.length
-      applyProgrammaticEditorText(nextText, cursor, cursor)
-      return
+      return {
+        text: nextText,
+        selection: {
+          anchor: cursor,
+          focus: cursor,
+          start: cursor,
+          end: cursor,
+          isCollapsed: true,
+        },
+      }
     }
 
     const nextStart = start + marker.open.length
     const nextEnd = nextStart + (end - start)
-    applyProgrammaticEditorText(nextText, nextStart, nextEnd)
-  }, [activeDecorationFormats, activeNoteId, applyProgrammaticEditorText, currentEditorText, editorSelection, isSelectionWrappedBy])
+    return {
+      text: nextText,
+      selection: {
+        anchor: nextStart,
+        focus: nextEnd,
+        start: nextStart,
+        end: nextEnd,
+        isCollapsed: false,
+      },
+    }
+  }, [isSelectionWrappedBy])
+
+  const applyTextDecoration = useCallback((format: TextDecorationFormat) => {
+    if (!activeNoteId) return
+
+    const next = buildTextDecorationTransform(currentEditorText, editorSelection, format)
+    if (!next) return
+
+    applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
+  }, [activeNoteId, applyProgrammaticEditorText, buildTextDecorationTransform, currentEditorText, editorSelection])
+
+  const resolveSelectionBoundsFromSelection = useCallback((text: string, selection: EditorSelectionState) => {
+    const start = Math.max(0, Math.min(selection.start, text.length))
+    const end = Math.max(start, Math.min(selection.end, text.length))
+    return { start, end }
+  }, [])
 
   const resolveSelectionBounds = useCallback((text: string) => {
-    const start = Math.max(0, Math.min(editorSelection.start, text.length))
-    const end = Math.max(start, Math.min(editorSelection.end, text.length))
-    return { start, end }
-  }, [editorSelection.end, editorSelection.start])
+    return resolveSelectionBoundsFromSelection(text, editorSelection)
+  }, [editorSelection, resolveSelectionBoundsFromSelection])
 
   const applyWrappedMarker = useCallback((open: string, close: string, collapsedPlaceholder = '') => {
     if (!activeNoteId) return
@@ -4652,11 +4705,11 @@ function App() {
     return { lineStart, lineEndExclusive }
   }, [])
 
-  const transformSelectedLines = useCallback((transform: (line: string, index: number) => string) => {
-    if (!activeNoteId) return
-
-    const sourceText = currentEditorText
-    const baseSelection = latestEditorSelectionRef.current
+  const transformSelectedLinesForSelection = useCallback((
+    sourceText: string,
+    baseSelection: EditorSelectionState,
+    transform: (line: string, index: number) => string,
+  ): { text: string; selection: EditorSelectionState } => {
     const start = Math.max(0, Math.min(baseSelection.start, sourceText.length))
     const end = Math.max(start, Math.min(baseSelection.end, sourceText.length))
     const { lineStart, lineEndExclusive } = resolveLineRange(sourceText, start, end)
@@ -4713,12 +4766,29 @@ function App() {
 
     const nextAnchor = Math.max(0, Math.min(nextText.length, remapOffset(baseSelection.anchor)))
     const nextFocus = Math.max(0, Math.min(nextText.length, remapOffset(baseSelection.focus)))
-    applyProgrammaticEditorText(nextText, nextAnchor, nextFocus)
+    return {
+      text: nextText,
+      selection: {
+        anchor: nextAnchor,
+        focus: nextFocus,
+        start: Math.min(nextAnchor, nextFocus),
+        end: Math.max(nextAnchor, nextFocus),
+        isCollapsed: nextAnchor === nextFocus,
+      },
+    }
+  }, [resolveLineRange])
+
+  const transformSelectedLines = useCallback((transform: (line: string, index: number) => string) => {
+    if (!activeNoteId) return
+
+    const sourceText = currentEditorText
+    const next = transformSelectedLinesForSelection(sourceText, latestEditorSelectionRef.current, transform)
+    applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
   }, [
     activeNoteId,
     applyProgrammaticEditorText,
     currentEditorText,
-    resolveLineRange,
+    transformSelectedLinesForSelection,
   ])
 
   const applyHeading = useCallback((level: 1 | 2 | 3 | 4 | 5 | 6) => {
@@ -4732,11 +4802,10 @@ function App() {
     })
   }, [transformSelectedLines])
 
-  const toggleCurrentLineHeading = useCallback(() => {
-    if (!activeNoteId) return
-
-    const sourceText = normalizeInternalText(latestEditorTextRef.current || currentEditorText)
-    const baseSelection = latestEditorSelectionRef.current
+  const buildToggleCurrentLineHeadingTransform = useCallback((
+    sourceText: string,
+    baseSelection: EditorSelectionState,
+  ): { text: string; selection: EditorSelectionState } | null => {
     const clampOffset = (offset: number) => Math.max(0, Math.min(offset, sourceText.length))
     const caret = clampOffset(baseSelection.focus)
     const lineStart = sourceText.lastIndexOf('\n', Math.max(0, caret - 1)) + 1
@@ -4760,8 +4829,16 @@ function App() {
 
       const nextAnchor = Math.max(0, Math.min(nextText.length, remapOffset(baseSelection.anchor)))
       const nextFocus = Math.max(0, Math.min(nextText.length, remapOffset(baseSelection.focus)))
-      applyProgrammaticEditorText(nextText, nextAnchor, nextFocus)
-      return
+      return {
+        text: nextText,
+        selection: {
+          anchor: nextAnchor,
+          focus: nextFocus,
+          start: Math.min(nextAnchor, nextFocus),
+          end: Math.max(nextAnchor, nextFocus),
+          isCollapsed: nextAnchor === nextFocus,
+        },
+      }
     }
 
     let searchLineEnd = lineStart > 0 ? lineStart - 1 : -1
@@ -4798,14 +4875,36 @@ function App() {
 
     const nextAnchor = Math.max(0, Math.min(nextText.length, remapOffset(baseSelection.anchor)))
     const nextFocus = Math.max(0, Math.min(nextText.length, remapOffset(baseSelection.focus)))
-    applyProgrammaticEditorText(nextText, nextAnchor, nextFocus)
+    return {
+      text: nextText,
+      selection: {
+        anchor: nextAnchor,
+        focus: nextFocus,
+        start: Math.min(nextAnchor, nextFocus),
+        end: Math.max(nextAnchor, nextFocus),
+        isCollapsed: nextAnchor === nextFocus,
+      },
+    }
+  }, [])
+
+  const toggleCurrentLineHeading = useCallback(() => {
+    if (!activeNoteId) return
+
+    const sourceText = normalizeInternalText(latestEditorTextRef.current || currentEditorText)
+    const next = buildToggleCurrentLineHeadingTransform(sourceText, latestEditorSelectionRef.current)
+    if (!next) return
+    applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
   }, [
     activeNoteId,
     applyProgrammaticEditorText,
+    buildToggleCurrentLineHeadingTransform,
     currentEditorText,
   ])
 
-  const toggleBulletedList = useCallback(() => {
+  const buildToggleBulletedListTransform = useCallback((
+    sourceText: string,
+    baseSelection: EditorSelectionState,
+  ): { text: string; selection: EditorSelectionState } => {
     const bulletPattern = /^(\s*(?:>\s*)*)([-*+])\s+/
     const numberedPattern = /^(\s*(?:>\s*)*)(\d+[.)])\s+/
 
@@ -4817,13 +4916,12 @@ function App() {
       return { quotePrefix, withoutListMarker }
     }
 
-    const sourceText = currentEditorText
-    const { start, end } = resolveSelectionBounds(sourceText)
+    const { start, end } = resolveSelectionBoundsFromSelection(sourceText, baseSelection)
     const { lineStart, lineEndExclusive } = resolveLineRange(sourceText, start, end)
     const lines = sourceText.slice(lineStart, lineEndExclusive).split('\n')
     const allBulleted = lines.every((line) => line.trim().length === 0 || bulletPattern.test(line))
 
-    transformSelectedLines((line) => {
+    return transformSelectedLinesForSelection(sourceText, baseSelection, (line) => {
       if (line.trim().length === 0) return line
       const { quotePrefix, withoutListMarker } = splitListPrefix(line)
       if (allBulleted) {
@@ -4838,9 +4936,12 @@ function App() {
 
       return `${quotePrefix}- ${withoutListMarker}`
     })
-  }, [currentEditorText, resolveLineRange, resolveSelectionBounds, transformSelectedLines])
+  }, [resolveLineRange, resolveSelectionBoundsFromSelection, transformSelectedLinesForSelection])
 
-  const toggleNumberedList = useCallback(() => {
+  const buildToggleNumberedListTransform = useCallback((
+    sourceText: string,
+    baseSelection: EditorSelectionState,
+  ): { text: string; selection: EditorSelectionState } => {
     const numberedPattern = /^(\s*(?:>\s*)*)(\d+[.)])\s+/
     const bulletPattern = /^(\s*(?:>\s*)*)([-*+])\s+/
 
@@ -4852,13 +4953,12 @@ function App() {
       return { quotePrefix, withoutListMarker }
     }
 
-    const sourceText = currentEditorText
-    const { start, end } = resolveSelectionBounds(sourceText)
+    const { start, end } = resolveSelectionBoundsFromSelection(sourceText, baseSelection)
     const { lineStart, lineEndExclusive } = resolveLineRange(sourceText, start, end)
     const lines = sourceText.slice(lineStart, lineEndExclusive).split('\n')
     const allNumbered = lines.every((line) => line.trim().length === 0 || numberedPattern.test(line))
 
-    transformSelectedLines((line, index) => {
+    return transformSelectedLinesForSelection(sourceText, baseSelection, (line, index) => {
       if (line.trim().length === 0) return line
       const { quotePrefix, withoutListMarker } = splitListPrefix(line)
       if (allNumbered) {
@@ -4873,7 +4973,17 @@ function App() {
 
       return `${quotePrefix}${index + 1}. ${withoutListMarker}`
     })
-  }, [currentEditorText, resolveLineRange, resolveSelectionBounds, transformSelectedLines])
+  }, [resolveLineRange, resolveSelectionBoundsFromSelection, transformSelectedLinesForSelection])
+
+  const toggleBulletedList = useCallback(() => {
+    const next = buildToggleBulletedListTransform(currentEditorText, latestEditorSelectionRef.current)
+    applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
+  }, [applyProgrammaticEditorText, buildToggleBulletedListTransform, currentEditorText])
+
+  const toggleNumberedList = useCallback(() => {
+    const next = buildToggleNumberedListTransform(currentEditorText, latestEditorSelectionRef.current)
+    applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
+  }, [applyProgrammaticEditorText, buildToggleNumberedListTransform, currentEditorText])
 
   const toggleBlockquote = useCallback(() => {
     const quotePattern = /^>\s?/
@@ -5597,6 +5707,8 @@ function App() {
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.defaultPrevented) return
+
       if (isFindMode && event.ctrlKey && !event.shiftKey && event.key === 'Enter') {
         event.preventDefault()
         replaceAllDocumentFindHits()

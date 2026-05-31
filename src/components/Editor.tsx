@@ -179,12 +179,20 @@ function resolveDomPointForTextOffset(rootEl: HTMLElement, canonicalText: string
   return paragraphEndPoint(paragraph, textNodes);
 }
 
-function applyDomSelectionFromOffsets(rootEl: HTMLElement, canonicalText: string, anchor: number, focus: number): void {
+function applyDomSelectionFromOffsets(
+  rootEl: HTMLElement,
+  canonicalText: string,
+  anchor: number,
+  focus: number,
+  scrollerEl?: HTMLElement | null,
+): void {
   const safeAnchor = Math.max(0, anchor);
   const safeFocus = Math.max(0, focus);
   const anchorPoint = resolveDomPointForTextOffset(rootEl, canonicalText, safeAnchor);
   const focusPoint = resolveDomPointForTextOffset(rootEl, canonicalText, safeFocus);
   if (!anchorPoint || !focusPoint) return;
+
+  const preservedScrollTop = scrollerEl ? scrollerEl.scrollTop : null;
 
   const range = document.createRange();
   range.setStart(anchorPoint.node, anchorPoint.offset);
@@ -193,49 +201,16 @@ function applyDomSelectionFromOffsets(rootEl: HTMLElement, canonicalText: string
   const selection = window.getSelection();
   if (!selection) return;
 
-  rootEl.focus();
   selection.removeAllRanges();
   selection.addRange(range);
-}
 
-function centerSelectionInCagedMiddle(
-  scroller: HTMLElement,
-  topBoundaryPx: number,
-  bottomBoundaryPx: number,
-  lineHeightPx: number,
-  options?: { animate?: boolean },
-): void {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) return;
-
-  const range = selection.getRangeAt(0);
-  const rect = range.getBoundingClientRect();
-  if (rect.height === 0 && rect.width === 0) return;
-
-  const scrollerRect = scroller.getBoundingClientRect();
-  const middleTopPx = topBoundaryPx;
-  const middleBottomPx = Math.max(middleTopPx + lineHeightPx, scroller.clientHeight - bottomBoundaryPx);
-  const middleCenterPx = (middleTopPx + middleBottomPx) / 2;
-
-  const selectionCenterInViewportPx = ((rect.top + rect.bottom) / 2) - scrollerRect.top;
-  const deltaPx = selectionCenterInViewportPx - middleCenterPx;
-  if (Math.abs(deltaPx) < 0.5) return;
-
-  const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-  const nextScrollTopPx = clampNumber(
-    Math.round((scroller.scrollTop + deltaPx) / lineHeightPx) * lineHeightPx,
-    0,
-    maxScrollTopPx,
-  );
-
-  if (nextScrollTopPx !== scroller.scrollTop) {
-    if (options?.animate) {
-      scrollToQuantizedSmooth(scroller, nextScrollTopPx, {
-        lineHeightPx,
-      });
-    } else {
-      scroller.scrollTop = nextScrollTopPx;
-    }
+  if (scrollerEl && preservedScrollTop !== null) {
+    scrollerEl.scrollTop = preservedScrollTop;
+    requestAnimationFrame(() => {
+      if (scrollerEl) {
+        scrollerEl.scrollTop = preservedScrollTop;
+      }
+    });
   }
 }
 
@@ -575,7 +550,6 @@ export function Editor({
       },
       applySnapshot(snapshot: EditorSnapshotApplyRequest) {
         const nextViewport = snapshot.viewport;
-        const hasViewportSnapshot = Boolean(nextViewport);
         let appliedViewport = false;
 
         if (ENABLE_CONTRACT_ASSERTIONS) {
@@ -616,20 +590,10 @@ export function Editor({
             const textLength = canonicalText.length;
             const anchor = clampNumber(snapshot.selection.anchor, 0, textLength);
             const focus = clampNumber(snapshot.selection.focus, 0, textLength);
-            applyDomSelectionFromOffsets(rootEl, canonicalText, anchor, focus);
+            applyDomSelectionFromOffsets(rootEl, canonicalText, anchor, focus, scrollerRef.current);
 
-            const scroller = scrollerRef.current;
-            const shouldCenterSelection = snapshot.selectionScrollBehavior !== 'preserve-scroll';
-            if (scroller && !hasViewportSnapshot && shouldCenterSelection) {
-              // Reconcile after selection is in DOM so focus stays inside the middle cage.
-              const shouldAnimateSelectionJump = !snapshot.selection.isCollapsed;
-              centerSelectionInCagedMiddle(scroller, topBoundary, bottomBoundary, lineHeightPx, {
-                animate: shouldAnimateSelectionJump,
-              });
-              requestAnimationFrame(() => centerSelectionInCagedMiddle(scroller, topBoundary, bottomBoundary, lineHeightPx, {
-                animate: shouldAnimateSelectionJump,
-              }));
-            }
+            // Selection application should never force viewport recentering here.
+            // Viewport movement is controlled by explicit viewport snapshots and caged scroll logic.
           }
         }
 
@@ -983,11 +947,13 @@ export function Editor({
             <PasteSanitizationPlugin />
             <TextSanitizationPlugin />
             <SyntaxHighlightPlugin />
-            <NoteTextHydrationPlugin text={initialText} />
+            <NoteTextHydrationPlugin text={initialText} scrollerRef={scrollerRef} />
             <ContractBridgePlugin
               onTextChange={handleTextChange}
               onSelectionChange={handleSelectionChange}
               onTabIndent={bindings?.onTabIndent}
+              onTabIndentTransform={bindings?.onTabIndentTransform}
+              onMarkdownShortcutTransform={bindings?.onMarkdownShortcutTransform}
               onEnterKey={bindings?.onEnterKey}
             />
             

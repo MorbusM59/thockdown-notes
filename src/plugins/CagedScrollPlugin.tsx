@@ -438,7 +438,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       }
       if (event.ctrlKey || event.metaKey || event.altKey) return false;
       if (event.key.length === 1) return true;
-      return event.key === 'Enter' || event.key === 'Backspace' || event.key === 'Delete' || event.key === 'Tab';
+      return event.key === 'Enter' || event.key === 'Backspace' || event.key === 'Delete';
     };
 
     const shouldSuppressNativeCaretScroll = (event: KeyboardEvent) => {

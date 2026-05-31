@@ -85,6 +85,22 @@ export interface EditorBindings {
   onSelectionChange?: (event: EditorSelectionChangeEvent) => void;
   onViewportChange?: (event: EditorViewportChangeEvent) => void;
   onTabIndent?: (event: { shiftKey: boolean }) => void;
+  onTabIndentTransform?: (event: {
+    shiftKey: boolean;
+    text: string;
+    selection: EditorSelectionState;
+  }) => {
+    text: string;
+    selection: EditorSelectionState;
+  } | null;
+  onMarkdownShortcutTransform?: (event: {
+    shortcut: 'bold' | 'italic' | 'strikethrough' | 'heading-toggle' | 'unordered-list' | 'ordered-list';
+    text: string;
+    selection: EditorSelectionState;
+  }) => {
+    text: string;
+    selection: EditorSelectionState;
+  } | null;
   onEnterKey?: (event: {
     shiftKey: boolean;
     altKey: boolean;
