@@ -814,9 +814,9 @@ body.splitter-dragging {
 }
 
 .toolbar-flyout-section-colors {
-  width: 151px;
-  min-width: 151px;
-  max-width: 151px;
+  width: 159px;
+  min-width: 159px;
+  max-width: 159px;
   gap: 4px;
 }
 
@@ -841,7 +841,7 @@ body.splitter-dragging {
   min-height: 0;
   height: auto;
   --color-grid-gap: 4px;
-  --color-grid-cell: 30px;
+  --color-grid-cell: 32px;
 }
 
 .toolbar-flyout-color-grid {
@@ -867,31 +867,9 @@ body.splitter-dragging {
 }
 
 .toolbar-flyout-color-swatch {
-  border: 1px solid rgba(80, 62, 46, 0.4);
-  border-radius: 6px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   width: 100%;
-  min-width: 0;
   height: 100%;
-  min-height: 0;
   color: #2f241a;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
-  aspect-ratio: 1 / 1;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.toolbar-flyout-color-swatch.is-active {
-  border-color: #80604a;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45), 0 0 0 1px rgba(60, 46, 34, 0.2);
-}
-
-.toolbar-flyout-color-swatch.is-armed {
-  border-color: #1f1510;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55), 0 0 0 2px rgba(31, 21, 16, 0.28);
 }
 
 .toolbar-flyout-color-swatch-glyph {
@@ -910,17 +888,15 @@ body.splitter-dragging {
 
 .toolbar-flyout-hsva-alpha {
   background: var(--color-background-light);
-  padding: 2px;
+  padding: 0;
 }
 
 .toolbar-flyout-hsva-glyph {
-  font-size: 15px;
   line-height: 1;
 }
 
 .toolbar-flyout-hsva-ghost {
   display: inline-block;
-  font-size: 22px;
   line-height: 1;
 }
 
