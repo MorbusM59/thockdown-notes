@@ -834,40 +834,39 @@ body.splitter-dragging {
 
 .toolbar-flyout-color-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
 }
 
 .toolbar-flyout-color-swatch {
-  border: 1px solid #bcae9f;
+  border: 1px solid rgba(80, 62, 46, 0.4);
   border-radius: 6px;
-  padding: 3px 4px;
+  padding: 0;
   display: flex;
   align-items: center;
-  gap: 5px;
-  background: rgba(255, 255, 255, 0.84);
-  min-height: 28px;
+  justify-content: center;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  color: #2f241a;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
 }
 
 .toolbar-flyout-color-swatch.is-active {
   border-color: #80604a;
-  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45), 0 0 0 1px rgba(60, 46, 34, 0.2);
 }
 
-.toolbar-flyout-color-swatch-chip {
-  width: 12px;
-  min-width: 12px;
-  height: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.25);
-  border-radius: 3px;
-  box-sizing: border-box;
+.toolbar-flyout-color-swatch.is-armed {
+  border-color: #1f1510;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55), 0 0 0 2px rgba(31, 21, 16, 0.28);
 }
 
-.toolbar-flyout-color-swatch-label {
-  font-size: 10px;
-  line-height: 1.1;
-  color: #4f4033;
-  text-align: left;
+.toolbar-flyout-color-swatch-glyph {
+  font-size: 14px;
+  line-height: 1;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
 .toolbar-flyout-color-editors {
@@ -899,19 +898,6 @@ body.splitter-dragging {
 .toolbar-flyout-alpha-control input[type='range'] {
   width: 100%;
   margin: 0;
-}
-
-.toolbar-flyout-channel-actions {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px;
-}
-
-.toolbar-flyout-channel-actions .toolbar-btn-icon {
-  width: 100%;
-  min-width: 0;
-  height: 24px;
-  font-size: 11px;
 }
 
 @media (prefers-reduced-motion: reduce) {

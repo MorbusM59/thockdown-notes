@@ -78,19 +78,29 @@ const SCROLL_TRACK_EDGE_GAP_PX = 3
 const NOTE_RIGHT_CLICK_HOLD_MS = 200
 const PREVIEW_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER
 const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
+  caret: 'rgba(120, 115, 112, 0.8)',
   selection: 'rgba(199, 94, 0, 0.49)',
   background: '#e9e6e3',
   topBackground: 'rgba(196, 187, 182, 0.49)',
   bottomBackground: 'rgba(196, 187, 182, 0.49)',
 }
 
-const HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['background', 'topBackground', 'bottomBackground', 'selection']
+const HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['caret', 'selection', 'background', 'topBackground', 'bottomBackground']
 
-const HIGHLIGHT_COLOR_LABELS: Record<HighlightColorKey, string> = {
+const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
+  caret: 'Caret color',
+  selection: 'Selection box color',
   background: 'Background',
   topBackground: 'Upper Box',
   bottomBackground: 'Lower Box',
-  selection: 'Selection',
+}
+
+const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
+  caret: 'fa-solid fa-i-cursor',
+  selection: 'fa-solid fa-arrow-pointer',
+  background: 'fa-solid fa-square',
+  topBackground: 'fa-solid fa-square-caret-up',
+  bottomBackground: 'fa-solid fa-square-caret-down',
 }
 
 type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find'
@@ -100,8 +110,7 @@ type TextDecorationFormat = 'bold' | 'italic' | 'strikethrough'
 type ViewStyleKey = 'modern' | 'narrow' | 'cute' | 'print'
 type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
 type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
-type HighlightColorKey = 'selection' | 'background' | 'topBackground' | 'bottomBackground'
-type HighlightColorChannel = 'r' | 'g' | 'b' | 'a'
+type HighlightColorKey = 'caret' | 'selection' | 'background' | 'topBackground' | 'bottomBackground'
 
 type HighlightColors = Record<HighlightColorKey, string>
 
@@ -109,6 +118,13 @@ type RgbaColor = {
   r: number
   g: number
   b: number
+  a: number
+}
+
+type HsvaColor = {
+  h: number
+  s: number
+  v: number
   a: number
 }
 
@@ -346,6 +362,76 @@ function rgbaToCssColor(color: RgbaColor): string {
 function rgbaToHex(color: RgbaColor): string {
   const toHex = (value: number) => clampColorChannel(value).toString(16).padStart(2, '0')
   return `#${toHex(color.r)}${toHex(color.g)}${toHex(color.b)}`
+}
+
+function rgbaToHsva(color: RgbaColor): HsvaColor {
+  const r = clampColorChannel(color.r) / 255
+  const g = clampColorChannel(color.g) / 255
+  const b = clampColorChannel(color.b) / 255
+
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const delta = max - min
+
+  let h = 0
+  if (delta !== 0) {
+    if (max === r) h = ((g - b) / delta) % 6
+    else if (max === g) h = (b - r) / delta + 2
+    else h = (r - g) / delta + 4
+    h *= 60
+    if (h < 0) h += 360
+  }
+
+  const s = max === 0 ? 0 : delta / max
+  const v = max
+
+  return {
+    h,
+    s,
+    v,
+    a: clampAlphaChannel(color.a),
+  }
+}
+
+function hsvaToRgba(color: HsvaColor): RgbaColor {
+  const h = ((color.h % 360) + 360) % 360
+  const s = Math.max(0, Math.min(1, color.s))
+  const v = Math.max(0, Math.min(1, color.v))
+
+  const c = v * s
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1))
+  const m = v - c
+
+  let rPrime = 0
+  let gPrime = 0
+  let bPrime = 0
+
+  if (h < 60) {
+    rPrime = c
+    gPrime = x
+  } else if (h < 120) {
+    rPrime = x
+    gPrime = c
+  } else if (h < 180) {
+    gPrime = c
+    bPrime = x
+  } else if (h < 240) {
+    gPrime = x
+    bPrime = c
+  } else if (h < 300) {
+    rPrime = x
+    bPrime = c
+  } else {
+    rPrime = c
+    bPrime = x
+  }
+
+  return {
+    r: clampColorChannel((rPrime + m) * 255),
+    g: clampColorChannel((gPrime + m) * 255),
+    b: clampColorChannel((bPrime + m) * 255),
+    a: clampAlphaChannel(color.a),
+  }
 }
 
 function isSafePreviewHref(href: string | undefined): boolean {
@@ -1187,8 +1273,10 @@ function App() {
   const [renderScrollSkew, setRenderScrollSkew] = useState(() => getRenderScrollSkew())
   const [isScrollSettingsOpen, setIsScrollSettingsOpen] = useState(false)
   const [highlightColors, setHighlightColors] = useState<HighlightColors>(DEFAULT_HIGHLIGHT_COLORS)
-  const [activeHighlightColorKey, setActiveHighlightColorKey] = useState<HighlightColorKey>('background')
+  const [activeHighlightColorKey, setActiveHighlightColorKey] = useState<HighlightColorKey>('caret')
+  const [armedHighlightColorKey, setArmedHighlightColorKey] = useState<HighlightColorKey | null>(null)
   const [activeDividerDrag, setActiveDividerDrag] = useState<'sidebar' | 'tag-split' | null>(null)
+  const highlightColorArmTimerRef = useRef<number | null>(null)
   const pendingSaveTextRef = useRef<string | null>(null)
   const latestEditorTextRef = useRef('')
   const latestEditorSelectionRef = useRef<EditorSelectionState>({
@@ -1272,23 +1360,49 @@ function App() {
     }))
   }, [])
 
-  const applyHighlightChannelToAll = useCallback((channel: HighlightColorChannel) => {
-    const source = parseCssColorToRgba(highlightColors[activeHighlightColorKey])
-      ?? parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS[activeHighlightColorKey])
-    if (!source) return
+  const clearHighlightColorArmTimer = useCallback(() => {
+    if (highlightColorArmTimerRef.current === null) return
+    window.clearTimeout(highlightColorArmTimerRef.current)
+    highlightColorArmTimerRef.current = null
+  }, [])
+
+  const resolveHighlightColor = useCallback((source: HighlightColors, key: HighlightColorKey): RgbaColor => {
+    return parseCssColorToRgba(source[key])
+      ?? parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS[key])
+      ?? { r: 233, g: 230, b: 227, a: 1 }
+  }, [])
+
+  const applyArmedColorToTarget = useCallback((targetKey: HighlightColorKey, options?: { hueOnly?: boolean }) => {
+    const sourceKey = armedHighlightColorKey
+    if (!sourceKey || sourceKey === targetKey) return
 
     setHighlightColors((previous) => {
+      const source = resolveHighlightColor(previous, sourceKey)
+      const target = resolveHighlightColor(previous, targetKey)
       const next: HighlightColors = { ...previous }
-      for (const key of HIGHLIGHT_COLOR_ORDER) {
-        const current = parseCssColorToRgba(previous[key])
-          ?? parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS[key])
-          ?? source
-        const updated: RgbaColor = { ...current, [channel]: source[channel] }
-        next[key] = rgbaToCssColor(updated)
+
+      if (options?.hueOnly) {
+        const sourceHsva = rgbaToHsva(source)
+        const targetHsva = rgbaToHsva(target)
+        next[targetKey] = rgbaToCssColor(hsvaToRgba({
+          h: sourceHsva.h,
+          s: targetHsva.s,
+          v: targetHsva.v,
+          a: targetHsva.a,
+        }))
+      } else {
+        next[targetKey] = rgbaToCssColor(source)
       }
+
       return next
     })
-  }, [activeHighlightColorKey, highlightColors])
+  }, [armedHighlightColorKey, resolveHighlightColor])
+
+  useEffect(() => {
+    return () => {
+      clearHighlightColorArmTimer()
+    }
+  }, [clearHighlightColorArmTimer])
 
   const readCurrentEditUiPayload = useCallback((): { progressEdit: number; cursorPos: number; scrollTop: number } | null => {
     const selection = latestEditorSelectionRef.current
@@ -1457,6 +1571,7 @@ function App() {
       renderScrollTotalTimeSec,
       renderScrollMaxSpeedPxPerSec,
       renderScrollSkew,
+      highlightCaretColor: highlightColors.caret,
       highlightSelectionColor: highlightColors.selection,
       highlightBackgroundColor: highlightColors.background,
       highlightTopBackgroundColor: highlightColors.topBackground,
@@ -1746,6 +1861,7 @@ function App() {
       '--color-bg-regular': highlightColors.background,
       '--color-bg-leading': highlightColors.topBackground,
       '--color-bg-trailing': highlightColors.bottomBackground,
+      '--color-caret': highlightColors.caret,
       '--color-selection': highlightColors.selection,
     }
     return style
@@ -2829,6 +2945,7 @@ function App() {
             setRenderScrollMaxSpeedPxPerSec(appState.menu.renderScrollMaxSpeedPxPerSec ?? getRenderScrollMaxSpeedPxPerSec())
             setRenderScrollSkew(appState.menu.renderScrollSkew ?? getRenderScrollSkew())
             setHighlightColors({
+              caret: appState.menu.highlightCaretColor ?? DEFAULT_HIGHLIGHT_COLORS.caret,
               selection: appState.menu.highlightSelectionColor ?? DEFAULT_HIGHLIGHT_COLORS.selection,
               background: appState.menu.highlightBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.background,
               topBackground: appState.menu.highlightTopBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.topBackground,
@@ -5675,12 +5792,40 @@ function App() {
                     <button
                       key={key}
                       type="button"
-                      className={`toolbar-flyout-color-swatch${activeHighlightColorKey === key ? ' is-active' : ''}`}
-                      onClick={() => setActiveHighlightColorKey(key)}
-                      title={HIGHLIGHT_COLOR_LABELS[key]}
+                      className={`toolbar-flyout-color-swatch${activeHighlightColorKey === key ? ' is-active' : ''}${armedHighlightColorKey === key ? ' is-armed' : ''}`}
+                      onClick={() => {
+                        if (armedHighlightColorKey && armedHighlightColorKey !== key) {
+                          applyArmedColorToTarget(key)
+                          return
+                        }
+                        setActiveHighlightColorKey(key)
+                      }}
+                      onMouseDown={(event) => {
+                        if (event.button !== 2) return
+                        clearHighlightColorArmTimer()
+                        highlightColorArmTimerRef.current = window.setTimeout(() => {
+                          setArmedHighlightColorKey(key)
+                          setActiveHighlightColorKey(key)
+                          highlightColorArmTimerRef.current = null
+                        }, NOTE_RIGHT_CLICK_HOLD_MS)
+                      }}
+                      onMouseUp={(event) => {
+                        if (event.button !== 2) return
+                        clearHighlightColorArmTimer()
+                      }}
+                      onMouseLeave={() => {
+                        clearHighlightColorArmTimer()
+                      }}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        clearHighlightColorArmTimer()
+                        if (!armedHighlightColorKey || armedHighlightColorKey === key) return
+                        applyArmedColorToTarget(key, { hueOnly: true })
+                      }}
+                      style={{ background: highlightColors[key] }}
+                      title={HIGHLIGHT_COLOR_TITLES[key]}
                     >
-                      <span className="toolbar-flyout-color-swatch-chip" style={{ background: highlightColors[key] }} aria-hidden="true" />
-                      <span className="toolbar-flyout-color-swatch-label">{HIGHLIGHT_COLOR_LABELS[key]}</span>
+                      <span className={`toolbar-flyout-color-swatch-glyph ${HIGHLIGHT_COLOR_ICONS[key]}`} aria-hidden="true" />
                     </button>
                   ))}
                 </div>
@@ -5719,13 +5864,6 @@ function App() {
                       aria-label="Alpha channel"
                     />
                   </label>
-                </div>
-
-                <div className="toolbar-flyout-channel-actions" aria-label="Apply selected channel to all colors">
-                  <button type="button" className="toolbar-btn-icon" title="Apply red channel to all" onClick={() => applyHighlightChannelToAll('r')}>R</button>
-                  <button type="button" className="toolbar-btn-icon" title="Apply green channel to all" onClick={() => applyHighlightChannelToAll('g')}>G</button>
-                  <button type="button" className="toolbar-btn-icon" title="Apply blue channel to all" onClick={() => applyHighlightChannelToAll('b')}>B</button>
-                  <button type="button" className="toolbar-btn-icon" title="Apply alpha channel to all" onClick={() => applyHighlightChannelToAll('a')}>A</button>
                 </div>
               </section>
 
