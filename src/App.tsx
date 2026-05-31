@@ -139,8 +139,8 @@ type HsvaDragState = {
 
 type ColorArmSource =
   | { kind: 'element'; key: HighlightColorKey }
-  | { kind: 'hsva'; key: HsvaControlKey; value: number }
-  | { kind: 'active-color'; color: RgbaColor }
+  | { kind: 'hsva'; key: HsvaControlKey }
+  | { kind: 'active-color' }
 
 type SidebarViewState = {
   scrollTop: number
@@ -1403,16 +1403,17 @@ function App() {
     })
   }, [resolveHighlightColor])
 
-  const applyHsvaValueToElement = useCallback((source: { key: HsvaControlKey; value: number }, targetKey: HighlightColorKey) => {
+  const applyHsvaValueToElement = useCallback((sourceKey: HsvaControlKey, targetKey: HighlightColorKey) => {
     setHighlightColors((previous) => {
       const target = resolveHighlightColor(previous, targetKey)
       const targetHsva = rgbaToHsva(target)
+      const sourceValue = activeColorHsva[sourceKey]
 
       const nextHsva: HsvaColor = {
         ...targetHsva,
-        [source.key]: source.key === 'h'
-          ? Math.max(0, Math.min(360, source.value))
-          : Math.max(0, Math.min(1, source.value)),
+        [sourceKey]: sourceKey === 'h'
+          ? Math.max(0, Math.min(360, sourceValue))
+          : Math.max(0, Math.min(1, sourceValue)),
       }
 
       return {
@@ -1420,14 +1421,14 @@ function App() {
         [targetKey]: rgbaToCssColor(hsvaToRgba(nextHsva)),
       }
     })
-  }, [resolveHighlightColor])
+  }, [activeColorHsva, resolveHighlightColor])
 
-  const applyActiveColorToElement = useCallback((source: RgbaColor, targetKey: HighlightColorKey) => {
+  const applyActiveColorToElement = useCallback((targetKey: HighlightColorKey) => {
     setHighlightColors((previous) => ({
       ...previous,
-      [targetKey]: rgbaToCssColor(source),
+      [targetKey]: activeColorCss,
     }))
-  }, [])
+  }, [activeColorCss])
 
   const applyElementValueToHsvaControl = useCallback((sourceKey: HighlightColorKey, control: HsvaControlKey) => {
     const source = resolveHighlightColor(highlightColors, sourceKey)
@@ -1532,6 +1533,12 @@ function App() {
       window.removeEventListener('mousedown', handleGlobalMouseDown, true)
     }
   }, [armedColorSource, clearColorArmTimer])
+
+  useEffect(() => {
+    if (isScrollSettingsOpen) return
+    clearColorArmTimer()
+    setArmedColorSource(null)
+  }, [isScrollSettingsOpen, clearColorArmTimer])
 
   const readCurrentEditUiPayload = useCallback((): { progressEdit: number; cursorPos: number; scrollTop: number } | null => {
     const selection = latestEditorSelectionRef.current
@@ -5931,13 +5938,13 @@ function App() {
                           }
 
                           if (armedColorSource?.kind === 'hsva') {
-                            applyHsvaValueToElement({ key: armedColorSource.key, value: armedColorSource.value }, key)
+                            applyHsvaValueToElement(armedColorSource.key, key)
                             setActiveHighlightColorKey(key)
                             return
                           }
 
                           if (armedColorSource?.kind === 'active-color') {
-                            applyActiveColorToElement(armedColorSource.color, key)
+                            applyActiveColorToElement(key)
                             setActiveHighlightColorKey(key)
                             return
                           }
@@ -5980,7 +5987,7 @@ function App() {
                       onMouseDown={(event) => {
                         if (event.button === 0 && armedColorSource?.kind === 'element') return
                         if (event.button === 2) {
-                          startColorArmHold({ kind: 'hsva', key: 'h', value: activeColorHsva.h }, event)
+                          startColorArmHold({ kind: 'hsva', key: 'h' }, event)
                           return
                         }
                         startHsvaDrag('h', event)
@@ -6007,7 +6014,7 @@ function App() {
                       onMouseDown={(event) => {
                         if (event.button === 0 && armedColorSource?.kind === 'element') return
                         if (event.button === 2) {
-                          startColorArmHold({ kind: 'hsva', key: 's', value: activeColorHsva.s }, event)
+                          startColorArmHold({ kind: 'hsva', key: 's' }, event)
                           return
                         }
                         startHsvaDrag('s', event)
@@ -6034,7 +6041,7 @@ function App() {
                       onMouseDown={(event) => {
                         if (event.button === 0 && armedColorSource?.kind === 'element') return
                         if (event.button === 2) {
-                          startColorArmHold({ kind: 'hsva', key: 'v', value: activeColorHsva.v }, event)
+                          startColorArmHold({ kind: 'hsva', key: 'v' }, event)
                           return
                         }
                         startHsvaDrag('v', event)
@@ -6061,7 +6068,7 @@ function App() {
                       onMouseDown={(event) => {
                         if (event.button === 0 && armedColorSource?.kind === 'element') return
                         if (event.button === 2) {
-                          startColorArmHold({ kind: 'hsva', key: 'a', value: activeColorHsva.a }, event)
+                          startColorArmHold({ kind: 'hsva', key: 'a' }, event)
                           return
                         }
                         startHsvaDrag('a', event)
@@ -6083,7 +6090,7 @@ function App() {
                       style={{ background: `linear-gradient(${activeColorCss}, ${activeColorCss}), var(--color-background-light)` }}
                       onMouseDown={(event) => {
                         if (event.button !== 2) return
-                        startColorArmHold({ kind: 'active-color', color: activeColorRgba }, event)
+                        startColorArmHold({ kind: 'active-color' }, event)
                       }}
                       onMouseUp={(event) => {
                         if (event.button !== 2) return
