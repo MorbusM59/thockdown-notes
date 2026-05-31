@@ -883,11 +883,23 @@ export function Editor({
               backgroundColor: 'transparent',
             }}
           >
-            {/* Inset content surface: keeps frame gap transparent while preserving editor background. */}
+            {/* Shared clean base for all three editor zones. */}
             <div
               className="absolute pointer-events-none"
               style={{
                 inset: 'var(--editor-frame-padding)',
+                backgroundColor: 'var(--color-background-light)',
+              }}
+            />
+
+            {/* Regular background color is constrained to the middle zone only. */}
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                top: `calc(var(--editor-frame-padding) + ${topBoundary}px)`,
+                bottom: `calc(var(--editor-frame-padding) + ${bottomBoundary}px)`,
+                left: 'var(--editor-frame-padding)',
+                right: 'var(--editor-frame-padding)',
                 backgroundColor: 'var(--color-bg-regular)',
               }}
             />
