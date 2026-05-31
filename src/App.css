@@ -1451,6 +1451,7 @@ body.hsva-dragging * {
   color: #2f2721;
   background: var(--color-background-light);
   text-shadow: var(--text-shadow-emboss-base);
+  font-synthesis: style;
   position: relative;
   z-index: 1;
 }
@@ -1488,6 +1489,11 @@ body.hsva-dragging * {
   color: #0e4ea2;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.markdown-preview em,
+.markdown-preview i {
+  font-style: italic;
 }
 
 .markdown-preview code {
@@ -1529,6 +1535,34 @@ body.hsva-dragging * {
 .markdown-preview ul,
 .markdown-preview ol {
   padding-left: 1.35em;
+}
+
+.markdown-preview ul {
+  list-style-type: disc;
+}
+
+.markdown-preview ol {
+  list-style-type: decimal;
+}
+
+.markdown-preview li {
+  display: list-item;
+}
+
+.markdown-preview ul ul {
+  list-style-type: circle;
+}
+
+.markdown-preview ul ul ul {
+  list-style-type: square;
+}
+
+.markdown-preview ol ol {
+  list-style-type: lower-alpha;
+}
+
+.markdown-preview ol ol ol {
+  list-style-type: lower-roman;
 }
 
 .markdown-preview table {

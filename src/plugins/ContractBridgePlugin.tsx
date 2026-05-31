@@ -132,6 +132,23 @@ export function ContractBridgePlugin({ onTextChange, onSelectionChange, onTabInd
       return { start: nextStart, end: nextEnd };
     };
 
+    const trimMatchingAsteriskPairs = (text: string, start: number, end: number) => {
+      let nextStart = start;
+      let nextEnd = end;
+
+      // Remove only balanced outer markdown emphasis markers, e.g. *word*, **word**.
+      while (
+        nextEnd - nextStart >= 3 &&
+        text[nextStart] === '*' &&
+        text[nextEnd - 1] === '*'
+      ) {
+        nextStart += 1;
+        nextEnd -= 1;
+      }
+
+      return { start: nextStart, end: nextEnd };
+    };
+
     const normalizeAnchor = (text: string, offset: number, predicate: (char: string) => boolean) => {
       const safeLength = text.length;
       if (safeLength === 0) {
@@ -184,7 +201,8 @@ export function ContractBridgePlugin({ onTextChange, onSelectionChange, onTabInd
         end += 1;
       }
 
-      return trimWhitespaceRange(text, start, end);
+      const whitespaceTrimmed = trimWhitespaceRange(text, start, end);
+      return trimMatchingAsteriskPairs(text, whitespaceTrimmed.start, whitespaceTrimmed.end);
     };
 
     const resolveSentenceRange = (text: string, offset: number) => {
