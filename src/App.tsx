@@ -4709,6 +4709,12 @@ function App() {
     sourceText: string,
     baseSelection: EditorSelectionState,
     transform: (line: string, index: number) => string,
+    remapLocalOffsetInLine?: (params: {
+      lineIndex: number
+      oldLine: string
+      newLine: string
+      localOffsetInLine: number
+    }) => number,
   ): { text: string; selection: EditorSelectionState } => {
     const start = Math.max(0, Math.min(baseSelection.start, sourceText.length))
     const end = Math.max(start, Math.min(baseSelection.end, sourceText.length))
@@ -4739,7 +4745,16 @@ function App() {
         const isLastLine = index === lines.length - 1
 
         if (localOffset < oldLineEnd) {
-          return lineStart + newCursor + Math.min(localOffset - oldCursor, newLineLength)
+          const localOffsetInLine = localOffset - oldCursor
+          const remappedLocalOffset = remapLocalOffsetInLine
+            ? remapLocalOffsetInLine({
+                lineIndex: index,
+                oldLine: lines[index],
+                newLine: nextLines[index],
+                localOffsetInLine,
+              })
+            : localOffsetInLine
+          return lineStart + newCursor + Math.min(Math.max(0, remappedLocalOffset), newLineLength)
         }
 
         if (localOffset === oldLineEnd) {
@@ -4921,6 +4936,13 @@ function App() {
     const lines = sourceText.slice(lineStart, lineEndExclusive).split('\n')
     const allBulleted = lines.every((line) => line.trim().length === 0 || bulletPattern.test(line))
 
+    const resolveContentStart = (line: string) => {
+      const match = line.match(/^(\s*(?:>\s*)*)(?:[-*+]|\d+[.)])\s+/)
+      if (match) return match[0].length
+      const quotePrefixMatch = line.match(/^(\s*(?:>\s*)*)/)
+      return quotePrefixMatch ? quotePrefixMatch[0].length : 0
+    }
+
     return transformSelectedLinesForSelection(sourceText, baseSelection, (line) => {
       if (line.trim().length === 0) return line
       const { quotePrefix, withoutListMarker } = splitListPrefix(line)
@@ -4935,6 +4957,15 @@ function App() {
       }
 
       return `${quotePrefix}- ${withoutListMarker}`
+    }, ({ oldLine, newLine, localOffsetInLine }) => {
+      const oldContentStart = resolveContentStart(oldLine)
+      const newContentStart = resolveContentStart(newLine)
+
+      if (localOffsetInLine <= oldContentStart) {
+        return Math.min(localOffsetInLine, newContentStart)
+      }
+
+      return localOffsetInLine + (newContentStart - oldContentStart)
     })
   }, [resolveLineRange, resolveSelectionBoundsFromSelection, transformSelectedLinesForSelection])
 
@@ -4958,6 +4989,13 @@ function App() {
     const lines = sourceText.slice(lineStart, lineEndExclusive).split('\n')
     const allNumbered = lines.every((line) => line.trim().length === 0 || numberedPattern.test(line))
 
+    const resolveContentStart = (line: string) => {
+      const match = line.match(/^(\s*(?:>\s*)*)(?:[-*+]|\d+[.)])\s+/)
+      if (match) return match[0].length
+      const quotePrefixMatch = line.match(/^(\s*(?:>\s*)*)/)
+      return quotePrefixMatch ? quotePrefixMatch[0].length : 0
+    }
+
     return transformSelectedLinesForSelection(sourceText, baseSelection, (line, index) => {
       if (line.trim().length === 0) return line
       const { quotePrefix, withoutListMarker } = splitListPrefix(line)
@@ -4972,6 +5010,15 @@ function App() {
       }
 
       return `${quotePrefix}${index + 1}. ${withoutListMarker}`
+    }, ({ oldLine, newLine, localOffsetInLine }) => {
+      const oldContentStart = resolveContentStart(oldLine)
+      const newContentStart = resolveContentStart(newLine)
+
+      if (localOffsetInLine <= oldContentStart) {
+        return Math.min(localOffsetInLine, newContentStart)
+      }
+
+      return localOffsetInLine + (newContentStart - oldContentStart)
     })
   }, [resolveLineRange, resolveSelectionBoundsFromSelection, transformSelectedLinesForSelection])
 
