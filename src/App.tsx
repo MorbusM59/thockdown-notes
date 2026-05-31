@@ -1299,6 +1299,7 @@ function App() {
   const colorArmTimerRef = useRef<number | null>(null)
   const pendingSaveTextRef = useRef<string | null>(null)
   const latestEditorTextRef = useRef('')
+  const lastHeadlineLevelRef = useRef<1 | 2 | 3 | 4 | 5 | 6>(1)
   const latestEditorSelectionRef = useRef<EditorSelectionState>({
     anchor: 0,
     focus: 0,
@@ -3279,6 +3280,67 @@ function App() {
       if (!activeNoteId) return
 
       const sourceText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+      const lineContext = resolveMarkdownSelectionContext(sourceText, editorSelection).line
+
+      if (lineContext.headingLevel > 0) {
+        const nextHeadingLevel = event.shiftKey
+          ? Math.max(1, lineContext.headingLevel - 1)
+          : Math.min(6, lineContext.headingLevel + 1)
+
+        if (nextHeadingLevel !== lineContext.headingLevel) {
+          const nextLineText = lineContext.lineText.replace(
+            /^(\s*(?:>\s*)*)#{1,6}(?=\s|$)/,
+            `$1${'#'.repeat(nextHeadingLevel)}`,
+          )
+
+          if (nextLineText !== lineContext.lineText) {
+            const nextText = `${sourceText.slice(0, lineContext.lineStart)}${nextLineText}${sourceText.slice(lineContext.lineEndExclusive)}`
+            const markerMatch = lineContext.lineText.match(/^(\s*(?:>\s*)*)#{1,6}/)
+            const markerStart = lineContext.lineStart + (markerMatch ? markerMatch[1].length : 0)
+            const oldMarkerEnd = markerStart + lineContext.headingLevel
+            const headingDelta = nextHeadingLevel - lineContext.headingLevel
+
+            const remapSelectionOffset = (offset: number) => {
+              if (offset <= markerStart) return offset
+              if (offset <= oldMarkerEnd) {
+                const relative = offset - markerStart
+                return markerStart + Math.min(relative, nextHeadingLevel)
+              }
+              return offset + headingDelta
+            }
+
+            const nextAnchor = Math.max(0, Math.min(nextText.length, remapSelectionOffset(editorSelection.anchor)))
+            const nextFocus = Math.max(0, Math.min(nextText.length, remapSelectionOffset(editorSelection.focus)))
+            const nextSelection: EditorSelectionState = {
+              anchor: nextAnchor,
+              focus: nextFocus,
+              start: Math.min(nextAnchor, nextFocus),
+              end: Math.max(nextAnchor, nextFocus),
+              isCollapsed: nextAnchor === nextFocus,
+            }
+
+            latestEditorTextRef.current = nextText
+            setActiveNoteText(nextText)
+            setEditorTextVersion((previous) => previous + 1)
+            updateActiveNoteTitlePreview(nextText)
+            queueSave(nextText)
+
+            requestAnimationFrame(() => {
+              adapterRef.current?.applySnapshot({
+                selection: {
+                  anchor: nextSelection.anchor,
+                  focus: nextSelection.focus,
+                  start: nextSelection.start,
+                  end: nextSelection.end,
+                  isCollapsed: nextSelection.isCollapsed,
+                },
+              })
+            })
+            return
+          }
+        }
+      }
+
       const direction = event.shiftKey ? 'outdent' : 'indent'
       const next = indentSelectionByStep(sourceText, editorSelection, direction, 3)
 
@@ -4466,16 +4528,55 @@ function App() {
   const isCodeBlockActive = markdownSelectionContext.inline.inFencedCodeBlock
   const isInlineCodeActive = markdownSelectionContext.inline.inInlineCode
 
+  useEffect(() => {
+    if (activeHeadingLevel > 0) {
+      lastHeadlineLevelRef.current = activeHeadingLevel as 1 | 2 | 3 | 4 | 5 | 6
+    }
+  }, [activeHeadingLevel])
+
   const applyTextDecoration = useCallback((format: TextDecorationFormat) => {
     if (!activeNoteId) return
 
     const marker = TEXT_DECORATION_MARKERS[format]
     const sourceText = currentEditorText
-    const start = Math.max(0, Math.min(editorSelection.start, sourceText.length))
-    const end = Math.max(start, Math.min(editorSelection.end, sourceText.length))
-    const hasWrapping = isSelectionWrappedBy(sourceText, editorSelection, marker.open, marker.close)
+    const baseStart = Math.max(0, Math.min(editorSelection.start, sourceText.length))
+    const baseEnd = Math.max(baseStart, Math.min(editorSelection.end, sourceText.length))
 
-    if (hasWrapping) {
+    const isWordChar = (char: string) => /[A-Za-z0-9_]/.test(char)
+    let start = baseStart
+    let end = baseEnd
+
+    if (editorSelection.isCollapsed) {
+      let left = baseStart
+      let right = baseStart
+
+      while (left > 0 && isWordChar(sourceText[left - 1])) {
+        left -= 1
+      }
+      while (right < sourceText.length && isWordChar(sourceText[right])) {
+        right += 1
+      }
+
+      if (right > left) {
+        start = left
+        end = right
+      }
+    }
+
+    const selectionForOperation: EditorSelectionState = {
+      anchor: start,
+      focus: end,
+      start,
+      end,
+      isCollapsed: start === end,
+    }
+
+    const hasWrapping = isSelectionWrappedBy(sourceText, selectionForOperation, marker.open, marker.close)
+    const isFormatActive = activeDecorationFormats.has(format)
+
+    // Only unwrap when that format is actually active for the current selection.
+    // This avoids false unwraps like italic-on-bold where '*' neighbors exist from '**'.
+    if (isFormatActive && hasWrapping) {
       const unwrapped = `${sourceText.slice(0, start - marker.open.length)}${sourceText.slice(start, end)}${sourceText.slice(end + marker.close.length)}`
       const nextStart = start - marker.open.length
       const nextEnd = nextStart + (end - start)
@@ -4484,7 +4585,7 @@ function App() {
     }
 
     const nextText = `${sourceText.slice(0, start)}${marker.open}${sourceText.slice(start, end)}${marker.close}${sourceText.slice(end)}`
-    if (editorSelection.isCollapsed) {
+    if (selectionForOperation.isCollapsed) {
       const cursor = start + marker.open.length
       applyProgrammaticEditorText(nextText, cursor, cursor)
       return
@@ -4493,7 +4594,7 @@ function App() {
     const nextStart = start + marker.open.length
     const nextEnd = nextStart + (end - start)
     applyProgrammaticEditorText(nextText, nextStart, nextEnd)
-  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, editorSelection, isSelectionWrappedBy])
+  }, [activeDecorationFormats, activeNoteId, applyProgrammaticEditorText, currentEditorText, editorSelection, isSelectionWrappedBy])
 
   const resolveSelectionBounds = useCallback((text: string) => {
     const start = Math.max(0, Math.min(editorSelection.start, text.length))
@@ -4544,6 +4645,28 @@ function App() {
     return { lineStart, lineEndExclusive }
   }, [])
 
+  const resolveNearestHeadingLevelAboveCaret = useCallback((text: string, selection: EditorSelectionState): 1 | 2 | 3 | 4 | 5 | 6 | null => {
+    const caret = Math.max(0, Math.min(selection.focus, text.length))
+    const currentLineStart = text.lastIndexOf('\n', Math.max(0, caret - 1)) + 1
+    let lineEndExclusive = currentLineStart > 0 ? currentLineStart - 1 : -1
+
+    while (lineEndExclusive >= 0) {
+      const lineStart = text.lastIndexOf('\n', Math.max(0, lineEndExclusive - 1)) + 1
+      const lineText = text.slice(lineStart, lineEndExclusive + 1)
+      const headingMatch = lineText.match(/^\s*(?:>\s*)*(#{1,6})(?:\s|$)/)
+      if (headingMatch) {
+        return headingMatch[1].length as 1 | 2 | 3 | 4 | 5 | 6
+      }
+
+      if (lineStart === 0) {
+        break
+      }
+      lineEndExclusive = lineStart - 2
+    }
+
+    return null
+  }, [])
+
   const transformSelectedLines = useCallback((transform: (line: string, index: number) => string) => {
     if (!activeNoteId) return
 
@@ -4558,7 +4681,8 @@ function App() {
     applyProgrammaticEditorText(nextText, lineStart, lineStart + nextBlock.length)
   }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, resolveLineRange, resolveSelectionBounds])
 
-  const applyHeading = useCallback((level: 1 | 2 | 3) => {
+  const applyHeading = useCallback((level: 1 | 2 | 3 | 4 | 5 | 6) => {
+    lastHeadlineLevelRef.current = level
     const headingPrefix = `${'#'.repeat(level)} `
 
     transformSelectedLines((line) => {
@@ -4568,8 +4692,40 @@ function App() {
     })
   }, [transformSelectedLines])
 
+  const toggleCurrentLineHeading = useCallback(() => {
+    if (!activeNoteId) return
+
+    if (activeHeadingLevel > 0) {
+      transformSelectedLines((line) => line.replace(/^#{1,6}\s+/, ''))
+      return
+    }
+
+    const sourceText = normalizeInternalText(latestEditorTextRef.current || currentEditorText)
+    const inferredHeadingLevel = resolveNearestHeadingLevelAboveCaret(sourceText, editorSelection) ?? lastHeadlineLevelRef.current
+    lastHeadlineLevelRef.current = inferredHeadingLevel
+    applyHeading(inferredHeadingLevel)
+  }, [
+    activeHeadingLevel,
+    activeNoteId,
+    applyHeading,
+    currentEditorText,
+    editorSelection,
+    resolveNearestHeadingLevelAboveCaret,
+    transformSelectedLines,
+  ])
+
   const toggleBulletedList = useCallback(() => {
-    const bulletPattern = /^[-*]\s+/
+    const bulletPattern = /^(\s*(?:>\s*)*)([-*+])\s+/
+    const numberedPattern = /^(\s*(?:>\s*)*)(\d+[.)])\s+/
+
+    const splitListPrefix = (line: string) => {
+      const quotePrefixMatch = line.match(/^(\s*(?:>\s*)*)/)
+      const quotePrefix = quotePrefixMatch ? quotePrefixMatch[1] : ''
+      const remainder = line.slice(quotePrefix.length)
+      const withoutListMarker = remainder.replace(/^(?:[-*+]|\d+[.)])\s+/, '')
+      return { quotePrefix, withoutListMarker }
+    }
+
     const sourceText = currentEditorText
     const { start, end } = resolveSelectionBounds(sourceText)
     const { lineStart, lineEndExclusive } = resolveLineRange(sourceText, start, end)
@@ -4578,12 +4734,33 @@ function App() {
 
     transformSelectedLines((line) => {
       if (line.trim().length === 0) return line
-      return allBulleted ? line.replace(bulletPattern, '') : `- ${line}`
+      const { quotePrefix, withoutListMarker } = splitListPrefix(line)
+      if (allBulleted) {
+        return bulletPattern.test(line) ? `${quotePrefix}${withoutListMarker}` : line
+      }
+
+      const hadNumberedMarker = numberedPattern.test(line)
+      const hadBulletedMarker = bulletPattern.test(line)
+      if (hadBulletedMarker || hadNumberedMarker) {
+        return `${quotePrefix}- ${withoutListMarker}`
+      }
+
+      return `${quotePrefix}- ${withoutListMarker}`
     })
   }, [currentEditorText, resolveLineRange, resolveSelectionBounds, transformSelectedLines])
 
   const toggleNumberedList = useCallback(() => {
-    const numberedPattern = /^\d+\.\s+/
+    const numberedPattern = /^(\s*(?:>\s*)*)(\d+[.)])\s+/
+    const bulletPattern = /^(\s*(?:>\s*)*)([-*+])\s+/
+
+    const splitListPrefix = (line: string) => {
+      const quotePrefixMatch = line.match(/^(\s*(?:>\s*)*)/)
+      const quotePrefix = quotePrefixMatch ? quotePrefixMatch[1] : ''
+      const remainder = line.slice(quotePrefix.length)
+      const withoutListMarker = remainder.replace(/^(?:[-*+]|\d+[.)])\s+/, '')
+      return { quotePrefix, withoutListMarker }
+    }
+
     const sourceText = currentEditorText
     const { start, end } = resolveSelectionBounds(sourceText)
     const { lineStart, lineEndExclusive } = resolveLineRange(sourceText, start, end)
@@ -4592,7 +4769,18 @@ function App() {
 
     transformSelectedLines((line, index) => {
       if (line.trim().length === 0) return line
-      return allNumbered ? line.replace(numberedPattern, '') : `${index + 1}. ${line}`
+      const { quotePrefix, withoutListMarker } = splitListPrefix(line)
+      if (allNumbered) {
+        return numberedPattern.test(line) ? `${quotePrefix}${withoutListMarker}` : line
+      }
+
+      const hadNumberedMarker = numberedPattern.test(line)
+      const hadBulletedMarker = bulletPattern.test(line)
+      if (hadNumberedMarker || hadBulletedMarker) {
+        return `${quotePrefix}${index + 1}. ${withoutListMarker}`
+      }
+
+      return `${quotePrefix}${index + 1}. ${withoutListMarker}`
     })
   }, [currentEditorText, resolveLineRange, resolveSelectionBounds, transformSelectedLines])
 
@@ -5346,6 +5534,49 @@ function App() {
         return
       }
 
+      const target = event.target instanceof HTMLElement ? event.target : null
+      const isEditorTarget = Boolean(target?.closest('.editor-stage'))
+      if (isEditorTarget && activeNoteId && event.ctrlKey && !event.altKey && !event.metaKey) {
+        const key = event.key.toLowerCase()
+
+        if (!event.shiftKey && key === 'b') {
+          event.preventDefault()
+          applyTextDecoration('bold')
+          return
+        }
+
+        if (!event.shiftKey && key === 'i') {
+          event.preventDefault()
+          applyTextDecoration('italic')
+          return
+        }
+
+        if (!event.shiftKey && key === 'j') {
+          event.preventDefault()
+          applyTextDecoration('strikethrough')
+          return
+        }
+
+        if (!event.shiftKey && key === 'h') {
+          event.preventDefault()
+          toggleCurrentLineHeading()
+          return
+        }
+
+        const isOrderedListShortcut = event.key === '#' || (event.shiftKey && event.key === '3')
+        if (isOrderedListShortcut) {
+          event.preventDefault()
+          toggleNumberedList()
+          return
+        }
+
+        if (!event.shiftKey && event.key === '-') {
+          event.preventDefault()
+          toggleBulletedList()
+          return
+        }
+      }
+
       if (event.key === 'Escape') {
         const activeElement = document.activeElement
         const isEditableField =
@@ -5371,6 +5602,11 @@ function App() {
     toggleRenderViewMode,
     createNote,
     createNoteFromClipboardTitle,
+    activeNoteId,
+    applyTextDecoration,
+    toggleCurrentLineHeading,
+    toggleNumberedList,
+    toggleBulletedList,
     isFindMode,
     runSidebarMenuTransition,
     replaceAllDocumentFindHits,
