@@ -52,6 +52,12 @@ export interface EditorSnapshot {
   viewport: EditorViewportState;
 }
 
+export type EditorSelectionScrollBehavior = 'center-caged' | 'preserve-scroll';
+
+export interface EditorSnapshotApplyRequest extends Partial<EditorSnapshot> {
+  selectionScrollBehavior?: EditorSelectionScrollBehavior;
+}
+
 export interface EditorCapabilityMap {
   textEvents: boolean;
   selectionEvents: boolean;
@@ -70,7 +76,7 @@ export interface EditorCapabilityMap {
 export interface EditorAdapter {
   getCapabilities(): EditorCapabilityMap;
   getSnapshot(): EditorSnapshot | null;
-  applySnapshot(snapshot: Partial<EditorSnapshot>): void;
+  applySnapshot(snapshot: EditorSnapshotApplyRequest): void;
 }
 
 export interface EditorBindings {

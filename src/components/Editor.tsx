@@ -17,6 +17,7 @@ import { PasteSanitizationPlugin } from '../plugins/PasteSanitizationPlugin';
 import type {
   EditorAdapter,
   EditorBindings,
+  EditorSnapshotApplyRequest,
   EditorSelectionChangeEvent,
   EditorSelectionState,
   EditorSnapshot,
@@ -572,7 +573,7 @@ export function Editor({
           viewport: buildViewport(),
         };
       },
-      applySnapshot(snapshot: Partial<EditorSnapshot>) {
+      applySnapshot(snapshot: EditorSnapshotApplyRequest) {
         const nextViewport = snapshot.viewport;
         const hasViewportSnapshot = Boolean(nextViewport);
         let appliedViewport = false;
@@ -618,7 +619,8 @@ export function Editor({
             applyDomSelectionFromOffsets(rootEl, canonicalText, anchor, focus);
 
             const scroller = scrollerRef.current;
-            if (scroller && !hasViewportSnapshot) {
+            const shouldCenterSelection = snapshot.selectionScrollBehavior !== 'preserve-scroll';
+            if (scroller && !hasViewportSnapshot && shouldCenterSelection) {
               // Reconcile after selection is in DOM so focus stays inside the middle cage.
               const shouldAnimateSelectionJump = !snapshot.selection.isCollapsed;
               centerSelectionInCagedMiddle(scroller, topBoundary, bottomBoundary, lineHeightPx, {

@@ -4364,6 +4364,7 @@ function App() {
       const safeSelectionEnd = Math.max(0, Math.min(selectionEnd, normalizedText.length))
       requestAnimationFrame(() => {
         adapterRef.current?.applySnapshot({
+          selectionScrollBehavior: 'preserve-scroll',
           selection: {
             anchor: safeSelectionStart,
             focus: safeSelectionEnd,
