@@ -128,6 +128,14 @@ type HsvaColor = {
   a: number
 }
 
+type HsvaControlKey = 'h' | 's' | 'v' | 'a'
+
+type HsvaDragState = {
+  control: HsvaControlKey
+  startX: number
+  baseValue: number
+}
+
 type SidebarViewState = {
   scrollTop: number
   page: number
@@ -357,11 +365,6 @@ function parseCssColorToRgba(color: string): RgbaColor | null {
 function rgbaToCssColor(color: RgbaColor): string {
   const alpha = Number(clampAlphaChannel(color.a).toFixed(3))
   return `rgba(${clampColorChannel(color.r)}, ${clampColorChannel(color.g)}, ${clampColorChannel(color.b)}, ${alpha})`
-}
-
-function rgbaToHex(color: RgbaColor): string {
-  const toHex = (value: number) => clampColorChannel(value).toString(16).padStart(2, '0')
-  return `#${toHex(color.r)}${toHex(color.g)}${toHex(color.b)}`
 }
 
 function rgbaToHsva(color: RgbaColor): HsvaColor {
@@ -1275,6 +1278,11 @@ function App() {
   const [highlightColors, setHighlightColors] = useState<HighlightColors>(DEFAULT_HIGHLIGHT_COLORS)
   const [activeHighlightColorKey, setActiveHighlightColorKey] = useState<HighlightColorKey>('caret')
   const [armedHighlightColorKey, setArmedHighlightColorKey] = useState<HighlightColorKey | null>(null)
+  const [activeColorHsva, setActiveColorHsva] = useState<HsvaColor>(() => {
+    const seed = parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS.caret) ?? { r: 120, g: 115, b: 112, a: 0.8 }
+    return rgbaToHsva(seed)
+  })
+  const [hsvaDragState, setHsvaDragState] = useState<HsvaDragState | null>(null)
   const [activeDividerDrag, setActiveDividerDrag] = useState<'sidebar' | 'tag-split' | null>(null)
   const highlightColorArmTimerRef = useRef<number | null>(null)
   const pendingSaveTextRef = useRef<string | null>(null)
@@ -1347,11 +1355,16 @@ function App() {
     [editorFontSize, editorSpacing],
   )
   const editorFontFamily = useMemo(() => resolveEditorFontFamily(editorStyle), [editorStyle])
-  const activeHighlightColor = useMemo(() => {
-    return parseCssColorToRgba(highlightColors[activeHighlightColorKey])
-      ?? parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS[activeHighlightColorKey])
-      ?? { r: 233, g: 230, b: 227, a: 1 }
-  }, [activeHighlightColorKey, highlightColors])
+  const activeColorRgba = useMemo(() => hsvaToRgba(activeColorHsva), [activeColorHsva])
+  const activeColorCss = useMemo(() => rgbaToCssColor(activeColorRgba), [activeColorRgba])
+
+  const hsvaDisplayColors = useMemo(() => {
+    const hColor = rgbaToCssColor(hsvaToRgba({ h: activeColorHsva.h, s: 1, v: 1, a: 1 }))
+    const sColor = rgbaToCssColor(hsvaToRgba({ h: activeColorHsva.h, s: activeColorHsva.s, v: 1, a: 1 }))
+    const vColor = rgbaToCssColor(hsvaToRgba({ h: activeColorHsva.h, s: 0, v: activeColorHsva.v, a: 1 }))
+    const aGhostColor = rgbaToCssColor(hsvaToRgba({ h: activeColorHsva.h, s: 0, v: 0, a: activeColorHsva.a }))
+    return { hColor, sColor, vColor, aGhostColor }
+  }, [activeColorHsva])
 
   const updateHighlightColor = useCallback((key: HighlightColorKey, color: RgbaColor) => {
     setHighlightColors((previous) => ({
@@ -1397,6 +1410,62 @@ function App() {
       return next
     })
   }, [armedHighlightColorKey, resolveHighlightColor])
+
+  const updateHsvaControlValue = useCallback((control: HsvaControlKey, rawValue: number) => {
+    setActiveColorHsva((previous) => {
+      if (control === 'h') {
+        return {
+          ...previous,
+          h: Math.max(0, Math.min(360, Math.round(rawValue))),
+        }
+      }
+
+      const normalized = Math.max(0, Math.min(255, Math.round(rawValue))) / 255
+      return {
+        ...previous,
+        [control]: normalized,
+      }
+    })
+  }, [])
+
+  const startHsvaDrag = useCallback((control: HsvaControlKey, event: MouseEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+
+    const baseValue = control === 'h'
+      ? activeColorHsva.h
+      : Math.round(activeColorHsva[control] * 255)
+
+    setHsvaDragState({
+      control,
+      startX: event.clientX,
+      baseValue,
+    })
+  }, [activeColorHsva])
+
+  useEffect(() => {
+    if (!hsvaDragState) return
+
+    document.body.classList.add('hsva-dragging')
+
+    const handleMouseMove = (event: globalThis.MouseEvent) => {
+      const delta = event.clientX - hsvaDragState.startX
+      updateHsvaControlValue(hsvaDragState.control, hsvaDragState.baseValue + delta)
+    }
+
+    const stopDrag = () => {
+      setHsvaDragState(null)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', stopDrag)
+
+    return () => {
+      document.body.classList.remove('hsva-dragging')
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', stopDrag)
+    }
+  }, [hsvaDragState, updateHsvaControlValue])
 
   useEffect(() => {
     return () => {
@@ -5787,83 +5856,99 @@ function App() {
               <section className="toolbar-flyout-section toolbar-flyout-section-colors display-in-edit" aria-label="Color settings">
                 <div className="panel-placeholder-title">Colors</div>
 
-                <div className="toolbar-flyout-color-grid" role="group" aria-label="Editor highlight colors">
-                  {HIGHLIGHT_COLOR_ORDER.map((key) => (
-                    <button
-                      key={key}
-                      type="button"
-                      className={`toolbar-flyout-color-swatch${activeHighlightColorKey === key ? ' is-active' : ''}${armedHighlightColorKey === key ? ' is-armed' : ''}`}
-                      onClick={() => {
-                        if (armedHighlightColorKey && armedHighlightColorKey !== key) {
-                          applyArmedColorToTarget(key)
-                          return
-                        }
-                        setActiveHighlightColorKey(key)
-                      }}
-                      onMouseDown={(event) => {
-                        if (event.button !== 2) return
-                        clearHighlightColorArmTimer()
-                        highlightColorArmTimerRef.current = window.setTimeout(() => {
-                          setArmedHighlightColorKey(key)
+                <div className="toolbar-flyout-color-layout" aria-label="HSVA color controls">
+                  <div className="toolbar-flyout-color-grid toolbar-flyout-element-grid" role="group" aria-label="Editor highlight elements">
+                    {HIGHLIGHT_COLOR_ORDER.map((key) => (
+                      <button
+                        key={key}
+                        type="button"
+                        className={`toolbar-flyout-color-swatch${activeHighlightColorKey === key ? ' is-active' : ''}${armedHighlightColorKey === key ? ' is-armed' : ''}`}
+                        onClick={() => {
+                          if (armedHighlightColorKey && armedHighlightColorKey !== key) {
+                            applyArmedColorToTarget(key)
+                            setActiveHighlightColorKey(key)
+                            return
+                          }
+                          updateHighlightColor(key, activeColorRgba)
                           setActiveHighlightColorKey(key)
-                          highlightColorArmTimerRef.current = null
-                        }, NOTE_RIGHT_CLICK_HOLD_MS)
-                      }}
-                      onMouseUp={(event) => {
-                        if (event.button !== 2) return
-                        clearHighlightColorArmTimer()
-                      }}
-                      onMouseLeave={() => {
-                        clearHighlightColorArmTimer()
-                      }}
-                      onContextMenu={(event) => {
-                        event.preventDefault()
-                        clearHighlightColorArmTimer()
-                        if (!armedHighlightColorKey || armedHighlightColorKey === key) return
-                        applyArmedColorToTarget(key, { hueOnly: true })
-                      }}
-                      style={{ background: highlightColors[key] }}
-                      title={HIGHLIGHT_COLOR_TITLES[key]}
-                    >
-                      <span className={`toolbar-flyout-color-swatch-glyph ${HIGHLIGHT_COLOR_ICONS[key]}`} aria-hidden="true" />
-                    </button>
-                  ))}
-                </div>
+                        }}
+                        onMouseDown={(event) => {
+                          if (event.button !== 2) return
+                          if (armedHighlightColorKey && armedHighlightColorKey !== key) return
+                          clearHighlightColorArmTimer()
+                          highlightColorArmTimerRef.current = window.setTimeout(() => {
+                            setArmedHighlightColorKey(key)
+                            setActiveHighlightColorKey(key)
+                            highlightColorArmTimerRef.current = null
+                          }, NOTE_RIGHT_CLICK_HOLD_MS)
+                        }}
+                        onMouseUp={(event) => {
+                          if (event.button !== 2) return
+                          clearHighlightColorArmTimer()
+                        }}
+                        onMouseLeave={() => {
+                          clearHighlightColorArmTimer()
+                        }}
+                        onContextMenu={(event) => {
+                          event.preventDefault()
+                          clearHighlightColorArmTimer()
+                          if (!armedHighlightColorKey || armedHighlightColorKey === key) return
+                          applyArmedColorToTarget(key, { hueOnly: true })
+                          setActiveHighlightColorKey(key)
+                        }}
+                        style={{ background: highlightColors[key] }}
+                        title={HIGHLIGHT_COLOR_TITLES[key]}
+                      >
+                        <span className={`toolbar-flyout-color-swatch-glyph ${HIGHLIGHT_COLOR_ICONS[key]}`} aria-hidden="true" />
+                      </button>
+                    ))}
+                  </div>
 
-                <div className="toolbar-flyout-color-editors" aria-label="Selected color editor">
-                  <input
-                    className="toolbar-flyout-color-picker"
-                    type="color"
-                    value={rgbaToHex(activeHighlightColor)}
-                    onChange={(event) => {
-                      const parsed = parseCssColorToRgba(event.target.value)
-                      if (!parsed) return
-                      updateHighlightColor(activeHighlightColorKey, {
-                        ...parsed,
-                        a: activeHighlightColor.a,
-                      })
-                    }}
-                    aria-label="Selected color RGB"
-                  />
+                  <span className="toolbar-flyout-color-separator" aria-hidden="true" />
 
-                  <label className="toolbar-flyout-alpha-control" aria-label="Selected color alpha">
-                    <span>A</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      step={1}
-                      value={Math.round(activeHighlightColor.a * 100)}
-                      onChange={(event) => {
-                        const nextAlpha = clampAlphaChannel(Number.parseFloat(event.target.value) / 100)
-                        updateHighlightColor(activeHighlightColorKey, {
-                          ...activeHighlightColor,
-                          a: nextAlpha,
-                        })
+                  <div className="toolbar-flyout-color-grid toolbar-flyout-hsva-grid" role="group" aria-label="HSVA value controls">
+                    <button
+                      type="button"
+                      className={`toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 'h' ? ' is-dragging' : ''}`}
+                      style={{ background: hsvaDisplayColors.hColor }}
+                      title="Hue"
+                      onMouseDown={(event) => startHsvaDrag('h', event)}
+                      onContextMenu={(event) => event.preventDefault()}
+                    ><span className="toolbar-flyout-hsva-glyph fa-solid fa-circle-notch" aria-hidden="true" /></button>
+                    <button
+                      type="button"
+                      className={`toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 's' ? ' is-dragging' : ''}`}
+                      style={{ background: hsvaDisplayColors.sColor }}
+                      title="Saturation"
+                      onMouseDown={(event) => startHsvaDrag('s', event)}
+                      onContextMenu={(event) => event.preventDefault()}
+                    ><span className="toolbar-flyout-hsva-glyph fa-solid fa-droplet" aria-hidden="true" /></button>
+                    <button
+                      type="button"
+                      className={`toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 'v' ? ' is-dragging' : ''}`}
+                      style={{ background: hsvaDisplayColors.vColor }}
+                      title="Value"
+                      onMouseDown={(event) => startHsvaDrag('v', event)}
+                      onContextMenu={(event) => event.preventDefault()}
+                    ><span className="toolbar-flyout-hsva-glyph fa-solid fa-sun" aria-hidden="true" /></button>
+                    <button
+                      type="button"
+                      className={`toolbar-flyout-color-swatch toolbar-flyout-hsva-control toolbar-flyout-hsva-alpha${hsvaDragState?.control === 'a' ? ' is-dragging' : ''}`}
+                      style={{ background: 'var(--color-background-light)', color: hsvaDisplayColors.aGhostColor }}
+                      title="Alpha"
+                      onMouseDown={(event) => startHsvaDrag('a', event)}
+                      onContextMenu={(event) => event.preventDefault()}
+                    ><span className="toolbar-flyout-hsva-ghost fa-solid fa-ghost" aria-hidden="true" /></button>
+                    <button
+                      type="button"
+                      className="toolbar-flyout-color-swatch toolbar-flyout-active-color"
+                      title="Active color"
+                      style={{ background: `linear-gradient(${activeColorCss}, ${activeColorCss}), var(--color-background-light)` }}
+                      onClick={() => {
+                        updateHighlightColor(activeHighlightColorKey, activeColorRgba)
                       }}
-                      aria-label="Alpha channel"
                     />
-                  </label>
+                  </div>
                 </div>
               </section>
 
