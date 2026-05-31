@@ -35,6 +35,8 @@ interface ContractBridgePluginProps {
   }) => boolean;
 }
 
+type SelectionScope = 'word' | 'sentence' | 'line' | 'block';
+
 function resolveChangeSource(tags: Set<string>): EditorTextChangeEvent['source'] {
   if (tags.has('restore')) return 'programmatic';
   if (tags.has('history-redo')) return 'history-redo';
@@ -62,7 +64,7 @@ export function ContractBridgePlugin({ onTextChange, onSelectionChange, onTabInd
   const selectionRafRef = useRef<number | null>(null);
   const pendingSelectionSourceRef = useRef<EditorTextChangeEvent['source']>('user-input');
   const rightClickCycleRef = useRef<{
-    scope: 'word' | 'sentence' | 'line' | 'block';
+    scope: SelectionScope;
     start: number;
     end: number;
   } | null>(null);
@@ -282,7 +284,29 @@ export function ContractBridgePlugin({ onTextChange, onSelectionChange, onTabInd
       isCollapsed: start === end,
     });
 
-    const resolveNextScope = (current: 'word' | 'sentence' | 'line' | 'block') => {
+    const isSameRange = (
+      left: { start: number; end: number },
+      right: { start: number; end: number },
+    ) => left.start === right.start && left.end === right.end;
+
+    const resolveRangeForScope = (
+      scope: SelectionScope,
+      text: string,
+      offset: number,
+    ) => {
+      if (scope === 'word') {
+        return resolveWordRange(text, offset);
+      }
+      if (scope === 'sentence') {
+        return resolveSentenceRange(text, offset);
+      }
+      if (scope === 'line') {
+        return resolveLineRange(text, offset);
+      }
+      return resolveBlockRange(text, offset);
+    };
+
+    const resolveNextScope = (current: SelectionScope): SelectionScope => {
       if (current === 'word') return 'sentence';
       if (current === 'sentence') return 'line';
       if (current === 'line') return 'block';
@@ -327,15 +351,20 @@ export function ContractBridgePlugin({ onTextChange, onSelectionChange, onTabInd
           ? resolveNextScope(priorCycle.scope)
           : 'word';
 
-        let nextRange = { start: clickOffset, end: clickOffset };
-        if (scope === 'word') {
-          nextRange = resolveWordRange(canonicalText, clickOffset);
-        } else if (scope === 'sentence') {
-          nextRange = resolveSentenceRange(canonicalText, clickOffset);
-        } else if (scope === 'line') {
-          nextRange = resolveLineRange(canonicalText, clickOffset);
-        } else {
-          nextRange = resolveBlockRange(canonicalText, clickOffset);
+        let resolvedScope = scope;
+        let nextRange = resolveRangeForScope(resolvedScope, canonicalText, clickOffset);
+
+        // Avoid consuming clicks on no-op intermediate levels, e.g. sentence == line.
+        if (canAdvanceScope) {
+          const currentRange = {
+            start: currentSelection.start,
+            end: currentSelection.end,
+          };
+
+          while (isSameRange(nextRange, currentRange) && resolvedScope !== 'block') {
+            resolvedScope = resolveNextScope(resolvedScope);
+            nextRange = resolveRangeForScope(resolvedScope, canonicalText, clickOffset);
+          }
         }
 
         nextSelection = toSelectionState(nextRange.start, nextRange.end);
@@ -345,7 +374,7 @@ export function ContractBridgePlugin({ onTextChange, onSelectionChange, onTabInd
         }
 
         rightClickCycleRef.current = {
-          scope,
+          scope: resolvedScope,
           start: nextSelection.start,
           end: nextSelection.end,
         };
