@@ -101,10 +101,15 @@ export interface EditorBindings {
     text: string;
     selection: EditorSelectionState;
   } | null;
-  onEnterKey?: (event: {
+  onEnterTransform?: (event: {
     shiftKey: boolean;
     altKey: boolean;
     ctrlKey: boolean;
     metaKey: boolean;
-  }) => boolean;
+    text: string;
+    selection: EditorSelectionState;
+  }) => {
+    text: string;
+    selection: EditorSelectionState;
+  } | null;
 }

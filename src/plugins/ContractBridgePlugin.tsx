@@ -47,12 +47,17 @@ interface ContractBridgePluginProps {
     text: string;
     selection: EditorSelectionState;
   } | null;
-  onEnterKey?: (event: {
+  onEnterTransform?: (event: {
     shiftKey: boolean;
     altKey: boolean;
     ctrlKey: boolean;
     metaKey: boolean;
-  }) => boolean;
+    text: string;
+    selection: EditorSelectionState;
+  }) => {
+    text: string;
+    selection: EditorSelectionState;
+  } | null;
 }
 
 type SelectionScope = 'word' | 'sentence' | 'line' | 'block';
@@ -102,7 +107,7 @@ export function ContractBridgePlugin({
   onTabIndent,
   onTabIndentTransform,
   onMarkdownShortcutTransform,
-  onEnterKey,
+  onEnterTransform,
 }: ContractBridgePluginProps) {
   const [editor] = useLexicalComposerContext();
   const previousTextRef = useRef('');
@@ -119,7 +124,7 @@ export function ContractBridgePlugin({
   const onTabIndentRef = useRef(onTabIndent);
   const onTabIndentTransformRef = useRef(onTabIndentTransform);
   const onMarkdownShortcutTransformRef = useRef(onMarkdownShortcutTransform);
-  const onEnterKeyRef = useRef(onEnterKey);
+  const onEnterTransformRef = useRef(onEnterTransform);
 
   useEffect(() => {
     onTextChangeRef.current = onTextChange;
@@ -127,8 +132,8 @@ export function ContractBridgePlugin({
     onTabIndentRef.current = onTabIndent;
     onTabIndentTransformRef.current = onTabIndentTransform;
     onMarkdownShortcutTransformRef.current = onMarkdownShortcutTransform;
-    onEnterKeyRef.current = onEnterKey;
-  }, [onTextChange, onSelectionChange, onTabIndent, onTabIndentTransform, onMarkdownShortcutTransform, onEnterKey]);
+    onEnterTransformRef.current = onEnterTransform;
+  }, [onTextChange, onSelectionChange, onTabIndent, onTabIndentTransform, onMarkdownShortcutTransform, onEnterTransform]);
 
   useEffect(() => {
     // Emit stable initial state from current editor content.
@@ -578,6 +583,42 @@ export function ContractBridgePlugin({
       COMMAND_PRIORITY_LOW,
     );
 
+    const applyTransformSelectionPreservingScroll = (
+      nextText: string,
+      nextSelection: EditorSelectionState,
+    ) => {
+      const rootEl = editor.getRootElement();
+      if (!rootEl) return;
+
+      const scroller = rootEl.closest('.measly-custom-scrollbar');
+      const scrollerEl = scroller instanceof HTMLElement ? scroller : null;
+      const preservedScrollTop = scrollerEl ? scrollerEl.scrollTop : null;
+
+      const applied = applySelectionStateToDom(rootEl, nextText, nextSelection);
+      if (!applied) return;
+
+      if (scrollerEl && preservedScrollTop !== null) {
+        scrollerEl.scrollTop = preservedScrollTop;
+        requestAnimationFrame(() => {
+          scrollerEl.scrollTop = preservedScrollTop;
+        });
+      }
+
+      previousSelectionRef.current = nextSelection;
+      onSelectionChangeRef.current({ source: 'user-input', selection: nextSelection });
+    };
+
+    const scheduleTransformSelectionReplay = (
+      nextText: string,
+      nextSelection: EditorSelectionState,
+    ) => {
+      // Commands can run before the editor tree commit is reflected in the DOM.
+      // Defer one frame so replay offsets always map against post-transform text.
+      requestAnimationFrame(() => {
+        applyTransformSelectionPreservingScroll(nextText, nextSelection);
+      });
+    };
+
     const removeTabCommand = editor.registerCommand(
       KEY_TAB_COMMAND,
       (event: KeyboardEvent) => {
@@ -608,14 +649,7 @@ export function ContractBridgePlugin({
             replaceEditorTextFromCanonical(next.text);
           }, { tag: 'tab-indent' });
 
-          requestAnimationFrame(() => {
-            const rootEl = editor.getRootElement();
-            if (!rootEl) return;
-            const applied = applySelectionStateToDom(rootEl, next.text, next.selection);
-            if (!applied) return;
-            previousSelectionRef.current = next.selection;
-            onSelectionChangeRef.current({ source: 'user-input', selection: next.selection });
-          });
+          scheduleTransformSelectionReplay(next.text, next.selection);
 
           return true;
         }
@@ -684,14 +718,7 @@ export function ContractBridgePlugin({
           replaceEditorTextFromCanonical(next.text);
         }, { tag: 'shortcut-transform' });
 
-        requestAnimationFrame(() => {
-          const rootEl = editor.getRootElement();
-          if (!rootEl) return;
-          const applied = applySelectionStateToDom(rootEl, next.text, next.selection);
-          if (!applied) return;
-          previousSelectionRef.current = next.selection;
-          onSelectionChangeRef.current({ source: 'user-input', selection: next.selection });
-        });
+        scheduleTransformSelectionReplay(next.text, next.selection);
 
         return true;
       },
@@ -701,21 +728,40 @@ export function ContractBridgePlugin({
     const removeEnterCommand = editor.registerCommand(
       KEY_ENTER_COMMAND,
       (event: KeyboardEvent) => {
-        const callback = onEnterKeyRef.current;
+        const callback = onEnterTransformRef.current;
         if (!callback) return false;
 
-        const handled = callback({
+        let canonicalText = '';
+        let currentSelection = previousSelectionRef.current;
+
+        editor.getEditorState().read(() => {
+          canonicalText = readCanonicalRootText();
+          const rootEl = editor.getRootElement();
+          const lexicalSelection = $getSelection();
+          if (rootEl && $isRangeSelection(lexicalSelection)) {
+            currentSelection = readSelectionStateFromDom(rootEl, window.getSelection(), canonicalText.length);
+          }
+        });
+
+        const next = callback({
           shiftKey: event.shiftKey,
           altKey: event.altKey,
           ctrlKey: event.ctrlKey,
           metaKey: event.metaKey,
+          text: canonicalText,
+          selection: currentSelection,
         });
 
-        if (!handled) {
-          return false;
-        }
+        if (!next) return false;
 
         event.preventDefault();
+
+        editor.update(() => {
+          replaceEditorTextFromCanonical(next.text);
+        }, { tag: 'enter-transform' });
+
+        scheduleTransformSelectionReplay(next.text, next.selection);
+
         return true;
       },
       COMMAND_PRIORITY_BEFORE_EDITOR,

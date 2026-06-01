@@ -35,6 +35,10 @@ This contract isolates app features from editor engine internals. All carryover 
   - `source = user-input` for user-driven scrolling.
   - `source = programmatic` for boundary updates and snapshot application.
 - `onTextChange` and `onSelectionChange` are active.
+- Command transform hooks are active for tab, markdown shortcuts, and enter:
+  - `onTabIndentTransform`
+  - `onMarkdownShortcutTransform`
+  - `onEnterTransform`
 - Current source mapping is conservative but deterministic:
   - `restore` updates map to `programmatic`.
   - `history-redo` tag maps to `history-redo`.
@@ -46,6 +50,11 @@ This contract isolates app features from editor engine internals. All carryover 
 - `getSnapshot()` returns current integration-safe state.
 - `applySnapshot()` restores supported subsets without forcing unsupported behavior.
 - Unsupported snapshot fields must be treated as no-ops by callers unless the corresponding granular capability is true.
+- `applySnapshot(selection)` honors `selectionScrollBehavior`:
+  - `preserve-scroll`: apply selection while preserving current `scrollTop`.
+  - `center-caged`: apply selection without forced scroll preservation.
+- Transform-originated selection replay is intentionally deferred to the next frame
+  to avoid applying offsets against pre-transform DOM text.
 
 ## Current Capability Status
 - `textEvents`: true
@@ -54,7 +63,7 @@ This contract isolates app features from editor engine internals. All carryover 
 - `snapshotRead`: true
 - `snapshotWrite`: false
 - `snapshotWriteText`: false
-- `snapshotWriteSelection`: false
+- `snapshotWriteSelection`: true
 - `snapshotWriteViewport`: true
 
 ## Usage Example

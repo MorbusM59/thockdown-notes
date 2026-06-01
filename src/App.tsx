@@ -3381,14 +3381,14 @@ function App() {
       setEditorSelection(next.selection)
       return next
     },
-    onEnterKey: (event) => {
-      if (!activeNoteId) return false
-      if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false
+    onEnterTransform: (event) => {
+      if (!activeNoteId) return null
+      if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return null
 
-      const sourceText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
-      const next = applyMarkdownEnter(sourceText, editorSelection)
+      const sourceText = normalizeInternalText(event.text)
+      const next = applyMarkdownEnter(sourceText, event.selection)
       if (!next) {
-        return false
+        return null
       }
 
       latestEditorTextRef.current = next.text
@@ -3397,20 +3397,13 @@ function App() {
       updateActiveNoteTitlePreview(next.text)
       queueSave(next.text)
 
-      requestAnimationFrame(() => {
-        adapterRef.current?.applySnapshot({
-          selectionScrollBehavior: 'preserve-scroll',
-          selection: {
-            anchor: next.selection.anchor,
-            focus: next.selection.focus,
-            start: next.selection.start,
-            end: next.selection.end,
-            isCollapsed: next.selection.isCollapsed,
-          },
-        })
-      })
+      latestEditorSelectionRef.current = next.selection
+      setEditorSelection(next.selection)
 
-      return true
+      return {
+        text: next.text,
+        selection: next.selection,
+      }
     },
     onViewportChange: (event: EditorViewportChangeEvent) => {
       const nextViewport = {
@@ -3451,8 +3444,6 @@ function App() {
     persistenceReady,
     queueSave,
     queueAppStateSave,
-    activeNoteText,
-    editorSelection,
     updateActiveNoteTitlePreview,
     updateEditModeSnapshotCache,
   ])

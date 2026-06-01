@@ -260,6 +260,30 @@ describe('applyMarkdownEnter', () => {
     expect(result).toBeNull()
   })
 
+  it('continues leading indentation on plain indented lines', () => {
+    const text = '   indented line'
+    const selection = collapsedSelection(text.length)
+
+    const result = applyMarkdownEnter(text, selection)
+
+    expect(result).not.toBeNull()
+    expect(result?.text).toBe('   indented line\n   ')
+    expect(result?.selection.anchor).toBe(result?.text.length)
+    expect(result?.selection.focus).toBe(result?.text.length)
+  })
+
+  it('continues indentation for whitespace-only lines', () => {
+    const text = '      '
+    const selection = collapsedSelection(text.length)
+
+    const result = applyMarkdownEnter(text, selection)
+
+    expect(result).not.toBeNull()
+    expect(result?.text).toBe('      \n      ')
+    expect(result?.selection.anchor).toBe(result?.text.length)
+    expect(result?.selection.focus).toBe(result?.text.length)
+  })
+
   it('returns null for non-collapsed selections', () => {
     const text = '- item'
     const selection: EditorSelectionState = {

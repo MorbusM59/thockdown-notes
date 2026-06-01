@@ -1,34 +1,38 @@
-# React + TypeScript + Vite
+# Measly Notes
+
+Desktop-first notes application built with Electron, React, Lexical, and Vite.
+
+## Development
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Run the standard desktop development flow (Vite + Electron):
+
+```bash
+npm run dev
+```
+
+3. Run browser-only mode for shared-page automation and deterministic renderer testing:
+
+```bash
+npm run dev:browser
+```
+
+Browser-only mode disables the Electron plugin chain and installs dev-only mock bridges via
+`src/dev/installBrowserMockBridges.ts` so `window.measlyNotes` and `window.measlyState` are available.
+
+## Tests
+
+```bash
+npm run test
+```
 
 ## Project Docs
 
 - [Interaction Design Philosophy](docs/interaction-design-philosophy.md)
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
-
-- Configure the top-level `parserOptions` property like this:
-
-```js
-export default {
-  // other rules...
-  parserOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    project: ['./tsconfig.json', './tsconfig.node.json'],
-    tsconfigRootDir: __dirname,
-  },
-}
-```
-
-- Replace `plugin:@typescript-eslint/recommended` to `plugin:@typescript-eslint/recommended-type-checked` or `plugin:@typescript-eslint/strict-type-checked`
-- Optionally add `plugin:@typescript-eslint/stylistic-type-checked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and add `plugin:react/recommended` & `plugin:react/jsx-runtime` to the `extends` list
+- [V2 Editor Contract](docs/V2_EDITOR_CONTRACT.md)
+- [V2 Session Handbook](docs/V2_SESSION_HANDBOOK.md)

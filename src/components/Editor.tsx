@@ -17,6 +17,7 @@ import { PasteSanitizationPlugin } from '../plugins/PasteSanitizationPlugin';
 import type {
   EditorAdapter,
   EditorBindings,
+  EditorSelectionScrollBehavior,
   EditorSnapshotApplyRequest,
   EditorSelectionChangeEvent,
   EditorSelectionState,
@@ -185,14 +186,16 @@ function applyDomSelectionFromOffsets(
   anchor: number,
   focus: number,
   scrollerEl?: HTMLElement | null,
+  selectionScrollBehavior: EditorSelectionScrollBehavior = 'preserve-scroll',
 ): void {
+  const shouldPreserveScroll = selectionScrollBehavior === 'preserve-scroll';
   const safeAnchor = Math.max(0, anchor);
   const safeFocus = Math.max(0, focus);
   const anchorPoint = resolveDomPointForTextOffset(rootEl, canonicalText, safeAnchor);
   const focusPoint = resolveDomPointForTextOffset(rootEl, canonicalText, safeFocus);
   if (!anchorPoint || !focusPoint) return;
 
-  const preservedScrollTop = scrollerEl ? scrollerEl.scrollTop : null;
+  const preservedScrollTop = shouldPreserveScroll && scrollerEl ? scrollerEl.scrollTop : null;
 
   const range = document.createRange();
   range.setStart(anchorPoint.node, anchorPoint.offset);
@@ -590,7 +593,15 @@ export function Editor({
             const textLength = canonicalText.length;
             const anchor = clampNumber(snapshot.selection.anchor, 0, textLength);
             const focus = clampNumber(snapshot.selection.focus, 0, textLength);
-            applyDomSelectionFromOffsets(rootEl, canonicalText, anchor, focus, scrollerRef.current);
+            const selectionScrollBehavior = snapshot.selectionScrollBehavior ?? 'center-caged';
+            applyDomSelectionFromOffsets(
+              rootEl,
+              canonicalText,
+              anchor,
+              focus,
+              scrollerRef.current,
+              selectionScrollBehavior,
+            );
 
             // Selection application should never force viewport recentering here.
             // Viewport movement is controlled by explicit viewport snapshots and caged scroll logic.
@@ -954,7 +965,7 @@ export function Editor({
               onTabIndent={bindings?.onTabIndent}
               onTabIndentTransform={bindings?.onTabIndentTransform}
               onMarkdownShortcutTransform={bindings?.onMarkdownShortcutTransform}
-              onEnterKey={bindings?.onEnterKey}
+              onEnterTransform={bindings?.onEnterTransform}
             />
             
             {/* The Magic Cage Scroller! */}

@@ -141,7 +141,18 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       const result = resolveIntentScrollTarget(intent);
       if (result.targetScrollTopPx === null) return false;
 
-      const targetScrollTopPx = result.targetScrollTopPx;
+      let targetScrollTopPx = result.targetScrollTopPx;
+
+      if (intent === 'refocus-caged' && clampNextEnterReconcileToSingleRow) {
+        const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        const singleStepMinPx = scroller.scrollTop;
+        const singleStepMaxPx = scroller.scrollTop + lineHeightPx;
+        const steppedTargetPx = Math.max(singleStepMinPx, Math.min(singleStepMaxPx, targetScrollTopPx));
+        targetScrollTopPx = Math.max(
+          0,
+          Math.min(maxScrollTopPx, Math.round(steppedTargetPx / lineHeightPx) * lineHeightPx),
+        );
+      }
 
       if (targetScrollTopPx !== scroller.scrollTop) {
         if (intent === 'refocus-caged') {
@@ -154,6 +165,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       }
 
       if (intent === 'refocus-caged') {
+        clampNextEnterReconcileToSingleRow = false;
         // Keep active for sustained key-repeat; cleared on keyup.
       }
 
@@ -168,6 +180,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     let isRefocusReconcileQueued = false;
     let refocusRetryFrameId: number | null = null;
     let deterministicEnterBoundaryScrollTopPx: number | null = null;
+    let clampNextEnterReconcileToSingleRow = false;
     const pressedRefocusKeys = new Set<string>();
     let initialRefocusAnchorScrollTopPx: number | null = null;
     let shouldSuppressInitialNativeJump = false;
@@ -191,6 +204,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       initialRefocusAnchorScrollTopPx = null;
       shouldSuppressInitialNativeJump = false;
       deterministicEnterBoundaryScrollTopPx = null;
+      clampNextEnterReconcileToSingleRow = false;
       if (refocusRetryFrameId !== null) {
         cancelAnimationFrame(refocusRetryFrameId);
         refocusRetryFrameId = null;
@@ -224,6 +238,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
 
         if (intent === 'refocus-caged' && deterministicEnterBoundaryScrollTopPx !== null) {
           const currentScroller = scrollerRef.current;
+          let didApplyDeterministicStep = false;
           if (currentScroller) {
             const maxScrollTopPx = Math.max(0, currentScroller.scrollHeight - currentScroller.clientHeight);
             const deterministicTargetPx = Math.max(
@@ -236,10 +251,19 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
 
             if (deterministicTargetPx > currentScroller.scrollTop) {
               currentScroller.scrollTop = deterministicTargetPx;
+              didApplyDeterministicStep = true;
             }
           }
 
           deterministicEnterBoundaryScrollTopPx = null;
+
+          if (didApplyDeterministicStep) {
+            clampNextEnterReconcileToSingleRow = false;
+            // Deterministic Enter boundary correction intentionally owns this
+            // cycle to avoid a second reconcile adding another row in the same tick.
+            shouldSuppressInitialNativeJump = false;
+            return;
+          }
         }
 
         const didReconcile = applyIntentReconcile(intent);
@@ -522,6 +546,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       }
 
       if (isRefocusKey(event)) {
+        clampNextEnterReconcileToSingleRow = event.key === 'Enter' && !event.ctrlKey && !event.metaKey && !event.altKey;
         const isNewRefocusPress = !pressedRefocusKeys.has(event.key);
         if (isNewRefocusPress) {
           initialRefocusAnchorScrollTopPx = scroller.scrollTop;
@@ -566,18 +591,14 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         pressedRefocusKeys.add(event.key);
         activateRefocusTransaction(scroller);
         pendingIntent = 'refocus-caged';
-        // Enter needs immediate keydown reconcile to avoid release-timed behavior.
-        // Arrow/navigation keys should reconcile on the post-move editor update.
-        if (event.key === 'Enter') {
-          scheduleRefocus();
-        }
+        // Reconcile only after Lexical commits the key effect.
+        // This avoids measuring stale pre-mutation caret geometry for Enter.
       }
     };
 
     const handleInitialRefocusNativeJumpSuppression = () => {
       if (!scroller) return;
       if (!shouldSuppressInitialNativeJump) return;
-      if (pendingIntent !== 'refocus-caged') return;
 
       const quantizedAnchorPx = resolveQuantizedAnchorScrollTopPx();
       if (quantizedAnchorPx === null) return;
@@ -759,8 +780,8 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       }
     };
 
-    scroller?.addEventListener('keydown', handleKeyDown);
-    scroller?.addEventListener('keyup', handleKeyUp);
+    scroller?.addEventListener('keydown', handleKeyDown, { capture: true });
+    scroller?.addEventListener('keyup', handleKeyUp, { capture: true });
     scroller?.addEventListener('paste', handlePaste);
     scroller?.addEventListener('wheel', handleWheel, { passive: false });
     scroller?.addEventListener('scroll', handleInitialRefocusNativeJumpSuppression, { passive: true });
@@ -785,8 +806,8 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         cancelAnimationFrame(dragCorrectionFrame);
         dragCorrectionFrame = null;
       }
-      scroller?.removeEventListener('keydown', handleKeyDown);
-      scroller?.removeEventListener('keyup', handleKeyUp);
+      scroller?.removeEventListener('keydown', handleKeyDown, true);
+      scroller?.removeEventListener('keyup', handleKeyUp, true);
       scroller?.removeEventListener('paste', handlePaste);
       scroller?.removeEventListener('wheel', handleWheel);
       scroller?.removeEventListener('scroll', handleInitialRefocusNativeJumpSuppression);
