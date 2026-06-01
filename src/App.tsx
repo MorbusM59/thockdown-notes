@@ -34,10 +34,10 @@ import {
   type DocumentFindHit,
 } from './editor/FindReplaceEngine'
 import {
-  applyMarkdownEnter,
   indentSelectionByStep,
   resolveMarkdownSelectionContext,
 } from './editor/MarkdownContext'
+import { resolveMarkdownEnterTransform } from './editor/EnterTransformPolicy'
 import { normalizeInternalText } from './editor/TextPolicy'
 import {
   buildReleaseRampDownPlanFromCurrentParams,
@@ -3383,10 +3383,7 @@ function App() {
     },
     onEnterTransform: (event) => {
       if (!activeNoteId) return null
-      if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return null
-
-      const sourceText = normalizeInternalText(event.text)
-      const next = applyMarkdownEnter(sourceText, event.selection)
+      const next = resolveMarkdownEnterTransform(event)
       if (!next) {
         return null
       }
