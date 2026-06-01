@@ -27,6 +27,7 @@ export interface PersistedMenuState {
   editorStyle?: 'syne' | 'redhat';
   editorFontSize?: 'xs' | 's' | 'm' | 'l' | 'xl';
   editorSpacing?: 'tight' | 'compact' | 'cozy' | 'wide';
+  editorGlyphPaddingPx?: number;
   sidebarWidthRatio: number;
   tagSplitRatio: number;
   scrollEaseMultiplier?: number;

@@ -27,6 +27,7 @@ const DEFAULT_APP_STATE: AppState = {
     editorStyle: 'syne',
     editorFontSize: 'm',
     editorSpacing: 'cozy',
+    editorGlyphPaddingPx: 2,
     sidebarWidthRatio: 0.306,
     tagSplitRatio: 0.645,
     scrollEaseMultiplier: 1.5,
@@ -112,6 +113,15 @@ function sanitizePositive(input: unknown, fallback: number): number {
   return input;
 }
 
+function sanitizeIntegerInRange(input: unknown, min: number, max: number, fallback: number): number {
+  if (typeof input !== 'number' || !Number.isFinite(input)) {
+    return fallback;
+  }
+
+  const rounded = Math.round(input);
+  return Math.max(min, Math.min(max, rounded));
+}
+
 function sanitizeCollapsedList(input: unknown): string[] {
   if (!Array.isArray(input)) {
     return [];
@@ -169,6 +179,12 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     editorStyle: sanitizeEditorStyle(input?.editorStyle),
     editorFontSize: sanitizeEditorFontSize(input?.editorFontSize),
     editorSpacing: sanitizeEditorSpacing(input?.editorSpacing),
+    editorGlyphPaddingPx: sanitizeIntegerInRange(
+      input?.editorGlyphPaddingPx,
+      0,
+      5,
+      DEFAULT_APP_STATE.menu!.editorGlyphPaddingPx ?? 2,
+    ),
     sidebarWidthRatio: sanitizeRatio(input?.sidebarWidthRatio, DEFAULT_APP_STATE.menu!.sidebarWidthRatio),
     tagSplitRatio: sanitizeRatio(input?.tagSplitRatio, DEFAULT_APP_STATE.menu!.tagSplitRatio),
     scrollEaseMultiplier: sanitizePositive(input?.scrollEaseMultiplier, DEFAULT_APP_STATE.menu!.scrollEaseMultiplier ?? 1),

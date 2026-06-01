@@ -813,6 +813,12 @@ body.splitter-dragging {
   max-width: 100px;
 }
 
+.toolbar-flyout-section-layout {
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+}
+
 .toolbar-flyout-section-colors {
   width: 159px;
   min-width: 159px;

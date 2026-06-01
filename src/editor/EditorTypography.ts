@@ -5,6 +5,7 @@ export type EditorSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide';
 export type EditorRuntimeMetrics = {
   fontSizePx: number;
   lineHeightPx: number;
+  glyphWidthPx: number;
   cellWidthPx: number;
 };
 
@@ -32,6 +33,10 @@ export const EDITOR_SPACING_OPTIONS: Array<{ key: EditorSpacingKey; label: strin
   { key: 'wide', label: 'Wide', multiplier: 1.8 },
 ];
 
+export const DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX = 2;
+const MIN_EDITOR_GLYPH_SIDE_GAP_PX = 0;
+const MAX_EDITOR_GLYPH_SIDE_GAP_PX = 5;
+
 const FONT_SIZE_PX_BY_KEY: Record<EditorFontSizeKey, number> = {
   xs: 12,
   s: 14,
@@ -47,7 +52,7 @@ const SPACING_MULTIPLIER_BY_KEY: Record<EditorSpacingKey, number> = {
   wide: 1.8,
 };
 
-const CELL_WIDTH_PX_BY_SIZE: Record<EditorFontSizeKey, number> = {
+const FALLBACK_CELL_WIDTH_PX_BY_SIZE: Record<EditorFontSizeKey, number> = {
   xs: 8,
   s: 9,
   m: 10,
@@ -64,15 +69,61 @@ export function resolveEditorFontFamily(style: EditorStyleKey): string {
   return FONT_FAMILY_BY_STYLE[style] ?? FONT_FAMILY_BY_STYLE[DEFAULT_EDITOR_STYLE];
 }
 
-export function resolveEditorRuntimeMetrics(fontSize: EditorFontSizeKey, spacing: EditorSpacingKey): EditorRuntimeMetrics {
+let glyphMeasureContext: CanvasRenderingContext2D | null | undefined;
+
+function getGlyphMeasureContext(): CanvasRenderingContext2D | null {
+  if (glyphMeasureContext !== undefined) {
+    return glyphMeasureContext;
+  }
+
+  if (typeof document === 'undefined') {
+    glyphMeasureContext = null;
+    return glyphMeasureContext;
+  }
+
+  const canvas = document.createElement('canvas');
+  glyphMeasureContext = canvas.getContext('2d');
+  return glyphMeasureContext;
+}
+
+function measureMonospaceGlyphWidthPx(fontFamily: string, fontSizePx: number): number | null {
+  const context = getGlyphMeasureContext();
+  if (!context) return null;
+
+  context.font = `400 ${fontSizePx}px ${fontFamily}`;
+  const width = context.measureText('0').width;
+  if (!Number.isFinite(width) || width <= 0) {
+    return null;
+  }
+
+  return width;
+}
+
+export function resolveEditorRuntimeMetrics(
+  style: EditorStyleKey,
+  fontSize: EditorFontSizeKey,
+  spacing: EditorSpacingKey,
+  glyphSideGapPx: number = DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
+): EditorRuntimeMetrics {
   const fontSizePx = FONT_SIZE_PX_BY_KEY[fontSize] ?? FONT_SIZE_PX_BY_KEY[DEFAULT_EDITOR_FONT_SIZE];
   const spacingMultiplier = SPACING_MULTIPLIER_BY_KEY[spacing] ?? SPACING_MULTIPLIER_BY_KEY[DEFAULT_EDITOR_SPACING];
   const lineHeightPx = Math.max(1, Math.round(fontSizePx * spacingMultiplier));
-  const cellWidthPx = Math.max(1, CELL_WIDTH_PX_BY_SIZE[fontSize] ?? CELL_WIDTH_PX_BY_SIZE[DEFAULT_EDITOR_FONT_SIZE]);
+  const safeGlyphSideGapPx = Math.max(
+    MIN_EDITOR_GLYPH_SIDE_GAP_PX,
+    Math.min(MAX_EDITOR_GLYPH_SIDE_GAP_PX, Math.round(glyphSideGapPx)),
+  );
+  const fallbackCellWidthPx =
+    FALLBACK_CELL_WIDTH_PX_BY_SIZE[fontSize] ?? FALLBACK_CELL_WIDTH_PX_BY_SIZE[DEFAULT_EDITOR_FONT_SIZE];
+  const fallbackGlyphWidthPx = Math.max(1, fallbackCellWidthPx - (safeGlyphSideGapPx * 2));
+  const fontFamily = resolveEditorFontFamily(style);
+  const measuredGlyphWidthPx = measureMonospaceGlyphWidthPx(fontFamily, fontSizePx);
+  const glyphWidthPx = Math.max(1, measuredGlyphWidthPx ?? fallbackGlyphWidthPx);
+  const cellWidthPx = Math.max(1, glyphWidthPx + (safeGlyphSideGapPx * 2));
 
   return {
     fontSizePx,
     lineHeightPx,
+    glyphWidthPx,
     cellWidthPx,
   };
 }

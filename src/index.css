@@ -118,6 +118,7 @@
   --editor-font: 'Syne Mono', monospace;
   --editor-font-size: 16px;
   --editor-line-height: 24px;
+  --editor-glyph-width: 8px;
   --editor-cell-width: 10px; /* EXACT absolute pixel width for boxes */
   --editor-frame-padding: 8px;
   
@@ -241,13 +242,13 @@ body {
   font-size: var(--editor-font-size);
   line-height: var(--editor-line-height);
   
-  /* THE GOLDEN FIX: Pads the character advance-width so it equals exactly the grid box */
-  letter-spacing: calc(var(--editor-cell-width) - 1ch); 
+  /* Space each glyph by the exact measured gap to match the runtime cell width. */
+  letter-spacing: calc(var(--editor-cell-width) - var(--editor-glyph-width)); 
 
   /* CENTER THE GLYPHS: Shifts the entire text layer halfway across the remaining letter-spacing space.
      Adjust the -1px vertically if the font baseline feels slightly too high or low!
      Zero overhead: performed entirely by the browser renderer on the container. */
-    transform: translateX(calc((var(--editor-cell-width) - 1ch) / 2));
+    transform: translateX(calc((var(--editor-cell-width) - var(--editor-glyph-width)) / 2));
   
   font-variant-ligatures: none; 
   font-variant-numeric: tabular-nums;

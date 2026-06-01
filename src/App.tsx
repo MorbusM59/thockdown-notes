@@ -15,6 +15,7 @@ import type {
 import type { PersistedMenuState, PersistedSidebarViewState, PersistedViewportState } from './shared/appState'
 import type { NoteSummary } from './shared/noteLifecycle'
 import {
+  DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
   DEFAULT_EDITOR_FONT_SIZE,
   DEFAULT_EDITOR_SPACING,
   DEFAULT_EDITOR_STYLE,
@@ -78,6 +79,8 @@ const SUGGESTED_MIN_WIDTH_PX = 220
 const UTILITY_WIDTH_PX = 160
 const DEFAULT_SIDEBAR_RATIO = 0.306
 const DEFAULT_TAG_SPLIT_RATIO = 0.645
+const EDITOR_GLYPH_PADDING_MIN_PX = 0
+const EDITOR_GLYPH_PADDING_MAX_PX = 5
 const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28
 const SCROLL_TRACK_EDGE_GAP_PX = 3
 const NOTE_RIGHT_CLICK_HOLD_MS = 200
@@ -1248,6 +1251,7 @@ function App() {
   const [editorStyle, setEditorStyle] = useState<EditorStyleKey>(DEFAULT_EDITOR_STYLE)
   const [editorFontSize, setEditorFontSize] = useState<EditorFontSizeKey>(DEFAULT_EDITOR_FONT_SIZE)
   const [editorSpacing, setEditorSpacing] = useState<EditorSpacingKey>(DEFAULT_EDITOR_SPACING)
+  const [editorGlyphPaddingPx, setEditorGlyphPaddingPx] = useState<number>(DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX)
   const [isTagMutationPending, setIsTagMutationPending] = useState(false)
   const [deleteArmedTagName, setDeleteArmedTagName] = useState<string | null>(null)
   const [renamingTagName, setRenamingTagName] = useState<string | null>(null)
@@ -1364,8 +1368,8 @@ function App() {
   const [isDraggingPreviewScrollThumb, setIsDraggingPreviewScrollThumb] = useState(false)
 
   const editorRuntimeMetrics = useMemo(
-    () => resolveEditorRuntimeMetrics(editorFontSize, editorSpacing),
-    [editorFontSize, editorSpacing],
+    () => resolveEditorRuntimeMetrics(editorStyle, editorFontSize, editorSpacing, editorGlyphPaddingPx),
+    [editorStyle, editorFontSize, editorSpacing, editorGlyphPaddingPx],
   )
   const editorFontFamily = useMemo(() => resolveEditorFontFamily(editorStyle), [editorStyle])
   const activeColorRgba = useMemo(() => hsvaToRgba(activeColorHsva), [activeColorHsva])
@@ -1727,6 +1731,7 @@ function App() {
       editorStyle,
       editorFontSize,
       editorSpacing,
+      editorGlyphPaddingPx,
       sidebarWidthRatio,
       tagSplitRatio,
       renderScrollDynamic,
@@ -1759,6 +1764,7 @@ function App() {
     categoryCollapsedPrimary,
     categoryCollapsedSecondary,
     editorFontSize,
+    editorGlyphPaddingPx,
     editorSpacing,
     editorStyle,
     isDocumentFindCaseSensitive,
@@ -3100,6 +3106,13 @@ function App() {
             setEditorStyle(appState.menu.editorStyle ?? DEFAULT_EDITOR_STYLE)
             setEditorFontSize(appState.menu.editorFontSize ?? DEFAULT_EDITOR_FONT_SIZE)
             setEditorSpacing(appState.menu.editorSpacing ?? DEFAULT_EDITOR_SPACING)
+            setEditorGlyphPaddingPx(
+              clamp(
+                Math.round(appState.menu.editorGlyphPaddingPx ?? DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX),
+                EDITOR_GLYPH_PADDING_MIN_PX,
+                EDITOR_GLYPH_PADDING_MAX_PX,
+              ),
+            )
             setSidebarWidthRatio(appState.menu.sidebarWidthRatio)
             setTagSplitRatio(appState.menu.tagSplitRatio)
             setRenderScrollDynamic(appState.menu.renderScrollDynamic ?? appState.menu.renderScrollEaseMultiplier ?? getRenderScrollDynamic())
@@ -6739,9 +6752,26 @@ function App() {
                 </div>
               </section>
 
-              <section className="toolbar-flyout-section toolbar-flyout-section-placeholder display-in-edit" aria-label="Layout settings placeholder">
+              <section className="toolbar-flyout-section toolbar-flyout-section-layout display-in-edit" aria-label="Layout settings">
                 <div className="panel-placeholder-title">Layout</div>
-                <div className="toolbar-flyout-placeholder-text">Soon</div>
+                <div className="utility-setting-slider-stack" aria-label="Layout settings controls">
+                  <CompactScrollbarSlider
+                    id="editor-glyph-padding"
+                    min={EDITOR_GLYPH_PADDING_MIN_PX}
+                    max={EDITOR_GLYPH_PADDING_MAX_PX}
+                    step={1}
+                    value={editorGlyphPaddingPx}
+                    trackLabel="padding"
+                    ariaLabel="Editor glyph side padding in pixels"
+                    onCommit={(value) => setEditorGlyphPaddingPx(
+                      clamp(
+                        Math.round(value),
+                        EDITOR_GLYPH_PADDING_MIN_PX,
+                        EDITOR_GLYPH_PADDING_MAX_PX,
+                      ),
+                    )}
+                  />
+                </div>
               </section>
 
               <section className="toolbar-flyout-section toolbar-flyout-section-placeholder display-in-view" aria-label="Render settings placeholder">
@@ -6771,6 +6801,7 @@ function App() {
                 fontFamily={editorFontFamily}
                 fontSizePx={editorRuntimeMetrics.fontSizePx}
                 lineHeightPx={editorRuntimeMetrics.lineHeightPx}
+                glyphWidthPx={editorRuntimeMetrics.glyphWidthPx}
                 cellWidthPx={editorRuntimeMetrics.cellWidthPx}
               />
             ) : (

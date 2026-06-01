@@ -48,6 +48,7 @@ interface EditorProps {
   fontFamily: string;
   fontSizePx: number;
   lineHeightPx: number;
+  glyphWidthPx: number;
   cellWidthPx: number;
 }
 
@@ -225,6 +226,7 @@ export function Editor({
   fontFamily,
   fontSizePx,
   lineHeightPx,
+  glyphWidthPx,
   cellWidthPx,
 }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -850,6 +852,7 @@ export function Editor({
                 '--editor-font': fontFamily,
                 '--editor-font-size': `${fontSizePx}px`,
                 '--editor-line-height': `${lineHeightPx}px`,
+                '--editor-glyph-width': `${glyphWidthPx}px`,
                 '--editor-cell-width': `${cellWidthPx}px`,
               } as React.CSSProperties),
               width: editorSize.width, 
