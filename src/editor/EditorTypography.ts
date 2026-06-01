@@ -33,9 +33,9 @@ export const EDITOR_SPACING_OPTIONS: Array<{ key: EditorSpacingKey; label: strin
   { key: 'wide', label: 'Wide', multiplier: 1.8 },
 ];
 
-export const DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX = 2;
+export const DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX = 1;
 const MIN_EDITOR_GLYPH_SIDE_GAP_PX = 0;
-const MAX_EDITOR_GLYPH_SIDE_GAP_PX = 5;
+const MAX_EDITOR_GLYPH_SIDE_GAP_PX = 1;
 
 const FONT_SIZE_PX_BY_KEY: Record<EditorFontSizeKey, number> = {
   xs: 12,

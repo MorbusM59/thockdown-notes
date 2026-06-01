@@ -257,7 +257,7 @@ body {
   /* CENTER THE GLYPHS: Shifts the entire text layer halfway across the remaining letter-spacing space.
      Adjust the -1px vertically if the font baseline feels slightly too high or low!
      Zero overhead: performed entirely by the browser renderer on the container. */
-    transform: translateX(calc(((var(--editor-cell-width) - var(--editor-glyph-width)) / 2) - 1px));
+    transform: translateX(calc(((var(--editor-cell-width) - var(--editor-glyph-width)) / 2)));
   
   font-variant-ligatures: none; 
   font-variant-numeric: tabular-nums;

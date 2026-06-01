@@ -27,7 +27,7 @@ const DEFAULT_APP_STATE: AppState = {
     editorStyle: 'syne',
     editorFontSize: 'm',
     editorSpacing: 'cozy',
-    editorGlyphPaddingPx: 2,
+    editorGlyphPaddingPx: 1,
     highlightGridOutlineColor: '#00000022',
     sidebarWidthRatio: 0.306,
     tagSplitRatio: 0.645,
@@ -183,8 +183,8 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     editorGlyphPaddingPx: sanitizeIntegerInRange(
       input?.editorGlyphPaddingPx,
       0,
-      5,
-      DEFAULT_APP_STATE.menu!.editorGlyphPaddingPx ?? 2,
+      1,
+      DEFAULT_APP_STATE.menu!.editorGlyphPaddingPx ?? 1,
     ),
     highlightGridOutlineColor:
       typeof input?.highlightGridOutlineColor === 'string'
