@@ -28,6 +28,7 @@ const DEFAULT_APP_STATE: AppState = {
     editorFontSize: 'm',
     editorSpacing: 'cozy',
     editorGlyphPaddingPx: 2,
+    highlightGridOutlineColor: '#00000022',
     sidebarWidthRatio: 0.306,
     tagSplitRatio: 0.645,
     scrollEaseMultiplier: 1.5,
@@ -185,6 +186,10 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
       5,
       DEFAULT_APP_STATE.menu!.editorGlyphPaddingPx ?? 2,
     ),
+    highlightGridOutlineColor:
+      typeof input?.highlightGridOutlineColor === 'string'
+        ? input.highlightGridOutlineColor
+        : (DEFAULT_APP_STATE.menu!.highlightGridOutlineColor ?? '#00000022'),
     sidebarWidthRatio: sanitizeRatio(input?.sidebarWidthRatio, DEFAULT_APP_STATE.menu!.sidebarWidthRatio),
     tagSplitRatio: sanitizeRatio(input?.tagSplitRatio, DEFAULT_APP_STATE.menu!.tagSplitRatio),
     scrollEaseMultiplier: sanitizePositive(input?.scrollEaseMultiplier, DEFAULT_APP_STATE.menu!.scrollEaseMultiplier ?? 1),

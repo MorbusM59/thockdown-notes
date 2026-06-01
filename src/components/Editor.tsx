@@ -906,7 +906,10 @@ export function Editor({
               }}
             />
 
-            {/* The single unified full-screen grid lines */}
+            {/* Secondary outline grid under the primary grid to add box borders. */}
+            <div className="absolute pointer-events-none measly-grid-outline-lines" style={{ inset: 'var(--editor-frame-padding)', zIndex: 29 }} />
+
+            {/* The single unified full-screen primary grid lines */}
             <div className="absolute pointer-events-none measly-grid-lines" style={{ inset: 'var(--editor-frame-padding)', zIndex: 30 }} />
             
             {/* Top Drag Handle */}

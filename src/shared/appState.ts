@@ -44,6 +44,7 @@ export interface PersistedMenuState {
   highlightBackgroundColor?: string;
   highlightTopBackgroundColor?: string;
   highlightBottomBackgroundColor?: string;
+  highlightGridOutlineColor?: string;
   // Legacy render smooth-scroll keys (pre curve-model / pre maxSpeed migration).
   renderScrollSmoothnessSec?: number;
   renderScrollEaseMultiplier?: number;

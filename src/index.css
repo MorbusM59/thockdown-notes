@@ -123,6 +123,7 @@
   --editor-frame-padding: 8px;
   
   /* Grid & Box Colors */
+  --color-grid-outline: #00000022;
   --color-grid-bg: #f9f6f3;       /* Bright paper background */
   --color-grid: #e9e6e3;          /* The drawn lines */
   --color-bg-regular: #e9e6e3;    /* Regular text box shading */
@@ -148,6 +149,14 @@ body {
 /* 
   The Magic Monospace Grid
 */
+.measly-grid-outline-lines {
+  background-image:
+    repeating-linear-gradient(to right, var(--color-grid-outline) 0, var(--color-grid-outline) 3px, transparent 3px, transparent var(--editor-cell-width)),
+    repeating-linear-gradient(to bottom, var(--color-grid-outline) 0, var(--color-grid-outline) 3px, transparent 3px, transparent var(--editor-line-height));
+  background-size: 100% 100%;
+  background-position: -1px -1px;
+}
+
 .measly-grid-lines {
   /* Exactly draw the 1px grid lines across the absolute width/height using the --color-grid-bg paper color to create the "plates" effect. */
   background-image: 

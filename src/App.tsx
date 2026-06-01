@@ -92,9 +92,10 @@ const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   background: '#e9e6e3',
   topBackground: 'rgba(196, 187, 182, 0.49)',
   bottomBackground: 'rgba(196, 187, 182, 0.49)',
+  gridOutline: '#00000022',
 }
 
-const HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['topBackground', 'caret', 'background', 'selection', 'bottomBackground']
+const HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['topBackground', 'gridOutline', 'caret', 'background', 'selection', 'bottomBackground']
 
 const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   caret: 'Caret color',
@@ -102,6 +103,7 @@ const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   background: 'Background',
   topBackground: 'Upper Box',
   bottomBackground: 'Lower Box',
+  gridOutline: 'Box outline',
 }
 
 const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
@@ -110,6 +112,7 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   background: 'fa-solid fa-square',
   topBackground: 'fa-solid fa-square-caret-up',
   bottomBackground: 'fa-solid fa-square-caret-down',
+  gridOutline: 'fa-regular fa-square',
 }
 
 type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find'
@@ -119,7 +122,7 @@ type TextDecorationFormat = 'bold' | 'italic' | 'strikethrough'
 type ViewStyleKey = 'modern' | 'narrow' | 'cute' | 'print'
 type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
 type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
-type HighlightColorKey = 'caret' | 'selection' | 'background' | 'topBackground' | 'bottomBackground'
+type HighlightColorKey = 'caret' | 'selection' | 'background' | 'topBackground' | 'bottomBackground' | 'gridOutline'
 
 type HighlightColors = Record<HighlightColorKey, string>
 
@@ -1744,6 +1747,7 @@ function App() {
       highlightBackgroundColor: highlightColors.background,
       highlightTopBackgroundColor: highlightColors.topBackground,
       highlightBottomBackgroundColor: highlightColors.bottomBackground,
+      highlightGridOutlineColor: highlightColors.gridOutline,
       sidebarViewState: {
         ...effectiveViewStateByMode,
         category: {
@@ -2030,6 +2034,7 @@ function App() {
       '--color-bg-regular': highlightColors.background,
       '--color-bg-leading': highlightColors.topBackground,
       '--color-bg-trailing': highlightColors.bottomBackground,
+      '--color-grid-outline': highlightColors.gridOutline,
       '--color-caret': highlightColors.caret,
       '--color-selection': highlightColors.selection,
     }
@@ -3126,6 +3131,7 @@ function App() {
               background: appState.menu.highlightBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.background,
               topBackground: appState.menu.highlightTopBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.topBackground,
               bottomBackground: appState.menu.highlightBottomBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.bottomBackground,
+              gridOutline: appState.menu.highlightGridOutlineColor ?? DEFAULT_HIGHLIGHT_COLORS.gridOutline,
             })
 
             setCurrentPage(loadedSidebarViewState[appState.menu.sidebarMode].page)
