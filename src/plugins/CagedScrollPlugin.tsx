@@ -290,8 +290,28 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       });
     };
 
-    const removeUpdateListener = editor.registerUpdateListener(({ editorState }) => {
+    const shouldBypassRefocusForTransformUpdate = (tags: ReadonlySet<string>) => {
+      // Tab/shortcut transforms replay selection with explicit preserve-scroll semantics.
+      // Any stale refocus intent from a previous key must not mutate viewport here.
+      return tags.has('tab-indent') || tags.has('shortcut-transform');
+    };
+
+    const removeUpdateListener = editor.registerUpdateListener(({ editorState, tags }) => {
       editorState.read(() => {
+        if (shouldBypassRefocusForTransformUpdate(tags)) {
+          pendingIntent = 'none';
+          shouldSuppressInitialNativeJump = false;
+          deterministicEnterBoundaryScrollTopPx = null;
+          clampNextEnterReconcileToSingleRow = false;
+
+          const currentScroller = scrollerRef.current;
+          if (currentScroller && pressedRefocusKeys.size === 0) {
+            scheduleRefocusTransactionDeactivation(currentScroller);
+          }
+
+          return;
+        }
+
         scheduleRefocus();
       });
     });
