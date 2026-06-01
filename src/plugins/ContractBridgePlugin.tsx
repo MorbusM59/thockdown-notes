@@ -586,23 +586,24 @@ export function ContractBridgePlugin({
     const applyTransformSelectionPreservingScroll = (
       nextText: string,
       nextSelection: EditorSelectionState,
+      preservedScrollTopOverride?: number | null,
     ) => {
       const rootEl = editor.getRootElement();
       if (!rootEl) return;
 
       const scroller = rootEl.closest('.measly-custom-scrollbar');
       const scrollerEl = scroller instanceof HTMLElement ? scroller : null;
-      const preservedScrollTop = scrollerEl ? scrollerEl.scrollTop : null;
+      const preservedScrollTop = preservedScrollTopOverride ?? (scrollerEl ? scrollerEl.scrollTop : null);
 
       const applied = applySelectionStateToDom(rootEl, nextText, nextSelection);
-      if (!applied) return;
-
       if (scrollerEl && preservedScrollTop !== null) {
         scrollerEl.scrollTop = preservedScrollTop;
         requestAnimationFrame(() => {
           scrollerEl.scrollTop = preservedScrollTop;
         });
       }
+
+      if (!applied) return;
 
       previousSelectionRef.current = nextSelection;
       onSelectionChangeRef.current({ source: 'user-input', selection: nextSelection });
@@ -611,11 +612,12 @@ export function ContractBridgePlugin({
     const scheduleTransformSelectionReplay = (
       nextText: string,
       nextSelection: EditorSelectionState,
+      preservedScrollTopOverride?: number | null,
     ) => {
       // Commands can run before the editor tree commit is reflected in the DOM.
       // Defer one frame so replay offsets always map against post-transform text.
       requestAnimationFrame(() => {
-        applyTransformSelectionPreservingScroll(nextText, nextSelection);
+        applyTransformSelectionPreservingScroll(nextText, nextSelection, preservedScrollTopOverride);
       });
     };
 
@@ -645,11 +647,16 @@ export function ContractBridgePlugin({
 
           event.preventDefault();
 
+          const rootEl = editor.getRootElement();
+          const scroller = rootEl?.closest('.measly-custom-scrollbar');
+          const scrollerEl = scroller instanceof HTMLElement ? scroller : null;
+          const preservedScrollTopAtCommand = scrollerEl ? scrollerEl.scrollTop : null;
+
           editor.update(() => {
             replaceEditorTextFromCanonical(next.text);
           }, { tag: 'tab-indent' });
 
-          scheduleTransformSelectionReplay(next.text, next.selection);
+          scheduleTransformSelectionReplay(next.text, next.selection, preservedScrollTopAtCommand);
 
           return true;
         }

@@ -274,7 +274,8 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
 
         // Enter at the cage edge can temporarily produce no measurable caret rect.
         // Retry on the next frame so the scroll-up reconcile still happens immediately.
-        if (intent === 'refocus-caged' && pressedRefocusKeys.size > 0) {
+        const shouldRetryRefocus = pressedRefocusKeys.has('Enter');
+        if (intent === 'refocus-caged' && shouldRetryRefocus) {
           pendingIntent = 'refocus-caged';
           if (refocusRetryFrameId !== null) {
             cancelAnimationFrame(refocusRetryFrameId);
@@ -303,6 +304,12 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
           shouldSuppressInitialNativeJump = false;
           deterministicEnterBoundaryScrollTopPx = null;
           clampNextEnterReconcileToSingleRow = false;
+          initialRefocusAnchorScrollTopPx = null;
+
+          if (refocusRetryFrameId !== null) {
+            cancelAnimationFrame(refocusRetryFrameId);
+            refocusRetryFrameId = null;
+          }
 
           const currentScroller = scrollerRef.current;
           if (currentScroller && pressedRefocusKeys.size === 0) {
