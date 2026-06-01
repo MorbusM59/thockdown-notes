@@ -95,7 +95,7 @@ const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   gridOutline: '#00000022',
 }
 
-const HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['topBackground', 'gridOutline', 'caret', 'background', 'selection', 'bottomBackground']
+const HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['topBackground', 'bottomBackground', 'background', 'gridOutline', 'caret', 'selection']
 
 const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   caret: 'Caret color',
