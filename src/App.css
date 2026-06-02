@@ -165,12 +165,13 @@ button.active,
 }
 
 .app-grid {
+  position: relative;
+  isolation: isolate;
   background-color: #ece8e4;
-  background-image: var(--texture-app-grid), linear-gradient(135deg, #f5f3f2, #e9e5e2);
-  background-repeat: no-repeat, no-repeat;
-  background-size: 100% 100%, 100% 100%;
-  background-position: 0 0, 0 0;
-  background-blend-mode: multiply, normal;
+  background-image: linear-gradient(135deg, #f5f3f2, #e9e5e2);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: 0 0;
   grid-template-columns: 300px 8px minmax(320px, 1fr) 8px minmax(220px, 0.55fr) 8px 160px;
   grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-areas:
@@ -179,6 +180,23 @@ button.active,
     'sidebar d-sidebar viewer viewer viewer viewer viewer';
   min-width: 980px;
   min-height: 620px;
+}
+
+.app-grid::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: var(--texture-app-grid);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: 0 0;
+}
+
+.app-grid > * {
+  position: relative;
+  z-index: 1;
 }
 
 .grid-divider {
@@ -385,6 +403,8 @@ body.splitter-dragging {
 }
 
 .sidebar-content {
+  position: relative;
+  isolation: isolate;
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
@@ -395,11 +415,24 @@ body.splitter-dragging {
   border-left: none;
   border-radius: 0 9px 9px 0;
   box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.5), inset 0 0 6px rgba(0, 0, 0, 0.2), 0 0 2px var(--color-shadow-white);
+  background-color: #ece8e4;
+}
+
+.sidebar-content::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
   background-image: var(--texture-sidebar-content);
   background-repeat: no-repeat;
   background-size: 100% 100%;
   background-position: 0 0;
-  background-blend-mode: multiply;
+}
+
+.sidebar-content > * {
+  position: relative;
+  z-index: 1;
 }
 
 .sidebar-content.is-paged-mode {
@@ -1231,6 +1264,26 @@ body.hsva-dragging * {
   height: 56px;
   padding: 8px;
   box-sizing: border-box;
+  background: #ffffff;
+}
+
+.date-view .note-list-item:hover,
+.date-view .note-list-item.is-active {
+  background: #ffffff;
+}
+
+.date-view .note-list-item.is-armed-for-archiving,
+.date-view .note-list-item.is-armed-for-archiving:hover,
+.date-view .note-list-item.is-armed-for-archiving.is-active,
+.date-view .note-list-item.is-armed-for-archiving.is-active:hover {
+  background-color: #dcebff;
+}
+
+.date-view .note-list-item.is-armed-for-deletion,
+.date-view .note-list-item.is-armed-for-deletion:hover,
+.date-view .note-list-item.is-armed-for-deletion.is-active,
+.date-view .note-list-item.is-armed-for-deletion.is-active:hover {
+  background-color: #ffe1e1;
 }
 
 .note-list-item:hover {
@@ -1455,6 +1508,22 @@ body.hsva-dragging * {
   z-index: 1;
 }
 
+.editor-stage-texture-underlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background-image: var(--texture-editor-stage);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: 0 0;
+}
+
+.editor-stage > :not(.editor-stage-texture-underlay) {
+  position: relative;
+  z-index: 2;
+}
+
 .editor-stage.is-preview-mode::before,
 .editor-stage.is-preview-mode::after {
   content: '';
@@ -1463,7 +1532,7 @@ body.hsva-dragging * {
   right: 1px;
   height: 4px;
   pointer-events: none;
-  z-index: 2;
+  z-index: 3;
 }
 
 .editor-stage.is-preview-mode::before {

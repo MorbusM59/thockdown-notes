@@ -906,20 +906,6 @@ export function Editor({
               }}
             />
 
-            {/* Texture overlay sits above all stage background fills while preserving their colors. */}
-            <div
-              className="absolute pointer-events-none"
-              style={{
-                inset: 'var(--editor-frame-padding)',
-                zIndex: 5,
-                backgroundImage: 'var(--texture-editor-stage)',
-                backgroundRepeat: 'no-repeat',
-                backgroundSize: '100% 100%',
-                backgroundPosition: '0 0',
-                backgroundBlendMode: 'multiply',
-              }}
-            />
-
             {/* Secondary outline grid under the primary grid to add box borders. */}
             <div className="absolute pointer-events-none measly-grid-outline-lines" style={{ inset: 'var(--editor-frame-padding)', zIndex: 29 }} />
 

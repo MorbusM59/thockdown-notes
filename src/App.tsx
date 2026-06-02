@@ -7225,6 +7225,7 @@ function App() {
       <div className="editor-viewer-frame" style={{ gridArea: 'viewer' }}>
         <main className="editor-shell">
           <div ref={editorStageRef} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
+            <div className="editor-stage-texture-underlay" aria-hidden="true" />
             {!isPreviewMode ? (
               <Editor
                 key={activeNoteId ?? 'no-active-note'}
