@@ -9,6 +9,7 @@ import { StateService } from './stateService'
 import { DatabaseService } from './databaseService'
 import { EXTERNAL_FILE_CHANNELS } from '../src/shared/externalFiles'
 import { LEGACY_DB_CHANNELS } from '../src/shared/legacyDbFeatures'
+import { TEXTURE_CHANNELS } from '../src/shared/textures'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -203,6 +204,14 @@ function registerIpcHandlers() {
   });
   ipcMain.handle(LEGACY_DB_CHANNELS.deleteTempNote, async (_event, noteId: string) => {
     databaseService!.deleteTempNote(noteId);
+  });
+
+  ipcMain.handle(TEXTURE_CHANNELS.getCached, async (_event, request) => {
+    return databaseService!.getTextureCache(request);
+  });
+
+  ipcMain.handle(TEXTURE_CHANNELS.saveCached, async (_event, request, payload) => {
+    databaseService!.saveTextureCache(request, payload);
   });
 }
 

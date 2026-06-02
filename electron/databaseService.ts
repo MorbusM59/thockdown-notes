@@ -3,6 +3,7 @@ import { existsSync, promises as fs } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { sanitizeDocumentText } from '../src/shared/textSanitization';
+import type { TextureCacheHit, TextureCacheRequest } from '../src/shared/textures';
 
 const require = createRequire(import.meta.url);
 const BetterSqlite3 = require('better-sqlite3') as typeof import('better-sqlite3');
@@ -152,6 +153,15 @@ function parseLegacyMetadata(rawText: string): ParsedLegacyNote {
   } catch {
     return { tags: [], bodyText: normalized, hasLegacyHeader: false };
   }
+}
+
+function serializeTextureColorHsva(color: TextureCacheRequest['color']): string {
+  return JSON.stringify({
+    h: Number(color.h.toFixed(4)),
+    s: Number(color.s.toFixed(4)),
+    v: Number(color.v.toFixed(4)),
+    a: Number(color.a.toFixed(4)),
+  });
 }
 
 export class DatabaseService {
@@ -877,6 +887,77 @@ export class DatabaseService {
     db.prepare('DELETE FROM notes_fts WHERE noteId = ?').run(noteId);
   }
 
+  getTextureCache(request: TextureCacheRequest): TextureCacheHit | null {
+    const db = this.requireDb();
+    const colorHsva = serializeTextureColorHsva(request.color);
+
+    const row = db.prepare(`
+      SELECT data, mimeType
+      FROM texture_cache
+      WHERE surface = ?
+        AND width = ?
+        AND height = ?
+        AND seed = ?
+        AND granularity = ?
+        AND vSteps = ?
+        AND colorHsva = ?
+        AND algorithmVersion = ?
+      LIMIT 1
+    `).get(
+      request.surface,
+      Math.max(1, Math.round(request.width)),
+      Math.max(1, Math.round(request.height)),
+      Math.max(0, Math.round(request.seed)),
+      Number(request.granularity.toFixed(4)),
+      Math.max(2, Math.round(request.vSteps)),
+      colorHsva,
+      Math.max(1, Math.round(request.algorithmVersion)),
+    ) as { data: Buffer; mimeType: string } | undefined;
+
+    if (!row) {
+      return null;
+    }
+
+    return {
+      data: new Uint8Array(row.data),
+      mimeType: row.mimeType,
+    };
+  }
+
+  saveTextureCache(request: TextureCacheRequest, payload: TextureCacheHit): void {
+    const db = this.requireDb();
+    const colorHsva = serializeTextureColorHsva(request.color);
+
+    db.prepare(`
+      INSERT OR REPLACE INTO texture_cache (
+        surface,
+        width,
+        height,
+        seed,
+        granularity,
+        vSteps,
+        colorHsva,
+        algorithmVersion,
+        data,
+        mimeType,
+        createdAt
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      request.surface,
+      Math.max(1, Math.round(request.width)),
+      Math.max(1, Math.round(request.height)),
+      Math.max(0, Math.round(request.seed)),
+      Number(request.granularity.toFixed(4)),
+      Math.max(2, Math.round(request.vSteps)),
+      colorHsva,
+      Math.max(1, Math.round(request.algorithmVersion)),
+      Buffer.from(payload.data),
+      payload.mimeType || 'image/webp',
+      Date.now(),
+    );
+  }
+
   private ensureSchema(): void {
     const db = this.requireDb();
 
@@ -935,6 +1016,23 @@ export class DatabaseService {
         title,
         content
       );
+
+      CREATE TABLE IF NOT EXISTS texture_cache (
+        surface TEXT NOT NULL,
+        width INTEGER NOT NULL,
+        height INTEGER NOT NULL,
+        seed INTEGER NOT NULL,
+        granularity REAL NOT NULL,
+        vSteps INTEGER NOT NULL,
+        colorHsva TEXT NOT NULL,
+        algorithmVersion INTEGER NOT NULL,
+        data BLOB NOT NULL,
+        mimeType TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        PRIMARY KEY (surface, width, height, seed, granularity, vSteps, colorHsva, algorithmVersion)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_texture_cache_created_at ON texture_cache(createdAt DESC);
     `);
 
     this.ensureNotesColumn('contentChecksum', 'TEXT');

@@ -323,6 +323,27 @@ const APP_STATE_CHANNELS = {
   loadWindowState: "state:window:load",
   saveWindowState: "state:window:save"
 };
+const TEXTURE_SURFACES = ["appGrid", "sidebarContent", "editorStage"];
+const DEFAULT_TEXTURE_MATERIALS = {
+  appGrid: {
+    seed: 137,
+    granularity: 9,
+    vSteps: 8,
+    color: { h: 32, s: 0.12, v: 0.95, a: 0.16 }
+  },
+  sidebarContent: {
+    seed: 211,
+    granularity: 8,
+    vSteps: 7,
+    color: { h: 30, s: 0.11, v: 0.93, a: 0.17 }
+  },
+  editorStage: {
+    seed: 389,
+    granularity: 10,
+    vSteps: 9,
+    color: { h: 29, s: 0.1, v: 0.92, a: 0.14 }
+  }
+};
 const APP_STATE_FILE = "app-state.json";
 const WINDOW_STATE_FILE = "window-state.json";
 const DEFAULT_APP_STATE = {
@@ -342,6 +363,9 @@ const DEFAULT_APP_STATE = {
     editorSpacing: "cozy",
     editorGlyphPaddingPx: 1,
     highlightGridOutlineColor: "#00000022",
+    textureEnabled: false,
+    textureActiveSurface: "appGrid",
+    textureMaterials: DEFAULT_TEXTURE_MATERIALS,
     sidebarWidthRatio: 0.306,
     tagSplitRatio: 0.645,
     scrollEaseMultiplier: 1.5,
@@ -422,6 +446,38 @@ function sanitizeIntegerInRange(input, min, max, fallback) {
   const rounded = Math.round(input);
   return Math.max(min, Math.min(max, rounded));
 }
+function sanitizeTextureSurface(input) {
+  if (input === "appGrid" || input === "sidebarContent" || input === "editorStage") {
+    return input;
+  }
+  return DEFAULT_APP_STATE.menu.textureActiveSurface ?? "appGrid";
+}
+function sanitizeTextureColor(input, fallback) {
+  const source = input && typeof input === "object" ? input : {};
+  return {
+    h: sanitizeIntegerInRange(source.h, 0, 360, fallback.h),
+    s: sanitizeRatio(source.s, fallback.s),
+    v: sanitizeRatio(source.v, fallback.v),
+    a: sanitizeRatio(source.a, fallback.a)
+  };
+}
+function sanitizeTextureMaterial(input, fallback) {
+  const source = input && typeof input === "object" ? input : {};
+  return {
+    seed: sanitizeIntegerInRange(source.seed, 0, 2147483647, fallback.seed),
+    granularity: sanitizeIntegerInRange(source.granularity, 1, 40, fallback.granularity),
+    vSteps: sanitizeIntegerInRange(source.vSteps, 2, 16, fallback.vSteps),
+    color: sanitizeTextureColor(source.color, fallback.color)
+  };
+}
+function sanitizeTextureMaterials(input) {
+  const source = input && typeof input === "object" ? input : {};
+  const next = { ...DEFAULT_TEXTURE_MATERIALS };
+  for (const surface of TEXTURE_SURFACES) {
+    next[surface] = sanitizeTextureMaterial(source[surface], DEFAULT_TEXTURE_MATERIALS[surface]);
+  }
+  return next;
+}
 function sanitizeCollapsedList(input) {
   if (!Array.isArray(input)) {
     return [];
@@ -470,6 +526,9 @@ function sanitizeMenu(input) {
       DEFAULT_APP_STATE.menu.editorGlyphPaddingPx ?? 1
     ),
     highlightGridOutlineColor: typeof (input == null ? void 0 : input.highlightGridOutlineColor) === "string" ? input.highlightGridOutlineColor : DEFAULT_APP_STATE.menu.highlightGridOutlineColor ?? "#00000022",
+    textureEnabled: Boolean(input == null ? void 0 : input.textureEnabled),
+    textureActiveSurface: sanitizeTextureSurface(input == null ? void 0 : input.textureActiveSurface),
+    textureMaterials: sanitizeTextureMaterials(input == null ? void 0 : input.textureMaterials),
     sidebarWidthRatio: sanitizeRatio(input == null ? void 0 : input.sidebarWidthRatio, DEFAULT_APP_STATE.menu.sidebarWidthRatio),
     tagSplitRatio: sanitizeRatio(input == null ? void 0 : input.tagSplitRatio, DEFAULT_APP_STATE.menu.tagSplitRatio),
     scrollEaseMultiplier: sanitizePositive(input == null ? void 0 : input.scrollEaseMultiplier, DEFAULT_APP_STATE.menu.scrollEaseMultiplier ?? 1),
@@ -629,6 +688,14 @@ function parseLegacyMetadata(rawText) {
   } catch {
     return { tags: [], bodyText: normalized, hasLegacyHeader: false };
   }
+}
+function serializeTextureColorHsva(color) {
+  return JSON.stringify({
+    h: Number(color.h.toFixed(4)),
+    s: Number(color.s.toFixed(4)),
+    v: Number(color.v.toFixed(4)),
+    a: Number(color.a.toFixed(4))
+  });
 }
 class DatabaseService {
   constructor(dataRoot) {
@@ -1217,6 +1284,71 @@ class DatabaseService {
     db.prepare("DELETE FROM notes WHERE id = ? AND isTemp = 1").run(noteId);
     db.prepare("DELETE FROM notes_fts WHERE noteId = ?").run(noteId);
   }
+  getTextureCache(request) {
+    const db = this.requireDb();
+    const colorHsva = serializeTextureColorHsva(request.color);
+    const row = db.prepare(`
+      SELECT data, mimeType
+      FROM texture_cache
+      WHERE surface = ?
+        AND width = ?
+        AND height = ?
+        AND seed = ?
+        AND granularity = ?
+        AND vSteps = ?
+        AND colorHsva = ?
+        AND algorithmVersion = ?
+      LIMIT 1
+    `).get(
+      request.surface,
+      Math.max(1, Math.round(request.width)),
+      Math.max(1, Math.round(request.height)),
+      Math.max(0, Math.round(request.seed)),
+      Number(request.granularity.toFixed(4)),
+      Math.max(2, Math.round(request.vSteps)),
+      colorHsva,
+      Math.max(1, Math.round(request.algorithmVersion))
+    );
+    if (!row) {
+      return null;
+    }
+    return {
+      data: new Uint8Array(row.data),
+      mimeType: row.mimeType
+    };
+  }
+  saveTextureCache(request, payload) {
+    const db = this.requireDb();
+    const colorHsva = serializeTextureColorHsva(request.color);
+    db.prepare(`
+      INSERT OR REPLACE INTO texture_cache (
+        surface,
+        width,
+        height,
+        seed,
+        granularity,
+        vSteps,
+        colorHsva,
+        algorithmVersion,
+        data,
+        mimeType,
+        createdAt
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      request.surface,
+      Math.max(1, Math.round(request.width)),
+      Math.max(1, Math.round(request.height)),
+      Math.max(0, Math.round(request.seed)),
+      Number(request.granularity.toFixed(4)),
+      Math.max(2, Math.round(request.vSteps)),
+      colorHsva,
+      Math.max(1, Math.round(request.algorithmVersion)),
+      Buffer.from(payload.data),
+      payload.mimeType || "image/webp",
+      Date.now()
+    );
+  }
   ensureSchema() {
     const db = this.requireDb();
     db.exec(`
@@ -1274,6 +1406,23 @@ class DatabaseService {
         title,
         content
       );
+
+      CREATE TABLE IF NOT EXISTS texture_cache (
+        surface TEXT NOT NULL,
+        width INTEGER NOT NULL,
+        height INTEGER NOT NULL,
+        seed INTEGER NOT NULL,
+        granularity REAL NOT NULL,
+        vSteps INTEGER NOT NULL,
+        colorHsva TEXT NOT NULL,
+        algorithmVersion INTEGER NOT NULL,
+        data BLOB NOT NULL,
+        mimeType TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        PRIMARY KEY (surface, width, height, seed, granularity, vSteps, colorHsva, algorithmVersion)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_texture_cache_created_at ON texture_cache(createdAt DESC);
     `);
     this.ensureNotesColumn("contentChecksum", "TEXT");
   }
@@ -1397,6 +1546,10 @@ const LEGACY_DB_CHANNELS = {
   syncExternalNoteToFile: "legacy-db:sync-external-note-to-file",
   getExternalSyncState: "legacy-db:get-external-sync-state",
   deleteTempNote: "legacy-db:delete-temp-note"
+};
+const TEXTURE_CHANNELS = {
+  getCached: "texture:cache:get",
+  saveCached: "texture:cache:save"
 };
 const __dirname$1 = path.dirname(fileURLToPath(import.meta.url));
 process.env.APP_ROOT = path.join(__dirname$1, "..");
@@ -1561,6 +1714,12 @@ function registerIpcHandlers() {
   });
   ipcMain.handle(LEGACY_DB_CHANNELS.deleteTempNote, async (_event, noteId) => {
     databaseService.deleteTempNote(noteId);
+  });
+  ipcMain.handle(TEXTURE_CHANNELS.getCached, async (_event, request) => {
+    return databaseService.getTextureCache(request);
+  });
+  ipcMain.handle(TEXTURE_CHANNELS.saveCached, async (_event, request, payload) => {
+    databaseService.saveTextureCache(request, payload);
   });
 }
 function readCurrentWindowState(windowRef) {

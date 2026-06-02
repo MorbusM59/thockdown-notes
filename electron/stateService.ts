@@ -8,6 +8,7 @@ import type {
   SidebarMode,
   WindowState,
 } from '../src/shared/appState';
+import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureColorHsva, type TextureMaterialSettings, type TextureMaterialsBySurface, type TextureSurfaceKey } from '../src/textures/types';
 
 const APP_STATE_FILE = 'app-state.json';
 const WINDOW_STATE_FILE = 'window-state.json';
@@ -29,6 +30,9 @@ const DEFAULT_APP_STATE: AppState = {
     editorSpacing: 'cozy',
     editorGlyphPaddingPx: 1,
     highlightGridOutlineColor: '#00000022',
+    textureEnabled: false,
+    textureActiveSurface: 'appGrid',
+    textureMaterials: DEFAULT_TEXTURE_MATERIALS,
     sidebarWidthRatio: 0.306,
     tagSplitRatio: 0.645,
     scrollEaseMultiplier: 1.5,
@@ -123,6 +127,42 @@ function sanitizeIntegerInRange(input: unknown, min: number, max: number, fallba
   return Math.max(min, Math.min(max, rounded));
 }
 
+function sanitizeTextureSurface(input: unknown): TextureSurfaceKey {
+  if (input === 'appGrid' || input === 'sidebarContent' || input === 'editorStage') {
+    return input;
+  }
+  return DEFAULT_APP_STATE.menu!.textureActiveSurface ?? 'appGrid';
+}
+
+function sanitizeTextureColor(input: unknown, fallback: TextureColorHsva): TextureColorHsva {
+  const source = (input && typeof input === 'object') ? input as Partial<TextureColorHsva> : {};
+  return {
+    h: sanitizeIntegerInRange(source.h, 0, 360, fallback.h),
+    s: sanitizeRatio(source.s, fallback.s),
+    v: sanitizeRatio(source.v, fallback.v),
+    a: sanitizeRatio(source.a, fallback.a),
+  };
+}
+
+function sanitizeTextureMaterial(input: unknown, fallback: TextureMaterialSettings): TextureMaterialSettings {
+  const source = (input && typeof input === 'object') ? input as Partial<TextureMaterialSettings> : {};
+  return {
+    seed: sanitizeIntegerInRange(source.seed, 0, 0x7fffffff, fallback.seed),
+    granularity: sanitizeIntegerInRange(source.granularity, 1, 40, fallback.granularity),
+    vSteps: sanitizeIntegerInRange(source.vSteps, 2, 16, fallback.vSteps),
+    color: sanitizeTextureColor(source.color, fallback.color),
+  };
+}
+
+function sanitizeTextureMaterials(input: unknown): TextureMaterialsBySurface {
+  const source = (input && typeof input === 'object') ? input as Partial<TextureMaterialsBySurface> : {};
+  const next = { ...DEFAULT_TEXTURE_MATERIALS } as TextureMaterialsBySurface;
+  for (const surface of TEXTURE_SURFACES) {
+    next[surface] = sanitizeTextureMaterial(source[surface], DEFAULT_TEXTURE_MATERIALS[surface]);
+  }
+  return next;
+}
+
 function sanitizeCollapsedList(input: unknown): string[] {
   if (!Array.isArray(input)) {
     return [];
@@ -190,6 +230,9 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
       typeof input?.highlightGridOutlineColor === 'string'
         ? input.highlightGridOutlineColor
         : (DEFAULT_APP_STATE.menu!.highlightGridOutlineColor ?? '#00000022'),
+    textureEnabled: Boolean(input?.textureEnabled),
+    textureActiveSurface: sanitizeTextureSurface(input?.textureActiveSurface),
+    textureMaterials: sanitizeTextureMaterials(input?.textureMaterials),
     sidebarWidthRatio: sanitizeRatio(input?.sidebarWidthRatio, DEFAULT_APP_STATE.menu!.sidebarWidthRatio),
     tagSplitRatio: sanitizeRatio(input?.tagSplitRatio, DEFAULT_APP_STATE.menu!.tagSplitRatio),
     scrollEaseMultiplier: sanitizePositive(input?.scrollEaseMultiplier, DEFAULT_APP_STATE.menu!.scrollEaseMultiplier ?? 1),

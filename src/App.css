@@ -67,6 +67,9 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.65),
     inset 0 -1px 0 rgba(48, 40, 34, 0.2),
     0 0 1px rgba(0, 0, 0, 0.25);
+  --texture-app-grid: none;
+  --texture-sidebar-content: none;
+  --texture-editor-stage: none;
 }
 
 .app-shell,
@@ -162,7 +165,12 @@ button.active,
 }
 
 .app-grid {
-  background: linear-gradient(135deg, #f5f3f2, #e9e5e2);
+  background-color: #ece8e4;
+  background-image: var(--texture-app-grid), linear-gradient(135deg, #f5f3f2, #e9e5e2);
+  background-repeat: no-repeat, no-repeat;
+  background-size: 100% 100%, 100% 100%;
+  background-position: 0 0, 0 0;
+  background-blend-mode: multiply, normal;
   grid-template-columns: 300px 8px minmax(320px, 1fr) 8px minmax(220px, 0.55fr) 8px 160px;
   grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-areas:
@@ -387,6 +395,11 @@ body.splitter-dragging {
   border-left: none;
   border-radius: 0 9px 9px 0;
   box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.5), inset 0 0 6px rgba(0, 0, 0, 0.2), 0 0 2px var(--color-shadow-white);
+  background-image: var(--texture-sidebar-content);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: 0 0;
+  background-blend-mode: multiply;
 }
 
 .sidebar-content.is-paged-mode {
@@ -820,9 +833,9 @@ body.splitter-dragging {
 }
 
 .toolbar-flyout-section-colors {
-  width: 159px;
-  min-width: 159px;
-  max-width: 159px;
+  width: fit-content;
+  min-width: 0;
+  max-width: none;
   gap: 4px;
 }
 
@@ -846,6 +859,7 @@ body.splitter-dragging {
   gap: 4px;
   min-height: 0;
   height: auto;
+  overflow: visible;
   --color-grid-gap: 4px;
   --color-grid-cell: 32px;
 }
@@ -863,6 +877,11 @@ body.splitter-dragging {
 
 .toolbar-flyout-hsva-grid {
   grid-template-columns: repeat(2, var(--color-grid-cell));
+  grid-template-rows: repeat(3, var(--color-grid-cell));
+}
+
+.toolbar-flyout-texture-grid {
+  grid-template-columns: repeat(1, var(--color-grid-cell));
   grid-template-rows: repeat(3, var(--color-grid-cell));
 }
 
@@ -920,6 +939,24 @@ body.splitter-dragging {
   justify-self: center;
   align-self: center;
   transition: none;
+}
+
+.toolbar-flyout-texture-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+  flex: 0 0 auto;
+}
+
+.toolbar-flyout-texture-preview {
+  grid-column: auto;
+  width: 100%;
+  height: 32px;
+  justify-self: auto;
+  align-self: auto;
 }
 
 body.hsva-dragging,

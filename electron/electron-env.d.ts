@@ -28,4 +28,5 @@ interface Window {
   measlyState?: import('../src/shared/appState').AppStateApi
   measlyExternalFiles?: import('../src/shared/externalFiles').ExternalFilesApi
   measlyLegacyDb?: import('../src/shared/legacyDbFeatures').LegacyDbApi
+  measlyTextures?: import('../src/shared/textures').TextureCacheApi
 }

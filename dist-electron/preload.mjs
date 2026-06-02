@@ -44,6 +44,10 @@ const LEGACY_DB_CHANNELS = {
   getExternalSyncState: "legacy-db:get-external-sync-state",
   deleteTempNote: "legacy-db:delete-temp-note"
 };
+const TEXTURE_CHANNELS = {
+  getCached: "texture:cache:get",
+  saveCached: "texture:cache:save"
+};
 electron.contextBridge.exposeInMainWorld("ipcRenderer", {
   on(...args) {
     const [channel, listener] = args;
@@ -120,3 +124,8 @@ const legacyDbApi = {
   deleteTempNote: (noteId) => electron.ipcRenderer.invoke(LEGACY_DB_CHANNELS.deleteTempNote, noteId)
 };
 electron.contextBridge.exposeInMainWorld("measlyLegacyDb", legacyDbApi);
+const textureCacheApi = {
+  getCachedTexture: (request) => electron.ipcRenderer.invoke(TEXTURE_CHANNELS.getCached, request),
+  saveCachedTexture: (request, payload) => electron.ipcRenderer.invoke(TEXTURE_CHANNELS.saveCached, request, payload)
+};
+electron.contextBridge.exposeInMainWorld("measlyTextures", textureCacheApi);

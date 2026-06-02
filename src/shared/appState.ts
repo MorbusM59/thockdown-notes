@@ -1,3 +1,5 @@
+import type { TextureMaterialsBySurface, TextureSurfaceKey } from '../textures/types';
+
 export const APP_STATE_CHANNELS = {
   loadAppState: 'state:app:load',
   saveAppState: 'state:app:save',
@@ -45,6 +47,9 @@ export interface PersistedMenuState {
   highlightTopBackgroundColor?: string;
   highlightBottomBackgroundColor?: string;
   highlightGridOutlineColor?: string;
+  textureEnabled?: boolean;
+  textureActiveSurface?: TextureSurfaceKey;
+  textureMaterials?: TextureMaterialsBySurface;
   // Legacy render smooth-scroll keys (pre curve-model / pre maxSpeed migration).
   renderScrollSmoothnessSec?: number;
   renderScrollEaseMultiplier?: number;

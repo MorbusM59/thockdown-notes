@@ -1,4 +1,5 @@
 import type { AppState, AppStateApi, WindowState } from '../shared/appState'
+import type { TextureCacheApi, TextureCacheHit, TextureCacheRequest } from '../shared/textures'
 import type {
   AddTagInput,
   CreateNoteInput,
@@ -21,6 +22,7 @@ type BrowserMockStore = {
   notes: NoteDocument[]
   appState: AppState
   windowState: WindowState
+  textureCache: Record<string, { mimeType: string; dataBase64: string }>
 }
 
 type BrowserMockWindow = Window & {
@@ -91,6 +93,27 @@ function createId(): string {
   return `${stamp}_${rand}`
 }
 
+function toBase64(data: Uint8Array): string {
+  let binary = ''
+  for (let i = 0; i < data.length; i += 1) {
+    binary += String.fromCharCode(data[i])
+  }
+  return btoa(binary)
+}
+
+function fromBase64(value: string): Uint8Array {
+  const binary = atob(value)
+  const out = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) {
+    out[i] = binary.charCodeAt(i)
+  }
+  return out
+}
+
+function serializeTextureKey(request: TextureCacheRequest): string {
+  return JSON.stringify(request)
+}
+
 function loadStore(): BrowserMockStore {
   try {
     const raw = window.localStorage.getItem(MOCK_STORAGE_KEY)
@@ -99,6 +122,7 @@ function loadStore(): BrowserMockStore {
         notes: [],
         appState: clone(DEFAULT_APP_STATE),
         windowState: clone(DEFAULT_WINDOW_STATE),
+        textureCache: {},
       }
     }
 
@@ -118,12 +142,16 @@ function loadStore(): BrowserMockStore {
             ...(parsed.windowState as WindowState),
           }
         : clone(DEFAULT_WINDOW_STATE),
+      textureCache: parsed.textureCache && typeof parsed.textureCache === 'object'
+        ? (parsed.textureCache as Record<string, { mimeType: string; dataBase64: string }>)
+        : {},
     }
   } catch {
     return {
       notes: [],
       appState: clone(DEFAULT_APP_STATE),
       windowState: clone(DEFAULT_WINDOW_STATE),
+      textureCache: {},
     }
   }
 }
@@ -317,6 +345,36 @@ function buildStateBridge(storeRef: { current: BrowserMockStore }): AppStateApi 
   }
 }
 
+function buildTextureBridge(storeRef: { current: BrowserMockStore }): TextureCacheApi {
+  const mutate = <T,>(transform: (store: BrowserMockStore) => T): T => {
+    const result = transform(storeRef.current)
+    persistStore(storeRef.current)
+    return result
+  }
+
+  return {
+    async getCachedTexture(request: TextureCacheRequest): Promise<TextureCacheHit | null> {
+      const key = serializeTextureKey(request)
+      const entry = storeRef.current.textureCache[key]
+      if (!entry) return null
+      return {
+        mimeType: entry.mimeType,
+        data: fromBase64(entry.dataBase64),
+      }
+    },
+
+    async saveCachedTexture(request: TextureCacheRequest, payload: TextureCacheHit): Promise<void> {
+      mutate((store) => {
+        const key = serializeTextureKey(request)
+        store.textureCache[key] = {
+          mimeType: payload.mimeType,
+          dataBase64: toBase64(payload.data),
+        }
+      })
+    },
+  }
+}
+
 export function installBrowserMockBridges(): void {
   if (!import.meta.env.DEV) return
 
@@ -324,7 +382,7 @@ export function installBrowserMockBridges(): void {
   if (scopedWindow.__measlyBrowserMockInstalled) return
 
   // Electron renderer already owns bridge provisioning through preload.
-  if (window.measlyNotes && window.measlyState) {
+  if (window.measlyNotes && window.measlyState && window.measlyTextures) {
     scopedWindow.__measlyBrowserMockInstalled = true
     return
   }
@@ -336,6 +394,9 @@ export function installBrowserMockBridges(): void {
   }
   if (!window.measlyState) {
     window.measlyState = buildStateBridge(storeRef)
+  }
+  if (!window.measlyTextures) {
+    window.measlyTextures = buildTextureBridge(storeRef)
   }
 
   scopedWindow.__measlyBrowserMockInstalled = true

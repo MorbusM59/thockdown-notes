@@ -66,6 +66,14 @@ import {
   FILTER_YEARS,
   handleMultiSelect,
 } from './shared/filterConstants'
+import {
+  DEFAULT_TEXTURE_MATERIALS,
+  TEXTURE_SURFACES,
+  type TextureMaterialSettings,
+  type TextureMaterialsBySurface,
+  type TextureSurfaceKey,
+} from './textures/types'
+import { useTextureSurface } from './textures/useTextureSurface'
 
 const SAVE_DEBOUNCE_MS = 350
 const NEW_NOTE_TEMPLATE = '# '
@@ -81,6 +89,10 @@ const DEFAULT_SIDEBAR_RATIO = 0.306
 const DEFAULT_TAG_SPLIT_RATIO = 0.645
 const EDITOR_GLYPH_PADDING_MIN_PX = 0
 const EDITOR_GLYPH_PADDING_MAX_PX = 1
+const TEXTURE_GRANULARITY_MIN = 1
+const TEXTURE_GRANULARITY_MAX = 40
+const TEXTURE_VSTEPS_MIN = 2
+const TEXTURE_VSTEPS_MAX = 16
 const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28
 const SCROLL_TRACK_EDGE_GAP_PX = 3
 const NOTE_RIGHT_CLICK_HOLD_MS = 200
@@ -113,6 +125,18 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   topBackground: 'fa-solid fa-square-caret-up',
   bottomBackground: 'fa-solid fa-square-caret-down',
   gridOutline: 'fa-regular fa-square',
+}
+
+const TEXTURE_SURFACE_TITLES: Record<TextureSurfaceKey, string> = {
+  appGrid: 'App grid texture color',
+  sidebarContent: 'Sidebar texture color',
+  editorStage: 'Editor texture color',
+}
+
+const TEXTURE_SURFACE_ICONS: Record<TextureSurfaceKey, string> = {
+  appGrid: 'fa-solid fa-table-columns',
+  sidebarContent: 'fa-solid fa-list',
+  editorStage: 'fa-solid fa-table-cells',
 }
 
 type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find'
@@ -151,8 +175,10 @@ type HsvaDragState = {
 
 type ColorArmSource =
   | { kind: 'element'; key: HighlightColorKey }
+  | { kind: 'texture'; key: TextureSurfaceKey }
   | { kind: 'hsva'; key: HsvaControlKey }
   | { kind: 'active-color' }
+  | { kind: 'texture-active-color' }
 
 type SidebarViewState = {
   scrollTop: number
@@ -765,6 +791,27 @@ function pad2(value: number): string {
   return String(value).padStart(2, '0')
 }
 
+function cloneTextureMaterials(source: TextureMaterialsBySurface): TextureMaterialsBySurface {
+  return {
+    appGrid: {
+      ...source.appGrid,
+      color: { ...source.appGrid.color },
+    },
+    sidebarContent: {
+      ...source.sidebarContent,
+      color: { ...source.sidebarContent.color },
+    },
+    editorStage: {
+      ...source.editorStage,
+      color: { ...source.editorStage.color },
+    },
+  }
+}
+
+function quantizeTextureSize(value: number): number {
+  return Math.max(128, Math.ceil(Math.max(0, value) / 64) * 64)
+}
+
 function formatCreatedDate(timestampMs: number): string {
   const date = new Date(timestampMs)
   const day = pad2(date.getDate())
@@ -1239,6 +1286,7 @@ function App() {
   const adapterRef = useRef<EditorAdapter | null>(null)
   const appShellRef = useRef<HTMLDivElement | null>(null)
   const sidebarContentRef = useRef<HTMLDivElement | null>(null)
+  const editorStageRef = useRef<HTMLDivElement | null>(null)
   const sidebarSearchInputRef = useRef<HTMLInputElement | null>(null)
   const tagInputRef = useRef<HTMLInputElement | null>(null)
   const [notes, setNotes] = useState<NoteSummary[]>([])
@@ -1297,6 +1345,12 @@ function App() {
   const [isScrollSettingsOpen, setIsScrollSettingsOpen] = useState(false)
   const [highlightColors, setHighlightColors] = useState<HighlightColors>(DEFAULT_HIGHLIGHT_COLORS)
   const [activeHighlightColorKey, setActiveHighlightColorKey] = useState<HighlightColorKey>('caret')
+  const [textureEnabled] = useState(true)
+  const [textureActiveSurface, setTextureActiveSurface] = useState<TextureSurfaceKey>('appGrid')
+  const [textureMaterials, setTextureMaterials] = useState<TextureMaterialsBySurface>(() => cloneTextureMaterials(DEFAULT_TEXTURE_MATERIALS))
+  const [appGridTextureSize, setAppGridTextureSize] = useState({ width: 1280, height: 720 })
+  const [sidebarTextureSize, setSidebarTextureSize] = useState({ width: 512, height: 720 })
+  const [editorStageTextureSize, setEditorStageTextureSize] = useState({ width: 1280, height: 720 })
   const [armedColorSource, setArmedColorSource] = useState<ColorArmSource | null>(null)
   const [activeColorHsva, setActiveColorHsva] = useState<HsvaColor>(() => {
     const seed = parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS.caret) ?? { r: 120, g: 115, b: 112, a: 0.8 }
@@ -1376,8 +1430,37 @@ function App() {
     [editorStyle, editorFontSize, editorSpacing, editorGlyphPaddingPx, editorFontLoadVersion],
   )
   const editorFontFamily = useMemo(() => resolveEditorFontFamily(editorStyle), [editorStyle])
+  const activeTextureMaterial = useMemo(
+    () => textureMaterials[textureActiveSurface],
+    [textureActiveSurface, textureMaterials],
+  )
+  const appGridTextureCss = useTextureSurface({
+    enabled: textureEnabled,
+    surface: 'appGrid',
+    width: appGridTextureSize.width,
+    height: appGridTextureSize.height,
+    material: textureMaterials.appGrid,
+  })
+  const sidebarTextureCss = useTextureSurface({
+    enabled: textureEnabled,
+    surface: 'sidebarContent',
+    width: sidebarTextureSize.width,
+    height: sidebarTextureSize.height,
+    material: textureMaterials.sidebarContent,
+  })
+  const editorStageTextureCss = useTextureSurface({
+    enabled: textureEnabled,
+    surface: 'editorStage',
+    width: editorStageTextureSize.width,
+    height: editorStageTextureSize.height,
+    material: textureMaterials.editorStage,
+  })
   const activeColorRgba = useMemo(() => hsvaToRgba(activeColorHsva), [activeColorHsva])
   const activeColorCss = useMemo(() => rgbaToCssColor(activeColorRgba), [activeColorRgba])
+  const activeTextureColorCss = useMemo(
+    () => rgbaToCssColor(hsvaToRgba(activeTextureMaterial.color)),
+    [activeTextureMaterial],
+  )
 
   const hsvaDisplayColors = useMemo(() => {
     const hColor = rgbaToCssColor(hsvaToRgba({ h: activeColorHsva.h, s: 1, v: 1, a: 1 }))
@@ -1387,12 +1470,37 @@ function App() {
     return { hColor, sColor, vColor, aGhostColor }
   }, [activeColorHsva])
 
+  const updateTextureMaterial = useCallback((surface: TextureSurfaceKey, updater: (current: TextureMaterialSettings) => TextureMaterialSettings) => {
+    setTextureMaterials((previous) => {
+      const next = cloneTextureMaterials(previous)
+      next[surface] = updater(next[surface])
+      return next
+    })
+  }, [])
+
+  const updateActiveTextureMaterial = useCallback((updater: (current: TextureMaterialSettings) => TextureMaterialSettings) => {
+    updateTextureMaterial(textureActiveSurface, updater)
+  }, [textureActiveSurface, updateTextureMaterial])
+
   const updateHighlightColor = useCallback((key: HighlightColorKey, color: RgbaColor) => {
     setHighlightColors((previous) => ({
       ...previous,
       [key]: rgbaToCssColor(color),
     }))
   }, [])
+
+  const updateTextureColor = useCallback((surface: TextureSurfaceKey, color: RgbaColor) => {
+    const nextHsva = rgbaToHsva(color)
+    updateTextureMaterial(surface, (current) => ({
+      ...current,
+      color: {
+        h: nextHsva.h,
+        s: nextHsva.s,
+        v: nextHsva.v,
+        a: nextHsva.a,
+      },
+    }))
+  }, [updateTextureMaterial])
 
   const clearColorArmTimer = useCallback(() => {
     if (colorArmTimerRef.current === null) return
@@ -1406,6 +1514,10 @@ function App() {
       ?? { r: 233, g: 230, b: 227, a: 1 }
   }, [])
 
+  const resolveTextureColor = useCallback((source: TextureMaterialsBySurface, surface: TextureSurfaceKey): RgbaColor => {
+    return hsvaToRgba(source[surface].color)
+  }, [])
+
   const applyElementColorToElement = useCallback((sourceKey: HighlightColorKey, targetKey: HighlightColorKey) => {
     if (sourceKey === targetKey) return
 
@@ -1417,6 +1529,22 @@ function App() {
       }
     })
   }, [resolveHighlightColor])
+
+  const applyTextureColorToTexture = useCallback((sourceSurface: TextureSurfaceKey, targetSurface: TextureSurfaceKey) => {
+    if (sourceSurface === targetSurface) return
+    const source = resolveTextureColor(textureMaterials, sourceSurface)
+    updateTextureColor(targetSurface, source)
+  }, [resolveTextureColor, textureMaterials, updateTextureColor])
+
+  const applyElementColorToTexture = useCallback((sourceKey: HighlightColorKey, targetSurface: TextureSurfaceKey) => {
+    const source = resolveHighlightColor(highlightColors, sourceKey)
+    updateTextureColor(targetSurface, source)
+  }, [highlightColors, resolveHighlightColor, updateTextureColor])
+
+  const applyTextureColorToElement = useCallback((sourceSurface: TextureSurfaceKey, targetKey: HighlightColorKey) => {
+    const source = resolveTextureColor(textureMaterials, sourceSurface)
+    updateHighlightColor(targetKey, source)
+  }, [resolveTextureColor, textureMaterials, updateHighlightColor])
 
   const applyHsvaValueToElement = useCallback((sourceKey: HsvaControlKey, targetKey: HighlightColorKey) => {
     setHighlightColors((previous) => {
@@ -1438,12 +1566,31 @@ function App() {
     })
   }, [activeColorHsva, resolveHighlightColor])
 
+  const applyHsvaValueToTexture = useCallback((sourceKey: HsvaControlKey, targetSurface: TextureSurfaceKey) => {
+    const target = resolveTextureColor(textureMaterials, targetSurface)
+    const targetHsva = rgbaToHsva(target)
+    const sourceValue = activeColorHsva[sourceKey]
+
+    const nextHsva: HsvaColor = {
+      ...targetHsva,
+      [sourceKey]: sourceKey === 'h'
+        ? Math.max(0, Math.min(360, sourceValue))
+        : Math.max(0, Math.min(1, sourceValue)),
+    }
+
+    updateTextureColor(targetSurface, hsvaToRgba(nextHsva))
+  }, [activeColorHsva, resolveTextureColor, textureMaterials, updateTextureColor])
+
   const applyActiveColorToElement = useCallback((targetKey: HighlightColorKey) => {
     setHighlightColors((previous) => ({
       ...previous,
       [targetKey]: activeColorCss,
     }))
   }, [activeColorCss])
+
+  const applyActiveColorToTexture = useCallback((targetSurface: TextureSurfaceKey) => {
+    updateTextureColor(targetSurface, activeColorRgba)
+  }, [activeColorRgba, updateTextureColor])
 
   const applyElementValueToHsvaControl = useCallback((sourceKey: HighlightColorKey, control: HsvaControlKey) => {
     const source = resolveHighlightColor(highlightColors, sourceKey)
@@ -1455,10 +1602,25 @@ function App() {
     }))
   }, [highlightColors, resolveHighlightColor])
 
+  const applyTextureValueToHsvaControl = useCallback((sourceSurface: TextureSurfaceKey, control: HsvaControlKey) => {
+    const source = resolveTextureColor(textureMaterials, sourceSurface)
+    const sourceHsva = rgbaToHsva(source)
+
+    setActiveColorHsva((previous) => ({
+      ...previous,
+      [control]: sourceHsva[control],
+    }))
+  }, [resolveTextureColor, textureMaterials])
+
   const applyElementColorToActiveColor = useCallback((sourceKey: HighlightColorKey) => {
     const source = resolveHighlightColor(highlightColors, sourceKey)
     setActiveColorHsva(rgbaToHsva(source))
   }, [highlightColors, resolveHighlightColor])
+
+  const applyTextureColorToActiveColor = useCallback((sourceSurface: TextureSurfaceKey) => {
+    const source = resolveTextureColor(textureMaterials, sourceSurface)
+    setActiveColorHsva(rgbaToHsva(source))
+  }, [resolveTextureColor, textureMaterials])
 
   const startColorArmHold = useCallback((source: ColorArmSource, event: MouseEvent<HTMLButtonElement>) => {
     if (event.button !== 2) return
@@ -1749,6 +1911,9 @@ function App() {
       highlightTopBackgroundColor: highlightColors.topBackground,
       highlightBottomBackgroundColor: highlightColors.bottomBackground,
       highlightGridOutlineColor: highlightColors.gridOutline,
+      textureEnabled,
+      textureActiveSurface,
+      textureMaterials,
       sidebarViewState: {
         ...effectiveViewStateByMode,
         category: {
@@ -1779,6 +1944,9 @@ function App() {
     renderScrollMaxSpeedPxPerSec,
     renderScrollSkew,
     renderScrollTotalTimeSec,
+    textureActiveSurface,
+    textureEnabled,
+    textureMaterials,
     highlightColors,
     searchQuery,
     selectedMonths,
@@ -2026,6 +2194,52 @@ function App() {
     setIsScrollSettingsOpen(false)
   }, [isPreviewMode])
 
+  useLayoutEffect(() => {
+    const appGridEl = appShellRef.current
+    const sidebarEl = sidebarContentRef.current
+    const stageEl = editorStageRef.current
+    if (!appGridEl || !sidebarEl || !stageEl) return
+
+    const updateAppGrid = () => {
+      const rect = appGridEl.getBoundingClientRect()
+      setAppGridTextureSize({
+        width: quantizeTextureSize(rect.width),
+        height: quantizeTextureSize(rect.height),
+      })
+    }
+    const updateSidebar = () => {
+      const rect = sidebarEl.getBoundingClientRect()
+      setSidebarTextureSize({
+        width: quantizeTextureSize(rect.width),
+        height: quantizeTextureSize(rect.height),
+      })
+    }
+    const updateEditorStage = () => {
+      const rect = stageEl.getBoundingClientRect()
+      setEditorStageTextureSize({
+        width: quantizeTextureSize(rect.width),
+        height: quantizeTextureSize(rect.height),
+      })
+    }
+
+    updateAppGrid()
+    updateSidebar()
+    updateEditorStage()
+
+    const observer = new ResizeObserver(() => {
+      updateAppGrid()
+      updateSidebar()
+      updateEditorStage()
+    })
+    observer.observe(appGridEl)
+    observer.observe(sidebarEl)
+    observer.observe(stageEl)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [isPreviewMode])
+
   const layout = useMemo(() => {
     const dividerTotalWidthPx = GRID_DIVIDER_PX * 3
     const maxSidebarWidthPx = Math.max(
@@ -2063,9 +2277,12 @@ function App() {
       '--color-grid-outline': highlightColors.gridOutline,
       '--color-caret': highlightColors.caret,
       '--color-selection': highlightColors.selection,
+      '--texture-app-grid': appGridTextureCss,
+      '--texture-sidebar-content': sidebarTextureCss,
+      '--texture-editor-stage': editorStageTextureCss,
     }
     return style
-  }, [highlightColors, layout.gridTemplateColumns])
+  }, [appGridTextureCss, editorStageTextureCss, highlightColors, layout.gridTemplateColumns, sidebarTextureCss])
 
   const queueAppStateSave = useCallback((selectedNoteId: string | null) => {
     if (!window.measlyState) return
@@ -3159,6 +3376,9 @@ function App() {
               bottomBackground: appState.menu.highlightBottomBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.bottomBackground,
               gridOutline: appState.menu.highlightGridOutlineColor ?? DEFAULT_HIGHLIGHT_COLORS.gridOutline,
             })
+            // Global texture enable is intentionally fixed on; per-surface alpha controls visibility.
+            setTextureActiveSurface(appState.menu.textureActiveSurface ?? 'appGrid')
+            setTextureMaterials(cloneTextureMaterials(appState.menu.textureMaterials ?? DEFAULT_TEXTURE_MATERIALS))
 
             setCurrentPage(loadedSidebarViewState[appState.menu.sidebarMode].page)
             setCategoryCollapsedPrimary(loadedSidebarViewState.category.collapsedPrimary)
@@ -6564,6 +6784,12 @@ function App() {
                             return
                           }
 
+                          if (armedColorSource?.kind === 'texture') {
+                            applyTextureColorToElement(armedColorSource.key, key)
+                            setActiveHighlightColorKey(key)
+                            return
+                          }
+
                           if (armedColorSource?.kind === 'hsva') {
                             applyHsvaValueToElement(armedColorSource.key, key)
                             setActiveHighlightColorKey(key)
@@ -6572,6 +6798,12 @@ function App() {
 
                           if (armedColorSource?.kind === 'active-color') {
                             applyActiveColorToElement(key)
+                            setActiveHighlightColorKey(key)
+                            return
+                          }
+
+                          if (armedColorSource?.kind === 'texture-active-color') {
+                            applyTextureColorToElement(textureActiveSurface, key)
                             setActiveHighlightColorKey(key)
                             return
                           }
@@ -6601,6 +6833,64 @@ function App() {
 
                   <span className="toolbar-flyout-color-separator" aria-hidden="true" />
 
+                  <div className="toolbar-flyout-color-grid toolbar-flyout-texture-grid" role="group" aria-label="Texture color targets">
+                    {TEXTURE_SURFACES.map((surface) => (
+                      <button
+                        key={surface}
+                        type="button"
+                        className={`toolbar-btn-icon toolbar-flyout-color-swatch${textureActiveSurface === surface ? ' is-active' : ''}${armedColorSource?.kind === 'texture' && armedColorSource.key === surface ? ' active' : ''}`}
+                        onClick={() => {
+                          setTextureActiveSurface(surface)
+
+                          if (armedColorSource?.kind === 'element') {
+                            applyElementColorToTexture(armedColorSource.key, surface)
+                            return
+                          }
+
+                          if (armedColorSource?.kind === 'texture') {
+                            applyTextureColorToTexture(armedColorSource.key, surface)
+                            return
+                          }
+
+                          if (armedColorSource?.kind === 'hsva') {
+                            applyHsvaValueToTexture(armedColorSource.key, surface)
+                            return
+                          }
+
+                          if (armedColorSource?.kind === 'active-color') {
+                            applyActiveColorToTexture(surface)
+                            return
+                          }
+
+                          if (armedColorSource?.kind === 'texture-active-color') {
+                            applyTextureColorToTexture(textureActiveSurface, surface)
+                            return
+                          }
+
+                          updateTextureColor(surface, activeColorRgba)
+                        }}
+                        onMouseDown={(event) => startColorArmHold({ kind: 'texture', key: surface }, event)}
+                        onMouseUp={(event) => {
+                          if (event.button !== 2) return
+                          clearColorArmTimer()
+                        }}
+                        onMouseLeave={() => {
+                          clearColorArmTimer()
+                        }}
+                        onContextMenu={(event) => {
+                          event.preventDefault()
+                          clearColorArmTimer()
+                        }}
+                        style={{ background: rgbaToCssColor(hsvaToRgba(textureMaterials[surface].color)) }}
+                        title={TEXTURE_SURFACE_TITLES[surface]}
+                      >
+                        <span className={`toolbar-flyout-color-swatch-glyph ${TEXTURE_SURFACE_ICONS[surface]}`} aria-hidden="true" />
+                      </button>
+                    ))}
+                  </div>
+
+                  <span className="toolbar-flyout-color-separator" aria-hidden="true" />
+
                   <div className="toolbar-flyout-color-grid toolbar-flyout-hsva-grid" role="group" aria-label="HSVA value controls">
                     <button
                       type="button"
@@ -6608,8 +6898,13 @@ function App() {
                       style={{ background: hsvaDisplayColors.hColor }}
                       title="Hue"
                       onClick={() => {
-                        if (armedColorSource?.kind !== 'element') return
-                        applyElementValueToHsvaControl(armedColorSource.key, 'h')
+                        if (armedColorSource?.kind === 'element') {
+                          applyElementValueToHsvaControl(armedColorSource.key, 'h')
+                          return
+                        }
+                        if (armedColorSource?.kind === 'texture') {
+                          applyTextureValueToHsvaControl(armedColorSource.key, 'h')
+                        }
                       }}
                       onPointerDown={(event) => {
                         startHsvaDrag('h', event)
@@ -6646,8 +6941,13 @@ function App() {
                       style={{ background: hsvaDisplayColors.sColor }}
                       title="Saturation"
                       onClick={() => {
-                        if (armedColorSource?.kind !== 'element') return
-                        applyElementValueToHsvaControl(armedColorSource.key, 's')
+                        if (armedColorSource?.kind === 'element') {
+                          applyElementValueToHsvaControl(armedColorSource.key, 's')
+                          return
+                        }
+                        if (armedColorSource?.kind === 'texture') {
+                          applyTextureValueToHsvaControl(armedColorSource.key, 's')
+                        }
                       }}
                       onPointerDown={(event) => {
                         startHsvaDrag('s', event)
@@ -6684,8 +6984,13 @@ function App() {
                       style={{ background: hsvaDisplayColors.vColor }}
                       title="Value"
                       onClick={() => {
-                        if (armedColorSource?.kind !== 'element') return
-                        applyElementValueToHsvaControl(armedColorSource.key, 'v')
+                        if (armedColorSource?.kind === 'element') {
+                          applyElementValueToHsvaControl(armedColorSource.key, 'v')
+                          return
+                        }
+                        if (armedColorSource?.kind === 'texture') {
+                          applyTextureValueToHsvaControl(armedColorSource.key, 'v')
+                        }
                       }}
                       onPointerDown={(event) => {
                         startHsvaDrag('v', event)
@@ -6722,8 +7027,13 @@ function App() {
                       style={{ background: 'var(--color-background-light)', color: hsvaDisplayColors.aGhostColor }}
                       title="Alpha"
                       onClick={() => {
-                        if (armedColorSource?.kind !== 'element') return
-                        applyElementValueToHsvaControl(armedColorSource.key, 'a')
+                        if (armedColorSource?.kind === 'element') {
+                          applyElementValueToHsvaControl(armedColorSource.key, 'a')
+                          return
+                        }
+                        if (armedColorSource?.kind === 'texture') {
+                          applyTextureValueToHsvaControl(armedColorSource.key, 'a')
+                        }
                       }}
                       onPointerDown={(event) => {
                         startHsvaDrag('a', event)
@@ -6777,7 +7087,99 @@ function App() {
                           applyElementColorToActiveColor(armedColorSource.key)
                           return
                         }
+                        if (armedColorSource?.kind === 'texture') {
+                          applyTextureColorToActiveColor(armedColorSource.key)
+                          return
+                        }
                         updateHighlightColor(activeHighlightColorKey, activeColorRgba)
+                      }}
+                    />
+                  </div>
+
+                  <span className="toolbar-flyout-color-separator" aria-hidden="true" />
+
+                  <div className="toolbar-flyout-texture-settings" aria-label="Texture generation settings">
+                    <CompactScrollbarSlider
+                      id="texture-seed"
+                      min={0}
+                      max={1000000}
+                      step={1}
+                      value={activeTextureMaterial.seed}
+                      trackLabel="seed"
+                      ariaLabel="Texture seed"
+                      onCommit={(value) => {
+                        updateActiveTextureMaterial((current) => ({
+                          ...current,
+                          seed: clamp(Math.round(value), 0, 1000000),
+                        }))
+                      }}
+                    />
+                    <CompactScrollbarSlider
+                      id="texture-granularity"
+                      min={TEXTURE_GRANULARITY_MIN}
+                      max={TEXTURE_GRANULARITY_MAX}
+                      step={1}
+                      value={activeTextureMaterial.granularity}
+                      trackLabel="granularity"
+                      ariaLabel="Texture granularity"
+                      onCommit={(value) => {
+                        updateActiveTextureMaterial((current) => ({
+                          ...current,
+                          granularity: clamp(Math.round(value), TEXTURE_GRANULARITY_MIN, TEXTURE_GRANULARITY_MAX),
+                        }))
+                      }}
+                    />
+                    <CompactScrollbarSlider
+                      id="texture-vsteps"
+                      min={TEXTURE_VSTEPS_MIN}
+                      max={TEXTURE_VSTEPS_MAX}
+                      step={1}
+                      value={activeTextureMaterial.vSteps}
+                      trackLabel="v-steps"
+                      ariaLabel="Texture value steps"
+                      onCommit={(value) => {
+                        updateActiveTextureMaterial((current) => ({
+                          ...current,
+                          vSteps: clamp(Math.round(value), TEXTURE_VSTEPS_MIN, TEXTURE_VSTEPS_MAX),
+                        }))
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color toolbar-flyout-texture-preview${armedColorSource?.kind === 'texture-active-color' ? ' active' : ''}`}
+                      title="Active texture color"
+                      style={{ background: `linear-gradient(${activeTextureColorCss}, ${activeTextureColorCss}), var(--color-background-light)` }}
+                      onMouseDown={(event) => {
+                        if (event.button !== 2) return
+                        startColorArmHold({ kind: 'texture-active-color' }, event)
+                      }}
+                      onMouseUp={(event) => {
+                        if (event.button !== 2) return
+                        clearColorArmTimer()
+                      }}
+                      onMouseLeave={clearColorArmTimer}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        clearColorArmTimer()
+                      }}
+                      onClick={() => {
+                        if (armedColorSource?.kind === 'element') {
+                          applyElementColorToTexture(armedColorSource.key, textureActiveSurface)
+                          return
+                        }
+                        if (armedColorSource?.kind === 'texture') {
+                          applyTextureColorToTexture(armedColorSource.key, textureActiveSurface)
+                          return
+                        }
+                        if (armedColorSource?.kind === 'hsva') {
+                          applyHsvaValueToTexture(armedColorSource.key, textureActiveSurface)
+                          return
+                        }
+                        if (armedColorSource?.kind === 'active-color') {
+                          applyActiveColorToTexture(textureActiveSurface)
+                          return
+                        }
+                        updateTextureColor(textureActiveSurface, activeColorRgba)
                       }}
                     />
                   </div>
@@ -6822,7 +7224,7 @@ function App() {
 
       <div className="editor-viewer-frame" style={{ gridArea: 'viewer' }}>
         <main className="editor-shell">
-          <div className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
+          <div ref={editorStageRef} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
             {!isPreviewMode ? (
               <Editor
                 key={activeNoteId ?? 'no-active-note'}

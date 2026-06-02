@@ -5,4 +5,5 @@ interface Window {
 	measlyState?: import('./shared/appState').AppStateApi;
 	measlyExternalFiles?: import('./shared/externalFiles').ExternalFilesApi;
 	measlyLegacyDb?: import('./shared/legacyDbFeatures').LegacyDbApi;
+	measlyTextures?: import('./shared/textures').TextureCacheApi;
 }

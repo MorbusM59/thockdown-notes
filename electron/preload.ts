@@ -18,6 +18,8 @@ import type { ExternalFilesApi } from '../src/shared/externalFiles'
 import { EXTERNAL_FILE_CHANNELS } from '../src/shared/externalFiles'
 import type { LegacyDbApi, NoteUiStatePayload } from '../src/shared/legacyDbFeatures'
 import { LEGACY_DB_CHANNELS } from '../src/shared/legacyDbFeatures'
+import type { TextureCacheApi } from '../src/shared/textures'
+import { TEXTURE_CHANNELS } from '../src/shared/textures'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
@@ -112,3 +114,10 @@ const legacyDbApi: LegacyDbApi = {
 }
 
 contextBridge.exposeInMainWorld('measlyLegacyDb', legacyDbApi)
+
+const textureCacheApi: TextureCacheApi = {
+  getCachedTexture: (request) => ipcRenderer.invoke(TEXTURE_CHANNELS.getCached, request),
+  saveCachedTexture: (request, payload) => ipcRenderer.invoke(TEXTURE_CHANNELS.saveCached, request, payload),
+}
+
+contextBridge.exposeInMainWorld('measlyTextures', textureCacheApi)
