@@ -93,6 +93,7 @@ const TEXTURE_GRANULARITY_MIN = 1
 const TEXTURE_GRANULARITY_MAX = 40
 const TEXTURE_VSTEPS_MIN = 2
 const TEXTURE_VSTEPS_MAX = 16
+const TEXTURE_PREVIEW_SURFACE: TextureSurfaceKey = 'appGrid'
 const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28
 const SCROLL_TRACK_EDGE_GAP_PX = 3
 const NOTE_RIGHT_CLICK_HOLD_MS = 200
@@ -178,7 +179,7 @@ type ColorArmSource =
   | { kind: 'texture'; key: TextureSurfaceKey }
   | { kind: 'hsva'; key: HsvaControlKey }
   | { kind: 'active-color' }
-  | { kind: 'texture-active-color' }
+  | { kind: 'texture-preview' }
 
 type SidebarViewState = {
   scrollTop: number
@@ -808,6 +809,22 @@ function cloneTextureMaterials(source: TextureMaterialsBySurface): TextureMateri
   }
 }
 
+function cloneTextureMaterial(source: TextureMaterialSettings): TextureMaterialSettings {
+  return {
+    ...source,
+    color: { ...source.color },
+  }
+}
+
+function toTexturePreviewMaterial(source: TextureMaterialSettings): TextureMaterialSettings {
+  return {
+    seed: source.seed,
+    granularity: source.granularity,
+    vSteps: source.vSteps,
+    color: { h: 0, s: 0, v: 1, a: 1 },
+  }
+}
+
 function quantizeTextureSize(value: number): number {
   return Math.max(128, Math.ceil(Math.max(0, value) / 64) * 64)
 }
@@ -1344,10 +1361,9 @@ function App() {
   const [renderScrollSkew, setRenderScrollSkew] = useState(() => getRenderScrollSkew())
   const [isScrollSettingsOpen, setIsScrollSettingsOpen] = useState(false)
   const [highlightColors, setHighlightColors] = useState<HighlightColors>(DEFAULT_HIGHLIGHT_COLORS)
-  const [activeHighlightColorKey, setActiveHighlightColorKey] = useState<HighlightColorKey>('caret')
   const [textureEnabled] = useState(true)
-  const [textureActiveSurface, setTextureActiveSurface] = useState<TextureSurfaceKey>('appGrid')
   const [textureMaterials, setTextureMaterials] = useState<TextureMaterialsBySurface>(() => cloneTextureMaterials(DEFAULT_TEXTURE_MATERIALS))
+  const [texturePreviewMaterial, setTexturePreviewMaterial] = useState<TextureMaterialSettings>(() => toTexturePreviewMaterial(DEFAULT_TEXTURE_MATERIALS.appGrid))
   const [appGridTextureSize, setAppGridTextureSize] = useState({ width: 1280, height: 720 })
   const [sidebarTextureSize, setSidebarTextureSize] = useState({ width: 512, height: 720 })
   const [editorStageTextureSize, setEditorStageTextureSize] = useState({ width: 1280, height: 720 })
@@ -1430,10 +1446,6 @@ function App() {
     [editorStyle, editorFontSize, editorSpacing, editorGlyphPaddingPx, editorFontLoadVersion],
   )
   const editorFontFamily = useMemo(() => resolveEditorFontFamily(editorStyle), [editorStyle])
-  const activeTextureMaterial = useMemo(
-    () => textureMaterials[textureActiveSurface],
-    [textureActiveSurface, textureMaterials],
-  )
   const appGridTextureCss = useTextureSurface({
     enabled: textureEnabled,
     surface: 'appGrid',
@@ -1455,12 +1467,15 @@ function App() {
     height: editorStageTextureSize.height,
     material: textureMaterials.editorStage,
   })
+  const texturePreviewCss = useTextureSurface({
+    enabled: true,
+    surface: TEXTURE_PREVIEW_SURFACE,
+    width: 96,
+    height: 32,
+    material: texturePreviewMaterial,
+  })
   const activeColorRgba = useMemo(() => hsvaToRgba(activeColorHsva), [activeColorHsva])
   const activeColorCss = useMemo(() => rgbaToCssColor(activeColorRgba), [activeColorRgba])
-  const activeTextureColorCss = useMemo(
-    () => rgbaToCssColor(hsvaToRgba(activeTextureMaterial.color)),
-    [activeTextureMaterial],
-  )
 
   const hsvaDisplayColors = useMemo(() => {
     const hColor = rgbaToCssColor(hsvaToRgba({ h: activeColorHsva.h, s: 1, v: 1, a: 1 }))
@@ -1478,9 +1493,19 @@ function App() {
     })
   }, [])
 
-  const updateActiveTextureMaterial = useCallback((updater: (current: TextureMaterialSettings) => TextureMaterialSettings) => {
-    updateTextureMaterial(textureActiveSurface, updater)
-  }, [textureActiveSurface, updateTextureMaterial])
+  const applyTexturePreviewToSurface = useCallback((surface: TextureSurfaceKey) => {
+    const preview = cloneTextureMaterial(texturePreviewMaterial)
+    setTextureMaterials((previous) => {
+      const next = cloneTextureMaterials(previous)
+      next[surface] = {
+        ...next[surface],
+        seed: preview.seed,
+        granularity: preview.granularity,
+        vSteps: preview.vSteps,
+      }
+      return next
+    })
+  }, [texturePreviewMaterial])
 
   const updateHighlightColor = useCallback((key: HighlightColorKey, color: RgbaColor) => {
     setHighlightColors((previous) => ({
@@ -1532,9 +1557,13 @@ function App() {
 
   const applyTextureColorToTexture = useCallback((sourceSurface: TextureSurfaceKey, targetSurface: TextureSurfaceKey) => {
     if (sourceSurface === targetSurface) return
-    const source = resolveTextureColor(textureMaterials, sourceSurface)
-    updateTextureColor(targetSurface, source)
-  }, [resolveTextureColor, textureMaterials, updateTextureColor])
+    const source = cloneTextureMaterial(textureMaterials[sourceSurface])
+    setTextureMaterials((previous) => {
+      const next = cloneTextureMaterials(previous)
+      next[targetSurface] = source
+      return next
+    })
+  }, [textureMaterials])
 
   const applyElementColorToTexture = useCallback((sourceKey: HighlightColorKey, targetSurface: TextureSurfaceKey) => {
     const source = resolveHighlightColor(highlightColors, sourceKey)
@@ -1912,7 +1941,6 @@ function App() {
       highlightBottomBackgroundColor: highlightColors.bottomBackground,
       highlightGridOutlineColor: highlightColors.gridOutline,
       textureEnabled,
-      textureActiveSurface,
       textureMaterials,
       sidebarViewState: {
         ...effectiveViewStateByMode,
@@ -1944,7 +1972,6 @@ function App() {
     renderScrollMaxSpeedPxPerSec,
     renderScrollSkew,
     renderScrollTotalTimeSec,
-    textureActiveSurface,
     textureEnabled,
     textureMaterials,
     highlightColors,
@@ -3377,7 +3404,6 @@ function App() {
               gridOutline: appState.menu.highlightGridOutlineColor ?? DEFAULT_HIGHLIGHT_COLORS.gridOutline,
             })
             // Global texture enable is intentionally fixed on; per-surface alpha controls visibility.
-            setTextureActiveSurface(appState.menu.textureActiveSurface ?? 'appGrid')
             setTextureMaterials(cloneTextureMaterials(appState.menu.textureMaterials ?? DEFAULT_TEXTURE_MATERIALS))
 
             setCurrentPage(loadedSidebarViewState[appState.menu.sidebarMode].page)
@@ -6780,36 +6806,22 @@ function App() {
                         onClick={() => {
                           if (armedColorSource?.kind === 'element') {
                             applyElementColorToElement(armedColorSource.key, key)
-                            setActiveHighlightColorKey(key)
                             return
                           }
 
                           if (armedColorSource?.kind === 'texture') {
                             applyTextureColorToElement(armedColorSource.key, key)
-                            setActiveHighlightColorKey(key)
                             return
                           }
 
                           if (armedColorSource?.kind === 'hsva') {
                             applyHsvaValueToElement(armedColorSource.key, key)
-                            setActiveHighlightColorKey(key)
                             return
                           }
 
                           if (armedColorSource?.kind === 'active-color') {
                             applyActiveColorToElement(key)
-                            setActiveHighlightColorKey(key)
-                            return
                           }
-
-                          if (armedColorSource?.kind === 'texture-active-color') {
-                            applyTextureColorToElement(textureActiveSurface, key)
-                            setActiveHighlightColorKey(key)
-                            return
-                          }
-
-                          updateHighlightColor(key, activeColorRgba)
-                          setActiveHighlightColorKey(key)
                         }}
                         onMouseDown={(event) => startColorArmHold({ kind: 'element', key }, event)}
                         onMouseUp={(event) => {
@@ -6838,10 +6850,8 @@ function App() {
                       <button
                         key={surface}
                         type="button"
-                        className={`toolbar-btn-icon toolbar-flyout-color-swatch${textureActiveSurface === surface ? ' is-active' : ''}${armedColorSource?.kind === 'texture' && armedColorSource.key === surface ? ' active' : ''}`}
+                        className={`toolbar-btn-icon toolbar-flyout-color-swatch${armedColorSource?.kind === 'texture' && armedColorSource.key === surface ? ' active' : ''}`}
                         onClick={() => {
-                          setTextureActiveSurface(surface)
-
                           if (armedColorSource?.kind === 'element') {
                             applyElementColorToTexture(armedColorSource.key, surface)
                             return
@@ -6862,12 +6872,10 @@ function App() {
                             return
                           }
 
-                          if (armedColorSource?.kind === 'texture-active-color') {
-                            applyTextureColorToTexture(textureActiveSurface, surface)
+                          if (armedColorSource?.kind === 'texture-preview') {
+                            applyTexturePreviewToSurface(surface)
                             return
                           }
-
-                          updateTextureColor(surface, activeColorRgba)
                         }}
                         onMouseDown={(event) => startColorArmHold({ kind: 'texture', key: surface }, event)}
                         onMouseUp={(event) => {
@@ -7089,9 +7097,7 @@ function App() {
                         }
                         if (armedColorSource?.kind === 'texture') {
                           applyTextureColorToActiveColor(armedColorSource.key)
-                          return
                         }
-                        updateHighlightColor(activeHighlightColorKey, activeColorRgba)
                       }}
                     />
                   </div>
@@ -7104,11 +7110,11 @@ function App() {
                       min={0}
                       max={1000000}
                       step={1}
-                      value={activeTextureMaterial.seed}
+                      value={texturePreviewMaterial.seed}
                       trackLabel="seed"
                       ariaLabel="Texture seed"
                       onCommit={(value) => {
-                        updateActiveTextureMaterial((current) => ({
+                        setTexturePreviewMaterial((current) => ({
                           ...current,
                           seed: clamp(Math.round(value), 0, 1000000),
                         }))
@@ -7119,11 +7125,11 @@ function App() {
                       min={TEXTURE_GRANULARITY_MIN}
                       max={TEXTURE_GRANULARITY_MAX}
                       step={1}
-                      value={activeTextureMaterial.granularity}
+                      value={texturePreviewMaterial.granularity}
                       trackLabel="granularity"
                       ariaLabel="Texture granularity"
                       onCommit={(value) => {
-                        updateActiveTextureMaterial((current) => ({
+                        setTexturePreviewMaterial((current) => ({
                           ...current,
                           granularity: clamp(Math.round(value), TEXTURE_GRANULARITY_MIN, TEXTURE_GRANULARITY_MAX),
                         }))
@@ -7134,11 +7140,11 @@ function App() {
                       min={TEXTURE_VSTEPS_MIN}
                       max={TEXTURE_VSTEPS_MAX}
                       step={1}
-                      value={activeTextureMaterial.vSteps}
+                      value={texturePreviewMaterial.vSteps}
                       trackLabel="v-steps"
                       ariaLabel="Texture value steps"
                       onCommit={(value) => {
-                        updateActiveTextureMaterial((current) => ({
+                        setTexturePreviewMaterial((current) => ({
                           ...current,
                           vSteps: clamp(Math.round(value), TEXTURE_VSTEPS_MIN, TEXTURE_VSTEPS_MAX),
                         }))
@@ -7146,12 +7152,18 @@ function App() {
                     />
                     <button
                       type="button"
-                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color toolbar-flyout-texture-preview${armedColorSource?.kind === 'texture-active-color' ? ' active' : ''}`}
-                      title="Active texture color"
-                      style={{ background: `linear-gradient(${activeTextureColorCss}, ${activeTextureColorCss}), var(--color-background-light)` }}
+                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color toolbar-flyout-texture-preview${armedColorSource?.kind === 'texture-preview' ? ' active' : ''}`}
+                      title="Texture preview"
+                      style={{
+                        backgroundColor: 'var(--color-background-light)',
+                        backgroundImage: texturePreviewCss,
+                        backgroundRepeat: 'no-repeat',
+                        backgroundSize: '100% 100%',
+                        backgroundPosition: '0 0',
+                      }}
                       onMouseDown={(event) => {
                         if (event.button !== 2) return
-                        startColorArmHold({ kind: 'texture-active-color' }, event)
+                        startColorArmHold({ kind: 'texture-preview' }, event)
                       }}
                       onMouseUp={(event) => {
                         if (event.button !== 2) return
@@ -7163,23 +7175,9 @@ function App() {
                         clearColorArmTimer()
                       }}
                       onClick={() => {
-                        if (armedColorSource?.kind === 'element') {
-                          applyElementColorToTexture(armedColorSource.key, textureActiveSurface)
-                          return
-                        }
                         if (armedColorSource?.kind === 'texture') {
-                          applyTextureColorToTexture(armedColorSource.key, textureActiveSurface)
-                          return
+                          setTexturePreviewMaterial(toTexturePreviewMaterial(textureMaterials[armedColorSource.key]))
                         }
-                        if (armedColorSource?.kind === 'hsva') {
-                          applyHsvaValueToTexture(armedColorSource.key, textureActiveSurface)
-                          return
-                        }
-                        if (armedColorSource?.kind === 'active-color') {
-                          applyActiveColorToTexture(textureActiveSurface)
-                          return
-                        }
-                        updateTextureColor(textureActiveSurface, activeColorRgba)
                       }}
                     />
                   </div>
@@ -7225,7 +7223,6 @@ function App() {
       <div className="editor-viewer-frame" style={{ gridArea: 'viewer' }}>
         <main className="editor-shell">
           <div ref={editorStageRef} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
-            <div className="editor-stage-texture-underlay" aria-hidden="true" />
             {!isPreviewMode ? (
               <Editor
                 key={activeNoteId ?? 'no-active-note'}

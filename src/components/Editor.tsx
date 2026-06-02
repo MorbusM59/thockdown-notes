@@ -867,8 +867,22 @@ export function Editor({
             <div
               className="absolute pointer-events-none"
               style={{
-                inset: 'var(--editor-frame-padding)',
+                inset: 0,
                 backgroundColor: 'var(--color-background-light)',
+                zIndex: 0,
+              }}
+            />
+
+            {/* Texture layer sits above the base background and below box color fills. */}
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                inset: 0,
+                zIndex: 1,
+                backgroundImage: 'var(--texture-editor-stage)',
+                backgroundRepeat: 'no-repeat',
+                backgroundSize: '100% 100%',
+                backgroundPosition: '0 0',
               }}
             />
 
@@ -881,6 +895,7 @@ export function Editor({
                 left: 'var(--editor-frame-padding)',
                 right: 'var(--editor-frame-padding)',
                 backgroundColor: 'var(--color-bg-regular)',
+                zIndex: 2,
               }}
             />
 
@@ -893,6 +908,7 @@ export function Editor({
                 right: 'var(--editor-frame-padding)',
                 height: topBoundary,
                 backgroundColor: 'var(--color-bg-leading)',
+                zIndex: 2,
               }}
             />
             <div
@@ -903,6 +919,7 @@ export function Editor({
                 right: 'var(--editor-frame-padding)',
                 height: bottomBoundary,
                 backgroundColor: 'var(--color-bg-trailing)',
+                zIndex: 2,
               }}
             />
 

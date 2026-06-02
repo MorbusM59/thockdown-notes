@@ -1508,19 +1508,7 @@ body.hsva-dragging * {
   z-index: 1;
 }
 
-.editor-stage-texture-underlay {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-  background-image: var(--texture-editor-stage);
-  background-repeat: no-repeat;
-  background-size: 100% 100%;
-  background-position: 0 0;
-}
-
-.editor-stage > :not(.editor-stage-texture-underlay) {
-  position: relative;
+.editor-stage > * {
   z-index: 2;
 }
 
