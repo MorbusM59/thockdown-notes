@@ -1255,6 +1255,7 @@ function App() {
   const [editorFontSize, setEditorFontSize] = useState<EditorFontSizeKey>(DEFAULT_EDITOR_FONT_SIZE)
   const [editorSpacing, setEditorSpacing] = useState<EditorSpacingKey>(DEFAULT_EDITOR_SPACING)
   const [editorGlyphPaddingPx, setEditorGlyphPaddingPx] = useState<number>(DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX)
+  const [editorFontLoadVersion, setEditorFontLoadVersion] = useState(0)
   const [isTagMutationPending, setIsTagMutationPending] = useState(false)
   const [deleteArmedTagName, setDeleteArmedTagName] = useState<string | null>(null)
   const [renamingTagName, setRenamingTagName] = useState<string | null>(null)
@@ -1372,7 +1373,7 @@ function App() {
 
   const editorRuntimeMetrics = useMemo(
     () => resolveEditorRuntimeMetrics(editorStyle, editorFontSize, editorSpacing, editorGlyphPaddingPx),
-    [editorStyle, editorFontSize, editorSpacing, editorGlyphPaddingPx],
+    [editorStyle, editorFontSize, editorSpacing, editorGlyphPaddingPx, editorFontLoadVersion],
   )
   const editorFontFamily = useMemo(() => resolveEditorFontFamily(editorStyle), [editorStyle])
   const activeColorRgba = useMemo(() => hsvaToRgba(activeColorHsva), [activeColorHsva])
@@ -1995,6 +1996,31 @@ function App() {
   useEffect(() => {
     applyRenderScrollSkew(renderScrollSkew)
   }, [renderScrollSkew])
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || !('fonts' in document)) return
+
+    let cancelled = false
+    const fontSpec = `400 ${editorRuntimeMetrics.fontSizePx}px ${resolveEditorFontFamily(editorStyle)}`
+
+    const ensureEditorFontLoaded = async () => {
+      try {
+        await document.fonts.load(fontSpec)
+      } catch {
+        return
+      }
+
+      if (!cancelled) {
+        setEditorFontLoadVersion((previous) => previous + 1)
+      }
+    }
+
+    void ensureEditorFontLoaded()
+
+    return () => {
+      cancelled = true
+    }
+  }, [editorStyle, editorRuntimeMetrics.fontSizePx])
 
   useEffect(() => {
     setIsScrollSettingsOpen(false)

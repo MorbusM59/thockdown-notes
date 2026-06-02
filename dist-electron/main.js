@@ -340,6 +340,8 @@ const DEFAULT_APP_STATE = {
     editorStyle: "syne",
     editorFontSize: "m",
     editorSpacing: "cozy",
+    editorGlyphPaddingPx: 1,
+    highlightGridOutlineColor: "#00000022",
     sidebarWidthRatio: 0.306,
     tagSplitRatio: 0.645,
     scrollEaseMultiplier: 1.5,
@@ -413,6 +415,13 @@ function sanitizePositive(input, fallback) {
   }
   return input;
 }
+function sanitizeIntegerInRange(input, min, max, fallback) {
+  if (typeof input !== "number" || !Number.isFinite(input)) {
+    return fallback;
+  }
+  const rounded = Math.round(input);
+  return Math.max(min, Math.min(max, rounded));
+}
 function sanitizeCollapsedList(input) {
   if (!Array.isArray(input)) {
     return [];
@@ -454,6 +463,13 @@ function sanitizeMenu(input) {
     editorStyle: sanitizeEditorStyle(input == null ? void 0 : input.editorStyle),
     editorFontSize: sanitizeEditorFontSize(input == null ? void 0 : input.editorFontSize),
     editorSpacing: sanitizeEditorSpacing(input == null ? void 0 : input.editorSpacing),
+    editorGlyphPaddingPx: sanitizeIntegerInRange(
+      input == null ? void 0 : input.editorGlyphPaddingPx,
+      0,
+      1,
+      DEFAULT_APP_STATE.menu.editorGlyphPaddingPx ?? 1
+    ),
+    highlightGridOutlineColor: typeof (input == null ? void 0 : input.highlightGridOutlineColor) === "string" ? input.highlightGridOutlineColor : DEFAULT_APP_STATE.menu.highlightGridOutlineColor ?? "#00000022",
     sidebarWidthRatio: sanitizeRatio(input == null ? void 0 : input.sidebarWidthRatio, DEFAULT_APP_STATE.menu.sidebarWidthRatio),
     tagSplitRatio: sanitizeRatio(input == null ? void 0 : input.tagSplitRatio, DEFAULT_APP_STATE.menu.tagSplitRatio),
     scrollEaseMultiplier: sanitizePositive(input == null ? void 0 : input.scrollEaseMultiplier, DEFAULT_APP_STATE.menu.scrollEaseMultiplier ?? 1),
