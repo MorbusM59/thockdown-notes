@@ -6,7 +6,7 @@ import { clampMaterialSettings } from './generateTexture';
 export const TEXTURE_ALGORITHM_VERSION = 1;
 
 function quantizeDimension(value: number): number {
-  const safe = Math.max(64, Math.floor(value));
+  const safe = Math.max(64, Math.min(4096, Math.floor(value)));
   return Math.ceil(safe / 64) * 64;
 }
 
@@ -20,6 +20,20 @@ function createBlobUrl(data: Uint8Array, mimeType: string): string {
   return URL.createObjectURL(blob);
 }
 
+function swapUrl(nextUrl: string, currentUrlRef: React.MutableRefObject<string | null>, setUrl: (value: string | null) => void): void {
+  const previousUrl = currentUrlRef.current;
+  currentUrlRef.current = nextUrl;
+  setUrl(nextUrl);
+
+  // Keep the previously rendered frame alive through this paint to avoid
+  // brief blanking while style updates commit to the new blob URL.
+  if (previousUrl && previousUrl !== nextUrl) {
+    window.requestAnimationFrame(() => {
+      revokeUrl(previousUrl);
+    });
+  }
+}
+
 export function useTextureSurface(params: {
   enabled: boolean;
   surface: TextureSurfaceKey;
@@ -29,13 +43,30 @@ export function useTextureSurface(params: {
 }): string {
   const { enabled, surface } = params;
   const material = useMemo(() => clampMaterialSettings(params.material), [params.material]);
+  const materialSeed = material.seed;
+  const materialGranularity = material.granularity;
+  const materialVSteps = material.vSteps;
+  const materialColorH = material.color.h;
+  const materialColorS = material.color.s;
+  const materialColorV = material.color.v;
+  const materialColorA = material.color.a;
   const width = useMemo(() => quantizeDimension(params.width), [params.width]);
   const height = useMemo(() => quantizeDimension(params.height), [params.height]);
   const [url, setUrl] = useState<string | null>(null);
   const currentUrlRef = useRef<string | null>(null);
+  const workerRef = useRef<Worker | null>(null);
+  const generationTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!enabled) {
+      if (generationTimeoutRef.current !== null) {
+        window.clearTimeout(generationTimeoutRef.current);
+        generationTimeoutRef.current = null;
+      }
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
       revokeUrl(currentUrlRef.current);
       currentUrlRef.current = null;
       setUrl(null);
@@ -48,10 +79,15 @@ export function useTextureSurface(params: {
       surface,
       width,
       height,
-      seed: material.seed,
-      granularity: material.granularity,
-      vSteps: material.vSteps,
-      color: material.color,
+      seed: materialSeed,
+      granularity: materialGranularity,
+      vSteps: materialVSteps,
+      color: {
+        h: materialColorH,
+        s: materialColorS,
+        v: materialColorV,
+        a: materialColorA,
+      },
       algorithmVersion: TEXTURE_ALGORITHM_VERSION,
     };
 
@@ -62,21 +98,30 @@ export function useTextureSurface(params: {
           const cached = await textureApi.getCachedTexture(cacheKey);
           if (cached && !cancelled) {
             const cachedUrl = createBlobUrl(cached.data, cached.mimeType);
-            revokeUrl(currentUrlRef.current);
-            currentUrlRef.current = cachedUrl;
-            setUrl(cachedUrl);
+            swapUrl(cachedUrl, currentUrlRef, setUrl);
             return;
           }
         }
 
+        if (workerRef.current) {
+          workerRef.current.terminate();
+          workerRef.current = null;
+        }
+
         const worker = new Worker(new URL('./textureWorker.ts', import.meta.url), { type: 'module' });
+        workerRef.current = worker;
         const workerRequest: TextureWorkerRequest = {
           width,
           height,
-          seed: material.seed,
-          granularity: material.granularity,
-          vSteps: material.vSteps,
-          color: material.color,
+          seed: materialSeed,
+          granularity: materialGranularity,
+          vSteps: materialVSteps,
+          color: {
+            h: materialColorH,
+            s: materialColorS,
+            v: materialColorV,
+            a: materialColorA,
+          },
         };
 
         const response = await new Promise<TextureWorkerResponse>((resolve, reject) => {
@@ -85,14 +130,13 @@ export function useTextureSurface(params: {
           worker.postMessage(workerRequest);
         });
         worker.terminate();
+        workerRef.current = null;
 
         if (cancelled) return;
 
         const data = new Uint8Array(response.buffer);
         const generatedUrl = createBlobUrl(data, response.mimeType);
-        revokeUrl(currentUrlRef.current);
-        currentUrlRef.current = generatedUrl;
-        setUrl(generatedUrl);
+        swapUrl(generatedUrl, currentUrlRef, setUrl);
 
         if (textureApi) {
           await textureApi.saveCachedTexture(cacheKey, {
@@ -101,23 +145,50 @@ export function useTextureSurface(params: {
           });
         }
       } catch {
-        if (!cancelled) {
-          revokeUrl(currentUrlRef.current);
-          currentUrlRef.current = null;
-          setUrl(null);
-        }
+        // Keep the last successful frame visible on generation/cache errors.
       }
     };
 
-    void run();
+    generationTimeoutRef.current = window.setTimeout(() => {
+      generationTimeoutRef.current = null;
+      void run();
+    }, 40);
 
     return () => {
       cancelled = true;
+      if (generationTimeoutRef.current !== null) {
+        window.clearTimeout(generationTimeoutRef.current);
+        generationTimeoutRef.current = null;
+      }
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
     };
-  }, [enabled, height, material, surface, width]);
+  }, [
+    enabled,
+    height,
+    materialColorA,
+    materialColorH,
+    materialColorS,
+    materialColorV,
+    materialGranularity,
+    materialSeed,
+    materialVSteps,
+    surface,
+    width,
+  ]);
 
   useEffect(() => {
     return () => {
+      if (generationTimeoutRef.current !== null) {
+        window.clearTimeout(generationTimeoutRef.current);
+        generationTimeoutRef.current = null;
+      }
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
       revokeUrl(currentUrlRef.current);
       currentUrlRef.current = null;
     };

@@ -821,8 +821,21 @@ function toTexturePreviewMaterial(source: TextureMaterialSettings): TextureMater
     seed: source.seed,
     granularity: source.granularity,
     vSteps: source.vSteps,
-    color: { h: 0, s: 0, v: 1, a: 1 },
+    color: { ...source.color },
   }
+}
+
+function areHsvaEqual(a: HsvaColor, b: HsvaColor): boolean {
+  return a.h === b.h && a.s === b.s && a.v === b.v && a.a === b.a
+}
+
+function areTextureMaterialsEqual(a: TextureMaterialSettings, b: TextureMaterialSettings): boolean {
+  return (
+    a.seed === b.seed
+    && a.granularity === b.granularity
+    && a.vSteps === b.vSteps
+    && areHsvaEqual(a.color, b.color)
+  )
 }
 
 function quantizeTextureSize(value: number): number {
@@ -1497,12 +1510,7 @@ function App() {
     const preview = cloneTextureMaterial(texturePreviewMaterial)
     setTextureMaterials((previous) => {
       const next = cloneTextureMaterials(previous)
-      next[surface] = {
-        ...next[surface],
-        seed: preview.seed,
-        granularity: preview.granularity,
-        vSteps: preview.vSteps,
-      }
+      next[surface] = preview
       return next
     })
   }, [texturePreviewMaterial])
@@ -1621,25 +1629,33 @@ function App() {
     updateTextureColor(targetSurface, activeColorRgba)
   }, [activeColorRgba, updateTextureColor])
 
-  const applyElementValueToHsvaControl = useCallback((sourceKey: HighlightColorKey, control: HsvaControlKey) => {
-    const source = resolveHighlightColor(highlightColors, sourceKey)
-    const sourceHsva = rgbaToHsva(source)
-
-    setActiveColorHsva((previous) => ({
-      ...previous,
-      [control]: sourceHsva[control],
+  const applyActiveColorToTexturePreview = useCallback(() => {
+    setTexturePreviewMaterial((current) => ({
+      ...current,
+      color: areHsvaEqual(current.color, activeColorHsva)
+        ? current.color
+        : {
+            h: activeColorHsva.h,
+            s: activeColorHsva.s,
+            v: activeColorHsva.v,
+            a: activeColorHsva.a,
+          },
     }))
-  }, [highlightColors, resolveHighlightColor])
+  }, [activeColorHsva])
 
-  const applyTextureValueToHsvaControl = useCallback((sourceSurface: TextureSurfaceKey, control: HsvaControlKey) => {
-    const source = resolveTextureColor(textureMaterials, sourceSurface)
-    const sourceHsva = rgbaToHsva(source)
-
-    setActiveColorHsva((previous) => ({
-      ...previous,
-      [control]: sourceHsva[control],
+  useEffect(() => {
+    setTexturePreviewMaterial((current) => ({
+      ...current,
+      color: areHsvaEqual(current.color, activeColorHsva)
+        ? current.color
+        : {
+            h: activeColorHsva.h,
+            s: activeColorHsva.s,
+            v: activeColorHsva.v,
+            a: activeColorHsva.a,
+          },
     }))
-  }, [resolveTextureColor, textureMaterials])
+  }, [activeColorHsva])
 
   const applyElementColorToActiveColor = useCallback((sourceKey: HighlightColorKey) => {
     const source = resolveHighlightColor(highlightColors, sourceKey)
@@ -1650,6 +1666,73 @@ function App() {
     const source = resolveTextureColor(textureMaterials, sourceSurface)
     setActiveColorHsva(rgbaToHsva(source))
   }, [resolveTextureColor, textureMaterials])
+
+  const applyTexturePreviewColorToActiveColor = useCallback(() => {
+    setActiveColorHsva({
+      h: texturePreviewMaterial.color.h,
+      s: texturePreviewMaterial.color.s,
+      v: texturePreviewMaterial.color.v,
+      a: texturePreviewMaterial.color.a,
+    })
+  }, [texturePreviewMaterial])
+
+  useEffect(() => {
+    if (!armedColorSource) return
+
+    if (armedColorSource.kind === 'element') {
+      const rgba = resolveHighlightColor(highlightColors, armedColorSource.key)
+      const hsva = rgbaToHsva(rgba)
+      setActiveColorHsva((previous) => (areHsvaEqual(previous, hsva) ? previous : hsva))
+      setTexturePreviewMaterial((current) => ({
+        ...current,
+        color: areHsvaEqual(current.color, hsva)
+          ? current.color
+          : {
+              h: hsva.h,
+              s: hsva.s,
+              v: hsva.v,
+              a: hsva.a,
+            },
+      }))
+      return
+    }
+
+    if (armedColorSource.kind === 'texture') {
+      const material = cloneTextureMaterial(textureMaterials[armedColorSource.key])
+      setTexturePreviewMaterial((previous) => (areTextureMaterialsEqual(previous, material) ? previous : material))
+      setActiveColorHsva((previous) => (areHsvaEqual(previous, material.color) ? previous : {
+        h: material.color.h,
+        s: material.color.s,
+        v: material.color.v,
+        a: material.color.a,
+      }))
+      return
+    }
+
+    if (armedColorSource.kind === 'texture-preview') {
+      setActiveColorHsva((previous) => (areHsvaEqual(previous, texturePreviewMaterial.color) ? previous : {
+        h: texturePreviewMaterial.color.h,
+        s: texturePreviewMaterial.color.s,
+        v: texturePreviewMaterial.color.v,
+        a: texturePreviewMaterial.color.a,
+      }))
+      return
+    }
+
+    if (armedColorSource.kind === 'active-color') {
+      setTexturePreviewMaterial((current) => ({
+        ...current,
+        color: areHsvaEqual(current.color, activeColorHsva)
+          ? current.color
+          : {
+              h: activeColorHsva.h,
+              s: activeColorHsva.s,
+              v: activeColorHsva.v,
+              a: activeColorHsva.a,
+            },
+      }))
+    }
+  }, [activeColorHsva, armedColorSource, highlightColors, resolveHighlightColor, textureMaterials, texturePreviewMaterial])
 
   const startColorArmHold = useCallback((source: ColorArmSource, event: MouseEvent<HTMLButtonElement>) => {
     if (event.button !== 2) return
@@ -1683,7 +1766,6 @@ function App() {
 
   const startHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return
-    if (armedColorSource?.kind === 'element') return
 
     event.preventDefault()
 
@@ -1701,7 +1783,7 @@ function App() {
     })
 
     updateHsvaControlValue(control, baseValue)
-  }, [activeColorHsva, armedColorSource, updateHsvaControlValue])
+  }, [activeColorHsva, updateHsvaControlValue])
 
   const handleHsvaDragMove = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
     const currentDrag = hsvaDragState
@@ -6821,6 +6903,11 @@ function App() {
 
                           if (armedColorSource?.kind === 'active-color') {
                             applyActiveColorToElement(key)
+                            return
+                          }
+
+                          if (armedColorSource?.kind === 'texture-preview') {
+                            updateHighlightColor(key, hsvaToRgba(texturePreviewMaterial.color))
                           }
                         }}
                         onMouseDown={(event) => startColorArmHold({ kind: 'element', key }, event)}
@@ -6905,15 +6992,6 @@ function App() {
                       className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 'h' ? ' is-dragging' : ''}${armedColorSource?.kind === 'hsva' && armedColorSource.key === 'h' ? ' active' : ''}`}
                       style={{ background: hsvaDisplayColors.hColor }}
                       title="Hue"
-                      onClick={() => {
-                        if (armedColorSource?.kind === 'element') {
-                          applyElementValueToHsvaControl(armedColorSource.key, 'h')
-                          return
-                        }
-                        if (armedColorSource?.kind === 'texture') {
-                          applyTextureValueToHsvaControl(armedColorSource.key, 'h')
-                        }
-                      }}
                       onPointerDown={(event) => {
                         startHsvaDrag('h', event)
                       }}
@@ -6948,15 +7026,6 @@ function App() {
                       className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 's' ? ' is-dragging' : ''}${armedColorSource?.kind === 'hsva' && armedColorSource.key === 's' ? ' active' : ''}`}
                       style={{ background: hsvaDisplayColors.sColor }}
                       title="Saturation"
-                      onClick={() => {
-                        if (armedColorSource?.kind === 'element') {
-                          applyElementValueToHsvaControl(armedColorSource.key, 's')
-                          return
-                        }
-                        if (armedColorSource?.kind === 'texture') {
-                          applyTextureValueToHsvaControl(armedColorSource.key, 's')
-                        }
-                      }}
                       onPointerDown={(event) => {
                         startHsvaDrag('s', event)
                       }}
@@ -6991,15 +7060,6 @@ function App() {
                       className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 'v' ? ' is-dragging' : ''}${armedColorSource?.kind === 'hsva' && armedColorSource.key === 'v' ? ' active' : ''}`}
                       style={{ background: hsvaDisplayColors.vColor }}
                       title="Value"
-                      onClick={() => {
-                        if (armedColorSource?.kind === 'element') {
-                          applyElementValueToHsvaControl(armedColorSource.key, 'v')
-                          return
-                        }
-                        if (armedColorSource?.kind === 'texture') {
-                          applyTextureValueToHsvaControl(armedColorSource.key, 'v')
-                        }
-                      }}
                       onPointerDown={(event) => {
                         startHsvaDrag('v', event)
                       }}
@@ -7034,15 +7094,6 @@ function App() {
                       className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control toolbar-flyout-hsva-alpha${hsvaDragState?.control === 'a' ? ' is-dragging' : ''}${armedColorSource?.kind === 'hsva' && armedColorSource.key === 'a' ? ' active' : ''}`}
                       style={{ background: 'var(--color-background-light)', color: hsvaDisplayColors.aGhostColor }}
                       title="Alpha"
-                      onClick={() => {
-                        if (armedColorSource?.kind === 'element') {
-                          applyElementValueToHsvaControl(armedColorSource.key, 'a')
-                          return
-                        }
-                        if (armedColorSource?.kind === 'texture') {
-                          applyTextureValueToHsvaControl(armedColorSource.key, 'a')
-                        }
-                      }}
                       onPointerDown={(event) => {
                         startHsvaDrag('a', event)
                       }}
@@ -7097,6 +7148,10 @@ function App() {
                         }
                         if (armedColorSource?.kind === 'texture') {
                           applyTextureColorToActiveColor(armedColorSource.key)
+                          return
+                        }
+                        if (armedColorSource?.kind === 'texture-preview') {
+                          applyTexturePreviewColorToActiveColor()
                         }
                       }}
                     />
@@ -7105,81 +7160,95 @@ function App() {
                   <span className="toolbar-flyout-color-separator" aria-hidden="true" />
 
                   <div className="toolbar-flyout-texture-settings" aria-label="Texture generation settings">
-                    <CompactScrollbarSlider
-                      id="texture-seed"
-                      min={0}
-                      max={1000000}
-                      step={1}
-                      value={texturePreviewMaterial.seed}
-                      trackLabel="seed"
-                      ariaLabel="Texture seed"
-                      onCommit={(value) => {
-                        setTexturePreviewMaterial((current) => ({
-                          ...current,
-                          seed: clamp(Math.round(value), 0, 1000000),
-                        }))
-                      }}
-                    />
-                    <CompactScrollbarSlider
-                      id="texture-granularity"
-                      min={TEXTURE_GRANULARITY_MIN}
-                      max={TEXTURE_GRANULARITY_MAX}
-                      step={1}
-                      value={texturePreviewMaterial.granularity}
-                      trackLabel="granularity"
-                      ariaLabel="Texture granularity"
-                      onCommit={(value) => {
-                        setTexturePreviewMaterial((current) => ({
-                          ...current,
-                          granularity: clamp(Math.round(value), TEXTURE_GRANULARITY_MIN, TEXTURE_GRANULARITY_MAX),
-                        }))
-                      }}
-                    />
-                    <CompactScrollbarSlider
-                      id="texture-vsteps"
-                      min={TEXTURE_VSTEPS_MIN}
-                      max={TEXTURE_VSTEPS_MAX}
-                      step={1}
-                      value={texturePreviewMaterial.vSteps}
-                      trackLabel="v-steps"
-                      ariaLabel="Texture value steps"
-                      onCommit={(value) => {
-                        setTexturePreviewMaterial((current) => ({
-                          ...current,
-                          vSteps: clamp(Math.round(value), TEXTURE_VSTEPS_MIN, TEXTURE_VSTEPS_MAX),
-                        }))
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color toolbar-flyout-texture-preview${armedColorSource?.kind === 'texture-preview' ? ' active' : ''}`}
-                      title="Texture preview"
-                      style={{
-                        backgroundColor: 'var(--color-background-light)',
-                        backgroundImage: texturePreviewCss,
-                        backgroundRepeat: 'no-repeat',
-                        backgroundSize: '100% 100%',
-                        backgroundPosition: '0 0',
-                      }}
-                      onMouseDown={(event) => {
-                        if (event.button !== 2) return
-                        startColorArmHold({ kind: 'texture-preview' }, event)
-                      }}
-                      onMouseUp={(event) => {
-                        if (event.button !== 2) return
-                        clearColorArmTimer()
-                      }}
-                      onMouseLeave={clearColorArmTimer}
-                      onContextMenu={(event) => {
-                        event.preventDefault()
-                        clearColorArmTimer()
-                      }}
-                      onClick={() => {
-                        if (armedColorSource?.kind === 'texture') {
-                          setTexturePreviewMaterial(toTexturePreviewMaterial(textureMaterials[armedColorSource.key]))
-                        }
-                      }}
-                    />
+                    <div className="toolbar-flyout-texture-stack">
+                      <div className="toolbar-flyout-texture-slider-slot">
+                        <CompactScrollbarSlider
+                          id="texture-seed"
+                          min={0}
+                          max={1000000}
+                          step={1}
+                          value={texturePreviewMaterial.seed}
+                          trackLabel="seed"
+                          ariaLabel="Texture seed"
+                          onCommit={(value) => {
+                            setTexturePreviewMaterial((current) => ({
+                              ...current,
+                              seed: clamp(Math.round(value), 0, 1000000),
+                            }))
+                          }}
+                        />
+                      </div>
+                      <div className="toolbar-flyout-texture-slider-slot">
+                        <CompactScrollbarSlider
+                          id="texture-granularity"
+                          min={TEXTURE_GRANULARITY_MIN}
+                          max={TEXTURE_GRANULARITY_MAX}
+                          step={1}
+                          value={texturePreviewMaterial.granularity}
+                          trackLabel="granularity"
+                          ariaLabel="Texture granularity"
+                          onCommit={(value) => {
+                            setTexturePreviewMaterial((current) => ({
+                              ...current,
+                              granularity: clamp(Math.round(value), TEXTURE_GRANULARITY_MIN, TEXTURE_GRANULARITY_MAX),
+                            }))
+                          }}
+                        />
+                      </div>
+                      <div className="toolbar-flyout-texture-slider-slot">
+                        <CompactScrollbarSlider
+                          id="texture-vsteps"
+                          min={TEXTURE_VSTEPS_MIN}
+                          max={TEXTURE_VSTEPS_MAX}
+                          step={1}
+                          value={texturePreviewMaterial.vSteps}
+                          trackLabel="v-steps"
+                          ariaLabel="Texture value steps"
+                          onCommit={(value) => {
+                            setTexturePreviewMaterial((current) => ({
+                              ...current,
+                              vSteps: clamp(Math.round(value), TEXTURE_VSTEPS_MIN, TEXTURE_VSTEPS_MAX),
+                            }))
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="toolbar-flyout-texture-preview-row">
+                      <button
+                        type="button"
+                        className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color toolbar-flyout-texture-preview${armedColorSource?.kind === 'texture-preview' ? ' active' : ''}`}
+                        title="Texture preview"
+                        style={{
+                          backgroundColor: 'var(--color-background-light)',
+                          backgroundImage: texturePreviewCss,
+                          backgroundRepeat: 'no-repeat',
+                          backgroundSize: '100% 100%',
+                          backgroundPosition: '0 0',
+                        }}
+                        onMouseDown={(event) => {
+                          if (event.button !== 2) return
+                          startColorArmHold({ kind: 'texture-preview' }, event)
+                        }}
+                        onMouseUp={(event) => {
+                          if (event.button !== 2) return
+                          clearColorArmTimer()
+                        }}
+                        onMouseLeave={clearColorArmTimer}
+                        onContextMenu={(event) => {
+                          event.preventDefault()
+                          clearColorArmTimer()
+                        }}
+                        onClick={() => {
+                          if (armedColorSource?.kind === 'texture') {
+                            setTexturePreviewMaterial(cloneTextureMaterial(textureMaterials[armedColorSource.key]))
+                            return
+                          }
+                          if (armedColorSource?.kind === 'active-color') {
+                            applyActiveColorToTexturePreview()
+                          }
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
               </section>
