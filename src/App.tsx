@@ -1327,6 +1327,7 @@ function App() {
   const editorStageRef = useRef<HTMLDivElement | null>(null)
   const sidebarSearchInputRef = useRef<HTMLInputElement | null>(null)
   const tagInputRef = useRef<HTMLInputElement | null>(null)
+  const pageJumpInputRef = useRef<HTMLInputElement | null>(null)
   const [notes, setNotes] = useState<NoteSummary[]>([])
   const [tagInputValue, setTagInputValue] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -1351,6 +1352,8 @@ function App() {
   const [selectedMonths, setSelectedMonths] = useState<Set<number>>(new Set())
   const [selectedYears, setSelectedYears] = useState<Set<number | 'older'>>(new Set())
   const [currentPage, setCurrentPage] = useState(1)
+  const [pageJumpInput, setPageJumpInput] = useState('1')
+  const [isPageJumpEditing, setIsPageJumpEditing] = useState(false)
   const [categoryCollapsedPrimary, setCategoryCollapsedPrimary] = useState<string[]>([])
   const [categoryCollapsedSecondary, setCategoryCollapsedSecondary] = useState<string[]>([])
   const [archiveCollapsedPrimary, setArchiveCollapsedPrimary] = useState<string[]>([])
@@ -2588,6 +2591,10 @@ function App() {
     }
 
     if (target === sidebarSearchInputRef.current || target === tagInputRef.current) {
+      return true
+    }
+
+    if (target.closest('.sidebar-pagination')) {
       return true
     }
 
@@ -6108,6 +6115,41 @@ function App() {
   }, [currentPage, totalPages])
 
   useEffect(() => {
+    if (!isPageJumpEditing) {
+      setPageJumpInput(String(currentPage))
+    }
+  }, [currentPage, isPageJumpEditing])
+
+  const commitPageJump = useCallback(() => {
+    const parsed = Number.parseInt(pageJumpInput.trim(), 10)
+    const safePage = Number.isFinite(parsed)
+      ? clamp(parsed, 1, totalPages)
+      : clamp(currentPage, 1, totalPages)
+
+    setCurrentPage(safePage)
+    setPageJumpInput(String(safePage))
+    setIsPageJumpEditing(false)
+  }, [currentPage, pageJumpInput, totalPages])
+
+  const startPageJumpEdit = useCallback(() => {
+    setPageJumpInput(String(currentPage))
+    setIsPageJumpEditing(true)
+  }, [currentPage])
+
+  const cancelPageJumpEdit = useCallback(() => {
+    setPageJumpInput(String(currentPage))
+    setIsPageJumpEditing(false)
+  }, [currentPage])
+
+  useEffect(() => {
+    if (!isPageJumpEditing) return
+    window.requestAnimationFrame(() => {
+      pageJumpInputRef.current?.focus()
+      pageJumpInputRef.current?.select()
+    })
+  }, [isPageJumpEditing])
+
+  useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented) return
 
@@ -6435,7 +6477,45 @@ function App() {
             >
               &lt;
             </button>
-            <span className="sidebar-page-number">{currentPage}</span>
+            {isPageJumpEditing ? (
+              <label className="sidebar-page-number-btn" aria-label="Jump to page">
+                <input
+                  ref={pageJumpInputRef}
+                  type="number"
+                  min={1}
+                  max={totalPages}
+                  step={1}
+                  inputMode="numeric"
+                  className="sidebar-page-number-input sidebar-page-number-input--edit"
+                  value={pageJumpInput}
+                  onChange={(event) => {
+                    setPageJumpInput(event.target.value.replace(/[^0-9]/g, ''))
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      commitPageJump()
+                      return
+                    }
+
+                    if (event.key === 'Escape') {
+                      event.preventDefault()
+                      cancelPageJumpEdit()
+                    }
+                  }}
+                  onBlur={cancelPageJumpEdit}
+                />
+              </label>
+            ) : (
+              <button
+                type="button"
+                className="sidebar-page-number-btn sidebar-page-number-display"
+                aria-label={`Current page ${currentPage} of ${totalPages}. Click to edit.`}
+                onClick={startPageJumpEdit}
+              >
+                {`${currentPage} / ${totalPages}`}
+              </button>
+            )}
             <button
               type="button"
               className="sidebar-page-btn"
