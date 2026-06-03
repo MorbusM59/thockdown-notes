@@ -1,4 +1,4 @@
-import type { TextureColorHsva, TextureSurfaceKey } from '../textures/types';
+import type { TextureSurfaceKey } from '../textures/types';
 
 export const TEXTURE_CHANNELS = {
   getCached: 'texture:cache:get',
@@ -13,7 +13,6 @@ export type TextureCacheRequest = {
   seed: number;
   granularity: number;
   vSteps: number;
-  color: TextureColorHsva;
   algorithmVersion: number;
 };
 

@@ -1505,6 +1505,11 @@ function App() {
   })
   const activeColorRgba = useMemo(() => hsvaToRgba(activeColorHsva), [activeColorHsva])
   const activeColorCss = useMemo(() => rgbaToCssColor(activeColorRgba), [activeColorRgba])
+  const appGridTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.appGrid.color)), [textureMaterials.appGrid.color])
+  const sidebarTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.sidebarContent.color)), [textureMaterials.sidebarContent.color])
+  const editorEditTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.editorEditText.color)), [textureMaterials.editorEditText.color])
+  const editorRenderTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.editorRenderText.color)), [textureMaterials.editorRenderText.color])
+  const texturePreviewTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(texturePreviewMaterial.color)), [texturePreviewMaterial.color])
 
   useEffect(() => {
     const textureApi = window.measlyTextures
@@ -1518,7 +1523,6 @@ function App() {
         seed: textureMaterials.appGrid.seed,
         granularity: textureMaterials.appGrid.granularity,
         vSteps: textureMaterials.appGrid.vSteps,
-        color: { ...textureMaterials.appGrid.color },
         algorithmVersion: TEXTURE_ALGORITHM_VERSION,
       },
       {
@@ -1528,7 +1532,6 @@ function App() {
         seed: textureMaterials.sidebarContent.seed,
         granularity: textureMaterials.sidebarContent.granularity,
         vSteps: textureMaterials.sidebarContent.vSteps,
-        color: { ...textureMaterials.sidebarContent.color },
         algorithmVersion: TEXTURE_ALGORITHM_VERSION,
       },
       {
@@ -1538,7 +1541,6 @@ function App() {
         seed: textureMaterials.editorEditText.seed,
         granularity: textureMaterials.editorEditText.granularity,
         vSteps: textureMaterials.editorEditText.vSteps,
-        color: { ...textureMaterials.editorEditText.color },
         algorithmVersion: TEXTURE_ALGORITHM_VERSION,
       },
       {
@@ -1548,7 +1550,6 @@ function App() {
         seed: textureMaterials.editorRenderText.seed,
         granularity: textureMaterials.editorRenderText.granularity,
         vSteps: textureMaterials.editorRenderText.vSteps,
-        color: { ...textureMaterials.editorRenderText.color },
         algorithmVersion: TEXTURE_ALGORITHM_VERSION,
       },
     ]
@@ -2367,9 +2368,24 @@ function App() {
       '--texture-sidebar-content': sidebarTextureCss,
       '--texture-editor-edit': editorEditTextTextureCss,
       '--texture-editor-render': editorRenderTextTextureCss,
+      '--texture-app-grid-tint': appGridTextureTintCss,
+      '--texture-sidebar-content-tint': sidebarTextureTintCss,
+      '--texture-editor-edit-tint': editorEditTextureTintCss,
+      '--texture-editor-render-tint': editorRenderTextureTintCss,
     }
     return style
-  }, [appGridTextureCss, editorEditTextTextureCss, editorRenderTextTextureCss, highlightColors, layout.gridTemplateColumns, sidebarTextureCss])
+  }, [
+    appGridTextureCss,
+    appGridTextureTintCss,
+    editorEditTextTextureCss,
+    editorEditTextureTintCss,
+    editorRenderTextTextureCss,
+    editorRenderTextureTintCss,
+    highlightColors,
+    layout.gridTemplateColumns,
+    sidebarTextureCss,
+    sidebarTextureTintCss,
+  ])
 
   const queueAppStateSave = useCallback((selectedNoteId: string | null) => {
     if (!window.measlyState) return
@@ -7165,11 +7181,15 @@ function App() {
                         className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color toolbar-flyout-texture-preview${armedColorSource.kind === 'texture-preview' ? ' active' : ''}`}
                         title="Texture preview"
                         style={{
-                          backgroundColor: 'var(--color-background-light)',
-                          backgroundImage: texturePreviewCss,
-                          backgroundRepeat: 'no-repeat',
-                          backgroundSize: '100% 100%',
-                          backgroundPosition: '0 0',
+                          backgroundColor: texturePreviewTintCss,
+                          WebkitMaskImage: texturePreviewCss,
+                          WebkitMaskRepeat: 'no-repeat',
+                          WebkitMaskSize: '100% 100%',
+                          WebkitMaskPosition: '0 0',
+                          maskImage: texturePreviewCss,
+                          maskRepeat: 'no-repeat',
+                          maskSize: '100% 100%',
+                          maskPosition: '0 0',
                         }}
                         onMouseDown={(event) => {
                           if (event.button !== 2) return

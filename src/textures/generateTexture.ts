@@ -100,40 +100,6 @@ function fbm(
   return maxValue > 0 ? value / maxValue : 0;
 }
 
-function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
-  const hue = ((h % 360) + 360) % 360;
-  const sat = Math.max(0, Math.min(1, s));
-  const val = Math.max(0, Math.min(1, v));
-
-  const c = val * sat;
-  const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
-  const m = val - c;
-
-  let r = 0;
-  let g = 0;
-  let b = 0;
-
-  if (hue < 60) {
-    r = c; g = x;
-  } else if (hue < 120) {
-    r = x; g = c;
-  } else if (hue < 180) {
-    g = c; b = x;
-  } else if (hue < 240) {
-    g = x; b = c;
-  } else if (hue < 300) {
-    r = x; b = c;
-  } else {
-    r = c; b = x;
-  }
-
-  return [
-    Math.round((r + m) * 255),
-    Math.round((g + m) * 255),
-    Math.round((b + m) * 255),
-  ];
-}
-
 function shapeValue(raw: number, featureBias: number): number {
   const exponent = Math.max(0.2, 1 - featureBias);
   return Math.pow(Math.max(0, Math.min(1, raw)), exponent);
@@ -182,14 +148,11 @@ export function generateTextureRgba(params: {
       const raw = fbm(sampleX, sampleY, spatialGrid, cols, rows, granularity, personality);
       const shaped = shapeValue(raw, personality.featureBias);
       const stepped = quantizeValue(shaped, material.vSteps);
-      const pixelV = stepped * Math.max(0, Math.min(1, material.color.v));
-
-      const [r, g, b] = hsvToRgb(material.color.h, material.color.s, pixelV);
       const idx = (y * width + x) * 4;
-      out[idx] = r;
-      out[idx + 1] = g;
-      out[idx + 2] = b;
-      out[idx + 3] = Math.round(Math.max(0, Math.min(1, material.color.a)) * 255);
+      out[idx] = 255;
+      out[idx + 1] = 255;
+      out[idx + 2] = 255;
+      out[idx + 3] = Math.round(Math.max(0, Math.min(1, stepped)) * 255);
     }
   }
 

@@ -50,10 +50,6 @@ export function useTextureSurface(params: {
   const materialSeed = material.seed;
   const materialGranularity = material.granularity;
   const materialVSteps = material.vSteps;
-  const materialColorH = material.color.h;
-  const materialColorS = material.color.s;
-  const materialColorV = material.color.v;
-  const materialColorA = material.color.a;
   const width = useMemo(() => quantizeDimension(params.width), [params.width]);
   const height = useMemo(() => quantizeDimension(params.height), [params.height]);
   const [url, setUrl] = useState<string | null>(null);
@@ -86,12 +82,6 @@ export function useTextureSurface(params: {
       seed: materialSeed,
       granularity: materialGranularity,
       vSteps: materialVSteps,
-      color: {
-        h: materialColorH,
-        s: materialColorS,
-        v: materialColorV,
-        a: materialColorA,
-      },
       algorithmVersion: TEXTURE_ALGORITHM_VERSION,
     };
 
@@ -120,12 +110,6 @@ export function useTextureSurface(params: {
           seed: materialSeed,
           granularity: materialGranularity,
           vSteps: materialVSteps,
-          color: {
-            h: materialColorH,
-            s: materialColorS,
-            v: materialColorV,
-            a: materialColorA,
-          },
         };
 
         const response = await new Promise<TextureWorkerResponse>((resolve, reject) => {
@@ -172,10 +156,6 @@ export function useTextureSurface(params: {
   }, [
     enabled,
     height,
-    materialColorA,
-    materialColorH,
-    materialColorS,
-    materialColorV,
     materialGranularity,
     materialSeed,
     materialVSteps,

@@ -14,7 +14,7 @@ workerScope.onmessage = async (event: MessageEvent<TextureWorkerRequest>) => {
     seed: payload.seed,
     granularity: payload.granularity,
     vSteps: payload.vSteps,
-    color: payload.color,
+    color: { h: 0, s: 0, v: 1, a: 1 },
   });
 
   const rgba = generateTextureRgba({ width, height, material });

@@ -51,7 +51,6 @@ export type TextureWorkerRequest = {
   seed: number;
   granularity: number;
   vSteps: number;
-  color: TextureColorHsva;
 };
 
 export type TextureWorkerResponse = {

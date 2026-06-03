@@ -706,14 +706,6 @@ function parseLegacyMetadata(rawText) {
     return { tags: [], bodyText: normalized, hasLegacyHeader: false };
   }
 }
-function serializeTextureColorHsva(color) {
-  return JSON.stringify({
-    h: Number(color.h.toFixed(4)),
-    s: Number(color.s.toFixed(4)),
-    v: Number(color.v.toFixed(4)),
-    a: Number(color.a.toFixed(4))
-  });
-}
 function normalizeTextureCacheRequest(request) {
   return {
     surface: request.surface,
@@ -722,7 +714,6 @@ function normalizeTextureCacheRequest(request) {
     seed: Math.max(0, Math.round(request.seed)),
     granularity: Number(request.granularity.toFixed(4)),
     vSteps: Math.max(2, Math.round(request.vSteps)),
-    colorHsva: serializeTextureColorHsva(request.color),
     algorithmVersion: Math.max(1, Math.round(request.algorithmVersion))
   };
 }
@@ -734,7 +725,6 @@ function textureCacheCompositeKey(request) {
     request.seed,
     request.granularity,
     request.vSteps,
-    request.colorHsva,
     request.algorithmVersion
   ].join("|");
 }
@@ -1330,14 +1320,13 @@ class DatabaseService {
     const normalized = normalizeTextureCacheRequest(request);
     const row = db.prepare(`
       SELECT data, mimeType
-      FROM texture_cache
+      FROM texture_pattern_cache
       WHERE surface = ?
         AND width = ?
         AND height = ?
         AND seed = ?
         AND granularity = ?
         AND vSteps = ?
-        AND colorHsva = ?
         AND algorithmVersion = ?
       LIMIT 1
     `).get(
@@ -1347,14 +1336,13 @@ class DatabaseService {
       normalized.seed,
       normalized.granularity,
       normalized.vSteps,
-      normalized.colorHsva,
       normalized.algorithmVersion
     );
     if (!row) {
       return null;
     }
     db.prepare(`
-      UPDATE texture_cache
+      UPDATE texture_pattern_cache
       SET createdAt = ?
       WHERE surface = ?
         AND width = ?
@@ -1362,7 +1350,6 @@ class DatabaseService {
         AND seed = ?
         AND granularity = ?
         AND vSteps = ?
-        AND colorHsva = ?
         AND algorithmVersion = ?
     `).run(
       Date.now(),
@@ -1372,7 +1359,6 @@ class DatabaseService {
       normalized.seed,
       normalized.granularity,
       normalized.vSteps,
-      normalized.colorHsva,
       normalized.algorithmVersion
     );
     return {
@@ -1384,20 +1370,19 @@ class DatabaseService {
     const db = this.requireDb();
     const normalized = normalizeTextureCacheRequest(request);
     db.prepare(`
-      INSERT OR REPLACE INTO texture_cache (
+      INSERT OR REPLACE INTO texture_pattern_cache (
         surface,
         width,
         height,
         seed,
         granularity,
         vSteps,
-        colorHsva,
         algorithmVersion,
         data,
         mimeType,
         createdAt
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       normalized.surface,
       normalized.width,
@@ -1405,7 +1390,6 @@ class DatabaseService {
       normalized.seed,
       normalized.granularity,
       normalized.vSteps,
-      normalized.colorHsva,
       normalized.algorithmVersion,
       Buffer.from(payload.data),
       payload.mimeType || "image/webp",
@@ -1421,11 +1405,11 @@ class DatabaseService {
     const keepKeys = new Set(keep.map((item) => textureCacheCompositeKey(normalizeTextureCacheRequest(item))));
     const cutoffMs = Date.now() - maxAgeMs;
     const rows = db.prepare(`
-      SELECT rowid, surface, width, height, seed, granularity, vSteps, colorHsva, algorithmVersion, createdAt
-      FROM texture_cache
+      SELECT rowid, surface, width, height, seed, granularity, vSteps, algorithmVersion, createdAt
+      FROM texture_pattern_cache
       ORDER BY createdAt DESC
     `).all();
-    const deleteStmt = db.prepare("DELETE FROM texture_cache WHERE rowid = ?");
+    const deleteStmt = db.prepare("DELETE FROM texture_pattern_cache WHERE rowid = ?");
     let retainedCount = 0;
     let deletedCount = 0;
     const tx = db.transaction(() => {
@@ -1437,7 +1421,6 @@ class DatabaseService {
           seed: row.seed,
           granularity: row.granularity,
           vSteps: row.vSteps,
-          colorHsva: row.colorHsva,
           algorithmVersion: row.algorithmVersion
         });
         const isProtected = keepKeys.has(key);
@@ -1512,22 +1495,21 @@ class DatabaseService {
         content
       );
 
-      CREATE TABLE IF NOT EXISTS texture_cache (
+      CREATE TABLE IF NOT EXISTS texture_pattern_cache (
         surface TEXT NOT NULL,
         width INTEGER NOT NULL,
         height INTEGER NOT NULL,
         seed INTEGER NOT NULL,
         granularity REAL NOT NULL,
         vSteps INTEGER NOT NULL,
-        colorHsva TEXT NOT NULL,
         algorithmVersion INTEGER NOT NULL,
         data BLOB NOT NULL,
         mimeType TEXT NOT NULL,
         createdAt INTEGER NOT NULL,
-        PRIMARY KEY (surface, width, height, seed, granularity, vSteps, colorHsva, algorithmVersion)
+        PRIMARY KEY (surface, width, height, seed, granularity, vSteps, algorithmVersion)
       );
 
-      CREATE INDEX IF NOT EXISTS idx_texture_cache_created_at ON texture_cache(createdAt DESC);
+      CREATE INDEX IF NOT EXISTS idx_texture_pattern_cache_created_at ON texture_pattern_cache(createdAt DESC);
     `);
     this.ensureNotesColumn("contentChecksum", "TEXT");
   }

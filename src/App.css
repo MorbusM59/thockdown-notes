@@ -71,6 +71,10 @@
   --texture-sidebar-content: none;
   --texture-editor-edit: none;
   --texture-editor-render: none;
+  --texture-app-grid-tint: rgba(0, 0, 0, 0);
+  --texture-sidebar-content-tint: rgba(0, 0, 0, 0);
+  --texture-editor-edit-tint: rgba(0, 0, 0, 0);
+  --texture-editor-render-tint: rgba(0, 0, 0, 0);
 }
 
 .app-shell,
@@ -189,10 +193,15 @@ button.active,
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background-image: var(--texture-app-grid);
-  background-repeat: no-repeat;
-  background-size: 100% 100%;
-  background-position: 0 0;
+  background-color: var(--texture-app-grid-tint);
+  -webkit-mask-image: var(--texture-app-grid);
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  -webkit-mask-position: 0 0;
+  mask-image: var(--texture-app-grid);
+  mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+  mask-position: 0 0;
 }
 
 .app-grid > * {
@@ -425,10 +434,15 @@ body.splitter-dragging {
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background-image: var(--texture-sidebar-content);
-  background-repeat: no-repeat;
-  background-size: 100% 100%;
-  background-position: 0 0;
+  background-color: var(--texture-sidebar-content-tint);
+  -webkit-mask-image: var(--texture-sidebar-content);
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  -webkit-mask-position: 0 0;
+  mask-image: var(--texture-sidebar-content);
+  mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+  mask-position: 0 0;
 }
 
 .sidebar-content > * {
@@ -1537,10 +1551,23 @@ body.hsva-dragging * {
   border-radius: 6px;
   overflow: hidden;
   z-index: 1;
-  background-image: var(--texture-editor-edit);
-  background-repeat: no-repeat;
-  background-size: 100% 100%;
-  background-position: 0 0;
+}
+
+.editor-stage::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background-color: var(--texture-editor-edit-tint);
+  -webkit-mask-image: var(--texture-editor-edit);
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  -webkit-mask-position: 0 0;
+  mask-image: var(--texture-editor-edit);
+  mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+  mask-position: 0 0;
 }
 
 .editor-stage > * {
@@ -1585,12 +1612,30 @@ body.hsva-dragging * {
   box-sizing: border-box;
   color: #2f2721;
   background-color: var(--color-background-light);
-  background-image: var(--texture-editor-render);
-  background-repeat: no-repeat;
-  background-size: 100% 100%;
-  background-position: 0 0;
   text-shadow: var(--text-shadow-emboss-base);
   font-synthesis: style;
+  position: relative;
+  z-index: 1;
+}
+
+.markdown-preview::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-color: var(--texture-editor-render-tint);
+  -webkit-mask-image: var(--texture-editor-render);
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  -webkit-mask-position: 0 0;
+  mask-image: var(--texture-editor-render);
+  mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+  mask-position: 0 0;
+}
+
+.markdown-preview > * {
   position: relative;
   z-index: 1;
 }
