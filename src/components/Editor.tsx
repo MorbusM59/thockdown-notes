@@ -863,29 +863,6 @@ export function Editor({
               backgroundColor: 'transparent',
             }}
           >
-            {/* Shared clean base for all three editor zones. */}
-            <div
-              className="absolute pointer-events-none"
-              style={{
-                inset: 0,
-                backgroundColor: 'var(--color-background-light)',
-                zIndex: 0,
-              }}
-            />
-
-            {/* Texture layer sits above the base background and below box color fills. */}
-            <div
-              className="absolute pointer-events-none"
-              style={{
-                inset: 0,
-                zIndex: 1,
-                backgroundImage: 'var(--texture-editor-stage)',
-                backgroundRepeat: 'no-repeat',
-                backgroundSize: '100% 100%',
-                backgroundPosition: '0 0',
-              }}
-            />
-
             {/* Regular background color is constrained to the middle zone only. */}
             <div
               className="absolute pointer-events-none"

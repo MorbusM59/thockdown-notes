@@ -1512,7 +1512,7 @@ body.hsva-dragging * {
   box-sizing: border-box;
   border: 1px solid var(--color-border-highlight);
   border-radius: var(--border-radius-regular);
-  background: linear-gradient(180deg, rgba(249, 245, 240, 0.92), rgba(243, 236, 229, 0.88));
+  background: var(--color-background-light);
   box-shadow: 0 0 2px var(--color-shadow-white);
   overflow: hidden;
 }
@@ -1535,6 +1535,10 @@ body.hsva-dragging * {
   border-radius: 6px;
   overflow: hidden;
   z-index: 1;
+  background-image: var(--texture-editor-stage);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: 0 0;
 }
 
 .editor-stage > * {
