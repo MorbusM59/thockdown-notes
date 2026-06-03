@@ -979,9 +979,9 @@ body.splitter-dragging {
   grid-template-columns: repeat(2, 1fr);
   grid-template-rows: repeat(3, var(--color-grid-cell));
   gap: var(--color-grid-gap);
-  width: 100px;
-  min-width: 100px;
-  max-width: 100px;
+  width: calc((var(--color-grid-cell) * 2) + var(--color-grid-gap));
+  min-width: calc((var(--color-grid-cell) * 2) + var(--color-grid-gap));
+  max-width: calc((var(--color-grid-cell) * 2) + var(--color-grid-gap));
   flex: 0 0 auto;
 }
 

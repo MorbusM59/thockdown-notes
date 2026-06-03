@@ -620,6 +620,8 @@ const EXTERNAL_TAG = "EXTERNAL";
 const PROTECTED_TAGS = ["deleted", "archived", EXTERNAL_TAG];
 const META_PREFIX = "<!-- measly-meta:";
 const META_SUFFIX = "-->";
+const TEXTURE_CACHE_DEFAULT_MAX_ENTRIES = 96;
+const TEXTURE_CACHE_DEFAULT_MAX_AGE_MS = 1e3 * 60 * 60 * 24 * 14;
 function normalizeTagName(rawTag) {
   const normalized = rawTag.trim().toLowerCase().replace(/\s+/g, "-");
   if (normalized === "external") {
@@ -696,6 +698,30 @@ function serializeTextureColorHsva(color) {
     v: Number(color.v.toFixed(4)),
     a: Number(color.a.toFixed(4))
   });
+}
+function normalizeTextureCacheRequest(request) {
+  return {
+    surface: request.surface,
+    width: Math.max(1, Math.round(request.width)),
+    height: Math.max(1, Math.round(request.height)),
+    seed: Math.max(0, Math.round(request.seed)),
+    granularity: Number(request.granularity.toFixed(4)),
+    vSteps: Math.max(2, Math.round(request.vSteps)),
+    colorHsva: serializeTextureColorHsva(request.color),
+    algorithmVersion: Math.max(1, Math.round(request.algorithmVersion))
+  };
+}
+function textureCacheCompositeKey(request) {
+  return [
+    request.surface,
+    request.width,
+    request.height,
+    request.seed,
+    request.granularity,
+    request.vSteps,
+    request.colorHsva,
+    request.algorithmVersion
+  ].join("|");
 }
 class DatabaseService {
   constructor(dataRoot) {
@@ -1286,7 +1312,7 @@ class DatabaseService {
   }
   getTextureCache(request) {
     const db = this.requireDb();
-    const colorHsva = serializeTextureColorHsva(request.color);
+    const normalized = normalizeTextureCacheRequest(request);
     const row = db.prepare(`
       SELECT data, mimeType
       FROM texture_cache
@@ -1300,18 +1326,40 @@ class DatabaseService {
         AND algorithmVersion = ?
       LIMIT 1
     `).get(
-      request.surface,
-      Math.max(1, Math.round(request.width)),
-      Math.max(1, Math.round(request.height)),
-      Math.max(0, Math.round(request.seed)),
-      Number(request.granularity.toFixed(4)),
-      Math.max(2, Math.round(request.vSteps)),
-      colorHsva,
-      Math.max(1, Math.round(request.algorithmVersion))
+      normalized.surface,
+      normalized.width,
+      normalized.height,
+      normalized.seed,
+      normalized.granularity,
+      normalized.vSteps,
+      normalized.colorHsva,
+      normalized.algorithmVersion
     );
     if (!row) {
       return null;
     }
+    db.prepare(`
+      UPDATE texture_cache
+      SET createdAt = ?
+      WHERE surface = ?
+        AND width = ?
+        AND height = ?
+        AND seed = ?
+        AND granularity = ?
+        AND vSteps = ?
+        AND colorHsva = ?
+        AND algorithmVersion = ?
+    `).run(
+      Date.now(),
+      normalized.surface,
+      normalized.width,
+      normalized.height,
+      normalized.seed,
+      normalized.granularity,
+      normalized.vSteps,
+      normalized.colorHsva,
+      normalized.algorithmVersion
+    );
     return {
       data: new Uint8Array(row.data),
       mimeType: row.mimeType
@@ -1319,7 +1367,7 @@ class DatabaseService {
   }
   saveTextureCache(request, payload) {
     const db = this.requireDb();
-    const colorHsva = serializeTextureColorHsva(request.color);
+    const normalized = normalizeTextureCacheRequest(request);
     db.prepare(`
       INSERT OR REPLACE INTO texture_cache (
         surface,
@@ -1336,18 +1384,60 @@ class DatabaseService {
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      request.surface,
-      Math.max(1, Math.round(request.width)),
-      Math.max(1, Math.round(request.height)),
-      Math.max(0, Math.round(request.seed)),
-      Number(request.granularity.toFixed(4)),
-      Math.max(2, Math.round(request.vSteps)),
-      colorHsva,
-      Math.max(1, Math.round(request.algorithmVersion)),
+      normalized.surface,
+      normalized.width,
+      normalized.height,
+      normalized.seed,
+      normalized.granularity,
+      normalized.vSteps,
+      normalized.colorHsva,
+      normalized.algorithmVersion,
       Buffer.from(payload.data),
       payload.mimeType || "image/webp",
       Date.now()
     );
+    this.purgeTextureCache();
+  }
+  purgeTextureCache(request) {
+    const db = this.requireDb();
+    const maxEntries = Math.max(0, Math.floor((request == null ? void 0 : request.maxEntries) ?? TEXTURE_CACHE_DEFAULT_MAX_ENTRIES));
+    const maxAgeMs = Math.max(0, Math.floor((request == null ? void 0 : request.maxAgeMs) ?? TEXTURE_CACHE_DEFAULT_MAX_AGE_MS));
+    const keep = Array.isArray(request == null ? void 0 : request.keep) ? request.keep : [];
+    const keepKeys = new Set(keep.map((item) => textureCacheCompositeKey(normalizeTextureCacheRequest(item))));
+    const cutoffMs = Date.now() - maxAgeMs;
+    const rows = db.prepare(`
+      SELECT rowid, surface, width, height, seed, granularity, vSteps, colorHsva, algorithmVersion, createdAt
+      FROM texture_cache
+      ORDER BY createdAt DESC
+    `).all();
+    const deleteStmt = db.prepare("DELETE FROM texture_cache WHERE rowid = ?");
+    let retainedCount = 0;
+    let deletedCount = 0;
+    const tx = db.transaction(() => {
+      for (const row of rows) {
+        const key = textureCacheCompositeKey({
+          surface: row.surface,
+          width: row.width,
+          height: row.height,
+          seed: row.seed,
+          granularity: row.granularity,
+          vSteps: row.vSteps,
+          colorHsva: row.colorHsva,
+          algorithmVersion: row.algorithmVersion
+        });
+        const isProtected = keepKeys.has(key);
+        const isExpired = row.createdAt < cutoffMs;
+        const exceedsCap = maxEntries > 0 && retainedCount >= maxEntries;
+        if (!isProtected && (isExpired || exceedsCap)) {
+          deleteStmt.run(row.rowid);
+          deletedCount += 1;
+          continue;
+        }
+        retainedCount += 1;
+      }
+    });
+    tx();
+    return deletedCount;
   }
   ensureSchema() {
     const db = this.requireDb();
@@ -1549,7 +1639,8 @@ const LEGACY_DB_CHANNELS = {
 };
 const TEXTURE_CHANNELS = {
   getCached: "texture:cache:get",
-  saveCached: "texture:cache:save"
+  saveCached: "texture:cache:save",
+  purgeCached: "texture:cache:purge"
 };
 const __dirname$1 = path.dirname(fileURLToPath(import.meta.url));
 process.env.APP_ROOT = path.join(__dirname$1, "..");
@@ -1720,6 +1811,9 @@ function registerIpcHandlers() {
   });
   ipcMain.handle(TEXTURE_CHANNELS.saveCached, async (_event, request, payload) => {
     databaseService.saveTextureCache(request, payload);
+  });
+  ipcMain.handle(TEXTURE_CHANNELS.purgeCached, async (_event, request) => {
+    return databaseService.purgeTextureCache(request);
   });
 }
 function readCurrentWindowState(windowRef) {

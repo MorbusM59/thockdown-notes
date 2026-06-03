@@ -1,5 +1,5 @@
 import type { AppState, AppStateApi, WindowState } from '../shared/appState'
-import type { TextureCacheApi, TextureCacheHit, TextureCacheRequest } from '../shared/textures'
+import type { TextureCacheApi, TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../shared/textures'
 import type {
   AddTagInput,
   CreateNoteInput,
@@ -22,7 +22,7 @@ type BrowserMockStore = {
   notes: NoteDocument[]
   appState: AppState
   windowState: WindowState
-  textureCache: Record<string, { mimeType: string; dataBase64: string }>
+  textureCache: Record<string, { mimeType: string; dataBase64: string; createdAt: number }>
 }
 
 type BrowserMockWindow = Window & {
@@ -143,7 +143,15 @@ function loadStore(): BrowserMockStore {
           }
         : clone(DEFAULT_WINDOW_STATE),
       textureCache: parsed.textureCache && typeof parsed.textureCache === 'object'
-        ? (parsed.textureCache as Record<string, { mimeType: string; dataBase64: string }>)
+        ? Object.entries(parsed.textureCache as Record<string, { mimeType: string; dataBase64: string; createdAt?: number }>).reduce((acc, [key, value]) => {
+            if (!value || typeof value !== 'object') return acc
+            acc[key] = {
+              mimeType: typeof value.mimeType === 'string' ? value.mimeType : 'image/webp',
+              dataBase64: typeof value.dataBase64 === 'string' ? value.dataBase64 : '',
+              createdAt: Number.isFinite(value.createdAt) ? Number(value.createdAt) : Date.now(),
+            }
+            return acc
+          }, {} as Record<string, { mimeType: string; dataBase64: string; createdAt: number }>)
         : {},
     }
   } catch {
@@ -357,6 +365,8 @@ function buildTextureBridge(storeRef: { current: BrowserMockStore }): TextureCac
       const key = serializeTextureKey(request)
       const entry = storeRef.current.textureCache[key]
       if (!entry) return null
+      entry.createdAt = Date.now()
+      persistStore(storeRef.current)
       return {
         mimeType: entry.mimeType,
         data: fromBase64(entry.dataBase64),
@@ -369,7 +379,37 @@ function buildTextureBridge(storeRef: { current: BrowserMockStore }): TextureCac
         store.textureCache[key] = {
           mimeType: payload.mimeType,
           dataBase64: toBase64(payload.data),
+          createdAt: Date.now(),
         }
+      })
+    },
+
+    async purgeCachedTextures(request?: TextureCachePurgeRequest): Promise<number> {
+      return mutate((store) => {
+        const keepSet = new Set((request?.keep ?? []).map((item) => serializeTextureKey(item)))
+        const maxEntries = Math.max(0, Math.floor(request?.maxEntries ?? 96))
+        const maxAgeMs = Math.max(0, Math.floor(request?.maxAgeMs ?? 1000 * 60 * 60 * 24 * 14))
+        const cutoff = Date.now() - maxAgeMs
+
+        const entries = Object.entries(store.textureCache)
+          .map(([key, value]) => ({ key, ...value }))
+          .sort((a, b) => b.createdAt - a.createdAt)
+
+        let retained = 0
+        let deleted = 0
+        for (const entry of entries) {
+          const isProtected = keepSet.has(entry.key)
+          const isExpired = entry.createdAt < cutoff
+          const exceedsCap = maxEntries > 0 && retained >= maxEntries
+          if (!isProtected && (isExpired || exceedsCap)) {
+            delete store.textureCache[entry.key]
+            deleted += 1
+            continue
+          }
+          retained += 1
+        }
+
+        return deleted
       })
     },
   }

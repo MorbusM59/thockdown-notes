@@ -118,6 +118,7 @@ contextBridge.exposeInMainWorld('measlyLegacyDb', legacyDbApi)
 const textureCacheApi: TextureCacheApi = {
   getCachedTexture: (request) => ipcRenderer.invoke(TEXTURE_CHANNELS.getCached, request),
   saveCachedTexture: (request, payload) => ipcRenderer.invoke(TEXTURE_CHANNELS.saveCached, request, payload),
+  purgeCachedTextures: (request) => ipcRenderer.invoke(TEXTURE_CHANNELS.purgeCached, request),
 }
 
 contextBridge.exposeInMainWorld('measlyTextures', textureCacheApi)

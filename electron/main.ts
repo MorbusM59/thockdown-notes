@@ -213,6 +213,10 @@ function registerIpcHandlers() {
   ipcMain.handle(TEXTURE_CHANNELS.saveCached, async (_event, request, payload) => {
     databaseService!.saveTextureCache(request, payload);
   });
+
+  ipcMain.handle(TEXTURE_CHANNELS.purgeCached, async (_event, request) => {
+    return databaseService!.purgeTextureCache(request);
+  });
 }
 
 function readCurrentWindowState(windowRef: BrowserWindow): WindowState {

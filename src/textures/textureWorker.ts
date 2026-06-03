@@ -26,7 +26,8 @@ workerScope.onmessage = async (event: MessageEvent<TextureWorkerRequest>) => {
       return;
     }
 
-    context.putImageData(new ImageData(rgba, width, height), 0, 0);
+    const imageDataBytes = new Uint8ClampedArray(rgba);
+    context.putImageData(new ImageData(imageDataBytes, width, height), 0, 0);
     const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.9 });
     const buffer = await blob.arrayBuffer();
     const response: TextureWorkerResponse = { buffer, mimeType: 'image/webp' };
@@ -34,7 +35,9 @@ workerScope.onmessage = async (event: MessageEvent<TextureWorkerRequest>) => {
     return;
   }
 
-  const fallbackBuffer = rgba.buffer.slice(rgba.byteOffset, rgba.byteOffset + rgba.byteLength);
+  const fallbackBuffer = rgba.buffer instanceof ArrayBuffer
+    ? rgba.buffer.slice(rgba.byteOffset, rgba.byteOffset + rgba.byteLength)
+    : new Uint8Array(rgba).buffer;
   const response: TextureWorkerResponse = { buffer: fallbackBuffer, mimeType: 'application/octet-stream' };
   workerScope.postMessage(response, [fallbackBuffer]);
 };

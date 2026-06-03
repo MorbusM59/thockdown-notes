@@ -46,7 +46,8 @@ const LEGACY_DB_CHANNELS = {
 };
 const TEXTURE_CHANNELS = {
   getCached: "texture:cache:get",
-  saveCached: "texture:cache:save"
+  saveCached: "texture:cache:save",
+  purgeCached: "texture:cache:purge"
 };
 electron.contextBridge.exposeInMainWorld("ipcRenderer", {
   on(...args) {
@@ -126,6 +127,7 @@ const legacyDbApi = {
 electron.contextBridge.exposeInMainWorld("measlyLegacyDb", legacyDbApi);
 const textureCacheApi = {
   getCachedTexture: (request) => electron.ipcRenderer.invoke(TEXTURE_CHANNELS.getCached, request),
-  saveCachedTexture: (request, payload) => electron.ipcRenderer.invoke(TEXTURE_CHANNELS.saveCached, request, payload)
+  saveCachedTexture: (request, payload) => electron.ipcRenderer.invoke(TEXTURE_CHANNELS.saveCached, request, payload),
+  purgeCachedTextures: (request) => electron.ipcRenderer.invoke(TEXTURE_CHANNELS.purgeCached, request)
 };
 electron.contextBridge.exposeInMainWorld("measlyTextures", textureCacheApi);

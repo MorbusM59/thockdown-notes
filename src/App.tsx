@@ -14,6 +14,7 @@ import type {
 } from './editor/EditorContract'
 import type { PersistedMenuState, PersistedSidebarViewState, PersistedViewportState } from './shared/appState'
 import type { NoteSummary } from './shared/noteLifecycle'
+import type { TextureCacheRequest } from './shared/textures'
 import {
   DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
   DEFAULT_EDITOR_FONT_SIZE,
@@ -73,7 +74,7 @@ import {
   type TextureMaterialsBySurface,
   type TextureSurfaceKey,
 } from './textures/types'
-import { useTextureSurface } from './textures/useTextureSurface'
+import { TEXTURE_ALGORITHM_VERSION, useTextureSurface } from './textures/useTextureSurface'
 
 const SAVE_DEBOUNCE_MS = 350
 const NEW_NOTE_TEMPLATE = '# '
@@ -175,11 +176,13 @@ type HsvaDragState = {
 }
 
 type ColorArmSource =
-  | { kind: 'element'; key: HighlightColorKey }
-  | { kind: 'texture'; key: TextureSurfaceKey }
   | { kind: 'hsva'; key: HsvaControlKey }
   | { kind: 'active-color' }
   | { kind: 'texture-preview' }
+
+type ElementPreviewCopySource =
+  | { kind: 'element'; key: HighlightColorKey }
+  | { kind: 'texture'; key: TextureSurfaceKey }
 
 type SidebarViewState = {
   scrollTop: number
@@ -1380,7 +1383,7 @@ function App() {
   const [appGridTextureSize, setAppGridTextureSize] = useState({ width: 1280, height: 720 })
   const [sidebarTextureSize, setSidebarTextureSize] = useState({ width: 512, height: 720 })
   const [editorStageTextureSize, setEditorStageTextureSize] = useState({ width: 1280, height: 720 })
-  const [armedColorSource, setArmedColorSource] = useState<ColorArmSource | null>(null)
+  const [armedColorSource, setArmedColorSource] = useState<ColorArmSource>({ kind: 'active-color' })
   const [activeColorHsva, setActiveColorHsva] = useState<HsvaColor>(() => {
     const seed = parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS.caret) ?? { r: 120, g: 115, b: 112, a: 0.8 }
     return rgbaToHsva(seed)
@@ -1486,9 +1489,58 @@ function App() {
     width: 96,
     height: 32,
     material: texturePreviewMaterial,
+    usePersistentCache: false,
   })
   const activeColorRgba = useMemo(() => hsvaToRgba(activeColorHsva), [activeColorHsva])
   const activeColorCss = useMemo(() => rgbaToCssColor(activeColorRgba), [activeColorRgba])
+
+  useEffect(() => {
+    const textureApi = window.measlyTextures
+    if (!textureApi) return
+
+    const keep: TextureCacheRequest[] = [
+      {
+        surface: 'appGrid',
+        width: quantizeTextureSize(appGridTextureSize.width),
+        height: quantizeTextureSize(appGridTextureSize.height),
+        seed: textureMaterials.appGrid.seed,
+        granularity: textureMaterials.appGrid.granularity,
+        vSteps: textureMaterials.appGrid.vSteps,
+        color: { ...textureMaterials.appGrid.color },
+        algorithmVersion: TEXTURE_ALGORITHM_VERSION,
+      },
+      {
+        surface: 'sidebarContent',
+        width: quantizeTextureSize(sidebarTextureSize.width),
+        height: quantizeTextureSize(sidebarTextureSize.height),
+        seed: textureMaterials.sidebarContent.seed,
+        granularity: textureMaterials.sidebarContent.granularity,
+        vSteps: textureMaterials.sidebarContent.vSteps,
+        color: { ...textureMaterials.sidebarContent.color },
+        algorithmVersion: TEXTURE_ALGORITHM_VERSION,
+      },
+      {
+        surface: 'editorStage',
+        width: quantizeTextureSize(editorStageTextureSize.width),
+        height: quantizeTextureSize(editorStageTextureSize.height),
+        seed: textureMaterials.editorStage.seed,
+        granularity: textureMaterials.editorStage.granularity,
+        vSteps: textureMaterials.editorStage.vSteps,
+        color: { ...textureMaterials.editorStage.color },
+        algorithmVersion: TEXTURE_ALGORITHM_VERSION,
+      },
+    ]
+
+    void textureApi.purgeCachedTextures({ keep, maxEntries: 96, maxAgeMs: 1000 * 60 * 60 * 24 * 14 })
+  }, [
+    appGridTextureSize.height,
+    appGridTextureSize.width,
+    editorStageTextureSize.height,
+    editorStageTextureSize.width,
+    sidebarTextureSize.height,
+    sidebarTextureSize.width,
+    textureMaterials,
+  ])
 
   const hsvaDisplayColors = useMemo(() => {
     const hColor = rgbaToCssColor(hsvaToRgba({ h: activeColorHsva.h, s: 1, v: 1, a: 1 }))
@@ -1551,38 +1603,6 @@ function App() {
     return hsvaToRgba(source[surface].color)
   }, [])
 
-  const applyElementColorToElement = useCallback((sourceKey: HighlightColorKey, targetKey: HighlightColorKey) => {
-    if (sourceKey === targetKey) return
-
-    setHighlightColors((previous) => {
-      const source = resolveHighlightColor(previous, sourceKey)
-      return {
-        ...previous,
-        [targetKey]: rgbaToCssColor(source),
-      }
-    })
-  }, [resolveHighlightColor])
-
-  const applyTextureColorToTexture = useCallback((sourceSurface: TextureSurfaceKey, targetSurface: TextureSurfaceKey) => {
-    if (sourceSurface === targetSurface) return
-    const source = cloneTextureMaterial(textureMaterials[sourceSurface])
-    setTextureMaterials((previous) => {
-      const next = cloneTextureMaterials(previous)
-      next[targetSurface] = source
-      return next
-    })
-  }, [textureMaterials])
-
-  const applyElementColorToTexture = useCallback((sourceKey: HighlightColorKey, targetSurface: TextureSurfaceKey) => {
-    const source = resolveHighlightColor(highlightColors, sourceKey)
-    updateTextureColor(targetSurface, source)
-  }, [highlightColors, resolveHighlightColor, updateTextureColor])
-
-  const applyTextureColorToElement = useCallback((sourceSurface: TextureSurfaceKey, targetKey: HighlightColorKey) => {
-    const source = resolveTextureColor(textureMaterials, sourceSurface)
-    updateHighlightColor(targetKey, source)
-  }, [resolveTextureColor, textureMaterials, updateHighlightColor])
-
   const applyHsvaValueToElement = useCallback((sourceKey: HsvaControlKey, targetKey: HighlightColorKey) => {
     setHighlightColors((previous) => {
       const target = resolveHighlightColor(previous, targetKey)
@@ -1629,20 +1649,6 @@ function App() {
     updateTextureColor(targetSurface, activeColorRgba)
   }, [activeColorRgba, updateTextureColor])
 
-  const applyActiveColorToTexturePreview = useCallback(() => {
-    setTexturePreviewMaterial((current) => ({
-      ...current,
-      color: areHsvaEqual(current.color, activeColorHsva)
-        ? current.color
-        : {
-            h: activeColorHsva.h,
-            s: activeColorHsva.s,
-            v: activeColorHsva.v,
-            a: activeColorHsva.a,
-          },
-    }))
-  }, [activeColorHsva])
-
   useEffect(() => {
     setTexturePreviewMaterial((current) => ({
       ...current,
@@ -1657,82 +1663,23 @@ function App() {
     }))
   }, [activeColorHsva])
 
-  const applyElementColorToActiveColor = useCallback((sourceKey: HighlightColorKey) => {
-    const source = resolveHighlightColor(highlightColors, sourceKey)
-    setActiveColorHsva(rgbaToHsva(source))
-  }, [highlightColors, resolveHighlightColor])
-
-  const applyTextureColorToActiveColor = useCallback((sourceSurface: TextureSurfaceKey) => {
-    const source = resolveTextureColor(textureMaterials, sourceSurface)
-    setActiveColorHsva(rgbaToHsva(source))
-  }, [resolveTextureColor, textureMaterials])
-
-  const applyTexturePreviewColorToActiveColor = useCallback(() => {
-    setActiveColorHsva({
-      h: texturePreviewMaterial.color.h,
-      s: texturePreviewMaterial.color.s,
-      v: texturePreviewMaterial.color.v,
-      a: texturePreviewMaterial.color.a,
-    })
-  }, [texturePreviewMaterial])
-
-  useEffect(() => {
-    if (!armedColorSource) return
-
-    if (armedColorSource.kind === 'element') {
-      const rgba = resolveHighlightColor(highlightColors, armedColorSource.key)
+  const copyElementValuesToPreviews = useCallback((source: ElementPreviewCopySource) => {
+    if (source.kind === 'element') {
+      const rgba = resolveHighlightColor(highlightColors, source.key)
       const hsva = rgbaToHsva(rgba)
       setActiveColorHsva((previous) => (areHsvaEqual(previous, hsva) ? previous : hsva))
-      setTexturePreviewMaterial((current) => ({
-        ...current,
-        color: areHsvaEqual(current.color, hsva)
-          ? current.color
-          : {
-              h: hsva.h,
-              s: hsva.s,
-              v: hsva.v,
-              a: hsva.a,
-            },
-      }))
       return
     }
 
-    if (armedColorSource.kind === 'texture') {
-      const material = cloneTextureMaterial(textureMaterials[armedColorSource.key])
-      setTexturePreviewMaterial((previous) => (areTextureMaterialsEqual(previous, material) ? previous : material))
-      setActiveColorHsva((previous) => (areHsvaEqual(previous, material.color) ? previous : {
-        h: material.color.h,
-        s: material.color.s,
-        v: material.color.v,
-        a: material.color.a,
-      }))
-      return
-    }
-
-    if (armedColorSource.kind === 'texture-preview') {
-      setActiveColorHsva((previous) => (areHsvaEqual(previous, texturePreviewMaterial.color) ? previous : {
-        h: texturePreviewMaterial.color.h,
-        s: texturePreviewMaterial.color.s,
-        v: texturePreviewMaterial.color.v,
-        a: texturePreviewMaterial.color.a,
-      }))
-      return
-    }
-
-    if (armedColorSource.kind === 'active-color') {
-      setTexturePreviewMaterial((current) => ({
-        ...current,
-        color: areHsvaEqual(current.color, activeColorHsva)
-          ? current.color
-          : {
-              h: activeColorHsva.h,
-              s: activeColorHsva.s,
-              v: activeColorHsva.v,
-              a: activeColorHsva.a,
-            },
-      }))
-    }
-  }, [activeColorHsva, armedColorSource, highlightColors, resolveHighlightColor, textureMaterials, texturePreviewMaterial])
+    const material = cloneTextureMaterial(textureMaterials[source.key])
+    setTexturePreviewMaterial((previous) => (areTextureMaterialsEqual(previous, material) ? previous : material))
+    setActiveColorHsva((previous) => (areHsvaEqual(previous, material.color) ? previous : {
+      h: material.color.h,
+      s: material.color.s,
+      v: material.color.v,
+      a: material.color.a,
+    }))
+  }, [highlightColors, resolveHighlightColor, textureMaterials])
 
   const startColorArmHold = useCallback((source: ColorArmSource, event: MouseEvent<HTMLButtonElement>) => {
     if (event.button !== 2) return
@@ -1745,6 +1692,18 @@ function App() {
       colorArmTimerRef.current = null
     }, COLOR_BUTTON_ARM_HOLD_MS)
   }, [clearColorArmTimer])
+
+  const startElementPreviewCopyHold = useCallback((source: ElementPreviewCopySource, event: MouseEvent<HTMLButtonElement>) => {
+    if (event.button !== 2) return
+    event.preventDefault()
+    event.stopPropagation()
+    clearColorArmTimer()
+
+    colorArmTimerRef.current = window.setTimeout(() => {
+      copyElementValuesToPreviews(source)
+      colorArmTimerRef.current = null
+    }, COLOR_BUTTON_ARM_HOLD_MS)
+  }, [clearColorArmTimer, copyElementValuesToPreviews])
 
   const updateHsvaControlValue = useCallback((control: HsvaControlKey, rawValue: number) => {
     setActiveColorHsva((previous) => {
@@ -1828,24 +1787,20 @@ function App() {
   }, [clearColorArmTimer])
 
   useEffect(() => {
-    if (!armedColorSource) return
-
     const handleGlobalMouseDown = (event: globalThis.MouseEvent) => {
       if (event.button !== 2) return
       clearColorArmTimer()
-      setArmedColorSource(null)
     }
 
     window.addEventListener('mousedown', handleGlobalMouseDown, true)
     return () => {
       window.removeEventListener('mousedown', handleGlobalMouseDown, true)
     }
-  }, [armedColorSource, clearColorArmTimer])
+  }, [clearColorArmTimer])
 
   useEffect(() => {
     if (isScrollSettingsOpen) return
     clearColorArmTimer()
-    setArmedColorSource(null)
   }, [isScrollSettingsOpen, clearColorArmTimer])
 
   const readCurrentEditUiPayload = useCallback((): { progressEdit: number; cursorPos: number; scrollTop: number } | null => {
@@ -6884,33 +6839,23 @@ function App() {
                       <button
                         key={key}
                         type="button"
-                        className={`toolbar-btn-icon toolbar-flyout-color-swatch${armedColorSource?.kind === 'element' && armedColorSource.key === key ? ' active' : ''}`}
+                        className="toolbar-btn-icon toolbar-flyout-color-swatch"
                         onClick={() => {
-                          if (armedColorSource?.kind === 'element') {
-                            applyElementColorToElement(armedColorSource.key, key)
-                            return
-                          }
-
-                          if (armedColorSource?.kind === 'texture') {
-                            applyTextureColorToElement(armedColorSource.key, key)
-                            return
-                          }
-
-                          if (armedColorSource?.kind === 'hsva') {
-                            applyHsvaValueToElement(armedColorSource.key, key)
-                            return
-                          }
-
-                          if (armedColorSource?.kind === 'active-color') {
+                          if (armedColorSource.kind === 'active-color') {
                             applyActiveColorToElement(key)
                             return
                           }
 
-                          if (armedColorSource?.kind === 'texture-preview') {
+                          if (armedColorSource.kind === 'texture-preview') {
                             updateHighlightColor(key, hsvaToRgba(texturePreviewMaterial.color))
+                            return
+                          }
+
+                          if (armedColorSource.kind === 'hsva') {
+                            applyHsvaValueToElement(armedColorSource.key, key)
                           }
                         }}
-                        onMouseDown={(event) => startColorArmHold({ kind: 'element', key }, event)}
+                        onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'element', key }, event)}
                         onMouseUp={(event) => {
                           if (event.button !== 2) return
                           clearColorArmTimer()
@@ -6937,34 +6882,24 @@ function App() {
                       <button
                         key={surface}
                         type="button"
-                        className={`toolbar-btn-icon toolbar-flyout-color-swatch${armedColorSource?.kind === 'texture' && armedColorSource.key === surface ? ' active' : ''}`}
+                        className="toolbar-btn-icon toolbar-flyout-color-swatch"
                         onClick={() => {
-                          if (armedColorSource?.kind === 'element') {
-                            applyElementColorToTexture(armedColorSource.key, surface)
-                            return
-                          }
-
-                          if (armedColorSource?.kind === 'texture') {
-                            applyTextureColorToTexture(armedColorSource.key, surface)
-                            return
-                          }
-
-                          if (armedColorSource?.kind === 'hsva') {
-                            applyHsvaValueToTexture(armedColorSource.key, surface)
-                            return
-                          }
-
-                          if (armedColorSource?.kind === 'active-color') {
+                          if (armedColorSource.kind === 'active-color') {
                             applyActiveColorToTexture(surface)
                             return
                           }
 
-                          if (armedColorSource?.kind === 'texture-preview') {
+                          if (armedColorSource.kind === 'texture-preview') {
                             applyTexturePreviewToSurface(surface)
                             return
                           }
+
+                          if (armedColorSource.kind === 'hsva') {
+                            applyHsvaValueToTexture(armedColorSource.key, surface)
+                            return
+                          }
                         }}
-                        onMouseDown={(event) => startColorArmHold({ kind: 'texture', key: surface }, event)}
+                        onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'texture', key: surface }, event)}
                         onMouseUp={(event) => {
                           if (event.button !== 2) return
                           clearColorArmTimer()
@@ -6989,7 +6924,7 @@ function App() {
                   <div className="toolbar-flyout-color-grid toolbar-flyout-hsva-grid" role="group" aria-label="HSVA value controls">
                     <button
                       type="button"
-                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 'h' ? ' is-dragging' : ''}${armedColorSource?.kind === 'hsva' && armedColorSource.key === 'h' ? ' active' : ''}`}
+                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 'h' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'h' ? ' active' : ''}`}
                       style={{ background: hsvaDisplayColors.hColor }}
                       title="Hue"
                       onPointerDown={(event) => {
@@ -7023,7 +6958,7 @@ function App() {
                     ><span className="toolbar-flyout-hsva-glyph fa-solid fa-circle-notch" aria-hidden="true" /></button>
                     <button
                       type="button"
-                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 's' ? ' is-dragging' : ''}${armedColorSource?.kind === 'hsva' && armedColorSource.key === 's' ? ' active' : ''}`}
+                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 's' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 's' ? ' active' : ''}`}
                       style={{ background: hsvaDisplayColors.sColor }}
                       title="Saturation"
                       onPointerDown={(event) => {
@@ -7057,7 +6992,7 @@ function App() {
                     ><span className="toolbar-flyout-hsva-glyph fa-solid fa-droplet" aria-hidden="true" /></button>
                     <button
                       type="button"
-                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 'v' ? ' is-dragging' : ''}${armedColorSource?.kind === 'hsva' && armedColorSource.key === 'v' ? ' active' : ''}`}
+                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 'v' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'v' ? ' active' : ''}`}
                       style={{ background: hsvaDisplayColors.vColor }}
                       title="Value"
                       onPointerDown={(event) => {
@@ -7091,7 +7026,7 @@ function App() {
                     ><span className="toolbar-flyout-hsva-glyph fa-solid fa-sun" aria-hidden="true" /></button>
                     <button
                       type="button"
-                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control toolbar-flyout-hsva-alpha${hsvaDragState?.control === 'a' ? ' is-dragging' : ''}${armedColorSource?.kind === 'hsva' && armedColorSource.key === 'a' ? ' active' : ''}`}
+                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control toolbar-flyout-hsva-alpha${hsvaDragState?.control === 'a' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'a' ? ' active' : ''}`}
                       style={{ background: 'var(--color-background-light)', color: hsvaDisplayColors.aGhostColor }}
                       title="Alpha"
                       onPointerDown={(event) => {
@@ -7125,7 +7060,7 @@ function App() {
                     ><span className="toolbar-flyout-hsva-ghost fa-solid fa-ghost" aria-hidden="true" /></button>
                     <button
                       type="button"
-                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color${armedColorSource?.kind === 'active-color' ? ' active' : ''}`}
+                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color${armedColorSource.kind === 'active-color' ? ' active' : ''}`}
                       title="Active color"
                       style={{ background: `linear-gradient(${activeColorCss}, ${activeColorCss}), var(--color-background-light)` }}
                       onMouseDown={(event) => {
@@ -7141,19 +7076,7 @@ function App() {
                         event.preventDefault()
                         clearColorArmTimer()
                       }}
-                      onClick={() => {
-                        if (armedColorSource?.kind === 'element') {
-                          applyElementColorToActiveColor(armedColorSource.key)
-                          return
-                        }
-                        if (armedColorSource?.kind === 'texture') {
-                          applyTextureColorToActiveColor(armedColorSource.key)
-                          return
-                        }
-                        if (armedColorSource?.kind === 'texture-preview') {
-                          applyTexturePreviewColorToActiveColor()
-                        }
-                      }}
+                      onClick={() => {}}
                     />
                   </div>
 
@@ -7216,7 +7139,7 @@ function App() {
                     <div className="toolbar-flyout-texture-preview-row">
                       <button
                         type="button"
-                        className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color toolbar-flyout-texture-preview${armedColorSource?.kind === 'texture-preview' ? ' active' : ''}`}
+                        className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color toolbar-flyout-texture-preview${armedColorSource.kind === 'texture-preview' ? ' active' : ''}`}
                         title="Texture preview"
                         style={{
                           backgroundColor: 'var(--color-background-light)',
@@ -7239,13 +7162,6 @@ function App() {
                           clearColorArmTimer()
                         }}
                         onClick={() => {
-                          if (armedColorSource?.kind === 'texture') {
-                            setTexturePreviewMaterial(cloneTextureMaterial(textureMaterials[armedColorSource.key]))
-                            return
-                          }
-                          if (armedColorSource?.kind === 'active-color') {
-                            applyActiveColorToTexturePreview()
-                          }
                         }}
                       />
                     </div>

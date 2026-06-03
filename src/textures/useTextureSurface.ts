@@ -16,7 +16,9 @@ function revokeUrl(url: string | null): void {
 }
 
 function createBlobUrl(data: Uint8Array, mimeType: string): string {
-  const blob = new Blob([data], { type: mimeType || 'image/webp' });
+  const blobBytes = new Uint8Array(data.byteLength);
+  blobBytes.set(data);
+  const blob = new Blob([blobBytes], { type: mimeType || 'image/webp' });
   return URL.createObjectURL(blob);
 }
 
@@ -40,8 +42,10 @@ export function useTextureSurface(params: {
   width: number;
   height: number;
   material: TextureMaterialSettings;
+  usePersistentCache?: boolean;
 }): string {
   const { enabled, surface } = params;
+  const usePersistentCache = params.usePersistentCache ?? true;
   const material = useMemo(() => clampMaterialSettings(params.material), [params.material]);
   const materialSeed = material.seed;
   const materialGranularity = material.granularity;
@@ -94,7 +98,7 @@ export function useTextureSurface(params: {
     const run = async () => {
       const textureApi = window.measlyTextures;
       try {
-        if (textureApi) {
+        if (textureApi && usePersistentCache) {
           const cached = await textureApi.getCachedTexture(cacheKey);
           if (cached && !cancelled) {
             const cachedUrl = createBlobUrl(cached.data, cached.mimeType);
@@ -138,7 +142,7 @@ export function useTextureSurface(params: {
         const generatedUrl = createBlobUrl(data, response.mimeType);
         swapUrl(generatedUrl, currentUrlRef, setUrl);
 
-        if (textureApi) {
+        if (textureApi && usePersistentCache) {
           await textureApi.saveCachedTexture(cacheKey, {
             data,
             mimeType: response.mimeType,
@@ -176,6 +180,7 @@ export function useTextureSurface(params: {
     materialSeed,
     materialVSteps,
     surface,
+    usePersistentCache,
     width,
   ]);
 
