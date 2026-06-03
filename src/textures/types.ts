@@ -1,4 +1,4 @@
-export type TextureSurfaceKey = 'appGrid' | 'sidebarContent' | 'editorStage';
+export type TextureSurfaceKey = 'appGrid' | 'sidebarContent' | 'editorEditText' | 'editorRenderText';
 
 export type TextureColorHsva = {
   h: number;
@@ -16,7 +16,7 @@ export type TextureMaterialSettings = {
 
 export type TextureMaterialsBySurface = Record<TextureSurfaceKey, TextureMaterialSettings>;
 
-export const TEXTURE_SURFACES: TextureSurfaceKey[] = ['appGrid', 'sidebarContent', 'editorStage'];
+export const TEXTURE_SURFACES: TextureSurfaceKey[] = ['appGrid', 'sidebarContent', 'editorEditText', 'editorRenderText'];
 
 export const DEFAULT_TEXTURE_MATERIALS: TextureMaterialsBySurface = {
   appGrid: {
@@ -31,11 +31,17 @@ export const DEFAULT_TEXTURE_MATERIALS: TextureMaterialsBySurface = {
     vSteps: 7,
     color: { h: 30, s: 0.11, v: 0.93, a: 0.17 },
   },
-  editorStage: {
+  editorEditText: {
     seed: 389,
     granularity: 10,
     vSteps: 9,
     color: { h: 29, s: 0.1, v: 0.92, a: 0.14 },
+  },
+  editorRenderText: {
+    seed: 467,
+    granularity: 11,
+    vSteps: 9,
+    color: { h: 31, s: 0.1, v: 0.94, a: 0.12 },
   },
 };
 

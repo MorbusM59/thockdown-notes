@@ -323,7 +323,7 @@ const APP_STATE_CHANNELS = {
   loadWindowState: "state:window:load",
   saveWindowState: "state:window:save"
 };
-const TEXTURE_SURFACES = ["appGrid", "sidebarContent", "editorStage"];
+const TEXTURE_SURFACES = ["appGrid", "sidebarContent", "editorEditText", "editorRenderText"];
 const DEFAULT_TEXTURE_MATERIALS = {
   appGrid: {
     seed: 137,
@@ -337,11 +337,17 @@ const DEFAULT_TEXTURE_MATERIALS = {
     vSteps: 7,
     color: { h: 30, s: 0.11, v: 0.93, a: 0.17 }
   },
-  editorStage: {
+  editorEditText: {
     seed: 389,
     granularity: 10,
     vSteps: 9,
     color: { h: 29, s: 0.1, v: 0.92, a: 0.14 }
+  },
+  editorRenderText: {
+    seed: 467,
+    granularity: 11,
+    vSteps: 9,
+    color: { h: 31, s: 0.1, v: 0.94, a: 0.12 }
   }
 };
 const APP_STATE_FILE = "app-state.json";
@@ -447,8 +453,11 @@ function sanitizeIntegerInRange(input, min, max, fallback) {
   return Math.max(min, Math.min(max, rounded));
 }
 function sanitizeTextureSurface(input) {
-  if (input === "appGrid" || input === "sidebarContent" || input === "editorStage") {
+  if (input === "appGrid" || input === "sidebarContent" || input === "editorEditText" || input === "editorRenderText") {
     return input;
+  }
+  if (input === "editorStage") {
+    return "editorEditText";
   }
   return DEFAULT_APP_STATE.menu.textureActiveSurface ?? "appGrid";
 }
@@ -472,8 +481,14 @@ function sanitizeTextureMaterial(input, fallback) {
 }
 function sanitizeTextureMaterials(input) {
   const source = input && typeof input === "object" ? input : {};
+  const legacySource = input && typeof input === "object" ? input : {};
+  const legacyEditorStage = legacySource.editorStage;
   const next = { ...DEFAULT_TEXTURE_MATERIALS };
   for (const surface of TEXTURE_SURFACES) {
+    if ((surface === "editorEditText" || surface === "editorRenderText") && source[surface] === void 0 && legacyEditorStage !== void 0) {
+      next[surface] = sanitizeTextureMaterial(legacyEditorStage, DEFAULT_TEXTURE_MATERIALS[surface]);
+      continue;
+    }
     next[surface] = sanitizeTextureMaterial(source[surface], DEFAULT_TEXTURE_MATERIALS[surface]);
   }
   return next;

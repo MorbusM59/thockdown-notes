@@ -69,7 +69,6 @@ import {
 } from './shared/filterConstants'
 import {
   DEFAULT_TEXTURE_MATERIALS,
-  TEXTURE_SURFACES,
   type TextureMaterialSettings,
   type TextureMaterialsBySurface,
   type TextureSurfaceKey,
@@ -132,13 +131,15 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
 const TEXTURE_SURFACE_TITLES: Record<TextureSurfaceKey, string> = {
   appGrid: 'App grid texture color',
   sidebarContent: 'Sidebar texture color',
-  editorStage: 'Editor texture color',
+  editorEditText: 'Edit text panel texture color',
+  editorRenderText: 'Render text panel texture color',
 }
 
 const TEXTURE_SURFACE_ICONS: Record<TextureSurfaceKey, string> = {
   appGrid: 'fa-solid fa-table-columns',
   sidebarContent: 'fa-solid fa-list',
-  editorStage: 'fa-solid fa-table-cells',
+  editorEditText: 'fa-solid fa-pen-to-square',
+  editorRenderText: 'fa-solid fa-book-open',
 }
 
 type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find'
@@ -805,9 +806,13 @@ function cloneTextureMaterials(source: TextureMaterialsBySurface): TextureMateri
       ...source.sidebarContent,
       color: { ...source.sidebarContent.color },
     },
-    editorStage: {
-      ...source.editorStage,
-      color: { ...source.editorStage.color },
+    editorEditText: {
+      ...source.editorEditText,
+      color: { ...source.editorEditText.color },
+    },
+    editorRenderText: {
+      ...source.editorRenderText,
+      color: { ...source.editorRenderText.color },
     },
   }
 }
@@ -1476,12 +1481,19 @@ function App() {
     height: sidebarTextureSize.height,
     material: textureMaterials.sidebarContent,
   })
-  const editorStageTextureCss = useTextureSurface({
+  const editorEditTextTextureCss = useTextureSurface({
     enabled: textureEnabled,
-    surface: 'editorStage',
+    surface: 'editorEditText',
     width: editorStageTextureSize.width,
     height: editorStageTextureSize.height,
-    material: textureMaterials.editorStage,
+    material: textureMaterials.editorEditText,
+  })
+  const editorRenderTextTextureCss = useTextureSurface({
+    enabled: textureEnabled,
+    surface: 'editorRenderText',
+    width: editorStageTextureSize.width,
+    height: editorStageTextureSize.height,
+    material: textureMaterials.editorRenderText,
   })
   const texturePreviewCss = useTextureSurface({
     enabled: true,
@@ -1520,13 +1532,23 @@ function App() {
         algorithmVersion: TEXTURE_ALGORITHM_VERSION,
       },
       {
-        surface: 'editorStage',
+        surface: 'editorEditText',
         width: quantizeTextureSize(editorStageTextureSize.width),
         height: quantizeTextureSize(editorStageTextureSize.height),
-        seed: textureMaterials.editorStage.seed,
-        granularity: textureMaterials.editorStage.granularity,
-        vSteps: textureMaterials.editorStage.vSteps,
-        color: { ...textureMaterials.editorStage.color },
+        seed: textureMaterials.editorEditText.seed,
+        granularity: textureMaterials.editorEditText.granularity,
+        vSteps: textureMaterials.editorEditText.vSteps,
+        color: { ...textureMaterials.editorEditText.color },
+        algorithmVersion: TEXTURE_ALGORITHM_VERSION,
+      },
+      {
+        surface: 'editorRenderText',
+        width: quantizeTextureSize(editorStageTextureSize.width),
+        height: quantizeTextureSize(editorStageTextureSize.height),
+        seed: textureMaterials.editorRenderText.seed,
+        granularity: textureMaterials.editorRenderText.granularity,
+        vSteps: textureMaterials.editorRenderText.vSteps,
+        color: { ...textureMaterials.editorRenderText.color },
         algorithmVersion: TEXTURE_ALGORITHM_VERSION,
       },
     ]
@@ -2343,10 +2365,11 @@ function App() {
       '--color-selection': highlightColors.selection,
       '--texture-app-grid': appGridTextureCss,
       '--texture-sidebar-content': sidebarTextureCss,
-      '--texture-editor-stage': editorStageTextureCss,
+      '--texture-editor-edit': editorEditTextTextureCss,
+      '--texture-editor-render': editorRenderTextTextureCss,
     }
     return style
-  }, [appGridTextureCss, editorStageTextureCss, highlightColors, layout.gridTemplateColumns, sidebarTextureCss])
+  }, [appGridTextureCss, editorEditTextTextureCss, editorRenderTextTextureCss, highlightColors, layout.gridTemplateColumns, sidebarTextureCss])
 
   const queueAppStateSave = useCallback((selectedNoteId: string | null) => {
     if (!window.measlyState) return
@@ -6830,8 +6853,8 @@ function App() {
                 </div>
               </section>
 
-              <section className="toolbar-flyout-section toolbar-flyout-section-colors display-in-edit" aria-label="Color settings">
-                <div className="panel-placeholder-title">Colors</div>
+              <section className="toolbar-flyout-section toolbar-flyout-section-colors display-in-view display-in-edit" aria-label="Texture and color settings">
+                <div className="panel-placeholder-title">Textures &amp; Colors</div>
 
                 <div className="toolbar-flyout-color-layout" aria-label="HSVA color controls">
                   <div className="toolbar-flyout-color-grid toolbar-flyout-element-grid" role="group" aria-label="Editor highlight elements">
@@ -6878,7 +6901,7 @@ function App() {
                   <span className="toolbar-flyout-color-separator" aria-hidden="true" />
 
                   <div className="toolbar-flyout-color-grid toolbar-flyout-texture-grid" role="group" aria-label="Texture color targets">
-                    {TEXTURE_SURFACES.map((surface) => (
+                    {(['appGrid', 'sidebarContent', isPreviewMode ? 'editorRenderText' : 'editorEditText'] as TextureSurfaceKey[]).map((surface) => (
                       <button
                         key={surface}
                         type="button"

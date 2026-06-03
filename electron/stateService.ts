@@ -128,8 +128,11 @@ function sanitizeIntegerInRange(input: unknown, min: number, max: number, fallba
 }
 
 function sanitizeTextureSurface(input: unknown): TextureSurfaceKey {
-  if (input === 'appGrid' || input === 'sidebarContent' || input === 'editorStage') {
+  if (input === 'appGrid' || input === 'sidebarContent' || input === 'editorEditText' || input === 'editorRenderText') {
     return input;
+  }
+  if (input === 'editorStage') {
+    return 'editorEditText';
   }
   return DEFAULT_APP_STATE.menu!.textureActiveSurface ?? 'appGrid';
 }
@@ -156,8 +159,15 @@ function sanitizeTextureMaterial(input: unknown, fallback: TextureMaterialSettin
 
 function sanitizeTextureMaterials(input: unknown): TextureMaterialsBySurface {
   const source = (input && typeof input === 'object') ? input as Partial<TextureMaterialsBySurface> : {};
+  const legacySource = (input && typeof input === 'object') ? input as Record<string, unknown> : {};
+  const legacyEditorStage = legacySource.editorStage;
   const next = { ...DEFAULT_TEXTURE_MATERIALS } as TextureMaterialsBySurface;
   for (const surface of TEXTURE_SURFACES) {
+    if ((surface === 'editorEditText' || surface === 'editorRenderText') && source[surface] === undefined && legacyEditorStage !== undefined) {
+      next[surface] = sanitizeTextureMaterial(legacyEditorStage, DEFAULT_TEXTURE_MATERIALS[surface]);
+      continue;
+    }
+
     next[surface] = sanitizeTextureMaterial(source[surface], DEFAULT_TEXTURE_MATERIALS[surface]);
   }
   return next;
