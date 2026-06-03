@@ -7162,6 +7162,7 @@ function App() {
                           clearColorArmTimer()
                         }}
                         onClick={() => {
+                          setArmedColorSource({ kind: 'texture-preview' })
                         }}
                       />
                     </div>
