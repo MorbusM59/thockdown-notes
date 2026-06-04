@@ -3,7 +3,8 @@ import type { TextureCacheRequest } from '../shared/textures';
 import type { TextureMaterialSettings, TextureSurfaceKey, TextureWorkerRequest, TextureWorkerResponse } from './types';
 import { clampMaterialSettings } from './generateTexture';
 
-export const TEXTURE_ALGORITHM_VERSION = 1;
+export const TEXTURE_ALGORITHM_VERSION = 2;
+export const TEXTURE_REPEAT_TILE_SIZE = 512;
 
 function quantizeDimension(value: number): number {
   const safe = Math.max(64, Math.min(4096, Math.floor(value)));
@@ -43,15 +44,23 @@ export function useTextureSurface(params: {
   height: number;
   material: TextureMaterialSettings;
   usePersistentCache?: boolean;
+  useFixedTile?: boolean;
 }): string {
   const { enabled, surface } = params;
   const usePersistentCache = params.usePersistentCache ?? true;
+  const useFixedTile = params.useFixedTile ?? true;
   const material = useMemo(() => clampMaterialSettings(params.material), [params.material]);
   const materialSeed = material.seed;
   const materialGranularity = material.granularity;
   const materialVSteps = material.vSteps;
-  const width = useMemo(() => quantizeDimension(params.width), [params.width]);
-  const height = useMemo(() => quantizeDimension(params.height), [params.height]);
+  const width = useMemo(
+    () => (useFixedTile ? TEXTURE_REPEAT_TILE_SIZE : quantizeDimension(params.width)),
+    [params.width, useFixedTile],
+  );
+  const height = useMemo(
+    () => (useFixedTile ? TEXTURE_REPEAT_TILE_SIZE : quantizeDimension(params.height)),
+    [params.height, useFixedTile],
+  );
   const [url, setUrl] = useState<string | null>(null);
   const currentUrlRef = useRef<string | null>(null);
   const workerRef = useRef<Worker | null>(null);
@@ -161,6 +170,7 @@ export function useTextureSurface(params: {
     materialVSteps,
     surface,
     usePersistentCache,
+    useFixedTile,
     width,
   ]);
 

@@ -26,12 +26,16 @@ const lerp = (min: number, max: number, t: number): number => min + ((max - min)
 function samplePersonality(rng: () => number): MaterialPersonality {
   return {
     persistence: lerp(0.25, 0.65, rng()),
-    lacunarity: lerp(1.8, 2.5, rng()),
+    lacunarity: rng() < 0.5 ? 2 : 3,
     octaves: 2 + Math.floor(rng() * 5),
     warpStrength: rng() < 0.4 ? 0 : lerp(0.2, 1.5, rng()),
     warpAxisBias: [rng(), rng()],
     featureBias: lerp(-0.3, 0.3, rng()),
   };
+}
+
+function fract(value: number): number {
+  return value - Math.floor(value);
 }
 
 function wrap(value: number, max: number): number {
@@ -77,12 +81,12 @@ function valueNoise(gx: number, gy: number, grid: Float32Array, cols: number, ro
 }
 
 function fbm(
-  x: number,
-  y: number,
+  u: number,
+  v: number,
   grid: Float32Array,
   cols: number,
   rows: number,
-  cellSize: number,
+  baseFrequency: number,
   personality: MaterialPersonality,
 ): number {
   let value = 0;
@@ -91,7 +95,9 @@ function fbm(
   let maxValue = 0;
 
   for (let octave = 0; octave < personality.octaves; octave += 1) {
-    value += valueNoise((x * frequency) / cellSize, (y * frequency) / cellSize, grid, cols, rows) * amplitude;
+    const sampleX = fract(u) * cols * baseFrequency * frequency;
+    const sampleY = fract(v) * rows * baseFrequency * frequency;
+    value += valueNoise(sampleX, sampleY, grid, cols, rows) * amplitude;
     maxValue += amplitude;
     amplitude *= personality.persistence;
     frequency *= personality.lacunarity;
@@ -120,8 +126,9 @@ export function generateTextureRgba(params: {
   const material = params.material;
   const granularity = Math.max(1, Math.min(40, material.granularity));
 
-  const cols = Math.max(4, Math.ceil(width / granularity) + 4);
-  const rows = Math.max(4, Math.ceil(height / granularity) + 4);
+  const cols = Math.max(4, Math.round(width / granularity));
+  const rows = Math.max(4, Math.round(height / granularity));
+  const baseFrequency = Math.max(0.25, 16 / granularity);
 
   const spatialGrid = buildGrid(cols, rows, material.seed >>> 0);
   const personality = samplePersonality(mulberry32((material.seed ^ 0xdeadbeef) >>> 0));
@@ -135,17 +142,34 @@ export function generateTextureRgba(params: {
 
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      let sampleX = x;
-      let sampleY = y;
+      const baseU = x / width;
+      const baseV = y / height;
+      let sampleU = baseU;
+      let sampleV = baseV;
 
       if (personality.warpStrength > 0) {
-        const wx = valueNoise((x + WX0) / granularity, (y + WY0) / granularity, spatialGrid, cols, rows);
-        const wy = valueNoise((x + WX1) / granularity, (y + WY1) / granularity, spatialGrid, cols, rows);
-        sampleX += wx * personality.warpStrength * personality.warpAxisBias[0] * granularity;
-        sampleY += wy * personality.warpStrength * personality.warpAxisBias[1] * granularity;
+        const wx = valueNoise(
+          fract(baseU + (WX0 / width)) * cols,
+          fract(baseV + (WY0 / height)) * rows,
+          spatialGrid,
+          cols,
+          rows,
+        );
+        const wy = valueNoise(
+          fract(baseU + (WX1 / width)) * cols,
+          fract(baseV + (WY1 / height)) * rows,
+          spatialGrid,
+          cols,
+          rows,
+        );
+
+        const warpU = ((wx - 0.5) * 2 * personality.warpStrength * personality.warpAxisBias[0]) / cols;
+        const warpV = ((wy - 0.5) * 2 * personality.warpStrength * personality.warpAxisBias[1]) / rows;
+        sampleU = fract(baseU + warpU);
+        sampleV = fract(baseV + warpV);
       }
 
-      const raw = fbm(sampleX, sampleY, spatialGrid, cols, rows, granularity, personality);
+      const raw = fbm(sampleU, sampleV, spatialGrid, cols, rows, baseFrequency, personality);
       const shaped = shapeValue(raw, personality.featureBias);
       const stepped = quantizeValue(shaped, material.vSteps);
       const idx = (y * width + x) * 4;

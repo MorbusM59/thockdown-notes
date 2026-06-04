@@ -73,7 +73,7 @@ import {
   type TextureMaterialsBySurface,
   type TextureSurfaceKey,
 } from './textures/types'
-import { TEXTURE_ALGORITHM_VERSION, useTextureSurface } from './textures/useTextureSurface'
+import { TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE, useTextureSurface } from './textures/useTextureSurface'
 
 const SAVE_DEBOUNCE_MS = 350
 const NEW_NOTE_TEMPLATE = '# '
@@ -1505,6 +1505,7 @@ function App() {
     height: 32,
     material: texturePreviewMaterial,
     usePersistentCache: false,
+    useFixedTile: false,
   })
   const activeColorRgba = useMemo(() => hsvaToRgba(activeColorHsva), [activeColorHsva])
   const activeColorCss = useMemo(() => rgbaToCssColor(activeColorRgba), [activeColorRgba])
@@ -1521,8 +1522,8 @@ function App() {
     const keep: TextureCacheRequest[] = [
       {
         surface: 'appGrid',
-        width: quantizeTextureSize(appGridTextureSize.width),
-        height: quantizeTextureSize(appGridTextureSize.height),
+        width: TEXTURE_REPEAT_TILE_SIZE,
+        height: TEXTURE_REPEAT_TILE_SIZE,
         seed: textureMaterials.appGrid.seed,
         granularity: textureMaterials.appGrid.granularity,
         vSteps: textureMaterials.appGrid.vSteps,
@@ -1530,8 +1531,8 @@ function App() {
       },
       {
         surface: 'sidebarContent',
-        width: quantizeTextureSize(sidebarTextureSize.width),
-        height: quantizeTextureSize(sidebarTextureSize.height),
+        width: TEXTURE_REPEAT_TILE_SIZE,
+        height: TEXTURE_REPEAT_TILE_SIZE,
         seed: textureMaterials.sidebarContent.seed,
         granularity: textureMaterials.sidebarContent.granularity,
         vSteps: textureMaterials.sidebarContent.vSteps,
@@ -1539,8 +1540,8 @@ function App() {
       },
       {
         surface: 'editorEditText',
-        width: quantizeTextureSize(editorStageTextureSize.width),
-        height: quantizeTextureSize(editorStageTextureSize.height),
+        width: TEXTURE_REPEAT_TILE_SIZE,
+        height: TEXTURE_REPEAT_TILE_SIZE,
         seed: textureMaterials.editorEditText.seed,
         granularity: textureMaterials.editorEditText.granularity,
         vSteps: textureMaterials.editorEditText.vSteps,
@@ -1548,8 +1549,8 @@ function App() {
       },
       {
         surface: 'editorRenderText',
-        width: quantizeTextureSize(editorStageTextureSize.width),
-        height: quantizeTextureSize(editorStageTextureSize.height),
+        width: TEXTURE_REPEAT_TILE_SIZE,
+        height: TEXTURE_REPEAT_TILE_SIZE,
         seed: textureMaterials.editorRenderText.seed,
         granularity: textureMaterials.editorRenderText.granularity,
         vSteps: textureMaterials.editorRenderText.vSteps,
@@ -1559,12 +1560,6 @@ function App() {
 
     void textureApi.purgeCachedTextures({ keep, maxEntries: 96, maxAgeMs: 1000 * 60 * 60 * 24 * 14 })
   }, [
-    appGridTextureSize.height,
-    appGridTextureSize.width,
-    editorStageTextureSize.height,
-    editorStageTextureSize.width,
-    sidebarTextureSize.height,
-    sidebarTextureSize.width,
     textureMaterials,
   ])
 

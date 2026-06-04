@@ -75,6 +75,7 @@
   --texture-sidebar-content-tint: rgba(0, 0, 0, 0);
   --texture-editor-edit-tint: rgba(0, 0, 0, 0);
   --texture-editor-render-tint: rgba(0, 0, 0, 0);
+  --texture-tile-size: 512px;
 }
 
 .app-shell,
@@ -195,12 +196,12 @@ button.active,
   z-index: 0;
   background-color: var(--texture-app-grid-tint);
   -webkit-mask-image: var(--texture-app-grid);
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-size: 100% 100%;
+  -webkit-mask-repeat: repeat;
+  -webkit-mask-size: var(--texture-tile-size) var(--texture-tile-size);
   -webkit-mask-position: 0 0;
   mask-image: var(--texture-app-grid);
-  mask-repeat: no-repeat;
-  mask-size: 100% 100%;
+  mask-repeat: repeat;
+  mask-size: var(--texture-tile-size) var(--texture-tile-size);
   mask-position: 0 0;
 }
 
@@ -436,12 +437,12 @@ body.splitter-dragging {
   z-index: 0;
   background-color: var(--texture-sidebar-content-tint);
   -webkit-mask-image: var(--texture-sidebar-content);
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-size: 100% 100%;
+  -webkit-mask-repeat: repeat;
+  -webkit-mask-size: var(--texture-tile-size) var(--texture-tile-size);
   -webkit-mask-position: 0 0;
   mask-image: var(--texture-sidebar-content);
-  mask-repeat: no-repeat;
-  mask-size: 100% 100%;
+  mask-repeat: repeat;
+  mask-size: var(--texture-tile-size) var(--texture-tile-size);
   mask-position: 0 0;
 }
 
@@ -1639,12 +1640,12 @@ body.hsva-dragging * {
   z-index: 1;
   background-color: var(--texture-editor-edit-tint);
   -webkit-mask-image: var(--texture-editor-edit);
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-size: 100% 100%;
+  -webkit-mask-repeat: repeat;
+  -webkit-mask-size: var(--texture-tile-size) var(--texture-tile-size);
   -webkit-mask-position: 0 0;
   mask-image: var(--texture-editor-edit);
-  mask-repeat: no-repeat;
-  mask-size: 100% 100%;
+  mask-repeat: repeat;
+  mask-size: var(--texture-tile-size) var(--texture-tile-size);
   mask-position: 0 0;
 }
 
@@ -1704,12 +1705,12 @@ body.hsva-dragging * {
   z-index: 0;
   background-color: var(--texture-editor-render-tint);
   -webkit-mask-image: var(--texture-editor-render);
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-size: 100% 100%;
+  -webkit-mask-repeat: repeat;
+  -webkit-mask-size: var(--texture-tile-size) var(--texture-tile-size);
   -webkit-mask-position: 0 0;
   mask-image: var(--texture-editor-render);
-  mask-repeat: no-repeat;
-  mask-size: 100% 100%;
+  mask-repeat: repeat;
+  mask-size: var(--texture-tile-size) var(--texture-tile-size);
   mask-position: 0 0;
 }
 
