@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
+import type { CSSProperties, DragEvent, FocusEvent as ReactFocusEvent, KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Editor } from './components/Editor'
@@ -197,6 +197,14 @@ type SidebarViewState = {
 
 type SidebarViewStateByMode = Record<SidebarMode, SidebarViewState>
 
+type SettingsSectionKey = 'scrolling' | 'colors' | 'layout' | 'loadout'
+
+type SettingsSectionInfo = {
+  title: string
+  summary: string
+  lines: Array<{ label: string; text: string }>
+}
+
 type EditRestoreSnapshot = {
   noteId: string
   collapsedSelection: EditorSelectionState
@@ -223,6 +231,45 @@ const SIDEBAR_MODES: Array<{ mode: SidebarMode; label: string }> = [
   { mode: 'trash', label: 'Trash' },
   { mode: 'find', label: 'Find' },
 ]
+
+const SETTINGS_SECTION_INFO: Record<SettingsSectionKey, SettingsSectionInfo> = {
+  scrolling: {
+    title: 'Adjust scrolling',
+    summary: 'These sliders shape how scrolling starts, peaks, and settles.',
+    lines: [
+      { label: 'Ramp', text: 'Higher makes easing more dramatic; lower feels flatter.' },
+      { label: 'Response', text: 'Controls early pickup: higher starts stronger and stays steadier.' },
+      { label: 'Speed', text: 'Sets base scroll time: lower is quicker, higher is slower.' },
+      { label: 'Max speed', text: 'Limits top speed; lower gives steadier long scrolls.' },
+      { label: 'Shape', text: 'Shifts the speed peak in time: lower earlier, higher later.' },
+    ],
+  },
+  colors: {
+    title: 'Tune textures and colors',
+    summary: 'Choose a target, then apply HSVA channel edits or texture parameters.',
+    lines: [
+      { label: 'Elements', text: 'Writes RGBA values to caret, boxes, backgrounds, and outline.' },
+      { label: 'HSVA', text: 'Arms one HSVA channel and applies it onto clicked targets.' },
+      { label: 'Texture', text: 'Seed, granularity, and smoothness drive procedural mask generation.' },
+    ],
+  },
+  layout: {
+    title: 'Refine layout',
+    summary: 'Set glyph side padding for tighter or looser text columns.',
+    lines: [
+      { label: 'Padding', text: 'Feeds runtime metrics: cellWidth = glyphWidth + (2 × padding).' },
+    ],
+  },
+  loadout: {
+    title: 'Manage loadouts',
+    summary: 'Store and recall UI layout snapshots in numbered slots.',
+    lines: [
+      { label: 'Apply', text: 'Click a slot to restore that saved layout.' },
+      { label: 'Save', text: 'Hold right-click for 500ms to save current layout.' },
+      { label: 'Smart slots', text: 'Duplicate layouts collapse into one canonical slot.' },
+    ],
+  },
+}
 
 function sanitizeCollapsedList(input: unknown): string[] {
   if (!Array.isArray(input)) return []
@@ -1388,6 +1435,7 @@ function App() {
   const [renderScrollMaxSpeedPxPerSec, setRenderScrollMaxSpeedPxPerSec] = useState(() => getRenderScrollMaxSpeedPxPerSec())
   const [renderScrollSkew, setRenderScrollSkew] = useState(() => getRenderScrollSkew())
   const [isScrollSettingsOpen, setIsScrollSettingsOpen] = useState(false)
+  const [hoveredSettingsSection, setHoveredSettingsSection] = useState<SettingsSectionKey | null>(null)
   const [uiLoadouts, setUiLoadouts] = useState<UiLayoutLoadout[]>([])
   const [highlightColors, setHighlightColors] = useState<HighlightColors>(DEFAULT_HIGHLIGHT_COLORS)
   const [textureEnabled] = useState(true)
@@ -1477,6 +1525,24 @@ function App() {
     () => resolveEditorRuntimeMetrics(editorStyle, editorFontSize, editorSpacing, editorGlyphPaddingPx),
     [editorStyle, editorFontSize, editorSpacing, editorGlyphPaddingPx, editorFontLoadVersion],
   )
+  const activeSettingsInfo = hoveredSettingsSection ? SETTINGS_SECTION_INFO[hoveredSettingsSection] : null
+
+  const handleSettingsSectionHover = useCallback((section: SettingsSectionKey) => {
+    setHoveredSettingsSection(section)
+  }, [])
+
+  const handleSettingsSectionLeave = useCallback((section: SettingsSectionKey) => {
+    setHoveredSettingsSection((current) => (current === section ? null : current))
+  }, [])
+
+  const handleSettingsSectionBlur = useCallback((section: SettingsSectionKey, event: ReactFocusEvent<HTMLElement>) => {
+    const nextTarget = event.relatedTarget
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+      return
+    }
+    setHoveredSettingsSection((current) => (current === section ? null : current))
+  }, [])
+
   const editorFontFamily = useMemo(() => resolveEditorFontFamily(editorStyle), [editorStyle])
   const appGridTextureCss = useTextureSurface({
     enabled: textureEnabled,
@@ -7077,8 +7143,14 @@ function App() {
               className={`toolbar-flyout-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`}
               aria-label="Settings panel"
             >
-              <section className="toolbar-flyout-section toolbar-flyout-section-scrolling display-in-view display-in-edit" aria-label="Scrolling settings">
-                <div className="panel-placeholder-title">Scrolling</div>
+              <section
+                className="toolbar-flyout-section toolbar-flyout-section-scrolling display-in-view display-in-edit"
+                aria-label="Scrolling settings"
+                onMouseEnter={() => handleSettingsSectionHover('scrolling')}
+                onMouseLeave={() => handleSettingsSectionLeave('scrolling')}
+                onFocusCapture={() => handleSettingsSectionHover('scrolling')}
+                onBlurCapture={(event) => handleSettingsSectionBlur('scrolling', event)}
+              >
                 <div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
                   <CompactScrollbarSlider
                     id="render-scroll-dynamic"
@@ -7136,8 +7208,14 @@ function App() {
                 </div>
               </section>
 
-              <section className="toolbar-flyout-section toolbar-flyout-section-colors display-in-view display-in-edit" aria-label="Texture and color settings">
-                <div className="panel-placeholder-title">Textures &amp; Colors</div>
+              <section
+                className="toolbar-flyout-section toolbar-flyout-section-colors display-in-view display-in-edit"
+                aria-label="Texture and color settings"
+                onMouseEnter={() => handleSettingsSectionHover('colors')}
+                onMouseLeave={() => handleSettingsSectionLeave('colors')}
+                onFocusCapture={() => handleSettingsSectionHover('colors')}
+                onBlurCapture={(event) => handleSettingsSectionBlur('colors', event)}
+              >
 
                 <div className="toolbar-flyout-color-layout" aria-label="HSVA color controls">
                   <div className="toolbar-flyout-color-grid toolbar-flyout-element-grid" role="group" aria-label="Editor highlight elements">
@@ -7511,8 +7589,14 @@ function App() {
                 </div>
               </section>
 
-              <section className="toolbar-flyout-section toolbar-flyout-section-layout display-in-edit" aria-label="Layout settings">
-                <div className="panel-placeholder-title">Layout</div>
+              <section
+                className="toolbar-flyout-section toolbar-flyout-section-layout display-in-edit"
+                aria-label="Layout settings"
+                onMouseEnter={() => handleSettingsSectionHover('layout')}
+                onMouseLeave={() => handleSettingsSectionLeave('layout')}
+                onFocusCapture={() => handleSettingsSectionHover('layout')}
+                onBlurCapture={(event) => handleSettingsSectionBlur('layout', event)}
+              >
                 <div className="utility-setting-slider-stack" aria-label="Layout settings controls">
                   <CompactScrollbarSlider
                     id="editor-glyph-padding"
@@ -7533,8 +7617,14 @@ function App() {
                 </div>
               </section>
 
-              <section className="toolbar-flyout-section toolbar-flyout-section-loadout display-in-view display-in-edit" aria-label="Loadout settings">
-                <div className="panel-placeholder-title">Loadout</div>
+              <section
+                className="toolbar-flyout-section toolbar-flyout-section-loadout display-in-view display-in-edit"
+                aria-label="Loadout settings"
+                onMouseEnter={() => handleSettingsSectionHover('loadout')}
+                onMouseLeave={() => handleSettingsSectionLeave('loadout')}
+                onFocusCapture={() => handleSettingsSectionHover('loadout')}
+                onBlurCapture={(event) => handleSettingsSectionBlur('loadout', event)}
+              >
                 <div className="toolbar-flyout-loadout-grid" role="group" aria-label="UI layout loadouts">
                   {uiLoadouts.map((loadout, index) => (
                     <button
@@ -7583,14 +7673,23 @@ function App() {
                 </div>
               </section>
 
-              <section className="toolbar-flyout-section toolbar-flyout-section-placeholder display-in-view" aria-label="Render settings placeholder">
-                <div className="panel-placeholder-title">Render</div>
-                <div className="toolbar-flyout-placeholder-text">Soon</div>
-              </section>
-
-              <section className="toolbar-flyout-section toolbar-flyout-section-placeholder display-in-view" aria-label="Navigation settings placeholder">
-                <div className="panel-placeholder-title">Navigation</div>
-                <div className="toolbar-flyout-placeholder-text">Smooth</div>
+              <section className="toolbar-flyout-section toolbar-flyout-section-info display-in-view display-in-edit" aria-label="Settings info panel">
+                {activeSettingsInfo ? (
+                  <>
+                    <div className="toolbar-flyout-info-title">{activeSettingsInfo.title}</div>
+                    <div className="toolbar-flyout-info-summary">{activeSettingsInfo.summary}</div>
+                    <div className="toolbar-flyout-info-lines">
+                      {activeSettingsInfo.lines.map((line) => (
+                        <p key={line.label} className="toolbar-flyout-info-line">
+                          <span className="toolbar-flyout-info-line-label">{line.label}:</span>{' '}
+                          <span>{line.text}</span>
+                        </p>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="toolbar-flyout-info-empty">Hover over a section to learn more about each setting.</div>
+                )}
               </section>
             </div>
           </div>
