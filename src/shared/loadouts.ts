@@ -13,8 +13,6 @@ export type UiLayoutLoadout = {
   editorFontSize: 'xs' | 's' | 'm' | 'l' | 'xl';
   editorSpacing: 'tight' | 'compact' | 'cozy' | 'wide';
   editorGlyphPaddingPx: number;
-  sidebarWidthRatio: number;
-  tagSplitRatio: number;
   renderScrollDynamic: number;
   renderScrollResponsiveness: number;
   renderScrollTotalTimeSec: number;

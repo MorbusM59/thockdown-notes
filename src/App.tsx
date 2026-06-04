@@ -883,6 +883,80 @@ function toTexturePreviewMaterial(source: TextureMaterialSettings): TextureMater
   }
 }
 
+function roundForSignature(value: number, decimals = 4): number {
+  if (!Number.isFinite(value)) return 0
+  const factor = 10 ** decimals
+  return Math.round(value * factor) / factor
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value)
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(',')}]`
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, nested]) => `${JSON.stringify(key)}:${stableStringify(nested)}`)
+  return `{${entries.join(',')}}`
+}
+
+function normalizeTextureMaterialForLoadoutSignature(source: TextureMaterialSettings): TextureMaterialSettings {
+  return {
+    seed: Math.max(0, Math.round(source.seed)),
+    granularity: clamp(Math.round(source.granularity), TEXTURE_GRANULARITY_MIN, TEXTURE_GRANULARITY_MAX),
+    vSteps: clamp(Math.round(source.vSteps), TEXTURE_VSTEPS_MIN, TEXTURE_VSTEPS_MAX),
+    color: {
+      h: clamp(Math.round(source.color.h), 0, 360),
+      s: roundForSignature(clamp(source.color.s, 0, 1)),
+      v: roundForSignature(clamp(source.color.v, 0, 1)),
+      a: roundForSignature(clamp(source.color.a, 0, 1)),
+    },
+  }
+}
+
+function normalizeUiLoadoutForSignature(loadout: UiLayoutLoadout): UiLayoutLoadout {
+  return {
+    viewStyle: loadout.viewStyle,
+    viewFontSize: loadout.viewFontSize,
+    viewSpacing: loadout.viewSpacing,
+    editorStyle: loadout.editorStyle,
+    editorFontSize: loadout.editorFontSize,
+    editorSpacing: loadout.editorSpacing,
+    editorGlyphPaddingPx: clamp(
+      Math.round(loadout.editorGlyphPaddingPx),
+      EDITOR_GLYPH_PADDING_MIN_PX,
+      EDITOR_GLYPH_PADDING_MAX_PX,
+    ),
+    renderScrollDynamic: roundForSignature(clamp(loadout.renderScrollDynamic, 0.1, 5)),
+    renderScrollResponsiveness: roundForSignature(clamp(loadout.renderScrollResponsiveness, 0.1, 5)),
+    renderScrollTotalTimeSec: roundForSignature(clamp(loadout.renderScrollTotalTimeSec, 0, 2)),
+    renderScrollMaxSpeedPxPerSec: Math.round(clamp(loadout.renderScrollMaxSpeedPxPerSec, 1000, 100000)),
+    renderScrollSkew: roundForSignature(clamp(loadout.renderScrollSkew, RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX)),
+    highlightColors: {
+      caret: loadout.highlightColors.caret,
+      selection: loadout.highlightColors.selection,
+      background: loadout.highlightColors.background,
+      topBackground: loadout.highlightColors.topBackground,
+      bottomBackground: loadout.highlightColors.bottomBackground,
+      gridOutline: loadout.highlightColors.gridOutline,
+    },
+    textureMaterials: {
+      appGrid: normalizeTextureMaterialForLoadoutSignature(loadout.textureMaterials.appGrid),
+      sidebarContent: normalizeTextureMaterialForLoadoutSignature(loadout.textureMaterials.sidebarContent),
+      editorEditText: normalizeTextureMaterialForLoadoutSignature(loadout.textureMaterials.editorEditText),
+      editorRenderText: normalizeTextureMaterialForLoadoutSignature(loadout.textureMaterials.editorRenderText),
+    },
+  }
+}
+
+function buildUiLoadoutSignature(loadout: UiLayoutLoadout): string {
+  return stableStringify(normalizeUiLoadoutForSignature(loadout))
+}
+
 function areHsvaEqual(a: HsvaColor, b: HsvaColor): boolean {
   return a.h === b.h && a.s === b.s && a.v === b.v && a.a === b.a
 }
@@ -1691,8 +1765,6 @@ function App() {
       editorFontSize,
       editorSpacing,
       editorGlyphPaddingPx,
-      sidebarWidthRatio,
-      tagSplitRatio,
       renderScrollDynamic,
       renderScrollResponsiveness,
       renderScrollTotalTimeSec,
@@ -1719,8 +1791,6 @@ function App() {
     renderScrollMaxSpeedPxPerSec,
     renderScrollSkew,
     renderScrollTotalTimeSec,
-    sidebarWidthRatio,
-    tagSplitRatio,
     textureMaterials,
     viewFontSize,
     viewSpacing,
@@ -1741,8 +1811,6 @@ function App() {
         EDITOR_GLYPH_PADDING_MAX_PX,
       ),
     )
-    setSidebarWidthRatio(clamp(loadout.sidebarWidthRatio, 0, 1))
-    setTagSplitRatio(clamp(loadout.tagSplitRatio, 0, 1))
     setRenderScrollDynamic(clamp(loadout.renderScrollDynamic, 0.1, 5))
     setRenderScrollResponsiveness(clamp(loadout.renderScrollResponsiveness, 0.1, 5))
     setRenderScrollTotalTimeSec(clamp(loadout.renderScrollTotalTimeSec, 0, 2))
@@ -1758,6 +1826,29 @@ function App() {
     })
     setTextureMaterials(cloneTextureMaterials(loadout.textureMaterials))
   }, [])
+
+  const capturedUiLayoutLoadout = useMemo(
+    () => captureUiLayoutLoadout(),
+    [captureUiLayoutLoadout],
+  )
+
+  const currentUiLoadoutSignature = useMemo(
+    () => buildUiLoadoutSignature(capturedUiLayoutLoadout),
+    [capturedUiLayoutLoadout],
+  )
+
+  const savedUiLoadoutSignatures = useMemo(
+    () => uiLoadouts.map((loadout) => buildUiLoadoutSignature(loadout)),
+    [uiLoadouts],
+  )
+
+  // Signature matching keeps active-state detection stable across reloads and value normalization.
+  const activeUiLoadoutIndex = useMemo(
+    () => savedUiLoadoutSignatures.findIndex((signature) => signature === currentUiLoadoutSignature),
+    [currentUiLoadoutSignature, savedUiLoadoutSignatures],
+  )
+
+  const hasUnsavedUiLoadoutChanges = activeUiLoadoutIndex < 0
 
   const clearLoadoutSaveTimer = useCallback(() => {
     if (loadoutSaveTimerRef.current === null) return
@@ -7630,7 +7721,7 @@ function App() {
                     <button
                       key={`loadout-${index}`}
                       type="button"
-                      className="toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn"
+                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn${activeUiLoadoutIndex === index ? ' active' : ''}`}
                       title={`Loadout ${index}`}
                       onClick={() => {
                         applyUiLayoutLoadout(loadout)
@@ -7653,7 +7744,7 @@ function App() {
                   {uiLoadouts.length < MAX_UI_LOADOUTS ? (
                     <button
                       type="button"
-                      className="toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn toolbar-flyout-loadout-plus"
+                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn toolbar-flyout-loadout-plus${hasUnsavedUiLoadoutChanges ? ' active' : ''}`}
                       title="Save new loadout"
                       onClick={() => {}}
                       onMouseDown={(event) => startLoadoutSaveHold(uiLoadouts.length, event)}
