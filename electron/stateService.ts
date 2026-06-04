@@ -151,8 +151,8 @@ function sanitizeTextureMaterial(input: unknown, fallback: TextureMaterialSettin
   const source = (input && typeof input === 'object') ? input as Partial<TextureMaterialSettings> : {};
   return {
     seed: sanitizeIntegerInRange(source.seed, 0, 0x7fffffff, fallback.seed),
-    granularity: sanitizeIntegerInRange(source.granularity, 1, 40, fallback.granularity),
-    vSteps: sanitizeIntegerInRange(source.vSteps, 2, 16, fallback.vSteps),
+    granularity: sanitizeIntegerInRange(source.granularity, 1, 20, fallback.granularity),
+    vSteps: sanitizeIntegerInRange(source.vSteps, 1, 20, fallback.vSteps),
     color: sanitizeTextureColor(source.color, fallback.color),
   };
 }

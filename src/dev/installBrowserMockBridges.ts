@@ -1,4 +1,5 @@
 import type { AppState, AppStateApi, WindowState } from '../shared/appState'
+import type { UiLayoutLoadout, UiLoadoutApi } from '../shared/loadouts'
 import type { TextureCacheApi, TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../shared/textures'
 import type {
   AddTagInput,
@@ -22,6 +23,7 @@ type BrowserMockStore = {
   notes: NoteDocument[]
   appState: AppState
   windowState: WindowState
+  uiLoadouts: UiLayoutLoadout[]
   textureCache: Record<string, { mimeType: string; dataBase64: string; createdAt: number }>
 }
 
@@ -114,6 +116,21 @@ function serializeTextureKey(request: TextureCacheRequest): string {
   return JSON.stringify(request)
 }
 
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value)
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(',')}]`
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, nested]) => `${JSON.stringify(key)}:${stableStringify(nested)}`)
+  return `{${entries.join(',')}}`
+}
+
 function loadStore(): BrowserMockStore {
   try {
     const raw = window.localStorage.getItem(MOCK_STORAGE_KEY)
@@ -122,6 +139,7 @@ function loadStore(): BrowserMockStore {
         notes: [],
         appState: clone(DEFAULT_APP_STATE),
         windowState: clone(DEFAULT_WINDOW_STATE),
+        uiLoadouts: [],
         textureCache: {},
       }
     }
@@ -142,6 +160,9 @@ function loadStore(): BrowserMockStore {
             ...(parsed.windowState as WindowState),
           }
         : clone(DEFAULT_WINDOW_STATE),
+      uiLoadouts: Array.isArray(parsed.uiLoadouts)
+        ? clone(parsed.uiLoadouts as UiLayoutLoadout[]).slice(0, 9)
+        : [],
       textureCache: parsed.textureCache && typeof parsed.textureCache === 'object'
         ? Object.entries(parsed.textureCache as Record<string, { mimeType: string; dataBase64: string; createdAt?: number }>).reduce((acc, [key, value]) => {
             if (!value || typeof value !== 'object') return acc
@@ -159,6 +180,7 @@ function loadStore(): BrowserMockStore {
       notes: [],
       appState: clone(DEFAULT_APP_STATE),
       windowState: clone(DEFAULT_WINDOW_STATE),
+      uiLoadouts: [],
       textureCache: {},
     }
   }
@@ -415,6 +437,42 @@ function buildTextureBridge(storeRef: { current: BrowserMockStore }): TextureCac
   }
 }
 
+function buildLoadoutBridge(storeRef: { current: BrowserMockStore }): UiLoadoutApi {
+  const mutate = <T,>(transform: (store: BrowserMockStore) => T): T => {
+    const result = transform(storeRef.current)
+    persistStore(storeRef.current)
+    return result
+  }
+
+  return {
+    async listUiLoadouts(): Promise<UiLayoutLoadout[]> {
+      return clone(storeRef.current.uiLoadouts).slice(0, 9)
+    },
+
+    async saveUiLoadout(slot: number, loadout: UiLayoutLoadout): Promise<UiLayoutLoadout[]> {
+      return mutate((store) => {
+        const targetSlot = Math.max(0, Math.min(8, Math.floor(slot)))
+        const next = [...store.uiLoadouts]
+        const signature = stableStringify(loadout)
+
+        if (targetSlot < next.length) {
+          next[targetSlot] = clone(loadout)
+        } else {
+          next.push(clone(loadout))
+        }
+
+        const deduped = next.filter((entry, index) => {
+          if (index === targetSlot) return true
+          return stableStringify(entry) !== signature
+        })
+
+        store.uiLoadouts = deduped.slice(0, 9)
+        return clone(store.uiLoadouts)
+      })
+    },
+  }
+}
+
 export function installBrowserMockBridges(): void {
   if (!import.meta.env.DEV) return
 
@@ -422,7 +480,7 @@ export function installBrowserMockBridges(): void {
   if (scopedWindow.__measlyBrowserMockInstalled) return
 
   // Electron renderer already owns bridge provisioning through preload.
-  if (window.measlyNotes && window.measlyState && window.measlyTextures) {
+  if (window.measlyNotes && window.measlyState && window.measlyTextures && window.measlyLoadouts) {
     scopedWindow.__measlyBrowserMockInstalled = true
     return
   }
@@ -437,6 +495,9 @@ export function installBrowserMockBridges(): void {
   }
   if (!window.measlyTextures) {
     window.measlyTextures = buildTextureBridge(storeRef)
+  }
+  if (!window.measlyLoadouts) {
+    window.measlyLoadouts = buildLoadoutBridge(storeRef)
   }
 
   scopedWindow.__measlyBrowserMockInstalled = true

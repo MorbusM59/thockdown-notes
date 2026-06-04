@@ -10,6 +10,7 @@ import { DatabaseService } from './databaseService'
 import { EXTERNAL_FILE_CHANNELS } from '../src/shared/externalFiles'
 import { LEGACY_DB_CHANNELS } from '../src/shared/legacyDbFeatures'
 import { TEXTURE_CHANNELS } from '../src/shared/textures'
+import { LOADOUT_CHANNELS } from '../src/shared/loadouts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -216,6 +217,14 @@ function registerIpcHandlers() {
 
   ipcMain.handle(TEXTURE_CHANNELS.purgeCached, async (_event, request) => {
     return databaseService!.purgeTextureCache(request);
+  });
+
+  ipcMain.handle(LOADOUT_CHANNELS.list, async () => {
+    return databaseService!.listUiLoadouts();
+  });
+
+  ipcMain.handle(LOADOUT_CHANNELS.save, async (_event, slot, loadout) => {
+    return databaseService!.saveUiLoadout(slot, loadout);
   });
 }
 

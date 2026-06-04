@@ -13,6 +13,7 @@ import type {
   EditorViewportChangeEvent,
 } from './editor/EditorContract'
 import type { PersistedMenuState, PersistedSidebarViewState, PersistedViewportState } from './shared/appState'
+import type { UiLayoutLoadout } from './shared/loadouts'
 import type { NoteSummary } from './shared/noteLifecycle'
 import type { TextureCacheRequest } from './shared/textures'
 import {
@@ -90,14 +91,16 @@ const DEFAULT_TAG_SPLIT_RATIO = 0.645
 const EDITOR_GLYPH_PADDING_MIN_PX = 0
 const EDITOR_GLYPH_PADDING_MAX_PX = 1
 const TEXTURE_GRANULARITY_MIN = 1
-const TEXTURE_GRANULARITY_MAX = 40
-const TEXTURE_VSTEPS_MIN = 2
-const TEXTURE_VSTEPS_MAX = 16
+const TEXTURE_GRANULARITY_MAX = 20
+const TEXTURE_VSTEPS_MIN = 1
+const TEXTURE_VSTEPS_MAX = 20
 const TEXTURE_PREVIEW_SURFACE: TextureSurfaceKey = 'appGrid'
 const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28
 const SCROLL_TRACK_EDGE_GAP_PX = 3
 const NOTE_RIGHT_CLICK_HOLD_MS = 200
 const COLOR_BUTTON_ARM_HOLD_MS = 300
+const LOADOUT_SAVE_HOLD_MS = 500
+const MAX_UI_LOADOUTS = 9
 const PREVIEW_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER
 const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   caret: 'rgba(120, 115, 112, 0.8)',
@@ -1328,6 +1331,7 @@ function App() {
   const sidebarSearchInputRef = useRef<HTMLInputElement | null>(null)
   const tagInputRef = useRef<HTMLInputElement | null>(null)
   const pageJumpInputRef = useRef<HTMLInputElement | null>(null)
+  const textureSeedInputRef = useRef<HTMLInputElement | null>(null)
   const [notes, setNotes] = useState<NoteSummary[]>([])
   const [tagInputValue, setTagInputValue] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -1384,10 +1388,13 @@ function App() {
   const [renderScrollMaxSpeedPxPerSec, setRenderScrollMaxSpeedPxPerSec] = useState(() => getRenderScrollMaxSpeedPxPerSec())
   const [renderScrollSkew, setRenderScrollSkew] = useState(() => getRenderScrollSkew())
   const [isScrollSettingsOpen, setIsScrollSettingsOpen] = useState(false)
+  const [uiLoadouts, setUiLoadouts] = useState<UiLayoutLoadout[]>([])
   const [highlightColors, setHighlightColors] = useState<HighlightColors>(DEFAULT_HIGHLIGHT_COLORS)
   const [textureEnabled] = useState(true)
   const [textureMaterials, setTextureMaterials] = useState<TextureMaterialsBySurface>(() => cloneTextureMaterials(DEFAULT_TEXTURE_MATERIALS))
   const [texturePreviewMaterial, setTexturePreviewMaterial] = useState<TextureMaterialSettings>(() => toTexturePreviewMaterial(DEFAULT_TEXTURE_MATERIALS.appGrid))
+  const [textureSeedInput, setTextureSeedInput] = useState(() => String(DEFAULT_TEXTURE_MATERIALS.appGrid.seed))
+  const [isTextureSeedEditing, setIsTextureSeedEditing] = useState(false)
   const [appGridTextureSize, setAppGridTextureSize] = useState({ width: 1280, height: 720 })
   const [sidebarTextureSize, setSidebarTextureSize] = useState({ width: 512, height: 720 })
   const [editorStageTextureSize, setEditorStageTextureSize] = useState({ width: 1280, height: 720 })
@@ -1399,6 +1406,7 @@ function App() {
   const [hsvaDragState, setHsvaDragState] = useState<HsvaDragState | null>(null)
   const [activeDividerDrag, setActiveDividerDrag] = useState<'sidebar' | 'tag-split' | null>(null)
   const colorArmTimerRef = useRef<number | null>(null)
+  const loadoutSaveTimerRef = useRef<number | null>(null)
   const pendingSaveTextRef = useRef<string | null>(null)
   const latestEditorTextRef = useRef('')
   const lastHeadlineLevelRef = useRef<1 | 2 | 3 | 4 | 5 | 6>(1)
@@ -1608,6 +1616,113 @@ function App() {
     }))
   }, [updateTextureMaterial])
 
+  const captureUiLayoutLoadout = useCallback((): UiLayoutLoadout => {
+    return {
+      viewStyle,
+      viewFontSize,
+      viewSpacing,
+      editorStyle,
+      editorFontSize,
+      editorSpacing,
+      editorGlyphPaddingPx,
+      sidebarWidthRatio,
+      tagSplitRatio,
+      renderScrollDynamic,
+      renderScrollResponsiveness,
+      renderScrollTotalTimeSec,
+      renderScrollMaxSpeedPxPerSec,
+      renderScrollSkew,
+      highlightColors: {
+        caret: highlightColors.caret,
+        selection: highlightColors.selection,
+        background: highlightColors.background,
+        topBackground: highlightColors.topBackground,
+        bottomBackground: highlightColors.bottomBackground,
+        gridOutline: highlightColors.gridOutline,
+      },
+      textureMaterials: cloneTextureMaterials(textureMaterials),
+    }
+  }, [
+    editorFontSize,
+    editorGlyphPaddingPx,
+    editorSpacing,
+    editorStyle,
+    highlightColors,
+    renderScrollDynamic,
+    renderScrollResponsiveness,
+    renderScrollMaxSpeedPxPerSec,
+    renderScrollSkew,
+    renderScrollTotalTimeSec,
+    sidebarWidthRatio,
+    tagSplitRatio,
+    textureMaterials,
+    viewFontSize,
+    viewSpacing,
+    viewStyle,
+  ])
+
+  const applyUiLayoutLoadout = useCallback((loadout: UiLayoutLoadout) => {
+    setViewStyle(loadout.viewStyle)
+    setViewFontSize(loadout.viewFontSize)
+    setViewSpacing(loadout.viewSpacing)
+    setEditorStyle(loadout.editorStyle)
+    setEditorFontSize(loadout.editorFontSize)
+    setEditorSpacing(loadout.editorSpacing)
+    setEditorGlyphPaddingPx(
+      clamp(
+        Math.round(loadout.editorGlyphPaddingPx),
+        EDITOR_GLYPH_PADDING_MIN_PX,
+        EDITOR_GLYPH_PADDING_MAX_PX,
+      ),
+    )
+    setSidebarWidthRatio(clamp(loadout.sidebarWidthRatio, 0, 1))
+    setTagSplitRatio(clamp(loadout.tagSplitRatio, 0, 1))
+    setRenderScrollDynamic(clamp(loadout.renderScrollDynamic, 0.1, 5))
+    setRenderScrollResponsiveness(clamp(loadout.renderScrollResponsiveness, 0.1, 5))
+    setRenderScrollTotalTimeSec(clamp(loadout.renderScrollTotalTimeSec, 0, 2))
+    setRenderScrollMaxSpeedPxPerSec(clamp(loadout.renderScrollMaxSpeedPxPerSec, 1000, 100000))
+    setRenderScrollSkew(clamp(loadout.renderScrollSkew, RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX))
+    setHighlightColors({
+      caret: loadout.highlightColors.caret,
+      selection: loadout.highlightColors.selection,
+      background: loadout.highlightColors.background,
+      topBackground: loadout.highlightColors.topBackground,
+      bottomBackground: loadout.highlightColors.bottomBackground,
+      gridOutline: loadout.highlightColors.gridOutline,
+    })
+    setTextureMaterials(cloneTextureMaterials(loadout.textureMaterials))
+  }, [])
+
+  const clearLoadoutSaveTimer = useCallback(() => {
+    if (loadoutSaveTimerRef.current === null) return
+    window.clearTimeout(loadoutSaveTimerRef.current)
+    loadoutSaveTimerRef.current = null
+  }, [])
+
+  const saveUiLayoutToSlot = useCallback(async (slot: number) => {
+    if (!window.measlyLoadouts) return
+    if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_UI_LOADOUTS) return
+
+    try {
+      const nextLoadouts = await window.measlyLoadouts.saveUiLoadout(slot, captureUiLayoutLoadout())
+      setUiLoadouts(nextLoadouts.slice(0, MAX_UI_LOADOUTS))
+    } catch (error) {
+      console.error('Failed to save UI loadout', error)
+    }
+  }, [captureUiLayoutLoadout])
+
+  const startLoadoutSaveHold = useCallback((slot: number, event: MouseEvent<HTMLButtonElement>) => {
+    if (event.button !== 2) return
+    event.preventDefault()
+    event.stopPropagation()
+    clearLoadoutSaveTimer()
+
+    loadoutSaveTimerRef.current = window.setTimeout(() => {
+      loadoutSaveTimerRef.current = null
+      void saveUiLayoutToSlot(slot)
+    }, LOADOUT_SAVE_HOLD_MS)
+  }, [clearLoadoutSaveTimer, saveUiLayoutToSlot])
+
   const clearColorArmTimer = useCallback(() => {
     if (colorArmTimerRef.current === null) return
     window.clearTimeout(colorArmTimerRef.current)
@@ -1808,16 +1923,41 @@ function App() {
   }, [clearColorArmTimer])
 
   useEffect(() => {
+    return () => {
+      clearLoadoutSaveTimer()
+    }
+  }, [clearLoadoutSaveTimer])
+
+  useEffect(() => {
+    if (!window.measlyLoadouts) return
+    let cancelled = false
+
+    void window.measlyLoadouts.listUiLoadouts()
+      .then((loaded) => {
+        if (cancelled) return
+        setUiLoadouts(loaded.slice(0, MAX_UI_LOADOUTS))
+      })
+      .catch((error) => {
+        console.error('Failed to load UI loadouts', error)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
     const handleGlobalMouseDown = (event: globalThis.MouseEvent) => {
       if (event.button !== 2) return
       clearColorArmTimer()
+      clearLoadoutSaveTimer()
     }
 
     window.addEventListener('mousedown', handleGlobalMouseDown, true)
     return () => {
       window.removeEventListener('mousedown', handleGlobalMouseDown, true)
     }
-  }, [clearColorArmTimer])
+  }, [clearColorArmTimer, clearLoadoutSaveTimer])
 
   useEffect(() => {
     if (isScrollSettingsOpen) return
@@ -2590,6 +2730,10 @@ function App() {
     }
 
     if (target.closest('.sidebar-pagination')) {
+      return true
+    }
+
+    if (target.closest('.toolbar-flyout-seed-editor')) {
       return true
     }
 
@@ -6115,6 +6259,12 @@ function App() {
     }
   }, [currentPage, isPageJumpEditing])
 
+  useEffect(() => {
+    if (!isTextureSeedEditing) {
+      setTextureSeedInput(String(texturePreviewMaterial.seed))
+    }
+  }, [isTextureSeedEditing, texturePreviewMaterial.seed])
+
   const commitPageJump = useCallback(() => {
     const parsed = Number.parseInt(pageJumpInput.trim(), 10)
     const safePage = Number.isFinite(parsed)
@@ -6143,6 +6293,48 @@ function App() {
       pageJumpInputRef.current?.select()
     })
   }, [isPageJumpEditing])
+
+  const commitTextureSeedEdit = useCallback(() => {
+    const parsed = Number.parseInt(textureSeedInput.trim(), 10)
+    const safeSeed = Number.isFinite(parsed)
+      ? clamp(parsed, 0, 1000000)
+      : clamp(texturePreviewMaterial.seed, 0, 1000000)
+
+    setTexturePreviewMaterial((current) => ({
+      ...current,
+      seed: safeSeed,
+    }))
+    setTextureSeedInput(String(safeSeed))
+    setIsTextureSeedEditing(false)
+  }, [texturePreviewMaterial.seed, textureSeedInput])
+
+  const cancelTextureSeedEdit = useCallback(() => {
+    setTextureSeedInput(String(texturePreviewMaterial.seed))
+    setIsTextureSeedEditing(false)
+  }, [texturePreviewMaterial.seed])
+
+  const randomizeTextureSeed = useCallback(() => {
+    if (isTextureSeedEditing) return
+
+    const nextSeed = Math.floor(Math.random() * 1000001)
+    setTexturePreviewMaterial((current) => ({
+      ...current,
+      seed: nextSeed,
+    }))
+  }, [isTextureSeedEditing])
+
+  const startTextureSeedEdit = useCallback(() => {
+    setTextureSeedInput(String(texturePreviewMaterial.seed))
+    setIsTextureSeedEditing(true)
+  }, [texturePreviewMaterial.seed])
+
+  useEffect(() => {
+    if (!isTextureSeedEditing) return
+    window.requestAnimationFrame(() => {
+      textureSeedInputRef.current?.focus()
+      textureSeedInputRef.current?.select()
+    })
+  }, [isTextureSeedEditing])
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -7199,21 +7391,52 @@ function App() {
                   <div className="toolbar-flyout-texture-settings" aria-label="Texture generation settings">
                     <div className="toolbar-flyout-texture-stack">
                       <div className="toolbar-flyout-texture-slider-slot">
-                        <CompactScrollbarSlider
-                          id="texture-seed"
-                          min={0}
-                          max={1000000}
-                          step={1}
-                          value={texturePreviewMaterial.seed}
-                          trackLabel="seed"
-                          ariaLabel="Texture seed"
-                          onCommit={(value) => {
-                            setTexturePreviewMaterial((current) => ({
-                              ...current,
-                              seed: clamp(Math.round(value), 0, 1000000),
-                            }))
-                          }}
-                        />
+                        <div className="toolbar-flyout-seed-editor" aria-label="Texture seed">
+                          {isTextureSeedEditing ? (
+                            <label className="sidebar-page-number-btn toolbar-flyout-seed-btn" aria-label="Edit texture seed">
+                              <input
+                                ref={textureSeedInputRef}
+                                type="number"
+                                min={0}
+                                max={1000000}
+                                step={1}
+                                inputMode="numeric"
+                                className="sidebar-page-number-input sidebar-page-number-input--edit"
+                                value={textureSeedInput}
+                                onChange={(event) => {
+                                  setTextureSeedInput(event.target.value.replace(/[^0-9]/g, ''))
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter') {
+                                    event.preventDefault()
+                                    commitTextureSeedEdit()
+                                    return
+                                  }
+
+                                  if (event.key === 'Escape') {
+                                    event.preventDefault()
+                                    cancelTextureSeedEdit()
+                                  }
+                                }}
+                                onBlur={commitTextureSeedEdit}
+                              />
+                            </label>
+                          ) : (
+                            <button
+                              type="button"
+                              className="sidebar-page-number-btn toolbar-flyout-seed-btn"
+                              aria-label={`Texture seed ${texturePreviewMaterial.seed}. Left click to randomize. Right click to edit.`}
+                              title="Left click: random seed. Right click: edit seed."
+                              onClick={randomizeTextureSeed}
+                              onContextMenu={(event) => {
+                                event.preventDefault()
+                                startTextureSeedEdit()
+                              }}
+                            >
+                              {texturePreviewMaterial.seed}
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div className="toolbar-flyout-texture-slider-slot">
                         <CompactScrollbarSlider
@@ -7234,13 +7457,13 @@ function App() {
                       </div>
                       <div className="toolbar-flyout-texture-slider-slot">
                         <CompactScrollbarSlider
-                          id="texture-vsteps"
+                          id="texture-smoothness"
                           min={TEXTURE_VSTEPS_MIN}
                           max={TEXTURE_VSTEPS_MAX}
                           step={1}
                           value={texturePreviewMaterial.vSteps}
-                          trackLabel="v-steps"
-                          ariaLabel="Texture value steps"
+                          trackLabel="smoothness"
+                          ariaLabel="Texture smoothness"
                           onCommit={(value) => {
                             setTexturePreviewMaterial((current) => ({
                               ...current,
@@ -7307,6 +7530,56 @@ function App() {
                       ),
                     )}
                   />
+                </div>
+              </section>
+
+              <section className="toolbar-flyout-section toolbar-flyout-section-loadout display-in-view display-in-edit" aria-label="Loadout settings">
+                <div className="panel-placeholder-title">Loadout</div>
+                <div className="toolbar-flyout-loadout-grid" role="group" aria-label="UI layout loadouts">
+                  {uiLoadouts.map((loadout, index) => (
+                    <button
+                      key={`loadout-${index}`}
+                      type="button"
+                      className="toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn"
+                      title={`Loadout ${index}`}
+                      onClick={() => {
+                        applyUiLayoutLoadout(loadout)
+                      }}
+                      onMouseDown={(event) => startLoadoutSaveHold(index, event)}
+                      onMouseUp={(event) => {
+                        if (event.button !== 2) return
+                        clearLoadoutSaveTimer()
+                      }}
+                      onMouseLeave={clearLoadoutSaveTimer}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        clearLoadoutSaveTimer()
+                      }}
+                    >
+                      <span className="toolbar-flyout-loadout-index">{index}</span>
+                    </button>
+                  ))}
+
+                  {uiLoadouts.length < MAX_UI_LOADOUTS ? (
+                    <button
+                      type="button"
+                      className="toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn toolbar-flyout-loadout-plus"
+                      title="Save new loadout"
+                      onClick={() => {}}
+                      onMouseDown={(event) => startLoadoutSaveHold(uiLoadouts.length, event)}
+                      onMouseUp={(event) => {
+                        if (event.button !== 2) return
+                        clearLoadoutSaveTimer()
+                      }}
+                      onMouseLeave={clearLoadoutSaveTimer}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        clearLoadoutSaveTimer()
+                      }}
+                    >
+                      <span className="toolbar-flyout-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
+                    </button>
+                  ) : null}
                 </div>
               </section>
 

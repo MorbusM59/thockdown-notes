@@ -29,4 +29,5 @@ interface Window {
   measlyExternalFiles?: import('../src/shared/externalFiles').ExternalFilesApi
   measlyLegacyDb?: import('../src/shared/legacyDbFeatures').LegacyDbApi
   measlyTextures?: import('../src/shared/textures').TextureCacheApi
+  measlyLoadouts?: import('../src/shared/loadouts').UiLoadoutApi
 }

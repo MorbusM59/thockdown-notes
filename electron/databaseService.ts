@@ -4,6 +4,8 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { sanitizeDocumentText } from '../src/shared/textSanitization';
 import type { TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../src/shared/textures';
+import type { UiLayoutLoadout } from '../src/shared/loadouts';
+import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureMaterialSettings, type TextureMaterialsBySurface } from '../src/textures/types';
 
 const require = createRequire(import.meta.url);
 const BetterSqlite3 = require('better-sqlite3') as typeof import('better-sqlite3');
@@ -15,6 +17,33 @@ const META_PREFIX = '<!-- measly-meta:';
 const META_SUFFIX = '-->';
 const TEXTURE_CACHE_DEFAULT_MAX_ENTRIES = 96;
 const TEXTURE_CACHE_DEFAULT_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 14;
+const UI_LOADOUT_MAX_ENTRIES = 9;
+
+const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
+  viewStyle: 'modern',
+  viewFontSize: 'm',
+  viewSpacing: 'cozy',
+  editorStyle: 'syne',
+  editorFontSize: 'm',
+  editorSpacing: 'cozy',
+  editorGlyphPaddingPx: 1,
+  sidebarWidthRatio: 0.306,
+  tagSplitRatio: 0.645,
+  renderScrollDynamic: 1.5,
+  renderScrollResponsiveness: 0.1,
+  renderScrollTotalTimeSec: 0,
+  renderScrollMaxSpeedPxPerSec: 10000,
+  renderScrollSkew: 1,
+  highlightColors: {
+    caret: 'rgba(120, 115, 112, 0.8)',
+    selection: 'rgba(199, 94, 0, 0.49)',
+    background: '#e9e6e3',
+    topBackground: 'rgba(196, 187, 182, 0.49)',
+    bottomBackground: 'rgba(196, 187, 182, 0.49)',
+    gridOutline: '#00000022',
+  },
+  textureMaterials: DEFAULT_TEXTURE_MATERIALS,
+};
 
 type SqliteDatabase = import('better-sqlite3').Database;
 
@@ -167,6 +196,12 @@ type NormalizedTextureCacheRequest = {
   algorithmVersion: number;
 };
 
+type UiLoadoutRow = {
+  slot: number;
+  payloadJson: string;
+  signature: string;
+};
+
 function normalizeTextureCacheRequest(request: TextureCacheRequest): NormalizedTextureCacheRequest {
   return {
     surface: request.surface,
@@ -174,7 +209,7 @@ function normalizeTextureCacheRequest(request: TextureCacheRequest): NormalizedT
     height: Math.max(1, Math.round(request.height)),
     seed: Math.max(0, Math.round(request.seed)),
     granularity: Number(request.granularity.toFixed(4)),
-    vSteps: Math.max(2, Math.round(request.vSteps)),
+    vSteps: Math.max(1, Math.round(request.vSteps)),
     algorithmVersion: Math.max(1, Math.round(request.algorithmVersion)),
   };
 }
@@ -189,6 +224,137 @@ function textureCacheCompositeKey(request: NormalizedTextureCacheRequest): strin
     request.vSteps,
     request.algorithmVersion,
   ].join('|');
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, value));
+}
+
+function clampInteger(value: unknown, min: number, max: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function sanitizeString(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : fallback;
+}
+
+function normalizeTextureMaterialSettings(
+  input: unknown,
+  fallback: TextureMaterialSettings,
+): TextureMaterialSettings {
+  const source = input && typeof input === 'object' ? input as Partial<TextureMaterialSettings> : {};
+  const color = source.color && typeof source.color === 'object'
+    ? source.color as Partial<TextureMaterialSettings['color']>
+    : {};
+
+  return {
+    seed: clampInteger(source.seed, 0, 0x7fffffff, fallback.seed),
+    granularity: clampInteger(source.granularity, 1, 20, fallback.granularity),
+    vSteps: clampInteger(source.vSteps, 1, 20, fallback.vSteps),
+    color: {
+      h: clampInteger(color.h, 0, 360, fallback.color.h),
+      s: clampNumber(color.s, 0, 1, fallback.color.s),
+      v: clampNumber(color.v, 0, 1, fallback.color.v),
+      a: clampNumber(color.a, 0, 1, fallback.color.a),
+    },
+  };
+}
+
+function normalizeTextureMaterials(input: unknown): TextureMaterialsBySurface {
+  const source = input && typeof input === 'object' ? input as Partial<TextureMaterialsBySurface> : {};
+  const next = { ...DEFAULT_TEXTURE_MATERIALS } as TextureMaterialsBySurface;
+
+  for (const surface of TEXTURE_SURFACES) {
+    next[surface] = normalizeTextureMaterialSettings(source[surface], DEFAULT_TEXTURE_MATERIALS[surface]);
+  }
+
+  return next;
+}
+
+function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
+  if (!input || typeof input !== 'object') {
+    return null;
+  }
+
+  const source = input as Partial<UiLayoutLoadout>;
+  const highlights = source.highlightColors && typeof source.highlightColors === 'object'
+    ? source.highlightColors as Partial<UiLayoutLoadout['highlightColors']>
+    : {};
+
+  const viewStyle = source.viewStyle === 'modern' || source.viewStyle === 'narrow' || source.viewStyle === 'cute' || source.viewStyle === 'print'
+    ? source.viewStyle
+    : DEFAULT_UI_LAYOUT_LOADOUT.viewStyle;
+
+  const viewFontSize = source.viewFontSize === 'xs' || source.viewFontSize === 's' || source.viewFontSize === 'm' || source.viewFontSize === 'l' || source.viewFontSize === 'xl'
+    ? source.viewFontSize
+    : DEFAULT_UI_LAYOUT_LOADOUT.viewFontSize;
+
+  const viewSpacing = source.viewSpacing === 'tight' || source.viewSpacing === 'compact' || source.viewSpacing === 'cozy' || source.viewSpacing === 'wide'
+    ? source.viewSpacing
+    : DEFAULT_UI_LAYOUT_LOADOUT.viewSpacing;
+
+  const editorStyle = source.editorStyle === 'syne' || source.editorStyle === 'redhat'
+    ? source.editorStyle
+    : DEFAULT_UI_LAYOUT_LOADOUT.editorStyle;
+
+  const editorFontSize = source.editorFontSize === 'xs' || source.editorFontSize === 's' || source.editorFontSize === 'm' || source.editorFontSize === 'l' || source.editorFontSize === 'xl'
+    ? source.editorFontSize
+    : DEFAULT_UI_LAYOUT_LOADOUT.editorFontSize;
+
+  const editorSpacing = source.editorSpacing === 'tight' || source.editorSpacing === 'compact' || source.editorSpacing === 'cozy' || source.editorSpacing === 'wide'
+    ? source.editorSpacing
+    : DEFAULT_UI_LAYOUT_LOADOUT.editorSpacing;
+
+  return {
+    viewStyle,
+    viewFontSize,
+    viewSpacing,
+    editorStyle,
+    editorFontSize,
+    editorSpacing,
+    editorGlyphPaddingPx: clampInteger(source.editorGlyphPaddingPx, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.editorGlyphPaddingPx),
+    sidebarWidthRatio: clampNumber(source.sidebarWidthRatio, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.sidebarWidthRatio),
+    tagSplitRatio: clampNumber(source.tagSplitRatio, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.tagSplitRatio),
+    renderScrollDynamic: clampNumber(source.renderScrollDynamic, 0.1, 5, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollDynamic),
+    renderScrollResponsiveness: clampNumber(source.renderScrollResponsiveness, 0.1, 5, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollResponsiveness),
+    renderScrollTotalTimeSec: clampNumber(source.renderScrollTotalTimeSec, 0, 2, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollTotalTimeSec),
+    renderScrollMaxSpeedPxPerSec: clampNumber(source.renderScrollMaxSpeedPxPerSec, 1000, 100000, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollMaxSpeedPxPerSec),
+    renderScrollSkew: clampNumber(source.renderScrollSkew, 0.1, 5, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollSkew),
+    highlightColors: {
+      caret: sanitizeString(highlights.caret, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.caret),
+      selection: sanitizeString(highlights.selection, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.selection),
+      background: sanitizeString(highlights.background, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.background),
+      topBackground: sanitizeString(highlights.topBackground, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.topBackground),
+      bottomBackground: sanitizeString(highlights.bottomBackground, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.bottomBackground),
+      gridOutline: sanitizeString(highlights.gridOutline, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.gridOutline),
+    },
+    textureMaterials: normalizeTextureMaterials(source.textureMaterials),
+  };
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, nested]) => `${JSON.stringify(key)}:${stableStringify(nested)}`);
+  return `{${entries.join(',')}}`;
 }
 
 export class DatabaseService {
@@ -1062,6 +1228,74 @@ export class DatabaseService {
     return deletedCount;
   }
 
+  listUiLoadouts(): UiLayoutLoadout[] {
+    const db = this.requireDb();
+    const rows = db.prepare(`
+      SELECT slot, payloadJson, signature
+      FROM ui_loadouts
+      ORDER BY slot ASC
+    `).all() as UiLoadoutRow[];
+
+    const output: UiLayoutLoadout[] = [];
+    for (const row of rows) {
+      try {
+        const parsed = JSON.parse(row.payloadJson) as unknown;
+        const normalized = normalizeUiLayoutLoadout(parsed);
+        if (!normalized) {
+          continue;
+        }
+        output.push(normalized);
+      } catch {
+        continue;
+      }
+    }
+
+    return output.slice(0, UI_LOADOUT_MAX_ENTRIES);
+  }
+
+  saveUiLoadout(slot: unknown, loadout: unknown): UiLayoutLoadout[] {
+    const db = this.requireDb();
+    const normalized = normalizeUiLayoutLoadout(loadout);
+    if (!normalized) {
+      return this.listUiLoadouts();
+    }
+
+    const targetSlot = clampInteger(slot, 0, UI_LOADOUT_MAX_ENTRIES - 1, 0);
+    const payloadJson = JSON.stringify(normalized);
+    const signature = stableStringify(normalized);
+    const timestamp = Date.now();
+
+    const tx = db.transaction(() => {
+      db.prepare('DELETE FROM ui_loadouts WHERE signature = ? AND slot <> ?').run(signature, targetSlot);
+
+      db.prepare(`
+        INSERT OR REPLACE INTO ui_loadouts (slot, payloadJson, signature, updatedAt)
+        VALUES (?, ?, ?, ?)
+      `).run(targetSlot, payloadJson, signature, timestamp);
+
+      const rows = db.prepare(`
+        SELECT slot, payloadJson, signature
+        FROM ui_loadouts
+        ORDER BY slot ASC
+      `).all() as UiLoadoutRow[];
+
+      const kept = rows.slice(0, UI_LOADOUT_MAX_ENTRIES);
+      db.prepare('DELETE FROM ui_loadouts').run();
+
+      const insertStmt = db.prepare(`
+        INSERT INTO ui_loadouts (slot, payloadJson, signature, updatedAt)
+        VALUES (?, ?, ?, ?)
+      `);
+
+      kept.forEach((row, index) => {
+        insertStmt.run(index, row.payloadJson, row.signature, timestamp);
+      });
+    });
+
+    tx();
+    return this.listUiLoadouts();
+  }
+
   private ensureSchema(): void {
     const db = this.requireDb();
 
@@ -1136,6 +1370,15 @@ export class DatabaseService {
       );
 
       CREATE INDEX IF NOT EXISTS idx_texture_pattern_cache_created_at ON texture_pattern_cache(createdAt DESC);
+
+      CREATE TABLE IF NOT EXISTS ui_loadouts (
+        slot INTEGER PRIMARY KEY,
+        payloadJson TEXT NOT NULL,
+        signature TEXT NOT NULL,
+        updatedAt INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_ui_loadouts_signature ON ui_loadouts(signature);
     `);
 
     this.ensureNotesColumn('contentChecksum', 'TEXT');

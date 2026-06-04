@@ -112,7 +112,7 @@ function shapeValue(raw: number, featureBias: number): number {
 }
 
 function quantizeValue(value: number, vSteps: number): number {
-  const safeSteps = Math.max(2, Math.min(16, Math.round(vSteps)));
+  const safeSteps = Math.max(2, Math.min(20, Math.round(vSteps)));
   return Math.round(value * (safeSteps - 1)) / (safeSteps - 1);
 }
 
@@ -124,7 +124,7 @@ export function generateTextureRgba(params: {
   const width = Math.max(1, Math.floor(params.width));
   const height = Math.max(1, Math.floor(params.height));
   const material = params.material;
-  const granularity = Math.max(1, Math.min(40, material.granularity));
+  const granularity = Math.max(1, Math.min(20, material.granularity));
 
   const cols = Math.max(4, Math.round(width / granularity));
   const rows = Math.max(4, Math.round(height / granularity));
@@ -193,8 +193,8 @@ export function clampMaterialSettings(material: TextureMaterialSettings): Textur
 
   return {
     seed: Number.isFinite(material.seed) ? Math.max(0, Math.round(material.seed)) : 0,
-    granularity: Number.isFinite(material.granularity) ? Math.max(1, Math.min(40, material.granularity)) : 10,
-    vSteps: Number.isFinite(material.vSteps) ? Math.max(2, Math.min(16, Math.round(material.vSteps))) : 8,
+    granularity: Number.isFinite(material.granularity) ? Math.max(1, Math.min(20, material.granularity)) : 10,
+    vSteps: Number.isFinite(material.vSteps) ? Math.max(1, Math.min(20, Math.round(material.vSteps))) : 8,
     color,
   };
 }

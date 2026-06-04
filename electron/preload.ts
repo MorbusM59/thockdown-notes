@@ -20,6 +20,8 @@ import type { LegacyDbApi, NoteUiStatePayload } from '../src/shared/legacyDbFeat
 import { LEGACY_DB_CHANNELS } from '../src/shared/legacyDbFeatures'
 import type { TextureCacheApi } from '../src/shared/textures'
 import { TEXTURE_CHANNELS } from '../src/shared/textures'
+import type { UiLoadoutApi } from '../src/shared/loadouts'
+import { LOADOUT_CHANNELS } from '../src/shared/loadouts'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
@@ -122,3 +124,10 @@ const textureCacheApi: TextureCacheApi = {
 }
 
 contextBridge.exposeInMainWorld('measlyTextures', textureCacheApi)
+
+const uiLoadoutApi: UiLoadoutApi = {
+  listUiLoadouts: () => ipcRenderer.invoke(LOADOUT_CHANNELS.list),
+  saveUiLoadout: (slot, loadout) => ipcRenderer.invoke(LOADOUT_CHANNELS.save, slot, loadout),
+}
+
+contextBridge.exposeInMainWorld('measlyLoadouts', uiLoadoutApi)

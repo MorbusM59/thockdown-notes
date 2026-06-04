@@ -49,6 +49,10 @@ const TEXTURE_CHANNELS = {
   saveCached: "texture:cache:save",
   purgeCached: "texture:cache:purge"
 };
+const LOADOUT_CHANNELS = {
+  list: "loadout:list",
+  save: "loadout:save"
+};
 electron.contextBridge.exposeInMainWorld("ipcRenderer", {
   on(...args) {
     const [channel, listener] = args;
@@ -131,3 +135,8 @@ const textureCacheApi = {
   purgeCachedTextures: (request) => electron.ipcRenderer.invoke(TEXTURE_CHANNELS.purgeCached, request)
 };
 electron.contextBridge.exposeInMainWorld("measlyTextures", textureCacheApi);
+const uiLoadoutApi = {
+  listUiLoadouts: () => electron.ipcRenderer.invoke(LOADOUT_CHANNELS.list),
+  saveUiLoadout: (slot, loadout) => electron.ipcRenderer.invoke(LOADOUT_CHANNELS.save, slot, loadout)
+};
+electron.contextBridge.exposeInMainWorld("measlyLoadouts", uiLoadoutApi);

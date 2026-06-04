@@ -474,8 +474,8 @@ function sanitizeTextureMaterial(input, fallback) {
   const source = input && typeof input === "object" ? input : {};
   return {
     seed: sanitizeIntegerInRange(source.seed, 0, 2147483647, fallback.seed),
-    granularity: sanitizeIntegerInRange(source.granularity, 1, 40, fallback.granularity),
-    vSteps: sanitizeIntegerInRange(source.vSteps, 2, 16, fallback.vSteps),
+    granularity: sanitizeIntegerInRange(source.granularity, 1, 20, fallback.granularity),
+    vSteps: sanitizeIntegerInRange(source.vSteps, 1, 20, fallback.vSteps),
     color: sanitizeTextureColor(source.color, fallback.color)
   };
 }
@@ -637,6 +637,31 @@ const META_PREFIX = "<!-- measly-meta:";
 const META_SUFFIX = "-->";
 const TEXTURE_CACHE_DEFAULT_MAX_ENTRIES = 96;
 const TEXTURE_CACHE_DEFAULT_MAX_AGE_MS = 1e3 * 60 * 60 * 24 * 14;
+const UI_LOADOUT_MAX_ENTRIES = 9;
+const DEFAULT_UI_LAYOUT_LOADOUT = {
+  viewStyle: "modern",
+  viewFontSize: "m",
+  viewSpacing: "cozy",
+  editorStyle: "syne",
+  editorFontSize: "m",
+  editorSpacing: "cozy",
+  editorGlyphPaddingPx: 1,
+  sidebarWidthRatio: 0.306,
+  tagSplitRatio: 0.645,
+  renderScrollDynamic: 1.5,
+  renderScrollResponsiveness: 0.1,
+  renderScrollTotalTimeSec: 0,
+  renderScrollMaxSpeedPxPerSec: 1e4,
+  renderScrollSkew: 1,
+  highlightColors: {
+    caret: "rgba(120, 115, 112, 0.8)",
+    selection: "rgba(199, 94, 0, 0.49)",
+    background: "#e9e6e3",
+    topBackground: "rgba(196, 187, 182, 0.49)",
+    bottomBackground: "rgba(196, 187, 182, 0.49)",
+    gridOutline: "#00000022"
+  }
+};
 function normalizeTagName(rawTag) {
   const normalized = rawTag.trim().toLowerCase().replace(/\s+/g, "-");
   if (normalized === "external") {
@@ -713,7 +738,7 @@ function normalizeTextureCacheRequest(request) {
     height: Math.max(1, Math.round(request.height)),
     seed: Math.max(0, Math.round(request.seed)),
     granularity: Number(request.granularity.toFixed(4)),
-    vSteps: Math.max(2, Math.round(request.vSteps)),
+    vSteps: Math.max(1, Math.round(request.vSteps)),
     algorithmVersion: Math.max(1, Math.round(request.algorithmVersion))
   };
 }
@@ -727,6 +752,96 @@ function textureCacheCompositeKey(request) {
     request.vSteps,
     request.algorithmVersion
   ].join("|");
+}
+function clampNumber(value, min, max, fallback) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, value));
+}
+function clampInteger(value, min, max, fallback) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+function sanitizeString(value, fallback) {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : fallback;
+}
+function normalizeTextureMaterialSettings(input, fallback) {
+  const source = input && typeof input === "object" ? input : {};
+  const color = source.color && typeof source.color === "object" ? source.color : {};
+  return {
+    seed: clampInteger(source.seed, 0, 2147483647, fallback.seed),
+    granularity: clampInteger(source.granularity, 1, 20, fallback.granularity),
+    vSteps: clampInteger(source.vSteps, 1, 20, fallback.vSteps),
+    color: {
+      h: clampInteger(color.h, 0, 360, fallback.color.h),
+      s: clampNumber(color.s, 0, 1, fallback.color.s),
+      v: clampNumber(color.v, 0, 1, fallback.color.v),
+      a: clampNumber(color.a, 0, 1, fallback.color.a)
+    }
+  };
+}
+function normalizeTextureMaterials(input) {
+  const source = input && typeof input === "object" ? input : {};
+  const next = { ...DEFAULT_TEXTURE_MATERIALS };
+  for (const surface of TEXTURE_SURFACES) {
+    next[surface] = normalizeTextureMaterialSettings(source[surface], DEFAULT_TEXTURE_MATERIALS[surface]);
+  }
+  return next;
+}
+function normalizeUiLayoutLoadout(input) {
+  if (!input || typeof input !== "object") {
+    return null;
+  }
+  const source = input;
+  const highlights = source.highlightColors && typeof source.highlightColors === "object" ? source.highlightColors : {};
+  const viewStyle = source.viewStyle === "modern" || source.viewStyle === "narrow" || source.viewStyle === "cute" || source.viewStyle === "print" ? source.viewStyle : DEFAULT_UI_LAYOUT_LOADOUT.viewStyle;
+  const viewFontSize = source.viewFontSize === "xs" || source.viewFontSize === "s" || source.viewFontSize === "m" || source.viewFontSize === "l" || source.viewFontSize === "xl" ? source.viewFontSize : DEFAULT_UI_LAYOUT_LOADOUT.viewFontSize;
+  const viewSpacing = source.viewSpacing === "tight" || source.viewSpacing === "compact" || source.viewSpacing === "cozy" || source.viewSpacing === "wide" ? source.viewSpacing : DEFAULT_UI_LAYOUT_LOADOUT.viewSpacing;
+  const editorStyle = source.editorStyle === "syne" || source.editorStyle === "redhat" ? source.editorStyle : DEFAULT_UI_LAYOUT_LOADOUT.editorStyle;
+  const editorFontSize = source.editorFontSize === "xs" || source.editorFontSize === "s" || source.editorFontSize === "m" || source.editorFontSize === "l" || source.editorFontSize === "xl" ? source.editorFontSize : DEFAULT_UI_LAYOUT_LOADOUT.editorFontSize;
+  const editorSpacing = source.editorSpacing === "tight" || source.editorSpacing === "compact" || source.editorSpacing === "cozy" || source.editorSpacing === "wide" ? source.editorSpacing : DEFAULT_UI_LAYOUT_LOADOUT.editorSpacing;
+  return {
+    viewStyle,
+    viewFontSize,
+    viewSpacing,
+    editorStyle,
+    editorFontSize,
+    editorSpacing,
+    editorGlyphPaddingPx: clampInteger(source.editorGlyphPaddingPx, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.editorGlyphPaddingPx),
+    sidebarWidthRatio: clampNumber(source.sidebarWidthRatio, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.sidebarWidthRatio),
+    tagSplitRatio: clampNumber(source.tagSplitRatio, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.tagSplitRatio),
+    renderScrollDynamic: clampNumber(source.renderScrollDynamic, 0.1, 5, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollDynamic),
+    renderScrollResponsiveness: clampNumber(source.renderScrollResponsiveness, 0.1, 5, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollResponsiveness),
+    renderScrollTotalTimeSec: clampNumber(source.renderScrollTotalTimeSec, 0, 2, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollTotalTimeSec),
+    renderScrollMaxSpeedPxPerSec: clampNumber(source.renderScrollMaxSpeedPxPerSec, 1e3, 1e5, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollMaxSpeedPxPerSec),
+    renderScrollSkew: clampNumber(source.renderScrollSkew, 0.1, 5, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollSkew),
+    highlightColors: {
+      caret: sanitizeString(highlights.caret, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.caret),
+      selection: sanitizeString(highlights.selection, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.selection),
+      background: sanitizeString(highlights.background, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.background),
+      topBackground: sanitizeString(highlights.topBackground, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.topBackground),
+      bottomBackground: sanitizeString(highlights.bottomBackground, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.bottomBackground),
+      gridOutline: sanitizeString(highlights.gridOutline, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.gridOutline)
+    },
+    textureMaterials: normalizeTextureMaterials(source.textureMaterials)
+  };
+}
+function stableStringify(value) {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  }
+  const entries = Object.entries(value).sort(([left], [right]) => left.localeCompare(right)).map(([key, nested]) => `${JSON.stringify(key)}:${stableStringify(nested)}`);
+  return `{${entries.join(",")}}`;
 }
 class DatabaseService {
   constructor(dataRoot) {
@@ -1437,6 +1552,62 @@ class DatabaseService {
     tx();
     return deletedCount;
   }
+  listUiLoadouts() {
+    const db = this.requireDb();
+    const rows = db.prepare(`
+      SELECT slot, payloadJson, signature
+      FROM ui_loadouts
+      ORDER BY slot ASC
+    `).all();
+    const output = [];
+    for (const row of rows) {
+      try {
+        const parsed = JSON.parse(row.payloadJson);
+        const normalized = normalizeUiLayoutLoadout(parsed);
+        if (!normalized) {
+          continue;
+        }
+        output.push(normalized);
+      } catch {
+        continue;
+      }
+    }
+    return output.slice(0, UI_LOADOUT_MAX_ENTRIES);
+  }
+  saveUiLoadout(slot, loadout) {
+    const db = this.requireDb();
+    const normalized = normalizeUiLayoutLoadout(loadout);
+    if (!normalized) {
+      return this.listUiLoadouts();
+    }
+    const targetSlot = clampInteger(slot, 0, UI_LOADOUT_MAX_ENTRIES - 1, 0);
+    const payloadJson = JSON.stringify(normalized);
+    const signature = stableStringify(normalized);
+    const timestamp = Date.now();
+    const tx = db.transaction(() => {
+      db.prepare("DELETE FROM ui_loadouts WHERE signature = ? AND slot <> ?").run(signature, targetSlot);
+      db.prepare(`
+        INSERT OR REPLACE INTO ui_loadouts (slot, payloadJson, signature, updatedAt)
+        VALUES (?, ?, ?, ?)
+      `).run(targetSlot, payloadJson, signature, timestamp);
+      const rows = db.prepare(`
+        SELECT slot, payloadJson, signature
+        FROM ui_loadouts
+        ORDER BY slot ASC
+      `).all();
+      const kept = rows.slice(0, UI_LOADOUT_MAX_ENTRIES);
+      db.prepare("DELETE FROM ui_loadouts").run();
+      const insertStmt = db.prepare(`
+        INSERT INTO ui_loadouts (slot, payloadJson, signature, updatedAt)
+        VALUES (?, ?, ?, ?)
+      `);
+      kept.forEach((row, index) => {
+        insertStmt.run(index, row.payloadJson, row.signature, timestamp);
+      });
+    });
+    tx();
+    return this.listUiLoadouts();
+  }
   ensureSchema() {
     const db = this.requireDb();
     db.exec(`
@@ -1510,6 +1681,15 @@ class DatabaseService {
       );
 
       CREATE INDEX IF NOT EXISTS idx_texture_pattern_cache_created_at ON texture_pattern_cache(createdAt DESC);
+
+      CREATE TABLE IF NOT EXISTS ui_loadouts (
+        slot INTEGER PRIMARY KEY,
+        payloadJson TEXT NOT NULL,
+        signature TEXT NOT NULL,
+        updatedAt INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_ui_loadouts_signature ON ui_loadouts(signature);
     `);
     this.ensureNotesColumn("contentChecksum", "TEXT");
   }
@@ -1638,6 +1818,10 @@ const TEXTURE_CHANNELS = {
   getCached: "texture:cache:get",
   saveCached: "texture:cache:save",
   purgeCached: "texture:cache:purge"
+};
+const LOADOUT_CHANNELS = {
+  list: "loadout:list",
+  save: "loadout:save"
 };
 const __dirname$1 = path.dirname(fileURLToPath(import.meta.url));
 process.env.APP_ROOT = path.join(__dirname$1, "..");
@@ -1811,6 +1995,12 @@ function registerIpcHandlers() {
   });
   ipcMain.handle(TEXTURE_CHANNELS.purgeCached, async (_event, request) => {
     return databaseService.purgeTextureCache(request);
+  });
+  ipcMain.handle(LOADOUT_CHANNELS.list, async () => {
+    return databaseService.listUiLoadouts();
+  });
+  ipcMain.handle(LOADOUT_CHANNELS.save, async (_event, slot, loadout) => {
+    return databaseService.saveUiLoadout(slot, loadout);
   });
 }
 function readCurrentWindowState(windowRef) {
