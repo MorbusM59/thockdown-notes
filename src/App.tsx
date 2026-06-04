@@ -846,40 +846,70 @@ function pad2(value: number): string {
   return String(value).padStart(2, '0')
 }
 
-function cloneTextureMaterials(source: TextureMaterialsBySurface): TextureMaterialsBySurface {
+function toRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object') {
+    return value as Record<string, unknown>
+  }
+  return {}
+}
+
+function toFiniteNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function normalizeTextureMaterial(source: unknown, fallback: TextureMaterialSettings): TextureMaterialSettings {
+  const record = toRecord(source)
+  const color = toRecord(record.color)
+
   return {
-    appGrid: {
-      ...source.appGrid,
-      color: { ...source.appGrid.color },
-    },
-    sidebarContent: {
-      ...source.sidebarContent,
-      color: { ...source.sidebarContent.color },
-    },
-    editorEditText: {
-      ...source.editorEditText,
-      color: { ...source.editorEditText.color },
-    },
-    editorRenderText: {
-      ...source.editorRenderText,
-      color: { ...source.editorRenderText.color },
+    seed: Math.max(0, Math.round(toFiniteNumber(record.seed, fallback.seed))),
+    granularity: clamp(
+      Math.round(toFiniteNumber(record.granularity, fallback.granularity)),
+      TEXTURE_GRANULARITY_MIN,
+      TEXTURE_GRANULARITY_MAX,
+    ),
+    vSteps: clamp(
+      Math.round(toFiniteNumber(record.vSteps, fallback.vSteps)),
+      TEXTURE_VSTEPS_MIN,
+      TEXTURE_VSTEPS_MAX,
+    ),
+    color: {
+      h: clamp(Math.round(toFiniteNumber(color.h, fallback.color.h)), 0, 360),
+      s: clamp(toFiniteNumber(color.s, fallback.color.s), 0, 1),
+      v: clamp(toFiniteNumber(color.v, fallback.color.v), 0, 1),
+      a: clamp(toFiniteNumber(color.a, fallback.color.a), 0, 1),
     },
   }
 }
 
-function cloneTextureMaterial(source: TextureMaterialSettings): TextureMaterialSettings {
+function cloneTextureMaterials(source: Partial<TextureMaterialsBySurface> | null | undefined): TextureMaterialsBySurface {
+  const record = toRecord(source)
   return {
-    ...source,
-    color: { ...source.color },
+    appGrid: normalizeTextureMaterial(record.appGrid, DEFAULT_TEXTURE_MATERIALS.appGrid),
+    sidebarContent: normalizeTextureMaterial(record.sidebarContent, DEFAULT_TEXTURE_MATERIALS.sidebarContent),
+    editorEditText: normalizeTextureMaterial(record.editorEditText, DEFAULT_TEXTURE_MATERIALS.editorEditText),
+    editorRenderText: normalizeTextureMaterial(record.editorRenderText, DEFAULT_TEXTURE_MATERIALS.editorRenderText),
   }
 }
 
-function toTexturePreviewMaterial(source: TextureMaterialSettings): TextureMaterialSettings {
+function cloneTextureMaterial(source: unknown, fallback: TextureMaterialSettings = DEFAULT_TEXTURE_MATERIALS[TEXTURE_PREVIEW_SURFACE]): TextureMaterialSettings {
+  return normalizeTextureMaterial(source, fallback)
+}
+
+function toTexturePreviewMaterial(source: unknown): TextureMaterialSettings {
+  return normalizeTextureMaterial(source, DEFAULT_TEXTURE_MATERIALS[TEXTURE_PREVIEW_SURFACE])
+}
+
+function normalizeLoadoutHighlightColors(source: unknown): HighlightColors {
+  const record = toRecord(source)
+
   return {
-    seed: source.seed,
-    granularity: source.granularity,
-    vSteps: source.vSteps,
-    color: { ...source.color },
+    caret: typeof record.caret === 'string' ? record.caret : DEFAULT_HIGHLIGHT_COLORS.caret,
+    selection: typeof record.selection === 'string' ? record.selection : DEFAULT_HIGHLIGHT_COLORS.selection,
+    background: typeof record.background === 'string' ? record.background : DEFAULT_HIGHLIGHT_COLORS.background,
+    topBackground: typeof record.topBackground === 'string' ? record.topBackground : DEFAULT_HIGHLIGHT_COLORS.topBackground,
+    bottomBackground: typeof record.bottomBackground === 'string' ? record.bottomBackground : DEFAULT_HIGHLIGHT_COLORS.bottomBackground,
+    gridOutline: typeof record.gridOutline === 'string' ? record.gridOutline : DEFAULT_HIGHLIGHT_COLORS.gridOutline,
   }
 }
 
@@ -918,37 +948,58 @@ function normalizeTextureMaterialForLoadoutSignature(source: TextureMaterialSett
   }
 }
 
-function normalizeUiLoadoutForSignature(loadout: UiLayoutLoadout): UiLayoutLoadout {
+function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
+  const source = toRecord(loadout)
+  const normalizedTextureMaterials = cloneTextureMaterials(source.textureMaterials as Partial<TextureMaterialsBySurface> | null | undefined)
+  const normalizedHighlightColors = normalizeLoadoutHighlightColors(source.highlightColors)
+
+  const viewStyle = source.viewStyle === 'modern' || source.viewStyle === 'narrow' || source.viewStyle === 'cute' || source.viewStyle === 'print'
+    ? source.viewStyle
+    : 'modern'
+
+  const viewFontSize = source.viewFontSize === 'xs' || source.viewFontSize === 's' || source.viewFontSize === 'm' || source.viewFontSize === 'l' || source.viewFontSize === 'xl'
+    ? source.viewFontSize
+    : 'm'
+
+  const viewSpacing = source.viewSpacing === 'tight' || source.viewSpacing === 'compact' || source.viewSpacing === 'cozy' || source.viewSpacing === 'wide'
+    ? source.viewSpacing
+    : 'cozy'
+
+  const editorStyle = source.editorStyle === 'syne' || source.editorStyle === 'redhat'
+    ? source.editorStyle
+    : DEFAULT_EDITOR_STYLE
+
+  const editorFontSize = source.editorFontSize === 'xs' || source.editorFontSize === 's' || source.editorFontSize === 'm' || source.editorFontSize === 'l' || source.editorFontSize === 'xl'
+    ? source.editorFontSize
+    : DEFAULT_EDITOR_FONT_SIZE
+
+  const editorSpacing = source.editorSpacing === 'tight' || source.editorSpacing === 'compact' || source.editorSpacing === 'cozy' || source.editorSpacing === 'wide'
+    ? source.editorSpacing
+    : DEFAULT_EDITOR_SPACING
+
   return {
-    viewStyle: loadout.viewStyle,
-    viewFontSize: loadout.viewFontSize,
-    viewSpacing: loadout.viewSpacing,
-    editorStyle: loadout.editorStyle,
-    editorFontSize: loadout.editorFontSize,
-    editorSpacing: loadout.editorSpacing,
+    viewStyle,
+    viewFontSize,
+    viewSpacing,
+    editorStyle,
+    editorFontSize,
+    editorSpacing,
     editorGlyphPaddingPx: clamp(
-      Math.round(loadout.editorGlyphPaddingPx),
+      Math.round(toFiniteNumber(source.editorGlyphPaddingPx, DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX)),
       EDITOR_GLYPH_PADDING_MIN_PX,
       EDITOR_GLYPH_PADDING_MAX_PX,
     ),
-    renderScrollDynamic: roundForSignature(clamp(loadout.renderScrollDynamic, 0.1, 5)),
-    renderScrollResponsiveness: roundForSignature(clamp(loadout.renderScrollResponsiveness, 0.1, 5)),
-    renderScrollTotalTimeSec: roundForSignature(clamp(loadout.renderScrollTotalTimeSec, 0, 2)),
-    renderScrollMaxSpeedPxPerSec: Math.round(clamp(loadout.renderScrollMaxSpeedPxPerSec, 1000, 100000)),
-    renderScrollSkew: roundForSignature(clamp(loadout.renderScrollSkew, RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX)),
-    highlightColors: {
-      caret: loadout.highlightColors.caret,
-      selection: loadout.highlightColors.selection,
-      background: loadout.highlightColors.background,
-      topBackground: loadout.highlightColors.topBackground,
-      bottomBackground: loadout.highlightColors.bottomBackground,
-      gridOutline: loadout.highlightColors.gridOutline,
-    },
+    renderScrollDynamic: roundForSignature(clamp(toFiniteNumber(source.renderScrollDynamic, getRenderScrollDynamic()), 0.1, 5)),
+    renderScrollResponsiveness: roundForSignature(clamp(toFiniteNumber(source.renderScrollResponsiveness, getRenderScrollResponsiveness()), 0.1, 5)),
+    renderScrollTotalTimeSec: roundForSignature(clamp(toFiniteNumber(source.renderScrollTotalTimeSec, getRenderScrollTotalTimeSec()), 0, 2)),
+    renderScrollMaxSpeedPxPerSec: Math.round(clamp(toFiniteNumber(source.renderScrollMaxSpeedPxPerSec, getRenderScrollMaxSpeedPxPerSec()), 1000, 100000)),
+    renderScrollSkew: roundForSignature(clamp(toFiniteNumber(source.renderScrollSkew, getRenderScrollSkew()), RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX)),
+    highlightColors: normalizedHighlightColors,
     textureMaterials: {
-      appGrid: normalizeTextureMaterialForLoadoutSignature(loadout.textureMaterials.appGrid),
-      sidebarContent: normalizeTextureMaterialForLoadoutSignature(loadout.textureMaterials.sidebarContent),
-      editorEditText: normalizeTextureMaterialForLoadoutSignature(loadout.textureMaterials.editorEditText),
-      editorRenderText: normalizeTextureMaterialForLoadoutSignature(loadout.textureMaterials.editorRenderText),
+      appGrid: normalizeTextureMaterialForLoadoutSignature(normalizedTextureMaterials.appGrid),
+      sidebarContent: normalizeTextureMaterialForLoadoutSignature(normalizedTextureMaterials.sidebarContent),
+      editorEditText: normalizeTextureMaterialForLoadoutSignature(normalizedTextureMaterials.editorEditText),
+      editorRenderText: normalizeTextureMaterialForLoadoutSignature(normalizedTextureMaterials.editorRenderText),
     },
   }
 }
@@ -1797,7 +1848,8 @@ function App() {
     viewStyle,
   ])
 
-  const applyUiLayoutLoadout = useCallback((loadout: UiLayoutLoadout) => {
+  const applyUiLayoutLoadout = useCallback((loadoutInput: unknown) => {
+    const loadout = normalizeUiLoadoutForSignature(loadoutInput)
     setViewStyle(loadout.viewStyle)
     setViewFontSize(loadout.viewFontSize)
     setViewSpacing(loadout.viewSpacing)
@@ -1862,7 +1914,7 @@ function App() {
 
     try {
       const nextLoadouts = await window.measlyLoadouts.saveUiLoadout(slot, captureUiLayoutLoadout())
-      setUiLoadouts(nextLoadouts.slice(0, MAX_UI_LOADOUTS))
+      setUiLoadouts(nextLoadouts.slice(0, MAX_UI_LOADOUTS).map((loadout) => normalizeUiLoadoutForSignature(loadout)))
     } catch (error) {
       console.error('Failed to save UI loadout', error)
     }
@@ -2092,7 +2144,7 @@ function App() {
     void window.measlyLoadouts.listUiLoadouts()
       .then((loaded) => {
         if (cancelled) return
-        setUiLoadouts(loaded.slice(0, MAX_UI_LOADOUTS))
+        setUiLoadouts(loaded.slice(0, MAX_UI_LOADOUTS).map((loadout) => normalizeUiLoadoutForSignature(loadout)))
       })
       .catch((error) => {
         console.error('Failed to load UI loadouts', error)
