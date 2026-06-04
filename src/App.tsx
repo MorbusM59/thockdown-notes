@@ -235,38 +235,40 @@ const SIDEBAR_MODES: Array<{ mode: SidebarMode; label: string }> = [
 const SETTINGS_SECTION_INFO: Record<SettingsSectionKey, SettingsSectionInfo> = {
   scrolling: {
     title: 'Adjust scrolling',
-    summary: 'These sliders shape how scrolling starts, peaks, and settles.',
+    summary: 'Shape how scrolling starts, peaks, and settles.',
     lines: [
-      { label: 'Ramp', text: 'Higher makes easing more dramatic; lower feels flatter.' },
-      { label: 'Response', text: 'Controls early pickup: higher starts stronger and stays steadier.' },
-      { label: 'Speed', text: 'Sets base scroll time: lower is quicker, higher is slower.' },
-      { label: 'Max speed', text: 'Limits top speed; lower gives steadier long scrolls.' },
-      { label: 'Shape', text: 'Shifts the speed peak in time: lower earlier, higher later.' },
+      { label: 'Ramp', text: 'Determines how dynamic scrolling feels.' },
+      { label: 'Response', text: 'Shapes start speed for the speed ramp.' },
+      { label: 'Speed', text: 'Sets how quickly a standard scroll completes.' },
+      { label: 'Max speed', text: 'Limits top speed for long & continuous scrolls.' },
+      { label: 'Shape', text: 'Skews the curve to the front or back.' },
     ],
   },
   colors: {
     title: 'Tune textures and colors',
-    summary: 'Choose a target, then apply HSVA channel edits or texture parameters.',
+    summary: 'Choose a channel (hue, saturation, value, alpha/color/texture) and apply it to an element.',
     lines: [
-      { label: 'Elements', text: 'Writes RGBA values to caret, boxes, backgrounds, and outline.' },
-      { label: 'HSVA', text: 'Arms one HSVA channel and applies it onto clicked targets.' },
-      { label: 'Texture', text: 'Seed, granularity, and smoothness drive procedural mask generation.' },
+      { label: 'Elements (left)', text: 'Left click to apply the selected channel. Hold right click to copy paramters.' },
+      { label: 'Channels (right)', text: 'Hold right click to choose the channel that will be applied.' },
+      { label: 'Seed', text: 'Left click to pick a random seed. Right click to enter a specific seed number.' },
+      { label: 'Granularity', text: 'Determines how fine or coarse the pattern looks.' },
+      { label: 'Smoothness', text: 'Determines the number of color steps in the pattern.' },
     ],
   },
   layout: {
     title: 'Refine layout',
-    summary: 'Set glyph side padding for tighter or looser text columns.',
+    summary: 'Set paddings and margins for various elements.',
     lines: [
-      { label: 'Padding', text: 'Feeds runtime metrics: cellWidth = glyphWidth + (2 × padding).' },
+      { label: 'Padding', text: 'Adds a little horizontal space between letters and their grid box.' },
     ],
   },
   loadout: {
     title: 'Manage loadouts',
     summary: 'Store and recall UI layout snapshots in numbered slots.',
     lines: [
-      { label: 'Apply', text: 'Click a slot to restore that saved layout.' },
-      { label: 'Save', text: 'Hold right-click for 500ms to save current layout.' },
-      { label: 'Smart slots', text: 'Duplicate layouts collapse into one canonical slot.' },
+      { label: 'Load', text: 'Click a slot to load its stored layout.' },
+      { label: 'Save', text: 'Hold right-click on a slot to store the current layout.' },
+      { label: 'Smart slots', text: 'Duplicate layouts collapse into a single slot. Pending changes are represented by an active + slot.' },
     ],
   },
 }
