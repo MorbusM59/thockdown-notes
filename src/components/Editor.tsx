@@ -698,18 +698,16 @@ export function Editor({
       const viewportHeightPx = Math.max(0, snappedInnerHeight);
 
       setTopBoundary((previousTop) => {
-        const nextTop = Math.min(quantizeTopEdge(previousTop, lineHeightPx), viewportHeightPx);
-        setBottomBoundary((previousBottom) => {
-          const normalized = normalizeEditorBoundaryPair({
-            topBoundaryPx: nextTop,
-            bottomBoundaryPx: previousBottom,
-            lineHeightPx,
-            viewportHeightPx,
-            preserve: 'top',
-          });
-          return normalized.bottomBoundaryPx;
+        const snappedTop = Math.min(quantizeTopEdge(previousTop, lineHeightPx), viewportHeightPx);
+        const normalized = normalizeEditorBoundaryPair({
+          topBoundaryPx: snappedTop,
+          bottomBoundaryPx: bottomBoundary,
+          lineHeightPx,
+          viewportHeightPx,
+          preserve: 'bottom',
         });
-        return nextTop;
+        setBottomBoundary(normalized.bottomBoundaryPx);
+        return normalized.topBoundaryPx;
       });
 
       const scroller = scrollerRef.current;
