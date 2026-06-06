@@ -6897,7 +6897,7 @@ function App() {
                 event.preventDefault()
                 clearColorArmTimer()
               }}
-              style={{ background: highlightColors[key] }}
+              style={{ '--toolbar-flyout-swatch-color': highlightColors[key] } as React.CSSProperties}
               title={HIGHLIGHT_COLOR_TITLES[key]}
             >
               <span className={`toolbar-flyout-color-swatch-glyph ${HIGHLIGHT_COLOR_ICONS[key]}`} aria-hidden="true" />
@@ -6939,7 +6939,7 @@ function App() {
                 event.preventDefault()
                 clearColorArmTimer()
               }}
-              style={{ background: rgbaToCssColor(hsvaToRgba(textureMaterials[surface].color)) }}
+              style={{ '--toolbar-flyout-swatch-color': rgbaToCssColor(hsvaToRgba(textureMaterials[surface].color)) } as React.CSSProperties}
               title={TEXTURE_SURFACE_TITLES[surface]}
             >
               <span className={`toolbar-flyout-color-swatch-glyph ${TEXTURE_SURFACE_ICONS[surface]}`} aria-hidden="true" />
