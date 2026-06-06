@@ -2947,7 +2947,7 @@ function App() {
     return listed[0].id
   }, [])
 
-  const [fileSyncStatus, setFileSyncStatus] = useState<string | null>(null)
+  const [, setFileSyncStatus] = useState<string | null>(null)
 
   const syncExistingNotes = useCallback(async () => {
     const fileSyncApi = window.measlyFileSync
@@ -7171,10 +7171,10 @@ function App() {
 
       <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-notes" aria-label="Notes and Import">
         <div className="sidebar-options-section-heading">Notes & Import</div>
-        <div className="toolbar-flyout-action-grid" role="group" aria-label="Note sync and import actions">
+        <div className="toolbar-flyout-loadout-grid" role="group" aria-label="Note sync and import actions">
           <button
             type="button"
-            className="toolbar-btn-icon options-toolbar-button"
+            className="toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn"
             onClick={syncExistingNotes}
             title="Sync stored note files"
             aria-label="Sync stored note files"
@@ -7183,7 +7183,7 @@ function App() {
           </button>
           <button
             type="button"
-            className="toolbar-btn-icon options-toolbar-button"
+            className="toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn"
             onClick={importNotes}
             title="Import notes from files or folders"
             aria-label="Import notes from files or folders"
@@ -7191,9 +7191,6 @@ function App() {
             <span className="fa-solid fa-file-import" aria-hidden="true" />
           </button>
         </div>
-        {fileSyncStatus ? (
-          <div className="sidebar-options-help-text">{fileSyncStatus}</div>
-        ) : null}
       </section>
     </div>
   )
