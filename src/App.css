@@ -1095,18 +1095,21 @@ body.splitter-dragging {
 }
 
 .toolbar-flyout-element-grid {
-  grid-template-columns: repeat(2, var(--color-grid-cell));
-  grid-template-rows: repeat(3, var(--color-grid-cell));
+  grid-auto-columns:var(--color-grid-cell);
+  grid-auto-rows: var(--color-grid-cell);
+  grid-auto-flow: column;
 }
 
 .toolbar-flyout-hsva-grid {
-  grid-template-columns: repeat(2, var(--color-grid-cell));
-  grid-template-rows: repeat(3, var(--color-grid-cell));
+  grid-template-columns: repeat(3, var(--color-grid-cell));
+  grid-template-rows: repeat(2, var(--color-grid-cell));
+  grid-auto-flow: column;
 }
 
 .toolbar-flyout-texture-grid {
-  grid-template-columns: repeat(1, var(--color-grid-cell));
-  grid-template-rows: repeat(3, var(--color-grid-cell));
+  grid-auto-columns:var(--color-grid-cell);
+  grid-auto-rows: var(--color-grid-cell);
+  grid-auto-flow: column;
 }
 
 .toolbar-flyout-color-separator {
@@ -1163,10 +1166,8 @@ body.splitter-dragging {
 }
 
 .toolbar-flyout-active-color {
-  grid-column: span 2;
+  grid-row: span 2;
   aspect-ratio: auto;
-  width: calc(100% - 4px);
-  height: calc(100% - 2px);
   justify-self: center;
   align-self: center;
   transition: none;
@@ -1174,8 +1175,9 @@ body.splitter-dragging {
 
 .toolbar-flyout-texture-settings {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: repeat(3, var(--color-grid-cell));
+  grid-auto-columns:var(--color-grid-cell);
+  grid-auto-rows: var(--color-grid-cell);
+  grid-auto-flow: column;
   gap: var(--color-grid-gap);
   width: calc((var(--color-grid-cell) * 2) + var(--color-grid-gap));
   min-width: calc((var(--color-grid-cell) * 2) + var(--color-grid-gap));
@@ -1184,7 +1186,7 @@ body.splitter-dragging {
 }
 
 .toolbar-flyout-texture-stack {
-  grid-column: 1 / span 2;
+  grid-column: 2 / span 2;
   grid-row: 1 / span 2;
   min-width: 0;
   min-height: 0;
@@ -1217,8 +1219,8 @@ body.splitter-dragging {
 }
 
 .toolbar-flyout-texture-preview-row {
-  grid-column: 1 / span 2;
-  grid-row: 3;
+  grid-row: 1 / span 2;
+  grid-column: 1;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -1239,7 +1241,7 @@ body.splitter-dragging {
   --loadout-cell-size: 32px;
   --loadout-gap: var(--toolbar-options-gap);
   display: grid;
-  grid-auto-flow: row;
+  grid-auto-flow: column;
   grid-template-columns: var(--loadout-cell-size);
   grid-template-rows: var(--loadout-cell-size);
   grid-auto-columns: var(--loadout-cell-size);
