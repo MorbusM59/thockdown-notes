@@ -253,7 +253,7 @@ body.splitter-dragging {
   height: 100%;
   box-sizing: border-box;
   gap: 4px;
-  padding: 0 var(--sidebar-padding-right) 0 0;
+  padding: 4px var(--sidebar-padding-right) 4px 0;
 }
 
 .search-box {
@@ -703,7 +703,7 @@ body.splitter-dragging {
 }
 
 .tag-input-grid {
-  padding: 4px 8px;
+  padding: 8px;
 }
 
 .tag-input-container {
