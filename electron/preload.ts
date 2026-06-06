@@ -22,6 +22,8 @@ import type { TextureCacheApi } from '../src/shared/textures'
 import { TEXTURE_CHANNELS } from '../src/shared/textures'
 import type { UiLoadoutApi } from '../src/shared/loadouts'
 import { LOADOUT_CHANNELS } from '../src/shared/loadouts'
+import type { FileSyncApi } from '../src/shared/fileSync'
+import { FILE_SYNC_CHANNELS } from '../src/shared/fileSync'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
@@ -139,3 +141,10 @@ const uiLoadoutApi: UiLoadoutApi = {
 }
 
 contextBridge.exposeInMainWorld('measlyLoadouts', uiLoadoutApi)
+
+const fileSyncApi: FileSyncApi = {
+  syncExistingNotes: () => ipcRenderer.invoke(FILE_SYNC_CHANNELS.syncExistingNotes),
+  importNotes: () => ipcRenderer.invoke(FILE_SYNC_CHANNELS.importNotes),
+}
+
+contextBridge.exposeInMainWorld('measlyFileSync', fileSyncApi)

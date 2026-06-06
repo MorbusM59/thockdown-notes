@@ -53,6 +53,10 @@ const LOADOUT_CHANNELS = {
   list: "loadout:list",
   save: "loadout:save"
 };
+const FILE_SYNC_CHANNELS = {
+  syncExistingNotes: "file-sync:sync-existing-notes",
+  importNotes: "file-sync:import-notes"
+};
 electron.contextBridge.exposeInMainWorld("ipcRenderer", {
   on(...args) {
     const [channel, listener] = args;
@@ -146,3 +150,8 @@ const uiLoadoutApi = {
   saveUiLoadout: (slot, loadout) => electron.ipcRenderer.invoke(LOADOUT_CHANNELS.save, slot, loadout)
 };
 electron.contextBridge.exposeInMainWorld("measlyLoadouts", uiLoadoutApi);
+const fileSyncApi = {
+  syncExistingNotes: () => electron.ipcRenderer.invoke(FILE_SYNC_CHANNELS.syncExistingNotes),
+  importNotes: () => electron.ipcRenderer.invoke(FILE_SYNC_CHANNELS.importNotes)
+};
+electron.contextBridge.exposeInMainWorld("measlyFileSync", fileSyncApi);

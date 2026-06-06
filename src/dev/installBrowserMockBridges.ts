@@ -1,6 +1,7 @@
 import type { AppState, AppStateApi, WindowState } from '../shared/appState'
 import type { UiLayoutLoadout, UiLoadoutApi } from '../shared/loadouts'
 import type { TextureCacheApi, TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../shared/textures'
+import type { FileSyncApi } from '../shared/fileSync'
 import type {
   AddTagInput,
   CreateNoteInput,
@@ -29,6 +30,7 @@ type BrowserMockStore = {
 
 type BrowserMockWindow = Window & {
   __measlyBrowserMockInstalled?: boolean
+  measlyFileSync?: FileSyncApi
 }
 
 const DEFAULT_WINDOW_STATE: WindowState = {
@@ -473,6 +475,17 @@ function buildLoadoutBridge(storeRef: { current: BrowserMockStore }): UiLoadoutA
   }
 }
 
+function buildFileSyncBridge(): FileSyncApi {
+  return {
+    async syncExistingNotes() {
+      return { createdNoteIds: [], updatedPaths: [], markedDeletedNoteIds: [] }
+    },
+    async importNotes() {
+      return { imported: 0, createdNoteIds: [], errors: ['File sync is not available in browser dev.'] }
+    },
+  }
+}
+
 export function installBrowserMockBridges(): void {
   if (!import.meta.env.DEV) return
 
@@ -498,6 +511,9 @@ export function installBrowserMockBridges(): void {
   }
   if (!window.measlyLoadouts) {
     window.measlyLoadouts = buildLoadoutBridge(storeRef)
+  }
+  if (!window.measlyFileSync) {
+    window.measlyFileSync = buildFileSyncBridge()
   }
 
   scopedWindow.__measlyBrowserMockInstalled = true

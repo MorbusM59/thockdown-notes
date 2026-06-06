@@ -2947,6 +2947,40 @@ function App() {
     return listed[0].id
   }, [])
 
+  const [fileSyncStatus, setFileSyncStatus] = useState<string | null>(null)
+
+  const syncExistingNotes = useCallback(async () => {
+    const fileSyncApi = window.measlyFileSync
+    if (!fileSyncApi || !persistenceReady) return
+
+    setFileSyncStatus('Syncing notes from storage...')
+    try {
+      const result = await fileSyncApi.syncExistingNotes()
+      await refreshNotes()
+      setFileSyncStatus(`Synced ${result.createdNoteIds.length} files.`)
+    } catch (error) {
+      setFileSyncStatus(`Sync failed: ${String(error)}`)
+    }
+  }, [persistenceReady, refreshNotes])
+
+  const importNotes = useCallback(async () => {
+    const fileSyncApi = window.measlyFileSync
+    if (!fileSyncApi || !persistenceReady) return
+
+    setFileSyncStatus('Importing selected note files or folders...')
+    try {
+      const result = await fileSyncApi.importNotes()
+      await refreshNotes()
+      if (result.errors && result.errors.length > 0) {
+        setFileSyncStatus(`Imported ${result.imported} files with ${result.errors.length} errors.`)
+      } else {
+        setFileSyncStatus(`Imported ${result.imported} files.`)
+      }
+    } catch (error) {
+      setFileSyncStatus(`Import failed: ${String(error)}`)
+    }
+  }, [persistenceReady, refreshNotes])
+
   const selectNote = useCallback(async (noteId: string, options?: { forceReload?: boolean }) => {
     if (!window.measlyNotes) return
     if (!persistenceReady) return
@@ -7134,6 +7168,33 @@ function App() {
           />
         </div>
       </section>
+
+      <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-notes" aria-label="Notes and Import">
+        <div className="sidebar-options-section-heading">Notes & Import</div>
+        <div className="toolbar-flyout-action-grid" role="group" aria-label="Note sync and import actions">
+          <button
+            type="button"
+            className="toolbar-btn-icon options-toolbar-button"
+            onClick={syncExistingNotes}
+            title="Sync stored note files"
+            aria-label="Sync stored note files"
+          >
+            <span className="fa-solid fa-rotate" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="toolbar-btn-icon options-toolbar-button"
+            onClick={importNotes}
+            title="Import notes from files or folders"
+            aria-label="Import notes from files or folders"
+          >
+            <span className="fa-solid fa-file-import" aria-hidden="true" />
+          </button>
+        </div>
+        {fileSyncStatus ? (
+          <div className="sidebar-options-help-text">{fileSyncStatus}</div>
+        ) : null}
+      </section>
     </div>
   )
 
@@ -7469,7 +7530,7 @@ function App() {
             )}
           </div>
 
-          {isSidebarScrollbarMode && isSidebarScrollThumbActive ? (
+          {isSidebarScrollbarMode ? (
             <aside className="sidebar-scrollbar-slot" aria-hidden="true">
               <div className="sidebar-scrollbar-slot-inner">
                 <div className="measly-scroll-rail sidebar-measly-scroll-rail">

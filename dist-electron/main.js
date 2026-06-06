@@ -1,7 +1,7 @@
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
-import { app, BrowserWindow, Menu, ipcMain } from "electron";
+import { app, BrowserWindow, Menu, ipcMain, dialog } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { promises, existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -304,6 +304,10 @@ class NoteLifecycleService {
     return this.databaseService.listTags();
   }
 }
+const FILE_SYNC_CHANNELS = {
+  syncExistingNotes: "file-sync:sync-existing-notes",
+  importNotes: "file-sync:import-notes"
+};
 const NOTE_LIFECYCLE_CHANNELS = {
   list: "notes:list",
   load: "notes:load",
@@ -1837,12 +1841,21 @@ const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
 }
+function normalizeExternalFilePath(value) {
+  const trimmed = value.trim().replace(/^"|"$/g, "");
+  const normalized = path.normalize(trimmed);
+  if (path.isAbsolute(normalized)) {
+    return normalized;
+  }
+  return path.resolve(process.cwd(), normalized);
+}
 function isOpenableExternalFile(filePath) {
-  const ext = path.extname(filePath).toLowerCase();
-  return OPENABLE_EXTENSIONS.has(ext) && existsSync(filePath);
+  const normalizedPath = normalizeExternalFilePath(filePath);
+  const ext = path.extname(normalizedPath).toLowerCase();
+  return OPENABLE_EXTENSIONS.has(ext) && existsSync(normalizedPath);
 }
 function extractOpenablePaths(argv) {
-  return argv.map((value) => value.replace(/^"|"$/g, "")).filter((value) => value.length > 0).filter((value) => path.isAbsolute(value)).filter((value) => isOpenableExternalFile(value));
+  return argv.map((value) => normalizeExternalFilePath(value)).filter((value) => value.length > 0).filter((value) => path.isAbsolute(value)).filter((value) => isOpenableExternalFile(value));
 }
 function enqueueExternalFilePaths(filePaths) {
   const seen = new Set(pendingExternalFilePaths);
@@ -1850,6 +1863,37 @@ function enqueueExternalFilePaths(filePaths) {
     if (seen.has(filePath)) continue;
     seen.add(filePath);
     pendingExternalFilePaths.push(filePath);
+  }
+}
+async function importNotesFromPaths(filePaths) {
+  const createdNoteIds = [];
+  const errors = [];
+  if (!noteLifecycleService) {
+    return { imported: 0, createdNoteIds, errors: ["Note lifecycle service is unavailable"] };
+  }
+  for (const filePath of filePaths) {
+    try {
+      const normalizedPath = normalizeExternalFilePath(filePath);
+      const content = await promises.readFile(normalizedPath, "utf8");
+      const note = await noteLifecycleService.createNote({ initialText: content });
+      createdNoteIds.push(note.id);
+    } catch (error) {
+      errors.push(String(error instanceof Error ? error.message : error));
+    }
+  }
+  return { imported: createdNoteIds.length, createdNoteIds, errors };
+}
+async function importNotesFromFolder(folderPath) {
+  try {
+    const entries = await promises.readdir(folderPath, { withFileTypes: true });
+    const filePaths = entries.filter((entry) => entry.isFile()).map((entry) => path.join(folderPath, entry.name)).filter((candidate) => [".md", ".txt"].includes(path.extname(candidate).toLowerCase()));
+    return importNotesFromPaths(filePaths);
+  } catch (error) {
+    return {
+      imported: 0,
+      createdNoteIds: [],
+      errors: [String(error instanceof Error ? error.message : error)]
+    };
   }
 }
 function flushPendingExternalPathsToRenderer() {
@@ -1892,6 +1936,62 @@ function registerIpcHandlers() {
   ipcMain.handle(APP_STATE_CHANNELS.saveAppState, async (_event, payload) => stateService.saveAppState(payload));
   ipcMain.handle(APP_STATE_CHANNELS.loadWindowState, async () => stateService.loadWindowState());
   ipcMain.handle(APP_STATE_CHANNELS.saveWindowState, async (_event, payload) => stateService.saveWindowState(payload));
+  ipcMain.handle(FILE_SYNC_CHANNELS.syncExistingNotes, async () => {
+    if (!databaseService) {
+      return { createdNoteIds: [], updatedPaths: [], markedDeletedNoteIds: [] };
+    }
+    const beforeIds = new Set(databaseService.listNoteRecords().map((note) => note.id));
+    await databaseService.bootstrapFromFilesystem();
+    const afterNotes = databaseService.listNoteRecords();
+    const createdNoteIds = afterNotes.filter((note) => !beforeIds.has(note.id)).map((note) => note.id);
+    return {
+      createdNoteIds,
+      updatedPaths: [],
+      markedDeletedNoteIds: []
+    };
+  });
+  ipcMain.handle(FILE_SYNC_CHANNELS.importNotes, async (event) => {
+    const winRef = BrowserWindow.fromWebContents(event.sender) ?? win;
+    if (!winRef) {
+      return { imported: 0, createdNoteIds: [], errors: ["No active window available"] };
+    }
+    try {
+      const result = await dialog.showOpenDialog(winRef, {
+        properties: ["openFile", "openDirectory", "multiSelections"],
+        filters: [
+          { name: "Markdown and Text Files", extensions: ["md", "txt"] }
+        ],
+        title: "Select files or folders to import"
+      });
+      if (result.canceled || result.filePaths.length === 0) {
+        return { imported: 0, createdNoteIds: [] };
+      }
+      let imported = 0;
+      const createdNoteIds = [];
+      const errors = [];
+      for (const selectedPath of result.filePaths) {
+        try {
+          const stats = await promises.stat(selectedPath);
+          if (stats.isDirectory()) {
+            const folderResult = await importNotesFromFolder(selectedPath);
+            imported += folderResult.imported;
+            createdNoteIds.push(...folderResult.createdNoteIds);
+            if (folderResult.errors) errors.push(...folderResult.errors);
+          } else if (stats.isFile()) {
+            const fileResult = await importNotesFromPaths([selectedPath]);
+            imported += fileResult.imported;
+            createdNoteIds.push(...fileResult.createdNoteIds);
+            if (fileResult.errors) errors.push(...fileResult.errors);
+          }
+        } catch (error) {
+          errors.push(String(error instanceof Error ? error.message : error));
+        }
+      }
+      return { imported, createdNoteIds, errors };
+    } catch (error) {
+      return { imported: 0, createdNoteIds: [], errors: [String(error instanceof Error ? error.message : error)] };
+    }
+  });
   ipcMain.on("window-control", (_event, action) => {
     if (!win || win.isDestroyed()) return;
     switch (action) {
@@ -1917,8 +2017,9 @@ function registerIpcHandlers() {
   });
   ipcMain.handle(EXTERNAL_FILE_CHANNELS.readContent, async (_event, filePath) => {
     if (typeof filePath !== "string" || !isOpenableExternalFile(filePath)) return null;
+    const normalizedPath = normalizeExternalFilePath(filePath);
     try {
-      return readFileSync(filePath, "utf8");
+      return readFileSync(normalizedPath, "utf8");
     } catch {
       return null;
     }
@@ -1926,8 +2027,9 @@ function registerIpcHandlers() {
   ipcMain.handle(EXTERNAL_FILE_CHANNELS.writeContent, async (_event, filePath, content) => {
     if (typeof filePath !== "string" || typeof content !== "string") return false;
     if (!isOpenableExternalFile(filePath)) return false;
+    const normalizedPath = normalizeExternalFilePath(filePath);
     try {
-      writeFileSync(filePath, content, "utf8");
+      writeFileSync(normalizedPath, content, "utf8");
       return true;
     } catch {
       return false;
@@ -1936,7 +2038,7 @@ function registerIpcHandlers() {
   ipcMain.handle(EXTERNAL_FILE_CHANNELS.basename, async (_event, filePath) => {
     if (typeof filePath !== "string") return "";
     try {
-      return path.basename(filePath);
+      return path.basename(normalizeExternalFilePath(filePath));
     } catch {
       return "";
     }

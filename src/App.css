@@ -1246,6 +1246,36 @@ body.splitter-dragging {
   z-index: 1;
 }
 
+.options-toolbar-button {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+.options-toolbar-button:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.options-toolbar-button:active {
+  transform: scale(0.98);
+}
+
+.options-toolbar-button .fa,
+.options-toolbar-button .fas,
+.options-toolbar-button .far,
+.options-toolbar-button .fal,
+.options-toolbar-button .fab {
+  font-size: 16px;
+}
+
 .toolbar-flyout-color-swatch-glyph {
   font-size: 14px;
   line-height: 1;

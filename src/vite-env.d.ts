@@ -7,6 +7,7 @@ interface Window {
 	measlyLegacyDb?: import('./shared/legacyDbFeatures').LegacyDbApi;
 	measlyTextures?: import('./shared/textures').TextureCacheApi;
 	measlyLoadouts?: import('./shared/loadouts').UiLoadoutApi;
+	measlyFileSync?: import('./shared/fileSync').FileSyncApi;
 	windowControls?: {
 		minimize: () => void;
 		toggleMaximize: () => void;

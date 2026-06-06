@@ -1,8 +1,9 @@
-import { app, BrowserWindow, Menu, ipcMain } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, promises as fsPromises, readFileSync, writeFileSync } from 'node:fs'
 import { NoteLifecycleService } from './noteLifecycleService'
+import { FILE_SYNC_CHANNELS } from '../src/shared/fileSync'
 import { NOTE_LIFECYCLE_CHANNELS } from '../src/shared/noteLifecycle'
 import { APP_STATE_CHANNELS, type WindowState } from '../src/shared/appState'
 import { StateService } from './stateService'
@@ -77,6 +78,46 @@ function enqueueExternalFilePaths(filePaths: string[]): void {
   }
 }
 
+async function importNotesFromPaths(filePaths: string[]): Promise<{ imported: number; createdNoteIds: string[]; errors: string[] }> {
+  const createdNoteIds: string[] = []
+  const errors: string[] = []
+
+  if (!noteLifecycleService) {
+    return { imported: 0, createdNoteIds, errors: ['Note lifecycle service is unavailable'] }
+  }
+
+  for (const filePath of filePaths) {
+    try {
+      const normalizedPath = normalizeExternalFilePath(filePath)
+      const content = await fsPromises.readFile(normalizedPath, 'utf8')
+      const note = await noteLifecycleService.createNote({ initialText: content })
+      createdNoteIds.push(note.id)
+    } catch (error) {
+      errors.push(String(error instanceof Error ? error.message : error))
+    }
+  }
+
+  return { imported: createdNoteIds.length, createdNoteIds, errors }
+}
+
+async function importNotesFromFolder(folderPath: string): Promise<{ imported: number; createdNoteIds: string[]; errors: string[] }> {
+  try {
+    const entries = await fsPromises.readdir(folderPath, { withFileTypes: true })
+    const filePaths = entries
+      .filter((entry) => entry.isFile())
+      .map((entry) => path.join(folderPath, entry.name))
+      .filter((candidate) => ['.md', '.txt'].includes(path.extname(candidate).toLowerCase()))
+
+    return importNotesFromPaths(filePaths)
+  } catch (error) {
+    return {
+      imported: 0,
+      createdNoteIds: [],
+      errors: [String(error instanceof Error ? error.message : error)],
+    }
+  }
+}
+
 function flushPendingExternalPathsToRenderer(): void {
   if (!win || win.isDestroyed()) return;
   if (pendingExternalFilePaths.length === 0) return;
@@ -122,6 +163,71 @@ function registerIpcHandlers() {
   ipcMain.handle(APP_STATE_CHANNELS.saveAppState, async (_event, payload) => stateService!.saveAppState(payload));
   ipcMain.handle(APP_STATE_CHANNELS.loadWindowState, async () => stateService!.loadWindowState());
   ipcMain.handle(APP_STATE_CHANNELS.saveWindowState, async (_event, payload) => stateService!.saveWindowState(payload));
+
+  ipcMain.handle(FILE_SYNC_CHANNELS.syncExistingNotes, async () => {
+    if (!databaseService) {
+      return { createdNoteIds: [], updatedPaths: [], markedDeletedNoteIds: [] }
+    }
+
+    const beforeIds = new Set(databaseService.listNoteRecords().map((note) => note.id))
+    await databaseService.bootstrapFromFilesystem()
+    const afterNotes = databaseService.listNoteRecords()
+    const createdNoteIds = afterNotes.filter((note) => !beforeIds.has(note.id)).map((note) => note.id)
+
+    return {
+      createdNoteIds,
+      updatedPaths: [],
+      markedDeletedNoteIds: [],
+    }
+  })
+
+  ipcMain.handle(FILE_SYNC_CHANNELS.importNotes, async (event) => {
+    const winRef = BrowserWindow.fromWebContents(event.sender) ?? win
+    if (!winRef) {
+      return { imported: 0, createdNoteIds: [], errors: ['No active window available'] }
+    }
+
+    try {
+      const result = await dialog.showOpenDialog(winRef, {
+        properties: ['openFile', 'openDirectory', 'multiSelections'],
+        filters: [
+          { name: 'Markdown and Text Files', extensions: ['md', 'txt'] },
+        ],
+        title: 'Select files or folders to import',
+      })
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { imported: 0, createdNoteIds: [] }
+      }
+
+      let imported = 0
+      const createdNoteIds: string[] = []
+      const errors: string[] = []
+
+      for (const selectedPath of result.filePaths) {
+        try {
+          const stats = await fsPromises.stat(selectedPath)
+          if (stats.isDirectory()) {
+            const folderResult = await importNotesFromFolder(selectedPath)
+            imported += folderResult.imported
+            createdNoteIds.push(...folderResult.createdNoteIds)
+            if (folderResult.errors) errors.push(...folderResult.errors)
+          } else if (stats.isFile()) {
+            const fileResult = await importNotesFromPaths([selectedPath])
+            imported += fileResult.imported
+            createdNoteIds.push(...fileResult.createdNoteIds)
+            if (fileResult.errors) errors.push(...fileResult.errors)
+          }
+        } catch (error) {
+          errors.push(String(error instanceof Error ? error.message : error))
+        }
+      }
+
+      return { imported, createdNoteIds, errors }
+    } catch (error) {
+      return { imported: 0, createdNoteIds: [], errors: [String(error instanceof Error ? error.message : error)] }
+    }
+  })
 
   ipcMain.on('window-control', (_event, action: string) => {
     if (!win || win.isDestroyed()) return
