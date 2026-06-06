@@ -1271,6 +1271,14 @@ body.splitter-dragging {
 .toolbar-flyout-texture-preview {
   position: relative;
   overflow: hidden;
+  border: 1px solid var(--btn-border-default);
+  background: var(--btn-bg-default);
+  box-shadow: inset 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.toolbar-flyout-texture-preview.active {
+  border-color: var(--btn-border-active);
+  box-shadow: var(--btn-shadow-active);
 }
 
 .toolbar-flyout-texture-preview::before,
