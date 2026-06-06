@@ -111,6 +111,9 @@ const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   gridOutline: '#00000022',
 }
 
+const quantizeTopEdge = (valuePx: number, lineHeightPx: number) =>
+  Math.max(0, Math.round(valuePx / lineHeightPx) * lineHeightPx)
+
 const HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['topBackground', 'bottomBackground', 'background', 'gridOutline', 'caret', 'selection']
 
 const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
@@ -629,8 +632,8 @@ function normalizeEditorViewportBoundaries(params: {
   }
 
   const maxSum = Math.max(0, editorHeightPx - safeLineHeightPx)
-  const topBoundaryPx = Math.min(rawTopBoundaryPx, maxSum)
-  const bottomBoundaryPx = Math.min(rawBottomBoundaryPx, maxSum)
+  const topBoundaryPx = Math.min(quantizeTopEdge(rawTopBoundaryPx, safeLineHeightPx), maxSum)
+  const bottomBoundaryPx = Math.min(quantizeTopEdge(rawBottomBoundaryPx, safeLineHeightPx), maxSum)
   if (topBoundaryPx + bottomBoundaryPx <= maxSum) {
     return { topBoundaryPx, bottomBoundaryPx }
   }

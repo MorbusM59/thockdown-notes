@@ -90,8 +90,14 @@ function normalizeEditorBoundaryPair(params: {
   const lineHeightPx = Math.max(1, Math.round(params.lineHeightPx));
   const viewportHeightPx = Math.max(0, Math.round(params.viewportHeightPx));
   const maxSum = Math.max(0, viewportHeightPx - lineHeightPx);
-  const topBoundaryPx = Math.min(Math.max(0, Math.round(params.topBoundaryPx)), maxSum);
-  const bottomBoundaryPx = Math.min(Math.max(0, Math.round(params.bottomBoundaryPx)), maxSum);
+  const topBoundaryPx = Math.min(
+    Math.max(0, quantizeTopEdge(params.topBoundaryPx, lineHeightPx)),
+    maxSum,
+  );
+  const bottomBoundaryPx = Math.min(
+    Math.max(0, quantizeTopEdge(params.bottomBoundaryPx, lineHeightPx)),
+    maxSum,
+  );
 
   if (topBoundaryPx + bottomBoundaryPx <= maxSum) {
     return { topBoundaryPx, bottomBoundaryPx };
