@@ -6839,15 +6839,8 @@ function App() {
                 title="Texture preview"
                 style={{
                   backgroundColor: texturePreviewTintCss,
-                  WebkitMaskImage: texturePreviewCss,
-                  WebkitMaskRepeat: 'no-repeat',
-                  WebkitMaskSize: '100% 100%',
-                  WebkitMaskPosition: '0 0',
-                  maskImage: texturePreviewCss,
-                  maskRepeat: 'no-repeat',
-                  maskSize: '100% 100%',
-                  maskPosition: '0 0',
-                }}
+                  '--texture-preview-mask': texturePreviewCss,
+                } as React.CSSProperties}
                 onMouseDown={(event) => {
                   if (event.button !== 2) return
                   startColorArmHold({ kind: 'texture-preview' }, event)
@@ -7370,7 +7363,7 @@ function App() {
             )}
           </div>
 
-          {isSidebarScrollbarMode ? (
+          {isSidebarScrollbarMode && isSidebarScrollThumbActive ? (
             <aside className="sidebar-scrollbar-slot" aria-hidden="true">
               <div className="sidebar-scrollbar-slot-inner">
                 <div className="measly-scroll-rail sidebar-measly-scroll-rail">

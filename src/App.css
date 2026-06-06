@@ -1234,7 +1234,43 @@ body.splitter-dragging {
 }
 
 .toolbar-flyout-texture-preview {
+  position: relative;
+  overflow: hidden;
   height: calc(100% - 2px);
+  border: none;
+  box-shadow: none;
+}
+
+.toolbar-flyout-texture-preview::before,
+.toolbar-flyout-texture-preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.toolbar-flyout-texture-preview::before {
+  background-color: inherit;
+  -webkit-mask-image: var(--texture-preview-mask);
+  mask-image: var(--texture-preview-mask);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-position: 0 0;
+  mask-position: 0 0;
+}
+
+.toolbar-flyout-texture-preview::after {
+  background: transparent;
+  border: 1px solid var(--btn-border-default);
+  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.2), inset 0 0 6px rgba(0, 0, 0, 0.1), 0 0 2px var(--color-shadow-white);
+}
+
+.toolbar-flyout-texture-preview.active::after {
+  border-color: var(--btn-border-active);
+  box-shadow: var(--btn-shadow-active);
 }
 
 .toolbar-flyout-loadout-grid {
@@ -1275,7 +1311,7 @@ body.splitter-dragging {
 
 body.hsva-dragging,
 body.hsva-dragging * {
-  cursor: crosshair !important;
+  cursor: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
