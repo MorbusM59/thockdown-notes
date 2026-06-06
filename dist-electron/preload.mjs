@@ -94,6 +94,12 @@ const appStateApi = {
   saveWindowState: (state) => electron.ipcRenderer.invoke(APP_STATE_CHANNELS.saveWindowState, state)
 };
 electron.contextBridge.exposeInMainWorld("measlyState", appStateApi);
+const windowControls = {
+  minimize: () => electron.ipcRenderer.send("window-control", "minimize"),
+  toggleMaximize: () => electron.ipcRenderer.send("window-control", "toggle-maximize"),
+  close: () => electron.ipcRenderer.send("window-control", "close")
+};
+electron.contextBridge.exposeInMainWorld("windowControls", windowControls);
 const externalFilesApi = {
   getPendingFilePaths: () => electron.ipcRenderer.invoke(EXTERNAL_FILE_CHANNELS.getPendingPaths),
   readFileContent: (filePath) => electron.ipcRenderer.invoke(EXTERNAL_FILE_CHANNELS.readContent, filePath),

@@ -1,7 +1,7 @@
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, Menu, ipcMain } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { promises, existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -646,13 +646,11 @@ const DEFAULT_UI_LAYOUT_LOADOUT = {
   editorFontSize: "m",
   editorSpacing: "cozy",
   editorGlyphPaddingPx: 1,
-  sidebarWidthRatio: 0.306,
-  tagSplitRatio: 0.645,
   renderScrollDynamic: 1.5,
-  renderScrollResponsiveness: 0.1,
-  renderScrollTotalTimeSec: 0,
-  renderScrollMaxSpeedPxPerSec: 1e4,
-  renderScrollSkew: 1,
+  renderScrollResponsiveness: 0.6,
+  renderScrollTotalTimeSec: 0.4,
+  renderScrollMaxSpeedPxPerSec: 6e3,
+  renderScrollSkew: 0.5,
   highlightColors: {
     caret: "rgba(120, 115, 112, 0.8)",
     selection: "rgba(199, 94, 0, 0.49)",
@@ -815,13 +813,11 @@ function normalizeUiLayoutLoadout(input) {
     editorFontSize,
     editorSpacing,
     editorGlyphPaddingPx: clampInteger(source.editorGlyphPaddingPx, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.editorGlyphPaddingPx),
-    sidebarWidthRatio: clampNumber(source.sidebarWidthRatio, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.sidebarWidthRatio),
-    tagSplitRatio: clampNumber(source.tagSplitRatio, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.tagSplitRatio),
     renderScrollDynamic: clampNumber(source.renderScrollDynamic, 0.1, 5, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollDynamic),
     renderScrollResponsiveness: clampNumber(source.renderScrollResponsiveness, 0.1, 5, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollResponsiveness),
     renderScrollTotalTimeSec: clampNumber(source.renderScrollTotalTimeSec, 0, 2, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollTotalTimeSec),
     renderScrollMaxSpeedPxPerSec: clampNumber(source.renderScrollMaxSpeedPxPerSec, 1e3, 1e5, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollMaxSpeedPxPerSec),
-    renderScrollSkew: clampNumber(source.renderScrollSkew, 0.1, 5, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollSkew),
+    renderScrollSkew: clampNumber(source.renderScrollSkew, 0.1, 0.9, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollSkew),
     highlightColors: {
       caret: sanitizeString(highlights.caret, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.caret),
       selection: sanitizeString(highlights.selection, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.selection),
@@ -1894,6 +1890,24 @@ function registerIpcHandlers() {
   ipcMain.handle(APP_STATE_CHANNELS.saveAppState, async (_event, payload) => stateService.saveAppState(payload));
   ipcMain.handle(APP_STATE_CHANNELS.loadWindowState, async () => stateService.loadWindowState());
   ipcMain.handle(APP_STATE_CHANNELS.saveWindowState, async (_event, payload) => stateService.saveWindowState(payload));
+  ipcMain.on("window-control", (_event, action) => {
+    if (!win || win.isDestroyed()) return;
+    switch (action) {
+      case "minimize":
+        win.minimize();
+        break;
+      case "toggle-maximize":
+        if (win.isMaximized()) {
+          win.unmaximize();
+        } else {
+          win.maximize();
+        }
+        break;
+      case "close":
+        win.close();
+        break;
+    }
+  });
   ipcMain.handle(EXTERNAL_FILE_CHANNELS.getPendingPaths, async () => {
     const paths = [...pendingExternalFilePaths];
     pendingExternalFilePaths = [];
@@ -2024,10 +2038,14 @@ async function createWindow() {
     height: savedWindowState.height,
     x: savedWindowState.x,
     y: savedWindowState.y,
+    frame: false,
+    titleBarStyle: "hidden",
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname$1, "preload.mjs")
     }
   });
+  win.setMenuBarVisibility(false);
   if (savedWindowState.isMaximized) {
     win.maximize();
   }
@@ -2090,6 +2108,7 @@ app.whenReady().then(async () => {
     console.warn("[db] startup sanity issues", sanity);
   }
   registerIpcHandlers();
+  Menu.setApplicationMenu(null);
   await createWindow();
 }).catch((error) => {
   console.error("[main] fatal startup failure", error);

@@ -2572,6 +2572,18 @@ function App() {
     runSidebarMenuTransition('options')
   }, [lastSidebarModeBeforeOptions, runSidebarMenuTransition, sidebarMode])
 
+  const handleWindowMinimize = useCallback(() => {
+    ;(window as any).windowControls?.minimize?.()
+  }, [])
+
+  const handleWindowToggleMaximize = useCallback(() => {
+    ;(window as any).windowControls?.toggleMaximize?.()
+  }, [])
+
+  const handleWindowClose = useCallback(() => {
+    ;(window as any).windowControls?.close?.()
+  }, [])
+
   useEffect(() => {
     applyRenderScrollDynamic(renderScrollDynamic)
   }, [renderScrollDynamic])
@@ -7614,10 +7626,35 @@ function App() {
 
       <div className="grid-divider divider-right" style={{ gridArea: 'd-right' }} aria-hidden="true" />
 
-      <section className="utility-grid" style={{ gridArea: 'utility' }} aria-label="Utility grid placeholder">
-        <div className="panel-placeholder utility-panel-placeholder">
-          <div className="panel-placeholder-title">Utility Grid</div>
-          <div className="panel-placeholder-text">Placeholder for utility actions and controls.</div>
+      <section className="utility-grid" style={{ gridArea: 'utility' }} aria-label="Window controls">
+        <div className="utility-controls">
+          <button
+            type="button"
+            className="toolbar-gear-btn window-control-btn"
+            title="Minimize"
+            aria-label="Minimize window"
+            onClick={handleWindowMinimize}
+          >
+            <span className="window-control-glyph fa-solid fa-minus" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="toolbar-gear-btn window-control-btn"
+            title="Maximize"
+            aria-label="Maximize window"
+            onClick={handleWindowToggleMaximize}
+          >
+            <span className="window-control-glyph fa-solid fa-square" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="toolbar-gear-btn window-control-btn window-control-close"
+            title="Close"
+            aria-label="Close window"
+            onClick={handleWindowClose}
+          >
+            <span className="window-control-glyph fa-solid fa-xmark" aria-hidden="true" />
+          </button>
         </div>
       </section>
 

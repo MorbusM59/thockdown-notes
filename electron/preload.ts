@@ -71,6 +71,14 @@ const appStateApi: AppStateApi = {
 
 contextBridge.exposeInMainWorld('measlyState', appStateApi)
 
+const windowControls = {
+  minimize: () => ipcRenderer.send('window-control', 'minimize'),
+  toggleMaximize: () => ipcRenderer.send('window-control', 'toggle-maximize'),
+  close: () => ipcRenderer.send('window-control', 'close'),
+}
+
+contextBridge.exposeInMainWorld('windowControls', windowControls)
+
 const externalFilesApi: ExternalFilesApi = {
   getPendingFilePaths: () => ipcRenderer.invoke(EXTERNAL_FILE_CHANNELS.getPendingPaths),
   readFileContent: (filePath: string) => ipcRenderer.invoke(EXTERNAL_FILE_CHANNELS.readContent, filePath),

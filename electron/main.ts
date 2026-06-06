@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
@@ -112,6 +112,28 @@ function registerIpcHandlers() {
   ipcMain.handle(APP_STATE_CHANNELS.saveAppState, async (_event, payload) => stateService!.saveAppState(payload));
   ipcMain.handle(APP_STATE_CHANNELS.loadWindowState, async () => stateService!.loadWindowState());
   ipcMain.handle(APP_STATE_CHANNELS.saveWindowState, async (_event, payload) => stateService!.saveWindowState(payload));
+
+  ipcMain.on('window-control', (_event, action: string) => {
+    if (!win || win.isDestroyed()) return
+
+    switch (action) {
+      case 'minimize':
+        win.minimize()
+        break
+      case 'toggle-maximize':
+        if (win.isMaximized()) {
+          win.unmaximize()
+        } else {
+          win.maximize()
+        }
+        break
+      case 'close':
+        win.close()
+        break
+      default:
+        break
+    }
+  })
 
   ipcMain.handle(EXTERNAL_FILE_CHANNELS.getPendingPaths, async () => {
     const paths = [...pendingExternalFilePaths];
@@ -252,10 +274,15 @@ async function createWindow() {
     height: savedWindowState.height,
     x: savedWindowState.x,
     y: savedWindowState.y,
+    frame: false,
+    titleBarStyle: 'hidden',
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
   })
+
+  win.setMenuBarVisibility(false)
 
   if (savedWindowState.isMaximized) {
     win.maximize();
@@ -336,6 +363,7 @@ app.whenReady().then(async () => {
     console.warn('[db] startup sanity issues', sanity)
   }
   registerIpcHandlers()
+  Menu.setApplicationMenu(null)
   await createWindow()
 }).catch((error) => {
   console.error('[main] fatal startup failure', error)
