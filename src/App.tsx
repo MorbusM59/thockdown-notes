@@ -104,6 +104,7 @@ const MAX_UI_LOADOUTS = 9
 const PREVIEW_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER
 const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   caret: 'rgba(120, 115, 112, 0.8)',
+  search: 'rgba(255, 221, 105, 0.55)',
   selection: 'rgba(199, 94, 0, 0.49)',
   background: '#e9e6e3',
   topBackground: 'rgba(196, 187, 182, 0.49)',
@@ -118,6 +119,7 @@ const HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['topBackground', 'bottomBack
 
 const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   caret: 'Caret color',
+  search: 'Search highlight color',
   selection: 'Selection box color',
   background: 'Background',
   topBackground: 'Upper Box',
@@ -127,6 +129,7 @@ const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
 
 const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   caret: 'fa-solid fa-i-cursor',
+  search: 'fa-solid fa-magnifying-glass',
   selection: 'fa-solid fa-arrow-pointer',
   background: 'fa-solid fa-square',
   topBackground: 'fa-solid fa-square-caret-up',
@@ -155,7 +158,7 @@ type TextDecorationFormat = 'bold' | 'italic' | 'strikethrough'
 type ViewStyleKey = 'modern' | 'narrow' | 'cute' | 'print'
 type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
 type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
-type HighlightColorKey = 'caret' | 'selection' | 'background' | 'topBackground' | 'bottomBackground' | 'gridOutline'
+type HighlightColorKey = 'caret' | 'search' | 'selection' | 'background' | 'topBackground' | 'bottomBackground' | 'gridOutline'
 
 type HighlightColors = Record<HighlightColorKey, string>
 
@@ -955,6 +958,7 @@ function normalizeLoadoutHighlightColors(source: unknown): HighlightColors {
 
   return {
     caret: typeof record.caret === 'string' ? record.caret : DEFAULT_HIGHLIGHT_COLORS.caret,
+    search: typeof record.search === 'string' ? record.search : DEFAULT_HIGHLIGHT_COLORS.search,
     selection: typeof record.selection === 'string' ? record.selection : DEFAULT_HIGHLIGHT_COLORS.selection,
     background: typeof record.background === 'string' ? record.background : DEFAULT_HIGHLIGHT_COLORS.background,
     topBackground: typeof record.topBackground === 'string' ? record.topBackground : DEFAULT_HIGHLIGHT_COLORS.topBackground,
@@ -1855,6 +1859,7 @@ function App() {
       renderScrollSkew,
       highlightColors: {
         caret: highlightColors.caret,
+        search: highlightColors.search,
         selection: highlightColors.selection,
         background: highlightColors.background,
         topBackground: highlightColors.topBackground,
@@ -1902,6 +1907,7 @@ function App() {
     setRenderScrollSkew(clamp(loadout.renderScrollSkew, RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX))
     setHighlightColors({
       caret: loadout.highlightColors.caret,
+      search: loadout.highlightColors.search,
       selection: loadout.highlightColors.selection,
       background: loadout.highlightColors.background,
       topBackground: loadout.highlightColors.topBackground,
@@ -2377,6 +2383,7 @@ function App() {
       renderScrollMaxSpeedPxPerSec,
       renderScrollSkew,
       highlightCaretColor: highlightColors.caret,
+      highlightSearchColor: highlightColors.search,
       highlightSelectionColor: highlightColors.selection,
       highlightBackgroundColor: highlightColors.background,
       highlightTopBackgroundColor: highlightColors.topBackground,
@@ -3886,6 +3893,7 @@ function App() {
             setRenderScrollSkew(appState.menu.renderScrollSkew ?? getRenderScrollSkew())
             setHighlightColors({
               caret: appState.menu.highlightCaretColor ?? DEFAULT_HIGHLIGHT_COLORS.caret,
+              search: appState.menu.highlightSearchColor ?? DEFAULT_HIGHLIGHT_COLORS.search,
               selection: appState.menu.highlightSelectionColor ?? DEFAULT_HIGHLIGHT_COLORS.selection,
               background: appState.menu.highlightBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.background,
               topBackground: appState.menu.highlightTopBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.topBackground,
@@ -6948,44 +6956,51 @@ function App() {
         <div className="sidebar-options-divider" aria-hidden="true" />
 
         <div className="toolbar-flyout-color-grid toolbar-flyout-element-grid" role="group" aria-label="Editor highlight elements">
-          {HIGHLIGHT_COLOR_ORDER.map((key) => (
-            <button
-              key={key}
-              type="button"
-              className="toolbar-btn-icon toolbar-flyout-color-swatch"
-              onClick={() => {
-                if (armedColorSource.kind === 'active-color') {
-                  applyActiveColorToElement(key)
-                  return
-                }
+          {HIGHLIGHT_COLOR_ORDER.map((key) => {
+            const resolvedKey: HighlightColorKey = isPreviewMode && key === 'caret' ? 'search' : key
+            const isSearchHighlightControl = key === 'caret' && isPreviewMode
+            const buttonTitle = isSearchHighlightControl ? 'Search highlight color' : HIGHLIGHT_COLOR_TITLES[key]
+            const buttonIcon = isSearchHighlightControl ? 'fa-solid fa-magnifying-glass' : HIGHLIGHT_COLOR_ICONS[key]
 
-                if (armedColorSource.kind === 'texture-preview') {
-                  updateHighlightColor(key, hsvaToRgba(texturePreviewMaterial.color))
-                  return
-                }
+            return (
+              <button
+                key={key}
+                type="button"
+                className="toolbar-btn-icon toolbar-flyout-color-swatch"
+                onClick={() => {
+                  if (armedColorSource.kind === 'active-color') {
+                    applyActiveColorToElement(resolvedKey)
+                    return
+                  }
 
-                if (armedColorSource.kind === 'hsva') {
-                  applyHsvaValueToElement(armedColorSource.key, key)
-                }
-              }}
-              onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'element', key }, event)}
-              onMouseUp={(event) => {
-                if (event.button !== 2) return
-                clearColorArmTimer()
-              }}
-              onMouseLeave={() => {
-                clearColorArmTimer()
-              }}
-              onContextMenu={(event) => {
-                event.preventDefault()
-                clearColorArmTimer()
-              }}
-              style={{ '--toolbar-flyout-swatch-color': highlightColors[key] } as React.CSSProperties}
-              title={HIGHLIGHT_COLOR_TITLES[key]}
-            >
-              <span className={`toolbar-flyout-color-swatch-glyph ${HIGHLIGHT_COLOR_ICONS[key]}`} aria-hidden="true" />
-            </button>
-          ))}
+                  if (armedColorSource.kind === 'texture-preview') {
+                    updateHighlightColor(resolvedKey, hsvaToRgba(texturePreviewMaterial.color))
+                    return
+                  }
+
+                  if (armedColorSource.kind === 'hsva') {
+                    applyHsvaValueToElement(armedColorSource.key, resolvedKey)
+                  }
+                }}
+                onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'element', key: resolvedKey }, event)}
+                onMouseUp={(event) => {
+                  if (event.button !== 2) return
+                  clearColorArmTimer()
+                }}
+                onMouseLeave={() => {
+                  clearColorArmTimer()
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  clearColorArmTimer()
+                }}
+                style={{ '--toolbar-flyout-swatch-color': highlightColors[resolvedKey] } as React.CSSProperties}
+                title={buttonTitle}
+              >
+                <span className={`toolbar-flyout-color-swatch-glyph ${buttonIcon}`} aria-hidden="true" />
+              </button>
+            )
+          })}
         </div>
 
         <div className="toolbar-flyout-color-grid toolbar-flyout-texture-grid" role="group" aria-label="Texture color targets">
@@ -7930,6 +7945,7 @@ function App() {
               <div
                 ref={previewScrollRef}
                 className={`markdown-preview measly-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
+                style={{ '--search-hit-color': highlightColors.search } as CSSProperties}
               >
                 {previewMarkdownElement}
               </div>

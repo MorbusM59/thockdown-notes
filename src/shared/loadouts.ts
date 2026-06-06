@@ -20,6 +20,7 @@ export type UiLayoutLoadout = {
   renderScrollSkew: number;
   highlightColors: {
     caret: string;
+    search: string;
     selection: string;
     background: string;
     topBackground: string;

@@ -34,6 +34,7 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   renderScrollSkew: 0.5,
   highlightColors: {
     caret: 'rgba(120, 115, 112, 0.8)',
+    search: 'rgba(255, 221, 105, 0.55)',
     selection: 'rgba(199, 94, 0, 0.49)',
     background: '#e9e6e3',
     topBackground: 'rgba(196, 187, 182, 0.49)',
@@ -328,6 +329,7 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     renderScrollSkew: clampNumber(source.renderScrollSkew, 0.1, 0.9, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollSkew),
     highlightColors: {
       caret: sanitizeString(highlights.caret, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.caret),
+      search: sanitizeString(highlights.search, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.search),
       selection: sanitizeString(highlights.selection, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.selection),
       background: sanitizeString(highlights.background, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.background),
       topBackground: sanitizeString(highlights.topBackground, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.topBackground),

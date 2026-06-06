@@ -2023,9 +2023,11 @@ body.hsva-dragging * {
 }
 
 .markdown-preview .search-hit {
-  background-color: rgba(255, 221, 105, 0.55);
+  background-color: var(--search-hit-color, rgba(255, 221, 105, 0.55));
   color: inherit;
-  border-radius: 2px;
+  border-radius: 8px;
+  outline: 1px solid #00000022;
+  padding: 4px;
 }
 
 .markdown-preview h1,

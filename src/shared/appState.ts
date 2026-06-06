@@ -42,6 +42,7 @@ export interface PersistedMenuState {
   renderScrollMaxSpeedPxPerSec?: number;
   renderScrollSkew?: number;
   highlightCaretColor?: string;
+  highlightSearchColor?: string;
   highlightSelectionColor?: string;
   highlightBackgroundColor?: string;
   highlightTopBackgroundColor?: string;
