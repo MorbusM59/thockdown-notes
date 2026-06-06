@@ -7626,8 +7626,8 @@ function App() {
 
       <div className="grid-divider divider-right" style={{ gridArea: 'd-right' }} aria-hidden="true" />
 
-      <section className="utility-grid" style={{ gridArea: 'utility' }} aria-label="Window controls">
-        <div className="utility-controls">
+      <section className="utility-grid" style={{ gridArea: 'utility' }} aria-label="Utility grid">
+        <div className="window-controls" aria-label="Window controls">
           <button
             type="button"
             className="toolbar-gear-btn window-control-btn"
