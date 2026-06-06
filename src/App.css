@@ -216,6 +216,19 @@ button.active,
   min-width: 8px;
 }
 
+.grid-divider.divider-right,
+.tag-input-grid,
+.suggested-grid,
+.utility-grid {
+  -webkit-app-region: drag;
+}
+
+.tag-input-grid :is(button, input, select, textarea),
+.suggested-grid :is(button, input, select, textarea),
+.utility-grid :is(button, input, select, textarea) {
+  -webkit-app-region: no-drag;
+}
+
 .divider-handle {
   cursor: col-resize;
   user-select: none;
@@ -1521,6 +1534,7 @@ body.hsva-dragging * {
   font-size: 11px;
   line-height: 1.2;
   cursor: default;
+  -webkit-app-region: no-drag;
 }
 
 .tag-pill.suggested:hover {
@@ -1557,6 +1571,7 @@ body.hsva-dragging * {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  -webkit-app-region: no-drag;
 }
 
 .tag-pill.active.protected {
