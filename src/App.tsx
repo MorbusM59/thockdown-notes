@@ -542,6 +542,14 @@ function createPreviewSearchHighlightRehypePlugin(needle: string, isCaseSensitiv
       const transformNode = (node: any, parent: any, index: number | null) => {
         if (!node || typeof node !== 'object') return
 
+        if (node.type === 'element') {
+          const className = node.properties?.className
+          const hasSearchHitClass = Array.isArray(className)
+            ? className.includes('search-hit')
+            : className === 'search-hit'
+          if (hasSearchHitClass) return
+        }
+
         if (node.type === 'text' && typeof node.value === 'string') {
           const textValue = node.value
           const haystack = isCaseSensitive ? textValue : textValue.toLocaleLowerCase()
