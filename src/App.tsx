@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, DragEvent, FocusEvent as ReactFocusEvent, KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
+import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Editor } from './components/Editor'
@@ -197,13 +197,6 @@ type SidebarViewState = {
 
 type SidebarViewStateByMode = Record<SidebarMode, SidebarViewState>
 
-type SettingsSectionKey = 'scrolling' | 'colors' | 'layout' | 'loadout'
-
-type SettingsSectionInfo = {
-  title: string
-  summary: string
-  lines: Array<{ label: string; text: string }>
-}
 
 type EditRestoreSnapshot = {
   noteId: string
@@ -231,47 +224,6 @@ const SIDEBAR_MODES: Array<{ mode: SidebarMode; label: string }> = [
   { mode: 'trash', label: 'Trash' },
   { mode: 'find', label: 'Find' },
 ]
-
-const SETTINGS_SECTION_INFO: Record<SettingsSectionKey, SettingsSectionInfo> = {
-  scrolling: {
-    title: 'Adjust scrolling',
-    summary: 'Shape how scrolling starts, peaks, and settles.',
-    lines: [
-      { label: 'Ramp', text: 'Determines how dynamic scrolling feels.' },
-      { label: 'Response', text: 'Shapes start speed for the speed ramp.' },
-      { label: 'Speed', text: 'Sets how quickly a standard scroll completes.' },
-      { label: 'Max speed', text: 'Limits top speed for long & continuous scrolls.' },
-      { label: 'Shape', text: 'Skews the curve to the front or back.' },
-    ],
-  },
-  colors: {
-    title: 'Tune textures and colors',
-    summary: 'Choose a channel (hue, saturation, value, alpha/color/texture) and apply it to an element.',
-    lines: [
-      { label: 'Elements (left)', text: 'Left click to apply the selected channel. Hold right click to copy paramters.' },
-      { label: 'Channels (right)', text: 'Hold right click to choose the channel that will be applied.' },
-      { label: 'Seed', text: 'Left click to pick a random seed. Right click to enter a specific seed number.' },
-      { label: 'Granularity', text: 'Determines how fine or coarse the pattern looks.' },
-      { label: 'Smoothness', text: 'Determines the number of color steps in the pattern.' },
-    ],
-  },
-  layout: {
-    title: 'Refine layout',
-    summary: 'Set paddings and margins for various elements.',
-    lines: [
-      { label: 'Padding', text: 'Adds a little horizontal space between letters and their grid box.' },
-    ],
-  },
-  loadout: {
-    title: 'Manage loadouts',
-    summary: 'Store and recall UI layout snapshots in numbered slots.',
-    lines: [
-      { label: 'Load', text: 'Click a slot to load its stored layout.' },
-      { label: 'Save', text: 'Hold right-click on a slot to store the current layout.' },
-      { label: 'Smart slots', text: 'Duplicate layouts collapse into a single slot. Pending changes are represented by an active + slot.' },
-    ],
-  },
-}
 
 function sanitizeCollapsedList(input: unknown): string[] {
   if (!Array.isArray(input)) return []
@@ -658,6 +610,37 @@ function quantizeEditScrollTop(scrollTopPx: number, lineHeightPx: number): numbe
   return Math.max(0, Math.round(scrollTopPx / safeLineHeight) * safeLineHeight)
 }
 
+function normalizeEditorViewportBoundaries(params: {
+  topBoundaryPx: number
+  bottomBoundaryPx: number
+  lineHeightPx: number
+  clientHeightPx?: number
+}) {
+  const safeLineHeightPx = Math.max(1, Math.round(params.lineHeightPx))
+  const rawTopBoundaryPx = Math.max(0, Math.round(params.topBoundaryPx))
+  const rawBottomBoundaryPx = Math.max(0, Math.round(params.bottomBoundaryPx))
+  const editorHeightPx = Math.max(0, Math.round(params.clientHeightPx ?? 0))
+
+  if (editorHeightPx <= 0) {
+    return {
+      topBoundaryPx: rawTopBoundaryPx,
+      bottomBoundaryPx: rawBottomBoundaryPx,
+    }
+  }
+
+  const maxSum = Math.max(0, editorHeightPx - safeLineHeightPx)
+  const topBoundaryPx = Math.min(rawTopBoundaryPx, maxSum)
+  const bottomBoundaryPx = Math.min(rawBottomBoundaryPx, maxSum)
+  if (topBoundaryPx + bottomBoundaryPx <= maxSum) {
+    return { topBoundaryPx, bottomBoundaryPx }
+  }
+
+  return {
+    topBoundaryPx,
+    bottomBoundaryPx: Math.max(0, maxSum - topBoundaryPx),
+  }
+}
+
 function buildEditRestoreSnapshotFromUiState(params: {
   noteId: string
   text: string
@@ -668,6 +651,11 @@ function buildEditRestoreSnapshotFromUiState(params: {
   const { noteId, text, uiState, fallbackViewport, lineHeightPx } = params
   const fallbackTopBoundary = fallbackViewport?.topBoundaryPx ?? 0
   const fallbackBottomBoundary = fallbackViewport?.bottomBoundaryPx ?? (lineHeightPx * 6)
+  const normalizedFallback = normalizeEditorViewportBoundaries({
+    topBoundaryPx: fallbackTopBoundary,
+    bottomBoundaryPx: fallbackBottomBoundary,
+    lineHeightPx,
+  })
   const selectionTextLength = Math.max(0, text.length)
   const persistedCursor =
     typeof uiState?.cursorPos === 'number' && Number.isFinite(uiState.cursorPos)
@@ -691,8 +679,8 @@ function buildEditRestoreSnapshotFromUiState(params: {
     collapsedSelection,
     fullSelection: collapsedSelection,
     viewport: {
-      topBoundaryPx: fallbackTopBoundary,
-      bottomBoundaryPx: fallbackBottomBoundary,
+      topBoundaryPx: normalizedFallback.topBoundaryPx,
+      bottomBoundaryPx: normalizedFallback.bottomBoundaryPx,
       scrollTopPx: storedScrollTop,
     },
   }
@@ -1563,7 +1551,6 @@ function App() {
   const [renderScrollTotalTimeSec, setRenderScrollTotalTimeSec] = useState(() => getRenderScrollTotalTimeSec())
   const [renderScrollMaxSpeedPxPerSec, setRenderScrollMaxSpeedPxPerSec] = useState(() => getRenderScrollMaxSpeedPxPerSec())
   const [renderScrollSkew, setRenderScrollSkew] = useState(() => getRenderScrollSkew())
-  const [hoveredSettingsSection, setHoveredSettingsSection] = useState<SettingsSectionKey | null>(null)
   const [uiLoadouts, setUiLoadouts] = useState<UiLayoutLoadout[]>([])
   const [highlightColors, setHighlightColors] = useState<HighlightColors>(DEFAULT_HIGHLIGHT_COLORS)
   const [textureEnabled] = useState(true)
@@ -1653,23 +1640,6 @@ function App() {
     () => resolveEditorRuntimeMetrics(editorStyle, editorFontSize, editorSpacing, editorGlyphPaddingPx),
     [editorStyle, editorFontSize, editorSpacing, editorGlyphPaddingPx, editorFontLoadVersion],
   )
-  const activeSettingsInfo = hoveredSettingsSection ? SETTINGS_SECTION_INFO[hoveredSettingsSection] : null
-
-  const handleSettingsSectionHover = useCallback((section: SettingsSectionKey) => {
-    setHoveredSettingsSection(section)
-  }, [])
-
-  const handleSettingsSectionLeave = useCallback((section: SettingsSectionKey) => {
-    setHoveredSettingsSection((current) => (current === section ? null : current))
-  }, [])
-
-  const handleSettingsSectionBlur = useCallback((section: SettingsSectionKey, event: ReactFocusEvent<HTMLElement>) => {
-    const nextTarget = event.relatedTarget
-    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
-      return
-    }
-    setHoveredSettingsSection((current) => (current === section ? null : current))
-  }, [])
 
   const editorFontFamily = useMemo(() => resolveEditorFontFamily(editorStyle), [editorStyle])
   const appGridTextureCss = useTextureSurface({
@@ -2223,11 +2193,19 @@ function App() {
     const selection = liveSnapshot?.selection ?? latestEditorSelectionRef.current
     const snapshotViewport = liveSnapshot?.viewport
     const viewport = snapshotViewport
-      ? {
-          topBoundaryPx: Math.round(snapshotViewport.topBoundaryPx),
-          bottomBoundaryPx: Math.round(snapshotViewport.bottomBoundaryPx),
-          scrollTopPx: Math.round(snapshotViewport.scrollTopPx),
-        }
+      ? (() => {
+          const normalized = normalizeEditorViewportBoundaries({
+            topBoundaryPx: snapshotViewport.topBoundaryPx,
+            bottomBoundaryPx: snapshotViewport.bottomBoundaryPx,
+            lineHeightPx: snapshotViewport.lineHeightPx,
+            clientHeightPx: snapshotViewport.clientHeightPx,
+          })
+          return {
+            topBoundaryPx: normalized.topBoundaryPx,
+            bottomBoundaryPx: normalized.bottomBoundaryPx,
+            scrollTopPx: Math.round(snapshotViewport.scrollTopPx),
+          }
+        })()
       : (latestEditViewportRef.current ?? latestViewportRef.current)
 
     if (snapshotViewport) {
@@ -3881,8 +3859,23 @@ function App() {
           latestEditorTextRef.current = hydratedText
           setActiveNoteText(hydratedText)
 
-          pendingViewportRestoreRef.current = appState.viewport ?? null
-          latestViewportRef.current = appState.viewport ?? null
+          if (appState.viewport) {
+            const normalizedPendingViewport = normalizeEditorViewportBoundaries({
+              topBoundaryPx: appState.viewport.topBoundaryPx,
+              bottomBoundaryPx: appState.viewport.bottomBoundaryPx,
+              lineHeightPx: editorRuntimeMetrics.lineHeightPx,
+            })
+
+            pendingViewportRestoreRef.current = {
+              topBoundaryPx: normalizedPendingViewport.topBoundaryPx,
+              bottomBoundaryPx: normalizedPendingViewport.bottomBoundaryPx,
+              scrollTopPx: appState.viewport.scrollTopPx,
+            }
+            latestViewportRef.current = pendingViewportRestoreRef.current
+          } else {
+            pendingViewportRestoreRef.current = null
+            latestViewportRef.current = null
+          }
 
           if (window.measlyState) {
             await window.measlyState.saveAppState({
@@ -3937,10 +3930,16 @@ function App() {
         return
       }
 
+      const normalizedPendingBoundaries = normalizeEditorViewportBoundaries({
+        topBoundaryPx: pending.topBoundaryPx,
+        bottomBoundaryPx: pending.bottomBoundaryPx,
+        lineHeightPx: editorRuntimeMetrics.lineHeightPx,
+      })
+
       adapter.applySnapshot({
         viewport: {
-          topBoundaryPx: pending.topBoundaryPx,
-          bottomBoundaryPx: pending.bottomBoundaryPx,
+          topBoundaryPx: normalizedPendingBoundaries.topBoundaryPx,
+          bottomBoundaryPx: normalizedPendingBoundaries.bottomBoundaryPx,
           scrollTopPx: pending.scrollTopPx,
           lineHeightPx: editorRuntimeMetrics.lineHeightPx,
           cellWidthPx: editorRuntimeMetrics.cellWidthPx,
@@ -3948,8 +3947,8 @@ function App() {
       })
 
       latestEditViewportRef.current = {
-        topBoundaryPx: pending.topBoundaryPx,
-        bottomBoundaryPx: pending.bottomBoundaryPx,
+        topBoundaryPx: normalizedPendingBoundaries.topBoundaryPx,
+        bottomBoundaryPx: normalizedPendingBoundaries.bottomBoundaryPx,
         scrollTopPx: pending.scrollTopPx,
       }
 
@@ -4134,9 +4133,15 @@ function App() {
       }
     },
     onViewportChange: (event: EditorViewportChangeEvent) => {
+      const normalizedBoundaries = normalizeEditorViewportBoundaries({
+        topBoundaryPx: event.viewport.topBoundaryPx,
+        bottomBoundaryPx: event.viewport.bottomBoundaryPx,
+        lineHeightPx: event.viewport.lineHeightPx,
+        clientHeightPx: event.viewport.clientHeightPx,
+      })
       const nextViewport = {
-        topBoundaryPx: Math.round(event.viewport.topBoundaryPx),
-        bottomBoundaryPx: Math.round(event.viewport.bottomBoundaryPx),
+        topBoundaryPx: normalizedBoundaries.topBoundaryPx,
+        bottomBoundaryPx: normalizedBoundaries.bottomBoundaryPx,
         scrollTopPx: Math.round(event.viewport.scrollTopPx),
       }
       const nextTelemetry = {

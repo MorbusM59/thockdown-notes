@@ -80,10 +80,36 @@ const bottomBoundaryFromTopEdge = (heightPx: number, topEdgePx: number, lineHeig
   return h - topEdge;
 };
 
-const topEdgeFromBottomBoundary = (heightPx: number, bottomBoundaryPx: number, lineHeightPx: number) => {
-  const h = quantizeViewportHeightToGrid(heightPx, lineHeightPx);
-  return Math.max(0, Math.min(h, quantizeTopEdge(h - bottomBoundaryPx, lineHeightPx)));
-};
+function normalizeEditorBoundaryPair(params: {
+  topBoundaryPx: number;
+  bottomBoundaryPx: number;
+  lineHeightPx: number;
+  viewportHeightPx: number;
+  preserve?: 'top' | 'bottom';
+}) {
+  const lineHeightPx = Math.max(1, Math.round(params.lineHeightPx));
+  const viewportHeightPx = Math.max(0, Math.round(params.viewportHeightPx));
+  const maxSum = Math.max(0, viewportHeightPx - lineHeightPx);
+  const topBoundaryPx = Math.min(Math.max(0, Math.round(params.topBoundaryPx)), maxSum);
+  const bottomBoundaryPx = Math.min(Math.max(0, Math.round(params.bottomBoundaryPx)), maxSum);
+
+  if (topBoundaryPx + bottomBoundaryPx <= maxSum) {
+    return { topBoundaryPx, bottomBoundaryPx };
+  }
+
+  const overflow = topBoundaryPx + bottomBoundaryPx - maxSum;
+  if (params.preserve === 'bottom') {
+    return {
+      topBoundaryPx: Math.max(0, topBoundaryPx - overflow),
+      bottomBoundaryPx,
+    };
+  }
+
+  return {
+    topBoundaryPx,
+    bottomBoundaryPx: Math.max(0, bottomBoundaryPx - overflow),
+  };
+}
 
 function clampNumber(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -574,14 +600,27 @@ export function Editor({
           const h = Math.max(0, scrollerRef.current?.clientHeight ?? 0);
           const quantizedViewportHeight = quantizeViewportHeightToGrid(h, lineHeightPx);
 
-          if (typeof nextViewport.topBoundaryPx === 'number') {
-            const quantized = Math.max(0, Math.round(nextViewport.topBoundaryPx / lineHeightPx) * lineHeightPx);
-            setTopBoundary(Math.min(quantized, quantizedViewportHeight));
-          }
-          if (typeof nextViewport.bottomBoundaryPx === 'number') {
-            const requestedTopEdge = topEdgeFromBottomBoundary(h, nextViewport.bottomBoundaryPx, lineHeightPx);
-            setBottomBoundary(bottomBoundaryFromTopEdge(h, requestedTopEdge, lineHeightPx));
-          }
+          let nextTopBoundary = typeof nextViewport.topBoundaryPx === 'number'
+          ? Math.max(0, Math.round(nextViewport.topBoundaryPx / lineHeightPx) * lineHeightPx)
+          : topBoundary;
+        let nextBottomBoundary = typeof nextViewport.bottomBoundaryPx === 'number'
+          ? Math.min(Math.max(0, Math.round(nextViewport.bottomBoundaryPx / lineHeightPx) * lineHeightPx), quantizedViewportHeight)
+          : bottomBoundary;
+
+        const normalized = normalizeEditorBoundaryPair({
+          topBoundaryPx: nextTopBoundary,
+          bottomBoundaryPx: nextBottomBoundary,
+          lineHeightPx,
+          viewportHeightPx: h,
+          preserve: typeof nextViewport.bottomBoundaryPx === 'number' ? 'bottom' : 'top',
+        });
+
+        if (typeof nextViewport.topBoundaryPx === 'number') {
+          setTopBoundary(normalized.topBoundaryPx);
+        }
+        if (typeof nextViewport.bottomBoundaryPx === 'number') {
+          setBottomBoundary(normalized.bottomBoundaryPx);
+        }
           if (typeof nextViewport.scrollTopPx === 'number' && scrollerRef.current) {
             scrollerRef.current.scrollTo({ top: Math.max(0, nextViewport.scrollTopPx), behavior: 'auto' });
           }
@@ -658,10 +697,19 @@ export function Editor({
       // so boundaries and scroll lattice cannot race each other across frames.
       const viewportHeightPx = Math.max(0, snappedInnerHeight);
 
-      setTopBoundary((previous) => Math.min(quantizeTopEdge(previous, lineHeightPx), viewportHeightPx));
-      setBottomBoundary((previous) => {
-        const requestedTopEdge = topEdgeFromBottomBoundary(viewportHeightPx, previous, lineHeightPx);
-        return bottomBoundaryFromTopEdge(viewportHeightPx, requestedTopEdge, lineHeightPx);
+      setTopBoundary((previousTop) => {
+        const nextTop = Math.min(quantizeTopEdge(previousTop, lineHeightPx), viewportHeightPx);
+        setBottomBoundary((previousBottom) => {
+          const normalized = normalizeEditorBoundaryPair({
+            topBoundaryPx: nextTop,
+            bottomBoundaryPx: previousBottom,
+            lineHeightPx,
+            viewportHeightPx,
+            preserve: 'top',
+          });
+          return normalized.bottomBoundaryPx;
+        });
+        return nextTop;
       });
 
       const scroller = scrollerRef.current;
@@ -695,13 +743,32 @@ export function Editor({
       const clampedY = Math.max(0, Math.min(relativeY, h));
 
       if (isDraggingTop) {
-        // Snap to 24px increments
         const snappedY = quantizeTopEdge(clampedY, lineHeightPx);
-        setTopBoundary(Math.min(snappedY, h));
+        const nextTop = Math.min(snappedY, Math.max(0, h - lineHeightPx));
+        setTopBoundary(nextTop);
+        setBottomBoundary((previousBottom) => {
+          const normalized = normalizeEditorBoundaryPair({
+            topBoundaryPx: nextTop,
+            bottomBoundaryPx: previousBottom,
+            lineHeightPx,
+            viewportHeightPx: h,
+            preserve: 'top',
+          });
+          return normalized.bottomBoundaryPx;
+        });
       } else if (isDraggingBottom) {
-        // Quantize the top edge of the bottom boundary to land EXACTLY on an absolute grid line!
-        // We do this by measuring from grid zero (relativeY) instead of window coordinates.
-        setBottomBoundary(bottomBoundaryFromTopEdge(h, clampedY, lineHeightPx));
+        const snappedBottom = Math.min(bottomBoundaryFromTopEdge(h, clampedY, lineHeightPx), Math.max(0, h - lineHeightPx));
+        setBottomBoundary(snappedBottom);
+        setTopBoundary((previousTop) => {
+          const normalized = normalizeEditorBoundaryPair({
+            topBoundaryPx: previousTop,
+            bottomBoundaryPx: snappedBottom,
+            lineHeightPx,
+            viewportHeightPx: h,
+            preserve: 'bottom',
+          });
+          return normalized.topBoundaryPx;
+        });
       }
     };
 
