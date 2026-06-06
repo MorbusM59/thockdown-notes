@@ -6582,216 +6582,6 @@ function App() {
       <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-colors" aria-label="Colors & Textures">
         <div className="sidebar-options-section-heading">Colors & Textures</div>
         <div className="toolbar-flyout-color-layout" aria-label="Color and texture controls">
-          <div className="toolbar-flyout-texture-settings" aria-label="Texture generation settings">
-            <div className="toolbar-flyout-texture-stack">
-              <div className="toolbar-flyout-texture-slider-slot">
-                <div className="toolbar-flyout-seed-editor" aria-label="Texture seed">
-                  {isTextureSeedEditing ? (
-                    <label className="sidebar-page-number-btn toolbar-flyout-seed-btn" aria-label="Edit texture seed">
-                      <input
-                        ref={textureSeedInputRef}
-                        type="number"
-                        min={0}
-                        max={1000000}
-                        step={1}
-                        inputMode="numeric"
-                        className="sidebar-page-number-input sidebar-page-number-input--edit"
-                        value={textureSeedInput}
-                        onChange={(event) => {
-                          setTextureSeedInput(event.target.value.replace(/[^0-9]/g, ''))
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault()
-                            commitTextureSeedEdit()
-                            return
-                          }
-
-                          if (event.key === 'Escape') {
-                            event.preventDefault()
-                            cancelTextureSeedEdit()
-                          }
-                        }}
-                        onBlur={commitTextureSeedEdit}
-                      />
-                    </label>
-                  ) : (
-                    <button
-                      type="button"
-                      className="sidebar-page-number-btn toolbar-flyout-seed-btn"
-                      aria-label={`Texture seed ${texturePreviewMaterial.seed}. Left click to randomize. Right click to edit.`}
-                      title="Left click: random seed. Right click: edit seed."
-                      onClick={randomizeTextureSeed}
-                      onContextMenu={(event) => {
-                        event.preventDefault()
-                        startTextureSeedEdit()
-                      }}
-                    >
-                      {texturePreviewMaterial.seed}
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div className="toolbar-flyout-texture-slider-slot">
-                <CompactScrollbarSlider
-                  id="texture-granularity"
-                  min={TEXTURE_GRANULARITY_MIN}
-                  max={TEXTURE_GRANULARITY_MAX}
-                  step={1}
-                  value={texturePreviewMaterial.granularity}
-                  trackLabel="granularity"
-                  ariaLabel="Texture granularity"
-                  onCommit={(value) => {
-                    setTexturePreviewMaterial((current) => ({
-                      ...current,
-                      granularity: clamp(Math.round(value), TEXTURE_GRANULARITY_MIN, TEXTURE_GRANULARITY_MAX),
-                    }))
-                  }}
-                />
-              </div>
-              <div className="toolbar-flyout-texture-slider-slot">
-                <CompactScrollbarSlider
-                  id="texture-smoothness"
-                  min={TEXTURE_VSTEPS_MIN}
-                  max={TEXTURE_VSTEPS_MAX}
-                  step={1}
-                  value={texturePreviewMaterial.vSteps}
-                  trackLabel="smoothness"
-                  ariaLabel="Texture smoothness"
-                  onCommit={(value) => {
-                    setTexturePreviewMaterial((current) => ({
-                      ...current,
-                      vSteps: clamp(Math.round(value), TEXTURE_VSTEPS_MIN, TEXTURE_VSTEPS_MAX),
-                    }))
-                  }}
-                />
-              </div>
-            </div>
-            <div className="toolbar-flyout-texture-preview-row">
-              <button
-                type="button"
-                className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color toolbar-flyout-texture-preview${armedColorSource.kind === 'texture-preview' ? ' active' : ''}`}
-                title="Texture preview"
-                style={{
-                  backgroundColor: texturePreviewTintCss,
-                  WebkitMaskImage: texturePreviewCss,
-                  WebkitMaskRepeat: 'no-repeat',
-                  WebkitMaskSize: '100% 100%',
-                  WebkitMaskPosition: '0 0',
-                  maskImage: texturePreviewCss,
-                  maskRepeat: 'no-repeat',
-                  maskSize: '100% 100%',
-                  maskPosition: '0 0',
-                }}
-                onMouseDown={(event) => {
-                  if (event.button !== 2) return
-                  startColorArmHold({ kind: 'texture-preview' }, event)
-                }}
-                onMouseUp={(event) => {
-                  if (event.button !== 2) return
-                  clearColorArmTimer()
-                }}
-                onMouseLeave={clearColorArmTimer}
-                onContextMenu={(event) => {
-                  event.preventDefault()
-                  clearColorArmTimer()
-                }}
-                onClick={() => {
-                  setArmedColorSource({ kind: 'texture-preview' })
-                }}
-              />
-            </div>
-          </div>
-
-          <span className="toolbar-flyout-color-separator" aria-hidden="true" />
-
-          <div className="toolbar-flyout-color-grid toolbar-flyout-element-grid" role="group" aria-label="Editor highlight elements">
-            {HIGHLIGHT_COLOR_ORDER.map((key) => (
-              <button
-                key={key}
-                type="button"
-                className="toolbar-btn-icon toolbar-flyout-color-swatch"
-                onClick={() => {
-                  if (armedColorSource.kind === 'active-color') {
-                    applyActiveColorToElement(key)
-                    return
-                  }
-
-                  if (armedColorSource.kind === 'texture-preview') {
-                    updateHighlightColor(key, hsvaToRgba(texturePreviewMaterial.color))
-                    return
-                  }
-
-                  if (armedColorSource.kind === 'hsva') {
-                    applyHsvaValueToElement(armedColorSource.key, key)
-                  }
-                }}
-                onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'element', key }, event)}
-                onMouseUp={(event) => {
-                  if (event.button !== 2) return
-                  clearColorArmTimer()
-                }}
-                onMouseLeave={() => {
-                  clearColorArmTimer()
-                }}
-                onContextMenu={(event) => {
-                  event.preventDefault()
-                  clearColorArmTimer()
-                }}
-                style={{ background: highlightColors[key] }}
-                title={HIGHLIGHT_COLOR_TITLES[key]}
-              >
-                <span className={`toolbar-flyout-color-swatch-glyph ${HIGHLIGHT_COLOR_ICONS[key]}`} aria-hidden="true" />
-              </button>
-            ))}
-          </div>
-
-          <span className="toolbar-flyout-color-separator" aria-hidden="true" />
-
-          <div className="toolbar-flyout-color-grid toolbar-flyout-texture-grid" role="group" aria-label="Texture color targets">
-            {(['appGrid', 'sidebarContent', isPreviewMode ? 'editorRenderText' : 'editorEditText'] as TextureSurfaceKey[]).map((surface) => (
-              <button
-                key={surface}
-                type="button"
-                className="toolbar-btn-icon toolbar-flyout-color-swatch"
-                onClick={() => {
-                  if (armedColorSource.kind === 'active-color') {
-                    applyActiveColorToTexture(surface)
-                    return
-                  }
-
-                  if (armedColorSource.kind === 'texture-preview') {
-                    applyTexturePreviewToSurface(surface)
-                    return
-                  }
-
-                  if (armedColorSource.kind === 'hsva') {
-                    applyHsvaValueToTexture(armedColorSource.key, surface)
-                    return
-                  }
-                }}
-                onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'texture', key: surface }, event)}
-                onMouseUp={(event) => {
-                  if (event.button !== 2) return
-                  clearColorArmTimer()
-                }}
-                onMouseLeave={() => {
-                  clearColorArmTimer()
-                }}
-                onContextMenu={(event) => {
-                  event.preventDefault()
-                  clearColorArmTimer()
-                }}
-                style={{ background: rgbaToCssColor(hsvaToRgba(textureMaterials[surface].color)) }}
-                title={TEXTURE_SURFACE_TITLES[surface]}
-              >
-                <span className={`toolbar-flyout-color-swatch-glyph ${TEXTURE_SURFACE_ICONS[surface]}`} aria-hidden="true" />
-              </button>
-            ))}
-          </div>
-
-          <span className="toolbar-flyout-color-separator" aria-hidden="true" />
-
           <div className="toolbar-flyout-color-grid toolbar-flyout-hsva-grid" role="group" aria-label="HSVA value controls">
             <button
               type="button"
@@ -6950,6 +6740,211 @@ function App() {
               onClick={() => {}}
             />
           </div>
+          <div className="toolbar-flyout-texture-settings" aria-label="Texture generation settings">
+            <div className="toolbar-flyout-texture-stack">
+              <div className="toolbar-flyout-texture-slider-slot">
+                <div className="toolbar-flyout-seed-editor" aria-label="Texture seed">
+                  {isTextureSeedEditing ? (
+                    <label className="sidebar-page-number-btn toolbar-flyout-seed-btn" aria-label="Edit texture seed">
+                      <input
+                        ref={textureSeedInputRef}
+                        type="number"
+                        min={0}
+                        max={1000000}
+                        step={1}
+                        inputMode="numeric"
+                        className="sidebar-page-number-input sidebar-page-number-input--edit"
+                        value={textureSeedInput}
+                        onChange={(event) => {
+                          setTextureSeedInput(event.target.value.replace(/[^0-9]/g, ''))
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
+                            commitTextureSeedEdit()
+                            return
+                          }
+
+                          if (event.key === 'Escape') {
+                            event.preventDefault()
+                            cancelTextureSeedEdit()
+                          }
+                        }}
+                        onBlur={commitTextureSeedEdit}
+                      />
+                    </label>
+                  ) : (
+                    <button
+                      type="button"
+                      className="sidebar-page-number-btn toolbar-flyout-seed-btn"
+                      aria-label={`Texture seed ${texturePreviewMaterial.seed}. Left click to randomize. Right click to edit.`}
+                      title="Left click: random seed. Right click: edit seed."
+                      onClick={randomizeTextureSeed}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        startTextureSeedEdit()
+                      }}
+                    >
+                      {texturePreviewMaterial.seed}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="toolbar-flyout-texture-slider-slot">
+                <CompactScrollbarSlider
+                  id="texture-granularity"
+                  min={TEXTURE_GRANULARITY_MIN}
+                  max={TEXTURE_GRANULARITY_MAX}
+                  step={1}
+                  value={texturePreviewMaterial.granularity}
+                  trackLabel="granularity"
+                  ariaLabel="Texture granularity"
+                  onCommit={(value) => {
+                    setTexturePreviewMaterial((current) => ({
+                      ...current,
+                      granularity: clamp(Math.round(value), TEXTURE_GRANULARITY_MIN, TEXTURE_GRANULARITY_MAX),
+                    }))
+                  }}
+                />
+              </div>
+              <div className="toolbar-flyout-texture-slider-slot">
+                <CompactScrollbarSlider
+                  id="texture-smoothness"
+                  min={TEXTURE_VSTEPS_MIN}
+                  max={TEXTURE_VSTEPS_MAX}
+                  step={1}
+                  value={texturePreviewMaterial.vSteps}
+                  trackLabel="smoothness"
+                  ariaLabel="Texture smoothness"
+                  onCommit={(value) => {
+                    setTexturePreviewMaterial((current) => ({
+                      ...current,
+                      vSteps: clamp(Math.round(value), TEXTURE_VSTEPS_MIN, TEXTURE_VSTEPS_MAX),
+                    }))
+                  }}
+                />
+              </div>
+            </div>
+            <div className="toolbar-flyout-texture-preview-row">
+              <button
+                type="button"
+                className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color toolbar-flyout-texture-preview${armedColorSource.kind === 'texture-preview' ? ' active' : ''}`}
+                title="Texture preview"
+                style={{
+                  backgroundColor: texturePreviewTintCss,
+                  WebkitMaskImage: texturePreviewCss,
+                  WebkitMaskRepeat: 'no-repeat',
+                  WebkitMaskSize: '100% 100%',
+                  WebkitMaskPosition: '0 0',
+                  maskImage: texturePreviewCss,
+                  maskRepeat: 'no-repeat',
+                  maskSize: '100% 100%',
+                  maskPosition: '0 0',
+                }}
+                onMouseDown={(event) => {
+                  if (event.button !== 2) return
+                  startColorArmHold({ kind: 'texture-preview' }, event)
+                }}
+                onMouseUp={(event) => {
+                  if (event.button !== 2) return
+                  clearColorArmTimer()
+                }}
+                onMouseLeave={clearColorArmTimer}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  clearColorArmTimer()
+                }}
+                onClick={() => {
+                  setArmedColorSource({ kind: 'texture-preview' })
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="sidebar-options-divider" aria-hidden="true" />
+
+        <div className="toolbar-flyout-color-grid toolbar-flyout-element-grid" role="group" aria-label="Editor highlight elements">
+          {HIGHLIGHT_COLOR_ORDER.map((key) => (
+            <button
+              key={key}
+              type="button"
+              className="toolbar-btn-icon toolbar-flyout-color-swatch"
+              onClick={() => {
+                if (armedColorSource.kind === 'active-color') {
+                  applyActiveColorToElement(key)
+                  return
+                }
+
+                if (armedColorSource.kind === 'texture-preview') {
+                  updateHighlightColor(key, hsvaToRgba(texturePreviewMaterial.color))
+                  return
+                }
+
+                if (armedColorSource.kind === 'hsva') {
+                  applyHsvaValueToElement(armedColorSource.key, key)
+                }
+              }}
+              onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'element', key }, event)}
+              onMouseUp={(event) => {
+                if (event.button !== 2) return
+                clearColorArmTimer()
+              }}
+              onMouseLeave={() => {
+                clearColorArmTimer()
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                clearColorArmTimer()
+              }}
+              style={{ background: highlightColors[key] }}
+              title={HIGHLIGHT_COLOR_TITLES[key]}
+            >
+              <span className={`toolbar-flyout-color-swatch-glyph ${HIGHLIGHT_COLOR_ICONS[key]}`} aria-hidden="true" />
+            </button>
+          ))}
+        </div>
+
+        <div className="toolbar-flyout-color-grid toolbar-flyout-texture-grid" role="group" aria-label="Texture color targets">
+          {(['appGrid', 'sidebarContent', isPreviewMode ? 'editorRenderText' : 'editorEditText'] as TextureSurfaceKey[]).map((surface) => (
+            <button
+              key={surface}
+              type="button"
+              className="toolbar-btn-icon toolbar-flyout-color-swatch"
+              onClick={() => {
+                if (armedColorSource.kind === 'active-color') {
+                  applyActiveColorToTexture(surface)
+                  return
+                }
+
+                if (armedColorSource.kind === 'texture-preview') {
+                  applyTexturePreviewToSurface(surface)
+                  return
+                }
+
+                if (armedColorSource.kind === 'hsva') {
+                  applyHsvaValueToTexture(armedColorSource.key, surface)
+                  return
+                }
+              }}
+              onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'texture', key: surface }, event)}
+              onMouseUp={(event) => {
+                if (event.button !== 2) return
+                clearColorArmTimer()
+              }}
+              onMouseLeave={() => {
+                clearColorArmTimer()
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                clearColorArmTimer()
+              }}
+              style={{ background: rgbaToCssColor(hsvaToRgba(textureMaterials[surface].color)) }}
+              title={TEXTURE_SURFACE_TITLES[surface]}
+            >
+              <span className={`toolbar-flyout-color-swatch-glyph ${TEXTURE_SURFACE_ICONS[surface]}`} aria-hidden="true" />
+            </button>
+          ))}
         </div>
       </section>
 
