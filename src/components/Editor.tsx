@@ -220,6 +220,8 @@ function applyDomSelectionFromOffsets(
   focus: number,
   scrollerEl?: HTMLElement | null,
   selectionScrollBehavior: EditorSelectionScrollBehavior = 'preserve-scroll',
+  lineHeightPx?: number,
+  onSmoothScrollStep?: () => void,
 ): void {
   const shouldPreserveScroll = selectionScrollBehavior === 'preserve-scroll';
   const safeAnchor = Math.max(0, anchor);
@@ -247,6 +249,28 @@ function applyDomSelectionFromOffsets(
         scrollerEl.scrollTop = preservedScrollTop;
       }
     });
+  } else if (scrollerEl && !shouldPreserveScroll) {
+    const scrollerRect = scrollerEl.getBoundingClientRect();
+    const rangeRect = range.getBoundingClientRect();
+    const visibleTop = scrollerRect.top;
+    const visibleBottom = scrollerRect.bottom;
+    if (rangeRect.top < visibleTop || rangeRect.bottom > visibleBottom) {
+      const targetScrollTop = scrollerEl.scrollTop + (rangeRect.top - visibleTop) - (scrollerEl.clientHeight * 0.35);
+      const clampedTarget = Math.max(0, Math.min(targetScrollTop, scrollerEl.scrollHeight - scrollerEl.clientHeight));
+      if (typeof lineHeightPx === 'number' && lineHeightPx > 0) {
+        scrollToQuantizedSmooth(scrollerEl, clampedTarget, {
+          lineHeightPx,
+          onStep: onSmoothScrollStep,
+        });
+      } else {
+        scrollerEl.scrollTop = clampedTarget;
+      }
+      requestAnimationFrame(() => {
+        if (scrollerEl && typeof lineHeightPx !== 'number') {
+          scrollerEl.scrollTop = clampedTarget;
+        }
+      });
+    }
   }
 }
 
@@ -648,6 +672,8 @@ export function Editor({
               focus,
               scrollerRef.current,
               selectionScrollBehavior,
+              lineHeightPx,
+              syncCustomScrollbar,
             );
 
             // Selection application should never force viewport recentering here.
