@@ -506,8 +506,8 @@ body.splitter-dragging {
 }
 
 .date-filter-rail.date-filter-rail-placeholder {
-  min-height: 20px;
-  height: 20px;
+  min-height: 16px;
+  height: 16px;
   padding: 0;
 }
 

@@ -7444,6 +7444,10 @@ function App() {
           </div>
         ) : null}
 
+        {sidebarMode === 'options' ? (
+          <div className="date-filter-rail date-filter-rail-placeholder" aria-hidden="true" />
+        ) : null}
+
         {isFindMode ? (
           <div className="find-options-rail" aria-label="Find options">
             <button
