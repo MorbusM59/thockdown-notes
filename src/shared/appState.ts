@@ -7,7 +7,7 @@ export const APP_STATE_CHANNELS = {
   saveWindowState: 'state:window:save',
 } as const;
 
-export type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find';
+export type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find' | 'options';
 
 export interface PersistedSidebarViewState {
   scrollTop?: number;

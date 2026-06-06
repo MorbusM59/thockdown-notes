@@ -323,6 +323,15 @@ body.splitter-dragging {
   color: #4a3f35;
 }
 
+.notes-sidebar .view-toggle .icon-btn.btn-options {
+  background-image: none;
+  color: #4a3f35;
+}
+
+.notes-sidebar .view-toggle .icon-btn.btn-options .toolbar-gear-glyph {
+  font-size: 18px;
+}
+
 .find-mode-glyph {
   width: 80%;
   height: 80%;

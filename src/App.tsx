@@ -145,7 +145,7 @@ const TEXTURE_SURFACE_ICONS: Record<TextureSurfaceKey, string> = {
   editorRenderText: 'fa-solid fa-book-open',
 }
 
-type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find'
+type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find' | 'options'
 type NoteArmedAction = 'archive' | 'deletion'
 type ProtectedQuickReleaseAction = 'remove-archived' | 'remove-deleted' | null
 type TextDecorationFormat = 'bold' | 'italic' | 'strikethrough'
@@ -308,6 +308,7 @@ function createDefaultSidebarViewStateByMode(): SidebarViewStateByMode {
     archive: sanitizeSidebarViewState(undefined),
     trash: sanitizeSidebarViewState(undefined),
     find: sanitizeSidebarViewState(undefined),
+    options: sanitizeSidebarViewState(undefined),
   }
 }
 
@@ -1526,6 +1527,7 @@ function App() {
   const [renamingTagName, setRenamingTagName] = useState<string | null>(null)
   const [draggedTagIndex, setDraggedTagIndex] = useState<number | null>(null)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('date')
+  const [lastSidebarModeBeforeOptions, setLastSidebarModeBeforeOptions] = useState<Exclude<SidebarMode, 'options'>>('date')
   const [sidebarViewStateByMode, setSidebarViewStateByMode] = useState<SidebarViewStateByMode>(() => createDefaultSidebarViewStateByMode())
   const [selectedMonths, setSelectedMonths] = useState<Set<number>>(new Set())
   const [selectedYears, setSelectedYears] = useState<Set<number | 'older'>>(new Set())
@@ -1561,7 +1563,6 @@ function App() {
   const [renderScrollTotalTimeSec, setRenderScrollTotalTimeSec] = useState(() => getRenderScrollTotalTimeSec())
   const [renderScrollMaxSpeedPxPerSec, setRenderScrollMaxSpeedPxPerSec] = useState(() => getRenderScrollMaxSpeedPxPerSec())
   const [renderScrollSkew, setRenderScrollSkew] = useState(() => getRenderScrollSkew())
-  const [isScrollSettingsOpen, setIsScrollSettingsOpen] = useState(false)
   const [hoveredSettingsSection, setHoveredSettingsSection] = useState<SettingsSectionKey | null>(null)
   const [uiLoadouts, setUiLoadouts] = useState<UiLayoutLoadout[]>([])
   const [highlightColors, setHighlightColors] = useState<HighlightColors>(DEFAULT_HIGHLIGHT_COLORS)
@@ -2170,11 +2171,6 @@ function App() {
     }
   }, [clearColorArmTimer, clearLoadoutSaveTimer])
 
-  useEffect(() => {
-    if (isScrollSettingsOpen) return
-    clearColorArmTimer()
-  }, [isScrollSettingsOpen, clearColorArmTimer])
-
   const readCurrentEditUiPayload = useCallback((): { progressEdit: number; cursorPos: number; scrollTop: number } | null => {
     const selection = latestEditorSelectionRef.current
 
@@ -2569,6 +2565,10 @@ function App() {
       [sidebarMode]: leavingSnapshot,
     }
 
+    if (sidebarMode === 'options' && nextMode !== 'options') {
+      setLastSidebarModeBeforeOptions(nextMode)
+    }
+
     setSidebarViewStateByMode(nextSidebarViewStateByMode)
     setSidebarMode(nextMode)
     restoreSidebarModeStateFrom(nextMode, nextSidebarViewStateByMode)
@@ -2580,6 +2580,16 @@ function App() {
     sidebarMode,
     sidebarViewStateByMode,
   ])
+
+  const toggleSidebarOptionsMenu = useCallback(() => {
+    if (sidebarMode === 'options') {
+      runSidebarMenuTransition(lastSidebarModeBeforeOptions)
+      return
+    }
+
+    setLastSidebarModeBeforeOptions(sidebarMode)
+    runSidebarMenuTransition('options')
+  }, [lastSidebarModeBeforeOptions, runSidebarMenuTransition, sidebarMode])
 
   useEffect(() => {
     applyRenderScrollDynamic(renderScrollDynamic)
@@ -2625,10 +2635,6 @@ function App() {
       cancelled = true
     }
   }, [editorStyle, editorRuntimeMetrics.fontSizePx])
-
-  useEffect(() => {
-    setIsScrollSettingsOpen(false)
-  }, [isPreviewMode])
 
   useLayoutEffect(() => {
     const appGridEl = appShellRef.current
@@ -3799,6 +3805,7 @@ function App() {
               archive: sanitizeSidebarViewState(appState.menu.sidebarViewState?.archive),
               trash: sanitizeSidebarViewState(appState.menu.sidebarViewState?.trash),
               find: sanitizeSidebarViewState(appState.menu.sidebarViewState?.find),
+              options: sanitizeSidebarViewState(appState.menu.sidebarViewState?.options),
             }
 
             setSidebarViewStateByMode(loadedSidebarViewState)
@@ -6519,6 +6526,559 @@ function App() {
     setIsTextureSeedEditing(false)
   }, [texturePreviewMaterial.seed, textureSeedInput])
 
+  const renderSidebarOptionsContent = () => (
+    <div className={`toolbar-flyout-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`} aria-label="Settings panel">
+      <section
+        className="toolbar-flyout-section toolbar-flyout-section-scrolling display-in-view display-in-edit"
+        aria-label="Scrolling settings"
+        onMouseEnter={() => handleSettingsSectionHover('scrolling')}
+        onMouseLeave={() => handleSettingsSectionLeave('scrolling')}
+        onFocusCapture={() => handleSettingsSectionHover('scrolling')}
+        onBlurCapture={(event) => handleSettingsSectionBlur('scrolling', event)}
+      >
+        <div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
+          <CompactScrollbarSlider
+            id="render-scroll-dynamic"
+            min={0.1}
+            max={5}
+            step={0.05}
+            value={renderScrollDynamic}
+            trackLabel="ramp"
+            ariaLabel="Curve dynamic parameter a"
+            onCommit={(value) => setRenderScrollDynamic(clamp(value, 0.1, 5))}
+          />
+          <CompactScrollbarSlider
+            id="render-scroll-responsiveness"
+            min={0.1}
+            max={5}
+            step={0.05}
+            value={renderScrollResponsiveness}
+            trackLabel="response"
+            ariaLabel="Curve responsiveness parameter b"
+            onCommit={(value) => setRenderScrollResponsiveness(clamp(value, 0.1, 5))}
+          />
+          <CompactScrollbarSlider
+            id="render-scroll-total-time"
+            min={0}
+            max={2}
+            step={0.05}
+            value={renderScrollTotalTimeSec}
+            trackLabel="speed"
+            ariaLabel="Total time parameter t in seconds"
+            reverseScale
+            onCommit={(value) => setRenderScrollTotalTimeSec(clamp(value, 0, 2))}
+          />
+          <CompactScrollbarSlider
+            id="render-scroll-max-speed"
+            min={1000}
+            max={100000}
+            step={1000}
+            value={renderScrollMaxSpeedPxPerSec}
+            trackLabel="max speed"
+            ariaLabel="Maximum scroll speed in pixels per second"
+            onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(clamp(value, 1000, 100000))}
+          />
+          <CompactScrollbarSlider
+            id="render-scroll-skew"
+            min={RENDER_SCROLL_SKEW_MIN}
+            max={RENDER_SCROLL_SKEW_MAX}
+            step={0.01}
+            value={renderScrollSkew}
+            trackLabel="shape"
+            ariaLabel="Curve skew (apex bias)"
+            onCommit={(value) => setRenderScrollSkew(
+              Math.max(RENDER_SCROLL_SKEW_MIN, Math.min(RENDER_SCROLL_SKEW_MAX, value)),
+            )}
+          />
+        </div>
+      </section>
+
+      <section
+        className="toolbar-flyout-section toolbar-flyout-section-colors display-in-view display-in-edit"
+        aria-label="Texture and color settings"
+        onMouseEnter={() => handleSettingsSectionHover('colors')}
+        onMouseLeave={() => handleSettingsSectionLeave('colors')}
+        onFocusCapture={() => handleSettingsSectionHover('colors')}
+        onBlurCapture={(event) => handleSettingsSectionBlur('colors', event)}
+      >
+
+        <div className="toolbar-flyout-color-layout" aria-label="HSVA color controls">
+          <div className="toolbar-flyout-color-grid toolbar-flyout-element-grid" role="group" aria-label="Editor highlight elements">
+            {HIGHLIGHT_COLOR_ORDER.map((key) => (
+              <button
+                key={key}
+                type="button"
+                className="toolbar-btn-icon toolbar-flyout-color-swatch"
+                onClick={() => {
+                  if (armedColorSource.kind === 'active-color') {
+                    applyActiveColorToElement(key)
+                    return
+                  }
+
+                  if (armedColorSource.kind === 'texture-preview') {
+                    updateHighlightColor(key, hsvaToRgba(texturePreviewMaterial.color))
+                    return
+                  }
+
+                  if (armedColorSource.kind === 'hsva') {
+                    applyHsvaValueToElement(armedColorSource.key, key)
+                  }
+                }}
+                onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'element', key }, event)}
+                onMouseUp={(event) => {
+                  if (event.button !== 2) return
+                  clearColorArmTimer()
+                }}
+                onMouseLeave={() => {
+                  clearColorArmTimer()
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  clearColorArmTimer()
+                }}
+                style={{ background: highlightColors[key] }}
+                title={HIGHLIGHT_COLOR_TITLES[key]}
+              >
+                <span className={`toolbar-flyout-color-swatch-glyph ${HIGHLIGHT_COLOR_ICONS[key]}`} aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+
+          <span className="toolbar-flyout-color-separator" aria-hidden="true" />
+
+          <div className="toolbar-flyout-color-grid toolbar-flyout-texture-grid" role="group" aria-label="Texture color targets">
+            {(['appGrid', 'sidebarContent', isPreviewMode ? 'editorRenderText' : 'editorEditText'] as TextureSurfaceKey[]).map((surface) => (
+              <button
+                key={surface}
+                type="button"
+                className="toolbar-btn-icon toolbar-flyout-color-swatch"
+                onClick={() => {
+                  if (armedColorSource.kind === 'active-color') {
+                    applyActiveColorToTexture(surface)
+                    return
+                  }
+
+                  if (armedColorSource.kind === 'texture-preview') {
+                    applyTexturePreviewToSurface(surface)
+                    return
+                  }
+
+                  if (armedColorSource.kind === 'hsva') {
+                    applyHsvaValueToTexture(armedColorSource.key, surface)
+                    return
+                  }
+                }}
+                onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'texture', key: surface }, event)}
+                onMouseUp={(event) => {
+                  if (event.button !== 2) return
+                  clearColorArmTimer()
+                }}
+                onMouseLeave={() => {
+                  clearColorArmTimer()
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  clearColorArmTimer()
+                }}
+                style={{ background: rgbaToCssColor(hsvaToRgba(textureMaterials[surface].color)) }}
+                title={TEXTURE_SURFACE_TITLES[surface]}
+              >
+                <span className={`toolbar-flyout-color-swatch-glyph ${TEXTURE_SURFACE_ICONS[surface]}`} aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+
+          <span className="toolbar-flyout-color-separator" aria-hidden="true" />
+
+          <div className="toolbar-flyout-color-grid toolbar-flyout-hsva-grid" role="group" aria-label="HSVA value controls">
+            <button
+              type="button"
+              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 'h' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'h' ? ' active' : ''}`}
+              style={{ background: hsvaDisplayColors.hColor }}
+              title="Hue"
+              onPointerDown={(event) => {
+                startHsvaDrag('h', event)
+              }}
+              onPointerMove={(event) => {
+                handleHsvaDragMove('h', event)
+              }}
+              onPointerUp={(event) => {
+                stopHsvaDrag('h', event)
+              }}
+              onPointerCancel={(event) => {
+                stopHsvaDrag('h', event)
+              }}
+              onLostPointerCapture={(event) => {
+                stopHsvaDrag('h', event)
+              }}
+              onMouseDown={(event) => {
+                if (event.button !== 2) return
+                startColorArmHold({ kind: 'hsva', key: 'h' }, event)
+              }}
+              onMouseUp={(event) => {
+                if (event.button !== 2) return
+                clearColorArmTimer()
+              }}
+              onMouseLeave={clearColorArmTimer}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                clearColorArmTimer()
+              }}
+            ><span className="toolbar-flyout-hsva-glyph fa-solid fa-circle-notch" aria-hidden="true" /></button>
+            <button
+              type="button"
+              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 's' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 's' ? ' active' : ''}`}
+              style={{ background: hsvaDisplayColors.sColor }}
+              title="Saturation"
+              onPointerDown={(event) => {
+                startHsvaDrag('s', event)
+              }}
+              onPointerMove={(event) => {
+                handleHsvaDragMove('s', event)
+              }}
+              onPointerUp={(event) => {
+                stopHsvaDrag('s', event)
+              }}
+              onPointerCancel={(event) => {
+                stopHsvaDrag('s', event)
+              }}
+              onLostPointerCapture={(event) => {
+                stopHsvaDrag('s', event)
+              }}
+              onMouseDown={(event) => {
+                if (event.button !== 2) return
+                startColorArmHold({ kind: 'hsva', key: 's' }, event)
+              }}
+              onMouseUp={(event) => {
+                if (event.button !== 2) return
+                clearColorArmTimer()
+              }}
+              onMouseLeave={clearColorArmTimer}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                clearColorArmTimer()
+              }}
+            ><span className="toolbar-flyout-hsva-glyph fa-solid fa-droplet" aria-hidden="true" /></button>
+            <button
+              type="button"
+              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 'v' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'v' ? ' active' : ''}`}
+              style={{ background: hsvaDisplayColors.vColor }}
+              title="Value"
+              onPointerDown={(event) => {
+                startHsvaDrag('v', event)
+              }}
+              onPointerMove={(event) => {
+                handleHsvaDragMove('v', event)
+              }}
+              onPointerUp={(event) => {
+                stopHsvaDrag('v', event)
+              }}
+              onPointerCancel={(event) => {
+                stopHsvaDrag('v', event)
+              }}
+              onLostPointerCapture={(event) => {
+                stopHsvaDrag('v', event)
+              }}
+              onMouseDown={(event) => {
+                if (event.button !== 2) return
+                startColorArmHold({ kind: 'hsva', key: 'v' }, event)
+              }}
+              onMouseUp={(event) => {
+                if (event.button !== 2) return
+                clearColorArmTimer()
+              }}
+              onMouseLeave={clearColorArmTimer}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                clearColorArmTimer()
+              }}
+            ><span className="toolbar-flyout-hsva-glyph fa-solid fa-sun" aria-hidden="true" /></button>
+            <button
+              type="button"
+              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control toolbar-flyout-hsva-alpha${hsvaDragState?.control === 'a' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'a' ? ' active' : ''}`}
+              style={{ background: 'var(--color-background-light)', color: hsvaDisplayColors.aGhostColor }}
+              title="Alpha"
+              onPointerDown={(event) => {
+                startHsvaDrag('a', event)
+              }}
+              onPointerMove={(event) => {
+                handleHsvaDragMove('a', event)
+              }}
+              onPointerUp={(event) => {
+                stopHsvaDrag('a', event)
+              }}
+              onPointerCancel={(event) => {
+                stopHsvaDrag('a', event)
+              }}
+              onLostPointerCapture={(event) => {
+                stopHsvaDrag('a', event)
+              }}
+              onMouseDown={(event) => {
+                if (event.button !== 2) return
+                startColorArmHold({ kind: 'hsva', key: 'a' }, event)
+              }}
+              onMouseUp={(event) => {
+                if (event.button !== 2) return
+                clearColorArmTimer()
+              }}
+              onMouseLeave={clearColorArmTimer}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                clearColorArmTimer()
+              }}
+            ><span className="toolbar-flyout-hsva-glyph fa-solid fa-ghost" aria-hidden="true" /></button>
+            <button
+              type="button"
+              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color${armedColorSource.kind === 'active-color' ? ' active' : ''}`}
+              title="Active color"
+              style={{ background: `linear-gradient(${activeColorCss}, ${activeColorCss}), var(--color-background-light)` }}
+              onMouseDown={(event) => {
+                if (event.button !== 2) return
+                startColorArmHold({ kind: 'active-color' }, event)
+              }}
+              onMouseUp={(event) => {
+                if (event.button !== 2) return
+                clearColorArmTimer()
+              }}
+              onMouseLeave={clearColorArmTimer}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                clearColorArmTimer()
+              }}
+              onClick={() => {}}
+            />
+          </div>
+
+          <span className="toolbar-flyout-color-separator" aria-hidden="true" />
+
+          <div className="toolbar-flyout-texture-settings" aria-label="Texture generation settings">
+            <div className="toolbar-flyout-texture-stack">
+              <div className="toolbar-flyout-texture-slider-slot">
+                <div className="toolbar-flyout-seed-editor" aria-label="Texture seed">
+                  {isTextureSeedEditing ? (
+                    <label className="sidebar-page-number-btn toolbar-flyout-seed-btn" aria-label="Edit texture seed">
+                      <input
+                        ref={textureSeedInputRef}
+                        type="number"
+                        min={0}
+                        max={1000000}
+                        step={1}
+                        inputMode="numeric"
+                        className="sidebar-page-number-input sidebar-page-number-input--edit"
+                        value={textureSeedInput}
+                        onChange={(event) => {
+                          setTextureSeedInput(event.target.value.replace(/[^0-9]/g, ''))
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
+                            commitTextureSeedEdit()
+                            return
+                          }
+
+                          if (event.key === 'Escape') {
+                            event.preventDefault()
+                            cancelTextureSeedEdit()
+                          }
+                        }}
+                        onBlur={commitTextureSeedEdit}
+                      />
+                    </label>
+                  ) : (
+                    <button
+                      type="button"
+                      className="sidebar-page-number-btn toolbar-flyout-seed-btn"
+                      aria-label={`Texture seed ${texturePreviewMaterial.seed}. Left click to randomize. Right click to edit.`}
+                      title="Left click: random seed. Right click: edit seed."
+                      onClick={randomizeTextureSeed}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        startTextureSeedEdit()
+                      }}
+                    >
+                      {texturePreviewMaterial.seed}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="toolbar-flyout-texture-slider-slot">
+                <CompactScrollbarSlider
+                  id="texture-granularity"
+                  min={TEXTURE_GRANULARITY_MIN}
+                  max={TEXTURE_GRANULARITY_MAX}
+                  step={1}
+                  value={texturePreviewMaterial.granularity}
+                  trackLabel="granularity"
+                  ariaLabel="Texture granularity"
+                  onCommit={(value) => {
+                    setTexturePreviewMaterial((current) => ({
+                      ...current,
+                      granularity: clamp(Math.round(value), TEXTURE_GRANULARITY_MIN, TEXTURE_GRANULARITY_MAX),
+                    }))
+                  }}
+                />
+              </div>
+              <div className="toolbar-flyout-texture-slider-slot">
+                <CompactScrollbarSlider
+                  id="texture-smoothness"
+                  min={TEXTURE_VSTEPS_MIN}
+                  max={TEXTURE_VSTEPS_MAX}
+                  step={1}
+                  value={texturePreviewMaterial.vSteps}
+                  trackLabel="smoothness"
+                  ariaLabel="Texture smoothness"
+                  onCommit={(value) => {
+                    setTexturePreviewMaterial((current) => ({
+                      ...current,
+                      vSteps: clamp(Math.round(value), TEXTURE_VSTEPS_MIN, TEXTURE_VSTEPS_MAX),
+                    }))
+                  }}
+                />
+              </div>
+            </div>
+            <div className="toolbar-flyout-texture-preview-row">
+              <button
+                type="button"
+                className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color toolbar-flyout-texture-preview${armedColorSource.kind === 'texture-preview' ? ' active' : ''}`}
+                title="Texture preview"
+                style={{
+                  backgroundColor: texturePreviewTintCss,
+                  WebkitMaskImage: texturePreviewCss,
+                  WebkitMaskRepeat: 'no-repeat',
+                  WebkitMaskSize: '100% 100%',
+                  WebkitMaskPosition: '0 0',
+                  maskImage: texturePreviewCss,
+                  maskRepeat: 'no-repeat',
+                  maskSize: '100% 100%',
+                  maskPosition: '0 0',
+                }}
+                onMouseDown={(event) => {
+                  if (event.button !== 2) return
+                  startColorArmHold({ kind: 'texture-preview' }, event)
+                }}
+                onMouseUp={(event) => {
+                  if (event.button !== 2) return
+                  clearColorArmTimer()
+                }}
+                onMouseLeave={clearColorArmTimer}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  clearColorArmTimer()
+                }}
+                onClick={() => {
+                  setArmedColorSource({ kind: 'texture-preview' })
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        className="toolbar-flyout-section toolbar-flyout-section-layout display-in-edit"
+        aria-label="Layout settings"
+        onMouseEnter={() => handleSettingsSectionHover('layout')}
+        onMouseLeave={() => handleSettingsSectionLeave('layout')}
+        onFocusCapture={() => handleSettingsSectionHover('layout')}
+        onBlurCapture={(event) => handleSettingsSectionBlur('layout', event)}
+      >
+        <div className="utility-setting-slider-stack" aria-label="Layout settings controls">
+          <CompactScrollbarSlider
+            id="editor-glyph-padding"
+            min={EDITOR_GLYPH_PADDING_MIN_PX}
+            max={EDITOR_GLYPH_PADDING_MAX_PX}
+            step={1}
+            value={editorGlyphPaddingPx}
+            trackLabel="padding"
+            ariaLabel="Editor glyph side padding in pixels"
+            onCommit={(value) => setEditorGlyphPaddingPx(
+              clamp(
+                Math.round(value),
+                EDITOR_GLYPH_PADDING_MIN_PX,
+                EDITOR_GLYPH_PADDING_MAX_PX,
+              ),
+            )}
+          />
+        </div>
+      </section>
+
+      <section
+        className="toolbar-flyout-section toolbar-flyout-section-loadout display-in-view display-in-edit"
+        aria-label="Loadout settings"
+        onMouseEnter={() => handleSettingsSectionHover('loadout')}
+        onMouseLeave={() => handleSettingsSectionLeave('loadout')}
+        onFocusCapture={() => handleSettingsSectionHover('loadout')}
+        onBlurCapture={(event) => handleSettingsSectionBlur('loadout', event)}
+      >
+        <div className="toolbar-flyout-loadout-grid" role="group" aria-label="UI layout loadouts">
+          {uiLoadouts.map((loadout, index) => (
+            <button
+              key={`loadout-${index}`}
+              type="button"
+              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn${activeUiLoadoutIndex === index ? ' active' : ''}`}
+              title={`Loadout ${index}`}
+              onClick={() => {
+                applyUiLayoutLoadout(loadout)
+              }}
+              onMouseDown={(event) => startLoadoutSaveHold(index, event)}
+              onMouseUp={(event) => {
+                if (event.button !== 2) return
+                clearLoadoutSaveTimer()
+              }}
+              onMouseLeave={clearLoadoutSaveTimer}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                clearLoadoutSaveTimer()
+              }}
+            >
+              <span className="toolbar-flyout-loadout-index">{index}</span>
+            </button>
+          ))}
+
+          {uiLoadouts.length < MAX_UI_LOADOUTS ? (
+            <button
+              type="button"
+              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn toolbar-flyout-loadout-plus${hasUnsavedUiLoadoutChanges ? ' active' : ''}`}
+              title="Save new loadout"
+              onClick={() => {}}
+              onMouseDown={(event) => startLoadoutSaveHold(uiLoadouts.length, event)}
+              onMouseUp={(event) => {
+                if (event.button !== 2) return
+                clearLoadoutSaveTimer()
+              }}
+              onMouseLeave={clearLoadoutSaveTimer}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                clearLoadoutSaveTimer()
+              }}
+            >
+              <span className="toolbar-flyout-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="toolbar-flyout-section toolbar-flyout-section-info display-in-view display-in-edit" aria-label="Settings info panel">
+        {activeSettingsInfo ? (
+          <>
+            <div className="toolbar-flyout-info-title">{activeSettingsInfo.title}</div>
+            <div className="toolbar-flyout-info-summary">{activeSettingsInfo.summary}</div>
+            <div className="toolbar-flyout-info-lines">
+              {activeSettingsInfo.lines.map((line) => (
+                <p key={line.label} className="toolbar-flyout-info-line">
+                  <span className="toolbar-flyout-info-line-label">{line.label}:</span>{' '}
+                  <span>{line.text}</span>
+                </p>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="toolbar-flyout-info-empty">Hover over a section to learn more about each setting.</div>
+        )}
+      </section>
+    </div>
+  )
+
   const cancelTextureSeedEdit = useCallback(() => {
     setTextureSeedInput(String(texturePreviewMaterial.seed))
     setIsTextureSeedEditing(false)
@@ -6725,6 +7285,7 @@ function App() {
               archive: 'btn-archived',
               trash: 'btn-deleted',
               find: 'btn-find',
+              options: 'btn-options',
             }
             return (
               <button
@@ -6750,7 +7311,11 @@ function App() {
                   setIsTrashViewDeleteArmed(false)
                 } : undefined}
               >
-                {mode === 'find' ? <span className="find-mode-glyph fa-solid fa-magnifying-glass" aria-hidden="true" /> : <span className="sr-only-mode-label">{label}</span>}
+                {mode === 'find' ? (
+                  <span className="find-mode-glyph fa-solid fa-magnifying-glass" aria-hidden="true" />
+                ) : (
+                  <span className="sr-only-mode-label">{label}</span>
+                )}
               </button>
             )
           })}
@@ -6821,6 +7386,8 @@ function App() {
                   </div>
                 ) : null}
               </div>
+            ) : sidebarMode === 'options' ? (
+              renderSidebarOptionsContent()
             ) : (
               <div
                 className="notes-list tree-view measly-custom-scrollbar"
@@ -7266,577 +7833,15 @@ function App() {
             )}
 
             <button
-              className={`toggle-btn icon-btn toolbar-gear-btn${isScrollSettingsOpen ? ' is-active' : ''}`}
               type="button"
-              title="View settings"
-              aria-label="View settings"
-              aria-expanded={isScrollSettingsOpen}
-              onClick={() => setIsScrollSettingsOpen((open) => !open)}
+              className={`toggle-btn icon-btn toolbar-gear-btn${sidebarMode === 'options' ? ' is-active' : ''}`}
+              title="View options"
+              aria-label="View options"
+              onClick={toggleSidebarOptionsMenu}
             >
               <span className="toolbar-gear-glyph fa-solid fa-gear" aria-hidden="true" />
             </button>
-          </div>
-        </div>
 
-        <div
-          className={`toolbar-flyout-panel${isScrollSettingsOpen ? ' is-open' : ''}`}
-          aria-label="Toolbar flyout panel"
-          aria-hidden={!isScrollSettingsOpen}
-        >
-          <div className="toolbar-flyout-panel-inner">
-            <div
-              className={`toolbar-flyout-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`}
-              aria-label="Settings panel"
-            >
-              <section
-                className="toolbar-flyout-section toolbar-flyout-section-scrolling display-in-view display-in-edit"
-                aria-label="Scrolling settings"
-                onMouseEnter={() => handleSettingsSectionHover('scrolling')}
-                onMouseLeave={() => handleSettingsSectionLeave('scrolling')}
-                onFocusCapture={() => handleSettingsSectionHover('scrolling')}
-                onBlurCapture={(event) => handleSettingsSectionBlur('scrolling', event)}
-              >
-                <div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
-                  <CompactScrollbarSlider
-                    id="render-scroll-dynamic"
-                    min={0.1}
-                    max={5}
-                    step={0.05}
-                    value={renderScrollDynamic}
-                    trackLabel="ramp"
-                    ariaLabel="Curve dynamic parameter a"
-                    onCommit={(value) => setRenderScrollDynamic(clamp(value, 0.1, 5))}
-                  />
-                  <CompactScrollbarSlider
-                    id="render-scroll-responsiveness"
-                    min={0.1}
-                    max={5}
-                    step={0.05}
-                    value={renderScrollResponsiveness}
-                    trackLabel="response"
-                    ariaLabel="Curve responsiveness parameter b"
-                    onCommit={(value) => setRenderScrollResponsiveness(clamp(value, 0.1, 5))}
-                  />
-                  <CompactScrollbarSlider
-                    id="render-scroll-total-time"
-                    min={0}
-                    max={2}
-                    step={0.05}
-                    value={renderScrollTotalTimeSec}
-                    trackLabel="speed"
-                    ariaLabel="Total time parameter t in seconds"
-                    reverseScale
-                    onCommit={(value) => setRenderScrollTotalTimeSec(clamp(value, 0, 2))}
-                  />
-                  <CompactScrollbarSlider
-                    id="render-scroll-max-speed"
-                    min={1000}
-                    max={100000}
-                    step={1000}
-                    value={renderScrollMaxSpeedPxPerSec}
-                    trackLabel="max speed"
-                    ariaLabel="Maximum scroll speed in pixels per second"
-                    onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(clamp(value, 1000, 100000))}
-                  />
-                  <CompactScrollbarSlider
-                    id="render-scroll-skew"
-                    min={RENDER_SCROLL_SKEW_MIN}
-                    max={RENDER_SCROLL_SKEW_MAX}
-                    step={0.01}
-                    value={renderScrollSkew}
-                    trackLabel="shape"
-                    ariaLabel="Curve skew (apex bias)"
-                    onCommit={(value) => setRenderScrollSkew(
-                      Math.max(RENDER_SCROLL_SKEW_MIN, Math.min(RENDER_SCROLL_SKEW_MAX, value)),
-                    )}
-                  />
-                </div>
-              </section>
-
-              <section
-                className="toolbar-flyout-section toolbar-flyout-section-colors display-in-view display-in-edit"
-                aria-label="Texture and color settings"
-                onMouseEnter={() => handleSettingsSectionHover('colors')}
-                onMouseLeave={() => handleSettingsSectionLeave('colors')}
-                onFocusCapture={() => handleSettingsSectionHover('colors')}
-                onBlurCapture={(event) => handleSettingsSectionBlur('colors', event)}
-              >
-
-                <div className="toolbar-flyout-color-layout" aria-label="HSVA color controls">
-                  <div className="toolbar-flyout-color-grid toolbar-flyout-element-grid" role="group" aria-label="Editor highlight elements">
-                    {HIGHLIGHT_COLOR_ORDER.map((key) => (
-                      <button
-                        key={key}
-                        type="button"
-                        className="toolbar-btn-icon toolbar-flyout-color-swatch"
-                        onClick={() => {
-                          if (armedColorSource.kind === 'active-color') {
-                            applyActiveColorToElement(key)
-                            return
-                          }
-
-                          if (armedColorSource.kind === 'texture-preview') {
-                            updateHighlightColor(key, hsvaToRgba(texturePreviewMaterial.color))
-                            return
-                          }
-
-                          if (armedColorSource.kind === 'hsva') {
-                            applyHsvaValueToElement(armedColorSource.key, key)
-                          }
-                        }}
-                        onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'element', key }, event)}
-                        onMouseUp={(event) => {
-                          if (event.button !== 2) return
-                          clearColorArmTimer()
-                        }}
-                        onMouseLeave={() => {
-                          clearColorArmTimer()
-                        }}
-                        onContextMenu={(event) => {
-                          event.preventDefault()
-                          clearColorArmTimer()
-                        }}
-                        style={{ background: highlightColors[key] }}
-                        title={HIGHLIGHT_COLOR_TITLES[key]}
-                      >
-                        <span className={`toolbar-flyout-color-swatch-glyph ${HIGHLIGHT_COLOR_ICONS[key]}`} aria-hidden="true" />
-                      </button>
-                    ))}
-                  </div>
-
-                  <span className="toolbar-flyout-color-separator" aria-hidden="true" />
-
-                  <div className="toolbar-flyout-color-grid toolbar-flyout-texture-grid" role="group" aria-label="Texture color targets">
-                    {(['appGrid', 'sidebarContent', isPreviewMode ? 'editorRenderText' : 'editorEditText'] as TextureSurfaceKey[]).map((surface) => (
-                      <button
-                        key={surface}
-                        type="button"
-                        className="toolbar-btn-icon toolbar-flyout-color-swatch"
-                        onClick={() => {
-                          if (armedColorSource.kind === 'active-color') {
-                            applyActiveColorToTexture(surface)
-                            return
-                          }
-
-                          if (armedColorSource.kind === 'texture-preview') {
-                            applyTexturePreviewToSurface(surface)
-                            return
-                          }
-
-                          if (armedColorSource.kind === 'hsva') {
-                            applyHsvaValueToTexture(armedColorSource.key, surface)
-                            return
-                          }
-                        }}
-                        onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'texture', key: surface }, event)}
-                        onMouseUp={(event) => {
-                          if (event.button !== 2) return
-                          clearColorArmTimer()
-                        }}
-                        onMouseLeave={() => {
-                          clearColorArmTimer()
-                        }}
-                        onContextMenu={(event) => {
-                          event.preventDefault()
-                          clearColorArmTimer()
-                        }}
-                        style={{ background: rgbaToCssColor(hsvaToRgba(textureMaterials[surface].color)) }}
-                        title={TEXTURE_SURFACE_TITLES[surface]}
-                      >
-                        <span className={`toolbar-flyout-color-swatch-glyph ${TEXTURE_SURFACE_ICONS[surface]}`} aria-hidden="true" />
-                      </button>
-                    ))}
-                  </div>
-
-                  <span className="toolbar-flyout-color-separator" aria-hidden="true" />
-
-                  <div className="toolbar-flyout-color-grid toolbar-flyout-hsva-grid" role="group" aria-label="HSVA value controls">
-                    <button
-                      type="button"
-                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 'h' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'h' ? ' active' : ''}`}
-                      style={{ background: hsvaDisplayColors.hColor }}
-                      title="Hue"
-                      onPointerDown={(event) => {
-                        startHsvaDrag('h', event)
-                      }}
-                      onPointerMove={(event) => {
-                        handleHsvaDragMove('h', event)
-                      }}
-                      onPointerUp={(event) => {
-                        stopHsvaDrag('h', event)
-                      }}
-                      onPointerCancel={(event) => {
-                        stopHsvaDrag('h', event)
-                      }}
-                      onLostPointerCapture={(event) => {
-                        stopHsvaDrag('h', event)
-                      }}
-                      onMouseDown={(event) => {
-                        if (event.button !== 2) return
-                        startColorArmHold({ kind: 'hsva', key: 'h' }, event)
-                      }}
-                      onMouseUp={(event) => {
-                        if (event.button !== 2) return
-                        clearColorArmTimer()
-                      }}
-                      onMouseLeave={clearColorArmTimer}
-                      onContextMenu={(event) => {
-                        event.preventDefault()
-                        clearColorArmTimer()
-                      }}
-                    ><span className="toolbar-flyout-hsva-glyph fa-solid fa-circle-notch" aria-hidden="true" /></button>
-                    <button
-                      type="button"
-                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 's' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 's' ? ' active' : ''}`}
-                      style={{ background: hsvaDisplayColors.sColor }}
-                      title="Saturation"
-                      onPointerDown={(event) => {
-                        startHsvaDrag('s', event)
-                      }}
-                      onPointerMove={(event) => {
-                        handleHsvaDragMove('s', event)
-                      }}
-                      onPointerUp={(event) => {
-                        stopHsvaDrag('s', event)
-                      }}
-                      onPointerCancel={(event) => {
-                        stopHsvaDrag('s', event)
-                      }}
-                      onLostPointerCapture={(event) => {
-                        stopHsvaDrag('s', event)
-                      }}
-                      onMouseDown={(event) => {
-                        if (event.button !== 2) return
-                        startColorArmHold({ kind: 'hsva', key: 's' }, event)
-                      }}
-                      onMouseUp={(event) => {
-                        if (event.button !== 2) return
-                        clearColorArmTimer()
-                      }}
-                      onMouseLeave={clearColorArmTimer}
-                      onContextMenu={(event) => {
-                        event.preventDefault()
-                        clearColorArmTimer()
-                      }}
-                    ><span className="toolbar-flyout-hsva-glyph fa-solid fa-droplet" aria-hidden="true" /></button>
-                    <button
-                      type="button"
-                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 'v' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'v' ? ' active' : ''}`}
-                      style={{ background: hsvaDisplayColors.vColor }}
-                      title="Value"
-                      onPointerDown={(event) => {
-                        startHsvaDrag('v', event)
-                      }}
-                      onPointerMove={(event) => {
-                        handleHsvaDragMove('v', event)
-                      }}
-                      onPointerUp={(event) => {
-                        stopHsvaDrag('v', event)
-                      }}
-                      onPointerCancel={(event) => {
-                        stopHsvaDrag('v', event)
-                      }}
-                      onLostPointerCapture={(event) => {
-                        stopHsvaDrag('v', event)
-                      }}
-                      onMouseDown={(event) => {
-                        if (event.button !== 2) return
-                        startColorArmHold({ kind: 'hsva', key: 'v' }, event)
-                      }}
-                      onMouseUp={(event) => {
-                        if (event.button !== 2) return
-                        clearColorArmTimer()
-                      }}
-                      onMouseLeave={clearColorArmTimer}
-                      onContextMenu={(event) => {
-                        event.preventDefault()
-                        clearColorArmTimer()
-                      }}
-                    ><span className="toolbar-flyout-hsva-glyph fa-solid fa-sun" aria-hidden="true" /></button>
-                    <button
-                      type="button"
-                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control toolbar-flyout-hsva-alpha${hsvaDragState?.control === 'a' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'a' ? ' active' : ''}`}
-                      style={{ background: 'var(--color-background-light)', color: hsvaDisplayColors.aGhostColor }}
-                      title="Alpha"
-                      onPointerDown={(event) => {
-                        startHsvaDrag('a', event)
-                      }}
-                      onPointerMove={(event) => {
-                        handleHsvaDragMove('a', event)
-                      }}
-                      onPointerUp={(event) => {
-                        stopHsvaDrag('a', event)
-                      }}
-                      onPointerCancel={(event) => {
-                        stopHsvaDrag('a', event)
-                      }}
-                      onLostPointerCapture={(event) => {
-                        stopHsvaDrag('a', event)
-                      }}
-                      onMouseDown={(event) => {
-                        if (event.button !== 2) return
-                        startColorArmHold({ kind: 'hsva', key: 'a' }, event)
-                      }}
-                      onMouseUp={(event) => {
-                        if (event.button !== 2) return
-                        clearColorArmTimer()
-                      }}
-                      onMouseLeave={clearColorArmTimer}
-                      onContextMenu={(event) => {
-                        event.preventDefault()
-                        clearColorArmTimer()
-                      }}
-                    ><span className="toolbar-flyout-hsva-ghost fa-solid fa-ghost" aria-hidden="true" /></button>
-                    <button
-                      type="button"
-                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color${armedColorSource.kind === 'active-color' ? ' active' : ''}`}
-                      title="Active color"
-                      style={{ background: `linear-gradient(${activeColorCss}, ${activeColorCss}), var(--color-background-light)` }}
-                      onMouseDown={(event) => {
-                        if (event.button !== 2) return
-                        startColorArmHold({ kind: 'active-color' }, event)
-                      }}
-                      onMouseUp={(event) => {
-                        if (event.button !== 2) return
-                        clearColorArmTimer()
-                      }}
-                      onMouseLeave={clearColorArmTimer}
-                      onContextMenu={(event) => {
-                        event.preventDefault()
-                        clearColorArmTimer()
-                      }}
-                      onClick={() => {}}
-                    />
-                  </div>
-
-                  <span className="toolbar-flyout-color-separator" aria-hidden="true" />
-
-                  <div className="toolbar-flyout-texture-settings" aria-label="Texture generation settings">
-                    <div className="toolbar-flyout-texture-stack">
-                      <div className="toolbar-flyout-texture-slider-slot">
-                        <div className="toolbar-flyout-seed-editor" aria-label="Texture seed">
-                          {isTextureSeedEditing ? (
-                            <label className="sidebar-page-number-btn toolbar-flyout-seed-btn" aria-label="Edit texture seed">
-                              <input
-                                ref={textureSeedInputRef}
-                                type="number"
-                                min={0}
-                                max={1000000}
-                                step={1}
-                                inputMode="numeric"
-                                className="sidebar-page-number-input sidebar-page-number-input--edit"
-                                value={textureSeedInput}
-                                onChange={(event) => {
-                                  setTextureSeedInput(event.target.value.replace(/[^0-9]/g, ''))
-                                }}
-                                onKeyDown={(event) => {
-                                  if (event.key === 'Enter') {
-                                    event.preventDefault()
-                                    commitTextureSeedEdit()
-                                    return
-                                  }
-
-                                  if (event.key === 'Escape') {
-                                    event.preventDefault()
-                                    cancelTextureSeedEdit()
-                                  }
-                                }}
-                                onBlur={commitTextureSeedEdit}
-                              />
-                            </label>
-                          ) : (
-                            <button
-                              type="button"
-                              className="sidebar-page-number-btn toolbar-flyout-seed-btn"
-                              aria-label={`Texture seed ${texturePreviewMaterial.seed}. Left click to randomize. Right click to edit.`}
-                              title="Left click: random seed. Right click: edit seed."
-                              onClick={randomizeTextureSeed}
-                              onContextMenu={(event) => {
-                                event.preventDefault()
-                                startTextureSeedEdit()
-                              }}
-                            >
-                              {texturePreviewMaterial.seed}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      <div className="toolbar-flyout-texture-slider-slot">
-                        <CompactScrollbarSlider
-                          id="texture-granularity"
-                          min={TEXTURE_GRANULARITY_MIN}
-                          max={TEXTURE_GRANULARITY_MAX}
-                          step={1}
-                          value={texturePreviewMaterial.granularity}
-                          trackLabel="granularity"
-                          ariaLabel="Texture granularity"
-                          onCommit={(value) => {
-                            setTexturePreviewMaterial((current) => ({
-                              ...current,
-                              granularity: clamp(Math.round(value), TEXTURE_GRANULARITY_MIN, TEXTURE_GRANULARITY_MAX),
-                            }))
-                          }}
-                        />
-                      </div>
-                      <div className="toolbar-flyout-texture-slider-slot">
-                        <CompactScrollbarSlider
-                          id="texture-smoothness"
-                          min={TEXTURE_VSTEPS_MIN}
-                          max={TEXTURE_VSTEPS_MAX}
-                          step={1}
-                          value={texturePreviewMaterial.vSteps}
-                          trackLabel="smoothness"
-                          ariaLabel="Texture smoothness"
-                          onCommit={(value) => {
-                            setTexturePreviewMaterial((current) => ({
-                              ...current,
-                              vSteps: clamp(Math.round(value), TEXTURE_VSTEPS_MIN, TEXTURE_VSTEPS_MAX),
-                            }))
-                          }}
-                        />
-                      </div>
-                    </div>
-                    <div className="toolbar-flyout-texture-preview-row">
-                      <button
-                        type="button"
-                        className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color toolbar-flyout-texture-preview${armedColorSource.kind === 'texture-preview' ? ' active' : ''}`}
-                        title="Texture preview"
-                        style={{
-                          backgroundColor: texturePreviewTintCss,
-                          WebkitMaskImage: texturePreviewCss,
-                          WebkitMaskRepeat: 'no-repeat',
-                          WebkitMaskSize: '100% 100%',
-                          WebkitMaskPosition: '0 0',
-                          maskImage: texturePreviewCss,
-                          maskRepeat: 'no-repeat',
-                          maskSize: '100% 100%',
-                          maskPosition: '0 0',
-                        }}
-                        onMouseDown={(event) => {
-                          if (event.button !== 2) return
-                          startColorArmHold({ kind: 'texture-preview' }, event)
-                        }}
-                        onMouseUp={(event) => {
-                          if (event.button !== 2) return
-                          clearColorArmTimer()
-                        }}
-                        onMouseLeave={clearColorArmTimer}
-                        onContextMenu={(event) => {
-                          event.preventDefault()
-                          clearColorArmTimer()
-                        }}
-                        onClick={() => {
-                          setArmedColorSource({ kind: 'texture-preview' })
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <section
-                className="toolbar-flyout-section toolbar-flyout-section-layout display-in-edit"
-                aria-label="Layout settings"
-                onMouseEnter={() => handleSettingsSectionHover('layout')}
-                onMouseLeave={() => handleSettingsSectionLeave('layout')}
-                onFocusCapture={() => handleSettingsSectionHover('layout')}
-                onBlurCapture={(event) => handleSettingsSectionBlur('layout', event)}
-              >
-                <div className="utility-setting-slider-stack" aria-label="Layout settings controls">
-                  <CompactScrollbarSlider
-                    id="editor-glyph-padding"
-                    min={EDITOR_GLYPH_PADDING_MIN_PX}
-                    max={EDITOR_GLYPH_PADDING_MAX_PX}
-                    step={1}
-                    value={editorGlyphPaddingPx}
-                    trackLabel="padding"
-                    ariaLabel="Editor glyph side padding in pixels"
-                    onCommit={(value) => setEditorGlyphPaddingPx(
-                      clamp(
-                        Math.round(value),
-                        EDITOR_GLYPH_PADDING_MIN_PX,
-                        EDITOR_GLYPH_PADDING_MAX_PX,
-                      ),
-                    )}
-                  />
-                </div>
-              </section>
-
-              <section
-                className="toolbar-flyout-section toolbar-flyout-section-loadout display-in-view display-in-edit"
-                aria-label="Loadout settings"
-                onMouseEnter={() => handleSettingsSectionHover('loadout')}
-                onMouseLeave={() => handleSettingsSectionLeave('loadout')}
-                onFocusCapture={() => handleSettingsSectionHover('loadout')}
-                onBlurCapture={(event) => handleSettingsSectionBlur('loadout', event)}
-              >
-                <div className="toolbar-flyout-loadout-grid" role="group" aria-label="UI layout loadouts">
-                  {uiLoadouts.map((loadout, index) => (
-                    <button
-                      key={`loadout-${index}`}
-                      type="button"
-                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn${activeUiLoadoutIndex === index ? ' active' : ''}`}
-                      title={`Loadout ${index}`}
-                      onClick={() => {
-                        applyUiLayoutLoadout(loadout)
-                      }}
-                      onMouseDown={(event) => startLoadoutSaveHold(index, event)}
-                      onMouseUp={(event) => {
-                        if (event.button !== 2) return
-                        clearLoadoutSaveTimer()
-                      }}
-                      onMouseLeave={clearLoadoutSaveTimer}
-                      onContextMenu={(event) => {
-                        event.preventDefault()
-                        clearLoadoutSaveTimer()
-                      }}
-                    >
-                      <span className="toolbar-flyout-loadout-index">{index}</span>
-                    </button>
-                  ))}
-
-                  {uiLoadouts.length < MAX_UI_LOADOUTS ? (
-                    <button
-                      type="button"
-                      className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn toolbar-flyout-loadout-plus${hasUnsavedUiLoadoutChanges ? ' active' : ''}`}
-                      title="Save new loadout"
-                      onClick={() => {}}
-                      onMouseDown={(event) => startLoadoutSaveHold(uiLoadouts.length, event)}
-                      onMouseUp={(event) => {
-                        if (event.button !== 2) return
-                        clearLoadoutSaveTimer()
-                      }}
-                      onMouseLeave={clearLoadoutSaveTimer}
-                      onContextMenu={(event) => {
-                        event.preventDefault()
-                        clearLoadoutSaveTimer()
-                      }}
-                    >
-                      <span className="toolbar-flyout-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
-                    </button>
-                  ) : null}
-                </div>
-              </section>
-
-              <section className="toolbar-flyout-section toolbar-flyout-section-info display-in-view display-in-edit" aria-label="Settings info panel">
-                {activeSettingsInfo ? (
-                  <>
-                    <div className="toolbar-flyout-info-title">{activeSettingsInfo.title}</div>
-                    <div className="toolbar-flyout-info-summary">{activeSettingsInfo.summary}</div>
-                    <div className="toolbar-flyout-info-lines">
-                      {activeSettingsInfo.lines.map((line) => (
-                        <p key={line.label} className="toolbar-flyout-info-line">
-                          <span className="toolbar-flyout-info-line-label">{line.label}:</span>{' '}
-                          <span>{line.text}</span>
-                        </p>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <div className="toolbar-flyout-info-empty">Hover over a section to learn more about each setting.</div>
-                )}
-              </section>
-            </div>
           </div>
         </div>
       </section>
