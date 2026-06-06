@@ -4197,11 +4197,12 @@ function App() {
     const activeText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
 
     if (!wasPreviewMode && isPreviewMode) {
-      if (
-        pendingRenderViewAnchorRatioRef.current === null
-        || !pendingEditRestoreSnapshotRef.current
-        || pendingEditRestoreSnapshotRef.current.noteId !== activeNoteId
-      ) {
+      const shouldResetPendingEditRestoreSnapshot =
+        pendingRenderViewAnchorRatioRef.current === null ||
+        !pendingEditRestoreSnapshotRef.current ||
+        pendingEditRestoreSnapshotRef.current.noteId !== activeNoteId
+
+      if (shouldResetPendingEditRestoreSnapshot) {
         const liveSnapshot = adapterRef.current?.getSnapshot()
         const selection = liveSnapshot?.selection ?? latestEditorSelectionRef.current
         const snapshotViewport = liveSnapshot?.viewport
@@ -6527,82 +6528,183 @@ function App() {
   }, [texturePreviewMaterial.seed, textureSeedInput])
 
   const renderSidebarOptionsContent = () => (
-    <div className={`toolbar-flyout-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`} aria-label="Settings panel">
-      <section
-        className="toolbar-flyout-section toolbar-flyout-section-scrolling display-in-view display-in-edit"
-        aria-label="Scrolling settings"
-        onMouseEnter={() => handleSettingsSectionHover('scrolling')}
-        onMouseLeave={() => handleSettingsSectionLeave('scrolling')}
-        onFocusCapture={() => handleSettingsSectionHover('scrolling')}
-        onBlurCapture={(event) => handleSettingsSectionBlur('scrolling', event)}
-      >
-        <div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
-          <CompactScrollbarSlider
-            id="render-scroll-dynamic"
-            min={0.1}
-            max={5}
-            step={0.05}
-            value={renderScrollDynamic}
-            trackLabel="ramp"
-            ariaLabel="Curve dynamic parameter a"
-            onCommit={(value) => setRenderScrollDynamic(clamp(value, 0.1, 5))}
-          />
-          <CompactScrollbarSlider
-            id="render-scroll-responsiveness"
-            min={0.1}
-            max={5}
-            step={0.05}
-            value={renderScrollResponsiveness}
-            trackLabel="response"
-            ariaLabel="Curve responsiveness parameter b"
-            onCommit={(value) => setRenderScrollResponsiveness(clamp(value, 0.1, 5))}
-          />
-          <CompactScrollbarSlider
-            id="render-scroll-total-time"
-            min={0}
-            max={2}
-            step={0.05}
-            value={renderScrollTotalTimeSec}
-            trackLabel="speed"
-            ariaLabel="Total time parameter t in seconds"
-            reverseScale
-            onCommit={(value) => setRenderScrollTotalTimeSec(clamp(value, 0, 2))}
-          />
-          <CompactScrollbarSlider
-            id="render-scroll-max-speed"
-            min={1000}
-            max={100000}
-            step={1000}
-            value={renderScrollMaxSpeedPxPerSec}
-            trackLabel="max speed"
-            ariaLabel="Maximum scroll speed in pixels per second"
-            onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(clamp(value, 1000, 100000))}
-          />
-          <CompactScrollbarSlider
-            id="render-scroll-skew"
-            min={RENDER_SCROLL_SKEW_MIN}
-            max={RENDER_SCROLL_SKEW_MAX}
-            step={0.01}
-            value={renderScrollSkew}
-            trackLabel="shape"
-            ariaLabel="Curve skew (apex bias)"
-            onCommit={(value) => setRenderScrollSkew(
-              Math.max(RENDER_SCROLL_SKEW_MIN, Math.min(RENDER_SCROLL_SKEW_MAX, value)),
-            )}
-          />
+    <div className={`toolbar-flyout-content sidebar-options-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`} aria-label="Settings panel">
+      <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-layouts" aria-label="Layouts">
+        <div className="sidebar-options-section-heading">Layouts</div>
+        <div className="toolbar-flyout-loadout-grid" role="group" aria-label="UI layout loadouts">
+          {uiLoadouts.map((loadout, index) => (
+            <button
+              key={`loadout-${index}`}
+              type="button"
+              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn${activeUiLoadoutIndex === index ? ' active' : ''}`}
+              title={`Loadout ${index}`}
+              onClick={() => {
+                applyUiLayoutLoadout(loadout)
+              }}
+              onMouseDown={(event) => startLoadoutSaveHold(index, event)}
+              onMouseUp={(event) => {
+                if (event.button !== 2) return
+                clearLoadoutSaveTimer()
+              }}
+              onMouseLeave={clearLoadoutSaveTimer}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                clearLoadoutSaveTimer()
+              }}
+            >
+              <span className="toolbar-flyout-loadout-index">{index}</span>
+            </button>
+          ))}
+
+          {uiLoadouts.length < MAX_UI_LOADOUTS ? (
+            <button
+              type="button"
+              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn toolbar-flyout-loadout-plus${hasUnsavedUiLoadoutChanges ? ' active' : ''}`}
+              title="Save new loadout"
+              onClick={() => {}}
+              onMouseDown={(event) => startLoadoutSaveHold(uiLoadouts.length, event)}
+              onMouseUp={(event) => {
+                if (event.button !== 2) return
+                clearLoadoutSaveTimer()
+              }}
+              onMouseLeave={clearLoadoutSaveTimer}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                clearLoadoutSaveTimer()
+              }}
+            >
+              <span className="toolbar-flyout-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
+            </button>
+          ) : null}
         </div>
       </section>
 
-      <section
-        className="toolbar-flyout-section toolbar-flyout-section-colors display-in-view display-in-edit"
-        aria-label="Texture and color settings"
-        onMouseEnter={() => handleSettingsSectionHover('colors')}
-        onMouseLeave={() => handleSettingsSectionLeave('colors')}
-        onFocusCapture={() => handleSettingsSectionHover('colors')}
-        onBlurCapture={(event) => handleSettingsSectionBlur('colors', event)}
-      >
+      <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-colors" aria-label="Colors & Textures">
+        <div className="sidebar-options-section-heading">Colors & Textures</div>
+        <div className="toolbar-flyout-color-layout" aria-label="Color and texture controls">
+          <div className="toolbar-flyout-texture-settings" aria-label="Texture generation settings">
+            <div className="toolbar-flyout-texture-stack">
+              <div className="toolbar-flyout-texture-slider-slot">
+                <div className="toolbar-flyout-seed-editor" aria-label="Texture seed">
+                  {isTextureSeedEditing ? (
+                    <label className="sidebar-page-number-btn toolbar-flyout-seed-btn" aria-label="Edit texture seed">
+                      <input
+                        ref={textureSeedInputRef}
+                        type="number"
+                        min={0}
+                        max={1000000}
+                        step={1}
+                        inputMode="numeric"
+                        className="sidebar-page-number-input sidebar-page-number-input--edit"
+                        value={textureSeedInput}
+                        onChange={(event) => {
+                          setTextureSeedInput(event.target.value.replace(/[^0-9]/g, ''))
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
+                            commitTextureSeedEdit()
+                            return
+                          }
 
-        <div className="toolbar-flyout-color-layout" aria-label="HSVA color controls">
+                          if (event.key === 'Escape') {
+                            event.preventDefault()
+                            cancelTextureSeedEdit()
+                          }
+                        }}
+                        onBlur={commitTextureSeedEdit}
+                      />
+                    </label>
+                  ) : (
+                    <button
+                      type="button"
+                      className="sidebar-page-number-btn toolbar-flyout-seed-btn"
+                      aria-label={`Texture seed ${texturePreviewMaterial.seed}. Left click to randomize. Right click to edit.`}
+                      title="Left click: random seed. Right click: edit seed."
+                      onClick={randomizeTextureSeed}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        startTextureSeedEdit()
+                      }}
+                    >
+                      {texturePreviewMaterial.seed}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="toolbar-flyout-texture-slider-slot">
+                <CompactScrollbarSlider
+                  id="texture-granularity"
+                  min={TEXTURE_GRANULARITY_MIN}
+                  max={TEXTURE_GRANULARITY_MAX}
+                  step={1}
+                  value={texturePreviewMaterial.granularity}
+                  trackLabel="granularity"
+                  ariaLabel="Texture granularity"
+                  onCommit={(value) => {
+                    setTexturePreviewMaterial((current) => ({
+                      ...current,
+                      granularity: clamp(Math.round(value), TEXTURE_GRANULARITY_MIN, TEXTURE_GRANULARITY_MAX),
+                    }))
+                  }}
+                />
+              </div>
+              <div className="toolbar-flyout-texture-slider-slot">
+                <CompactScrollbarSlider
+                  id="texture-smoothness"
+                  min={TEXTURE_VSTEPS_MIN}
+                  max={TEXTURE_VSTEPS_MAX}
+                  step={1}
+                  value={texturePreviewMaterial.vSteps}
+                  trackLabel="smoothness"
+                  ariaLabel="Texture smoothness"
+                  onCommit={(value) => {
+                    setTexturePreviewMaterial((current) => ({
+                      ...current,
+                      vSteps: clamp(Math.round(value), TEXTURE_VSTEPS_MIN, TEXTURE_VSTEPS_MAX),
+                    }))
+                  }}
+                />
+              </div>
+            </div>
+            <div className="toolbar-flyout-texture-preview-row">
+              <button
+                type="button"
+                className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color toolbar-flyout-texture-preview${armedColorSource.kind === 'texture-preview' ? ' active' : ''}`}
+                title="Texture preview"
+                style={{
+                  backgroundColor: texturePreviewTintCss,
+                  WebkitMaskImage: texturePreviewCss,
+                  WebkitMaskRepeat: 'no-repeat',
+                  WebkitMaskSize: '100% 100%',
+                  WebkitMaskPosition: '0 0',
+                  maskImage: texturePreviewCss,
+                  maskRepeat: 'no-repeat',
+                  maskSize: '100% 100%',
+                  maskPosition: '0 0',
+                }}
+                onMouseDown={(event) => {
+                  if (event.button !== 2) return
+                  startColorArmHold({ kind: 'texture-preview' }, event)
+                }}
+                onMouseUp={(event) => {
+                  if (event.button !== 2) return
+                  clearColorArmTimer()
+                }}
+                onMouseLeave={clearColorArmTimer}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  clearColorArmTimer()
+                }}
+                onClick={() => {
+                  setArmedColorSource({ kind: 'texture-preview' })
+                }}
+              />
+            </div>
+          </div>
+
+          <span className="toolbar-flyout-color-separator" aria-hidden="true" />
+
           <div className="toolbar-flyout-color-grid toolbar-flyout-element-grid" role="group" aria-label="Editor highlight elements">
             {HIGHLIGHT_COLOR_ORDER.map((key) => (
               <button
@@ -6848,141 +6950,71 @@ function App() {
               onClick={() => {}}
             />
           </div>
-
-          <span className="toolbar-flyout-color-separator" aria-hidden="true" />
-
-          <div className="toolbar-flyout-texture-settings" aria-label="Texture generation settings">
-            <div className="toolbar-flyout-texture-stack">
-              <div className="toolbar-flyout-texture-slider-slot">
-                <div className="toolbar-flyout-seed-editor" aria-label="Texture seed">
-                  {isTextureSeedEditing ? (
-                    <label className="sidebar-page-number-btn toolbar-flyout-seed-btn" aria-label="Edit texture seed">
-                      <input
-                        ref={textureSeedInputRef}
-                        type="number"
-                        min={0}
-                        max={1000000}
-                        step={1}
-                        inputMode="numeric"
-                        className="sidebar-page-number-input sidebar-page-number-input--edit"
-                        value={textureSeedInput}
-                        onChange={(event) => {
-                          setTextureSeedInput(event.target.value.replace(/[^0-9]/g, ''))
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault()
-                            commitTextureSeedEdit()
-                            return
-                          }
-
-                          if (event.key === 'Escape') {
-                            event.preventDefault()
-                            cancelTextureSeedEdit()
-                          }
-                        }}
-                        onBlur={commitTextureSeedEdit}
-                      />
-                    </label>
-                  ) : (
-                    <button
-                      type="button"
-                      className="sidebar-page-number-btn toolbar-flyout-seed-btn"
-                      aria-label={`Texture seed ${texturePreviewMaterial.seed}. Left click to randomize. Right click to edit.`}
-                      title="Left click: random seed. Right click: edit seed."
-                      onClick={randomizeTextureSeed}
-                      onContextMenu={(event) => {
-                        event.preventDefault()
-                        startTextureSeedEdit()
-                      }}
-                    >
-                      {texturePreviewMaterial.seed}
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div className="toolbar-flyout-texture-slider-slot">
-                <CompactScrollbarSlider
-                  id="texture-granularity"
-                  min={TEXTURE_GRANULARITY_MIN}
-                  max={TEXTURE_GRANULARITY_MAX}
-                  step={1}
-                  value={texturePreviewMaterial.granularity}
-                  trackLabel="granularity"
-                  ariaLabel="Texture granularity"
-                  onCommit={(value) => {
-                    setTexturePreviewMaterial((current) => ({
-                      ...current,
-                      granularity: clamp(Math.round(value), TEXTURE_GRANULARITY_MIN, TEXTURE_GRANULARITY_MAX),
-                    }))
-                  }}
-                />
-              </div>
-              <div className="toolbar-flyout-texture-slider-slot">
-                <CompactScrollbarSlider
-                  id="texture-smoothness"
-                  min={TEXTURE_VSTEPS_MIN}
-                  max={TEXTURE_VSTEPS_MAX}
-                  step={1}
-                  value={texturePreviewMaterial.vSteps}
-                  trackLabel="smoothness"
-                  ariaLabel="Texture smoothness"
-                  onCommit={(value) => {
-                    setTexturePreviewMaterial((current) => ({
-                      ...current,
-                      vSteps: clamp(Math.round(value), TEXTURE_VSTEPS_MIN, TEXTURE_VSTEPS_MAX),
-                    }))
-                  }}
-                />
-              </div>
-            </div>
-            <div className="toolbar-flyout-texture-preview-row">
-              <button
-                type="button"
-                className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color toolbar-flyout-texture-preview${armedColorSource.kind === 'texture-preview' ? ' active' : ''}`}
-                title="Texture preview"
-                style={{
-                  backgroundColor: texturePreviewTintCss,
-                  WebkitMaskImage: texturePreviewCss,
-                  WebkitMaskRepeat: 'no-repeat',
-                  WebkitMaskSize: '100% 100%',
-                  WebkitMaskPosition: '0 0',
-                  maskImage: texturePreviewCss,
-                  maskRepeat: 'no-repeat',
-                  maskSize: '100% 100%',
-                  maskPosition: '0 0',
-                }}
-                onMouseDown={(event) => {
-                  if (event.button !== 2) return
-                  startColorArmHold({ kind: 'texture-preview' }, event)
-                }}
-                onMouseUp={(event) => {
-                  if (event.button !== 2) return
-                  clearColorArmTimer()
-                }}
-                onMouseLeave={clearColorArmTimer}
-                onContextMenu={(event) => {
-                  event.preventDefault()
-                  clearColorArmTimer()
-                }}
-                onClick={() => {
-                  setArmedColorSource({ kind: 'texture-preview' })
-                }}
-              />
-            </div>
-          </div>
         </div>
       </section>
 
-      <section
-        className="toolbar-flyout-section toolbar-flyout-section-layout display-in-edit"
-        aria-label="Layout settings"
-        onMouseEnter={() => handleSettingsSectionHover('layout')}
-        onMouseLeave={() => handleSettingsSectionLeave('layout')}
-        onFocusCapture={() => handleSettingsSectionHover('layout')}
-        onBlurCapture={(event) => handleSettingsSectionBlur('layout', event)}
-      >
-        <div className="utility-setting-slider-stack" aria-label="Layout settings controls">
+      <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-scrolling" aria-label="Scrolling Behavior">
+        <div className="sidebar-options-section-heading">Scrolling Behavior</div>
+        <div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
+          <CompactScrollbarSlider
+            id="render-scroll-dynamic"
+            min={0.1}
+            max={5}
+            step={0.05}
+            value={renderScrollDynamic}
+            trackLabel="ramp"
+            ariaLabel="Curve dynamic parameter a"
+            onCommit={(value) => setRenderScrollDynamic(clamp(value, 0.1, 5))}
+          />
+          <CompactScrollbarSlider
+            id="render-scroll-responsiveness"
+            min={0.1}
+            max={5}
+            step={0.05}
+            value={renderScrollResponsiveness}
+            trackLabel="response"
+            ariaLabel="Curve responsiveness parameter b"
+            onCommit={(value) => setRenderScrollResponsiveness(clamp(value, 0.1, 5))}
+          />
+          <CompactScrollbarSlider
+            id="render-scroll-total-time"
+            min={0}
+            max={2}
+            step={0.05}
+            value={renderScrollTotalTimeSec}
+            trackLabel="speed"
+            ariaLabel="Total time parameter t in seconds"
+            reverseScale
+            onCommit={(value) => setRenderScrollTotalTimeSec(clamp(value, 0, 2))}
+          />
+          <CompactScrollbarSlider
+            id="render-scroll-max-speed"
+            min={1000}
+            max={100000}
+            step={1000}
+            value={renderScrollMaxSpeedPxPerSec}
+            trackLabel="max speed"
+            ariaLabel="Maximum scroll speed in pixels per second"
+            onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(clamp(value, 1000, 100000))}
+          />
+          <CompactScrollbarSlider
+            id="render-scroll-skew"
+            min={RENDER_SCROLL_SKEW_MIN}
+            max={RENDER_SCROLL_SKEW_MAX}
+            step={0.01}
+            value={renderScrollSkew}
+            trackLabel="shape"
+            ariaLabel="Curve skew (apex bias)"
+            onCommit={(value) => setRenderScrollSkew(
+              Math.max(RENDER_SCROLL_SKEW_MIN, Math.min(RENDER_SCROLL_SKEW_MAX, value)),
+            )}
+          />
+        </div>
+      </section>
+
+      <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-misc" aria-label="Miscellaneous Settings">
+        <div className="sidebar-options-section-heading">Miscellaneous Settings</div>
+        <div className="utility-setting-slider-stack" aria-label="Miscellaneous settings controls">
           <CompactScrollbarSlider
             id="editor-glyph-padding"
             min={EDITOR_GLYPH_PADDING_MIN_PX}
@@ -7000,81 +7032,6 @@ function App() {
             )}
           />
         </div>
-      </section>
-
-      <section
-        className="toolbar-flyout-section toolbar-flyout-section-loadout display-in-view display-in-edit"
-        aria-label="Loadout settings"
-        onMouseEnter={() => handleSettingsSectionHover('loadout')}
-        onMouseLeave={() => handleSettingsSectionLeave('loadout')}
-        onFocusCapture={() => handleSettingsSectionHover('loadout')}
-        onBlurCapture={(event) => handleSettingsSectionBlur('loadout', event)}
-      >
-        <div className="toolbar-flyout-loadout-grid" role="group" aria-label="UI layout loadouts">
-          {uiLoadouts.map((loadout, index) => (
-            <button
-              key={`loadout-${index}`}
-              type="button"
-              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn${activeUiLoadoutIndex === index ? ' active' : ''}`}
-              title={`Loadout ${index}`}
-              onClick={() => {
-                applyUiLayoutLoadout(loadout)
-              }}
-              onMouseDown={(event) => startLoadoutSaveHold(index, event)}
-              onMouseUp={(event) => {
-                if (event.button !== 2) return
-                clearLoadoutSaveTimer()
-              }}
-              onMouseLeave={clearLoadoutSaveTimer}
-              onContextMenu={(event) => {
-                event.preventDefault()
-                clearLoadoutSaveTimer()
-              }}
-            >
-              <span className="toolbar-flyout-loadout-index">{index}</span>
-            </button>
-          ))}
-
-          {uiLoadouts.length < MAX_UI_LOADOUTS ? (
-            <button
-              type="button"
-              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn toolbar-flyout-loadout-plus${hasUnsavedUiLoadoutChanges ? ' active' : ''}`}
-              title="Save new loadout"
-              onClick={() => {}}
-              onMouseDown={(event) => startLoadoutSaveHold(uiLoadouts.length, event)}
-              onMouseUp={(event) => {
-                if (event.button !== 2) return
-                clearLoadoutSaveTimer()
-              }}
-              onMouseLeave={clearLoadoutSaveTimer}
-              onContextMenu={(event) => {
-                event.preventDefault()
-                clearLoadoutSaveTimer()
-              }}
-            >
-              <span className="toolbar-flyout-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
-            </button>
-          ) : null}
-        </div>
-      </section>
-
-      <section className="toolbar-flyout-section toolbar-flyout-section-info display-in-view display-in-edit" aria-label="Settings info panel">
-        {activeSettingsInfo ? (
-          <>
-            <div className="toolbar-flyout-info-title">{activeSettingsInfo.title}</div>
-            <div className="toolbar-flyout-info-summary">{activeSettingsInfo.summary}</div>
-            <div className="toolbar-flyout-info-lines">
-              {activeSettingsInfo.lines.map((line) => (
-                <p key={line.label} className="toolbar-flyout-info-line">
-                  <span className="toolbar-flyout-info-line-label">{line.label}:</span>{' '}
-                  <span>{line.text}</span>
-                </p>
-              ))}
-            </div>
-          </>
-        ) : (
-          <div className="toolbar-flyout-info-empty">Hover over a section to learn more about each setting.</div>
-        )}
       </section>
     </div>
   )

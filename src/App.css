@@ -937,6 +937,33 @@ body.splitter-dragging {
   padding-bottom: 2px;
 }
 
+.toolbar-flyout-content.sidebar-options-content {
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: visible;
+  gap: 12px;
+  padding-bottom: 0;
+}
+
+.sidebar-options-section {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  width: 100%;
+}
+
+.sidebar-options-section-heading {
+  margin: 0 0 10px;
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #3f342b;
+}
+
 .toolbar-flyout-content.mode-view .toolbar-flyout-section.display-in-edit:not(.display-in-view) {
   display: none;
 }
@@ -946,10 +973,7 @@ body.splitter-dragging {
 }
 
 .toolbar-flyout-section {
-  border: 1px solid var(--color-border-highlight);
-  border-radius: var(--border-radius-regular);
-  background: var(--color-input-backdrop);
-  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.5), inset 0 0 6px rgba(0, 0, 0, 0.2), 0 0 2px var(--color-shadow-white);
+
   box-sizing: border-box;
   padding: 6px;
   display: flex;
@@ -1196,10 +1220,11 @@ body.splitter-dragging {
   --loadout-cell-size: 32px;
   --loadout-gap: var(--toolbar-options-gap);
   display: grid;
-  grid-auto-flow: column;
+  grid-auto-flow: row;
   grid-template-columns: var(--loadout-cell-size);
-  grid-template-rows: repeat(3, var(--loadout-cell-size));
+  grid-template-rows: var(--loadout-cell-size);
   grid-auto-columns: var(--loadout-cell-size);
+  grid-auto-rows: var(--loadout-cell-size);
   column-gap: var(--loadout-gap);
   row-gap: var(--loadout-gap);
   padding: 0;
