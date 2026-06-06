@@ -45,14 +45,24 @@ if (!gotSingleInstanceLock) {
   app.quit();
 }
 
+function normalizeExternalFilePath(value: string): string {
+  const trimmed = value.trim().replace(/^"|"$/g, '');
+  const normalized = path.normalize(trimmed);
+  if (path.isAbsolute(normalized)) {
+    return normalized;
+  }
+  return path.resolve(process.cwd(), normalized);
+}
+
 function isOpenableExternalFile(filePath: string): boolean {
-  const ext = path.extname(filePath).toLowerCase();
-  return OPENABLE_EXTENSIONS.has(ext) && existsSync(filePath);
+  const normalizedPath = normalizeExternalFilePath(filePath);
+  const ext = path.extname(normalizedPath).toLowerCase();
+  return OPENABLE_EXTENSIONS.has(ext) && existsSync(normalizedPath);
 }
 
 function extractOpenablePaths(argv: string[]): string[] {
   return argv
-    .map((value) => value.replace(/^"|"$/g, ''))
+    .map((value) => normalizeExternalFilePath(value))
     .filter((value) => value.length > 0)
     .filter((value) => path.isAbsolute(value))
     .filter((value) => isOpenableExternalFile(value));
@@ -143,8 +153,9 @@ function registerIpcHandlers() {
 
   ipcMain.handle(EXTERNAL_FILE_CHANNELS.readContent, async (_event, filePath: unknown) => {
     if (typeof filePath !== 'string' || !isOpenableExternalFile(filePath)) return null;
+    const normalizedPath = normalizeExternalFilePath(filePath);
     try {
-      return readFileSync(filePath, 'utf8');
+      return readFileSync(normalizedPath, 'utf8');
     } catch {
       return null;
     }
@@ -153,8 +164,9 @@ function registerIpcHandlers() {
   ipcMain.handle(EXTERNAL_FILE_CHANNELS.writeContent, async (_event, filePath: unknown, content: unknown) => {
     if (typeof filePath !== 'string' || typeof content !== 'string') return false;
     if (!isOpenableExternalFile(filePath)) return false;
+    const normalizedPath = normalizeExternalFilePath(filePath);
     try {
-      writeFileSync(filePath, content, 'utf8');
+      writeFileSync(normalizedPath, content, 'utf8');
       return true;
     } catch {
       return false;
@@ -164,7 +176,7 @@ function registerIpcHandlers() {
   ipcMain.handle(EXTERNAL_FILE_CHANNELS.basename, async (_event, filePath: unknown) => {
     if (typeof filePath !== 'string') return '';
     try {
-      return path.basename(filePath);
+      return path.basename(normalizeExternalFilePath(filePath));
     } catch {
       return '';
     }
