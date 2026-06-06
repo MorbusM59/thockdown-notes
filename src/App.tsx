@@ -528,6 +528,62 @@ const PREVIEW_MARKDOWN_COMPONENTS = {
   },
 } as const
 
+function createPreviewSearchHighlightRehypePlugin(needle: string, isCaseSensitive: boolean) {
+  const normalizedNeedle = isCaseSensitive ? needle : needle.toLocaleLowerCase()
+  if (!normalizedNeedle) {
+    return () => () => {}
+  }
+
+  return () => {
+    return (tree: any) => {
+      const transformNode = (node: any, parent: any, index: number | null) => {
+        if (!node || typeof node !== 'object') return
+
+        if (node.type === 'text' && typeof node.value === 'string') {
+          const textValue = node.value
+          const haystack = isCaseSensitive ? textValue : textValue.toLocaleLowerCase()
+          const needleLength = normalizedNeedle.length
+
+          let cursor = 0
+          const replacements: any[] = []
+          let matchIndex = haystack.indexOf(normalizedNeedle, cursor)
+          while (matchIndex >= 0) {
+            if (matchIndex > cursor) {
+              replacements.push({ type: 'text', value: textValue.slice(cursor, matchIndex) })
+            }
+            replacements.push({
+              type: 'element',
+              tagName: 'span',
+              properties: { className: ['search-hit'] },
+              children: [{ type: 'text', value: textValue.slice(matchIndex, matchIndex + needleLength) }],
+            })
+            cursor = matchIndex + needleLength
+            matchIndex = haystack.indexOf(normalizedNeedle, cursor)
+          }
+
+          if (replacements.length > 0) {
+            if (cursor < textValue.length) {
+              replacements.push({ type: 'text', value: textValue.slice(cursor) })
+            }
+            if (parent && Array.isArray(parent.children) && typeof index === 'number') {
+              parent.children.splice(index, 1, ...replacements)
+            }
+            return
+          }
+        }
+
+        if (Array.isArray(node.children)) {
+          for (let childIndex = 0; childIndex < node.children.length; childIndex += 1) {
+            transformNode(node.children[childIndex], node, childIndex)
+          }
+        }
+      }
+
+      transformNode(tree, null, null)
+    }
+  }
+}
+
 function titleFromFileBasename(fileName: string): string {
   const withoutExtension = fileName.replace(/\.[^./\\]+$/, '').trim()
   if (!withoutExtension) return FALLBACK_NEW_NOTE_TITLE
@@ -4718,20 +4774,27 @@ function App() {
     return normalizeInternalText(latestEditorTextRef.current || activeNoteText)
   }, [activeNoteText, editorTextVersion])
 
+  const documentFindDirective = useMemo<DocumentFindDirective>(() => {
+    return resolveDocumentFindDirective(documentFindQuery, currentEditorText, isDocumentFindCaseSensitive)
+  }, [currentEditorText, documentFindQuery, isDocumentFindCaseSensitive])
+
+  const previewSearchHighlightPlugin = useMemo(
+    () => createPreviewSearchHighlightRehypePlugin(documentFindDirective.findText, isDocumentFindCaseSensitive),
+    [documentFindDirective.findText, isDocumentFindCaseSensitive],
+  )
+
   // Memoized so per-frame App re-renders (scroll thumb state, etc.) do not
   // trigger a full ReactMarkdown reconciliation of long notes. That heavy
   // reconciliation was stalling the main thread and freezing rAF mid-scroll.
   const previewMarkdownElement = useMemo(() => (
     <ReactMarkdown
       remarkPlugins={PREVIEW_MARKDOWN_REMARK_PLUGINS}
+      rehypePlugins={[previewSearchHighlightPlugin]}
       components={PREVIEW_MARKDOWN_COMPONENTS}
     >
       {currentEditorText}
     </ReactMarkdown>
-  ), [currentEditorText])
-  const documentFindDirective = useMemo<DocumentFindDirective>(() => {
-    return resolveDocumentFindDirective(documentFindQuery, currentEditorText, isDocumentFindCaseSensitive)
-  }, [currentEditorText, documentFindQuery, isDocumentFindCaseSensitive])
+  ), [currentEditorText, previewSearchHighlightPlugin])
 
   const documentFindHits = useMemo<DocumentFindHit[]>(() => {
     return buildDocumentFindHits(currentEditorText, documentFindDirective.findText, isDocumentFindCaseSensitive)
