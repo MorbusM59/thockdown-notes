@@ -63,6 +63,18 @@ describe('resolveMarkdownEnterTransform', () => {
     expect(result?.text).toBe('   indented line\n   ')
   })
 
+  it('continues leading indentation on whitespace-only lines without inflating trailing spaces', () => {
+    const text = '  '
+    const selection = collapsedSelection(1)
+
+    const result = resolveMarkdownEnterTransform(buildEvent(text, selection))
+
+    expect(result).not.toBeNull()
+    expect(result?.text).toBe(' \n  ')
+    expect(result?.selection.anchor).toBe(3)
+    expect(result?.selection.focus).toBe(3)
+  })
+
   it('terminates empty markdown list items in place', () => {
     const text = '- '
     const selection = collapsedSelection(text.length)

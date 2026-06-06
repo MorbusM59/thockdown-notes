@@ -506,7 +506,12 @@ export function applyMarkdownEnter(
   } else if (lineStructure.quotePrefix.length > 0) {
     inserted = `\n${basePrefix}`
   } else if (lineStructure.leadingSpaces.length > 0) {
-    inserted = `\n${lineStructure.leadingSpaces}`
+    const linePrefixBeforeCaret = sourceText.slice(context.line.lineStart, caretOffset)
+    const newLineIndent = lineText.trim().length === 0
+      ? ' '.repeat(countLeadingSpaces(linePrefixBeforeCaret))
+      : lineStructure.leadingSpaces
+
+    inserted = `\n${newLineIndent}`
   } else {
     return null
   }
