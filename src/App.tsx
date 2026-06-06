@@ -4824,6 +4824,7 @@ function App() {
   const totalPages = Math.max(1, Math.ceil(totalPagedNotes / Math.max(1, itemsPerPage)))
   const isSidebarTreeMode = sidebarMode === 'category' || sidebarMode === 'archive'
   const isSidebarCustomScrollbarMode = isSidebarTreeMode || isFindMode
+  const isSidebarScrollbarMode = isSidebarCustomScrollbarMode || sidebarMode === 'options'
 
   // Direct-DOM helpers: per-frame scroll events would otherwise trigger React
   // state updates that re-render the entire App component (heavy for long
@@ -4912,13 +4913,13 @@ function App() {
   }, [applyPreviewThumbDom])
 
   const syncSidebarCustomScrollbar = useCallback(() => {
-    if (!isSidebarCustomScrollbarMode) {
+    if (!isSidebarScrollbarMode) {
       applySidebarThumbDom(0, 0)
       setIsSidebarScrollThumbActive(false)
       return
     }
 
-    const scroller = sidebarTreeScrollerEl
+    const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
     const track = sidebarScrollbarTrackRef.current
     if (!scroller || !track) return
 
@@ -4951,10 +4952,10 @@ function App() {
 
     applySidebarThumbDom(nextThumbTop, nextThumbHeight)
     setIsSidebarScrollThumbActive(true)
-  }, [applySidebarThumbDom, isSidebarCustomScrollbarMode, sidebarTreeScrollerEl])
+  }, [applySidebarThumbDom, isSidebarScrollbarMode, sidebarTreeScrollerEl])
 
   const sidebarScrollFromThumbTop = useCallback((thumbTopPx: number) => {
-    const scroller = sidebarTreeScrollerEl
+    const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
     const track = sidebarScrollbarTrackRef.current
     if (!scroller || !track) return
 
@@ -5917,9 +5918,9 @@ function App() {
   }, [itemsPerPage, sidebarMode, totalPagedNotes])
 
   useEffect(() => {
-    if (!isSidebarCustomScrollbarMode) return
+    if (!isSidebarScrollbarMode) return
     syncSidebarCustomScrollbar()
-  }, [isSidebarCustomScrollbarMode, syncSidebarCustomScrollbar, sidebarMode, categoryTree, archiveTree, documentFindHits])
+  }, [isSidebarScrollbarMode, syncSidebarCustomScrollbar, sidebarMode, categoryTree, archiveTree, documentFindHits])
 
   useEffect(() => {
     if (!isPreviewMode) return
@@ -6342,18 +6343,24 @@ function App() {
   ])
 
   useEffect(() => {
-    if (!isSidebarCustomScrollbarMode || !sidebarTreeScrollerEl) return
+    if (!isSidebarScrollbarMode) return
+
+    const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
+    if (!scroller) return
 
     const onScroll = () => {
       syncSidebarCustomScrollbar()
     }
 
-    sidebarTreeScrollerEl.addEventListener('scroll', onScroll, { passive: true })
-    return () => sidebarTreeScrollerEl.removeEventListener('scroll', onScroll)
-  }, [isSidebarCustomScrollbarMode, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    return () => scroller.removeEventListener('scroll', onScroll)
+  }, [isSidebarScrollbarMode, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
 
   useEffect(() => {
-    if (!isSidebarCustomScrollbarMode || !sidebarTreeScrollerEl) return
+    if (!isSidebarScrollbarMode) return
+
+    const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
+    if (!scroller) return
 
     const scheduleSync = () => {
       if (sidebarScrollbarRafRef.current !== null) {
@@ -6367,16 +6374,16 @@ function App() {
     }
 
     scheduleSync()
-    const treeContentEl = sidebarTreeScrollerEl.firstElementChild as HTMLElement | null
+    const treeContentEl = sidebarTreeScrollerEl?.firstElementChild as HTMLElement | null
 
     const resizeObserver = new ResizeObserver(() => scheduleSync())
-    resizeObserver.observe(sidebarTreeScrollerEl)
+    resizeObserver.observe(scroller)
     if (treeContentEl) {
       resizeObserver.observe(treeContentEl)
     }
 
     const mutationObserver = new MutationObserver(() => scheduleSync())
-    mutationObserver.observe(sidebarTreeScrollerEl, {
+    mutationObserver.observe(scroller, {
       subtree: true,
       childList: true,
       characterData: true,
@@ -6390,10 +6397,10 @@ function App() {
       }
     }
 
-    sidebarTreeScrollerEl.addEventListener('toggle', onDetailsToggle, true)
+    sidebarTreeScrollerEl?.addEventListener('toggle', onDetailsToggle, true)
 
     return () => {
-      sidebarTreeScrollerEl.removeEventListener('toggle', onDetailsToggle, true)
+      sidebarTreeScrollerEl?.removeEventListener('toggle', onDetailsToggle, true)
       mutationObserver.disconnect()
       resizeObserver.disconnect()
       if (sidebarScrollbarRafRef.current !== null) {
@@ -6442,7 +6449,7 @@ function App() {
     const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel
     const clampedTop = Math.max(minThumbTop, Math.min(targetThumbTop, maxThumbTop))
 
-    const scroller = sidebarTreeScrollerEl
+    const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
     if (!scroller) {
       sidebarScrollFromThumbTop(clampedTop)
       syncSidebarCustomScrollbar()
@@ -7275,7 +7282,7 @@ function App() {
 
         <div className={`sidebar-scroll-frame${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}`}>
           <div
-            className={`sidebar-content${(sidebarMode === 'date' || sidebarMode === 'trash') ? ' is-paged-mode' : ''}${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}`}
+            className={`sidebar-content${(sidebarMode === 'date' || sidebarMode === 'trash') ? ' is-paged-mode' : ''}${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}${isSidebarScrollbarMode && !isSidebarCustomScrollbarMode ? ' is-scrollbar-mode' : ''}`}
             ref={sidebarContentRef}
           >
             {(sidebarMode === 'date' || sidebarMode === 'trash') ? (
@@ -7363,7 +7370,7 @@ function App() {
             )}
           </div>
 
-          {isSidebarCustomScrollbarMode ? (
+          {isSidebarScrollbarMode ? (
             <aside className="sidebar-scrollbar-slot" aria-hidden="true">
               <div className="sidebar-scrollbar-slot-inner">
                 <div className="measly-scroll-rail sidebar-measly-scroll-rail">

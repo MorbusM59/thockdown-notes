@@ -469,6 +469,16 @@ body.splitter-dragging {
   overflow-y: hidden;
 }
 
+.sidebar-content.is-scrollbar-mode {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar-content.is-scrollbar-mode::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
 .sidebar-scrollbar-slot {
   flex: 0 0 20px;
   width: 20px;
