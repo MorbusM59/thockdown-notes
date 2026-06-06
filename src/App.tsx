@@ -52,6 +52,11 @@ import {
   getRenderScrollTotalTimeSec,
   getRenderScrollMaxSpeedPxPerSec,
   getRenderScrollSkew,
+  DEFAULT_RENDER_SCROLL_DYNAMIC,
+  DEFAULT_RENDER_SCROLL_RESPONSIVENESS,
+  DEFAULT_RENDER_SCROLL_TOTAL_TIME_SEC,
+  DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC,
+  DEFAULT_RENDER_SCROLL_SKEW,
   sampleReleaseRampDownPlan,
   resolveRampCrossingTimeSecFromCurrentParams,
   RENDER_SCROLL_SKEW_MIN,
@@ -1851,6 +1856,23 @@ function App() {
     }))
   }, [updateTextureMaterial])
 
+  const defaultUiLayoutLoadout = useMemo<UiLayoutLoadout>(() => ({
+    viewStyle: 'modern',
+    viewFontSize: 'm',
+    viewSpacing: 'cozy',
+    editorStyle: DEFAULT_EDITOR_STYLE,
+    editorFontSize: DEFAULT_EDITOR_FONT_SIZE,
+    editorSpacing: DEFAULT_EDITOR_SPACING,
+    editorGlyphPaddingPx: DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
+    renderScrollDynamic: DEFAULT_RENDER_SCROLL_DYNAMIC,
+    renderScrollResponsiveness: DEFAULT_RENDER_SCROLL_RESPONSIVENESS,
+    renderScrollTotalTimeSec: DEFAULT_RENDER_SCROLL_TOTAL_TIME_SEC,
+    renderScrollMaxSpeedPxPerSec: DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC,
+    renderScrollSkew: DEFAULT_RENDER_SCROLL_SKEW,
+    highlightColors: DEFAULT_HIGHLIGHT_COLORS,
+    textureMaterials: cloneTextureMaterials(DEFAULT_TEXTURE_MATERIALS),
+  }), [])
+
   const captureUiLayoutLoadout = useCallback((): UiLayoutLoadout => {
     return {
       viewStyle,
@@ -1924,6 +1946,12 @@ function App() {
     })
     setTextureMaterials(cloneTextureMaterials(loadout.textureMaterials))
   }, [])
+
+  const resetUiLayoutDefaults = useCallback(() => {
+    applyUiLayoutLoadout(defaultUiLayoutLoadout)
+    const caretColorRgba = parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS.caret) ?? { r: 120, g: 115, b: 112, a: 0.8 }
+    setActiveColorHsva(rgbaToHsva(caretColorRgba))
+  }, [applyUiLayoutLoadout, defaultUiLayoutLoadout])
 
   const capturedUiLayoutLoadout = useMemo(
     () => captureUiLayoutLoadout(),
@@ -6716,6 +6744,16 @@ function App() {
               <span className="toolbar-flyout-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
             </button>
           ) : null}
+          <button
+            type="button"
+            className="toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn"
+            title="Reset layout defaults"
+            aria-label="Reset layout defaults"
+            onClick={resetUiLayoutDefaults}
+            onContextMenu={(event) => event.preventDefault()}
+          >
+            <span className="fa-solid fa-rotate-left" aria-hidden="true" />
+          </button>
         </div>
       </section>
 
