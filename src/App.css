@@ -1251,13 +1251,13 @@ body.splitter-dragging {
 }
 
 .toolbar-flyout-texture-preview::before {
-  background-color: inherit;
+  background-color: var(--texture-preview-color, transparent);
   -webkit-mask-image: var(--texture-preview-mask);
   mask-image: var(--texture-preview-mask);
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: 100% 100%;
-  mask-size: 100% 100%;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  -webkit-mask-size: var(--texture-tile-size) var(--texture-tile-size);
+  mask-size: var(--texture-tile-size) var(--texture-tile-size);
   -webkit-mask-position: 0 0;
   mask-position: 0 0;
 }

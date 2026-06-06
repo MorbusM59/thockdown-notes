@@ -1707,7 +1707,7 @@ function App() {
     height: 32,
     material: texturePreviewMaterial,
     usePersistentCache: false,
-    useFixedTile: false,
+    useFixedTile: true,
   })
   const activeColorRgba = useMemo(() => hsvaToRgba(activeColorHsva), [activeColorHsva])
   const activeColorCss = useMemo(() => rgbaToCssColor(activeColorRgba), [activeColorRgba])
@@ -6838,7 +6838,7 @@ function App() {
                 className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color toolbar-flyout-texture-preview${armedColorSource.kind === 'texture-preview' ? ' active' : ''}`}
                 title="Texture preview"
                 style={{
-                  backgroundColor: texturePreviewTintCss,
+                  '--texture-preview-color': texturePreviewTintCss,
                   '--texture-preview-mask': texturePreviewCss,
                 } as React.CSSProperties}
                 onMouseDown={(event) => {
