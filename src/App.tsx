@@ -722,8 +722,9 @@ function buildEditRestoreSnapshotFromUiState(params: {
   uiState: { scrollTop?: unknown; cursorPos?: unknown } | null | undefined
   fallbackViewport: PersistedViewportState | null
   lineHeightPx: number
+  overrideCursorPos?: number
 }): EditRestoreSnapshot {
-  const { noteId, text, uiState, fallbackViewport, lineHeightPx } = params
+  const { noteId, text, uiState, fallbackViewport, lineHeightPx, overrideCursorPos } = params
   const fallbackTopBoundary = fallbackViewport?.topBoundaryPx ?? 0
   const fallbackBottomBoundary = fallbackViewport?.bottomBoundaryPx ?? (lineHeightPx * 6)
   const normalizedFallback = normalizeEditorViewportBoundaries({
@@ -733,9 +734,11 @@ function buildEditRestoreSnapshotFromUiState(params: {
   })
   const selectionTextLength = Math.max(0, text.length)
   const persistedCursor =
-    typeof uiState?.cursorPos === 'number' && Number.isFinite(uiState.cursorPos)
-      ? Math.max(0, Math.min(Math.round(uiState.cursorPos), selectionTextLength))
-      : 0
+    typeof overrideCursorPos === 'number' && Number.isFinite(overrideCursorPos)
+      ? Math.max(0, Math.min(Math.round(overrideCursorPos), selectionTextLength))
+      : typeof uiState?.cursorPos === 'number' && Number.isFinite(uiState.cursorPos)
+        ? Math.max(0, Math.min(Math.round(uiState.cursorPos), selectionTextLength))
+        : 0
   const storedScrollTop =
     typeof uiState?.scrollTop === 'number' && Number.isFinite(uiState.scrollTop)
       ? quantizeEditScrollTop(Math.max(0, Math.round(uiState.scrollTop)), lineHeightPx)
@@ -2905,7 +2908,7 @@ function App() {
     await window.measlyLegacyDb?.saveNoteUiState(noteId, { progressPreview: ratio })
   }, [])
 
-  const activateNote = useCallback(async (noteId: string) => {
+  const activateNote = useCallback(async (noteId: string, overrideCursorPos?: number) => {
     if (!window.measlyNotes) return
 
     const previousNoteId = activeNoteId
@@ -2937,6 +2940,7 @@ function App() {
       uiState: nextUiState,
       fallbackViewport,
       lineHeightPx: editorRuntimeMetrics.lineHeightPx,
+      overrideCursorPos,
     })
     updateEditModeSnapshotCache(preloadedSnapshot)
 
@@ -3110,12 +3114,16 @@ function App() {
     if (!persistenceReady) return
     if (noteTransitionLockRef.current) return
 
+    if (isPreviewMode) {
+      toggleRenderViewMode()
+    }
+
     noteTransitionLockRef.current = true
     try {
       await flushPendingSaveNow()
       const created = await window.measlyNotes.createNote({ initialText })
       await refreshNotes(created.id)
-      await activateNote(created.id)
+      await activateNote(created.id, initialText.length)
       setSidebarMode('date')
     } catch (error) {
       console.error('Failed to create note', error)

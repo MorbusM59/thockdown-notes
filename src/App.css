@@ -634,6 +634,7 @@ body.splitter-dragging {
 
 .sidebar-page-number-input[type='number'] {
   -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 .sidebar-page-number-btn:focus-within {
@@ -973,7 +974,6 @@ body.splitter-dragging {
   font-size: 13px;
   line-height: 1;
   margin: 0;
-  vertical-align: 0;
   transform: translateY(0);
 }
 
