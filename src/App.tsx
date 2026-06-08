@@ -8059,6 +8059,7 @@ function App() {
                 className={`markdown-preview measly-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
                 style={{ '--search-hit-color': highlightColors.search } as CSSProperties}
               >
+                <div className="markdown-preview-texture" aria-hidden />
                 {previewMarkdownElement}
               </div>
             )}
