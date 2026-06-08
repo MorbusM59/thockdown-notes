@@ -38,7 +38,7 @@
   --color-shadow-white-harsh: #fcf9f6ee;
   --border-radius-regular: 6px;
   --border-radius-small: 3px;
-  --sidebar-view-button-size: 48px;
+  --sidebar-view-button-size: var(--btn-square-large-size);
   --sidebar-view-gap-min: 8px;
   --sidebar-view-padding-left: 8px;
   --sidebar-padding-right: 8px;
@@ -53,6 +53,11 @@
   );
 
   /* Unified button template (sourced from V1 edit toggle button) */
+  --btn-square-micro-size: 12px;
+  --btn-square-mini-size: 20px;
+  --btn-square-small-size: 24px;
+  --btn-square-regular-size: 32px;
+  --btn-square-large-size: 48px;
   --btn-border-default: #999;
   --btn-border-hover: #444;
   --btn-border-active: var(--color-border-selected);
@@ -84,6 +89,9 @@
   --texture-editor-edit-tint: rgba(0, 0, 0, 0);
   --texture-editor-render-tint: rgba(0, 0, 0, 0);
   --texture-tile-size: 512px;
+
+  --text-info-color: #22222288;
+  --text-info-size: 12px;
 }
 
 .app-shell,
@@ -157,9 +165,9 @@ button.active,
 .ui-btn--square,
 .toolbar-btn-icon,
 .sidebar-page-btn {
-  width: 32px;
-  min-width: 32px;
-  height: 32px;
+  width: var(--btn-square-regular-size);
+  min-width: var(--btn-square-regular-size);
+  height: var(--btn-square-regular-size);
   padding: 0;
   border-radius: var(--border-radius-regular);
   font-size: 14px;
@@ -766,8 +774,8 @@ body.splitter-dragging {
 }
 
 .tag-empty-state {
-  font-size: 11px;
-  color: #746557;
+  font-size: var(--text-info-size);
+  color: var(--text-info-color);
   text-align: center;
 }
 
@@ -1046,18 +1054,14 @@ body.splitter-dragging {
   border: none;
   border-radius: 0;
   background: transparent;
-  padding: 0;
   width: 100%;
 }
 
 .sidebar-options-section-heading {
-  margin: 0 0 10px;
-  padding: 0 4px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: #3f342b;
+  margin: 0;
+  padding: 12px 12px 0 12px;
+  font-size: var(--text-info-size);
+  color: var(--text-info-color);
 }
 
 .toolbar-flyout-content.mode-view .toolbar-flyout-section.display-in-edit:not(.display-in-view) {
@@ -1069,13 +1073,12 @@ body.splitter-dragging {
 }
 
 .toolbar-flyout-section {
-
   box-sizing: border-box;
-  padding: 6px;
+  margin: auto;
   display: flex;
   flex-direction: column;
   gap: var(--toolbar-options-gap);
-  min-width: 96px;
+  width: calc(var(--btn-square-regular-size)*6 + 5*var(--toolbar-options-gap));
 }
 
 .toolbar-flyout-section-scrolling {
