@@ -2028,6 +2028,7 @@ body.hsva-dragging * {
   mask-repeat: repeat;
   mask-size: var(--texture-tile-size) var(--texture-tile-size);
   mask-position: 0 0;
+  -webkit-mask-position: 0 0;
 }
 
 .markdown-preview > *:not(.markdown-preview-texture), .markdown-preview > *:not(.markdown-preview-background) {

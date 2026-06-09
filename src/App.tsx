@@ -1095,6 +1095,11 @@ function quantizeTextureSize(value: number): number {
   return Math.max(128, Math.ceil(Math.max(0, value) / 64) * 64)
 }
 
+const syncTextureToScroll = (scrollTop: number, maskEl: HTMLElement) => {
+  maskEl.style.maskPosition = `0 ${-scrollTop}px`;
+  maskEl.style.webkitMaskPosition = `0 ${-scrollTop}px`;
+};
+
 function formatCreatedDate(timestampMs: number): string {
   const date = new Date(timestampMs)
   const day = pad2(date.getDate())
@@ -7414,6 +7419,25 @@ function App() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [activeNoteId, isPreviewMode, persistActiveNoteEditModeStateNow, persistMenuStateOnUnload, persistRenderViewStateForNoteNow])
 
+  const previewTextureRef = useRef<HTMLDivElement>(null);
+
+  // 1. Native scroll (covers mouse wheel, trackpad, keyboard when not intercepted)
+  const handlePreviewScroll = useCallback(() => {
+    if (!previewScrollRef.current || !previewTextureRef.current) return;
+    syncTextureToScroll(previewScrollRef.current.scrollTop, previewTextureRef.current);
+  }, []);
+
+  // 2. Pass as onStep to your smooth scroll calls
+  const smoothScrollPreview = useCallback((targetPx: number) => {
+    if (!previewScrollRef.current) return;
+    scrollToNonQuantizedSmooth(previewScrollRef.current, targetPx, {
+      onStep: () => {
+        if (!previewScrollRef.current || !previewTextureRef.current) return;
+        syncTextureToScroll(previewScrollRef.current.scrollTop, previewTextureRef.current);
+      }
+    });
+  }, []);
+
   return (
     <div
       className="app-shell app-grid"
@@ -8055,9 +8079,10 @@ function App() {
               />
             ) : (
               <div className="preview-container">
-                <div className="markdown-preview-texture"/>
+                <div ref={previewTextureRef} className="markdown-preview-texture" />
                 <div
                   ref={previewScrollRef}
+                  onScroll={handlePreviewScroll}
                   className={`markdown-preview measly-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
                   style={{ '--search-hit-color': highlightColors.search } as CSSProperties}
                 >
