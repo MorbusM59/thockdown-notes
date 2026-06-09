@@ -8054,13 +8054,15 @@ function App() {
                 cellWidthPx={editorRuntimeMetrics.cellWidthPx}
               />
             ) : (
-              <div
-                ref={previewScrollRef}
-                className={`markdown-preview measly-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
-                style={{ '--search-hit-color': highlightColors.search } as CSSProperties}
-              >
-                <div className="markdown-preview-texture" aria-hidden />
-                {previewMarkdownElement}
+              <div className="preview-container">
+                <div className="markdown-preview-texture"/>
+                <div
+                  ref={previewScrollRef}
+                  className={`markdown-preview measly-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
+                  style={{ '--search-hit-color': highlightColors.search } as CSSProperties}
+                >
+                  {previewMarkdownElement}
+                </div>
               </div>
             )}
           </div>

@@ -1986,6 +1986,12 @@ body.hsva-dragging * {
   background: linear-gradient(to top, var(--preview-edge-fade-color, var(--color-background-light)), transparent);
 }
 
+.preview-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
 .markdown-preview {
   --preview-edge-padding: 18px;
   --preview-edge-fade-color: var(--color-background-light);
@@ -2002,22 +2008,17 @@ body.hsva-dragging * {
   padding-left: var(--preview-edge-padding);
   box-sizing: border-box;
   color: #2f2721;
-  background-color: var(--color-background-light);
   text-shadow: var(--text-shadow-emboss-base);
   font-synthesis: style;
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .markdown-preview-texture {
-  position: sticky;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100vh;
-  margin-bottom: -100vh;
+  position: absolute;
+  inset: 0;
   pointer-events: none;
-  z-index: 0;
+  z-index: 1;
   background-color: var(--texture-editor-render-tint);
   -webkit-mask-image: var(--texture-editor-render);
   -webkit-mask-repeat: repeat;
@@ -2029,9 +2030,9 @@ body.hsva-dragging * {
   mask-position: 0 0;
 }
 
-.markdown-preview > *:not(.markdown-preview-texture) {
+.markdown-preview > *:not(.markdown-preview-texture), .markdown-preview > *:not(.markdown-preview-background) {
   position: relative;
-  z-index: 1;
+  z-index: 3;
 }
 
 .markdown-preview .search-hit {
