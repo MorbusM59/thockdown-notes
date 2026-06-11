@@ -129,26 +129,20 @@
   --color-toggle-shadow:        rgba(0, 0, 0, 0.1);
 
   --color-tag-active-bg:        #ffffff;
-  --color-tag-active-text:      #222222;
+  --color-tag-active-text:      var(--color-text-dark);
   --color-tag-active-border:    #ffffff;
   --color-tag-suggested-bg:     #f5f5f5;
-  --color-tag-suggested-text:   #4a4a4a;
+  --color-tag-suggested-text:   var(--color-text-faded);
   --color-tag-suggested-border: #ddd;
 
   --color-shadow-white-light:   var(--palette-shadow-white-lo);
   --color-shadow-white:         var(--palette-shadow-white-mid);
   --color-shadow-white-harsh:   var(--palette-shadow-white-hi);
 
-  /* Text colors — warm brown scale */
-  --color-text-darkest:   #201d1a;   /* note list title         */
-  --color-text-dark:      #2f2721;   /* preview body / snippet  */
-  --color-text-main:      #3c312a;   /* find hit item           */
-  --color-text-mid:       #4f4339;   /* flyout info line        */
-  --color-text-muted:     #5f5144;   /* page number / seed btn  */
-  --color-text-subtle:    #65584d;   /* flyout info summary     */
-  --color-text-ui:        #4a3f35;   /* window/gear btn icon    */
-  --color-text-label:     #5f5247;   /* selector label          */
-  --color-text-info:      #22222288;
+  /* Text colors */
+  --color-text-dark:      #000000DD;
+  --color-text-faded:     #000000BB;
+  --color-text-label:     #00000088;
 
   /* Danger / status colors */
   --color-danger:         #b71c1c;
@@ -158,6 +152,11 @@
   --color-archive:        #0066bb;
   --color-archive-border: #0066bb88;
   --color-archive-glow:   #0066bb33;
+
+  /* Markdown colors */
+  --color-text-link:          #00459edd;
+  --color-border-blockquote:  #00000044;
+  --color-border-hr:          #00000044;
 
   /* ---------------------------------------------------------------------------
      1b. Shadow System
@@ -214,7 +213,7 @@
     0 1px 0 #FFFFFF;
 
   --text-info-size:  12px;
-  --text-info-color: var(--color-text-info);
+  --text-info-color: var(--color-text-label);
 
   /* ---------------------------------------------------------------------------
      1d. Border & Radius
@@ -249,13 +248,13 @@
   --btn-square-regular-size: 32px;
   --btn-square-large-size:   48px;
 
-  --btn-border-default: #999;
-  --btn-border-hover:   #444;
+  --btn-border-default: #00000055;
+  --btn-border-hover:   #00000088;
   --btn-border-active:  var(--color-border-selected);
 
-  --btn-bg-default: white;
-  --btn-bg-hover:   white;
-  --btn-bg-pressed: #d8d8d8;
+  --btn-bg-default: #FFFFFFBB;
+  --btn-bg-hover:   #EEEEEEBB;
+  --btn-bg-pressed: #DDDDDDBB;
   --btn-bg-active:  var(--color-input-backdrop);
 
   --btn-shadow-active:
@@ -613,7 +612,7 @@ body.splitter-dragging {
   margin:        0;
   font-family:   'Syne Mono', monospace;
   font-size:     18px;
-  color:         #23201d;
+  color:         var(--color-text-dark);
   letter-spacing: 0.04em;
   text-shadow:   var(--text-shadow-emboss-panel);
 }
@@ -645,7 +644,7 @@ body.splitter-dragging {
   outline:        none;
   background:     var(--color-input-backdrop);
   transition:     border-color 0.2s;
-  color:          #222222;
+  color:           var(--color-text-dark);
   box-sizing:     border-box;
 }
 
@@ -693,7 +692,7 @@ body.splitter-dragging {
 .notes-sidebar .view-toggle .icon-btn.btn-find,
 .notes-sidebar .view-toggle .icon-btn.btn-options {
   background-image: none;
-  color: #4a3f35;
+  color:  var(--color-text-faded);
 }
 
 .notes-sidebar .view-toggle .icon-btn.btn-options .toolbar-gear-glyph {
@@ -775,12 +774,11 @@ body.splitter-dragging {
   font-size:     10px;
   font-weight:   500;
   aspect-ratio:  auto;
-  color:         #666;
+  color:         var(--color-text-label);
 }
 
 .sidebar-page-btn:disabled {
-  opacity: 0.4;
-  cursor:  not-allowed;
+  opacity: 0;
 }
 
 .sidebar-page-number-btn {
@@ -794,6 +792,7 @@ body.splitter-dragging {
   align-items:     center;
   justify-content: center;
   box-sizing:      border-box;
+  box-shadow: var(--box-shadow-inverted-light);
 }
 
 .sidebar-page-number-btn:focus-within {
@@ -801,23 +800,8 @@ body.splitter-dragging {
   box-shadow:   var(--box-shadow-inverted);
 }
 
-/* NOTE: .sidebar-page-number is also duplicated in source (lines 661 and 682).
-   Second definition (font-size: 13px) overrides the first (10px).
-   Preserved as 13px here, flagged in report. */
-.sidebar-page-number {
-  min-width:       20px;
-  height:          20px;
-  padding:         0 8px;
-  font-size:       13px;
-  color:           var(--color-text-muted);
-  font-weight:     600;
-  display:         inline-flex;
-  align-items:     center;
-  justify-content: center;
-}
-
 .sidebar-page-number-display {
-  color:       var(--color-text-muted);
+  color:       var(--color-text-faded);
   font-size:   10px;
   font-weight: 600;
   cursor:      text;
@@ -829,7 +813,7 @@ body.splitter-dragging {
   height:      100%;
   border:      none;
   background:  transparent;
-  color:       var(--color-text-muted);
+  color:       var(--color-text-faded);
   font-size:   10px;
   font-weight: 600;
   text-align:  center;
@@ -882,7 +866,7 @@ body.splitter-dragging {
   flex:            1;
   min-width:       0;
   height:          20px;
-  color:           var(--color-tag-suggested-text);
+  color:            var(--color-text-faded);
   display:         flex;
   align-items:     center;
   justify-content: center;
@@ -905,7 +889,7 @@ body.splitter-dragging {
   border-radius: 3px;
   font-size:   10px;
   font-weight: 500;
-  color:       var(--color-tag-suggested-text);
+  color:       var(--color-text-faded);
   line-height: 1;
 }
 
@@ -1078,8 +1062,8 @@ body.splitter-dragging {
 }
 
 .note-list-title {
-  font-size:     14px;
-  color:         var(--color-text-darkest);
+  font-size:     12px;
+  color:         var(--color-text-dark);
   font-weight:   600;
   white-space:   nowrap;
   overflow:      hidden;
@@ -1093,9 +1077,9 @@ body.splitter-dragging {
   align-items:     center;
   justify-content: space-between;
   gap:             8px;
-  font-size:       11px;
-  color:           #736455;
-  font-weight:     400;
+  font-size:       10px;
+  color:           var(--color-text-label);
+  font-weight:     800;
 }
 
 .note-list-meta-left,
@@ -1133,9 +1117,9 @@ body.splitter-dragging {
   list-style:     none;
   cursor:         default;
   padding:        4px;
-  color:          #3b3028;
-  font-size:      12px;
-  font-weight:    700;
+  color:          var(--color-text-label);
+  font-size:      10px;
+  font-weight:    900;
   text-transform: uppercase;
   letter-spacing: 0.2em;
   text-align:     center;
@@ -1147,9 +1131,9 @@ body.splitter-dragging {
   cursor:           default;
   margin:           0;
   padding:          2px 4px;
-  color:            #3b3028;
-  font-size:        12px;
-  font-weight:      400;
+  color:            var(--color-text-label);
+  font-size:        10px;
+  font-weight:      700;
   text-transform:   uppercase;
   letter-spacing:   0.1em;
   background-color: #00000011;
@@ -1251,7 +1235,7 @@ body.splitter-dragging {
 
 .tag-empty-state {
   font-size:  var(--text-info-size);
-  color:      var(--text-info-color);
+  color:      var(--color-text-label);
   text-align: center;
 }
 
@@ -1328,7 +1312,7 @@ body.splitter-dragging {
 
 .suggested-empty {
   font-size: 11px;
-  color:     #716255;
+  color:     var(--color-text-label);
   padding:   8px 0;
 }
 
@@ -1405,7 +1389,7 @@ body.splitter-dragging {
 }
 
 .toolbar-divider {
-  color:       #ccc;
+  color:       var(--btn-border-default);
   margin:      0 4px;
   font-size:   18px;
   user-select: none;
@@ -1425,10 +1409,10 @@ body.splitter-dragging {
 
 .style-selector select {
   height:        30px;
-  border:        1px solid #c6b9ab;
-  border-radius: 6px;
+  border:        1px solid var(--btn-border-default);
+  border-radius: var(--border-radius-regular);
   background:    var(--color-input-backdrop);
-  color:         var(--color-text-main);
+  color:         var(--color-text-dark);
   font-size:     12px;
   padding:       0 8px;
 }
@@ -1447,7 +1431,7 @@ body.splitter-dragging {
   background-size:     auto;
   background-repeat:   no-repeat;
   background-position: center;
-  color: var(--color-text-ui);
+  color: var(--color-text-label);
 }
 
 .toolbar-gear-glyph {
@@ -1601,39 +1585,7 @@ body.splitter-dragging {
   text-align:      center;
   font-size:       10px;
   line-height:     1.35;
-  color:           var(--color-text-subtle);
-}
-
-.toolbar-flyout-info-title {
-  font-size:      12px;
-  font-weight:    700;
-  color:          #3f342b;
-  letter-spacing: 0.02em;
-  line-height:    1.2;
-}
-
-.toolbar-flyout-info-summary {
-  font-size:   10px;
-  color:       var(--color-text-subtle);
-  line-height: 1.3;
-}
-
-.toolbar-flyout-info-lines {
-  display:        flex;
-  flex-direction: column;
-  gap:            4px;
-}
-
-.toolbar-flyout-info-line {
-  margin:      0;
-  font-size:   10px;
-  line-height: 1.3;
-  color:       var(--color-text-mid);
-}
-
-.toolbar-flyout-info-line-label {
-  font-weight: 700;
-  color:       #3e332a;
+  color:           var(--color-text-faded);
 }
 
 /* 8f. Color & texture picker system */
@@ -1677,7 +1629,7 @@ body.splitter-dragging {
 .toolbar-flyout-color-swatch {
   width:      100%;
   height:     100%;
-  color:      #2f241a;
+  color:      var(--color-text-dark);
   transition: none;
 }
 
@@ -1799,7 +1751,7 @@ body.splitter-dragging {
   justify-content: center;
   font-size:       10px;
   font-weight:     600;
-  color:           var(--color-text-muted);
+  color:           var(--color-text-faded);
 }
 
 .toolbar-flyout-texture-preview-row {
@@ -1874,18 +1826,10 @@ body.splitter-dragging {
   height:      100%;
   font-size:   13px;
   font-weight: 600;
-  color:       #2f241a;
+  color:       var(--color-text-faded);
 }
 
-.toolbar-flyout-loadout-index {
-  line-height: 1;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
-}
 
-.toolbar-flyout-loadout-plus-glyph {
-  font-size:   13px;
-  line-height: 1;
-}
 
 /* 8h. HSVA drag cursor override */
 body.hsva-dragging,
@@ -1929,7 +1873,7 @@ body.hsva-dragging * {
   border:        1px solid #c6b9ab;
   border-radius: var(--border-radius-regular);
   background:    var(--color-input-backdrop);
-  color:         var(--color-text-main);
+  color:         var(--color-text-dark);
   font-size:     11px;
   padding:       4px 6px;
 }
@@ -2185,7 +2129,7 @@ body.hsva-dragging * {
 .markdown-preview h6 {
   margin:      0.75em 0 0.45em;
   line-height: 1.25;
-  color:       #211b16;
+  color:       var(--color-text-dark);
   text-shadow: var(--text-shadow-emboss-heading-glow);
 }
 
@@ -2205,7 +2149,7 @@ body.hsva-dragging * {
 .markdown-preview > *:first-child { margin-top: 0; }
 
 .markdown-preview a {
-  color:                #0e4ea2;
+  color:                var(--color-text-link);
   text-decoration:      underline;
   text-underline-offset: 2px;
 }
@@ -2240,14 +2184,16 @@ body.hsva-dragging * {
 }
 
 .markdown-preview blockquote {
-  border-left: 3px solid rgba(124, 91, 67, 0.42);
-  padding-left: 10px;
-  color:       #5f4f42;
+  border-left:    3px solid var(--color-border-blockquote);
+  padding-left:   10px;
+  letter-spacing: 0.1em;
+  font-size:      80%;
+  color:          var(--color-text-faded);
 }
 
 .markdown-preview hr {
   border:     none;
-  border-top: 1px solid rgba(83, 69, 58, 0.25);
+  border-top: 1px solid var(--color-border-hr);
   margin:     0.8em 0;
 }
 
@@ -2265,8 +2211,8 @@ body.hsva-dragging * {
 .markdown-preview table {
   width:            100%;
   border-collapse:  collapse;
-  background:       rgba(255, 255, 255, 0.5);
-  border-radius:    8px;
+  background:       var(--color-background-light);
+  border-radius:    var(--border-radius-regular);
   overflow:         hidden;
 }
 
@@ -2305,7 +2251,6 @@ body.hsva-dragging * {
   --preview-inline-code-padding: 0.06em 0.3em;
   letter-spacing: 0.02em;
   font-weight:    200;
-  color:          #2b241d;
 }
 
 /* 11d. Size variants */
@@ -2354,18 +2299,18 @@ body.hsva-dragging * {
   border:          1px solid #ddd;
   border-radius:   var(--border-radius-regular);
   background:      white;
-  color:           var(--color-text-ui);
+  color:           var(--color-text-label);
   cursor:          pointer;
   transition:      background 0.2s, border-color 0.2s, color 0.2s;
 }
 
 .window-control-btn:hover {
-  background:   #f3f0ec;
-  border-color: #c6b9ab;
+  background:   var(--btn-bg-hover);
+  border-color: var(--btn-border-hover);
 }
 
-.window-control-close       { color: #9e2a2b; }
-.window-control-close:hover { background: #f8e8e8; }
+.window-control-close       { color: var(--color-danger); }
+.window-control-close:hover { background: var(--color-danger-bg); }
 
 .window-control-glyph {
   display:     block;
@@ -2378,34 +2323,7 @@ body.hsva-dragging * {
    13. UTILITY & SHARED UI
    ============================================================================= */
 
-/* 13a. Panel placeholders */
-.panel-placeholder {
-  height:         100%;
-  display:        flex;
-  flex-direction: column;
-  justify-content: center;
-  gap:            5px;
-  border:         1px dashed #bcb0a4;
-  border-radius:  8px;
-  background:     rgba(255, 255, 255, 0.42);
-  padding:        8px;
-  box-sizing:     border-box;
-}
-
-.panel-placeholder-title {
-  font-size:      12px;
-  font-weight:    700;
-  color:          #3f342b;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.panel-placeholder-text {
-  font-size: 11px;
-  color:     #716255;
-}
-
-/* 13b. Find hit items */
+/* 13a. Find hit items */
 .find-hit-item {
   width:         100%;
   display:       block;
@@ -2413,7 +2331,7 @@ body.hsva-dragging * {
   border-radius: 8px;
   border:        1px solid #d2cec9;
   background:    rgba(255, 255, 255, 0.62);
-  color:         var(--color-text-main);
+  color:         var(--color-text-dark);
   text-align:    left;
   font-size:     11px;
   line-height:   1.45;
@@ -2432,18 +2350,18 @@ body.hsva-dragging * {
   font-weight: 700;
 }
 
-/* 13c. Empty states */
+/* 13b. Empty states */
 .notes-empty-state {
   border:        1px dashed #ccbfb2;
   border-radius: 8px;
   background:    rgba(255, 255, 255, 0.45);
-  color:         #746557;
+  color:         var(--color-text-label);
   font-size:     12px;
   padding:       14px 10px;
   text-align:    center;
 }
 
-/* 13d. Accessibility helpers */
+/* 13c. Accessibility helpers */
 .sr-only-mode-label {
   position: absolute;
   width:    1px;
