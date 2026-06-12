@@ -955,7 +955,6 @@ body.splitter-dragging {
   cursor:          default;
   border:          1px solid var(--color-border-highlight);
   box-shadow:      var(--box-shadow-regular);
-  transition:      border-color 200ms ease-in, background-color 100ms ease-in, box-shadow 50ms ease-in;
 }
 
 .note-list-item:hover        { background: #ffffffBB; }
@@ -1007,20 +1006,25 @@ body.splitter-dragging {
 
 /* Tree card variant */
 .note-list-item.is-tree-card {
-  padding:          0 0 2px 4px;
-  margin:           0;
+  padding:          2px 8px;
+  margin:           2px 4px;
   background-color: transparent;
-  border:           none;
-  border-radius:    0;
+  border:           1px solid var(--btn-border-default);
   box-shadow:       none;
   font-weight:      200;
-  background-color: var(--color-background-light);
+  background-color: rgba(255, 255, 255, 0.3);
+  border-radius: var(--border-radius-regular);
 }
 
-.note-list-item.is-tree-card.is-active {
-  border:           none;
-  border-radius:    0;
-  box-shadow:       none;
+.note-list-item.is-tree-card.is-active{
+  box-shadow: var(--box-shadow-inverted);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.note-list-item.is-tree-card:hover {
+  border: 1px solid var(--btn-border-active);
+  outline: 2px solid #ffffff88;
+  background: rgba(255, 255, 255, 0.4);
 }
 
 .is-tree-card .note-list-title           { font-weight: 400; }
@@ -1031,12 +1035,12 @@ body.splitter-dragging {
   height:     56px;
   padding:    8px;
   box-sizing: border-box;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .date-view .note-list-item:hover,
 .date-view .note-list-item.is-active {
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.4);
 }
 
 .date-view .note-list-item.is-armed-for-archiving,
@@ -1138,14 +1142,11 @@ body.splitter-dragging {
   font-weight:      700;
   text-transform:   uppercase;
   letter-spacing:   0.1em;
-  background-color: #00000011;
   text-shadow:      var(--text-shadow-emboss-panel);
-  border-bottom:    1px solid #999999;
+
 }
 
 .category-secondary-summary.is-general-secondary {
-  height:         12px;
-  min-height:     6px;
   padding:        0;
   font-size:      0;
   letter-spacing: 0;
@@ -1154,9 +1155,9 @@ body.splitter-dragging {
 
 .category-secondary {
   border:        1px solid #999999;
-  border-top:    2px solid #999999;
   border-radius: var(--border-radius-regular);
   margin:        8px 0;
+  background-color: rgba(255, 255, 255, 0.4);
 }
 
 .category-primary-summary::-webkit-details-marker,
