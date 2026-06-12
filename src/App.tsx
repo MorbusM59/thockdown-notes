@@ -7796,7 +7796,9 @@ function App() {
                       onMouseLeave={() => handleTagChipMouseLeave(tagName)}
                       title={deleteArmedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion'}
                     >
-                      {tagName}
+                      <span class="tag-pill-label">
+                        {tagName}
+                      </span>
                     </div>
                   )
                 })

@@ -998,10 +998,10 @@ export function Editor({
             />
 
             {/* Secondary outline grid under the primary grid to add box borders. */}
-            <div className="absolute pointer-events-none measly-grid-outline-lines" style={{ inset: 'var(--editor-frame-padding)', zIndex: 29 }} />
+            <div className="absolute pointer-events-none measly-grid-outline-lines" style={{ inset: 'var(--editor-frame-padding) var(--editor-frame-padding) calc(var(--editor-frame-padding) - 1px) var(--editor-frame-padding)', zIndex: 29 }} />
 
             {/* The single unified full-screen primary grid lines */}
-            <div className="absolute pointer-events-none measly-grid-lines" style={{ inset: 'var(--editor-frame-padding)', zIndex: 30 }} />
+            <div className="absolute pointer-events-none measly-grid-lines" style={{ inset: 'var(--editor-frame-padding) var(--editor-frame-padding) calc(var(--editor-frame-padding) - 1px) var(--editor-frame-padding)', zIndex: 30 }} />
             
             {/* Top Drag Handle */}
             <div 
