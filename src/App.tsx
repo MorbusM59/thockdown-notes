@@ -91,6 +91,7 @@ const TAG_INPUT_MIN_WIDTH_PX = 150
 const TAG_INPUT_MAX_WIDTH_PX = 250
 const SUGGESTED_MIN_WIDTH_PX = 150
 const UTILITY_WIDTH_PX = 129
+const APP_GRID_MIN_WIDTH_PX = SIDEBAR_MIN_WIDTH_PX + (GRID_DIVIDER_PX * 2) + TAG_INPUT_MIN_WIDTH_PX + SUGGESTED_MIN_WIDTH_PX + UTILITY_WIDTH_PX
 const DEFAULT_SIDEBAR_RATIO = 0.306
 const DEFAULT_TAG_SPLIT_RATIO = 0.645
 const EDITOR_GLYPH_PADDING_MIN_PX = 0
@@ -1627,7 +1628,7 @@ function App() {
     isCollapsed: true,
   })
   const [persistenceReady, setPersistenceReady] = useState(false)
-  const [appShellWidthPx, setAppShellWidthPx] = useState(980)
+  const [appShellWidthPx, setAppShellWidthPx] = useState(APP_GRID_MIN_WIDTH_PX)
   const [renderScrollDynamic, setRenderScrollDynamic] = useState(() => getRenderScrollDynamic())
   const [renderScrollResponsiveness, setRenderScrollResponsiveness] = useState(() => getRenderScrollResponsiveness())
   const [renderScrollTotalTimeSec, setRenderScrollTotalTimeSec] = useState(() => getRenderScrollTotalTimeSec())
@@ -4764,7 +4765,7 @@ function App() {
     if (!shellElement) return
 
     const updateShellWidth = () => {
-      setAppShellWidthPx(Math.max(980, Math.round(shellElement.clientWidth)))
+      setAppShellWidthPx(Math.max(APP_GRID_MIN_WIDTH_PX, Math.round(shellElement.clientWidth)))
     }
 
     updateShellWidth()
@@ -4772,7 +4773,7 @@ function App() {
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0]
       if (!entry) return
-      setAppShellWidthPx(Math.max(980, Math.round(entry.contentRect.width)))
+      setAppShellWidthPx(Math.max(APP_GRID_MIN_WIDTH_PX, Math.round(entry.contentRect.width)))
     })
 
     observer.observe(shellElement)
