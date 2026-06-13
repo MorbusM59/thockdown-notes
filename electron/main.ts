@@ -386,19 +386,21 @@ async function createWindow() {
 
   const savedWindowState = await stateService.loadWindowState();
 
-  win = new BrowserWindow({
-    icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
-    width: savedWindowState.width,
-    height: savedWindowState.height,
-    x: savedWindowState.x,
-    y: savedWindowState.y,
-    frame: false,
-    titleBarStyle: 'hidden',
-    autoHideMenuBar: true,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.mjs'),
-    },
-  })
+win = new BrowserWindow({
+  icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+  width: savedWindowState.width,
+  height: savedWindowState.height,
+  x: savedWindowState.x,
+  y: savedWindowState.y,
+  minWidth: 840,
+  minHeight: 525,
+  frame: false,
+  titleBarStyle: 'hidden',
+  autoHideMenuBar: true,
+  webPreferences: {
+    preload: path.join(__dirname, 'preload.mjs'),
+  },
+})
 
   win.setMenuBarVisibility(false)
 
