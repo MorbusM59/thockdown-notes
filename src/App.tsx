@@ -7796,7 +7796,7 @@ function App() {
                       onMouseLeave={() => handleTagChipMouseLeave(tagName)}
                       title={deleteArmedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion'}
                     >
-                      <span class="tag-pill-label">
+                      <span className={'tag-pill-label'}>
                         {tagName}
                       </span>
                     </div>
@@ -7949,7 +7949,6 @@ function App() {
             {isPreviewMode ? (
               <>
                 <div className="style-selector">
-                  <label className="selector-label">Style:</label>
                   <select
                     value={viewStyle}
                     onChange={(event) => setViewStyle(event.target.value as ViewStyleKey)}
@@ -7964,7 +7963,6 @@ function App() {
                 </div>
 
                 <div className="style-selector">
-                  <label className="selector-label">Size:</label>
                   <select
                     value={viewFontSize}
                     onChange={(event) => setViewFontSize(event.target.value as ViewSizeKey)}
@@ -7980,7 +7978,6 @@ function App() {
                 </div>
 
                 <div className="style-selector">
-                  <label className="selector-label">Spacing:</label>
                   <select
                     value={viewSpacing}
                     onChange={(event) => setViewSpacing(event.target.value as ViewSpacingKey)}

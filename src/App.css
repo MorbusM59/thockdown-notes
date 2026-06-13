@@ -948,9 +948,7 @@ body.splitter-dragging {
   display:         flex;
   align-items:     center;
   justify-content: space-between;
-  gap:             12px;
-  padding:         10px 8px;
-  border-radius:   8px;
+  border-radius:   var(--border-radius-regular);
   background:      #ffffff55;
   cursor:          default;
   border:          1px solid var(--color-border-highlight);
@@ -1032,8 +1030,8 @@ body.splitter-dragging {
 
 /* Date view variant */
 .date-view .note-list-item {
-  height:     56px;
-  padding:    8px;
+  height:     var(--btn-square-large-size);
+  padding:    0 8px;
   box-sizing: border-box;
   background: rgba(255, 255, 255, 0.2);
 }
@@ -1062,7 +1060,7 @@ body.splitter-dragging {
   display:        flex;
   flex:           1 1 auto;
   flex-direction: column;
-  gap:            2px;
+  gap:            4px;
   width:          100%;
   min-width:      0;
 }
@@ -1378,9 +1376,9 @@ body.splitter-dragging {
   height:      32px;
   min-height:  32px;
   padding:     0 12px;
-  border:      1px solid #ddd;
-  background:  white;
-  border-radius: 4px;
+  border:      1px solid var(--btn-border-default);
+  background:  var(--btn-bg-default);;
+  border-radius: var(--border-radius-regular);
   font-size:   14px;
   font-weight: 500;
   line-height: 1;
@@ -1403,10 +1401,8 @@ body.splitter-dragging {
 }
 
 .style-selector {
-  margin-left: 8px;
   display:     flex;
   align-items: center;
-  gap:         6px;
 }
 
 .selector-label {
@@ -1415,7 +1411,7 @@ body.splitter-dragging {
 }
 
 .style-selector select {
-  height:        30px;
+  height:        var(--btn-square-regular-size);
   border:        1px solid var(--btn-border-default);
   border-radius: var(--border-radius-regular);
   background:    var(--color-input-backdrop);
@@ -1443,7 +1439,7 @@ body.splitter-dragging {
 
 .toolbar-gear-glyph {
   display:    block;
-  font-size:  13px;
+  font-size:  16px;
   line-height: 1;
   margin:     0;
   transform:  translateY(0);
