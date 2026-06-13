@@ -87,10 +87,10 @@ const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
 const PROTECTED_TAGS = new Set(['archived', 'deleted', 'external'])
 const GRID_DIVIDER_PX = 8
 const SIDEBAR_MIN_WIDTH_PX = 288
-const SIDEBAR_MAX_WIDTH_PX = 520
-const TAG_INPUT_MIN_WIDTH_PX = 320
-const SUGGESTED_MIN_WIDTH_PX = 220
-const UTILITY_WIDTH_PX = 160
+const TAG_INPUT_MIN_WIDTH_PX = 150
+const TAG_INPUT_MAX_WIDTH_PX = 250
+const SUGGESTED_MIN_WIDTH_PX = 150
+const UTILITY_WIDTH_PX = 129
 const DEFAULT_SIDEBAR_RATIO = 0.306
 const DEFAULT_TAG_SPLIT_RATIO = 0.645
 const EDITOR_GLYPH_PADDING_MIN_PX = 0
@@ -1628,8 +1628,6 @@ function App() {
   })
   const [persistenceReady, setPersistenceReady] = useState(false)
   const [appShellWidthPx, setAppShellWidthPx] = useState(980)
-  const [sidebarWidthRatio, setSidebarWidthRatio] = useState(DEFAULT_SIDEBAR_RATIO)
-  const [tagSplitRatio, setTagSplitRatio] = useState(DEFAULT_TAG_SPLIT_RATIO)
   const [renderScrollDynamic, setRenderScrollDynamic] = useState(() => getRenderScrollDynamic())
   const [renderScrollResponsiveness, setRenderScrollResponsiveness] = useState(() => getRenderScrollResponsiveness())
   const [renderScrollTotalTimeSec, setRenderScrollTotalTimeSec] = useState(() => getRenderScrollTotalTimeSec())
@@ -1651,7 +1649,6 @@ function App() {
     return rgbaToHsva(seed)
   })
   const [hsvaDragState, setHsvaDragState] = useState<HsvaDragState | null>(null)
-  const [activeDividerDrag, setActiveDividerDrag] = useState<'sidebar' | 'tag-split' | null>(null)
   const colorArmTimerRef = useRef<number | null>(null)
   const loadoutSaveTimerRef = useRef<number | null>(null)
   const pendingSaveTextRef = useRef<string | null>(null)
@@ -1685,10 +1682,6 @@ function App() {
   const trashFilteredNotesRef = useRef<NoteSummary[]>([])
   const categoryTreeRef = useRef<PrimaryGroup[]>([])
   const archiveTreeRef = useRef<PrimaryGroup[]>([])
-  const dividerDragStartXRef = useRef(0)
-  const dividerStartSidebarWidthRef = useRef(0)
-  const dividerStartTagInputWidthRef = useRef(0)
-  const dividerStartMainWidthRef = useRef(0)
   const externalOpenQueueRef = useRef<Promise<void>>(Promise.resolve())
   const sidebarScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const sidebarScrollbarRafRef = useRef<number | null>(null)
@@ -2420,8 +2413,8 @@ function App() {
       editorFontSize,
       editorSpacing,
       editorGlyphPaddingPx,
-      sidebarWidthRatio,
-      tagSplitRatio,
+      sidebarWidthRatio: DEFAULT_SIDEBAR_RATIO,
+      tagSplitRatio: DEFAULT_TAG_SPLIT_RATIO,
       renderScrollDynamic,
       renderScrollResponsiveness,
       renderScrollTotalTimeSec,
@@ -2474,8 +2467,6 @@ function App() {
     selectedYears,
     sidebarMode,
     sidebarViewStateByMode,
-    sidebarWidthRatio,
-    tagSplitRatio,
     viewFontSize,
     viewSpacing,
     viewStyle,
@@ -2784,7 +2775,7 @@ function App() {
   }, [isPreviewMode])
 
   const layout = useMemo(() => {
-    const dividerTotalWidthPx = GRID_DIVIDER_PX * 3
+    const dividerTotalWidthPx = GRID_DIVIDER_PX * 2
     const sidebarWidthPx = SIDEBAR_MIN_WIDTH_PX
 
     const mainColumnsWidthPx = Math.max(
@@ -2792,17 +2783,22 @@ function App() {
       appShellWidthPx - dividerTotalWidthPx - UTILITY_WIDTH_PX - sidebarWidthPx,
     )
 
-    const tagInputWidthPx = clamp(mainColumnsWidthPx * tagSplitRatio, TAG_INPUT_MIN_WIDTH_PX, mainColumnsWidthPx - SUGGESTED_MIN_WIDTH_PX)
-    const suggestedWidthPx = Math.max(SUGGESTED_MIN_WIDTH_PX, mainColumnsWidthPx - tagInputWidthPx)
+    // Tag-input and suggested-tags share remaining space at a 1:2 growth
+    // ratio above their combined minimums, until tag-input hits its max.
+    const baselineWidthPx = TAG_INPUT_MIN_WIDTH_PX + SUGGESTED_MIN_WIDTH_PX
+    const growthPx = Math.max(0, mainColumnsWidthPx - baselineWidthPx)
+    const tagInputGrowthPx = Math.min(growthPx / 3, TAG_INPUT_MAX_WIDTH_PX - TAG_INPUT_MIN_WIDTH_PX)
+    const tagInputWidthPx = TAG_INPUT_MIN_WIDTH_PX + tagInputGrowthPx
+    const suggestedWidthPx = mainColumnsWidthPx - tagInputWidthPx
 
     return {
       sidebarWidthPx,
       mainColumnsWidthPx,
       tagInputWidthPx,
       suggestedWidthPx,
-      gridTemplateColumns: `${Math.round(sidebarWidthPx)}px ${GRID_DIVIDER_PX}px ${Math.round(tagInputWidthPx)}px ${GRID_DIVIDER_PX}px ${Math.round(suggestedWidthPx)}px ${GRID_DIVIDER_PX}px ${UTILITY_WIDTH_PX}px`,
+      gridTemplateColumns: `${Math.round(sidebarWidthPx)}px ${GRID_DIVIDER_PX}px ${Math.round(tagInputWidthPx)}px ${Math.round(suggestedWidthPx)}px ${GRID_DIVIDER_PX}px ${UTILITY_WIDTH_PX}px`,
     }
-  }, [appShellWidthPx, tagSplitRatio])
+  }, [appShellWidthPx])
 
   const appShellStyle = useMemo(() => {
     const style: CSSProperties & Record<string, string> = {
@@ -3961,8 +3957,6 @@ function App() {
                 EDITOR_GLYPH_PADDING_MAX_PX,
               ),
             )
-            setSidebarWidthRatio(appState.menu.sidebarWidthRatio)
-            setTagSplitRatio(appState.menu.tagSplitRatio)
             setRenderScrollDynamic(appState.menu.renderScrollDynamic ?? appState.menu.renderScrollEaseMultiplier ?? getRenderScrollDynamic())
             setRenderScrollResponsiveness(appState.menu.renderScrollResponsiveness ?? appState.menu.renderScrollDistanceTimeInfluence ?? getRenderScrollResponsiveness())
             setRenderScrollTotalTimeSec(appState.menu.renderScrollTotalTimeSec ?? getRenderScrollTotalTimeSec())
@@ -4784,67 +4778,6 @@ function App() {
     observer.observe(shellElement)
     return () => observer.disconnect()
   }, [])
-
-  const handleDividerMouseDown = useCallback((divider: 'sidebar' | 'tag-split', event: MouseEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    dividerDragStartXRef.current = event.clientX
-    dividerStartSidebarWidthRef.current = layout.sidebarWidthPx
-    dividerStartTagInputWidthRef.current = layout.tagInputWidthPx
-    dividerStartMainWidthRef.current = layout.mainColumnsWidthPx
-    setActiveDividerDrag(divider)
-  }, [layout.mainColumnsWidthPx, layout.sidebarWidthPx, layout.tagInputWidthPx])
-
-  useEffect(() => {
-    if (!activeDividerDrag) return
-
-    const onPointerMove = (event: globalThis.MouseEvent) => {
-      const deltaX = event.clientX - dividerDragStartXRef.current
-
-      if (activeDividerDrag === 'sidebar') {
-        const maxSidebarWidthPx = Math.max(
-          SIDEBAR_MIN_WIDTH_PX,
-          Math.min(
-            SIDEBAR_MAX_WIDTH_PX,
-            appShellWidthPx - (GRID_DIVIDER_PX * 3) - UTILITY_WIDTH_PX - TAG_INPUT_MIN_WIDTH_PX - SUGGESTED_MIN_WIDTH_PX,
-          ),
-        )
-
-        const nextSidebarWidthPx = clamp(
-          dividerStartSidebarWidthRef.current + deltaX,
-          SIDEBAR_MIN_WIDTH_PX,
-          maxSidebarWidthPx,
-        )
-
-        setSidebarWidthRatio(nextSidebarWidthPx / appShellWidthPx)
-        return
-      }
-
-      const nextTagInputWidthPx = clamp(
-        dividerStartTagInputWidthRef.current + deltaX,
-        TAG_INPUT_MIN_WIDTH_PX,
-        dividerStartMainWidthRef.current - SUGGESTED_MIN_WIDTH_PX,
-      )
-
-      setTagSplitRatio(nextTagInputWidthPx / dividerStartMainWidthRef.current)
-    }
-
-    const onPointerUp = () => {
-      setActiveDividerDrag(null)
-      if (persistenceReady && activeNoteId) {
-        queueAppStateSave(activeNoteId)
-      }
-    }
-
-    document.body.classList.add('splitter-dragging')
-    window.addEventListener('mousemove', onPointerMove)
-    window.addEventListener('mouseup', onPointerUp)
-
-    return () => {
-      document.body.classList.remove('splitter-dragging')
-      window.removeEventListener('mousemove', onPointerMove)
-      window.removeEventListener('mouseup', onPointerUp)
-    }
-  }, [activeDividerDrag, activeNoteId, appShellWidthPx, persistenceReady, queueAppStateSave])
 
   const sortedNotes = useMemo(() => {
     return [...notes].sort((a, b) => b.updatedAtMs - a.updatedAtMs)
@@ -7790,15 +7723,6 @@ function App() {
           </div>
         </div>
       </section>
-
-      <div
-        className={`grid-divider divider-left divider-handle${activeDividerDrag === 'tag-split' ? ' is-dragging' : ''}`}
-        style={{ gridArea: 'd-left' }}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize tag panels"
-        onMouseDown={(event) => handleDividerMouseDown('tag-split', event)}
-      />
 
       <section className="suggested-grid" style={{ gridArea: 'suggested' }} aria-label="Suggested tags panel">
         <div className="suggested-tags" aria-hidden={suggestedTags.length === 0}>

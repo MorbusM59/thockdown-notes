@@ -446,12 +446,12 @@ button.active,
   background-repeat:    no-repeat;
   background-size:      100% 100%;
   background-position:  0 0;
-  grid-template-columns: 300px 8px minmax(320px, 1fr) 8px minmax(220px, 0.55fr) 8px 160px;
+  grid-template-columns: 300px 8px minmax(150px, 250px) minmax(150px, 1fr) 8px 160px;
   grid-template-rows:   auto auto minmax(0, 1fr);
   grid-template-areas:
-    'sidebar d-sidebar taginput d-left suggested d-right utility'
-    'sidebar d-sidebar toolbar  toolbar  toolbar  toolbar  toolbar'
-    'sidebar d-sidebar viewer   viewer   viewer   viewer   viewer';
+    'sidebar d-sidebar taginput suggested d-right utility'
+    'sidebar d-sidebar toolbar  toolbar    toolbar  toolbar'
+    'sidebar d-sidebar viewer   viewer    viewer  viewer';
   min-width:  480px;
   min-height: 420px;
 }
@@ -497,16 +497,6 @@ button.active,
 .suggested-grid :is(button, input, select, textarea),
 .utility-grid   :is(button, input, select, textarea) {
   -webkit-app-region: no-drag;
-}
-
-.divider-handle {
-  cursor:      col-resize;
-  user-select: none;
-}
-
-body.splitter-dragging {
-  cursor:      col-resize;
-  user-select: none;
 }
 
 .divider-sidebar {
