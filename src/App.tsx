@@ -2785,15 +2785,8 @@ function App() {
 
   const layout = useMemo(() => {
     const dividerTotalWidthPx = GRID_DIVIDER_PX * 3
-    const maxSidebarWidthPx = Math.max(
-      SIDEBAR_MIN_WIDTH_PX,
-      Math.min(
-        SIDEBAR_MAX_WIDTH_PX,
-        appShellWidthPx - dividerTotalWidthPx - UTILITY_WIDTH_PX - TAG_INPUT_MIN_WIDTH_PX - SUGGESTED_MIN_WIDTH_PX,
-      ),
-    )
+    const sidebarWidthPx = SIDEBAR_MIN_WIDTH_PX
 
-    const sidebarWidthPx = clamp(appShellWidthPx * sidebarWidthRatio, SIDEBAR_MIN_WIDTH_PX, maxSidebarWidthPx)
     const mainColumnsWidthPx = Math.max(
       TAG_INPUT_MIN_WIDTH_PX + SUGGESTED_MIN_WIDTH_PX,
       appShellWidthPx - dividerTotalWidthPx - UTILITY_WIDTH_PX - sidebarWidthPx,
@@ -2809,7 +2802,7 @@ function App() {
       suggestedWidthPx,
       gridTemplateColumns: `${Math.round(sidebarWidthPx)}px ${GRID_DIVIDER_PX}px ${Math.round(tagInputWidthPx)}px ${GRID_DIVIDER_PX}px ${Math.round(suggestedWidthPx)}px ${GRID_DIVIDER_PX}px ${UTILITY_WIDTH_PX}px`,
     }
-  }, [appShellWidthPx, sidebarWidthRatio, tagSplitRatio])
+  }, [appShellWidthPx, tagSplitRatio])
 
   const appShellStyle = useMemo(() => {
     const style: CSSProperties & Record<string, string> = {
@@ -7727,12 +7720,8 @@ function App() {
       </aside>
 
       <div
-        className={`grid-divider divider-sidebar divider-handle${activeDividerDrag === 'sidebar' ? ' is-dragging' : ''}`}
+        className="grid-divider divider-sidebar"
         style={{ gridArea: 'd-sidebar' }}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize sidebar"
-        onMouseDown={(event) => handleDividerMouseDown('sidebar', event)}
       />
 
       <section className="tag-input-grid" style={{ gridArea: 'taginput' }} aria-label="Tag input manager">

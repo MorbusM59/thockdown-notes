@@ -452,8 +452,8 @@ button.active,
     'sidebar d-sidebar taginput d-left suggested d-right utility'
     'sidebar d-sidebar toolbar  toolbar  toolbar  toolbar  toolbar'
     'sidebar d-sidebar viewer   viewer   viewer   viewer   viewer';
-  min-width:  980px;
-  min-height: 620px;
+  min-width:  480px;
+  min-height: 420px;
 }
 
 /* Texture overlay — shared pattern used across app-grid, sidebar-content, editor-stage */
