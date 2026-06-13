@@ -446,13 +446,16 @@ button.active,
   background-repeat:    no-repeat;
   background-size:      100% 100%;
   background-position:  0 0;
-  grid-template-columns: 300px 8px minmax(150px, 250px) minmax(150px, 1fr) 8px 160px;
+  grid-template-columns: 288px 8px minmax(150px, 250px) minmax(150px, 1fr) 8px 129px;
   grid-template-rows:   auto auto minmax(0, 1fr);
   grid-template-areas:
     'sidebar d-sidebar taginput suggested d-right utility'
     'sidebar d-sidebar toolbar  toolbar    toolbar  toolbar'
     'sidebar d-sidebar viewer   viewer    viewer  viewer';
-  min-width:  480px;
+  /* NOTE: grid-template-columns is overridden at runtime via inline style
+     (see layout.gridTemplateColumns in App.tsx). The value above is the
+     effective minimum, kept here for documentation only. */
+  min-width:  733px;
   min-height: 420px;
 }
 
@@ -2369,17 +2372,7 @@ body.hsva-dragging * {
    14. RESPONSIVE / MEDIA QUERIES
    ============================================================================= */
 
-@media (max-width: 980px) {
-  .app-shell {
-    overflow-x: auto;
-  }
-
-  .app-grid {
-    min-width: 980px;
-  }
-
-  .tag-input-section,
-  .tags-display {
-    gap: 6px;
-  }
-}
+/* No media queries currently active. The app-shell window has a hard
+   minimum size (electron/main.ts BrowserWindow minWidth/minHeight) that
+   is kept above APP_GRID_MIN_WIDTH_PX, so the grid always has enough
+   room and no horizontal-scroll fallback is needed. */
