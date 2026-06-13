@@ -1703,6 +1703,7 @@ function App() {
   const noteArmTimerRef = useRef<{ noteId: string; timeoutId: number; quickReleaseAction: ProtectedQuickReleaseAction } | null>(null)
   const trashButtonArmTimerRef = useRef<number | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
+  const previewTextureRef = useRef<HTMLDivElement>(null)
   const previewScrollSaveTimerRef = useRef<number | null>(null)
   const previewScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const previewScrollbarRafRef = useRef<number | null>(null)
@@ -5036,7 +5037,13 @@ function App() {
 
     const scroller = previewScrollRef.current
     const track = previewScrollbarTrackRef.current
-    if (!scroller || !track) return
+    if (!scroller) return
+
+    if (previewTextureRef.current) {
+      syncTextureToScroll(scroller.scrollTop, previewTextureRef.current)
+    }
+
+    if (!track) return
 
     const viewportHeight = scroller.clientHeight
     const contentHeight = scroller.scrollHeight
@@ -7419,23 +7426,10 @@ function App() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [activeNoteId, isPreviewMode, persistActiveNoteEditModeStateNow, persistMenuStateOnUnload, persistRenderViewStateForNoteNow])
 
-  const previewTextureRef = useRef<HTMLDivElement>(null);
-
-  // 1. Native scroll (covers mouse wheel, trackpad, keyboard when not intercepted)
+  // Native scroll (covers mouse wheel, trackpad, keyboard when not intercepted)
   const handlePreviewScroll = useCallback(() => {
     if (!previewScrollRef.current || !previewTextureRef.current) return;
     syncTextureToScroll(previewScrollRef.current.scrollTop, previewTextureRef.current);
-  }, []);
-
-  // 2. Pass as onStep to your smooth scroll calls
-  const smoothScrollPreview = useCallback((targetPx: number) => {
-    if (!previewScrollRef.current) return;
-    scrollToNonQuantizedSmooth(previewScrollRef.current, targetPx, {
-      onStep: () => {
-        if (!previewScrollRef.current || !previewTextureRef.current) return;
-        syncTextureToScroll(previewScrollRef.current.scrollTop, previewTextureRef.current);
-      }
-    });
   }, []);
 
   return (
@@ -7796,7 +7790,7 @@ function App() {
                       onMouseLeave={() => handleTagChipMouseLeave(tagName)}
                       title={deleteArmedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion'}
                     >
-                      <span className={'tag-pill-label'}>
+                      <span className="tag-pill-label">
                         {tagName}
                       </span>
                     </div>
