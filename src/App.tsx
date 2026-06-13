@@ -7988,7 +7988,6 @@ function App() {
             ) : (
               <>
                 <div className="style-selector">
-                  <label className="selector-label">Style:</label>
                   <select
                     value={editorStyle}
                     onChange={(event) => {
@@ -8005,7 +8004,6 @@ function App() {
                 </div>
 
                 <div className="style-selector">
-                  <label className="selector-label">Size:</label>
                   <select
                     value={editorFontSize}
                     onChange={(event) => {
@@ -8022,7 +8020,6 @@ function App() {
                 </div>
 
                 <div className="style-selector">
-                  <label className="selector-label">Spacing:</label>
                   <select
                     value={editorSpacing}
                     onChange={(event) => {
