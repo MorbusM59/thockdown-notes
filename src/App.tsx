@@ -5997,15 +5997,16 @@ function App() {
   }, [clearNoteArmTimer, clearTrashButtonArmTimer])
 
   useEffect(() => {
-    const ITEM_HEIGHT = 56
+    const ITEM_HEIGHT = 48
     const ITEM_GAP = 8
+    const CONTAINER_PADDING = 10
     const ITEM_TOTAL = ITEM_HEIGHT + ITEM_GAP
 
     const compute = () => {
       const container = sidebarContentRef.current
       if (!container) return
 
-      const contentHeight = container.clientHeight
+      const contentHeight = container.clientHeight - 2 * CONTAINER_PADDING + ITEM_GAP
       let nextItemsPerPage = Math.floor(contentHeight / ITEM_TOTAL)
       if (nextItemsPerPage < 1) nextItemsPerPage = 1
 
