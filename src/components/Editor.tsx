@@ -24,6 +24,7 @@ import type {
   EditorSnapshot,
   EditorTextChangeEvent,
   EditorViewportState,
+  EditorViewportLines,
 } from '../editor/EditorContract';
 import {
   validateSelectionInvariants,
@@ -74,12 +75,6 @@ const quantizeViewportHeightToGrid = (heightPx: number, lineHeightPx: number) =>
   return Math.floor(h / line) * line;
 };
 
-const bottomBoundaryFromTopEdge = (heightPx: number, topEdgePx: number, lineHeightPx: number) => {
-  const h = quantizeViewportHeightToGrid(heightPx, lineHeightPx);
-  const topEdge = Math.max(0, Math.min(h, quantizeTopEdge(topEdgePx, lineHeightPx)));
-  return h - topEdge;
-};
-
 function normalizeEditorBoundaryPair(params: {
   topBoundaryPx: number;
   bottomBoundaryPx: number;
@@ -115,6 +110,40 @@ function normalizeEditorBoundaryPair(params: {
     topBoundaryPx,
     bottomBoundaryPx: Math.max(0, bottomBoundaryPx - overflow),
   };
+}
+
+// Pure derivation from stored (persisted) boundary line counts to displayed
+// line counts, given how many lines are currently available in the
+// viewport. Never mutates the stored values — clamping is recomputed fresh
+// on every call from (storedTopLines, storedBottomLines, availableLines).
+//
+// Constraint: at least one line must remain for the middle (text) section,
+// i.e. topLines + bottomLines <= max(0, availableLines - 1).
+// Top boundary has priority for the available budget; bottom boundary
+// receives whatever remains.
+//
+// Example: availableLines=20 (410px / 20px), stored top=25, stored bottom=5
+//   -> maxCombined = 19
+//   -> displayTop = min(25, 19) = 19
+//   -> displayBottom = min(5, 19 - 19) = 0
+// If availableLines later becomes 40 (804px / 20px):
+//   -> maxCombined = 39
+//   -> displayTop = min(25, 39) = 25
+//   -> displayBottom = min(5, 39 - 25) = 5
+function clampBoundaryLines(
+  storedTopLines: number,
+  storedBottomLines: number,
+  availableLines: number,
+): { topLines: number; bottomLines: number } {
+  const safeTop = Math.max(0, Math.round(storedTopLines));
+  const safeBottom = Math.max(0, Math.round(storedBottomLines));
+  const safeAvailable = Math.max(0, Math.round(availableLines));
+  const maxCombined = Math.max(0, safeAvailable - 1);
+
+  const topLines = Math.min(safeTop, maxCombined);
+  const bottomLines = Math.min(safeBottom, maxCombined - topLines);
+
+  return { topLines, bottomLines };
 }
 
 function clampNumber(value: number, min: number, max: number): number {
@@ -298,11 +327,37 @@ export function Editor({
     isCollapsed: true,
   });
   
-  const [editorSize, setEditorSize] = useState({ width: 0, height: 0, top: 0, left: 0 });
+  const [editorSize, setEditorSize] = useState({ width: 0, height: 0, left: 0, top: 0, innerHeight: 0 });
 
-  // Here are our user-configurable boundaries!
-  const [topBoundary, setTopBoundary] = useState(6 * lineHeightPx);
-  const [bottomBoundary, setBottomBoundary] = useState(6 * lineHeightPx);
+  // User-configurable boundaries, stored as integer line counts. This is
+  // the persisted representation (see EditorViewportLines): resolution-
+  // independent, never invalidated by container size, and never mutated by
+  // display/clamping logic. Display pixel values are derived fresh on every
+  // render via clampBoundaryLines + the current viewport's available line
+  // count (see topBoundary/bottomBoundary below).
+  const [topBoundaryLines, setTopBoundaryLines] = useState(0);
+  const [bottomBoundaryLines, setBottomBoundaryLines] = useState(0);
+
+  // Whether the editor has received its restored (or default 0/0/0)
+  // boundary/scroll line counts via applySnapshot. Until this is true, the
+  // boundary dividers and the text content are not rendered — only the
+  // outer frame (whose size doesn't depend on its content) is, so it can be
+  // measured. This avoids ever rendering a "wrong" frame that gets
+  // corrected a moment later.
+  const [hasViewportLines, setHasViewportLines] = useState(false);
+
+  // Derived display values (px), recomputed every render from the stored
+  // line counts + the current measured viewport height. Pure function of
+  // two known quantities — never needs a retry/verify loop, and never
+  // mutates topBoundaryLines/bottomBoundaryLines.
+  const availableLines = Math.max(0, Math.floor(editorSize.innerHeight / lineHeightPx));
+  const { topLines: displayTopLines, bottomLines: displayBottomLines } = clampBoundaryLines(
+    topBoundaryLines,
+    bottomBoundaryLines,
+    availableLines,
+  );
+  const topBoundary = displayTopLines * lineHeightPx;
+  const bottomBoundary = displayBottomLines * lineHeightPx;
 
   // Dragging state
   const [isDraggingTop, setIsDraggingTop] = useState(false);
@@ -353,6 +408,12 @@ export function Editor({
     scrollHeightPx: scrollerRef.current?.scrollHeight ?? 0,
     clientHeightPx: scrollerRef.current?.clientHeight ?? 0,
   }), [topBoundary, bottomBoundary, lineHeightPx, cellWidthPx]);
+
+  const buildViewportLines = useCallback((): EditorViewportLines => ({
+    topBoundaryLines,
+    bottomBoundaryLines,
+    scrollTopLines: Math.round((scrollerRef.current?.scrollTop ?? 0) / lineHeightPx),
+  }), [topBoundaryLines, bottomBoundaryLines, lineHeightPx]);
 
   const readScrollbarGeometry = useCallback((): ScrollbarGeometry | null => {
     const scroller = scrollerRef.current;
@@ -607,6 +668,7 @@ export function Editor({
           text: latestTextRef.current,
           selection: latestSelectionRef.current,
           viewport: buildViewport(),
+          viewportLines: buildViewportLines(),
         };
       },
       applySnapshot(snapshot: EditorSnapshotApplyRequest) {
@@ -646,14 +708,34 @@ export function Editor({
         });
 
         if (typeof nextViewport.topBoundaryPx === 'number') {
-          setTopBoundary(normalized.topBoundaryPx);
+          setTopBoundaryLines(Math.round(normalized.topBoundaryPx / lineHeightPx));
         }
         if (typeof nextViewport.bottomBoundaryPx === 'number') {
-          setBottomBoundary(normalized.bottomBoundaryPx);
+          setBottomBoundaryLines(Math.round(normalized.bottomBoundaryPx / lineHeightPx));
         }
           if (typeof nextViewport.scrollTopPx === 'number' && scrollerRef.current) {
             scrollerRef.current.scrollTo({ top: Math.max(0, nextViewport.scrollTopPx), behavior: 'auto' });
           }
+          appliedViewport = true;
+        }
+
+        // Primary restore path: integer line counts, applied directly with
+        // no clamping or measurement-dependent math (see EditorViewportLines
+        // and clampBoundaryLines). This is the only path that should be used
+        // for cross-session restore. Display boundaries are derived lazily
+        // via clampBoundaryLines on every render once the container is
+        // measured, so this is correct to call even before that happens.
+        if (snapshot.viewportLines) {
+          const lines = snapshot.viewportLines;
+          setTopBoundaryLines(Math.max(0, Math.round(lines.topBoundaryLines)));
+          setBottomBoundaryLines(Math.max(0, Math.round(lines.bottomBoundaryLines)));
+          if (scrollerRef.current) {
+            scrollerRef.current.scrollTo({
+              top: Math.max(0, Math.round(lines.scrollTopLines) * lineHeightPx),
+              behavior: 'auto',
+            });
+          }
+          setHasViewportLines(true);
           appliedViewport = true;
         }
 
@@ -692,7 +774,7 @@ export function Editor({
         adapterRef.current = null;
       }
     };
-  }, [adapterRef, buildViewport, topBoundary, bottomBoundary, lineHeightPx]);
+  }, [adapterRef, buildViewport, buildViewportLines, topBoundary, bottomBoundary, topBoundaryLines, bottomBoundaryLines, lineHeightPx]);
 
   useLayoutEffect(() => {
     const updateSize = () => {
@@ -718,28 +800,12 @@ export function Editor({
           previous.width === snappedWidth &&
           previous.height === snappedHeight &&
           previous.left === left &&
-          previous.top === top
+          previous.top === top &&
+          previous.innerHeight === snappedInnerHeight
         ) {
           return previous;
         }
-        return { width: snappedWidth, height: snappedHeight, left, top };
-      });
-
-      // Typography switches must reconcile viewport geometry in one deterministic pass
-      // so boundaries and scroll lattice cannot race each other across frames.
-      const viewportHeightPx = Math.max(0, snappedInnerHeight);
-
-      setTopBoundary((previousTop) => {
-        const snappedTop = Math.min(quantizeTopEdge(previousTop, lineHeightPx), viewportHeightPx);
-        const normalized = normalizeEditorBoundaryPair({
-          topBoundaryPx: snappedTop,
-          bottomBoundaryPx: bottomBoundary,
-          lineHeightPx,
-          viewportHeightPx,
-          preserve: 'bottom',
-        });
-        setBottomBoundary(normalized.bottomBoundaryPx);
-        return normalized.topBoundaryPx;
+        return { width: snappedWidth, height: snappedHeight, left, top, innerHeight: snappedInnerHeight };
       });
 
       const scroller = scrollerRef.current;
@@ -771,34 +837,19 @@ export function Editor({
       const h = Math.max(0, scrollerRef.current.clientHeight);
       const relativeY = e.clientY - rect.top;
       const clampedY = Math.max(0, Math.min(relativeY, h));
+      const dragLines = Math.max(0, Math.round(clampedY / lineHeightPx));
 
       if (isDraggingTop) {
-        const snappedY = quantizeTopEdge(clampedY, lineHeightPx);
-        const nextTop = Math.min(snappedY, Math.max(0, h - lineHeightPx));
-        setTopBoundary(nextTop);
-        setBottomBoundary((previousBottom) => {
-          const normalized = normalizeEditorBoundaryPair({
-            topBoundaryPx: nextTop,
-            bottomBoundaryPx: previousBottom,
-            lineHeightPx,
-            viewportHeightPx: h,
-            preserve: 'top',
-          });
-          return normalized.bottomBoundaryPx;
-        });
+        // The dragged value is the stored value going forward: "the current
+        // distance to the edge becomes the new value" (per spec). Display
+        // clamping (clampBoundaryLines) reconciles this against the bottom
+        // boundary and available space on every render — no cross-boundary
+        // adjustment is needed here.
+        setTopBoundaryLines(dragLines);
       } else if (isDraggingBottom) {
-        const snappedBottom = Math.min(bottomBoundaryFromTopEdge(h, clampedY, lineHeightPx), Math.max(0, h - lineHeightPx));
-        setBottomBoundary(snappedBottom);
-        setTopBoundary((previousTop) => {
-          const normalized = normalizeEditorBoundaryPair({
-            topBoundaryPx: previousTop,
-            bottomBoundaryPx: snappedBottom,
-            lineHeightPx,
-            viewportHeightPx: h,
-            preserve: 'bottom',
-          });
-          return normalized.topBoundaryPx;
-        });
+        const availableLines = Math.max(0, Math.round(h / lineHeightPx));
+        const bottomLines = Math.max(0, availableLines - dragLines);
+        setBottomBoundaryLines(bottomLines);
       }
     };
 
