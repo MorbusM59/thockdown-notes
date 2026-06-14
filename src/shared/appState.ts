@@ -60,10 +60,21 @@ export interface PersistedMenuState {
   sidebarViewState?: Partial<Record<SidebarMode, PersistedSidebarViewState>>;
 }
 
+// Persisted boundary/scroll position as integer line counts. See
+// EditorViewportLines in EditorContract.ts for the rationale: line counts
+// are resolution-independent and never need validation against a live DOM
+// measurement, eliminating the corrupt-restore class of bugs that pixel
+// values were prone to.
+//
+// Older saved states may still contain the previous pixel-based shape
+// (topBoundaryPx/bottomBoundaryPx/scrollTopPx). That shape is intentionally
+// not migrated — if loadAppState() returns an object missing the line-based
+// fields, callers should treat the viewport as absent and default to
+// 0/0/0 (the same default used for a fresh install).
 export interface PersistedViewportState {
-  topBoundaryPx: number;
-  bottomBoundaryPx: number;
-  scrollTopPx: number;
+  topBoundaryLines: number;
+  bottomBoundaryLines: number;
+  scrollTopLines: number;
 }
 
 export interface AppState {

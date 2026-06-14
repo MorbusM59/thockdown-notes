@@ -57,14 +57,24 @@ const DEFAULT_WINDOW_STATE: WindowState = {
 
 function sanitizeViewport(input: Partial<PersistedViewportState> | undefined): PersistedViewportState | undefined {
   if (!input) return undefined;
-  const topBoundaryPx = typeof input.topBoundaryPx === 'number' ? Math.max(0, Math.round(input.topBoundaryPx)) : 0;
-  const bottomBoundaryPx = typeof input.bottomBoundaryPx === 'number' ? Math.max(0, Math.round(input.bottomBoundaryPx)) : 0;
-  const scrollTopPx = typeof input.scrollTopPx === 'number' ? Math.max(0, Math.round(input.scrollTopPx)) : 0;
+
+  // Older saved states used a pixel-based shape (topBoundaryPx/
+  // bottomBoundaryPx/scrollTopPx). That shape is intentionally not migrated
+  // — treat it as absent so callers fall back to the 0/0/0 default, same as
+  // a fresh install. Only persist/restore the new line-count shape.
+  const { topBoundaryLines, bottomBoundaryLines, scrollTopLines } = input as Partial<PersistedViewportState>;
+  if (
+    typeof topBoundaryLines !== 'number'
+    && typeof bottomBoundaryLines !== 'number'
+    && typeof scrollTopLines !== 'number'
+  ) {
+    return undefined;
+  }
 
   return {
-    topBoundaryPx,
-    bottomBoundaryPx,
-    scrollTopPx,
+    topBoundaryLines: typeof topBoundaryLines === 'number' ? Math.max(0, Math.round(topBoundaryLines)) : 0,
+    bottomBoundaryLines: typeof bottomBoundaryLines === 'number' ? Math.max(0, Math.round(bottomBoundaryLines)) : 0,
+    scrollTopLines: typeof scrollTopLines === 'number' ? Math.max(0, Math.round(scrollTopLines)) : 0,
   };
 }
 

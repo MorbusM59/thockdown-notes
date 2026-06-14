@@ -25,6 +25,19 @@ export interface EditorViewportState {
   clientHeightPx?: number;
 }
 
+// Persisted/restorable boundary and scroll position, expressed as integer
+// line counts rather than pixels. Line counts are resolution-independent:
+// they survive across sessions and font/line-height changes without ever
+// needing to be validated against a live DOM measurement. Display pixel
+// values are derived from these at render time via a pure clamp function
+// (see clampBoundaryLines in Editor.tsx) and are never written back into
+// this stored representation except in response to an explicit user drag.
+export interface EditorViewportLines {
+  topBoundaryLines: number;
+  bottomBoundaryLines: number;
+  scrollTopLines: number;
+}
+
 export interface EditorTextChangeEvent {
   source: EditorChangeSource;
   text: string;
@@ -50,12 +63,23 @@ export interface EditorSnapshot {
   text: string;
   selection: EditorSelectionState;
   viewport: EditorViewportState;
+  // Present once the editor has resolved its restored boundary/scroll line
+  // counts (either from an applySnapshot({ viewportLines }) call, or from
+  // the default 0/0/0 if nothing was restored). Absent while the editor is
+  // still waiting on a restore to arrive.
+  viewportLines?: EditorViewportLines;
 }
 
 export type EditorSelectionScrollBehavior = 'center-caged' | 'preserve-scroll';
 
 export interface EditorSnapshotApplyRequest extends Partial<EditorSnapshot> {
   selectionScrollBehavior?: EditorSelectionScrollBehavior;
+  // Restores the boundary/scroll position from integer line counts. This is
+  // the preferred restore path: no clamping is performed against the
+  // current container size at apply time. Display values are derived lazily
+  // and continuously via clampBoundaryLines, so applying this is safe at
+  // any point, including before the container has been measured.
+  viewportLines?: EditorViewportLines;
 }
 
 export interface EditorCapabilityMap {
