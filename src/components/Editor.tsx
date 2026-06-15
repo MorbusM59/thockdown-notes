@@ -1011,64 +1011,80 @@ export function Editor({
               backgroundColor: 'transparent',
             }}
           >
-            {/* Regular background color is constrained to the middle zone only. */}
-            <div
-              className="absolute pointer-events-none"
-              style={{
-                top: `calc(var(--editor-frame-padding) + ${topBoundary}px)`,
-                bottom: `calc(var(--editor-frame-padding) + ${bottomBoundary}px)`,
-                left: 'var(--editor-frame-padding)',
-                right: 'var(--editor-frame-padding)',
-                backgroundColor: 'var(--color-bg-regular)',
-                zIndex: 2,
-              }}
-            />
+            {/* Boundary-dependent visuals: background zones, grid lines, and
+                drag handles all depend on topBoundary/bottomBoundary, which
+                are only meaningful once the restored line counts have been
+                applied (hasViewportLines). Rendering them before that would
+                show a 0/0 frame that then jumps to the correct values —
+                exactly the flash we want to avoid. Render nothing here until
+                ready; the scroller below still mounts unconditionally so it
+                can be measured. */}
+            {hasViewportLines && (
+              <>
+                {/* Regular background color is constrained to the middle zone only. */}
+                <div
+                  className="absolute pointer-events-none"
+                  style={{
+                    top: `calc(var(--editor-frame-padding) + ${topBoundary}px)`,
+                    bottom: `calc(var(--editor-frame-padding) + ${bottomBoundary}px)`,
+                    left: 'var(--editor-frame-padding)',
+                    right: 'var(--editor-frame-padding)',
+                    backgroundColor: 'var(--color-bg-regular)',
+                    zIndex: 2,
+                  }}
+                />
 
-            {/* Background color for top and bottom zones */}
-            <div
-              className="absolute left-0 right-0 pointer-events-none"
-              style={{
-                top: 'var(--editor-frame-padding)',
-                left: 'var(--editor-frame-padding)',
-                right: 'var(--editor-frame-padding)',
-                height: topBoundary,
-                backgroundColor: 'var(--color-bg-leading)',
-                zIndex: 2,
-              }}
-            />
-            <div
-              className="absolute left-0 right-0 pointer-events-none"
-              style={{
-                bottom: 'var(--editor-frame-padding)',
-                left: 'var(--editor-frame-padding)',
-                right: 'var(--editor-frame-padding)',
-                height: bottomBoundary,
-                backgroundColor: 'var(--color-bg-trailing)',
-                zIndex: 2,
-              }}
-            />
+                {/* Background color for top and bottom zones */}
+                <div
+                  className="absolute left-0 right-0 pointer-events-none"
+                  style={{
+                    top: 'var(--editor-frame-padding)',
+                    left: 'var(--editor-frame-padding)',
+                    right: 'var(--editor-frame-padding)',
+                    height: topBoundary,
+                    backgroundColor: 'var(--color-bg-leading)',
+                    zIndex: 2,
+                  }}
+                />
+                <div
+                  className="absolute left-0 right-0 pointer-events-none"
+                  style={{
+                    bottom: 'var(--editor-frame-padding)',
+                    left: 'var(--editor-frame-padding)',
+                    right: 'var(--editor-frame-padding)',
+                    height: bottomBoundary,
+                    backgroundColor: 'var(--color-bg-trailing)',
+                    zIndex: 2,
+                  }}
+                />
+              </>
+            )}
 
             {/* Secondary outline grid under the primary grid to add box borders. */}
             <div className="absolute pointer-events-none measly-grid-outline-lines" style={{ inset: 'var(--editor-frame-padding) var(--editor-frame-padding) calc(var(--editor-frame-padding) - 1px) var(--editor-frame-padding)', zIndex: 29 }} />
 
             {/* The single unified full-screen primary grid lines */}
             <div className="absolute pointer-events-none measly-grid-lines" style={{ inset: 'var(--editor-frame-padding) var(--editor-frame-padding) calc(var(--editor-frame-padding) - 1px) var(--editor-frame-padding)', zIndex: 30 }} />
-            
-            {/* Top Drag Handle */}
-            <div 
-              className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize" 
-              style={{ top: `calc(var(--editor-frame-padding) + ${topBoundary}px - ${lineHeightPx}px)`, left: 'var(--editor-frame-padding)', right: 'var(--editor-frame-padding)', height: lineHeightPx }} 
-              onWheel={forwardHandleWheelToScroller}
-              onMouseDown={(e) => { e.preventDefault(); setIsDraggingTop(true); }}
-            />
 
-            {/* Bottom Drag Handle */}
-            <div 
-              className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize" 
-              style={{ bottom: `calc(var(--editor-frame-padding) + ${bottomBoundary}px - ${lineHeightPx}px)`, left: 'var(--editor-frame-padding)', right: 'var(--editor-frame-padding)', height: lineHeightPx }} 
-              onWheel={forwardHandleWheelToScroller}
-              onMouseDown={(e) => { e.preventDefault(); setIsDraggingBottom(true); }}
-            />
+            {hasViewportLines && (
+              <>
+                {/* Top Drag Handle */}
+                <div
+                  className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize"
+                  style={{ top: `calc(var(--editor-frame-padding) + ${topBoundary}px - ${lineHeightPx}px)`, left: 'var(--editor-frame-padding)', right: 'var(--editor-frame-padding)', height: lineHeightPx }}
+                  onWheel={forwardHandleWheelToScroller}
+                  onMouseDown={(e) => { e.preventDefault(); setIsDraggingTop(true); }}
+                />
+
+                {/* Bottom Drag Handle */}
+                <div
+                  className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize"
+                  style={{ bottom: `calc(var(--editor-frame-padding) + ${bottomBoundary}px - ${lineHeightPx}px)`, left: 'var(--editor-frame-padding)', right: 'var(--editor-frame-padding)', height: lineHeightPx }}
+                  onWheel={forwardHandleWheelToScroller}
+                  onMouseDown={(e) => { e.preventDefault(); setIsDraggingBottom(true); }}
+                />
+              </>
+            )}
 
             {/* Actual Scroller */}
             <div 
@@ -1080,27 +1096,47 @@ export function Editor({
                 contentEditable={
                   <ContentEditable 
                     className="outline-none text-gray-800 editor-text min-h-full w-full relative z-10"
-                    style={{ paddingTop: topBoundary, paddingBottom: bottomBoundary, paddingLeft: 0, paddingRight: 0, boxSizing: 'border-box' }}
+                    style={{
+                      paddingTop: topBoundary,
+                      paddingBottom: bottomBoundary,
+                      paddingLeft: 0,
+                      paddingRight: 0,
+                      boxSizing: 'border-box',
+                      // Hide content until the restored line counts have
+                      // been applied (hasViewportLines). The padding above
+                      // depends on topBoundary/bottomBoundary, which are
+                      // 0/0 until then — rendering visible content with 0
+                      // padding and then snapping to the correct padding
+                      // would be exactly the "wrong frame, then corrected"
+                      // flash we want to avoid. The element stays mounted
+                      // (so Lexical's editable root exists and text
+                      // hydration can proceed) but is not visible.
+                      visibility: hasViewportLines ? 'visible' : 'hidden',
+                    }}
                     spellCheck={false} 
                   />
                 }
                 placeholder={
-                  <div className="absolute text-gray-400 pointer-events-none select-none editor-text z-0" style={{ top: topBoundary, left: 0 }}>
-                    Jot down a measly note...
-                  </div>
+                  hasViewportLines ? (
+                    <div className="absolute text-gray-400 pointer-events-none select-none editor-text z-0" style={{ top: topBoundary, left: 0 }}>
+                      Jot down a measly note...
+                    </div>
+                  ) : null
                 }
                 ErrorBoundary={LexicalErrorBoundary}
               />
             </div>
 
             {/* Native Caret Replacement overlayed in viewport space */}
-            <BlockCaretPlugin
-              scrollerRef={scrollerRef}
-              topBoundaryPx={topBoundary}
-              bottomBoundaryPx={bottomBoundary}
-              lineHeightPx={lineHeightPx}
-              cellWidthPx={cellWidthPx}
-            />
+            {hasViewportLines && (
+              <BlockCaretPlugin
+                scrollerRef={scrollerRef}
+                topBoundaryPx={topBoundary}
+                bottomBoundaryPx={bottomBoundary}
+                lineHeightPx={lineHeightPx}
+                cellWidthPx={cellWidthPx}
+              />
+            )}
         
             <HistoryPlugin />
             <PasteSanitizationPlugin />
@@ -1117,12 +1153,14 @@ export function Editor({
             />
             
             {/* The Magic Cage Scroller! */}
-            <CagedScrollPlugin
-              scrollerRef={scrollerRef}
-              topBoundaryPx={topBoundary}
-              bottomBoundaryPx={bottomBoundary}
-              lineHeightPx={lineHeightPx}
-            />
+            {hasViewportLines && (
+              <CagedScrollPlugin
+                scrollerRef={scrollerRef}
+                topBoundaryPx={topBoundary}
+                bottomBoundaryPx={bottomBoundary}
+                lineHeightPx={lineHeightPx}
+              />
+            )}
           </div>
         </LexicalComposer>
       )}
