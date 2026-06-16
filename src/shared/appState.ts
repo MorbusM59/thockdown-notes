@@ -58,6 +58,7 @@ export interface PersistedMenuState {
   renderScrollBaseDistanceRows?: number;
   renderScrollMaxDurationMultiplier?: number;
   sidebarViewState?: Partial<Record<SidebarMode, PersistedSidebarViewState>>;
+  debuggingEnabled?: boolean;
 }
 
 // Persisted boundary/scroll position as integer line counts. See

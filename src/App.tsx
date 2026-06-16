@@ -1558,6 +1558,8 @@ function App() {
   const [isDocumentFindCaseSensitive, setIsDocumentFindCaseSensitive] = useState(false)
   // Terminology convention: false = edit mode, true = render view.
   const [isPreviewMode, setIsPreviewMode] = useState(false)
+  const [debuggingEnabled, setDebuggingEnabled] = useState(false)
+  const debugNoteIdRef = useRef<string | null>(null)
   const [viewStyle, setViewStyle] = useState<ViewStyleKey>('modern')
   const [viewFontSize, setViewFontSize] = useState<ViewSizeKey>('m')
   const [viewSpacing, setViewSpacing] = useState<ViewSpacingKey>('cozy')
@@ -2409,12 +2411,14 @@ function App() {
           collapsedSecondary: archiveCollapsedSecondary,
         },
       },
+      debuggingEnabled,
     }
   }, [
     archiveCollapsedPrimary,
     archiveCollapsedSecondary,
     categoryCollapsedPrimary,
     categoryCollapsedSecondary,
+    debuggingEnabled,
     editorFontSize,
     editorGlyphPaddingPx,
     editorSpacing,
@@ -2799,6 +2803,47 @@ function App() {
     sidebarTextureTintCss,
   ])
 
+  // Writes a structured debug entry to a session-scoped debug note (tagged
+  // "debug"). No-ops when debuggingEnabled is false. Safe to call from any
+  // async or sync context — creation and tagging are fire-and-forget.
+  const writeDebugEntry = useCallback(async (functionName: string, lines: string[]) => {
+    if (!debuggingEnabled) return
+    if (!window.measlyNotes) return
+
+    const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+    const section = `\n## ${timeStr} / ${functionName}\n${lines.map(l => `- ${l}`).join('\n')}`
+
+    if (!debugNoteIdRef.current) {
+      // Create the debug note for this session
+      const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+      const title = `# Debug: ${dateStr} / ${pad(now.getHours())}:${pad(now.getMinutes())}`
+      const created = await window.measlyNotes.createNote({ initialText: `${title}\n${section}` })
+      debugNoteIdRef.current = created.id
+      setNotes((previous) => {
+        const index = previous.findIndex(n => n.id === created.id)
+        if (index >= 0) return previous
+        return [created, ...previous]
+      })
+      await window.measlyNotes.addTagToNote({ id: created.id, tagName: 'debug', position: 0 }).catch(() => {})
+    } else {
+      // Append to the existing debug note
+      const loaded = await window.measlyNotes.loadNote({ id: debugNoteIdRef.current })
+      const updated = await window.measlyNotes.saveNote({
+        id: debugNoteIdRef.current,
+        text: `${loaded.text}${section}`,
+      })
+      setNotes((previous) => {
+        const index = previous.findIndex(n => n.id === updated.id)
+        if (index < 0) return previous
+        const next = [...previous]
+        next[index] = updated
+        return next
+      })
+    }
+  }, [debuggingEnabled])
+
   const queueAppStateSave = useCallback((selectedNoteId: string | null) => {
     if (!window.measlyState) return
     if (!persistenceReady) return
@@ -2810,13 +2855,20 @@ function App() {
 
     appStateSaveTimerRef.current = window.setTimeout(() => {
       appStateSaveTimerRef.current = null
+      const viewport = latestViewportRef.current
+      void writeDebugEntry('queueAppStateSave:flush', [
+        `selectedNoteId: ${selectedNoteId}`,
+        `topBoundaryLines: ${viewport?.topBoundaryLines ?? 'null'}`,
+        `bottomBoundaryLines: ${viewport?.bottomBoundaryLines ?? 'null'}`,
+        `scrollTopLines: ${viewport?.scrollTopLines ?? 'null'}`,
+      ])
       void window.measlyState?.saveAppState({
         selectedNoteId,
-        viewport: latestViewportRef.current ?? undefined,
+        viewport: viewport ?? undefined,
         menu: persistedMenuStateRef.current ?? buildMenuStateSnapshot(),
       })
     }, 150)
-  }, [buildMenuStateSnapshot, persistenceReady])
+  }, [buildMenuStateSnapshot, persistenceReady, writeDebugEntry])
 
   const flushSave = useCallback(async () => {
     if (!window.measlyNotes || !activeNoteId) return
@@ -3896,6 +3948,7 @@ function App() {
             })
             // Global texture enable is intentionally fixed on; per-surface alpha controls visibility.
             setTextureMaterials(cloneTextureMaterials(appState.menu.textureMaterials ?? DEFAULT_TEXTURE_MATERIALS))
+            setDebuggingEnabled(appState.menu.debuggingEnabled ?? false)
 
             setCurrentPage(loadedSidebarViewState[appState.menu.sidebarMode].page)
             setCategoryCollapsedPrimary(loadedSidebarViewState.category.collapsedPrimary)
@@ -3942,6 +3995,12 @@ function App() {
               scrollTopLines: appState.viewport.scrollTopLines,
             }
             latestViewportRef.current = pendingViewportRestoreRef.current
+            void writeDebugEntry('bootstrap:loadAppState', [
+              `viewport found in app-state.json`,
+              `topBoundaryLines: ${appState.viewport.topBoundaryLines}`,
+              `bottomBoundaryLines: ${appState.viewport.bottomBoundaryLines}`,
+              `scrollTopLines: ${appState.viewport.scrollTopLines}`,
+            ])
           } else {
             // Per spec: default to 0 lines for both boundaries (and scroll)
             // when nothing is stored.
@@ -3951,6 +4010,9 @@ function App() {
               scrollTopLines: 0,
             }
             latestViewportRef.current = pendingViewportRestoreRef.current
+            void writeDebugEntry('bootstrap:loadAppState', [
+              `no viewport in app-state.json — defaulting to 0/0/0`,
+            ])
           }
 
           if (window.measlyState) {
@@ -4014,6 +4076,13 @@ function App() {
         viewportLines: pending,
       })
 
+      void writeDebugEntry('applyViewport', [
+        `applySnapshot called`,
+        `topBoundaryLines: ${pending.topBoundaryLines}`,
+        `bottomBoundaryLines: ${pending.bottomBoundaryLines}`,
+        `scrollTopLines: ${pending.scrollTopLines}`,
+      ])
+
       latestEditViewportRef.current = pending
 
       pendingViewportRestoreRef.current = null
@@ -4026,7 +4095,7 @@ function App() {
       cancelled = true
       isApplyingInitialViewportRef.current = false
     }
-  }, [persistenceReady, activeNoteId])
+  }, [persistenceReady, activeNoteId, writeDebugEntry])
 
   const bindings = useMemo<EditorBindings>(() => ({
     onTextChange: (event: EditorTextChangeEvent) => {
@@ -4221,6 +4290,15 @@ function App() {
       latestEditViewportRef.current = nextViewport
       latestEditViewportTelemetryRef.current = nextTelemetry
 
+      void writeDebugEntry('onViewportChange', [
+        `source: ${event.source}`,
+        `topBoundaryLines: ${nextViewport.topBoundaryLines}`,
+        `bottomBoundaryLines: ${nextViewport.bottomBoundaryLines}`,
+        `scrollTopLines: ${nextViewport.scrollTopLines}`,
+        `isApplyingInitialViewport: ${isApplyingInitialViewportRef.current}`,
+        `persistenceReady: ${persistenceReady}`,
+      ])
+
       if (!isPreviewMode && activeNoteId) {
         const selection = latestEditorSelectionRef.current
         updateEditModeSnapshotCache({
@@ -4247,6 +4325,7 @@ function App() {
     queueAppStateSave,
     updateActiveNoteTitlePreview,
     updateEditModeSnapshotCache,
+    writeDebugEntry,
   ])
 
   useEffect(() => {
@@ -7097,6 +7176,31 @@ function App() {
           </button>
         </div>
       </section>
+
+      <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-debug" aria-label="Debugging">
+        <div className="sidebar-options-section-heading">Debugging</div>
+        <div className="toolbar-flyout-loadout-grid" role="group" aria-label="Debug tools">
+          <button
+            type="button"
+            className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn${debuggingEnabled ? ' is-active' : ''}`}
+            onClick={() => {
+              const next = !debuggingEnabled
+              setDebuggingEnabled(next)
+              if (!next) {
+                // Reset session debug note so a fresh note is created if
+                // debugging is re-enabled later in the same session
+                debugNoteIdRef.current = null
+              }
+              queueAppStateSave(activeNoteId)
+            }}
+            title={debuggingEnabled ? 'Disable debug logging' : 'Enable debug logging to a note'}
+            aria-label={debuggingEnabled ? 'Disable debug logging' : 'Enable debug logging to a note'}
+            aria-pressed={debuggingEnabled}
+          >
+            <span className="fa-solid fa-bug" aria-hidden="true" />
+          </button>
+        </div>
+      </section>
     </div>
   )
 
@@ -7262,6 +7366,26 @@ function App() {
 
   useEffect(() => {
     const handleBeforeUnload = () => {
+      // Flush any pending debounced app-state save immediately so the main
+      // process receives the latest viewport/menu state before the renderer
+      // is torn down. The main process will also re-save its cached copy on
+      // before-quit as a belt-and-suspenders guarantee.
+      if (appStateSaveTimerRef.current !== null) {
+        window.clearTimeout(appStateSaveTimerRef.current)
+        appStateSaveTimerRef.current = null
+        const viewport = latestViewportRef.current
+        void writeDebugEntry('beforeunload:flush', [
+          `flushing pending save on close`,
+          `topBoundaryLines: ${viewport?.topBoundaryLines ?? 'null'}`,
+          `bottomBoundaryLines: ${viewport?.bottomBoundaryLines ?? 'null'}`,
+        ])
+        void window.measlyState?.saveAppState({
+          selectedNoteId: activeNoteId,
+          viewport: viewport ?? undefined,
+          menu: persistedMenuStateRef.current ?? buildMenuStateSnapshot(),
+        })
+      }
+
       persistActiveNoteEditModeStateNow()
       if (isPreviewMode && activeNoteId) {
         void persistRenderViewStateForNoteNow(activeNoteId)
@@ -7271,7 +7395,7 @@ function App() {
 
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [activeNoteId, isPreviewMode, persistActiveNoteEditModeStateNow, persistMenuStateOnUnload, persistRenderViewStateForNoteNow])
+  }, [activeNoteId, buildMenuStateSnapshot, isPreviewMode, persistActiveNoteEditModeStateNow, persistMenuStateOnUnload, persistRenderViewStateForNoteNow, writeDebugEntry])
 
   // Native scroll (covers mouse wheel, trackpad, keyboard when not intercepted)
   const handlePreviewScroll = useCallback(() => {

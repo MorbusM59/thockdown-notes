@@ -260,6 +260,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     scrollBaseDistanceRows: sanitizePositive(input?.scrollBaseDistanceRows, DEFAULT_APP_STATE.menu!.scrollBaseDistanceRows ?? 1),
     scrollMaxDurationMultiplier: sanitizePositive(input?.scrollMaxDurationMultiplier, DEFAULT_APP_STATE.menu!.scrollMaxDurationMultiplier ?? 1),
     sidebarViewState: sanitizeSidebarViewState(input?.sidebarViewState),
+    debuggingEnabled: Boolean(input?.debuggingEnabled),
   };
 }
 
@@ -275,6 +276,7 @@ async function fileExists(filePath: string): Promise<boolean> {
 export class StateService {
   private readonly appStatePath: string;
   private readonly windowStatePath: string;
+  private cachedAppState: AppState | null = null;
 
   constructor(dataRoot: string) {
     this.appStatePath = path.join(dataRoot, APP_STATE_FILE);
@@ -311,7 +313,24 @@ export class StateService {
       viewport: sanitizeViewport(state.viewport),
       menu: sanitizeMenu(state.menu),
     };
+    this.cachedAppState = payload;
     await fs.writeFile(this.appStatePath, JSON.stringify(payload, null, 2), 'utf8');
+  }
+
+  // Called synchronously from the main process on app close, to guarantee
+  // the last-known state is written even if the renderer's async IPC call
+  // didn't complete before the window was destroyed.
+  async flushAppStateOnClose(): Promise<void> {
+    if (!this.cachedAppState) return;
+    try {
+      await fs.writeFile(
+        this.appStatePath,
+        JSON.stringify(this.cachedAppState, null, 2),
+        'utf8',
+      );
+    } catch (error) {
+      console.error('[stateService] flushAppStateOnClose failed:', error);
+    }
   }
 
   async loadWindowState(): Promise<WindowState> {

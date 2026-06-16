@@ -489,6 +489,14 @@ app.whenReady().then(async () => {
   app.quit()
 })
 
-app.on('before-quit', () => {
+let isQuitting = false;
+app.on('before-quit', (event) => {
   databaseService?.close()
+  if (!stateService || isQuitting) return
+  // Prevent the default quit, flush state to disk, then re-quit.
+  // This guarantees the last-known app state is written even if the
+  // renderer's async IPC call didn't complete before close.
+  event.preventDefault()
+  isQuitting = true
+  stateService.flushAppStateOnClose().finally(() => app.quit())
 })
