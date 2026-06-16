@@ -1562,6 +1562,7 @@ function App() {
   const [isPreviewMode, setIsPreviewMode] = useState(false)
   const [debuggingEnabled, setDebuggingEnabled] = useState(false)
   const debugNoteIdRef = useRef<string | null>(null)
+  const [windowIsMaximized, setWindowIsMaximized] = useState(false)
   const [viewStyle, setViewStyle] = useState<ViewStyleKey>('modern')
   const [viewFontSize, setViewFontSize] = useState<ViewSizeKey>('m')
   const [viewSpacing, setViewSpacing] = useState<ViewSpacingKey>('cozy')
@@ -2667,6 +2668,13 @@ function App() {
 
   const handleWindowClose = useCallback(() => {
     ;(window as any).windowControls?.close?.()
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = window.windowControls?.onMaximizeStateChange?.((isMaximized) => {
+      setWindowIsMaximized(isMaximized)
+    })
+    return () => unsubscribe?.()
   }, [])
 
   useEffect(() => {
@@ -7848,16 +7856,19 @@ function App() {
             aria-label="Minimize window"
             onClick={handleWindowMinimize}
           >
-            <span className="window-control-glyph fa-solid fa-minus" aria-hidden="true" />
+            <span className="window-control-glyph fa-solid fa-turn-down fa-flip-horizontal" aria-hidden="true" />
           </button>
           <button
             type="button"
             className="toolbar-gear-btn window-control-btn"
-            title="Maximize"
-            aria-label="Maximize window"
+            title={windowIsMaximized ? 'Restore' : 'Maximize'}
+            aria-label={windowIsMaximized ? 'Restore window' : 'Maximize window'}
             onClick={handleWindowToggleMaximize}
           >
-            <span className="window-control-glyph fa-solid fa-square" aria-hidden="true" />
+            <span
+              className={`window-control-glyph fa-solid ${windowIsMaximized ? 'fa-down-left-and-up-right-to-center' : 'fa-up-right-and-down-left-from-center'}`}
+              aria-hidden="true"
+            />
           </button>
           <button
             type="button"
@@ -7866,7 +7877,7 @@ function App() {
             aria-label="Close window"
             onClick={handleWindowClose}
           >
-            <span className="window-control-glyph fa-solid fa-xmark" aria-hidden="true" />
+            <span className="window-control-glyph fa-brands fa-twitter" aria-hidden="true" />
           </button>
         </div>
       </section>

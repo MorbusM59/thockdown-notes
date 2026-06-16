@@ -12,5 +12,6 @@ interface Window {
 		minimize: () => void;
 		toggleMaximize: () => void;
 		close: () => void;
+		onMaximizeStateChange: (callback: (isMaximized: boolean) => void) => () => void;
 	};
 }

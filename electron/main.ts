@@ -415,13 +415,24 @@ win = new BrowserWindow({
 
   win.on('resize', persistWindowState);
   win.on('move', persistWindowState);
-  win.on('maximize', persistWindowState);
-  win.on('unmaximize', persistWindowState);
+  win.on('maximize', () => {
+    persistWindowState()
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('window-maximize-state', true)
+    }
+  });
+  win.on('unmaximize', () => {
+    persistWindowState()
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('window-maximize-state', false)
+    }
+  });
   win.on('close', persistWindowState);
 
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
+    win?.webContents.send('window-maximize-state', win.isMaximized())
   })
 
   if (VITE_DEV_SERVER_URL) {

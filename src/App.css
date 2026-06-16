@@ -2308,8 +2308,13 @@ body.hsva-dragging * {
 
 .window-control-glyph {
   display:     block;
-  font-size:   13px;
+  font-size:   18px;
   line-height: 1;
+}
+
+.window-control-glyph.fa-turn-down {
+  font-size:   15px;
+  padding-left: 1px;
 }
 
 
