@@ -85,7 +85,8 @@ import { TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE, useTextureSurface 
 const SAVE_DEBOUNCE_MS = 350
 const NEW_NOTE_TEMPLATE = '# '
 const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
-const PROTECTED_TAGS = new Set(['archived', 'deleted', 'external'])
+const DEBUG_TAG_NAME = 'debug'
+const PROTECTED_TAGS = new Set(['archived', 'deleted', 'external', DEBUG_TAG_NAME])
 const GRID_DIVIDER_PX = 8
 const SIDEBAR_MIN_WIDTH_PX = 288
 const TAG_INPUT_MIN_WIDTH_PX = 150
@@ -2820,32 +2821,62 @@ function App() {
   // Writes a structured debug entry to a session-scoped debug note (tagged
   // "debug"). No-ops when debuggingEnabled is false. Safe to call from any
   // async or sync context — creation and tagging are fire-and-forget.
-  const writeDebugEntry = useCallback(async (functionName: string, lines: string[]) => {
-    if (!debuggingEnabled) return
-    if (!window.measlyNotes) return
+  const createDebugNote = useCallback(async (): Promise<string | null> => {
+    if (!window.measlyNotes || !persistenceReady) return null
 
     const now = new Date()
     const pad = (n: number) => String(n).padStart(2, '0')
-    const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
-    const section = `\n## ${timeStr} / ${functionName}\n${lines.map(l => `- ${l}`).join('\n')}`
+    const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+    const title = `# Debug: ${dateStr} / ${pad(now.getHours())}:${pad(now.getMinutes())}`
 
-    if (!debugNoteIdRef.current) {
-      // Create the debug note for this session
-      const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-      const title = `# Debug: ${dateStr} / ${pad(now.getHours())}:${pad(now.getMinutes())}`
-      const created = await window.measlyNotes.createNote({ initialText: `${title}\n${section}` })
+    try {
+      const created = await window.measlyNotes.createNote({ initialText: `${title}\n` })
       debugNoteIdRef.current = created.id
       setNotes((previous) => {
         const index = previous.findIndex(n => n.id === created.id)
         if (index >= 0) return previous
         return [created, ...previous]
       })
-      await window.measlyNotes.addTagToNote({ id: created.id, tagName: 'debug', position: 0 }).catch(() => {})
-    } else {
-      // Append to the existing debug note
-      const loaded = await window.measlyNotes.loadNote({ id: debugNoteIdRef.current })
+      await window.measlyNotes.addTagToNote({ id: created.id, tagName: DEBUG_TAG_NAME, position: 0 }).catch(() => {})
+      return created.id
+    } catch (error) {
+      console.error('Failed to create debug note', error)
+      return null
+    }
+  }, [persistenceReady])
+
+  const ensureDebugNoteExists = useCallback(async (): Promise<string | null> => {
+    if (!debuggingEnabled) return null
+    if (debugNoteIdRef.current) return debugNoteIdRef.current
+    return createDebugNote()
+  }, [createDebugNote, debuggingEnabled])
+
+  useEffect(() => {
+    if (!debuggingEnabled) return
+    if (!persistenceReady) return
+    if (debugNoteIdRef.current) return
+
+    void createDebugNote()
+  }, [createDebugNote, debuggingEnabled, persistenceReady])
+
+  const writeDebugEntry = useCallback(async (functionName: string, lines: string[]) => {
+    if (!debuggingEnabled) return
+    if (!window.measlyNotes) return
+
+    if (!debugNoteIdRef.current) {
+      const noteId = await ensureDebugNoteExists()
+      if (!noteId) return
+    }
+
+    const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+    const section = `\n## ${timeStr} / ${functionName}\n${lines.map(l => `- ${l}`).join('\n')}`
+
+    try {
+      const loaded = await window.measlyNotes.loadNote({ id: debugNoteIdRef.current! })
       const updated = await window.measlyNotes.saveNote({
-        id: debugNoteIdRef.current,
+        id: debugNoteIdRef.current!,
         text: `${loaded.text}${section}`,
       })
       setNotes((previous) => {
@@ -2855,8 +2886,10 @@ function App() {
         next[index] = updated
         return next
       })
+    } catch (error) {
+      console.error('Failed to write debug entry', error)
     }
-  }, [debuggingEnabled])
+  }, [debuggingEnabled, ensureDebugNoteExists])
 
   const queueAppStateSave = useCallback((selectedNoteId: string | null) => {
     if (!window.measlyState) return
@@ -3223,6 +3256,10 @@ function App() {
     if (!activeNoteId) return null
     return notes.find((note) => note.id === activeNoteId) ?? null
   }, [activeNoteId, notes])
+
+  const activeNoteHasDebugTag = useMemo(() => {
+    return activeNoteSummary?.tags.some((tag) => normalizeTagName(tag) === DEBUG_TAG_NAME) ?? false
+  }, [activeNoteSummary])
 
   const persistEditUiState = useCallback((noteId: string, options?: { immediate?: boolean }) => {
     const legacyDb = window.measlyLegacyDb
@@ -4100,7 +4137,7 @@ function App() {
       setEditorSelection(event.selection)
       setEditorTextVersion((previous) => previous + 1)
 
-      if (!activeNoteId || !persistenceReady) return
+      if (!activeNoteId || !persistenceReady || activeNoteHasDebugTag) return
 
       const isUserEditableSource =
         event.source === 'user-input' || event.source === 'history-undo' || event.source === 'history-redo'
@@ -7197,7 +7234,9 @@ function App() {
             onClick={() => {
               const next = !debuggingEnabled
               setDebuggingEnabled(next)
-              if (!next) {
+              if (next) {
+                void createDebugNote()
+              } else {
                 // Reset session debug note so a fresh note is created if
                 // debugging is re-enabled later in the same session
                 debugNoteIdRef.current = null
@@ -8031,6 +8070,7 @@ function App() {
                 glyphWidthPx={editorRuntimeMetrics.glyphWidthPx}
                 cellWidthPx={editorRuntimeMetrics.cellWidthPx}
                 fontReady={editorFontLoadVersion > 0}
+                editorReadOnly={activeNoteHasDebugTag}
               />
             ) : (
               <div className="preview-container">

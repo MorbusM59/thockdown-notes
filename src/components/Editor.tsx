@@ -56,6 +56,7 @@ interface EditorProps {
   // is true, metrics are fallback estimates and the grid/columns would render
   // at the wrong pitch. Gated content waits for both this and hasViewportLines.
   fontReady: boolean;
+  editorReadOnly?: boolean;
 }
 
 const ENABLE_CONTRACT_ASSERTIONS = import.meta.env.DEV;
