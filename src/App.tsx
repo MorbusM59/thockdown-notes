@@ -8068,7 +8068,6 @@ function App() {
           <div ref={editorStageRef} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
             {!isPreviewMode ? (
               <Editor
-                key={activeNoteId ?? 'no-active-note'}
                 bindings={bindings}
                 adapterRef={adapterRef}
                 initialText={activeNoteText}
