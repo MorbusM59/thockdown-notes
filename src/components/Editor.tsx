@@ -380,6 +380,15 @@ export function Editor({
     clientHeightPx: number;
     trackHeightPx: number;
   } | null>(null);
+  const isProgrammaticScrollRef = useRef(false);
+
+  const withProgrammaticScroll = useCallback((action: () => void) => {
+    isProgrammaticScrollRef.current = true;
+    action();
+    requestAnimationFrame(() => {
+      isProgrammaticScrollRef.current = false;
+    });
+  }, []);
 
   const reportInvariantIssues = (context: string, issues: string[]) => {
     if (!ENABLE_CONTRACT_ASSERTIONS || issues.length === 0) return;
@@ -538,7 +547,7 @@ export function Editor({
   useEffect(() => {
     const viewport = buildViewport();
     reportInvariantIssues('viewport-change', validateViewportInvariants(viewport));
-    bindings?.onViewportChange?.({ source: 'programmatic', viewport });
+    bindings?.onViewportChange?.({ source: 'programmatic', origin: 'programmatic', viewport });
   }, [bindings, buildViewport]);
 
   useLayoutEffect(() => {
@@ -603,7 +612,11 @@ export function Editor({
     const onScroll = () => {
       const viewport = buildViewport();
       reportInvariantIssues('viewport-scroll', validateViewportInvariants(viewport));
-      bindings?.onViewportChange?.({ source: 'user-input', viewport });
+      bindings?.onViewportChange?.({
+        source: 'user-input',
+        origin: isProgrammaticScrollRef.current ? 'programmatic' : 'scroll',
+        viewport,
+      });
       syncCustomScrollbar();
     };
 
@@ -853,7 +866,7 @@ export function Editor({
     };
 
     reportInvariantIssues('viewport-change', validateViewportInvariants(viewport));
-    bindings.onViewportChange?.({ source: 'user-input', viewport });
+    bindings.onViewportChange?.({ source: 'user-input', origin: 'viewport-drag', viewport });
   }, [bindings, cellWidthPx, lineHeightPx]);
 
   useEffect(() => {

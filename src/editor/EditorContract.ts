@@ -15,6 +15,8 @@ export interface EditorSelectionState {
   isCollapsed: boolean;
 }
 
+export type EditorViewportChangeOrigin = 'viewport-drag' | 'scroll' | 'programmatic';
+
 export interface EditorViewportState {
   topBoundaryPx: number;
   bottomBoundaryPx: number;
@@ -52,6 +54,7 @@ export interface EditorSelectionChangeEvent {
 
 export interface EditorViewportChangeEvent {
   source: EditorChangeSource;
+  origin?: EditorViewportChangeOrigin;
   viewport: EditorViewportState;
 }
 

@@ -11,6 +11,7 @@ import type {
   EditorSelectionState,
   EditorTextChangeEvent,
   EditorViewportChangeEvent,
+  EditorViewportState,
 } from './editor/EditorContract'
 import type { PersistedMenuState, PersistedSidebarViewState, PersistedViewportState } from './shared/appState'
 import type { UiLayoutLoadout } from './shared/loadouts'
@@ -1643,6 +1644,18 @@ function App() {
   const ignoreNextUserViewportChangeRef = useRef(false)
   const latestEditViewportRef = useRef<PersistedViewportState | null>(null)
   const latestEditViewportTelemetryRef = useRef<EditViewportTelemetry | null>(null)
+
+  const areMatchingViewportLines = useCallback((expected: PersistedViewportState, event: EditorViewportState) => {
+    const lineHeight = Math.max(1, event.lineHeightPx)
+    const actualTop = Math.max(0, Math.round(event.topBoundaryPx / lineHeight))
+    const actualBottom = Math.max(0, Math.round(event.bottomBoundaryPx / lineHeight))
+    const actualScrollTop = Math.max(0, Math.round(event.scrollTopPx / lineHeight))
+    return (
+      actualTop === expected.topBoundaryLines &&
+      actualBottom === expected.bottomBoundaryLines &&
+      actualScrollTop === expected.scrollTopLines
+    )
+  }, []);
   const editUiStateSaveTimerRef = useRef<number | null>(null)
   const lastPersistedEditUiStateRef = useRef<{ noteId: string; progressEdit: number; cursorPos: number; scrollTop: number } | null>(null)
   const pendingEditRestoreSnapshotRef = useRef<EditRestoreSnapshot | null>(null)
@@ -4088,8 +4101,9 @@ function App() {
 
       latestViewportRef.current = pending
       latestEditViewportRef.current = pending
-      pendingViewportRestoreRef.current = null
-      isApplyingInitialViewportRef.current = false
+      // Keep the pending restore until the editor reports the matching
+      // restored viewport. This guards against an intermediate 0/0/0
+      // programmatic event that can arrive directly after applySnapshot.
     }
 
     requestAnimationFrame(applyViewport)
@@ -4273,7 +4287,24 @@ function App() {
         ignoreNextUserViewportChangeRef.current = false
         return
       }
-      if (pendingViewportRestoreRef.current) {
+
+      const pendingRestore = pendingViewportRestoreRef.current
+      if (pendingRestore) {
+        if (event.source === 'programmatic' && areMatchingViewportLines(pendingRestore, event.viewport)) {
+          pendingViewportRestoreRef.current = null
+          isApplyingInitialViewportRef.current = false
+        } else {
+          return
+        }
+      }
+
+      if (event.source !== 'user-input') {
+        return
+      }
+
+      const isViewportDrag = event.origin === 'viewport-drag'
+      const isScroll = event.origin === 'scroll'
+      if (!isViewportDrag && !isScroll) {
         return
       }
 
