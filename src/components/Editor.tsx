@@ -51,6 +51,11 @@ interface EditorProps {
   lineHeightPx: number;
   glyphWidthPx: number;
   cellWidthPx: number;
+  // True once the editor font has loaded and glyph metrics (cellWidthPx,
+  // glyphWidthPx) have been measured against the real font face. Until this
+  // is true, metrics are fallback estimates and the grid/columns would render
+  // at the wrong pitch. Gated content waits for both this and hasViewportLines.
+  fontReady: boolean;
 }
 
 const ENABLE_CONTRACT_ASSERTIONS = import.meta.env.DEV;
@@ -313,6 +318,7 @@ export function Editor({
   lineHeightPx,
   glyphWidthPx,
   cellWidthPx,
+  fontReady,
 }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -1019,7 +1025,7 @@ export function Editor({
                 exactly the flash we want to avoid. Render nothing here until
                 ready; the scroller below still mounts unconditionally so it
                 can be measured. */}
-            {hasViewportLines && (
+            {hasViewportLines && fontReady && (
               <>
                 {/* Regular background color is constrained to the middle zone only. */}
                 <div
@@ -1064,14 +1070,14 @@ export function Editor({
                 (--editor-line-height / --editor-cell-width) must be final
                 before they render — otherwise the grid draws at a wrong
                 pitch and redraws once font metrics settle. */}
-            {hasViewportLines && (
+            {hasViewportLines && fontReady && (
               <>
                 <div className="absolute pointer-events-none measly-grid-outline-lines" style={{ inset: 'var(--editor-frame-padding) var(--editor-frame-padding) calc(var(--editor-frame-padding) - 1px) var(--editor-frame-padding)', zIndex: 29 }} />
                 <div className="absolute pointer-events-none measly-grid-lines" style={{ inset: 'var(--editor-frame-padding) var(--editor-frame-padding) calc(var(--editor-frame-padding) - 1px) var(--editor-frame-padding)', zIndex: 30 }} />
               </>
             )}
 
-            {hasViewportLines && (
+            {hasViewportLines && fontReady && (
               <>
                 {/* Top Drag Handle */}
                 <div
@@ -1116,13 +1122,13 @@ export function Editor({
                       // flash we want to avoid. The element stays mounted
                       // (so Lexical's editable root exists and text
                       // hydration can proceed) but is not visible.
-                      visibility: hasViewportLines ? 'visible' : 'hidden',
+                      visibility: hasViewportLines && fontReady ? 'visible' : 'hidden',
                     }}
                     spellCheck={false} 
                   />
                 }
                 placeholder={
-                  hasViewportLines ? (
+                  hasViewportLines && fontReady ? (
                     <div className="absolute text-gray-400 pointer-events-none select-none editor-text z-0" style={{ top: topBoundary, left: 0 }}>
                       Jot down a measly note...
                     </div>
@@ -1133,7 +1139,7 @@ export function Editor({
             </div>
 
             {/* Native Caret Replacement overlayed in viewport space */}
-            {hasViewportLines && (
+            {hasViewportLines && fontReady && (
               <BlockCaretPlugin
                 scrollerRef={scrollerRef}
                 topBoundaryPx={topBoundary}
@@ -1158,7 +1164,7 @@ export function Editor({
             />
             
             {/* The Magic Cage Scroller! */}
-            {hasViewportLines && (
+            {hasViewportLines && fontReady && (
               <CagedScrollPlugin
                 scrollerRef={scrollerRef}
                 topBoundaryPx={topBoundary}

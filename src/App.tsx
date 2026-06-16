@@ -7893,6 +7893,7 @@ function App() {
                 lineHeightPx={editorRuntimeMetrics.lineHeightPx}
                 glyphWidthPx={editorRuntimeMetrics.glyphWidthPx}
                 cellWidthPx={editorRuntimeMetrics.cellWidthPx}
+                fontReady={editorFontLoadVersion > 0}
               />
             ) : (
               <div className="preview-container">
