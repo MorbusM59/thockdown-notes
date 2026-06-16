@@ -382,14 +382,6 @@ export function Editor({
   } | null>(null);
   const isProgrammaticScrollRef = useRef(false);
 
-  const withProgrammaticScroll = useCallback((action: () => void) => {
-    isProgrammaticScrollRef.current = true;
-    action();
-    requestAnimationFrame(() => {
-      isProgrammaticScrollRef.current = false;
-    });
-  }, []);
-
   const reportInvariantIssues = (context: string, issues: string[]) => {
     if (!ENABLE_CONTRACT_ASSERTIONS || issues.length === 0) return;
     const key = `${context}|${issues.join('|')}`;
