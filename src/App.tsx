@@ -2847,7 +2847,7 @@ function App() {
   const queueAppStateSave = useCallback((selectedNoteId: string | null) => {
     if (!window.measlyState) return
     if (!persistenceReady) return
-    if (isApplyingInitialViewportRef.current) return
+    if (isApplyingInitialViewportRef.current || pendingViewportRestoreRef.current) return
 
     if (appStateSaveTimerRef.current !== null) {
       window.clearTimeout(appStateSaveTimerRef.current)
@@ -4023,6 +4023,7 @@ function App() {
             })
           }
 
+          isApplyingInitialViewportRef.current = true
           setPersistenceReady(true)
           return
         } catch (error) {
@@ -4084,7 +4085,6 @@ function App() {
       ])
 
       latestEditViewportRef.current = pending
-
       pendingViewportRestoreRef.current = null
       isApplyingInitialViewportRef.current = false
     }
@@ -4266,6 +4266,10 @@ function App() {
       }
     },
     onViewportChange: (event: EditorViewportChangeEvent) => {
+      if (pendingViewportRestoreRef.current && event.source === 'programmatic') {
+        return
+      }
+
       // Derive line counts directly from the event's px values rather than
       // re-reading via adapterRef.current?.getSnapshot(). The adapter object
       // is recreated on the same render cycle as a boundary drag (because
