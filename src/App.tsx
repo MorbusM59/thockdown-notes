@@ -4197,14 +4197,21 @@ function App() {
       }
     },
     onViewportChange: (event: EditorViewportChangeEvent) => {
-      const snapshotLines = adapterRef.current?.getSnapshot()?.viewportLines
-      const nextViewport: PersistedViewportState = snapshotLines
-        ? {
-            topBoundaryLines: Math.max(0, Math.round(snapshotLines.topBoundaryLines)),
-            bottomBoundaryLines: Math.max(0, Math.round(snapshotLines.bottomBoundaryLines)),
-            scrollTopLines: Math.max(0, Math.round(snapshotLines.scrollTopLines)),
-          }
-        : (latestViewportRef.current ?? { topBoundaryLines: 0, bottomBoundaryLines: 0, scrollTopLines: 0 })
+      // Derive line counts directly from the event's px values rather than
+      // re-reading via adapterRef.current?.getSnapshot(). The adapter object
+      // is recreated on the same render cycle as a boundary drag (because
+      // buildViewportLines is in its dep array), causing adapterRef.current
+      // to be briefly null between the old adapter's cleanup and the new
+      // adapter's setup — exactly when this handler fires. Re-reading through
+      // the adapter would return null and fall back to stale 0/0/0 values.
+      // Reading from the event is safe: it carries the values from the render
+      // that triggered this effect, so they're always current.
+      const lh = Math.max(1, event.viewport.lineHeightPx)
+      const nextViewport: PersistedViewportState = {
+        topBoundaryLines: Math.max(0, Math.round(event.viewport.topBoundaryPx / lh)),
+        bottomBoundaryLines: Math.max(0, Math.round(event.viewport.bottomBoundaryPx / lh)),
+        scrollTopLines: Math.max(0, Math.round(event.viewport.scrollTopPx / lh)),
+      }
       const nextTelemetry = {
         scrollTopPx: Math.round(event.viewport.scrollTopPx),
         scrollHeightPx: Math.max(0, Math.round(event.viewport.scrollHeightPx ?? 0)),
