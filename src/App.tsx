@@ -118,9 +118,6 @@ const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   gridOutline: '#00000022',
 }
 
-const quantizeTopEdge = (valuePx: number, lineHeightPx: number) =>
-  Math.max(0, Math.round(valuePx / lineHeightPx) * lineHeightPx)
-
 const HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['topBackground', 'bottomBackground', 'background', 'gridOutline', 'caret', 'selection']
 
 const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
@@ -655,9 +652,8 @@ function resolvePreviewAnchorRatioFromEditState(params: {
   selectionEnd: number
   viewport: PersistedViewportState | null
   telemetry?: EditViewportTelemetry | null
-  lineHeightPx: number
 }): number {
-  const { text, selectionEnd, viewport, telemetry, lineHeightPx } = params
+  const { text, selectionEnd, viewport, telemetry } = params
 
   const safeTextLength = Math.max(1, text.length)
   const cursorRatio = clamp(selectionEnd / safeTextLength, 0, 1)
@@ -674,47 +670,25 @@ function resolvePreviewAnchorRatioFromEditState(params: {
   }
 
   const totalRows = Math.max(1, text.split('\n').length)
-  const safeLineHeight = Math.max(1, lineHeightPx)
-  const scrolledRows = Math.max(0, viewport.scrollTopPx / safeLineHeight)
+  const scrolledRows = Math.max(0, viewport.scrollTopLines)
   const viewportRatio = clamp(scrolledRows / Math.max(1, totalRows - 1), 0, 1)
 
   return viewportRatio
 }
 
-function quantizeEditScrollTop(scrollTopPx: number, lineHeightPx: number): number {
+// Converts a pixel scroll position (e.g. from the legacy per-note SQLite
+// scrollTop column) to an integer line count for storage in
+// PersistedViewportState/EditRestoreSnapshot.viewport.
+function scrollTopPxToLines(scrollTopPx: number, lineHeightPx: number): number {
   const safeLineHeight = Math.max(1, lineHeightPx)
-  return Math.max(0, Math.round(scrollTopPx / safeLineHeight) * safeLineHeight)
+  return Math.max(0, Math.round(scrollTopPx / safeLineHeight))
 }
 
-function normalizeEditorViewportBoundaries(params: {
-  topBoundaryPx: number
-  bottomBoundaryPx: number
-  lineHeightPx: number
-  clientHeightPx?: number
-}) {
-  const safeLineHeightPx = Math.max(1, Math.round(params.lineHeightPx))
-  const rawTopBoundaryPx = Math.max(0, Math.round(params.topBoundaryPx))
-  const rawBottomBoundaryPx = Math.max(0, Math.round(params.bottomBoundaryPx))
-  const editorHeightPx = Math.max(0, Math.round(params.clientHeightPx ?? 0))
-
-  if (editorHeightPx <= 0) {
-    return {
-      topBoundaryPx: rawTopBoundaryPx,
-      bottomBoundaryPx: rawBottomBoundaryPx,
-    }
-  }
-
-  const maxSum = Math.max(0, editorHeightPx - safeLineHeightPx)
-  const topBoundaryPx = Math.min(quantizeTopEdge(rawTopBoundaryPx, safeLineHeightPx), maxSum)
-  const bottomBoundaryPx = Math.min(quantizeTopEdge(rawBottomBoundaryPx, safeLineHeightPx), maxSum)
-  if (topBoundaryPx + bottomBoundaryPx <= maxSum) {
-    return { topBoundaryPx, bottomBoundaryPx }
-  }
-
-  return {
-    topBoundaryPx,
-    bottomBoundaryPx: Math.max(0, maxSum - topBoundaryPx),
-  }
+// Converts an integer line count back to a pixel scroll position, e.g. for
+// writing back to the legacy per-note SQLite scrollTop column.
+function scrollTopLinesToPx(scrollTopLines: number, lineHeightPx: number): number {
+  const safeLineHeight = Math.max(1, lineHeightPx)
+  return Math.max(0, Math.round(scrollTopLines)) * safeLineHeight
 }
 
 function buildEditRestoreSnapshotFromUiState(params: {
@@ -726,13 +700,10 @@ function buildEditRestoreSnapshotFromUiState(params: {
   overrideCursorPos?: number
 }): EditRestoreSnapshot {
   const { noteId, text, uiState, fallbackViewport, lineHeightPx, overrideCursorPos } = params
-  const fallbackTopBoundary = fallbackViewport?.topBoundaryPx ?? 0
-  const fallbackBottomBoundary = fallbackViewport?.bottomBoundaryPx ?? (lineHeightPx * 6)
-  const normalizedFallback = normalizeEditorViewportBoundaries({
-    topBoundaryPx: fallbackTopBoundary,
-    bottomBoundaryPx: fallbackBottomBoundary,
-    lineHeightPx,
-  })
+  // Default to 0 lines for both boundaries when nothing is stored (per spec:
+  // a fresh/never-dragged note has no reserved top/bottom zones).
+  const fallbackTopBoundaryLines = fallbackViewport?.topBoundaryLines ?? 0
+  const fallbackBottomBoundaryLines = fallbackViewport?.bottomBoundaryLines ?? 0
   const selectionTextLength = Math.max(0, text.length)
   const persistedCursor =
     typeof overrideCursorPos === 'number' && Number.isFinite(overrideCursorPos)
@@ -740,9 +711,9 @@ function buildEditRestoreSnapshotFromUiState(params: {
       : typeof uiState?.cursorPos === 'number' && Number.isFinite(uiState.cursorPos)
         ? Math.max(0, Math.min(Math.round(uiState.cursorPos), selectionTextLength))
         : 0
-  const storedScrollTop =
+  const storedScrollTopLines =
     typeof uiState?.scrollTop === 'number' && Number.isFinite(uiState.scrollTop)
-      ? quantizeEditScrollTop(Math.max(0, Math.round(uiState.scrollTop)), lineHeightPx)
+      ? scrollTopPxToLines(Math.max(0, uiState.scrollTop), lineHeightPx)
       : 0
 
   const collapsedSelection: EditorSelectionState = {
@@ -758,9 +729,9 @@ function buildEditRestoreSnapshotFromUiState(params: {
     collapsedSelection,
     fullSelection: collapsedSelection,
     viewport: {
-      topBoundaryPx: normalizedFallback.topBoundaryPx,
-      bottomBoundaryPx: normalizedFallback.bottomBoundaryPx,
-      scrollTopPx: storedScrollTop,
+      topBoundaryLines: fallbackTopBoundaryLines,
+      bottomBoundaryLines: fallbackBottomBoundaryLines,
+      scrollTopLines: storedScrollTopLines,
     },
   }
 }
@@ -2248,18 +2219,23 @@ function App() {
   const readCurrentEditUiPayload = useCallback((): { progressEdit: number; cursorPos: number; scrollTop: number } | null => {
     const selection = latestEditorSelectionRef.current
 
-    const snapshotViewport = adapterRef.current?.getSnapshot()?.viewport
+    const liveSnapshot = adapterRef.current?.getSnapshot()
+    const snapshotViewport = liveSnapshot?.viewport
+    const snapshotViewportLines = liveSnapshot?.viewportLines
     let snapshotViewportState: PersistedViewportState | null = null
 
-    if (snapshotViewport) {
+    if (snapshotViewportLines) {
       snapshotViewportState = {
-        topBoundaryPx: Math.round(snapshotViewport.topBoundaryPx),
-        bottomBoundaryPx: Math.round(snapshotViewport.bottomBoundaryPx),
-        scrollTopPx: Math.round(snapshotViewport.scrollTopPx),
+        topBoundaryLines: Math.max(0, Math.round(snapshotViewportLines.topBoundaryLines)),
+        bottomBoundaryLines: Math.max(0, Math.round(snapshotViewportLines.bottomBoundaryLines)),
+        scrollTopLines: Math.max(0, Math.round(snapshotViewportLines.scrollTopLines)),
       }
 
       latestViewportRef.current = snapshotViewportState
       latestEditViewportRef.current = snapshotViewportState
+    }
+
+    if (snapshotViewport) {
       latestEditViewportTelemetryRef.current = {
         scrollTopPx: Math.round(snapshotViewport.scrollTopPx),
         scrollHeightPx: Math.max(0, Math.round(snapshotViewport.scrollHeightPx ?? 0)),
@@ -2270,9 +2246,9 @@ function App() {
     const viewport = snapshotViewportState ?? latestEditViewportRef.current ?? latestViewportRef.current
     if (!viewport) return null
 
-    const scrollTop = Math.max(0, Math.round(viewport.scrollTopPx))
-    const lineHeight = Math.max(1, editorRuntimeMetrics.lineHeightPx)
-    const progressEdit = scrollTop / lineHeight
+    const scrollTopLines = Math.max(0, Math.round(viewport.scrollTopLines))
+    const scrollTop = scrollTopLinesToPx(scrollTopLines, editorRuntimeMetrics.lineHeightPx)
+    const progressEdit = scrollTopLines
     const cursorPos = Math.max(0, selection.end)
 
     return {
@@ -2283,38 +2259,28 @@ function App() {
   }, [editorRuntimeMetrics.lineHeightPx])
 
   const updateEditModeSnapshotCache = useCallback((snapshot: EditRestoreSnapshot) => {
-    editModeSnapshotByNoteIdRef.current.set(snapshot.noteId, {
-      ...snapshot,
-      viewport: {
-        ...snapshot.viewport,
-        scrollTopPx: quantizeEditScrollTop(snapshot.viewport.scrollTopPx, editorRuntimeMetrics.lineHeightPx),
-      },
-    })
-  }, [editorRuntimeMetrics.lineHeightPx])
+    editModeSnapshotByNoteIdRef.current.set(snapshot.noteId, snapshot)
+  }, [])
 
   const captureEditModeSnapshotFromEditor = useCallback((noteId: string): EditRestoreSnapshot | null => {
     const liveSnapshot = adapterRef.current?.getSnapshot()
     const selection = liveSnapshot?.selection ?? latestEditorSelectionRef.current
     const snapshotViewport = liveSnapshot?.viewport
-    const viewport = snapshotViewport
-      ? (() => {
-          const normalized = normalizeEditorViewportBoundaries({
-            topBoundaryPx: snapshotViewport.topBoundaryPx,
-            bottomBoundaryPx: snapshotViewport.bottomBoundaryPx,
-            lineHeightPx: snapshotViewport.lineHeightPx,
-            clientHeightPx: snapshotViewport.clientHeightPx,
-          })
-          return {
-            topBoundaryPx: normalized.topBoundaryPx,
-            bottomBoundaryPx: normalized.bottomBoundaryPx,
-            scrollTopPx: Math.round(snapshotViewport.scrollTopPx),
-          }
-        })()
+    const snapshotViewportLines = liveSnapshot?.viewportLines
+    const viewport: PersistedViewportState | null = snapshotViewportLines
+      ? {
+          topBoundaryLines: Math.max(0, Math.round(snapshotViewportLines.topBoundaryLines)),
+          bottomBoundaryLines: Math.max(0, Math.round(snapshotViewportLines.bottomBoundaryLines)),
+          scrollTopLines: Math.max(0, Math.round(snapshotViewportLines.scrollTopLines)),
+        }
       : (latestEditViewportRef.current ?? latestViewportRef.current)
 
-    if (snapshotViewport) {
+    if (snapshotViewportLines) {
       latestViewportRef.current = viewport
       latestEditViewportRef.current = viewport
+    }
+
+    if (snapshotViewport) {
       latestEditViewportTelemetryRef.current = {
         scrollTopPx: Math.round(snapshotViewport.scrollTopPx),
         scrollHeightPx: Math.max(0, Math.round(snapshotViewport.scrollHeightPx ?? 0)),
@@ -2912,9 +2878,9 @@ function App() {
       const previousSnapshot = editModeSnapshotByNoteIdRef.current.get(previousNoteId)
       const snapshotPayload = previousSnapshot
         ? {
-            progressEdit: previousSnapshot.viewport.scrollTopPx / Math.max(1, editorRuntimeMetrics.lineHeightPx),
+            progressEdit: previousSnapshot.viewport.scrollTopLines,
             cursorPos: previousSnapshot.fullSelection.end,
-            scrollTop: quantizeEditScrollTop(previousSnapshot.viewport.scrollTopPx, editorRuntimeMetrics.lineHeightPx),
+            scrollTop: scrollTopLinesToPx(previousSnapshot.viewport.scrollTopLines, editorRuntimeMetrics.lineHeightPx),
           }
         : null
       const payload = snapshotPayload
@@ -3227,7 +3193,7 @@ function App() {
           },
           viewport: {
             ...cached.viewport,
-            scrollTopPx: quantizeEditScrollTop(scrollTop, editorRuntimeMetrics.lineHeightPx),
+            scrollTopLines: scrollTopPxToLines(scrollTop, editorRuntimeMetrics.lineHeightPx),
           },
         })
       }
@@ -3282,9 +3248,9 @@ function App() {
     const cachedSnapshot = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
     const snapshotPayload = cachedSnapshot
       ? {
-          progressEdit: cachedSnapshot.viewport.scrollTopPx / Math.max(1, editorRuntimeMetrics.lineHeightPx),
+          progressEdit: cachedSnapshot.viewport.scrollTopLines,
           cursorPos: cachedSnapshot.fullSelection.end,
-          scrollTop: quantizeEditScrollTop(cachedSnapshot.viewport.scrollTopPx, editorRuntimeMetrics.lineHeightPx),
+          scrollTop: scrollTopLinesToPx(cachedSnapshot.viewport.scrollTopLines, editorRuntimeMetrics.lineHeightPx),
         }
       : null
     const payload = snapshotPayload
@@ -3302,45 +3268,13 @@ function App() {
   const applyEditRestoreSnapshot = useCallback((snapshot: EditRestoreSnapshot, options?: { restoreFullSelection?: boolean }) => {
     const restoreFullSelection = options?.restoreFullSelection ?? true
     let cancelled = false
-    const targetScrollTop = Math.max(0, Math.round(snapshot.viewport.scrollTopPx))
 
-    const applyViewportSnapshot = () => {
-      adapterRef.current?.applySnapshot({
-        viewport: {
-          topBoundaryPx: snapshot.viewport.topBoundaryPx,
-          bottomBoundaryPx: snapshot.viewport.bottomBoundaryPx,
-          scrollTopPx: targetScrollTop,
-          lineHeightPx: editorRuntimeMetrics.lineHeightPx,
-          cellWidthPx: editorRuntimeMetrics.cellWidthPx,
-        },
-      })
-    }
-
-    const scheduleViewportReconcile = (attempt: number, stableFrames: number) => {
-      if (cancelled) return
-
-      const viewport = adapterRef.current?.getSnapshot()?.viewport
-      const observedScrollTop = typeof viewport?.scrollTopPx === 'number' ? Math.round(viewport.scrollTopPx) : null
-      const maxScrollTop = viewport
-        ? Math.max(0, Math.round((viewport.scrollHeightPx ?? 0) - (viewport.clientHeightPx ?? 0)))
-        : 0
-      const waitingForHydration = targetScrollTop > 0 && maxScrollTop <= 0
-      const expectedScrollTop = waitingForHydration
-        ? targetScrollTop
-        : Math.min(targetScrollTop, maxScrollTop)
-      const scrollDelta = observedScrollTop === null ? Number.POSITIVE_INFINITY : Math.abs(observedScrollTop - expectedScrollTop)
-      const isSettled = !waitingForHydration && scrollDelta <= 1
-      const nextStableFrames = isSettled ? (stableFrames + 1) : 0
-      const maxAttempts = 120
-
-      if (nextStableFrames >= 2 || attempt >= maxAttempts) {
-        return
-      }
-
-      applyViewportSnapshot()
-      requestAnimationFrame(() => scheduleViewportReconcile(attempt + 1, nextStableFrames))
-    }
-
+    // Restoring from integer line counts is direct and idempotent: no
+    // measurement-dependent clamping happens at apply time (see
+    // EditorViewportLines / clampBoundaryLines), so a single applySnapshot
+    // call is sufficient. The previous implementation needed a multi-frame
+    // reconciliation loop to work around pixel-based restores being
+    // invalidated by container-size races; that is no longer necessary.
     const applyWhenReady = () => {
       if (cancelled) return
       const adapter = adapterRef.current
@@ -3351,23 +3285,11 @@ function App() {
 
       adapter.applySnapshot({
         selection: snapshot.collapsedSelection,
-        viewport: {
-          topBoundaryPx: snapshot.viewport.topBoundaryPx,
-          bottomBoundaryPx: snapshot.viewport.bottomBoundaryPx,
-          scrollTopPx: targetScrollTop,
-          lineHeightPx: editorRuntimeMetrics.lineHeightPx,
-          cellWidthPx: editorRuntimeMetrics.cellWidthPx,
-        },
+        viewportLines: snapshot.viewport,
       })
 
-      latestViewportRef.current = {
-        topBoundaryPx: snapshot.viewport.topBoundaryPx,
-        bottomBoundaryPx: snapshot.viewport.bottomBoundaryPx,
-        scrollTopPx: targetScrollTop,
-      }
-      latestEditViewportRef.current = latestViewportRef.current
-
-      requestAnimationFrame(() => scheduleViewportReconcile(0, 0))
+      latestViewportRef.current = snapshot.viewport
+      latestEditViewportRef.current = snapshot.viewport
 
       if (!restoreFullSelection || snapshot.fullSelection.isCollapsed) {
         return
@@ -3386,7 +3308,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [editorRuntimeMetrics.cellWidthPx, editorRuntimeMetrics.lineHeightPx])
+  }, [])
 
   const orderedActiveTags = activeNoteSummary?.tags ?? []
   const activeNoteIsExternal = orderedActiveTags.some((tag) => isExternalTagName(tag))
@@ -4011,27 +3933,30 @@ function App() {
           setActiveNoteText(hydratedText)
 
           if (appState.viewport) {
-            const normalizedPendingViewport = normalizeEditorViewportBoundaries({
-              topBoundaryPx: appState.viewport.topBoundaryPx,
-              bottomBoundaryPx: appState.viewport.bottomBoundaryPx,
-              lineHeightPx: editorRuntimeMetrics.lineHeightPx,
-            })
-
+            // Line counts are stored as-is, with no clamping at load time.
+            // Display values are derived continuously inside Editor.tsx via
+            // clampBoundaryLines once the container is measured.
             pendingViewportRestoreRef.current = {
-              topBoundaryPx: normalizedPendingViewport.topBoundaryPx,
-              bottomBoundaryPx: normalizedPendingViewport.bottomBoundaryPx,
-              scrollTopPx: appState.viewport.scrollTopPx,
+              topBoundaryLines: appState.viewport.topBoundaryLines,
+              bottomBoundaryLines: appState.viewport.bottomBoundaryLines,
+              scrollTopLines: appState.viewport.scrollTopLines,
             }
             latestViewportRef.current = pendingViewportRestoreRef.current
           } else {
-            pendingViewportRestoreRef.current = null
-            latestViewportRef.current = null
+            // Per spec: default to 0 lines for both boundaries (and scroll)
+            // when nothing is stored.
+            pendingViewportRestoreRef.current = {
+              topBoundaryLines: 0,
+              bottomBoundaryLines: 0,
+              scrollTopLines: 0,
+            }
+            latestViewportRef.current = pendingViewportRestoreRef.current
           }
 
           if (window.measlyState) {
             await window.measlyState.saveAppState({
               selectedNoteId: loaded.id,
-              viewport: appState.viewport,
+              viewport: pendingViewportRestoreRef.current ?? undefined,
               menu: persistedMenuStateRef.current ?? undefined,
             })
           }
@@ -4081,27 +4006,15 @@ function App() {
         return
       }
 
-      const normalizedPendingBoundaries = normalizeEditorViewportBoundaries({
-        topBoundaryPx: pending.topBoundaryPx,
-        bottomBoundaryPx: pending.bottomBoundaryPx,
-        lineHeightPx: editorRuntimeMetrics.lineHeightPx,
-      })
-
+      // Restoring from integer line counts is direct: no clamping or
+      // measurement-dependent math happens here (see EditorViewportLines /
+      // clampBoundaryLines in Editor.tsx). This call is correct even before
+      // the editor's container has been measured.
       adapter.applySnapshot({
-        viewport: {
-          topBoundaryPx: normalizedPendingBoundaries.topBoundaryPx,
-          bottomBoundaryPx: normalizedPendingBoundaries.bottomBoundaryPx,
-          scrollTopPx: pending.scrollTopPx,
-          lineHeightPx: editorRuntimeMetrics.lineHeightPx,
-          cellWidthPx: editorRuntimeMetrics.cellWidthPx,
-        },
+        viewportLines: pending,
       })
 
-      latestEditViewportRef.current = {
-        topBoundaryPx: normalizedPendingBoundaries.topBoundaryPx,
-        bottomBoundaryPx: normalizedPendingBoundaries.bottomBoundaryPx,
-        scrollTopPx: pending.scrollTopPx,
-      }
+      latestEditViewportRef.current = pending
 
       pendingViewportRestoreRef.current = null
       isApplyingInitialViewportRef.current = false
@@ -4113,7 +4026,7 @@ function App() {
       cancelled = true
       isApplyingInitialViewportRef.current = false
     }
-  }, [persistenceReady, activeNoteId, editorRuntimeMetrics.lineHeightPx, editorRuntimeMetrics.cellWidthPx])
+  }, [persistenceReady, activeNoteId])
 
   const bindings = useMemo<EditorBindings>(() => ({
     onTextChange: (event: EditorTextChangeEvent) => {
@@ -4284,17 +4197,14 @@ function App() {
       }
     },
     onViewportChange: (event: EditorViewportChangeEvent) => {
-      const normalizedBoundaries = normalizeEditorViewportBoundaries({
-        topBoundaryPx: event.viewport.topBoundaryPx,
-        bottomBoundaryPx: event.viewport.bottomBoundaryPx,
-        lineHeightPx: event.viewport.lineHeightPx,
-        clientHeightPx: event.viewport.clientHeightPx,
-      })
-      const nextViewport = {
-        topBoundaryPx: normalizedBoundaries.topBoundaryPx,
-        bottomBoundaryPx: normalizedBoundaries.bottomBoundaryPx,
-        scrollTopPx: Math.round(event.viewport.scrollTopPx),
-      }
+      const snapshotLines = adapterRef.current?.getSnapshot()?.viewportLines
+      const nextViewport: PersistedViewportState = snapshotLines
+        ? {
+            topBoundaryLines: Math.max(0, Math.round(snapshotLines.topBoundaryLines)),
+            bottomBoundaryLines: Math.max(0, Math.round(snapshotLines.bottomBoundaryLines)),
+            scrollTopLines: Math.max(0, Math.round(snapshotLines.scrollTopLines)),
+          }
+        : (latestViewportRef.current ?? { topBoundaryLines: 0, bottomBoundaryLines: 0, scrollTopLines: 0 })
       const nextTelemetry = {
         scrollTopPx: Math.round(event.viewport.scrollTopPx),
         scrollHeightPx: Math.max(0, Math.round(event.viewport.scrollHeightPx ?? 0)),
@@ -4362,17 +4272,21 @@ function App() {
         const liveSnapshot = adapterRef.current?.getSnapshot()
         const selection = liveSnapshot?.selection ?? latestEditorSelectionRef.current
         const snapshotViewport = liveSnapshot?.viewport
-        const viewport = snapshotViewport
+        const snapshotViewportLines = liveSnapshot?.viewportLines
+        const viewport: PersistedViewportState | null = snapshotViewportLines
           ? {
-              topBoundaryPx: Math.round(snapshotViewport.topBoundaryPx),
-              bottomBoundaryPx: Math.round(snapshotViewport.bottomBoundaryPx),
-              scrollTopPx: Math.round(snapshotViewport.scrollTopPx),
+              topBoundaryLines: Math.max(0, Math.round(snapshotViewportLines.topBoundaryLines)),
+              bottomBoundaryLines: Math.max(0, Math.round(snapshotViewportLines.bottomBoundaryLines)),
+              scrollTopLines: Math.max(0, Math.round(snapshotViewportLines.scrollTopLines)),
             }
           : (latestEditViewportRef.current ?? latestViewportRef.current)
 
-        if (snapshotViewport) {
+        if (snapshotViewportLines) {
           latestViewportRef.current = viewport
           latestEditViewportRef.current = viewport
+        }
+
+        if (snapshotViewport) {
           latestEditViewportTelemetryRef.current = {
             scrollTopPx: Math.round(snapshotViewport.scrollTopPx),
             scrollHeightPx: Math.max(0, Math.round(snapshotViewport.scrollHeightPx ?? 0)),
@@ -4404,7 +4318,6 @@ function App() {
           selectionEnd: cursorPos,
           viewport,
           telemetry: latestEditViewportTelemetryRef.current,
-          lineHeightPx: editorRuntimeMetrics.lineHeightPx,
         })
       }
 
@@ -4483,9 +4396,8 @@ function App() {
       selectionEnd: cursorPos,
       viewport,
       telemetry: latestEditViewportTelemetryRef.current,
-      lineHeightPx: editorRuntimeMetrics.lineHeightPx,
     })
-  }, [captureEditModeSnapshotFromEditor, editorRuntimeMetrics.lineHeightPx])
+  }, [captureEditModeSnapshotFromEditor])
 
   const toggleRenderViewMode = useCallback(() => {
     setIsPreviewMode((previous) => {
