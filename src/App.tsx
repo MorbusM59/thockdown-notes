@@ -716,7 +716,7 @@ function buildEditRestoreSnapshotFromUiState(params: {
   const storedScrollTopLines =
     typeof uiState?.scrollTop === 'number' && Number.isFinite(uiState.scrollTop)
       ? scrollTopPxToLines(Math.max(0, uiState.scrollTop), lineHeightPx)
-      : 0
+      : Math.max(0, Math.round(fallbackViewport?.scrollTopLines ?? 0))
 
   const collapsedSelection: EditorSelectionState = {
     anchor: persistedCursor,
@@ -3389,6 +3389,7 @@ function App() {
       }
 
       adapter.applySnapshot({
+        selectionScrollBehavior: 'preserve-scroll',
         selection: snapshot.collapsedSelection,
         viewportLines: snapshot.viewport,
       })
@@ -3403,6 +3404,7 @@ function App() {
       requestAnimationFrame(() => {
         if (cancelled) return
         adapterRef.current?.applySnapshot({
+          selectionScrollBehavior: 'preserve-scroll',
           selection: snapshot.fullSelection,
         })
       })
