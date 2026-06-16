@@ -2870,12 +2870,6 @@ function App() {
     appStateSaveTimerRef.current = window.setTimeout(() => {
       appStateSaveTimerRef.current = null
       const viewport = latestViewportRef.current
-      void writeDebugEntry('queueAppStateSave:flush', [
-        `selectedNoteId: ${selectedNoteId}`,
-        `topBoundaryLines: ${viewport?.topBoundaryLines ?? 'null'}`,
-        `bottomBoundaryLines: ${viewport?.bottomBoundaryLines ?? 'null'}`,
-        `scrollTopLines: ${viewport?.scrollTopLines ?? 'null'}`,
-      ])
       void window.measlyState?.saveAppState({
         selectedNoteId,
         viewport: viewport ?? undefined,
@@ -4009,12 +4003,6 @@ function App() {
               scrollTopLines: appState.viewport.scrollTopLines,
             }
             latestViewportRef.current = pendingViewportRestoreRef.current
-            void writeDebugEntry('bootstrap:loadAppState', [
-              `viewport found in app-state.json`,
-              `topBoundaryLines: ${appState.viewport.topBoundaryLines}`,
-              `bottomBoundaryLines: ${appState.viewport.bottomBoundaryLines}`,
-              `scrollTopLines: ${appState.viewport.scrollTopLines}`,
-            ])
           } else {
             // Per spec: default to 0 lines for both boundaries (and scroll)
             // when nothing is stored.
@@ -4024,9 +4012,6 @@ function App() {
               scrollTopLines: 0,
             }
             latestViewportRef.current = pendingViewportRestoreRef.current
-            void writeDebugEntry('bootstrap:loadAppState', [
-              `no viewport in app-state.json — defaulting to 0/0/0`,
-            ])
           }
 
           if (window.measlyState) {
@@ -4091,13 +4076,6 @@ function App() {
       adapter.applySnapshot({
         viewportLines: pending,
       })
-
-      void writeDebugEntry('applyViewport', [
-        `applySnapshot called`,
-        `topBoundaryLines: ${pending.topBoundaryLines}`,
-        `bottomBoundaryLines: ${pending.bottomBoundaryLines}`,
-        `scrollTopLines: ${pending.scrollTopLines}`,
-      ])
 
       latestViewportRef.current = pending
       latestEditViewportRef.current = pending
@@ -4331,15 +4309,6 @@ function App() {
       latestViewportRef.current = nextViewport
       latestEditViewportRef.current = nextViewport
       latestEditViewportTelemetryRef.current = nextTelemetry
-
-      void writeDebugEntry('onViewportChange', [
-        `source: ${event.source}`,
-        `topBoundaryLines: ${nextViewport.topBoundaryLines}`,
-        `bottomBoundaryLines: ${nextViewport.bottomBoundaryLines}`,
-        `scrollTopLines: ${nextViewport.scrollTopLines}`,
-        `isApplyingInitialViewport: ${isApplyingInitialViewportRef.current}`,
-        `persistenceReady: ${persistenceReady}`,
-      ])
 
       if (!isPreviewMode && activeNoteId) {
         const selection = latestEditorSelectionRef.current
@@ -7416,11 +7385,6 @@ function App() {
         window.clearTimeout(appStateSaveTimerRef.current)
         appStateSaveTimerRef.current = null
         const viewport = latestViewportRef.current
-        void writeDebugEntry('beforeunload:flush', [
-          `flushing pending save on close`,
-          `topBoundaryLines: ${viewport?.topBoundaryLines ?? 'null'}`,
-          `bottomBoundaryLines: ${viewport?.bottomBoundaryLines ?? 'null'}`,
-        ])
         void window.measlyState?.saveAppState({
           selectedNoteId: activeNoteId,
           viewport: viewport ?? undefined,

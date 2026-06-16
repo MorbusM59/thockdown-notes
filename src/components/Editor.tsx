@@ -747,9 +747,6 @@ export function Editor({
             });
           }
           setHasViewportLines(true);
-          if (import.meta.env.DEV) {
-            console.debug('[Editor] applySnapshot viewportLines', lines);
-          }
           appliedViewport = true;
         }
 
