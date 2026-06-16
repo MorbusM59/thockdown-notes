@@ -742,6 +742,9 @@ export function Editor({
             });
           }
           setHasViewportLines(true);
+          if (import.meta.env.DEV) {
+            console.debug('[Editor] applySnapshot viewportLines', lines);
+          }
           appliedViewport = true;
         }
 
@@ -836,6 +839,23 @@ export function Editor({
   }, [cellWidthPx, lineHeightPx]);
 
   // Global Mouse listeners for Dragging
+  const emitUserViewportChange = useCallback((nextTopBoundaryLines: number, nextBottomBoundaryLines: number) => {
+    if (!bindings) return;
+    const scroller = scrollerRef.current;
+    const viewport = {
+      topBoundaryPx: Math.max(0, nextTopBoundaryLines) * lineHeightPx,
+      bottomBoundaryPx: Math.max(0, nextBottomBoundaryLines) * lineHeightPx,
+      scrollTopPx: scroller?.scrollTop ?? 0,
+      lineHeightPx,
+      cellWidthPx,
+      scrollHeightPx: scroller?.scrollHeight ?? 0,
+      clientHeightPx: scroller?.clientHeight ?? 0,
+    };
+
+    reportInvariantIssues('viewport-change', validateViewportInvariants(viewport));
+    bindings.onViewportChange?.({ source: 'user-input', viewport });
+  }, [bindings, cellWidthPx, lineHeightPx]);
+
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!scrollerRef.current) return;
@@ -852,10 +872,12 @@ export function Editor({
         // boundary and available space on every render — no cross-boundary
         // adjustment is needed here.
         setTopBoundaryLines(dragLines);
+        emitUserViewportChange(dragLines, bottomBoundaryLines);
       } else if (isDraggingBottom) {
         const availableLines = Math.max(0, Math.round(h / lineHeightPx));
         const bottomLines = Math.max(0, availableLines - dragLines);
         setBottomBoundaryLines(bottomLines);
+        emitUserViewportChange(topBoundaryLines, bottomLines);
       }
     };
 

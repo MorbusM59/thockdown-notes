@@ -1640,6 +1640,7 @@ function App() {
   const noteTransitionLockRef = useRef(false)
   const pendingViewportRestoreRef = useRef<PersistedViewportState | null>(null)
   const pendingSidebarScrollRestoreRef = useRef<{ mode: SidebarMode; scrollTop: number } | null>(null)
+  const ignoreNextUserViewportChangeRef = useRef(false)
   const latestEditViewportRef = useRef<PersistedViewportState | null>(null)
   const latestEditViewportTelemetryRef = useRef<EditViewportTelemetry | null>(null)
   const editUiStateSaveTimerRef = useRef<number | null>(null)
@@ -4073,6 +4074,7 @@ function App() {
       // measurement-dependent math happens here (see EditorViewportLines /
       // clampBoundaryLines in Editor.tsx). This call is correct even before
       // the editor's container has been measured.
+      ignoreNextUserViewportChangeRef.current = true
       adapter.applySnapshot({
         viewportLines: pending,
       })
@@ -4084,6 +4086,7 @@ function App() {
         `scrollTopLines: ${pending.scrollTopLines}`,
       ])
 
+      latestViewportRef.current = pending
       latestEditViewportRef.current = pending
       pendingViewportRestoreRef.current = null
       isApplyingInitialViewportRef.current = false
@@ -4266,7 +4269,11 @@ function App() {
       }
     },
     onViewportChange: (event: EditorViewportChangeEvent) => {
-      if (pendingViewportRestoreRef.current && event.source === 'programmatic') {
+      if (ignoreNextUserViewportChangeRef.current && event.source === 'user-input') {
+        ignoreNextUserViewportChangeRef.current = false
+        return
+      }
+      if (pendingViewportRestoreRef.current) {
         return
       }
 
