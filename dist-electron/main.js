@@ -398,13 +398,14 @@ const DEFAULT_WINDOW_STATE = {
 };
 function sanitizeViewport(input) {
   if (!input) return void 0;
-  const topBoundaryPx = typeof input.topBoundaryPx === "number" ? Math.max(0, Math.round(input.topBoundaryPx)) : 0;
-  const bottomBoundaryPx = typeof input.bottomBoundaryPx === "number" ? Math.max(0, Math.round(input.bottomBoundaryPx)) : 0;
-  const scrollTopPx = typeof input.scrollTopPx === "number" ? Math.max(0, Math.round(input.scrollTopPx)) : 0;
+  const { topBoundaryLines, bottomBoundaryLines, scrollTopLines } = input;
+  if (typeof topBoundaryLines !== "number" && typeof bottomBoundaryLines !== "number" && typeof scrollTopLines !== "number") {
+    return void 0;
+  }
   return {
-    topBoundaryPx,
-    bottomBoundaryPx,
-    scrollTopPx
+    topBoundaryLines: typeof topBoundaryLines === "number" ? Math.max(0, Math.round(topBoundaryLines)) : 0,
+    bottomBoundaryLines: typeof bottomBoundaryLines === "number" ? Math.max(0, Math.round(bottomBoundaryLines)) : 0,
+    scrollTopLines: typeof scrollTopLines === "number" ? Math.max(0, Math.round(scrollTopLines)) : 0
   };
 }
 function sanitizeSidebarMode(input) {
@@ -2142,6 +2143,8 @@ async function createWindow() {
     height: savedWindowState.height,
     x: savedWindowState.x,
     y: savedWindowState.y,
+    minWidth: 840,
+    minHeight: 525,
     frame: false,
     titleBarStyle: "hidden",
     autoHideMenuBar: true,
@@ -2164,7 +2167,6 @@ async function createWindow() {
   win.on("close", persistWindowState);
   win.webContents.on("did-finish-load", () => {
     win == null ? void 0 : win.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
-    flushPendingExternalPathsToRenderer();
   });
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL);
