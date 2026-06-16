@@ -7242,9 +7242,7 @@ function App() {
             onClick={() => {
               const next = !debuggingEnabled
               setDebuggingEnabled(next)
-              if (next) {
-                void createDebugNote()
-              } else {
+              if (!next) {
                 // Reset session debug note so a fresh note is created if
                 // debugging is re-enabled later in the same session
                 debugNoteIdRef.current = null
