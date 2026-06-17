@@ -357,7 +357,6 @@ export function Editor({
   // Derived display values (px), recomputed every render from the stored
   // line counts + the current measured viewport height. Pure function of
   // two known quantities — never needs a retry/verify loop, and never
-  // mutates topBoundaryLines/bottomBoundaryLines.
   const availableLines = Math.max(0, Math.floor(editorSize.innerHeight / lineHeightPx));
   const { topLines: displayTopLines, bottomLines: displayBottomLines } = clampBoundaryLines(
     topBoundaryLines,
