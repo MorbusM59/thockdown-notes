@@ -57,6 +57,7 @@ interface EditorProps {
   // at the wrong pitch. Gated content waits for both this and hasViewportLines.
   fontReady: boolean;
   editorReadOnly?: boolean;
+  caretSuspended?: boolean;
 }
 
 const ENABLE_CONTRACT_ASSERTIONS = import.meta.env.DEV;
@@ -321,6 +322,7 @@ export function Editor({
   cellWidthPx,
   fontReady,
   editorReadOnly = false,
+  caretSuspended = false,
 }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -354,6 +356,12 @@ export function Editor({
   // corrected a moment later.
   const [hasViewportLines, setHasViewportLines] = useState(false);
 
+  // The caret overlay must remain hidden while snapshot restore is being
+  // applied, since selection and viewport changes can be visible for a frame
+  // before the new note content is fully stable.
+  const [isSnapshotRestorePending, setIsSnapshotRestorePending] = useState(false);
+  const snapshotRestoreRafRef = useRef<number | null>(null);
+
   // Derived display values (px), recomputed every render from the stored
   // line counts + the current measured viewport height. Pure function of
   // two known quantities — never needs a retry/verify loop, and never
@@ -374,6 +382,15 @@ export function Editor({
   const [isScrollThumbActive, setIsScrollThumbActive] = useState(false);
   const [isDraggingScrollThumb, setIsDraggingScrollThumb] = useState(false);
   const scrollThumbDragOriginRef = useRef<{ pointerY: number; thumbTopPx: number } | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (snapshotRestoreRafRef.current !== null) {
+        cancelAnimationFrame(snapshotRestoreRafRef.current);
+        snapshotRestoreRafRef.current = null;
+      }
+    };
+  }, []);
   const scrollbarSyncRafRef = useRef<number | null>(null);
   const lastPassiveScrollbarMetricsRef = useRef<{
     scrollTopPx: number;
@@ -700,6 +717,14 @@ export function Editor({
           }
         }
 
+        const isSnapshotRestore = Boolean(snapshot.viewport || snapshot.viewportLines || snapshot.selection);
+        if (isSnapshotRestore) {
+          if (snapshotRestoreRafRef.current !== null) {
+            cancelAnimationFrame(snapshotRestoreRafRef.current);
+          }
+          setIsSnapshotRestorePending(true);
+        }
+
         if (nextViewport) {
           const h = Math.max(0, scrollerRef.current?.clientHeight ?? 0);
           const quantizedViewportHeight = quantizeViewportHeightToGrid(h, lineHeightPx);
@@ -773,6 +798,16 @@ export function Editor({
             // Selection application should never force viewport recentering here.
             // Viewport movement is controlled by explicit viewport snapshots and caged scroll logic.
           }
+        }
+
+        if (isSnapshotRestore) {
+          if (snapshotRestoreRafRef.current !== null) {
+            cancelAnimationFrame(snapshotRestoreRafRef.current);
+          }
+          snapshotRestoreRafRef.current = requestAnimationFrame(() => {
+            snapshotRestoreRafRef.current = null;
+            setIsSnapshotRestorePending(false);
+          });
         }
 
         if (appliedViewport) {
@@ -1165,7 +1200,7 @@ export function Editor({
             </div>
 
             {/* Native Caret Replacement overlayed in viewport space */}
-            {hasViewportLines && fontReady && (
+            {hasViewportLines && fontReady && !isSnapshotRestorePending && !caretSuspended && (
               <BlockCaretPlugin
                 scrollerRef={scrollerRef}
                 topBoundaryPx={topBoundary}

@@ -1573,6 +1573,7 @@ function App() {
   const [editorFontLoadVersion, setEditorFontLoadVersion] = useState(0)
   const [isTagMutationPending, setIsTagMutationPending] = useState(false)
   const [deleteArmedTagName, setDeleteArmedTagName] = useState<string | null>(null)
+  const [isCaretSuspended, setIsCaretSuspended] = useState(false)
   const [renamingTagName, setRenamingTagName] = useState<string | null>(null)
   const [draggedTagIndex, setDraggedTagIndex] = useState<number | null>(null)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('date')
@@ -2974,6 +2975,7 @@ function App() {
   const activateNote = useCallback(async (noteId: string, overrideCursorPos?: number) => {
     if (!window.measlyNotes) return
 
+    setIsCaretSuspended(true)
     const previousNoteId = activeNoteId
     if (persistenceReady && previousNoteId && previousNoteId !== noteId) {
       const previousSnapshot = editModeSnapshotByNoteIdRef.current.get(previousNoteId)
@@ -3412,9 +3414,10 @@ function App() {
     persistEditUiPayloadForNote,
   ])
 
-  const applyEditRestoreSnapshot = useCallback((snapshot: EditRestoreSnapshot, options?: { restoreFullSelection?: boolean; focusAfterApply?: boolean }) => {
+  const applyEditRestoreSnapshot = useCallback((snapshot: EditRestoreSnapshot, options?: { restoreFullSelection?: boolean; focusAfterApply?: boolean; onComplete?: () => void }) => {
     const restoreFullSelection = options?.restoreFullSelection ?? true
     const focusAfterApply = options?.focusAfterApply ?? false
+    const onComplete = options?.onComplete
     let cancelled = false
 
     // Restoring from integer line counts is direct and idempotent: no
@@ -3446,6 +3449,10 @@ function App() {
         requestAnimationFrame(() => {
           focusEditorInEditMode({ restoreSelection: false })
         })
+      }
+
+      if (onComplete) {
+        onComplete()
       }
     }
 
@@ -4650,13 +4657,21 @@ function App() {
     const cachedSnapshot = pendingEditRestoreSnapshotRef.current
     if (cachedSnapshot && cachedSnapshot.noteId === activeNoteId) {
       pendingEditRestoreSnapshotRef.current = null
-      applyEditRestoreSnapshot(cachedSnapshot, { restoreFullSelection: true, focusAfterApply: true })
+      applyEditRestoreSnapshot(cachedSnapshot, {
+        restoreFullSelection: true,
+        focusAfterApply: true,
+        onComplete: () => setIsCaretSuspended(false),
+      })
       return
     }
 
     const memorySnapshot = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
     if (memorySnapshot) {
-      applyEditRestoreSnapshot(memorySnapshot, { restoreFullSelection: true, focusAfterApply: true })
+      applyEditRestoreSnapshot(memorySnapshot, {
+        restoreFullSelection: true,
+        focusAfterApply: true,
+        onComplete: () => setIsCaretSuspended(false),
+      })
       return
     }
 
@@ -4678,7 +4693,10 @@ function App() {
         })
         updateEditModeSnapshotCache(restoreSnapshot)
 
-        applyEditRestoreSnapshot(restoreSnapshot, { restoreFullSelection: false })
+        applyEditRestoreSnapshot(restoreSnapshot, {
+          restoreFullSelection: false,
+          onComplete: () => setIsCaretSuspended(false),
+        })
       } catch (error) {
         console.warn('Failed to restore persisted edit state on note activation', error)
       }
@@ -8177,6 +8195,7 @@ function App() {
                 cellWidthPx={editorRuntimeMetrics.cellWidthPx}
                 fontReady={editorFontLoadVersion > 0}
                 editorReadOnly={activeNoteHasDebugTag}
+                caretSuspended={isCaretSuspended}
               />
             </div>
             <div className="preview-container" style={{ display: isPreviewMode ? undefined : 'none' }} aria-hidden={!isPreviewMode}>
