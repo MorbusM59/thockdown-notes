@@ -3116,12 +3116,19 @@ function App() {
     const selection = latestEditorSelectionRef.current
     if (!selection) return
 
+    const adapter = adapterRef.current
+    if (adapter) {
+      adapter.applySnapshot({
+        selectionScrollBehavior: 'preserve-scroll',
+        selection,
+      })
+      return
+    }
+
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        adapterRef.current?.applySnapshot({
-          selectionScrollBehavior: 'preserve-scroll',
-          selection,
-        })
+      adapterRef.current?.applySnapshot({
+        selectionScrollBehavior: 'preserve-scroll',
+        selection,
       })
     })
   }, [])
@@ -3133,17 +3140,30 @@ function App() {
     if (!editorRoot) return
     if (document.activeElement === editorRoot) return
 
-    editorRoot.focus({ preventScroll: true })
     if (options?.restoreSelection ?? true) {
       restoreEditorSelection()
     }
+    editorRoot.focus({ preventScroll: true })
   }, [activeNoteId, isPreviewMode, restoreEditorSelection])
 
   const scheduleFocusEditorInEditMode = useCallback((options?: { restoreSelection?: boolean }) => {
-    window.setTimeout(() => {
+    const attemptFocus = () => {
+      if (isPreviewMode || !activeNoteId) return
+
+      const adapter = adapterRef.current
+      const editorRoot = document.querySelector<HTMLElement>('.editor-stage .editor-text[contenteditable="true"]')
+      if (!adapter || !editorRoot) {
+        requestAnimationFrame(attemptFocus)
+        return
+      }
+
       focusEditorInEditMode(options)
+    }
+
+    window.setTimeout(() => {
+      requestAnimationFrame(attemptFocus)
     }, 0)
-  }, [focusEditorInEditMode])
+  }, [activeNoteId, focusEditorInEditMode, isPreviewMode])
 
   const isAllowedNonEditorFocusTarget = useCallback((target: EventTarget | null): boolean => {
     if (!(target instanceof HTMLElement)) return false
@@ -3392,8 +3412,9 @@ function App() {
     persistEditUiPayloadForNote,
   ])
 
-  const applyEditRestoreSnapshot = useCallback((snapshot: EditRestoreSnapshot, options?: { restoreFullSelection?: boolean }) => {
+  const applyEditRestoreSnapshot = useCallback((snapshot: EditRestoreSnapshot, options?: { restoreFullSelection?: boolean; focusAfterApply?: boolean }) => {
     const restoreFullSelection = options?.restoreFullSelection ?? true
+    const focusAfterApply = options?.focusAfterApply ?? false
     let cancelled = false
 
     // Restoring from integer line counts is direct and idempotent: no
@@ -3410,26 +3431,22 @@ function App() {
         return
       }
 
+      const selection = restoreFullSelection ? snapshot.fullSelection : snapshot.collapsedSelection
+
       adapter.applySnapshot({
         selectionScrollBehavior: 'preserve-scroll',
-        selection: snapshot.collapsedSelection,
+        selection,
         viewportLines: snapshot.viewport,
       })
 
       latestViewportRef.current = snapshot.viewport
       latestEditViewportRef.current = snapshot.viewport
 
-      if (!restoreFullSelection || snapshot.fullSelection.isCollapsed) {
-        return
-      }
-
-      requestAnimationFrame(() => {
-        if (cancelled) return
-        adapterRef.current?.applySnapshot({
-          selectionScrollBehavior: 'preserve-scroll',
-          selection: snapshot.fullSelection,
+      if (focusAfterApply) {
+        requestAnimationFrame(() => {
+          focusEditorInEditMode({ restoreSelection: false })
         })
-      })
+      }
     }
 
     requestAnimationFrame(applyWhenReady)
@@ -3437,7 +3454,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [focusEditorInEditMode])
 
   const orderedActiveTags = activeNoteSummary?.tags ?? []
   const activeNoteIsExternal = orderedActiveTags.some((tag) => isExternalTagName(tag))
@@ -4504,15 +4521,13 @@ function App() {
 
     if (cachedSnapshot && cachedSnapshot.noteId === activeNoteId) {
       pendingEditRestoreSnapshotRef.current = null
-      applyEditRestoreSnapshot(cachedSnapshot, { restoreFullSelection: true })
-      scheduleFocusEditorInEditMode({ restoreSelection: false })
+      applyEditRestoreSnapshot(cachedSnapshot, { restoreFullSelection: true, focusAfterApply: true })
       return
     }
 
     const memorySnapshot = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
     if (memorySnapshot) {
-      applyEditRestoreSnapshot(memorySnapshot, { restoreFullSelection: true })
-      scheduleFocusEditorInEditMode({ restoreSelection: false })
+      applyEditRestoreSnapshot(memorySnapshot, { restoreFullSelection: true, focusAfterApply: true })
       return
     }
 
@@ -4533,8 +4548,7 @@ function App() {
         })
         updateEditModeSnapshotCache(fallbackSnapshot)
 
-        applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false })
-        scheduleFocusEditorInEditMode()
+        applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusAfterApply: true })
       } catch (error) {
         console.warn('Failed to restore edit mode state from persisted UI data', error)
       }
@@ -4636,13 +4650,13 @@ function App() {
     const cachedSnapshot = pendingEditRestoreSnapshotRef.current
     if (cachedSnapshot && cachedSnapshot.noteId === activeNoteId) {
       pendingEditRestoreSnapshotRef.current = null
-      applyEditRestoreSnapshot(cachedSnapshot, { restoreFullSelection: true })
+      applyEditRestoreSnapshot(cachedSnapshot, { restoreFullSelection: true, focusAfterApply: true })
       return
     }
 
     const memorySnapshot = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
     if (memorySnapshot) {
-      applyEditRestoreSnapshot(memorySnapshot, { restoreFullSelection: true })
+      applyEditRestoreSnapshot(memorySnapshot, { restoreFullSelection: true, focusAfterApply: true })
       return
     }
 
@@ -7344,7 +7358,6 @@ function App() {
       if (isEditorControlField && ['Escape', 'Enter', 'Tab'].includes(event.key)) {
         event.preventDefault()
         event.stopImmediatePropagation()
-        target?.blur()
         scheduleFocusEditorInEditMode()
         return
       }
@@ -8151,7 +8164,7 @@ function App() {
       <div className="editor-viewer-frame" style={{ gridArea: 'viewer' }}>
         <main className="editor-shell">
           <div ref={editorStageRef} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
-            {!isPreviewMode ? (
+            <div style={{ display: isPreviewMode ? 'none' : undefined }}>
               <Editor
                 bindings={bindings}
                 adapterRef={adapterRef}
@@ -8165,19 +8178,18 @@ function App() {
                 fontReady={editorFontLoadVersion > 0}
                 editorReadOnly={activeNoteHasDebugTag}
               />
-            ) : (
-              <div className="preview-container">
-                <div ref={previewTextureRef} className="markdown-preview-texture" />
-                <div
-                  ref={previewScrollRef}
-                  onScroll={handlePreviewScroll}
-                  className={`markdown-preview measly-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
-                  style={{ '--search-hit-color': highlightColors.search } as CSSProperties}
-                >
-                  {previewMarkdownElement}
-                </div>
+            </div>
+            <div className="preview-container" style={{ display: isPreviewMode ? undefined : 'none' }} aria-hidden={!isPreviewMode}>
+              <div ref={previewTextureRef} className="markdown-preview-texture" />
+              <div
+                ref={previewScrollRef}
+                onScroll={handlePreviewScroll}
+                className={`markdown-preview measly-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
+                style={{ '--search-hit-color': highlightColors.search } as CSSProperties}
+              >
+                {previewMarkdownElement}
               </div>
-            )}
+            </div>
           </div>
         </main>
         <aside className="editor-scrollbar-slot" aria-hidden="true">
