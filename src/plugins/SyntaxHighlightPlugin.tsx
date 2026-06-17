@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useLayoutEffect } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { TextNode, $createTextNode } from 'lexical';
 import { $createMeaslyTokenNode, $isMeaslyTokenNode, MeaslyTokenNode } from '../nodes/MeaslyTokenNode';
@@ -6,7 +6,7 @@ import { $createMeaslyTokenNode, $isMeaslyTokenNode, MeaslyTokenNode } from '../
 export function SyntaxHighlightPlugin() {
   const [editor] = useLexicalComposerContext();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!editor.hasNodes([MeaslyTokenNode])) {
       console.error('SyntaxHighlightPlugin: MeaslyTokenNode not registered on editor!');
       return;
