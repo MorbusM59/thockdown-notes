@@ -3112,7 +3112,21 @@ function App() {
     void selectNote(noteId, { forceReload: true })
   }, [selectNote])
 
-  const focusEditorInEditMode = useCallback(() => {
+  const restoreEditorSelection = useCallback(() => {
+    const selection = latestEditorSelectionRef.current
+    if (!selection) return
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        adapterRef.current?.applySnapshot({
+          selectionScrollBehavior: 'preserve-scroll',
+          selection,
+        })
+      })
+    })
+  }, [])
+
+  const focusEditorInEditMode = useCallback((options?: { restoreSelection?: boolean }) => {
     if (isPreviewMode || !activeNoteId) return
 
     const editorRoot = document.querySelector<HTMLElement>('.editor-stage .editor-text[contenteditable="true"]')
@@ -3120,11 +3134,14 @@ function App() {
     if (document.activeElement === editorRoot) return
 
     editorRoot.focus({ preventScroll: true })
-  }, [activeNoteId, isPreviewMode])
+    if (options?.restoreSelection ?? true) {
+      restoreEditorSelection()
+    }
+  }, [activeNoteId, isPreviewMode, restoreEditorSelection])
 
-  const scheduleFocusEditorInEditMode = useCallback(() => {
+  const scheduleFocusEditorInEditMode = useCallback((options?: { restoreSelection?: boolean }) => {
     window.setTimeout(() => {
-      focusEditorInEditMode()
+      focusEditorInEditMode(options)
     }, 0)
   }, [focusEditorInEditMode])
 
@@ -3135,7 +3152,12 @@ function App() {
       return true
     }
 
-    if (target === sidebarSearchInputRef.current || target === tagInputRef.current) {
+    if (
+      target === sidebarSearchInputRef.current ||
+      target === tagInputRef.current ||
+      target === pageJumpInputRef.current ||
+      target === textureSeedInputRef.current
+    ) {
       return true
     }
 
@@ -4482,12 +4504,16 @@ function App() {
 
     if (cachedSnapshot && cachedSnapshot.noteId === activeNoteId) {
       pendingEditRestoreSnapshotRef.current = null
-      return applyEditRestoreSnapshot(cachedSnapshot, { restoreFullSelection: true })
+      applyEditRestoreSnapshot(cachedSnapshot, { restoreFullSelection: true })
+      scheduleFocusEditorInEditMode({ restoreSelection: false })
+      return
     }
 
     const memorySnapshot = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
     if (memorySnapshot) {
-      return applyEditRestoreSnapshot(memorySnapshot, { restoreFullSelection: true })
+      applyEditRestoreSnapshot(memorySnapshot, { restoreFullSelection: true })
+      scheduleFocusEditorInEditMode({ restoreSelection: false })
+      return
     }
 
     let cancelled = false
@@ -4508,6 +4534,7 @@ function App() {
         updateEditModeSnapshotCache(fallbackSnapshot)
 
         applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false })
+        scheduleFocusEditorInEditMode()
       } catch (error) {
         console.warn('Failed to restore edit mode state from persisted UI data', error)
       }
@@ -4544,17 +4571,19 @@ function App() {
   }, [captureEditModeSnapshotFromEditor])
 
   const toggleRenderViewMode = useCallback(() => {
+    if (isPreviewMode && activeNoteId) {
+      void persistRenderViewStateForNoteNow(activeNoteId)
+    }
+
     setIsPreviewMode((previous) => {
       if (!previous && activeNoteId) {
         const activeText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
         setActiveNoteText(activeText)
         captureEditModeSnapshotForRenderView(activeNoteId, activeText)
-      } else if (previous && activeNoteId) {
-        void persistRenderViewStateForNoteNow(activeNoteId)
       }
       return !previous
     })
-  }, [activeNoteId, activeNoteText, captureEditModeSnapshotForRenderView, persistRenderViewStateForNoteNow])
+  }, [activeNoteId, activeNoteText, captureEditModeSnapshotForRenderView, isPreviewMode, persistRenderViewStateForNoteNow])
 
   useEffect(() => {
     if (!window.measlyState || !activeNoteId) return
@@ -6946,15 +6975,23 @@ function App() {
                           if (event.key === 'Enter') {
                             event.preventDefault()
                             commitTextureSeedEdit()
+                            scheduleFocusEditorInEditMode()
                             return
                           }
 
-                          if (event.key === 'Escape') {
+                          if (event.key === 'Escape' || event.key === 'Tab') {
                             event.preventDefault()
                             cancelTextureSeedEdit()
+                            scheduleFocusEditorInEditMode()
                           }
                         }}
-                        onBlur={commitTextureSeedEdit}
+                        onBlur={() => {
+                          window.setTimeout(() => {
+                            if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
+                              scheduleFocusEditorInEditMode()
+                            }
+                          }, 0)
+                        }}
                       />
                     </label>
                   ) : (
@@ -7296,6 +7333,22 @@ function App() {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented) return
 
+      const target = event.target instanceof HTMLElement ? event.target : null
+      const isEditorTarget = Boolean(target?.closest('.editor-stage'))
+      const isSearchField = target === sidebarSearchInputRef.current
+      const isTagField = target === tagInputRef.current
+      const isPageJumpField = target === pageJumpInputRef.current
+      const isTextureSeedField = target === textureSeedInputRef.current
+      const isEditorControlField = isSearchField || isTagField || isPageJumpField || isTextureSeedField
+
+      if (isEditorControlField && ['Escape', 'Enter', 'Tab'].includes(event.key)) {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        target?.blur()
+        scheduleFocusEditorInEditMode()
+        return
+      }
+
       if (isFindMode && event.ctrlKey && !event.shiftKey && event.key === 'Enter') {
         event.preventDefault()
         replaceAllDocumentFindHits()
@@ -7324,8 +7377,6 @@ function App() {
         return
       }
 
-      const target = event.target instanceof HTMLElement ? event.target : null
-      const isEditorTarget = Boolean(target?.closest('.editor-stage'))
       if (isEditorTarget && activeNoteId && event.ctrlKey && !event.altKey && !event.metaKey) {
         const key = event.key.toLowerCase()
 
@@ -7479,6 +7530,13 @@ function App() {
               } else {
                 setSearchQuery(value)
               }
+            }}
+            onBlur={() => {
+              window.setTimeout(() => {
+                if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
+                  scheduleFocusEditorInEditMode()
+                }
+              }, 0)
             }}
           />
         </div>
@@ -7667,15 +7725,23 @@ function App() {
                     if (event.key === 'Enter') {
                       event.preventDefault()
                       commitPageJump()
+                      scheduleFocusEditorInEditMode()
                       return
                     }
 
-                    if (event.key === 'Escape') {
+                    if (event.key === 'Escape' || event.key === 'Tab') {
                       event.preventDefault()
                       cancelPageJumpEdit()
+                      scheduleFocusEditorInEditMode()
                     }
                   }}
-                  onBlur={cancelPageJumpEdit}
+                  onBlur={() => {
+                    window.setTimeout(() => {
+                      if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
+                        scheduleFocusEditorInEditMode()
+                      }
+                    }, 0)
+                  }}
                 />
               </label>
             ) : (
@@ -7778,11 +7844,25 @@ function App() {
                     if (event.key === 'Enter') {
                       event.preventDefault()
                       handleTagInputEnter()
+                      scheduleFocusEditorInEditMode()
+                      return
                     }
-                    if (event.key === 'Escape' && renamingTagName) {
+                    if (event.key === 'Escape') {
                       event.preventDefault()
-                      setRenamingTagName(null)
-                      setTagInputValue('')
+                      if (renamingTagName) {
+                        setRenamingTagName(null)
+                        setTagInputValue('')
+                      }
+                      scheduleFocusEditorInEditMode()
+                      return
+                    }
+                    if (event.key === 'Tab') {
+                      event.preventDefault()
+                      if (renamingTagName) {
+                        setRenamingTagName(null)
+                        setTagInputValue('')
+                      }
+                      scheduleFocusEditorInEditMode()
                     }
                   }}
                   disabled={!persistenceReady || !activeNoteId || isTagMutationPending || activeNoteIsExternal}
