@@ -4182,7 +4182,7 @@ function App() {
       }
     },
     onTabIndentTransform: ({ shiftKey, text, selection }) => {
-      if (!activeNoteId) return null
+      if (!activeNoteId || activeNoteHasDebugTag) return null
 
       const sourceText = normalizeInternalText(text)
       const lineContext = resolveMarkdownSelectionContext(sourceText, selection).line
@@ -4260,7 +4260,7 @@ function App() {
       return { text: next.text, selection: next.selection }
     },
     onMarkdownShortcutTransform: ({ shortcut, text, selection }) => {
-      if (!activeNoteId) return null
+      if (!activeNoteId || activeNoteHasDebugTag) return null
 
       const sourceText = normalizeInternalText(text)
       let next: { text: string; selection: EditorSelectionState } | null = null
@@ -4287,7 +4287,7 @@ function App() {
       return next
     },
     onEnterTransform: (event) => {
-      if (!activeNoteId) return null
+      if (!activeNoteId || activeNoteHasDebugTag) return null
       const next = resolveMarkdownEnterTransform(event)
       if (!next) {
         return null
@@ -5310,6 +5310,8 @@ function App() {
   }, [isPreviewMode, jumpToPreviewDocumentFindHit])
 
   const applyProgrammaticEditorText = useCallback((nextText: string, selectionStart?: number, selectionEnd?: number) => {
+    if (activeNoteHasDebugTag) return
+
     const normalizedText = normalizeInternalText(nextText)
     latestEditorTextRef.current = normalizedText
     setActiveNoteText(normalizedText)

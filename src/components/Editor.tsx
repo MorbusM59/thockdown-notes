@@ -320,6 +320,7 @@ export function Editor({
   glyphWidthPx,
   cellWidthPx,
   fontReady,
+  editorReadOnly = false,
 }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -1132,6 +1133,7 @@ export function Editor({
                 contentEditable={
                   <ContentEditable 
                     className="outline-none text-gray-800 editor-text min-h-full w-full relative z-10"
+                    contentEditable={!editorReadOnly}
                     style={{
                       paddingTop: topBoundary,
                       paddingBottom: bottomBoundary,
