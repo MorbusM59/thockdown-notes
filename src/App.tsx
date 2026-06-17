@@ -7405,7 +7405,7 @@ function App() {
   useEffect(() => {
     if (isPreviewMode || !activeNoteId) return
 
-    const onFocusIn = (event: FocusEvent) => {
+    const onMouseDownCapture = (event: globalThis.MouseEvent) => {
       const target = event.target
       if (!(target instanceof HTMLElement)) return
 
@@ -7417,11 +7417,12 @@ function App() {
         return
       }
 
+      event.preventDefault()
       scheduleFocusEditorInEditMode()
     }
 
-    window.addEventListener('focusin', onFocusIn)
-    return () => window.removeEventListener('focusin', onFocusIn)
+    window.addEventListener('mousedown', onMouseDownCapture, true)
+    return () => window.removeEventListener('mousedown', onMouseDownCapture, true)
   }, [activeNoteId, isAllowedNonEditorFocusTarget, isPreviewMode, scheduleFocusEditorInEditMode])
 
   useEffect(() => {
