@@ -4944,6 +4944,7 @@ function App() {
     const date = new Date(timestampMs)
     const noteMonth = date.getMonth() + 1
     const noteYear = date.getFullYear()
+    const oldestYear = new Date().getFullYear() - 4
 
     const monthMatch = !hasMonthFilter || selectedMonths.has(noteMonth)
 
@@ -4951,7 +4952,7 @@ function App() {
     if (hasYearFilter) {
       if (selectedYears.has(noteYear)) {
         yearMatch = true
-      } else if (selectedYears.has('older') && noteYear <= 2021) {
+      } else if (selectedYears.has('older') && noteYear < oldestYear) {
         yearMatch = true
       }
     }
