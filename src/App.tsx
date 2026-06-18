@@ -1827,7 +1827,10 @@ function App() {
     const preview = cloneTextureMaterial(texturePreviewMaterial)
     setTextureMaterials((previous) => {
       const next = cloneTextureMaterials(previous)
-      next[surface] = preview
+      next[surface] = {
+        ...preview,
+        enabled: true,
+      }
       return next
     })
   }, [texturePreviewMaterial])
