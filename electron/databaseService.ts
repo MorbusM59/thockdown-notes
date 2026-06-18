@@ -257,6 +257,7 @@ function normalizeTextureMaterialSettings(
     : {};
 
   return {
+    enabled: source.enabled !== false,
     seed: clampInteger(source.seed, 0, 0x7fffffff, fallback.seed),
     granularity: clampInteger(source.granularity, 1, 20, fallback.granularity),
     vSteps: clampInteger(source.vSteps, 1, 20, fallback.vSteps),

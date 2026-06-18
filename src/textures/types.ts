@@ -8,6 +8,7 @@ export type TextureColorHsva = {
 };
 
 export type TextureMaterialSettings = {
+  enabled: boolean;
   seed: number;
   granularity: number;
   vSteps: number;
@@ -20,24 +21,28 @@ export const TEXTURE_SURFACES: TextureSurfaceKey[] = ['appGrid', 'sidebarContent
 
 export const DEFAULT_TEXTURE_MATERIALS: TextureMaterialsBySurface = {
   appGrid: {
+    enabled: true,
     seed: 137,
     granularity: 9,
     vSteps: 8,
     color: { h: 32, s: 0.12, v: 0.95, a: 0.16 },
   },
   sidebarContent: {
+    enabled: true,
     seed: 211,
     granularity: 8,
     vSteps: 7,
     color: { h: 30, s: 0.11, v: 0.93, a: 0.17 },
   },
   editorEditText: {
+    enabled: true,
     seed: 389,
     granularity: 10,
     vSteps: 9,
     color: { h: 29, s: 0.1, v: 0.92, a: 0.14 },
   },
   editorRenderText: {
+    enabled: true,
     seed: 467,
     granularity: 11,
     vSteps: 9,

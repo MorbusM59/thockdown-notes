@@ -160,6 +160,7 @@ function sanitizeTextureColor(input: unknown, fallback: TextureColorHsva): Textu
 function sanitizeTextureMaterial(input: unknown, fallback: TextureMaterialSettings): TextureMaterialSettings {
   const source = (input && typeof input === 'object') ? input as Partial<TextureMaterialSettings> : {};
   return {
+    enabled: source.enabled !== false,
     seed: sanitizeIntegerInRange(source.seed, 0, 0x7fffffff, fallback.seed),
     granularity: sanitizeIntegerInRange(source.granularity, 1, 20, fallback.granularity),
     vSteps: sanitizeIntegerInRange(source.vSteps, 1, 20, fallback.vSteps),

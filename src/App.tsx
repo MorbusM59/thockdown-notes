@@ -905,6 +905,7 @@ function normalizeTextureMaterial(source: unknown, fallback: TextureMaterialSett
   const color = toRecord(record.color)
 
   return {
+    enabled: record.enabled !== false,
     seed: Math.max(0, Math.round(toFiniteNumber(record.seed, fallback.seed))),
     granularity: clamp(
       Math.round(toFiniteNumber(record.granularity, fallback.granularity)),
@@ -980,6 +981,7 @@ function stableStringify(value: unknown): string {
 
 function normalizeTextureMaterialForLoadoutSignature(source: TextureMaterialSettings): TextureMaterialSettings {
   return {
+    enabled: source.enabled,
     seed: Math.max(0, Math.round(source.seed)),
     granularity: clamp(Math.round(source.granularity), TEXTURE_GRANULARITY_MIN, TEXTURE_GRANULARITY_MAX),
     vSteps: clamp(Math.round(source.vSteps), TEXTURE_VSTEPS_MIN, TEXTURE_VSTEPS_MAX),
@@ -1058,7 +1060,8 @@ function areHsvaEqual(a: HsvaColor, b: HsvaColor): boolean {
 
 function areTextureMaterialsEqual(a: TextureMaterialSettings, b: TextureMaterialSettings): boolean {
   return (
-    a.seed === b.seed
+    a.enabled === b.enabled
+    && a.seed === b.seed
     && a.granularity === b.granularity
     && a.vSteps === b.vSteps
     && areHsvaEqual(a.color, b.color)
@@ -1712,28 +1715,28 @@ function App() {
 
   const editorFontFamily = useMemo(() => resolveEditorFontFamily(editorStyle), [editorStyle])
   const appGridTextureCss = useTextureSurface({
-    enabled: textureEnabled,
+    enabled: textureEnabled && textureMaterials.appGrid.enabled,
     surface: 'appGrid',
     width: appGridTextureSize.width,
     height: appGridTextureSize.height,
     material: textureMaterials.appGrid,
   })
   const sidebarTextureCss = useTextureSurface({
-    enabled: textureEnabled,
+    enabled: textureEnabled && textureMaterials.sidebarContent.enabled,
     surface: 'sidebarContent',
     width: sidebarTextureSize.width,
     height: sidebarTextureSize.height,
     material: textureMaterials.sidebarContent,
   })
   const editorEditTextTextureCss = useTextureSurface({
-    enabled: textureEnabled,
+    enabled: textureEnabled && textureMaterials.editorEditText.enabled,
     surface: 'editorEditText',
     width: editorStageTextureSize.width,
     height: editorStageTextureSize.height,
     material: textureMaterials.editorEditText,
   })
   const editorRenderTextTextureCss = useTextureSurface({
-    enabled: textureEnabled,
+    enabled: textureEnabled && textureMaterials.editorRenderText.enabled,
     surface: 'editorRenderText',
     width: editorStageTextureSize.width,
     height: editorStageTextureSize.height,
@@ -1836,10 +1839,11 @@ function App() {
     }))
   }, [])
 
-  const updateTextureColor = useCallback((surface: TextureSurfaceKey, color: RgbaColor) => {
+  const updateTextureColor = useCallback((surface: TextureSurfaceKey, color: RgbaColor, enabled = true) => {
     const nextHsva = rgbaToHsva(color)
     updateTextureMaterial(surface, (current) => ({
       ...current,
+      enabled: enabled,
       color: {
         h: nextHsva.h,
         s: nextHsva.s,
@@ -2058,7 +2062,7 @@ function App() {
   }, [activeColorCss])
 
   const applyActiveColorToTexture = useCallback((targetSurface: TextureSurfaceKey) => {
-    updateTextureColor(targetSurface, activeColorRgba)
+    updateTextureColor(targetSurface, activeColorRgba, false)
   }, [activeColorRgba, updateTextureColor])
 
   useEffect(() => {
