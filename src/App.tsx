@@ -186,7 +186,7 @@ type HsvaControlKey = 'h' | 's' | 'v' | 'a'
 type HsvaDragState = {
   control: HsvaControlKey
   pointerId: number
-  startX: number
+  startY: number
   baseValue: number
 }
 
@@ -2153,7 +2153,7 @@ function App() {
     setHsvaDragState({
       control,
       pointerId: event.pointerId,
-      startX: event.clientX,
+      startY: event.clientY,
       baseValue,
     })
 
@@ -2167,7 +2167,7 @@ function App() {
     if (currentDrag.pointerId !== event.pointerId) return
 
     event.preventDefault()
-    const delta = event.clientX - currentDrag.startX
+    const delta = currentDrag.startY - event.clientY
     updateHsvaControlValue(control, currentDrag.baseValue + delta)
   }, [hsvaDragState, updateHsvaControlValue])
 

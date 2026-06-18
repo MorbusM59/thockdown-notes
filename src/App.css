@@ -1673,7 +1673,7 @@ button.active,
 
 /* HSVA controls */
 .toolbar-flyout-hsva-control {
-  cursor:     w-resize;
+  cursor:     ns-resize;
   transition: none;
 }
 
