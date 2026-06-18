@@ -4969,15 +4969,11 @@ function App() {
 
   const dateEligibleNotes = useMemo(() => {
     return searchedNotes.filter((note) => {
-      if (isDeletedNote(note)) {
-        return false
-      }
-      if (isArchivedNote(note) && !hasDateFilter) {
-        return false
-      }
+      if (isDeletedNote(note)) return false
+      if (isArchivedNote(note)) return false
       return true
     })
-  }, [hasDateFilter, searchedNotes])
+  }, [searchedNotes])
 
   const categoryEligibleNotes = useMemo(() => {
     const categoryNotes = dateEligibleNotes.filter((note) => !isExternalNote(note))
