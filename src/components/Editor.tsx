@@ -44,6 +44,7 @@ function onError(error: Error) {
 interface EditorProps {
   bindings?: EditorBindings;
   adapterRef?: React.MutableRefObject<EditorAdapter | null>;
+  noteId?: string | null;
   initialText?: string;
   scrollbarHost?: HTMLElement | null;
   fontFamily: string;
@@ -313,6 +314,7 @@ function applyDomSelectionFromOffsets(
 export function Editor({
   bindings,
   adapterRef,
+  noteId,
   initialText = '',
   scrollbarHost = null,
   fontFamily,
@@ -1214,7 +1216,7 @@ export function Editor({
             <PasteSanitizationPlugin />
             <TextSanitizationPlugin />
             <SyntaxHighlightPlugin />
-            <NoteTextHydrationPlugin text={initialText} scrollerRef={scrollerRef} />
+            <NoteTextHydrationPlugin noteId={noteId} text={initialText} scrollerRef={scrollerRef} />
             <ContractBridgePlugin
               onTextChange={handleTextChange}
               onSelectionChange={handleSelectionChange}

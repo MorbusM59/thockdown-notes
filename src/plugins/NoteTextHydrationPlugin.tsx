@@ -12,6 +12,7 @@ import { canonicalizeParagraphSegments, normalizeInternalText } from '../editor/
 import { sanitizeDocumentText } from '../shared/textSanitization';
 
 interface NoteTextHydrationPluginProps {
+  noteId?: string | null;
   text: string;
   scrollerRef?: React.RefObject<HTMLElement>;
 }
@@ -57,24 +58,24 @@ function readCanonicalRootText(): string {
   return canonicalizeParagraphSegments(children.map((child) => child.getTextContent()));
 }
 
-export function NoteTextHydrationPlugin({ text, scrollerRef }: NoteTextHydrationPluginProps) {
+export function NoteTextHydrationPlugin({ noteId, text, scrollerRef }: NoteTextHydrationPluginProps) {
   const [editor] = useLexicalComposerContext();
-  const appliedTextRef = useRef<string | null>(null);
+  const lastAppliedNoteIdRef = useRef<string | null>(null);
 
   useLayoutEffect(() => {
-    if (appliedTextRef.current === text) return;
-
     const normalizedIncomingText = normalizeInternalText(sanitizeDocumentText(text));
+    const currentNoteId = noteId ?? '';
     let shouldHydrate = false;
 
     editor.getEditorState().read(() => {
       shouldHydrate = readCanonicalRootText() !== normalizedIncomingText;
     });
 
-    if (!shouldHydrate) {
-      appliedTextRef.current = text;
+    if (!shouldHydrate && lastAppliedNoteIdRef.current === currentNoteId) {
       return;
     }
+
+    lastAppliedNoteIdRef.current = currentNoteId;
 
     const scrollerEl = (scrollerRef?.current ?? null);
     const preservedScrollTop = scrollerEl ? scrollerEl.scrollTop : null;
@@ -94,9 +95,7 @@ export function NoteTextHydrationPlugin({ text, scrollerRef }: NoteTextHydration
     }, { tag: 'restore' });
 
     restoreScroll();
-
-    appliedTextRef.current = text;
-  }, [editor, text, scrollerRef]);
+  }, [editor, noteId, text, scrollerRef]);
 
   return null;
 }

@@ -8211,6 +8211,7 @@ function App() {
               <Editor
                 bindings={bindings}
                 adapterRef={adapterRef}
+                noteId={activeNoteId}
                 initialText={activeNoteText}
                 scrollbarHost={scrollbarHostEl}
                 fontFamily={editorFontFamily}
