@@ -107,6 +107,13 @@
 }
 
 @font-face {
+  font-family: 'xkcd';
+  src: url('./fonts/xkcd.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
   font-family: 'Share Tech Mono';
   src: url('./fonts/ShareTechMono-Regular.woff2') format('woff2');
   font-weight: 400;

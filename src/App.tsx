@@ -160,7 +160,7 @@ type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find' | 'options
 type NoteArmedAction = 'archive' | 'deletion'
 type ProtectedQuickReleaseAction = 'remove-archived' | 'remove-deleted' | null
 type TextDecorationFormat = 'bold' | 'italic' | 'strikethrough'
-type ViewStyleKey = 'modern' | 'narrow' | 'cute' | 'print'
+type ViewStyleKey = 'modern' | 'narrow' | 'cute' | 'xkcd' | 'print'
 type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
 type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
 type HighlightColorKey = 'caret' | 'search' | 'selection' | 'background' | 'topBackground' | 'bottomBackground' | 'gridOutline'
@@ -8105,6 +8105,7 @@ function App() {
                     <option value="modern">Modern</option>
                     <option value="narrow">Narrow</option>
                     <option value="cute">Cute</option>
+                    <option value="xkcd">xkcd</option>
                     <option value="print">Print</option>
                   </select>
                 </div>

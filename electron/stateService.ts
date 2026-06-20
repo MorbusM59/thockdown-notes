@@ -92,8 +92,8 @@ function sanitizeEditorStyle(input: unknown): 'syne' | 'redhat' {
   return DEFAULT_APP_STATE.menu!.editorStyle ?? 'syne';
 }
 
-function sanitizeViewStyle(input: unknown): 'modern' | 'narrow' | 'cute' | 'print' {
-  if (input === 'modern' || input === 'narrow' || input === 'cute' || input === 'print') {
+function sanitizeViewStyle(input: unknown): 'modern' | 'narrow' | 'cute' | 'xkcd' | 'print' {
+  if (input === 'modern' || input === 'narrow' || input === 'cute' || input === 'xkcd' || input === 'print') {
     return input;
   }
   return DEFAULT_APP_STATE.menu!.viewStyle ?? 'modern';

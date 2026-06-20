@@ -23,7 +23,7 @@ export interface PersistedMenuState {
   searchQuery: string;
   documentFindCaseSensitive?: boolean;
   isPreviewMode?: boolean;
-  viewStyle?: 'modern' | 'narrow' | 'cute' | 'print';
+  viewStyle?: 'modern' | 'narrow' | 'cute' | 'xkcd' | 'print';
   viewFontSize?: 'xs' | 's' | 'm' | 'l' | 'xl';
   viewSpacing?: 'tight' | 'compact' | 'cozy' | 'wide';
   editorStyle?: 'syne' | 'redhat';
