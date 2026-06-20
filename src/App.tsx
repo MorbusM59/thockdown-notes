@@ -7544,11 +7544,25 @@ function App() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [activeNoteId, buildMenuStateSnapshot, isPreviewMode, persistActiveNoteEditModeStateNow, persistMenuStateOnUnload, persistRenderViewStateForNoteNow, writeDebugEntry])
 
+  const syncSidebarTexture = useCallback(() => {
+    const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
+    if (!scroller || !sidebarTextureRef.current) return
+    syncTextureToScroll(scroller.scrollTop, sidebarTextureRef.current)
+  }, [sidebarTreeScrollerEl])
+
   // Native scroll (covers mouse wheel, trackpad, keyboard when not intercepted)
   const handlePreviewScroll = useCallback(() => {
     if (!previewScrollRef.current || !previewTextureRef.current) return;
     syncTextureToScroll(previewScrollRef.current.scrollTop, previewTextureRef.current);
   }, []);
+
+  const handleSidebarScroll = useCallback(() => {
+    syncSidebarTexture()
+  }, [syncSidebarTexture])
+
+  useEffect(() => {
+    syncSidebarTexture()
+  }, [syncSidebarTexture, sidebarMode, isSidebarScrollbarMode])
 
   return (
     <div
@@ -7630,6 +7644,7 @@ function App() {
           <div
             className={`sidebar-content${(sidebarMode === 'date' || sidebarMode === 'trash') ? ' is-paged-mode' : ''}${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}${isSidebarScrollbarMode && !isSidebarCustomScrollbarMode ? ' is-scrollbar-mode' : ''}`}
             ref={sidebarContentRef}
+            onScroll={handleSidebarScroll}
           >
             <div ref={sidebarTextureRef} className="sidebar-content-texture" />
             {(sidebarMode === 'date' || sidebarMode === 'trash') ? (

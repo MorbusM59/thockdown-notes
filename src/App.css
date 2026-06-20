@@ -552,8 +552,22 @@ button.active,
   background-color: var(--palette-parchment-dark);
 }
 
-.sidebar-content-texture {
+.sidebar-content.is-scrollbar-mode > div:nth-child(2) {
+  position: absolute;
+  top: 0;
+  z-index: 1;
+}
+
+.sidebar-content.is-scrollbar-mode > .sidebar-content-texture {
+  position:         sticky;
+}
+
+.sidebar-content:not(.is-scrollbar-mode) > .sidebar-content-texture {
   position:         absolute;
+}
+
+.sidebar-content-texture {
+  height: 100%;
   inset:            0;
   pointer-events:   none;
   z-index:          1;
@@ -734,6 +748,10 @@ button.active,
   display:        flex;
   flex-direction: column;
   gap:            8px;
+}
+
+.notes-list > * {
+  z-index: 2;
 }
 
 .notes-list.date-view  { overflow-y: hidden; }
@@ -1483,20 +1501,18 @@ button.active,
 }
 
 /* 8d. Flyout content layout */
-.toolbar-flyout-content {
+
+.sidebar-options-content {
   display:        flex;
   align-items:    stretch;
   gap:            var(--toolbar-options-gap);
   overflow-x:     auto;
-  padding-bottom: 2px;
-}
-
-.toolbar-flyout-content.sidebar-options-content {
   flex-direction: column;
   overflow-x:     hidden;
   overflow-y:     visible;
-  gap:            12px;
-  padding-bottom: 0;
+  width:          100%;
+  z-index:        1;
+  padding-bottom: var(--toolbar-options-gap);
 }
 
 /* Mode visibility filters */
