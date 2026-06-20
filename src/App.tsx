@@ -1696,6 +1696,7 @@ function App() {
   const previewScrollbarRafRef = useRef<number | null>(null)
   const previewScrollbarDragOriginRef = useRef<{ pointerY: number; thumbTopPx: number } | null>(null)
   const previewScrollbarThumbRef = useRef<HTMLDivElement | null>(null)
+  const sidebarTextureRef = useRef<HTMLDivElement | null>(null)
   const previewScrollThumbTopRef = useRef(0)
   const previewScrollThumbHeightRef = useRef(0)
   const previewContinuousScrollDirectionRef = useRef<-1 | 0 | 1>(0)
@@ -5152,6 +5153,10 @@ function App() {
     const track = sidebarScrollbarTrackRef.current
     if (!scroller || !track) return
 
+    if (sidebarTextureRef.current) {
+      syncTextureToScroll(scroller.scrollTop, sidebarTextureRef.current)
+    }
+
     const viewportHeight = scroller.clientHeight
     const contentHeight = scroller.scrollHeight
     const trackHeight = track.clientHeight
@@ -7626,6 +7631,7 @@ function App() {
             className={`sidebar-content${(sidebarMode === 'date' || sidebarMode === 'trash') ? ' is-paged-mode' : ''}${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}${isSidebarScrollbarMode && !isSidebarCustomScrollbarMode ? ' is-scrollbar-mode' : ''}`}
             ref={sidebarContentRef}
           >
+            <div ref={sidebarTextureRef} className="sidebar-content-texture" />
             {(sidebarMode === 'date' || sidebarMode === 'trash') ? (
               <div className="notes-list date-view" role="listbox" aria-label="Note list">
                 {pagedVisibleNotes.map((note) => {

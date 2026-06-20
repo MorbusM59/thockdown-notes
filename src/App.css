@@ -533,6 +533,7 @@ button.active,
   align-items: stretch;
   min-width:   0;
   min-height:  0;
+  position:    relative;
 }
 
 .sidebar-content {
@@ -551,12 +552,11 @@ button.active,
   background-color: var(--palette-parchment-dark);
 }
 
-.sidebar-content::before {
-  content:          '';
+.sidebar-content-texture {
   position:         absolute;
   inset:            0;
   pointer-events:   none;
-  z-index:          0;
+  z-index:          1;
   background-color: var(--texture-sidebar-content-tint);
   -webkit-mask-image:    var(--texture-sidebar-content);
   -webkit-mask-repeat:   repeat;
@@ -566,11 +566,6 @@ button.active,
   mask-repeat:   repeat;
   mask-size:     var(--texture-tile-size) var(--texture-tile-size);
   mask-position: 0 0;
-}
-
-.sidebar-content > * {
-  position: relative;
-  z-index:  1;
 }
 
 .sidebar-content.is-paged-mode {
@@ -1283,15 +1278,15 @@ button.active,
 
 /* 7c. Suggested tags */
 .suggested-grid {
-  padding: 7px 9px;
+  padding: 9px 0;
 }
 
 .suggested-tags {
   display:    flex;
   flex-wrap:  wrap;
-  gap:        6px;
+  gap:        4px;
   overflow:   hidden;
-  max-height: 80px;
+  max-height: 68px;
 }
 
 .tag-pill.suggested {
