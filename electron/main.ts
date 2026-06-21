@@ -161,8 +161,13 @@ async function createHiddenExportWindow(htmlContent: string): Promise<BrowserWin
       exportWindow.webContents.removeAllListeners('did-fail-load')
     }
 
-    exportWindow.webContents.once('did-finish-load', () => {
+    exportWindow.webContents.once('did-finish-load', async () => {
       cleanup()
+      try {
+        await exportWindow!.webContents.executeJavaScript('document.fonts.ready')
+      } catch {
+        // Continue even if fonts.ready is unavailable or fails.
+      }
       resolve()
     })
     exportWindow.webContents.once('did-fail-load', (_event, errorCode, errorDescription) => {

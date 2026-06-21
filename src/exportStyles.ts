@@ -8,6 +8,7 @@ interface ExportStyleTokens {
   bodyLinkColor: string
   bodyBorderColor: string
   bodyBlockquoteBorderColor: string
+  bodyBlockquoteColor: string
   codeBackground: string
   codeBorderColor: string
   codeRadius: string
@@ -15,7 +16,11 @@ interface ExportStyleTokens {
   textRadius: string
   previewFontFamily: string
   previewFontSize: string
+  previewFontWeight: string
   previewLineHeight: string
+  previewLetterSpacing: string
+  previewFontSynthesis: string
+  previewTextShadow: string
   previewPadding: string
   previewCodeFont: string
   previewInlineCodeSize: string
@@ -29,6 +34,7 @@ const defaultExportTokens: ExportStyleTokens = {
   bodyLinkColor: '#00459edd',
   bodyBorderColor: '#00000044',
   bodyBlockquoteBorderColor: '#00000044',
+  bodyBlockquoteColor: '#000000BB',
   codeBackground: '#f2f2f2',
   codeBorderColor: '#dcdcdc',
   codeRadius: '6px',
@@ -36,7 +42,11 @@ const defaultExportTokens: ExportStyleTokens = {
   textRadius: '4px',
   previewFontFamily: 'Georgia, serif',
   previewFontSize: '16px',
+  previewFontWeight: '400',
   previewLineHeight: '1.6',
+  previewLetterSpacing: 'normal',
+  previewFontSynthesis: 'none',
+  previewTextShadow: 'none',
   previewPadding: '18px',
   previewCodeFont: 'Menlo, Monaco, monospace',
   previewInlineCodeSize: '0.95em',
@@ -50,6 +60,7 @@ export const exportStyleMappingConfig: Record<keyof ExportStyleTokens, boolean> 
   bodyLinkColor: true,
   bodyBorderColor: true,
   bodyBlockquoteBorderColor: true,
+  bodyBlockquoteColor: true,
   codeBackground: true,
   codeBorderColor: true,
   codeRadius: true,
@@ -57,7 +68,11 @@ export const exportStyleMappingConfig: Record<keyof ExportStyleTokens, boolean> 
   textRadius: true,
   previewFontFamily: true,
   previewFontSize: true,
+  previewFontWeight: true,
   previewLineHeight: true,
+  previewLetterSpacing: true,
+  previewFontSynthesis: true,
+  previewTextShadow: true,
   previewPadding: true,
   previewCodeFont: true,
   previewInlineCodeSize: true,
@@ -68,6 +83,119 @@ export const exportStyleMappingConfig: Record<keyof ExportStyleTokens, boolean> 
 function resolveCssVar(name: string, fallback: string): string {
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
   return value || fallback
+}
+
+function resolveExportFontUrl(relativePath: string): string {
+  return new URL(relativePath, import.meta.url).href
+}
+
+function buildExportFontFaceCss(): string {
+  return `
+@font-face {
+  font-family: 'Syne Mono';
+  src: url('${resolveExportFontUrl('./fonts/SyneMono-Regular.woff2')}') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Red Hat Mono';
+  src: url('${resolveExportFontUrl('./fonts/RedHatMono-Regular.woff2')}') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Roboto Condensed';
+  src: url('${resolveExportFontUrl('./fonts/RobotoCondensed-Regular.woff2')}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Roboto Condensed';
+  src: url('${resolveExportFontUrl('./fonts/RobotoCondensed-Medium.woff2')}') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Roboto Condensed';
+  src: url('${resolveExportFontUrl('./fonts/RobotoCondensed-Bold.woff2')}') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Quicksand';
+  src: url('${resolveExportFontUrl('./fonts/Quicksand-Regular.woff2')}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Quicksand';
+  src: url('${resolveExportFontUrl('./fonts/Quicksand-Medium.woff2')}') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Quicksand';
+  src: url('${resolveExportFontUrl('./fonts/Quicksand-Bold.woff2')}') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Sour Gummy';
+  src: url('${resolveExportFontUrl('./fonts/SourGummy-Regular.woff2')}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Sour Gummy';
+  src: url('${resolveExportFontUrl('./fonts/SourGummy-Medium.woff2')}') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Sour Gummy';
+  src: url('${resolveExportFontUrl('./fonts/SourGummy-Bold.woff2')}') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Alumni Sans';
+  src: url('${resolveExportFontUrl('./fonts/AlumniSans-Regular.woff2')}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Big Shoulders';
+  src: url('${resolveExportFontUrl('./fonts/BigShoulders-ExtraLight.woff2')}') format('woff2');
+  font-weight: 200;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'xkcd';
+  src: url('${resolveExportFontUrl('./fonts/xkcd.otf')}') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Share Tech Mono';
+  src: url('${resolveExportFontUrl('./fonts/ShareTechMono-Regular.woff2')}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+`
 }
 
 function createPreviewMeasurementNode(viewStyle: ExportViewStyle, viewFontSize: ExportFontSize, viewSpacing: ExportSpacing): HTMLElement {
@@ -102,6 +230,7 @@ function resolveExportTokens(
     codeRadius: resolveCssVar('--border-radius-regular', defaultExportTokens.codeRadius),
     textBorderColor: resolveCssVar('--btn-border-default', defaultExportTokens.textBorderColor),
     textRadius: resolveCssVar('--border-radius-small', defaultExportTokens.textRadius),
+    bodyBlockquoteColor: resolveCssVar('--color-text-faded', defaultExportTokens.bodyBlockquoteColor),
     previewFontFamily: computed.fontFamily || defaultExportTokens.previewFontFamily,
     previewFontSize: computed.fontSize || defaultExportTokens.previewFontSize,
     previewLineHeight: computed.lineHeight || defaultExportTokens.previewLineHeight,
@@ -109,6 +238,10 @@ function resolveExportTokens(
     previewCodeFont: computed.getPropertyValue('--preview-code-font').trim() || defaultExportTokens.previewCodeFont,
     previewInlineCodeSize: computed.getPropertyValue('--preview-inline-code-size').trim() || defaultExportTokens.previewInlineCodeSize,
     previewInlineCodePadding: computed.getPropertyValue('--preview-inline-code-padding').trim() || defaultExportTokens.previewInlineCodePadding,
+    previewLetterSpacing: computed.letterSpacing || defaultExportTokens.previewLetterSpacing,
+    previewFontWeight: computed.fontWeight || defaultExportTokens.previewFontWeight,
+    previewFontSynthesis: computed.fontSynthesis || defaultExportTokens.previewFontSynthesis,
+    previewTextShadow: computed.textShadow || defaultExportTokens.previewTextShadow,
     previewHighlightedBackground: resolveCssVar('--preview-edge-fade-color', defaultExportTokens.previewHighlightedBackground),
   }
 
@@ -118,6 +251,7 @@ function resolveExportTokens(
     bodyLinkColor: exportStyleMappingConfig.bodyLinkColor ? resolvedTokens.bodyLinkColor : defaultExportTokens.bodyLinkColor,
     bodyBorderColor: exportStyleMappingConfig.bodyBorderColor ? resolvedTokens.bodyBorderColor : defaultExportTokens.bodyBorderColor,
     bodyBlockquoteBorderColor: exportStyleMappingConfig.bodyBlockquoteBorderColor ? resolvedTokens.bodyBlockquoteBorderColor : defaultExportTokens.bodyBlockquoteBorderColor,
+    bodyBlockquoteColor: exportStyleMappingConfig.bodyBlockquoteColor ? resolvedTokens.bodyBlockquoteColor : defaultExportTokens.bodyBlockquoteColor,
     codeBackground: exportStyleMappingConfig.codeBackground ? resolvedTokens.codeBackground : defaultExportTokens.codeBackground,
     codeBorderColor: exportStyleMappingConfig.codeBorderColor ? resolvedTokens.codeBorderColor : defaultExportTokens.codeBorderColor,
     codeRadius: exportStyleMappingConfig.codeRadius ? resolvedTokens.codeRadius : defaultExportTokens.codeRadius,
@@ -125,7 +259,11 @@ function resolveExportTokens(
     textRadius: exportStyleMappingConfig.textRadius ? resolvedTokens.textRadius : defaultExportTokens.textRadius,
     previewFontFamily: exportStyleMappingConfig.previewFontFamily ? resolvedTokens.previewFontFamily : defaultExportTokens.previewFontFamily,
     previewFontSize: exportStyleMappingConfig.previewFontSize ? resolvedTokens.previewFontSize : defaultExportTokens.previewFontSize,
+    previewFontWeight: exportStyleMappingConfig.previewFontWeight ? resolvedTokens.previewFontWeight : defaultExportTokens.previewFontWeight,
     previewLineHeight: exportStyleMappingConfig.previewLineHeight ? resolvedTokens.previewLineHeight : defaultExportTokens.previewLineHeight,
+    previewLetterSpacing: exportStyleMappingConfig.previewLetterSpacing ? resolvedTokens.previewLetterSpacing : defaultExportTokens.previewLetterSpacing,
+    previewFontSynthesis: exportStyleMappingConfig.previewFontSynthesis ? resolvedTokens.previewFontSynthesis : defaultExportTokens.previewFontSynthesis,
+    previewTextShadow: exportStyleMappingConfig.previewTextShadow ? resolvedTokens.previewTextShadow : defaultExportTokens.previewTextShadow,
     previewPadding: exportStyleMappingConfig.previewPadding ? resolvedTokens.previewPadding : defaultExportTokens.previewPadding,
     previewCodeFont: exportStyleMappingConfig.previewCodeFont ? resolvedTokens.previewCodeFont : defaultExportTokens.previewCodeFont,
     previewInlineCodeSize: exportStyleMappingConfig.previewInlineCodeSize ? resolvedTokens.previewInlineCodeSize : defaultExportTokens.previewInlineCodeSize,
@@ -144,7 +282,8 @@ export function buildExportCss(
 ): string {
   const tokens = resolveExportTokens(viewStyle, viewFontSize, viewSpacing)
 
-  return `
+  return `${buildExportFontFaceCss()}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -155,7 +294,10 @@ html, body {
   color: ${tokens.bodyTextColor};
   font-family: ${tokens.previewFontFamily};
   font-size: ${tokens.previewFontSize};
+  font-weight: ${tokens.previewFontWeight};
   line-height: ${tokens.previewLineHeight};
+  letter-spacing: ${tokens.previewLetterSpacing};
+  font-synthesis: ${tokens.previewFontSynthesis};
 }
 
 @page {
@@ -186,7 +328,7 @@ body {
   padding: ${tokens.previewPadding};
   box-sizing: border-box;
   color: ${tokens.bodyTextColor};
-  text-shadow: none;
+  text-shadow: ${tokens.previewTextShadow};
 }
 
 .markdown-preview > *:not(.markdown-preview-texture),
