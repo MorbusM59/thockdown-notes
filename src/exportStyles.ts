@@ -26,6 +26,37 @@ interface ExportStyleTokens {
   previewInlineCodeSize: string
   previewInlineCodePadding: string
   previewHighlightedBackground: string
+  headingTextShadow: string
+  heading1FontSize: string
+  heading2FontSize: string
+  heading3FontSize: string
+  heading4FontSize: string
+  heading5FontSize: string
+  heading6FontSize: string
+  heading1FontWeight: string
+  heading2FontWeight: string
+  heading3FontWeight: string
+  heading4FontWeight: string
+  heading5FontWeight: string
+  heading6FontWeight: string
+  heading1FontStyle: string
+  heading2FontStyle: string
+  heading3FontStyle: string
+  heading4FontStyle: string
+  heading5FontStyle: string
+  heading6FontStyle: string
+  heading1LetterSpacing: string
+  heading2LetterSpacing: string
+  heading3LetterSpacing: string
+  heading4LetterSpacing: string
+  heading5LetterSpacing: string
+  heading6LetterSpacing: string
+  heading1TextShadow: string
+  heading2TextShadow: string
+  heading3TextShadow: string
+  heading4TextShadow: string
+  heading5TextShadow: string
+  heading6TextShadow: string
 }
 
 const defaultExportTokens: ExportStyleTokens = {
@@ -52,6 +83,37 @@ const defaultExportTokens: ExportStyleTokens = {
   previewInlineCodeSize: '0.95em',
   previewInlineCodePadding: '0.08em 0.35em',
   previewHighlightedBackground: 'rgba(255, 221, 105, 0.55)',
+  headingTextShadow: 'none',
+  heading1FontSize: '1.9em',
+  heading2FontSize: '1.55em',
+  heading3FontSize: '1.28em',
+  heading4FontSize: '1em',
+  heading5FontSize: '1em',
+  heading6FontSize: '1em',
+  heading1FontWeight: 'inherit',
+  heading2FontWeight: 'inherit',
+  heading3FontWeight: 'inherit',
+  heading4FontWeight: 'inherit',
+  heading5FontWeight: 'inherit',
+  heading6FontWeight: 'inherit',
+  heading1FontStyle: 'normal',
+  heading2FontStyle: 'normal',
+  heading3FontStyle: 'normal',
+  heading4FontStyle: 'normal',
+  heading5FontStyle: 'normal',
+  heading6FontStyle: 'normal',
+  heading1LetterSpacing: 'normal',
+  heading2LetterSpacing: 'normal',
+  heading3LetterSpacing: 'normal',
+  heading4LetterSpacing: 'normal',
+  heading5LetterSpacing: 'normal',
+  heading6LetterSpacing: 'normal',
+  heading1TextShadow: 'none',
+  heading2TextShadow: 'none',
+  heading3TextShadow: 'none',
+  heading4TextShadow: 'none',
+  heading5TextShadow: 'none',
+  heading6TextShadow: 'none',
 }
 
 export const exportStyleMappingConfig: Record<keyof ExportStyleTokens, boolean> = {
@@ -78,6 +140,37 @@ export const exportStyleMappingConfig: Record<keyof ExportStyleTokens, boolean> 
   previewInlineCodeSize: true,
   previewInlineCodePadding: true,
   previewHighlightedBackground: true,
+  headingTextShadow: true,
+  heading1FontSize: true,
+  heading2FontSize: true,
+  heading3FontSize: true,
+  heading4FontSize: true,
+  heading5FontSize: true,
+  heading6FontSize: true,
+  heading1FontWeight: true,
+  heading2FontWeight: true,
+  heading3FontWeight: true,
+  heading4FontWeight: true,
+  heading5FontWeight: true,
+  heading6FontWeight: true,
+  heading1FontStyle: true,
+  heading2FontStyle: true,
+  heading3FontStyle: true,
+  heading4FontStyle: true,
+  heading5FontStyle: true,
+  heading6FontStyle: true,
+  heading1LetterSpacing: true,
+  heading2LetterSpacing: true,
+  heading3LetterSpacing: true,
+  heading4LetterSpacing: true,
+  heading5LetterSpacing: true,
+  heading6LetterSpacing: true,
+  heading1TextShadow: true,
+  heading2TextShadow: true,
+  heading3TextShadow: true,
+  heading4TextShadow: true,
+  heading5TextShadow: true,
+  heading6TextShadow: true,
 }
 
 function resolveCssVar(name: string, fallback: string): string {
@@ -206,7 +299,15 @@ function createPreviewMeasurementNode(viewStyle: ExportViewStyle, viewFontSize: 
   node.style.left = '-99999px'
   node.style.top = '-99999px'
   node.style.pointerEvents = 'none'
-  node.textContent = 'preview'
+  node.innerHTML = `
+    <h1>preview</h1>
+    <h2>preview</h2>
+    <h3>preview</h3>
+    <h4>preview</h4>
+    <h5>preview</h5>
+    <h6>preview</h6>
+    <p>preview</p>
+  `
   document.body.appendChild(node)
   return node
 }
@@ -218,6 +319,12 @@ function resolveExportTokens(
 ): ExportStyleTokens {
   const previewNode = createPreviewMeasurementNode(viewStyle, viewFontSize, viewSpacing)
   const computed = getComputedStyle(previewNode)
+  const h1 = getComputedStyle(previewNode.querySelector('h1')!)
+  const h2 = getComputedStyle(previewNode.querySelector('h2')!)
+  const h3 = getComputedStyle(previewNode.querySelector('h3')!)
+  const h4 = getComputedStyle(previewNode.querySelector('h4')!)
+  const h5 = getComputedStyle(previewNode.querySelector('h5')!)
+  const h6 = getComputedStyle(previewNode.querySelector('h6')!)
 
   const resolvedTokens: ExportStyleTokens = {
     bodyBackground: resolveCssVar('--color-background-light', defaultExportTokens.bodyBackground),
@@ -243,6 +350,37 @@ function resolveExportTokens(
     previewFontSynthesis: computed.fontSynthesis || defaultExportTokens.previewFontSynthesis,
     previewTextShadow: computed.textShadow || defaultExportTokens.previewTextShadow,
     previewHighlightedBackground: resolveCssVar('--preview-edge-fade-color', defaultExportTokens.previewHighlightedBackground),
+    headingTextShadow: h1.textShadow || defaultExportTokens.headingTextShadow,
+    heading1FontSize: h1.fontSize || defaultExportTokens.heading1FontSize,
+    heading2FontSize: h2.fontSize || defaultExportTokens.heading2FontSize,
+    heading3FontSize: h3.fontSize || defaultExportTokens.heading3FontSize,
+    heading4FontSize: h4.fontSize || defaultExportTokens.heading4FontSize,
+    heading5FontSize: h5.fontSize || defaultExportTokens.heading5FontSize,
+    heading6FontSize: h6.fontSize || defaultExportTokens.heading6FontSize,
+    heading1FontWeight: h1.fontWeight || defaultExportTokens.heading1FontWeight,
+    heading2FontWeight: h2.fontWeight || defaultExportTokens.heading2FontWeight,
+    heading3FontWeight: h3.fontWeight || defaultExportTokens.heading3FontWeight,
+    heading4FontWeight: h4.fontWeight || defaultExportTokens.heading4FontWeight,
+    heading5FontWeight: h5.fontWeight || defaultExportTokens.heading5FontWeight,
+    heading6FontWeight: h6.fontWeight || defaultExportTokens.heading6FontWeight,
+    heading1FontStyle: h1.fontStyle || defaultExportTokens.heading1FontStyle,
+    heading2FontStyle: h2.fontStyle || defaultExportTokens.heading2FontStyle,
+    heading3FontStyle: h3.fontStyle || defaultExportTokens.heading3FontStyle,
+    heading4FontStyle: h4.fontStyle || defaultExportTokens.heading4FontStyle,
+    heading5FontStyle: h5.fontStyle || defaultExportTokens.heading5FontStyle,
+    heading6FontStyle: h6.fontStyle || defaultExportTokens.heading6FontStyle,
+    heading1LetterSpacing: h1.letterSpacing || defaultExportTokens.heading1LetterSpacing,
+    heading2LetterSpacing: h2.letterSpacing || defaultExportTokens.heading2LetterSpacing,
+    heading3LetterSpacing: h3.letterSpacing || defaultExportTokens.heading3LetterSpacing,
+    heading4LetterSpacing: h4.letterSpacing || defaultExportTokens.heading4LetterSpacing,
+    heading5LetterSpacing: h5.letterSpacing || defaultExportTokens.heading5LetterSpacing,
+    heading6LetterSpacing: h6.letterSpacing || defaultExportTokens.heading6LetterSpacing,
+    heading1TextShadow: h1.textShadow || defaultExportTokens.heading1TextShadow,
+    heading2TextShadow: h2.textShadow || defaultExportTokens.heading2TextShadow,
+    heading3TextShadow: h3.textShadow || defaultExportTokens.heading3TextShadow,
+    heading4TextShadow: h4.textShadow || defaultExportTokens.heading4TextShadow,
+    heading5TextShadow: h5.textShadow || defaultExportTokens.heading5TextShadow,
+    heading6TextShadow: h6.textShadow || defaultExportTokens.heading6TextShadow,
   }
 
   const tokens: ExportStyleTokens = {
@@ -269,6 +407,37 @@ function resolveExportTokens(
     previewInlineCodeSize: exportStyleMappingConfig.previewInlineCodeSize ? resolvedTokens.previewInlineCodeSize : defaultExportTokens.previewInlineCodeSize,
     previewInlineCodePadding: exportStyleMappingConfig.previewInlineCodePadding ? resolvedTokens.previewInlineCodePadding : defaultExportTokens.previewInlineCodePadding,
     previewHighlightedBackground: exportStyleMappingConfig.previewHighlightedBackground ? resolvedTokens.previewHighlightedBackground : defaultExportTokens.previewHighlightedBackground,
+    headingTextShadow: exportStyleMappingConfig.headingTextShadow ? resolvedTokens.headingTextShadow : defaultExportTokens.headingTextShadow,
+    heading1FontSize: exportStyleMappingConfig.heading1FontSize ? resolvedTokens.heading1FontSize : defaultExportTokens.heading1FontSize,
+    heading2FontSize: exportStyleMappingConfig.heading2FontSize ? resolvedTokens.heading2FontSize : defaultExportTokens.heading2FontSize,
+    heading3FontSize: exportStyleMappingConfig.heading3FontSize ? resolvedTokens.heading3FontSize : defaultExportTokens.heading3FontSize,
+    heading4FontSize: exportStyleMappingConfig.heading4FontSize ? resolvedTokens.heading4FontSize : defaultExportTokens.heading4FontSize,
+    heading5FontSize: exportStyleMappingConfig.heading5FontSize ? resolvedTokens.heading5FontSize : defaultExportTokens.heading5FontSize,
+    heading6FontSize: exportStyleMappingConfig.heading6FontSize ? resolvedTokens.heading6FontSize : defaultExportTokens.heading6FontSize,
+    heading1FontWeight: exportStyleMappingConfig.heading1FontWeight ? resolvedTokens.heading1FontWeight : defaultExportTokens.heading1FontWeight,
+    heading2FontWeight: exportStyleMappingConfig.heading2FontWeight ? resolvedTokens.heading2FontWeight : defaultExportTokens.heading2FontWeight,
+    heading3FontWeight: exportStyleMappingConfig.heading3FontWeight ? resolvedTokens.heading3FontWeight : defaultExportTokens.heading3FontWeight,
+    heading4FontWeight: exportStyleMappingConfig.heading4FontWeight ? resolvedTokens.heading4FontWeight : defaultExportTokens.heading4FontWeight,
+    heading5FontWeight: exportStyleMappingConfig.heading5FontWeight ? resolvedTokens.heading5FontWeight : defaultExportTokens.heading5FontWeight,
+    heading6FontWeight: exportStyleMappingConfig.heading6FontWeight ? resolvedTokens.heading6FontWeight : defaultExportTokens.heading6FontWeight,
+    heading1FontStyle: exportStyleMappingConfig.heading1FontStyle ? resolvedTokens.heading1FontStyle : defaultExportTokens.heading1FontStyle,
+    heading2FontStyle: exportStyleMappingConfig.heading2FontStyle ? resolvedTokens.heading2FontStyle : defaultExportTokens.heading2FontStyle,
+    heading3FontStyle: exportStyleMappingConfig.heading3FontStyle ? resolvedTokens.heading3FontStyle : defaultExportTokens.heading3FontStyle,
+    heading4FontStyle: exportStyleMappingConfig.heading4FontStyle ? resolvedTokens.heading4FontStyle : defaultExportTokens.heading4FontStyle,
+    heading5FontStyle: exportStyleMappingConfig.heading5FontStyle ? resolvedTokens.heading5FontStyle : defaultExportTokens.heading5FontStyle,
+    heading6FontStyle: exportStyleMappingConfig.heading6FontStyle ? resolvedTokens.heading6FontStyle : defaultExportTokens.heading6FontStyle,
+    heading1LetterSpacing: exportStyleMappingConfig.heading1LetterSpacing ? resolvedTokens.heading1LetterSpacing : defaultExportTokens.heading1LetterSpacing,
+    heading2LetterSpacing: exportStyleMappingConfig.heading2LetterSpacing ? resolvedTokens.heading2LetterSpacing : defaultExportTokens.heading2LetterSpacing,
+    heading3LetterSpacing: exportStyleMappingConfig.heading3LetterSpacing ? resolvedTokens.heading3LetterSpacing : defaultExportTokens.heading3LetterSpacing,
+    heading4LetterSpacing: exportStyleMappingConfig.heading4LetterSpacing ? resolvedTokens.heading4LetterSpacing : defaultExportTokens.heading4LetterSpacing,
+    heading5LetterSpacing: exportStyleMappingConfig.heading5LetterSpacing ? resolvedTokens.heading5LetterSpacing : defaultExportTokens.heading5LetterSpacing,
+    heading6LetterSpacing: exportStyleMappingConfig.heading6LetterSpacing ? resolvedTokens.heading6LetterSpacing : defaultExportTokens.heading6LetterSpacing,
+    heading1TextShadow: exportStyleMappingConfig.heading1TextShadow ? resolvedTokens.heading1TextShadow : defaultExportTokens.heading1TextShadow,
+    heading2TextShadow: exportStyleMappingConfig.heading2TextShadow ? resolvedTokens.heading2TextShadow : defaultExportTokens.heading2TextShadow,
+    heading3TextShadow: exportStyleMappingConfig.heading3TextShadow ? resolvedTokens.heading3TextShadow : defaultExportTokens.heading3TextShadow,
+    heading4TextShadow: exportStyleMappingConfig.heading4TextShadow ? resolvedTokens.heading4TextShadow : defaultExportTokens.heading4TextShadow,
+    heading5TextShadow: exportStyleMappingConfig.heading5TextShadow ? resolvedTokens.heading5TextShadow : defaultExportTokens.heading5TextShadow,
+    heading6TextShadow: exportStyleMappingConfig.heading6TextShadow ? resolvedTokens.heading6TextShadow : defaultExportTokens.heading6TextShadow,
   }
 
   document.body.removeChild(previewNode)
@@ -354,12 +523,15 @@ body {
   margin: 0.75em 0 0.45em;
   line-height: 1.25;
   color: ${tokens.bodyTextColor};
-  text-shadow: none;
+  text-shadow: ${tokens.headingTextShadow};
 }
 
-.markdown-preview h1 { font-size: 1.9em; }
-.markdown-preview h2 { font-size: 1.55em; }
-.markdown-preview h3 { font-size: 1.28em; }
+.markdown-preview h1 { font-size: ${tokens.heading1FontSize}; font-weight: ${tokens.heading1FontWeight}; font-style: ${tokens.heading1FontStyle}; letter-spacing: ${tokens.heading1LetterSpacing}; text-shadow: ${tokens.heading1TextShadow}; }
+.markdown-preview h2 { font-size: ${tokens.heading2FontSize}; font-weight: ${tokens.heading2FontWeight}; font-style: ${tokens.heading2FontStyle}; letter-spacing: ${tokens.heading2LetterSpacing}; text-shadow: ${tokens.heading2TextShadow}; }
+.markdown-preview h3 { font-size: ${tokens.heading3FontSize}; font-weight: ${tokens.heading3FontWeight}; font-style: ${tokens.heading3FontStyle}; letter-spacing: ${tokens.heading3LetterSpacing}; text-shadow: ${tokens.heading3TextShadow}; }
+.markdown-preview h4 { font-size: ${tokens.heading4FontSize}; font-weight: ${tokens.heading4FontWeight}; font-style: ${tokens.heading4FontStyle}; letter-spacing: ${tokens.heading4LetterSpacing}; text-shadow: ${tokens.heading4TextShadow}; }
+.markdown-preview h5 { font-size: ${tokens.heading5FontSize}; font-weight: ${tokens.heading5FontWeight}; font-style: ${tokens.heading5FontStyle}; letter-spacing: ${tokens.heading5LetterSpacing}; text-shadow: ${tokens.heading5TextShadow}; }
+.markdown-preview h6 { font-size: ${tokens.heading6FontSize}; font-weight: ${tokens.heading6FontWeight}; font-style: ${tokens.heading6FontStyle}; letter-spacing: ${tokens.heading6LetterSpacing}; text-shadow: ${tokens.heading6TextShadow}; }
 
 .markdown-preview p,
 .markdown-preview ul,
