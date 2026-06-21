@@ -514,6 +514,18 @@ function isSafePreviewHref(href: string | undefined): boolean {
   }
 }
 
+function isSafePreviewImageSrc(src: string | undefined): boolean {
+  if (!src) return false
+  if (src.startsWith('data:')) return true
+  if (src.startsWith('file:')) return true
+  try {
+    const parsed = new URL(src)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 // Stable references for ReactMarkdown so per-frame App re-renders (e.g. from
 // scroll-driven thumb state updates) don't force a full markdown reconciliation.
 const PREVIEW_MARKDOWN_REMARK_PLUGINS = [remarkGfm]
@@ -535,6 +547,13 @@ const PREVIEW_MARKDOWN_COMPONENTS = {
     }
 
     return <span>{children}</span>
+  },
+  img: ({ src, alt }: { src?: string; alt?: string }) => {
+    const normalizedSrc = typeof src === 'string' ? src : undefined
+    if (isSafePreviewImageSrc(normalizedSrc)) {
+      return <img src={normalizedSrc} alt={alt ?? ''} />
+    }
+    return <span>{alt ?? 'Image'}</span>
   },
 } as const
 
