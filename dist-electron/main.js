@@ -330,24 +330,28 @@ const APP_STATE_CHANNELS = {
 const TEXTURE_SURFACES = ["appGrid", "sidebarContent", "editorEditText", "editorRenderText"];
 const DEFAULT_TEXTURE_MATERIALS = {
   appGrid: {
+    enabled: true,
     seed: 137,
     granularity: 9,
     vSteps: 8,
     color: { h: 32, s: 0.12, v: 0.95, a: 0.16 }
   },
   sidebarContent: {
+    enabled: true,
     seed: 211,
     granularity: 8,
     vSteps: 7,
     color: { h: 30, s: 0.11, v: 0.93, a: 0.17 }
   },
   editorEditText: {
+    enabled: true,
     seed: 389,
     granularity: 10,
     vSteps: 9,
     color: { h: 29, s: 0.1, v: 0.92, a: 0.14 }
   },
   editorRenderText: {
+    enabled: true,
     seed: 467,
     granularity: 11,
     vSteps: 9,
@@ -421,7 +425,7 @@ function sanitizeEditorStyle(input) {
   return DEFAULT_APP_STATE.menu.editorStyle ?? "syne";
 }
 function sanitizeViewStyle(input) {
-  if (input === "modern" || input === "narrow" || input === "cute" || input === "print") {
+  if (input === "modern" || input === "narrow" || input === "cute" || input === "xkcd" || input === "print") {
     return input;
   }
   return DEFAULT_APP_STATE.menu.viewStyle ?? "modern";
@@ -478,6 +482,7 @@ function sanitizeTextureColor(input, fallback) {
 function sanitizeTextureMaterial(input, fallback) {
   const source = input && typeof input === "object" ? input : {};
   return {
+    enabled: source.enabled !== false,
     seed: sanitizeIntegerInRange(source.seed, 0, 2147483647, fallback.seed),
     granularity: sanitizeIntegerInRange(source.granularity, 1, 20, fallback.granularity),
     vSteps: sanitizeIntegerInRange(source.vSteps, 1, 20, fallback.vSteps),
@@ -555,7 +560,8 @@ function sanitizeMenu(input) {
     scrollDistanceTimeInfluence: sanitizeRatio(input == null ? void 0 : input.scrollDistanceTimeInfluence, DEFAULT_APP_STATE.menu.scrollDistanceTimeInfluence ?? 0),
     scrollBaseDistanceRows: sanitizePositive(input == null ? void 0 : input.scrollBaseDistanceRows, DEFAULT_APP_STATE.menu.scrollBaseDistanceRows ?? 1),
     scrollMaxDurationMultiplier: sanitizePositive(input == null ? void 0 : input.scrollMaxDurationMultiplier, DEFAULT_APP_STATE.menu.scrollMaxDurationMultiplier ?? 1),
-    sidebarViewState: sanitizeSidebarViewState(input == null ? void 0 : input.sidebarViewState)
+    sidebarViewState: sanitizeSidebarViewState(input == null ? void 0 : input.sidebarViewState),
+    debuggingEnabled: Boolean(input == null ? void 0 : input.debuggingEnabled)
   };
 }
 async function fileExists(filePath) {
@@ -570,6 +576,7 @@ class StateService {
   constructor(dataRoot) {
     __publicField(this, "appStatePath");
     __publicField(this, "windowStatePath");
+    __publicField(this, "cachedAppState", null);
     this.appStatePath = path.join(dataRoot, APP_STATE_FILE);
     this.windowStatePath = path.join(dataRoot, WINDOW_STATE_FILE);
   }
@@ -600,7 +607,23 @@ class StateService {
       viewport: sanitizeViewport(state.viewport),
       menu: sanitizeMenu(state.menu)
     };
+    this.cachedAppState = payload;
     await promises.writeFile(this.appStatePath, JSON.stringify(payload, null, 2), "utf8");
+  }
+  // Called synchronously from the main process on app close, to guarantee
+  // the last-known state is written even if the renderer's async IPC call
+  // didn't complete before the window was destroyed.
+  async flushAppStateOnClose() {
+    if (!this.cachedAppState) return;
+    try {
+      await promises.writeFile(
+        this.appStatePath,
+        JSON.stringify(this.cachedAppState, null, 2),
+        "utf8"
+      );
+    } catch (error) {
+      console.error("[stateService] flushAppStateOnClose failed:", error);
+    }
   }
   async loadWindowState() {
     await this.ensureDataRoot();
@@ -780,6 +803,7 @@ function normalizeTextureMaterialSettings(input, fallback) {
   const source = input && typeof input === "object" ? input : {};
   const color = source.color && typeof source.color === "object" ? source.color : {};
   return {
+    enabled: source.enabled !== false,
     seed: clampInteger(source.seed, 0, 2147483647, fallback.seed),
     granularity: clampInteger(source.granularity, 1, 20, fallback.granularity),
     vSteps: clampInteger(source.vSteps, 1, 20, fallback.vSteps),
@@ -1912,6 +1936,50 @@ function resolveDataRoot() {
   }
   return path.join(process.env.APP_ROOT, "data");
 }
+async function createHiddenExportWindow(htmlContent) {
+  const exportWindow = new BrowserWindow({
+    show: false,
+    autoHideMenuBar: true,
+    webPreferences: {
+      sandbox: false,
+      webSecurity: true,
+      backgroundThrottling: false
+    }
+  });
+  const tempHtmlPath = path.join(app.getPath("temp"), `measly-notes-export-${Date.now()}.html`);
+  await promises.writeFile(tempHtmlPath, htmlContent, "utf8");
+  await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error("Export page load timeout"));
+    }, 15e3);
+    const cleanup = () => {
+      clearTimeout(timeout);
+      exportWindow.webContents.removeAllListeners("did-finish-load");
+      exportWindow.webContents.removeAllListeners("did-fail-load");
+    };
+    exportWindow.webContents.once("did-finish-load", async () => {
+      cleanup();
+      try {
+        await exportWindow.webContents.executeJavaScript("document.fonts.ready");
+      } catch {
+      }
+      resolve();
+    });
+    exportWindow.webContents.once("did-fail-load", (_event, errorCode, errorDescription) => {
+      cleanup();
+      reject(new Error(`Export page failed to load: ${errorCode} ${errorDescription}`));
+    });
+    exportWindow.loadFile(tempHtmlPath).catch((error) => {
+      cleanup();
+      reject(error);
+    });
+  });
+  exportWindow.once("closed", () => {
+    promises.unlink(tempHtmlPath).catch(() => {
+    });
+  });
+  return exportWindow;
+}
 function registerIpcHandlers() {
   if (!databaseService) {
     databaseService = new DatabaseService(resolveDataRoot());
@@ -2044,6 +2112,66 @@ function registerIpcHandlers() {
       return "";
     }
   });
+  ipcMain.handle("select-export-folder", async (event) => {
+    try {
+      const winRef = BrowserWindow.fromWebContents(event.sender) ?? win;
+      if (!winRef) return null;
+      const result = await dialog.showOpenDialog(winRef, {
+        properties: ["openDirectory", "createDirectory"],
+        title: "Select export destination"
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      return result.filePaths[0];
+    } catch (error) {
+      console.warn("[main] select-export-folder failed", error);
+      return null;
+    }
+  });
+  ipcMain.handle("export-pdf", async (_event, folderPath, fileName, htmlContent) => {
+    let exportWindow = null;
+    try {
+      if (!folderPath || !fileName || typeof htmlContent !== "string") {
+        return { ok: false, error: "Invalid export arguments" };
+      }
+      await promises.mkdir(folderPath, { recursive: true });
+      const sanitize = (input) => input.replace(/[<>:"/\\|?*]+/g, "_");
+      const base = sanitize(fileName);
+      let outPath = path.join(folderPath, base);
+      const exists = await promises.stat(outPath).then(() => true).catch(() => false);
+      if (exists) {
+        const now = /* @__PURE__ */ new Date();
+        const hh = String(now.getHours()).padStart(2, "0");
+        const mm = String(now.getMinutes()).padStart(2, "0");
+        const timeSuffix = ` (${hh}-${mm})`;
+        const ext = path.extname(base);
+        const nameOnly = base.substring(0, base.length - ext.length);
+        let candidate = `${nameOnly}${timeSuffix}${ext}`;
+        let candidatePath = path.join(folderPath, candidate);
+        let counter = 1;
+        while (await promises.stat(candidatePath).then(() => true).catch(() => false)) {
+          counter += 1;
+          candidate = `${nameOnly}${timeSuffix} v${counter}${ext}`;
+          candidatePath = path.join(folderPath, candidate);
+        }
+        outPath = candidatePath;
+      }
+      exportWindow = await createHiddenExportWindow(htmlContent);
+      const pdfOpts = {
+        printBackground: true,
+        pageSize: "A4"
+      };
+      const data = await exportWindow.webContents.printToPDF(pdfOpts);
+      await promises.writeFile(outPath, data);
+      return { ok: true, path: outPath };
+    } catch (error) {
+      console.warn("[main] export-pdf failed", error);
+      return { ok: false, error: (error == null ? void 0 : error.message) ?? String(error) };
+    } finally {
+      if (exportWindow && !exportWindow.isDestroyed()) {
+        exportWindow.destroy();
+      }
+    }
+  });
   ipcMain.handle(LEGACY_DB_CHANNELS.getLastEditedNoteId, async () => databaseService.getLastEditedNoteId());
   ipcMain.handle(LEGACY_DB_CHANNELS.getTrashNoteIds, async () => databaseService.getTrashNoteIds());
   ipcMain.handle(
@@ -2162,11 +2290,22 @@ async function createWindow() {
   };
   win.on("resize", persistWindowState);
   win.on("move", persistWindowState);
-  win.on("maximize", persistWindowState);
-  win.on("unmaximize", persistWindowState);
+  win.on("maximize", () => {
+    persistWindowState();
+    if (win && !win.isDestroyed()) {
+      win.webContents.send("window-maximize-state", true);
+    }
+  });
+  win.on("unmaximize", () => {
+    persistWindowState();
+    if (win && !win.isDestroyed()) {
+      win.webContents.send("window-maximize-state", false);
+    }
+  });
   win.on("close", persistWindowState);
   win.webContents.on("did-finish-load", () => {
     win == null ? void 0 : win.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
+    win == null ? void 0 : win.webContents.send("window-maximize-state", win.isMaximized());
   });
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL);
@@ -2220,8 +2359,13 @@ app.whenReady().then(async () => {
   console.error("[main] fatal startup failure", error);
   app.quit();
 });
-app.on("before-quit", () => {
+let isQuitting = false;
+app.on("before-quit", (event) => {
   databaseService == null ? void 0 : databaseService.close();
+  if (!stateService || isQuitting) return;
+  event.preventDefault();
+  isQuitting = true;
+  stateService.flushAppStateOnClose().finally(() => app.quit());
 });
 export {
   MAIN_DIST,

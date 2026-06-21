@@ -471,7 +471,7 @@ html, body {
 
 @page {
   size: A4;
-  margin: 12mm;
+  margin: 0;
 }
 
 body {
@@ -482,7 +482,7 @@ body {
   width: 210mm;
   max-width: 210mm;
   min-height: auto;
-  padding: 12mm;
+  padding: calc(3 * ${tokens.previewPadding});
   box-sizing: border-box;
   background: ${tokens.bodyBackground};
   color: ${tokens.bodyTextColor};
@@ -494,7 +494,7 @@ body {
   width: 100%;
   height: auto;
   overflow: visible;
-  padding: ${tokens.previewPadding};
+  padding: 0;
   box-sizing: border-box;
   color: ${tokens.bodyTextColor};
   text-shadow: ${tokens.previewTextShadow};

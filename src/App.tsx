@@ -2959,13 +2959,15 @@ function App() {
     const exportCss = buildExportCss(viewStyle as ExportViewStyle, viewFontSize as ExportFontSize, viewSpacing as ExportSpacing)
 
     const markdownHtml = renderToStaticMarkup(
-      <div className={`pdf-exporter-page pdf-exporter-markdown-preview markdown-preview style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}>
-        <ReactMarkdown
-          remarkPlugins={PREVIEW_MARKDOWN_REMARK_PLUGINS}
-          components={PREVIEW_MARKDOWN_COMPONENTS}
-        >
-          {currentEditorText}
-        </ReactMarkdown>
+      <div className="pdf-exporter-page">
+        <div className={`pdf-exporter-markdown-preview markdown-preview style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}>
+          <ReactMarkdown
+            remarkPlugins={PREVIEW_MARKDOWN_REMARK_PLUGINS}
+            components={PREVIEW_MARKDOWN_COMPONENTS}
+          >
+            {currentEditorText}
+          </ReactMarkdown>
+        </div>
       </div>,
     )
 
