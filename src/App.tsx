@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Editor } from './components/Editor'
 import './App.css'
+import { buildExportCss, type ExportViewStyle, type ExportFontSize, type ExportSpacing } from './exportStyles'
 import type {
   EditorAdapter,
   EditorBindings,
@@ -2955,9 +2956,7 @@ function App() {
 
   const buildExportHtmlContent = useCallback(async () => {
     const currentEditorText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
-    const headStyles = Array.from(document.head.querySelectorAll('link[rel="stylesheet"], style'))
-      .map((node) => node.outerHTML)
-      .join('\n')
+    const exportCss = buildExportCss(viewStyle as ExportViewStyle, viewFontSize as ExportFontSize, viewSpacing as ExportSpacing)
 
     const markdownHtml = renderToStaticMarkup(
       <div className={`pdf-exporter-page pdf-exporter-markdown-preview markdown-preview style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}>
@@ -2976,64 +2975,7 @@ function App() {
 <meta charset="utf-8">
 <title>${deriveNoteTitleFromText(activeNoteText || '')}</title>
 <base href="${document.location.href}">
-${headStyles}
-<style>
-html, body {
-  margin: 0 !important;
-  padding: 0 !important;
-  min-height: auto !important;
-  height: auto !important;
-  overflow: visible !important;
-}
-@page { size: A4; margin: 12mm; }
-body { background: #ffffff !important; color: #000000 !important; -webkit-print-color-adjust: exact !important; }
-.pdf-exporter-page {
-  width: 210mm !important;
-  max-width: 210mm !important;
-  min-height: auto !important;
-  padding: 12mm !important;
-  box-sizing: border-box !important;
-  background: #ffffff !important;
-  color: #000000 !important;
-  margin: 0 auto !important;
-  overflow: visible !important;
-}
-.pdf-exporter-markdown-preview,
-.markdown-preview {
-  height: auto !important;
-  min-height: auto !important;
-  overflow: visible !important;
-  overflow-x: visible !important;
-  overflow-y: visible !important;
-  padding: 0 !important;
-  width: auto !important;
-  max-width: 100% !important;
-  box-sizing: border-box !important;
-}
-.pdf-exporter-markdown-preview { background: transparent !important; color: #000000 !important; text-shadow: none !important; box-shadow: none !important; }
-.pdf-exporter-markdown-preview img { max-width: 100% !important; height: auto !important; }
-.pdf-exporter-markdown-preview h1,
-.pdf-exporter-markdown-preview h2,
-.pdf-exporter-markdown-preview h3,
-.pdf-exporter-markdown-preview h4,
-.pdf-exporter-markdown-preview h5,
-.pdf-exporter-markdown-preview h6 {
-  page-break-after: avoid !important;
-  break-inside: avoid !important;
-}
-.pdf-exporter-markdown-preview p,
-.pdf-exporter-markdown-preview ul,
-.pdf-exporter-markdown-preview ol,
-.pdf-exporter-markdown-preview blockquote,
-.pdf-exporter-markdown-preview pre,
-.pdf-exporter-markdown-preview table,
-.pdf-exporter-markdown-preview li {
-  page-break-inside: avoid !important;
-  break-inside: avoid !important;
-  orphans: 2;
-  widows: 2;
-}
-</style>
+<style>${exportCss}</style>
 </head>
 <body>
 ${markdownHtml}
