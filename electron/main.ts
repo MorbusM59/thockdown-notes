@@ -304,7 +304,7 @@ function registerIpcHandlers() {
     }
   })
 
-  ipcMain.handle('export-pdf', async (event, folderPath: string, fileName: string) => {
+  ipcMain.handle('export-pdf', async (event, folderPath: string, fileName: string, htmlContent?: string) => {
     try {
       if (!folderPath || !fileName) return { ok: false, error: 'Invalid arguments' }
       await fsPromises.mkdir(folderPath, { recursive: true })
@@ -338,6 +338,13 @@ function registerIpcHandlers() {
 
       const data = await event.sender.printToPDF(pdfOpts)
       await fsPromises.writeFile(outPath, data)
+
+      if (htmlContent && typeof htmlContent === 'string') {
+        const htmlName = `${path.basename(outPath, path.extname(outPath))}.html`
+        const htmlPath = path.join(folderPath, htmlName)
+        await fsPromises.writeFile(htmlPath, htmlContent, 'utf8')
+      }
+
       return { ok: true, path: outPath }
     } catch (error: any) {
       console.warn('[main] export-pdf failed', error)

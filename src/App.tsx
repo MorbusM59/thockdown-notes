@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -4618,7 +4619,6 @@ function App() {
   const handleExportPdf = useCallback(async () => {
     if (!activeNoteId || isExportingPdf) return
     const body = typeof document !== 'undefined' ? document.body : null
-    if (body) body.classList.add('pdf-exporting')
     setIsExportingPdf(true)
 
     try {
@@ -4628,15 +4628,41 @@ function App() {
         : () => window.ipcRenderer?.invoke('select-export-folder')
       const exportPdf = exportApi
         ? exportApi.exportPdf
-        : (folderPath: string, fileName: string) => window.ipcRenderer?.invoke('export-pdf', folderPath, fileName)
+        : (folderPath: string, fileName: string, htmlContent?: string) => window.ipcRenderer?.invoke('export-pdf', folderPath, fileName, htmlContent)
 
       const folderPath = await selectExportFolder()
       if (!folderPath) return
 
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      if (body) body.classList.add('pdf-exporting')
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
 
       const fileName = `${deriveNoteTitleFromText(activeNoteText || '')}.pdf`
-      const result = await exportPdf(folderPath, fileName)
+      const exporterPage = document.querySelector('.pdf-exporter-page') as HTMLElement | null
+      const headStyles = Array.from(document.head.querySelectorAll('link[rel="stylesheet"], style'))
+        .map((node) => node.outerHTML)
+        .join('\n')
+      const htmlContent = exporterPage
+        ? `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>${fileName.replace(/\.pdf$/i, '')}</title>
+<base href="${document.location.href}">
+${headStyles}
+<style>
+body { margin: 0; padding: 0; background: #ffffff; color: #000000; }
+.pdf-exporter-page { width: 210mm; min-height: 279mm; padding: 12mm; box-sizing: border-box; background: #ffffff; color: #000000; margin: 0 auto; }
+.pdf-exporter-markdown-preview { padding: 0 !important; background: transparent !important; color: #000000 !important; text-shadow: none !important; box-shadow: none !important; }
+.pdf-exporter-markdown-preview img { max-width: 100%; height: auto; }
+</style>
+</head>
+<body class="pdf-exporting">
+${exporterPage.outerHTML}
+</body>
+</html>`
+        : ''
+      const result = await exportPdf(folderPath, fileName, htmlContent)
 
       if (!result?.ok) {
         console.error('Export PDF failed', result?.error)
@@ -8320,12 +8346,13 @@ function App() {
       </div>
     </div>
 
-    {isExportingPdf ? (
+    {isExportingPdf && typeof document !== 'undefined' ? createPortal(
       <div className="pdf-exporter-root" aria-hidden="true">
-        <div className={`pdf-exporter-page markdown-preview style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}>
+        <div className={`pdf-exporter-page pdf-exporter-markdown-preview markdown-preview style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}>
           {exportMarkdownElement}
         </div>
-      </div>
+      </div>,
+      document.body,
     ) : null}
   </div>
 )

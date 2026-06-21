@@ -90,7 +90,8 @@ const windowControls = {
 
 const exportApi = {
   selectExportFolder: () => ipcRenderer.invoke('select-export-folder'),
-  exportPdf: (folderPath: string, fileName: string) => ipcRenderer.invoke('export-pdf', folderPath, fileName),
+  exportPdf: (folderPath: string, fileName: string, htmlContent?: string) =>
+    ipcRenderer.invoke('export-pdf', folderPath, fileName, htmlContent),
 }
 
 contextBridge.exposeInMainWorld('windowControls', windowControls)
