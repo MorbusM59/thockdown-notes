@@ -471,22 +471,23 @@ html, body {
 
 @page {
   size: A4;
-  margin: 0;
+  margin: calc(3 * ${tokens.previewPadding});
 }
 
 body {
+  margin: 0;
   -webkit-print-color-adjust: exact;
 }
 
 .pdf-exporter-page {
-  width: 210mm;
-  max-width: 210mm;
+  width: 100%;
+  max-width: 100%;
   min-height: auto;
-  padding: calc(3 * ${tokens.previewPadding});
+  padding: 0;
   box-sizing: border-box;
   background: ${tokens.bodyBackground};
   color: ${tokens.bodyTextColor};
-  margin: 0 auto;
+  margin: 0;
   overflow: visible;
 }
 
