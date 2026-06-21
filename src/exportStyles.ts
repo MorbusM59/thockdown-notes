@@ -2,17 +2,160 @@ export type ExportViewStyle = 'modern' | 'narrow' | 'cute' | 'xkcd' | 'print'
 export type ExportFontSize = 'xs' | 's' | 'm' | 'l' | 'xl'
 export type ExportSpacing = 'tight' | 'compact' | 'cozy' | 'wide'
 
-const baseExportCss = `
+interface ExportStyleTokens {
+  bodyBackground: string
+  bodyTextColor: string
+  bodyLinkColor: string
+  bodyBorderColor: string
+  bodyBlockquoteBorderColor: string
+  codeBackground: string
+  codeBorderColor: string
+  codeRadius: string
+  textBorderColor: string
+  textRadius: string
+  previewFontFamily: string
+  previewFontSize: string
+  previewLineHeight: string
+  previewPadding: string
+  previewCodeFont: string
+  previewInlineCodeSize: string
+  previewInlineCodePadding: string
+  previewHighlightedBackground: string
+}
+
+const defaultExportTokens: ExportStyleTokens = {
+  bodyBackground: '#ffffff',
+  bodyTextColor: '#000000',
+  bodyLinkColor: '#00459edd',
+  bodyBorderColor: '#00000044',
+  bodyBlockquoteBorderColor: '#00000044',
+  codeBackground: '#f2f2f2',
+  codeBorderColor: '#dcdcdc',
+  codeRadius: '6px',
+  textBorderColor: '#dcdcdc',
+  textRadius: '4px',
+  previewFontFamily: 'Georgia, serif',
+  previewFontSize: '16px',
+  previewLineHeight: '1.6',
+  previewPadding: '18px',
+  previewCodeFont: 'Menlo, Monaco, monospace',
+  previewInlineCodeSize: '0.95em',
+  previewInlineCodePadding: '0.08em 0.35em',
+  previewHighlightedBackground: 'rgba(255, 221, 105, 0.55)',
+}
+
+export const exportStyleMappingConfig: Record<keyof ExportStyleTokens, boolean> = {
+  bodyBackground: false,
+  bodyTextColor: true,
+  bodyLinkColor: true,
+  bodyBorderColor: true,
+  bodyBlockquoteBorderColor: true,
+  codeBackground: true,
+  codeBorderColor: true,
+  codeRadius: true,
+  textBorderColor: true,
+  textRadius: true,
+  previewFontFamily: true,
+  previewFontSize: true,
+  previewLineHeight: true,
+  previewPadding: true,
+  previewCodeFont: true,
+  previewInlineCodeSize: true,
+  previewInlineCodePadding: true,
+  previewHighlightedBackground: true,
+}
+
+function resolveCssVar(name: string, fallback: string): string {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return value || fallback
+}
+
+function createPreviewMeasurementNode(viewStyle: ExportViewStyle, viewFontSize: ExportFontSize, viewSpacing: ExportSpacing): HTMLElement {
+  const node = document.createElement('div')
+  node.className = `markdown-preview style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`
+  node.style.position = 'absolute'
+  node.style.visibility = 'hidden'
+  node.style.left = '-99999px'
+  node.style.top = '-99999px'
+  node.style.pointerEvents = 'none'
+  node.textContent = 'preview'
+  document.body.appendChild(node)
+  return node
+}
+
+function resolveExportTokens(
+  viewStyle: ExportViewStyle,
+  viewFontSize: ExportFontSize,
+  viewSpacing: ExportSpacing,
+): ExportStyleTokens {
+  const previewNode = createPreviewMeasurementNode(viewStyle, viewFontSize, viewSpacing)
+  const computed = getComputedStyle(previewNode)
+
+  const resolvedTokens: ExportStyleTokens = {
+    bodyBackground: resolveCssVar('--color-background-light', defaultExportTokens.bodyBackground),
+    bodyTextColor: resolveCssVar('--color-text-dark', defaultExportTokens.bodyTextColor),
+    bodyLinkColor: resolveCssVar('--color-text-link', defaultExportTokens.bodyLinkColor),
+    bodyBorderColor: resolveCssVar('--color-border-hr', defaultExportTokens.bodyBorderColor),
+    bodyBlockquoteBorderColor: resolveCssVar('--color-border-blockquote', defaultExportTokens.bodyBlockquoteBorderColor),
+    codeBackground: resolveCssVar('--btn-bg-default', defaultExportTokens.codeBackground),
+    codeBorderColor: resolveCssVar('--btn-border-default', defaultExportTokens.codeBorderColor),
+    codeRadius: resolveCssVar('--border-radius-regular', defaultExportTokens.codeRadius),
+    textBorderColor: resolveCssVar('--btn-border-default', defaultExportTokens.textBorderColor),
+    textRadius: resolveCssVar('--border-radius-small', defaultExportTokens.textRadius),
+    previewFontFamily: computed.fontFamily || defaultExportTokens.previewFontFamily,
+    previewFontSize: computed.fontSize || defaultExportTokens.previewFontSize,
+    previewLineHeight: computed.lineHeight || defaultExportTokens.previewLineHeight,
+    previewPadding: computed.getPropertyValue('--preview-edge-padding').trim() || defaultExportTokens.previewPadding,
+    previewCodeFont: computed.getPropertyValue('--preview-code-font').trim() || defaultExportTokens.previewCodeFont,
+    previewInlineCodeSize: computed.getPropertyValue('--preview-inline-code-size').trim() || defaultExportTokens.previewInlineCodeSize,
+    previewInlineCodePadding: computed.getPropertyValue('--preview-inline-code-padding').trim() || defaultExportTokens.previewInlineCodePadding,
+    previewHighlightedBackground: resolveCssVar('--preview-edge-fade-color', defaultExportTokens.previewHighlightedBackground),
+  }
+
+  const tokens: ExportStyleTokens = {
+    bodyBackground: exportStyleMappingConfig.bodyBackground ? resolvedTokens.bodyBackground : defaultExportTokens.bodyBackground,
+    bodyTextColor: exportStyleMappingConfig.bodyTextColor ? resolvedTokens.bodyTextColor : defaultExportTokens.bodyTextColor,
+    bodyLinkColor: exportStyleMappingConfig.bodyLinkColor ? resolvedTokens.bodyLinkColor : defaultExportTokens.bodyLinkColor,
+    bodyBorderColor: exportStyleMappingConfig.bodyBorderColor ? resolvedTokens.bodyBorderColor : defaultExportTokens.bodyBorderColor,
+    bodyBlockquoteBorderColor: exportStyleMappingConfig.bodyBlockquoteBorderColor ? resolvedTokens.bodyBlockquoteBorderColor : defaultExportTokens.bodyBlockquoteBorderColor,
+    codeBackground: exportStyleMappingConfig.codeBackground ? resolvedTokens.codeBackground : defaultExportTokens.codeBackground,
+    codeBorderColor: exportStyleMappingConfig.codeBorderColor ? resolvedTokens.codeBorderColor : defaultExportTokens.codeBorderColor,
+    codeRadius: exportStyleMappingConfig.codeRadius ? resolvedTokens.codeRadius : defaultExportTokens.codeRadius,
+    textBorderColor: exportStyleMappingConfig.textBorderColor ? resolvedTokens.textBorderColor : defaultExportTokens.textBorderColor,
+    textRadius: exportStyleMappingConfig.textRadius ? resolvedTokens.textRadius : defaultExportTokens.textRadius,
+    previewFontFamily: exportStyleMappingConfig.previewFontFamily ? resolvedTokens.previewFontFamily : defaultExportTokens.previewFontFamily,
+    previewFontSize: exportStyleMappingConfig.previewFontSize ? resolvedTokens.previewFontSize : defaultExportTokens.previewFontSize,
+    previewLineHeight: exportStyleMappingConfig.previewLineHeight ? resolvedTokens.previewLineHeight : defaultExportTokens.previewLineHeight,
+    previewPadding: exportStyleMappingConfig.previewPadding ? resolvedTokens.previewPadding : defaultExportTokens.previewPadding,
+    previewCodeFont: exportStyleMappingConfig.previewCodeFont ? resolvedTokens.previewCodeFont : defaultExportTokens.previewCodeFont,
+    previewInlineCodeSize: exportStyleMappingConfig.previewInlineCodeSize ? resolvedTokens.previewInlineCodeSize : defaultExportTokens.previewInlineCodeSize,
+    previewInlineCodePadding: exportStyleMappingConfig.previewInlineCodePadding ? resolvedTokens.previewInlineCodePadding : defaultExportTokens.previewInlineCodePadding,
+    previewHighlightedBackground: exportStyleMappingConfig.previewHighlightedBackground ? resolvedTokens.previewHighlightedBackground : defaultExportTokens.previewHighlightedBackground,
+  }
+
+  document.body.removeChild(previewNode)
+  return tokens
+}
+
+export function buildExportCss(
+  viewStyle: ExportViewStyle,
+  viewFontSize: ExportFontSize,
+  viewSpacing: ExportSpacing,
+): string {
+  const tokens = resolveExportTokens(viewStyle, viewFontSize, viewSpacing)
+
+  return `
 html, body {
   margin: 0;
   padding: 0;
   min-height: auto;
   height: auto;
   overflow: visible;
-  background: #ffffff;
-  color: #000000;
-  font-family: 'Times New Roman', Georgia, serif;
-  font-size: 16px;
+  background: ${tokens.bodyBackground};
+  color: ${tokens.bodyTextColor};
+  font-family: ${tokens.previewFontFamily};
+  font-size: ${tokens.previewFontSize};
+  line-height: ${tokens.previewLineHeight};
 }
 
 @page {
@@ -30,8 +173,8 @@ body {
   min-height: auto;
   padding: 12mm;
   box-sizing: border-box;
-  background: #ffffff;
-  color: #000000;
+  background: ${tokens.bodyBackground};
+  color: ${tokens.bodyTextColor};
   margin: 0 auto;
   overflow: visible;
 }
@@ -40,11 +183,10 @@ body {
   width: 100%;
   height: auto;
   overflow: visible;
-  padding: 0;
+  padding: ${tokens.previewPadding};
   box-sizing: border-box;
-  color: #1f1f1f;
+  color: ${tokens.bodyTextColor};
   text-shadow: none;
-  position: relative;
 }
 
 .markdown-preview > *:not(.markdown-preview-texture),
@@ -54,9 +196,9 @@ body {
 }
 
 .markdown-preview .search-hit {
-  background-color: rgba(255, 221, 105, 0.55);
+  background-color: ${tokens.previewHighlightedBackground};
   color: inherit;
-  border-radius: 8px;
+  border-radius: ${tokens.textRadius};
   outline: 1px solid rgba(0, 0, 0, 0.14);
   padding: 4px;
 }
@@ -69,7 +211,7 @@ body {
 .markdown-preview h6 {
   margin: 0.75em 0 0.45em;
   line-height: 1.25;
-  color: #1f1f1f;
+  color: ${tokens.bodyTextColor};
   text-shadow: none;
 }
 
@@ -91,7 +233,7 @@ body {
 }
 
 .markdown-preview a {
-  color: #1a66cc;
+  color: ${tokens.bodyLinkColor};
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -102,18 +244,18 @@ body {
 }
 
 .markdown-preview code {
-  font-family: 'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
-  font-size: 0.95em;
-  background: #f2f2f2;
-  border: 1px solid #dcdcdc;
-  border-radius: 4px;
-  padding: 0.08em 0.35em;
+  font-family: ${tokens.previewCodeFont};
+  font-size: ${tokens.previewInlineCodeSize};
+  background: ${tokens.codeBackground};
+  border: 1px solid ${tokens.codeBorderColor};
+  border-radius: ${tokens.textRadius};
+  padding: ${tokens.previewInlineCodePadding};
 }
 
 .markdown-preview pre {
-  background: #f2f2f2;
-  border: 1px solid #dcdcdc;
-  border-radius: 8px;
+  background: ${tokens.codeBackground};
+  border: 1px solid ${tokens.codeBorderColor};
+  border-radius: ${tokens.codeRadius};
   padding: 12px;
   overflow-x: auto;
 }
@@ -126,16 +268,16 @@ body {
 }
 
 .markdown-preview blockquote {
-  border-left: 3px solid #b0b0b0;
+  border-left: 3px solid ${tokens.bodyBlockquoteBorderColor};
   padding-left: 10px;
   letter-spacing: 0.1em;
   font-size: 0.94em;
-  color: #555555;
+  color: ${tokens.bodyTextColor};
 }
 
 .markdown-preview hr {
   border: none;
-  border-top: 1px solid #cccccc;
+  border-top: 1px solid ${tokens.bodyBorderColor};
   margin: 0.8em 0;
 }
 
@@ -156,14 +298,14 @@ body {
 .markdown-preview table {
   width: 100%;
   border-collapse: collapse;
-  background: #f8f8f8;
-  border-radius: 8px;
+  background: ${tokens.bodyBackground};
+  border-radius: ${tokens.codeRadius};
   overflow: hidden;
 }
 
 .markdown-preview th,
 .markdown-preview td {
-  border: 1px solid #dcdcdc;
+  border: 1px solid ${tokens.codeBorderColor};
   padding: 6px 8px;
   text-align: left;
 }
@@ -171,40 +313,8 @@ body {
 .markdown-preview img {
   max-width: 100%;
   height: auto;
-  border-radius: 6px;
+  border-radius: ${tokens.codeRadius};
 }
-
-.markdown-preview.style-modern {
-  font-family: 'Quicksand', 'Segoe UI', sans-serif;
-}
-
-.markdown-preview.style-narrow {
-  font-family: 'Roboto Condensed', 'Segoe UI', sans-serif;
-}
-
-.markdown-preview.style-cute {
-  font-family: 'Sour Gummy', 'Quicksand', 'Segoe UI', sans-serif;
-}
-
-.markdown-preview.style-xkcd {
-  font-family: 'xkcd', 'Comic Sans MS', 'Chalkboard SE', cursive;
-}
-
-.markdown-preview.style-print {
-  font-family: 'Big Shoulders', 'Times New Roman', Georgia, serif;
-  font-weight: 400;
-}
-
-.markdown-preview.size-xs { font-size: 12px; }
-.markdown-preview.size-s { font-size: 14px; }
-.markdown-preview.size-m { font-size: 16px; }
-.markdown-preview.size-l { font-size: 18px; }
-.markdown-preview.size-xl { font-size: 20px; }
-
-.markdown-preview.spacing-tight { line-height: 1.2; }
-.markdown-preview.spacing-compact { line-height: 1.4; }
-.markdown-preview.spacing-cozy { line-height: 1.6; }
-.markdown-preview.spacing-wide { line-height: 1.8; }
 
 .markdown-preview h1,
 .markdown-preview h2,
@@ -224,40 +334,4 @@ body {
   orphans: 2;
   widows: 2;
 }
-`
-
-const styleVariantCss: Record<ExportViewStyle, string> = {
-  modern: `.markdown-preview { font-family: 'Quicksand', 'Segoe UI', sans-serif; }`,
-  narrow: `.markdown-preview { font-family: 'Roboto Condensed', 'Segoe UI', sans-serif; }`,
-  cute: `.markdown-preview { font-family: 'Sour Gummy', 'Quicksand', 'Segoe UI', sans-serif; }`,
-  xkcd: `.markdown-preview { font-family: 'xkcd', 'Comic Sans MS', 'Chalkboard SE', cursive; }`,
-  print: `.markdown-preview { font-family: 'Big Shoulders', 'Times New Roman', Georgia, serif; font-weight: 400; }`,
-}
-
-const sizeVariantCss: Record<ExportFontSize, string> = {
-  xs: `.markdown-preview { font-size: 12px; }`,
-  s: `.markdown-preview { font-size: 14px; }`,
-  m: `.markdown-preview { font-size: 16px; }`,
-  l: `.markdown-preview { font-size: 18px; }`,
-  xl: `.markdown-preview { font-size: 20px; }`,
-}
-
-const spacingVariantCss: Record<ExportSpacing, string> = {
-  tight: `.markdown-preview { line-height: 1.2; }`,
-  compact: `.markdown-preview { line-height: 1.4; }`,
-  cozy: `.markdown-preview { line-height: 1.6; }`,
-  wide: `.markdown-preview { line-height: 1.8; }`,
-}
-
-export function buildExportCss(
-  viewStyle: ExportViewStyle,
-  viewFontSize: ExportFontSize,
-  viewSpacing: ExportSpacing,
-): string {
-  return [
-    baseExportCss,
-    styleVariantCss[viewStyle],
-    sizeVariantCss[viewFontSize],
-    spacingVariantCss[viewSpacing],
-  ].join('\n')
-}
+`}
