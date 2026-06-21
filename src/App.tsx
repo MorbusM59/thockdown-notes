@@ -8131,20 +8131,22 @@ ${markdownHtml}
             </button>
 
             {isPreviewMode ? (
-              <button
-                type="button"
-                className="toolbar-btn-icon"
-                title="Export PDF"
-                aria-label="Export current note to PDF"
-                onClick={handleExportPdf}
-                onContextMenu={(event) => {
-                  event.preventDefault()
-                  void chooseExportFolder()
-                }}
-                disabled={!activeNoteId || isExportingPdf}
-              >
-                <span className="fa-solid fa-file-pdf" aria-hidden="true" />
-              </button>
+              <div className="toolbar-action-group" aria-label="Print toolbar">
+                <button
+                  type="button"
+                  className="toolbar-btn-icon"
+                  title="Export PDF"
+                  aria-label="Export current note to PDF"
+                  onClick={handleExportPdf}
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    void chooseExportFolder()
+                  }}
+                  disabled={!activeNoteId || isExportingPdf}
+                >
+                  <span className="fa-solid fa-file-pdf" aria-hidden="true" />
+                </button>
+              </div>
             ) : null}
 
             {!isPreviewMode ? (

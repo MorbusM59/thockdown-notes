@@ -1390,7 +1390,8 @@ button.active,
   line-height: 1;
 }
 
-.markdown-toolbar {
+.markdown-toolbar,
+.toolbar-action-group {
   display:     flex;
   align-items: center;
   gap:         4px;
