@@ -5151,6 +5151,7 @@ ${markdownHtml}
     ? visibleNotes.length
     : 0
   const totalPages = Math.max(1, Math.ceil(totalPagedNotes / Math.max(1, itemsPerPage)))
+  const effectiveCurrentPage = Math.min(Math.max(1, currentPage), totalPages)
   const isSidebarTreeMode = sidebarMode === 'category' || sidebarMode === 'archive'
   const isSidebarCustomScrollbarMode = isSidebarTreeMode || isFindMode
   const isSidebarScrollbarMode = isSidebarCustomScrollbarMode || sidebarMode === 'options'
@@ -5314,9 +5315,9 @@ ${markdownHtml}
       return visibleNotes
     }
 
-    const startIndex = (currentPage - 1) * itemsPerPage
+    const startIndex = (effectiveCurrentPage - 1) * itemsPerPage
     return visibleNotes.slice(startIndex, startIndex + itemsPerPage)
-  }, [currentPage, itemsPerPage, sidebarMode, visibleNotes])
+  }, [effectiveCurrentPage, itemsPerPage, sidebarMode, visibleNotes])
 
   useEffect(() => {
     const pending = pendingSidebarScrollRestoreRef.current
@@ -6229,35 +6230,53 @@ ${markdownHtml}
     }
   }, [clearNoteArmTimer, clearTrashButtonArmTimer])
 
-  useEffect(() => {
-    const ITEM_HEIGHT = 48
-    const ITEM_GAP = 8
-    const CONTAINER_PADDING = 10
-    const ITEM_TOTAL = ITEM_HEIGHT + ITEM_GAP
-
+  useLayoutEffect(() => {
     const compute = () => {
       const container = sidebarContentRef.current
       if (!container) return
 
-      const contentHeight = container.clientHeight - 2 * CONTAINER_PADDING + ITEM_GAP
-      let nextItemsPerPage = Math.floor(contentHeight / ITEM_TOTAL)
-      if (nextItemsPerPage < 1) nextItemsPerPage = 1
+      const list = container.querySelector('.notes-list') as HTMLElement | null
+      const firstItem = list?.querySelector('.note-list-item') as HTMLElement | null
+      const listStyles = list ? window.getComputedStyle(list) : null
+
+      const rowHeight = firstItem ? Math.round(firstItem.getBoundingClientRect().height) : 48
+      const rowGap = listStyles ? Math.round(parseFloat(listStyles.rowGap || listStyles.gap || '8')) : 8
+      const paddingTop = listStyles ? Math.round(parseFloat(listStyles.paddingTop || '10')) : 10
+      const paddingBottom = listStyles ? Math.round(parseFloat(listStyles.paddingBottom || '10')) : 10
+
+      const contentHeight = container.clientHeight - paddingTop - paddingBottom
+      const nextItemsPerPage = Math.max(1, Math.floor((contentHeight + rowGap) / (rowHeight + rowGap)))
+
+      const nextTotalPages = Math.max(1, Math.ceil(totalPagedNotes / Math.max(1, nextItemsPerPage)))
+      const shouldShowPagination =
+        (sidebarMode === 'date' || sidebarMode === 'trash') && nextTotalPages > 1
 
       if (nextItemsPerPage !== itemsPerPage) {
         setItemsPerPage(nextItemsPerPage)
       }
 
-      const shouldShowPagination =
-        (sidebarMode === 'date' || sidebarMode === 'trash') &&
-        Math.ceil(totalPagedNotes / Math.max(1, nextItemsPerPage)) > 1
+      if (currentPage > nextTotalPages) {
+        setCurrentPage(nextTotalPages)
+      }
 
       setShowPagination(shouldShowPagination)
     }
 
-    compute()
+    const container = sidebarContentRef.current
+    const resizeObserver = new ResizeObserver(compute)
+
+    if (container) {
+      compute()
+      resizeObserver.observe(container)
+      window.requestAnimationFrame(compute)
+    }
+
     window.addEventListener('resize', compute)
-    return () => window.removeEventListener('resize', compute)
-  }, [itemsPerPage, sidebarMode, totalPagedNotes])
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', compute)
+    }
+  }, [currentPage, itemsPerPage, sidebarMode, totalPagedNotes])
 
   useEffect(() => {
     if (!isSidebarScrollbarMode) return
@@ -6823,9 +6842,9 @@ ${markdownHtml}
 
   useEffect(() => {
     if (!isPageJumpEditing) {
-      setPageJumpInput(String(currentPage))
+      setPageJumpInput(String(effectiveCurrentPage))
     }
-  }, [currentPage, isPageJumpEditing])
+  }, [effectiveCurrentPage, isPageJumpEditing])
 
   useEffect(() => {
     if (!isTextureSeedEditing) {
@@ -6837,22 +6856,22 @@ ${markdownHtml}
     const parsed = Number.parseInt(pageJumpInput.trim(), 10)
     const safePage = Number.isFinite(parsed)
       ? clamp(parsed, 1, totalPages)
-      : clamp(currentPage, 1, totalPages)
+      : effectiveCurrentPage
 
     setCurrentPage(safePage)
     setPageJumpInput(String(safePage))
     setIsPageJumpEditing(false)
-  }, [currentPage, pageJumpInput, totalPages])
+  }, [effectiveCurrentPage, pageJumpInput, totalPages])
 
   const startPageJumpEdit = useCallback(() => {
-    setPageJumpInput(String(currentPage))
+    setPageJumpInput(String(effectiveCurrentPage))
     setIsPageJumpEditing(true)
-  }, [currentPage])
+  }, [effectiveCurrentPage])
 
   const cancelPageJumpEdit = useCallback(() => {
-    setPageJumpInput(String(currentPage))
+    setPageJumpInput(String(effectiveCurrentPage))
     setIsPageJumpEditing(false)
-  }, [currentPage])
+  }, [effectiveCurrentPage])
 
   useEffect(() => {
     if (!isPageJumpEditing) return
@@ -7873,7 +7892,7 @@ ${markdownHtml}
             <button
               type="button"
               className="sidebar-page-btn"
-              disabled={currentPage === 1}
+              disabled={effectiveCurrentPage === 1}
               onClick={() => setCurrentPage((previous) => Math.max(1, previous - 1))}
             >
               &lt;
@@ -7919,16 +7938,16 @@ ${markdownHtml}
               <button
                 type="button"
                 className="sidebar-page-number-btn sidebar-page-number-display"
-                aria-label={`Current page ${currentPage} of ${totalPages}. Click to edit.`}
+                aria-label={`Current page ${effectiveCurrentPage} of ${totalPages}. Click to edit.`}
                 onClick={startPageJumpEdit}
               >
-                {`${currentPage} / ${totalPages}`}
+                {`${effectiveCurrentPage} / ${totalPages}`}
               </button>
             )}
             <button
               type="button"
               className="sidebar-page-btn"
-              disabled={currentPage === totalPages}
+              disabled={effectiveCurrentPage === totalPages}
               onClick={() => setCurrentPage((previous) => Math.min(totalPages, previous + 1))}
             >
               &gt;
