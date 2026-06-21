@@ -8,6 +8,13 @@ interface Window {
 	measlyTextures?: import('./shared/textures').TextureCacheApi;
 	measlyLoadouts?: import('./shared/loadouts').UiLoadoutApi;
 	measlyFileSync?: import('./shared/fileSync').FileSyncApi;
+	measlyExport?: {
+		selectExportFolder: () => Promise<string | null>;
+		exportPdf: (folderPath: string, fileName: string) => Promise<{ ok: boolean; path?: string; error?: string }>;
+	};
+	ipcRenderer?: {
+		invoke: <T = any>(channel: string, ...args: unknown[]) => Promise<T>;
+	};
 	windowControls?: {
 		minimize: () => void;
 		toggleMaximize: () => void;

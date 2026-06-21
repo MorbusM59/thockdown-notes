@@ -1563,6 +1563,7 @@ function App() {
   const [isDocumentFindCaseSensitive, setIsDocumentFindCaseSensitive] = useState(false)
   // Terminology convention: false = edit mode, true = render view.
   const [isPreviewMode, setIsPreviewMode] = useState(false)
+  const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [debuggingEnabled, setDebuggingEnabled] = useState(false)
   const debugNoteIdRef = useRef<string | null>(null)
   const [windowIsMaximized, setWindowIsMaximized] = useState(false)
@@ -4613,6 +4614,40 @@ function App() {
       return !previous
     })
   }, [activeNoteId, activeNoteText, captureEditModeSnapshotForRenderView, isPreviewMode, persistRenderViewStateForNoteNow])
+
+  const handleExportPdf = useCallback(async () => {
+    if (!activeNoteId || isExportingPdf) return
+    setIsExportingPdf(true)
+    const body = typeof document !== 'undefined' ? document.body : null
+    if (body) body.classList.add('pdf-exporting')
+
+    try {
+      const exportApi = window.measlyExport
+      const selectExportFolder = exportApi
+        ? exportApi.selectExportFolder
+        : () => window.ipcRenderer?.invoke('select-export-folder')
+      const exportPdf = exportApi
+        ? exportApi.exportPdf
+        : (folderPath: string, fileName: string) => window.ipcRenderer?.invoke('export-pdf', folderPath, fileName)
+
+      const folderPath = await selectExportFolder()
+      if (!folderPath) return
+
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+
+      const fileName = `${deriveNoteTitleFromText(activeNoteText || '')}.pdf`
+      const result = await exportPdf(folderPath, fileName)
+
+      if (!result?.ok) {
+        console.error('Export PDF failed', result?.error)
+      }
+    } catch (error) {
+      console.error('Export PDF failed', error)
+    } finally {
+      if (body) body.classList.remove('pdf-exporting')
+      setIsExportingPdf(false)
+    }
+  }, [activeNoteId, activeNoteText, isExportingPdf])
 
   useEffect(() => {
     if (!window.measlyState || !activeNoteId) return
@@ -8033,6 +8068,19 @@ function App() {
             >
               Edit
             </button>
+
+            {isPreviewMode ? (
+              <button
+                type="button"
+                className="toolbar-btn-icon"
+                title="Export PDF"
+                aria-label="Export current note to PDF"
+                onClick={handleExportPdf}
+                disabled={!activeNoteId || isExportingPdf}
+              >
+                <span className="fa-solid fa-file-pdf" aria-hidden="true" />
+              </button>
+            ) : null}
 
             {!isPreviewMode ? (
               <div className="markdown-toolbar" aria-label="Markdown toolbar">

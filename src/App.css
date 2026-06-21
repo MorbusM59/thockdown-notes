@@ -2276,6 +2276,118 @@ body.hsva-dragging * {
 .markdown-preview.spacing-cozy    { line-height: 1.6; --preview-edge-padding: 18px; }
 .markdown-preview.spacing-wide    { line-height: 1.8; --preview-edge-padding: 24px; }
 
+body.pdf-exporting .app-shell,
+body.pdf-exporting .app-grid {
+  display: block !important;
+  width: auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  overflow: visible !important;
+  background: transparent !important;
+}
+
+body.pdf-exporting .app-grid::before,
+body.pdf-exporting .editor-shell::after,
+body.pdf-exporting .editor-stage::before,
+body.pdf-exporting .editor-stage.is-preview-mode::before,
+body.pdf-exporting .editor-stage.is-preview-mode::after,
+body.pdf-exporting .markdown-preview-texture {
+  display: none !important;
+}
+
+body.pdf-exporting .app-shell > *,
+body.pdf-exporting .app-grid > * {
+  display: none !important;
+}
+
+body.pdf-exporting .editor-viewer-frame,
+body.pdf-exporting .editor-viewer-frame .editor-shell,
+body.pdf-exporting .editor-viewer-frame .preview-container,
+body.pdf-exporting .editor-viewer-frame .markdown-preview {
+  display: block !important;
+  position: static !important;
+  overflow: visible !important;
+  width: auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
+
+body.pdf-exporting .editor-viewer-frame {
+  width: auto !important;
+}
+
+body.pdf-exporting .editor-shell {
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+body.pdf-exporting .editor-stage {
+  display: block !important;
+  width: auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+
+body.pdf-exporting .editor-stage > *:not(.preview-container) {
+  display: none !important;
+}
+
+body.pdf-exporting .preview-container {
+  width: auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+
+body.pdf-exporting .preview-container > *:not(.markdown-preview) {
+  display: none !important;
+}
+
+body.pdf-exporting .markdown-preview {
+  visibility: visible !important;
+  opacity: 1 !important;
+  background: #ffffff !important;
+  color: #000000 !important;
+  box-shadow: none !important;
+  padding: 12mm !important;
+  width: auto !important;
+  max-width: 100% !important;
+  margin: 0 auto !important;
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+
+body.pdf-exporting .markdown-preview * {
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+body.pdf-exporting .markdown-preview img {
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+@media print {
+  @page { size: A4; margin: 12mm; }
+  body.pdf-exporting {
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+  }
+  body.pdf-exporting .markdown-preview {
+    padding: 12mm !important;
+  }
+}
+
 
 /* =============================================================================
    12. WINDOW CONTROLS

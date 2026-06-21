@@ -288,6 +288,63 @@ function registerIpcHandlers() {
     }
   });
 
+  ipcMain.handle('select-export-folder', async (event) => {
+    try {
+      const winRef = BrowserWindow.fromWebContents(event.sender) ?? win
+      if (!winRef) return null
+      const result = await dialog.showOpenDialog(winRef, {
+        properties: ['openDirectory', 'createDirectory'],
+        title: 'Select export destination',
+      })
+      if (result.canceled || result.filePaths.length === 0) return null
+      return result.filePaths[0]
+    } catch (error) {
+      console.warn('[main] select-export-folder failed', error)
+      return null
+    }
+  })
+
+  ipcMain.handle('export-pdf', async (event, folderPath: string, fileName: string) => {
+    try {
+      if (!folderPath || !fileName) return { ok: false, error: 'Invalid arguments' }
+      await fsPromises.mkdir(folderPath, { recursive: true })
+
+      const sanitize = (input: string) => input.replace(/[<>:"/\\|?*]+/g, '_')
+      const base = sanitize(fileName)
+      let outPath = path.join(folderPath, base)
+      const exists = await fsPromises.stat(outPath).then(() => true).catch(() => false)
+      if (exists) {
+        const now = new Date()
+        const hh = String(now.getHours()).padStart(2, '0')
+        const mm = String(now.getMinutes()).padStart(2, '0')
+        const timeSuffix = ` (${hh}-${mm})`
+        const ext = path.extname(base)
+        const nameOnly = base.substring(0, base.length - ext.length)
+        let candidate = `${nameOnly}${timeSuffix}${ext}`
+        let candidatePath = path.join(folderPath, candidate)
+        let counter = 1
+        while (await fsPromises.stat(candidatePath).then(() => true).catch(() => false)) {
+          counter += 1
+          candidate = `${nameOnly}${timeSuffix} v${counter}${ext}`
+          candidatePath = path.join(folderPath, candidate)
+        }
+        outPath = candidatePath
+      }
+
+      const pdfOpts: any = {
+        printBackground: true,
+        pageSize: 'A4',
+      }
+
+      const data = await event.sender.printToPDF(pdfOpts)
+      await fsPromises.writeFile(outPath, data)
+      return { ok: true, path: outPath }
+    } catch (error: any) {
+      console.warn('[main] export-pdf failed', error)
+      return { ok: false, error: error?.message ?? String(error) }
+    }
+  })
+
   ipcMain.handle(LEGACY_DB_CHANNELS.getLastEditedNoteId, async () => databaseService!.getLastEditedNoteId());
   ipcMain.handle(LEGACY_DB_CHANNELS.getTrashNoteIds, async () => databaseService!.getTrashNoteIds());
   ipcMain.handle(LEGACY_DB_CHANNELS.searchNoteIdsByTag, async (_event, tagQuery: string) =>

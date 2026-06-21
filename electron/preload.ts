@@ -88,7 +88,13 @@ const windowControls = {
   },
 }
 
+const exportApi = {
+  selectExportFolder: () => ipcRenderer.invoke('select-export-folder'),
+  exportPdf: (folderPath: string, fileName: string) => ipcRenderer.invoke('export-pdf', folderPath, fileName),
+}
+
 contextBridge.exposeInMainWorld('windowControls', windowControls)
+contextBridge.exposeInMainWorld('measlyExport', exportApi)
 
 const externalFilesApi: ExternalFilesApi = {
   getPendingFilePaths: () => ipcRenderer.invoke(EXTERNAL_FILE_CHANNELS.getPendingPaths),
