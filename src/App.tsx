@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { renderToStaticMarkup } from 'react-dom/server'
 import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -2953,6 +2953,94 @@ function App() {
     return folderPath
   }, [activeNoteId, buildMenuStateSnapshot, queueAppStateSave])
 
+  const buildExportHtmlContent = useCallback(async () => {
+    const currentEditorText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+    const headStyles = Array.from(document.head.querySelectorAll('link[rel="stylesheet"], style'))
+      .map((node) => node.outerHTML)
+      .join('\n')
+
+    const markdownHtml = renderToStaticMarkup(
+      <div className={`pdf-exporter-page pdf-exporter-markdown-preview markdown-preview style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}>
+        <ReactMarkdown
+          remarkPlugins={PREVIEW_MARKDOWN_REMARK_PLUGINS}
+          components={PREVIEW_MARKDOWN_COMPONENTS}
+        >
+          {currentEditorText}
+        </ReactMarkdown>
+      </div>,
+    )
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>${deriveNoteTitleFromText(activeNoteText || '')}</title>
+<base href="${document.location.href}">
+${headStyles}
+<style>
+html, body {
+  margin: 0 !important;
+  padding: 0 !important;
+  min-height: auto !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+@page { size: A4; margin: 12mm; }
+body { background: #ffffff !important; color: #000000 !important; -webkit-print-color-adjust: exact !important; }
+.pdf-exporter-page {
+  width: 210mm !important;
+  max-width: 210mm !important;
+  min-height: auto !important;
+  padding: 12mm !important;
+  box-sizing: border-box !important;
+  background: #ffffff !important;
+  color: #000000 !important;
+  margin: 0 auto !important;
+  overflow: visible !important;
+}
+.pdf-exporter-markdown-preview,
+.markdown-preview {
+  height: auto !important;
+  min-height: auto !important;
+  overflow: visible !important;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+  padding: 0 !important;
+  width: auto !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+.pdf-exporter-markdown-preview { background: transparent !important; color: #000000 !important; text-shadow: none !important; box-shadow: none !important; }
+.pdf-exporter-markdown-preview img { max-width: 100% !important; height: auto !important; }
+.pdf-exporter-markdown-preview h1,
+.pdf-exporter-markdown-preview h2,
+.pdf-exporter-markdown-preview h3,
+.pdf-exporter-markdown-preview h4,
+.pdf-exporter-markdown-preview h5,
+.pdf-exporter-markdown-preview h6 {
+  page-break-after: avoid !important;
+  break-inside: avoid !important;
+}
+.pdf-exporter-markdown-preview p,
+.pdf-exporter-markdown-preview ul,
+.pdf-exporter-markdown-preview ol,
+.pdf-exporter-markdown-preview blockquote,
+.pdf-exporter-markdown-preview pre,
+.pdf-exporter-markdown-preview table,
+.pdf-exporter-markdown-preview li {
+  page-break-inside: avoid !important;
+  break-inside: avoid !important;
+  orphans: 2;
+  widows: 2;
+}
+</style>
+</head>
+<body>
+${markdownHtml}
+</body>
+</html>`
+  }, [activeNoteText, viewFontSize, viewSpacing, viewStyle])
+
   const flushSave = useCallback(async () => {
     if (!window.measlyNotes || !activeNoteId) return
     const nextText = pendingSaveTextRef.current
@@ -4643,7 +4731,6 @@ function App() {
 
   const handleExportPdf = useCallback(async () => {
     if (!activeNoteId || isExportingPdf) return
-    const body = typeof document !== 'undefined' ? document.body : null
     setIsExportingPdf(true)
 
     try {
@@ -4655,35 +4742,8 @@ function App() {
       const folderPath = exportFolder ?? await chooseExportFolder()
       if (!folderPath) return
 
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-      if (body) body.classList.add('pdf-exporting')
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-
       const fileName = `${deriveNoteTitleFromText(activeNoteText || '')}.pdf`
-      const exporterPage = document.querySelector('.pdf-exporter-page') as HTMLElement | null
-      const headStyles = Array.from(document.head.querySelectorAll('link[rel="stylesheet"], style'))
-        .map((node) => node.outerHTML)
-        .join('\n')
-      const htmlContent = exporterPage
-        ? `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>${fileName.replace(/\.pdf$/i, '')}</title>
-<base href="${document.location.href}">
-${headStyles}
-<style>
-body { margin: 0; padding: 0; background: #ffffff; color: #000000; }
-.pdf-exporter-page { width: 210mm; min-height: 279mm; padding: 12mm; box-sizing: border-box; background: #ffffff; color: #000000; margin: 0 auto; }
-.pdf-exporter-markdown-preview { padding: 0 !important; background: transparent !important; color: #000000 !important; text-shadow: none !important; box-shadow: none !important; }
-.pdf-exporter-markdown-preview img { max-width: 100%; height: auto; }
-</style>
-</head>
-<body class="pdf-exporting">
-${exporterPage.outerHTML}
-</body>
-</html>`
-        : ''
+      const htmlContent = await buildExportHtmlContent()
       const result = await exportPdf(folderPath, fileName, htmlContent)
 
       if (!result?.ok) {
@@ -4692,10 +4752,9 @@ ${exporterPage.outerHTML}
     } catch (error) {
       console.error('Export PDF failed', error)
     } finally {
-      if (body) body.classList.remove('pdf-exporting')
       setIsExportingPdf(false)
     }
-  }, [activeNoteId, activeNoteText, isExportingPdf])
+  }, [activeNoteId, activeNoteText, exportFolder, isExportingPdf, chooseExportFolder, buildExportHtmlContent])
 
   useEffect(() => {
     if (!window.measlyState || !activeNoteId) return
@@ -5022,15 +5081,6 @@ ${exporterPage.outerHTML}
       {currentEditorText}
     </ReactMarkdown>
   ), [currentEditorText, previewSearchHighlightPlugin])
-
-  const exportMarkdownElement = useMemo(() => (
-    <ReactMarkdown
-      remarkPlugins={PREVIEW_MARKDOWN_REMARK_PLUGINS}
-      components={PREVIEW_MARKDOWN_COMPONENTS}
-    >
-      {currentEditorText}
-    </ReactMarkdown>
-  ), [currentEditorText])
 
   const documentFindHits = useMemo<DocumentFindHit[]>(() => {
     return buildDocumentFindHits(currentEditorText, documentFindDirective.findText, isDocumentFindCaseSensitive)
@@ -7033,7 +7083,16 @@ ${exporterPage.outerHTML}
             ><span className="toolbar-flyout-hsva-glyph fa-solid fa-sun" aria-hidden="true" /></button>
             <button
               type="button"
-              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control toolbar-flyout-hsva-alpha${hsvaDragState?.control === 'a' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'a' ? ' active' : ''}`}
+              className={[
+                'toolbar-btn-icon',
+                'toolbar-flyout-color-swatch',
+                'toolbar-flyout-hsva-control',
+                'toolbar-flyout-hsva-alpha',
+                hsvaDragState?.control === 'a' ? 'is-dragging' : '',
+                armedColorSource.kind === 'hsva' && armedColorSource.key === 'a' ? 'active' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
               style={{ background: 'var(--color-background-light)', color: hsvaDisplayColors.aGhostColor }}
               title="Alpha"
               onPointerDown={(event) => {
@@ -8372,14 +8431,6 @@ ${exporterPage.outerHTML}
       </div>
     </div>
 
-    {isExportingPdf && typeof document !== 'undefined' ? createPortal(
-      <div className="pdf-exporter-root" aria-hidden="true">
-        <div className={`pdf-exporter-page pdf-exporter-markdown-preview markdown-preview style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}>
-          {exportMarkdownElement}
-        </div>
-      </div>,
-      document.body,
-    ) : null}
   </div>
 )
 }

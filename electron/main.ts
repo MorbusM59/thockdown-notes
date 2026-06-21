@@ -136,6 +136,53 @@ function resolveDataRoot(): string {
   return path.join(process.env.APP_ROOT, 'data');
 }
 
+async function createHiddenExportWindow(htmlContent: string): Promise<BrowserWindow> {
+  const exportWindow = new BrowserWindow({
+    show: false,
+    autoHideMenuBar: true,
+    webPreferences: {
+      sandbox: false,
+      webSecurity: true,
+      backgroundThrottling: false,
+    },
+  })
+
+  const tempHtmlPath = path.join(app.getPath('temp'), `measly-notes-export-${Date.now()}.html`)
+  await fsPromises.writeFile(tempHtmlPath, htmlContent, 'utf8')
+
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('Export page load timeout'))
+    }, 15000)
+
+    const cleanup = () => {
+      clearTimeout(timeout)
+      exportWindow.webContents.removeAllListeners('did-finish-load')
+      exportWindow.webContents.removeAllListeners('did-fail-load')
+    }
+
+    exportWindow.webContents.once('did-finish-load', () => {
+      cleanup()
+      resolve()
+    })
+    exportWindow.webContents.once('did-fail-load', (_event, errorCode, errorDescription) => {
+      cleanup()
+      reject(new Error(`Export page failed to load: ${errorCode} ${errorDescription}`))
+    })
+
+    exportWindow.loadFile(tempHtmlPath).catch((error) => {
+      cleanup()
+      reject(error)
+    })
+  })
+
+  exportWindow.once('closed', () => {
+    fsPromises.unlink(tempHtmlPath).catch(() => {})
+  })
+
+  return exportWindow
+}
+
 function registerIpcHandlers() {
   if (!databaseService) {
     databaseService = new DatabaseService(resolveDataRoot())
@@ -304,9 +351,12 @@ function registerIpcHandlers() {
     }
   })
 
-  ipcMain.handle('export-pdf', async (event, folderPath: string, fileName: string, htmlContent?: string) => {
+  ipcMain.handle('export-pdf', async (_event, folderPath: string, fileName: string, htmlContent?: string) => {
+    let exportWindow: BrowserWindow | null = null
     try {
-      if (!folderPath || !fileName) return { ok: false, error: 'Invalid arguments' }
+      if (!folderPath || !fileName || typeof htmlContent !== 'string') {
+        return { ok: false, error: 'Invalid export arguments' }
+      }
       await fsPromises.mkdir(folderPath, { recursive: true })
 
       const sanitize = (input: string) => input.replace(/[<>:"/\\|?*]+/g, '_')
@@ -331,24 +381,24 @@ function registerIpcHandlers() {
         outPath = candidatePath
       }
 
+      exportWindow = await createHiddenExportWindow(htmlContent)
+
       const pdfOpts: any = {
         printBackground: true,
         pageSize: 'A4',
       }
 
-      const data = await event.sender.printToPDF(pdfOpts)
+      const data = await exportWindow.webContents.printToPDF(pdfOpts)
       await fsPromises.writeFile(outPath, data)
-
-      if (htmlContent && typeof htmlContent === 'string') {
-        const htmlName = `${path.basename(outPath, path.extname(outPath))}.html`
-        const htmlPath = path.join(folderPath, htmlName)
-        await fsPromises.writeFile(htmlPath, htmlContent, 'utf8')
-      }
 
       return { ok: true, path: outPath }
     } catch (error: any) {
       console.warn('[main] export-pdf failed', error)
       return { ok: false, error: error?.message ?? String(error) }
+    } finally {
+      if (exportWindow && !exportWindow.isDestroyed()) {
+        exportWindow.destroy()
+      }
     }
   })
 
