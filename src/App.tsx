@@ -1565,6 +1565,7 @@ function App() {
   // Terminology convention: false = edit mode, true = render view.
   const [isPreviewMode, setIsPreviewMode] = useState(false)
   const [isExportingPdf, setIsExportingPdf] = useState(false)
+  const [exportFolder, setExportFolder] = useState<string | null>(null)
   const [debuggingEnabled, setDebuggingEnabled] = useState(false)
   const debugNoteIdRef = useRef<string | null>(null)
   const [windowIsMaximized, setWindowIsMaximized] = useState(false)
@@ -2411,6 +2412,7 @@ function App() {
       editorGlyphPaddingPx,
       sidebarWidthRatio: DEFAULT_SIDEBAR_RATIO,
       tagSplitRatio: DEFAULT_TAG_SPLIT_RATIO,
+      exportFolder: exportFolder ?? undefined,
       renderScrollDynamic,
       renderScrollResponsiveness,
       renderScrollTotalTimeSec,
@@ -2450,6 +2452,7 @@ function App() {
     editorGlyphPaddingPx,
     editorSpacing,
     editorStyle,
+    exportFolder,
     isDocumentFindCaseSensitive,
     isPreviewMode,
     renderScrollDynamic,
@@ -2929,6 +2932,26 @@ function App() {
       })
     }, 150)
   }, [buildMenuStateSnapshot, persistenceReady, writeDebugEntry])
+
+  const chooseExportFolder = useCallback(async () => {
+    const exportApi = window.measlyExport
+    const selectExportFolder = exportApi
+      ? exportApi.selectExportFolder
+      : () => window.ipcRenderer?.invoke('select-export-folder')
+
+    const folderPath = await selectExportFolder()
+    if (!folderPath) return null
+
+    setExportFolder(folderPath)
+
+    const nextMenuState = {
+      ...(persistedMenuStateRef.current ?? buildMenuStateSnapshot()),
+      exportFolder: folderPath,
+    }
+    persistedMenuStateRef.current = nextMenuState
+    queueAppStateSave(activeNoteId)
+    return folderPath
+  }, [activeNoteId, buildMenuStateSnapshot, queueAppStateSave])
 
   const flushSave = useCallback(async () => {
     if (!window.measlyNotes || !activeNoteId) return
@@ -4075,8 +4098,10 @@ function App() {
               ...appState.menu,
               sidebarViewState: loadedSidebarViewState,
             }
+            setExportFolder(appState.menu.exportFolder ?? null)
           } else {
             persistedMenuStateRef.current = null
+            setExportFolder(null)
           }
 
           const preferredId = appState.selectedNoteId
@@ -4623,14 +4648,11 @@ function App() {
 
     try {
       const exportApi = window.measlyExport
-      const selectExportFolder = exportApi
-        ? exportApi.selectExportFolder
-        : () => window.ipcRenderer?.invoke('select-export-folder')
       const exportPdf = exportApi
         ? exportApi.exportPdf
         : (folderPath: string, fileName: string, htmlContent?: string) => window.ipcRenderer?.invoke('export-pdf', folderPath, fileName, htmlContent)
 
-      const folderPath = await selectExportFolder()
+      const folderPath = exportFolder ?? await chooseExportFolder()
       if (!folderPath) return
 
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
@@ -8112,6 +8134,10 @@ ${exporterPage.outerHTML}
                 title="Export PDF"
                 aria-label="Export current note to PDF"
                 onClick={handleExportPdf}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  void chooseExportFolder()
+                }}
                 disabled={!activeNoteId || isExportingPdf}
               >
                 <span className="fa-solid fa-file-pdf" aria-hidden="true" />

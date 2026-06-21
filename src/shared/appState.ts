@@ -45,6 +45,7 @@ export interface PersistedMenuState {
   highlightSearchColor?: string;
   highlightSelectionColor?: string;
   highlightBackgroundColor?: string;
+  exportFolder?: string;
   highlightTopBackgroundColor?: string;
   highlightBottomBackgroundColor?: string;
   highlightGridOutlineColor?: string;
