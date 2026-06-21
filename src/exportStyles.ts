@@ -524,6 +524,8 @@ body {
   line-height: 1.25;
   color: ${tokens.bodyTextColor};
   text-shadow: ${tokens.headingTextShadow};
+  page-break-after: avoid;
+  break-after: avoid;
 }
 
 .markdown-preview h1 { font-size: ${tokens.heading1FontSize}; font-weight: ${tokens.heading1FontWeight}; font-style: ${tokens.heading1FontStyle}; letter-spacing: ${tokens.heading1LetterSpacing}; text-shadow: ${tokens.heading1TextShadow}; }
