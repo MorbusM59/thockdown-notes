@@ -2376,6 +2376,69 @@ body.pdf-exporting .markdown-preview img {
   height: auto !important;
 }
 
+.pdf-exporter-root {
+  position: absolute;
+  inset: 0;
+  z-index: 10000;
+  background: #ffffff;
+  color: #000000;
+}
+
+.pdf-exporter-page {
+  width: 100%;
+  min-height: calc(297mm - 24mm);
+  padding: 12mm;
+  box-sizing: border-box;
+  background: #ffffff;
+  color: #000000;
+  margin: 0 auto;
+}
+
+.pdf-exporter-root .markdown-preview {
+  padding: 0 !important;
+  background: transparent !important;
+  color: #000000 !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+}
+
+.pdf-exporter-root .markdown-preview * {
+  text-shadow: none !important;
+}
+
+.pdf-exporter-root .markdown-preview h1,
+.pdf-exporter-root .markdown-preview h2,
+.pdf-exporter-root .markdown-preview h3,
+.pdf-exporter-root .markdown-preview h4,
+.pdf-exporter-root .markdown-preview h5,
+.pdf-exporter-root .markdown-preview h6 {
+  text-shadow: none !important;
+  page-break-after: avoid;
+  break-after: avoid;
+  page-break-inside: avoid;
+  break-inside: avoid;
+  orphans: 2;
+  widows: 2;
+}
+
+.pdf-exporter-root .markdown-preview p,
+.pdf-exporter-root .markdown-preview ul,
+.pdf-exporter-root .markdown-preview ol,
+.pdf-exporter-root .markdown-preview blockquote,
+.pdf-exporter-root .markdown-preview pre,
+.pdf-exporter-root .markdown-preview table,
+.pdf-exporter-root .markdown-preview li {
+  page-break-inside: avoid;
+  break-inside: avoid;
+  orphans: 2;
+  widows: 2;
+}
+
+.pdf-exporter-root .markdown-preview > * {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
 @media print {
   @page { size: A4; margin: 12mm; }
   body.pdf-exporting {
@@ -2384,7 +2447,10 @@ body.pdf-exporting .markdown-preview img {
     background: #ffffff;
   }
   body.pdf-exporting .markdown-preview {
-    padding: 12mm !important;
+    padding: 0 !important;
+  }
+  .pdf-exporter-root {
+    position: static !important;
   }
 }
 

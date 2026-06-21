@@ -4617,9 +4617,9 @@ function App() {
 
   const handleExportPdf = useCallback(async () => {
     if (!activeNoteId || isExportingPdf) return
-    setIsExportingPdf(true)
     const body = typeof document !== 'undefined' ? document.body : null
     if (body) body.classList.add('pdf-exporting')
+    setIsExportingPdf(true)
 
     try {
       const exportApi = window.measlyExport
@@ -4974,6 +4974,15 @@ function App() {
       {currentEditorText}
     </ReactMarkdown>
   ), [currentEditorText, previewSearchHighlightPlugin])
+
+  const exportMarkdownElement = useMemo(() => (
+    <ReactMarkdown
+      remarkPlugins={PREVIEW_MARKDOWN_REMARK_PLUGINS}
+      components={PREVIEW_MARKDOWN_COMPONENTS}
+    >
+      {currentEditorText}
+    </ReactMarkdown>
+  ), [currentEditorText])
 
   const documentFindHits = useMemo<DocumentFindHit[]>(() => {
     return buildDocumentFindHits(currentEditorText, documentFindDirective.findText, isDocumentFindCaseSensitive)
@@ -7600,11 +7609,12 @@ function App() {
   }, [syncSidebarTexture, sidebarMode, isSidebarScrollbarMode])
 
   return (
-    <div
-      className="app-shell app-grid"
-      ref={appShellRef}
-      style={appShellStyle}
-    >
+    <div className="app-root">
+      <div
+        className="app-shell app-grid"
+        ref={appShellRef}
+        style={appShellStyle}
+      >
       <aside className="notes-sidebar" style={{ gridArea: 'sidebar' }}>
         <div className="search-box" aria-label="Search panel">
           <input
@@ -8309,7 +8319,16 @@ function App() {
         </aside>
       </div>
     </div>
-  )
+
+    {isExportingPdf ? (
+      <div className="pdf-exporter-root" aria-hidden="true">
+        <div className={`pdf-exporter-page markdown-preview style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}>
+          {exportMarkdownElement}
+        </div>
+      </div>
+    ) : null}
+  </div>
+)
 }
 
 export default App
