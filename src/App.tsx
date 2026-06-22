@@ -1129,6 +1129,7 @@ async function waitForNotesBridge(shouldStop: () => boolean): Promise<boolean> {
 type NoteListItemProps = {
   note: NoteSummary
   isActive: boolean
+  isModified?: boolean
   onSelect: (noteId: string) => void
   onArmedLeftClick: (noteId: string) => void
   armedAction?: NoteArmedAction | null
@@ -1141,6 +1142,7 @@ type NoteListItemProps = {
 const NoteListItem = memo(function NoteListItem({
   note,
   isActive,
+  isModified = false,
   onSelect,
   onArmedLeftClick,
   armedAction = null,
@@ -1631,6 +1633,7 @@ function App() {
   const [sidebarTreeScrollerEl, setSidebarTreeScrollerEl] = useState<HTMLDivElement | null>(null)
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null)
   const [activeNoteText, setActiveNoteText] = useState('')
+  const [currentExternalNoteHash, setCurrentExternalNoteHash] = useState<string | null>(null)
   const [editorSelection, setEditorSelection] = useState<EditorSelectionState>({
     anchor: 0,
     focus: 0,
@@ -3427,6 +3430,26 @@ ${markdownHtml}
   const activeNoteHasDebugTag = useMemo(() => {
     return activeNoteSummary?.tags.some((tag) => normalizeTagName(tag) === DEBUG_TAG_NAME) ?? false
   }, [activeNoteSummary])
+
+  useEffect(() => {
+    if (!activeNoteId || !activeNoteSummary || !isExternalNote(activeNoteSummary)) {
+      setCurrentExternalNoteHash(null)
+      return
+    }
+
+    let disposed = false
+    void (async () => {
+      const currentText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+      const hash = await hashNormalizedText(currentText)
+      if (!disposed) {
+        setCurrentExternalNoteHash(hash)
+      }
+    })()
+
+    return () => {
+      disposed = true
+    }
+  }, [activeNoteId, activeNoteSummary, activeNoteText, editorTextVersion])
 
   const persistEditUiState = useCallback((noteId: string, options?: { immediate?: boolean }) => {
     const legacyDb = window.measlyLegacyDb
@@ -7816,11 +7839,13 @@ ${markdownHtml}
               <div className="notes-list date-view" role="listbox" aria-label="Note list">
                 {pagedVisibleNotes.map((note) => {
                   const isActive = note.id === activeNoteId
+                  const isModified = isActive && isExternalNote(note) && currentExternalNoteHash !== null && currentExternalNoteHash !== externalNoteOriginalHashByIdRef.current.get(note.id)
                   return (
                     <NoteListItem
                       key={note.id}
                       note={note}
                       isActive={isActive}
+                      isModified={isModified}
                       onSelect={handleSelectNote}
                       onArmedLeftClick={handleArmedNoteLeftClick}
                       armedAction={armedNoteActionById.get(note.id) ?? null}
