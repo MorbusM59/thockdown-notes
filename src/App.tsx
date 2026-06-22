@@ -1568,6 +1568,14 @@ function matchesSearchQuery(note: NoteSummary, query: string): boolean {
   )
 }
 
+async function hashNormalizedText(text: string): Promise<string> {
+  const normalized = normalizeInternalText(text)
+  const encoder = new TextEncoder()
+  const data = encoder.encode(normalized)
+  const digest = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
 function App() {
   const adapterRef = useRef<EditorAdapter | null>(null)
   const appShellRef = useRef<HTMLDivElement | null>(null)
@@ -1669,6 +1677,8 @@ function App() {
   const appStateSaveTimerRef = useRef<number | null>(null)
   const noteTransitionLockRef = useRef(false)
   const pendingViewportRestoreRef = useRef<PersistedViewportState | null>(null)
+  const externalNoteOriginalTextByIdRef = useRef<Map<string, string>>(new Map())
+  const externalNoteOriginalHashByIdRef = useRef<Map<string, string>>(new Map())
   const pendingSidebarScrollRestoreRef = useRef<{ mode: SidebarMode; scrollTop: number } | null>(null)
   const ignoreNextUserViewportChangeRef = useRef(false)
   const latestEditViewportRef = useRef<PersistedViewportState | null>(null)
@@ -3099,6 +3109,27 @@ ${markdownHtml}
     setActiveNoteId(loaded.id)
     setActiveNoteText(hydratedText)
     pendingViewportRestoreRef.current = null
+
+    if (isExternalNote(loaded)) {
+      const snapshotRows = await window.measlyLegacyDb?.getNoteSnapshots(loaded.id) ?? []
+      const originalSnapshotRow = snapshotRows
+        .filter((row) => !row.isManual)
+        .reverse()
+        .find(() => true)
+        ?? snapshotRows[snapshotRows.length - 1]
+
+      const originalText = originalSnapshotRow
+        ? normalizeInternalText(originalSnapshotRow.content)
+        : hydratedText
+
+      if (!snapshotRows.some((row) => !row.isManual)) {
+        await window.measlyLegacyDb?.saveNoteSnapshot(loaded.id, hydratedText, false)
+      }
+
+      externalNoteOriginalTextByIdRef.current.set(loaded.id, originalText)
+      externalNoteOriginalHashByIdRef.current.set(loaded.id, await hashNormalizedText(originalText))
+    }
+
     await saveSelectedNoteState(loaded.id)
   }, [
     activeNoteId,
