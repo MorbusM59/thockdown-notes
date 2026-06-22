@@ -108,6 +108,7 @@ const TEXTURE_PREVIEW_SURFACE: TextureSurfaceKey = 'appGrid'
 const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28
 const SCROLL_TRACK_EDGE_GAP_PX = 3
 const NOTE_RIGHT_CLICK_HOLD_MS = 200
+const NOTE_LEFT_CLICK_HOLD_MS = 200
 const COLOR_BUTTON_ARM_HOLD_MS = 300
 const LOADOUT_SAVE_HOLD_MS = 500
 const MAX_UI_LOADOUTS = 9
@@ -159,7 +160,7 @@ const TEXTURE_SURFACE_ICONS: Record<TextureSurfaceKey, string> = {
 }
 
 type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find' | 'options'
-type NoteArmedAction = 'archive' | 'deletion'
+type NoteArmedAction = 'archive' | 'deletion' | 'save' | 'close'
 type ProtectedQuickReleaseAction = 'remove-archived' | 'remove-deleted' | null
 type TextDecorationFormat = 'bold' | 'italic' | 'strikethrough'
 type ViewStyleKey = 'modern' | 'narrow' | 'cute' | 'xkcd' | 'print'
@@ -1133,6 +1134,8 @@ type NoteListItemProps = {
   onSelect: (noteId: string) => void
   onArmedLeftClick: (noteId: string) => void
   armedAction?: NoteArmedAction | null
+  onLeftPressStart: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
+  onLeftPressEnd: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   onRightPressStart: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   onRightPressEnd: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   onArmHoverLeave: (noteId: string) => void
@@ -1146,6 +1149,8 @@ const NoteListItem = memo(function NoteListItem({
   onSelect,
   onArmedLeftClick,
   armedAction = null,
+  onLeftPressStart,
+  onLeftPressEnd,
   onRightPressStart,
   onRightPressEnd,
   onArmHoverLeave,
@@ -1173,18 +1178,30 @@ const NoteListItem = memo(function NoteListItem({
   }, [note.id, onSelect])
 
   const handleMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    if (event.button !== 2) return
-    event.preventDefault()
-    event.stopPropagation()
-    onRightPressStart(note.id, event)
-  }, [note.id, onRightPressStart])
+    if (event.button === 2) {
+      event.preventDefault()
+      event.stopPropagation()
+      onRightPressStart(note.id, event)
+      return
+    }
+
+    if (event.button === 0) {
+      onLeftPressStart(note.id, event)
+    }
+  }, [note.id, onLeftPressStart, onRightPressStart])
 
   const handleMouseUp = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    if (event.button !== 2) return
-    event.preventDefault()
-    event.stopPropagation()
-    onRightPressEnd(note.id, event)
-  }, [note.id, onRightPressEnd])
+    if (event.button === 2) {
+      event.preventDefault()
+      event.stopPropagation()
+      onRightPressEnd(note.id, event)
+      return
+    }
+
+    if (event.button === 0) {
+      onLeftPressEnd(note.id, event)
+    }
+  }, [note.id, onLeftPressEnd, onRightPressEnd])
 
   const handleContextMenu = useCallback((event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -1197,7 +1214,7 @@ const NoteListItem = memo(function NoteListItem({
 
   return (
     <div
-      className={`note-list-item${isActive ? ' is-active' : ''}${isTreeVariant ? ' is-tree-card' : ''}${isExternalNote(note) ? ' is-external' : ''}${armedAction === 'archive' ? ' is-armed-for-archiving' : ''}${armedAction === 'deletion' ? ' is-armed-for-deletion' : ''}`}
+      className={`note-list-item${isActive ? ' is-active' : ''}${isTreeVariant ? ' is-tree-card' : ''}${isModified ? ' is-modified' : ''}${isExternalNote(note) ? ' is-external' : ''}${armedAction === 'archive' ? ' is-armed-for-archiving' : ''}${armedAction === 'deletion' ? ' is-armed-for-deletion' : ''}${armedAction === 'save' ? ' is-armed-for-saving' : ''}`}
       data-note-id={note.id}
       role="option"
       aria-selected={isActive}
@@ -1232,6 +1249,8 @@ type CategoryTreeViewProps = {
   onSelect: (noteId: string) => void
   onArmedLeftClick: (noteId: string) => void
   armedNoteActionById: Map<string, NoteArmedAction>
+  onLeftPressStart: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
+  onLeftPressEnd: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   onNoteRightPressStart: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   onNoteRightPressEnd: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   onNoteArmHoverLeave: (noteId: string) => void
@@ -1247,6 +1266,8 @@ const CategoryTreeView = memo(function CategoryTreeView({
   onSelect,
   onArmedLeftClick,
   armedNoteActionById,
+  onLeftPressStart,
+  onLeftPressEnd,
   onNoteRightPressStart,
   onNoteRightPressEnd,
   onNoteArmHoverLeave,
@@ -1521,6 +1542,8 @@ const CategoryTreeView = memo(function CategoryTreeView({
                       onSelect={onSelect}
                       onArmedLeftClick={onArmedLeftClick}
                       armedAction={armedNoteActionById.get(note.id) ?? null}
+                      onLeftPressStart={onLeftPressStart}
+                      onLeftPressEnd={onLeftPressEnd}
                       onRightPressStart={onNoteRightPressStart}
                       onRightPressEnd={onNoteRightPressEnd}
                       onArmHoverLeave={onNoteArmHoverLeave}
@@ -1723,7 +1746,7 @@ function App() {
   const [isDraggingSidebarScrollThumb, setIsDraggingSidebarScrollThumb] = useState(false)
   const [isTrashViewDeleteArmed, setIsTrashViewDeleteArmed] = useState(false)
   const [armedNoteActionState, setArmedNoteActionState] = useState<{ noteId: string; action: NoteArmedAction } | null>(null)
-  const noteArmTimerRef = useRef<{ noteId: string; timeoutId: number; quickReleaseAction: ProtectedQuickReleaseAction } | null>(null)
+  const noteArmTimerRef = useRef<{ noteId: string; button: 0 | 2; timeoutId: number; quickReleaseAction: ProtectedQuickReleaseAction | null } | null>(null)
   const trashButtonArmTimerRef = useRef<number | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const previewTextureRef = useRef<HTMLDivElement>(null)
@@ -3823,6 +3846,29 @@ ${markdownHtml}
     await window.measlyNotes.reorderNoteTags({ id: noteId, tagNames: reordered })
   }, [notes])
 
+  const saveExternalNoteToFile = useCallback(async (noteId: string) => {
+    if (!window.measlyLegacyDb) return
+    if (activeNoteId !== noteId) return
+
+    const currentText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+    const hash = await hashNormalizedText(currentText)
+
+    try {
+      const synced = await window.measlyLegacyDb.syncExternalNoteToFile(noteId)
+      if (!synced) {
+        console.error('External note sync failed for note', noteId)
+        return
+      }
+
+      await window.measlyLegacyDb.saveNoteSnapshot(noteId, currentText, false)
+      externalNoteOriginalTextByIdRef.current.set(noteId, currentText)
+      externalNoteOriginalHashByIdRef.current.set(noteId, hash)
+      setCurrentExternalNoteHash(hash)
+    } catch (error) {
+      console.error('Failed to save external note to file', error)
+    }
+  }, [activeNoteId, activeNoteText])
+
   const executeArmedNoteAction = useCallback(async (noteId: string, action: NoteArmedAction) => {
     if (!window.measlyNotes) return
     if (!persistenceReady) return
@@ -3834,6 +3880,11 @@ ${markdownHtml}
     noteTransitionLockRef.current = true
     try {
       await flushPendingSaveNow()
+
+      if (action === 'save') {
+        await saveExternalNoteToFile(noteId)
+        return
+      }
 
       if (action === 'deletion' && isCurrentlyDeleted) {
         await window.measlyNotes.deleteNote({ id: noteId })
@@ -3868,7 +3919,7 @@ ${markdownHtml}
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [activateNote, activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes])
+  }, [activateNote, activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes, saveExternalNoteToFile])
 
   const applyQuickProtectedRightClickAction = useCallback(async (noteId: string, action: Exclude<ProtectedQuickReleaseAction, null>) => {
     if (!window.measlyNotes) return
@@ -3896,6 +3947,27 @@ ${markdownHtml}
     }
   }, [activateNote, activeNoteId, flushPendingSaveNow, persistenceReady, refreshNotes])
 
+  const closeExternalNoteWithoutSaving = useCallback(async (noteId: string) => {
+    if (!window.measlyLegacyDb) return
+
+    clearNoteArmTimer()
+    if (activeNoteId === noteId) {
+      setActiveNoteId(null)
+      setActiveNoteText('')
+    }
+
+    externalNoteOriginalTextByIdRef.current.delete(noteId)
+    externalNoteOriginalHashByIdRef.current.delete(noteId)
+    setCurrentExternalNoteHash((current) => (activeNoteId === noteId ? null : current))
+
+    try {
+      await window.measlyLegacyDb.deleteTempNote(noteId)
+      setNotes((previous) => previous.filter((note) => note.id !== noteId))
+    } catch (error) {
+      console.error('Failed to delete external temp note', error)
+    }
+  }, [activeNoteId, clearNoteArmTimer])
+
   const handleNoteRightPressStart = useCallback((noteId: string, event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()
     clearNoteArmTimer()
@@ -3903,6 +3975,21 @@ ${markdownHtml}
     const summary = notes.find((note) => note.id === noteId)
     const isNoteArchived = summary ? isArchivedNote(summary) : false
     const isNoteDeleted = summary ? isDeletedNote(summary) : false
+    const isNoteExternal = summary ? isExternalNote(summary) : false
+    const isNoteModified = isNoteExternal && noteId === activeNoteId && currentExternalNoteHash !== null && currentExternalNoteHash !== externalNoteOriginalHashByIdRef.current.get(noteId)
+
+    if (isNoteExternal && !isNoteModified) {
+      void closeExternalNoteWithoutSaving(noteId)
+      return
+    }
+
+    if (isNoteExternal && isNoteModified) {
+      if (armedNoteActionState?.noteId === noteId && armedNoteActionState.action === 'close') {
+        setArmedNoteActionState(null)
+        void closeExternalNoteWithoutSaving(noteId)
+        return
+      }
+    }
 
     if (isNoteArchived || isNoteDeleted) {
       setArmedNoteActionState(null)
@@ -3915,31 +4002,67 @@ ${markdownHtml}
       : (isNoteArchived ? 'remove-archived' : null)
 
     const timeoutId = window.setTimeout(() => {
-      setArmedNoteActionState((previous) => {
-        if (quickReleaseAction) {
+      if (isNoteExternal && isNoteModified) {
+        setArmedNoteActionState({ noteId, action: 'close' })
+      } else {
+        setArmedNoteActionState((previous) => {
+          if (quickReleaseAction) {
+            return {
+              noteId,
+              action: 'deletion',
+            }
+          }
+
+          if (!previous || previous.noteId !== noteId) {
+            return previous
+          }
+
           return {
             noteId,
             action: 'deletion',
           }
-        }
-
-        if (!previous || previous.noteId !== noteId) {
-          return previous
-        }
-
-        return {
-          noteId,
-          action: 'deletion',
-        }
-      })
+        })
+      }
 
       if (noteArmTimerRef.current?.noteId === noteId) {
         noteArmTimerRef.current = null
       }
     }, NOTE_RIGHT_CLICK_HOLD_MS)
 
-    noteArmTimerRef.current = { noteId, timeoutId, quickReleaseAction }
-  }, [clearNoteArmTimer, notes])
+    noteArmTimerRef.current = { noteId, button: 2, timeoutId, quickReleaseAction }
+  }, [activeNoteId, armedNoteActionState, clearNoteArmTimer, closeExternalNoteWithoutSaving, currentExternalNoteHash, notes])
+
+  const handleNoteLeftPressStart = useCallback((noteId: string, event: MouseEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    clearNoteArmTimer()
+
+    const summary = notes.find((note) => note.id === noteId)
+    const isNoteExternal = summary ? isExternalNote(summary) : false
+    const isNoteModified = isNoteExternal && noteId === activeNoteId && currentExternalNoteHash !== null && currentExternalNoteHash !== externalNoteOriginalHashByIdRef.current.get(noteId)
+
+    if (!isNoteExternal || !isNoteModified) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setArmedNoteActionState({ noteId, action: 'save' })
+      if (noteArmTimerRef.current?.noteId === noteId) {
+        noteArmTimerRef.current = null
+      }
+    }, NOTE_LEFT_CLICK_HOLD_MS)
+
+    noteArmTimerRef.current = { noteId, button: 0, timeoutId, quickReleaseAction: null }
+  }, [activeNoteId, clearNoteArmTimer, currentExternalNoteHash, notes])
+
+  const handleNoteLeftPressEnd = useCallback((noteId: string, event: MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
+    const pendingArm = noteArmTimerRef.current
+    if (!pendingArm || pendingArm.noteId !== noteId) return
+
+    if (pendingArm.button === 0) {
+      clearNoteArmTimer()
+    }
+  }, [clearNoteArmTimer])
 
   const handleNoteRightPressEnd = useCallback((noteId: string, event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -3949,7 +4072,6 @@ ${markdownHtml}
       return
     }
 
-    // Quick release consumes the current cycle before hold-escalation.
     const quickReleaseAction = pendingArm.quickReleaseAction
     clearNoteArmTimer()
 
@@ -7849,6 +7971,8 @@ ${markdownHtml}
                       onSelect={handleSelectNote}
                       onArmedLeftClick={handleArmedNoteLeftClick}
                       armedAction={armedNoteActionById.get(note.id) ?? null}
+                      onLeftPressStart={handleNoteLeftPressStart}
+                      onLeftPressEnd={handleNoteLeftPressEnd}
                       onRightPressStart={handleNoteRightPressStart}
                       onRightPressEnd={handleNoteRightPressEnd}
                       onArmHoverLeave={handleNoteArmHoverLeave}
@@ -7914,6 +8038,8 @@ ${markdownHtml}
                   onSelect={handleSelectNote}
                   onArmedLeftClick={handleArmedNoteLeftClick}
                   armedNoteActionById={armedNoteActionById}
+                  onLeftPressStart={handleNoteLeftPressStart}
+                  onLeftPressEnd={handleNoteLeftPressEnd}
                   onNoteRightPressStart={handleNoteRightPressStart}
                   onNoteRightPressEnd={handleNoteRightPressEnd}
                   onNoteArmHoverLeave={handleNoteArmHoverLeave}
