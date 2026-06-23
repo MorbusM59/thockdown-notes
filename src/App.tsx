@@ -4791,6 +4791,7 @@ ${markdownHtml}
     },
     onEnterTransform: (event) => {
       if (!activeNoteId || activeNoteHasDebugTag) return null
+      void typingSoundManager.playRandomClick({ detune: -500 })
       const next = resolveMarkdownEnterTransform(event)
       if (!next) {
         return null

@@ -6,6 +6,11 @@ export interface TypingSoundLayerConfig {
   assetIndexes: number[]
 }
 
+export interface TypingSoundPlayOptions {
+  detune?: number
+  playbackRate?: number
+}
+
 export class TypingSoundManager {
   private audioContext: AudioContext | null = null
   private masterGain: GainNode | null = null
@@ -65,11 +70,11 @@ export class TypingSoundManager {
     }
   }
 
-  async playRandomClick(): Promise<void> {
-    await this.playLayer('click')
+  async playRandomClick(options?: TypingSoundPlayOptions): Promise<void> {
+    await this.playLayer('click', options)
   }
 
-  private async playLayer(layerId: string): Promise<void> {
+  private async playLayer(layerId: string, options?: TypingSoundPlayOptions): Promise<void> {
     if (!this.loaded || !this.audioContext || !this.masterGain) return
 
     await this.ensureContextRunning()
@@ -83,6 +88,13 @@ export class TypingSoundManager {
 
     const source = this.audioContext.createBufferSource()
     source.buffer = buffer
+
+    if (options?.playbackRate !== undefined) {
+      source.playbackRate.value = options.playbackRate
+    }
+    if (options?.detune !== undefined) {
+      source.detune.value = options.detune
+    }
 
     const gainNode = this.audioContext.createGain()
     gainNode.gain.value = layer.gain
