@@ -1681,6 +1681,9 @@ function App() {
   const [texturePreviewMaterial, setTexturePreviewMaterial] = useState<TextureMaterialSettings>(() => toTexturePreviewMaterial(DEFAULT_TEXTURE_MATERIALS.appGrid))
   const [textureSeedInput, setTextureSeedInput] = useState(() => String(DEFAULT_TEXTURE_MATERIALS.appGrid.seed))
   const [isTextureSeedEditing, setIsTextureSeedEditing] = useState(false)
+  const [audioKeyVolume, setAudioKeyVolume] = useState(0.6)
+  const [audioBassVolume, setAudioBassVolume] = useState(0.5)
+  const [audioTrebleVolume, setAudioTrebleVolume] = useState(0.5)
   const [appGridTextureSize, setAppGridTextureSize] = useState({ width: 1280, height: 720 })
   const [sidebarTextureSize, setSidebarTextureSize] = useState({ width: 512, height: 720 })
   const [editorStageTextureSize, setEditorStageTextureSize] = useState({ width: 1280, height: 720 })
@@ -2482,6 +2485,9 @@ function App() {
       renderScrollTotalTimeSec,
       renderScrollMaxSpeedPxPerSec,
       renderScrollSkew,
+      audioKeyVolume,
+      audioBassVolume,
+      audioTrebleVolume,
       highlightCaretColor: highlightColors.caret,
       highlightSearchColor: highlightColors.search,
       highlightSelectionColor: highlightColors.selection,
@@ -2524,6 +2530,9 @@ function App() {
     renderScrollMaxSpeedPxPerSec,
     renderScrollSkew,
     renderScrollTotalTimeSec,
+    audioKeyVolume,
+    audioBassVolume,
+    audioTrebleVolume,
     textureEnabled,
     textureMaterials,
     highlightColors,
@@ -4469,6 +4478,9 @@ ${markdownHtml}
             setRenderScrollTotalTimeSec(appState.menu.renderScrollTotalTimeSec ?? getRenderScrollTotalTimeSec())
             setRenderScrollMaxSpeedPxPerSec(appState.menu.renderScrollMaxSpeedPxPerSec ?? getRenderScrollMaxSpeedPxPerSec())
             setRenderScrollSkew(appState.menu.renderScrollSkew ?? getRenderScrollSkew())
+            setAudioKeyVolume(appState.menu.audioKeyVolume ?? 0.6)
+            setAudioBassVolume(appState.menu.audioBassVolume ?? 0.5)
+            setAudioTrebleVolume(appState.menu.audioTrebleVolume ?? 0.5)
             setHighlightColors({
               caret: appState.menu.highlightCaretColor ?? DEFAULT_HIGHLIGHT_COLORS.caret,
               search: appState.menu.highlightSearchColor ?? DEFAULT_HIGHLIGHT_COLORS.search,
@@ -4621,6 +4633,18 @@ ${markdownHtml}
   useEffect(() => {
     void typingSoundManager.load()
   }, [])
+
+  useEffect(() => {
+    typingSoundManager.setLayerGain('click', audioKeyVolume)
+  }, [audioKeyVolume])
+
+  useEffect(() => {
+    typingSoundManager.setLayerGain('bass', audioBassVolume)
+  }, [audioBassVolume])
+
+  useEffect(() => {
+    typingSoundManager.setLayerGain('treble', audioTrebleVolume)
+  }, [audioTrebleVolume])
 
   const shouldPlayTypingSound = useCallback((event: EditorTextChangeEvent) => {
     if (event.source !== 'user-input') return false
@@ -7778,6 +7802,42 @@ ${markdownHtml}
             onCommit={(value) => setRenderScrollSkew(
               Math.max(RENDER_SCROLL_SKEW_MIN, Math.min(RENDER_SCROLL_SKEW_MAX, value)),
             )}
+          />
+        </div>
+      </section>
+
+      <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-audio" aria-label="Audio Settings">
+        <div className="sidebar-options-section-heading">Audio Settings</div>
+        <div className="utility-setting-slider-stack" aria-label="Audio settings controls">
+          <CompactScrollbarSlider
+            id="audio-key-volume"
+            min={0}
+            max={1}
+            step={0.01}
+            value={audioKeyVolume}
+            trackLabel="key"
+            ariaLabel="Key volume"
+            onCommit={(value) => setAudioKeyVolume(clamp(value, 0, 1))}
+          />
+          <CompactScrollbarSlider
+            id="audio-bass-volume"
+            min={0}
+            max={1}
+            step={0.01}
+            value={audioBassVolume}
+            trackLabel="bass"
+            ariaLabel="Bass volume"
+            onCommit={(value) => setAudioBassVolume(clamp(value, 0, 1))}
+          />
+          <CompactScrollbarSlider
+            id="audio-treble-volume"
+            min={0}
+            max={1}
+            step={0.01}
+            value={audioTrebleVolume}
+            trackLabel="treble"
+            ariaLabel="Treble volume"
+            onCommit={(value) => setAudioTrebleVolume(clamp(value, 0, 1))}
           />
         </div>
       </section>

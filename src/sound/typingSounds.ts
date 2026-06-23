@@ -10,3 +10,6 @@ export const TYPING_SOUND_ASSETS = [
   new URL('../assets/sounds/keys/key09.wav', import.meta.url).href,
   new URL('../assets/sounds/keys/key10.wav', import.meta.url).href,
 ] as const;
+
+export const BASS_TYPING_SOUND_ASSET = new URL('../assets/sounds/bass.wav', import.meta.url).href
+export const TREBLE_TYPING_SOUND_ASSET = new URL('../assets/sounds/treble.wav', import.meta.url).href

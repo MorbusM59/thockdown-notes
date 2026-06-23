@@ -52,6 +52,9 @@ export interface PersistedMenuState {
   textureEnabled?: boolean;
   textureActiveSurface?: TextureSurfaceKey;
   textureMaterials?: TextureMaterialsBySurface;
+  audioKeyVolume?: number;
+  audioBassVolume?: number;
+  audioTrebleVolume?: number;
   // Legacy render smooth-scroll keys (pre curve-model / pre maxSpeed migration).
   renderScrollSmoothnessSec?: number;
   renderScrollEaseMultiplier?: number;
