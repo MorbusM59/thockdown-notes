@@ -3886,6 +3886,11 @@ ${markdownHtml}
         return
       }
 
+      if (action === 'close') {
+        await closeExternalNoteWithoutSaving(noteId)
+        return
+      }
+
       if (action === 'deletion' && isCurrentlyDeleted) {
         await window.measlyNotes.deleteNote({ id: noteId })
 
