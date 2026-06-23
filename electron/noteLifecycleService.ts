@@ -260,6 +260,9 @@ export class NoteLifecycleService {
         text,
         createdAtMs: record.createdAtMs,
         updatedAtMs: nowMs,
+        isTemp: true,
+        hasUnsavedChanges: true,
+        syncMode: false,
       });
       this.databaseService.updateTempNoteState(input.id, true, false);
       const summary = await this.readSummary(this.databaseService.getNoteRecord(input.id) ?? {

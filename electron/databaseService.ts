@@ -572,12 +572,18 @@ export class DatabaseService {
     text: string;
     createdAtMs: number;
     updatedAtMs: number;
+    isTemp?: boolean;
+    hasUnsavedChanges?: boolean;
+    syncMode?: boolean;
   }): void {
     const db = this.requireDb();
     const createdAtIso = new Date(input.createdAtMs).toISOString();
     const updatedAtIso = new Date(input.updatedAtMs).toISOString();
     const normalizedText = normalizeText(input.text);
     const contentChecksum = checksumText(normalizedText);
+    const isTemp = input.isTemp ? 1 : 0;
+    const hasUnsavedChanges = input.hasUnsavedChanges ? 1 : 0;
+    const syncMode = input.syncMode ? 1 : 0;
 
     db.prepare(`
       INSERT INTO notes (
@@ -592,14 +598,17 @@ export class DatabaseService {
         hasUnsavedChanges,
         syncMode
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         filePath = excluded.filePath,
         createdAt = excluded.createdAt,
         updatedAt = excluded.updatedAt,
         lastEdited = excluded.lastEdited,
-        contentChecksum = excluded.contentChecksum
+        contentChecksum = excluded.contentChecksum,
+        isTemp = excluded.isTemp,
+        hasUnsavedChanges = excluded.hasUnsavedChanges,
+        syncMode = excluded.syncMode
     `).run(
       input.id,
       input.title,
@@ -608,6 +617,9 @@ export class DatabaseService {
       updatedAtIso,
       updatedAtIso,
       contentChecksum,
+      isTemp,
+      hasUnsavedChanges,
+      syncMode,
     );
 
     db.prepare('INSERT OR REPLACE INTO notes_fts (noteId, title, content) VALUES (?, ?, ?)')
@@ -1075,7 +1087,7 @@ export class DatabaseService {
 
   deleteTempNote(noteId: string): void {
     const db = this.requireDb();
-    db.prepare('DELETE FROM notes WHERE id = ? AND isTemp = 1').run(noteId);
+    db.prepare('DELETE FROM notes WHERE id = ?').run(noteId);
     db.prepare('DELETE FROM notes_fts WHERE noteId = ?').run(noteId);
   }
 

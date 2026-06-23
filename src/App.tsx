@@ -1699,10 +1699,13 @@ function App() {
     end: 0,
     isCollapsed: true,
   })
+  type ConsoleMethodName = 'log' | 'info' | 'warn' | 'error' | 'debug'
   const saveTimerRef = useRef<number | null>(null)
   const appStateSaveTimerRef = useRef<number | null>(null)
   const noteTransitionLockRef = useRef(false)
   const pendingViewportRestoreRef = useRef<PersistedViewportState | null>(null)
+  const originalConsoleMethodsRef = useRef<Partial<Record<ConsoleMethodName, (...args: any[]) => void>>>({})
+  const isWritingDebugEntryRef = useRef(false)
   const externalNoteOriginalTextByIdRef = useRef<Map<string, string>>(new Map())
   const externalNoteOriginalHashByIdRef = useRef<Map<string, string>>(new Map())
   const pendingSidebarScrollRestoreRef = useRef<{ mode: SidebarMode; scrollTop: number } | null>(null)
@@ -1736,6 +1739,7 @@ function App() {
   const categoryTreeRef = useRef<PrimaryGroup[]>([])
   const archiveTreeRef = useRef<PrimaryGroup[]>([])
   const externalOpenQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const pendingExternalImportPathsRef = useRef<Set<string>>(new Set())
   const sidebarScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const sidebarScrollbarRafRef = useRef<number | null>(null)
   const sidebarScrollbarDragOriginRef = useRef<{ pointerY: number; thumbTopPx: number } | null>(null)
@@ -2941,12 +2945,14 @@ function App() {
   const writeDebugEntry = useCallback(async (functionName: string, lines: string[]) => {
     if (!debuggingEnabled) return
     if (!window.measlyNotes) return
+    if (isWritingDebugEntryRef.current) return
 
     if (!debugNoteIdRef.current) {
       const noteId = await ensureDebugNoteExists()
       if (!noteId) return
     }
 
+    isWritingDebugEntryRef.current = true
     const now = new Date()
     const pad = (n: number) => String(n).padStart(2, '0')
     const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
@@ -2966,9 +2972,64 @@ function App() {
         return next
       })
     } catch (error) {
-      console.error('Failed to write debug entry', error)
+      const originalError = originalConsoleMethodsRef.current.error ?? console.error
+      originalError.call(console, 'Failed to write debug entry', error)
+    } finally {
+      isWritingDebugEntryRef.current = false
     }
   }, [debuggingEnabled, ensureDebugNoteExists])
+
+  useEffect(() => {
+    const consoleMethods: ConsoleMethodName[] = ['log', 'info', 'warn', 'error', 'debug']
+
+    if (!debuggingEnabled) {
+      if (originalConsoleMethodsRef.current.log) {
+        consoleMethods.forEach((method) => {
+          const original = originalConsoleMethodsRef.current[method]
+          if (original) {
+            console[method] = original as any
+          }
+        })
+        originalConsoleMethodsRef.current = {}
+      }
+      return
+    }
+
+    consoleMethods.forEach((method) => {
+      if (!originalConsoleMethodsRef.current[method]) {
+        originalConsoleMethodsRef.current[method] = console[method].bind(console)
+      }
+      console[method] = ((...args: any[]) => {
+        const original = originalConsoleMethodsRef.current[method]
+        if (original) {
+          original(...args)
+        }
+        if (isWritingDebugEntryRef.current) {
+          return
+        }
+        const stringified = args.map((arg) => {
+          try {
+            if (typeof arg === 'string') return arg
+            if (arg instanceof Error) return arg.stack || arg.message
+            return JSON.stringify(arg)
+          } catch {
+            return String(arg)
+          }
+        })
+        void writeDebugEntry(`console.${method}`, stringified)
+      }) as any
+    })
+
+    return () => {
+      consoleMethods.forEach((method) => {
+        const original = originalConsoleMethodsRef.current[method]
+        if (original) {
+          console[method] = original as any
+        }
+      })
+      originalConsoleMethodsRef.current = {}
+    }
+  }, [debuggingEnabled, writeDebugEntry])
 
   const queueAppStateSave = useCallback((selectedNoteId: string | null) => {
     if (!window.measlyState) return
@@ -3048,7 +3109,19 @@ ${markdownHtml}
 
     pendingSaveTextRef.current = null
     try {
-      const savedSummary = await window.measlyNotes.saveNote({ id: activeNoteId, text: normalizeInternalText(nextText) })
+      const noteSummary = notes.find((note) => note.id === activeNoteId)
+      const isExternal = noteSummary ? isExternalNote(noteSummary) : false
+      if (isExternal) {
+        console.warn('[external-note] flushSave triggered for external note', { noteId: activeNoteId, textLength: nextText.length, nextText })
+      }
+      const normalizedText = normalizeInternalText(nextText)
+      console.debug('[external-note] flushing note into DB', { noteId: activeNoteId, textLength: normalizedText.length, normalizedText })
+      const savedSummary = await window.measlyNotes.saveNote({ id: activeNoteId, text: normalizedText })
+      if (isExternal) {
+        console.warn('[external-note] external note current state persisted into DB', { noteId: activeNoteId, textLength: normalizedText.length })
+        latestEditorTextRef.current = normalizedText
+        setActiveNoteText(normalizedText)
+      }
       setNotes((previous) => {
         const index = previous.findIndex((note) => note.id === savedSummary.id)
         if (index < 0) return previous
@@ -3065,7 +3138,7 @@ ${markdownHtml}
     } catch (error) {
       console.error('Failed to persist note', error)
     }
-  }, [activeNoteId])
+  }, [activeNoteId, notes])
 
   const flushPendingSaveNow = useCallback(async () => {
     if (saveTimerRef.current !== null) {
@@ -3149,12 +3222,17 @@ ${markdownHtml}
         ? normalizeInternalText(originalSnapshotRow.content)
         : hydratedText
 
+      console.warn('[external-note] activating external note', { noteId: loaded.id, snapshotCount: snapshotRows.length, hasOriginalSnapshot: !!originalSnapshotRow, hydratedLength: hydratedText.length })
+
       if (!snapshotRows.some((row) => !row.isManual)) {
         await window.measlyLegacyDb?.saveNoteSnapshot(loaded.id, hydratedText, false)
+        console.warn('[external-note] created initial original snapshot for external note', { noteId: loaded.id, textLength: hydratedText.length })
       }
 
       externalNoteOriginalTextByIdRef.current.set(loaded.id, originalText)
-      externalNoteOriginalHashByIdRef.current.set(loaded.id, await hashNormalizedText(originalText))
+      const originalHash = await hashNormalizedText(originalText)
+      externalNoteOriginalHashByIdRef.current.set(loaded.id, originalHash)
+      console.warn('[external-note] stored original hash for external note', { noteId: loaded.id, originalHash })
     }
 
     await saveSelectedNoteState(loaded.id)
@@ -3409,6 +3487,15 @@ ${markdownHtml}
     try {
       await flushPendingSaveNow()
 
+      const existingTempId = await legacyDbApi.getTempNoteIdByExternalPath(filePath)
+      if (existingTempId) {
+        console.debug('[external-note] external file already tracked, activating existing temp note', { filePath, noteId: existingTempId })
+        await refreshNotes(existingTempId)
+        await activateNote(existingTempId)
+        setSidebarMode('date')
+        return
+      }
+
       const [fileName, content] = await Promise.all([
         externalApi.getFileBasename(filePath),
         externalApi.readFileContent(filePath),
@@ -3419,14 +3506,16 @@ ${markdownHtml}
       }
 
       const initialTitle = titleFromFileBasename(fileName)
-      let noteId = await legacyDbApi.getTempNoteIdByExternalPath(filePath)
+      const noteId = await legacyDbApi.createTempNote(initialTitle, filePath, 'utf8')
+      console.debug('[external-note] created temp note for external file', { noteId, filePath })
 
-      if (!noteId) {
-        noteId = await legacyDbApi.createTempNote(initialTitle, filePath, 'utf8')
-      }
-
-      await notesApi.saveNote({ id: noteId, text: normalizeInternalText(content) })
+      const normalizedContent = normalizeInternalText(content)
+      await notesApi.saveNote({ id: noteId, text: normalizedContent })
+      console.debug('[external-note] saved imported external content into temp note', { noteId, filePath, contentLength: normalizedContent.length })
+      await legacyDbApi.saveNoteSnapshot(noteId, normalizedContent, false)
+      console.debug('[external-note] saved original external snapshot', { noteId, filePath, contentLength: normalizedContent.length })
       await legacyDbApi.updateTempNoteState(noteId, false, true)
+      console.debug('[external-note] updated temp note sync state for imported external file', { noteId, hasUnsavedChanges: false, syncMode: true })
       await refreshNotes(noteId)
       await activateNote(noteId)
       setSidebarMode('date')
@@ -3438,11 +3527,24 @@ ${markdownHtml}
   }, [activateNote, flushPendingSaveNow, persistenceReady, refreshNotes])
 
   const enqueueExternalFileImport = useCallback((filePath: string) => {
+    const normalizedPath = filePath.trim()
+    if (!normalizedPath) return
+    const pending = pendingExternalImportPathsRef.current
+    if (pending.has(normalizedPath)) return
+    pending.add(normalizedPath)
+
     const queue = externalOpenQueueRef.current
     externalOpenQueueRef.current = queue
-      .then(() => importExternalFileAsTempNote(filePath))
+      .then(async () => {
+        try {
+          await importExternalFileAsTempNote(normalizedPath)
+        } finally {
+          pendingExternalImportPathsRef.current.delete(normalizedPath)
+        }
+      })
       .catch((error) => {
         console.error('External file import queue error', error)
+        pendingExternalImportPathsRef.current.delete(normalizedPath)
       })
   }, [importExternalFileAsTempNote])
 
@@ -3870,14 +3972,17 @@ ${markdownHtml}
     const currentText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
     const hash = await hashNormalizedText(currentText)
 
+    console.debug('[external-note] explicit save path starting', { noteId, textLength: currentText.length, hash })
     try {
       const synced = await window.measlyLegacyDb.syncExternalNoteToFile(noteId)
+      console.debug('[external-note] external file write result', { noteId, synced })
       if (!synced) {
         console.error('External note sync failed for note', noteId)
         return
       }
 
       await window.measlyLegacyDb.saveNoteSnapshot(noteId, currentText, false)
+      console.debug('[external-note] saved current state snapshot after external write', { noteId, textLength: currentText.length })
       externalNoteOriginalTextByIdRef.current.set(noteId, currentText)
       externalNoteOriginalHashByIdRef.current.set(noteId, hash)
       latestEditorTextRef.current = currentText
@@ -4500,8 +4605,18 @@ ${markdownHtml}
 
       if (!activeNoteId || !persistenceReady || activeNoteHasDebugTag) return
 
+      const noteSummary = notes.find((note) => note.id === activeNoteId)
+      const isExternal = noteSummary ? isExternalNote(noteSummary) : false
       const isUserEditableSource =
         event.source === 'user-input' || event.source === 'history-undo' || event.source === 'history-redo'
+
+      if (isExternal && isUserEditableSource) {
+        console.warn('[external-note] editor text change detected for external note', {
+          noteId: activeNoteId,
+          textLength: normalizedText.length,
+          source: event.source,
+        })
+      }
 
       if (!isUserEditableSource) {
         // Do not derive save/pause transitions from hydration/programmatic events.
