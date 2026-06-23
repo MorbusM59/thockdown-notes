@@ -1065,6 +1065,9 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     renderScrollTotalTimeSec: roundForSignature(clamp(toFiniteNumber(source.renderScrollTotalTimeSec, getRenderScrollTotalTimeSec()), 0, 2)),
     renderScrollMaxSpeedPxPerSec: Math.round(clamp(toFiniteNumber(source.renderScrollMaxSpeedPxPerSec, getRenderScrollMaxSpeedPxPerSec()), 1000, 100000)),
     renderScrollSkew: roundForSignature(clamp(toFiniteNumber(source.renderScrollSkew, getRenderScrollSkew()), RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX)),
+    audioKeyVolume: clamp(toFiniteNumber(source.audioKeyVolume, 1), 0, 1),
+    audioBassVolume: clamp(toFiniteNumber(source.audioBassVolume, 0), 0, 1),
+    audioTrebleVolume: clamp(toFiniteNumber(source.audioTrebleVolume, 0), 0, 1),
     highlightColors: normalizedHighlightColors,
     textureMaterials: {
       appGrid: normalizeTextureMaterialForLoadoutSignature(normalizedTextureMaterials.appGrid),
@@ -1681,9 +1684,9 @@ function App() {
   const [texturePreviewMaterial, setTexturePreviewMaterial] = useState<TextureMaterialSettings>(() => toTexturePreviewMaterial(DEFAULT_TEXTURE_MATERIALS.appGrid))
   const [textureSeedInput, setTextureSeedInput] = useState(() => String(DEFAULT_TEXTURE_MATERIALS.appGrid.seed))
   const [isTextureSeedEditing, setIsTextureSeedEditing] = useState(false)
-  const [audioKeyVolume, setAudioKeyVolume] = useState(0.6)
-  const [audioBassVolume, setAudioBassVolume] = useState(0.5)
-  const [audioTrebleVolume, setAudioTrebleVolume] = useState(0.5)
+  const [audioKeyVolume, setAudioKeyVolume] = useState(1)
+  const [audioBassVolume, setAudioBassVolume] = useState(0)
+  const [audioTrebleVolume, setAudioTrebleVolume] = useState(0)
   const [appGridTextureSize, setAppGridTextureSize] = useState({ width: 1280, height: 720 })
   const [sidebarTextureSize, setSidebarTextureSize] = useState({ width: 512, height: 720 })
   const [editorStageTextureSize, setEditorStageTextureSize] = useState({ width: 1280, height: 720 })
@@ -1935,6 +1938,9 @@ function App() {
     editorFontSize: DEFAULT_EDITOR_FONT_SIZE,
     editorSpacing: DEFAULT_EDITOR_SPACING,
     editorGlyphPaddingPx: DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
+    audioKeyVolume: 1,
+    audioBassVolume: 0,
+    audioTrebleVolume: 0,
     renderScrollDynamic: DEFAULT_RENDER_SCROLL_DYNAMIC,
     renderScrollResponsiveness: DEFAULT_RENDER_SCROLL_RESPONSIVENESS,
     renderScrollTotalTimeSec: DEFAULT_RENDER_SCROLL_TOTAL_TIME_SEC,
@@ -1953,6 +1959,9 @@ function App() {
       editorFontSize,
       editorSpacing,
       editorGlyphPaddingPx,
+      audioKeyVolume,
+      audioBassVolume,
+      audioTrebleVolume,
       renderScrollDynamic,
       renderScrollResponsiveness,
       renderScrollTotalTimeSec,
@@ -1977,9 +1986,12 @@ function App() {
     highlightColors,
     renderScrollDynamic,
     renderScrollResponsiveness,
+    renderScrollTotalTimeSec,
     renderScrollMaxSpeedPxPerSec,
     renderScrollSkew,
-    renderScrollTotalTimeSec,
+    audioKeyVolume,
+    audioBassVolume,
+    audioTrebleVolume,
     textureMaterials,
     viewFontSize,
     viewSpacing,
@@ -2005,7 +2017,9 @@ function App() {
     setRenderScrollResponsiveness(clamp(loadout.renderScrollResponsiveness, 0.1, 5))
     setRenderScrollTotalTimeSec(clamp(loadout.renderScrollTotalTimeSec, 0, 2))
     setRenderScrollMaxSpeedPxPerSec(clamp(loadout.renderScrollMaxSpeedPxPerSec, 1000, 100000))
-    setRenderScrollSkew(clamp(loadout.renderScrollSkew, RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX))
+    setAudioKeyVolume(clamp(loadout.audioKeyVolume, 0, 1))
+    setAudioBassVolume(clamp(loadout.audioBassVolume, 0, 1))
+    setAudioTrebleVolume(clamp(loadout.audioTrebleVolume, 0, 1))
     setHighlightColors({
       caret: loadout.highlightColors.caret,
       search: loadout.highlightColors.search,

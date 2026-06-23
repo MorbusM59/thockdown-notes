@@ -13,6 +13,9 @@ export type UiLayoutLoadout = {
   editorFontSize: 'xs' | 's' | 'm' | 'l' | 'xl';
   editorSpacing: 'tight' | 'compact' | 'cozy' | 'wide';
   editorGlyphPaddingPx: number;
+  audioKeyVolume: number;
+  audioBassVolume: number;
+  audioTrebleVolume: number;
   renderScrollDynamic: number;
   renderScrollResponsiveness: number;
   renderScrollTotalTimeSec: number;
