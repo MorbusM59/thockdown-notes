@@ -10,6 +10,7 @@ export interface TypingSoundPlayOptions {
   detune?: number
   playbackRate?: number
   reverse?: boolean
+  gain?: number
 }
 
 export class TypingSoundManager {
@@ -100,7 +101,7 @@ export class TypingSoundManager {
     }
 
     const gainNode = this.audioContext.createGain()
-    gainNode.gain.value = layer.gain
+    gainNode.gain.value = options?.gain ?? layer.gain
     source.connect(gainNode).connect(this.masterGain)
 
     source.start()

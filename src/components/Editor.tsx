@@ -1,8 +1,9 @@
-import React, { useRef, useState, useEffect, useCallback, useLayoutEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useLayoutEffect, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
+import { typingSoundManager } from '../sound/TypingSoundManager';
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
 import { cancelQuantizedSmoothScroll, scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
@@ -425,6 +426,19 @@ export function Editor({
     reportInvariantIssues('selection-change', validateSelectionInvariants(latestTextRef.current, event.selection));
     bindings?.onSelectionChange?.(event);
   }, [bindings]);
+
+  const handleEditorKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    switch (event.key) {
+      case 'ArrowLeft':
+      case 'ArrowRight':
+      case 'ArrowUp':
+      case 'ArrowDown':
+        void typingSoundManager.playRandomClick({ detune: 1200, gain: 0.3 });
+        break;
+      default:
+        break;
+    }
+  }, []);
 
   const buildViewport = useCallback((): EditorViewportState => ({
     topBoundaryPx: quantizeTopEdge(topBoundary, lineHeightPx),
@@ -1187,7 +1201,8 @@ export function Editor({
                       // hydration can proceed) but is not visible.
                       visibility: hasViewportLines && fontReady ? 'visible' : 'hidden',
                     }}
-                    spellCheck={false} 
+                    spellCheck={false}
+                    onKeyDown={handleEditorKeyDown}
                   />
                 }
                 placeholder={
