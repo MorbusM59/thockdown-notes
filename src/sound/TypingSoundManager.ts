@@ -6,11 +6,18 @@ export interface TypingSoundLayerConfig {
   assetIndexes: number[]
 }
 
+export interface TypingSoundEchoOptions {
+  delayMs: number
+  count: number
+  decay: number
+}
+
 export interface TypingSoundPlayOptions {
   detune?: number
   playbackRate?: number
   reverse?: boolean
   gain?: number
+  echo?: TypingSoundEchoOptions
 }
 
 export class TypingSoundManager {
@@ -100,15 +107,66 @@ export class TypingSoundManager {
       source.detune.value = options.detune
     }
 
+    const effectiveGain = options?.gain ?? layer.gain
     const gainNode = this.audioContext.createGain()
-    gainNode.gain.value = options?.gain ?? layer.gain
+    gainNode.gain.value = effectiveGain
     source.connect(gainNode).connect(this.masterGain)
 
-    source.start()
-    source.onended = () => {
-      source.disconnect()
-      gainNode.disconnect()
+    const echoSources: Array<{ source: AudioBufferSourceNode; gainNode: GainNode; delayMs: number }> = []
+    if (options?.echo && this.masterGain) {
+      const { count, delayMs, decay } = options.echo
+      for (let i = 1; i <= count; i += 1) {
+        const echoSource = this.audioContext.createBufferSource()
+        echoSource.buffer = source.buffer
+        if (options?.playbackRate !== undefined) {
+          echoSource.playbackRate.value = options.playbackRate
+        }
+        if (options?.detune !== undefined) {
+          echoSource.detune.value = options.detune
+        }
+
+        const echoGainNode = this.audioContext.createGain()
+        echoGainNode.gain.value = effectiveGain * Math.pow(decay, i)
+        echoSource.connect(echoGainNode).connect(this.masterGain)
+        echoSources.push({ source: echoSource, gainNode: echoGainNode, delayMs: delayMs * i })
+      }
     }
+
+    const playbackRate = options?.playbackRate ?? 1
+    source.start()
+    for (let i = 0; i < echoSources.length; i += 1) {
+      const echo = echoSources[i]
+      echo.source.start(this.audioContext.currentTime + (options?.echo!.delayMs ?? 0) * (i + 1) / 1000)
+    }
+
+    const directDurationMs = (buffer.duration / playbackRate) * 1000
+    const echoDelayMs = options?.echo ? options.echo.delayMs * options.echo.count : 0
+    const cleanupDelayMs = directDurationMs + echoDelayMs + 100
+
+    window.setTimeout(() => {
+      try {
+        source.disconnect()
+      } catch {
+        // best effort cleanup
+      }
+      try {
+        gainNode.disconnect()
+      } catch {
+        // best effort cleanup
+      }
+      for (const echo of echoSources) {
+        try {
+          echo.source.disconnect()
+        } catch {
+          // best effort cleanup
+        }
+        try {
+          echo.gainNode.disconnect()
+        } catch {
+          // best effort cleanup
+        }
+      }
+    }, cleanupDelayMs)
   }
 
   private async ensureContextRunning(): Promise<void> {
