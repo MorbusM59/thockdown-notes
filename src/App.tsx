@@ -1218,6 +1218,8 @@ const NoteListItem = memo(function NoteListItem({
     onArmHoverLeave(note.id)
   }, [note.id, onArmHoverLeave])
 
+  const displayTitle = isExternalNote(note) ? note.fileName : note.title
+
   return (
     <div
       className={`note-list-item${isActive ? ' is-active' : ''}${isTreeVariant ? ' is-tree-card' : ''}${isModified ? ' is-modified' : ''}${isExternalNote(note) ? ' is-external' : ''}${armedAction === 'archive' ? ' is-armed-for-archiving' : ''}${armedAction === 'deletion' ? ' is-armed-for-deletion' : ''}${armedAction === 'save' ? ' is-armed-for-saving' : ''}`}
@@ -1233,7 +1235,7 @@ const NoteListItem = memo(function NoteListItem({
       tabIndex={0}
     >
       <div className="note-list-content">
-        <div className="note-list-title">{note.title || 'Untitled'}</div>
+        <div className="note-list-title">{displayTitle || 'Untitled'}</div>
         {isTreeVariant ? null : (
           <div className="note-list-meta-row">
             <span className="note-list-meta-left">{createdDate}</span>
