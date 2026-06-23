@@ -3445,6 +3445,22 @@ ${markdownHtml}
       })
   }, [importExternalFileAsTempNote])
 
+  const handleAppDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+  }, [])
+
+  const handleAppDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    const file = event.dataTransfer.files?.[0]
+    if (!file || !file.path) {
+      return
+    }
+
+    enqueueExternalFileImport(file.path)
+  }, [enqueueExternalFileImport])
+
   const activeNoteSummary = useMemo(() => {
     if (!activeNoteId) return null
     return notes.find((note) => note.id === activeNoteId) ?? null
@@ -7879,7 +7895,7 @@ ${markdownHtml}
   }, [syncSidebarTexture, sidebarMode, isSidebarScrollbarMode])
 
   return (
-    <div className="app-root">
+    <div className="app-root" onDragOver={handleAppDragOver} onDrop={handleAppDrop}>
       <div
         className="app-shell app-grid"
         ref={appShellRef}

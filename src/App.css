@@ -1064,7 +1064,24 @@ button.active,
   background-color: #ffe1e1;
 }
 
-/* Note list content */
+.date-view .note-list-item.is-external,
+.date-view .note-list-item.is-external.is-modified,
+.date-view .note-list-item.is-armed-for-saving,
+.date-view .note-list-item.is-armed-for-saving.is-active {
+}
+
+.date-view .note-list-item.is-external {
+  border-radius: 0;
+}
+
+.date-view .note-list-item.is-external.is-modified {
+  border-style: dashed;
+}
+
+.date-view .note-list-item.is-armed-for-saving {
+  outline: 2px solid #ff0000;
+}
+
 .note-list-content {
   display:        flex;
   flex:           1 1 auto;
