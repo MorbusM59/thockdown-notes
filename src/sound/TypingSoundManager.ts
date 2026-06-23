@@ -9,12 +9,14 @@ export interface TypingSoundLayerConfig {
 export interface TypingSoundPlayOptions {
   detune?: number
   playbackRate?: number
+  reverse?: boolean
 }
 
 export class TypingSoundManager {
   private audioContext: AudioContext | null = null
   private masterGain: GainNode | null = null
   private buffers: AudioBuffer[] = []
+  private reversedBuffers: AudioBuffer[] | null = null
   private loaded = false
   private loadingPromise: Promise<void> | null = null
   private layers: Record<string, TypingSoundLayerConfig> = {
@@ -50,6 +52,7 @@ export class TypingSoundManager {
       )
 
       this.buffers = buffers
+      this.reversedBuffers = buffers.map((buffer) => this.createReversedBuffer(buffer, context))
       this.loaded = true
     })()
 
@@ -87,7 +90,7 @@ export class TypingSoundManager {
     if (!buffer) return
 
     const source = this.audioContext.createBufferSource()
-    source.buffer = buffer
+    source.buffer = options?.reverse ? this.getReversedBuffer(assetIndex) : buffer
 
     if (options?.playbackRate !== undefined) {
       source.playbackRate.value = options.playbackRate
@@ -122,6 +125,23 @@ export class TypingSoundManager {
     if (this.audioContext) return this.audioContext
     const AudioContextConstructor = window.AudioContext || (window as any).webkitAudioContext
     return new AudioContextConstructor()
+  }
+
+  private createReversedBuffer(buffer: AudioBuffer, context: AudioContext): AudioBuffer {
+    const reversed = context.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate)
+    for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+      const sourceData = buffer.getChannelData(channel)
+      const reversedData = reversed.getChannelData(channel)
+      for (let i = 0; i < buffer.length; i += 1) {
+        reversedData[i] = sourceData[buffer.length - 1 - i]
+      }
+    }
+    return reversed
+  }
+
+  private getReversedBuffer(assetIndex: number): AudioBuffer | null {
+    if (!this.reversedBuffers) return null
+    return this.reversedBuffers[assetIndex] ?? null
   }
 }
 

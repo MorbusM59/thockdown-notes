@@ -4628,10 +4628,18 @@ ${markdownHtml}
     return delta > 0 && delta <= 8
   }, [])
 
+  const shouldPlayReverseTypingSound = useCallback((event: EditorTextChangeEvent) => {
+    if (event.source !== 'user-input') return false
+    const delta = event.text.length - event.previousText.length
+    return delta < 0 && delta >= -8
+  }, [])
+
   const bindings = useMemo<EditorBindings>(() => ({
     onTextChange: (event: EditorTextChangeEvent) => {
       if (shouldPlayTypingSound(event)) {
         void typingSoundManager.playRandomClick()
+      } else if (shouldPlayReverseTypingSound(event)) {
+        void typingSoundManager.playRandomClick({ reverse: true, detune: 600 })
       }
 
       const normalizedText = normalizeInternalText(event.text)
