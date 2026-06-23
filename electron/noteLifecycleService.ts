@@ -187,17 +187,24 @@ export class NoteLifecycleService {
       text = sanitizedText;
 
       if (record?.isTemp) {
-        this.databaseService.upsertNoteContent({
-          id: input.id,
-          title: titleFromText(sanitizedText),
-          filePath,
-          text: sanitizedText,
-          createdAtMs: record.createdAtMs,
-          updatedAtMs: Date.now(),
-          isTemp: true,
-          hasUnsavedChanges: record.hasUnsavedChanges,
-          syncMode: record.syncMode,
-        });
+        const sanitizedTitle = titleFromText(sanitizedText);
+        const shouldUpdateTempNote =
+          sanitizedText !== rawText ||
+          sanitizedTitle !== record.title;
+
+        if (shouldUpdateTempNote) {
+          this.databaseService.upsertNoteContent({
+            id: input.id,
+            title: sanitizedTitle,
+            filePath,
+            text: sanitizedText,
+            createdAtMs: record.createdAtMs,
+            updatedAtMs: Date.now(),
+            isTemp: true,
+            hasUnsavedChanges: record.hasUnsavedChanges,
+            syncMode: record.syncMode,
+          });
+        }
       } else {
         if (sanitizedText !== rawText) {
           await fs.writeFile(filePath, sanitizedText, 'utf8');

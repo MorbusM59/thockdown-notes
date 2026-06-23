@@ -951,10 +951,17 @@ export class DatabaseService {
     const db = this.requireDb();
     const timestamp = new Date().toISOString();
 
-    db.prepare(`
-      INSERT INTO note_snapshots (noteId, content, timestamp, isManual)
-      VALUES (?, ?, ?, ?)
-    `).run(noteId, content, timestamp, isManual ? 1 : 0);
+    const tx = db.transaction(() => {
+      if (!isManual) {
+        db.prepare('DELETE FROM note_snapshots WHERE noteId = ? AND isManual = 0').run(noteId);
+      }
+      db.prepare(`
+        INSERT INTO note_snapshots (noteId, content, timestamp, isManual)
+        VALUES (?, ?, ?, ?)
+      `).run(noteId, content, timestamp, isManual ? 1 : 0);
+    });
+
+    tx();
   }
 
   getNoteSnapshots(noteId: string): Array<{
@@ -1093,8 +1100,12 @@ export class DatabaseService {
 
   deleteTempNote(noteId: string): void {
     const db = this.requireDb();
-    db.prepare('DELETE FROM notes WHERE id = ?').run(noteId);
-    db.prepare('DELETE FROM notes_fts WHERE noteId = ?').run(noteId);
+    const tx = db.transaction(() => {
+      db.prepare('DELETE FROM note_snapshots WHERE noteId = ?').run(noteId);
+      db.prepare('DELETE FROM notes WHERE id = ?').run(noteId);
+      db.prepare('DELETE FROM notes_fts WHERE noteId = ?').run(noteId);
+    });
+    tx();
   }
 
   getTextureCache(request: TextureCacheRequest): TextureCacheHit | null {

@@ -1619,6 +1619,11 @@ function App() {
   const pageJumpInputRef = useRef<HTMLInputElement | null>(null)
   const textureSeedInputRef = useRef<HTMLInputElement | null>(null)
   const [notes, setNotes] = useState<NoteSummary[]>([])
+  const notesRef = useRef<NoteSummary[]>([])
+
+  useEffect(() => {
+    notesRef.current = notes
+  }, [notes])
   const [tagInputValue, setTagInputValue] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [documentFindQuery, setDocumentFindQuery] = useState('')
@@ -3137,7 +3142,7 @@ ${markdownHtml}
 
     pendingSaveTextRef.current = null
     try {
-      const noteSummary = notes.find((note) => note.id === activeNoteId)
+      const noteSummary = notesRef.current.find((note) => note.id === activeNoteId)
       const isExternal = noteSummary ? isExternalNote(noteSummary) : false
       if (isExternal) {
         console.warn('[external-note] flushSave triggered for external note', { noteId: activeNoteId, textLength: nextText.length, nextText })
@@ -3172,7 +3177,7 @@ ${markdownHtml}
     } catch (error) {
       console.error('Failed to persist note', error)
     }
-  }, [activeNoteId, notes])
+  }, [activeNoteId])
 
   const flushPendingSaveNow = useCallback(async () => {
     if (saveTimerRef.current !== null) {
@@ -3237,22 +3242,14 @@ ${markdownHtml}
     })
     updateEditModeSnapshotCache(preloadedSnapshot)
 
-    latestEditorTextRef.current = hydratedText
-    pendingEditRestoreSnapshotRef.current = preloadedSnapshot
-    pendingRenderViewAnchorRatioRef.current = null
-    setActiveNoteId(loaded.id)
-    setActiveNoteText(hydratedText)
-    pendingViewportRestoreRef.current = null
+    let originalText: string | null = null
+    let originalHash: string | null = null
 
     if (isExternalNote(loaded)) {
       const snapshotRows = await window.measlyLegacyDb?.getNoteSnapshots(loaded.id) ?? []
-      const originalSnapshotRow = snapshotRows
-        .filter((row) => !row.isManual)
-        .reverse()
-        .find(() => true)
-        ?? snapshotRows[snapshotRows.length - 1]
+      const originalSnapshotRow = snapshotRows.find((row) => !row.isManual) ?? snapshotRows[0]
 
-      const originalText = originalSnapshotRow
+      originalText = originalSnapshotRow
         ? normalizeInternalText(originalSnapshotRow.content)
         : hydratedText
 
@@ -3264,11 +3261,17 @@ ${markdownHtml}
       }
 
       externalNoteOriginalTextByIdRef.current.set(loaded.id, originalText)
-      const originalHash = await hashNormalizedText(originalText)
+      originalHash = await hashNormalizedText(originalText)
       externalNoteOriginalHashByIdRef.current.set(loaded.id, originalHash)
       console.warn('[external-note] stored original hash for external note', { noteId: loaded.id, originalHash })
     }
 
+    latestEditorTextRef.current = hydratedText
+    pendingEditRestoreSnapshotRef.current = preloadedSnapshot
+    pendingRenderViewAnchorRatioRef.current = null
+    setActiveNoteId(loaded.id)
+    setActiveNoteText(hydratedText)
+    pendingViewportRestoreRef.current = null
     await saveSelectedNoteState(loaded.id)
   }, [
     activeNoteId,
