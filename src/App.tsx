@@ -1747,6 +1747,7 @@ function App() {
   const [isTrashViewDeleteArmed, setIsTrashViewDeleteArmed] = useState(false)
   const [armedNoteActionState, setArmedNoteActionState] = useState<{ noteId: string; action: NoteArmedAction } | null>(null)
   const noteArmTimerRef = useRef<{ noteId: string; button: 0 | 2; timeoutId: number; quickReleaseAction: ProtectedQuickReleaseAction | null } | null>(null)
+  const skipArmedLeftClickRef = useRef<string | null>(null)
   const trashButtonArmTimerRef = useRef<number | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const previewTextureRef = useRef<HTMLDivElement>(null)
@@ -3879,7 +3880,22 @@ ${markdownHtml}
       await window.measlyLegacyDb.saveNoteSnapshot(noteId, currentText, false)
       externalNoteOriginalTextByIdRef.current.set(noteId, currentText)
       externalNoteOriginalHashByIdRef.current.set(noteId, hash)
+      latestEditorTextRef.current = currentText
+      if (activeNoteId === noteId) {
+        setActiveNoteText(currentText)
+      }
       setCurrentExternalNoteHash(hash)
+      setNotes((previous) => {
+        const index = previous.findIndex((note) => note.id === noteId)
+        if (index < 0) return previous
+
+        const next = [...previous]
+        next[index] = {
+          ...next[index],
+          updatedAtMs: Date.now(),
+        }
+        return next
+      })
     } catch (error) {
       console.error('Failed to save external note to file', error)
     }
@@ -4067,6 +4083,7 @@ ${markdownHtml}
 
     const timeoutId = window.setTimeout(() => {
       setArmedNoteActionState({ noteId, action: 'save' })
+      skipArmedLeftClickRef.current = noteId
       if (noteArmTimerRef.current?.noteId === noteId) {
         noteArmTimerRef.current = null
       }
@@ -4105,6 +4122,11 @@ ${markdownHtml}
   const handleArmedNoteLeftClick = useCallback((noteId: string) => {
     const armed = armedNoteActionState
     if (!armed || armed.noteId !== noteId) {
+      return
+    }
+
+    if (skipArmedLeftClickRef.current === noteId) {
+      skipArmedLeftClickRef.current = null
       return
     }
 
