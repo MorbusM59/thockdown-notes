@@ -3116,12 +3116,18 @@ ${markdownHtml}
       }
       const normalizedText = normalizeInternalText(nextText)
       console.debug('[external-note] flushing note into DB', { noteId: activeNoteId, textLength: normalizedText.length, normalizedText })
+
       const savedSummary = await window.measlyNotes.saveNote({ id: activeNoteId, text: normalizedText })
+
       if (isExternal) {
-        console.warn('[external-note] external note current state persisted into DB', { noteId: activeNoteId, textLength: normalizedText.length })
+        if (window.measlyLegacyDb) {
+          await window.measlyLegacyDb.saveNoteSnapshot(activeNoteId, normalizedText, false)
+        }
+        console.warn('[external-note] external note current state persisted into DB snapshot', { noteId: activeNoteId, textLength: normalizedText.length })
         latestEditorTextRef.current = normalizedText
         setActiveNoteText(normalizedText)
       }
+
       setNotes((previous) => {
         const index = previous.findIndex((note) => note.id === savedSummary.id)
         if (index < 0) return previous
@@ -3974,7 +3980,7 @@ ${markdownHtml}
 
     console.debug('[external-note] explicit save path starting', { noteId, textLength: currentText.length, hash })
     try {
-      const synced = await window.measlyLegacyDb.syncExternalNoteToFile(noteId)
+      const synced = await window.measlyLegacyDb.syncExternalNoteToFile(noteId, currentText)
       console.debug('[external-note] external file write result', { noteId, synced })
       if (!synced) {
         console.error('External note sync failed for note', noteId)
@@ -3983,6 +3989,7 @@ ${markdownHtml}
 
       await window.measlyLegacyDb.saveNoteSnapshot(noteId, currentText, false)
       console.debug('[external-note] saved current state snapshot after external write', { noteId, textLength: currentText.length })
+
       externalNoteOriginalTextByIdRef.current.set(noteId, currentText)
       externalNoteOriginalHashByIdRef.current.set(noteId, hash)
       latestEditorTextRef.current = currentText
@@ -4016,15 +4023,15 @@ ${markdownHtml}
 
     noteTransitionLockRef.current = true
     try {
+      if (action === 'close') {
+        await closeExternalNoteWithoutSaving(noteId)
+        return
+      }
+
       await flushPendingSaveNow()
 
       if (action === 'save') {
         await saveExternalNoteToFile(noteId)
-        return
-      }
-
-      if (action === 'close') {
-        await closeExternalNoteWithoutSaving(noteId)
         return
       }
 
@@ -4092,6 +4099,12 @@ ${markdownHtml}
   const closeExternalNoteWithoutSaving = useCallback(async (noteId: string) => {
     if (!window.measlyLegacyDb) return
 
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
+    pendingSaveTextRef.current = null
+
     clearNoteArmTimer()
     if (activeNoteId === noteId) {
       setActiveNoteId(null)
@@ -4112,27 +4125,38 @@ ${markdownHtml}
 
   const handleNoteRightPressStart = useCallback((noteId: string, event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()
-    clearNoteArmTimer()
 
     const summary = notes.find((note) => note.id === noteId)
-    const isNoteArchived = summary ? isArchivedNote(summary) : false
-    const isNoteDeleted = summary ? isDeletedNote(summary) : false
     const isNoteExternal = summary ? isExternalNote(summary) : false
     const isNoteModified = isNoteExternal && noteId === activeNoteId && currentExternalNoteHash !== null && currentExternalNoteHash !== externalNoteOriginalHashByIdRef.current.get(noteId)
 
     if (isNoteExternal && !isNoteModified) {
+      clearNoteArmTimer()
       void closeExternalNoteWithoutSaving(noteId)
       return
     }
 
     if (isNoteExternal && isNoteModified) {
       if (armedNoteActionState?.noteId === noteId && armedNoteActionState.action === 'close') {
-        setArmedNoteActionState(null)
-        void closeExternalNoteWithoutSaving(noteId)
         return
       }
+
+      clearNoteArmTimer()
+      const timeoutId = window.setTimeout(() => {
+        setArmedNoteActionState({ noteId, action: 'close' })
+        if (noteArmTimerRef.current?.noteId === noteId) {
+          noteArmTimerRef.current = null
+        }
+      }, NOTE_RIGHT_CLICK_HOLD_MS)
+
+      noteArmTimerRef.current = { noteId, button: 2, timeoutId, quickReleaseAction: null }
+      return
     }
 
+    clearNoteArmTimer()
+
+    const isNoteArchived = summary ? isArchivedNote(summary) : false
+    const isNoteDeleted = summary ? isDeletedNote(summary) : false
     if (isNoteArchived || isNoteDeleted) {
       setArmedNoteActionState(null)
     } else {
@@ -4144,27 +4168,23 @@ ${markdownHtml}
       : (isNoteArchived ? 'remove-archived' : null)
 
     const timeoutId = window.setTimeout(() => {
-      if (isNoteExternal && isNoteModified) {
-        setArmedNoteActionState({ noteId, action: 'close' })
-      } else {
-        setArmedNoteActionState((previous) => {
-          if (quickReleaseAction) {
-            return {
-              noteId,
-              action: 'deletion',
-            }
-          }
-
-          if (!previous || previous.noteId !== noteId) {
-            return previous
-          }
-
+      setArmedNoteActionState((previous) => {
+        if (quickReleaseAction) {
           return {
             noteId,
             action: 'deletion',
           }
-        })
-      }
+        }
+
+        if (!previous || previous.noteId !== noteId) {
+          return previous
+        }
+
+        return {
+          noteId,
+          action: 'deletion',
+        }
+      })
 
       if (noteArmTimerRef.current?.noteId === noteId) {
         noteArmTimerRef.current = null

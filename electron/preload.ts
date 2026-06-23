@@ -136,7 +136,7 @@ const legacyDbApi: LegacyDbApi = {
   getTempNoteIds: () => ipcRenderer.invoke(LEGACY_DB_CHANNELS.getTempNoteIds),
   getTempNoteIdByExternalPath: (externalPath: string) =>
     ipcRenderer.invoke(LEGACY_DB_CHANNELS.getTempNoteIdByExternalPath, externalPath),
-  syncExternalNoteToFile: (noteId: string) => ipcRenderer.invoke(LEGACY_DB_CHANNELS.syncExternalNoteToFile, noteId),
+  syncExternalNoteToFile: (noteId: string, content: string) => ipcRenderer.invoke(LEGACY_DB_CHANNELS.syncExternalNoteToFile, noteId, content),
   getExternalSyncState: (noteId: string) => ipcRenderer.invoke(LEGACY_DB_CHANNELS.getExternalSyncState, noteId),
   deleteTempNote: (noteId: string) => ipcRenderer.invoke(LEGACY_DB_CHANNELS.deleteTempNote, noteId),
 }

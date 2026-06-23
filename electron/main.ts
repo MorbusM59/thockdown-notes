@@ -443,19 +443,18 @@ function registerIpcHandlers() {
   ipcMain.handle(LEGACY_DB_CHANNELS.getExternalSyncState, async (_event, noteId: string) =>
     databaseService!.getExternalSyncState(noteId),
   );
-  ipcMain.handle(LEGACY_DB_CHANNELS.syncExternalNoteToFile, async (_event, noteId: string) => {
+  ipcMain.handle(LEGACY_DB_CHANNELS.syncExternalNoteToFile, async (_event, noteId: string, content: string) => {
     const record = databaseService!.getNoteRecord(noteId);
     if (!record?.isTemp || !record.externalPath) {
       return false;
     }
 
-    const content = databaseService!.getNoteContentSnapshot(noteId);
-    if (content === null) {
-      return false;
-    }
-
     try {
       writeFileSync(record.externalPath, content, 'utf8');
+      const verification = readFileSync(record.externalPath, 'utf8');
+      if (verification !== content) {
+        return false;
+      }
       databaseService!.markExternalNoteSynced(noteId);
       return true;
     } catch {

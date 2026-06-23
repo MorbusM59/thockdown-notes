@@ -59,7 +59,7 @@ export type LegacyDbApi = {
   convertTempNoteToRegular(noteId: string, newFilePath: string): Promise<void>;
   getTempNoteIds(): Promise<string[]>;
   getTempNoteIdByExternalPath(externalPath: string): Promise<string | null>;
-  syncExternalNoteToFile(noteId: string): Promise<boolean>;
+  syncExternalNoteToFile(noteId: string, content: string): Promise<boolean>;
   getExternalSyncState(noteId: string): Promise<ExternalSyncState>;
   deleteTempNote(noteId: string): Promise<void>;
 };

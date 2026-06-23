@@ -194,6 +194,9 @@ export class NoteLifecycleService {
           text: sanitizedText,
           createdAtMs: record.createdAtMs,
           updatedAtMs: Date.now(),
+          isTemp: true,
+          hasUnsavedChanges: record.hasUnsavedChanges,
+          syncMode: record.syncMode,
         });
       } else {
         if (sanitizedText !== rawText) {

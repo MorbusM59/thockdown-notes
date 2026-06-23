@@ -1082,6 +1082,10 @@ button.active,
   outline: 2px solid #ff0000;
 }
 
+.date-view .note-list-item.is-armed-for-closing {
+  outline: 2px solid #ffff00;
+}
+
 .note-list-content {
   display:        flex;
   flex:           1 1 auto;
