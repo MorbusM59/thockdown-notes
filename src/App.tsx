@@ -15,6 +15,9 @@ import type {
   EditorViewportChangeEvent,
   EditorViewportState,
 } from './editor/EditorContract'
+import {
+  typingSoundManager,
+} from './sound/TypingSoundManager'
 import type { PersistedMenuState, PersistedSidebarViewState, PersistedViewportState } from './shared/appState'
 import type { UiLayoutLoadout } from './shared/loadouts'
 import type { NoteSummary } from './shared/noteLifecycle'
@@ -4615,8 +4618,22 @@ ${markdownHtml}
     }
   }, [persistenceReady, activeNoteId, writeDebugEntry])
 
+  useEffect(() => {
+    void typingSoundManager.load()
+  }, [])
+
+  const shouldPlayTypingSound = useCallback((event: EditorTextChangeEvent) => {
+    if (event.source !== 'user-input') return false
+    const delta = event.text.length - event.previousText.length
+    return delta > 0 && delta <= 8
+  }, [])
+
   const bindings = useMemo<EditorBindings>(() => ({
     onTextChange: (event: EditorTextChangeEvent) => {
+      if (shouldPlayTypingSound(event)) {
+        void typingSoundManager.playRandomClick()
+      }
+
       const normalizedText = normalizeInternalText(event.text)
       latestEditorTextRef.current = normalizedText
       latestEditorSelectionRef.current = event.selection
