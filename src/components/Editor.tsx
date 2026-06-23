@@ -436,11 +436,18 @@ export function Editor({
         void typingSoundManager.playRandomClick({ detune: 1200, gain: 0.3 });
         break;
       case 'Tab':
-        void typingSoundManager.playRandomClick({
-          detune: -800,
-          gain: 0.7,
-          echo: { count: 2, delayMs: 80, decay: 0.4 },
-        })
+        if (event.shiftKey) {
+          void typingSoundManager.playRandomClick({
+            reverse: true,
+            gain: 0.7,
+            echo: { count: 2, delayMs: 80, decay: 0.4 },
+            detune: 600 });
+        } else {
+          void typingSoundManager.playRandomClick({
+            gain: 0.7,
+            echo: { count: 2, delayMs: 80, decay: 0.4 },
+          });
+        }
         break;
       default:
         break;
