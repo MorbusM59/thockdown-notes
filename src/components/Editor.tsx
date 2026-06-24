@@ -428,22 +428,26 @@ export function Editor({
   }, [bindings]);
 
   const handleEditorKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    const keyId = `key:${event.key}`
     switch (event.key) {
       case 'ArrowLeft':
       case 'ArrowRight':
       case 'ArrowUp':
       case 'ArrowDown':
-        void typingSoundManager.playRandomClick({ detune: 1200, gain: 0.3 });
+        void typingSoundManager.playRandomClick({ keyId, detune: 1200, gain: 0.3 });
         break;
       case 'Tab':
         if (event.shiftKey) {
           void typingSoundManager.playRandomClick({
+            keyId,
             reverse: true,
             gain: 0.7,
             echo: { count: 2, delayMs: 80, decay: 0.4 },
-            detune: 600 });
+            detune: 600,
+          });
         } else {
           void typingSoundManager.playRandomClick({
+            keyId,
             gain: 0.7,
             echo: { count: 2, delayMs: 80, decay: 0.4 },
           });

@@ -4900,12 +4900,31 @@ ${markdownHtml}
     return delta < 0 && delta >= -8
   }, [])
 
+  const deriveTypingSoundKeyId = useCallback((event: EditorTextChangeEvent): string | undefined => {
+    if (event.source !== 'user-input') return undefined
+
+    const delta = event.text.length - event.previousText.length
+    if (delta === 1) {
+      const inserted = event.text.slice(event.previousText.length)
+      if (inserted.length === 1) {
+        return `key:${inserted}`
+      }
+    }
+
+    if (delta === -1) {
+      return 'key:backspace'
+    }
+
+    return undefined
+  }, [])
+
   const bindings = useMemo<EditorBindings>(() => ({
     onTextChange: (event: EditorTextChangeEvent) => {
+      const keyId = deriveTypingSoundKeyId(event)
       if (shouldPlayTypingSound(event)) {
-        void typingSoundManager.playRandomClick()
+        void typingSoundManager.playRandomClick({ keyId })
       } else if (shouldPlayReverseTypingSound(event)) {
-        void typingSoundManager.playRandomClick({ reverse: true, detune: 600 })
+        void typingSoundManager.playRandomClick({ keyId, reverse: true, detune: 600 })
       }
 
       const normalizedText = normalizeInternalText(event.text)

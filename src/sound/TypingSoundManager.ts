@@ -13,11 +13,27 @@ export interface TypingSoundEchoOptions {
 }
 
 export interface TypingSoundPlayOptions {
+  keyId?: string
+  assetIndex?: number
   detune?: number
   playbackRate?: number
   reverse?: boolean
   gain?: number
   echo?: TypingSoundEchoOptions
+}
+
+interface TypingSoundHistoryEntry {
+  keyId: string
+  attributes: {
+    assetIndex: number
+    detune: number
+    playbackRate: number
+    reverse: boolean
+    gain: number
+    echo?: TypingSoundEchoOptions
+    bassDetune: number
+    trebleDetune: number
+  }
 }
 
 export class TypingSoundManager {
@@ -35,6 +51,7 @@ export class TypingSoundManager {
   private reversedBufferGroups: Record<string, AudioBuffer[]> | null = null
   private reversedClickBuffersBySet: Record<TypingSoundSetId, AudioBuffer[]> | null = null
   private activeKeySet: TypingSoundSetId = DEFAULT_TYPING_SOUND_SET
+  private recentKeySoundHistory: TypingSoundHistoryEntry[] = []
   private loaded = false
   private loadingPromise: Promise<void> | null = null
   private layers: Record<string, TypingSoundLayerConfig> = {
@@ -120,25 +137,79 @@ export class TypingSoundManager {
     }
   }
 
-  async playRandomClick(options?: TypingSoundPlayOptions): Promise<void> {
-    await this.playLayer('click', options)
+  private getSoundAttributes(options?: TypingSoundPlayOptions) {
+    const keyId = options?.keyId
+    const existing = keyId
+      ? this.recentKeySoundHistory.find((entry) => entry.keyId === keyId)
+      : undefined
+
+    if (existing) {
+      // Promote the existing key to recent usage.
+      this.recentKeySoundHistory = [
+        existing,
+        ...this.recentKeySoundHistory.filter((entry) => entry.keyId !== keyId),
+      ]
+      return existing.attributes
+    }
 
     const baseDetune = options?.detune ?? 0
-    const bassDetune = baseDetune + this.getRandomLayerDetune()
-    const trebleDetune = baseDetune + this.getRandomLayerDetune()
+    const attributes = {
+      assetIndex: options?.assetIndex ?? Math.floor(Math.random() * TYPING_SOUND_ASSETS[this.activeKeySet].length),
+      detune: options?.detune ?? 0,
+      playbackRate: options?.playbackRate ?? 1,
+      reverse: options?.reverse ?? false,
+      gain: options?.gain ?? 1,
+      echo: options?.echo ? { ...options.echo } : undefined,
+      bassDetune: baseDetune + this.getRandomLayerDetune(),
+      trebleDetune: baseDetune + this.getRandomLayerDetune(),
+    }
+
+    if (keyId) {
+      this.recentKeySoundHistory = [
+        { keyId, attributes },
+        ...this.recentKeySoundHistory.filter((entry) => entry.keyId !== keyId),
+      ].slice(0, 5)
+    }
+
+    return attributes
+  }
+
+  async playRandomClick(options?: TypingSoundPlayOptions): Promise<void> {
+    const soundAttributes = this.getSoundAttributes(options)
+
+    await this.playLayer('click', {
+      ...options,
+      assetIndex: soundAttributes.assetIndex,
+      detune: soundAttributes.detune,
+      playbackRate: soundAttributes.playbackRate,
+      reverse: soundAttributes.reverse,
+      gain: soundAttributes.gain,
+      echo: soundAttributes.echo,
+    })
 
     void this.playLayer('bass', {
       ...options,
-      detune: bassDetune,
+      detune: soundAttributes.bassDetune,
+      playbackRate: soundAttributes.playbackRate,
+      reverse: soundAttributes.reverse,
+      gain: soundAttributes.gain,
+      echo: soundAttributes.echo,
     })
     void this.playLayer('treble', {
       ...options,
-      detune: trebleDetune,
+      detune: soundAttributes.trebleDetune,
+      playbackRate: soundAttributes.playbackRate,
+      reverse: soundAttributes.reverse,
+      gain: soundAttributes.gain,
+      echo: soundAttributes.echo,
     })
   }
 
   setTypingSoundSet(setId: TypingSoundSetId): void {
-    this.activeKeySet = setId
+    if (this.activeKeySet !== setId) {
+      this.recentKeySoundHistory = []
+      this.activeKeySet = setId
+    }
   }
 
   private getRandomLayerDetune(): number {
@@ -158,7 +229,9 @@ export class TypingSoundManager {
       : this.bufferGroups[layerId]
     if (!buffers || buffers.length === 0) return
 
-    const assetIndex = layer.assetIndexes[Math.floor(Math.random() * layer.assetIndexes.length)]
+    const assetIndex = options?.assetIndex !== undefined && layer.assetIndexes.includes(options.assetIndex)
+      ? options.assetIndex
+      : layer.assetIndexes[Math.floor(Math.random() * layer.assetIndexes.length)]
     const buffer = buffers[assetIndex]
     if (!buffer) return
 
