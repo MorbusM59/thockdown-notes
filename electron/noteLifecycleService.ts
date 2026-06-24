@@ -308,6 +308,13 @@ export class NoteLifecycleService {
 
     if (record?.isTemp) {
       const nowMs = Date.now();
+      const snapshotRows = await this.getNoteSnapshots({ id: input.id });
+      const originalSnapshotRow = snapshotRows.find((row) => !row.isManual) ?? snapshotRows[0];
+      const originalSnapshotText = originalSnapshotRow ? normalizeText(originalSnapshotRow.content) : null;
+      const isCleanAgainstOriginal = originalSnapshotText !== null && originalSnapshotText === text;
+      const hasUnsavedChanges = !isCleanAgainstOriginal;
+      const syncMode = isCleanAgainstOriginal ? true : false;
+
       this.databaseService.upsertNoteContent({
         id: input.id,
         title: titleFromText(text),
@@ -317,10 +324,10 @@ export class NoteLifecycleService {
         createdAtMs: record.createdAtMs,
         updatedAtMs: nowMs,
         isTemp: true,
-        hasUnsavedChanges: true,
-        syncMode: false,
+        hasUnsavedChanges,
+        syncMode,
       });
-      this.databaseService.updateTempNoteState(input.id, true, false);
+      this.databaseService.updateTempNoteState(input.id, hasUnsavedChanges, syncMode);
       const summary = await this.readSummary(this.databaseService.getNoteRecord(input.id) ?? {
         id: input.id,
         title: titleFromText(text),
@@ -330,8 +337,8 @@ export class NoteLifecycleService {
         contentChecksum: null,
         isTemp: true,
         externalPath: record.externalPath,
-        hasUnsavedChanges: true,
-        syncMode: false,
+        hasUnsavedChanges,
+        syncMode,
       });
 
       if (!summary) {

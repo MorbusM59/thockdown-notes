@@ -642,7 +642,8 @@ function isSameNoteSummary(a: NoteSummary, b: NoteSummary): boolean {
     a.tags.every((tag, index) => tag === b.tags[index]) &&
     a.createdAtMs === b.createdAtMs &&
     a.updatedAtMs === b.updatedAtMs &&
-    a.sizeBytes === b.sizeBytes
+    a.sizeBytes === b.sizeBytes &&
+    Boolean(a.hasUnsavedChanges) === Boolean(b.hasUnsavedChanges)
   )
 }
 
@@ -3675,6 +3676,18 @@ ${markdownHtml}
     return activeNoteSummary?.tags.some((tag) => normalizeTagName(tag) === DEBUG_TAG_NAME) ?? false
   }, [activeNoteSummary])
 
+  const getCurrentExternalNoteModifiedState = useCallback((note: NoteSummary, currentHash: string | null = currentExternalNoteHash): boolean => {
+    if (!isExternalNote(note)) return false
+    if (note.id !== activeNoteId) {
+      return Boolean(note.hasUnsavedChanges)
+    }
+
+    return (
+      currentHash !== null
+      && currentHash !== externalNoteOriginalHashByIdRef.current.get(note.id)
+    )
+  }, [activeNoteId, currentExternalNoteHash])
+
   useEffect(() => {
     if (!activeNoteId || !activeNoteSummary || !isExternalNote(activeNoteSummary)) {
       setCurrentExternalNoteHash(null)
@@ -3685,15 +3698,26 @@ ${markdownHtml}
     void (async () => {
       const currentText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
       const hash = await hashNormalizedText(currentText)
-      if (!disposed) {
-        setCurrentExternalNoteHash(hash)
-      }
+      if (disposed) return
+
+      setCurrentExternalNoteHash(hash)
+
+      const updatedState = getCurrentExternalNoteModifiedState(activeNoteSummary, hash)
+      setNotes((previous) => {
+        const index = previous.findIndex((note) => note.id === activeNoteId)
+        if (index < 0) return previous
+        const existing = previous[index]
+        if (existing.hasUnsavedChanges === updatedState) return previous
+        const next = [...previous]
+        next[index] = { ...existing, hasUnsavedChanges: updatedState }
+        return next
+      })
     })()
 
     return () => {
       disposed = true
     }
-  }, [activeNoteId, activeNoteSummary, activeNoteText, editorTextVersion])
+  }, [activeNoteId, activeNoteSummary, activeNoteText, editorTextVersion, getCurrentExternalNoteModifiedState])
 
   const persistEditUiState = useCallback((noteId: string, options?: { immediate?: boolean }) => {
     const notesApi = window.measlyNotes
@@ -4117,10 +4141,14 @@ ${markdownHtml}
     let writeAttemptedViaNoteApi = false
     let writeAttemptedViaExternalApi = false
 
+    let syncedSummary: NoteSummary | null = null
     try {
       writeAttemptedViaNoteApi = true
       writeSucceeded = await window.measlyNotes.syncExternalNoteToFile({ id: noteId, content: currentText })
       console.debug('[external-note] syncExternalNoteToFile result', { noteId, externalPath, writeSucceeded })
+      if (writeSucceeded) {
+        syncedSummary = await window.measlyNotes.updateExternalNoteState({ id: noteId, hasUnsavedChanges: false, syncMode: true })
+      }
     } catch (error) {
       console.error('[external-note] syncExternalNoteToFile exception', { noteId, externalPath, error })
     }
@@ -4131,7 +4159,7 @@ ${markdownHtml}
         writeSucceeded = await window.measlyExternalFiles.writeFileContent(externalPath, currentText)
         console.debug('[external-note] writeFileContent fallback result', { noteId, externalPath, writeSucceeded })
         if (writeSucceeded) {
-          await window.measlyNotes.updateExternalNoteState({ id: noteId, hasUnsavedChanges: false, syncMode: true })
+          syncedSummary = await window.measlyNotes.updateExternalNoteState({ id: noteId, hasUnsavedChanges: false, syncMode: true })
         }
       } catch (error) {
         console.error('[external-note] writeFileContent fallback exception', { noteId, externalPath, error })
@@ -4150,17 +4178,19 @@ ${markdownHtml}
       try {
         const savedSummary = await window.measlyNotes.saveNote({ id: noteId, text: currentText })
         console.debug('[external-note] saveExternalNoteToFile persisted temp note text into DB', { noteId, externalPath, savedSummary })
+
+        const nextSummary = syncedSummary ?? savedSummary
         setNotes((previous) => {
-          const index = previous.findIndex((note) => note.id === savedSummary.id)
+          const index = previous.findIndex((note) => note.id === nextSummary.id)
           if (index < 0) return previous
 
           const existing = previous[index]
-          if (isSameNoteSummary(existing, savedSummary)) {
+          if (isSameNoteSummary(existing, nextSummary)) {
             return previous
           }
 
           const next = [...previous]
-          next[index] = savedSummary
+          next[index] = nextSummary
           return next
         })
       } catch (error) {
@@ -4338,7 +4368,7 @@ ${markdownHtml}
 
     const summary = notes.find((note) => note.id === noteId)
     const isNoteExternal = summary ? isExternalNote(summary) : false
-    const isNoteModified = isNoteExternal && noteId === activeNoteId && currentExternalNoteHash !== null && currentExternalNoteHash !== externalNoteOriginalHashByIdRef.current.get(noteId)
+    const isNoteModified = summary ? getCurrentExternalNoteModifiedState(summary) : false
 
     if (isNoteExternal && !isNoteModified) {
       clearNoteArmTimer()
@@ -4410,7 +4440,7 @@ ${markdownHtml}
 
     const summary = notes.find((note) => note.id === noteId)
     const isNoteExternal = summary ? isExternalNote(summary) : false
-    const isNoteModified = isNoteExternal && noteId === activeNoteId && currentExternalNoteHash !== null && currentExternalNoteHash !== externalNoteOriginalHashByIdRef.current.get(noteId)
+    const isNoteModified = summary ? getCurrentExternalNoteModifiedState(summary) : false
 
     if (!isNoteExternal || !isNoteModified) {
       return
@@ -4883,6 +4913,23 @@ ${markdownHtml}
           textLength: normalizedText.length,
           source: event.source,
         })
+
+        const originalExternalText = externalNoteOriginalTextByIdRef.current.get(activeNoteId)
+        const isCurrentlyModified = originalExternalText !== undefined
+          ? normalizedText !== originalExternalText
+          : Boolean(noteSummary && noteSummary.hasUnsavedChanges)
+
+        if (noteSummary && noteSummary.hasUnsavedChanges !== isCurrentlyModified) {
+          setNotes((previous) => {
+            const index = previous.findIndex((note) => note.id === activeNoteId)
+            if (index < 0) return previous
+            const existing = previous[index]
+            if (existing.hasUnsavedChanges === isCurrentlyModified) return previous
+            const next = [...previous]
+            next[index] = { ...existing, hasUnsavedChanges: isCurrentlyModified }
+            return next
+          })
+        }
       }
 
       if (!isUserEditableSource) {
@@ -8423,7 +8470,7 @@ ${markdownHtml}
               <div className="notes-list date-view" role="listbox" aria-label="Note list">
                 {pagedVisibleNotes.map((note) => {
                   const isActive = note.id === activeNoteId
-                  const isModified = isActive && isExternalNote(note) && currentExternalNoteHash !== null && currentExternalNoteHash !== externalNoteOriginalHashByIdRef.current.get(note.id)
+                  const isModified = isExternalNote(note) && getCurrentExternalNoteModifiedState(note)
                   return (
                     <NoteListItem
                       key={note.id}
