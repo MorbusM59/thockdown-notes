@@ -428,7 +428,13 @@ export function Editor({
   }, [bindings]);
 
   const handleEditorKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
-    const keyId = `key:${event.key}`
+    const modifiers = [
+      event.shiftKey ? 'Shift' : null,
+      event.ctrlKey ? 'Control' : null,
+      event.altKey ? 'Alt' : null,
+      event.metaKey ? 'Meta' : null,
+    ].filter(Boolean).join('+')
+    const keyId = modifiers ? `key:${modifiers}:${event.key}` : `key:${event.key}`
     switch (event.key) {
       case 'ArrowLeft':
       case 'ArrowRight':
