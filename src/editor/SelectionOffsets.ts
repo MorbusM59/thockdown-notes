@@ -106,7 +106,27 @@ function getOffsetWithinRoot(rootEl: HTMLElement, node: Node, offset: number): n
   for (let index = 0; index < paragraphs.length; index += 1) {
     const paragraph = paragraphs[index];
     if (paragraph.contains(node) || paragraph === node) {
-      return accumulated + getOffsetWithinContainer(paragraph, node, offset);
+      const innerOffset = getOffsetWithinContainer(paragraph, node, offset);
+      const paraTextLength = normalizePlainText(paragraph.textContent ?? '').length;
+      const hasNextParagraph = index < paragraphs.length - 1;
+
+      // Disambiguate the inter-paragraph boundary: when the anchor/focus node is the
+      // paragraph element itself (not a text node inside it) and its DOM offset points
+      // past its last child, Lexical places the cursor at the "end of this paragraph".
+      // Visually that position is indistinguishable from "start of next paragraph", but
+      // after a delete/merge operation Lexical consistently produces this form.
+      // Treating it as end-of-line means the caret appears on the wrong logical line,
+      // so Enter re-inserts the removed blank line instead of splitting the next one.
+      // The canonical offset for this position is start-of-next-paragraph, i.e.
+      // accumulated + paraTextLength + 1 (the LF separator). We only apply this when
+      // the paragraph actually has text (empty paragraphs represent blank lines and
+      // their past-end position is genuinely on that blank line, not the next one).
+      const nodeIsElement = !(node instanceof Text);
+      if (nodeIsElement && hasNextParagraph && paraTextLength > 0 && innerOffset >= paraTextLength) {
+        return accumulated + paraTextLength + 1;
+      }
+
+      return accumulated + innerOffset;
     }
 
     accumulated += normalizePlainText(paragraph.textContent ?? '').length;
