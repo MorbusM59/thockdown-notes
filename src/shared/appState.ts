@@ -55,6 +55,8 @@ export interface PersistedMenuState {
   audioKeyVolume?: number;
   audioBassVolume?: number;
   audioTrebleVolume?: number;
+  audioReverbStrength?: number;
+  audioReverbSpace?: number;
   audioReverbAmount?: number;
   typingSoundEnabled?: boolean;
   typingSoundSet?: 'A' | 'B' | 'C';

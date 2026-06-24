@@ -40,9 +40,11 @@ export class TypingSoundManager {
   private audioContext: AudioContext | null = null
   private masterGain: GainNode | null = null
   private reverbNode: ConvolverNode | null = null
+  private reverbFilter: BiquadFilterNode | null = null
   private reverbDryGain: GainNode | null = null
   private reverbWetGain: GainNode | null = null
-  private reverbAmount = 0
+  private reverbStrength = 0
+  private reverbSpace = 0
   private bufferGroups: Record<string, AudioBuffer[]> = {
     bass: [],
     treble: [],
@@ -87,21 +89,26 @@ export class TypingSoundManager {
       const dryGain = context.createGain()
       const wetGain = context.createGain()
       const reverb = context.createConvolver()
+      const reverbFilter = context.createBiquadFilter()
 
       masterGain.gain.value = 1
       dryGain.gain.value = 1
       wetGain.gain.value = 0
-      reverb.buffer = this.createReverbImpulseResponse(context, 1.5, 2)
+      reverbFilter.type = 'lowpass'
+      reverbFilter.frequency.value = 12000
+      reverbFilter.Q.value = 0.7
 
       dryGain.connect(masterGain)
-      reverb.connect(wetGain).connect(masterGain)
+      reverb.connect(reverbFilter).connect(wetGain).connect(masterGain)
       masterGain.connect(context.destination)
 
       this.audioContext = context
       this.masterGain = masterGain
       this.reverbNode = reverb
+      this.reverbFilter = reverbFilter
       this.reverbDryGain = dryGain
       this.reverbWetGain = wetGain
+      this.updateReverbImpulseResponse()
 
       const clickBuffersBySet = {} as Record<TypingSoundSetId, AudioBuffer[]>
       for (const setId of TYPING_SOUND_SET_IDS) {
@@ -236,12 +243,24 @@ export class TypingSoundManager {
     }
   }
 
-  setReverbAmount(amount: number): void {
-    this.reverbAmount = Math.max(0, Math.min(1, amount))
+  setReverbStrength(amount: number): void {
+    this.reverbStrength = Math.max(0, Math.min(1, amount))
     if (this.reverbDryGain && this.reverbWetGain) {
-      this.reverbDryGain.gain.value = 1 - this.reverbAmount
-      this.reverbWetGain.gain.value = this.reverbAmount
+      this.reverbDryGain.gain.value = 1 - this.reverbStrength
+      this.reverbWetGain.gain.value = this.reverbStrength
     }
+    this.updateReverbImpulseResponse()
+  }
+
+  setReverbSpace(amount: number): void {
+    this.reverbSpace = Math.max(0, Math.min(1, amount))
+    if (this.reverbFilter) {
+      const minFreq = 2000
+      const maxFreq = 12000
+      this.reverbFilter.frequency.value = minFreq + (maxFreq - minFreq) * (1 - this.reverbSpace)
+      this.reverbFilter.Q.value = 0.7 + this.reverbSpace * 0.8
+    }
+    this.updateReverbImpulseResponse()
   }
 
   private getRandomLayerDetune(): number {
@@ -390,16 +409,30 @@ export class TypingSoundManager {
     return new AudioContextConstructor()
   }
 
-  private createReverbImpulseResponse(context: AudioContext, durationSec: number, decay: number): AudioBuffer {
+  private updateReverbImpulseResponse(): void {
+    if (!this.audioContext || !this.reverbNode) return
+
+    const durationSec = 0.8 + this.reverbStrength * 1.7
+    const decay = 1 + this.reverbStrength * 3
+    const buffer = this.createReverbImpulseResponse(this.audioContext, durationSec, decay, this.reverbSpace)
+    this.reverbNode.buffer = buffer
+  }
+
+  private createReverbImpulseResponse(context: AudioContext, durationSec: number, decay: number, roomSpace: number): AudioBuffer {
     const sampleRate = context.sampleRate
-    const length = sampleRate * durationSec
+    const length = Math.round(sampleRate * durationSec)
     const impulse = context.createBuffer(2, length, sampleRate)
+    const diffusion = 0.3 + roomSpace * 0.55
+
     for (let channel = 0; channel < 2; channel += 1) {
       const channelData = impulse.getChannelData(channel)
+      let previous = 0
       for (let i = 0; i < length; i += 1) {
         const progress = i / length
         const envelope = Math.pow(1 - progress, decay)
-        channelData[i] = (Math.random() * 2 - 1) * envelope
+        const noise = (Math.random() * 2 - 1) * envelope
+        previous = previous * diffusion + noise * (1 - diffusion)
+        channelData[i] = previous
       }
     }
     return impulse
