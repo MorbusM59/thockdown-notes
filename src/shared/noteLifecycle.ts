@@ -10,6 +10,13 @@ export const NOTE_LIFECYCLE_CHANNELS = {
   reorderTags: 'tags:reorder',
   renameTag: 'tags:rename',
   listTags: 'tags:list',
+  saveNoteUiState: 'notes:save-note-ui-state',
+  getNoteUiState: 'notes:get-note-ui-state',
+  updateExternalNoteState: 'notes:update-external-note-state',
+  syncExternalNoteToFile: 'notes:sync-external-note-to-file',
+  getNoteIdByExternalPath: 'notes:get-note-id-by-external-path',
+  saveNoteSnapshot: 'notes:save-note-snapshot',
+  getNoteSnapshots: 'notes:get-note-snapshots',
 } as const;
 
 export interface NoteSummary {
@@ -20,6 +27,10 @@ export interface NoteSummary {
   createdAtMs: number;
   updatedAtMs: number;
   sizeBytes: number;
+  isExternal?: boolean;
+  externalPath?: string | null;
+  hasUnsavedChanges?: boolean;
+  isInSync?: boolean;
 }
 
 export interface NoteDocument extends NoteSummary {
@@ -28,6 +39,8 @@ export interface NoteDocument extends NoteSummary {
 
 export interface CreateNoteInput {
   initialText?: string;
+  externalPath?: string;
+  title?: string;
 }
 
 export interface SaveNoteInput {
@@ -73,6 +86,20 @@ export interface TagSummary {
   usageCount: number;
 }
 
+export type NoteUiStatePayload = {
+  progressPreview?: number | null;
+  progressEdit?: number | null;
+  cursorPos?: number | null;
+  scrollTop?: number | null;
+};
+
+export type NoteUiState = {
+  progressPreview: number | null;
+  progressEdit: number | null;
+  cursorPos: number | null;
+  scrollTop: number | null;
+};
+
 export interface NoteLifecycleApi {
   listNotes(): Promise<NoteSummary[]>;
   loadNote(input: LoadNoteInput): Promise<NoteDocument>;
@@ -85,4 +112,11 @@ export interface NoteLifecycleApi {
   reorderNoteTags(input: ReorderTagsInput): Promise<string[]>;
   renameTag(input: RenameTagInput): Promise<{ updatedNoteIds: string[] }>;
   listTags(): Promise<TagSummary[]>;
+  saveNoteUiState(input: { id: string; payload: NoteUiStatePayload }): Promise<void>;
+  getNoteUiState(input: LoadNoteInput): Promise<NoteUiState>;
+  updateExternalNoteState(input: { id: string; hasUnsavedChanges: boolean; syncMode: boolean }): Promise<NoteSummary>;
+  syncExternalNoteToFile(input: { id: string; content: string }): Promise<boolean>;
+  getNoteIdByExternalPath(input: { externalPath: string }): Promise<string | null>;
+  saveNoteSnapshot(input: { id: string; content: string; isManual?: boolean }): Promise<void>;
+  getNoteSnapshots(input: LoadNoteInput): Promise<Array<{ id: number; noteId: string; content: string; timestamp: string; isManual: boolean }>>;
 }

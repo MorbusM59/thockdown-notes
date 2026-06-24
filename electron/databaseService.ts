@@ -579,6 +579,7 @@ export class DatabaseService {
     createdAtMs: number;
     updatedAtMs: number;
     isTemp?: boolean;
+    externalPath?: string | null;
     hasUnsavedChanges?: boolean;
     syncMode?: boolean;
   }): void {
@@ -601,10 +602,11 @@ export class DatabaseService {
         lastEdited,
         contentChecksum,
         isTemp,
+        externalPath,
         hasUnsavedChanges,
         syncMode
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         filePath = excluded.filePath,
@@ -613,6 +615,7 @@ export class DatabaseService {
         lastEdited = excluded.lastEdited,
         contentChecksum = excluded.contentChecksum,
         isTemp = excluded.isTemp,
+        externalPath = excluded.externalPath,
         hasUnsavedChanges = excluded.hasUnsavedChanges,
         syncMode = excluded.syncMode
     `).run(
@@ -624,6 +627,7 @@ export class DatabaseService {
       updatedAtIso,
       contentChecksum,
       isTemp,
+      input.externalPath ?? null,
       hasUnsavedChanges,
       syncMode,
     );

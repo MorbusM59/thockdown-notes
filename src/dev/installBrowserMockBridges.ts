@@ -11,6 +11,8 @@ import type {
   NoteLifecycleApi,
   NoteSummary,
   NoteTagsInput,
+  NoteUiState,
+  NoteUiStatePayload,
   RemoveTagInput,
   RenameTagInput,
   ReorderTagsInput,
@@ -246,6 +248,46 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
         note.title = deriveTitle(input.text)
         return clone(toSummary(note))
       })
+    },
+
+    async saveNoteUiState(_input: { id: string; payload: NoteUiStatePayload }): Promise<void> {
+      // Browser mock does not persist UI state outside memory yet.
+      return
+    },
+
+    async getNoteUiState(_input: LoadNoteInput): Promise<NoteUiState> {
+      return {
+        progressPreview: null,
+        progressEdit: null,
+        cursorPos: null,
+        scrollTop: null,
+      }
+    },
+
+    async updateExternalNoteState(input: { id: string; hasUnsavedChanges: boolean; syncMode: boolean }): Promise<NoteSummary> {
+      const note = getById(input.id)
+      if (!note) {
+        throw new Error(`Note not found: ${input.id}`)
+      }
+      return clone(toSummary(note))
+    },
+
+    async syncExternalNoteToFile(_input: { id: string; content: string }): Promise<boolean> {
+      return true
+    },
+
+    async getNoteIdByExternalPath(input: { externalPath: string }): Promise<string | null> {
+      const note = storeRef.current.notes.find((note) => note.externalPath === input.externalPath)
+      return note?.id ?? null
+    },
+
+    async saveNoteSnapshot(_input: { id: string; content: string; isManual?: boolean }): Promise<void> {
+      // Browser mock does not persist snapshots.
+      return
+    },
+
+    async getNoteSnapshots(_input: LoadNoteInput): Promise<Array<{ id: number; noteId: string; content: string; timestamp: string; isManual: boolean }>> {
+      return []
     },
 
     async deleteNote(input: DeleteNoteInput): Promise<void> {

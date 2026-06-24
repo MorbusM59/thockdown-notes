@@ -16,8 +16,6 @@ import type { AppStateApi } from '../src/shared/appState'
 import { APP_STATE_CHANNELS } from '../src/shared/appState'
 import type { ExternalFilesApi } from '../src/shared/externalFiles'
 import { EXTERNAL_FILE_CHANNELS } from '../src/shared/externalFiles'
-import type { LegacyDbApi, NoteUiStatePayload } from '../src/shared/legacyDbFeatures'
-import { LEGACY_DB_CHANNELS } from '../src/shared/legacyDbFeatures'
 import type { TextureCacheApi } from '../src/shared/textures'
 import { TEXTURE_CHANNELS } from '../src/shared/textures'
 import type { UiLoadoutApi } from '../src/shared/loadouts'
@@ -60,6 +58,13 @@ const noteLifecycleApi: NoteLifecycleApi = {
   reorderNoteTags: (input: ReorderTagsInput) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.reorderTags, input),
   renameTag: (input: RenameTagInput) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.renameTag, input),
   listTags: () => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.listTags),
+  saveNoteUiState: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.saveNoteUiState, input),
+  getNoteUiState: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.getNoteUiState, input),
+  updateExternalNoteState: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.updateExternalNoteState, input),
+  syncExternalNoteToFile: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.syncExternalNoteToFile, input),
+  getNoteIdByExternalPath: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.getNoteIdByExternalPath, input),
+  saveNoteSnapshot: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.saveNoteSnapshot, input),
+  getNoteSnapshots: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.getNoteSnapshots, input),
 }
 
 contextBridge.exposeInMainWorld('measlyNotes', noteLifecycleApi)
@@ -116,32 +121,6 @@ const externalFilesApi: ExternalFilesApi = {
 
 contextBridge.exposeInMainWorld('measlyExternalFiles', externalFilesApi)
 
-const legacyDbApi: LegacyDbApi = {
-  getLastEditedNoteId: () => ipcRenderer.invoke(LEGACY_DB_CHANNELS.getLastEditedNoteId),
-  getTrashNoteIds: () => ipcRenderer.invoke(LEGACY_DB_CHANNELS.getTrashNoteIds),
-  searchNoteIdsByTag: (tagQuery: string) => ipcRenderer.invoke(LEGACY_DB_CHANNELS.searchNoteIdsByTag, tagQuery),
-  saveNoteUiState: (noteId: string, payload: NoteUiStatePayload) =>
-    ipcRenderer.invoke(LEGACY_DB_CHANNELS.saveNoteUiState, noteId, payload),
-  getNoteUiState: (noteId: string) => ipcRenderer.invoke(LEGACY_DB_CHANNELS.getNoteUiState, noteId),
-  saveNoteSnapshot: (noteId: string, content: string, isManual?: boolean) =>
-    ipcRenderer.invoke(LEGACY_DB_CHANNELS.saveNoteSnapshot, noteId, content, isManual),
-  getNoteSnapshots: (noteId: string) => ipcRenderer.invoke(LEGACY_DB_CHANNELS.getNoteSnapshots, noteId),
-  deleteNoteSnapshot: (snapshotId: number) => ipcRenderer.invoke(LEGACY_DB_CHANNELS.deleteNoteSnapshot, snapshotId),
-  createTempNote: (title: string, externalPath: string, originalEncoding?: string) =>
-    ipcRenderer.invoke(LEGACY_DB_CHANNELS.createTempNote, title, externalPath, originalEncoding),
-  updateTempNoteState: (noteId: string, hasUnsavedChanges: boolean, syncMode: boolean) =>
-    ipcRenderer.invoke(LEGACY_DB_CHANNELS.updateTempNoteState, noteId, hasUnsavedChanges, syncMode),
-  convertTempNoteToRegular: (noteId: string, newFilePath: string) =>
-    ipcRenderer.invoke(LEGACY_DB_CHANNELS.convertTempNoteToRegular, noteId, newFilePath),
-  getTempNoteIds: () => ipcRenderer.invoke(LEGACY_DB_CHANNELS.getTempNoteIds),
-  getTempNoteIdByExternalPath: (externalPath: string) =>
-    ipcRenderer.invoke(LEGACY_DB_CHANNELS.getTempNoteIdByExternalPath, externalPath),
-  syncExternalNoteToFile: (noteId: string, content: string) => ipcRenderer.invoke(LEGACY_DB_CHANNELS.syncExternalNoteToFile, noteId, content),
-  getExternalSyncState: (noteId: string) => ipcRenderer.invoke(LEGACY_DB_CHANNELS.getExternalSyncState, noteId),
-  deleteTempNote: (noteId: string) => ipcRenderer.invoke(LEGACY_DB_CHANNELS.deleteTempNote, noteId),
-}
-
-contextBridge.exposeInMainWorld('measlyLegacyDb', legacyDbApi)
 
 const textureCacheApi: TextureCacheApi = {
   getCachedTexture: (request) => ipcRenderer.invoke(TEXTURE_CHANNELS.getCached, request),

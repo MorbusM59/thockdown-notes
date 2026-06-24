@@ -8,6 +8,8 @@ import type {
   LoadNoteInput,
   NoteDocument,
   NoteSummary,
+  NoteUiState,
+  NoteUiStatePayload,
   ReorderTagsInput,
   RemoveTagInput,
   RenameTagInput,
@@ -133,14 +135,19 @@ export class NoteLifecycleService {
       const parsed = parseNoteMetadata(text, true);
       const fileName = path.basename(record.filePath);
 
+      const tags = this.databaseService.getNoteTags(record.id);
       return {
         id: record.id,
         fileName,
         title: titleFromText(parsed.bodyText),
-        tags: this.databaseService.getNoteTags(record.id),
+        tags,
         createdAtMs: stat.birthtimeMs || record.createdAtMs,
         updatedAtMs: stat.mtimeMs,
         sizeBytes: stat.size,
+        isExternal: tags.includes(EXTERNAL_TAG),
+        externalPath: record.externalPath ?? null,
+        hasUnsavedChanges: record.hasUnsavedChanges,
+        isInSync: Boolean(record.syncMode && !record.hasUnsavedChanges),
       };
     } catch {
       return null;
@@ -223,31 +230,58 @@ export class NoteLifecycleService {
 
     const parsed = parseNoteMetadata(text, shouldSanitize);
 
+    const tags = this.databaseService.getNoteTags(input.id);
     return {
       id: input.id,
       fileName,
       title: titleFromText(parsed.bodyText),
-      tags: this.databaseService.getNoteTags(input.id),
+      tags,
       createdAtMs: stat.birthtimeMs || record?.createdAtMs || stat.mtimeMs,
       updatedAtMs: stat.mtimeMs,
       sizeBytes: Buffer.byteLength(text, 'utf8'),
       text: parsed.bodyText,
+      isExternal: tags.includes(EXTERNAL_TAG),
+      externalPath: record?.externalPath ?? null,
+      hasUnsavedChanges: record?.hasUnsavedChanges ?? false,
+      isInSync: Boolean(record?.syncMode && !record?.hasUnsavedChanges),
     };
   }
 
   async createNote(input?: CreateNoteInput): Promise<NoteDocument> {
-    await this.ensureNotesDir();
-
     const id = buildNoteId(new Date());
+    const text = normalizeText(input?.initialText ?? '');
+    const title = input?.title ? input.title.trim() || titleFromText(text) : titleFromText(text);
+    const createdAtMs = Date.now();
+    const updatedAtMs = createdAtMs;
+
+    if (input?.externalPath) {
+      const externalPath = input.externalPath;
+      const filePath = externalPath;
+      this.databaseService.upsertNoteContent({
+        id,
+        title,
+        filePath,
+        externalPath,
+        text,
+        createdAtMs,
+        updatedAtMs,
+        isTemp: true,
+        hasUnsavedChanges: false,
+        syncMode: true,
+      });
+      await this.databaseService.addTagToNote(id, EXTERNAL_TAG, 0);
+      return this.loadNote({ id });
+    }
+
+    await this.ensureNotesDir();
     const fileName = idToFileName(id);
     const filePath = path.join(this.notesDir, fileName);
-    const text = normalizeText(input?.initialText ?? '');
 
     await fs.writeFile(filePath, text, 'utf8');
     const stat = await fs.stat(filePath);
     this.databaseService.upsertNoteContent({
       id,
-      title: titleFromText(text),
+      title,
       filePath,
       text,
       createdAtMs: stat.birthtimeMs || stat.mtimeMs,
@@ -267,6 +301,7 @@ export class NoteLifecycleService {
         id: input.id,
         title: titleFromText(text),
         filePath,
+        externalPath: record.externalPath,
         text,
         createdAtMs: record.createdAtMs,
         updatedAtMs: nowMs,
@@ -304,6 +339,9 @@ export class NoteLifecycleService {
       text,
       createdAtMs: stat.birthtimeMs || record?.createdAtMs || stat.mtimeMs,
       updatedAtMs: stat.mtimeMs,
+      externalPath: record?.externalPath ?? null,
+      hasUnsavedChanges: record?.hasUnsavedChanges ?? false,
+      syncMode: record?.syncMode ?? false,
     });
     const summary = await this.readSummary(this.databaseService.getNoteRecord(input.id) ?? {
       id: input.id,
@@ -336,6 +374,54 @@ export class NoteLifecycleService {
     const filePath = record?.filePath ?? path.join(this.notesDir, idToFileName(input.id));
     await fs.unlink(filePath);
     this.databaseService.deleteNote(input.id);
+  }
+
+  async saveNoteUiState(input: { id: string; payload: NoteUiStatePayload }): Promise<void> {
+    this.databaseService.saveNoteUiState(input.id, input.payload);
+  }
+
+  async getNoteUiState(input: LoadNoteInput): Promise<NoteUiState> {
+    return this.databaseService.getNoteUiState(input.id);
+  }
+
+  async updateExternalNoteState(input: { id: string; hasUnsavedChanges: boolean; syncMode: boolean }): Promise<NoteSummary> {
+    this.databaseService.updateTempNoteState(input.id, input.hasUnsavedChanges, input.syncMode);
+    const summary = await this.readSummary(this.databaseService.getNoteRecord(input.id)!);
+    if (!summary) {
+      throw new Error(`Failed to read updated external note summary for id=${input.id}`);
+    }
+    return summary;
+  }
+
+  async saveNoteSnapshot(input: { id: string; content: string; isManual?: boolean }): Promise<void> {
+    this.databaseService.saveNoteSnapshot(input.id, input.content, Boolean(input.isManual));
+  }
+
+  async getNoteSnapshots(input: LoadNoteInput): Promise<Array<{ id: number; noteId: string; content: string; timestamp: string; isManual: boolean }>> {
+    return this.databaseService.getNoteSnapshots(input.id);
+  }
+
+  async syncExternalNoteToFile(input: { id: string; content: string }): Promise<boolean> {
+    const record = this.databaseService.getNoteRecord(input.id);
+    if (!record?.isTemp || !record.externalPath) {
+      return false;
+    }
+
+    try {
+      await fs.writeFile(record.externalPath, input.content, 'utf8');
+      const verification = await fs.readFile(record.externalPath, 'utf8');
+      if (verification !== input.content) {
+        return false;
+      }
+      this.databaseService.markExternalNoteSynced(input.id);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async getNoteIdByExternalPath(input: { externalPath: string }): Promise<string | null> {
+    return this.databaseService.getTempNoteIdByExternalPath(input.externalPath);
   }
 
   async getNoteTags(input: LoadNoteInput): Promise<string[]> {

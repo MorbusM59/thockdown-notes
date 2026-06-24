@@ -9,7 +9,6 @@ import { APP_STATE_CHANNELS, type WindowState } from '../src/shared/appState'
 import { StateService } from './stateService'
 import { DatabaseService } from './databaseService'
 import { EXTERNAL_FILE_CHANNELS } from '../src/shared/externalFiles'
-import { LEGACY_DB_CHANNELS } from '../src/shared/legacyDbFeatures'
 import { TEXTURE_CHANNELS } from '../src/shared/textures'
 import { LOADOUT_CHANNELS } from '../src/shared/loadouts'
 
@@ -210,6 +209,13 @@ function registerIpcHandlers() {
   ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.reorderTags, async (_event, input) => noteLifecycleService!.reorderNoteTags(input));
   ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.renameTag, async (_event, input) => noteLifecycleService!.renameTag(input));
   ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.listTags, async () => noteLifecycleService!.listTags());
+  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.saveNoteUiState, async (_event, input) => noteLifecycleService!.saveNoteUiState(input));
+  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.getNoteUiState, async (_event, input) => noteLifecycleService!.getNoteUiState(input));
+  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.updateExternalNoteState, async (_event, input) => noteLifecycleService!.updateExternalNoteState(input));
+  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.saveNoteSnapshot, async (_event, input) => noteLifecycleService!.saveNoteSnapshot(input));
+  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.getNoteSnapshots, async (_event, input) => noteLifecycleService!.getNoteSnapshots(input));
+  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.syncExternalNoteToFile, async (_event, input) => noteLifecycleService!.syncExternalNoteToFile(input));
+  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.getNoteIdByExternalPath, async (_event, input) => noteLifecycleService!.getNoteIdByExternalPath(input));
 
   ipcMain.handle(APP_STATE_CHANNELS.loadAppState, async () => stateService!.loadAppState());
   ipcMain.handle(APP_STATE_CHANNELS.saveAppState, async (_event, payload) => stateService!.saveAppState(payload));
@@ -406,64 +412,6 @@ function registerIpcHandlers() {
       }
     }
   })
-
-  ipcMain.handle(LEGACY_DB_CHANNELS.getLastEditedNoteId, async () => databaseService!.getLastEditedNoteId());
-  ipcMain.handle(LEGACY_DB_CHANNELS.getTrashNoteIds, async () => databaseService!.getTrashNoteIds());
-  ipcMain.handle(LEGACY_DB_CHANNELS.searchNoteIdsByTag, async (_event, tagQuery: string) =>
-    databaseService!.searchNoteIdsByTag(tagQuery),
-  );
-  ipcMain.handle(LEGACY_DB_CHANNELS.saveNoteUiState, async (_event, noteId: string, payload) => {
-    databaseService!.saveNoteUiState(noteId, payload ?? {});
-  });
-  ipcMain.handle(LEGACY_DB_CHANNELS.getNoteUiState, async (_event, noteId: string) =>
-    databaseService!.getNoteUiState(noteId),
-  );
-  ipcMain.handle(LEGACY_DB_CHANNELS.saveNoteSnapshot, async (_event, noteId: string, content: string, isManual?: boolean) => {
-    databaseService!.saveNoteSnapshot(noteId, content, Boolean(isManual));
-  });
-  ipcMain.handle(LEGACY_DB_CHANNELS.getNoteSnapshots, async (_event, noteId: string) =>
-    databaseService!.getNoteSnapshots(noteId),
-  );
-  ipcMain.handle(LEGACY_DB_CHANNELS.deleteNoteSnapshot, async (_event, snapshotId: number) => {
-    databaseService!.deleteNoteSnapshot(snapshotId);
-  });
-  ipcMain.handle(LEGACY_DB_CHANNELS.createTempNote, async (_event, title: string, externalPath: string, originalEncoding?: string) =>
-    databaseService!.createTempNote({ title, externalPath, originalEncoding }),
-  );
-  ipcMain.handle(LEGACY_DB_CHANNELS.updateTempNoteState, async (_event, noteId: string, hasUnsavedChanges: boolean, syncMode: boolean) => {
-    databaseService!.updateTempNoteState(noteId, hasUnsavedChanges, syncMode);
-  });
-  ipcMain.handle(LEGACY_DB_CHANNELS.convertTempNoteToRegular, async (_event, noteId: string, newFilePath: string) => {
-    databaseService!.convertTempNoteToRegular(noteId, newFilePath);
-  });
-  ipcMain.handle(LEGACY_DB_CHANNELS.getTempNoteIds, async () => databaseService!.getTempNoteIds());
-  ipcMain.handle(LEGACY_DB_CHANNELS.getTempNoteIdByExternalPath, async (_event, externalPath: string) =>
-    databaseService!.getTempNoteIdByExternalPath(externalPath),
-  );
-  ipcMain.handle(LEGACY_DB_CHANNELS.getExternalSyncState, async (_event, noteId: string) =>
-    databaseService!.getExternalSyncState(noteId),
-  );
-  ipcMain.handle(LEGACY_DB_CHANNELS.syncExternalNoteToFile, async (_event, noteId: string, content: string) => {
-    const record = databaseService!.getNoteRecord(noteId);
-    if (!record?.isTemp || !record.externalPath) {
-      return false;
-    }
-
-    try {
-      writeFileSync(record.externalPath, content, 'utf8');
-      const verification = readFileSync(record.externalPath, 'utf8');
-      if (verification !== content) {
-        return false;
-      }
-      databaseService!.markExternalNoteSynced(noteId);
-      return true;
-    } catch {
-      return false;
-    }
-  });
-  ipcMain.handle(LEGACY_DB_CHANNELS.deleteTempNote, async (_event, noteId: string) => {
-    databaseService!.deleteTempNote(noteId);
-  });
 
   ipcMain.handle(TEXTURE_CHANNELS.getCached, async (_event, request) => {
     return databaseService!.getTextureCache(request);

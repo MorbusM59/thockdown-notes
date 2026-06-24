@@ -2432,8 +2432,8 @@ function App() {
     noteId: string,
     payload: { progressEdit: number; cursorPos: number; scrollTop: number },
   ) => {
-    const legacyDb = window.measlyLegacyDb
-    if (!legacyDb) return
+    const notesApi = window.measlyNotes
+    if (!notesApi) return
 
     const { progressEdit, cursorPos, scrollTop } = payload
     const previousPersisted = lastPersistedEditUiStateRef.current
@@ -2451,7 +2451,7 @@ function App() {
         cursorPos,
         scrollTop,
       }
-      await legacyDb.saveNoteUiState(noteId, payload)
+      await notesApi.saveNoteUiState({ id: noteId, payload })
       return
     }
   }, [])
@@ -3153,9 +3153,7 @@ ${markdownHtml}
       const savedSummary = await window.measlyNotes.saveNote({ id: activeNoteId, text: normalizedText })
 
       if (isExternal) {
-        if (window.measlyLegacyDb) {
-          await window.measlyLegacyDb.saveNoteSnapshot(activeNoteId, normalizedText, false)
-        }
+        await window.measlyNotes?.saveNoteSnapshot({ id: activeNoteId, content: normalizedText, isManual: false })
         console.warn('[external-note] external note current state persisted into DB snapshot', { noteId: activeNoteId, textLength: normalizedText.length })
         latestEditorTextRef.current = normalizedText
         setActiveNoteText(normalizedText)
@@ -3202,7 +3200,7 @@ ${markdownHtml}
 
     const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
     const ratio = maxScrollTop <= 0 ? 0 : clamp(container.scrollTop / maxScrollTop, 0, 1)
-    await window.measlyLegacyDb?.saveNoteUiState(noteId, { progressPreview: ratio })
+    await window.measlyNotes?.saveNoteUiState({ id: noteId, payload: { progressPreview: ratio } })
   }, [])
 
   const activateNote = useCallback(async (noteId: string, overrideCursorPos?: number) => {
@@ -3228,7 +3226,7 @@ ${markdownHtml}
 
     const [loaded, nextUiState] = await Promise.all([
       window.measlyNotes.loadNote({ id: noteId }),
-      window.measlyLegacyDb?.getNoteUiState(noteId) ?? Promise.resolve(null),
+      window.measlyNotes?.getNoteUiState({ id: noteId }) ?? Promise.resolve(null),
     ])
     const hydratedText = normalizeInternalText(loaded.text)
     const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
@@ -3246,7 +3244,7 @@ ${markdownHtml}
     let originalHash: string | null = null
 
     if (isExternalNote(loaded)) {
-      const snapshotRows = await window.measlyLegacyDb?.getNoteSnapshots(loaded.id) ?? []
+      const snapshotRows = await window.measlyNotes?.getNoteSnapshots({ id: loaded.id }) ?? []
       const originalSnapshotRow = snapshotRows.find((row) => !row.isManual) ?? snapshotRows[0]
 
       originalText = originalSnapshotRow
@@ -3256,7 +3254,7 @@ ${markdownHtml}
       console.warn('[external-note] activating external note', { noteId: loaded.id, snapshotCount: snapshotRows.length, hasOriginalSnapshot: !!originalSnapshotRow, hydratedLength: hydratedText.length })
 
       if (!snapshotRows.some((row) => !row.isManual)) {
-        await window.measlyLegacyDb?.saveNoteSnapshot(loaded.id, hydratedText, false)
+        await window.measlyNotes?.saveNoteSnapshot({ id: loaded.id, content: hydratedText, isManual: false })
         console.warn('[external-note] created initial original snapshot for external note', { noteId: loaded.id, textLength: hydratedText.length })
       }
 
@@ -3511,9 +3509,8 @@ ${markdownHtml}
 
   const importExternalFileAsTempNote = useCallback(async (filePath: string) => {
     const externalApi = window.measlyExternalFiles
-    const legacyDbApi = window.measlyLegacyDb
     const notesApi = window.measlyNotes
-    if (!externalApi || !legacyDbApi || !notesApi) return
+    if (!externalApi || !notesApi) return
     if (!persistenceReady) return
 
     if (noteTransitionLockRef.current) {
@@ -3524,7 +3521,7 @@ ${markdownHtml}
     try {
       await flushPendingSaveNow()
 
-      const existingTempId = await legacyDbApi.getTempNoteIdByExternalPath(filePath)
+      const existingTempId = await notesApi.getNoteIdByExternalPath({ externalPath: filePath })
       if (existingTempId) {
         console.debug('[external-note] external file already tracked, activating existing temp note', { filePath, noteId: existingTempId })
         await refreshNotes(existingTempId)
@@ -3543,15 +3540,16 @@ ${markdownHtml}
       }
 
       const initialTitle = titleFromFileBasename(fileName)
-      const noteId = await legacyDbApi.createTempNote(initialTitle, filePath, 'utf8')
+      const created = await notesApi.createNote({ initialText: content, externalPath: filePath, title: initialTitle })
+      const noteId = created.id
       console.debug('[external-note] created temp note for external file', { noteId, filePath })
 
       const normalizedContent = normalizeInternalText(content)
       await notesApi.saveNote({ id: noteId, text: normalizedContent })
       console.debug('[external-note] saved imported external content into temp note', { noteId, filePath, contentLength: normalizedContent.length })
-      await legacyDbApi.saveNoteSnapshot(noteId, normalizedContent, false)
+      await notesApi.saveNoteSnapshot({ id: noteId, content: normalizedContent, isManual: false })
       console.debug('[external-note] saved original external snapshot', { noteId, filePath, contentLength: normalizedContent.length })
-      await legacyDbApi.updateTempNoteState(noteId, false, true)
+      await notesApi.updateExternalNoteState({ id: noteId, hasUnsavedChanges: false, syncMode: true })
       console.debug('[external-note] updated temp note sync state for imported external file', { noteId, hasUnsavedChanges: false, syncMode: true })
       await refreshNotes(noteId)
       await activateNote(noteId)
@@ -3631,8 +3629,8 @@ ${markdownHtml}
   }, [activeNoteId, activeNoteSummary, activeNoteText, editorTextVersion])
 
   const persistEditUiState = useCallback((noteId: string, options?: { immediate?: boolean }) => {
-    const legacyDb = window.measlyLegacyDb
-    if (!legacyDb) return
+    const notesApi = window.measlyNotes
+    if (!notesApi) return
 
     const persistNow = async () => {
       const payload = readCurrentEditUiPayload()
@@ -3682,7 +3680,7 @@ ${markdownHtml}
         scrollTop,
       }
 
-      await legacyDb.saveNoteUiState(noteId, payload)
+      await notesApi.saveNoteUiState({ id: noteId, payload })
     }
 
     if (options?.immediate) {
@@ -4003,7 +4001,7 @@ ${markdownHtml}
   }, [notes])
 
   const saveExternalNoteToFile = useCallback(async (noteId: string) => {
-    if (!window.measlyLegacyDb) return
+    if (!window.measlyNotes) return
     if (activeNoteId !== noteId) return
 
     const currentText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
@@ -4011,19 +4009,14 @@ ${markdownHtml}
 
     console.debug('[external-note] explicit save path starting', { noteId, textLength: currentText.length, hash })
     try {
-      const synced = await window.measlyLegacyDb.syncExternalNoteToFile(noteId, currentText)
+      const synced = await window.measlyNotes.syncExternalNoteToFile({ id: noteId, content: currentText })
       console.debug('[external-note] external file write result', { noteId, synced })
       if (!synced) {
         console.error('External note sync failed for note', noteId)
         return
       }
 
-      await window.measlyLegacyDb.saveNoteSnapshot(noteId, currentText, false)
-      console.debug('[external-note] saved current state snapshot after external write', { noteId, textLength: currentText.length })
-
-      externalNoteOriginalTextByIdRef.current.set(noteId, currentText)
-      externalNoteOriginalHashByIdRef.current.set(noteId, hash)
-      latestEditorTextRef.current = currentText
+      await window.measlyNotes.saveNoteSnapshot({ id: noteId, content: currentText, isManual: false })
       if (activeNoteId === noteId) {
         setActiveNoteText(currentText)
       }
@@ -4128,7 +4121,7 @@ ${markdownHtml}
   }, [activateNote, activeNoteId, flushPendingSaveNow, persistenceReady, refreshNotes])
 
   const closeExternalNoteWithoutSaving = useCallback(async (noteId: string) => {
-    if (!window.measlyLegacyDb) return
+    if (!window.measlyNotes) return
 
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current)
@@ -4147,7 +4140,7 @@ ${markdownHtml}
     setCurrentExternalNoteHash((current) => (activeNoteId === noteId ? null : current))
 
     try {
-      await window.measlyLegacyDb.deleteTempNote(noteId)
+      await window.measlyNotes.deleteNote({ id: noteId })
       setNotes((previous) => previous.filter((note) => note.id !== noteId))
     } catch (error) {
       console.error('Failed to delete external temp note', error)
@@ -5051,7 +5044,7 @@ ${markdownHtml}
 
     const restoreFromPersistedEditState = async () => {
       try {
-        const uiState = await window.measlyLegacyDb?.getNoteUiState(activeNoteId)
+        const uiState = await window.measlyNotes?.getNoteUiState({ id: activeNoteId })
         if (cancelled) return
 
         const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
@@ -5154,7 +5147,7 @@ ${markdownHtml}
 
     const preloadEditModeSnapshot = async () => {
       try {
-        const uiState = await window.measlyLegacyDb?.getNoteUiState(activeNoteId)
+        const uiState = await window.measlyNotes?.getNoteUiState({ id: activeNoteId })
         if (cancelled) return
 
         const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
@@ -5215,7 +5208,7 @@ ${markdownHtml}
 
     const restorePersistedEditState = async () => {
       try {
-        const uiState = await window.measlyLegacyDb?.getNoteUiState(activeNoteId)
+        const uiState = await window.measlyNotes?.getNoteUiState({ id: activeNoteId })
         if (cancelled) return
 
         const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
@@ -5324,7 +5317,7 @@ ${markdownHtml}
 
     const restorePreviewScroll = async () => {
       try {
-        const uiState = await window.measlyLegacyDb?.getNoteUiState(activeNoteId)
+        const uiState = await window.measlyNotes?.getNoteUiState({ id: activeNoteId })
         if (cancelled) return
 
         const ratio = uiState?.progressPreview
@@ -5370,7 +5363,7 @@ ${markdownHtml}
         previewScrollSaveTimerRef.current = null
         const maxScrollTop = Math.max(1, container.scrollHeight - container.clientHeight)
         const ratio = maxScrollTop <= 0 ? 0 : (container.scrollTop / maxScrollTop)
-        void window.measlyLegacyDb?.saveNoteUiState(activeNoteId, { progressPreview: ratio })
+        void window.measlyNotes?.saveNoteUiState({ id: activeNoteId, payload: { progressPreview: ratio } })
       }, 120)
     }
 
@@ -5388,7 +5381,7 @@ ${markdownHtml}
     if (!persistenceReady) return
 
     const externalApi = window.measlyExternalFiles
-    if (!externalApi || !window.measlyLegacyDb || !window.measlyNotes) return
+    if (!externalApi || !window.measlyNotes) return
 
     let disposed = false
 

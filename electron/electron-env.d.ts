@@ -27,7 +27,6 @@ interface Window {
   measlyNotes?: import('../src/shared/noteLifecycle').NoteLifecycleApi
   measlyState?: import('../src/shared/appState').AppStateApi
   measlyExternalFiles?: import('../src/shared/externalFiles').ExternalFilesApi
-  measlyLegacyDb?: import('../src/shared/legacyDbFeatures').LegacyDbApi
   measlyTextures?: import('../src/shared/textures').TextureCacheApi
   measlyLoadouts?: import('../src/shared/loadouts').UiLoadoutApi
 }
