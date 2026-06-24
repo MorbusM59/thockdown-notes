@@ -1722,6 +1722,7 @@ function App() {
   const pendingViewportRestoreRef = useRef<PersistedViewportState | null>(null)
   const originalConsoleMethodsRef = useRef<Partial<Record<ConsoleMethodName, (...args: any[]) => void>>>({})
   const isWritingDebugEntryRef = useRef(false)
+  const debugNoteCreationPromiseRef = useRef<Promise<string | null> | null>(null)
   const externalNoteOriginalTextByIdRef = useRef<Map<string, string>>(new Map())
   const externalNoteOriginalHashByIdRef = useRef<Map<string, string>>(new Map())
   const pendingSidebarScrollRestoreRef = useRef<{ mode: SidebarMode; scrollTop: number } | null>(null)
@@ -3005,21 +3006,31 @@ function App() {
       debugNoteIdRef.current = null
     }
 
-    const existingId = await findExistingDebugNoteId()
-    if (existingId) {
-      return existingId
+    if (debugNoteCreationPromiseRef.current) {
+      return debugNoteCreationPromiseRef.current
     }
 
-    return createDebugNote()
+    const promise = (async (): Promise<string | null> => {
+      const existingId = await findExistingDebugNoteId()
+      if (existingId) {
+        return existingId
+      }
+
+      return createDebugNote()
+    })()
+
+    debugNoteCreationPromiseRef.current = promise
+    const result = await promise
+    debugNoteCreationPromiseRef.current = null
+    return result
   }, [createDebugNote, debuggingEnabled, findExistingDebugNoteId])
 
   useEffect(() => {
     if (!debuggingEnabled) return
     if (!persistenceReady) return
-    if (debugNoteIdRef.current) return
 
-    void createDebugNote()
-  }, [createDebugNote, debuggingEnabled, persistenceReady])
+    void ensureDebugNoteExists()
+  }, [ensureDebugNoteExists, debuggingEnabled, persistenceReady])
 
   const writeDebugEntry = useCallback(async (functionName: string, lines: string[]) => {
     if (!debuggingEnabled) return
