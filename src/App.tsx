@@ -4284,8 +4284,39 @@ ${markdownHtml}
       return trashFilteredNotesRef.current.find((note) => note.id !== removedNoteId)?.id ?? null
     }
 
+    if (sidebarMode === 'category') {
+      for (const primary of categoryTreeRef.current) {
+        for (const secondary of primary.secondary) {
+          for (const tertiary of secondary.tertiary) {
+            for (const note of tertiary.notes) {
+              if (note.id !== removedNoteId) {
+                return note.id
+              }
+            }
+          }
+        }
+      }
+      return null
+    }
+
+    if (sidebarMode === 'archive') {
+      for (const primary of archiveTreeRef.current) {
+        for (const secondary of primary.secondary) {
+          for (const tertiary of secondary.tertiary) {
+            for (const note of tertiary.notes) {
+              if (note.id !== removedNoteId) {
+                return note.id
+              }
+            }
+          }
+        }
+      }
+      return null
+    }
+
     return null
   }, [sidebarMode])
+
 
   const executeArmedNoteAction = useCallback(async (noteId: string, action: NoteArmedAction) => {
     if (!window.measlyNotes) return
@@ -5887,6 +5918,66 @@ ${markdownHtml}
   const totalPagedNotes = (sidebarMode === 'date' || sidebarMode === 'trash')
     ? visibleNotes.length
     : 0
+
+  const isNoteDisplayedInCurrentMenu = useCallback((noteId: string): boolean => {
+    if (sidebarMode === 'date') {
+      return dateFilteredNotes.some((note) => note.id === noteId)
+    }
+
+    if (sidebarMode === 'trash') {
+      return trashFilteredNotes.some((note) => note.id === noteId)
+    }
+
+    if (sidebarMode === 'category') {
+      for (const primary of categoryTreeRef.current) {
+        for (const secondary of primary.secondary) {
+          for (const tertiary of secondary.tertiary) {
+            if (tertiary.notes.some((note) => note.id === noteId)) {
+              return true
+            }
+          }
+        }
+      }
+      return false
+    }
+
+    if (sidebarMode === 'archive') {
+      for (const primary of archiveTreeRef.current) {
+        for (const secondary of primary.secondary) {
+          for (const tertiary of secondary.tertiary) {
+            if (tertiary.notes.some((note) => note.id === noteId)) {
+              return true
+            }
+          }
+        }
+      }
+      return false
+    }
+
+    return true
+  }, [sidebarMode, dateFilteredNotes, trashFilteredNotes])
+
+  useEffect(() => {
+    if (!activeNoteId) {
+      return
+    }
+
+    if (sidebarMode !== 'date' && sidebarMode !== 'trash' && sidebarMode !== 'category' && sidebarMode !== 'archive') {
+      return
+    }
+
+    if (isNoteDisplayedInCurrentMenu(activeNoteId)) {
+      return
+    }
+
+    const nextActiveId = getNextActiveNoteIdAfterRemoval(activeNoteId)
+    if (nextActiveId) {
+      void activateNote(nextActiveId)
+    } else {
+      setActiveNoteId(null)
+      setActiveNoteText('')
+    }
+  }, [activeNoteId, sidebarMode, isNoteDisplayedInCurrentMenu, getNextActiveNoteIdAfterRemoval, activateNote])
   const totalPages = Math.max(1, Math.ceil(totalPagedNotes / Math.max(1, itemsPerPage)))
   const effectiveCurrentPage = Math.min(Math.max(1, currentPage), totalPages)
   const isSidebarTreeMode = sidebarMode === 'category' || sidebarMode === 'archive'
@@ -8892,7 +8983,7 @@ ${markdownHtml}
 
             <div className="tags-display" aria-live="polite">
               {!activeNoteId ? (
-                <div className="tag-empty-state">Tags appear here. Drag to change order, left click to remove or right click to rename across all notes.</div>
+                <div className="tag-empty-state">Tags go here. Drag to change order, left click to remove, right click to rename.</div>
               ) : orderedActiveTags.length === 0 ? (
                 <div className="tag-empty-state">No tags on active note.</div>
               ) : (
