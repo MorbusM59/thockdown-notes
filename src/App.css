@@ -1913,6 +1913,13 @@ body.hsva-dragging * {
   gap:            4px;
 }
 
+.utility-setting-button-row {
+  display:        flex;
+  flex-direction: row;
+  gap:            6px;
+  align-items:    center;
+}
+
 .utility-setting-slider-stack {
   display:        flex;
   flex-direction: column;

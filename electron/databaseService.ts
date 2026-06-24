@@ -30,6 +30,7 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   audioKeyVolume: 1,
   audioBassVolume: 0,
   audioTrebleVolume: 0,
+  typingSoundSet: 'A',
   renderScrollDynamic: 1.5,
   renderScrollResponsiveness: 0.6,
   renderScrollTotalTimeSec: 0.4,
@@ -334,6 +335,9 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     renderScrollTotalTimeSec: clampNumber(source.renderScrollTotalTimeSec, 0, 2, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollTotalTimeSec),
     renderScrollMaxSpeedPxPerSec: clampNumber(source.renderScrollMaxSpeedPxPerSec, 1000, 100000, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollMaxSpeedPxPerSec),
     renderScrollSkew: clampNumber(source.renderScrollSkew, 0.1, 0.9, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollSkew),
+    typingSoundSet: source.typingSoundSet === 'A' || source.typingSoundSet === 'B' || source.typingSoundSet === 'C'
+      ? source.typingSoundSet
+      : DEFAULT_UI_LAYOUT_LOADOUT.typingSoundSet,
     highlightColors: {
       caret: sanitizeString(highlights.caret, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.caret),
       search: sanitizeString(highlights.search, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.search),

@@ -16,6 +16,7 @@ import type {
   EditorViewportState,
 } from './editor/EditorContract'
 import {
+  DEFAULT_TYPING_SOUND_SET,
   typingSoundManager,
 } from './sound/TypingSoundManager'
 import type { PersistedMenuState, PersistedSidebarViewState, PersistedViewportState } from './shared/appState'
@@ -1069,6 +1070,9 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     audioKeyVolume: clamp(toFiniteNumber(source.audioKeyVolume, 1), 0, 1),
     audioBassVolume: clamp(toFiniteNumber(source.audioBassVolume, 0), 0, 1),
     audioTrebleVolume: clamp(toFiniteNumber(source.audioTrebleVolume, 0), 0, 1),
+    typingSoundSet: source.typingSoundSet === 'A' || source.typingSoundSet === 'B' || source.typingSoundSet === 'C'
+      ? source.typingSoundSet
+      : DEFAULT_TYPING_SOUND_SET,
     highlightColors: normalizedHighlightColors,
     textureMaterials: {
       appGrid: normalizeTextureMaterialForLoadoutSignature(normalizedTextureMaterials.appGrid),
@@ -1696,6 +1700,7 @@ function App() {
   const [audioKeyVolume, setAudioKeyVolume] = useState(1)
   const [audioBassVolume, setAudioBassVolume] = useState(0)
   const [audioTrebleVolume, setAudioTrebleVolume] = useState(0)
+  const [typingSoundSet, setTypingSoundSet] = useState<'A' | 'B' | 'C'>(DEFAULT_TYPING_SOUND_SET)
   const [appGridTextureSize, setAppGridTextureSize] = useState({ width: 1280, height: 720 })
   const [sidebarTextureSize, setSidebarTextureSize] = useState({ width: 512, height: 720 })
   const [editorStageTextureSize, setEditorStageTextureSize] = useState({ width: 1280, height: 720 })
@@ -1951,6 +1956,7 @@ function App() {
     audioKeyVolume: 1,
     audioBassVolume: 0,
     audioTrebleVolume: 0,
+    typingSoundSet: DEFAULT_TYPING_SOUND_SET,
     renderScrollDynamic: DEFAULT_RENDER_SCROLL_DYNAMIC,
     renderScrollResponsiveness: DEFAULT_RENDER_SCROLL_RESPONSIVENESS,
     renderScrollTotalTimeSec: DEFAULT_RENDER_SCROLL_TOTAL_TIME_SEC,
@@ -1972,6 +1978,7 @@ function App() {
       audioKeyVolume,
       audioBassVolume,
       audioTrebleVolume,
+      typingSoundSet,
       renderScrollDynamic,
       renderScrollResponsiveness,
       renderScrollTotalTimeSec,
@@ -2030,6 +2037,7 @@ function App() {
     setAudioKeyVolume(clamp(loadout.audioKeyVolume, 0, 1))
     setAudioBassVolume(clamp(loadout.audioBassVolume, 0, 1))
     setAudioTrebleVolume(clamp(loadout.audioTrebleVolume, 0, 1))
+    setTypingSoundSet(loadout.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
     setHighlightColors({
       caret: loadout.highlightColors.caret,
       search: loadout.highlightColors.search,
@@ -2512,6 +2520,7 @@ function App() {
       audioKeyVolume,
       audioBassVolume,
       audioTrebleVolume,
+      typingSoundSet,
       highlightCaretColor: highlightColors.caret,
       highlightSearchColor: highlightColors.search,
       highlightSelectionColor: highlightColors.selection,
@@ -4706,9 +4715,10 @@ ${markdownHtml}
             setRenderScrollTotalTimeSec(appState.menu.renderScrollTotalTimeSec ?? getRenderScrollTotalTimeSec())
             setRenderScrollMaxSpeedPxPerSec(appState.menu.renderScrollMaxSpeedPxPerSec ?? getRenderScrollMaxSpeedPxPerSec())
             setRenderScrollSkew(appState.menu.renderScrollSkew ?? getRenderScrollSkew())
-            setAudioKeyVolume(appState.menu.audioKeyVolume ?? 0.6)
+                    setAudioKeyVolume(appState.menu.audioKeyVolume ?? 0.6)
             setAudioBassVolume(appState.menu.audioBassVolume ?? 0.5)
             setAudioTrebleVolume(appState.menu.audioTrebleVolume ?? 0.5)
+            setTypingSoundSet(appState.menu.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
             setHighlightColors({
               caret: appState.menu.highlightCaretColor ?? DEFAULT_HIGHLIGHT_COLORS.caret,
               search: appState.menu.highlightSearchColor ?? DEFAULT_HIGHLIGHT_COLORS.search,
@@ -4869,6 +4879,10 @@ ${markdownHtml}
   useEffect(() => {
     typingSoundManager.setLayerGain('bass', audioBassVolume)
   }, [audioBassVolume])
+
+  useEffect(() => {
+    typingSoundManager.setTypingSoundSet(typingSoundSet)
+  }, [typingSoundSet])
 
   useEffect(() => {
     typingSoundManager.setLayerGain('treble', audioTrebleVolume)
@@ -8052,8 +8066,24 @@ ${markdownHtml}
       </section>
 
       <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-audio" aria-label="Audio Settings">
-        <div className="sidebar-options-section-heading">Audio Settings</div>
+          <div className="sidebar-options-section-heading">Audio Settings</div>
         <div className="utility-setting-slider-stack" aria-label="Audio settings controls">
+          <div className="utility-setting-button-row" role="group" aria-label="Typing sound set selection">
+            {(['A', 'B', 'C'] as const).map((setId) => (
+              <button
+                key={setId}
+                type="button"
+                className={`toolbar-btn-icon${typingSoundSet === setId ? ' is-active' : ''}`}
+                onClick={() => {
+                  setTypingSoundSet(setId)
+                  typingSoundManager.setTypingSoundSet(setId)
+                }}
+                aria-pressed={typingSoundSet === setId}
+              >
+                {setId}
+              </button>
+            ))}
+          </div>
           <CompactScrollbarSlider
             id="audio-key-volume"
             min={0}

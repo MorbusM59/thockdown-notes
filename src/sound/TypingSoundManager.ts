@@ -1,4 +1,4 @@
-import { BASS_TYPING_SOUND_ASSET, TREBLE_TYPING_SOUND_ASSET, TYPING_SOUND_ASSETS } from './typingSounds'
+import { BASS_TYPING_SOUND_ASSET, DEFAULT_TYPING_SOUND_SET, TREBLE_TYPING_SOUND_ASSET, TYPING_SOUND_ASSETS, TYPING_SOUND_SET_IDS, TypingSoundSetId } from './typingSounds'
 
 export interface TypingSoundLayerConfig {
   enabled: boolean
@@ -24,18 +24,24 @@ export class TypingSoundManager {
   private audioContext: AudioContext | null = null
   private masterGain: GainNode | null = null
   private bufferGroups: Record<string, AudioBuffer[]> = {
-    click: [],
     bass: [],
     treble: [],
   }
+  private clickBuffersBySet: Record<TypingSoundSetId, AudioBuffer[]> = {
+    A: [],
+    B: [],
+    C: [],
+  }
   private reversedBufferGroups: Record<string, AudioBuffer[]> | null = null
+  private reversedClickBuffersBySet: Record<TypingSoundSetId, AudioBuffer[]> | null = null
+  private activeKeySet: TypingSoundSetId = DEFAULT_TYPING_SOUND_SET
   private loaded = false
   private loadingPromise: Promise<void> | null = null
   private layers: Record<string, TypingSoundLayerConfig> = {
     click: {
       enabled: true,
       gain: 1,
-      assetIndexes: TYPING_SOUND_ASSETS.map((_, index) => index),
+      assetIndexes: TYPING_SOUND_ASSETS[DEFAULT_TYPING_SOUND_SET].map((_, index) => index),
     },
     bass: {
       enabled: true,
@@ -62,26 +68,34 @@ export class TypingSoundManager {
       this.audioContext = context
       this.masterGain = masterGain
 
-      const clickBuffers = await Promise.all(
-        TYPING_SOUND_ASSETS.map(async (assetUrl) => {
-          const response = await fetch(assetUrl)
-          if (!response.ok) {
-            throw new Error(`Failed to load typing sound asset: ${assetUrl}`)
-          }
-          const arrayBuffer = await response.arrayBuffer()
-          return await context.decodeAudioData(arrayBuffer)
-        }),
-      )
+      const clickBuffersBySet = {} as Record<TypingSoundSetId, AudioBuffer[]>
+      for (const setId of TYPING_SOUND_SET_IDS) {
+        clickBuffersBySet[setId] = await Promise.all(
+          TYPING_SOUND_ASSETS[setId].map(async (assetUrl) => {
+            const response = await fetch(assetUrl)
+            if (!response.ok) {
+              throw new Error(`Failed to load typing sound asset: ${assetUrl}`)
+            }
+            const arrayBuffer = await response.arrayBuffer()
+            return await context.decodeAudioData(arrayBuffer)
+          }),
+        )
+      }
 
       const bassBuffer = await this.loadSingleBuffer(BASS_TYPING_SOUND_ASSET, context)
       const trebleBuffer = await this.loadSingleBuffer(TREBLE_TYPING_SOUND_ASSET, context)
 
-      this.bufferGroups.click = clickBuffers
+      this.clickBuffersBySet = clickBuffersBySet
       this.bufferGroups.bass = [bassBuffer]
       this.bufferGroups.treble = [trebleBuffer]
 
+      this.reversedClickBuffersBySet = {
+        A: clickBuffersBySet.A.map((buffer) => this.createReversedBuffer(buffer, context)),
+        B: clickBuffersBySet.B.map((buffer) => this.createReversedBuffer(buffer, context)),
+        C: clickBuffersBySet.C.map((buffer) => this.createReversedBuffer(buffer, context)),
+      }
+
       this.reversedBufferGroups = {
-        click: clickBuffers.map((buffer) => this.createReversedBuffer(buffer, context)),
         bass: [this.createReversedBuffer(bassBuffer, context)],
         treble: [this.createReversedBuffer(trebleBuffer, context)],
       }
@@ -123,6 +137,10 @@ export class TypingSoundManager {
     })
   }
 
+  setTypingSoundSet(setId: TypingSoundSetId): void {
+    this.activeKeySet = setId
+  }
+
   private getRandomLayerDetune(): number {
     return Math.floor(Math.random() * 601) - 300
   }
@@ -135,7 +153,9 @@ export class TypingSoundManager {
     const layer = this.layers[layerId]
     if (!layer || !layer.enabled || layer.assetIndexes.length === 0) return
 
-    const buffers = this.bufferGroups[layerId]
+    const buffers = layerId === 'click'
+      ? this.clickBuffersBySet[this.activeKeySet]
+      : this.bufferGroups[layerId]
     if (!buffers || buffers.length === 0) return
 
     const assetIndex = layer.assetIndexes[Math.floor(Math.random() * layer.assetIndexes.length)]
@@ -143,7 +163,9 @@ export class TypingSoundManager {
     if (!buffer) return
 
     const source = this.audioContext.createBufferSource()
-    source.buffer = options?.reverse ? this.getReversedBuffer(layerId, assetIndex) : buffer
+    const selectedBuffer = options?.reverse ? this.getReversedBuffer(layerId, assetIndex) : buffer
+    if (!selectedBuffer) return
+    source.buffer = selectedBuffer
 
     if (options?.playbackRate !== undefined) {
       source.playbackRate.value = options.playbackRate
@@ -215,6 +237,10 @@ export class TypingSoundManager {
   }
 
   private getReversedBuffer(layerId: string, assetIndex: number): AudioBuffer | null {
+    if (layerId === 'click') {
+      return this.reversedClickBuffersBySet?.[this.activeKeySet]?.[assetIndex] ?? null
+    }
+
     if (!this.reversedBufferGroups) return null
     const layerBuffers = this.reversedBufferGroups[layerId]
     return layerBuffers?.[assetIndex] ?? null
@@ -260,3 +286,4 @@ export class TypingSoundManager {
 }
 
 export const typingSoundManager = new TypingSoundManager()
+export { DEFAULT_TYPING_SOUND_SET }

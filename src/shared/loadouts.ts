@@ -16,6 +16,7 @@ export type UiLayoutLoadout = {
   audioKeyVolume: number;
   audioBassVolume: number;
   audioTrebleVolume: number;
+  typingSoundSet: 'A' | 'B' | 'C';
   renderScrollDynamic: number;
   renderScrollResponsiveness: number;
   renderScrollTotalTimeSec: number;
