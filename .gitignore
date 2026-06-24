@@ -28,3 +28,4 @@ release
 # Runtime app data (notes, state, local DB) should stay out of version control
 data/**
 !data/.gitkeep
+/dist-electron
