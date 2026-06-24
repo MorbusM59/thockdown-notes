@@ -632,7 +632,8 @@ export class DatabaseService {
       syncMode,
     );
 
-    db.prepare('INSERT OR REPLACE INTO notes_fts (noteId, title, content) VALUES (?, ?, ?)')
+    db.prepare('DELETE FROM notes_fts WHERE noteId = ?').run(input.id);
+    db.prepare('INSERT INTO notes_fts (noteId, title, content) VALUES (?, ?, ?)')
       .run(input.id, input.title, normalizedText);
   }
 
@@ -687,8 +688,21 @@ export class DatabaseService {
 
   getNoteContentSnapshot(noteId: string): string | null {
     const db = this.requireDb();
-    const row = db.prepare('SELECT content FROM notes_fts WHERE noteId = ?').get(noteId) as { content: string } | undefined;
-    return row?.content ?? null;
+
+    const snapshotRow = db.prepare(`
+      SELECT content
+      FROM note_snapshots
+      WHERE noteId = ?
+      ORDER BY datetime(timestamp) DESC
+      LIMIT 1
+    `).get(noteId) as { content: string } | undefined;
+
+    if (snapshotRow?.content) {
+      return snapshotRow.content;
+    }
+
+    const ftsRow = db.prepare('SELECT content FROM notes_fts WHERE noteId = ?').get(noteId) as { content: string } | undefined;
+    return ftsRow?.content ?? null;
   }
 
   getExternalSyncState(noteId: string): ExternalSyncState {

@@ -167,9 +167,20 @@ export class NoteLifecycleService {
     const record = this.databaseService.getNoteRecord(input.id);
     const filePath = record?.filePath ?? path.join(this.notesDir, idToFileName(input.id));
     const fileName = path.basename(filePath);
-    const rawText = record?.isTemp
-      ? (this.databaseService.getNoteContentSnapshot(input.id) ?? '')
-      : await fs.readFile(filePath, 'utf8');
+    let rawText: string
+    if (record?.isTemp) {
+      const snapshotText = this.databaseService.getNoteContentSnapshot(input.id)
+      if (snapshotText !== null) {
+        rawText = snapshotText
+      } else if (record.externalPath) {
+        rawText = await fs.readFile(record.externalPath, 'utf8')
+      } else {
+        rawText = ''
+      }
+    } else {
+      rawText = await fs.readFile(filePath, 'utf8')
+    }
+
     const stat = record?.isTemp
       ? {
           birthtimeMs: record.createdAtMs,

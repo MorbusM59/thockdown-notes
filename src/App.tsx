@@ -4145,6 +4145,27 @@ ${markdownHtml}
         writeAttemptedViaNoteApi,
         writeAttemptedViaExternalApi,
       })
+    } else {
+      latestEditorTextRef.current = currentText
+      try {
+        const savedSummary = await window.measlyNotes.saveNote({ id: noteId, text: currentText })
+        console.debug('[external-note] saveExternalNoteToFile persisted temp note text into DB', { noteId, externalPath, savedSummary })
+        setNotes((previous) => {
+          const index = previous.findIndex((note) => note.id === savedSummary.id)
+          if (index < 0) return previous
+
+          const existing = previous[index]
+          if (isSameNoteSummary(existing, savedSummary)) {
+            return previous
+          }
+
+          const next = [...previous]
+          next[index] = savedSummary
+          return next
+        })
+      } catch (error) {
+        console.error('[external-note] saveExternalNoteToFile failed to persist temp note in DB', { noteId, externalPath, error })
+      }
     }
 
     try {
