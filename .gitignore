@@ -29,3 +29,5 @@ release
 data/**
 !data/.gitkeep
 /dist-electron
+dist-electron/main.js
+dist-electron/preload.mjs
