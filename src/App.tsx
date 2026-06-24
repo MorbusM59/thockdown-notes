@@ -4334,7 +4334,17 @@ ${markdownHtml}
 
       await refreshNotes(activeNoteId ?? noteId)
       if (activeNoteId === noteId) {
-        await activateNote(noteId)
+        if (action === 'archive' || action === 'deletion') {
+          const nextActiveId = getNextActiveNoteIdAfterRemoval(noteId)
+          if (nextActiveId) {
+            await activateNote(nextActiveId)
+          } else {
+            setActiveNoteId(null)
+            setActiveNoteText('')
+          }
+        } else {
+          await activateNote(noteId)
+        }
       }
     } catch (error) {
       console.error('Failed to apply note action', error)
