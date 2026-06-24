@@ -51,6 +51,7 @@ export class TypingSoundManager {
   private reversedBufferGroups: Record<string, AudioBuffer[]> | null = null
   private reversedClickBuffersBySet: Record<TypingSoundSetId, AudioBuffer[]> | null = null
   private activeKeySet: TypingSoundSetId = DEFAULT_TYPING_SOUND_SET
+  private enabled = true
   private recentKeySoundHistory: TypingSoundHistoryEntry[] = []
   private loaded = false
   private loadingPromise: Promise<void> | null = null
@@ -175,6 +176,8 @@ export class TypingSoundManager {
   }
 
   async playRandomClick(options?: TypingSoundPlayOptions): Promise<void> {
+    if (!this.enabled) return
+
     const soundAttributes = this.getSoundAttributes(options)
 
     await this.playLayer('click', {
@@ -203,6 +206,10 @@ export class TypingSoundManager {
       gain: soundAttributes.gain,
       echo: soundAttributes.echo,
     })
+  }
+
+  setTypingSoundEnabled(enabled: boolean): void {
+    this.enabled = enabled
   }
 
   setTypingSoundSet(setId: TypingSoundSetId): void {
