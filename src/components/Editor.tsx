@@ -459,6 +459,27 @@ export function Editor({
           });
         }
         break;
+      case 'z':
+        if (event.ctrlKey || event.metaKey) {
+          void typingSoundManager.playRandomClick({
+            keyId,
+            reverse: true,
+            detune: -1200,
+            gain: 0.7,
+          });
+          break;
+        }
+        break;
+      case 'y':
+        if (event.ctrlKey || event.metaKey) {
+          void typingSoundManager.playRandomClick({
+            keyId,
+            detune: -1200,
+            gain: 0.7,
+          });
+          break;
+        }
+        break;
       default:
         break;
     }
