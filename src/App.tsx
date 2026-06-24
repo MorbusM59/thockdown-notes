@@ -2938,7 +2938,7 @@ function App() {
   // "debug"). No-ops when debuggingEnabled is false. Safe to call from any
   // async or sync context — creation and tagging are fire-and-forget.
   const createDebugNote = useCallback(async (): Promise<string | null> => {
-    if (!window.measlyNotes || !persistenceReady) return null
+    if (!window.measlyNotes) return null
 
     const now = new Date()
     const pad = (n: number) => String(n).padStart(2, '0')
@@ -2961,11 +2961,57 @@ function App() {
     }
   }, [persistenceReady])
 
+  const findExistingDebugNoteId = useCallback(async (): Promise<string | null> => {
+    if (!window.measlyNotes) return null
+
+    try {
+      const listed = await window.measlyNotes.listNotes()
+      const existing = listed.find((note) => {
+        const normalizedTags = new Set(note.tags.map((tag) => normalizeTagName(tag)))
+        return normalizedTags.has(DEBUG_TAG_NAME) && !normalizedTags.has('deleted') && !normalizedTags.has('archived')
+      })
+
+      if (!existing) return null
+
+      debugNoteIdRef.current = existing.id
+      setNotes((previous) => {
+        const index = previous.findIndex((note) => note.id === existing.id)
+        if (index >= 0) return previous
+        return [existing, ...previous]
+      })
+      return existing.id
+    } catch {
+      return null
+    }
+  }, [])
+
   const ensureDebugNoteExists = useCallback(async (): Promise<string | null> => {
-    if (!debuggingEnabled) return null
-    if (debugNoteIdRef.current) return debugNoteIdRef.current
+    if (!debuggingEnabled || !window.measlyNotes) return null
+
+    if (debugNoteIdRef.current) {
+      try {
+        const loaded = await window.measlyNotes.loadNote({ id: debugNoteIdRef.current })
+        const normalizedTags = new Set(loaded.tags.map((tag) => normalizeTagName(tag)))
+        const isDeletedOrArchived = normalizedTags.has('deleted') || normalizedTags.has('archived')
+        const isDebugTagged = normalizedTags.has(DEBUG_TAG_NAME)
+
+        if (isDebugTagged && !isDeletedOrArchived) {
+          return debugNoteIdRef.current
+        }
+      } catch {
+        // stale or deleted note id; fall through and create a fresh debug note.
+      }
+
+      debugNoteIdRef.current = null
+    }
+
+    const existingId = await findExistingDebugNoteId()
+    if (existingId) {
+      return existingId
+    }
+
     return createDebugNote()
-  }, [createDebugNote, debuggingEnabled])
+  }, [createDebugNote, debuggingEnabled, findExistingDebugNoteId])
 
   useEffect(() => {
     if (!debuggingEnabled) return
@@ -2980,10 +3026,8 @@ function App() {
     if (!window.measlyNotes) return
     if (isWritingDebugEntryRef.current) return
 
-    if (!debugNoteIdRef.current) {
-      const noteId = await ensureDebugNoteExists()
-      if (!noteId) return
-    }
+    const noteId = await ensureDebugNoteExists()
+    if (!noteId) return
 
     isWritingDebugEntryRef.current = true
     const now = new Date()
@@ -2992,9 +3036,9 @@ function App() {
     const section = `\n## ${timeStr} / ${functionName}\n${lines.map(l => `- ${l}`).join('\n')}`
 
     try {
-      const loaded = await window.measlyNotes.loadNote({ id: debugNoteIdRef.current! })
+      const loaded = await window.measlyNotes.loadNote({ id: noteId })
       const updated = await window.measlyNotes.saveNote({
-        id: debugNoteIdRef.current!,
+        id: noteId,
         text: `${loaded.text}${section}`,
       })
       setNotes((previous) => {
