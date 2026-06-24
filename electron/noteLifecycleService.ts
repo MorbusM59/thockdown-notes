@@ -145,7 +145,7 @@ export class NoteLifecycleService {
         updatedAtMs: stat.mtimeMs,
         sizeBytes: stat.size,
         isExternal: tags.includes(EXTERNAL_TAG),
-        externalPath: record.externalPath ?? null,
+        externalPath: record.externalPath ?? (record.isTemp ? record.filePath : null) ?? null,
         hasUnsavedChanges: record.hasUnsavedChanges,
         isInSync: Boolean(record.syncMode && !record.hasUnsavedChanges),
       };
@@ -241,7 +241,7 @@ export class NoteLifecycleService {
       sizeBytes: Buffer.byteLength(text, 'utf8'),
       text: parsed.bodyText,
       isExternal: tags.includes(EXTERNAL_TAG),
-      externalPath: record?.externalPath ?? null,
+      externalPath: record?.externalPath ?? (record?.isTemp ? record.filePath : null) ?? null,
       hasUnsavedChanges: record?.hasUnsavedChanges ?? false,
       isInSync: Boolean(record?.syncMode && !record?.hasUnsavedChanges),
     };

@@ -1669,6 +1669,7 @@ function App() {
   const [sidebarTreeScrollerEl, setSidebarTreeScrollerEl] = useState<HTMLDivElement | null>(null)
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null)
   const [activeNoteText, setActiveNoteText] = useState('')
+  const activeNoteExternalPathRef = useRef<string | null>(null)
   const [currentExternalNoteHash, setCurrentExternalNoteHash] = useState<string | null>(null)
   const [editorSelection, setEditorSelection] = useState<EditorSelectionState>({
     anchor: 0,
@@ -3306,7 +3307,13 @@ ${markdownHtml}
         ? normalizeInternalText(originalSnapshotRow.content)
         : hydratedText
 
-      console.warn('[external-note] activating external note', { noteId: loaded.id, snapshotCount: snapshotRows.length, hasOriginalSnapshot: !!originalSnapshotRow, hydratedLength: hydratedText.length })
+      console.warn('[external-note] activating external note', {
+        noteId: loaded.id,
+        snapshotCount: snapshotRows.length,
+        hasOriginalSnapshot: !!originalSnapshotRow,
+        hydratedLength: hydratedText.length,
+        externalPath: loaded.externalPath,
+      })
 
       if (!snapshotRows.some((row) => !row.isManual)) {
         await window.measlyNotes?.saveNoteSnapshot({ id: loaded.id, content: hydratedText, isManual: false })
@@ -3316,7 +3323,12 @@ ${markdownHtml}
       externalNoteOriginalTextByIdRef.current.set(loaded.id, originalText)
       originalHash = await hashNormalizedText(originalText)
       externalNoteOriginalHashByIdRef.current.set(loaded.id, originalHash)
-      console.warn('[external-note] stored original hash for external note', { noteId: loaded.id, originalHash })
+      activeNoteExternalPathRef.current = loaded.externalPath ?? null
+      console.warn('[external-note] stored original hash for external note', {
+        noteId: loaded.id,
+        originalHash,
+        externalPath: loaded.externalPath,
+      })
     }
 
     latestEditorTextRef.current = hydratedText
@@ -4060,29 +4072,84 @@ ${markdownHtml}
     if (activeNoteId !== noteId) return
 
     const summary = notes.find((note) => note.id === noteId)
-    const externalPath = summary?.externalPath ?? null
+    let externalPath = summary?.externalPath ?? activeNoteExternalPathRef.current ?? null
     if (!externalPath) {
-      console.error('[external-note] saveExternalNoteToFile missing externalPath', { noteId })
+      console.warn('[external-note] saveExternalNoteToFile missing externalPath on summary, attempting loadNote fallback', { noteId, summary })
+      try {
+        const loadedNote = await window.measlyNotes.loadNote({ id: noteId })
+        externalPath = loadedNote.externalPath ?? null
+        console.debug('[external-note] saveExternalNoteToFile loaded note path fallback', { noteId, loadedExternalPath: externalPath, loadedNote })
+        if (externalPath) {
+          activeNoteExternalPathRef.current = externalPath
+        }
+        if (externalPath && summary) {
+          setNotes((previous) => {
+            const index = previous.findIndex((note) => note.id === noteId)
+            if (index < 0) return previous
+            const next = [...previous]
+            next[index] = { ...next[index], externalPath }
+            return next
+          })
+        }
+      } catch (error) {
+        console.error('[external-note] saveExternalNoteToFile fallback loadNote failed', { noteId, error })
+      }
+    }
+
+    if (!externalPath) {
+      console.error('[external-note] saveExternalNoteToFile missing externalPath', { noteId, noteSummary: summary })
       return
     }
 
     const currentText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
     const currentHash = await hashNormalizedText(currentText)
 
-    console.debug('[external-note] explicit save path starting', { noteId, textLength: currentText.length, hash: currentHash })
+    console.debug('[external-note] explicit save path starting', {
+      noteId,
+      externalPath,
+      textLength: currentText.length,
+      hash: currentHash,
+      activeNoteId,
+    })
 
     let diskSanityText: string | null = null
     let writeSucceeded = false
+    let writeAttemptedViaNoteApi = false
+    let writeAttemptedViaExternalApi = false
 
     try {
+      writeAttemptedViaNoteApi = true
       writeSucceeded = await window.measlyNotes.syncExternalNoteToFile({ id: noteId, content: currentText })
-      console.debug('[external-note] external file write result', { noteId, writeSucceeded })
+      console.debug('[external-note] syncExternalNoteToFile result', { noteId, externalPath, writeSucceeded })
     } catch (error) {
-      console.error('[external-note] external file write failed', { noteId, error })
+      console.error('[external-note] syncExternalNoteToFile exception', { noteId, externalPath, error })
+    }
+
+    if (!writeSucceeded) {
+      try {
+        writeAttemptedViaExternalApi = true
+        writeSucceeded = await window.measlyExternalFiles.writeFileContent(externalPath, currentText)
+        console.debug('[external-note] writeFileContent fallback result', { noteId, externalPath, writeSucceeded })
+        if (writeSucceeded) {
+          await window.measlyNotes.updateExternalNoteState({ id: noteId, hasUnsavedChanges: false, syncMode: true })
+        }
+      } catch (error) {
+        console.error('[external-note] writeFileContent fallback exception', { noteId, externalPath, error })
+      }
+    }
+
+    if (!writeSucceeded) {
+      console.error('[external-note] external save failed, no write method succeeded', {
+        noteId,
+        externalPath,
+        writeAttemptedViaNoteApi,
+        writeAttemptedViaExternalApi,
+      })
     }
 
     try {
       const diskContent = await window.measlyExternalFiles.readFileContent(externalPath)
+      console.debug('[external-note] readFileContent after save', { noteId, externalPath, diskContentLength: diskContent?.length ?? null, diskContentIsNull: diskContent === null })
       if (diskContent !== null) {
         diskSanityText = diskContent
       } else {
