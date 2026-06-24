@@ -4275,6 +4275,18 @@ ${markdownHtml}
     }
   }, [activeNoteId, activeNoteText, notes])
 
+  const getNextActiveNoteIdAfterRemoval = useCallback((removedNoteId: string): string | null => {
+    if (sidebarMode === 'date') {
+      return dateFilteredNotesRef.current.find((note) => note.id !== removedNoteId)?.id ?? null
+    }
+
+    if (sidebarMode === 'trash') {
+      return trashFilteredNotesRef.current.find((note) => note.id !== removedNoteId)?.id ?? null
+    }
+
+    return null
+  }, [sidebarMode])
+
   const executeArmedNoteAction = useCallback(async (noteId: string, action: NoteArmedAction) => {
     if (!window.measlyNotes) return
     if (!persistenceReady) return
@@ -4299,11 +4311,10 @@ ${markdownHtml}
 
       if (action === 'deletion' && isCurrentlyDeleted) {
         await window.measlyNotes.deleteNote({ id: noteId })
-
-        const preferredId = activeNoteId === noteId ? null : (activeNoteId ?? null)
-        const nextActiveId = await refreshNotes(preferredId)
+        await refreshNotes(activeNoteId === noteId ? null : activeNoteId)
 
         if (activeNoteId === noteId) {
+          const nextActiveId = getNextActiveNoteIdAfterRemoval(noteId)
           if (nextActiveId) {
             await activateNote(nextActiveId)
           } else {
@@ -4368,10 +4379,7 @@ ${markdownHtml}
     pendingSaveTextRef.current = null
 
     clearNoteArmTimer()
-    if (activeNoteId === noteId) {
-      setActiveNoteId(null)
-      setActiveNoteText('')
-    }
+    const nextActiveId = activeNoteId === noteId ? getNextActiveNoteIdAfterRemoval(noteId) : null
 
     externalNoteOriginalTextByIdRef.current.delete(noteId)
     externalNoteOriginalHashByIdRef.current.delete(noteId)
@@ -4380,10 +4388,19 @@ ${markdownHtml}
     try {
       await window.measlyNotes.deleteNote({ id: noteId })
       setNotes((previous) => previous.filter((note) => note.id !== noteId))
+
+      if (activeNoteId === noteId) {
+        if (nextActiveId) {
+          await activateNote(nextActiveId)
+        } else {
+          setActiveNoteId(null)
+          setActiveNoteText('')
+        }
+      }
     } catch (error) {
       console.error('Failed to delete external temp note', error)
     }
-  }, [activeNoteId, clearNoteArmTimer])
+  }, [activeNoteId, activateNote, clearNoteArmTimer, getNextActiveNoteIdAfterRemoval])
 
   const handleNoteRightPressStart = useCallback((noteId: string, event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -4559,10 +4576,10 @@ ${markdownHtml}
       }
 
       const activeDeleted = activeNoteId ? deletedNoteIds.includes(activeNoteId) : false
-      const preferredId = activeDeleted ? null : (activeNoteId ?? null)
-      const nextActiveId = await refreshNotes(preferredId)
+      await refreshNotes(activeDeleted ? null : activeNoteId)
 
-      if (activeDeleted) {
+      if (activeDeleted && activeNoteId) {
+        const nextActiveId = getNextActiveNoteIdAfterRemoval(activeNoteId)
         if (nextActiveId) {
           await activateNote(nextActiveId)
         } else {
