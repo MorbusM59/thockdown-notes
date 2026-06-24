@@ -512,9 +512,16 @@ export function applyMarkdownEnter(
       : lineStructure.leadingSpaces
 
     inserted = `\n${newLineIndent}`
-  } else {
-    return null
   }
+  // else: plain line with no list/quote/indent — plain newline insert.
+  // We handle this ourselves rather than returning null and falling through to Lexical's
+  // native paragraph-split. Lexical's native Enter at the start of a paragraph places
+  // the caret on the newly-created empty paragraph before the content, whereas our
+  // canonical model inserts '\n' and advances the caret past it, keeping it at the
+  // start of the content line. The difference is only observable at column 0, which is
+  // exactly the case that causes the delete→enter bug: after deleting an empty line the
+  // caret sits at column 0 of the following line, and native Enter re-creates the empty
+  // line with the caret on it instead of keeping the caret on the content line.
 
   const nextText = `${sourceText.slice(0, caretOffset)}${inserted}${sourceText.slice(caretOffset)}`
   const nextCaret = caretOffset + inserted.length
