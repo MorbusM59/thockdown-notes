@@ -55,6 +55,7 @@ export interface PersistedMenuState {
   audioKeyVolume?: number;
   audioBassVolume?: number;
   audioTrebleVolume?: number;
+  audioReverbAmount?: number;
   typingSoundEnabled?: boolean;
   typingSoundSet?: 'A' | 'B' | 'C';
   // Legacy render smooth-scroll keys (pre curve-model / pre maxSpeed migration).

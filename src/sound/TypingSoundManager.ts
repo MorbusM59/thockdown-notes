@@ -39,6 +39,10 @@ interface TypingSoundHistoryEntry {
 export class TypingSoundManager {
   private audioContext: AudioContext | null = null
   private masterGain: GainNode | null = null
+  private reverbNode: ConvolverNode | null = null
+  private reverbDryGain: GainNode | null = null
+  private reverbWetGain: GainNode | null = null
+  private reverbAmount = 0
   private bufferGroups: Record<string, AudioBuffer[]> = {
     bass: [],
     treble: [],
@@ -80,11 +84,24 @@ export class TypingSoundManager {
     this.loadingPromise = (async () => {
       const context = this.createAudioContext()
       const masterGain = context.createGain()
+      const dryGain = context.createGain()
+      const wetGain = context.createGain()
+      const reverb = context.createConvolver()
+
       masterGain.gain.value = 1
+      dryGain.gain.value = 1
+      wetGain.gain.value = 0
+      reverb.buffer = this.createReverbImpulseResponse(context, 1.5, 2)
+
+      dryGain.connect(masterGain)
+      reverb.connect(wetGain).connect(masterGain)
       masterGain.connect(context.destination)
 
       this.audioContext = context
       this.masterGain = masterGain
+      this.reverbNode = reverb
+      this.reverbDryGain = dryGain
+      this.reverbWetGain = wetGain
 
       const clickBuffersBySet = {} as Record<TypingSoundSetId, AudioBuffer[]>
       for (const setId of TYPING_SOUND_SET_IDS) {
@@ -219,6 +236,14 @@ export class TypingSoundManager {
     }
   }
 
+  setReverbAmount(amount: number): void {
+    this.reverbAmount = Math.max(0, Math.min(1, amount))
+    if (this.reverbDryGain && this.reverbWetGain) {
+      this.reverbDryGain.gain.value = 1 - this.reverbAmount
+      this.reverbWetGain.gain.value = this.reverbAmount
+    }
+  }
+
   private getRandomLayerDetune(): number {
     return Math.floor(Math.random() * 601) - 300
   }
@@ -257,7 +282,14 @@ export class TypingSoundManager {
     const effectiveGain = (options?.gain !== undefined ? options.gain : 1) * layer.gain
     const gainNode = this.audioContext.createGain()
     gainNode.gain.value = effectiveGain
-    source.connect(gainNode).connect(this.masterGain)
+    source.connect(gainNode)
+
+    if (this.reverbDryGain && this.reverbNode) {
+      gainNode.connect(this.reverbDryGain)
+      gainNode.connect(this.reverbNode)
+    } else if (this.masterGain) {
+      gainNode.connect(this.masterGain)
+    }
 
     const echoSources: Array<{ source: AudioBufferSourceNode; gainNode: GainNode; delayMs: number }> = []
     if (options?.echo && this.masterGain) {
@@ -274,7 +306,13 @@ export class TypingSoundManager {
 
         const echoGainNode = this.audioContext.createGain()
         echoGainNode.gain.value = effectiveGain * Math.pow(decay, i)
-        echoSource.connect(echoGainNode).connect(this.masterGain)
+        if (this.reverbDryGain && this.reverbNode) {
+          echoSource.connect(echoGainNode)
+          echoGainNode.connect(this.reverbDryGain)
+          echoGainNode.connect(this.reverbNode)
+        } else {
+          echoSource.connect(echoGainNode).connect(this.masterGain)
+        }
         echoSources.push({ source: echoSource, gainNode: echoGainNode, delayMs: delayMs * i })
       }
     }
@@ -350,6 +388,21 @@ export class TypingSoundManager {
     if (this.audioContext) return this.audioContext
     const AudioContextConstructor = window.AudioContext || (window as any).webkitAudioContext
     return new AudioContextConstructor()
+  }
+
+  private createReverbImpulseResponse(context: AudioContext, durationSec: number, decay: number): AudioBuffer {
+    const sampleRate = context.sampleRate
+    const length = sampleRate * durationSec
+    const impulse = context.createBuffer(2, length, sampleRate)
+    for (let channel = 0; channel < 2; channel += 1) {
+      const channelData = impulse.getChannelData(channel)
+      for (let i = 0; i < length; i += 1) {
+        const progress = i / length
+        const envelope = Math.pow(1 - progress, decay)
+        channelData[i] = (Math.random() * 2 - 1) * envelope
+      }
+    }
+    return impulse
   }
 
   private createReversedBuffer(buffer: AudioBuffer, context: AudioContext): AudioBuffer {

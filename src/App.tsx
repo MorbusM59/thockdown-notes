@@ -1070,6 +1070,7 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     audioKeyVolume: clamp(toFiniteNumber(source.audioKeyVolume, 1), 0, 1),
     audioBassVolume: clamp(toFiniteNumber(source.audioBassVolume, 0), 0, 1),
     audioTrebleVolume: clamp(toFiniteNumber(source.audioTrebleVolume, 0), 0, 1),
+    audioReverbAmount: clamp(toFiniteNumber(source.audioReverbAmount, 0), 0, 1),
     typingSoundEnabled: source.typingSoundEnabled === true,
     typingSoundSet: source.typingSoundSet === 'A' || source.typingSoundSet === 'B' || source.typingSoundSet === 'C'
       ? source.typingSoundSet
@@ -1701,6 +1702,7 @@ function App() {
   const [audioKeyVolume, setAudioKeyVolume] = useState(0.5)
   const [audioBassVolume, setAudioBassVolume] = useState(0)
   const [audioTrebleVolume, setAudioTrebleVolume] = useState(0)
+  const [audioReverbAmount, setAudioReverbAmount] = useState(0)
   const [typingSoundEnabled, setTypingSoundEnabled] = useState(false)
   const [typingSoundSet, setTypingSoundSet] = useState<'A' | 'B' | 'C'>(DEFAULT_TYPING_SOUND_SET)
   const [appGridTextureSize, setAppGridTextureSize] = useState({ width: 1280, height: 720 })
@@ -1958,6 +1960,7 @@ function App() {
     audioKeyVolume: 0.5,
     audioBassVolume: 0,
     audioTrebleVolume: 0,
+    audioReverbAmount: 0,
     typingSoundEnabled: false,
     typingSoundSet: DEFAULT_TYPING_SOUND_SET,
     renderScrollDynamic: DEFAULT_RENDER_SCROLL_DYNAMIC,
@@ -1981,6 +1984,7 @@ function App() {
       audioKeyVolume,
       audioBassVolume,
       audioTrebleVolume,
+      audioReverbAmount,
       typingSoundEnabled,
       typingSoundSet,
       renderScrollDynamic,
@@ -4723,6 +4727,7 @@ ${markdownHtml}
                     setAudioKeyVolume(appState.menu.audioKeyVolume ?? 0.5)
             setAudioBassVolume(appState.menu.audioBassVolume ?? 0)
             setAudioTrebleVolume(appState.menu.audioTrebleVolume ?? 0)
+            setAudioReverbAmount(appState.menu.audioReverbAmount ?? 0)
             setTypingSoundEnabled(appState.menu.typingSoundEnabled ?? false)
             setTypingSoundSet(appState.menu.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
             setHighlightColors({
@@ -4893,6 +4898,10 @@ ${markdownHtml}
   useEffect(() => {
     typingSoundManager.setTypingSoundEnabled(typingSoundEnabled)
   }, [typingSoundEnabled])
+
+  useEffect(() => {
+    typingSoundManager.setReverbAmount(audioReverbAmount)
+  }, [audioReverbAmount])
 
   useEffect(() => {
     typingSoundManager.setLayerGain('treble', audioTrebleVolume)
@@ -8156,6 +8165,16 @@ ${markdownHtml}
             trackLabel="treble"
             ariaLabel="Treble volume"
             onCommit={(value) => setAudioTrebleVolume(clamp(value, 0, 1))}
+          />
+          <CompactScrollbarSlider
+            id="audio-reverb-amount"
+            min={0}
+            max={1}
+            step={0.01}
+            value={audioReverbAmount}
+            trackLabel="reverb"
+            ariaLabel="Reverb amount"
+            onCommit={(value) => setAudioReverbAmount(clamp(value, 0, 1))}
           />
         </div>
       </section>
