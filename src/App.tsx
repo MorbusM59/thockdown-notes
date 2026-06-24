@@ -8828,6 +8828,7 @@ ${markdownHtml}
           <div ref={editorStageRef} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
             <div style={{ display: isPreviewMode ? 'none' : undefined }}>
               <Editor
+                key={activeNoteId ?? 'editor' }
                 bindings={bindings}
                 adapterRef={adapterRef}
                 noteId={activeNoteId}
