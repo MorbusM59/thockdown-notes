@@ -71,20 +71,20 @@ function readCollapsedCaretFromAdjacentContent(range: Range): SelectionRect | nu
     const element = container as Element;
     const childCount = element.childNodes.length;
 
-    if (offset > 0 && offset - 1 < childCount) {
-      const before = element.childNodes[offset - 1];
-      const probe = range.cloneRange();
-      probe.selectNode(before);
-      const rect = tryProbeRangeRect(probe);
-      if (rect) return pointAtRectEdge(rect, 'right');
-    }
-
     if (offset < childCount) {
       const after = element.childNodes[offset];
       const probe = range.cloneRange();
       probe.selectNode(after);
       const rect = tryProbeRangeRect(probe);
       if (rect) return pointAtRectEdge(rect, 'left');
+    }
+
+    if (offset > 0 && offset - 1 < childCount) {
+      const before = element.childNodes[offset - 1];
+      const probe = range.cloneRange();
+      probe.selectNode(before);
+      const rect = tryProbeRangeRect(probe);
+      if (rect) return pointAtRectEdge(rect, 'right');
     }
   }
 
