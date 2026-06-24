@@ -8181,7 +8181,7 @@ ${markdownHtml}
             max={1}
             step={0.01}
             value={audioReverbStrength}
-            trackLabel="strength"
+            trackLabel="reverb"
             ariaLabel="Reverb strength"
             onCommit={(value) => setAudioReverbStrength(clamp(value, 0, 1))}
           />
@@ -8191,7 +8191,7 @@ ${markdownHtml}
             max={1}
             step={0.01}
             value={audioReverbSpace}
-            trackLabel="space"
+            trackLabel="room"
             ariaLabel="Reverb space"
             onCommit={(value) => setAudioReverbSpace(clamp(value, 0, 1))}
           />
