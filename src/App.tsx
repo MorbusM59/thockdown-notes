@@ -4056,41 +4056,84 @@ ${markdownHtml}
   }, [notes])
 
   const saveExternalNoteToFile = useCallback(async (noteId: string) => {
-    if (!window.measlyNotes) return
+    if (!window.measlyNotes || !window.measlyExternalFiles) return
     if (activeNoteId !== noteId) return
 
-    const currentText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
-    const hash = await hashNormalizedText(currentText)
-
-    console.debug('[external-note] explicit save path starting', { noteId, textLength: currentText.length, hash })
-    try {
-      const synced = await window.measlyNotes.syncExternalNoteToFile({ id: noteId, content: currentText })
-      console.debug('[external-note] external file write result', { noteId, synced })
-      if (!synced) {
-        console.error('External note sync failed for note', noteId)
-        return
-      }
-
-      await window.measlyNotes.saveNoteSnapshot({ id: noteId, content: currentText, isManual: false })
-      if (activeNoteId === noteId) {
-        setActiveNoteText(currentText)
-      }
-      setCurrentExternalNoteHash(hash)
-      setNotes((previous) => {
-        const index = previous.findIndex((note) => note.id === noteId)
-        if (index < 0) return previous
-
-        const next = [...previous]
-        next[index] = {
-          ...next[index],
-          updatedAtMs: Date.now(),
-        }
-        return next
-      })
-    } catch (error) {
-      console.error('Failed to save external note to file', error)
+    const summary = notes.find((note) => note.id === noteId)
+    const externalPath = summary?.externalPath ?? null
+    if (!externalPath) {
+      console.error('[external-note] saveExternalNoteToFile missing externalPath', { noteId })
+      return
     }
-  }, [activeNoteId, activeNoteText])
+
+    const currentText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+    const currentHash = await hashNormalizedText(currentText)
+
+    console.debug('[external-note] explicit save path starting', { noteId, textLength: currentText.length, hash: currentHash })
+
+    let diskSanityText: string | null = null
+    let writeSucceeded = false
+
+    try {
+      writeSucceeded = await window.measlyNotes.syncExternalNoteToFile({ id: noteId, content: currentText })
+      console.debug('[external-note] external file write result', { noteId, writeSucceeded })
+    } catch (error) {
+      console.error('[external-note] external file write failed', { noteId, error })
+    }
+
+    try {
+      const diskContent = await window.measlyExternalFiles.readFileContent(externalPath)
+      if (diskContent !== null) {
+        diskSanityText = diskContent
+      } else {
+        console.error('[external-note] failed to read disk content for sanity snapshot', { noteId, externalPath })
+      }
+    } catch (error) {
+      console.error('[external-note] failed to read disk content for sanity snapshot', { noteId, externalPath, error })
+    }
+
+    if (diskSanityText === null) {
+      return
+    }
+
+    const diskSanityNormalized = normalizeInternalText(diskSanityText)
+    const isDiskEqual = currentText === diskSanityNormalized
+
+    try {
+      if (isDiskEqual) {
+        await window.measlyNotes.saveNoteSnapshot({ id: noteId, content: currentText, isManual: false })
+        externalNoteOriginalTextByIdRef.current.set(noteId, currentText)
+        externalNoteOriginalHashByIdRef.current.set(noteId, currentHash)
+        setCurrentExternalNoteHash(currentHash)
+        if (activeNoteId === noteId) {
+          setActiveNoteText(currentText)
+        }
+        setNotes((previous) => {
+          const index = previous.findIndex((note) => note.id === noteId)
+          if (index < 0) return previous
+
+          const next = [...previous]
+          next[index] = {
+            ...next[index],
+            updatedAtMs: Date.now(),
+          }
+          return next
+        })
+      } else {
+        const diskHash = await hashNormalizedText(diskSanityNormalized)
+        await window.measlyNotes.saveNoteSnapshot({ id: noteId, content: diskSanityNormalized, isManual: false })
+        externalNoteOriginalTextByIdRef.current.set(noteId, diskSanityNormalized)
+        externalNoteOriginalHashByIdRef.current.set(noteId, diskHash)
+        setCurrentExternalNoteHash(currentHash)
+        if (activeNoteId === noteId) {
+          setActiveNoteText(currentText)
+        }
+        console.error('[external-note] disk sanity mismatch after save', { noteId, currentHash, diskHash, writeSucceeded })
+      }
+    } catch (error) {
+      console.error('[external-note] failed to persist external note snapshots', { noteId, error })
+    }
+  }, [activeNoteId, activeNoteText, notes])
 
   const executeArmedNoteAction = useCallback(async (noteId: string, action: NoteArmedAction) => {
     if (!window.measlyNotes) return
