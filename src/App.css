@@ -1079,12 +1079,12 @@ button.active,
   outline: 3px double #FFFFFFAA;
 }
 
-.date-view .note-list-item.is-armed-for-saving {
-  outline: 2px solid #ff0000;
+.date-view .note-list-item.is-modified.is-armed-for-saving {
+  outline: 2px solid #00ff00;
 }
 
-.date-view .note-list-item.is-armed-for-closing {
-  outline: 2px solid #ffff00;
+.date-view .note-list-item.is-modified.is-armed-for-closing {
+  outline: 2px solid #ff0000;
 }
 
 .note-list-content {
