@@ -1075,16 +1075,18 @@ button.active,
 }
 
 .date-view .note-list-item.is-external.is-modified {
-  border: 1px solid #FFFFFF;
-  outline: 3px double #FFFFFFAA;
+  border: 1px solid #FFDDAA;
+  outline: 3px double #FFDDAAAA;
 }
 
 .date-view .note-list-item.is-modified.is-armed-for-saving {
-  outline: 2px solid #00ff00;
+  border: 1px solid #BBFFAA;
+  outline: 3px double #BBFFAAAA;
 }
 
 .date-view .note-list-item.is-modified.is-armed-for-closing {
-  outline: 2px solid #ff0000;
+  border: 1px solid #FF9999;
+  outline: 3px double #FF9999AA;
 }
 
 .note-list-content {
