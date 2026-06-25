@@ -4,12 +4,16 @@
   "appId": "com.morbusm59.measlynotes",
   "asar": true,
   "productName": "Measly Notes",
+  "icon": "assets/icon",
   "directories": {
     "output": "release/${version}"
   },
   "files": [
     "dist",
-    "dist-electron"
+    "dist-electron",
+    "assets/icon.ico",
+    "assets/icon.icns",
+    "assets/icon.png"
   ],
   "mac": {
     "target": [

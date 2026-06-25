@@ -32,6 +32,18 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
+function resolveWindowIconPath(): string {
+  if (process.platform === 'win32') {
+    return path.join(process.env.APP_ROOT, 'assets', 'icon.ico')
+  }
+
+  if (process.platform === 'darwin') {
+    return path.join(process.env.APP_ROOT, 'assets', 'icon.icns')
+  }
+
+  return path.join(process.env.APP_ROOT, 'assets', 'icon.png')
+}
+
 let win: BrowserWindow | null
 let noteLifecycleService: NoteLifecycleService | null = null;
 let stateService: StateService | null = null;
@@ -453,7 +465,7 @@ async function createWindow() {
   const savedWindowState = await stateService.loadWindowState();
 
 win = new BrowserWindow({
-  icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+  icon: resolveWindowIconPath(),
   width: savedWindowState.width,
   height: savedWindowState.height,
   x: savedWindowState.x,
