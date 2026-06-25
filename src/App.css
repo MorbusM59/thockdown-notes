@@ -1075,7 +1075,8 @@ button.active,
 }
 
 .date-view .note-list-item.is-external.is-modified {
-  border-style: dashed;
+  border: 1px solid #FFFFFF;
+  outline: 3px double #FFFFFFAA;
 }
 
 .date-view .note-list-item.is-armed-for-saving {
