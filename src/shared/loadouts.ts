@@ -25,6 +25,7 @@ export type UiLayoutLoadout = {
   renderScrollTotalTimeSec: number;
   renderScrollMaxSpeedPxPerSec: number;
   renderScrollSkew: number;
+  glazeMode: 'none' | 'light' | 'medium' | 'heavy';
   highlightColors: {
     caret: string;
     search: string;

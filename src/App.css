@@ -1710,6 +1710,64 @@ button.active,
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
+.toolbar-flyout-glaze-grid {
+  grid-auto-columns: var(--color-grid-cell);
+  grid-auto-rows:    var(--color-grid-cell);
+  grid-auto-flow:    column;
+}
+
+.toolbar-flyout-glaze-swatch {
+  position: relative;
+  outline: 1px solid transparent;
+  background: linear-gradient(135deg, rgba(255,255,255,0.78), rgba(255,255,255,0.36));
+}
+
+.toolbar-flyout-glaze-swatch::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.55), transparent 56%);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.toolbar-flyout-glaze-swatch.active {
+  outline-color: var(--btn-border-active);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.5);
+}
+
+/* Glaze overlay */
+.app-shell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 220ms ease;
+  background-image:
+    repeating-linear-gradient(42deg,
+      rgba(0,0,0,0.12) 0%, rgba(255,255,255,0.44) 3%,
+      rgba(0,0,0,0.14) 3%, rgba(255,255,255,0.14) 5%,
+      transparent 5%, transparent 9%,
+      rgba(255,255,255,0.22) 9%, rgba(255,255,255,0.46) 11%,
+      transparent 11%, transparent 14%,
+      rgba(0,0,255,0.28) 14%, rgba(255,255,255,0.28) 16%,
+      transparent 16%, transparent 20%,
+      rgba(255,255,255,0.12) 20%, rgba(255,255,255,0.12) 22%,
+      transparent 22%, transparent 26%),
+    radial-gradient(circle at top left, rgba(0,222,255,0.8), transparent 82%),
+    radial-gradient(circle at bottom right, rgba(255,0,222,0.7), transparent 90%);
+  background-repeat: no-repeat;
+  background-size: 100%;
+  mix-blend-mode: screen;
+}
+
+.app-shell.glaze-light::after { opacity: 0.25; }
+.app-shell.glaze-medium::after { opacity: 0.4; }
+.app-shell.glaze-heavy::after { opacity: 0.6; }
+
 /* HSVA controls */
 .toolbar-flyout-hsva-control {
   cursor:     ns-resize;

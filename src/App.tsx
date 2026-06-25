@@ -190,6 +190,15 @@ type HsvaColor = {
 
 type HsvaControlKey = 'h' | 's' | 'v' | 'a'
 
+type GlazeModeKey = 'none' | 'light' | 'medium' | 'heavy'
+
+const GLAZE_MODES: Array<{ key: GlazeModeKey; title: string; ariaLabel: string }> = [
+  { key: 'none', title: 'No glaze', ariaLabel: 'No glaze overlay' },
+  { key: 'light', title: 'Light glaze', ariaLabel: 'Light glaze overlay' },
+  { key: 'medium', title: 'Glass glaze', ariaLabel: 'Glass glaze overlay' },
+  { key: 'heavy', title: 'Bold glaze', ariaLabel: 'Bold glaze overlay' },
+]
+
 type HsvaDragState = {
   control: HsvaControlKey
   pointerId: number
@@ -1033,9 +1042,9 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     ? source.viewStyle
     : 'modern'
 
-  const viewFontSize = source.viewFontSize === 'xs' || source.viewFontSize === 's' || source.viewFontSize === 'm' || source.viewFontSize === 'l' || source.viewFontSize === 'xl'
-    ? source.viewFontSize
-    : 'm'
+  const glazeMode = source.glazeMode === 'none' || source.glazeMode === 'light' || source.glazeMode === 'medium' || source.glazeMode === 'heavy'
+    ? source.glazeMode
+    : 'none'
 
   const viewSpacing = source.viewSpacing === 'tight' || source.viewSpacing === 'compact' || source.viewSpacing === 'cozy' || source.viewSpacing === 'wide'
     ? source.viewSpacing
@@ -1055,7 +1064,9 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
 
   return {
     viewStyle,
-    viewFontSize,
+    viewFontSize: source.viewFontSize === 'xs' || source.viewFontSize === 's' || source.viewFontSize === 'm' || source.viewFontSize === 'l' || source.viewFontSize === 'xl'
+      ? source.viewFontSize
+      : 'm',
     viewSpacing,
     editorStyle,
     editorFontSize,
@@ -1079,6 +1090,7 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     typingSoundSet: source.typingSoundSet === 'A' || source.typingSoundSet === 'B' || source.typingSoundSet === 'C'
       ? source.typingSoundSet
       : DEFAULT_TYPING_SOUND_SET,
+    glazeMode,
     highlightColors: normalizedHighlightColors,
     textureMaterials: {
       appGrid: normalizeTextureMaterialForLoadoutSignature(normalizedTextureMaterials.appGrid),
@@ -1703,6 +1715,7 @@ function App() {
   const [texturePreviewMaterial, setTexturePreviewMaterial] = useState<TextureMaterialSettings>(() => toTexturePreviewMaterial(DEFAULT_TEXTURE_MATERIALS.appGrid))
   const [textureSeedInput, setTextureSeedInput] = useState(() => String(DEFAULT_TEXTURE_MATERIALS.appGrid.seed))
   const [isTextureSeedEditing, setIsTextureSeedEditing] = useState(false)
+  const [glazeMode, setGlazeMode] = useState<GlazeModeKey>('none')
   const [audioKeyVolume, setAudioKeyVolume] = useState(0.5)
   const [audioBassVolume, setAudioBassVolume] = useState(0)
   const [audioTrebleVolume, setAudioTrebleVolume] = useState(0)
@@ -1974,6 +1987,7 @@ function App() {
     renderScrollTotalTimeSec: DEFAULT_RENDER_SCROLL_TOTAL_TIME_SEC,
     renderScrollMaxSpeedPxPerSec: DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC,
     renderScrollSkew: DEFAULT_RENDER_SCROLL_SKEW,
+    glazeMode: 'none',
     highlightColors: DEFAULT_HIGHLIGHT_COLORS,
     textureMaterials: cloneTextureMaterials(DEFAULT_TEXTURE_MATERIALS),
   }), [])
@@ -1999,6 +2013,7 @@ function App() {
       renderScrollTotalTimeSec,
       renderScrollMaxSpeedPxPerSec,
       renderScrollSkew,
+      glazeMode,
       highlightColors: {
         caret: highlightColors.caret,
         search: highlightColors.search,
@@ -2015,7 +2030,7 @@ function App() {
     editorGlyphPaddingPx,
     editorSpacing,
     editorStyle,
-    highlightColors,
+    glazeMode,
     renderScrollDynamic,
     renderScrollResponsiveness,
     renderScrollTotalTimeSec,
@@ -2054,6 +2069,7 @@ function App() {
     setAudioTrebleVolume(clamp(loadout.audioTrebleVolume, 0, 1))
     setTypingSoundEnabled(loadout.typingSoundEnabled)
     setTypingSoundSet(loadout.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
+    setGlazeMode(loadout.glazeMode ?? 'none')
     setHighlightColors({
       caret: loadout.highlightColors.caret,
       search: loadout.highlightColors.search,
@@ -2533,11 +2549,11 @@ function App() {
       renderScrollTotalTimeSec,
       renderScrollMaxSpeedPxPerSec,
       renderScrollSkew,
+      glazeMode,
       audioKeyVolume,
       audioBassVolume,
       audioTrebleVolume,
       typingSoundSet,
-      highlightCaretColor: highlightColors.caret,
       highlightSearchColor: highlightColors.search,
       highlightSelectionColor: highlightColors.selection,
       highlightBackgroundColor: highlightColors.background,
@@ -2583,6 +2599,7 @@ function App() {
     audioBassVolume,
     audioTrebleVolume,
     textureEnabled,
+    glazeMode,
     textureMaterials,
     highlightColors,
     searchQuery,
@@ -4791,9 +4808,10 @@ ${markdownHtml}
             setRenderScrollDynamic(appState.menu.renderScrollDynamic ?? appState.menu.renderScrollEaseMultiplier ?? getRenderScrollDynamic())
             setRenderScrollResponsiveness(appState.menu.renderScrollResponsiveness ?? appState.menu.renderScrollDistanceTimeInfluence ?? getRenderScrollResponsiveness())
             setRenderScrollTotalTimeSec(appState.menu.renderScrollTotalTimeSec ?? getRenderScrollTotalTimeSec())
-            setRenderScrollMaxSpeedPxPerSec(appState.menu.renderScrollMaxSpeedPxPerSec ?? getRenderScrollMaxSpeedPxPerSec())
+                  setRenderScrollMaxSpeedPxPerSec(appState.menu.renderScrollMaxSpeedPxPerSec ?? getRenderScrollMaxSpeedPxPerSec())
             setRenderScrollSkew(appState.menu.renderScrollSkew ?? getRenderScrollSkew())
-                    setAudioKeyVolume(appState.menu.audioKeyVolume ?? 0.5)
+            setGlazeMode(appState.menu.glazeMode ?? 'none')
+            setAudioKeyVolume(appState.menu.audioKeyVolume ?? 0.5)
             setAudioBassVolume(appState.menu.audioBassVolume ?? 0)
             setAudioTrebleVolume(appState.menu.audioTrebleVolume ?? 0)
             setAudioReverbStrength(appState.menu.audioReverbStrength ?? appState.menu.audioReverbAmount ?? 0)
@@ -8156,6 +8174,21 @@ ${markdownHtml}
           })}
         </div>
 
+        <div className="sidebar-options-divider" aria-hidden="true" />
+        <div className="toolbar-flyout-color-grid toolbar-flyout-glaze-grid" role="group" aria-label="Glaze overlay options">
+          {GLAZE_MODES.map((mode) => (
+            <button
+              key={mode.key}
+              type="button"
+              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-glaze-swatch glaze-${mode.key}${glazeMode === mode.key ? ' active' : ''}`}
+              title={mode.title}
+              aria-label={mode.ariaLabel}
+              onClick={() => setGlazeMode(mode.key)}
+            />
+          ))}
+        </div>
+        <div className="sidebar-options-divider" aria-hidden="true" />
+
         <div className="toolbar-flyout-color-grid toolbar-flyout-texture-grid" role="group" aria-label="Texture color targets">
           {(['appGrid', 'sidebarContent', isPreviewMode ? 'editorRenderText' : 'editorEditText'] as TextureSurfaceKey[]).map((surface) => (
             <button
@@ -8642,7 +8675,7 @@ ${markdownHtml}
   return (
     <div className="app-root" onDragOver={handleAppDragOver} onDrop={handleAppDrop}>
       <div
-        className="app-shell app-grid"
+        className={`app-shell app-grid glaze-${glazeMode}`}
         ref={appShellRef}
         style={appShellStyle}
       >
