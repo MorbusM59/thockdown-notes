@@ -39,6 +39,7 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   renderScrollTotalTimeSec: 0.4,
   renderScrollMaxSpeedPxPerSec: 6000,
   renderScrollSkew: 0.5,
+  glazeMode: 'none',
   highlightColors: {
     caret: 'rgba(120, 115, 112, 0.8)',
     search: 'rgba(255, 221, 105, 0.55)',
@@ -322,6 +323,10 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     ? source.editorSpacing
     : DEFAULT_UI_LAYOUT_LOADOUT.editorSpacing;
 
+  const glazeMode = source.glazeMode === 'none' || source.glazeMode === 'light' || source.glazeMode === 'medium' || source.glazeMode === 'heavy'
+    ? source.glazeMode
+    : DEFAULT_UI_LAYOUT_LOADOUT.glazeMode;
+
   return {
     viewStyle,
     viewFontSize,
@@ -344,6 +349,7 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     typingSoundSet: source.typingSoundSet === 'A' || source.typingSoundSet === 'B' || source.typingSoundSet === 'C'
       ? source.typingSoundSet
       : DEFAULT_UI_LAYOUT_LOADOUT.typingSoundSet,
+    glazeMode,
     highlightColors: {
       caret: sanitizeString(highlights.caret, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.caret),
       search: sanitizeString(highlights.search, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.search),
