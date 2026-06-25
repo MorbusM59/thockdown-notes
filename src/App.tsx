@@ -656,8 +656,11 @@ function mergeNoteSummaries(previous: NoteSummary[], next: NoteSummary[]): NoteS
   for (let index = 0; index < next.length; index += 1) {
     const nextNote = next[index]
     const existing = previousById.get(nextNote.id)
+    const nextCandidate = (existing && existing.hasUnsavedChanges && !nextNote.hasUnsavedChanges && isExternalNote(existing))
+      ? { ...nextNote, hasUnsavedChanges: existing.hasUnsavedChanges }
+      : nextNote
 
-    if (existing && isSameNoteSummary(existing, nextNote)) {
+    if (existing && isSameNoteSummary(existing, nextCandidate)) {
       merged.push(existing)
       if (previous[index] !== existing) {
         changed = true
@@ -665,7 +668,7 @@ function mergeNoteSummaries(previous: NoteSummary[], next: NoteSummary[]): NoteS
       continue
     }
 
-    merged.push(nextNote)
+    merged.push(nextCandidate)
     changed = true
   }
 
@@ -3704,6 +3707,10 @@ ${markdownHtml}
       return Boolean(note.hasUnsavedChanges)
     }
 
+    if (Boolean(note.hasUnsavedChanges)) {
+      return true
+    }
+
     return (
       currentHash !== null
       && currentHash !== externalNoteOriginalHashByIdRef.current.get(note.id)
@@ -5048,6 +5055,27 @@ ${markdownHtml}
             next[index] = { ...existing, hasUnsavedChanges: isCurrentlyModified }
             return next
           })
+
+          const notesApi = window.measlyNotes
+          if (notesApi) {
+            void notesApi.updateExternalNoteState({
+              id: activeNoteId,
+              hasUnsavedChanges: isCurrentlyModified,
+              syncMode: !isCurrentlyModified,
+            }).then((updatedSummary) => {
+              setNotes((previous) => {
+                const index = previous.findIndex((note) => note.id === updatedSummary.id)
+                if (index < 0) return previous
+                const existing = previous[index]
+                if (isSameNoteSummary(existing, updatedSummary)) return previous
+                const next = [...previous]
+                next[index] = updatedSummary
+                return next
+              })
+            }).catch((error) => {
+              console.error('[external-note] failed to persist unsaved state', { noteId: activeNoteId, isCurrentlyModified, error })
+            })
+          }
         }
       }
 
