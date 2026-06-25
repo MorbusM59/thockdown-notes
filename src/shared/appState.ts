@@ -32,6 +32,7 @@ export interface PersistedMenuState {
   editorGlyphPaddingPx?: number;
   sidebarWidthRatio: number;
   tagSplitRatio: number;
+  glazeMode?: 'none' | 'light' | 'medium' | 'heavy';
   scrollEaseMultiplier?: number;
   scrollDistanceTimeInfluence?: number;
   scrollBaseDistanceRows?: number;
