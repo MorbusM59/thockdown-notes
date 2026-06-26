@@ -1083,12 +1083,6 @@ button.active,
   background-color: #ffe1e1;
 }
 
-.date-view .note-list-item.is-external,
-.date-view .note-list-item.is-external.is-modified,
-.date-view .note-list-item.is-armed-for-saving,
-.date-view .note-list-item.is-armed-for-saving.is-active {
-}
-
 .date-view .note-list-item.is-external {
   border-radius: 0;
 }

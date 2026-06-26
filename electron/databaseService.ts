@@ -40,6 +40,7 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   renderScrollMaxSpeedPxPerSec: 6000,
   renderScrollSkew: 0.5,
   glazeMode: 'none',
+  darkMode: 'none',
   highlightColors: {
     caret: 'rgba(120, 115, 112, 0.8)',
     search: 'rgba(255, 221, 105, 0.55)',
@@ -327,6 +328,10 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     ? source.glazeMode
     : DEFAULT_UI_LAYOUT_LOADOUT.glazeMode;
 
+  const darkMode = source.darkMode === 'none' || source.darkMode === 'mono' || source.darkMode === 'red' || source.darkMode === 'dusk' || source.darkMode === 'neon' || source.darkMode === 'matrix'
+    ? source.darkMode
+    : DEFAULT_UI_LAYOUT_LOADOUT.darkMode;
+
   return {
     viewStyle,
     viewFontSize,
@@ -350,6 +355,7 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
       ? source.typingSoundSet
       : DEFAULT_UI_LAYOUT_LOADOUT.typingSoundSet,
     glazeMode,
+    darkMode,
     highlightColors: {
       caret: sanitizeString(highlights.caret, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.caret),
       search: sanitizeString(highlights.search, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.search),
