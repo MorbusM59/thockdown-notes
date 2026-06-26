@@ -1729,6 +1729,18 @@ button.active,
   grid-auto-flow:    column;
 }
 
+.glaze-light > .fa-barcode {
+  opacity: 0.2;
+}
+
+.glaze-medium > .fa-barcode {
+  opacity: 0.4;
+}
+
+.glaze-heavy > .fa-barcode {
+  opacity: 0.8;
+}
+
 /* Glaze overlay */
 .app-root::after {
   content: '';
@@ -1741,13 +1753,13 @@ button.active,
   background-image:
     repeating-linear-gradient(225deg,
       transparent 0, transparent 53px,
-      rgba(0,255,255,0.2) 53px, rgba(0,255,255,0.2) 142px,
+      rgba(222,255,255,0.2) 53px, rgba(222,255,255,0.2) 142px,
       transparent 142px, transparent 214px,
-      rgba(0,255,255,0.2) 214px, rgba(0,255,255,0.2) 371px,
+      rgba(255,222,255,0.2) 214px, rgba(255,222,255,0.2) 371px,
       transparent 371px, transparent 412px,
-      rgba(0,255,255,0.2) 412px, rgba(0,255,255,0.2) 468px,
+      rgba(255,255,222,0.2) 412px, rgba(255,255,222,0.2) 468px,
       transparent 468px, transparent 525px,
-      rgba(0,255,255,0.2) 525px, rgba(0,255,255,0.2) 612px,
+      rgba(222,255,222,0.2) 525px, rgba(222,255,222,0.2) 612px,
       transparent 612px, transparent 677px),
     repeating-linear-gradient(45deg,
       transparent 0, transparent 79px,
@@ -1761,28 +1773,47 @@ button.active,
       transparent 612px, transparent 648px),
     repeating-linear-gradient(45deg,
       transparent 0, transparent 34px,
-      rgba(255,255,255,0.4) 34px, rgba(255,255,255,0.4) 51px,
+      rgba(255,255,255,0.22) 34px, rgba(255,255,255,0.22) 51px,
       transparent 51px, transparent 94px,
-      rgba(255,255,255,0.2) 94px, rgba(255,255,255,0.2) 100px,
+      rgba(255,255,255,0.24) 94px, rgba(255,255,255,0.24) 100px,
       transparent 100px, transparent 147px,
-      rgba(255,255,255,0.4) 147px, rgba(255,255,255,0.4) 162px,
+      rgba(255,255,255,0.22) 147px, rgba(255,255,255,0.22) 162px,
       transparent 162px, transparent 202px,
-      rgba(255,255,255,0.3) 202px, rgba(255,255,255,0.3) 226px,
+      rgba(255,255,255,0.26) 202px, rgba(255,255,255,0.26) 226px,
       transparent 226px, transparent 260px),
     linear-gradient(180deg,
-      #00000044 0, #000000BB 33%,
-      #000000BB 33%, #000000BB 66%,
-      #000000BB 66%, #00000044 100%),
-    radial-gradient(circle at top left, rgba(0,222,255,0.8), transparent 82%),
-    radial-gradient(circle at bottom right, rgba(255,0,222,0.7), transparent 90%);
+      rgba(0,0,0,0.3) 0, rgba(0,0,0,0.8) 33%,
+      rgba(0,0,0,0.8) 33%, rgba(0,0,0,0.8) 66%,
+      rgba(0,0,0,0.8) 66%, rgba(0,0,0,0.3) 100%),
+    radial-gradient(circle at top left, rgba(0,222,255,0.2), transparent 90%),
+    radial-gradient(circle at bottom right, rgba(255,0,222,0.2), transparent 90%);
   background-repeat: no-repeat;
   background-size: 100%;
   mix-blend-mode: luminosity;
 }
 
-.app-root.glaze-light::after { opacity: 0.05; }
-.app-root.glaze-medium::after { opacity: 0.1; }
+.app-root.glaze-light::after { opacity: 0.1; }
+.app-root.glaze-medium::after { opacity: 0.15; }
 .app-root.glaze-heavy::after { opacity: 0.2; }
+
+.app-root.glaze-light:has(.app-shell.darkmode-mono)::after,
+.app-root.glaze-light:has(.app-shell.darkmode-red)::after,
+.app-root.glaze-light:has(.app-shell.darkmode-dusk)::after,
+.app-root.glaze-light:has(.app-shell.darkmode-neon)::after,
+.app-root.glaze-light:has(.app-shell.darkmode-matrix)::after
+  { opacity: 0.07; }
+.app-root.glaze-medium:has(.app-shell.darkmode-mono)::after,
+.app-root.glaze-medium:has(.app-shell.darkmode-red)::after,
+.app-root.glaze-medium:has(.app-shell.darkmode-dusk)::after,
+.app-root.glaze-medium:has(.app-shell.darkmode-neon)::after,
+.app-root.glaze-medium:has(.app-shell.darkmode-matrix)::after
+  { opacity: 0.1; }
+.app-root.glaze-heavy:has(.app-shell.darkmode-mono)::after,
+.app-root.glaze-heavy:has(.app-shell.darkmode-red)::after,
+.app-root.glaze-heavy:has(.app-shell.darkmode-dusk)::after,
+.app-root.glaze-heavy:has(.app-shell.darkmode-neon)::after,
+.app-root.glaze-heavy:has(.app-shell.darkmode-matrix)::after
+  { opacity: 0.13; }
 
 /* HSVA controls */
 .toolbar-flyout-hsva-control {

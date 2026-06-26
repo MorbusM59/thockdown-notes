@@ -192,22 +192,22 @@ type HsvaControlKey = 'h' | 's' | 'v' | 'a'
 
 type GlazeModeKey = 'none' | 'light' | 'medium' | 'heavy'
 
-const GLAZE_MODES: Array<{ key: GlazeModeKey; title: string; ariaLabel: string }> = [
-  { key: 'none', title: 'No glaze', ariaLabel: 'No glaze overlay' },
-  { key: 'light', title: 'Light glaze', ariaLabel: 'Light glaze overlay' },
-  { key: 'medium', title: 'Medium glaze', ariaLabel: 'Medium glaze overlay' },
-  { key: 'heavy', title: 'Heavy glaze', ariaLabel: 'Heavy glaze overlay' },
+const GLAZE_MODES: Array<{ key: GlazeModeKey; title: string; ariaLabel: string; faicon: string }> = [
+  { key: 'none', title: 'No glaze', ariaLabel: 'No glaze overlay', faicon: 'fa-solid fa-ban' },
+  { key: 'light', title: 'Light glaze', ariaLabel: 'Light glaze overlay', faicon: 'fa-solid fa-barcode' },
+  { key: 'medium', title: 'Medium glaze', ariaLabel: 'Medium glaze overlay', faicon: 'fa-solid fa-barcode' },
+  { key: 'heavy', title: 'Heavy glaze', ariaLabel: 'Heavy glaze overlay', faicon: 'fa-solid fa-barcode' },
 ]
 
 type DarkModeKey = 'none' | 'mono' | 'red' | 'dusk' | 'neon' | 'matrix'
 
-const DARK_MODES: Array<{ key: DarkModeKey; title: string; ariaLabel: string }> = [
-  { key: 'none', title: 'Dark mode: None', ariaLabel: 'No dark mode' },
-  { key: 'mono', title: 'Dark mode: Mono', ariaLabel: 'Monochrome dark mode' },
-  { key: 'red', title: 'Dark mode: Red', ariaLabel: 'Reddish dark mode' },
-  { key: 'dusk', title: 'Dark mode: Dusk', ariaLabel: 'Cool dusk dark mode' },
-  { key: 'neon', title: 'Dark mode: Neon', ariaLabel: 'Neon dark mode' },
-  { key: 'matrix', title: 'Dark mode: Matrix', ariaLabel: 'Matrix mode' },
+const DARK_MODES: Array<{ key: DarkModeKey; title: string; ariaLabel: string; faicon: string }> = [
+  { key: 'none', title: 'Dark mode: None', ariaLabel: 'No dark mode', faicon: 'fa-solid fa-sun' },
+  { key: 'mono', title: 'Dark mode: Mono', ariaLabel: 'Monochrome dark mode', faicon: 'fa-solid fa-moon' },
+  { key: 'red', title: 'Dark mode: Red', ariaLabel: 'Reddish dark mode', faicon: 'fa-solid fa-film' },
+  { key: 'dusk', title: 'Dark mode: Dusk', ariaLabel: 'Cool dusk dark mode', faicon: 'fa-solid fa-cloud-moon' },
+  { key: 'neon', title: 'Dark mode: Neon', ariaLabel: 'Neon dark mode', faicon: 'fa-solid fa-burst' },
+  { key: 'matrix', title: 'Dark mode: Matrix', ariaLabel: 'Matrix mode', faicon: 'fa-solid fa-code' },
 ]
 
 type HsvaDragState = {
@@ -8251,7 +8251,7 @@ ${markdownHtml}
               title={mode.title}
               aria-label={mode.ariaLabel}
               onClick={() => setGlazeMode(mode.key)}
-            />
+            ><span className={`${mode.faicon}`}></span></button>
           ))}
         </div>
 
@@ -8266,7 +8266,7 @@ ${markdownHtml}
               title={mode.title}
               aria-label={mode.ariaLabel}
               onClick={() => setDarkMode(mode.key)}
-            />
+            ><span className={`${mode.faicon}`}></span></button>
           ))}
         </div>
 
