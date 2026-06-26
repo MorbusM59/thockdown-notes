@@ -5452,13 +5452,13 @@ ${markdownHtml}
 
     if (cachedSnapshot && cachedSnapshot.noteId === activeNoteId) {
       pendingEditRestoreSnapshotRef.current = null
-      applyEditRestoreSnapshot(cachedSnapshot, { restoreFullSelection: true, focusAfterApply: true })
+applyEditRestoreSnapshot(cachedSnapshot, { restoreFullSelection: true, focusAfterApply: true, onComplete: () => setIsCaretSuspended(false) })
       return
     }
 
     const memorySnapshot = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
     if (memorySnapshot) {
-      applyEditRestoreSnapshot(memorySnapshot, { restoreFullSelection: true, focusAfterApply: true })
+applyEditRestoreSnapshot(memorySnapshot, { restoreFullSelection: true, focusAfterApply: true, onComplete: () => setIsCaretSuspended(false) })
       return
     }
 
@@ -5479,7 +5479,7 @@ ${markdownHtml}
         })
         updateEditModeSnapshotCache(fallbackSnapshot)
 
-        applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusAfterApply: true })
+applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusAfterApply: true, onComplete: () => setIsCaretSuspended(false) })
       } catch (error) {
         console.warn('Failed to restore edit mode state from persisted UI data', error)
       }
