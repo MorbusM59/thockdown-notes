@@ -1,4 +1,4 @@
-﻿// shared/types.ts - central types for Measly Notes
+﻿// shared/types.ts - central types for Thockdown Notes
 
 export interface Note {
   id: number;

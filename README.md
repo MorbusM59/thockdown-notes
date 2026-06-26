@@ -1,4 +1,4 @@
-# Measly Notes
+# Thockdown Notes
 
 Desktop-first notes application built with Electron, React, Lexical, and Vite.
 

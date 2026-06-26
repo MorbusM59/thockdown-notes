@@ -3,7 +3,7 @@
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.morbusm59.measlynotes",
   "asar": true,
-  "productName": "Measly Notes",
+  "productName": "Thockdown Notes",
   "icon": "assets/icon",
   "directories": {
     "output": "release/${version}"
@@ -48,13 +48,13 @@
     {
       "ext": "md",
       "name": "Markdown Document",
-      "description": "Measly Notes Markdown File",
+      "description": "Thockdown Notes Markdown File",
       "role": "Editor"
     },
     {
       "ext": "txt",
       "name": "Text Document",
-      "description": "Measly Notes Text File",
+      "description": "Thockdown Notes File",
       "role": "Editor"
     }
   ]
