@@ -1792,28 +1792,28 @@ button.active,
   mix-blend-mode: luminosity;
 }
 
-.app-root.glaze-light::after { opacity: 0.1; }
-.app-root.glaze-medium::after { opacity: 0.15; }
-.app-root.glaze-heavy::after { opacity: 0.2; }
+.app-root.glaze-light::after { opacity: 0.08; }
+.app-root.glaze-medium::after { opacity: 0.12; }
+.app-root.glaze-heavy::after { opacity: 0.16; }
 
 .app-root.glaze-light:has(.app-shell.darkmode-mono)::after,
 .app-root.glaze-light:has(.app-shell.darkmode-red)::after,
 .app-root.glaze-light:has(.app-shell.darkmode-dusk)::after,
 .app-root.glaze-light:has(.app-shell.darkmode-neon)::after,
 .app-root.glaze-light:has(.app-shell.darkmode-matrix)::after
-  { opacity: 0.07; }
+  { opacity: 0.03; }
 .app-root.glaze-medium:has(.app-shell.darkmode-mono)::after,
 .app-root.glaze-medium:has(.app-shell.darkmode-red)::after,
 .app-root.glaze-medium:has(.app-shell.darkmode-dusk)::after,
 .app-root.glaze-medium:has(.app-shell.darkmode-neon)::after,
 .app-root.glaze-medium:has(.app-shell.darkmode-matrix)::after
-  { opacity: 0.1; }
+  { opacity: 0.06; }
 .app-root.glaze-heavy:has(.app-shell.darkmode-mono)::after,
 .app-root.glaze-heavy:has(.app-shell.darkmode-red)::after,
 .app-root.glaze-heavy:has(.app-shell.darkmode-dusk)::after,
 .app-root.glaze-heavy:has(.app-shell.darkmode-neon)::after,
 .app-root.glaze-heavy:has(.app-shell.darkmode-matrix)::after
-  { opacity: 0.13; }
+  { opacity: 0.09; }
 
 /* HSVA controls */
 .toolbar-flyout-hsva-control {
