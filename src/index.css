@@ -1,13 +1,403 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+@import "tailwindcss";
+
+:root {
+  font-family: inherit;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light;
+  color: #2a241f;
+  background-color: #f9f6f3;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@font-face {
+  font-family: 'Syne Mono';
+  src: url('./fonts/SyneMono-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Red Hat Mono';
+  src: url('./fonts/RedHatMono-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Roboto Condensed';
+  src: url('./fonts/RobotoCondensed-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Roboto Condensed';
+  src: url('./fonts/RobotoCondensed-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Roboto Condensed';
+  src: url('./fonts/RobotoCondensed-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Quicksand';
+  src: url('./fonts/Quicksand-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Quicksand';
+  src: url('./fonts/Quicksand-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Quicksand';
+  src: url('./fonts/Quicksand-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Sour Gummy';
+  src: url('./fonts/SourGummy-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Sour Gummy';
+  src: url('./fonts/SourGummy-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Sour Gummy';
+  src: url('./fonts/SourGummy-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Alumni Sans';
+  src: url('./fonts/AlumniSans-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Big Shoulders';
+  src: url('./fonts/BigShoulders-ExtraLight.woff2') format('woff2');
+  font-weight: 200;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'xkcd';
+  src: url('./fonts/xkcd.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Share Tech Mono';
+  src: url('./fonts/ShareTechMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+:root {
+  /* Core Editor Variables */
+  --editor-font: 'Syne Mono', monospace;
+  --editor-font-size: 16px;
+  --editor-line-height: 24px;
+  --editor-glyph-width: 8px;
+  --editor-cell-width: 10px; /* EXACT absolute pixel width for boxes */
+  --editor-frame-padding: 8px;
+  
+  /* Grid & Box Colors */
+  --color-grid-outline: #00000022;
+  --color-grid-bg: #f9f6f3;       /* Bright paper background */
+  --color-grid: #e9e6e3;          /* The drawn lines */
+  --color-bg-regular: #e9e6e3;    /* Regular text box shading */
+  --color-bg-leading: #d9d6d3;    /* Top section overlay */
+  --color-bg-trailing: #d9d6d3;   /* Bottom section overlay */
+  --color-caret: rgba(120, 115, 112, 0.8);
+  --color-selection: rgba(199, 94, 0, 0.49);
 }
 
 body {
+  margin: 0;
   overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  /* Use system font for UI, but editor uses custom font */
+  font-family: system-ui, -apple-system, sans-serif; 
+}
+#root {
+  width: 100%;
+  height: 100%;
 }
 
-#root {
-  height: 100vh;
+/* 
+  The Magic Monospace Grid
+*/
+.measly-grid-outline-lines {
+  background-image:
+    repeating-linear-gradient(to right, var(--color-grid-outline) 0, var(--color-grid-outline) 3px, transparent 3px, transparent var(--editor-cell-width)),
+    repeating-linear-gradient(to bottom, var(--color-grid-outline) 0, var(--color-grid-outline) 3px, transparent 3px, transparent var(--editor-line-height));
+  background-size: 100% 100%;
+  background-position: -1px -1px;
+}
+
+.measly-grid-lines {
+  /* Exactly draw the 1px grid lines across the absolute width/height using the --color-grid-bg paper color to create the "plates" effect. */
+  background-image: 
+    repeating-linear-gradient(to right, var(--color-grid-bg) 0, var(--color-grid-bg) 1px, transparent 1px, transparent var(--editor-cell-width)),
+    repeating-linear-gradient(to bottom, var(--color-grid-bg) 0, var(--color-grid-bg) 1px, transparent 1px, transparent var(--editor-line-height));
+  background-size: 100% 100%;
+  
+  /* FLUSH ALIGNMENT: Start exactly at 0px 0px so grid lines land perfectly on 24px row boundaries */
+  background-position: 0px 0px;
+}
+
+/* Dedicated editor scrollbar rail (lives in the 20px right-space zone). */
+.measly-custom-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.measly-custom-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.measly-scroll-rail {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0 4px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  z-index: 14;
+}
+
+.measly-scroll-track {
+  position: relative;
+  width: var(--canonical-scroll-thickness);
+  height: 100%;
+  border: 1px solid var(--canonical-scroll-track-border);
+  border-radius: var(--border-radius-regular);
+  box-shadow: var(--box-shadow-inverted-light);
+  background: var(--canonical-scroll-track-bg);
+  box-sizing: border-box;
+}
+
+.measly-scroll-thumb {
+  position: absolute;
+  left: var(--canonical-scroll-handle-gap);
+  right: var(--canonical-scroll-handle-gap);
+  border: 1px solid var(--canonical-handle-border);
+  border-radius: 999px;
+  box-sizing: border-box;
+  background: var(--canonical-handle-bg);
+  box-shadow: var(--box-shadow-regular-light);
+  cursor: ns-resize;
+}
+
+.measly-scroll-thumb:hover.is-inactive,
+.measly-scroll-thumb.is-dragging.is-inactive,
+.measly-scroll-thumb.is-inactive {
+  border-color: rgba(81, 73, 66, 0.30);
+  background: var(--canonical-handle-bg);
+  cursor: default;
+}
+
+/* Caret Box Tricks */
+.editor-text {
+  caret-color: transparent; /* Hide the native OS caret */
+}
+
+/* Custom Lexical Retro Block Caret */
+.measly-block-caret {
+  background-color: var(--color-caret);
+  animation: measly-blink 1.2s infinite cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes measly-blink {
+  /* Restore the beloved ff-caret-heartbeat rhythm! */
+  0%       { opacity: 0.6; }
+  10%  { opacity: 0.1; }
+  65%  { opacity: 0.9; }
+  85%  { opacity: 0.3; }
+  100%     { opacity: 0.6; }
+}
+
+/* Zone styling removed and flattened into Editor.tsx */
+
+/* Lexical Editor Text Styles */
+.editor-text {
+  font-family: var(--editor-font);
+  font-size: var(--editor-font-size);
+  line-height: var(--editor-line-height);
+  
+  /* Space each glyph by the exact measured gap to match the runtime cell width. */
+  letter-spacing: calc(var(--editor-cell-width) - var(--editor-glyph-width)); 
+
+  /* CENTER THE GLYPHS: Shifts the entire text layer halfway across the remaining letter-spacing space.
+     Adjust the -1px vertically if the font baseline feels slightly too high or low!
+     Zero overhead: performed entirely by the browser renderer on the container. */
+    transform: translateX(calc(((var(--editor-cell-width) - var(--editor-glyph-width)) / 2)));
+  
+  font-variant-ligatures: none; 
+  font-variant-numeric: tabular-nums;
+  white-space: pre-wrap;
+  tab-size: 4;
+}
+
+/* Clear all native margins from children inside the editor to prevent vertical shifting */
+.editor-text p, .editor-text div {
+  margin: 0;
+  padding: 0;
+}
+
+.editor-text::selection,
+.editor-text *::selection,
+.markdown-preview::selection,
+.markdown-preview *::selection {
+  background: var(--color-selection);
+}
+
+/* Syntax Highlighting Base Colors */
+.measly-token-heading,
+.measly-token-list,
+.measly-token-quote {
+  background: transparent;
+}
+
+.measly-token-heading {
+  color: #1e3a8a;
+  font-weight: bold;
+  text-shadow: 0 0 8px #FFFFFF, 0 0 4px #FFFFFF, 0 0 2px #FFFFFF99, 0 1px 0 #FFFFFF;
+}
+
+.measly-token-list {
+  color: #047857;
+  font-weight: bold;
+}
+
+.measly-token-quote {
+  color: #b45309;
+  font-style: italic;
+}
+
+/* We will apply this to all standard text nodes */
+.editor-text-regular {
+  background-color: transparent;
+}
+
+.h-screen { height: 100vh; width: 100vw; }
+.w-screen { width: 100vw; }
+.overflow-hidden { overflow: hidden; }
+.flex-shrink-0 { flex-shrink: 0; }
+.py-4 { padding-top: 1rem; padding-bottom: 1rem; }
+.shadow-sm { box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); }
+.text-2xl { font-size: 1.5rem; line-height: 2rem; }
+.border-b-2 { border-bottom-width: 2px; border-bottom-style: solid; }
+.pb-1 { padding-bottom: 0.25rem; }
+.flex-1 { flex: 1 1 0%; }
+.min-h-0 { min-height: 0; }
+.max-w-4xl { max-width: 56rem; }
+.border-x { border-left-width: 1px; border-right-width: 1px; border-style: solid; border-color: #e5e7eb; }
+.bg-gray-50 { background-color: #f9fafb; color: #111; }
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.p-4 { padding: 1rem; }
+.mb-8 { margin-bottom: 2rem; }
+.text-center { text-align: center; }
+.text-3xl { font-size: 1.875rem; line-height: 2.25rem; }
+.font-bold { font-weight: 700; }
+.text-gray-900 { color: #111827; }
+.border-b-4 { border-bottom-width: 4px; border-bottom-style: solid; }
+.border-orange-500 { border-color: #f97316; }
+.inline-block { display: inline-block; }
+.pb-2 { padding-bottom: 0.5rem; }
+.text-gray-500 { color: #6b7280; }
+.mt-2 { margin-top: 0.5rem; }
+.w-full { width: 100%; }
+.max-w-3xl { max-width: 48rem; }
+.mx-auto { margin-left: auto; margin-right: auto; }
+.mt-10 { margin-top: 2.5rem; }
+.rounded-lg { border-radius: 0.5rem; }
+.shadow-xl { box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1); }
+.bg-white { background-color: #fff; }
+.border { border-width: 1px; border-style: solid; }
+.border-gray-200 { border-color: #e5e7eb; }
+.overflow-hidden { overflow: hidden; }
+.text-left { text-align: left; }
+.relative { position: relative; }
+.p-6 { padding: 1.5rem; }
+.min-h-\[400px\] { min-height: 400px; }
+.outline-none { outline: 2px solid transparent; outline-offset: 2px; }
+.text-gray-800 { color: #1f2937; }
+.text-lg { font-size: 1.125rem; line-height: 1.75rem; }
+.absolute { position: absolute; }
+.top-6 { top: 1.5rem; }
+.left-6 { left: 1.5rem; }
+.left-0 { left: 0; }
+.right-0 { right: 0; }
+.h-full { height: 100%; }
+.w-full { width: 100%; }
+.top-\[50vh\] { top: 50vh; }
+.pt-\[50vh\] { padding-top: 50vh; }
+.pb-\[50vh\] { padding-bottom: 50vh; }
+.px-10 { padding-left: 2.5rem; padding-right: 2.5rem; }
+.min-h-\[50px\] { min-height: 50px; }
+.overflow-y-auto { overflow-y: auto; }
+.bg-gray-100 { background-color: #f3f4f6; }
+.p-2 { padding: 0.5rem; }
+.gap-2 { gap: 0.5rem; }
+.gap-4 { gap: 1rem; }
+.text-sm { font-size: 0.875rem; }
+.w-10 { width: 2.5rem; }
+.text-right { text-align: right; }
+.border-dashed { border-style: dashed; }
+.border-t-2 { border-top-width: 2px; border-top-style: dashed; }
+.border-b-2 { border-bottom-width: 2px; border-bottom-style: dashed; }
+.border-orange-400 { border-color: #fb923c; }
+.opacity-50 { opacity: 0.5; }
+.z-10 { z-index: 10; }
+.z-20 { z-index: 20; }
+.leading-relaxed { line-height: 1.625; }
+.outline-none { outline: 2px solid transparent; outline-offset: 2px; }
+.text-gray-800 { color: #1f2937; }
+.text-gray-400 { color: #9ca3af; }
+.pointer-events-none { pointer-events: none; }
+.select-none { user-select: none; }
+.relative { position: relative; }
+.bg-white { background-color: #fff; }
+
+.editor-paragraph {
+  margin: 0;
+  padding: 0;
+  min-height: var(--editor-line-height);
 }

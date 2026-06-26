@@ -1,7 +1,7 @@
-# Measly Notes — User Guide
+# Thockdown Notes — User Guide
 
 ## Overview
-Measly Notes is a Markdown-first desktop note-taking application built with Electron and React. It is designed for fast note capture, structured tagging, searchable history, and seamless editing with automatic persistence.
+Thowckdown Notes is a Markdown-first desktop note-taking application built with Electron and React. It is designed for fast note capture, structured tagging, searchable history, and seamless editing with automatic persistence.
 
 The app centers on three primary areas:
 - **Sidebar** for navigation, search, and view modes

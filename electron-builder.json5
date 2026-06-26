@@ -1,0 +1,61 @@
+// @see - https://www.electron.build/configuration/configuration
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.morbusm59.measlynotes",
+  "asar": true,
+  "productName": "Thockdown Notes",
+  "icon": "assets/icon",
+  "directories": {
+    "output": "release/${version}"
+  },
+  "files": [
+    "dist",
+    "dist-electron",
+    "assets/icon.ico",
+    "assets/icon.icns",
+    "assets/icon.png"
+  ],
+  "mac": {
+    "target": [
+      "dmg"
+    ],
+    "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
+  },
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "artifactName": "${productName}-Windows-${version}-Setup.${ext}"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "deleteAppDataOnUninstall": false
+  },
+  "linux": {
+    "target": [
+      "AppImage"
+    ],
+    "artifactName": "${productName}-Linux-${version}.${ext}"
+  },
+  "fileAssociations": [
+    {
+      "ext": "md",
+      "name": "Markdown Document",
+      "description": "Thockdown Notes Markdown File",
+      "role": "Editor"
+    },
+    {
+      "ext": "txt",
+      "name": "Text Document",
+      "description": "Thockdown Notes File",
+      "role": "Editor"
+    }
+  ]
+}

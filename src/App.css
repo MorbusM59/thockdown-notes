@@ -1,0 +1,2678 @@
+/* =============================================================================
+   App.css — measly-notes
+   =============================================================================
+
+   TABLE OF CONTENTS
+   -----------------
+   1.  Design Tokens (:root)
+       1a. Color Palette
+       1b. Shadow System
+       1c. Typography
+       1d. Border & Radius
+       1e. Texture System
+       1f. Button Tokens
+       1g. Scrollbar Tokens
+       1h. Sidebar Layout Tokens
+       1i. Flyout / Toolbar Tokens
+
+   2.  Global Reset & Base
+
+   3.  Scrollbar System
+       3a. Firefox (scrollbar-width / scrollbar-color)
+       3b. WebKit custom scrollbar
+
+   4.  Button System
+       4a. Base button
+       4b. State variants (hover / active / is-active)
+       4c. Square icon buttons
+       4d. Mini / chip buttons
+
+   5.  App Shell & Grid Layout
+       5a. app-shell
+       5b. app-grid + texture overlay
+       5c. Grid dividers & drag regions
+
+   6.  Sidebar
+       6a. Sidebar shell & structure
+       6b. Sidebar header & title
+       6c. Search box
+       6d. View toggle & icon buttons
+       6e. Sidebar scrollbar slot
+       6f. Notes list & view modes
+       6g. Pagination controls
+       6h. Quick actions & mode bar
+       6i. Notes mode button
+       6j. Note list items & states
+       6k. Category tree
+
+   7.  Tag System
+       7a. Tag input area
+       7b. Tag pills (active / protected / armed)
+       7c. Suggested tags
+
+   8.  Toolbar
+       8a. Toolbar grid & editor toolbar
+       8b. Toolbar buttons & controls
+       8c. Flyout panel (open / closed animation)
+       8d. Flyout content layout
+       8e. Flyout sections (scrolling, layout, info)
+       8f. Color & texture picker system
+       8g. Loadout grid
+       8h. HSVA drag cursor override
+
+   9.  Utility Settings Panel
+       9a. Setting rows & stacks
+       9b. Custom slider / scrollbar shell
+
+   10. Editor Area
+       10a. Editor viewer frame & shell
+       10b. Editor stage + texture overlay
+       10c. Preview mode edge fades
+
+   11. Preview (Markdown Renderer)
+       11a. Container & texture layer
+       11b. Markdown typography
+       11c. Style variants (modern / narrow / cute / print)
+       11d. Size variants
+       11e. Spacing variants
+
+   12. Window Controls
+
+   13. Utility & Shared UI
+       13a. Panel placeholders
+       13b. Find hit items
+       13c. Empty states
+       13d. Accessibility helpers
+
+   14. Responsive / Media Queries
+
+   ============================================================================= */
+
+
+/* =============================================================================
+   1. DESIGN TOKENS
+   ============================================================================= */
+
+:root {
+
+  /* ---------------------------------------------------------------------------
+     1a. Color Palette
+     Raw palette values — used by the tokens below.
+     Warm-tone neutral palette derived from #fcf9f6 / #ece8e4.
+  --------------------------------------------------------------------------- */
+
+  --palette-parchment-lightest: #f9f6f4;   /* --color-background-light  */
+  --palette-parchment-light:    #f5f3f2;   /* gradient start            */
+  --palette-parchment-mid:      #e9e5e2;   /* gradient end              */
+  --palette-parchment-dark:     #ece8e4;   /* app-grid / sidebar bg     */
+  --palette-parchment-input:    #ffffff;   /* input backdrop            */
+
+  --palette-shadow-white-lo:    #fcf9f677;
+  --palette-shadow-white-mid:   #fcf9f6bb;
+  --palette-shadow-white-hi:    #fcf9f6ee;
+
+  /* Semantic color tokens */
+  --color-background-light:     var(--palette-parchment-lightest);
+  --color-background-dark:      #eeeeee;
+  --color-panel-top-gradient:   linear-gradient(135deg, var(--palette-parchment-light), var(--palette-parchment-mid));
+  --color-panel-shadow:         rgba(20, 0, 0, 0.4);
+  --color-panel-border:         #ffffff88;
+  --color-input-backdrop:       var(--palette-parchment-input);
+
+  --color-border-regular:       #00000033;
+  --color-border-selected:      #00000066;
+  --color-border-highlight:     #fcf9f6;
+
+  --color-toggle-default:       #eeeeee;
+  --color-toggle-hover:         #f0f0f0;
+  --color-toggle-active:        #ffffff;
+  --color-toggle-shadow:        rgba(0, 0, 0, 0.1);
+
+  --color-tag-active-bg:        #ffffff;
+  --color-tag-active-text:      var(--color-text-dark);
+  --color-tag-active-border:    #ffffff;
+  --color-tag-suggested-bg:     #f5f5f5;
+  --color-tag-suggested-text:   var(--color-text-faded);
+  --color-tag-suggested-border: #ddd;
+
+  --color-shadow-white-light:   var(--palette-shadow-white-lo);
+  --color-shadow-white:         var(--palette-shadow-white-mid);
+  --color-shadow-white-harsh:   var(--palette-shadow-white-hi);
+
+  /* Text colors */
+  --color-text-dark:      #000000DD;
+  --color-text-faded:     #000000BB;
+  --color-text-label:     #00000088;
+
+  /* Danger / status colors */
+  --color-danger:         #b71c1c;
+  --color-danger-bg:      #feecec;
+  --color-danger-border:  #b71c1c88;
+  --color-danger-glow:    #b71c1c33;
+  --color-archive:        #0066bb;
+  --color-archive-bg:     #ecf2fe;
+  --color-archive-border: #0066bb88;
+  --color-archive-glow:   #0066bb33;
+
+  /* Markdown colors */
+  --color-text-link:          #00459edd;
+  --color-border-blockquote:  #00000044;
+  --color-border-hr:          #00000044;
+
+  /* ---------------------------------------------------------------------------
+     1b. Shadow System
+     Convention: regular = outer glow, inverted = inset/recessed.
+     Intensity tiers: light < (default) < harsh.
+  --------------------------------------------------------------------------- */
+
+  --box-shadow-regular-light:
+    0 0 2px rgba(0, 0, 0, 0.3),
+    0 0 6px rgba(0, 0, 0, 0.1),
+    inset 0 0 2px var(--color-shadow-white-light);
+
+  --box-shadow-inverted-light:
+    inset 0 0 2px rgba(0, 0, 0, 0.3),
+    inset 0 0 6px rgba(0, 0, 0, 0.1),
+    0 0 2px var(--color-shadow-white-light);
+
+  --box-shadow-regular:
+    0 0 2px rgba(26, 15, 15, 0.5),
+    0 0 6px rgba(0, 0, 0, 0.2),
+    inset 0 0 2px var(--color-shadow-white);
+
+  --box-shadow-inverted:
+    inset 0 0 2px rgba(0, 0, 0, 0.5),
+    inset 0 0 6px rgba(0, 0, 0, 0.2),
+    0 0 2px var(--color-shadow-white);
+
+  --box-shadow-regular-harsh:
+    0 0 2px rgba(0, 0, 0, 1),
+    0 0 6px rgba(0, 0, 0, 0.5),
+    inset 0 0 2px var(--color-shadow-white-harsh);
+
+  --box-shadow-inverted-harsh:
+    inset 0 0 2px rgba(0, 0, 0, 1),
+    inset 0 0 6px rgba(0, 0, 0, 0.5),
+    0 0 2px var(--color-shadow-white-harsh);
+
+  /* ---------------------------------------------------------------------------
+     1c. Typography
+  --------------------------------------------------------------------------- */
+
+  --text-shadow-emboss-base:
+    0 -1px 0px #55000022,
+    0 1px 0px #ffffff;
+
+  --text-shadow-emboss-panel:
+    0 1px 1px rgba(255, 255, 255, 1),
+    0 -1px 0 rgba(0, 0, 0, 0.2);
+
+  --text-shadow-emboss-heading-glow:
+    0 0 8px #FFFFFF,
+    0 0 4px #FFFFFF,
+    0 0 2px #FFFFFF99,
+    0 1px 0 #FFFFFF;
+
+  --text-info-size:  12px;
+  --text-info-color: var(--color-text-label);
+
+  /* ---------------------------------------------------------------------------
+     1d. Border & Radius
+  --------------------------------------------------------------------------- */
+
+  --border-radius-regular: 6px;
+  --border-radius-small:   3px;
+
+  /* ---------------------------------------------------------------------------
+     1e. Texture System
+     All texture slots default to none / transparent.
+     JS sets these at runtime from user-selected blobs.
+  --------------------------------------------------------------------------- */
+
+  --texture-tile-size:             512px;
+  --texture-app-grid:              none;
+  --texture-sidebar-content:       none;
+  --texture-editor-edit:           none;
+  --texture-editor-render:         none;
+  --texture-app-grid-tint:         rgba(0, 0, 0, 0);
+  --texture-sidebar-content-tint:  rgba(0, 0, 0, 0);
+  --texture-editor-edit-tint:      rgba(0, 0, 0, 0);
+  --texture-editor-render-tint:    rgba(0, 0, 0, 0);
+
+  /* ---------------------------------------------------------------------------
+     1f. Button Tokens
+  --------------------------------------------------------------------------- */
+
+  --btn-square-micro-size:   12px;
+  --btn-square-mini-size:    20px;
+  --btn-square-small-size:   24px;
+  --btn-square-regular-size: 32px;
+  --btn-square-large-size:   48px;
+
+  --btn-border-default: #00000055;
+  --btn-border-hover:   #00000088;
+  --btn-border-active:  var(--color-border-selected);
+
+  --btn-bg-default: #FFFFFFBB;
+  --btn-bg-hover:   #EEEEEEBB;
+  --btn-bg-pressed: #DDDDDDBB;
+  --btn-bg-active:  var(--color-input-backdrop);
+
+  --btn-shadow-active:
+    inset 0 0 2px rgba(0, 0, 0, 0.5),
+    inset 0 0 6px rgba(0, 0, 0, 0.2),
+    0 0 2px var(--color-shadow-white);
+
+  /* ---------------------------------------------------------------------------
+     1g. Scrollbar Tokens
+     Shared by both native WebKit scrollbars and the custom JS scrollbar widget.
+  --------------------------------------------------------------------------- */
+
+  --canonical-scroll-thickness:       20px;
+  --canonical-scroll-handle-gap:      4px;
+  --canonical-scroll-handle-thickness: calc(
+    var(--canonical-scroll-thickness) - (var(--canonical-scroll-handle-gap) * 2)
+  );
+
+  --canonical-scroll-track-bg:     rgba(255, 255, 255, 0.92);
+  --canonical-scroll-track-border: rgba(106, 92, 79, 0.45);
+  --canonical-handle-border:       rgba(81, 73, 66, 0.6);
+  --canonical-handle-bg:           linear-gradient(135deg, var(--palette-parchment-light), var(--palette-parchment-mid));
+
+  --canonical-handle-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 -1px 0 rgba(48, 40, 34, 0.2),
+    0 0 1px rgba(0, 0, 0, 0.25);
+
+  /* ---------------------------------------------------------------------------
+     1h. Sidebar Layout Tokens
+  --------------------------------------------------------------------------- */
+
+  --sidebar-view-button-size:  var(--btn-square-large-size);
+  --sidebar-view-gap-min:      8px;
+  --sidebar-view-padding-left: 8px;
+  --sidebar-padding-right:     8px;
+
+  --sidebar-min-width: calc(
+    (var(--sidebar-view-button-size) * 5) +
+    (var(--sidebar-view-gap-min) * 4) +
+    var(--sidebar-view-padding-left) +
+    var(--sidebar-padding-right)
+  );
+
+  /* ---------------------------------------------------------------------------
+     1i. Flyout / Toolbar Tokens
+  --------------------------------------------------------------------------- */
+
+  --toolbar-options-gap: 6px;
+  --color-grid-gap:      var(--toolbar-options-gap);
+  --color-grid-cell:     32px;
+}
+
+
+/* =============================================================================
+   2. GLOBAL RESET & BASE
+   ============================================================================= */
+
+.app-shell {
+  height: 100vh;
+  width: 100%;
+  display: grid;
+  overflow: hidden;
+  background: var(--color-panel-top-gradient);
+  text-shadow: var(--text-shadow-emboss-base);
+}
+
+.app-shell.darkmode-mono {
+  filter: grayscale(1) invert() brightness(0.6) contrast(0.96);
+}
+
+.app-shell.darkmode-red {
+  filter: invert() sepia() hue-rotate(310deg) brightness(0.35) contrast(1.1) saturate(5);
+}
+
+.app-shell.darkmode-dusk {
+  filter: invert() sepia() hue-rotate(150deg) brightness(0.55) contrast(0.95) saturate(0.9);
+}
+
+.app-shell.darkmode-neon {
+  filter: invert() sepia() hue-rotate(280deg) brightness(0.5) contrast(1.05) saturate(8);
+}
+
+.app-shell.darkmode-matrix {
+  filter: invert() sepia() hue-rotate(70deg) brightness(0.4) contrast(1.1) saturate(5);
+}
+
+/* =============================================================================
+   3. SCROLLBAR SYSTEM
+   ============================================================================= */
+
+/* 3a. Firefox */
+.app-shell,
+.app-shell * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--canonical-handle-border) var(--canonical-scroll-track-bg);
+}
+
+/* 3b. WebKit */
+.app-shell *::-webkit-scrollbar {
+  width:  var(--canonical-scroll-thickness);
+  height: var(--canonical-scroll-thickness);
+}
+
+.app-shell *::-webkit-scrollbar-track {
+  border:        1px solid var(--canonical-scroll-track-border);
+  border-radius: 999px;
+  background:    var(--canonical-scroll-track-bg);
+  box-shadow:    var(--box-shadow-inverted);
+}
+
+.app-shell *::-webkit-scrollbar-thumb {
+  border:        1px solid var(--canonical-handle-border);
+  border-radius: 999px;
+  background:    var(--canonical-handle-bg);
+  box-shadow:    var(--box-shadow-regular);
+}
+
+.app-shell *::-webkit-scrollbar-thumb:hover {
+  border-color: rgba(81, 73, 66, 0.8);
+}
+
+
+/* =============================================================================
+   4. BUTTON SYSTEM
+   ============================================================================= */
+
+/* 4a. Base */
+button,
+.ui-btn {
+  border:        1px solid var(--btn-border-default);
+  background:    var(--btn-bg-default);
+  color:         inherit;
+  border-radius: var(--border-radius-regular);
+  font-size:     14px;
+  transition:    all 0.2s;
+  cursor:        default;
+}
+
+.app-shell button:focus,
+.app-shell button:focus-visible,
+.app-shell select:focus,
+.app-shell select:focus-visible {
+  outline: none;
+}
+
+/* 4b. State variants */
+button:hover,
+.ui-btn:hover {
+  background:   var(--btn-bg-hover);
+  border-color: var(--btn-border-hover);
+}
+
+button:active,
+.ui-btn:active {
+  background: var(--btn-bg-pressed);
+}
+
+button.is-active,
+button.active,
+.ui-btn.is-active,
+.ui-btn.active {
+  background:   var(--btn-bg-active);
+  border-color: var(--btn-border-active);
+  box-shadow:   var(--box-shadow-inverted);
+}
+
+/* 4c. Square icon buttons */
+.ui-btn--square,
+.toolbar-btn-icon,
+.sidebar-page-btn {
+  width:           var(--btn-square-regular-size);
+  min-width:       var(--btn-square-regular-size);
+  height:          var(--btn-square-regular-size);
+  padding:         0;
+  border-radius:   var(--border-radius-regular);
+  font-size:       14px;
+  font-weight:     600;
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  aspect-ratio:    1 / 1;
+  box-sizing:      border-box;
+}
+
+/* 4d. Mini / chip buttons */
+.ui-btn--mini,
+.date-filter-chip {
+  border-radius: var(--border-radius-small);
+  font-size:     10px;
+  font-weight:   300;
+}
+
+
+/* =============================================================================
+   5. APP SHELL & GRID LAYOUT
+   ============================================================================= */
+
+/* 5a. app-shell — see section 2 */
+
+/* 5b. app-grid */
+.app-grid {
+  position:             relative;
+  isolation:            isolate;
+  background-color:     var(--palette-parchment-dark);
+  background-image:     var(--color-panel-top-gradient);
+  background-repeat:    no-repeat;
+  background-size:      100% 100%;
+  background-position:  0 0;
+  grid-template-columns: 288px 8px minmax(150px, 250px) minmax(150px, 1fr) 8px 129px;
+  grid-template-rows:   auto auto minmax(0, 1fr);
+  grid-template-areas:
+    'sidebar d-sidebar taginput suggested d-right utility'
+    'sidebar d-sidebar toolbar  toolbar    toolbar  toolbar'
+    'sidebar d-sidebar viewer   viewer    viewer  viewer';
+  /* NOTE: grid-template-columns is overridden at runtime via inline style
+     (see layout.gridTemplateColumns in App.tsx). The value above is the
+     effective minimum, kept here for documentation only. */
+  min-width:  733px;
+  min-height: 420px;
+}
+
+/* Texture overlay — shared pattern used across app-grid, sidebar-content, editor-stage */
+.app-grid::before {
+  content:          '';
+  position:         absolute;
+  inset:            0;
+  pointer-events:   none;
+  z-index:          0;
+  background-color: var(--texture-app-grid-tint);
+  -webkit-mask-image:    var(--texture-app-grid);
+  -webkit-mask-repeat:   repeat;
+  -webkit-mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  -webkit-mask-position: 0 0;
+  mask-image:    var(--texture-app-grid);
+  mask-repeat:   repeat;
+  mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  mask-position: 0 0;
+}
+
+.app-grid > * {
+  position: relative;
+  z-index:  1;
+}
+
+/* 5c. Grid dividers & drag regions */
+.grid-divider {
+  position:  relative;
+  width:     8px;
+  min-width: 8px;
+}
+
+.grid-divider.divider-right,
+.tag-input-grid,
+.suggested-grid,
+.utility-grid {
+  -webkit-app-region: drag;
+}
+
+.tag-input-grid :is(button, input, select, textarea),
+.suggested-grid :is(button, input, select, textarea),
+.utility-grid   :is(button, input, select, textarea) {
+  -webkit-app-region: no-drag;
+}
+
+.divider-sidebar {
+  border:        1px solid hsla(0, 0%, 100%, 0.533);
+  border-top:    none;
+  border-bottom: none;
+  box-shadow:    var(--box-shadow-inverted);
+}
+
+
+/* =============================================================================
+   6. SIDEBAR
+   ============================================================================= */
+
+/* 6a. Sidebar shell & structure */
+.notes-sidebar {
+  min-width:      var(--sidebar-min-width);
+  display:        flex;
+  flex-direction: column;
+  height:         100%;
+  box-sizing:     border-box;
+  gap:            4px;
+  /* NOTE: padding uses named tokens on right (sidebar-padding-right) but raw
+     values for top/bottom/left — intentional, these are layout-specific. */
+  padding: 4px var(--sidebar-padding-right) 4px 0;
+}
+
+.sidebar-scroll-frame {
+  flex:        1 1 auto;
+  display:     flex;
+  align-items: stretch;
+  min-width:   0;
+  min-height:  0;
+  position:    relative;
+}
+
+.sidebar-content {
+  position:   relative;
+  isolation:  isolate;
+  flex:       1 1 auto;
+  min-height: 0;
+  min-width:  0;
+  overflow-y: auto;
+  margin:     0;
+  padding:    0;
+  border:          1px solid var(--color-border-highlight);
+  border-left:     none;
+  border-radius:   0 9px 9px 0;
+  box-shadow:      var(--box-shadow-inverted);
+  background-color: var(--palette-parchment-dark);
+}
+
+.sidebar-content.is-scrollbar-mode > div:nth-child(2) {
+  position: absolute;
+  top: 0;
+  z-index: 1;
+}
+
+.sidebar-content.is-scrollbar-mode > .sidebar-content-texture {
+  position:         sticky;
+}
+
+.sidebar-content:not(.is-scrollbar-mode) > .sidebar-content-texture {
+  position:         absolute;
+}
+
+.sidebar-content-texture {
+  height: 100%;
+  inset:            0;
+  pointer-events:   none;
+  z-index:          1;
+  background-color: var(--texture-sidebar-content-tint);
+  -webkit-mask-image:    var(--texture-sidebar-content);
+  -webkit-mask-repeat:   repeat;
+  -webkit-mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  -webkit-mask-position: 0 0;
+  mask-image:    var(--texture-sidebar-content);
+  mask-repeat:   repeat;
+  mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  mask-position: 0 0;
+}
+
+.sidebar-content.is-paged-mode {
+  overflow-y: hidden;
+}
+
+.sidebar-content.is-tree-mode {
+  display:    flex;
+  overflow-y: hidden;
+}
+
+.sidebar-content.is-scrollbar-mode {
+  scrollbar-width:    none;
+  -ms-overflow-style: none;
+}
+
+.sidebar-content.is-scrollbar-mode::-webkit-scrollbar {
+  width:  0;
+  height: 0;
+}
+
+/* 6b. Sidebar header & title */
+.notes-sidebar-header {
+  display:         flex;
+  align-items:     center;
+  justify-content: space-between;
+  /* NOTE: these padding values are layout-specific; do not unify with --preview-edge-padding */
+  padding: 18px 14px 12px;
+  border-bottom: 1px solid #d2cec9;
+}
+
+.notes-sidebar-title {
+  margin:        0;
+  font-family:   'Syne Mono', monospace;
+  font-size:     18px;
+  color:         var(--color-text-dark);
+  letter-spacing: 0.04em;
+  text-shadow:   var(--text-shadow-emboss-panel);
+}
+
+.notes-action-button {
+  padding:     6px 16px;
+  font-weight: 600;
+}
+
+.notes-action-button:disabled {
+  opacity: 0.45;
+  cursor:  not-allowed;
+}
+
+/* 6c. Search box */
+.search-box {
+  margin:  0;
+  /* NOTE: asymmetric padding is intentional for sidebar alignment */
+  padding: 4px 0 0 8px;
+}
+
+.search-box input {
+  width:          100%;
+  padding:        10px;
+  border:         1px solid var(--color-border-highlight);
+  border-radius:  var(--border-radius-regular);
+  box-shadow:     var(--box-shadow-inverted);
+  font-size:      14px;
+  outline:        none;
+  background:     var(--color-input-backdrop);
+  transition:     border-color 0.2s;
+  color:           var(--color-text-dark);
+  box-sizing:     border-box;
+}
+
+.search-box input:focus    { border-color: var(--color-border-selected); }
+.search-box input:disabled { opacity: 0.75; cursor: not-allowed; }
+
+/* 6d. View toggle & icon buttons */
+.view-toggle {
+  display:         flex;
+  justify-content: space-between;
+  align-items:     start;
+  /* NOTE: padding uses named tokens; values are layout-specific */
+  padding: 4px 0 4px var(--sidebar-view-padding-left);
+  gap:     var(--sidebar-view-gap-min);
+  margin:  0;
+}
+
+.toggle-btn {
+  font-size: 15px;
+}
+
+.notes-sidebar .view-toggle .icon-btn {
+  width:      var(--sidebar-view-button-size);
+  height:     var(--sidebar-view-button-size);
+  min-width:  var(--sidebar-view-button-size);
+  min-height: var(--sidebar-view-button-size);
+  flex:       0 0 var(--sidebar-view-button-size);
+  padding:    4px;
+  margin:     0;
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  border-radius:       6px;
+  background-size:     auto;
+  background-repeat:   no-repeat;
+  background-position: center;
+  position: relative;
+}
+
+.notes-sidebar .view-toggle .icon-btn.btn-date     { background-image: url('/assets/buttons/latest.png');   }
+.notes-sidebar .view-toggle .icon-btn.btn-category  { background-image: url('/assets/buttons/active.png');   }
+.notes-sidebar .view-toggle .icon-btn.btn-archived  { background-image: url('/assets/buttons/archived.png'); }
+.notes-sidebar .view-toggle .icon-btn.btn-deleted   { background-image: url('/assets/buttons/deleted.png');  }
+
+.notes-sidebar .view-toggle .icon-btn.btn-find,
+.notes-sidebar .view-toggle .icon-btn.btn-options {
+  background-image: none;
+  color:  var(--color-text-faded);
+}
+
+.notes-sidebar .view-toggle .icon-btn.btn-options .toolbar-gear-glyph {
+  font-size: 18px;
+}
+
+.find-mode-glyph {
+  width:           80%;
+  height:          80%;
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  font-size:       30px;
+  line-height:     1;
+}
+
+.icon-btn.btn-deleted.is-armed-for-deletion,
+.icon-btn.btn-deleted.is-armed-for-deletion:hover,
+.icon-btn.btn-deleted.is-armed-for-deletion.is-active,
+.icon-btn.btn-deleted.is-armed-for-deletion.is-active:hover {
+  background-color: #FF000022;
+  transition: all 300ms;
+}
+
+/* 6e. Sidebar scrollbar slot */
+.sidebar-scrollbar-slot {
+  flex:      0 0 20px;
+  width:     20px;
+  min-width: 20px;
+  max-width: 20px;
+  position:  relative;
+}
+
+.sidebar-scrollbar-slot-inner {
+  position: absolute;
+  inset:    0;
+}
+
+.sidebar-scrollbar-slot .sidebar-measly-scroll-rail {
+  z-index:         4;
+  padding:         0 0 0 4px;
+  justify-content: flex-end;
+}
+
+/* 6f. Notes list & view modes */
+.notes-list {
+  flex:           1;
+  overflow-y:     auto;
+  padding:        10px;
+  display:        flex;
+  flex-direction: column;
+  gap:            8px;
+}
+
+.notes-list > * {
+  z-index: 2;
+}
+
+.notes-list.date-view  { overflow-y: hidden; }
+.notes-list.tree-view  { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.notes-list.find-view  { flex: 1 1 auto; min-height: 0; overflow-y: auto; gap: 6px; }
+
+/* 6g. Pagination controls */
+.sidebar-pagination {
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  gap:             10px;
+  padding:         0;
+  margin:          0;
+  background:      transparent;
+  border:          none;
+}
+
+/* NOTE: .sidebar-page-btn is defined twice in source (lines 594 and 673).
+   Merged here — the second declaration only repeated color: #666. */
+.sidebar-page-btn {
+  width:         auto;
+  min-width:     20px;
+  height:        20px;
+  padding:       0 6px;
+  border-radius: var(--border-radius-small);
+  font-size:     10px;
+  font-weight:   500;
+  aspect-ratio:  auto;
+  color:         var(--color-text-label);
+}
+
+.sidebar-page-btn:disabled {
+  opacity: 0;
+}
+
+.sidebar-page-number-btn {
+  min-width:       52px;
+  height:          20px;
+  padding:         0 6px;
+  border:          1px solid var(--btn-border-default);
+  border-radius:   var(--border-radius-small);
+  background:      var(--btn-bg-default);
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  box-sizing:      border-box;
+  box-shadow: var(--box-shadow-inverted-light);
+}
+
+.sidebar-page-number-btn:focus-within {
+  border-color: var(--btn-border-active);
+  box-shadow:   var(--box-shadow-inverted);
+}
+
+.sidebar-page-number-display {
+  color:       var(--color-text-faded);
+  font-size:   10px;
+  font-weight: 600;
+  cursor:      text;
+}
+
+.sidebar-page-number-input {
+  width:       100%;
+  max-width:   72px;
+  height:      100%;
+  border:      none;
+  background:  transparent;
+  color:       var(--color-text-faded);
+  font-size:   10px;
+  font-weight: 600;
+  text-align:  center;
+  outline:     none;
+  padding:     0;
+  margin:      0;
+}
+
+.sidebar-page-number-input--edit {
+  cursor: text;
+}
+
+.sidebar-page-number-input::-webkit-outer-spin-button,
+.sidebar-page-number-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.sidebar-page-number-input[type='number'] {
+  -moz-appearance: textfield;
+  appearance:      textfield;
+}
+
+/* Date filter */
+.date-filter-rail {
+  padding:        0 0 4px 8px;
+  display:        flex;
+  flex-direction: column;
+  gap:            0;
+}
+
+.date-filter-rail.date-filter-rail-placeholder {
+  min-height: 16px;
+  height:     16px;
+  padding:    0;
+}
+
+.date-filter-line {
+  display:       flex;
+  width:         100%;
+  gap:           3px;
+  margin-bottom: 3px;
+}
+
+.date-filter-line:last-child {
+  margin-bottom: 0;
+}
+
+.date-filter-chip {
+  flex:            1;
+  min-width:       0;
+  height:          20px;
+  color:            var(--color-text-faded);
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+}
+
+/* Find options */
+.find-options-rail {
+  min-height:  20px;
+  height:      20px;
+  display:     flex;
+  align-items: center;
+  /* NOTE: asymmetric padding is intentional for rail alignment */
+  padding: 0 0 4px 8px;
+}
+
+.find-option-btn {
+  height:      20px;
+  min-width:   52px;
+  padding:     0 8px;
+  border-radius: 3px;
+  font-size:   10px;
+  font-weight: 500;
+  color:       var(--color-text-faded);
+  line-height: 1;
+}
+
+/* 6h. Notes mode bar & quick actions */
+.notes-mode-bar {
+  display:     grid;
+  grid-template-columns: 1fr 1fr;
+  gap:         6px;
+  padding:     10px;
+  border-bottom: 1px solid #d2cec9;
+}
+
+.notes-quick-actions {
+  display:       flex;
+  gap:           6px;
+  padding:       8px 10px;
+  border-bottom: 1px solid #d2cec9;
+}
+
+.notes-mini-action {
+  flex:         1;
+  padding:      8px 2px;
+  background:   var(--color-toggle-default);
+  border:       1px solid var(--color-border-regular);
+  border-radius: var(--border-radius-regular);
+  transition:   background 0.2s, box-shadow 0.2s;
+}
+
+.notes-mini-action:hover    { background: var(--color-toggle-hover); }
+.notes-mini-action:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* 6i. Notes mode button */
+.notes-mode-button {
+  flex:    1;
+  padding: 6px 16px;
+}
+
+.view-toggle .notes-mode-button {
+  width:           100%;
+  min-height:      36px;
+  /* NOTE: padding overrides base .notes-mode-button padding intentionally */
+  padding: 6px 12px;
+  display:         flex;
+  align-items:     center;
+  justify-content: space-between;
+}
+
+.notes-mode-count {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+/* 6j. Note list items & states */
+.note-list-item {
+  display:         flex;
+  align-items:     center;
+  justify-content: space-between;
+  border-radius:   var(--border-radius-regular);
+  background:      #ffffff55;
+  cursor:          default;
+  border:          1px solid var(--color-border-highlight);
+  box-shadow:      var(--box-shadow-regular);
+}
+
+.note-list-item:hover        { background: #ffffffBB; }
+.note-list-item:focus-visible { outline: 2px solid #82614a; outline-offset: 1px; }
+
+.note-list-item.is-active {
+  border-color: #80604a;
+  background:   #ffffff11;
+  box-shadow:   var(--box-shadow-inverted-harsh);
+}
+
+/* Armed states — standard card */
+.note-list-item.is-armed-for-archiving,
+.note-list-item.is-armed-for-archiving:hover {
+  color: var(--color-archive);
+  background-color: var(--color-archive-bg);
+  border: 1px solid var(--color-archive-border);
+  outline: 1px solid var(--color-archive-glow);
+  transition: all 300ms ease-in;
+}
+
+.note-list-item.is-armed-for-deletion,
+.note-list-item.is-armed-for-deletion:hover {
+  color: var(--color-danger);
+  background-color: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  outline: 1px solid var(--color-danger-glow);
+  transition: all 200ms ease-out;
+}
+
+.note-list-item.is-armed-for-archiving.is-tree-card,
+.note-list-item.is-armed-for-archiving.is-tree-card:hover,
+.note-list-item.is-armed-for-archiving.is-tree-card.is-active,
+.note-list-item.is-armed-for-archiving.is-tree-card.is-active:hover {
+  color: var(--color-archive);
+  background-color: var(--color-archive-bg);
+  border: 1px solid var(--color-archive-border);
+  outline: 1px solid var(--color-archive-glow);
+  transition: all 300ms ease-in;
+}
+
+.note-list-item.is-armed-for-deletion.is-tree-card,
+.note-list-item.is-armed-for-deletion.is-tree-card:hover,
+.note-list-item.is-armed-for-deletion.is-tree-card.is-active,
+.note-list-item.is-armed-for-deletion.is-tree-card.is-active:hover {
+  color: var(--color-danger);
+  background-color: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  outline: 1px solid var(--color-danger-glow);
+  transition: all 200ms ease-out;
+}
+
+/* Tree card variant */
+.note-list-item.is-tree-card {
+  padding:          2px 8px;
+  margin:           2px 4px;
+  background-color: transparent;
+  border:           1px solid var(--btn-border-default);
+  box-shadow:       none;
+  font-weight:      200;
+  background-color: rgba(255, 255, 255, 0.3);
+  border-radius: var(--border-radius-regular);
+}
+
+.note-list-item.is-tree-card.is-active{
+  box-shadow: var(--box-shadow-inverted);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.note-list-item.is-tree-card:hover {
+  border: 1px solid var(--btn-border-active);
+  outline: 2px solid #ffffff88;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.is-tree-card .note-list-title           { font-weight: 400; }
+.is-tree-card.is-active .note-list-title { font-weight: 600; }
+
+/* Date view variant */
+.date-view .note-list-item {
+  height:     var(--btn-square-large-size);
+  padding:    0 8px;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.date-view .note-list-item:hover,
+.date-view .note-list-item.is-active {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.date-view .note-list-item.is-armed-for-archiving,
+.date-view .note-list-item.is-armed-for-archiving:hover,
+.date-view .note-list-item.is-armed-for-archiving.is-active,
+.date-view .note-list-item.is-armed-for-archiving.is-active:hover {
+  background-color: #dcebff;
+}
+
+.date-view .note-list-item.is-armed-for-deletion,
+.date-view .note-list-item.is-armed-for-deletion:hover,
+.date-view .note-list-item.is-armed-for-deletion.is-active,
+.date-view .note-list-item.is-armed-for-deletion.is-active:hover {
+  background-color: #ffe1e1;
+}
+
+.date-view .note-list-item.is-external {
+  border-radius: 0;
+}
+
+.date-view .note-list-item.is-external.is-modified {
+  border: 1px solid #FFDDAA;
+  outline: 3px double #FFDDAAAA;
+}
+
+.date-view .note-list-item.is-modified.is-armed-for-saving {
+  border: 1px solid #BBFFAA;
+  outline: 3px double #BBFFAAAA;
+}
+
+.date-view .note-list-item.is-modified.is-armed-for-closing {
+  border: 1px solid #FF9999;
+  outline: 3px double #FF9999AA;
+}
+
+.note-list-content {
+  display:        flex;
+  flex:           1 1 auto;
+  flex-direction: column;
+  gap:            4px;
+  width:          100%;
+  min-width:      0;
+}
+
+.note-list-title {
+  font-size:     12px;
+  color:         var(--color-text-dark);
+  font-weight:   600;
+  white-space:   nowrap;
+  overflow:      hidden;
+  text-overflow: ellipsis;
+}
+
+.note-list-meta-row {
+  display:         flex;
+  width:           100%;
+  min-width:       0;
+  align-items:     center;
+  justify-content: space-between;
+  gap:             8px;
+  font-size:       10px;
+  color:           var(--color-text-label);
+  font-weight:     800;
+}
+
+.note-list-meta-left,
+.note-list-meta-right {
+  display:     inline-block;
+  white-space: nowrap;
+}
+
+.note-list-meta-month-day { font-weight: 400; }
+
+.note-list-meta-year {
+  font-style:  normal;
+  font-weight: 400;
+  opacity:     0.75;
+}
+
+.note-list-meta-right {
+  margin-left:          auto;
+  text-align:           right;
+  font-variant-numeric: tabular-nums;
+  opacity:              0.75;
+}
+
+/* 6k. Category tree */
+.category-tree-root {
+  display:        flex;
+  flex-direction: column;
+  gap:            10px;
+}
+
+.category-primary-summary {
+  border:         1px solid #d2cec9;
+  border-radius:  8px;
+  background:     rgba(255, 255, 255, 0.6);
+  list-style:     none;
+  cursor:         default;
+  padding:        4px;
+  color:          var(--color-text-label);
+  font-size:      10px;
+  font-weight:    900;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  text-align:     center;
+  text-shadow:    var(--text-shadow-emboss-panel);
+}
+
+.category-secondary-summary {
+  list-style:       none;
+  cursor:           default;
+  margin:           0;
+  padding:          2px 4px;
+  color:            var(--color-text-label);
+  font-size:        10px;
+  font-weight:      700;
+  text-transform:   uppercase;
+  letter-spacing:   0.1em;
+  text-shadow:      var(--text-shadow-emboss-panel);
+
+}
+
+.category-secondary-summary.is-general-secondary {
+  padding:        0;
+  font-size:      0;
+  letter-spacing: 0;
+  text-shadow:    none;
+}
+
+.category-secondary {
+  border:        1px solid #999999;
+  border-radius: var(--border-radius-regular);
+  margin:        8px 0;
+  background-color: rgba(255, 255, 255, 0.4);
+}
+
+.category-primary-summary::-webkit-details-marker,
+.category-secondary-summary::-webkit-details-marker {
+  display: none;
+}
+
+.category-tertiary-block {
+  display:        flex;
+  flex-direction: column;
+  gap:            0;
+  padding:        2px 0;
+}
+
+.category-tertiary-heading {
+  display: none;
+}
+
+
+/* =============================================================================
+   7. TAG SYSTEM
+   ============================================================================= */
+
+/* 7a. Tag input area */
+.tag-input-grid {
+  padding: 8px;
+}
+
+.tag-input-container {
+  width:      100%;
+  box-sizing: border-box;
+}
+
+.tag-input-section {
+  display:        flex;
+  flex-direction: column;
+  gap:            8px;
+  min-width:      0;
+}
+
+.tag-input-bar {
+  display:     flex;
+  align-items: center;
+  gap:         8px;
+}
+
+.tag-input-wrapper {
+  flex:      1 1 auto;
+  min-width: 0;
+}
+
+.tag-input {
+  width:          100%;
+  box-sizing:     border-box;
+  padding:        10px;
+  border:         1px solid var(--color-border-highlight);
+  border-radius:  var(--border-radius-regular);
+  box-shadow:     var(--box-shadow-inverted);
+  font-size:      14px;
+  outline:        none;
+  background:     var(--color-input-backdrop);
+  transition:     border-color 0.2s;
+}
+
+.tag-input:focus {
+  border-color: var(--color-border-selected);
+}
+
+.tags-display {
+  display:     flex;
+  flex-wrap:   nowrap;
+  min-height:  32px;
+  max-height:  32px;
+  gap:         6px;
+  align-items: center;
+  overflow:    hidden;
+}
+
+.tag-empty-state {
+  font-size:  var(--text-info-size);
+  color:      var(--color-text-label);
+  text-align: center;
+}
+
+/* 7b. Tag pills */
+.tag-pill {
+  display:          inline-flex;
+  align-items:      center;
+  gap:              4px;
+  padding:          4px 10px;
+  border:           1px solid var(--btn-border-default);
+  border-radius:    999px;
+  background:       var(--btn-bg-default);
+  font-size:        13px;
+  color:            inherit;
+  user-select:      none;
+  transition:       all 0.2s;
+  white-space:      nowrap;
+  overflow:         hidden;
+  -webkit-app-region: no-drag;
+}
+
+.tag-pill-label {
+  overflow:      hidden;
+  text-overflow: ellipsis;
+}
+
+.tag-pill.active.protected {
+  background: #eee;
+}
+
+.tag-pill.active.protected.deleted {
+  color:      var(--color-danger);
+  border:     1px solid var(--color-danger-border);
+  box-shadow: inset 0 0 3px #00000055, inset 0 0 12px var(--color-danger-glow);
+}
+
+.tag-pill.active.protected.archived {
+  color:      var(--color-archive);
+  border:     1px solid var(--color-archive-border);
+  box-shadow: inset 0 0 3px #00000055, inset 0 0 12px var(--color-archive-glow);
+}
+
+.tag-pill.active.protected[draggable='false'] {
+  cursor: default;
+}
+
+.tag-pill.active.armed {
+  background: var(--color-danger-bg);
+  color:      var(--color-danger);
+}
+
+/* 7c. Suggested tags */
+.suggested-grid {
+  padding: 9px 0;
+}
+
+.suggested-tags {
+  display:    flex;
+  flex-wrap:  wrap;
+  gap:        4px;
+  overflow:   hidden;
+  max-height: 68px;
+}
+
+.tag-pill.suggested {
+  border-radius: 999px;
+  color:         var(--color-tag-suggested-text);
+  padding:       2px 6px;
+  font-size:     11px;
+  line-height:   1.2;
+  cursor:        default;
+  -webkit-app-region: no-drag;
+}
+
+.tag-pill.suggested:hover           { background: var(--btn-bg-hover); }
+.tag-pill.suggested:active          { background: var(--btn-bg-pressed); }
+.tag-pill.suggested[aria-disabled='true'] { opacity: 0.5; cursor: default; }
+
+.suggested-empty {
+  font-size: 11px;
+  color:     var(--color-text-label);
+  padding:   8px 0;
+}
+
+
+/* =============================================================================
+   8. TOOLBAR
+   ============================================================================= */
+
+/* 8a. Toolbar grid & editor toolbar */
+.toolbar-grid {
+  margin:          0;
+  padding:         0 4px;
+  display:         flex;
+  flex-direction:  column;
+  align-items:     stretch;
+  -webkit-app-region: drag;
+}
+
+.toolbar-grid button,
+.toolbar-grid select {
+  -webkit-app-region: no-drag;
+}
+
+.editor-toolbar {
+  display:         flex;
+  align-items:     center;
+  justify-content: space-between;
+  /* NOTE: margin 0 4px and padding 0 are intentional toolbar-specific values */
+  margin:      0 4px;
+  padding:     0;
+  min-height:  44px;
+  line-height: 44px;
+  flex-wrap:   nowrap;
+  box-sizing:  border-box;
+  overflow:    hidden;
+}
+
+.toolbar-left-tools {
+  display:     flex;
+  align-items: center;
+  min-width:   0;
+  overflow:    hidden;
+}
+
+.toolbar-right-tools {
+  display:      flex;
+  align-items:  center;
+  gap:          8px;
+  margin-left:  12px;
+  flex-shrink:  0;
+}
+
+/* 8b. Toolbar buttons & controls */
+.toolbar-toggle-btn {
+  width:       70px;
+  height:      32px;
+  min-height:  32px;
+  padding:     0 12px;
+  border:      1px solid var(--btn-border-default);
+  background:  var(--btn-bg-default);;
+  border-radius: var(--border-radius-regular);
+  font-size:   14px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.markdown-toolbar,
+.toolbar-action-group {
+  display:     flex;
+  align-items: center;
+  gap:         4px;
+  margin-left: 8px;
+  min-width:   0;
+  overflow:    hidden;
+}
+
+.toolbar-divider {
+  color:       var(--btn-border-default);
+  margin:      0 4px;
+  font-size:   18px;
+  user-select: none;
+}
+
+.style-selector {
+  display:     flex;
+  align-items: center;
+}
+
+.selector-label {
+  font-size: 12px;
+  color:     var(--color-text-label);
+}
+
+.style-selector select {
+  height:        var(--btn-square-regular-size);
+  border:        1px solid var(--btn-border-default);
+  border-radius: var(--border-radius-regular);
+  background:    var(--color-input-backdrop);
+  color:         var(--color-text-dark);
+  font-size:     12px;
+  padding:       0 8px;
+}
+
+.toolbar-gear-btn {
+  width:           var(--btn-square-regular-size);
+  height:          var(--btn-square-regular-size);
+  min-width:       var(--btn-square-regular-size);
+  min-height:      var(--btn-square-regular-size);
+  padding:         0;
+  margin:          0;
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  border-radius:       var(--border-radius-regular);
+  background-size:     auto;
+  background-repeat:   no-repeat;
+  background-position: center;
+  color: var(--color-text-label);
+}
+
+.toolbar-gear-glyph {
+  display:    block;
+  font-size:  16px;
+  line-height: 1;
+  margin:     0;
+  transform:  translateY(0);
+}
+
+.toolbar-gear-glyph::before {
+  display: block;
+}
+
+/* 8c. Flyout panel */
+.toolbar-flyout-panel {
+  width:           100%;
+  box-sizing:      border-box;
+  display:         grid;
+  grid-template-rows: 0fr;
+  opacity:         0;
+  transform:       translateY(-3px);
+  visibility:      hidden;
+  pointer-events:  none;
+  padding:         0 4px 4px 4px;
+  transition:
+    grid-template-rows 220ms cubic-bezier(0.35, 0, 0.25, 1),
+    opacity            140ms linear,
+    transform          220ms cubic-bezier(0.35, 0, 0.25, 1),
+    visibility         0s   linear 220ms;
+}
+
+.toolbar-flyout-panel.is-open {
+  grid-template-rows: 1fr;
+  opacity:            1;
+  transform:          translateY(0);
+  visibility:         visible;
+  pointer-events:     auto;
+  padding:            0 4px 4px 4px;
+  transition:
+    grid-template-rows 260ms cubic-bezier(0.18, 0.9, 0.24, 1),
+    opacity            180ms linear,
+    transform          260ms cubic-bezier(0.18, 0.9, 0.24, 1),
+    visibility         0s   linear 0s;
+}
+
+.toolbar-flyout-panel-inner {
+  min-height: 0;
+  overflow:   hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toolbar-flyout-panel,
+  .toolbar-flyout-panel.is-open {
+    transition: none;
+    transform:  none;
+  }
+}
+
+/* 8d. Flyout content layout */
+
+.sidebar-options-content {
+  display:        flex;
+  align-items:    stretch;
+  gap:            var(--toolbar-options-gap);
+  overflow-x:     auto;
+  flex-direction: column;
+  overflow-x:     hidden;
+  overflow-y:     visible;
+  width:          100%;
+  z-index:        1;
+  padding-bottom: var(--toolbar-options-gap);
+}
+
+/* Mode visibility filters */
+.toolbar-flyout-content.mode-view .toolbar-flyout-section.display-in-edit:not(.display-in-view) { display: none; }
+.toolbar-flyout-content.mode-edit .toolbar-flyout-section.display-in-view:not(.display-in-edit) { display: none; }
+
+/* 8e. Flyout sections */
+.sidebar-options-section {
+  border:     none;
+  border-radius: 0;
+  background: transparent;
+  width:      100%;
+}
+
+.sidebar-options-section-heading {
+  margin:    0;
+  padding:   12px 12px 0 12px;
+  font-size: var(--text-info-size);
+  color:     var(--text-info-color);
+}
+
+.sidebar-options-divider {
+  width:      100%;
+  height:     1px;
+  background: var(--color-border-highlight);
+  margin:     12px 0;
+}
+
+.toolbar-flyout-section {
+  box-sizing:     border-box;
+  margin:         auto;
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--toolbar-options-gap);
+  width: calc(var(--btn-square-regular-size) * 6 + 5 * var(--toolbar-options-gap));
+}
+
+.toolbar-flyout-section-scrolling,
+.toolbar-flyout-section-layout {
+  width:     100px;
+  min-width: 100px;
+  max-width: 100px;
+}
+
+.sidebar-options-section-colors,
+.toolbar-flyout-section-loadout {
+  width:    fit-content;
+  min-width: 0;
+  max-width: none;
+  flex:     0 0 auto;
+}
+
+.sidebar-options-section-colors {
+  gap: var(--toolbar-options-gap);
+  --color-grid-gap:  var(--toolbar-options-gap);
+  --color-grid-cell: 32px;
+}
+
+.toolbar-flyout-section-info {
+  flex:      1 1 220px;
+  min-width: 220px;
+  max-width: none;
+  align-self: stretch;
+}
+
+.toolbar-flyout-content.mode-view .toolbar-flyout-section-info {
+  flex-basis: 300px;
+  min-width:  300px;
+}
+
+.toolbar-flyout-info-empty {
+  margin:          0;
+  flex:            1 1 auto;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  text-align:      center;
+  font-size:       10px;
+  line-height:     1.35;
+  color:           var(--color-text-faded);
+}
+
+/* 8f. Color & texture picker system */
+.toolbar-flyout-color-layout {
+  display:    flex;
+  align-items: stretch;
+  gap:        var(--toolbar-options-gap);
+  min-height: 0;
+  height:     auto;
+  overflow:   visible;
+  --color-grid-gap:  var(--toolbar-options-gap);
+  --color-grid-cell: 32px;
+}
+
+.toolbar-flyout-color-grid {
+  display: grid;
+  gap:     var(--color-grid-gap);
+  flex:    0 0 auto;
+}
+
+.toolbar-flyout-element-grid,
+.toolbar-flyout-texture-grid {
+  grid-auto-columns: var(--color-grid-cell);
+  grid-auto-rows:    var(--color-grid-cell);
+  grid-auto-flow:    column;
+}
+
+.toolbar-flyout-hsva-grid {
+  grid-template-columns: repeat(3, var(--color-grid-cell));
+  grid-template-rows:    repeat(2, var(--color-grid-cell));
+  grid-auto-flow:        column;
+}
+
+.toolbar-flyout-color-separator {
+  width:       1px;
+  background:  #ccc;
+  align-self:  stretch;
+}
+
+/* Swatch base */
+.toolbar-flyout-color-swatch {
+  width:      100%;
+  height:     100%;
+  color:      var(--color-text-dark);
+  transition: none;
+}
+
+.toolbar-flyout-element-grid .toolbar-flyout-color-swatch,
+.toolbar-flyout-texture-grid .toolbar-flyout-color-swatch {
+  position:   relative;
+  background: transparent;
+  overflow:   hidden;
+}
+
+/* Swatch pseudo-layer stack: ::before = bg, ::after = swatch color */
+.toolbar-flyout-element-grid .toolbar-flyout-color-swatch::before,
+.toolbar-flyout-element-grid .toolbar-flyout-color-swatch::after,
+.toolbar-flyout-texture-grid .toolbar-flyout-color-swatch::before,
+.toolbar-flyout-texture-grid .toolbar-flyout-color-swatch::after {
+  content:        '';
+  position:       absolute;
+  inset:          0;
+  border-radius:  inherit;
+  pointer-events: none;
+  z-index:        0;
+}
+
+.toolbar-flyout-element-grid .toolbar-flyout-color-swatch::before,
+.toolbar-flyout-texture-grid .toolbar-flyout-color-swatch::before {
+  background: var(--color-background-light);
+}
+
+.toolbar-flyout-element-grid .toolbar-flyout-color-swatch::after,
+.toolbar-flyout-texture-grid .toolbar-flyout-color-swatch::after {
+  background: var(--toolbar-flyout-swatch-color, transparent);
+}
+
+.toolbar-flyout-element-grid .toolbar-flyout-color-swatch > *,
+.toolbar-flyout-texture-grid .toolbar-flyout-color-swatch > * {
+  position: relative;
+  z-index:  1;
+}
+
+.toolbar-flyout-color-swatch-glyph {
+  font-size:   14px;
+  line-height: 1;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.toolbar-flyout-glaze-grid, .toolbar-flyout-darkmode-grid {
+  grid-auto-columns: var(--color-grid-cell);
+  grid-auto-rows:    var(--color-grid-cell);
+  grid-auto-flow:    column;
+}
+
+.glaze-light > .fa-barcode {
+  opacity: 0.2;
+}
+
+.glaze-medium > .fa-barcode {
+  opacity: 0.4;
+}
+
+.glaze-heavy > .fa-barcode {
+  opacity: 0.8;
+}
+
+/* Glaze overlay */
+.app-root::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 220ms ease;
+  background-image:
+    repeating-linear-gradient(225deg,
+      transparent 0, transparent 53px,
+      rgba(222,255,255,0.2) 53px, rgba(222,255,255,0.2) 142px,
+      transparent 142px, transparent 214px,
+      rgba(255,222,255,0.2) 214px, rgba(255,222,255,0.2) 371px,
+      transparent 371px, transparent 412px,
+      rgba(255,255,222,0.2) 412px, rgba(255,255,222,0.2) 468px,
+      transparent 468px, transparent 525px,
+      rgba(222,255,222,0.2) 525px, rgba(222,255,222,0.2) 612px,
+      transparent 612px, transparent 677px),
+    repeating-linear-gradient(45deg,
+      transparent 0, transparent 79px,
+      rgba(255,255,255,0.2) 79px, rgba(255,255,255,0.2) 112px,
+      transparent 112px, transparent 244px,
+      rgba(255,255,255,0.2) 244px, rgba(255,255,255,0.2) 321px,
+      transparent 321px, transparent 442px,
+      rgba(255,255,255,0.2) 442px, rgba(255,255,255,0.2) 488px,
+      transparent 488px, transparent 555px,
+      rgba(255,255,255,0.2) 555px, rgba(255,255,255,0.2) 612px,
+      transparent 612px, transparent 648px),
+    repeating-linear-gradient(45deg,
+      transparent 0, transparent 34px,
+      rgba(255,255,255,0.22) 34px, rgba(255,255,255,0.22) 51px,
+      transparent 51px, transparent 94px,
+      rgba(255,255,255,0.24) 94px, rgba(255,255,255,0.24) 100px,
+      transparent 100px, transparent 147px,
+      rgba(255,255,255,0.22) 147px, rgba(255,255,255,0.22) 162px,
+      transparent 162px, transparent 202px,
+      rgba(255,255,255,0.26) 202px, rgba(255,255,255,0.26) 226px,
+      transparent 226px, transparent 260px),
+    linear-gradient(180deg,
+      rgba(0,0,0,0.3) 0, rgba(0,0,0,0.8) 33%,
+      rgba(0,0,0,0.8) 33%, rgba(0,0,0,0.8) 66%,
+      rgba(0,0,0,0.8) 66%, rgba(0,0,0,0.3) 100%),
+    radial-gradient(circle at top left, rgba(0,222,255,0.2), transparent 90%),
+    radial-gradient(circle at bottom right, rgba(255,0,222,0.2), transparent 90%);
+  background-repeat: no-repeat;
+  background-size: 100%;
+  mix-blend-mode: luminosity;
+}
+
+.app-root.glaze-light::after { opacity: 0.1; }
+.app-root.glaze-medium::after { opacity: 0.15; }
+.app-root.glaze-heavy::after { opacity: 0.2; }
+
+.app-root.glaze-light:has(.app-shell.darkmode-mono)::after,
+.app-root.glaze-light:has(.app-shell.darkmode-red)::after,
+.app-root.glaze-light:has(.app-shell.darkmode-dusk)::after,
+.app-root.glaze-light:has(.app-shell.darkmode-neon)::after,
+.app-root.glaze-light:has(.app-shell.darkmode-matrix)::after
+  { opacity: 0.07; }
+.app-root.glaze-medium:has(.app-shell.darkmode-mono)::after,
+.app-root.glaze-medium:has(.app-shell.darkmode-red)::after,
+.app-root.glaze-medium:has(.app-shell.darkmode-dusk)::after,
+.app-root.glaze-medium:has(.app-shell.darkmode-neon)::after,
+.app-root.glaze-medium:has(.app-shell.darkmode-matrix)::after
+  { opacity: 0.1; }
+.app-root.glaze-heavy:has(.app-shell.darkmode-mono)::after,
+.app-root.glaze-heavy:has(.app-shell.darkmode-red)::after,
+.app-root.glaze-heavy:has(.app-shell.darkmode-dusk)::after,
+.app-root.glaze-heavy:has(.app-shell.darkmode-neon)::after,
+.app-root.glaze-heavy:has(.app-shell.darkmode-matrix)::after
+  { opacity: 0.13; }
+
+/* HSVA controls */
+.toolbar-flyout-hsva-control {
+  cursor:     ns-resize;
+  transition: none;
+}
+
+.toolbar-flyout-hsva-control.is-dragging { cursor: crosshair; }
+
+.toolbar-flyout-hsva-alpha {
+  background: var(--color-background-light);
+  padding:    0;
+}
+
+.toolbar-flyout-hsva-glyph,
+.toolbar-flyout-hsva-ghost {
+  line-height: 1;
+}
+
+.toolbar-flyout-hsva-ghost { display: inline-block; }
+
+.toolbar-flyout-hsva-ghost::before,
+.toolbar-flyout-hsva-glyph::before {
+  display: block;
+}
+
+.toolbar-flyout-active-color {
+  grid-row:     span 2;
+  aspect-ratio: auto;
+  justify-self: center;
+  align-self:   center;
+  transition:   none;
+}
+
+/* Texture picker */
+.toolbar-flyout-texture-settings {
+  display:           grid;
+  grid-auto-columns: var(--color-grid-cell);
+  grid-auto-rows:    var(--color-grid-cell);
+  grid-auto-flow:    column;
+  gap:               var(--color-grid-gap);
+  width:     calc((var(--color-grid-cell) * 2) + var(--color-grid-gap));
+  min-width: calc((var(--color-grid-cell) * 2) + var(--color-grid-gap));
+  max-width: calc((var(--color-grid-cell) * 2) + var(--color-grid-gap));
+  flex:      0 0 auto;
+}
+
+.toolbar-flyout-texture-stack {
+  grid-column:    2 / span 2;
+  grid-row:       1 / span 2;
+  min-width:      0;
+  min-height:     0;
+  display:        flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap:            var(--toolbar-options-gap);
+}
+
+.toolbar-flyout-texture-slider-slot {
+  min-width:   0;
+  min-height:  0;
+  display:     flex;
+  align-items: center;
+}
+
+.toolbar-flyout-seed-editor {
+  width:       100%;
+  display:     flex;
+  align-items: center;
+}
+
+.toolbar-flyout-seed-btn {
+  width:           100%;
+  min-width:       0;
+  justify-content: center;
+  font-size:       10px;
+  font-weight:     600;
+  color:           var(--color-text-faded);
+}
+
+.toolbar-flyout-texture-preview-row {
+  grid-row:        1 / span 2;
+  grid-column:     1;
+  min-width:       0;
+  min-height:      0;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+}
+
+.toolbar-flyout-texture-slider-slot .utility-setting-scrollbar-shell,
+.toolbar-flyout-texture-preview-row .toolbar-flyout-texture-preview {
+  width: 100%;
+}
+
+.toolbar-flyout-texture-preview {
+  position:   relative;
+  overflow:   hidden;
+  border:     1px solid var(--btn-border-default);
+  background: var(--btn-bg-default);
+}
+
+.toolbar-flyout-texture-preview.active {
+  border-color: var(--btn-border-active);
+  box-shadow:   var(--box-shadow-inverted-harsh);
+}
+
+.toolbar-flyout-texture-preview::before,
+.toolbar-flyout-texture-preview::after {
+  content:        '';
+  position:       absolute;
+  inset:          0;
+  border-radius:  inherit;
+  pointer-events: none;
+}
+
+.toolbar-flyout-texture-preview::before {
+  background-color: var(--texture-preview-color, transparent);
+  -webkit-mask-image:    var(--texture-preview-mask);
+  -webkit-mask-repeat:   repeat;
+  -webkit-mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  -webkit-mask-position: 0 0;
+  mask-image:    var(--texture-preview-mask);
+  mask-repeat:   repeat;
+  mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  mask-position: 0 0;
+}
+
+/* 8g. Loadout grid */
+.toolbar-flyout-loadout-grid {
+  --loadout-cell-size: 32px;
+  --loadout-gap:       var(--toolbar-options-gap);
+  display:             grid;
+  grid-template-columns: repeat(6, var(--loadout-cell-size));
+  grid-auto-rows:      var(--loadout-cell-size);
+  column-gap:          var(--loadout-gap);
+  row-gap:             var(--loadout-gap);
+  padding:             0;
+  width:               fit-content;
+  align-content:       start;
+  justify-content:     start;
+  min-height:          0;
+}
+
+.toolbar-flyout-loadout-btn {
+  width:       100%;
+  height:      100%;
+  font-size:   13px;
+  font-weight: 600;
+  color:       var(--color-text-faded);
+}
+
+
+
+/* 8h. HSVA drag cursor override */
+body.hsva-dragging,
+body.hsva-dragging * {
+  cursor: none !important;
+}
+
+
+/* =============================================================================
+   9. UTILITY SETTINGS PANEL
+   ============================================================================= */
+
+/* 9a. Setting rows & stacks */
+.utility-grid {
+  display:         flex;
+  justify-content: flex-end;
+  align-items:     center;
+  -webkit-app-region: drag;
+  width:           100%;
+  height:          100%;
+}
+
+.utility-settings-panel {
+  justify-content: flex-start;
+  gap:             8px;
+}
+
+.utility-setting-row {
+  display:        flex;
+  flex-direction: column;
+  gap:            4px;
+}
+
+.utility-setting-row-range {
+  gap: 3px;
+}
+
+.utility-setting-row input {
+  width:         100%;
+  box-sizing:    border-box;
+  border:        1px solid #c6b9ab;
+  border-radius: var(--border-radius-regular);
+  background:    var(--color-input-backdrop);
+  color:         var(--color-text-dark);
+  font-size:     11px;
+  padding:       4px 6px;
+}
+
+.utility-setting-stack {
+  display:        flex;
+  flex-direction: column;
+  gap:            4px;
+}
+
+.utility-setting-button-row {
+  display:        flex;
+  flex-direction: row;
+  gap:            6px;
+  align-items:    center;
+}
+
+.utility-setting-slider-stack {
+  display:        flex;
+  flex-direction: column;
+  gap:            6px;
+}
+
+/* 9b. Custom slider / scrollbar shell */
+.utility-setting-scrollbar-shell {
+  position:    relative;
+  width:       100%;
+  height:      var(--canonical-scroll-thickness);
+  display:     block;
+  touch-action: none;
+  cursor:      default;
+  user-select: none;
+}
+
+.utility-setting-scrollbar-shell:focus-visible {
+  outline:       1px solid #8f7f70;
+  border-radius: 999px;
+}
+
+.utility-setting-scrollbar-rail {
+  position:      absolute;
+  inset:         0;
+  border:        1px solid var(--canonical-scroll-track-border);
+  border-radius: 999px;
+  background:    var(--canonical-scroll-track-bg);
+  box-shadow:    var(--box-shadow-inverted-light);
+}
+
+.utility-setting-scrollbar-track-label {
+  position:        absolute;
+  inset:           0;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  pointer-events:  none;
+  user-select:     none;
+  font-size:       10px;
+  letter-spacing:  0.03em;
+  text-transform:  lowercase;
+  color:           var(--canonical-scroll-track-border);
+}
+
+.utility-setting-scrollbar-thumb {
+  position:      absolute;
+  top:           calc(var(--canonical-scroll-handle-gap) - 2px);
+  width:         calc(var(--canonical-scroll-handle-thickness) + 2px);
+  height:        calc(var(--canonical-scroll-handle-thickness) + 2px);
+  border:        1px solid var(--canonical-handle-border);
+  border-radius: 999px;
+  box-sizing:    border-box;
+  background:    var(--canonical-handle-bg);
+  box-shadow:    var(--box-shadow-regular-light);
+  z-index:       1;
+}
+
+.utility-setting-scrollbar-shell.is-dragging .utility-setting-scrollbar-thumb {
+  border-color: rgba(81, 73, 66, 0.8);
+}
+
+
+/* =============================================================================
+   10. EDITOR AREA
+   ============================================================================= */
+
+/* 10a. Editor viewer frame & shell */
+.editor-viewer-frame {
+  display:     flex;
+  align-items: stretch;
+  width:       100%;
+  height:      100%;
+  min-width:   0;
+  min-height:  0;
+}
+
+.editor-shell {
+  /* NOTE: margin 0 0 20px 8px is intentional layout spacing; do not unify */
+  margin:        0 0 20px 8px;
+  flex:          1 1 auto;
+  min-width:     0;
+  position:      relative;
+  padding:       0;
+  box-sizing:    border-box;
+  border:        1px solid var(--color-border-highlight);
+  border-radius: var(--border-radius-regular);
+  background:    var(--color-background-light);
+  overflow:      hidden;
+}
+
+/* Inset shadow overlay — sits above all content */
+.editor-shell::after {
+  content:        '';
+  position:       absolute;
+  inset:          0;
+  border-radius:  inherit;
+  pointer-events: none;
+  box-shadow:     var(--box-shadow-inverted);
+  z-index:        4;
+}
+
+/* Editor scrollbar slot */
+.editor-scrollbar-slot {
+  flex:      0 0 24px;
+  width:     24px;
+  min-width: 24px;
+  max-width: 24px;
+  /* NOTE: margin-bottom 20px is layout-specific alignment; do not unify */
+  margin:    0 0 20px;
+  position:  relative;
+}
+
+.editor-scrollbar-slot-inner {
+  position: absolute;
+  inset:    0;
+}
+
+/* 10b. Editor stage + texture overlay */
+.editor-stage {
+  position:      relative;
+  width:         100%;
+  height:        100%;
+  box-sizing:    border-box;
+  border-radius: 6px;
+  overflow:      hidden;
+  z-index:       1;
+}
+
+.editor-stage::before {
+  content:          '';
+  position:         absolute;
+  inset:            0;
+  pointer-events:   none;
+  z-index:          1;
+  background-color: var(--texture-editor-edit-tint);
+  -webkit-mask-image:    var(--texture-editor-edit);
+  -webkit-mask-repeat:   repeat;
+  -webkit-mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  -webkit-mask-position: 0 0;
+  mask-image:    var(--texture-editor-edit);
+  mask-repeat:   repeat;
+  mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  mask-position: 0 0;
+}
+
+.editor-stage > * {
+  z-index: 2;
+}
+
+/* 10c. Preview mode edge fades */
+.editor-stage.is-preview-mode::before,
+.editor-stage.is-preview-mode::after {
+  content:        '';
+  position:       absolute;
+  left:           1px;
+  right:          1px;
+  height:         4px;
+  pointer-events: none;
+  z-index:        3;
+}
+
+.editor-stage.is-preview-mode::before {
+  top:        0;
+  background: linear-gradient(to bottom, var(--preview-edge-fade-color, var(--color-background-light)), transparent);
+}
+
+.editor-stage.is-preview-mode::after {
+  bottom:     0;
+  background: linear-gradient(to top, var(--preview-edge-fade-color, var(--color-background-light)), transparent);
+}
+
+
+/* =============================================================================
+   11. PREVIEW (MARKDOWN RENDERER)
+   ============================================================================= */
+
+/* 11a. Container & texture layer */
+.preview-container {
+  position: relative;
+  width:    100%;
+  height:   100%;
+}
+
+.markdown-preview-texture {
+  position:         absolute;
+  inset:            0;
+  pointer-events:   none;
+  z-index:          1;
+  background-color: var(--texture-editor-render-tint);
+  -webkit-mask-image:    var(--texture-editor-render);
+  -webkit-mask-repeat:   repeat;
+  -webkit-mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  -webkit-mask-position: 0 0;
+  mask-image:    var(--texture-editor-render);
+  mask-repeat:   repeat;
+  mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  mask-position: 0 0;
+}
+
+.markdown-preview {
+  /* Local tokens scoped to the preview renderer */
+  --preview-edge-padding:        18px;
+  --preview-edge-fade-color:     var(--color-background-light);
+  --preview-code-font:           'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
+  --preview-inline-code-size:    0.95em;
+  --preview-inline-code-padding: 0.08em 0.35em;
+
+  width:          100%;
+  height:         100%;
+  overflow-y:     auto;
+  scroll-behavior: smooth;
+  padding:        var(--preview-edge-padding);
+  box-sizing:     border-box;
+  color:          var(--color-text-dark);
+  text-shadow:    var(--text-shadow-emboss-base);
+  font-synthesis: style;
+  position:       relative;
+  z-index:        2;
+}
+
+.markdown-preview > *:not(.markdown-preview-texture),
+.markdown-preview > *:not(.markdown-preview-background) {
+  position: relative;
+  z-index:  3;
+}
+
+/* Search highlight */
+.markdown-preview .search-hit {
+  background-color: var(--search-hit-color, rgba(255, 221, 105, 0.55));
+  color:            inherit;
+  border-radius:    8px;
+  outline:          1px solid #00000022;
+  padding:          4px;
+}
+
+/* 11b. Markdown typography */
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4,
+.markdown-preview h5,
+.markdown-preview h6 {
+  margin:      0.75em 0 0.45em;
+  line-height: 1.25;
+  color:       var(--color-text-dark);
+  text-shadow: var(--text-shadow-emboss-heading-glow);
+}
+
+.markdown-preview h1 { font-size: 1.9em; }
+.markdown-preview h2 { font-size: 1.55em; }
+.markdown-preview h3 { font-size: 1.28em; }
+
+.markdown-preview p,
+.markdown-preview ul,
+.markdown-preview ol,
+.markdown-preview blockquote,
+.markdown-preview pre,
+.markdown-preview table {
+  margin: 0.55em 0;
+}
+
+.markdown-preview > *:first-child { margin-top: 0; }
+
+.markdown-preview a {
+  color:                var(--color-text-link);
+  text-decoration:      underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-preview em,
+.markdown-preview i {
+  font-style: italic;
+}
+
+.markdown-preview code {
+  font-family:    var(--preview-code-font);
+  font-size:      var(--preview-inline-code-size);
+  background:     var(--btn-bg-default);
+  border:         1px solid var(--btn-border-default);
+  border-radius:  var(--border-radius-small);
+  padding:        var(--preview-inline-code-padding);
+}
+
+.markdown-preview pre {
+  background:    var(--btn-bg-default);
+  border:        1px solid var(--btn-border-default);
+  border-radius: var(--border-radius-regular);
+  padding:       12px;
+  overflow-x:    auto;
+}
+
+.markdown-preview pre code {
+  border:     none;
+  background: transparent;
+  font-size:  1em;
+  padding:    0;
+}
+
+.markdown-preview blockquote {
+  border-left:    3px solid var(--color-border-blockquote);
+  padding-left:   10px;
+  letter-spacing: 0.1em;
+  font-size:      80%;
+  color:          var(--color-text-faded);
+}
+
+.markdown-preview hr {
+  border:     none;
+  border-top: 1px solid var(--color-border-hr);
+  margin:     0.8em 0;
+}
+
+.markdown-preview ul,
+.markdown-preview ol  { padding-left: 1.35em; }
+.markdown-preview ul  { list-style-type: disc; }
+.markdown-preview ol  { list-style-type: decimal; }
+.markdown-preview li  { display: list-item; }
+
+.markdown-preview ul ul       { list-style-type: circle; }
+.markdown-preview ul ul ul    { list-style-type: square; }
+.markdown-preview ol ol       { list-style-type: lower-alpha; }
+.markdown-preview ol ol ol    { list-style-type: lower-roman; }
+
+.markdown-preview table {
+  width:            100%;
+  border-collapse:  collapse;
+  background:       var(--color-background-light);
+  border-radius:    var(--border-radius-regular);
+  overflow:         hidden;
+}
+
+.markdown-preview th,
+.markdown-preview td {
+  border:     1px solid var(--color-border-regular);
+  padding:    6px 8px;
+  text-align: left;
+}
+
+.markdown-preview img {
+  max-width:     100%;
+  height:        auto;
+  border-radius: 6px;
+}
+
+/* 11c. Style variants */
+.markdown-preview.style-modern {
+  font-family: 'Quicksand', 'Segoe UI', sans-serif;
+}
+
+.markdown-preview.style-narrow {
+  font-family:         'Roboto Condensed', 'Segoe UI', sans-serif;
+  --preview-code-font: 'Share Tech Mono', 'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
+}
+
+.markdown-preview.style-cute {
+  font-family:         'Sour Gummy', 'Quicksand', 'Segoe UI', sans-serif;
+  --preview-code-font: 'Syne Mono', 'Red Hat Mono', 'Menlo', 'Monaco', monospace;
+}
+
+.markdown-preview.style-xkcd {
+  font-family:         'xkcd', 'Comic Sans MS', 'Chalkboard SE', cursive;
+  --preview-code-font: 'Syne Mono', 'Red Hat Mono', 'Menlo', 'Monaco', monospace;
+  font-synthesis: style weight;
+}
+
+.markdown-preview.style-print {
+  font-family:                  'Big Shoulders', 'Times New Roman', Georgia, serif;
+  --preview-code-font:          'Share Tech Mono', 'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
+  --preview-inline-code-size:   0.82em;
+  --preview-inline-code-padding: 0.06em 0.3em;
+  letter-spacing: 0.05em;
+  font-weight:    400;
+  font-synthesis: style weight;
+}
+
+/* 11d. Size variants */
+.markdown-preview.size-xs { font-size: 12px; }
+.markdown-preview.size-s  { font-size: 14px; }
+.markdown-preview.size-m  { font-size: 16px; }
+.markdown-preview.size-l  { font-size: 18px; }
+.markdown-preview.size-xl { font-size: 20px; }
+
+/* 11e. Spacing variants */
+.markdown-preview.spacing-tight   { line-height: 1.2; --preview-edge-padding: 9px;  }
+.markdown-preview.spacing-compact { line-height: 1.4; --preview-edge-padding: 12px; }
+.markdown-preview.spacing-cozy    { line-height: 1.6; --preview-edge-padding: 18px; }
+.markdown-preview.spacing-wide    { line-height: 1.8; --preview-edge-padding: 24px; }
+
+body.pdf-exporting > *:not(.pdf-exporter-root) {
+  display: none !important;
+}
+
+body.pdf-exporting .pdf-exporter-root {
+  display: block !important;
+  position: static !important;
+  width: auto !important;
+  min-height: auto !important;
+  overflow: visible !important;
+}
+
+body.pdf-exporting .pdf-exporter-root .pdf-exporter-page {
+  display: block !important;
+  position: relative !important;
+  width: auto !important;
+  max-width: 210mm !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  page-break-before: auto;
+  page-break-after: auto;
+  break-inside: avoid;
+}
+
+body.pdf-exporting .pdf-exporter-root .pdf-exporter-markdown-preview {
+  visibility: visible !important;
+  opacity: 1 !important;
+  background: transparent !important;
+}
+
+body.pdf-exporting .markdown-preview {
+  visibility: visible !important;
+  opacity: 1 !important;
+  background: #ffffff !important;
+  color: #000000 !important;
+  box-shadow: none !important;
+  padding: 12mm !important;
+  width: auto !important;
+  max-width: 100% !important;
+  margin: 0 auto !important;
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+
+body.pdf-exporting .markdown-preview * {
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+body.pdf-exporting .markdown-preview img {
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+.pdf-exporter-root {
+  position: absolute;
+  inset: 0;
+  z-index: 10000;
+  background: #ffffff;
+  color: #000000;
+}
+
+.pdf-exporter-page {
+  width: 100%;
+  padding: 12mm;
+  box-sizing: border-box;
+  background: #ffffff;
+  color: #000000;
+  margin: 0 auto;
+  height: auto !important;
+  min-height: 0 !important;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.pdf-exporter-root .markdown-preview {
+  padding: 0 !important;
+  background: transparent !important;
+  color: #000000 !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+}
+
+.pdf-exporter-root .markdown-preview * {
+  text-shadow: none !important;
+}
+
+.pdf-exporter-root .markdown-preview h1,
+.pdf-exporter-root .markdown-preview h2,
+.pdf-exporter-root .markdown-preview h3,
+.pdf-exporter-root .markdown-preview h4,
+.pdf-exporter-root .markdown-preview h5,
+.pdf-exporter-root .markdown-preview h6 {
+  text-shadow: none !important;
+  page-break-after: avoid;
+  break-after: avoid;
+  page-break-inside: avoid;
+  break-inside: avoid;
+  orphans: 2;
+  widows: 2;
+}
+
+.pdf-exporter-root .markdown-preview p,
+.pdf-exporter-root .markdown-preview ul,
+.pdf-exporter-root .markdown-preview ol,
+.pdf-exporter-root .markdown-preview blockquote,
+.pdf-exporter-root .markdown-preview pre,
+.pdf-exporter-root .markdown-preview table,
+.pdf-exporter-root .markdown-preview li {
+  page-break-inside: avoid;
+  break-inside: avoid;
+  orphans: 2;
+  widows: 2;
+}
+
+.pdf-exporter-root .markdown-preview > * {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+@media print {
+  @page { size: A4; margin: 12mm; }
+  body.pdf-exporting {
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+  }
+  body.pdf-exporting .markdown-preview {
+    padding: 0 !important;
+  }
+  .pdf-exporter-root {
+    position: static !important;
+  }
+}
+
+
+/* =============================================================================
+   12. WINDOW CONTROLS
+   ============================================================================= */
+
+.window-controls {
+  display:          flex;
+  padding:          8px;
+  gap:              8px;
+  align-items:      center;
+  margin-bottom:    auto;
+  margin-left:      auto;
+  border-radius:    0 0 0 var(--border-radius-regular);
+  border-left:      1px solid var(--color-border-highlight);
+  border-bottom:    1px solid var(--color-border-highlight);
+  box-shadow:       var(--box-shadow-inverted);
+  background:       var(--color-input-backdrop);
+}
+
+.window-control-btn {
+  -webkit-app-region: no-drag;
+  width:           var(--btn-square-regular-size);
+  height:          var(--btn-square-regular-size);
+  min-width:       var(--btn-square-regular-size);
+  min-height:      var(--btn-square-regular-size);
+  padding:         0;
+  margin:          0;
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  border:          1px solid var(--btn-border-default);
+  border-radius:   var(--border-radius-regular);
+  background:      var(--btn-bg-default);
+  color:           var(--color-text-label);
+  cursor:          pointer;
+  transition:      background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.window-control-btn:hover {
+  background:   var(--btn-bg-hover);
+  border-color: var(--btn-border-hover);
+}
+
+.window-control-close       { color: var(--color-danger); }
+.window-control-close:hover { background: var(--color-danger-bg); }
+
+.window-control-glyph {
+  display:     block;
+  font-size:   18px;
+  line-height: 1;
+}
+
+.window-control-glyph.fa-turn-down {
+  font-size:   15px;
+  padding-left: 1px;
+}
+
+
+/* =============================================================================
+   13. UTILITY & SHARED UI
+   ============================================================================= */
+
+/* 13a. Find hit items */
+.find-hit-item {
+  width:         100%;
+  display:       block;
+  padding:       8px 10px;
+  border-radius: 8px;
+  border:        1px solid #d2cec9;
+  background:    rgba(255, 255, 255, 0.62);
+  color:         var(--color-text-dark);
+  text-align:    left;
+  font-size:     11px;
+  line-height:   1.45;
+}
+
+.find-hit-item:hover        { background: rgba(255, 255, 255, 0.8); }
+.find-hit-item:focus-visible { outline: 1px solid #8d7a68; outline-offset: 1px; }
+
+.find-hit-snippet {
+  min-width:    0;
+  overflow-wrap: anywhere;
+  color:        var(--color-text-dark);
+}
+
+.find-hit-match {
+  font-weight: 700;
+}
+
+/* 13b. Empty states */
+.notes-empty-state {
+  border:        1px dashed #ccbfb2;
+  border-radius: 8px;
+  background:    rgba(255, 255, 255, 0.45);
+  color:         var(--color-text-label);
+  font-size:     12px;
+  padding:       14px 10px;
+  text-align:    center;
+}
+
+/* 13c. Accessibility helpers */
+.sr-only-mode-label {
+  position: absolute;
+  width:    1px;
+  height:   1px;
+  padding:  0;
+  margin:   -1px;
+  overflow: hidden;
+  clip:     rect(0, 0, 0, 0);
+  border:   0;
+}
+
+
+/* =============================================================================
+   14. RESPONSIVE / MEDIA QUERIES
+   ============================================================================= */
+
+/* No media queries currently active. The app-shell window has a hard
+   minimum size (electron/main.ts BrowserWindow minWidth/minHeight) that
+   is kept above APP_GRID_MIN_WIDTH_PX, so the grid always has enough
+   room and no horizontal-scroll fallback is needed. */
