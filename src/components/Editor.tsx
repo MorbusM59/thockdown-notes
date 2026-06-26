@@ -1248,6 +1248,18 @@ export function Editor({
                     }}
                     spellCheck={false}
                     onKeyDown={handleEditorKeyDown}
+                    onDragStart={(e) => e.preventDefault()}
+                    onMouseDown={(e) => {
+                      if (e.button !== 0) return;
+                      const selection = window.getSelection();
+                      if (selection && !selection.isCollapsed) {
+                        const range = selection.getRangeAt(0);
+                        const target = (document as any).caretRangeFromPoint?.(e.clientX, e.clientY);
+                        if (target && range.isPointInRange(target.startContainer, target.startOffset)) {
+                          selection.removeAllRanges();
+                        }
+                      }
+                    }}
                   />
                 }
                 placeholder={
