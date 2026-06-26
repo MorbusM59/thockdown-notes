@@ -8673,9 +8673,9 @@ ${markdownHtml}
   }, [syncSidebarTexture, sidebarMode, isSidebarScrollbarMode])
 
   return (
-    <div className="app-root" onDragOver={handleAppDragOver} onDrop={handleAppDrop}>
+    <div className={`app-root glaze-${glazeMode}`} onDragOver={handleAppDragOver} onDrop={handleAppDrop}>
       <div
-        className={`app-shell app-grid glaze-${glazeMode}`}
+        className="app-shell app-grid"
         ref={appShellRef}
         style={appShellStyle}
       >

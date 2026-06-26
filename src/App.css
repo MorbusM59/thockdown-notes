@@ -321,8 +321,8 @@
   overflow: hidden;
   background: var(--color-panel-top-gradient);
   text-shadow: var(--text-shadow-emboss-base);
+  filter: invert() sepia() hue-rotate(310deg) brightness(0.6) contrast(0.92) saturate(2); 
 }
-
 
 /* =============================================================================
    3. SCROLLBAR SYSTEM
@@ -1738,7 +1738,7 @@ button.active,
 }
 
 /* Glaze overlay */
-.app-shell::after {
+.app-root::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -1788,9 +1788,9 @@ button.active,
   mix-blend-mode: luminosity;
 }
 
-.app-shell.glaze-light::after { opacity: 0.05; }
-.app-shell.glaze-medium::after { opacity: 0.1; }
-.app-shell.glaze-heavy::after { opacity: 0.2; }
+.app-root.glaze-light::after { opacity: 0.05; }
+.app-root.glaze-medium::after { opacity: 0.1; }
+.app-root.glaze-heavy::after { opacity: 0.2; }
 
 /* HSVA controls */
 .toolbar-flyout-hsva-control {
