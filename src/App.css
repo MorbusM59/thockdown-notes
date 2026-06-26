@@ -1747,26 +1747,50 @@ button.active,
   opacity: 0;
   transition: opacity 220ms ease;
   background-image:
-    repeating-linear-gradient(42deg,
-      rgba(0,0,0,0.12) 0%, rgba(255,255,255,0.44) 3%,
-      rgba(0,0,0,0.14) 3%, rgba(255,255,255,0.14) 5%,
-      transparent 5%, transparent 9%,
-      rgba(255,255,255,0.22) 9%, rgba(255,255,255,0.46) 11%,
-      transparent 11%, transparent 14%,
-      rgba(0,0,255,0.28) 14%, rgba(255,255,255,0.28) 16%,
-      transparent 16%, transparent 20%,
-      rgba(255,255,255,0.12) 20%, rgba(255,255,255,0.12) 22%,
-      transparent 22%, transparent 26%),
+    repeating-linear-gradient(225deg,
+      transparent 0, transparent 53px,
+      rgba(0,255,255,0.2) 53px, rgba(0,255,255,0.2) 142px,
+      transparent 142px, transparent 214px,
+      rgba(0,255,255,0.2) 214px, rgba(0,255,255,0.2) 371px,
+      transparent 371px, transparent 412px,
+      rgba(0,255,255,0.2) 412px, rgba(0,255,255,0.2) 468px,
+      transparent 468px, transparent 525px,
+      rgba(0,255,255,0.2) 525px, rgba(0,255,255,0.2) 612px,
+      transparent 612px, transparent 677px),
+    repeating-linear-gradient(45deg,
+      transparent 0, transparent 79px,
+      rgba(255,255,255,0.2) 79px, rgba(255,255,255,0.2) 112px,
+      transparent 112px, transparent 244px,
+      rgba(255,255,255,0.2) 244px, rgba(255,255,255,0.2) 321px,
+      transparent 321px, transparent 442px,
+      rgba(255,255,255,0.2) 442px, rgba(255,255,255,0.2) 488px,
+      transparent 488px, transparent 555px,
+      rgba(255,255,255,0.2) 555px, rgba(255,255,255,0.2) 612px,
+      transparent 612px, transparent 648px),
+    repeating-linear-gradient(45deg,
+      transparent 0, transparent 34px,
+      rgba(255,255,255,0.4) 34px, rgba(255,255,255,0.4) 51px,
+      transparent 51px, transparent 94px,
+      rgba(255,255,255,0.2) 94px, rgba(255,255,255,0.2) 100px,
+      transparent 100px, transparent 147px,
+      rgba(255,255,255,0.4) 147px, rgba(255,255,255,0.4) 162px,
+      transparent 162px, transparent 202px,
+      rgba(255,255,255,0.3) 202px, rgba(255,255,255,0.3) 226px,
+      transparent 226px, transparent 260px),
+    linear-gradient(180deg,
+      #00000044 0, #000000BB 33%,
+      #000000BB 33%, #000000BB 66%,
+      #000000BB 66%, #00000044 100%),
     radial-gradient(circle at top left, rgba(0,222,255,0.8), transparent 82%),
     radial-gradient(circle at bottom right, rgba(255,0,222,0.7), transparent 90%);
   background-repeat: no-repeat;
   background-size: 100%;
-  mix-blend-mode: screen;
+  mix-blend-mode: luminosity;
 }
 
-.app-shell.glaze-light::after { opacity: 0.25; }
-.app-shell.glaze-medium::after { opacity: 0.4; }
-.app-shell.glaze-heavy::after { opacity: 0.6; }
+.app-shell.glaze-light::after { opacity: 0.05; }
+.app-shell.glaze-medium::after { opacity: 0.1; }
+.app-shell.glaze-heavy::after { opacity: 0.2; }
 
 /* HSVA controls */
 .toolbar-flyout-hsva-control {
