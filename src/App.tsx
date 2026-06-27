@@ -6028,11 +6028,18 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }, [sidebarMode, dateFilteredNotes, trashFilteredNotes])
 
   useEffect(() => {
-    if (!activeNoteId) {
+    if (sidebarMode !== 'date' && sidebarMode !== 'trash' && sidebarMode !== 'category' && sidebarMode !== 'archive') {
       return
     }
 
-    if (sidebarMode !== 'date' && sidebarMode !== 'trash' && sidebarMode !== 'category' && sidebarMode !== 'archive') {
+    if (!activeNoteId) {
+      // No active note — auto-load the first available note in date/trash views.
+      if (sidebarMode === 'date' || sidebarMode === 'trash') {
+        const firstId = getNextActiveNoteIdAfterRemoval('')
+        if (firstId) {
+          void activateNote(firstId)
+        }
+      }
       return
     }
 
