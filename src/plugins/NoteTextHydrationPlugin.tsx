@@ -75,12 +75,16 @@ export function NoteTextHydrationPlugin({ noteId, text, scrollerRef }: NoteTextH
       return;
     }
 
+    const isNoteSwitch = lastAppliedNoteIdRef.current !== currentNoteId;
     lastAppliedNoteIdRef.current = currentNoteId;
 
     const scrollerEl = (scrollerRef?.current ?? null);
     const preservedScrollTop = scrollerEl ? scrollerEl.scrollTop : null;
 
     const restoreScroll = () => {
+      // Only restore scroll on note switches — typing in the same note must not
+      // override CagedScrollPlugin's deterministic boundary scroll step.
+      if (!isNoteSwitch) return;
       if (!scrollerEl || preservedScrollTop === null) return;
       scrollerEl.scrollTop = preservedScrollTop;
       requestAnimationFrame(() => {
