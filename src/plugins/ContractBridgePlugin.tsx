@@ -519,19 +519,6 @@ export function ContractBridgePlugin({
 
         // DEBUG: log what the RAF reads
         const domSel = window.getSelection();
-        console.warn('[CBP:RAF:emitSelection]', {
-          source,
-          anchorNode: domSel?.anchorNode?.nodeName,
-          anchorNodeType: domSel?.anchorNode?.nodeType,
-          anchorNodeContent: domSel?.anchorNode?.textContent,
-          anchorOffset: domSel?.anchorOffset,
-          focusNode: domSel?.focusNode?.nodeName,
-          focusNodeType: domSel?.focusNode?.nodeType,
-          focusNodeContent: domSel?.focusNode?.textContent,
-          focusOffset: domSel?.focusOffset,
-          resolvedFocus: nextSelection.focus,
-          previousRefFocus: previousSelectionRef.current.focus,
-        });
       });
 
       const previousSelection = previousSelectionRef.current;
@@ -574,19 +561,6 @@ export function ContractBridgePlugin({
         if (normalizedText !== previousText) {
           const source = resolveChangeSource(tags);
 
-          // DEBUG: log the raw DOM selection at the moment of text change
-          const domSel = window.getSelection();
-          console.warn('[CBP:updateListener:textChange]', {
-            source,
-            text: JSON.stringify(normalizedText),
-            anchorNode: domSel?.anchorNode?.nodeName,
-            anchorNodeType: domSel?.anchorNode?.nodeType, // 1=Element, 3=Text
-            anchorOffset: domSel?.anchorOffset,
-            focusNode: domSel?.focusNode?.nodeName,
-            focusNodeType: domSel?.focusNode?.nodeType,
-            focusOffset: domSel?.focusOffset,
-            resolvedSelection: nextSelection,
-          });
 
           onTextChangeRef.current({
             source,
@@ -791,19 +765,6 @@ export function ContractBridgePlugin({
 
           // DEBUG: log exact DOM state at Enter keypress
           const domSel = window.getSelection();
-          console.warn('[CBP:enterCommand]', {
-            canonicalText: JSON.stringify(canonicalText),
-            anchorNode: domSel?.anchorNode?.nodeName,
-            anchorNodeType: domSel?.anchorNode?.nodeType, // 1=Element, 3=Text
-            anchorNodeContent: domSel?.anchorNode?.textContent,
-            anchorOffset: domSel?.anchorOffset,
-            focusNode: domSel?.focusNode?.nodeName,
-            focusNodeType: domSel?.focusNode?.nodeType,
-            focusNodeContent: domSel?.focusNode?.textContent,
-            focusOffset: domSel?.focusOffset,
-            resolvedFocus: currentSelection.focus,
-            previousSelectionRefFocus: previousSelectionRef.current.focus,
-          });
         });
 
         const next = callback({
@@ -815,7 +776,6 @@ export function ContractBridgePlugin({
           selection: currentSelection,
         });
 
-        console.warn('[CBP:enterCommand:result]', { next, currentSelectionFocus: currentSelection.focus });
 
         if (!next) return false;
 

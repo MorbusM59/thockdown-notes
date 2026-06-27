@@ -139,18 +139,10 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       if (!scroller) return false;
 
       const result = resolveIntentScrollTarget(intent);
-      console.warn('[CSP:applyIntentReconcile]', {
-        intent,
-        targetScrollTopPx: result.targetScrollTopPx,
-        reason: result.reason,
-        caretTopInScrollPx: result.caretTopInScrollPx,
-        currentScrollTop: scroller.scrollTop,
-      });
 
       let targetScrollTopPx = result.targetScrollTopPx;
 
       if (targetScrollTopPx === null) {
-        console.warn('[CSP:targetScrollTopPx is null]');
         return;
       }
 
@@ -247,11 +239,6 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         pendingIntent = 'none';
         if (intent === 'none') return;
 
-        console.warn('[CSP:scheduleRefocus:microtask]', {
-          intent,
-          deterministicEnterBoundaryScrollTopPx,
-          scrollTop: scrollerRef.current?.scrollTop,
-        });
 
         if (intent === 'refocus-caged' && deterministicEnterBoundaryScrollTopPx !== null) {
           const currentScroller = scrollerRef.current;
@@ -266,11 +253,6 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
               ),
             );
 
-            console.warn('[CSP:scheduleRefocus:deterministicStep]', {
-              deterministicTargetPx,
-              currentScrollTop: currentScroller.scrollTop,
-              willApply: deterministicTargetPx > currentScroller.scrollTop,
-            });
 
             if (deterministicTargetPx > currentScroller.scrollTop) {
               currentScroller.scrollTop = deterministicTargetPx;
@@ -278,47 +260,6 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
               const capturedScroller = currentScroller;
               const capturedTarget = deterministicTargetPx;
 
-              // Prototype-level scrollTop trap to identify what resets scroll after the deterministic step.
-              const trapProto = Object.getPrototypeOf(capturedScroller) as typeof HTMLElement.prototype;
-              const descriptor =
-                Object.getOwnPropertyDescriptor(trapProto, 'scrollTop') ??
-                Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop') ??
-                Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTop');
-
-              console.warn('[CSP:trap-setup]', {
-                foundDescriptor: !!descriptor,
-                protoName: trapProto?.constructor?.name,
-              });
-
-              if (descriptor?.set) {
-                const originalSet = descriptor.set;
-                const originalGet = descriptor.get;
-                Object.defineProperty(trapProto, 'scrollTop', {
-                  get: originalGet,
-                  set: function(this: HTMLElement, value: number) {
-                    if (this === capturedScroller && Math.abs(value - capturedTarget) > 1) {
-                      console.error('[CSP:scrollTop-STOMPER]', {
-                        newValue: value,
-                        expectedTarget: capturedTarget,
-                        stack: new Error().stack,
-                      });
-                    }
-                    originalSet.call(this, value);
-                  },
-                  configurable: true,
-                });
-                requestAnimationFrame(() => requestAnimationFrame(() => {
-                  Object.defineProperty(trapProto, 'scrollTop', descriptor);
-                }));
-              }
-
-              requestAnimationFrame(() => {
-                console.warn('[CSP:deterministicStep:RAF-verify]', {
-                  scrollTopAfterRAF: capturedScroller.scrollTop,
-                  expectedTarget: capturedTarget,
-                  survived: Math.abs(capturedScroller.scrollTop - capturedTarget) < 1,
-                });
-              });
             }
           }
 
@@ -677,15 +618,6 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
             const quantizedCaretRowTopPx = Math.round(caretTopInScroll / lineHeightPx) * lineHeightPx;
             const lastMiddleRowTopPx = Math.round((middleBottomInScrollPx - lineHeightPx) / lineHeightPx) * lineHeightPx;
             const isAtLastMiddleRow = Math.abs(quantizedCaretRowTopPx - lastMiddleRowTopPx) < 0.01;
-            console.warn('[CSP:keydown:enter]', {
-              caretSource: caretRect?.source,
-              isAuthoritativeRect,
-              quantizedCaretRowTopPx,
-              lastMiddleRowTopPx,
-              isAtLastMiddleRow,
-              scrollTop: scroller.scrollTop,
-              deterministicArmed: isAtLastMiddleRow,
-            });
           if (isAtLastMiddleRow) {
               deterministicEnterBoundaryScrollTopPx = scroller.scrollTop;
             }
