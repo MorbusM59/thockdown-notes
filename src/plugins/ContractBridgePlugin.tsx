@@ -826,12 +826,19 @@ export function ContractBridgePlugin({
         }, {
           tag: 'enter-transform',
           onUpdate: () => {
-            applyTransformSelectionPreservingScroll(next.text, next.selection);
+            // Apply DOM selection synchronously post-commit so CagedScrollPlugin's
+            // microtask reads the correct caret position for its boundary scroll step.
+            // Do NOT touch scrollTop — CagedScrollPlugin owns scroll for Enter.
+            const rootEl = editor.getRootElement();
+            if (rootEl) {
+              const applied = applySelectionStateToDom(rootEl, next.text, next.selection);
+              if (applied) {
+                previousSelectionRef.current = next.selection;
+                onSelectionChangeRef.current({ source: 'user-input', selection: next.selection });
+              }
+            }
           },
         });
-        // No scheduleTransformSelectionReplay needed — onUpdate handles it synchronously post-commit
-
-        scheduleTransformSelectionReplay(next.text, next.selection);
 
         return true;
       },

@@ -139,7 +139,13 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       if (!scroller) return false;
 
       const result = resolveIntentScrollTarget(intent);
-      if (result.targetScrollTopPx === null) return false;
+      console.warn('[CSP:applyIntentReconcile]', {
+        intent,
+        targetScrollTopPx: result.targetScrollTopPx,
+        reason: result.reason,
+        caretTopInScrollPx: result.caretTopInScrollPx,
+        currentScrollTop: scroller.scrollTop,
+      });
 
       let targetScrollTopPx = result.targetScrollTopPx;
 
@@ -236,6 +242,12 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         pendingIntent = 'none';
         if (intent === 'none') return;
 
+        console.warn('[CSP:scheduleRefocus:microtask]', {
+          intent,
+          deterministicEnterBoundaryScrollTopPx,
+          scrollTop: scrollerRef.current?.scrollTop,
+        });
+
         if (intent === 'refocus-caged' && deterministicEnterBoundaryScrollTopPx !== null) {
           const currentScroller = scrollerRef.current;
           let didApplyDeterministicStep = false;
@@ -248,6 +260,12 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
                 Math.round((deterministicEnterBoundaryScrollTopPx + lineHeightPx) / lineHeightPx) * lineHeightPx,
               ),
             );
+
+            console.warn('[CSP:scheduleRefocus:deterministicStep]', {
+              deterministicTargetPx,
+              currentScrollTop: currentScroller.scrollTop,
+              willApply: deterministicTargetPx > currentScroller.scrollTop,
+            });
 
             if (deterministicTargetPx > currentScroller.scrollTop) {
               currentScroller.scrollTop = deterministicTargetPx;
@@ -609,8 +627,17 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
             const middleBottomInScrollPx = scroller.scrollTop + scroller.clientHeight - bottomBoundaryPx;
             const quantizedCaretRowTopPx = Math.round(caretTopInScroll / lineHeightPx) * lineHeightPx;
             const lastMiddleRowTopPx = Math.round((middleBottomInScrollPx - lineHeightPx) / lineHeightPx) * lineHeightPx;
-            const isAtLastMiddleRow = isAuthoritativeRect && Math.abs(quantizedCaretRowTopPx - lastMiddleRowTopPx) < 0.01;
-            if (isAtLastMiddleRow) {
+            const isAtLastMiddleRow = Math.abs(quantizedCaretRowTopPx - lastMiddleRowTopPx) < 0.01;
+            console.warn('[CSP:keydown:enter]', {
+              caretSource: caretRect?.source,
+              isAuthoritativeRect,
+              quantizedCaretRowTopPx,
+              lastMiddleRowTopPx,
+              isAtLastMiddleRow,
+              scrollTop: scroller.scrollTop,
+              deterministicArmed: isAtLastMiddleRow,
+            });
+          if (isAtLastMiddleRow) {
               deterministicEnterBoundaryScrollTopPx = scroller.scrollTop;
             }
           }
