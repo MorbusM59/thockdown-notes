@@ -1,6 +1,7 @@
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useEffect, useRef } from 'react';
 import {
+  $addUpdateTag,
   $createParagraphNode,
   $createTextNode,
   $getRoot,
@@ -13,6 +14,7 @@ import {
   KEY_ENTER_COMMAND,
   KEY_TAB_COMMAND,
   SELECTION_CHANGE_COMMAND,
+  SKIP_SELECTION_FOCUS_TAG,
 } from 'lexical';
 import type {
   EditorSelectionChangeEvent,
@@ -83,6 +85,7 @@ function readCanonicalRootText(): string {
 }
 
 function replaceEditorTextFromCanonical(nextText: string): void {
+  $addUpdateTag(SKIP_SELECTION_FOCUS_TAG);
   const root = $getRoot();
   root.clear();
 
@@ -566,6 +569,8 @@ export function ContractBridgePlugin({
         const previousText = previousTextRef.current;
         const previousSelection = previousSelectionRef.current;
 
+        const isTransformCommit = tags.has('enter-transform') || tags.has('tab-indent') || tags.has('shortcut-transform');
+
         if (normalizedText !== previousText) {
           const source = resolveChangeSource(tags);
 
@@ -587,17 +592,22 @@ export function ContractBridgePlugin({
             source,
             text: normalizedText,
             previousText,
-            selection: nextSelection,
+            // Transform commits own their own selection via scheduleTransformSelectionReplay.
+            // The DOM selection immediately post-commit is unreliable (Lexical default placement),
+            // so report the pre-transform position to avoid poisoning latestEditorSelectionRef.
+            selection: isTransformCommit ? previousSelection : nextSelection,
           });
           previousTextRef.current = normalizedText;
         }
 
         if (
-          nextSelection.anchor !== previousSelection.anchor ||
-          nextSelection.focus !== previousSelection.focus ||
-          nextSelection.start !== previousSelection.start ||
-          nextSelection.end !== previousSelection.end ||
-          nextSelection.isCollapsed !== previousSelection.isCollapsed
+          !isTransformCommit && (
+            nextSelection.anchor !== previousSelection.anchor ||
+            nextSelection.focus !== previousSelection.focus ||
+            nextSelection.start !== previousSelection.start ||
+            nextSelection.end !== previousSelection.end ||
+            nextSelection.isCollapsed !== previousSelection.isCollapsed
+          )
         ) {
           scheduleSelectionEmit(resolveChangeSource(tags));
         }
@@ -813,7 +823,13 @@ export function ContractBridgePlugin({
 
         editor.update(() => {
           replaceEditorTextFromCanonical(next.text);
-        }, { tag: 'enter-transform' });
+        }, {
+          tag: 'enter-transform',
+          onUpdate: () => {
+            applyTransformSelectionPreservingScroll(next.text, next.selection);
+          },
+        });
+        // No scheduleTransformSelectionReplay needed — onUpdate handles it synchronously post-commit
 
         scheduleTransformSelectionReplay(next.text, next.selection);
 
