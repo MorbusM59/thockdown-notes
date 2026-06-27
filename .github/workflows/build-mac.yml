@@ -20,7 +20,11 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Install dependencies
+      - name: Read version
+        id: version
+        run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node modules
         run: npm ci
 
       - name: Build app
@@ -31,5 +35,5 @@ jobs:
       - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
-          name: thockdown-notes-mac-dmg
+          name: Thockdown-Notes-mac-${{ steps.version.outputs.version }}-dmg
           path: release/**/**/*.dmg
