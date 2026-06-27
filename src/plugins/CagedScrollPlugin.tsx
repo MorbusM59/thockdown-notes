@@ -149,6 +149,11 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
 
       let targetScrollTopPx = result.targetScrollTopPx;
 
+      if (targetScrollTopPx === null) {
+        console.warn('[CSP:targetScrollTopPx is null]');
+        return;
+      }
+
       if (intent === 'refocus-caged' && clampNextEnterReconcileToSingleRow) {
         const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
         const singleStepMinPx = scroller.scrollTop;
@@ -272,6 +277,41 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
               didApplyDeterministicStep = true;
               const capturedScroller = currentScroller;
               const capturedTarget = deterministicTargetPx;
+
+              // Prototype-level scrollTop trap to identify what resets scroll after the deterministic step.
+              const trapProto = Object.getPrototypeOf(capturedScroller) as typeof HTMLElement.prototype;
+              const descriptor =
+                Object.getOwnPropertyDescriptor(trapProto, 'scrollTop') ??
+                Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop') ??
+                Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTop');
+
+              console.warn('[CSP:trap-setup]', {
+                foundDescriptor: !!descriptor,
+                protoName: trapProto?.constructor?.name,
+              });
+
+              if (descriptor?.set) {
+                const originalSet = descriptor.set;
+                const originalGet = descriptor.get;
+                Object.defineProperty(trapProto, 'scrollTop', {
+                  get: originalGet,
+                  set: function(this: HTMLElement, value: number) {
+                    if (this === capturedScroller && Math.abs(value - capturedTarget) > 1) {
+                      console.error('[CSP:scrollTop-STOMPER]', {
+                        newValue: value,
+                        expectedTarget: capturedTarget,
+                        stack: new Error().stack,
+                      });
+                    }
+                    originalSet.call(this, value);
+                  },
+                  configurable: true,
+                });
+                requestAnimationFrame(() => requestAnimationFrame(() => {
+                  Object.defineProperty(trapProto, 'scrollTop', descriptor);
+                }));
+              }
+
               requestAnimationFrame(() => {
                 console.warn('[CSP:deterministicStep:RAF-verify]', {
                   scrollTopAfterRAF: capturedScroller.scrollTop,
