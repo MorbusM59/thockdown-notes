@@ -2816,8 +2816,12 @@ function App() {
     setSidebarMode(nextMode)
     restoreSidebarModeStateFrom(nextMode, nextSidebarViewStateByMode)
     void persistMenuStateOnce(nextMode, nextSidebarViewStateByMode)
+    // Select the active note in the incoming menu: jump to its page in
+    // date/trash, or trigger tree unfold/focus in category/archive.
+    focusActiveNoteInSidebarMode(nextMode)
   }, [
     captureSidebarModeState,
+    focusActiveNoteInSidebarMode,
     persistMenuStateOnce,
     restoreSidebarModeStateFrom,
     sidebarMode,
@@ -6033,17 +6037,21 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     }
 
     if (!activeNoteId) {
-      // No active note — auto-load the first available note in date/trash views.
-      if (sidebarMode === 'date' || sidebarMode === 'trash') {
-        const firstId = getNextActiveNoteIdAfterRemoval('')
-        if (firstId) {
-          void activateNote(firstId)
-        }
+      // No active note — auto-load the first available note in date/trash/category/archive.
+      const firstId = getNextActiveNoteIdAfterRemoval('')
+      if (firstId) {
+        void activateNote(firstId)
       }
       return
     }
 
     if (isNoteDisplayedInCurrentMenu(activeNoteId)) {
+      return
+    }
+
+    // In tree views (category/archive), a note may not appear in that tree but
+    // still exists — keep it in the editor without replacement.
+    if (sidebarMode === 'category' || sidebarMode === 'archive') {
       return
     }
 
