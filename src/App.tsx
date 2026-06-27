@@ -8812,7 +8812,11 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           >
             <div ref={sidebarTextureRef} className="sidebar-content-texture" />
             {(sidebarMode === 'date' || sidebarMode === 'trash') ? (
-              <div className="notes-list date-view" role="listbox" aria-label="Note list">
+              <div
+                className={`notes-list date-view${hasDateFilter ? ' is-filtered' : ''}`}
+                role="listbox"
+                aria-label="Note list"
+              >
                 {pagedVisibleNotes.map((note) => {
                   const isActive = note.id === activeNoteId
                   const isModified = isExternalNote(note) && getCurrentExternalNoteModifiedState(note)
@@ -8879,7 +8883,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               renderSidebarOptionsContent()
             ) : (
               <div
-                className="notes-list tree-view measly-custom-scrollbar"
+                className={`notes-list tree-view measly-custom-scrollbar${hasDateFilter ? ' is-filtered' : ''}`}
                 ref={setSidebarTreeScrollerEl}
               >
                 <CategoryTreeView
