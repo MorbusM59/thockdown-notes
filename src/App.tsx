@@ -2816,9 +2816,11 @@ function App() {
     setSidebarMode(nextMode)
     restoreSidebarModeStateFrom(nextMode, nextSidebarViewStateByMode)
     void persistMenuStateOnce(nextMode, nextSidebarViewStateByMode)
-    // Select the active note in the incoming menu: jump to its page in
-    // date/trash, or trigger tree unfold/focus in category/archive.
-    focusActiveNoteInSidebarMode(nextMode)
+    // Defer focus so the new mode's render (with updated filtered notes / tree
+    // state) has committed before we attempt to jump page or unfold the tree.
+    requestAnimationFrame(() => {
+      focusActiveNoteInSidebarMode(nextMode)
+    })
   }, [
     captureSidebarModeState,
     focusActiveNoteInSidebarMode,
