@@ -257,9 +257,6 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
             if (deterministicTargetPx > currentScroller.scrollTop) {
               currentScroller.scrollTop = deterministicTargetPx;
               didApplyDeterministicStep = true;
-              const capturedScroller = currentScroller;
-              const capturedTarget = deterministicTargetPx;
-
             }
           }
 

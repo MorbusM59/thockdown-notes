@@ -516,9 +516,6 @@ export function ContractBridgePlugin({
           window.getSelection(),
           canonicalText.length,
         );
-
-        // DEBUG: log what the RAF reads
-        const domSel = window.getSelection();
       });
 
       const previousSelection = previousSelectionRef.current;
@@ -762,9 +759,6 @@ export function ContractBridgePlugin({
           if (rootEl && $isRangeSelection(lexicalSelection)) {
             currentSelection = readSelectionStateFromDom(rootEl, window.getSelection(), canonicalText.length);
           }
-
-          // DEBUG: log exact DOM state at Enter keypress
-          const domSel = window.getSelection();
         });
 
         const next = callback({
