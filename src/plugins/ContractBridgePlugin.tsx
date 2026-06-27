@@ -828,10 +828,18 @@ export function ContractBridgePlugin({
           onUpdate: () => {
             // Apply DOM selection synchronously post-commit so CagedScrollPlugin's
             // microtask reads the correct caret position for its boundary scroll step.
-            // Do NOT touch scrollTop — CagedScrollPlugin owns scroll for Enter.
+            // Preserve scrollTop across addRange — the browser natively scrolls the
+            // caret into view on addRange, which would stomp CagedScrollPlugin's
+            // deterministic scroll step. Re-pinning scrollTop after addRange prevents that.
             const rootEl = editor.getRootElement();
             if (rootEl) {
+              const scroller = rootEl.closest('.measly-custom-scrollbar');
+              const scrollerEl = scroller instanceof HTMLElement ? scroller : null;
+              const scrollTopBefore = scrollerEl ? scrollerEl.scrollTop : null;
               const applied = applySelectionStateToDom(rootEl, next.text, next.selection);
+              if (scrollerEl && scrollTopBefore !== null) {
+                scrollerEl.scrollTop = scrollTopBefore;
+              }
               if (applied) {
                 previousSelectionRef.current = next.selection;
                 onSelectionChangeRef.current({ source: 'user-input', selection: next.selection });
