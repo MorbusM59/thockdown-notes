@@ -270,6 +270,15 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
             if (deterministicTargetPx > currentScroller.scrollTop) {
               currentScroller.scrollTop = deterministicTargetPx;
               didApplyDeterministicStep = true;
+              const capturedScroller = currentScroller;
+              const capturedTarget = deterministicTargetPx;
+              requestAnimationFrame(() => {
+                console.warn('[CSP:deterministicStep:RAF-verify]', {
+                  scrollTopAfterRAF: capturedScroller.scrollTop,
+                  expectedTarget: capturedTarget,
+                  survived: Math.abs(capturedScroller.scrollTop - capturedTarget) < 1,
+                });
+              });
             }
           }
 
