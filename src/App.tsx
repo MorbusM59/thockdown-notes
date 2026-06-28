@@ -1670,6 +1670,7 @@ function App() {
   // Terminology convention: false = edit mode, true = render view.
   const [isPreviewMode, setIsPreviewMode] = useState(false)
   const [isExportingPdf, setIsExportingPdf] = useState(false)
+  const [isExportingMd, setIsExportingMd] = useState(false)
   const [exportFolder, setExportFolder] = useState<string | null>(null)
   const [debuggingEnabled, setDebuggingEnabled] = useState(false)
   const debugNoteIdRef = useRef<string | null>(null)
@@ -5577,6 +5578,29 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     }
   }, [activeNoteId, activeNoteText, exportFolder, isExportingPdf, chooseExportFolder, buildExportHtmlContent])
 
+  const handleExportMd = useCallback(async (forceChooseFolder = false) => {
+    if (!activeNoteId || isExportingMd) return
+    setIsExportingMd(true)
+
+    try {
+      const folderPath = (!exportFolder || forceChooseFolder)
+        ? await chooseExportFolder()
+        : exportFolder
+      if (!folderPath) return
+
+      const fileName = `${deriveNoteTitleFromText(activeNoteText || '')}.md`
+      const result = await window.ipcRenderer?.invoke('export-md', activeNoteId, folderPath, fileName)
+
+      if (!result?.ok) {
+        console.error('Export MD failed', result?.error)
+      }
+    } catch (error) {
+      console.error('Export MD failed', error)
+    } finally {
+      setIsExportingMd(false)
+    }
+  }, [activeNoteId, activeNoteText, exportFolder, isExportingMd, chooseExportFolder])
+
   useEffect(() => {
     if (!window.measlyState || !activeNoteId) return
     queueAppStateSave(activeNoteId)
@@ -9241,6 +9265,20 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   disabled={!activeNoteId || isExportingPdf}
                 >
                   <span className="fa-solid fa-file-pdf" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="toolbar-btn-icon"
+                  title="Export Markdown"
+                  aria-label="Export current note to Markdown"
+                  onClick={() => void handleExportMd()}
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    void handleExportMd(true)
+                  }}
+                  disabled={!activeNoteId || isExportingMd}
+                >
+                  <span className="fa-solid fa-file-code" aria-hidden="true" />
                 </button>
               </div>
             ) : null}

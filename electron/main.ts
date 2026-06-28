@@ -425,6 +425,27 @@ function registerIpcHandlers() {
     }
   })
 
+  ipcMain.handle('export-md', async (_event, noteId: string, folderPath: string, fileName: string) => {
+    try {
+      if (!noteId || !folderPath || !fileName) {
+        return { ok: false, error: 'Invalid export arguments' }
+      }
+      const sourcePath = path.join(resolveDataRoot(), 'notes', `${noteId}.md`)
+      const sourceExists = await fsPromises.stat(sourcePath).then(() => true).catch(() => false)
+      if (!sourceExists) {
+        return { ok: false, error: 'Source note file not found' }
+      }
+      await fsPromises.mkdir(folderPath, { recursive: true })
+      const sanitize = (input: string) => input.replace(/[<>:"/\\|?*]+/g, '_')
+      const outPath = path.join(folderPath, sanitize(fileName))
+      await fsPromises.copyFile(sourcePath, outPath)
+      return { ok: true, path: outPath }
+    } catch (error: any) {
+      console.warn('[main] export-md failed', error)
+      return { ok: false, error: error?.message ?? String(error) }
+    }
+  })
+
   ipcMain.handle(TEXTURE_CHANNELS.getCached, async (_event, request) => {
     return databaseService!.getTextureCache(request);
   });
