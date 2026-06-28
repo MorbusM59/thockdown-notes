@@ -32,6 +32,7 @@ function shouldPreserveLineBreak(previousLine: string, currentLine: string): boo
 
   return (
     SENTENCE_ENDINGS.has(lastPreviousChar) ||
+    previousTrimmedRight.startsWith('```') ||
     BULLET_PATTERN.test(currentTrimmedLeft) ||
     currentLine.startsWith(SANITIZED_TAB_SPACES) ||
     currentTrimmedLeft.startsWith('#') ||
@@ -49,10 +50,29 @@ function reconstructParagraphs(input: string): string {
   }
 
   const result: string[] = [lines[0]];
+  let insideCodeFence = lines[0].trimStart().startsWith('```');
 
   for (let index = 1; index < lines.length; index += 1) {
     const previousLine = result[result.length - 1];
     const currentLine = lines[index];
+    const currentTrimmedLeft = currentLine.replace(/^\s+/, '');
+    const isCodeFenceLine = currentTrimmedLeft.startsWith('```');
+
+    if (insideCodeFence) {
+      result.push(currentLine);
+
+      if (isCodeFenceLine) {
+        insideCodeFence = false;
+      }
+
+      continue;
+    }
+
+    if (isCodeFenceLine) {
+      result.push(currentLine);
+      insideCodeFence = true;
+      continue;
+    }
 
     if (shouldPreserveLineBreak(previousLine, currentLine)) {
       result.push(currentLine);
