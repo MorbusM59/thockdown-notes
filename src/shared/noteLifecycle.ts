@@ -41,6 +41,7 @@ export interface CreateNoteInput {
   initialText?: string;
   externalPath?: string;
   title?: string;
+  initialTags?: string[];
 }
 
 export interface SaveNoteInput {

@@ -101,7 +101,7 @@ async function importNotesFromPaths(filePaths: string[]): Promise<{ imported: nu
     try {
       const normalizedPath = normalizeExternalFilePath(filePath)
       const content = await fsPromises.readFile(normalizedPath, 'utf8')
-      const note = await noteLifecycleService.createNote({ initialText: content })
+      const note = await noteLifecycleService.createNote({ initialText: content, initialTags: ['import'] })
       createdNoteIds.push(note.id)
     } catch (error) {
       errors.push(String(error instanceof Error ? error.message : error))
@@ -259,11 +259,11 @@ function registerIpcHandlers() {
 
     try {
       const result = await dialog.showOpenDialog(winRef, {
-        properties: ['openFile', 'openDirectory', 'multiSelections'],
+        properties: ['openFile', 'multiSelections'],
         filters: [
           { name: 'Markdown and Text Files', extensions: ['md', 'txt'] },
         ],
-        title: 'Select files or folders to import',
+        title: 'Select files to import',
       })
 
       if (result.canceled || result.filePaths.length === 0) {

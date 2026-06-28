@@ -298,6 +298,11 @@ export class NoteLifecycleService {
       createdAtMs: stat.birthtimeMs || stat.mtimeMs,
       updatedAtMs: stat.mtimeMs,
     });
+    if (input?.initialTags?.length) {
+      for (const tag of input.initialTags) {
+        await this.databaseService.addTagToNote(id, tag, 0);
+      }
+    }
     return this.loadNote({ id });
   }
 
