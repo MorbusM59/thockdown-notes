@@ -2769,8 +2769,22 @@ function App() {
         return false
       }
 
-      const safeItemsPerPage = Math.max(1, itemsPerPage)
-      const targetPage = Math.floor(noteIndex / safeItemsPerPage) + 1
+      // Measure itemsPerPage from the DOM directly — same calculation as the
+      // useLayoutEffect compute() — so the target page always agrees with
+      // the clamp that compute() applies. Using the itemsPerPage state value
+      // risks a frame where state and DOM measurement disagree.
+      const container = sidebarContentRef.current
+      const list = container?.querySelector('.notes-list') as HTMLElement | null
+      const firstItem = list?.querySelector('.note-list-item') as HTMLElement | null
+      const listStyles = list ? window.getComputedStyle(list) : null
+      const rowHeight = firstItem ? Math.round(firstItem.getBoundingClientRect().height) : 48
+      const rowGap = listStyles ? Math.round(parseFloat(listStyles.rowGap || listStyles.gap || '8')) : 8
+      const paddingTop = listStyles ? Math.round(parseFloat(listStyles.paddingTop || '10')) : 10
+      const paddingBottom = listStyles ? Math.round(parseFloat(listStyles.paddingBottom || '10')) : 10
+      const contentHeight = container ? container.clientHeight - paddingTop - paddingBottom : 0
+      const measuredItemsPerPage = Math.max(1, Math.floor((contentHeight + rowGap) / (rowHeight + rowGap)))
+
+      const targetPage = Math.floor(noteIndex / measuredItemsPerPage) + 1
       setCurrentPage(targetPage)
       return true
     }
@@ -2795,7 +2809,7 @@ function App() {
     }
 
     return false
-  }, [activeNoteId, itemsPerPage])
+  }, [activeNoteId])
 
   const runSidebarMenuTransition = useCallback((nextMode: SidebarMode) => {
     if (nextMode === sidebarMode) {
@@ -5979,52 +5993,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     archiveTreeRef.current = archiveTree
   }, [archiveTree])
 
-  // When switching to date/trash, record the target page for the active note.
-  // We store it in a ref and apply it in a separate effect that watches
-  // itemsPerPage — because itemsPerPage is set by a ResizeObserver that fires
-  // asynchronously after the mode transition, and the clamp at line 7782 would
-  // otherwise reduce our target page before itemsPerPage has settled.
-  const pendingPageFocusRef = useRef<{ noteId: string; mode: SidebarMode } | null>(null)
-  const previousSidebarModeRef = useRef<SidebarMode>(sidebarMode)
 
-  useEffect(() => {
-    const previousMode = previousSidebarModeRef.current
-    previousSidebarModeRef.current = sidebarMode
-
-    if (sidebarMode !== 'date' && sidebarMode !== 'trash') {
-      pendingPageFocusRef.current = null
-      return
-    }
-    if (sidebarMode === previousMode) {
-      return
-    }
-    if (!activeNoteId) {
-      return
-    }
-    pendingPageFocusRef.current = { noteId: activeNoteId, mode: sidebarMode }
-  }, [sidebarMode, activeNoteId])
-
-  // Apply the pending page focus once itemsPerPage has settled after mode switch.
-  useEffect(() => {
-    const pending = pendingPageFocusRef.current
-    if (!pending) {
-      return
-    }
-    if (pending.mode !== sidebarMode) {
-      pendingPageFocusRef.current = null
-      return
-    }
-    const source = sidebarMode === 'date' ? dateFilteredNotes : trashFilteredNotes
-    const noteIndex = source.findIndex((note) => note.id === pending.noteId)
-    if (noteIndex < 0) {
-      pendingPageFocusRef.current = null
-      return
-    }
-    const safeItemsPerPage = Math.max(1, itemsPerPage)
-    const targetPage = Math.floor(noteIndex / safeItemsPerPage) + 1
-    pendingPageFocusRef.current = null
-    setCurrentPage(targetPage)
-  }, [sidebarMode, itemsPerPage, dateFilteredNotes, trashFilteredNotes])
 
   const visibleNotes = useMemo(() => {
     if (sidebarMode === 'date') {

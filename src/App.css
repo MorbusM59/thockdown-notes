@@ -815,6 +815,24 @@ button.active,
   pointer-events: none;
 }
 
+.notes-list.is-filtered.date-view .note-list-item.is-active::after {
+  top: 3px;
+  right: 3px;
+  width: 10px;
+  height: 10px;
+  border: 1px none var(--color-border-highlight);
+  box-shadow: var(--box-shadow-inverted-harsh);
+}
+
+.notes-list.is-filtered.tree-view .note-list-item.is-active::after {
+  top: 6px;
+  right: 4px;
+  width: 10px;
+  height: 10px;
+  border: 1px none var(--color-border-highlight);
+  box-shadow: var(--box-shadow-inverted-harsh);
+}
+
 .notes-list.date-view  { overflow-y: hidden; }
 .notes-list.tree-view  { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .notes-list.find-view  { flex: 1 1 auto; min-height: 0; overflow-y: auto; gap: 6px; }
