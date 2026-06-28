@@ -33,11 +33,14 @@ function shouldPreserveLineBreak(previousLine: string, currentLine: string): boo
   return (
     SENTENCE_ENDINGS.has(lastPreviousChar) ||
     previousTrimmedRight.startsWith('```') ||
+    previousTrimmedRight.startsWith('~~~') ||
     BULLET_PATTERN.test(currentTrimmedLeft) ||
     currentLine.startsWith(SANITIZED_TAB_SPACES) ||
     currentTrimmedLeft.startsWith('#') ||
     currentTrimmedLeft.startsWith('>') ||
     currentTrimmedLeft.startsWith('```') ||
+    currentTrimmedLeft.startsWith('~~~') ||
+    currentTrimmedLeft.startsWith('|') ||
     HORIZONTAL_RULE_PATTERN.test(currentTrimmedLeft)
   );
 }
