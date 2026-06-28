@@ -6,7 +6,7 @@ const TAB_CHARACTERS = /\t/g;
 const SANITIZED_TAB_SPACES = '   ';
 
 const SENTENCE_ENDINGS = new Set(['.', ':', '!', '?', '…', '。', '！', '？', '：']);
-const BULLET_PATTERN = /^(\s*)([-*+•◦‣▪▫○●■□☐☑✓✔]|\d+[.)]|[A-Za-z][.)]|[ivxlcdmIVXLCDM]+[.)])\s/;
+const BULLET_PATTERN = /^(\s*)([-–*+•◦‣▪▫○●■□☐☑✓✔]|\d+[.)]|[A-Za-z][.)]|[ivxlcdmIVXLCDM]+[.)])\s/;
 const HORIZONTAL_RULE_PATTERN = /^\s*(?:---|\*\*\*|___)\s*$/;
 
 function normalizeLineSeparators(input: string): string {
@@ -88,6 +88,13 @@ function reconstructParagraphs(input: string): string {
   return result.join('\n');
 }
 
+function normalizeBulletMarkers(input: string): string {
+  return input.replace(
+    /^(\s*)[-–*+•◦‣▪▫○●■□☐☑✓✔](\s+)/gm,
+    '$1-$2',
+  );
+}
+
 export function sanitizeTextFragment(input: string): string {
   return normalizeLineSeparators(input)
     .replace(TAB_CHARACTERS, SANITIZED_TAB_SPACES)
@@ -101,5 +108,11 @@ export function sanitizeDocumentText(input: string): string {
 }
 
 export function sanitizeDocumentTextExtended(input: string): string {
-  return reconstructParagraphs(removeSoftHyphenation(sanitizeDocumentText(input)));
+  return normalizeBulletMarkers(
+    reconstructParagraphs(
+      removeSoftHyphenation(
+        sanitizeDocumentText(input),
+      ),
+    ),
+  );
 }
