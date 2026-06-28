@@ -1107,6 +1107,13 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
       : DEFAULT_TYPING_SOUND_SET,
     glazeMode,
     darkMode,
+    filterGrayscale: clamp(toFiniteNumber(source.filterGrayscale, 0), 0, 1),
+    filterInvert: clamp(toFiniteNumber(source.filterInvert, 0), 0, 1),
+    filterSepia: clamp(toFiniteNumber(source.filterSepia, 0), 0, 1),
+    filterHueRotate: clamp(toFiniteNumber(source.filterHueRotate, 0), 0, 360),
+    filterBrightness: clamp(toFiniteNumber(source.filterBrightness, 1), 0, 2),
+    filterContrast: clamp(toFiniteNumber(source.filterContrast, 1), 0, 2),
+    filterSaturate: clamp(toFiniteNumber(source.filterSaturate, 1), 0, 10),
     highlightColors: normalizedHighlightColors,
     textureMaterials: {
       appGrid: normalizeTextureMaterialForLoadoutSignature(normalizedTextureMaterials.appGrid),
@@ -1734,6 +1741,13 @@ function App() {
   const [isTextureSeedEditing, setIsTextureSeedEditing] = useState(false)
   const [glazeMode, setGlazeMode] = useState<GlazeModeKey>('none')
   const [darkMode, setDarkMode] = useState<DarkModeKey>('none')
+  const [filterGrayscale, setFilterGrayscale] = useState(0)
+  const [filterInvert, setFilterInvert] = useState(0)
+  const [filterSepia, setFilterSepia] = useState(0)
+  const [filterHueRotate, setFilterHueRotate] = useState(0)
+  const [filterBrightness, setFilterBrightness] = useState(1)
+  const [filterContrast, setFilterContrast] = useState(1)
+  const [filterSaturate, setFilterSaturate] = useState(1)
   const [audioKeyVolume, setAudioKeyVolume] = useState(0.5)
   const [audioBassVolume, setAudioBassVolume] = useState(0)
   const [audioTrebleVolume, setAudioTrebleVolume] = useState(0)
@@ -2007,6 +2021,13 @@ function App() {
     renderScrollSkew: DEFAULT_RENDER_SCROLL_SKEW,
     glazeMode: 'none',
     darkMode: 'none',
+    filterGrayscale: 0,
+    filterInvert: 0,
+    filterSepia: 0,
+    filterHueRotate: 0,
+    filterBrightness: 1,
+    filterContrast: 1,
+    filterSaturate: 1,
     highlightColors: DEFAULT_HIGHLIGHT_COLORS,
     textureMaterials: cloneTextureMaterials(DEFAULT_TEXTURE_MATERIALS),
   }), [])
@@ -2034,6 +2055,13 @@ function App() {
       renderScrollSkew,
       glazeMode,
       darkMode,
+      filterGrayscale,
+      filterInvert,
+      filterSepia,
+      filterHueRotate,
+      filterBrightness,
+      filterContrast,
+      filterSaturate,
       highlightColors: {
         caret: highlightColors.caret,
         search: highlightColors.search,
@@ -2052,6 +2080,13 @@ function App() {
     editorStyle,
     glazeMode,
     darkMode,
+    filterGrayscale,
+    filterInvert,
+    filterSepia,
+    filterHueRotate,
+    filterBrightness,
+    filterContrast,
+    filterSaturate,
     renderScrollDynamic,
     renderScrollResponsiveness,
     renderScrollTotalTimeSec,
@@ -2092,6 +2127,13 @@ function App() {
     setTypingSoundSet(loadout.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
     setGlazeMode(loadout.glazeMode ?? 'none')
     setDarkMode(loadout.darkMode ?? 'none')
+    setFilterGrayscale(loadout.filterGrayscale ?? 0)
+    setFilterInvert(loadout.filterInvert ?? 0)
+    setFilterSepia(loadout.filterSepia ?? 0)
+    setFilterHueRotate(loadout.filterHueRotate ?? 0)
+    setFilterBrightness(loadout.filterBrightness ?? 1)
+    setFilterContrast(loadout.filterContrast ?? 1)
+    setFilterSaturate(loadout.filterSaturate ?? 1)
     setHighlightColors({
       caret: loadout.highlightColors.caret,
       search: loadout.highlightColors.search,
@@ -2573,6 +2615,13 @@ function App() {
       renderScrollSkew,
       glazeMode,
       darkMode,
+      filterGrayscale,
+      filterInvert,
+      filterSepia,
+      filterHueRotate,
+      filterBrightness,
+      filterContrast,
+      filterSaturate,
       audioKeyVolume,
       audioBassVolume,
       audioTrebleVolume,
@@ -2624,6 +2673,13 @@ function App() {
     textureEnabled,
     glazeMode,
     darkMode,
+    filterGrayscale,
+    filterInvert,
+    filterSepia,
+    filterHueRotate,
+    filterBrightness,
+    filterContrast,
+    filterSaturate,
     textureMaterials,
     highlightColors,
     searchQuery,
@@ -2992,6 +3048,28 @@ function App() {
   }, [appShellWidthPx])
 
   const appShellStyle = useMemo(() => {
+    const filterParts: string[] = []
+    if (filterGrayscale > 0) filterParts.push(`grayscale(${filterGrayscale})`)
+    if (filterInvert > 0) filterParts.push(`invert(${filterInvert})`)
+    if (filterSepia > 0) filterParts.push(`sepia(${filterSepia})`)
+    if (filterHueRotate !== 0) filterParts.push(`hue-rotate(${filterHueRotate}deg)`)
+    if (filterBrightness !== 1) filterParts.push(`brightness(${filterBrightness})`)
+    if (filterContrast !== 1) filterParts.push(`contrast(${filterContrast})`)
+    if (filterSaturate !== 1) filterParts.push(`saturate(${filterSaturate})`)
+    // When custom sliders are active the inline style overrides the CSS class filter,
+    // so prepend the active darkmode preset's chain to keep it in effect.
+    if (filterParts.length > 0 && darkMode !== 'none') {
+      const presetFilters: Record<string, string> = {
+        mono: 'grayscale(1) invert() brightness(0.6) contrast(0.96)',
+        red: 'invert() sepia() hue-rotate(310deg) brightness(0.35) contrast(1.1) saturate(5)',
+        dusk: 'invert() sepia() hue-rotate(150deg) brightness(0.55) contrast(0.95) saturate(0.9)',
+        neon: 'invert() sepia() hue-rotate(280deg) brightness(0.5) contrast(1.05) saturate(8)',
+        matrix: 'invert() sepia() hue-rotate(70deg) brightness(0.4) contrast(1.1) saturate(5)',
+      }
+      const preset = presetFilters[darkMode]
+      if (preset) filterParts.unshift(preset)
+    }
+
     const style: CSSProperties & Record<string, string> = {
       gridTemplateColumns: layout.gridTemplateColumns,
       '--color-bg-regular': highlightColors.background,
@@ -3009,14 +3087,25 @@ function App() {
       '--texture-editor-edit-tint': editorEditTextureTintCss,
       '--texture-editor-render-tint': editorRenderTextureTintCss,
     }
+    if (filterParts.length > 0) {
+      style.filter = filterParts.join(' ')
+    }
     return style
   }, [
     appGridTextureCss,
     appGridTextureTintCss,
+    darkMode,
     editorEditTextTextureCss,
     editorEditTextureTintCss,
     editorRenderTextTextureCss,
     editorRenderTextureTintCss,
+    filterBrightness,
+    filterContrast,
+    filterGrayscale,
+    filterHueRotate,
+    filterInvert,
+    filterSaturate,
+    filterSepia,
     highlightColors,
     layout.gridTemplateColumns,
     sidebarTextureCss,
@@ -4856,6 +4945,13 @@ ${markdownHtml}
             setRenderScrollSkew(appState.menu.renderScrollSkew ?? getRenderScrollSkew())
             setGlazeMode(appState.menu.glazeMode ?? 'none')
             setDarkMode(appState.menu.darkMode ?? 'none')
+            setFilterGrayscale(appState.menu.filterGrayscale ?? 0)
+            setFilterInvert(appState.menu.filterInvert ?? 0)
+            setFilterSepia(appState.menu.filterSepia ?? 0)
+            setFilterHueRotate(appState.menu.filterHueRotate ?? 0)
+            setFilterBrightness(appState.menu.filterBrightness ?? 1)
+            setFilterContrast(appState.menu.filterContrast ?? 1)
+            setFilterSaturate(appState.menu.filterSaturate ?? 1)
             setAudioKeyVolume(appState.menu.audioKeyVolume ?? 0.5)
             setAudioBassVolume(appState.menu.audioBassVolume ?? 0)
             setAudioTrebleVolume(appState.menu.audioTrebleVolume ?? 0)
@@ -8297,8 +8393,11 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           ))}
         </div>
 
-        <div className="sidebar-options-divider" aria-hidden="true" />
 
+      </section>
+
+      <section className="toolbar-flyout-section sidebar-options-section" aria-label="Glaze">
+        <div className="sidebar-options-section-heading">Glaze</div>
         <div className="toolbar-flyout-color-grid toolbar-flyout-glaze-grid" role="group" aria-label="Glaze overlay options">
           {GLAZE_MODES.map((mode) => (
             <button
@@ -8314,7 +8413,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
         <div className="sidebar-options-divider" aria-hidden="true" />
 
-        <div className="toolbar-flyout-color-grid toolbar-flyout-darkmode-grid" role="group" aria-label="Dark mode options">
+        <div className="toolbar-flyout-color-grid toolbar-flyout-darkmode-grid" role="group" aria-label="Dark mode preset options">
           {DARK_MODES.map((mode) => (
             <button
               key={mode.key}
@@ -8326,7 +8425,19 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             ><span className={`${mode.faicon}`}></span></button>
           ))}
         </div>
+      </section>
 
+      <section className="toolbar-flyout-section sidebar-options-section" aria-label="Filters">
+        <div className="sidebar-options-section-heading">Filters</div>
+        <div className="utility-setting-slider-stack" aria-label="CSS filter controls">
+          <CompactScrollbarSlider id="filter-grayscale" min={0} max={1} step={0.01} value={filterGrayscale} trackLabel="grayscale" ariaLabel="Grayscale" onCommit={setFilterGrayscale} />
+          <CompactScrollbarSlider id="filter-invert" min={0} max={1} step={0.01} value={filterInvert} trackLabel="invert" ariaLabel="Invert" onCommit={setFilterInvert} />
+          <CompactScrollbarSlider id="filter-sepia" min={0} max={1} step={0.01} value={filterSepia} trackLabel="sepia" ariaLabel="Sepia" onCommit={setFilterSepia} />
+          <CompactScrollbarSlider id="filter-hue-rotate" min={0} max={360} step={1} value={filterHueRotate} trackLabel="hue-rotate" ariaLabel="Hue rotate (degrees)" onCommit={setFilterHueRotate} />
+          <CompactScrollbarSlider id="filter-brightness" min={0} max={2} step={0.01} value={filterBrightness} trackLabel="brightness" ariaLabel="Brightness" onCommit={setFilterBrightness} />
+          <CompactScrollbarSlider id="filter-contrast" min={0} max={2} step={0.01} value={filterContrast} trackLabel="contrast" ariaLabel="Contrast" onCommit={setFilterContrast} />
+          <CompactScrollbarSlider id="filter-saturate" min={0} max={10} step={0.1} value={filterSaturate} trackLabel="saturate" ariaLabel="Saturate" onCommit={setFilterSaturate} />
+        </div>
       </section>
 
       <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-scrolling" aria-label="Scrolling Behavior">
