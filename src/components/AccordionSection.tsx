@@ -1,14 +1,29 @@
 // AccordionSection — animated details/summary accordion.
 //
-// Height animation reuses the same ScrollCurvePlan bell-curve engine that
-// drives the editor's smooth scroll, so accordion dynamics follow the same
-// user-configured curve parameters (dynamic, responsiveness, total time, skew).
-//
-// The distance fed into buildScrollPlanFromCurrentParams is the pixel height
-// delta, exactly as if the user had scrolled that many pixels.
+// Height animation uses the same ScrollCurvePlan bell-curve engine as the
+// editor scroll, but with fixed internal parameters that are not exposed to
+// the user. The accordion feel is intentionally crisp and independent of
+// the scroll dynamics settings.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { buildScrollPlanFromCurrentParams, sampleScrollPlan } from '../editor/ScrollCurvePlan'
+import { buildCurvePlan, buildScrollPlan, sampleScrollPlan } from '../editor/ScrollCurvePlan'
+
+// Fixed accordion animation parameters — not user-configurable.
+const ACCORDION_DYNAMIC       = 4   // bell width (a)
+const ACCORDION_RESPONSIVENESS = 2  // bell height (b)
+const ACCORDION_DURATION_SEC  = 0.12  // total animation time
+const ACCORDION_MAX_SPEED     = 20000  // px/s cap
+const ACCORDION_SKEW          = 1  // apex bias (0=early, 1=late)
+
+const buildAccordionPlan = (signedDistance: number) => {
+  const curve = buildCurvePlan(
+    ACCORDION_DYNAMIC,
+    ACCORDION_RESPONSIVENESS,
+    ACCORDION_DURATION_SEC,
+    ACCORDION_SKEW,
+  )
+  return buildScrollPlan(curve, ACCORDION_DURATION_SEC, signedDistance, ACCORDION_MAX_SPEED)
+}
 
 interface AccordionSectionProps {
   heading: React.ReactNode
@@ -63,7 +78,7 @@ export function AccordionSection({
       return
     }
 
-    const plan = buildScrollPlanFromCurrentParams(distance)
+    const plan = buildAccordionPlan(distance)
     const totalDurationMs = plan.totalDurationSec * 1000
 
     const state: AnimState = {
