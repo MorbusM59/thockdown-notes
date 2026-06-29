@@ -210,6 +210,26 @@ const DARK_MODES: Array<{ key: DarkModeKey; title: string; ariaLabel: string; fa
   { key: 'matrix', title: 'Dark mode: Matrix', ariaLabel: 'Matrix mode', faicon: 'fa-solid fa-code' },
 ]
 
+type DarkModePresetValues = {
+  filterGrayscale: number
+  filterInvert: number
+  filterSepia: number
+  filterHueRotate: number
+  filterBrightness: number
+  filterContrast: number
+  filterSaturate: number
+}
+
+const DARK_MODE_PRESET_VALUES: Record<DarkModeKey, DarkModePresetValues> = {
+  none:   { filterGrayscale: 0, filterInvert: 0, filterSepia: 0, filterHueRotate: 0,   filterBrightness: 1,    filterContrast: 1,    filterSaturate: 1 },
+  mono:   { filterGrayscale: 1, filterInvert: 1, filterSepia: 0, filterHueRotate: 0,   filterBrightness: 0.6,  filterContrast: 0.96, filterSaturate: 1 },
+  red:    { filterGrayscale: 0, filterInvert: 1, filterSepia: 1, filterHueRotate: 310, filterBrightness: 0.35, filterContrast: 1.1,  filterSaturate: 5 },
+  dusk:   { filterGrayscale: 0, filterInvert: 1, filterSepia: 1, filterHueRotate: 150, filterBrightness: 0.55, filterContrast: 0.95, filterSaturate: 0.9 },
+  neon:   { filterGrayscale: 0, filterInvert: 1, filterSepia: 1, filterHueRotate: 280, filterBrightness: 0.5,  filterContrast: 1.05, filterSaturate: 8 },
+  matrix: { filterGrayscale: 0, filterInvert: 1, filterSepia: 1, filterHueRotate: 70,  filterBrightness: 0.4,  filterContrast: 1.1,  filterSaturate: 5 },
+}
+
+
 type HsvaDragState = {
   control: HsvaControlKey
   pointerId: number
@@ -1999,6 +2019,18 @@ function App() {
     }))
   }, [updateTextureMaterial])
 
+  const applyDarkModePreset = useCallback((key: DarkModeKey) => {
+    setDarkMode(key)
+    const v = DARK_MODE_PRESET_VALUES[key]
+    setFilterGrayscale(v.filterGrayscale)
+    setFilterInvert(v.filterInvert)
+    setFilterSepia(v.filterSepia)
+    setFilterHueRotate(v.filterHueRotate)
+    setFilterBrightness(v.filterBrightness)
+    setFilterContrast(v.filterContrast)
+    setFilterSaturate(v.filterSaturate)
+  }, [])
+
   const defaultUiLayoutLoadout = useMemo<UiLayoutLoadout>(() => ({
     viewStyle: 'modern',
     viewFontSize: 'm',
@@ -2126,7 +2158,9 @@ function App() {
     setTypingSoundEnabled(loadout.typingSoundEnabled)
     setTypingSoundSet(loadout.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
     setGlazeMode(loadout.glazeMode ?? 'none')
-    setDarkMode(loadout.darkMode ?? 'none')
+    // Apply darkMode preset to sliders; individual filter values from the
+    // loadout then override preset values if they were customised further.
+    applyDarkModePreset(loadout.darkMode ?? 'none')
     setFilterGrayscale(loadout.filterGrayscale ?? 0)
     setFilterInvert(loadout.filterInvert ?? 0)
     setFilterSepia(loadout.filterSepia ?? 0)
@@ -3056,20 +3090,6 @@ function App() {
     if (filterBrightness !== 1) filterParts.push(`brightness(${filterBrightness})`)
     if (filterContrast !== 1) filterParts.push(`contrast(${filterContrast})`)
     if (filterSaturate !== 1) filterParts.push(`saturate(${filterSaturate})`)
-    // When custom sliders are active the inline style overrides the CSS class filter,
-    // so prepend the active darkmode preset's chain to keep it in effect.
-    if (filterParts.length > 0 && darkMode !== 'none') {
-      const presetFilters: Record<string, string> = {
-        mono: 'grayscale(1) invert() brightness(0.6) contrast(0.96)',
-        red: 'invert() sepia() hue-rotate(310deg) brightness(0.35) contrast(1.1) saturate(5)',
-        dusk: 'invert() sepia() hue-rotate(150deg) brightness(0.55) contrast(0.95) saturate(0.9)',
-        neon: 'invert() sepia() hue-rotate(280deg) brightness(0.5) contrast(1.05) saturate(8)',
-        matrix: 'invert() sepia() hue-rotate(70deg) brightness(0.4) contrast(1.1) saturate(5)',
-      }
-      const preset = presetFilters[darkMode]
-      if (preset) filterParts.unshift(preset)
-    }
-
     const style: CSSProperties & Record<string, string> = {
       gridTemplateColumns: layout.gridTemplateColumns,
       '--color-bg-regular': highlightColors.background,
@@ -3094,7 +3114,6 @@ function App() {
   }, [
     appGridTextureCss,
     appGridTextureTintCss,
-    darkMode,
     editorEditTextTextureCss,
     editorEditTextureTintCss,
     editorRenderTextTextureCss,
@@ -4944,7 +4963,7 @@ ${markdownHtml}
                   setRenderScrollMaxSpeedPxPerSec(appState.menu.renderScrollMaxSpeedPxPerSec ?? getRenderScrollMaxSpeedPxPerSec())
             setRenderScrollSkew(appState.menu.renderScrollSkew ?? getRenderScrollSkew())
             setGlazeMode(appState.menu.glazeMode ?? 'none')
-            setDarkMode(appState.menu.darkMode ?? 'none')
+            applyDarkModePreset(appState.menu.darkMode ?? 'none')
             setFilterGrayscale(appState.menu.filterGrayscale ?? 0)
             setFilterInvert(appState.menu.filterInvert ?? 0)
             setFilterSepia(appState.menu.filterSepia ?? 0)
@@ -8421,7 +8440,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-darkmode-swatch darkmode-${mode.key}${darkMode === mode.key ? ' active' : ''}`}
               title={mode.title}
               aria-label={mode.ariaLabel}
-              onClick={() => setDarkMode(mode.key)}
+              onClick={() => applyDarkModePreset(mode.key)}
             ><span className={`${mode.faicon}`}></span></button>
           ))}
         </div>
@@ -8883,7 +8902,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   return (
     <div className={`app-root glaze-${glazeMode}`} onDragOver={handleAppDragOver} onDrop={handleAppDrop}>
       <div
-        className={`app-shell app-grid darkmode-${darkMode}`}
+        className="app-shell app-grid"
         ref={appShellRef}
         style={appShellStyle}
       >
