@@ -4,16 +4,20 @@
 // editor scroll, but with fixed internal parameters that are not exposed to
 // the user. The accordion feel is intentionally crisp and independent of
 // the scroll dynamics settings.
+//
+// Left-click: opens this section, closes all siblings.
+// Right-click: opens this section without closing siblings.
+// All sections are closed by default.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { type MouseEvent, type ReactNode, createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react'
 import { buildCurvePlan, buildScrollPlan, sampleScrollPlan } from '../editor/ScrollCurvePlan'
 
 // Fixed accordion animation parameters — not user-configurable.
-const ACCORDION_DYNAMIC       = 4   // bell width (a)
-const ACCORDION_RESPONSIVENESS = 2  // bell height (b)
-const ACCORDION_DURATION_SEC  = 0.12  // total animation time
-const ACCORDION_MAX_SPEED     = 20000  // px/s cap
-const ACCORDION_SKEW          = 1  // apex bias (0=early, 1=late)
+const ACCORDION_DYNAMIC        = 4
+const ACCORDION_RESPONSIVENESS = 2
+const ACCORDION_DURATION_SEC   = 0.12
+const ACCORDION_MAX_SPEED      = 20000
+const ACCORDION_SKEW           = 1
 
 const buildAccordionPlan = (signedDistance: number) => {
   const curve = buildCurvePlan(
@@ -25,10 +29,49 @@ const buildAccordionPlan = (signedDistance: number) => {
   return buildScrollPlan(curve, ACCORDION_DURATION_SEC, signedDistance, ACCORDION_MAX_SPEED)
 }
 
+// ── Accordion group context ────────────────────────────────────────────────
+// Siblings share a registry of close callbacks so left-click can collapse all
+// others before expanding the clicked one.
+
+type CloseCallback = () => void
+
+interface AccordionGroupCtx {
+  register:   (id: string, close: CloseCallback) => void
+  unregister: (id: string) => void
+  closeOthers: (exceptId: string) => void
+}
+
+const AccordionGroupContext = createContext<AccordionGroupCtx | null>(null)
+
+export function AccordionGroup({ children }: { children: ReactNode }) {
+  const registry = useRef<Map<string, CloseCallback>>(new Map())
+
+  const register = useCallback((id: string, close: CloseCallback) => {
+    registry.current.set(id, close)
+  }, [])
+
+  const unregister = useCallback((id: string) => {
+    registry.current.delete(id)
+  }, [])
+
+  const closeOthers = useCallback((exceptId: string) => {
+    registry.current.forEach((close: CloseCallback, id: string) => {
+      if (id !== exceptId) close()
+    })
+  }, [])
+
+  return (
+    <AccordionGroupContext.Provider value={{ register, unregister, closeOthers }}>
+      {children}
+    </AccordionGroupContext.Provider>
+  )
+}
+
+// ── AccordionSection ───────────────────────────────────────────────────────
+
 interface AccordionSectionProps {
-  heading: React.ReactNode
-  children: React.ReactNode
-  defaultOpen?: boolean
+  heading: ReactNode
+  children: ReactNode
   className?: string
   headingClassName?: string
   ariaLabel?: string
@@ -36,25 +79,25 @@ interface AccordionSectionProps {
 
 interface AnimState {
   rafId: number
-  startHeightPx: number
-  targetHeightPx: number
   startTimeMs: number | null
+  fromPx: number
+  toPx: number
 }
 
 export function AccordionSection({
   heading,
   children,
-  defaultOpen = true,
   className,
   headingClassName,
   ariaLabel,
 }: AccordionSectionProps) {
-  const [isOpen, setIsOpen] = useState(defaultOpen)
+  const id = useId()
+  const group = useContext(AccordionGroupContext)
+  const [isOpen, setIsOpen] = useState(false)
   const detailsRef = useRef<HTMLDetailsElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const animRef = useRef<AnimState | null>(null)
 
-  // Cancel any in-progress animation.
   const cancelAnim = useCallback(() => {
     if (animRef.current) {
       cancelAnimationFrame(animRef.current.rafId)
@@ -62,46 +105,33 @@ export function AccordionSection({
     }
   }, [])
 
-  // Animate height from currentPx to targetPx using the scroll curve engine.
-  const animateTo = useCallback((currentPx: number, targetPx: number, onDone?: () => void) => {
+  const animateTo = useCallback((fromPx: number, toPx: number, onDone?: () => void) => {
     cancelAnim()
     const content = contentRef.current
-    if (!content) {
-      onDone?.()
-      return
-    }
+    if (!content) { onDone?.(); return }
 
-    const distance = targetPx - currentPx
+    const distance = toPx - fromPx
     if (Math.abs(distance) < 0.5) {
-      content.style.height = `${targetPx}px`
+      content.style.height = `${toPx}px`
       onDone?.()
       return
     }
 
     const plan = buildAccordionPlan(distance)
-    const totalDurationMs = plan.totalDurationSec * 1000
-
-    const state: AnimState = {
-      rafId: 0,
-      startHeightPx: currentPx,
-      targetHeightPx: targetPx,
-      startTimeMs: null,
-    }
+    const totalMs = plan.totalDurationSec * 1000
+    const state: AnimState = { rafId: 0, startTimeMs: null, fromPx, toPx }
     animRef.current = state
 
     const frame = (nowMs: number) => {
       if (state.startTimeMs === null) state.startTimeMs = nowMs
-      const elapsedMs = nowMs - state.startTimeMs
-
-      if (elapsedMs >= totalDurationMs) {
-        content.style.height = `${targetPx}px`
+      const elapsed = nowMs - state.startTimeMs
+      if (elapsed >= totalMs) {
+        content.style.height = `${toPx}px`
         animRef.current = null
         onDone?.()
         return
       }
-
-      const displacement = sampleScrollPlan(plan, elapsedMs / 1000)
-      content.style.height = `${currentPx + displacement}px`
+      content.style.height = `${fromPx + sampleScrollPlan(plan, elapsed / 1000)}px`
       state.rafId = requestAnimationFrame(frame)
       animRef.current = state
     }
@@ -109,50 +139,71 @@ export function AccordionSection({
     state.rafId = requestAnimationFrame(frame)
   }, [cancelAnim])
 
-  const handleSummaryClick = useCallback((e: React.MouseEvent<HTMLElement>) => {
-    e.preventDefault()
+  // Exposed close — used by siblings via the group registry.
+  const close = useCallback(() => {
     const details = detailsRef.current
     const content = contentRef.current
-    if (!details || !content) return
-
-    if (!isOpen) {
-      // Opening: set open immediately so content is in the DOM and measurable,
-      // then animate from 0 to natural height.
-      details.open = true
-      setIsOpen(true)
-      const naturalHeight = content.scrollHeight
-      content.style.height = '0px'
-      content.style.overflow = 'hidden'
-      animateTo(0, naturalHeight, () => {
-        content.style.height = ''
-        content.style.overflow = ''
-      })
-    } else {
-      // Closing: animate from current height to 0, then remove open attribute.
-      const currentHeight = content.getBoundingClientRect().height
-      content.style.height = `${currentHeight}px`
-      content.style.overflow = 'hidden'
-      animateTo(currentHeight, 0, () => {
-        details.open = false
-        setIsOpen(false)
-        content.style.height = ''
-        content.style.overflow = ''
-      })
-    }
+    if (!details || !content || !isOpen) return
+    const currentHeight = content.getBoundingClientRect().height
+    content.style.height = `${currentHeight}px`
+    content.style.overflow = 'hidden'
+    animateTo(currentHeight, 0, () => {
+      details.open = false
+      setIsOpen(false)
+      content.style.height = ''
+      content.style.overflow = ''
+    })
   }, [isOpen, animateTo])
 
-  // Cleanup on unmount.
-  useEffect(() => cancelAnim, [cancelAnim])
+  const open = useCallback(() => {
+    const details = detailsRef.current
+    const content = contentRef.current
+    if (!details || !content || isOpen) return
+    details.open = true
+    setIsOpen(true)
+    const naturalHeight = content.scrollHeight
+    content.style.height = '0px'
+    content.style.overflow = 'hidden'
+    animateTo(0, naturalHeight, () => {
+      content.style.height = ''
+      content.style.overflow = ''
+    })
+  }, [isOpen, animateTo])
+
+  // Register close callback with the group.
+  useEffect(() => {
+    group?.register(id, close)
+    return () => group?.unregister(id)
+  }, [group, id, close])
+
+  useEffect(() => () => cancelAnim(), [cancelAnim])
+
+  const handleClick = useCallback((e: MouseEvent<HTMLElement>) => {
+    e.preventDefault()
+    if (isOpen) {
+      close()
+    } else {
+      group?.closeOthers(id)
+      open()
+    }
+  }, [isOpen, close, open, group, id])
+
+  const handleContextMenu = useCallback((e: MouseEvent<HTMLElement>) => {
+    e.preventDefault()
+    if (!isOpen) open()
+    // Right-click on open section: do nothing (could toggle, but spec says open only)
+  }, [isOpen, open])
 
   return (
     <section
       className={`toolbar-flyout-section sidebar-options-section${className ? ` ${className}` : ''}`}
       aria-label={ariaLabel}
     >
-      <details ref={detailsRef} className="sidebar-options-accordion" open={defaultOpen || undefined}>
+      <details ref={detailsRef} className="sidebar-options-accordion">
         <summary
           className={`sidebar-options-section-heading${headingClassName ? ` ${headingClassName}` : ''}`}
-          onClick={handleSummaryClick}
+          onClick={handleClick}
+          onContextMenu={handleContextMenu}
         >
           {heading}
         </summary>

@@ -4,7 +4,7 @@ import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent,
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Editor } from './components/Editor'
-import { AccordionSection } from './components/AccordionSection'
+import { AccordionGroup, AccordionSection } from './components/AccordionSection'
 import './App.css'
 import { buildExportCss, type ExportViewStyle, type ExportFontSize, type ExportSpacing } from './exportStyles'
 import type {
@@ -7970,6 +7970,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
   const renderSidebarOptionsContent = () => (
     <div className={`toolbar-flyout-content sidebar-options-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`} aria-label="Settings panel">
+      <AccordionGroup>
       <AccordionSection
         className="sidebar-options-section-layouts"
         ariaLabel="Layouts"
@@ -8701,6 +8702,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           </button>
         </div>
       </AccordionSection>
+      </AccordionGroup>
     </div>
   )
 
