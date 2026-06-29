@@ -1628,11 +1628,51 @@ button.active,
   width:      100%;
 }
 
+.sidebar-options-accordion {
+  width: 100%;
+  border: 1px solid var(--color-border-regular);
+  padding: 0 var(--toolbar-options-gap);
+  background:#FFFFFF66;
+  box-shadow: var(--box-shadow-regular-light);
+  border-radius: var(--border-radius-small);
+}
+
+.sidebar-options-accordion > div:last-child {
+  padding-bottom: var(--toolbar-options-gap);
+}
+
+.sidebar-options-accordion:not([open]) {
+}
+
+.sidebar-options-accordion > summary {
+  list-style: none;
+  user-select: none;
+}
+
+.sidebar-options-accordion > summary::-webkit-details-marker {
+  display: none;
+}
+
 .sidebar-options-section-heading {
   margin:    0;
-  padding:   12px 12px 0 12px;
+  padding:   0;
   font-size: var(--text-info-size);
   color:     var(--text-info-color);
+  display:   flex;
+  align-items: center;
+  gap:       6px;
+}
+
+.sidebar-options-section-heading::after {
+  content:     '▾';
+  font-size:   20px;
+  margin-left: auto;
+  transition:  transform 0.15s ease;
+  padding-right: 4px;
+}
+
+.sidebar-options-accordion:not([open]) > .sidebar-options-section-heading::after {
+  transform: rotate(90deg);
 }
 
 .sidebar-options-divider {
@@ -1644,11 +1684,15 @@ button.active,
 
 .toolbar-flyout-section {
   box-sizing:     border-box;
-  margin:         auto;
+  margin:         0 calc(var(--toolbar-options-gap) + 5px);
   display:        flex;
   flex-direction: column;
   gap:            var(--toolbar-options-gap);
-  width: calc(var(--btn-square-regular-size) * 6 + 5 * var(--toolbar-options-gap));
+  width: calc(var(--btn-square-regular-size) * 6 + 7 * var(--toolbar-options-gap)) + 2px;
+}
+
+.toolbar-flyout-section:first-child {
+  margin-top: calc(var(--toolbar-options-gap) + 5px);
 }
 
 .toolbar-flyout-section-scrolling,
@@ -1656,14 +1700,6 @@ button.active,
   width:     100px;
   min-width: 100px;
   max-width: 100px;
-}
-
-.sidebar-options-section-colors,
-.toolbar-flyout-section-loadout {
-  width:    fit-content;
-  min-width: 0;
-  max-width: none;
-  flex:     0 0 auto;
 }
 
 .sidebar-options-section-colors {

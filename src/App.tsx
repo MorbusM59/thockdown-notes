@@ -7968,7 +7968,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   const renderSidebarOptionsContent = () => (
     <div className={`toolbar-flyout-content sidebar-options-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`} aria-label="Settings panel">
       <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-layouts" aria-label="Layouts">
-        <div className="sidebar-options-section-heading">Layouts</div>
+        <details className="sidebar-options-accordion" open>
+        <summary className="sidebar-options-section-heading">Layouts</summary>
         <div className="toolbar-flyout-loadout-grid" role="group" aria-label="UI layout loadouts">
           {uiLoadouts.map((loadout, index) => (
             <button
@@ -8025,10 +8026,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <span className="fa-solid fa-rotate-left" aria-hidden="true" />
           </button>
         </div>
+      </details>
       </section>
 
       <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-colors" aria-label="Colors & Textures">
-        <div className="sidebar-options-section-heading">Colors & Textures</div>
+        <details className="sidebar-options-accordion" open>
+        <summary className="sidebar-options-section-heading">Colors & Textures</summary>
         <div className="toolbar-flyout-color-layout" aria-label="Color and texture controls">
           <div className="toolbar-flyout-color-grid toolbar-flyout-hsva-grid" role="group" aria-label="HSVA value controls">
             <button
@@ -8370,6 +8373,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           })}
         </div>
 
+        <div className="sidebar-options-divider" aria-hidden="true" />
+
         <div className="toolbar-flyout-color-grid toolbar-flyout-texture-grid" role="group" aria-label="Texture color targets">
           {(['appGrid', 'sidebarContent', isPreviewMode ? 'editorRenderText' : 'editorEditText'] as TextureSurfaceKey[]).map((surface) => (
             <button
@@ -8413,10 +8418,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         </div>
 
 
+      </details>
       </section>
 
       <section className="toolbar-flyout-section sidebar-options-section" aria-label="Glaze">
-        <div className="sidebar-options-section-heading">Glaze</div>
+        <details className="sidebar-options-accordion" open>
+        <summary className="sidebar-options-section-heading">Glaze</summary>
         <div className="toolbar-flyout-color-grid toolbar-flyout-glaze-grid" role="group" aria-label="Glaze overlay options">
           {GLAZE_MODES.map((mode) => (
             <button
@@ -8444,10 +8451,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             ><span className={`${mode.faicon}`}></span></button>
           ))}
         </div>
+      </details>
       </section>
 
       <section className="toolbar-flyout-section sidebar-options-section" aria-label="Filters">
-        <div className="sidebar-options-section-heading">Filters</div>
+        <details className="sidebar-options-accordion" open>
+        <summary className="sidebar-options-section-heading">Filters</summary>
         <div className="utility-setting-slider-stack" aria-label="CSS filter controls">
           <CompactScrollbarSlider id="filter-grayscale" min={0} max={1} step={0.01} value={filterGrayscale} trackLabel="grayscale" ariaLabel="Grayscale" onCommit={setFilterGrayscale} />
           <CompactScrollbarSlider id="filter-invert" min={0} max={1} step={0.01} value={filterInvert} trackLabel="invert" ariaLabel="Invert" onCommit={setFilterInvert} />
@@ -8457,10 +8466,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           <CompactScrollbarSlider id="filter-contrast" min={0} max={2} step={0.01} value={filterContrast} trackLabel="contrast" ariaLabel="Contrast" onCommit={setFilterContrast} />
           <CompactScrollbarSlider id="filter-saturate" min={0} max={10} step={0.1} value={filterSaturate} trackLabel="saturate" ariaLabel="Saturate" onCommit={setFilterSaturate} />
         </div>
+      </details>
       </section>
 
       <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-scrolling" aria-label="Scrolling Behavior">
-        <div className="sidebar-options-section-heading">Scrolling Behavior</div>
+        <details className="sidebar-options-accordion" open>
+        <summary className="sidebar-options-section-heading">Scrolling Behavior</summary>
         <div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
           <CompactScrollbarSlider
             id="render-scroll-dynamic"
@@ -8516,10 +8527,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             )}
           />
         </div>
+      </details>
       </section>
 
       <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-audio" aria-label="Audio Settings">
-          <div className="sidebar-options-section-heading">Audio Settings</div>
+          <details className="sidebar-options-accordion" open>
+        <summary className="sidebar-options-section-heading">Audio Settings</summary>
         <div className="utility-setting-slider-stack" aria-label="Audio settings controls">
           <div className="utility-setting-button-row" role="group" aria-label="Typing sound controls">
             <button
@@ -8602,10 +8615,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             onCommit={(value) => setAudioReverbSpace(clamp(value, 0, 1))}
           />
         </div>
+      </details>
       </section>
 
       <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-misc" aria-label="Miscellaneous Settings">
-        <div className="sidebar-options-section-heading">Miscellaneous Settings</div>
+        <details className="sidebar-options-accordion" open>
+        <summary className="sidebar-options-section-heading">Miscellaneous Settings</summary>
         <div className="utility-setting-slider-stack" aria-label="Miscellaneous settings controls">
           <CompactScrollbarSlider
             id="editor-glyph-padding"
@@ -8624,10 +8639,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             )}
           />
         </div>
+      </details>
       </section>
 
       <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-notes" aria-label="Notes and Import">
-        <div className="sidebar-options-section-heading">Notes & Import</div>
+        <details className="sidebar-options-accordion" open>
+        <summary className="sidebar-options-section-heading">Notes & Import</summary>
         <div className="toolbar-flyout-loadout-grid" role="group" aria-label="Note sync and import actions">
           <button
             type="button"
@@ -8648,10 +8665,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <span className="fa-solid fa-file-import" aria-hidden="true" />
           </button>
         </div>
+      </details>
       </section>
 
       <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-debug" aria-label="Debugging">
-        <div className="sidebar-options-section-heading">Debugging</div>
+        <details className="sidebar-options-accordion" open>
+        <summary className="sidebar-options-section-heading">Debugging</summary>
         <div className="toolbar-flyout-loadout-grid" role="group" aria-label="Debug tools">
           <button
             type="button"
@@ -8673,6 +8692,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <span className="fa-solid fa-bug" aria-hidden="true" />
           </button>
         </div>
+      </details>
       </section>
     </div>
   )
