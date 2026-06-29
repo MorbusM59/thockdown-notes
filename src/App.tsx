@@ -212,7 +212,6 @@ const DARK_MODES: Array<{ key: DarkModeKey; title: string; ariaLabel: string; fa
 ]
 
 type DarkModePresetValues = {
-  filterGrayscale: number
   filterInvert: number
   filterSepia: number
   filterHueRotate: number
@@ -221,13 +220,27 @@ type DarkModePresetValues = {
   filterSaturate: number
 }
 
+// Saturate slider: position x in [0,1] maps to CSS saturate value via
+// s(x) = x / (1 - 4^(x-1)), capped at SATURATE_MAX.
+// At x=0: s=0 (greyscale), x=0.5: s=1 (neutral), x→1: s→∞ (capped).
+const SATURATE_MAX = 64
+
+function saturatePosToValue(x: number): number {
+  const xClamped = Math.max(0, Math.min(0.9999, x))
+  if (xClamped <= 0) return 0
+  const denom = 1 - Math.pow(4, xClamped - 1)
+  if (Math.abs(denom) < 1e-9) return SATURATE_MAX
+  const s = xClamped / denom
+  return Math.max(0, Math.min(SATURATE_MAX, s))
+}
+
 const DARK_MODE_PRESET_VALUES: Record<DarkModeKey, DarkModePresetValues> = {
-  none:   { filterGrayscale: 0, filterInvert: 0, filterSepia: 0, filterHueRotate: 0,   filterBrightness: 1,    filterContrast: 1,    filterSaturate: 1 },
-  mono:   { filterGrayscale: 1, filterInvert: 1, filterSepia: 0, filterHueRotate: 0,   filterBrightness: 0.6,  filterContrast: 0.96, filterSaturate: 1 },
-  red:    { filterGrayscale: 0, filterInvert: 1, filterSepia: 1, filterHueRotate: 310, filterBrightness: 0.35, filterContrast: 1.1,  filterSaturate: 5 },
-  dusk:   { filterGrayscale: 0, filterInvert: 1, filterSepia: 1, filterHueRotate: 150, filterBrightness: 0.55, filterContrast: 0.95, filterSaturate: 0.9 },
-  neon:   { filterGrayscale: 0, filterInvert: 1, filterSepia: 1, filterHueRotate: 280, filterBrightness: 0.5,  filterContrast: 1.05, filterSaturate: 8 },
-  matrix: { filterGrayscale: 0, filterInvert: 1, filterSepia: 1, filterHueRotate: 70,  filterBrightness: 0.4,  filterContrast: 1.1,  filterSaturate: 5 },
+  none:   { filterInvert: 0, filterSepia: 0, filterHueRotate: 0,   filterBrightness: 1,    filterContrast: 1,    filterSaturate: 0.5000 },
+  mono:   { filterInvert: 1, filterSepia: 1, filterHueRotate: 0,   filterBrightness: 0.6,  filterContrast: 0.96, filterSaturate: 0.0000 },
+  red:    { filterInvert: 1, filterSepia: 1, filterHueRotate: 310, filterBrightness: 0.35, filterContrast: 1.1,  filterSaturate: 0.8633 },
+  dusk:   { filterInvert: 1, filterSepia: 1, filterHueRotate: 150, filterBrightness: 0.55, filterContrast: 0.95, filterSaturate: 0.4690 },
+  neon:   { filterInvert: 1, filterSepia: 1, filterHueRotate: 280, filterBrightness: 0.5,  filterContrast: 1.05, filterSaturate: 0.9126 },
+  matrix: { filterInvert: 1, filterSepia: 1, filterHueRotate: 70,  filterBrightness: 0.4,  filterContrast: 1.1,  filterSaturate: 0.8633 },
 }
 
 
@@ -1128,13 +1141,12 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
       : DEFAULT_TYPING_SOUND_SET,
     glazeMode,
     darkMode,
-    filterGrayscale: clamp(toFiniteNumber(source.filterGrayscale, 0), 0, 1),
     filterInvert: clamp(toFiniteNumber(source.filterInvert, 0), 0, 1),
     filterSepia: clamp(toFiniteNumber(source.filterSepia, 0), 0, 1),
     filterHueRotate: clamp(toFiniteNumber(source.filterHueRotate, 0), 0, 360),
     filterBrightness: clamp(toFiniteNumber(source.filterBrightness, 1), 0, 2),
     filterContrast: clamp(toFiniteNumber(source.filterContrast, 1), 0, 2),
-    filterSaturate: clamp(toFiniteNumber(source.filterSaturate, 1), 0, 10),
+    filterSaturate: clamp(toFiniteNumber(source.filterSaturate, 0.5), 0, 1),
     highlightColors: normalizedHighlightColors,
     textureMaterials: {
       appGrid: normalizeTextureMaterialForLoadoutSignature(normalizedTextureMaterials.appGrid),
@@ -1762,7 +1774,6 @@ function App() {
   const [isTextureSeedEditing, setIsTextureSeedEditing] = useState(false)
   const [glazeMode, setGlazeMode] = useState<GlazeModeKey>('none')
   const [darkMode, setDarkMode] = useState<DarkModeKey>('none')
-  const [filterGrayscale, setFilterGrayscale] = useState(0)
   const [filterInvert, setFilterInvert] = useState(0)
   const [filterSepia, setFilterSepia] = useState(0)
   const [filterHueRotate, setFilterHueRotate] = useState(0)
@@ -2023,7 +2034,6 @@ function App() {
   const applyDarkModePreset = useCallback((key: DarkModeKey) => {
     setDarkMode(key)
     const v = DARK_MODE_PRESET_VALUES[key]
-    setFilterGrayscale(v.filterGrayscale)
     setFilterInvert(v.filterInvert)
     setFilterSepia(v.filterSepia)
     setFilterHueRotate(v.filterHueRotate)
@@ -2054,13 +2064,12 @@ function App() {
     renderScrollSkew: DEFAULT_RENDER_SCROLL_SKEW,
     glazeMode: 'none',
     darkMode: 'none',
-    filterGrayscale: 0,
     filterInvert: 0,
     filterSepia: 0,
     filterHueRotate: 0,
     filterBrightness: 1,
     filterContrast: 1,
-    filterSaturate: 1,
+    filterSaturate: 0.5,
     highlightColors: DEFAULT_HIGHLIGHT_COLORS,
     textureMaterials: cloneTextureMaterials(DEFAULT_TEXTURE_MATERIALS),
   }), [])
@@ -2088,7 +2097,6 @@ function App() {
       renderScrollSkew,
       glazeMode,
       darkMode,
-      filterGrayscale,
       filterInvert,
       filterSepia,
       filterHueRotate,
@@ -2113,7 +2121,6 @@ function App() {
     editorStyle,
     glazeMode,
     darkMode,
-    filterGrayscale,
     filterInvert,
     filterSepia,
     filterHueRotate,
@@ -2162,7 +2169,6 @@ function App() {
     // Apply darkMode preset to sliders; individual filter values from the
     // loadout then override preset values if they were customised further.
     applyDarkModePreset(loadout.darkMode ?? 'none')
-    setFilterGrayscale(loadout.filterGrayscale ?? 0)
     setFilterInvert(loadout.filterInvert ?? 0)
     setFilterSepia(loadout.filterSepia ?? 0)
     setFilterHueRotate(loadout.filterHueRotate ?? 0)
@@ -2650,7 +2656,6 @@ function App() {
       renderScrollSkew,
       glazeMode,
       darkMode,
-      filterGrayscale,
       filterInvert,
       filterSepia,
       filterHueRotate,
@@ -2708,7 +2713,6 @@ function App() {
     textureEnabled,
     glazeMode,
     darkMode,
-    filterGrayscale,
     filterInvert,
     filterSepia,
     filterHueRotate,
@@ -3084,13 +3088,13 @@ function App() {
 
   const appShellStyle = useMemo(() => {
     const filterParts: string[] = []
-    if (filterGrayscale > 0) filterParts.push(`grayscale(${filterGrayscale})`)
     if (filterInvert > 0) filterParts.push(`invert(${filterInvert})`)
     if (filterSepia > 0) filterParts.push(`sepia(${filterSepia})`)
     if (filterHueRotate !== 0) filterParts.push(`hue-rotate(${filterHueRotate}deg)`)
     if (filterBrightness !== 1) filterParts.push(`brightness(${filterBrightness})`)
     if (filterContrast !== 1) filterParts.push(`contrast(${filterContrast})`)
-    if (filterSaturate !== 1) filterParts.push(`saturate(${filterSaturate})`)
+    const saturateCssValue = saturatePosToValue(filterSaturate)
+    if (Math.abs(saturateCssValue - 1) > 0.001) filterParts.push(`saturate(${saturateCssValue.toFixed(4)})`)
     const style: CSSProperties & Record<string, string> = {
       gridTemplateColumns: layout.gridTemplateColumns,
       '--color-bg-regular': highlightColors.background,
@@ -3121,7 +3125,6 @@ function App() {
     editorRenderTextureTintCss,
     filterBrightness,
     filterContrast,
-    filterGrayscale,
     filterHueRotate,
     filterInvert,
     filterSaturate,
@@ -4965,7 +4968,6 @@ ${markdownHtml}
             setRenderScrollSkew(appState.menu.renderScrollSkew ?? getRenderScrollSkew())
             setGlazeMode(appState.menu.glazeMode ?? 'none')
             applyDarkModePreset(appState.menu.darkMode ?? 'none')
-            setFilterGrayscale(appState.menu.filterGrayscale ?? 0)
             setFilterInvert(appState.menu.filterInvert ?? 0)
             setFilterSepia(appState.menu.filterSepia ?? 0)
             setFilterHueRotate(appState.menu.filterHueRotate ?? 0)
@@ -8460,13 +8462,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         heading="Filters"
       >
 <div className="utility-setting-slider-stack" aria-label="CSS filter controls">
-          <CompactScrollbarSlider id="filter-grayscale" min={0} max={1} step={0.01} value={filterGrayscale} trackLabel="grayscale" ariaLabel="Grayscale" onCommit={setFilterGrayscale} />
           <CompactScrollbarSlider id="filter-invert" min={0} max={1} step={0.01} value={filterInvert} trackLabel="invert" ariaLabel="Invert" onCommit={setFilterInvert} />
           <CompactScrollbarSlider id="filter-sepia" min={0} max={1} step={0.01} value={filterSepia} trackLabel="sepia" ariaLabel="Sepia" onCommit={setFilterSepia} />
           <CompactScrollbarSlider id="filter-hue-rotate" min={0} max={360} step={1} value={filterHueRotate} trackLabel="hue-rotate" ariaLabel="Hue rotate (degrees)" onCommit={setFilterHueRotate} />
           <CompactScrollbarSlider id="filter-brightness" min={0} max={2} step={0.01} value={filterBrightness} trackLabel="brightness" ariaLabel="Brightness" onCommit={setFilterBrightness} />
           <CompactScrollbarSlider id="filter-contrast" min={0} max={2} step={0.01} value={filterContrast} trackLabel="contrast" ariaLabel="Contrast" onCommit={setFilterContrast} />
-          <CompactScrollbarSlider id="filter-saturate" min={0} max={10} step={0.1} value={filterSaturate} trackLabel="saturate" ariaLabel="Saturate" onCommit={setFilterSaturate} />
+          <CompactScrollbarSlider id="filter-saturate" min={0} max={1} step={0.001} value={filterSaturate} trackLabel="saturate" ariaLabel="Saturate" onCommit={setFilterSaturate} />
         </div>
       </AccordionSection>
 

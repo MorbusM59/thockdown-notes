@@ -27,7 +27,6 @@ export type UiLayoutLoadout = {
   renderScrollSkew: number;
   glazeMode: 'none' | 'light' | 'medium' | 'heavy';
   darkMode: 'none' | 'mono' | 'red' | 'dusk' | 'neon' | 'matrix';
-  filterGrayscale: number;
   filterInvert: number;
   filterSepia: number;
   filterHueRotate: number;
