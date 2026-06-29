@@ -190,9 +190,9 @@ export function AccordionSection({
 
   const handleContextMenu = useCallback((e: MouseEvent<HTMLElement>) => {
     e.preventDefault()
-    if (!isOpen) open()
-    // Right-click on open section: do nothing (could toggle, but spec says open only)
-  }, [isOpen, open])
+    if (isOpen) close()
+    else open()
+  }, [isOpen, close, open])
 
   return (
     <section
