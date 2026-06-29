@@ -4,6 +4,7 @@ import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent,
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Editor } from './components/Editor'
+import { AccordionSection } from './components/AccordionSection'
 import './App.css'
 import { buildExportCss, type ExportViewStyle, type ExportFontSize, type ExportSpacing } from './exportStyles'
 import type {
@@ -7967,10 +7968,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
   const renderSidebarOptionsContent = () => (
     <div className={`toolbar-flyout-content sidebar-options-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`} aria-label="Settings panel">
-      <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-layouts" aria-label="Layouts">
-        <details className="sidebar-options-accordion" open>
-        <summary className="sidebar-options-section-heading">Layouts</summary>
-        <div className="toolbar-flyout-loadout-grid" role="group" aria-label="UI layout loadouts">
+      <AccordionSection
+        className="sidebar-options-section-layouts"
+        ariaLabel="Layouts"
+        heading="Layouts"
+      >
+<div className="toolbar-flyout-loadout-grid" role="group" aria-label="UI layout loadouts">
           {uiLoadouts.map((loadout, index) => (
             <button
               key={`loadout-${index}`}
@@ -8026,13 +8029,14 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <span className="fa-solid fa-rotate-left" aria-hidden="true" />
           </button>
         </div>
-      </details>
-      </section>
+      </AccordionSection>
 
-      <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-colors" aria-label="Colors & Textures">
-        <details className="sidebar-options-accordion" open>
-        <summary className="sidebar-options-section-heading">Colors & Textures</summary>
-        <div className="toolbar-flyout-color-layout" aria-label="Color and texture controls">
+      <AccordionSection
+        className="sidebar-options-section-colors"
+        ariaLabel="Colors & Textures"
+        heading="Colors & Textures"
+      >
+<div className="toolbar-flyout-color-layout" aria-label="Color and texture controls">
           <div className="toolbar-flyout-color-grid toolbar-flyout-hsva-grid" role="group" aria-label="HSVA value controls">
             <button
               type="button"
@@ -8416,15 +8420,13 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             </button>
           ))}
         </div>
+      </AccordionSection>
 
-
-      </details>
-      </section>
-
-      <section className="toolbar-flyout-section sidebar-options-section" aria-label="Glaze">
-        <details className="sidebar-options-accordion" open>
-        <summary className="sidebar-options-section-heading">Glaze</summary>
-        <div className="toolbar-flyout-color-grid toolbar-flyout-glaze-grid" role="group" aria-label="Glaze overlay options">
+      <AccordionSection
+        ariaLabel="Glaze"
+        heading="Glaze"
+      >
+<div className="toolbar-flyout-color-grid toolbar-flyout-glaze-grid" role="group" aria-label="Glaze overlay options">
           {GLAZE_MODES.map((mode) => (
             <button
               key={mode.key}
@@ -8451,13 +8453,13 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             ><span className={`${mode.faicon}`}></span></button>
           ))}
         </div>
-      </details>
-      </section>
+      </AccordionSection>
 
-      <section className="toolbar-flyout-section sidebar-options-section" aria-label="Filters">
-        <details className="sidebar-options-accordion" open>
-        <summary className="sidebar-options-section-heading">Filters</summary>
-        <div className="utility-setting-slider-stack" aria-label="CSS filter controls">
+      <AccordionSection
+        ariaLabel="Filters"
+        heading="Filters"
+      >
+<div className="utility-setting-slider-stack" aria-label="CSS filter controls">
           <CompactScrollbarSlider id="filter-grayscale" min={0} max={1} step={0.01} value={filterGrayscale} trackLabel="grayscale" ariaLabel="Grayscale" onCommit={setFilterGrayscale} />
           <CompactScrollbarSlider id="filter-invert" min={0} max={1} step={0.01} value={filterInvert} trackLabel="invert" ariaLabel="Invert" onCommit={setFilterInvert} />
           <CompactScrollbarSlider id="filter-sepia" min={0} max={1} step={0.01} value={filterSepia} trackLabel="sepia" ariaLabel="Sepia" onCommit={setFilterSepia} />
@@ -8466,13 +8468,14 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           <CompactScrollbarSlider id="filter-contrast" min={0} max={2} step={0.01} value={filterContrast} trackLabel="contrast" ariaLabel="Contrast" onCommit={setFilterContrast} />
           <CompactScrollbarSlider id="filter-saturate" min={0} max={10} step={0.1} value={filterSaturate} trackLabel="saturate" ariaLabel="Saturate" onCommit={setFilterSaturate} />
         </div>
-      </details>
-      </section>
+      </AccordionSection>
 
-      <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-scrolling" aria-label="Scrolling Behavior">
-        <details className="sidebar-options-accordion" open>
-        <summary className="sidebar-options-section-heading">Scrolling Behavior</summary>
-        <div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
+      <AccordionSection
+        className="sidebar-options-section-scrolling"
+        ariaLabel="Scrolling Behavior"
+        heading="Scrolling Behavior"
+      >
+<div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
           <CompactScrollbarSlider
             id="render-scroll-dynamic"
             min={0.1}
@@ -8527,13 +8530,14 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             )}
           />
         </div>
-      </details>
-      </section>
+      </AccordionSection>
 
-      <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-audio" aria-label="Audio Settings">
-          <details className="sidebar-options-accordion" open>
-        <summary className="sidebar-options-section-heading">Audio Settings</summary>
-        <div className="utility-setting-slider-stack" aria-label="Audio settings controls">
+      <AccordionSection
+        className="sidebar-options-section-audio"
+        ariaLabel="Audio Settings"
+        heading="Audio Settings"
+      >
+<div className="utility-setting-slider-stack" aria-label="Audio settings controls">
           <div className="utility-setting-button-row" role="group" aria-label="Typing sound controls">
             <button
               type="button"
@@ -8615,13 +8619,14 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             onCommit={(value) => setAudioReverbSpace(clamp(value, 0, 1))}
           />
         </div>
-      </details>
-      </section>
+      </AccordionSection>
 
-      <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-misc" aria-label="Miscellaneous Settings">
-        <details className="sidebar-options-accordion" open>
-        <summary className="sidebar-options-section-heading">Miscellaneous Settings</summary>
-        <div className="utility-setting-slider-stack" aria-label="Miscellaneous settings controls">
+      <AccordionSection
+        className="sidebar-options-section-misc"
+        ariaLabel="Miscellaneous Settings"
+        heading="Miscellaneous Settings"
+      >
+<div className="utility-setting-slider-stack" aria-label="Miscellaneous settings controls">
           <CompactScrollbarSlider
             id="editor-glyph-padding"
             min={EDITOR_GLYPH_PADDING_MIN_PX}
@@ -8639,13 +8644,14 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             )}
           />
         </div>
-      </details>
-      </section>
+      </AccordionSection>
 
-      <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-notes" aria-label="Notes and Import">
-        <details className="sidebar-options-accordion" open>
-        <summary className="sidebar-options-section-heading">Notes & Import</summary>
-        <div className="toolbar-flyout-loadout-grid" role="group" aria-label="Note sync and import actions">
+      <AccordionSection
+        className="sidebar-options-section-notes"
+        ariaLabel="Notes and Import"
+        heading="Notes & Import"
+      >
+<div className="toolbar-flyout-loadout-grid" role="group" aria-label="Note sync and import actions">
           <button
             type="button"
             className="toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn"
@@ -8665,13 +8671,14 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <span className="fa-solid fa-file-import" aria-hidden="true" />
           </button>
         </div>
-      </details>
-      </section>
+      </AccordionSection>
 
-      <section className="toolbar-flyout-section sidebar-options-section sidebar-options-section-debug" aria-label="Debugging">
-        <details className="sidebar-options-accordion" open>
-        <summary className="sidebar-options-section-heading">Debugging</summary>
-        <div className="toolbar-flyout-loadout-grid" role="group" aria-label="Debug tools">
+      <AccordionSection
+        className="sidebar-options-section-debug"
+        ariaLabel="Debugging"
+        heading="Debugging"
+      >
+<div className="toolbar-flyout-loadout-grid" role="group" aria-label="Debug tools">
           <button
             type="button"
             className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn${debuggingEnabled ? ' is-active' : ''}`}
@@ -8692,8 +8699,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <span className="fa-solid fa-bug" aria-hidden="true" />
           </button>
         </div>
-      </details>
-      </section>
+      </AccordionSection>
     </div>
   )
 
