@@ -1641,9 +1641,6 @@ button.active,
   padding-bottom: var(--toolbar-options-gap);
 }
 
-.sidebar-options-accordion:not([open]) {
-}
-
 .sidebar-options-accordion > summary {
   list-style: none;
   user-select: none;
