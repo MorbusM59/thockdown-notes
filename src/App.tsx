@@ -2108,7 +2108,6 @@ function App() {
       filterBrightness,
       filterContrast,
       filterSaturate,
-    filterColorize,
       filterColorize,
       highlightColors: {
         caret: highlightColors.caret,
@@ -2671,7 +2670,6 @@ function App() {
       filterBrightness,
       filterContrast,
       filterSaturate,
-    filterColorize,
       filterColorize,
       audioKeyVolume,
       audioBassVolume,
