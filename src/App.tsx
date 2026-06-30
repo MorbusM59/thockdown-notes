@@ -21,7 +21,14 @@ import {
   typingSoundManager,
 } from './sound/TypingSoundManager'
 import type { PersistedMenuState, PersistedSidebarViewState, PersistedViewportState } from './shared/appState'
-import type { UiLayoutLoadout } from './shared/loadouts'
+import type { UiLayoutLoadout, UiLoadoutEntry, UiLoadoutMode } from './shared/loadouts'
+import {
+  idKind,
+  idMode,
+  modeSign,
+  LOADOUT_DEFAULT_CUSTOM_ID_ABS,
+  LOADOUT_FACTORY_PRESET_COUNT,
+} from './shared/loadouts'
 import type { NoteSummary } from './shared/noteLifecycle'
 import type { TextureCacheRequest } from './shared/textures'
 import {
@@ -60,11 +67,6 @@ import {
   getRenderScrollTotalTimeSec,
   getRenderScrollMaxSpeedPxPerSec,
   getRenderScrollSkew,
-  DEFAULT_RENDER_SCROLL_DYNAMIC,
-  DEFAULT_RENDER_SCROLL_RESPONSIVENESS,
-  DEFAULT_RENDER_SCROLL_TOTAL_TIME_SEC,
-  DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC,
-  DEFAULT_RENDER_SCROLL_SKEW,
   sampleReleaseRampDownPlan,
   resolveRampCrossingTimeSecFromCurrentParams,
   RENDER_SCROLL_SKEW_MIN,
@@ -115,8 +117,7 @@ const SCROLL_TRACK_EDGE_GAP_PX = 3
 const NOTE_RIGHT_CLICK_HOLD_MS = 200
 const NOTE_LEFT_CLICK_HOLD_MS = 200
 const COLOR_BUTTON_ARM_HOLD_MS = 300
-const LOADOUT_SAVE_HOLD_MS = 500
-const MAX_UI_LOADOUTS = 9
+const PENDING_UPDATE_DEBOUNCE_MS = 400
 const PREVIEW_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER
 const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   caret: 'rgba(120, 115, 112, 0.8)',
@@ -201,15 +202,6 @@ const GLAZE_MODES: Array<{ key: GlazeModeKey; title: string; ariaLabel: string; 
 ]
 
 type DarkModeKey = 'none' | 'mono' | 'red' | 'dusk' | 'neon' | 'matrix'
-
-const DARK_MODES: Array<{ key: DarkModeKey; title: string; ariaLabel: string; faicon: string }> = [
-  { key: 'none', title: 'Dark mode: None', ariaLabel: 'No dark mode', faicon: 'fa-solid fa-sun' },
-  { key: 'mono', title: 'Dark mode: Mono', ariaLabel: 'Monochrome dark mode', faicon: 'fa-solid fa-moon' },
-  { key: 'red', title: 'Dark mode: Red', ariaLabel: 'Reddish dark mode', faicon: 'fa-solid fa-film' },
-  { key: 'dusk', title: 'Dark mode: Dusk', ariaLabel: 'Cool dusk dark mode', faicon: 'fa-solid fa-cloud-moon' },
-  { key: 'neon', title: 'Dark mode: Neon', ariaLabel: 'Neon dark mode', faicon: 'fa-solid fa-burst' },
-  { key: 'matrix', title: 'Dark mode: Matrix', ariaLabel: 'Matrix mode', faicon: 'fa-solid fa-code' },
-]
 
 type DarkModePresetValues = {
   filterInvert: number
@@ -1767,7 +1759,12 @@ function App() {
   const [renderScrollTotalTimeSec, setRenderScrollTotalTimeSec] = useState(() => getRenderScrollTotalTimeSec())
   const [renderScrollMaxSpeedPxPerSec, setRenderScrollMaxSpeedPxPerSec] = useState(() => getRenderScrollMaxSpeedPxPerSec())
   const [renderScrollSkew, setRenderScrollSkew] = useState(() => getRenderScrollSkew())
-  const [uiLoadouts, setUiLoadouts] = useState<UiLayoutLoadout[]>([])
+  const [uiMode, setUiMode] = useState<UiLoadoutMode>('light')
+  const [uiLoadoutEntries, setUiLoadoutEntries] = useState<UiLoadoutEntry[]>([])
+  const [lastCustomIdByMode, setLastCustomIdByMode] = useState<{ light: number; dark: number }>({
+    light: LOADOUT_DEFAULT_CUSTOM_ID_ABS,
+    dark: -LOADOUT_DEFAULT_CUSTOM_ID_ABS,
+  })
   const [highlightColors, setHighlightColors] = useState<HighlightColors>(DEFAULT_HIGHLIGHT_COLORS)
   const [textureEnabled] = useState(true)
   const [textureMaterials, setTextureMaterials] = useState<TextureMaterialsBySurface>(() => cloneTextureMaterials(DEFAULT_TEXTURE_MATERIALS))
@@ -1800,7 +1797,7 @@ function App() {
   })
   const [hsvaDragState, setHsvaDragState] = useState<HsvaDragState | null>(null)
   const colorArmTimerRef = useRef<number | null>(null)
-  const loadoutSaveTimerRef = useRef<number | null>(null)
+  const pendingUpdateDebounceRef = useRef<number | null>(null)
   const pendingSaveTextRef = useRef<string | null>(null)
   const latestEditorTextRef = useRef('')
   const lastHeadlineLevelRef = useRef<1 | 2 | 3 | 4 | 5 | 6>(1)
@@ -2046,39 +2043,6 @@ function App() {
     setFilterColorize(v.filterColorize)
   }, [])
 
-  const defaultUiLayoutLoadout = useMemo<UiLayoutLoadout>(() => ({
-    viewStyle: 'modern',
-    viewFontSize: 'm',
-    viewSpacing: 'cozy',
-    editorStyle: DEFAULT_EDITOR_STYLE,
-    editorFontSize: DEFAULT_EDITOR_FONT_SIZE,
-    editorSpacing: DEFAULT_EDITOR_SPACING,
-    editorGlyphPaddingPx: DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
-    audioKeyVolume: 0.5,
-    audioBassVolume: 0,
-    audioTrebleVolume: 0,
-    audioReverbStrength: 0,
-    audioReverbSpace: 0,
-    typingSoundEnabled: false,
-    typingSoundSet: DEFAULT_TYPING_SOUND_SET,
-    renderScrollDynamic: DEFAULT_RENDER_SCROLL_DYNAMIC,
-    renderScrollResponsiveness: DEFAULT_RENDER_SCROLL_RESPONSIVENESS,
-    renderScrollTotalTimeSec: DEFAULT_RENDER_SCROLL_TOTAL_TIME_SEC,
-    renderScrollMaxSpeedPxPerSec: DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC,
-    renderScrollSkew: DEFAULT_RENDER_SCROLL_SKEW,
-    glazeMode: 'none',
-    darkMode: 'none',
-    filterInvert: 0,
-    filterSepia: 0,
-    filterHueRotate: 0,
-    filterBrightness: 1,
-    filterContrast: 1,
-    filterSaturate: 0.5,
-    filterColorize: 0,
-    highlightColors: DEFAULT_HIGHLIGHT_COLORS,
-    textureMaterials: cloneTextureMaterials(DEFAULT_TEXTURE_MATERIALS),
-  }), [])
-
   const captureUiLayoutLoadout = useCallback((): UiLayoutLoadout => {
     return {
       viewStyle,
@@ -2195,12 +2159,6 @@ function App() {
     setTextureMaterials(cloneTextureMaterials(loadout.textureMaterials))
   }, [])
 
-  const resetUiLayoutDefaults = useCallback(() => {
-    applyUiLayoutLoadout(defaultUiLayoutLoadout)
-    const caretColorRgba = parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS.caret) ?? { r: 120, g: 115, b: 112, a: 0.8 }
-    setActiveColorHsva(rgbaToHsva(caretColorRgba))
-  }, [applyUiLayoutLoadout, defaultUiLayoutLoadout])
-
   const capturedUiLayoutLoadout = useMemo(
     () => captureUiLayoutLoadout(),
     [captureUiLayoutLoadout],
@@ -2211,48 +2169,117 @@ function App() {
     [capturedUiLayoutLoadout],
   )
 
-  const savedUiLoadoutSignatures = useMemo(
-    () => uiLoadouts.map((loadout) => buildUiLoadoutSignature(loadout)),
-    [uiLoadouts],
+  // --- Loadout entry derivations (per current uiMode) -----------------------
+
+  const entriesForCurrentMode = useMemo(() => {
+    const sign = modeSign(uiMode)
+    return uiLoadoutEntries.filter((entry) => entry.id * sign > 0)
+  }, [uiLoadoutEntries, uiMode])
+
+  const activeEntryForCurrentMode = useMemo(
+    () => entriesForCurrentMode.find((entry) => entry.isActive) ?? null,
+    [entriesForCurrentMode],
   )
 
-  // Signature matching keeps active-state detection stable across reloads and value normalization.
-  const activeUiLoadoutIndex = useMemo(
-    () => savedUiLoadoutSignatures.findIndex((signature) => signature === currentUiLoadoutSignature),
-    [currentUiLoadoutSignature, savedUiLoadoutSignatures],
-  )
+  // True once the live captured state has drifted from whatever entry is
+  // marked active for this mode — i.e. there are unsaved pending changes.
+  const hasUnsavedUiLoadoutChanges = useMemo(() => {
+    if (!activeEntryForCurrentMode) return false
+    if (idKind(activeEntryForCurrentMode.id) === 'pending') return true
+    return activeEntryForCurrentMode.signature !== currentUiLoadoutSignature
+  }, [activeEntryForCurrentMode, currentUiLoadoutSignature])
 
-  const hasUnsavedUiLoadoutChanges = activeUiLoadoutIndex < 0
-
-  const clearLoadoutSaveTimer = useCallback(() => {
-    if (loadoutSaveTimerRef.current === null) return
-    window.clearTimeout(loadoutSaveTimerRef.current)
-    loadoutSaveTimerRef.current = null
-  }, [])
-
-  const saveUiLayoutToSlot = useCallback(async (slot: number) => {
-    if (!window.measlyLoadouts) return
-    if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_UI_LOADOUTS) return
-
-    try {
-      const nextLoadouts = await window.measlyLoadouts.saveUiLoadout(slot, captureUiLayoutLoadout())
-      setUiLoadouts(nextLoadouts.slice(0, MAX_UI_LOADOUTS).map((loadout) => normalizeUiLoadoutForSignature(loadout)))
-    } catch (error) {
-      console.error('Failed to save UI loadout', error)
+  const factoryPresetEntriesForCurrentMode = useMemo(() => {
+    const byAbsId = new Map<number, UiLoadoutEntry>(
+      entriesForCurrentMode.map((entry) => [Math.abs(entry.id), entry]),
+    )
+    const ordered: UiLoadoutEntry[] = []
+    for (let abs = 1; abs <= LOADOUT_FACTORY_PRESET_COUNT; abs += 1) {
+      const entry = byAbsId.get(abs)
+      if (entry) ordered.push(entry)
     }
-  }, [captureUiLayoutLoadout])
+    return ordered
+  }, [entriesForCurrentMode])
 
-  const startLoadoutSaveHold = useCallback((slot: number, event: MouseEvent<HTMLButtonElement>) => {
-    if (event.button !== 2) return
-    event.preventDefault()
-    event.stopPropagation()
-    clearLoadoutSaveTimer()
+  const customSlotEntriesForCurrentMode = useMemo(
+    () => entriesForCurrentMode
+      .filter((entry) => idKind(entry.id) === 'custom')
+      .sort((a, b) => Math.abs(a.id) - Math.abs(b.id)),
+    [entriesForCurrentMode],
+  )
 
-    loadoutSaveTimerRef.current = window.setTimeout(() => {
-      loadoutSaveTimerRef.current = null
-      void saveUiLayoutToSlot(slot)
-    }, LOADOUT_SAVE_HOLD_MS)
-  }, [clearLoadoutSaveTimer, saveUiLayoutToSlot])
+  // The id the dynamic "Custom" preset button targets: whichever custom-ish
+  // id (abs >= 6) was last activated for this mode, defaulting to the
+  // default-custom id.
+  const dynamicCustomPresetId = lastCustomIdByMode[uiMode]
+
+  const isDynamicCustomPresetActive = useMemo(() => {
+    if (!activeEntryForCurrentMode) return false
+    const kind = idKind(activeEntryForCurrentMode.id)
+    if (kind === 'pending') return true
+    return activeEntryForCurrentMode.id === dynamicCustomPresetId
+  }, [activeEntryForCurrentMode, dynamicCustomPresetId])
+
+  // --- Loadout actions --------------------------------------------------
+
+  const applyEntryToLiveState = useCallback((entry: UiLoadoutEntry) => {
+    applyUiLayoutLoadout(entry.payload)
+    const caretColorRgba = parseCssColorToRgba(entry.payload.highlightColors.caret) ?? { r: 120, g: 115, b: 112, a: 0.8 }
+    setActiveColorHsva(rgbaToHsva(caretColorRgba))
+  }, [applyUiLayoutLoadout])
+
+  const selectLoadoutPreset = useCallback(async (id: number) => {
+    if (!window.measlyLoadouts) return
+    try {
+      const result = await window.measlyLoadouts.setActive(id)
+      setUiLoadoutEntries(result.entries)
+      setLastCustomIdByMode(result.lastCustomIdByMode)
+      const sign = modeSign(idMode(id))
+      const active = result.entries.find((entry) => entry.id * sign > 0 && entry.isActive)
+      if (active) applyEntryToLiveState(active)
+    } catch (error) {
+      console.error('Failed to select UI loadout preset', error)
+    }
+  }, [applyEntryToLiveState])
+
+  const selectDynamicCustomPreset = useCallback(() => {
+    void selectLoadoutPreset(dynamicCustomPresetId)
+  }, [selectLoadoutPreset, dynamicCustomPresetId])
+
+  const saveCustomLoadout = useCallback(async () => {
+    if (!window.measlyLoadouts) return
+    try {
+      const result = await window.measlyLoadouts.saveCustom(uiMode)
+      setUiLoadoutEntries(result.entries)
+      setLastCustomIdByMode(result.lastCustomIdByMode)
+    } catch (error) {
+      console.error('Failed to save custom UI loadout', error)
+    }
+  }, [uiMode])
+
+  const resetCustomLoadout = useCallback(async () => {
+    if (!window.measlyLoadouts) return
+    try {
+      const result = await window.measlyLoadouts.resetCustom(uiMode)
+      setUiLoadoutEntries(result.entries)
+      setLastCustomIdByMode(result.lastCustomIdByMode)
+      const sign = modeSign(uiMode)
+      const active = result.entries.find((entry) => entry.id * sign > 0 && entry.isActive)
+      if (active) applyEntryToLiveState(active)
+    } catch (error) {
+      console.error('Failed to reset custom UI loadout', error)
+    }
+  }, [uiMode, applyEntryToLiveState])
+
+  const toggleUiMode = useCallback(() => {
+    setUiMode((previousMode) => {
+      const nextMode: UiLoadoutMode = previousMode === 'light' ? 'dark' : 'light'
+      const sign = modeSign(nextMode)
+      const active = uiLoadoutEntries.find((entry) => entry.id * sign > 0 && entry.isActive)
+      if (active) applyEntryToLiveState(active)
+      return nextMode
+    })
+  }, [uiLoadoutEntries, applyEntryToLiveState])
 
   const clearColorArmTimer = useCallback(() => {
     if (colorArmTimerRef.current === null) return
@@ -2453,20 +2480,20 @@ function App() {
     }
   }, [clearColorArmTimer])
 
-  useEffect(() => {
-    return () => {
-      clearLoadoutSaveTimer()
-    }
-  }, [clearLoadoutSaveTimer])
-
+  // On mount: fetch the full loadout table, then apply whichever entry is
+  // active for the current uiMode to the live editable state.
   useEffect(() => {
     if (!window.measlyLoadouts) return
     let cancelled = false
 
-    void window.measlyLoadouts.listUiLoadouts()
-      .then((loaded) => {
+    void window.measlyLoadouts.list()
+      .then((result) => {
         if (cancelled) return
-        setUiLoadouts(loaded.slice(0, MAX_UI_LOADOUTS).map((loadout) => normalizeUiLoadoutForSignature(loadout)))
+        setUiLoadoutEntries(result.entries)
+        setLastCustomIdByMode(result.lastCustomIdByMode)
+        const sign = modeSign(uiMode)
+        const active = result.entries.find((entry) => entry.id * sign > 0 && entry.isActive)
+        if (active) applyEntryToLiveState(active)
       })
       .catch((error) => {
         console.error('Failed to load UI loadouts', error)
@@ -2475,20 +2502,54 @@ function App() {
     return () => {
       cancelled = true
     }
+    // Intentionally runs once on mount only — uiMode here reflects whatever
+    // was restored from appState before this effect fires.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     const handleGlobalMouseDown = (event: globalThis.MouseEvent) => {
       if (event.button !== 2) return
       clearColorArmTimer()
-      clearLoadoutSaveTimer()
     }
 
     window.addEventListener('mousedown', handleGlobalMouseDown, true)
     return () => {
       window.removeEventListener('mousedown', handleGlobalMouseDown, true)
     }
-  }, [clearColorArmTimer, clearLoadoutSaveTimer])
+  }, [clearColorArmTimer])
+
+  // Debounced: whenever the live captured state drifts from the active entry
+  // for the current mode, push it to the pending row (+/-7) on the backend.
+  useEffect(() => {
+    if (!window.measlyLoadouts) return
+    if (!activeEntryForCurrentMode) return
+    if (activeEntryForCurrentMode.signature === currentUiLoadoutSignature) return
+
+    if (pendingUpdateDebounceRef.current !== null) {
+      window.clearTimeout(pendingUpdateDebounceRef.current)
+    }
+
+    pendingUpdateDebounceRef.current = window.setTimeout(() => {
+      pendingUpdateDebounceRef.current = null
+      void window.measlyLoadouts?.updatePending(uiMode, capturedUiLayoutLoadout)
+        .then((result) => {
+          if (!result) return
+          setUiLoadoutEntries(result.entries)
+          setLastCustomIdByMode(result.lastCustomIdByMode)
+        })
+        .catch((error) => {
+          console.error('Failed to update pending UI loadout', error)
+        })
+    }, PENDING_UPDATE_DEBOUNCE_MS)
+
+    return () => {
+      if (pendingUpdateDebounceRef.current !== null) {
+        window.clearTimeout(pendingUpdateDebounceRef.current)
+        pendingUpdateDebounceRef.current = null
+      }
+    }
+  }, [activeEntryForCurrentMode, currentUiLoadoutSignature, uiMode, capturedUiLayoutLoadout])
 
   const readCurrentEditUiPayload = useCallback((): { progressEdit: number; cursorPos: number; scrollTop: number } | null => {
     const selection = latestEditorSelectionRef.current
@@ -2722,6 +2783,7 @@ function App() {
     textureEnabled,
     glazeMode,
     darkMode,
+    uiMode,
     filterInvert,
     filterSepia,
     filterHueRotate,
@@ -4982,6 +5044,7 @@ ${markdownHtml}
                   setRenderScrollMaxSpeedPxPerSec(appState.menu.renderScrollMaxSpeedPxPerSec ?? getRenderScrollMaxSpeedPxPerSec())
             setRenderScrollSkew(appState.menu.renderScrollSkew ?? getRenderScrollSkew())
             setGlazeMode(appState.menu.glazeMode ?? 'none')
+            setUiMode(appState.menu.uiMode === 'dark' ? 'dark' : 'light')
             applyDarkModePreset(appState.menu.darkMode ?? 'none')
             setFilterInvert(appState.menu.filterInvert ?? 0)
             setFilterSepia(appState.menu.filterSepia ?? 0)
@@ -7988,67 +8051,75 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     <div className={`toolbar-flyout-content sidebar-options-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`} aria-label="Settings panel">
       <AccordionGroup>
       <AccordionSection
-        className="sidebar-options-section-layouts"
-        ariaLabel="Layouts"
-        heading="Layouts"
+        className="sidebar-options-section-presets"
+        ariaLabel="Presets"
+        heading="Presets"
       >
-<div className="toolbar-flyout-loadout-grid" role="group" aria-label="UI layout loadouts">
-          {uiLoadouts.map((loadout, index) => (
+<div className="toolbar-flyout-loadout-grid" role="group" aria-label="UI mode presets">
+          {factoryPresetEntriesForCurrentMode.map((entry) => (
             <button
-              key={`loadout-${index}`}
+              key={`preset-${entry.id}`}
               type="button"
-              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn${activeUiLoadoutIndex === index ? ' active' : ''}`}
-              title={`Loadout ${index}`}
-              onClick={() => {
-                applyUiLayoutLoadout(loadout)
-              }}
-              onMouseDown={(event) => startLoadoutSaveHold(index, event)}
-              onMouseUp={(event) => {
-                if (event.button !== 2) return
-                clearLoadoutSaveTimer()
-              }}
-              onMouseLeave={clearLoadoutSaveTimer}
-              onContextMenu={(event) => {
-                event.preventDefault()
-                clearLoadoutSaveTimer()
-              }}
+              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}`}
+              title={`Preset ${Math.abs(entry.id)}`}
+              aria-label={`Preset ${Math.abs(entry.id)}`}
+              onClick={() => void selectLoadoutPreset(entry.id)}
             >
-              <span className="toolbar-flyout-loadout-index">{index}</span>
+              <span className="toolbar-flyout-loadout-index">{Math.abs(entry.id)}</span>
+            </button>
+          ))}
+          <button
+            type="button"
+            className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn${isDynamicCustomPresetActive ? ' active' : ''}`}
+            title="Custom"
+            aria-label="Custom preset"
+            onClick={selectDynamicCustomPreset}
+          >
+            <span className="fa-solid fa-sliders" aria-hidden="true" />
+          </button>
+        </div>
+      </AccordionSection>
+
+      <AccordionSection
+        className="sidebar-options-section-layouts"
+        ariaLabel="Custom Presets"
+        heading="Custom Presets"
+      >
+<div className="toolbar-flyout-loadout-grid" role="group" aria-label="Custom UI layout presets">
+          {customSlotEntriesForCurrentMode.map((entry) => (
+            <button
+              key={`custom-${entry.id}`}
+              type="button"
+              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}`}
+              title={`Custom ${Math.abs(entry.id) - LOADOUT_FACTORY_PRESET_COUNT - 2}`}
+              onClick={() => void selectLoadoutPreset(entry.id)}
+            >
+              <span className="toolbar-flyout-loadout-index">{Math.abs(entry.id) - LOADOUT_FACTORY_PRESET_COUNT - 2}</span>
             </button>
           ))}
 
-          {uiLoadouts.length < MAX_UI_LOADOUTS ? (
-            <button
-              type="button"
-              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn toolbar-flyout-loadout-plus${hasUnsavedUiLoadoutChanges ? ' active' : ''}`}
-              title="Save new loadout"
-              onClick={() => {}}
-              onMouseDown={(event) => startLoadoutSaveHold(uiLoadouts.length, event)}
-              onMouseUp={(event) => {
-                if (event.button !== 2) return
-                clearLoadoutSaveTimer()
-              }}
-              onMouseLeave={clearLoadoutSaveTimer}
-              onContextMenu={(event) => {
-                event.preventDefault()
-                clearLoadoutSaveTimer()
-              }}
-            >
-              <span className="toolbar-flyout-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn toolbar-flyout-loadout-plus${hasUnsavedUiLoadoutChanges ? ' active' : ''}`}
+            title="Save current settings as a new custom preset"
+            aria-label="Save current settings as a new custom preset"
+            onClick={() => void saveCustomLoadout()}
+          >
+            <span className="toolbar-flyout-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
+          </button>
           <button
             type="button"
             className="toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn"
-            title="Reset layout defaults"
-            aria-label="Reset layout defaults"
-            onClick={resetUiLayoutDefaults}
+            title="Reset custom preset to defaults"
+            aria-label="Reset custom preset to defaults"
+            onClick={() => void resetCustomLoadout()}
             onContextMenu={(event) => event.preventDefault()}
           >
             <span className="fa-solid fa-rotate-left" aria-hidden="true" />
           </button>
         </div>
       </AccordionSection>
+
 
       <AccordionSection
         className="sidebar-options-section-colors"
@@ -8454,21 +8525,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               title={mode.title}
               aria-label={mode.ariaLabel}
               onClick={() => setGlazeMode(mode.key)}
-            ><span className={`${mode.faicon}`}></span></button>
-          ))}
-        </div>
-
-        <div className="sidebar-options-divider" aria-hidden="true" />
-
-        <div className="toolbar-flyout-color-grid toolbar-flyout-darkmode-grid" role="group" aria-label="Dark mode preset options">
-          {DARK_MODES.map((mode) => (
-            <button
-              key={mode.key}
-              type="button"
-              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-darkmode-swatch darkmode-${mode.key}${darkMode === mode.key ? ' active' : ''}`}
-              title={mode.title}
-              aria-label={mode.ariaLabel}
-              onClick={() => applyDarkModePreset(mode.key)}
             ><span className={`${mode.faicon}`}></span></button>
           ))}
         </div>
@@ -9616,6 +9672,16 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 </div>
               </>
             )}
+
+            <button
+              type="button"
+              className={`toggle-btn icon-btn toolbar-gear-btn${uiMode === 'dark' ? ' is-active' : ''}`}
+              title="Toggle dark mode"
+              aria-label="Toggle dark mode"
+              onClick={toggleUiMode}
+            >
+              <span className="toolbar-gear-glyph fa-solid fa-moon" aria-hidden="true" />
+            </button>
 
             <button
               type="button"
