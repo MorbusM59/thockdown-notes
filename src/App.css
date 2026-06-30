@@ -1707,10 +1707,14 @@ button.active,
 
 .preset-section {
   box-sizing:     border-box;
-  margin:         auto;
+  margin:         calc(2*var(--toolbar-options-gap)) auto 0 auto;
   display:        block;
-  padding: calc(2*var(--toolbar-options-gap)) var(--toolbar-options-gap) var(--toolbar-options-gap) var(--toolbar-options-gap);
+  padding: var(--toolbar-options-gap);
   width: calc(var(--btn-square-regular-size) * 6 + 7 * var(--toolbar-options-gap)) + 2px;
+  background:#FFFFFF66;
+  box-shadow: var(--box-shadow-regular-light);
+  border: 1px solid var(--color-border-regular);
+  border-radius: var(--border-radius-small);
 }
 
 .toolbar-flyout-section {

@@ -157,7 +157,7 @@ const LIGHT_PRESET_ICONS: string[] = [
   'fa-solid fa-leaf',
   'fa-solid fa-droplet',
   'fa-solid fa-feather',
-  'fa-solid fa-cloud-sun',
+  'fa-regular fa-file',
 ]
 
 const DARK_PRESET_ICONS: string[] = [
@@ -170,15 +170,15 @@ const DARK_PRESET_ICONS: string[] = [
 
 // Names for the 5 factory presets per mode, indexed by abs(id) - 1 (0-based).
 const LIGHT_PRESET_THEMES: string[] = [
-  'Sun',
+  'Light (Default)',
   'Leaf',
   'Droplet',
   'Feather',
-  'Cloud',
+  'Paper',
 ]
 
 const DARK_PRESET_THEMES: string[] = [
-  'Dusk',
+  'Dark (Default)',
   'Flow',
   'Mountain',
   'Meteor',
