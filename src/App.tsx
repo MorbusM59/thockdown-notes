@@ -238,7 +238,7 @@ function saturatePosToValue(x: number): number {
 const DARK_MODE_PRESET_VALUES: Record<DarkModeKey, DarkModePresetValues> = {
   none:   { filterInvert: 0, filterSepia: 0, filterHueRotate: 0,   filterBrightness: 1,    filterContrast: 1,    filterSaturate: 0.5000, filterColorize: 0 },
   mono:   { filterInvert: 1, filterSepia: 1, filterHueRotate: 0,   filterBrightness: 0.6,  filterContrast: 0.96, filterSaturate: 0.0000, filterColorize: 0 },
-  red:    { filterInvert: 1, filterSepia: 1, filterHueRotate: 310, filterBrightness: 0.35, filterContrast: 1.1,  filterSaturate: 0.8633, filterColorize: 0 },
+  red:    { filterInvert: 1, filterSepia: 0, filterHueRotate: 0,   filterBrightness: 0.3,  filterContrast: 0.95, filterSaturate: 0.45,    filterColorize: 1 },
   dusk:   { filterInvert: 1, filterSepia: 1, filterHueRotate: 150, filterBrightness: 0.55, filterContrast: 0.95, filterSaturate: 0.4690, filterColorize: 0 },
   neon:   { filterInvert: 1, filterSepia: 1, filterHueRotate: 280, filterBrightness: 0.5,  filterContrast: 1.05, filterSaturate: 0.9126, filterColorize: 0 },
   matrix: { filterInvert: 1, filterSepia: 1, filterHueRotate: 70,  filterBrightness: 0.4,  filterContrast: 1.1,  filterSaturate: 0.8633, filterColorize: 0 },
