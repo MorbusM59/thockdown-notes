@@ -8125,7 +8125,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         ariaLabel="Custom Presets"
         heading="Custom Presets"
       >
-<div className="toolbar-flyout-loadout-grid" role="group" aria-label="Custom UI layout presets">
+        <div className="toolbar-flyout-loadout-grid" role="group" aria-label="Custom UI layout presets">
           {customSlotEntriesForCurrentMode.map((entry) => (
             <button
               key={`custom-${entry.id}`}
@@ -8166,7 +8166,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         ariaLabel="Colors & Textures"
         heading="Colors & Textures"
       >
-<div className="toolbar-flyout-color-layout" aria-label="Color and texture controls">
+        <div className="toolbar-flyout-color-layout" aria-label="Color and texture controls">
           <div className="toolbar-flyout-color-grid toolbar-flyout-hsva-grid" role="group" aria-label="HSVA value controls">
             <button
               type="button"
