@@ -1705,6 +1705,14 @@ button.active,
   margin:     12px 0;
 }
 
+.preset-section {
+  box-sizing:     border-box;
+  margin:         auto;
+  display:        block;
+  padding: calc(2*var(--toolbar-options-gap)) var(--toolbar-options-gap) var(--toolbar-options-gap) var(--toolbar-options-gap);
+  width: calc(var(--btn-square-regular-size) * 6 + 7 * var(--toolbar-options-gap)) + 2px;
+}
+
 .toolbar-flyout-section {
   box-sizing:     border-box;
   margin:         0 calc(var(--toolbar-options-gap) + 5px);

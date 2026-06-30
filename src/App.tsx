@@ -8083,12 +8083,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
   const renderSidebarOptionsContent = () => (
     <div className={`toolbar-flyout-content sidebar-options-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`} aria-label="Settings panel">
-      <AccordionGroup>
-      <AccordionSection
-        className="sidebar-options-section-presets"
-        ariaLabel="Presets"
-        heading="Presets"
-      >
+      <div className="preset-section">
         <div className="toolbar-flyout-loadout-grid" role="group" aria-label="UI mode presets">
           {factoryPresetEntriesForCurrentMode.map((entry) => {
             const presetIcons = uiMode === 'dark' ? DARK_PRESET_ICONS : LIGHT_PRESET_ICONS
@@ -8115,11 +8110,11 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             aria-label="Custom preset"
             onClick={selectDynamicCustomPreset}
           >
-            <span className="fa-solid fa-sliders" aria-hidden="true" />
+            <span className="fa-solid fa-marker" aria-hidden="true" />
           </button>
         </div>
-      </AccordionSection>
-
+      </div>
+      <AccordionGroup>
       <AccordionSection
         className="sidebar-options-section-layouts"
         ariaLabel="Custom Presets"
