@@ -3104,8 +3104,6 @@ function App() {
     if (filterHueRotate !== 0) filterParts.push(`hue-rotate(${filterHueRotate}deg)`)
     if (filterBrightness !== 1) filterParts.push(`brightness(${filterBrightness})`)
     if (filterContrast !== 1) filterParts.push(`contrast(${filterContrast})`)
-    const saturateCssValue = saturatePosToValue(filterSaturate)
-    if (Math.abs(saturateCssValue - 1) > 0.001) filterParts.push(`saturate(${saturateCssValue.toFixed(4)})`)
     const style: CSSProperties & Record<string, string> = {
       gridTemplateColumns: layout.gridTemplateColumns,
       '--color-bg-regular': highlightColors.background,
@@ -3138,13 +3136,21 @@ function App() {
     filterContrast,
     filterHueRotate,
     filterInvert,
-    filterSaturate,
     filterSepia,
     highlightColors,
     layout.gridTemplateColumns,
     sidebarTextureCss,
     sidebarTextureTintCss,
   ])
+
+  // Saturate is applied on a wrapper that contains BOTH app-shell and the
+  // colorize overlay, so it operates on the post-colorization composited
+  // result rather than the pre-colorize content underneath the overlay.
+  const appOuterStyle = useMemo(() => {
+    const saturateCssValue = saturatePosToValue(filterSaturate)
+    if (Math.abs(saturateCssValue - 1) <= 0.001) return undefined
+    return { filter: `saturate(${saturateCssValue.toFixed(4)})` } as CSSProperties
+  }, [filterSaturate])
 
   // Writes a structured debug entry to a session-scoped debug note (tagged
   // "debug"). No-ops when debuggingEnabled is false. Safe to call from any
@@ -8943,6 +8949,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
   return (
     <div className={`app-root glaze-${glazeMode}`} onDragOver={handleAppDragOver} onDrop={handleAppDrop}>
+      <div className="app-saturate-wrapper" style={{ ...appOuterStyle, position: 'fixed', inset: 0 }}>
       <div
         className="app-shell app-grid"
         ref={appShellRef}
@@ -9706,6 +9713,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         aria-hidden="true"
       />
     )}
+    </div>
   </div>
 )
 }
