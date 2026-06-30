@@ -151,6 +151,40 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   gridOutline: 'fa-regular fa-square',
 }
 
+// Icons for the 5 factory presets per mode, indexed by abs(id) - 1 (0-based).
+const LIGHT_PRESET_ICONS: string[] = [
+  'fa-solid fa-sun',
+  'fa-solid fa-leaf',
+  'fa-solid fa-droplet',
+  'fa-solid fa-feather',
+  'fa-solid fa-cloud-sun',
+]
+
+const DARK_PRESET_ICONS: string[] = [
+  'fa-solid fa-moon',
+  'fa-solid fa-water',
+  'fa-solid fa-mountain',
+  'fa-solid fa-meteor',
+  'fa-solid fa-fire',
+]
+
+// Names for the 5 factory presets per mode, indexed by abs(id) - 1 (0-based).
+const LIGHT_PRESET_THEMES: string[] = [
+  'Sun',
+  'Leaf',
+  'Droplet',
+  'Feather',
+  'Cloud',
+]
+
+const DARK_PRESET_THEMES: string[] = [
+  'Dusk',
+  'Flow',
+  'Mountain',
+  'Meteor',
+  'Fire',
+]
+
 const TEXTURE_SURFACE_TITLES: Record<TextureSurfaceKey, string> = {
   appGrid: 'App grid texture color',
   sidebarContent: 'Sidebar texture color',
@@ -8055,19 +8089,25 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         ariaLabel="Presets"
         heading="Presets"
       >
-<div className="toolbar-flyout-loadout-grid" role="group" aria-label="UI mode presets">
-          {factoryPresetEntriesForCurrentMode.map((entry) => (
-            <button
-              key={`preset-${entry.id}`}
-              type="button"
-              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}`}
-              title={`Preset ${Math.abs(entry.id)}`}
-              aria-label={`Preset ${Math.abs(entry.id)}`}
-              onClick={() => void selectLoadoutPreset(entry.id)}
-            >
-              <span className="toolbar-flyout-loadout-index">{Math.abs(entry.id)}</span>
-            </button>
-          ))}
+        <div className="toolbar-flyout-loadout-grid" role="group" aria-label="UI mode presets">
+          {factoryPresetEntriesForCurrentMode.map((entry) => {
+            const presetIcons = uiMode === 'dark' ? DARK_PRESET_ICONS : LIGHT_PRESET_ICONS
+            const presetThemes = uiMode === 'dark' ? DARK_PRESET_THEMES : LIGHT_PRESET_THEMES
+            const icon = presetIcons[Math.abs(entry.id) - 1] ?? 'fa-solid fa-circle'
+            const theme = presetThemes[Math.abs(entry.id) - 1] ?? 'None'
+            return (
+              <button
+                key={`preset-${entry.id}`}
+                type="button"
+                className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}`}
+                title={theme}
+                aria-label={theme}
+                onClick={() => void selectLoadoutPreset(entry.id)}
+              >
+                <span className={icon} aria-hidden="true" />
+              </button>
+            )
+          })}
           <button
             type="button"
             className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn${isDynamicCustomPresetActive ? ' active' : ''}`}
