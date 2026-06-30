@@ -8949,7 +8949,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     <div className={`app-root glaze-${glazeMode}`} onDragOver={handleAppDragOver} onDrop={handleAppDrop}>
       <div className="app-saturate-wrapper" style={{ ...appOuterStyle, position: 'fixed', inset: 0 }}>
       <div
-        className="app-shell app-grid"
+        className={`app-shell app-grid${filterInvert > 0.5 ? ' shadow-flip' : ''}`}
         ref={appShellRef}
         style={appShellStyle}
       >

@@ -205,6 +205,43 @@
     inset 0 0 6px rgba(0, 0, 0, 0.2),
     0 0 2px var(--color-shadow-white-harsh);
 
+  --box-shadow-regular-light-original: var(--box-shadow-regular-light);
+
+  --box-shadow-inverted-light-original: var(--box-shadow-inverted-light);
+
+  --box-shadow-regular-original: var(--box-shadow-regular);
+
+  --box-shadow-inverted-original: var(--box-shadow-inverted);
+
+  --box-shadow-regular-harsh-original: var(--box-shadow-regular-harsh);
+
+  --box-shadow-inverted-harsh-original: var(--box-shadow-inverted-harsh);
+
+  --box-shadow-regular-filtered-original: var(--box-shadow-regular-filtered);
+
+  --box-shadow-inverted-filtered-original: var(--box-shadow-inverted-filtered);
+}
+
+/* ---------------------------------------------------------------------------
+   1b-i. Shadow flip — when the invert filter exceeds 50%, the visual sense of
+   "outer glow" vs "inset/recessed" is perceptually reversed by the filter
+   itself, so the named variables are swapped: --box-shadow-regular* takes on
+   the inverted recipe and vice versa. Every box-shadow usage in this file
+   refers to these custom properties by name, so this single rule re-points
+   all of them without touching individual declarations.
+--------------------------------------------------------------------------- */
+
+.app-shell.shadow-flip {
+  --box-shadow-regular-light: var(--box-shadow-inverted-light-original);
+  --box-shadow-inverted-light: var(--box-shadow-regular-light-original);
+  --box-shadow-regular: var(--box-shadow-inverted-original);
+  --box-shadow-inverted: var(--box-shadow-regular-original);
+  --box-shadow-regular-harsh: var(--box-shadow-inverted-original);
+  --box-shadow-inverted-harsh: var(--box-shadow-regular-harsh-original);
+}
+
+:root {
+
   /* ---------------------------------------------------------------------------
      1c. Typography
   --------------------------------------------------------------------------- */
@@ -212,6 +249,7 @@
   --text-shadow-emboss-base:
     0 -1px 0px #55000022,
     0 1px 0px #ffffff;
+
 
   --text-shadow-emboss-panel:
     0 1px 1px rgba(255, 255, 255, 1),
@@ -331,26 +369,6 @@
   overflow: hidden;
   background: var(--color-panel-top-gradient);
   text-shadow: var(--text-shadow-emboss-base);
-}
-
-.app-shell.darkmode-mono {
-  filter: grayscale(1) invert() brightness(0.6) contrast(0.96);
-}
-
-.app-shell.darkmode-red {
-  filter: invert() sepia() hue-rotate(310deg) brightness(0.35) contrast(1.1) saturate(5);
-}
-
-.app-shell.darkmode-dusk {
-  filter: invert() sepia() hue-rotate(150deg) brightness(0.55) contrast(0.95) saturate(0.9);
-}
-
-.app-shell.darkmode-neon {
-  filter: invert() sepia() hue-rotate(280deg) brightness(0.5) contrast(1.05) saturate(8);
-}
-
-.app-shell.darkmode-matrix {
-  filter: invert() sepia() hue-rotate(70deg) brightness(0.4) contrast(1.1) saturate(5);
 }
 
 /* =============================================================================
