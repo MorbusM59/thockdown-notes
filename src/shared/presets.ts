@@ -22,7 +22,7 @@ const NEUTRAL_BASE: UiLayoutLoadout = {
   editorFontSize: 'm',
   editorSpacing: 'cozy',
   editorGlyphPaddingPx: 1,
-  audioKeyVolume: 1,
+  audioKeyVolume: 0.5,
   audioBassVolume: 0,
   audioTrebleVolume: 0,
   audioReverbStrength: 0,
