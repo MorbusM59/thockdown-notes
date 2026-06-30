@@ -229,6 +229,9 @@
    the inverted recipe and vice versa. Every box-shadow usage in this file
    refers to these custom properties by name, so this single rule re-points
    all of them without touching individual declarations.
+
+   Filter shadows (used for badges on list-note-items) are purposefully
+   omitted because they don't fit the design paqttern. They are left as is.
 --------------------------------------------------------------------------- */
 
 .app-shell.shadow-flip {
