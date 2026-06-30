@@ -1808,7 +1808,8 @@ button.active,
 .toolbar-flyout-color-swatch {
   width:      100%;
   height:     100%;
-  color:      var(--color-text-dark);
+  font-size: 18px;
+  color:      var(--color-text-faded);
   transition: none;
 }
 
@@ -1849,7 +1850,7 @@ button.active,
 }
 
 .toolbar-flyout-color-swatch-glyph {
-  font-size:   14px;
+  font-size:   18px;
   line-height: 1;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
 }
@@ -2089,15 +2090,17 @@ button.active,
   min-height:          0;
 }
 
-.toolbar-flyout-loadout-btn {
+.toolbar-flyout-loadout-btn, .toolbar-flyout-glaze-swatch {
   width:       100%;
   height:      100%;
-  font-size:   13px;
+  font-size:   18px;
   font-weight: 600;
   color:       var(--color-text-faded);
 }
 
-
+.toolbar-flyout-audio-btn {
+  font-size: 18px;
+}
 
 /* 8h. HSVA drag cursor override */
 body.hsva-dragging,

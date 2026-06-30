@@ -132,19 +132,19 @@ const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
 const HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['topBackground', 'bottomBackground', 'background', 'gridOutline', 'caret', 'selection']
 
 const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
-  caret: 'Caret color',
-  search: 'Search highlight color',
-  selection: 'Selection box color',
-  background: 'Background',
-  topBackground: 'Upper Box',
-  bottomBackground: 'Lower Box',
-  gridOutline: 'Box outline',
+  caret: 'Caret Color',
+  search: 'Search Highlight color',
+  selection: 'Selection Box color',
+  background: 'Default Box Background',
+  topBackground: 'Upper Box Background',
+  bottomBackground: 'Lower Box Background',
+  gridOutline: 'Box Outline',
 }
 
 const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
-  caret: 'fa-solid fa-i-cursor',
+  caret: 'fa-solid fa-i',
   search: 'fa-solid fa-magnifying-glass',
-  selection: 'fa-solid fa-arrow-pointer',
+  selection: 'fa-solid fa-expand',
   background: 'fa-solid fa-square',
   topBackground: 'fa-solid fa-square-caret-up',
   bottomBackground: 'fa-solid fa-square-caret-down',
@@ -154,7 +154,7 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
 // Icons for the 5 factory presets per mode, indexed by abs(id) - 1 (0-based).
 const LIGHT_PRESET_ICONS: string[] = [
   'fa-solid fa-sun',
-  'fa-solid fa-leaf',
+  'fa-solid fa-film',
   'fa-solid fa-droplet',
   'fa-solid fa-feather',
   'fa-regular fa-file',
@@ -171,7 +171,7 @@ const DARK_PRESET_ICONS: string[] = [
 // Names for the 5 factory presets per mode, indexed by abs(id) - 1 (0-based).
 const LIGHT_PRESET_THEMES: string[] = [
   'Light (Default)',
-  'Leaf',
+  'Faded Film',
   'Droplet',
   'Feather',
   'Paper',
@@ -8651,13 +8651,13 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           <div className="utility-setting-button-row" role="group" aria-label="Typing sound controls">
             <button
               type="button"
-              className={`toolbar-btn-icon${!typingSoundEnabled ? ' is-active' : ''}`}
+              className={`toolbar-btn-icon toolbar-flyout-audio-btn${!typingSoundEnabled ? ' is-active' : ''}`}
               onClick={() => {
                 setTypingSoundEnabled(false)
                 typingSoundManager.setTypingSoundEnabled(false)
               }}
               aria-pressed={!typingSoundEnabled}
-              title="Disable key sounds"
+              title="No Key Sounds"
             >
               <span className="fa-solid fa-ban" aria-hidden="true" />
             </button>
@@ -8665,7 +8665,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               <button
                 key={setId}
                 type="button"
-                className={`toolbar-btn-icon${typingSoundEnabled && typingSoundSet === setId ? ' is-active' : ''}`}
+                className={`toolbar-btn-icon toolbar-flyout-audio-btn${typingSoundEnabled && typingSoundSet === setId ? ' is-active' : ''}`}
                 onClick={() => {
                   setTypingSoundEnabled(true)
                   setTypingSoundSet(setId)
@@ -8673,8 +8673,9 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   typingSoundManager.setTypingSoundSet(setId)
                 }}
                 aria-pressed={typingSoundEnabled && typingSoundSet === setId}
+                title={`${setId === 'A' ? 'Pops' : ''}${setId === 'B' ? 'Pins' : ''}${setId === 'C' ? 'Creamy' : ''}`}
               >
-                {setId}
+                <span className={`${setId === 'A' ? 'fa-solid fa-burst' : ''}${setId === 'B' ? 'fa-solid fa-map-pin' : ''}${setId === 'C' ? 'fa-solid fa-ice-cream' : ''}`} aria-hidden="true" />
               </button>
             ))}
           </div>
