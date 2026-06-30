@@ -1,5 +1,19 @@
 import type { AppState, AppStateApi, WindowState } from '../shared/appState'
-import type { UiLayoutLoadout, UiLoadoutApi } from '../shared/loadouts'
+import type { UiLayoutLoadout, UiLoadoutApi, UiLoadoutEntry, UiLoadoutListResult, UiLoadoutMode } from '../shared/loadouts'
+import {
+  idKind,
+  idMode,
+  modeSign,
+  LOADOUT_DEFAULT_CUSTOM_ID_ABS,
+  LOADOUT_PENDING_ID_ABS,
+  LOADOUT_FIRST_CUSTOM_ID_ABS,
+} from '../shared/loadouts'
+import {
+  LIGHT_FACTORY_PRESETS,
+  DARK_FACTORY_PRESETS,
+  DEFAULT_CUSTOM_LIGHT,
+  DEFAULT_CUSTOM_DARK,
+} from '../shared/presets'
 import type { TextureCacheApi, TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../shared/textures'
 import type { FileSyncApi } from '../shared/fileSync'
 import type {
@@ -26,7 +40,8 @@ type BrowserMockStore = {
   notes: NoteDocument[]
   appState: AppState
   windowState: WindowState
-  uiLoadouts: UiLayoutLoadout[]
+  uiLoadoutEntries: UiLoadoutEntry[]
+  lastCustomIdByMode: { light: number; dark: number }
   textureCache: Record<string, { mimeType: string; dataBase64: string; createdAt: number }>
 }
 
@@ -135,15 +150,40 @@ function stableStringify(value: unknown): string {
   return `{${entries.join(',')}}`
 }
 
+function seedUiLoadoutEntries(): { entries: UiLoadoutEntry[]; lastCustomIdByMode: { light: number; dark: number } } {
+  const now = Date.now()
+  const entries: UiLoadoutEntry[] = []
+
+  const push = (id: number, payload: UiLayoutLoadout, isActive: boolean) => {
+    entries.push({ id, isActive, signature: stableStringify(payload), payload: clone(payload), updatedAt: now })
+  }
+
+  LIGHT_FACTORY_PRESETS.forEach((preset, index) => push(index + 1, preset, false))
+  DARK_FACTORY_PRESETS.forEach((preset, index) => push(-(index + 1), preset, false))
+
+  push(LOADOUT_DEFAULT_CUSTOM_ID_ABS, DEFAULT_CUSTOM_LIGHT, true)
+  push(-LOADOUT_DEFAULT_CUSTOM_ID_ABS, DEFAULT_CUSTOM_DARK, true)
+
+  push(LOADOUT_PENDING_ID_ABS, DEFAULT_CUSTOM_LIGHT, false)
+  push(-LOADOUT_PENDING_ID_ABS, DEFAULT_CUSTOM_DARK, false)
+
+  return {
+    entries,
+    lastCustomIdByMode: { light: LOADOUT_DEFAULT_CUSTOM_ID_ABS, dark: -LOADOUT_DEFAULT_CUSTOM_ID_ABS },
+  }
+}
+
 function loadStore(): BrowserMockStore {
   try {
     const raw = window.localStorage.getItem(MOCK_STORAGE_KEY)
     if (!raw) {
+      const seeded = seedUiLoadoutEntries()
       return {
         notes: [],
         appState: clone(DEFAULT_APP_STATE),
         windowState: clone(DEFAULT_WINDOW_STATE),
-        uiLoadouts: [],
+        uiLoadoutEntries: seeded.entries,
+        lastCustomIdByMode: seeded.lastCustomIdByMode,
         textureCache: {},
       }
     }
@@ -164,9 +204,12 @@ function loadStore(): BrowserMockStore {
             ...(parsed.windowState as WindowState),
           }
         : clone(DEFAULT_WINDOW_STATE),
-      uiLoadouts: Array.isArray(parsed.uiLoadouts)
-        ? clone(parsed.uiLoadouts as UiLayoutLoadout[]).slice(0, 9)
-        : [],
+      uiLoadoutEntries: Array.isArray(parsed.uiLoadoutEntries) && parsed.uiLoadoutEntries.length > 0
+        ? clone(parsed.uiLoadoutEntries as UiLoadoutEntry[])
+        : seedUiLoadoutEntries().entries,
+      lastCustomIdByMode: parsed.lastCustomIdByMode && typeof parsed.lastCustomIdByMode === 'object'
+        ? clone(parsed.lastCustomIdByMode as { light: number; dark: number })
+        : seedUiLoadoutEntries().lastCustomIdByMode,
       textureCache: parsed.textureCache && typeof parsed.textureCache === 'object'
         ? Object.entries(parsed.textureCache as Record<string, { mimeType: string; dataBase64: string; createdAt?: number }>).reduce((acc, [key, value]) => {
             if (!value || typeof value !== 'object') return acc
@@ -180,11 +223,13 @@ function loadStore(): BrowserMockStore {
         : {},
     }
   } catch {
+    const seeded = seedUiLoadoutEntries()
     return {
       notes: [],
       appState: clone(DEFAULT_APP_STATE),
       windowState: clone(DEFAULT_WINDOW_STATE),
-      uiLoadouts: [],
+      uiLoadoutEntries: seeded.entries,
+      lastCustomIdByMode: seeded.lastCustomIdByMode,
       textureCache: {},
     }
   }
@@ -488,30 +533,132 @@ function buildLoadoutBridge(storeRef: { current: BrowserMockStore }): UiLoadoutA
     return result
   }
 
+  const snapshot = (store: BrowserMockStore): UiLoadoutListResult => ({
+    entries: clone(store.uiLoadoutEntries),
+    lastCustomIdByMode: clone(store.lastCustomIdByMode),
+  })
+
+  const findEntry = (store: BrowserMockStore, id: number) =>
+    store.uiLoadoutEntries.find((entry) => entry.id === id)
+
+  const deactivateMode = (store: BrowserMockStore, sign: 1 | -1) => {
+    store.uiLoadoutEntries.forEach((entry) => {
+      if (entry.id * sign > 0) entry.isActive = false
+    })
+  }
+
   return {
-    async listUiLoadouts(): Promise<UiLayoutLoadout[]> {
-      return clone(storeRef.current.uiLoadouts).slice(0, 9)
+    async list(): Promise<UiLoadoutListResult> {
+      return snapshot(storeRef.current)
     },
 
-    async saveUiLoadout(slot: number, loadout: UiLayoutLoadout): Promise<UiLayoutLoadout[]> {
+    async setActive(id: number): Promise<UiLoadoutListResult> {
       return mutate((store) => {
-        const targetSlot = Math.max(0, Math.min(8, Math.floor(slot)))
-        const next = [...store.uiLoadouts]
-        const signature = stableStringify(loadout)
+        const target = findEntry(store, id)
+        if (!target) return snapshot(store)
 
-        if (targetSlot < next.length) {
-          next[targetSlot] = clone(loadout)
-        } else {
-          next.push(clone(loadout))
+        const mode: UiLoadoutMode = idMode(id)
+        const sign = modeSign(mode)
+        deactivateMode(store, sign)
+        target.isActive = true
+        target.updatedAt = Date.now()
+
+        const kind = idKind(id)
+        if (kind === 'default-custom' || kind === 'custom') {
+          store.lastCustomIdByMode[mode] = id
         }
 
-        const deduped = next.filter((entry, index) => {
-          if (index === targetSlot) return true
-          return stableStringify(entry) !== signature
+        return snapshot(store)
+      })
+    },
+
+    async updatePending(mode: UiLoadoutMode, loadout: UiLayoutLoadout): Promise<UiLoadoutListResult> {
+      return mutate((store) => {
+        const sign = modeSign(mode)
+        const pendingId = LOADOUT_PENDING_ID_ABS * sign
+        const signature = stableStringify(loadout)
+
+        const match = store.uiLoadoutEntries.find(
+          (entry) => entry.id * sign > 0 && entry.signature === signature,
+        )
+
+        deactivateMode(store, sign)
+
+        if (match) {
+          match.isActive = true
+          match.updatedAt = Date.now()
+          const kind = idKind(match.id)
+          if (kind === 'default-custom' || kind === 'custom') {
+            store.lastCustomIdByMode[mode] = match.id
+          }
+          return snapshot(store)
+        }
+
+        const pending = findEntry(store, pendingId)
+        if (pending) {
+          pending.isActive = true
+          pending.signature = signature
+          pending.payload = clone(loadout)
+          pending.updatedAt = Date.now()
+        }
+
+        return snapshot(store)
+      })
+    },
+
+    async saveCustom(mode: UiLoadoutMode): Promise<UiLoadoutListResult> {
+      return mutate((store) => {
+        const sign = modeSign(mode)
+        const pendingId = LOADOUT_PENDING_ID_ABS * sign
+        const pending = findEntry(store, pendingId)
+        if (!pending || !pending.isActive) return snapshot(store)
+
+        const existingAbs = store.uiLoadoutEntries
+          .filter((entry) => entry.id * sign > 0 && Math.abs(entry.id) >= LOADOUT_FIRST_CUSTOM_ID_ABS)
+          .map((entry) => Math.abs(entry.id))
+
+        let nextAbs = LOADOUT_FIRST_CUSTOM_ID_ABS
+        while (existingAbs.includes(nextAbs)) nextAbs += 1
+        const newId = nextAbs * sign
+
+        deactivateMode(store, sign)
+
+        store.uiLoadoutEntries.push({
+          id: newId,
+          isActive: true,
+          signature: pending.signature,
+          payload: clone(pending.payload),
+          updatedAt: Date.now(),
         })
 
-        store.uiLoadouts = deduped.slice(0, 9)
-        return clone(store.uiLoadouts)
+        store.lastCustomIdByMode[mode] = newId
+
+        const defaultCustomId = LOADOUT_DEFAULT_CUSTOM_ID_ABS * sign
+        const defaultCustom = findEntry(store, defaultCustomId)
+        if (defaultCustom) {
+          pending.isActive = false
+          pending.signature = defaultCustom.signature
+          pending.payload = clone(defaultCustom.payload)
+          pending.updatedAt = Date.now()
+        }
+
+        return snapshot(store)
+      })
+    },
+
+    async resetCustom(mode: UiLoadoutMode): Promise<UiLoadoutListResult> {
+      return mutate((store) => {
+        const sign = modeSign(mode)
+        const defaultCustomId = LOADOUT_DEFAULT_CUSTOM_ID_ABS * sign
+        const target = findEntry(store, defaultCustomId)
+        if (!target) return snapshot(store)
+
+        deactivateMode(store, sign)
+        target.isActive = true
+        target.updatedAt = Date.now()
+        store.lastCustomIdByMode[mode] = defaultCustomId
+
+        return snapshot(store)
       })
     },
   }

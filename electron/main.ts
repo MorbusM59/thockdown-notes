@@ -462,8 +462,20 @@ function registerIpcHandlers() {
     return databaseService!.listUiLoadouts();
   });
 
-  ipcMain.handle(LOADOUT_CHANNELS.save, async (_event, slot, loadout) => {
-    return databaseService!.saveUiLoadout(slot, loadout);
+  ipcMain.handle(LOADOUT_CHANNELS.setActive, async (_event, id) => {
+    return databaseService!.setActiveUiLoadout(id);
+  });
+
+  ipcMain.handle(LOADOUT_CHANNELS.updatePending, async (_event, mode, loadout) => {
+    return databaseService!.updatePendingUiLoadout(mode, loadout);
+  });
+
+  ipcMain.handle(LOADOUT_CHANNELS.saveCustom, async (_event, mode) => {
+    return databaseService!.saveCustomUiLoadout(mode);
+  });
+
+  ipcMain.handle(LOADOUT_CHANNELS.resetCustom, async (_event, mode) => {
+    return databaseService!.resetCustomUiLoadout(mode);
   });
 }
 

@@ -131,8 +131,11 @@ const textureCacheApi: TextureCacheApi = {
 contextBridge.exposeInMainWorld('measlyTextures', textureCacheApi)
 
 const uiLoadoutApi: UiLoadoutApi = {
-  listUiLoadouts: () => ipcRenderer.invoke(LOADOUT_CHANNELS.list),
-  saveUiLoadout: (slot, loadout) => ipcRenderer.invoke(LOADOUT_CHANNELS.save, slot, loadout),
+  list: () => ipcRenderer.invoke(LOADOUT_CHANNELS.list),
+  setActive: (id) => ipcRenderer.invoke(LOADOUT_CHANNELS.setActive, id),
+  updatePending: (mode, loadout) => ipcRenderer.invoke(LOADOUT_CHANNELS.updatePending, mode, loadout),
+  saveCustom: (mode) => ipcRenderer.invoke(LOADOUT_CHANNELS.saveCustom, mode),
+  resetCustom: (mode) => ipcRenderer.invoke(LOADOUT_CHANNELS.resetCustom, mode),
 }
 
 contextBridge.exposeInMainWorld('measlyLoadouts', uiLoadoutApi)

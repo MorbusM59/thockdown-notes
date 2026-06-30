@@ -4,7 +4,27 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { sanitizeDocumentText } from '../src/shared/textSanitization';
 import type { TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../src/shared/textures';
-import type { UiLayoutLoadout } from '../src/shared/loadouts';
+import type {
+  UiLayoutLoadout,
+  UiLoadoutEntry,
+  UiLoadoutListResult,
+  UiLoadoutMode,
+} from '../src/shared/loadouts';
+import {
+  idKind,
+  idMode,
+  modeSign,
+  LOADOUT_DEFAULT_CUSTOM_ID_ABS,
+  LOADOUT_PENDING_ID_ABS,
+  LOADOUT_FIRST_CUSTOM_ID_ABS,
+  LOADOUT_MAX_CUSTOM_SLOTS,
+} from '../src/shared/loadouts';
+import {
+  LIGHT_FACTORY_PRESETS,
+  DARK_FACTORY_PRESETS,
+  DEFAULT_CUSTOM_LIGHT,
+  DEFAULT_CUSTOM_DARK,
+} from '../src/shared/presets';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureMaterialSettings, type TextureMaterialsBySurface } from '../src/textures/types';
 
 const require = createRequire(import.meta.url);
@@ -17,7 +37,6 @@ const META_PREFIX = '<!-- measly-meta:';
 const META_SUFFIX = '-->';
 const TEXTURE_CACHE_DEFAULT_MAX_ENTRIES = 96;
 const TEXTURE_CACHE_DEFAULT_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 14;
-const UI_LOADOUT_MAX_ENTRIES = 9;
 
 const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   viewStyle: 'modern',
@@ -211,10 +230,12 @@ type NormalizedTextureCacheRequest = {
   algorithmVersion: number;
 };
 
-type UiLoadoutRow = {
-  slot: number;
-  payloadJson: string;
+type UiLoadoutEntryRow = {
+  id: number;
+  isActive: number;
   signature: string;
+  payloadJson: string;
+  updatedAt: number;
 };
 
 function normalizeTextureCacheRequest(request: TextureCacheRequest): NormalizedTextureCacheRequest {
@@ -1310,72 +1331,244 @@ export class DatabaseService {
     return deletedCount;
   }
 
-  listUiLoadouts(): UiLayoutLoadout[] {
+  // -------------------------------------------------------------------------
+  // UI Loadouts — see src/shared/loadouts.ts for the id/mode/kind scheme.
+  // -------------------------------------------------------------------------
+
+  private ensureLoadoutsSeeded(): void {
     const db = this.requireDb();
-    const rows = db.prepare(`
-      SELECT slot, payloadJson, signature
-      FROM ui_loadouts
-      ORDER BY slot ASC
-    `).all() as UiLoadoutRow[];
+    const countRow = db.prepare('SELECT COUNT(*) as n FROM ui_loadout_entries').get() as { n: number };
+    if (countRow.n > 0) return;
 
-    const output: UiLayoutLoadout[] = [];
-    for (const row of rows) {
-      try {
-        const parsed = JSON.parse(row.payloadJson) as unknown;
-        const normalized = normalizeUiLayoutLoadout(parsed);
-        if (!normalized) {
-          continue;
-        }
-        output.push(normalized);
-      } catch {
-        continue;
-      }
-    }
-
-    return output.slice(0, UI_LOADOUT_MAX_ENTRIES);
-  }
-
-  saveUiLoadout(slot: unknown, loadout: unknown): UiLayoutLoadout[] {
-    const db = this.requireDb();
-    const normalized = normalizeUiLayoutLoadout(loadout);
-    if (!normalized) {
-      return this.listUiLoadouts();
-    }
-
-    const targetSlot = clampInteger(slot, 0, UI_LOADOUT_MAX_ENTRIES - 1, 0);
-    const payloadJson = JSON.stringify(normalized);
-    const signature = stableStringify(normalized);
     const timestamp = Date.now();
+    const insertStmt = db.prepare(`
+      INSERT INTO ui_loadout_entries (id, isActive, signature, payloadJson, updatedAt)
+      VALUES (?, ?, ?, ?, ?)
+    `);
 
     const tx = db.transaction(() => {
-      db.prepare('DELETE FROM ui_loadouts WHERE signature = ? AND slot <> ?').run(signature, targetSlot);
+      const seedRow = (id: number, payload: UiLayoutLoadout, isActive: boolean) => {
+        const normalized = normalizeUiLayoutLoadout(payload) ?? DEFAULT_UI_LAYOUT_LOADOUT;
+        insertStmt.run(id, isActive ? 1 : 0, stableStringify(normalized), JSON.stringify(normalized), timestamp);
+      };
 
-      db.prepare(`
-        INSERT OR REPLACE INTO ui_loadouts (slot, payloadJson, signature, updatedAt)
-        VALUES (?, ?, ?, ?)
-      `).run(targetSlot, payloadJson, signature, timestamp);
+      LIGHT_FACTORY_PRESETS.forEach((preset, index) => seedRow(index + 1, preset, false));
+      DARK_FACTORY_PRESETS.forEach((preset, index) => seedRow(-(index + 1), preset, false));
 
-      const rows = db.prepare(`
-        SELECT slot, payloadJson, signature
-        FROM ui_loadouts
-        ORDER BY slot ASC
-      `).all() as UiLoadoutRow[];
+      seedRow(LOADOUT_DEFAULT_CUSTOM_ID_ABS, DEFAULT_CUSTOM_LIGHT, true);
+      seedRow(-LOADOUT_DEFAULT_CUSTOM_ID_ABS, DEFAULT_CUSTOM_DARK, true);
 
-      const kept = rows.slice(0, UI_LOADOUT_MAX_ENTRIES);
-      db.prepare('DELETE FROM ui_loadouts').run();
+      // Pending rows start as inert copies of the default-custom rows.
+      seedRow(LOADOUT_PENDING_ID_ABS, DEFAULT_CUSTOM_LIGHT, false);
+      seedRow(-LOADOUT_PENDING_ID_ABS, DEFAULT_CUSTOM_DARK, false);
 
-      const insertStmt = db.prepare(`
-        INSERT INTO ui_loadouts (slot, payloadJson, signature, updatedAt)
-        VALUES (?, ?, ?, ?)
-      `);
-
-      kept.forEach((row, index) => {
-        insertStmt.run(index, row.payloadJson, row.signature, timestamp);
-      });
+      const metaStmt = db.prepare(`INSERT OR REPLACE INTO ui_loadout_meta (key, value) VALUES (?, ?)`);
+      metaStmt.run('lastCustomId:light', String(LOADOUT_DEFAULT_CUSTOM_ID_ABS));
+      metaStmt.run('lastCustomId:dark', String(-LOADOUT_DEFAULT_CUSTOM_ID_ABS));
     });
 
     tx();
-    return this.listUiLoadouts();
+  }
+
+  private readLoadoutMeta(key: string, fallback: number): number {
+    const db = this.requireDb();
+    const row = db.prepare('SELECT value FROM ui_loadout_meta WHERE key = ?').get(key) as { value: string } | undefined;
+    if (!row) return fallback;
+    const parsed = Number.parseInt(row.value, 10);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  private writeLoadoutMeta(key: string, value: number): void {
+    const db = this.requireDb();
+    db.prepare(`INSERT OR REPLACE INTO ui_loadout_meta (key, value) VALUES (?, ?)`).run(key, String(value));
+  }
+
+  private readLoadoutRow(id: number): UiLoadoutEntry | null {
+    const db = this.requireDb();
+    const row = db.prepare(`
+      SELECT id, isActive, signature, payloadJson, updatedAt
+      FROM ui_loadout_entries WHERE id = ?
+    `).get(id) as UiLoadoutEntryRow | undefined;
+    if (!row) return null;
+    return this.rowToEntry(row);
+  }
+
+  private rowToEntry(row: UiLoadoutEntryRow): UiLoadoutEntry {
+    let payload: UiLayoutLoadout;
+    try {
+      payload = normalizeUiLayoutLoadout(JSON.parse(row.payloadJson)) ?? DEFAULT_UI_LAYOUT_LOADOUT;
+    } catch {
+      payload = DEFAULT_UI_LAYOUT_LOADOUT;
+    }
+    return {
+      id: row.id,
+      isActive: row.isActive === 1,
+      signature: row.signature,
+      payload,
+      updatedAt: row.updatedAt,
+    };
+  }
+
+  private buildListResult(): UiLoadoutListResult {
+    const db = this.requireDb();
+    const rows = db.prepare(`
+      SELECT id, isActive, signature, payloadJson, updatedAt
+      FROM ui_loadout_entries
+      ORDER BY id ASC
+    `).all() as UiLoadoutEntryRow[];
+
+    return {
+      entries: rows.map((row) => this.rowToEntry(row)),
+      lastCustomIdByMode: {
+        light: this.readLoadoutMeta('lastCustomId:light', LOADOUT_DEFAULT_CUSTOM_ID_ABS),
+        dark: this.readLoadoutMeta('lastCustomId:dark', -LOADOUT_DEFAULT_CUSTOM_ID_ABS),
+      },
+    };
+  }
+
+  listUiLoadouts(): UiLoadoutListResult {
+    this.ensureLoadoutsSeeded();
+    return this.buildListResult();
+  }
+
+  setActiveUiLoadout(id: unknown): UiLoadoutListResult {
+    this.ensureLoadoutsSeeded();
+    const db = this.requireDb();
+    const targetId = typeof id === 'number' && Number.isInteger(id) ? id : null;
+    if (targetId === null) return this.buildListResult();
+
+    const existing = this.readLoadoutRow(targetId);
+    if (!existing) return this.buildListResult();
+
+    const mode: UiLoadoutMode = idMode(targetId);
+    const sign = modeSign(mode);
+    const timestamp = Date.now();
+
+    const tx = db.transaction(() => {
+      db.prepare(`UPDATE ui_loadout_entries SET isActive = 0 WHERE id * ? > 0`).run(sign);
+      db.prepare(`UPDATE ui_loadout_entries SET isActive = 1, updatedAt = ? WHERE id = ?`).run(timestamp, targetId);
+
+      const kind = idKind(targetId);
+      if (kind === 'default-custom' || kind === 'custom') {
+        this.writeLoadoutMeta(`lastCustomId:${mode}`, targetId);
+      }
+    });
+
+    tx();
+    return this.buildListResult();
+  }
+
+  updatePendingUiLoadout(mode: unknown, loadout: unknown): UiLoadoutListResult {
+    this.ensureLoadoutsSeeded();
+    const db = this.requireDb();
+    const normalizedMode: UiLoadoutMode = mode === 'dark' ? 'dark' : 'light';
+    const normalized = normalizeUiLayoutLoadout(loadout);
+    if (!normalized) return this.buildListResult();
+
+    const sign = modeSign(normalizedMode);
+    const pendingId = LOADOUT_PENDING_ID_ABS * sign;
+    const signature = stableStringify(normalized);
+    const payloadJson = JSON.stringify(normalized);
+    const timestamp = Date.now();
+
+    const tx = db.transaction(() => {
+      // Does this payload match an existing row for this mode? If so,
+      // collapse into that match instead of treating it as new pending data.
+      const match = db.prepare(`
+        SELECT id FROM ui_loadout_entries
+        WHERE signature = ? AND id * ? > 0
+        ORDER BY ABS(id) ASC
+        LIMIT 1
+      `).get(signature, sign) as { id: number } | undefined;
+
+      db.prepare(`UPDATE ui_loadout_entries SET isActive = 0 WHERE id * ? > 0`).run(sign);
+
+      if (match) {
+        db.prepare(`UPDATE ui_loadout_entries SET isActive = 1, updatedAt = ? WHERE id = ?`).run(timestamp, match.id);
+        const kind = idKind(match.id);
+        if (kind === 'default-custom' || kind === 'custom') {
+          this.writeLoadoutMeta(`lastCustomId:${normalizedMode}`, match.id);
+        }
+        return;
+      }
+
+      db.prepare(`
+        UPDATE ui_loadout_entries
+        SET isActive = 1, signature = ?, payloadJson = ?, updatedAt = ?
+        WHERE id = ?
+      `).run(signature, payloadJson, timestamp, pendingId);
+    });
+
+    tx();
+    return this.buildListResult();
+  }
+
+  saveCustomUiLoadout(mode: unknown): UiLoadoutListResult {
+    this.ensureLoadoutsSeeded();
+    const db = this.requireDb();
+    const normalizedMode: UiLoadoutMode = mode === 'dark' ? 'dark' : 'light';
+    const sign = modeSign(normalizedMode);
+    const pendingId = LOADOUT_PENDING_ID_ABS * sign;
+
+    const pendingRow = this.readLoadoutRow(pendingId);
+    if (!pendingRow || !pendingRow.isActive) {
+      // Nothing pending to save for this mode.
+      return this.buildListResult();
+    }
+
+    const timestamp = Date.now();
+    const tx = db.transaction(() => {
+      const existingCustomIds = (db.prepare(`
+        SELECT id FROM ui_loadout_entries WHERE id * ? > 0 AND ABS(id) >= ?
+      `).all(sign, LOADOUT_FIRST_CUSTOM_ID_ABS) as { id: number }[]).map((r) => Math.abs(r.id));
+
+      let nextAbs = LOADOUT_FIRST_CUSTOM_ID_ABS;
+      while (existingCustomIds.includes(nextAbs) && nextAbs < LOADOUT_FIRST_CUSTOM_ID_ABS + LOADOUT_MAX_CUSTOM_SLOTS + 16) {
+        nextAbs += 1;
+      }
+      const newId = nextAbs * sign;
+
+      db.prepare(`UPDATE ui_loadout_entries SET isActive = 0 WHERE id * ? > 0`).run(sign);
+
+      db.prepare(`
+        INSERT INTO ui_loadout_entries (id, isActive, signature, payloadJson, updatedAt)
+        VALUES (?, 1, ?, ?, ?)
+      `).run(newId, pendingRow.signature, JSON.stringify(pendingRow.payload), timestamp);
+
+      this.writeLoadoutMeta(`lastCustomId:${normalizedMode}`, newId);
+
+      // Reset the pending row back to an inert copy of default-custom.
+      const defaultCustomId = LOADOUT_DEFAULT_CUSTOM_ID_ABS * sign;
+      const defaultCustomRow = this.readLoadoutRow(defaultCustomId);
+      if (defaultCustomRow) {
+        db.prepare(`
+          UPDATE ui_loadout_entries
+          SET isActive = 0, signature = ?, payloadJson = ?, updatedAt = ?
+          WHERE id = ?
+        `).run(defaultCustomRow.signature, JSON.stringify(defaultCustomRow.payload), timestamp, pendingId);
+      }
+    });
+
+    tx();
+    return this.buildListResult();
+  }
+
+  resetCustomUiLoadout(mode: unknown): UiLoadoutListResult {
+    this.ensureLoadoutsSeeded();
+    const db = this.requireDb();
+    const normalizedMode: UiLoadoutMode = mode === 'dark' ? 'dark' : 'light';
+    const sign = modeSign(normalizedMode);
+    const defaultCustomId = LOADOUT_DEFAULT_CUSTOM_ID_ABS * sign;
+    const timestamp = Date.now();
+
+    const tx = db.transaction(() => {
+      db.prepare(`UPDATE ui_loadout_entries SET isActive = 0 WHERE id * ? > 0`).run(sign);
+      db.prepare(`UPDATE ui_loadout_entries SET isActive = 1, updatedAt = ? WHERE id = ?`).run(timestamp, defaultCustomId);
+      this.writeLoadoutMeta(`lastCustomId:${normalizedMode}`, defaultCustomId);
+    });
+
+    tx();
+    return this.buildListResult();
   }
 
   private ensureSchema(): void {
@@ -1453,14 +1646,20 @@ export class DatabaseService {
 
       CREATE INDEX IF NOT EXISTS idx_texture_pattern_cache_created_at ON texture_pattern_cache(createdAt DESC);
 
-      CREATE TABLE IF NOT EXISTS ui_loadouts (
-        slot INTEGER PRIMARY KEY,
-        payloadJson TEXT NOT NULL,
+      CREATE TABLE IF NOT EXISTS ui_loadout_entries (
+        id INTEGER PRIMARY KEY,
+        isActive INTEGER NOT NULL DEFAULT 0,
         signature TEXT NOT NULL,
+        payloadJson TEXT NOT NULL,
         updatedAt INTEGER NOT NULL
       );
 
-      CREATE INDEX IF NOT EXISTS idx_ui_loadouts_signature ON ui_loadouts(signature);
+      CREATE INDEX IF NOT EXISTS idx_ui_loadout_entries_signature ON ui_loadout_entries(signature);
+
+      CREATE TABLE IF NOT EXISTS ui_loadout_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
     `);
 
     this.ensureNotesColumn('contentChecksum', 'TEXT');
