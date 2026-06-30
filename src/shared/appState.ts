@@ -40,6 +40,7 @@ export interface PersistedMenuState {
   filterBrightness?: number;
   filterContrast?: number;
   filterSaturate?: number;
+  filterColorize?: number;
   scrollEaseMultiplier?: number;
   scrollDistanceTimeInfluence?: number;
   scrollBaseDistanceRows?: number;

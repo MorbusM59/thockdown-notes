@@ -218,6 +218,7 @@ type DarkModePresetValues = {
   filterBrightness: number
   filterContrast: number
   filterSaturate: number
+  filterColorize: number
 }
 
 // Saturate slider: position x in [0,1] maps to CSS saturate value via
@@ -235,12 +236,12 @@ function saturatePosToValue(x: number): number {
 }
 
 const DARK_MODE_PRESET_VALUES: Record<DarkModeKey, DarkModePresetValues> = {
-  none:   { filterInvert: 0, filterSepia: 0, filterHueRotate: 0,   filterBrightness: 1,    filterContrast: 1,    filterSaturate: 0.5000 },
-  mono:   { filterInvert: 1, filterSepia: 1, filterHueRotate: 0,   filterBrightness: 0.6,  filterContrast: 0.96, filterSaturate: 0.0000 },
-  red:    { filterInvert: 1, filterSepia: 1, filterHueRotate: 310, filterBrightness: 0.35, filterContrast: 1.1,  filterSaturate: 0.8633 },
-  dusk:   { filterInvert: 1, filterSepia: 1, filterHueRotate: 150, filterBrightness: 0.55, filterContrast: 0.95, filterSaturate: 0.4690 },
-  neon:   { filterInvert: 1, filterSepia: 1, filterHueRotate: 280, filterBrightness: 0.5,  filterContrast: 1.05, filterSaturate: 0.9126 },
-  matrix: { filterInvert: 1, filterSepia: 1, filterHueRotate: 70,  filterBrightness: 0.4,  filterContrast: 1.1,  filterSaturate: 0.8633 },
+  none:   { filterInvert: 0, filterSepia: 0, filterHueRotate: 0,   filterBrightness: 1,    filterContrast: 1,    filterSaturate: 0.5000, filterColorize: 0 },
+  mono:   { filterInvert: 1, filterSepia: 1, filterHueRotate: 0,   filterBrightness: 0.6,  filterContrast: 0.96, filterSaturate: 0.0000, filterColorize: 0 },
+  red:    { filterInvert: 1, filterSepia: 1, filterHueRotate: 310, filterBrightness: 0.35, filterContrast: 1.1,  filterSaturate: 0.8633, filterColorize: 0 },
+  dusk:   { filterInvert: 1, filterSepia: 1, filterHueRotate: 150, filterBrightness: 0.55, filterContrast: 0.95, filterSaturate: 0.4690, filterColorize: 0 },
+  neon:   { filterInvert: 1, filterSepia: 1, filterHueRotate: 280, filterBrightness: 0.5,  filterContrast: 1.05, filterSaturate: 0.9126, filterColorize: 0 },
+  matrix: { filterInvert: 1, filterSepia: 1, filterHueRotate: 70,  filterBrightness: 0.4,  filterContrast: 1.1,  filterSaturate: 0.8633, filterColorize: 0 },
 }
 
 
@@ -1147,6 +1148,7 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     filterBrightness: clamp(toFiniteNumber(source.filterBrightness, 1), 0, 2),
     filterContrast: clamp(toFiniteNumber(source.filterContrast, 1), 0, 2),
     filterSaturate: clamp(toFiniteNumber(source.filterSaturate, 0.5), 0, 1),
+    filterColorize: clamp(toFiniteNumber(source.filterColorize, 0), 0, 1),
     highlightColors: normalizedHighlightColors,
     textureMaterials: {
       appGrid: normalizeTextureMaterialForLoadoutSignature(normalizedTextureMaterials.appGrid),
@@ -1780,6 +1782,7 @@ function App() {
   const [filterBrightness, setFilterBrightness] = useState(1)
   const [filterContrast, setFilterContrast] = useState(1)
   const [filterSaturate, setFilterSaturate] = useState(1)
+  const [filterColorize, setFilterColorize] = useState(0)
   const [audioKeyVolume, setAudioKeyVolume] = useState(0.5)
   const [audioBassVolume, setAudioBassVolume] = useState(0)
   const [audioTrebleVolume, setAudioTrebleVolume] = useState(0)
@@ -2040,6 +2043,7 @@ function App() {
     setFilterBrightness(v.filterBrightness)
     setFilterContrast(v.filterContrast)
     setFilterSaturate(v.filterSaturate)
+    setFilterColorize(v.filterColorize)
   }, [])
 
   const defaultUiLayoutLoadout = useMemo<UiLayoutLoadout>(() => ({
@@ -2070,6 +2074,7 @@ function App() {
     filterBrightness: 1,
     filterContrast: 1,
     filterSaturate: 0.5,
+    filterColorize: 0,
     highlightColors: DEFAULT_HIGHLIGHT_COLORS,
     textureMaterials: cloneTextureMaterials(DEFAULT_TEXTURE_MATERIALS),
   }), [])
@@ -2103,6 +2108,8 @@ function App() {
       filterBrightness,
       filterContrast,
       filterSaturate,
+    filterColorize,
+      filterColorize,
       highlightColors: {
         caret: highlightColors.caret,
         search: highlightColors.search,
@@ -2127,6 +2134,7 @@ function App() {
     filterBrightness,
     filterContrast,
     filterSaturate,
+    filterColorize,
     renderScrollDynamic,
     renderScrollResponsiveness,
     renderScrollTotalTimeSec,
@@ -2174,7 +2182,8 @@ function App() {
     setFilterHueRotate(loadout.filterHueRotate ?? 0)
     setFilterBrightness(loadout.filterBrightness ?? 1)
     setFilterContrast(loadout.filterContrast ?? 1)
-    setFilterSaturate(loadout.filterSaturate ?? 1)
+    setFilterSaturate(loadout.filterSaturate ?? 0.5)
+    setFilterColorize(loadout.filterColorize ?? 0)
     setHighlightColors({
       caret: loadout.highlightColors.caret,
       search: loadout.highlightColors.search,
@@ -2662,6 +2671,8 @@ function App() {
       filterBrightness,
       filterContrast,
       filterSaturate,
+    filterColorize,
+      filterColorize,
       audioKeyVolume,
       audioBassVolume,
       audioTrebleVolume,
@@ -4973,7 +4984,8 @@ ${markdownHtml}
             setFilterHueRotate(appState.menu.filterHueRotate ?? 0)
             setFilterBrightness(appState.menu.filterBrightness ?? 1)
             setFilterContrast(appState.menu.filterContrast ?? 1)
-            setFilterSaturate(appState.menu.filterSaturate ?? 1)
+            setFilterSaturate(appState.menu.filterSaturate ?? 0.5)
+            setFilterColorize(appState.menu.filterColorize ?? 0)
             setAudioKeyVolume(appState.menu.audioKeyVolume ?? 0.5)
             setAudioBassVolume(appState.menu.audioBassVolume ?? 0)
             setAudioTrebleVolume(appState.menu.audioTrebleVolume ?? 0)
@@ -8469,6 +8481,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           <CompactScrollbarSlider id="filter-brightness" min={0} max={2} step={0.01} value={filterBrightness} trackLabel="brightness" ariaLabel="Brightness" onCommit={setFilterBrightness} />
           <CompactScrollbarSlider id="filter-contrast" min={0} max={2} step={0.01} value={filterContrast} trackLabel="contrast" ariaLabel="Contrast" onCommit={setFilterContrast} />
           <CompactScrollbarSlider id="filter-saturate" min={0} max={1} step={0.001} value={filterSaturate} trackLabel="saturate" ariaLabel="Saturate" onCommit={setFilterSaturate} />
+          <CompactScrollbarSlider id="filter-colorize" min={0} max={1} step={0.01} value={filterColorize} trackLabel="colorize" ariaLabel="Colorize opacity" onCommit={setFilterColorize} />
         </div>
       </AccordionSection>
 
@@ -9671,6 +9684,28 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       </div>
     </div>
 
+    {filterColorize > 0 && (
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          // 50% saturation gives a GIMP-colorize-like result: strong enough to
+          // be visible on neutral text colours, not so strong it oversaturates
+          // already-colourful UI elements. Lightness 50% keeps the hue pure.
+          background: `hsl(${filterHueRotate}deg, 50%, 50%)`,
+          opacity: filterColorize,
+          // 'color' blend mode takes hue+saturation from this overlay and keeps
+          // only the backdrop's luminosity — unlike 'hue', it still colorizes
+          // near-neutral/grey pixels (e.g. text at #222) since the saturation
+          // comes entirely from the overlay rather than being multiplied by
+          // the (near-zero) backdrop saturation.
+          mixBlendMode: 'color',
+          pointerEvents: 'none',
+          zIndex: 9999,
+        }}
+        aria-hidden="true"
+      />
+    )}
   </div>
 )
 }

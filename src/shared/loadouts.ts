@@ -33,6 +33,7 @@ export type UiLayoutLoadout = {
   filterBrightness: number;
   filterContrast: number;
   filterSaturate: number;
+  filterColorize: number;
   highlightColors: {
     caret: string;
     search: string;

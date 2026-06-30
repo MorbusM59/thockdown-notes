@@ -47,6 +47,7 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   filterBrightness: 1,
   filterContrast: 1,
   filterSaturate: 0.5,
+  filterColorize: 0,
   highlightColors: {
     caret: 'rgba(120, 115, 112, 0.8)',
     search: 'rgba(255, 221, 105, 0.55)',
@@ -368,6 +369,7 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     filterBrightness: Math.max(0, Math.min(2, source.filterBrightness ?? 1)),
     filterContrast: Math.max(0, Math.min(2, source.filterContrast ?? 1)),
     filterSaturate: Math.max(0, Math.min(1, source.filterSaturate ?? 0.5)),
+    filterColorize: Math.max(0, Math.min(1, source.filterColorize ?? 0)),
     highlightColors: {
       caret: sanitizeString(highlights.caret, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.caret),
       search: sanitizeString(highlights.search, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.search),
