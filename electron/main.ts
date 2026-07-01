@@ -485,6 +485,10 @@ function registerIpcHandlers() {
     return databaseService!.saveCustomUiLoadout(mode);
   });
 
+  ipcMain.handle(LOADOUT_CHANNELS.deleteCustom, async (_event, id) => {
+    return databaseService!.deleteCustomUiLoadout(id);
+  });
+
   ipcMain.handle(LOADOUT_CHANNELS.resetCustom, async (_event, mode) => {
     return databaseService!.resetCustomUiLoadout(mode);
   });

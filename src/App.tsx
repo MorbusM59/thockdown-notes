@@ -1868,6 +1868,7 @@ function App() {
   const [editorFontLoadVersion, setEditorFontLoadVersion] = useState(0)
   const [isTagMutationPending, setIsTagMutationPending] = useState(false)
   const [deleteArmedTagName, setDeleteArmedTagName] = useState<string | null>(null)
+  const [deleteArmedCustomLoadoutId, setDeleteArmedCustomLoadoutId] = useState<number | null>(null)
   const [isCaretSuspended, setIsCaretSuspended] = useState(false)
   const [renamingTagName, setRenamingTagName] = useState<string | null>(null)
   const [draggedTagIndex, setDraggedTagIndex] = useState<number | null>(null)
@@ -2476,6 +2477,21 @@ function App() {
     }
   }, [uiMode])
 
+  const deleteCustomLoadout = useCallback(async (id: number) => {
+    if (!window.measlyLoadouts) return
+    if (idKind(id) !== 'custom') return
+    try {
+      const result = await window.measlyLoadouts.deleteCustom(id)
+      setUiLoadoutEntries(result.entries)
+      setLastCustomIdByMode(result.lastCustomIdByMode)
+      const sign = modeSign(idMode(id))
+      const active = result.entries.find((entry) => entry.id * sign > 0 && entry.isActive)
+      if (active) applyEntryToLiveState(active)
+    } catch (error) {
+      console.error('Failed to delete custom UI loadout', error)
+    }
+  }, [applyEntryToLiveState])
+
   const resetCustomLoadout = useCallback(async () => {
     if (!window.measlyLoadouts) return
     try {
@@ -2489,6 +2505,28 @@ function App() {
       console.error('Failed to reset custom UI loadout', error)
     }
   }, [uiMode, applyEntryToLiveState])
+
+  const handleCustomLoadoutSlotClick = useCallback((entryId: number) => {
+    if (deleteArmedCustomLoadoutId === entryId) {
+      setDeleteArmedCustomLoadoutId(null)
+      void deleteCustomLoadout(entryId)
+      return
+    }
+
+    setDeleteArmedCustomLoadoutId(null)
+    void selectLoadoutPreset(entryId)
+  }, [deleteArmedCustomLoadoutId, deleteCustomLoadout, selectLoadoutPreset])
+
+  const handleCustomLoadoutSlotContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>, entryId: number) => {
+    event.preventDefault()
+    setDeleteArmedCustomLoadoutId(entryId)
+  }, [])
+
+  const handleCustomLoadoutSlotMouseLeave = useCallback((entryId: number) => {
+    if (deleteArmedCustomLoadoutId === entryId) {
+      setDeleteArmedCustomLoadoutId(null)
+    }
+  }, [deleteArmedCustomLoadoutId])
 
   const exportLayoutsTdl = useCallback(async () => {
     if (!window.measlyLoadouts) return
@@ -7660,6 +7698,14 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }, [activeNoteId, orderedActiveTags])
 
   useEffect(() => {
+    setDeleteArmedCustomLoadoutId((current) => {
+      if (current === null) return null
+      const stillExists = customSlotEntriesForCurrentMode.some((entry) => entry.id === current)
+      return stillExists ? current : null
+    })
+  }, [customSlotEntriesForCurrentMode, uiMode])
+
+  useEffect(() => {
     if (!armedNoteActionState) return
     if (!notes.some((note) => note.id === armedNoteActionState.noteId)) {
       clearNoteArmTimer()
@@ -8430,9 +8476,19 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <button
               key={`custom-${entry.id}`}
               type="button"
-              className={`toolbar-btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}`}
-              title={`Custom ${Math.abs(entry.id) - LOADOUT_FACTORY_PRESET_COUNT - 2}`}
-              onClick={() => void selectLoadoutPreset(entry.id)}
+              className={`toolbar-btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}${deleteArmedCustomLoadoutId === entry.id ? ' armed' : ''}`}
+              title={deleteArmedCustomLoadoutId === entry.id
+                ? 'Click to delete this custom preset or move cursor away to cancel'
+                : `Custom ${Math.abs(entry.id) - LOADOUT_FACTORY_PRESET_COUNT - 2}. Right click to arm deletion.`}
+              onClick={() => {
+                handleCustomLoadoutSlotClick(entry.id)
+              }}
+              onContextMenu={(event) => {
+                handleCustomLoadoutSlotContextMenu(event, entry.id)
+              }}
+              onMouseLeave={() => {
+                handleCustomLoadoutSlotMouseLeave(entry.id)
+              }}
             >
               <span className="options-loadout-index">{Math.abs(entry.id) - LOADOUT_FACTORY_PRESET_COUNT - 2}</span>
             </button>

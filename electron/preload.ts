@@ -137,6 +137,7 @@ const uiLoadoutApi: UiLoadoutApi = {
   setActive: (id) => ipcRenderer.invoke(LOADOUT_CHANNELS.setActive, id),
   updatePending: (mode, loadout) => ipcRenderer.invoke(LOADOUT_CHANNELS.updatePending, mode, loadout),
   saveCustom: (mode) => ipcRenderer.invoke(LOADOUT_CHANNELS.saveCustom, mode),
+  deleteCustom: (id) => ipcRenderer.invoke(LOADOUT_CHANNELS.deleteCustom, id),
   resetCustom: (mode) => ipcRenderer.invoke(LOADOUT_CHANNELS.resetCustom, mode),
   exportTdl: () => ipcRenderer.invoke(LOADOUT_CHANNELS.exportTdl),
   importTdl: () => ipcRenderer.invoke(LOADOUT_CHANNELS.importTdl),

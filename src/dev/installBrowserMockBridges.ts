@@ -646,6 +646,35 @@ function buildLoadoutBridge(storeRef: { current: BrowserMockStore }): UiLoadoutA
       })
     },
 
+    async deleteCustom(id: number): Promise<UiLoadoutListResult> {
+      return mutate((store) => {
+        if (idKind(id) !== 'custom') return snapshot(store)
+
+        const index = store.uiLoadoutEntries.findIndex((entry) => entry.id === id)
+        if (index < 0) return snapshot(store)
+
+        const [removed] = store.uiLoadoutEntries.splice(index, 1)
+        const mode: UiLoadoutMode = idMode(id)
+        const sign = modeSign(mode)
+        const defaultCustomId = LOADOUT_DEFAULT_CUSTOM_ID_ABS * sign
+
+        if (removed?.isActive) {
+          deactivateMode(store, sign)
+          const fallback = findEntry(store, defaultCustomId)
+          if (fallback) {
+            fallback.isActive = true
+            fallback.updatedAt = Date.now()
+          }
+        }
+
+        if (store.lastCustomIdByMode[mode] === id) {
+          store.lastCustomIdByMode[mode] = defaultCustomId
+        }
+
+        return snapshot(store)
+      })
+    },
+
     async resetCustom(mode: UiLoadoutMode): Promise<UiLoadoutListResult> {
       return mutate((store) => {
         const sign = modeSign(mode)

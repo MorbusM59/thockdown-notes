@@ -5,6 +5,7 @@ export const LOADOUT_CHANNELS = {
   list: 'loadout:list',
   setActive: 'loadout:setActive',
   saveCustom: 'loadout:saveCustom',
+  deleteCustom: 'loadout:deleteCustom',
   resetCustom: 'loadout:resetCustom',
   updatePending: 'loadout:updatePending',
   exportTdl: 'loadout:exportTdl',
@@ -125,6 +126,9 @@ export interface UiLoadoutApi {
   // slot (abs id >= 8), activates it, and resets the pending row to inert.
   // No-ops if the pending row isn't currently active for that mode.
   saveCustom(mode: UiLoadoutMode): Promise<UiLoadoutListResult>;
+  // Deletes a saved custom slot (abs id >= 8). If the deleted slot was
+  // active, default-custom (+/-6) is activated.
+  deleteCustom(id: number): Promise<UiLoadoutListResult>;
   // Restores the default-custom row (+/-6) for `mode` and activates it,
   // discarding any pending edits.
   resetCustom(mode: UiLoadoutMode): Promise<UiLoadoutListResult>;

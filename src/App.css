@@ -2140,6 +2140,11 @@ button.active,
   text-shadow:  var(--text-shadow-icon);
 }
 
+.options-loadout-btn.armed {
+  background: var(--color-danger-bg);
+  color:      var(--color-danger);
+}
+
 .options-audio-btn {
   font-size: 18px;
   color:      var(--color-text-icon);

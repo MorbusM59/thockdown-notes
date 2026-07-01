@@ -1709,6 +1709,38 @@ export class DatabaseService {
     return this.buildListResult();
   }
 
+  deleteCustomUiLoadout(id: unknown): UiLoadoutListResult {
+    this.ensureLoadoutsSeeded();
+    const db = this.requireDb();
+    const targetId = typeof id === 'number' && Number.isInteger(id) ? id : null;
+    if (targetId === null || idKind(targetId) !== 'custom') return this.buildListResult();
+
+    const existing = this.readLoadoutRow(targetId);
+    if (!existing) return this.buildListResult();
+
+    const mode: UiLoadoutMode = idMode(targetId);
+    const sign = modeSign(mode);
+    const defaultCustomId = LOADOUT_DEFAULT_CUSTOM_ID_ABS * sign;
+    const timestamp = Date.now();
+
+    const tx = db.transaction(() => {
+      db.prepare(`DELETE FROM ui_loadout_entries WHERE id = ?`).run(targetId);
+
+      if (existing.isActive) {
+        db.prepare(`UPDATE ui_loadout_entries SET isActive = 0 WHERE id * ? > 0`).run(sign);
+        db.prepare(`UPDATE ui_loadout_entries SET isActive = 1, updatedAt = ? WHERE id = ?`).run(timestamp, defaultCustomId);
+      }
+
+      const lastCustomId = this.readLoadoutMeta(`lastCustomId:${mode}`, defaultCustomId);
+      if (lastCustomId === targetId) {
+        this.writeLoadoutMeta(`lastCustomId:${mode}`, defaultCustomId);
+      }
+    });
+
+    tx();
+    return this.buildListResult();
+  }
+
   resetCustomUiLoadout(mode: unknown): UiLoadoutListResult {
     this.ensureLoadoutsSeeded();
     const db = this.requireDb();
