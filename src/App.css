@@ -1850,6 +1850,10 @@ button.active,
   text-shadow: var(--text-shadow-icon);
 }
 
+.text-icon {
+  background: var()
+}
+
 .toolbar-flyout-glaze-grid, .toolbar-flyout-darkmode-grid {
   grid-auto-columns: var(--color-grid-cell);
   grid-auto-rows:    var(--color-grid-cell);

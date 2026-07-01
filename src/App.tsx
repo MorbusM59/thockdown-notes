@@ -8601,7 +8601,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         <div className="toolbar-flyout-color-grid toolbar-flyout-element-grid" role="group" aria-label="Text elements">
           <button
             type="button"
-            className="toolbar-btn-icon toolbar-flyout-color-swatch"
+            className="toolbar-btn-icon toolbar-flyout-color-swatch text-icon"
             onClick={() => {
               const target: EditorTextColorTargetKey = isPreviewMode ? 'editorRenderText' : 'editorEditText'
 
@@ -8635,7 +8635,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             style={{ '--toolbar-flyout-swatch-color': editorTextColors[isPreviewMode ? 'editorRenderText' : 'editorEditText'] } as React.CSSProperties}
             title={isPreviewMode ? 'Render mode text color' : 'Edit mode text color'}
           >
-            <span className={`toolbar-flyout-color-swatch-glyph ${isPreviewMode ? 'fa-solid fa-book-open' : 'fa-solid fa-pen-to-square'}`} aria-hidden="true" />
+            <span className={`toolbar-flyout-color-swatch-glyph ${isPreviewMode ? 'fa-solid fa-font' : 'fa-solid fa-font'}`} aria-hidden="true" />
           </button>
         </div>
 
