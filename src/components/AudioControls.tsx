@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
 import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../shared/audioPlayer'
 import { PLAYLIST_SLOT_ICONS } from '../shared/audioPlayer'
+import { PLAYLIST_SLOT_THEMESS as PLAYLIST_SLOT_THEMES } from '../shared/audioPlayer'
 import { musicPlayerService, MissingFileError } from '../sound/MusicPlayerService'
 
 // Duration (ms) a pointer must be held to trigger the "arm for clear" action.
@@ -171,9 +172,9 @@ export const AudioControls = memo(function AudioControls({
     if (!currentSong) return
     await window.measlyAudioPlayer?.skipSong(currentSong.id)
     if (currentSong.id != null) {
-      // Mark the old song as played so it gets deprioritized.
       await window.measlyAudioPlayer?.afterPlay(currentSong.id)
     }
+    await musicPlayerService.fadeOut()
     await advanceToNextSong()
   }, [currentSong, advanceToNextSong])
 
@@ -333,6 +334,14 @@ export const AudioControls = memo(function AudioControls({
     }
   }, [armedSlot, activeSlots, currentSong, onActiveSlotsChange, refreshCounts, advanceToNextSong])
 
+  const handleSlotPointerLeave = useCallback((slot: PlaylistSlot) => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current)
+      holdTimerRef.current = null
+    }
+    if (armedSlot === slot) setArmedSlot(null)
+  }, [armedSlot])
+
   const handleSlotShiftRightClick = useCallback(async (event: MouseEvent, slot: PlaylistSlot) => {
     if (!event.shiftKey) return
     event.preventDefault()
@@ -439,17 +448,18 @@ export const AudioControls = memo(function AudioControls({
               className={`audio-ctrl-btn audio-playlist-btn${isActive ? ' is-active' : ''}${isArmed ? ' is-armed' : ''}${isEmpty ? ' is-empty' : ''}`}
               title={
                 isEmpty
-                  ? `Playlist ${slot}: empty — click to add files`
+                  ? `${PLAYLIST_SLOT_THEMES[slot]}: empty — click to add files`
                   : isArmed
-                    ? `Playlist ${slot}: release to clear all ${counts[slot]} songs`
-                    : `Playlist ${slot}: ${counts[slot]} song${counts[slot] !== 1 ? 's' : ''}${isActive ? ' (active)' : ''}`
+                    ? `${PLAYLIST_SLOT_THEMES[slot]}: release to clear all ${counts[slot]} songs`
+                    : `${PLAYLIST_SLOT_THEMES[slot]}: ${counts[slot]} song${counts[slot] !== 1 ? 's' : ''}${isActive ? ' (active)' : ''}`
               }
-              aria-label={`Playlist ${slot}`}
+              aria-label={PLAYLIST_SLOT_THEMES[slot]}
               aria-pressed={isActive}
               onClick={() => { void handleSlotLeftClick(slot) }}
               onContextMenu={(e) => { void handleSlotContextMenu(e, slot) }}
               onPointerDown={(e) => handleSlotPointerDown(e, slot)}
               onPointerUp={(e) => { void handleSlotPointerUp(e, slot) }}
+              onPointerLeave={() => handleSlotPointerLeave(slot)}
             >
               <span className={PLAYLIST_SLOT_ICONS[slot]} aria-hidden="true" />
             </button>

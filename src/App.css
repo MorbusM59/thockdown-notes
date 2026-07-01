@@ -2843,6 +2843,10 @@ body.pdf-exporting .markdown-preview img {
   transition:         background 0.15s, border-color 0.15s, color 0.15s;
 }
 
+.audio-playlist-btn {
+  font-size:          14px;
+}
+
 .audio-ctrl-btn:hover {
   background:   var(--btn-bg-hover);
   border-color: var(--btn-border-hover);
@@ -2867,6 +2871,7 @@ body.pdf-exporting .markdown-preview img {
 .audio-play-btn {
   justify-content: center;
   min-width: 0;
+  font-size: 12px;
 }
 
 .audio-song-label {

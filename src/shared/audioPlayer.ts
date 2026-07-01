@@ -89,7 +89,16 @@ export const AUDIO_EXTENSIONS = new Set([
 export const PLAYLIST_SLOT_ICONS: Record<PlaylistSlot, string> = {
   1: 'fa-solid fa-microphone',
   2: 'fa-solid fa-guitar',
-  3: 'fa-solid fa-ankh',
+  3: 'fa-solid fa-torii-gate',
   4: 'fa-solid fa-bolt',
   5: 'fa-solid fa-microchip',
+};
+
+/** FA icon classes used for each playlist slot button (bottom row). */
+export const PLAYLIST_SLOT_THEMESS: Record<PlaylistSlot, string> = {
+  1: 'Vocal',
+  2: 'Instrumental',
+  3: 'Ambient',
+  4: 'Rock',
+  5: 'Electro',
 };

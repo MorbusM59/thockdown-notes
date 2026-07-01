@@ -179,29 +179,20 @@ export class MusicPlayerService {
       };
       el.addEventListener('error', onError, { once: true });
 
-      // Start silent so there is no mount click.
+      // Restore gain to target volume in case it was faded out by pause/stop/fadeOut.
       if (this.gainNode && this.audioCtx) {
         const g = this.gainNode.gain;
         g.cancelScheduledValues(this.audioCtx.currentTime);
-        g.setValueAtTime(0, this.audioCtx.currentTime);
+        g.setValueAtTime(this.config.volume, this.audioCtx.currentTime);
       }
 
       el.play()
         .then(() => {
           el.removeEventListener('error', onError);
-          // 100 ms ramp up after playback starts.
-          if (this.gainNode && this.audioCtx) {
-            const now = this.audioCtx.currentTime;
-            this.gainNode.gain.setValueAtTime(0, now);
-            this.gainNode.gain.linearRampToValueAtTime(this.config.volume, now + 0.1);
-          }
           resolve();
         })
         .catch((err: unknown) => {
           el.removeEventListener('error', onError);
-          if (this.gainNode && this.audioCtx) {
-            this.gainNode.gain.setValueAtTime(this.config.volume, this.audioCtx.currentTime);
-          }
           if (err instanceof DOMException && err.name === 'AbortError') {
             reject(err);
           } else {
@@ -242,6 +233,25 @@ export class MusicPlayerService {
       el.pause();
       el.currentTime = 0;
     }
+  }
+
+  /** Fade to silence over 100 ms then pause.  Resolves when the fade completes. */
+  fadeOut(): Promise<void> {
+    return new Promise((resolve) => {
+      if (!this.element) { resolve(); return; }
+      this._isPlaying = false;
+      const el = this.element;
+      if (this.gainNode && this.audioCtx) {
+        const now = this.audioCtx.currentTime;
+        this.gainNode.gain.cancelScheduledValues(now);
+        this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, now);
+        this.gainNode.gain.linearRampToValueAtTime(0, now + 0.1);
+        setTimeout(() => { if (el === this.element) el.pause(); resolve(); }, 110);
+      } else {
+        el.pause();
+        resolve();
+      }
+    });
   }
 
   /** Call when continuous scrubbing begins — dims to 20 % so seeks are quiet. */
