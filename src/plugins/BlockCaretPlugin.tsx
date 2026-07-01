@@ -175,7 +175,7 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx,
       style={{
         position: 'absolute',
         pointerEvents: 'none',
-        zIndex: 50,
+        zIndex: 5,
         ...caretStyle
       }}
     />
