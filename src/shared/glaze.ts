@@ -10,7 +10,9 @@ export type GlazeSettings = {
   bellyOpacity: number;
 };
 
-export const GLAZE_OPACITY_MAX = 0.25;
+export const GLAZE_LINEAR_OPACITY_MAX = 0.15;
+export const GLAZE_RADIAL_OPACITY_MAX = 0.25;
+export const GLAZE_BELLY_OPACITY_MAX = 0.5;
 
 export const DEFAULT_GLAZE_SETTINGS: GlazeSettings = {
   linearStackCount: 3,
@@ -44,13 +46,13 @@ export function sanitizeGlazeSettings(input: unknown, fallback: GlazeSettings = 
   const source = toRecord(input);
   return {
     linearStackCount: clamp(Math.round(toFinite(source.linearStackCount, fallback.linearStackCount)), 0, 5),
-    linearOpacity: clamp(toFinite(source.linearOpacity, fallback.linearOpacity), 0, GLAZE_OPACITY_MAX),
+    linearOpacity: clamp(toFinite(source.linearOpacity, fallback.linearOpacity), 0, GLAZE_LINEAR_OPACITY_MAX),
     linearSeed: clamp(Math.round(toFinite(source.linearSeed, fallback.linearSeed)), 0, 1000000),
     radialCount: clamp(Math.round(toFinite(source.radialCount, fallback.radialCount)), 0, 4),
-    radialOpacity: clamp(toFinite(source.radialOpacity, fallback.radialOpacity), 0, GLAZE_OPACITY_MAX),
+    radialOpacity: clamp(toFinite(source.radialOpacity, fallback.radialOpacity), 0, GLAZE_RADIAL_OPACITY_MAX),
     radialSeed: clamp(Math.round(toFinite(source.radialSeed, fallback.radialSeed)), 0, 1000000),
     bellyPosition: clamp(toFinite(source.bellyPosition, fallback.bellyPosition), -0.5, 1.5),
     bellyShape: clamp(toFinite(source.bellyShape, fallback.bellyShape), 0, 2),
-    bellyOpacity: clamp(toFinite(source.bellyOpacity, fallback.bellyOpacity), 0, GLAZE_OPACITY_MAX),
+    bellyOpacity: clamp(toFinite(source.bellyOpacity, fallback.bellyOpacity), 0, GLAZE_BELLY_OPACITY_MAX),
   };
 }

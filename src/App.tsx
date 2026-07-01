@@ -22,7 +22,14 @@ import {
   typingSoundManager,
 } from './sound/TypingSoundManager'
 import type { PersistedMenuState, PersistedSidebarViewState, PersistedViewportState } from './shared/appState'
-import { DEFAULT_GLAZE_SETTINGS, GLAZE_OPACITY_MAX, sanitizeGlazeSettings, type GlazeSettings } from './shared/glaze'
+import {
+  DEFAULT_GLAZE_SETTINGS,
+  GLAZE_BELLY_OPACITY_MAX,
+  GLAZE_LINEAR_OPACITY_MAX,
+  GLAZE_RADIAL_OPACITY_MAX,
+  sanitizeGlazeSettings,
+  type GlazeSettings,
+} from './shared/glaze'
 import type { UiLayoutLoadout, UiLoadoutEntry, UiLoadoutMode } from './shared/loadouts'
 import {
   idKind,
@@ -790,7 +797,7 @@ function buildLinearGlazeLayers(settings: GlazeSettings): string[] {
       const distance = Math.max(12, averageDistancePx * (0.55 + (rand() * 1.05)))
       const litWidth = Math.max(3, distance * lightRatio * (0.7 + (rand() * 0.65)))
       const clearWidth = Math.max(4, distance - litWidth)
-      const lightAlpha = clamp(settings.linearOpacity * (0.55 + (rand() * 0.9)), 0, GLAZE_OPACITY_MAX)
+      const lightAlpha = clamp(settings.linearOpacity * (0.55 + (rand() * 0.9)), 0, GLAZE_LINEAR_OPACITY_MAX)
       const warmJitter = Math.round((rand() * 22) - 11)
       const red = clamp(245 + warmJitter, 0, 255)
       const green = clamp(245 + warmJitter, 0, 255)
@@ -841,10 +848,10 @@ function buildRadialGlazeLayers(settings: GlazeSettings): string[] {
     const radiusInner = Math.round(18 + (rand() * 14))
     const radiusMid = Math.round(46 + (rand() * 20))
     const radiusOuter = Math.round(74 + (rand() * 22))
-    const alphaScale = clamp(settings.radialOpacity * (0.8 + (rand() * 0.7)), 0, GLAZE_OPACITY_MAX)
-    const alphaInner = clamp(alphaScale * (1.0 + (rand() * 0.2)), 0, GLAZE_OPACITY_MAX)
-    const alphaMid = clamp(alphaScale * (0.8 + (rand() * 0.2)), 0, GLAZE_OPACITY_MAX)
-    const alphaOuter = clamp(alphaScale * (0.52 + (rand() * 0.2)), 0, GLAZE_OPACITY_MAX)
+    const alphaScale = clamp(settings.radialOpacity * (0.8 + (rand() * 0.7)), 0, GLAZE_RADIAL_OPACITY_MAX)
+    const alphaInner = clamp(alphaScale * (1.0 + (rand() * 0.2)), 0, GLAZE_RADIAL_OPACITY_MAX)
+    const alphaMid = clamp(alphaScale * (0.8 + (rand() * 0.2)), 0, GLAZE_RADIAL_OPACITY_MAX)
+    const alphaOuter = clamp(alphaScale * (0.52 + (rand() * 0.2)), 0, GLAZE_RADIAL_OPACITY_MAX)
     layers.push(
       `radial-gradient(circle at ${corner}, rgba(${innerR}, ${innerG}, ${innerB}, ${alphaInner.toFixed(3)}) ${radiusInner}%, rgba(${midR}, ${midG}, ${midB}, ${alphaMid.toFixed(3)}) ${radiusMid}%, rgba(${outerR}, ${outerG}, ${outerB}, ${alphaOuter.toFixed(3)}) ${radiusOuter}%, transparent 100%)`,
     )
@@ -857,8 +864,8 @@ function buildBellyGlazeLayer(settings: GlazeSettings): string {
   if (settings.bellyOpacity <= 0) return 'none'
   const centerPct = clamp(settings.bellyPosition, -0.5, 1.5) * 100
   const edgeScale = clamp(settings.bellyShape, 0, 2)
-  const edgeAlpha = clamp(settings.bellyOpacity * edgeScale, 0, GLAZE_OPACITY_MAX)
-  const centerAlpha = clamp(settings.bellyOpacity, 0, GLAZE_OPACITY_MAX)
+  const edgeAlpha = clamp(settings.bellyOpacity * edgeScale, 0, GLAZE_BELLY_OPACITY_MAX)
+  const centerAlpha = clamp(settings.bellyOpacity, 0, GLAZE_BELLY_OPACITY_MAX)
   return `linear-gradient(180deg, rgba(0, 0, 0, ${edgeAlpha.toFixed(3)}) -100%, rgba(0, 0, 0, ${centerAlpha.toFixed(3)}) ${centerPct.toFixed(1)}%, rgba(0, 0, 0, ${edgeAlpha.toFixed(3)}) 200%)`
 }
 
@@ -8919,7 +8926,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <CompactScrollbarSlider
               id="glaze-linear-opacity"
               min={0}
-              max={GLAZE_OPACITY_MAX}
+              max={GLAZE_LINEAR_OPACITY_MAX}
               step={0.005}
               value={glazeSettings.linearOpacity}
               trackLabel="linear opacity"
@@ -8927,7 +8934,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
                   ...current,
-                  linearOpacity: clamp(value, 0, GLAZE_OPACITY_MAX),
+                  linearOpacity: clamp(value, 0, GLAZE_LINEAR_OPACITY_MAX),
                 }))
               }}
             />
@@ -8936,7 +8943,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <CompactScrollbarSlider
               id="glaze-radial-opacity"
               min={0}
-              max={GLAZE_OPACITY_MAX}
+              max={GLAZE_RADIAL_OPACITY_MAX}
               step={0.005}
               value={glazeSettings.radialOpacity}
               trackLabel="radial opacity"
@@ -8944,7 +8951,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
                   ...current,
-                  radialOpacity: clamp(value, 0, GLAZE_OPACITY_MAX),
+                  radialOpacity: clamp(value, 0, GLAZE_RADIAL_OPACITY_MAX),
                 }))
               }}
             />
@@ -8988,7 +8995,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <CompactScrollbarSlider
               id="glaze-belly-opacity"
               min={0}
-              max={GLAZE_OPACITY_MAX}
+              max={GLAZE_BELLY_OPACITY_MAX}
               step={0.005}
               value={glazeSettings.bellyOpacity}
               trackLabel="belly opacity"
@@ -8996,7 +9003,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
                   ...current,
-                  bellyOpacity: clamp(value, 0, GLAZE_OPACITY_MAX),
+                  bellyOpacity: clamp(value, 0, GLAZE_BELLY_OPACITY_MAX),
                 }))
               }}
             />

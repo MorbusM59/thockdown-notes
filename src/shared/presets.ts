@@ -86,7 +86,7 @@ export const DARK_FACTORY_PRESETS: UiLayoutLoadout[] = [
   { ...NEUTRAL_BASE, filterInvert: 1, filterSepia: 0.3, filterHueRotate: 200, filterSaturate: 0.6 },
   { ...NEUTRAL_BASE, filterInvert: 1, filterContrast: 1.1, filterBrightness: 0.85 },
   { ...NEUTRAL_BASE, filterInvert: 1, filterSepia: 0.5, filterHueRotate: 280, filterSaturate: 0.7 },
-  { ...NEUTRAL_BASE, filterInvert: 1, filterBrightness: 0.8, glaze: { ...NEUTRAL_BASE.glaze, linearStackCount: 4, radialCount: 2, linearOpacity: 0.24 } },
+  { ...NEUTRAL_BASE, filterInvert: 1, filterBrightness: 0.8, glaze: { ...NEUTRAL_BASE.glaze, linearStackCount: 4, radialCount: 2, linearOpacity: 0.15 } },
 ];
 
 if (LIGHT_FACTORY_PRESETS.length !== 5 || DARK_FACTORY_PRESETS.length !== 5) {
