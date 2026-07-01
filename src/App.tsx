@@ -2239,6 +2239,7 @@ function App() {
     setRenderScrollResponsiveness(clamp(loadout.renderScrollResponsiveness, 0.1, 5))
     setRenderScrollTotalTimeSec(clamp(loadout.renderScrollTotalTimeSec, 0, 2))
     setRenderScrollMaxSpeedPxPerSec(clamp(loadout.renderScrollMaxSpeedPxPerSec, 1000, 100000))
+    setRenderScrollSkew(clamp(loadout.renderScrollSkew, RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX))
     setAudioKeyVolume(clamp(loadout.audioKeyVolume, 0, 1))
     setAudioBassVolume(clamp(loadout.audioBassVolume, 0, 1))
     setAudioTrebleVolume(clamp(loadout.audioTrebleVolume, 0, 1))
