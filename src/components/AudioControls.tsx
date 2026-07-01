@@ -39,6 +39,11 @@ export const AudioControls = memo(function AudioControls({
   const activeRef = useRef(activeSlots)
   activeRef.current = activeSlots
 
+  const refreshCountsRef = useRef(async () => {
+    const c = await window.measlyAudioPlayer?.getPlaylistCounts()
+    if (c) setCounts(c)
+  })
+
   // Sync player config whenever props change.
   useEffect(() => {
     musicPlayerService.setConfig({ volume, reverbAmount, reverbRoom })
@@ -87,7 +92,7 @@ export const AudioControls = memo(function AudioControls({
         if (err instanceof MissingFileError) {
           // Silently purge the bad entry and try the next song.
           await window.measlyAudioPlayer?.purgeSong(next.id)
-          await refreshCounts()
+          await refreshCountsRef.current()
           musicPlayerService.stop()
           continue
         }
@@ -99,11 +104,10 @@ export const AudioControls = memo(function AudioControls({
     // Exhausted retries — give up.
     setIsPlaying(false)
     setCurrentSong(null)
-  }, [refreshCounts])
+  }, [])
 
   const refreshCounts = useCallback(async () => {
-    const c = await window.measlyAudioPlayer?.getPlaylistCounts()
-    if (c) setCounts(c)
+    await refreshCountsRef.current()
   }, [])
 
   // ---------------------------------------------------------------- play / stop
@@ -124,7 +128,7 @@ export const AudioControls = memo(function AudioControls({
             await window.measlyAudioPlayer?.purgeSong(currentSong.id)
             setCurrentSong(null)
             musicPlayerService.stop()
-            await refreshCounts()
+            await refreshCountsRef.current()
             await advanceToNextSong()
           } else {
             throw err
