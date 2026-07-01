@@ -6,6 +6,8 @@ export const LOADOUT_CHANNELS = {
   saveCustom: 'loadout:saveCustom',
   resetCustom: 'loadout:resetCustom',
   updatePending: 'loadout:updatePending',
+  exportTdl: 'loadout:exportTdl',
+  importTdl: 'loadout:importTdl',
 } as const;
 
 export type UiLayoutLoadout = {
@@ -125,4 +127,11 @@ export interface UiLoadoutApi {
   // Restores the default-custom row (+/-6) for `mode` and activates it,
   // discarding any pending edits.
   resetCustom(mode: UiLoadoutMode): Promise<UiLoadoutListResult>;
+  // Opens a save dialog and writes all user custom layouts (abs id >= 8)
+  // to a .tdl file as NEUTRAL_BASE diffs. Returns void.
+  exportTdl(): Promise<void>;
+  // Opens an open dialog, parses the chosen .tdl file, and inserts any new
+  // custom layouts into the database (skipping duplicates by signature).
+  // Returns the updated snapshot.
+  importTdl(): Promise<UiLoadoutListResult>;
 }

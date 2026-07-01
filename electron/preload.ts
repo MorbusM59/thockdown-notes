@@ -136,6 +136,8 @@ const uiLoadoutApi: UiLoadoutApi = {
   updatePending: (mode, loadout) => ipcRenderer.invoke(LOADOUT_CHANNELS.updatePending, mode, loadout),
   saveCustom: (mode) => ipcRenderer.invoke(LOADOUT_CHANNELS.saveCustom, mode),
   resetCustom: (mode) => ipcRenderer.invoke(LOADOUT_CHANNELS.resetCustom, mode),
+  exportTdl: () => ipcRenderer.invoke(LOADOUT_CHANNELS.exportTdl),
+  importTdl: () => ipcRenderer.invoke(LOADOUT_CHANNELS.importTdl),
 }
 
 contextBridge.exposeInMainWorld('measlyLoadouts', uiLoadoutApi)

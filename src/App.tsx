@@ -2381,6 +2381,28 @@ function App() {
     }
   }, [uiMode, applyEntryToLiveState])
 
+  const exportLayoutsTdl = useCallback(async () => {
+    if (!window.measlyLoadouts) return
+    try {
+      await window.measlyLoadouts.exportTdl()
+    } catch (error) {
+      console.error('Failed to export layouts', error)
+    }
+  }, [])
+
+  const importLayoutsTdl = useCallback(async () => {
+    if (!window.measlyLoadouts) return
+    try {
+      const result = await window.measlyLoadouts.importTdl()
+      if (result) {
+        setUiLoadoutEntries(result.entries)
+        setLastCustomIdByMode(result.lastCustomIdByMode)
+      }
+    } catch (error) {
+      console.error('Failed to import layouts', error)
+    }
+  }, [])
+
   const toggleUiMode = useCallback(() => {
     setUiMode((previousMode) => {
       const nextMode: UiLoadoutMode = previousMode === 'light' ? 'dark' : 'light'
@@ -8919,6 +8941,24 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             aria-label="Import notes from files or folders"
           >
             <span className="fa-solid fa-file-import" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn"
+            onClick={() => void exportLayoutsTdl()}
+            title="Export custom layouts to a .tdl file"
+            aria-label="Export custom layouts to a .tdl file"
+          >
+            <span className="fa-solid fa-file-export" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn"
+            onClick={() => void importLayoutsTdl()}
+            title="Import layouts from a .tdl file"
+            aria-label="Import layouts from a .tdl file"
+          >
+            <span className="fa-solid fa-file-arrow-up" aria-hidden="true" />
           </button>
         </div>
       </AccordionSection>

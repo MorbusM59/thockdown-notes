@@ -77,6 +77,10 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
     gridOutline: '#00000022',
   },
   textureMaterials: DEFAULT_TEXTURE_MATERIALS,
+  editorTextColors: {
+    editorEditText: '#000000DD',
+    editorRenderText: '#000000DD',
+  },
 };
 
 type SqliteDatabase = import('better-sqlite3').Database;
@@ -401,7 +405,160 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
       gridOutline: sanitizeString(highlights.gridOutline, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.gridOutline),
     },
     textureMaterials: normalizeTextureMaterials(source.textureMaterials),
+    editorTextColors: {
+      editorEditText: typeof source.editorTextColors === 'object' && source.editorTextColors !== null && typeof (source.editorTextColors as Record<string, unknown>).editorEditText === 'string'
+        ? String((source.editorTextColors as Record<string, unknown>).editorEditText)
+        : DEFAULT_UI_LAYOUT_LOADOUT.editorTextColors.editorEditText,
+      editorRenderText: typeof source.editorTextColors === 'object' && source.editorTextColors !== null && typeof (source.editorTextColors as Record<string, unknown>).editorRenderText === 'string'
+        ? String((source.editorTextColors as Record<string, unknown>).editorRenderText)
+        : DEFAULT_UI_LAYOUT_LOADOUT.editorTextColors.editorRenderText,
+    },
   };
+}
+
+// ---------------------------------------------------------------------------
+// TDL (Thockdown Layout) import/export helpers
+// ---------------------------------------------------------------------------
+
+// Ordered list of scalar UiLayoutLoadout keys used for diff lines.
+const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
+  'viewStyle', 'viewFontSize', 'viewSpacing',
+  'editorStyle', 'editorFontSize', 'editorSpacing', 'editorGlyphPaddingPx',
+  'audioKeyVolume', 'audioBassVolume', 'audioTrebleVolume', 'audioReverbStrength', 'audioReverbSpace',
+  'typingSoundEnabled', 'typingSoundSet',
+  'renderScrollDynamic', 'renderScrollResponsiveness', 'renderScrollTotalTimeSec',
+  'renderScrollMaxSpeedPxPerSec', 'renderScrollSkew',
+  'glazeMode', 'darkMode',
+  'filterInvert', 'filterSepia', 'filterHueRotate', 'filterBrightness',
+  'filterContrast', 'filterSaturate', 'filterColorize',
+];
+
+// Keys whose values are nested objects; they're emitted as inline JSON when
+// they differ from NEUTRAL_BASE (DEFAULT_CUSTOM_LIGHT).
+const TDL_OBJECT_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
+  'highlightColors', 'editorTextColors', 'textureMaterials',
+];
+
+function formatTdlScalar(value: unknown): string {
+  if (typeof value === 'string') return `'${value}'`;
+  return String(value); // number or boolean
+}
+
+/** Build the override fragment of one .tdl line against NEUTRAL_BASE. */
+function buildNeutralBaseDiff(payload: Record<string, unknown>): string[] {
+  const base = DEFAULT_CUSTOM_LIGHT as Record<string, unknown>;
+  const parts: string[] = [];
+
+  for (const key of TDL_SCALAR_KEYS) {
+    const val = payload[key];
+    const baseVal = base[key];
+    if (val !== undefined && val !== baseVal) {
+      parts.push(`${key}: ${formatTdlScalar(val)}`);
+    }
+  }
+
+  for (const key of TDL_OBJECT_KEYS) {
+    const val = payload[key];
+    const baseVal = base[key];
+    if (val !== undefined && stableStringify(val) !== stableStringify(baseVal)) {
+      parts.push(`${key}: ${JSON.stringify(val)}`);
+    }
+  }
+
+  return parts;
+}
+
+/** Parse unquoted-key override string from a .tdl line. */
+function parseTdlOverrides(overrideStr: string): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  let pos = 0;
+  const str = overrideStr.trim();
+
+  while (pos < str.length) {
+    // skip commas and whitespace between fields
+    while (pos < str.length && /[,\s]/.test(str[pos])) pos++;
+    if (pos >= str.length) break;
+
+    // unquoted identifier key
+    const keyMatch = /^([a-zA-Z_]\w*)/.exec(str.slice(pos));
+    if (!keyMatch) break;
+    const key = keyMatch[1];
+    pos += key.length;
+
+    // skip colon and surrounding whitespace
+    while (pos < str.length && (str[pos] === ':' || str[pos] === ' ')) pos++;
+    if (pos >= str.length) break;
+
+    const rest = str.slice(pos);
+
+    if (rest[0] === '{') {
+      // inline JSON object — balance braces
+      let depth = 0;
+      let endIdx = -1;
+      for (let i = 0; i < rest.length; i++) {
+        if (rest[i] === '{') depth++;
+        else if (rest[i] === '}') {
+          depth--;
+          if (depth === 0) { endIdx = i; break; }
+        }
+      }
+      if (endIdx < 0) break;
+      try {
+        result[key] = JSON.parse(rest.slice(0, endIdx + 1));
+      } catch {
+        // malformed — skip this field
+      }
+      pos += endIdx + 1;
+    } else if (rest[0] === "'") {
+      // single-quoted string
+      let end = 1;
+      while (end < rest.length && rest[end] !== "'") end++;
+      result[key] = rest.slice(1, end);
+      pos += end + 1;
+    } else if (rest[0] === '"') {
+      // double-quoted string
+      let end = 1;
+      while (end < rest.length && rest[end] !== '"') end++;
+      result[key] = rest.slice(1, end);
+      pos += end + 1;
+    } else if (rest.startsWith('true')) {
+      result[key] = true; pos += 4;
+    } else if (rest.startsWith('false')) {
+      result[key] = false; pos += 5;
+    } else {
+      const numMatch = /^-?\d+(?:\.\d+)?/.exec(rest);
+      if (numMatch) {
+        result[key] = parseFloat(numMatch[0]);
+        pos += numMatch[0].length;
+      } else {
+        break; // can't parse — bail
+      }
+    }
+  }
+
+  return result;
+}
+
+/** Parse an entire .tdl file into (original-id, overrides) pairs. */
+function parseTdlContent(content: string): Array<{ id: number; overrides: Record<string, unknown> }> {
+  const result: Array<{ id: number; overrides: Record<string, unknown> }> = [];
+
+  for (const rawLine of content.split('\n')) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('//')) continue;
+
+    // e.g.  8: { ...NEUTRAL_BASE, filterInvert: 1 },
+    const m = /^(-?\d+):\s*\{\s*\.\.\.\s*NEUTRAL_BASE\s*(?:,\s*([\s\S]*?))?\s*\},?\s*$/.exec(line);
+    if (!m) continue;
+
+    const id = parseInt(m[1], 10);
+    if (!Number.isFinite(id) || id === 0) continue;
+
+    const overrides = m[2] ? parseTdlOverrides(m[2]) : {};
+    result.push({ id, overrides });
+  }
+
+  return result;
 }
 
 function stableStringify(value: unknown): string {
@@ -1565,6 +1722,97 @@ export class DatabaseService {
       db.prepare(`UPDATE ui_loadout_entries SET isActive = 0 WHERE id * ? > 0`).run(sign);
       db.prepare(`UPDATE ui_loadout_entries SET isActive = 1, updatedAt = ? WHERE id = ?`).run(timestamp, defaultCustomId);
       this.writeLoadoutMeta(`lastCustomId:${normalizedMode}`, defaultCustomId);
+    });
+
+    tx();
+    return this.buildListResult();
+  }
+
+  /**
+   * Build the string content of a .tdl file containing all user custom
+   * loadouts (abs id >= 8), expressed as NEUTRAL_BASE diffs.
+   */
+  buildTdlContent(): string {
+    this.ensureLoadoutsSeeded();
+    const db = this.requireDb();
+
+    const rows = db.prepare(`
+      SELECT id, payloadJson FROM ui_loadout_entries
+      WHERE ABS(id) >= ? ORDER BY id ASC
+    `).all(LOADOUT_FIRST_CUSTOM_ID_ABS) as Array<{ id: number; payloadJson: string }>;
+
+    const lines: string[] = [
+      '// Thockdown Layout file',
+      '// Generated by Thockdown Notes',
+      '//',
+      '// Each line: <id>: { ...NEUTRAL_BASE, <overrides> },',
+      '// Positive IDs = light mode, negative IDs = dark mode',
+      '',
+    ];
+
+    for (const row of rows) {
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(row.payloadJson) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      const diff = buildNeutralBaseDiff(payload);
+      const diffStr = diff.length > 0 ? ', ' + diff.join(', ') : '';
+      lines.push(`  ${row.id}: { ...NEUTRAL_BASE${diffStr} },`);
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Parse a .tdl file and insert any entries that don't already exist
+   * (by signature) into the database as new custom slots.
+   * Returns the updated list result.
+   */
+  importTdlLoadouts(fileContent: string): UiLoadoutListResult {
+    this.ensureLoadoutsSeeded();
+    const db = this.requireDb();
+
+    const parsed = parseTdlContent(fileContent);
+    if (parsed.length === 0) return this.buildListResult();
+
+    const timestamp = Date.now();
+
+    const tx = db.transaction(() => {
+      for (const { id: originalId, overrides } of parsed) {
+        const mode: UiLoadoutMode = originalId > 0 ? 'light' : 'dark';
+        const sign = modeSign(mode);
+
+        // Merge overrides onto NEUTRAL_BASE and normalize
+        const fullPayload = { ...DEFAULT_CUSTOM_LIGHT, ...overrides };
+        const normalized = normalizeUiLayoutLoadout(fullPayload);
+        if (!normalized) continue;
+
+        const signature = stableStringify(normalized);
+
+        // Skip if this exact signature already exists for this mode
+        const existing = db.prepare(`
+          SELECT id FROM ui_loadout_entries WHERE signature = ? AND id * ? > 0 LIMIT 1
+        `).get(signature, sign) as { id: number } | undefined;
+        if (existing) continue;
+
+        // Find the next free custom slot ID for this mode
+        const usedAbs = (db.prepare(`
+          SELECT id FROM ui_loadout_entries WHERE id * ? > 0 AND ABS(id) >= ?
+        `).all(sign, LOADOUT_FIRST_CUSTOM_ID_ABS) as { id: number }[]).map((r) => Math.abs(r.id));
+
+        let nextAbs = LOADOUT_FIRST_CUSTOM_ID_ABS;
+        while (usedAbs.includes(nextAbs)) nextAbs++;
+        usedAbs.push(nextAbs); // prevent duplicate alloc within the same transaction
+
+        const newId = nextAbs * sign;
+
+        db.prepare(`
+          INSERT INTO ui_loadout_entries (id, isActive, signature, payloadJson, updatedAt)
+          VALUES (?, 0, ?, ?, ?)
+        `).run(newId, signature, JSON.stringify(normalized), timestamp);
+      }
     });
 
     tx();

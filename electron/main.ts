@@ -477,6 +477,28 @@ function registerIpcHandlers() {
   ipcMain.handle(LOADOUT_CHANNELS.resetCustom, async (_event, mode) => {
     return databaseService!.resetCustomUiLoadout(mode);
   });
+
+  ipcMain.handle(LOADOUT_CHANNELS.exportTdl, async () => {
+    const content = databaseService!.buildTdlContent();
+    const { filePath, canceled } = await dialog.showSaveDialog({
+      title: 'Export layouts',
+      defaultPath: 'my-layouts.tdl',
+      filters: [{ name: 'Thockdown Layout', extensions: ['tdl'] }],
+    });
+    if (canceled || !filePath) return;
+    await fsPromises.writeFile(filePath, content, 'utf-8');
+  });
+
+  ipcMain.handle(LOADOUT_CHANNELS.importTdl, async () => {
+    const { filePaths, canceled } = await dialog.showOpenDialog({
+      title: 'Import layouts',
+      filters: [{ name: 'Thockdown Layout', extensions: ['tdl'] }],
+      properties: ['openFile'],
+    });
+    if (canceled || filePaths.length === 0) return databaseService!.listUiLoadouts();
+    const content = await fsPromises.readFile(filePaths[0], 'utf-8');
+    return databaseService!.importTdlLoadouts(content);
+  });
 }
 
 function readCurrentWindowState(windowRef: BrowserWindow): WindowState {

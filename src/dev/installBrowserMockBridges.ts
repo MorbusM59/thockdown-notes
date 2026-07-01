@@ -661,6 +661,12 @@ function buildLoadoutBridge(storeRef: { current: BrowserMockStore }): UiLoadoutA
         return snapshot(store)
       })
     },
+    async exportTdl(): Promise<void> {
+      // No-op in browser dev mode
+    },
+    async importTdl(): Promise<UiLoadoutListResult> {
+      return mutate((store) => snapshot(store))
+    },
   }
 }
 
