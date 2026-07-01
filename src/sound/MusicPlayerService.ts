@@ -179,13 +179,29 @@ export class MusicPlayerService {
       };
       el.addEventListener('error', onError, { once: true });
 
+      // Start silent so there is no mount click.
+      if (this.gainNode && this.audioCtx) {
+        const g = this.gainNode.gain;
+        g.cancelScheduledValues(this.audioCtx.currentTime);
+        g.setValueAtTime(0, this.audioCtx.currentTime);
+      }
+
       el.play()
         .then(() => {
           el.removeEventListener('error', onError);
+          // 100 ms ramp up after playback starts.
+          if (this.gainNode && this.audioCtx) {
+            const now = this.audioCtx.currentTime;
+            this.gainNode.gain.setValueAtTime(0, now);
+            this.gainNode.gain.linearRampToValueAtTime(this.config.volume, now + 0.1);
+          }
           resolve();
         })
         .catch((err: unknown) => {
           el.removeEventListener('error', onError);
+          if (this.gainNode && this.audioCtx) {
+            this.gainNode.gain.setValueAtTime(this.config.volume, this.audioCtx.currentTime);
+          }
           if (err instanceof DOMException && err.name === 'AbortError') {
             reject(err);
           } else {
@@ -199,15 +215,49 @@ export class MusicPlayerService {
 
   pause(): void {
     if (!this.element) return;
-    this.element.pause();
     this._isPlaying = false;
+    const el = this.element;
+    if (this.gainNode && this.audioCtx) {
+      const now = this.audioCtx.currentTime;
+      this.gainNode.gain.cancelScheduledValues(now);
+      this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, now);
+      this.gainNode.gain.linearRampToValueAtTime(0, now + 0.1);
+      setTimeout(() => { if (el === this.element) el.pause(); }, 110);
+    } else {
+      el.pause();
+    }
   }
 
   stop(): void {
     if (!this.element) return;
-    this.element.pause();
-    this.element.currentTime = 0;
     this._isPlaying = false;
+    const el = this.element;
+    if (this.gainNode && this.audioCtx) {
+      const now = this.audioCtx.currentTime;
+      this.gainNode.gain.cancelScheduledValues(now);
+      this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, now);
+      this.gainNode.gain.linearRampToValueAtTime(0, now + 0.1);
+      setTimeout(() => { if (el === this.element) { el.pause(); el.currentTime = 0; } }, 110);
+    } else {
+      el.pause();
+      el.currentTime = 0;
+    }
+  }
+
+  /** Call when continuous scrubbing begins — dims to 20 % so seeks are quiet. */
+  beginScrub(): void {
+    if (!this.gainNode || !this.audioCtx) return;
+    const now = this.audioCtx.currentTime;
+    this.gainNode.gain.cancelScheduledValues(now);
+    this.gainNode.gain.setValueAtTime(this.config.volume * 0.2, now);
+  }
+
+  /** Restore full volume when scrubbing ends. */
+  endScrub(): void {
+    if (!this.gainNode || !this.audioCtx) return;
+    const now = this.audioCtx.currentTime;
+    this.gainNode.gain.cancelScheduledValues(now);
+    this.gainNode.gain.setValueAtTime(this.config.volume, now);
   }
 
   /**

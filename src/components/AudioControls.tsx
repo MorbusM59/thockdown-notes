@@ -230,6 +230,9 @@ export const AudioControls = memo(function AudioControls({
       clearInterval(seekIntervalRef.current)
       seekIntervalRef.current = null
     }
+    if (isSeekScrubbing.current) {
+      musicPlayerService.endScrub()
+    }
     isSeekScrubbing.current = false
   }, [])
 
@@ -239,6 +242,7 @@ export const AudioControls = memo(function AudioControls({
     const direction = event.button === 0 ? 1 : -1
     seekTimerRef.current = setTimeout(() => {
       isSeekScrubbing.current = true
+      musicPlayerService.beginScrub()
       musicPlayerService.seek(direction * SEEK_HOLD_STEP)
       seekIntervalRef.current = setInterval(() => {
         musicPlayerService.seek(direction * SEEK_HOLD_STEP)
