@@ -26,6 +26,8 @@ import {
   DEFAULT_CUSTOM_DARK,
 } from '../src/shared/presets';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureMaterialSettings, type TextureMaterialsBySurface } from '../src/textures/types';
+import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../src/shared/audioPlayer';
+import { AUDIO_EXTENSIONS } from '../src/shared/audioPlayer';
 
 const require = createRequire(import.meta.url);
 const BetterSqlite3 = require('better-sqlite3') as typeof import('better-sqlite3');
@@ -1819,6 +1821,151 @@ export class DatabaseService {
     return this.buildListResult();
   }
 
+  // ---------------------------------------------------------------------------
+  // Music player
+  // ---------------------------------------------------------------------------
+
+  private rowToSongEntry(row: Record<string, unknown>): MusicSongEntry {
+    return {
+      id:           row['id'] as number,
+      filePath:     row['filePath'] as string,
+      playlistSlot: row['playlistSlot'] as PlaylistSlot,
+      priority:     row['priority'] as number,
+      favorability: row['favorability'] as number,
+      title:        row['title'] as string,
+      artist:       row['artist'] as string,
+      durationSec:  row['durationSec'] as number,
+    };
+  }
+
+  getMusicPlaylist(slot: PlaylistSlot): MusicSongEntry[] {
+    const db = this.requireDb();
+    const rows = db.prepare(
+      'SELECT * FROM music_songs WHERE playlistSlot = ? ORDER BY priority ASC, id ASC'
+    ).all(slot) as Record<string, unknown>[];
+    return rows.map((r) => this.rowToSongEntry(r));
+  }
+
+  addMusicSongs(slot: PlaylistSlot, filePaths: string[]): MusicSongEntry[] {
+    const db = this.requireDb();
+    const insert = db.prepare(`
+      INSERT INTO music_songs (filePath, playlistSlot, title, artist)
+      VALUES (?, ?, ?, '')
+      ON CONFLICT(filePath) DO NOTHING
+    `);
+
+    const tx = db.transaction(() => {
+      for (const fp of filePaths) {
+        const ext = path.extname(fp).toLowerCase();
+        if (!AUDIO_EXTENSIONS.has(ext)) continue;
+        const baseName = path.basename(fp, ext);
+        // Simple heuristic: "Artist - Title" or just use the full basename as title.
+        const dashIndex = baseName.indexOf(' - ');
+        const title  = dashIndex >= 0 ? baseName.slice(dashIndex + 3).trim() : baseName;
+        const artist = dashIndex >= 0 ? baseName.slice(0, dashIndex).trim()  : '';
+        insert.run(fp, slot, title, artist);
+      }
+    });
+    tx();
+    return this.getMusicPlaylist(slot);
+  }
+
+  clearMusicPlaylist(slot: PlaylistSlot): void {
+    const db = this.requireDb();
+    db.prepare('DELETE FROM music_songs WHERE playlistSlot = ?').run(slot);
+  }
+
+  removeMusicSong(id: number): void {
+    const db = this.requireDb();
+    db.prepare('DELETE FROM music_songs WHERE id = ?').run(id);
+  }
+
+  purgeMusicSong(id: number): void {
+    this.removeMusicSong(id);
+  }
+
+  pickNextMusicSong(activeSlots: PlaylistSlot[]): MusicSongEntry | null {
+    if (activeSlots.length === 0) return null;
+    const db = this.requireDb();
+
+    const placeholders = activeSlots.map(() => '?').join(',');
+    const minRow = db.prepare(
+      `SELECT MIN(priority) AS minPriority FROM music_songs WHERE playlistSlot IN (${placeholders})`
+    ).get(...activeSlots) as { minPriority: number | null } | undefined;
+
+    if (!minRow || minRow.minPriority == null) return null;
+
+    const candidates = db.prepare(
+      `SELECT * FROM music_songs WHERE playlistSlot IN (${placeholders}) AND priority = ?`
+    ).all(...activeSlots, minRow.minPriority) as Record<string, unknown>[];
+
+    if (candidates.length === 0) return null;
+
+    const picked = candidates[Math.floor(Math.random() * candidates.length)];
+    return this.rowToSongEntry(picked);
+  }
+
+  afterMusicPlay(id: number): void {
+    const db = this.requireDb();
+
+    const tx = db.transaction(() => {
+      // Count total songs in the database (for max priority).
+      const { total } = db.prepare('SELECT COUNT(*) AS total FROM music_songs').get() as { total: number };
+      if (total === 0) return;
+
+      // Set the played song to the lowest priority.
+      db.prepare('UPDATE music_songs SET priority = ? WHERE id = ?').run(total, id);
+
+      // Decrease priority value (increase priority) for all others by their favorability, clamped to 1.
+      db.prepare(`
+        UPDATE music_songs
+        SET priority = MAX(1, priority - favorability)
+        WHERE id != ?
+      `).run(id);
+    });
+
+    tx();
+  }
+
+  favoriteMusicSong(id: number): MusicSongEntry | null {
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      db.prepare(`
+        UPDATE music_songs
+        SET priority = 0,
+            favorability = MIN(10, favorability + 1)
+        WHERE id = ?
+      `).run(id);
+    });
+    tx();
+    const row = db.prepare('SELECT * FROM music_songs WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+    return row ? this.rowToSongEntry(row) : null;
+  }
+
+  skipMusicSong(id: number): void {
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      const { total } = db.prepare('SELECT COUNT(*) AS total FROM music_songs').get() as { total: number };
+      db.prepare('UPDATE music_songs SET priority = ?, favorability = 1 WHERE id = ?').run(total, id);
+    });
+    tx();
+  }
+
+  getMusicPlaylistCounts(): PlaylistCountsResult {
+    const db = this.requireDb();
+    const rows = db.prepare(
+      'SELECT playlistSlot, COUNT(*) AS cnt FROM music_songs GROUP BY playlistSlot'
+    ).all() as Array<{ playlistSlot: number; cnt: number }>;
+
+    const result: PlaylistCountsResult = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    for (const row of rows) {
+      if (row.playlistSlot >= 1 && row.playlistSlot <= 5) {
+        result[row.playlistSlot as PlaylistSlot] = row.cnt;
+      }
+    }
+    return result;
+  }
+
   private ensureSchema(): void {
     const db = this.requireDb();
 
@@ -1908,6 +2055,20 @@ export class DatabaseService {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS music_songs (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        filePath    TEXT    NOT NULL UNIQUE,
+        playlistSlot INTEGER NOT NULL CHECK(playlistSlot BETWEEN 1 AND 5),
+        priority    INTEGER NOT NULL DEFAULT 1,
+        favorability INTEGER NOT NULL DEFAULT 1,
+        title       TEXT    NOT NULL DEFAULT '',
+        artist      TEXT    NOT NULL DEFAULT '',
+        durationSec REAL    NOT NULL DEFAULT 0
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_music_songs_slot     ON music_songs(playlistSlot);
+      CREATE INDEX IF NOT EXISTS idx_music_songs_priority ON music_songs(priority);
     `);
 
     this.ensureNotesColumn('contentChecksum', 'TEXT');

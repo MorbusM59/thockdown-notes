@@ -11,6 +11,8 @@ import { DatabaseService } from './databaseService'
 import { EXTERNAL_FILE_CHANNELS } from '../src/shared/externalFiles'
 import { TEXTURE_CHANNELS } from '../src/shared/textures'
 import { LOADOUT_CHANNELS } from '../src/shared/loadouts'
+import { AUDIO_PLAYER_CHANNELS, AUDIO_EXTENSIONS } from '../src/shared/audioPlayer'
+import type { PlaylistSlot } from '../src/shared/audioPlayer'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -498,6 +500,95 @@ function registerIpcHandlers() {
     if (canceled || filePaths.length === 0) return databaseService!.listUiLoadouts();
     const content = await fsPromises.readFile(filePaths[0], 'utf-8');
     return databaseService!.importTdlLoadouts(content);
+  });
+
+  // ---- Music player --------------------------------------------------------
+
+  const AUDIO_FILTER = [{
+    name: 'Audio Files',
+    extensions: [...AUDIO_EXTENSIONS].map((ext) => ext.slice(1)), // strip leading dot
+  }];
+
+  ipcMain.handle(AUDIO_PLAYER_CHANNELS.pickFiles, async () => {
+    const { filePaths, canceled } = await dialog.showOpenDialog({
+      title: 'Add songs',
+      filters: AUDIO_FILTER,
+      properties: ['openFile', 'multiSelections'],
+    });
+    return canceled ? [] : filePaths;
+  });
+
+  ipcMain.handle(AUDIO_PLAYER_CHANNELS.pickFolder, async () => {
+    const { filePaths, canceled } = await dialog.showOpenDialog({
+      title: 'Add folder of songs',
+      properties: ['openDirectory'],
+    });
+    return canceled || filePaths.length === 0 ? null : filePaths[0];
+  });
+
+  ipcMain.handle(AUDIO_PLAYER_CHANNELS.scanFolderForAudio, async (_event, folderPath: string) => {
+    const results: string[] = [];
+    const scan = async (dir: string): Promise<void> => {
+      let entries;
+      try {
+        entries = await fsPromises.readdir(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await scan(fullPath);
+        } else if (entry.isFile()) {
+          const ext = path.extname(entry.name).toLowerCase();
+          if (AUDIO_EXTENSIONS.has(ext)) {
+            results.push(fullPath);
+          }
+        }
+      }
+    };
+    await scan(folderPath);
+    return results;
+  });
+
+  ipcMain.handle(AUDIO_PLAYER_CHANNELS.getPlaylist, async (_event, slot: PlaylistSlot) => {
+    return databaseService!.getMusicPlaylist(slot);
+  });
+
+  ipcMain.handle(AUDIO_PLAYER_CHANNELS.addSongs, async (_event, slot: PlaylistSlot, filePaths: string[]) => {
+    return databaseService!.addMusicSongs(slot, filePaths);
+  });
+
+  ipcMain.handle(AUDIO_PLAYER_CHANNELS.clearPlaylist, async (_event, slot: PlaylistSlot) => {
+    databaseService!.clearMusicPlaylist(slot);
+  });
+
+  ipcMain.handle(AUDIO_PLAYER_CHANNELS.removeSong, async (_event, id: number) => {
+    databaseService!.removeMusicSong(id);
+  });
+
+  ipcMain.handle(AUDIO_PLAYER_CHANNELS.pickNextSong, async (_event, activeSlots: PlaylistSlot[]) => {
+    return databaseService!.pickNextMusicSong(activeSlots);
+  });
+
+  ipcMain.handle(AUDIO_PLAYER_CHANNELS.afterPlay, async (_event, id: number) => {
+    databaseService!.afterMusicPlay(id);
+  });
+
+  ipcMain.handle(AUDIO_PLAYER_CHANNELS.favoriteSong, async (_event, id: number) => {
+    return databaseService!.favoriteMusicSong(id);
+  });
+
+  ipcMain.handle(AUDIO_PLAYER_CHANNELS.skipSong, async (_event, id: number) => {
+    databaseService!.skipMusicSong(id);
+  });
+
+  ipcMain.handle(AUDIO_PLAYER_CHANNELS.purgeSong, async (_event, id: number) => {
+    databaseService!.purgeMusicSong(id);
+  });
+
+  ipcMain.handle(AUDIO_PLAYER_CHANNELS.getPlaylistCounts, async () => {
+    return databaseService!.getMusicPlaylistCounts();
   });
 }
 

@@ -29,4 +29,5 @@ interface Window {
   measlyExternalFiles?: import('../src/shared/externalFiles').ExternalFilesApi
   measlyTextures?: import('../src/shared/textures').TextureCacheApi
   measlyLoadouts?: import('../src/shared/loadouts').UiLoadoutApi
+  measlyAudioPlayer?: import('../src/shared/audioPlayer').AudioPlayerApi
 }

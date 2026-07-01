@@ -2159,9 +2159,9 @@ body.hsva-dragging * {
 
 /* 9a. Setting rows & stacks */
 .utility-grid {
-  display:         flex;
-  justify-content: flex-end;
-  align-items:     center;
+  display:         grid;
+  grid-template-columns: auto;
+  grid-template-rows: auto auto;
   -webkit-app-region: drag;
   width:           100%;
   height:          100%;
@@ -2796,6 +2796,89 @@ body.pdf-exporting .markdown-preview img {
 .window-control-glyph.fa-turn-down {
   font-size:   15px;
   padding-left: 1px;
+}
+
+
+/* =============================================================================
+   12b. AUDIO CONTROLS
+   ============================================================================= */
+
+.audio-controls {
+  display:          flex;
+  padding:          2px;
+  gap:              2px;
+  align-items:      center;
+  margin:           4px auto 0 auto;
+  border-radius:    var(--border-radius-regular) 0 0 var(--border-radius-regular);
+  border:           1px solid var(--color-border-highlight);
+  border-right:     none;
+  box-shadow:       var(--box-shadow-inverted);
+  background:       var(--color-input-backdrop);
+}
+
+.audio-micro-grid {
+  display:               grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows:    auto auto;
+  gap:                   3px;
+  padding:               6px;
+}
+
+.audio-ctrl-btn {
+  -webkit-app-region: no-drag;
+  display:            inline-flex;
+  align-items:        center;
+  justify-content:    center;
+  gap:                4px;
+  padding:            0 4px;
+  height:             var(--btn-square-mini-size);
+  min-height:         var(--btn-square-mini-size);
+  border:             1px solid var(--btn-border-default);
+  border-radius:      var(--border-radius-small);
+  background:         var(--btn-bg-default);
+  color:              var(--color-text-label);
+  font-size:          10px;
+  cursor:             default;
+  overflow:           hidden;
+  transition:         background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.audio-ctrl-btn:hover {
+  background:   var(--btn-bg-hover);
+  border-color: var(--btn-border-hover);
+}
+
+.audio-ctrl-btn.is-active {
+  background:   var(--btn-bg-active, rgba(120, 100, 80, 0.22));
+  border-color: var(--btn-border-active, #9a8070);
+  color:        var(--color-text-dark);
+}
+
+.audio-ctrl-btn.is-armed {
+  border-color: var(--color-danger);
+  color:        var(--color-danger);
+}
+
+.audio-ctrl-btn.is-empty {
+  opacity: 0.45;
+}
+
+/* Play button takes up 2 columns and shows a song label text. */
+.audio-play-btn {
+  justify-content: flex-start;
+  padding-left: 6px;
+  min-width: 0;
+}
+
+.audio-song-label {
+  font-size:     9px;
+  white-space:   nowrap;
+  overflow:      hidden;
+  text-overflow: ellipsis;
+  min-width:     0;
+  flex:          1;
+  text-align:    left;
+  opacity:       0.75;
 }
 
 

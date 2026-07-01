@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Editor } from './components/Editor'
 import { AccordionGroup, AccordionSection } from './components/AccordionSection'
+import { AudioControls } from './components/AudioControls'
 import './App.css'
 import { buildExportCss, type ExportViewStyle, type ExportFontSize, type ExportSpacing } from './exportStyles'
 import type {
@@ -1841,6 +1842,10 @@ function App() {
   const [audioReverbSpace, setAudioReverbSpace] = useState(0)
   const [typingSoundEnabled, setTypingSoundEnabled] = useState(false)
   const [typingSoundSet, setTypingSoundSet] = useState<'A' | 'B' | 'C'>(DEFAULT_TYPING_SOUND_SET)
+  const [musicVolume, setMusicVolume] = useState(0.8)
+  const [musicReverbAmount, setMusicReverbAmount] = useState(0)
+  const [musicReverbRoom, setMusicReverbRoom] = useState(0.3)
+  const [musicActiveSlots, setMusicActiveSlots] = useState<import('./shared/audioPlayer').PlaylistSlot[]>([])
   const [appGridTextureSize, setAppGridTextureSize] = useState({ width: 1280, height: 720 })
   const [sidebarTextureSize, setSidebarTextureSize] = useState({ width: 512, height: 720 })
   const [editorStageTextureSize, setEditorStageTextureSize] = useState({ width: 1280, height: 720 })
@@ -2875,6 +2880,10 @@ function App() {
       audioBassVolume,
       audioTrebleVolume,
       typingSoundSet,
+      musicVolume,
+      musicReverbAmount,
+      musicReverbRoom,
+      musicActiveSlots,
       highlightSearchColor: highlightColors.search,
       highlightSelectionColor: highlightColors.selection,
       highlightBackgroundColor: highlightColors.background,
@@ -2923,6 +2932,10 @@ function App() {
     audioTrebleVolume,
     textureEnabled,
     glazeMode,
+    musicVolume,
+    musicReverbAmount,
+    musicReverbRoom,
+    musicActiveSlots,
     darkMode,
     uiMode,
     filterInvert,
@@ -5206,6 +5219,14 @@ ${markdownHtml}
             setAudioReverbSpace(appState.menu.audioReverbSpace ?? 0)
             setTypingSoundEnabled(appState.menu.typingSoundEnabled ?? false)
             setTypingSoundSet(appState.menu.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
+            if (typeof appState.menu.musicVolume === 'number') setMusicVolume(appState.menu.musicVolume)
+            if (typeof appState.menu.musicReverbAmount === 'number') setMusicReverbAmount(appState.menu.musicReverbAmount)
+            if (typeof appState.menu.musicReverbRoom === 'number') setMusicReverbRoom(appState.menu.musicReverbRoom)
+            if (Array.isArray(appState.menu.musicActiveSlots)) {
+              setMusicActiveSlots(
+                (appState.menu.musicActiveSlots as number[]).filter((s) => s >= 1 && s <= 5) as import('./shared/audioPlayer').PlaylistSlot[]
+              )
+            }
             setHighlightColors({
               caret: appState.menu.highlightCaretColor ?? DEFAULT_HIGHLIGHT_COLORS.caret,
               search: appState.menu.highlightSearchColor ?? DEFAULT_HIGHLIGHT_COLORS.search,
@@ -8805,10 +8826,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
       <AccordionSection
         className="sidebar-options-section-audio"
-        ariaLabel="Audio Settings"
-        heading="Audio Settings"
+        ariaLabel="Keystroke Sounds"
+        heading="Keystroke Sounds"
       >
-<div className="utility-setting-slider-stack" aria-label="Audio settings controls">
+<div className="utility-setting-slider-stack" aria-label="Keystroke Sounds controls">
           <div className="utility-setting-button-row" role="group" aria-label="Typing sound controls">
             <button
               type="button"
@@ -8889,6 +8910,45 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             trackLabel="room"
             ariaLabel="Reverb space"
             onCommit={(value) => setAudioReverbSpace(clamp(value, 0, 1))}
+          />
+        </div>
+      </AccordionSection>
+
+      <AccordionSection
+        className="sidebar-options-section-music"
+        ariaLabel="Music"
+        heading="Music"
+      >
+        <div className="utility-setting-slider-stack" aria-label="Music player controls">
+          <CompactScrollbarSlider
+            id="music-volume"
+            min={0}
+            max={1}
+            step={0.01}
+            value={musicVolume}
+            trackLabel="volume"
+            ariaLabel="Music volume"
+            onCommit={(value) => setMusicVolume(clamp(value, 0, 1))}
+          />
+          <CompactScrollbarSlider
+            id="music-reverb-amount"
+            min={0}
+            max={1}
+            step={0.01}
+            value={musicReverbAmount}
+            trackLabel="reverb"
+            ariaLabel="Music reverb amount"
+            onCommit={(value) => setMusicReverbAmount(clamp(value, 0, 1))}
+          />
+          <CompactScrollbarSlider
+            id="music-reverb-room"
+            min={0}
+            max={1}
+            step={0.01}
+            value={musicReverbRoom}
+            trackLabel="room"
+            ariaLabel="Music reverb room size"
+            onCommit={(value) => setMusicReverbRoom(clamp(value, 0, 1))}
           />
         </div>
       </AccordionSection>
@@ -9683,6 +9743,17 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <span className="window-control-glyph fa-brands fa-twitter" aria-hidden="true" />
           </button>
         </div>
+
+        <AudioControls
+          volume={musicVolume}
+          reverbAmount={musicReverbAmount}
+          reverbRoom={musicReverbRoom}
+          activeSlots={musicActiveSlots}
+          onActiveSlotsChange={setMusicActiveSlots}
+          onOpenMusicOptions={() => {
+            setSidebarMode('options')
+          }}
+        />
       </section>
 
       <section className="toolbar-grid" style={{ gridArea: 'toolbar' }} aria-label="Editor toolbar">

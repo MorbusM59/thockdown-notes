@@ -22,6 +22,8 @@ import type { UiLoadoutApi } from '../src/shared/loadouts'
 import { LOADOUT_CHANNELS } from '../src/shared/loadouts'
 import type { FileSyncApi } from '../src/shared/fileSync'
 import { FILE_SYNC_CHANNELS } from '../src/shared/fileSync'
+import type { AudioPlayerApi } from '../src/shared/audioPlayer'
+import { AUDIO_PLAYER_CHANNELS } from '../src/shared/audioPlayer'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
@@ -148,3 +150,21 @@ const fileSyncApi: FileSyncApi = {
 }
 
 contextBridge.exposeInMainWorld('measlyFileSync', fileSyncApi)
+
+const audioPlayerApi: AudioPlayerApi = {
+  pickFiles:          () => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.pickFiles),
+  pickFolder:         () => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.pickFolder),
+  scanFolderForAudio: (folderPath) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.scanFolderForAudio, folderPath),
+  getPlaylist:        (slot) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.getPlaylist, slot),
+  addSongs:           (slot, filePaths) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.addSongs, slot, filePaths),
+  clearPlaylist:      (slot) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.clearPlaylist, slot),
+  removeSong:         (id) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.removeSong, id),
+  pickNextSong:       (activeSlots) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.pickNextSong, activeSlots),
+  afterPlay:          (id) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.afterPlay, id),
+  favoriteSong:       (id) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.favoriteSong, id),
+  skipSong:           (id) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.skipSong, id),
+  purgeSong:          (id) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.purgeSong, id),
+  getPlaylistCounts:  () => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.getPlaylistCounts),
+}
+
+contextBridge.exposeInMainWorld('measlyAudioPlayer', audioPlayerApi)
