@@ -373,7 +373,7 @@ export const AudioControls = memo(function AudioControls({
         <button
           type="button"
           className={`audio-ctrl-btn audio-play-btn${isPlaying ? ' is-active' : ''}`}
-          title={isPlaying ? `Stop — ${songLabel}` : `Play — ${songLabel}`}
+          title={isPlaying ? `${songLabel}` : `${songLabel}`}
           aria-label={isPlaying ? 'Stop music' : 'Play music'}
           aria-pressed={isPlaying}
           onClick={() => { void handlePlayToggle() }}
@@ -383,7 +383,6 @@ export const AudioControls = memo(function AudioControls({
             className={`fa-solid ${isPlaying ? 'fa-stop' : 'fa-play'}`}
             aria-hidden="true"
           />
-          <span className="audio-song-label" aria-hidden="true">{songLabel}</span>
         </button>
 
         {/* Favorability / skip button */}
@@ -413,7 +412,7 @@ export const AudioControls = memo(function AudioControls({
           onPointerUp={handleSeekPointerUp}
           onPointerLeave={stopSeekScrub}
         >
-          <span className="fa-solid fa-forward-step" aria-hidden="true" />
+          <span className="fa-solid fa-forward" aria-hidden="true" />
         </button>
 
         {/* Options toggle */}
@@ -425,7 +424,7 @@ export const AudioControls = memo(function AudioControls({
           aria-pressed={isOptionsOpen}
           onClick={onOpenMusicOptions}
         >
-          <span className="fa-solid fa-sliders" aria-hidden="true" />
+          <span className="fa-solid fa-headphones" aria-hidden="true" />
         </button>
 
         {/* Bottom row — playlist slot buttons */}

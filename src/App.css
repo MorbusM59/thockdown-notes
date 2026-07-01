@@ -2865,8 +2865,7 @@ body.pdf-exporting .markdown-preview img {
 
 /* Play button takes up 2 columns and shows a song label text. */
 .audio-play-btn {
-  justify-content: flex-start;
-  padding-left: 6px;
+  justify-content: center;
   min-width: 0;
 }
 
