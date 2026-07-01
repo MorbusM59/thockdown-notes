@@ -1381,6 +1381,7 @@ button.active,
   transition:       all 0.2s;
   white-space:      nowrap;
   overflow:         hidden;
+  padding:          5px 10px;
   -webkit-app-region: no-drag;
 }
 
@@ -1905,7 +1906,7 @@ button.active,
 .options-glaze-settings-grid {
   display: grid;
   grid-template-columns: repeat(6, var(--color-grid-cell));
-  grid-template-rows: repeat(4, var(--color-grid-cell));
+  grid-template-rows: 32px repeat(3, auto);
   gap: var(--color-grid-gap);
 }
 
@@ -1936,6 +1937,7 @@ button.active,
   height: 100%;
   min-width: 0;
   min-height: 0;
+  color: var(--color-text-icon);
 }
 
 .options-glaze-cell .utility-setting-scrollbar-shell,
@@ -1979,8 +1981,8 @@ button.active,
   z-index: 2;
 }
 
-.glaze-overlay-layer-belly {
-  background-image: var(--glaze-belly-background-image, none);
+.glaze-overlay-layer-gloom {
+  background-image: var(--glaze-gloom-background-image, none);
   mix-blend-mode: difference;
   z-index: 0;
 }
@@ -2056,12 +2058,13 @@ button.active,
 }
 
 .options-seed-btn {
+  height:          32px;
   width:           100%;
   min-width:       0;
   justify-content: center;
-  font-size:       10px;
+  font-size:       var(--btn-icon-size);
   font-weight:     600;
-  color:           var(--color-text-faded);
+  color:           var(--color-text-label);
 }
 
 .options-texture-preview-row {

@@ -24,7 +24,7 @@ import {
 import type { PersistedMenuState, PersistedSidebarViewState, PersistedViewportState } from './shared/appState'
 import {
   DEFAULT_GLAZE_SETTINGS,
-  GLAZE_BELLY_OPACITY_MAX,
+  GLAZE_GLOOM_OPACITY_MAX,
   GLAZE_LINEAR_OPACITY_MAX,
   GLAZE_RADIAL_OPACITY_MAX,
   sanitizeGlazeSettings,
@@ -860,12 +860,12 @@ function buildRadialGlazeLayers(settings: GlazeSettings): string[] {
   return layers
 }
 
-function buildBellyGlazeLayer(settings: GlazeSettings): string {
-  if (settings.bellyOpacity <= 0) return 'none'
-  const centerPct = clamp(settings.bellyPosition, -0.5, 1.5) * 100
-  const edgeScale = clamp(settings.bellyShape, 0, 2)
-  const edgeAlpha = clamp(settings.bellyOpacity * edgeScale, 0, GLAZE_BELLY_OPACITY_MAX)
-  const centerAlpha = clamp(settings.bellyOpacity, 0, GLAZE_BELLY_OPACITY_MAX)
+function buildGloomGlazeLayer(settings: GlazeSettings): string {
+  if (settings.gloomOpacity <= 0) return 'none'
+  const centerPct = clamp(settings.gloomPosition, -0.5, 1.5) * 100
+  const edgeScale = clamp(settings.gloomShape, 0, 2)
+  const edgeAlpha = clamp(settings.gloomOpacity * edgeScale, 0, GLAZE_GLOOM_OPACITY_MAX)
+  const centerAlpha = clamp(settings.gloomOpacity, 0, GLAZE_GLOOM_OPACITY_MAX)
   return `linear-gradient(180deg, rgba(0, 0, 0, ${edgeAlpha.toFixed(3)}) -100%, rgba(0, 0, 0, ${centerAlpha.toFixed(3)}) ${centerPct.toFixed(1)}%, rgba(0, 0, 0, ${edgeAlpha.toFixed(3)}) 200%)`
 }
 
@@ -3485,17 +3485,17 @@ function App() {
     return radialLayers.length > 0 ? radialLayers.join(', ') : 'none'
   }, [glazeSettings])
 
-  const glazeBellyBackgroundImage = useMemo(() => {
-    return buildBellyGlazeLayer(glazeSettings)
+  const glazeGloomBackgroundImage = useMemo(() => {
+    return buildGloomGlazeLayer(glazeSettings)
   }, [glazeSettings])
 
   const appRootStyle = useMemo(() => {
     return {
       '--glaze-linear-background-image': glazeLinearBackgroundImage,
       '--glaze-radial-background-image': glazeRadialBackgroundImage,
-      '--glaze-belly-background-image': glazeBellyBackgroundImage,
+      '--glaze-gloom-background-image': glazeGloomBackgroundImage,
     } as CSSProperties & Record<string, string>
-  }, [glazeLinearBackgroundImage, glazeRadialBackgroundImage, glazeBellyBackgroundImage])
+  }, [glazeLinearBackgroundImage, glazeRadialBackgroundImage, glazeGloomBackgroundImage])
 
   // Writes a structured debug entry to a session-scoped debug note (tagged
   // "debug"). No-ops when debuggingEnabled is false. Safe to call from any
@@ -8954,7 +8954,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     startGlazeLinearSeedEdit()
                   }}
                 >
-                  linear seed {glazeSettings.linearSeed}
+                  <span className="fa-solid fa-barcode"/>
                 </button>
               )}
             </div>
@@ -9027,7 +9027,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     startGlazeRadialSeedEdit()
                   }}
                 >
-                  radial seed {glazeSettings.radialSeed}
+                  <span className="fa-solid fa-bullseye"/>
                 </button>
               )}
             </div>
@@ -9040,7 +9040,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               max={5}
               step={1}
               value={glazeSettings.linearStackCount}
-              trackLabel="linear stacks"
+              trackLabel="stacks"
               ariaLabel="Number of linear glaze stacks"
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
@@ -9057,7 +9057,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               max={4}
               step={1}
               value={glazeSettings.radialCount}
-              trackLabel="radial corners"
+              trackLabel="sources"
               ariaLabel="Number of radial corner gradients"
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
@@ -9075,7 +9075,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               max={GLAZE_LINEAR_OPACITY_MAX}
               step={0.005}
               value={glazeSettings.linearOpacity}
-              trackLabel="linear opacity"
+              trackLabel="glare"
               ariaLabel="Linear gradient stack opacity"
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
@@ -9092,7 +9092,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               max={GLAZE_RADIAL_OPACITY_MAX}
               step={0.005}
               value={glazeSettings.radialOpacity}
-              trackLabel="radial opacity"
+              trackLabel="flair"
               ariaLabel="Radial gradient stack opacity"
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
@@ -9105,51 +9105,51 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
           <div className="options-glaze-cell options-glaze-cell-span-2">
             <CompactScrollbarSlider
-              id="glaze-belly-position"
+              id="glaze-gloom-position"
               min={-0.5}
               max={1.5}
               step={0.005}
-              value={glazeSettings.bellyPosition}
-              trackLabel="belly y"
-              ariaLabel="Black gradient belly vertical position"
+              value={glazeSettings.gloomPosition}
+              trackLabel="position"
+              ariaLabel="Black gradient gloom vertical position"
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
                   ...current,
-                  bellyPosition: clamp(value, -0.5, 1.5),
+                  gloomPosition: clamp(value, -0.5, 1.5),
                 }))
               }}
             />
           </div>
           <div className="options-glaze-cell options-glaze-cell-span-2">
             <CompactScrollbarSlider
-              id="glaze-belly-shape"
+              id="glaze-gloom-shape"
               min={0}
               max={2}
               step={0.01}
-              value={glazeSettings.bellyShape}
-              trackLabel="belly shape"
-              ariaLabel="Black gradient belly edge shape"
+              value={glazeSettings.gloomShape}
+              trackLabel="shape"
+              ariaLabel="Black gradient gloom edge shape"
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
                   ...current,
-                  bellyShape: clamp(value, 0, 2),
+                  gloomShape: clamp(value, 0, 2),
                 }))
               }}
             />
           </div>
           <div className="options-glaze-cell options-glaze-cell-span-2">
             <CompactScrollbarSlider
-              id="glaze-belly-opacity"
+              id="glaze-gloom-opacity"
               min={0}
-              max={GLAZE_BELLY_OPACITY_MAX}
+              max={GLAZE_GLOOM_OPACITY_MAX}
               step={0.005}
-              value={glazeSettings.bellyOpacity}
-              trackLabel="belly opacity"
-              ariaLabel="Black gradient belly opacity"
+              value={glazeSettings.gloomOpacity}
+              trackLabel="gloom"
+              ariaLabel="Black gradient gloom opacity"
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
                   ...current,
-                  bellyOpacity: clamp(value, 0, GLAZE_BELLY_OPACITY_MAX),
+                  gloomOpacity: clamp(value, 0, GLAZE_GLOOM_OPACITY_MAX),
                 }))
               }}
             />
@@ -9750,7 +9750,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       <div className={`glaze-overlay-stack${glazeSettings.radialAboveLinear ? ' radial-above-linear' : ''}`} aria-hidden="true">
         <div className="glaze-overlay-layer glaze-overlay-layer-linear" />
         <div className="glaze-overlay-layer glaze-overlay-layer-radial" />
-        <div className="glaze-overlay-layer glaze-overlay-layer-belly" />
+        <div className="glaze-overlay-layer glaze-overlay-layer-gloom" />
       </div>
       <div className="app-saturate-wrapper" style={{ ...appOuterStyle, position: 'fixed', inset: 0 }}>
       <div

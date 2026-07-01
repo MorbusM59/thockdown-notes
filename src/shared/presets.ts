@@ -78,7 +78,7 @@ export const LIGHT_FACTORY_PRESETS: UiLayoutLoadout[] = [
   { ...NEUTRAL_BASE, filterSepia: 0.2, filterBrightness: 1.05 },
   { ...NEUTRAL_BASE, filterContrast: 1.15, filterSaturate: 0.7 },
   { ...NEUTRAL_BASE, filterHueRotate: 30, filterSaturate: 0.6 },
-  { ...NEUTRAL_BASE, filterBrightness: 1.1, glaze: { ...NEUTRAL_BASE.glaze, linearStackCount: 2, radialCount: 1, bellyOpacity: 0.65 } },
+  { ...NEUTRAL_BASE, filterBrightness: 1.1, glaze: { ...NEUTRAL_BASE.glaze, linearStackCount: 2, radialCount: 1, gloomOpacity: 0.65 } },
 ];
 
 export const DARK_FACTORY_PRESETS: UiLayoutLoadout[] = [
