@@ -1423,9 +1423,9 @@ button.active,
 .suggested-tags {
   display:    flex;
   flex-wrap:  wrap;
-  gap:        4px;
+  gap:        2px;
   overflow:   hidden;
-  max-height: 68px;
+  max-height: 86px;
 }
 
 .tag-pill.suggested {
