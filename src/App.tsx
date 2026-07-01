@@ -129,6 +129,11 @@ const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   gridOutline: '#00000022',
 }
 
+const DEFAULT_EDITOR_TEXT_COLORS: Record<EditorTextColorTargetKey, string> = {
+  editorEditText: '#000000DD',
+  editorRenderText: '#000000DD',
+}
+
 const HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['topBackground', 'bottomBackground', 'background', 'gridOutline', 'caret', 'selection']
 
 const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
@@ -208,6 +213,8 @@ type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
 type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
 type HighlightColorKey = 'caret' | 'search' | 'selection' | 'background' | 'topBackground' | 'bottomBackground' | 'gridOutline'
 
+type EditorTextColorTargetKey = 'editorEditText' | 'editorRenderText'
+
 type HighlightColors = Record<HighlightColorKey, string>
 
 type RgbaColor = {
@@ -286,6 +293,7 @@ type ColorArmSource =
 type ElementPreviewCopySource =
   | { kind: 'element'; key: HighlightColorKey }
   | { kind: 'texture'; key: TextureSurfaceKey }
+  | { kind: 'text'; key: EditorTextColorTargetKey }
 
 type SidebarViewState = {
   scrollTop: number
@@ -1176,6 +1184,14 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     filterSaturate: clamp(toFiniteNumber(source.filterSaturate, 0.5), 0, 1),
     filterColorize: clamp(toFiniteNumber(source.filterColorize, 0), 0, 1),
     highlightColors: normalizedHighlightColors,
+    editorTextColors: {
+      editorEditText: typeof source.editorTextColors === 'object' && source.editorTextColors !== null && typeof (source.editorTextColors as Record<string, unknown>).editorEditText === 'string'
+        ? String((source.editorTextColors as Record<string, unknown>).editorEditText)
+        : DEFAULT_EDITOR_TEXT_COLORS.editorEditText,
+      editorRenderText: typeof source.editorTextColors === 'object' && source.editorTextColors !== null && typeof (source.editorTextColors as Record<string, unknown>).editorRenderText === 'string'
+        ? String((source.editorTextColors as Record<string, unknown>).editorRenderText)
+        : DEFAULT_EDITOR_TEXT_COLORS.editorRenderText,
+    },
     textureMaterials: {
       appGrid: normalizeTextureMaterialForLoadoutSignature(normalizedTextureMaterials.appGrid),
       sidebarContent: normalizeTextureMaterialForLoadoutSignature(normalizedTextureMaterials.sidebarContent),
@@ -1800,6 +1816,10 @@ function App() {
     dark: -LOADOUT_DEFAULT_CUSTOM_ID_ABS,
   })
   const [highlightColors, setHighlightColors] = useState<HighlightColors>(DEFAULT_HIGHLIGHT_COLORS)
+  const [editorTextColors, setEditorTextColors] = useState<Record<EditorTextColorTargetKey, string>>(() => ({
+    editorEditText: DEFAULT_EDITOR_TEXT_COLORS.editorEditText,
+    editorRenderText: DEFAULT_EDITOR_TEXT_COLORS.editorRenderText,
+  }))
   const [textureEnabled] = useState(true)
   const [textureMaterials, setTextureMaterials] = useState<TextureMaterialsBySurface>(() => cloneTextureMaterials(DEFAULT_TEXTURE_MATERIALS))
   const [texturePreviewMaterial, setTexturePreviewMaterial] = useState<TextureMaterialSettings>(() => toTexturePreviewMaterial(DEFAULT_TEXTURE_MATERIALS.appGrid))
@@ -1966,6 +1986,8 @@ function App() {
   const sidebarTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.sidebarContent.color)), [textureMaterials.sidebarContent.color])
   const editorEditTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.editorEditText.color)), [textureMaterials.editorEditText.color])
   const editorRenderTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.editorRenderText.color)), [textureMaterials.editorRenderText.color])
+  const editorEditTextColorCss = useMemo(() => editorTextColors.editorEditText, [editorTextColors.editorEditText])
+  const editorRenderTextColorCss = useMemo(() => editorTextColors.editorRenderText, [editorTextColors.editorRenderText])
   const texturePreviewTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(texturePreviewMaterial.color)), [texturePreviewMaterial.color])
 
   useEffect(() => {
@@ -2051,6 +2073,46 @@ function App() {
     }))
   }, [])
 
+  const resolveEditorTextColor = useCallback((source: Record<EditorTextColorTargetKey, string>, key: EditorTextColorTargetKey): RgbaColor => {
+    return parseCssColorToRgba(source[key])
+      ?? parseCssColorToRgba(DEFAULT_EDITOR_TEXT_COLORS[key])
+      ?? { r: 0, g: 0, b: 0, a: 1 }
+  }, [])
+
+  const updateEditorTextColor = useCallback((target: EditorTextColorTargetKey, color: RgbaColor) => {
+    setEditorTextColors((previous) => ({
+      ...previous,
+      [target]: rgbaToCssColor(color),
+    }))
+  }, [])
+
+  const applyHsvaValueToEditorText = useCallback((sourceKey: HsvaControlKey, targetKey: EditorTextColorTargetKey) => {
+    setEditorTextColors((previous) => {
+      const target = resolveEditorTextColor(previous, targetKey)
+      const targetHsva = rgbaToHsva(target)
+      const sourceValue = activeColorHsva[sourceKey]
+
+      const nextHsva: HsvaColor = {
+        ...targetHsva,
+        [sourceKey]: sourceKey === 'h'
+          ? Math.max(0, Math.min(360, sourceValue))
+          : Math.max(0, Math.min(1, sourceValue)),
+      }
+
+      return {
+        ...previous,
+        [targetKey]: rgbaToCssColor(hsvaToRgba(nextHsva)),
+      }
+    })
+  }, [activeColorHsva, resolveEditorTextColor])
+
+  const applyActiveColorToEditorText = useCallback((targetKey: EditorTextColorTargetKey) => {
+    setEditorTextColors((previous) => ({
+      ...previous,
+      [targetKey]: activeColorCss,
+    }))
+  }, [activeColorCss])
+
   const updateTextureColor = useCallback((surface: TextureSurfaceKey, color: RgbaColor, enabled = true) => {
     const nextHsva = rgbaToHsva(color)
     updateTextureMaterial(surface, (current) => ({
@@ -2115,6 +2177,10 @@ function App() {
         topBackground: highlightColors.topBackground,
         bottomBackground: highlightColors.bottomBackground,
         gridOutline: highlightColors.gridOutline,
+      },
+      editorTextColors: {
+        editorEditText: editorTextColors.editorEditText,
+        editorRenderText: editorTextColors.editorRenderText,
       },
       textureMaterials: cloneTextureMaterials(textureMaterials),
     }
@@ -2189,6 +2255,14 @@ function App() {
       topBackground: loadout.highlightColors.topBackground,
       bottomBackground: loadout.highlightColors.bottomBackground,
       gridOutline: loadout.highlightColors.gridOutline,
+    })
+    setEditorTextColors({
+      editorEditText: loadout.editorTextColors.editorEditText,
+      editorRenderText: loadout.editorTextColors.editorRenderText,
+    })
+    setEditorTextColors({
+      editorEditText: loadout.editorTextColors.editorEditText,
+      editorRenderText: loadout.editorTextColors.editorRenderText,
     })
     setTextureMaterials(cloneTextureMaterials(loadout.textureMaterials))
   }, [])
@@ -2399,6 +2473,13 @@ function App() {
       return
     }
 
+    if (source.kind === 'text') {
+      const rgba = resolveEditorTextColor(editorTextColors, source.key)
+      const hsva = rgbaToHsva(rgba)
+      setActiveColorHsva((previous) => (areHsvaEqual(previous, hsva) ? previous : hsva))
+      return
+    }
+
     const material = cloneTextureMaterial(textureMaterials[source.key])
     setTexturePreviewMaterial((previous) => (areTextureMaterialsEqual(previous, material) ? previous : material))
     setActiveColorHsva((previous) => (areHsvaEqual(previous, material.color) ? previous : {
@@ -2407,7 +2488,7 @@ function App() {
       v: material.color.v,
       a: material.color.a,
     }))
-  }, [highlightColors, resolveHighlightColor, textureMaterials])
+  }, [editorTextColors, highlightColors, resolveEditorTextColor, resolveHighlightColor, textureMaterials])
 
   const startColorArmHold = useCallback((source: ColorArmSource, event: MouseEvent<HTMLButtonElement>) => {
     if (event.button !== 2) return
@@ -2777,6 +2858,8 @@ function App() {
       highlightBottomBackgroundColor: highlightColors.bottomBackground,
       highlightGridOutlineColor: highlightColors.gridOutline,
       textureEnabled,
+      editorEditTextColor: editorTextColors.editorEditText,
+      editorRenderTextColor: editorTextColors.editorRenderText,
       textureMaterials,
       sidebarViewState: {
         ...effectiveViewStateByMode,
@@ -3206,6 +3289,8 @@ function App() {
       '--color-grid-outline': highlightColors.gridOutline,
       '--color-caret': highlightColors.caret,
       '--color-selection': highlightColors.selection,
+      '--color-editor-edit-text': editorEditTextColorCss,
+      '--color-editor-render-text': editorRenderTextColorCss,
       '--texture-app-grid': appGridTextureCss,
       '--texture-sidebar-content': sidebarTextureCss,
       '--texture-editor-edit': editorEditTextTextureCss,
@@ -5102,6 +5187,10 @@ ${markdownHtml}
               topBackground: appState.menu.highlightTopBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.topBackground,
               bottomBackground: appState.menu.highlightBottomBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.bottomBackground,
               gridOutline: appState.menu.highlightGridOutlineColor ?? DEFAULT_HIGHLIGHT_COLORS.gridOutline,
+            })
+            setEditorTextColors({
+              editorEditText: appState.menu.editorEditTextColor ?? DEFAULT_EDITOR_TEXT_COLORS.editorEditText,
+              editorRenderText: appState.menu.editorRenderTextColor ?? DEFAULT_EDITOR_TEXT_COLORS.editorRenderText,
             })
             // Global texture enable is intentionally fixed on; per-surface alpha controls visibility.
             setTextureMaterials(cloneTextureMaterials(appState.menu.textureMaterials ?? DEFAULT_TEXTURE_MATERIALS))
@@ -8500,6 +8589,49 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               </button>
             )
           })}
+        </div>
+
+        <div className="sidebar-options-divider" aria-hidden="true" />
+
+        <div className="toolbar-flyout-color-grid toolbar-flyout-element-grid" role="group" aria-label="Text elements">
+          <button
+            type="button"
+            className="toolbar-btn-icon toolbar-flyout-color-swatch"
+            onClick={() => {
+              const target: EditorTextColorTargetKey = isPreviewMode ? 'editorRenderText' : 'editorEditText'
+
+              if (armedColorSource.kind === 'active-color') {
+                applyActiveColorToEditorText(target)
+                return
+              }
+
+              if (armedColorSource.kind === 'texture-preview') {
+                updateEditorTextColor(target, hsvaToRgba(texturePreviewMaterial.color))
+                return
+              }
+
+              if (armedColorSource.kind === 'hsva') {
+                applyHsvaValueToEditorText(armedColorSource.key, target)
+                return
+              }
+            }}
+            onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'text', key: isPreviewMode ? 'editorRenderText' : 'editorEditText' }, event)}
+            onMouseUp={(event) => {
+              if (event.button !== 2) return
+              clearColorArmTimer()
+            }}
+            onMouseLeave={() => {
+              clearColorArmTimer()
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              clearColorArmTimer()
+            }}
+            style={{ '--toolbar-flyout-swatch-color': editorTextColors[isPreviewMode ? 'editorRenderText' : 'editorEditText'] } as React.CSSProperties}
+            title={isPreviewMode ? 'Render mode text color' : 'Edit mode text color'}
+          >
+            <span className={`toolbar-flyout-color-swatch-glyph ${isPreviewMode ? 'fa-solid fa-book-open' : 'fa-solid fa-pen-to-square'}`} aria-hidden="true" />
+          </button>
         </div>
 
         <div className="sidebar-options-divider" aria-hidden="true" />

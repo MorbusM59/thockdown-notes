@@ -2376,7 +2376,7 @@ body.hsva-dragging * {
   scroll-behavior: smooth;
   padding:        var(--preview-edge-padding);
   box-sizing:     border-box;
-  color:          var(--color-text-dark);
+  color:          var(--color-editor-render-text, var(--color-text-dark));
   text-shadow:    var(--text-shadow-emboss-base);
   font-synthesis: style;
   position:       relative;
@@ -2407,7 +2407,7 @@ body.hsva-dragging * {
 .markdown-preview h6 {
   margin:      0.75em 0 0.45em;
   line-height: 1.25;
-  color:       var(--color-text-dark);
+  color:       inherit;
   text-shadow: var(--text-shadow-emboss-heading-glow);
 }
 
