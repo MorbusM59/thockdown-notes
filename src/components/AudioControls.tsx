@@ -382,9 +382,10 @@ export const AudioControls = memo(function AudioControls({
         {/* Favorability / skip button */}
         <button
           type="button"
-          className="audio-ctrl-btn"
+          className={`audio-ctrl-btn${currentSong?.priority === 0 ? ' is-active' : ''}`}
           title="Left-click: favourite (replay next). Right-click: skip. Hold right-click: purge."
           aria-label="Favourite or skip current song"
+          aria-pressed={currentSong?.priority === 0}
           onClick={() => { void handleFavoriteLeft() }}
           onContextMenu={handleFavoriteContextMenu}
           onPointerDown={handleFavPointerDown}
