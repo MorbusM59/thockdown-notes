@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
 import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../shared/audioPlayer'
 import { PLAYLIST_SLOT_ICONS } from '../shared/audioPlayer'
-import { musicPlayerService } from '../sound/MusicPlayerService'
+import { musicPlayerService, MissingFileError } from '../sound/MusicPlayerService'
 
 // Duration (ms) a pointer must be held to trigger the "arm for clear" action.
 const HOLD_THRESHOLD_MS = 700
@@ -68,16 +68,38 @@ export const AudioControls = memo(function AudioControls({
       setCurrentSong(null)
       return
     }
-    const next = await window.measlyAudioPlayer?.pickNextSong(slots)
-    if (!next) {
-      setIsPlaying(false)
-      setCurrentSong(null)
-      return
+
+    // Safety limit: avoid an infinite loop if every song in the pool is missing.
+    const MAX_ATTEMPTS = 50
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      const next = await window.measlyAudioPlayer?.pickNextSong(slots)
+      if (!next) {
+        setIsPlaying(false)
+        setCurrentSong(null)
+        return
+      }
+      try {
+        setCurrentSong(next)
+        await musicPlayerService.play(next.filePath)
+        setIsPlaying(true)
+        return
+      } catch (err) {
+        if (err instanceof MissingFileError) {
+          // Silently purge the bad entry and try the next song.
+          await window.measlyAudioPlayer?.purgeSong(next.id)
+          await refreshCounts()
+          musicPlayerService.stop()
+          continue
+        }
+        // Non-file-missing error (e.g. AbortError from rapid pause): surface it.
+        throw err
+      }
     }
-    setCurrentSong(next)
-    await musicPlayerService.play(next.filePath)
-    setIsPlaying(true)
-  }, [])
+
+    // Exhausted retries — give up.
+    setIsPlaying(false)
+    setCurrentSong(null)
+  }, [refreshCounts])
 
   const refreshCounts = useCallback(async () => {
     const c = await window.measlyAudioPlayer?.getPlaylistCounts()
@@ -92,14 +114,27 @@ export const AudioControls = memo(function AudioControls({
       setIsPlaying(false)
     } else {
       if (currentSong) {
-        // Resume the current song.
-        await musicPlayerService.play(currentSong.filePath)
-        setIsPlaying(true)
+        try {
+          // Resume the current song.
+          await musicPlayerService.play(currentSong.filePath)
+          setIsPlaying(true)
+        } catch (err) {
+          if (err instanceof MissingFileError) {
+            // File gone since last session — purge and pick a fresh song.
+            await window.measlyAudioPlayer?.purgeSong(currentSong.id)
+            setCurrentSong(null)
+            musicPlayerService.stop()
+            await refreshCounts()
+            await advanceToNextSong()
+          } else {
+            throw err
+          }
+        }
       } else {
         await advanceToNextSong()
       }
     }
-  }, [isPlaying, currentSong, advanceToNextSong])
+  }, [isPlaying, currentSong, advanceToNextSong, refreshCounts])
 
   // ---------------------------------------------------------------- favorability button
 

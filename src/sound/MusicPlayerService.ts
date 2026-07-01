@@ -17,6 +17,18 @@ export interface MusicPlayerConfig {
   reverbRoom: number;   // 0–1  (impulse response length: 0 = 0.5 s, 1 = 6 s)
 }
 
+/**
+ * Thrown by `play()` when the source file cannot be loaded (missing / unreadable).
+ * Callers should treat this as a signal to purge the entry and pick a new song.
+ */
+export class MissingFileError extends Error {
+  constructor(public readonly filePath: string, cause?: unknown) {
+    super(`Music file not found or unreadable: ${filePath}`)
+    this.name = 'MissingFileError'
+    if (cause instanceof Error) this.stack = cause.stack
+  }
+}
+
 type PlaybackEndHandler = () => void;
 
 export class MusicPlayerService {
@@ -86,7 +98,33 @@ export class MusicPlayerService {
       await ctx.resume();
     }
 
-    await this.element.play();
+    // Race the play() call against an element error event so that a missing or
+    // unreadable file surfaces as a typed MissingFileError rather than an
+    // opaque DOMException or silent stall.
+    const el = this.element;
+    await new Promise<void>((resolve, reject) => {
+      const onError = () => {
+        const msg = el.error ? `code ${el.error.code}: ${el.error.message}` : 'unknown media error';
+        reject(new MissingFileError(filePath, new Error(msg)));
+      };
+      el.addEventListener('error', onError, { once: true });
+
+      el.play().then(() => {
+        // Remove the error listener once play succeeded — the element may still
+        // fire errors later (e.g. mid-stream), but those are handled by 'ended'.
+        el.removeEventListener('error', onError);
+        resolve();
+      }).catch((err: unknown) => {
+        el.removeEventListener('error', onError);
+        // AbortError happens when play() is interrupted by pause/src change —
+        // that is not a missing-file situation, so re-throw as-is.
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          reject(err);
+        } else {
+          reject(new MissingFileError(filePath, err));
+        }
+      });
+    });
     this._isPlaying = true;
   }
 
