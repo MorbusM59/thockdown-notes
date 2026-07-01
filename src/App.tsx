@@ -1846,6 +1846,7 @@ function App() {
   const [musicReverbAmount, setMusicReverbAmount] = useState(0)
   const [musicReverbRoom, setMusicReverbRoom] = useState(0.3)
   const [musicActiveSlots, setMusicActiveSlots] = useState<import('./shared/audioPlayer').PlaylistSlot[]>([])
+  const [musicAccordionNonce, setMusicAccordionNonce] = useState(0)
   const [appGridTextureSize, setAppGridTextureSize] = useState({ width: 1280, height: 720 })
   const [sidebarTextureSize, setSidebarTextureSize] = useState({ width: 512, height: 720 })
   const [editorStageTextureSize, setEditorStageTextureSize] = useState({ width: 1280, height: 720 })
@@ -8918,6 +8919,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         className="sidebar-options-section-music"
         ariaLabel="Music"
         heading="Music"
+        forceOpenNonce={musicAccordionNonce}
       >
         <div className="utility-setting-slider-stack" aria-label="Music player controls">
           <CompactScrollbarSlider
@@ -9750,8 +9752,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           reverbRoom={musicReverbRoom}
           activeSlots={musicActiveSlots}
           onActiveSlotsChange={setMusicActiveSlots}
+          isOptionsOpen={sidebarMode === 'options'}
           onOpenMusicOptions={() => {
-            setSidebarMode('options')
+            if (sidebarMode !== 'options') setMusicAccordionNonce((n) => n + 1)
+            toggleSidebarOptionsMenu()
           }}
         />
       </section>

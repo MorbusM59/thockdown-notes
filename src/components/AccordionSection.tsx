@@ -75,6 +75,8 @@ interface AccordionSectionProps {
   className?: string
   headingClassName?: string
   ariaLabel?: string
+  /** Increment to programmatically open this section (e.g. from an external button). */
+  forceOpenNonce?: number
 }
 
 interface AnimState {
@@ -90,6 +92,7 @@ export function AccordionSection({
   className,
   headingClassName,
   ariaLabel,
+  forceOpenNonce,
 }: AccordionSectionProps) {
   const id = useId()
   const group = useContext(AccordionGroupContext)
@@ -175,6 +178,15 @@ export function AccordionSection({
     group?.register(id, close)
     return () => group?.unregister(id)
   }, [group, id, close])
+
+  // Open programmatically when the nonce increments (e.g. external button).
+  useEffect(() => {
+    if (forceOpenNonce) {
+      group?.closeOthers(id)
+      open()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forceOpenNonce])
 
   useEffect(() => () => cancelAnim(), [cancelAnim])
 

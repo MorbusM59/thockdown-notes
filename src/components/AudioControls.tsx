@@ -17,7 +17,9 @@ export interface AudioControlsProps {
   /** Which playlist slots are currently toggled active. */
   activeSlots: PlaylistSlot[]
   onActiveSlotsChange: (slots: PlaylistSlot[]) => void
-  /** Called when the options panel should open to the Music section. */
+  /** Whether the options sidebar is currently open. */
+  isOptionsOpen: boolean
+  /** Called to toggle the options panel (opens to Music section, or closes if already open). */
   onOpenMusicOptions: () => void
 }
 
@@ -27,6 +29,7 @@ export const AudioControls = memo(function AudioControls({
   reverbRoom,
   activeSlots,
   onActiveSlotsChange,
+  isOptionsOpen,
   onOpenMusicOptions,
 }: AudioControlsProps) {
   const [isPlaying, setIsPlaying] = useState(false)
@@ -416,9 +419,10 @@ export const AudioControls = memo(function AudioControls({
         {/* Options toggle */}
         <button
           type="button"
-          className="audio-ctrl-btn"
-          title="Music options"
-          aria-label="Open music options"
+          className={`audio-ctrl-btn${isOptionsOpen ? ' is-active' : ''}`}
+          title={isOptionsOpen ? 'Close options' : 'Music options'}
+          aria-label={isOptionsOpen ? 'Close options panel' : 'Open music options'}
+          aria-pressed={isOptionsOpen}
           onClick={onOpenMusicOptions}
         >
           <span className="fa-solid fa-sliders" aria-hidden="true" />
