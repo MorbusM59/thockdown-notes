@@ -1949,16 +1949,19 @@ button.active,
 .glaze-overlay-layer-linear {
   background-image: var(--glaze-linear-background-image, none);
   mix-blend-mode: luminosity;
+  z-index: 1;
 }
 
 .glaze-overlay-layer-radial {
   background-image: var(--glaze-radial-background-image, none);
-  mix-blend-mode: screen;
+  mix-blend-mode: color-dodge;
+  z-index: 2;
 }
 
 .glaze-overlay-layer-belly {
   background-image: var(--glaze-belly-background-image, none);
-  mix-blend-mode: multiply;
+  mix-blend-mode: difference;
+  z-index: 0;
 }
 
 /* HSVA controls */
