@@ -8902,7 +8902,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         heading="Glaze"
       >
         <div className="toolbar-flyout-glaze-settings-grid" role="group" aria-label="Glaze overlay controls">
-          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-3">
+          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-2 toolbar-flyout-glaze-top-left">
             <div className="toolbar-flyout-seed-editor" aria-label="Linear glaze seed">
               {isGlazeLinearSeedEditing ? (
                 <label className="sidebar-page-number-btn toolbar-flyout-seed-btn" aria-label="Edit linear glaze seed">
@@ -8959,7 +8959,23 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               )}
             </div>
           </div>
-          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-3">
+          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-2 toolbar-flyout-glaze-top-center">
+            <button
+              type="button"
+              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-glaze-layer-order-btn${glazeSettings.radialAboveLinear ? ' active' : ''}`}
+              aria-label={glazeSettings.radialAboveLinear ? 'Radial layer above linear layer' : 'Linear layer above radial layer'}
+              title={glazeSettings.radialAboveLinear ? 'Radial layer above linear layer' : 'Linear layer above radial layer'}
+              onClick={() => {
+                setGlazeSettings((current) => ({
+                  ...current,
+                  radialAboveLinear: !current.radialAboveLinear,
+                }))
+              }}
+            >
+              <span className="fa-solid fa-layer-group" aria-hidden="true" />
+            </button>
+          </div>
+          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-2 toolbar-flyout-glaze-top-right">
             <div className="toolbar-flyout-seed-editor" aria-label="Radial glaze seed">
               {isGlazeRadialSeedEditing ? (
                 <label className="sidebar-page-number-btn toolbar-flyout-seed-btn" aria-label="Edit radial glaze seed">
@@ -9731,7 +9747,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
   return (
     <div className="app-root" style={appRootStyle} onDragOver={handleAppDragOver} onDrop={handleAppDrop}>
-      <div className="glaze-overlay-stack" aria-hidden="true">
+      <div className={`glaze-overlay-stack${glazeSettings.radialAboveLinear ? ' radial-above-linear' : ''}`} aria-hidden="true">
         <div className="glaze-overlay-layer glaze-overlay-layer-linear" />
         <div className="glaze-overlay-layer glaze-overlay-layer-radial" />
         <div className="glaze-overlay-layer glaze-overlay-layer-belly" />
