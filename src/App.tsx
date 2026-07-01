@@ -855,13 +855,11 @@ function buildRadialGlazeLayers(settings: GlazeSettings): string[] {
 
 function buildBellyGlazeLayer(settings: GlazeSettings): string {
   if (settings.bellyOpacity <= 0) return 'none'
-  const centerPct = clamp(settings.bellyPosition, 0, 1) * 100
-  const halfSpanPct = 6 + (clamp(settings.bellyWidth, 0.15, 1) * 34)
-  const topPct = clamp(centerPct - halfSpanPct, 0, 100)
-  const bottomPct = clamp(centerPct + halfSpanPct, 0, 100)
-  const edgeAlpha = clamp(settings.bellyOpacity * 0.38, 0, GLAZE_OPACITY_MAX)
+  const centerPct = clamp(settings.bellyPosition, -0.5, 1.5) * 100
+  const edgeScale = clamp(settings.bellyShape, 0, 2)
+  const edgeAlpha = clamp(settings.bellyOpacity * edgeScale, 0, GLAZE_OPACITY_MAX)
   const centerAlpha = clamp(settings.bellyOpacity, 0, GLAZE_OPACITY_MAX)
-  return `linear-gradient(180deg, rgba(0, 0, 0, ${edgeAlpha.toFixed(3)}) 0%, rgba(0, 0, 0, ${centerAlpha.toFixed(3)}) ${topPct.toFixed(1)}%, rgba(0, 0, 0, ${centerAlpha.toFixed(3)}) ${bottomPct.toFixed(1)}%, rgba(0, 0, 0, ${edgeAlpha.toFixed(3)}) 100%)`
+  return `linear-gradient(180deg, rgba(0, 0, 0, ${edgeAlpha.toFixed(3)}) -100%, rgba(0, 0, 0, ${centerAlpha.toFixed(3)}) ${centerPct.toFixed(1)}%, rgba(0, 0, 0, ${edgeAlpha.toFixed(3)}) 200%)`
 }
 
 function resolvePreviewAnchorRatioFromEditState(params: {
@@ -8955,33 +8953,33 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-2">
             <CompactScrollbarSlider
               id="glaze-belly-position"
-              min={0}
-              max={1}
-              step={0.01}
+              min={-0.5}
+              max={1.5}
+              step={0.005}
               value={glazeSettings.bellyPosition}
               trackLabel="belly y"
               ariaLabel="Black gradient belly vertical position"
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
                   ...current,
-                  bellyPosition: clamp(value, 0, 1),
+                  bellyPosition: clamp(value, -0.5, 1.5),
                 }))
               }}
             />
           </div>
           <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-2">
             <CompactScrollbarSlider
-              id="glaze-belly-width"
-              min={0.15}
-              max={1}
+              id="glaze-belly-shape"
+              min={0}
+              max={2}
               step={0.01}
-              value={glazeSettings.bellyWidth}
-              trackLabel="belly width"
-              ariaLabel="Black gradient belly width"
+              value={glazeSettings.bellyShape}
+              trackLabel="belly shape"
+              ariaLabel="Black gradient belly edge shape"
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
                   ...current,
-                  bellyWidth: clamp(value, 0.15, 1),
+                  bellyShape: clamp(value, 0, 2),
                 }))
               }}
             />

@@ -6,7 +6,7 @@ export type GlazeSettings = {
   radialOpacity: number;
   radialSeed: number;
   bellyPosition: number;
-  bellyWidth: number;
+  bellyShape: number;
   bellyOpacity: number;
 };
 
@@ -20,7 +20,7 @@ export const DEFAULT_GLAZE_SETTINGS: GlazeSettings = {
   radialOpacity: 0,
   radialSeed: 94021,
   bellyPosition: 0.5,
-  bellyWidth: 0.42,
+  bellyShape: 0.38,
   bellyOpacity: 0,
 };
 
@@ -49,8 +49,8 @@ export function sanitizeGlazeSettings(input: unknown, fallback: GlazeSettings = 
     radialCount: clamp(Math.round(toFinite(source.radialCount, fallback.radialCount)), 0, 4),
     radialOpacity: clamp(toFinite(source.radialOpacity, fallback.radialOpacity), 0, GLAZE_OPACITY_MAX),
     radialSeed: clamp(Math.round(toFinite(source.radialSeed, fallback.radialSeed)), 0, 1000000),
-    bellyPosition: clamp(toFinite(source.bellyPosition, fallback.bellyPosition), 0, 1),
-    bellyWidth: clamp(toFinite(source.bellyWidth, fallback.bellyWidth), 0.15, 1),
+    bellyPosition: clamp(toFinite(source.bellyPosition, fallback.bellyPosition), -0.5, 1.5),
+    bellyShape: clamp(toFinite(source.bellyShape, fallback.bellyShape), 0, 2),
     bellyOpacity: clamp(toFinite(source.bellyOpacity, fallback.bellyOpacity), 0, GLAZE_OPACITY_MAX),
   };
 }
