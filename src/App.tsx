@@ -8632,7 +8632,9 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               event.preventDefault()
               clearColorArmTimer()
             }}
-            style={{ '--toolbar-flyout-swatch-color': editorTextColors[isPreviewMode ? 'editorRenderText' : 'editorEditText'] } as React.CSSProperties}
+            style={{
+              '--toolbar-flyout-swatch-color': editorTextColors[isPreviewMode ? 'editorRenderText' : 'editorEditText'],
+            } as React.CSSProperties}
             title={isPreviewMode ? 'Render mode text color' : 'Edit mode text color'}
           >
             <span className={`toolbar-flyout-color-swatch-glyph ${isPreviewMode ? 'fa-solid fa-font' : 'fa-solid fa-font'}`} aria-hidden="true" />

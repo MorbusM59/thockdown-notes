@@ -1850,8 +1850,50 @@ button.active,
   text-shadow: var(--text-shadow-icon);
 }
 
-.text-icon {
-  background: var()
+/* Text-color swatch: replicates the exact editor background stack so the glyph
+   color preview matches how the text actually looks in the editor.
+   Layer 0 (element bg): parchment base — same as editor-shell background.
+   Layer 1 (::before):   texture tint + mask — mirrors editor-stage overlay.
+   Layer 2 (::after):    box background (edit only) — mirrors --color-bg-regular. */
+.toolbar-flyout-element-grid .toolbar-flyout-color-swatch.text-icon {
+  background: var(--color-background-light);
+}
+
+.mode-edit .toolbar-flyout-element-grid .toolbar-flyout-color-swatch.text-icon::before {
+  background-color:      var(--texture-editor-edit-tint);
+  -webkit-mask-image:    var(--texture-editor-edit);
+  -webkit-mask-repeat:   repeat;
+  -webkit-mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  -webkit-mask-position: 0 0;
+  mask-image:    var(--texture-editor-edit);
+  mask-repeat:   repeat;
+  mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  mask-position: 0 0;
+}
+
+.mode-view .toolbar-flyout-element-grid .toolbar-flyout-color-swatch.text-icon::before {
+  background-color:      var(--texture-editor-render-tint);
+  -webkit-mask-image:    var(--texture-editor-render);
+  -webkit-mask-repeat:   repeat;
+  -webkit-mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  -webkit-mask-position: 0 0;
+  mask-image:    var(--texture-editor-render);
+  mask-repeat:   repeat;
+  mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  mask-position: 0 0;
+}
+
+.mode-edit .toolbar-flyout-element-grid .toolbar-flyout-color-swatch.text-icon::after {
+  background: var(--color-bg-regular);
+}
+
+.mode-view .toolbar-flyout-element-grid .toolbar-flyout-color-swatch.text-icon::after {
+  background: transparent;
+}
+
+.text-icon .toolbar-flyout-color-swatch-glyph {
+  color:       var(--toolbar-flyout-swatch-color, var(--color-text-icon));
+  text-shadow: var(--text-shadow-emboss-base);
 }
 
 .toolbar-flyout-glaze-grid, .toolbar-flyout-darkmode-grid {
