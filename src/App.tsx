@@ -8899,7 +8899,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       <AccordionSection
         className="sidebar-options-section-notes"
         ariaLabel="Notes and Import"
-        heading="Notes & Import"
+        heading="Data Synchronization"
       >
 <div className="toolbar-flyout-loadout-grid" role="group" aria-label="Note sync and import actions">
           <button
