@@ -1838,6 +1838,8 @@ function App() {
   const tagInputRef = useRef<HTMLInputElement | null>(null)
   const pageJumpInputRef = useRef<HTMLInputElement | null>(null)
   const textureSeedInputRef = useRef<HTMLInputElement | null>(null)
+  const glazeLinearSeedInputRef = useRef<HTMLInputElement | null>(null)
+  const glazeRadialSeedInputRef = useRef<HTMLInputElement | null>(null)
   const [notes, setNotes] = useState<NoteSummary[]>([])
   const notesRef = useRef<NoteSummary[]>([])
 
@@ -1923,6 +1925,10 @@ function App() {
   const [textureSeedInput, setTextureSeedInput] = useState(() => String(DEFAULT_TEXTURE_MATERIALS.appGrid.seed))
   const [isTextureSeedEditing, setIsTextureSeedEditing] = useState(false)
   const [glazeSettings, setGlazeSettings] = useState<GlazeSettings>(() => DEFAULT_GLAZE_SETTINGS)
+  const [glazeLinearSeedInput, setGlazeLinearSeedInput] = useState(() => String(DEFAULT_GLAZE_SETTINGS.linearSeed))
+  const [isGlazeLinearSeedEditing, setIsGlazeLinearSeedEditing] = useState(false)
+  const [glazeRadialSeedInput, setGlazeRadialSeedInput] = useState(() => String(DEFAULT_GLAZE_SETTINGS.radialSeed))
+  const [isGlazeRadialSeedEditing, setIsGlazeRadialSeedEditing] = useState(false)
   const [darkMode, setDarkMode] = useState<DarkModeKey>('none')
   const [filterInvert, setFilterInvert] = useState(0)
   const [filterSepia, setFilterSepia] = useState(0)
@@ -4055,7 +4061,9 @@ ${markdownHtml}
       target === sidebarSearchInputRef.current ||
       target === tagInputRef.current ||
       target === pageJumpInputRef.current ||
-      target === textureSeedInputRef.current
+      target === textureSeedInputRef.current ||
+      target === glazeLinearSeedInputRef.current ||
+      target === glazeRadialSeedInputRef.current
     ) {
       return true
     }
@@ -8295,6 +8303,18 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     }
   }, [isTextureSeedEditing, texturePreviewMaterial.seed])
 
+  useEffect(() => {
+    if (!isGlazeLinearSeedEditing) {
+      setGlazeLinearSeedInput(String(glazeSettings.linearSeed))
+    }
+  }, [glazeSettings.linearSeed, isGlazeLinearSeedEditing])
+
+  useEffect(() => {
+    if (!isGlazeRadialSeedEditing) {
+      setGlazeRadialSeedInput(String(glazeSettings.radialSeed))
+    }
+  }, [glazeSettings.radialSeed, isGlazeRadialSeedEditing])
+
   const commitPageJump = useCallback(() => {
     const parsed = Number.parseInt(pageJumpInput.trim(), 10)
     const safePage = Number.isFinite(parsed)
@@ -8337,6 +8357,34 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     setTextureSeedInput(String(safeSeed))
     setIsTextureSeedEditing(false)
   }, [texturePreviewMaterial.seed, textureSeedInput])
+
+  const commitGlazeLinearSeedEdit = useCallback(() => {
+    const parsed = Number.parseInt(glazeLinearSeedInput.trim(), 10)
+    const safeSeed = Number.isFinite(parsed)
+      ? clamp(parsed, 0, 1000000)
+      : clamp(glazeSettings.linearSeed, 0, 1000000)
+
+    setGlazeSettings((current) => ({
+      ...current,
+      linearSeed: safeSeed,
+    }))
+    setGlazeLinearSeedInput(String(safeSeed))
+    setIsGlazeLinearSeedEditing(false)
+  }, [glazeLinearSeedInput, glazeSettings.linearSeed])
+
+  const commitGlazeRadialSeedEdit = useCallback(() => {
+    const parsed = Number.parseInt(glazeRadialSeedInput.trim(), 10)
+    const safeSeed = Number.isFinite(parsed)
+      ? clamp(parsed, 0, 1000000)
+      : clamp(glazeSettings.radialSeed, 0, 1000000)
+
+    setGlazeSettings((current) => ({
+      ...current,
+      radialSeed: safeSeed,
+    }))
+    setGlazeRadialSeedInput(String(safeSeed))
+    setIsGlazeRadialSeedEditing(false)
+  }, [glazeRadialSeedInput, glazeSettings.radialSeed])
 
   const renderSidebarOptionsContent = () => (
     <div className={`toolbar-flyout-content sidebar-options-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`} aria-label="Settings panel">
@@ -8855,36 +8903,118 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       >
         <div className="toolbar-flyout-glaze-settings-grid" role="group" aria-label="Glaze overlay controls">
           <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-3">
-            <button
-              type="button"
-              className="sidebar-page-number-btn toolbar-flyout-seed-btn"
-              aria-label={`Linear gradient seed ${glazeSettings.linearSeed}. Click to randomize linear strips.`}
-              title="Randomize repeating linear glaze pattern"
-              onClick={() => {
-                setGlazeSettings((current) => ({
-                  ...current,
-                  linearSeed: Math.floor(Math.random() * 1000001),
-                }))
-              }}
-            >
-              linear seed {glazeSettings.linearSeed}
-            </button>
+            <div className="toolbar-flyout-seed-editor" aria-label="Linear glaze seed">
+              {isGlazeLinearSeedEditing ? (
+                <label className="sidebar-page-number-btn toolbar-flyout-seed-btn" aria-label="Edit linear glaze seed">
+                  <input
+                    ref={glazeLinearSeedInputRef}
+                    type="number"
+                    min={0}
+                    max={1000000}
+                    step={1}
+                    inputMode="numeric"
+                    className="sidebar-page-number-input sidebar-page-number-input--edit"
+                    value={glazeLinearSeedInput}
+                    onChange={(event) => {
+                      setGlazeLinearSeedInput(event.target.value.replace(/[^0-9]/g, ''))
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        commitGlazeLinearSeedEdit()
+                        scheduleFocusEditorInEditMode()
+                        return
+                      }
+
+                      if (event.key === 'Escape' || event.key === 'Tab') {
+                        event.preventDefault()
+                        cancelGlazeLinearSeedEdit()
+                        scheduleFocusEditorInEditMode()
+                      }
+                    }}
+                    onBlur={() => {
+                      commitGlazeLinearSeedEdit()
+                      window.setTimeout(() => {
+                        if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
+                          scheduleFocusEditorInEditMode()
+                        }
+                      }, 0)
+                    }}
+                  />
+                </label>
+              ) : (
+                <button
+                  type="button"
+                  className="sidebar-page-number-btn toolbar-flyout-seed-btn"
+                  aria-label={`Linear glaze seed ${glazeSettings.linearSeed}. Left click to randomize. Right click to edit.`}
+                  title="Left click: random seed. Right click: edit seed."
+                  onClick={randomizeGlazeLinearSeed}
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    startGlazeLinearSeedEdit()
+                  }}
+                >
+                  linear seed {glazeSettings.linearSeed}
+                </button>
+              )}
+            </div>
           </div>
           <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-3">
-            <button
-              type="button"
-              className="sidebar-page-number-btn toolbar-flyout-seed-btn"
-              aria-label={`Radial gradient seed ${glazeSettings.radialSeed}. Click to randomize radial colors and radii.`}
-              title="Randomize radial glaze colors and radii"
-              onClick={() => {
-                setGlazeSettings((current) => ({
-                  ...current,
-                  radialSeed: Math.floor(Math.random() * 1000001),
-                }))
-              }}
-            >
-              radial seed {glazeSettings.radialSeed}
-            </button>
+            <div className="toolbar-flyout-seed-editor" aria-label="Radial glaze seed">
+              {isGlazeRadialSeedEditing ? (
+                <label className="sidebar-page-number-btn toolbar-flyout-seed-btn" aria-label="Edit radial glaze seed">
+                  <input
+                    ref={glazeRadialSeedInputRef}
+                    type="number"
+                    min={0}
+                    max={1000000}
+                    step={1}
+                    inputMode="numeric"
+                    className="sidebar-page-number-input sidebar-page-number-input--edit"
+                    value={glazeRadialSeedInput}
+                    onChange={(event) => {
+                      setGlazeRadialSeedInput(event.target.value.replace(/[^0-9]/g, ''))
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        commitGlazeRadialSeedEdit()
+                        scheduleFocusEditorInEditMode()
+                        return
+                      }
+
+                      if (event.key === 'Escape' || event.key === 'Tab') {
+                        event.preventDefault()
+                        cancelGlazeRadialSeedEdit()
+                        scheduleFocusEditorInEditMode()
+                      }
+                    }}
+                    onBlur={() => {
+                      commitGlazeRadialSeedEdit()
+                      window.setTimeout(() => {
+                        if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
+                          scheduleFocusEditorInEditMode()
+                        }
+                      }, 0)
+                    }}
+                  />
+                </label>
+              ) : (
+                <button
+                  type="button"
+                  className="sidebar-page-number-btn toolbar-flyout-seed-btn"
+                  aria-label={`Radial glaze seed ${glazeSettings.radialSeed}. Left click to randomize. Right click to edit.`}
+                  title="Left click: random seed. Right click: edit seed."
+                  onClick={randomizeGlazeRadialSeed}
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    startGlazeRadialSeedEdit()
+                  }}
+                >
+                  radial seed {glazeSettings.radialSeed}
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-3">
@@ -9324,6 +9454,16 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     setIsTextureSeedEditing(false)
   }, [texturePreviewMaterial.seed])
 
+  const cancelGlazeLinearSeedEdit = useCallback(() => {
+    setGlazeLinearSeedInput(String(glazeSettings.linearSeed))
+    setIsGlazeLinearSeedEditing(false)
+  }, [glazeSettings.linearSeed])
+
+  const cancelGlazeRadialSeedEdit = useCallback(() => {
+    setGlazeRadialSeedInput(String(glazeSettings.radialSeed))
+    setIsGlazeRadialSeedEditing(false)
+  }, [glazeSettings.radialSeed])
+
   const randomizeTextureSeed = useCallback(() => {
     if (isTextureSeedEditing) return
 
@@ -9334,10 +9474,40 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     }))
   }, [isTextureSeedEditing])
 
+  const randomizeGlazeLinearSeed = useCallback(() => {
+    if (isGlazeLinearSeedEditing) return
+
+    const nextSeed = Math.floor(Math.random() * 1000001)
+    setGlazeSettings((current) => ({
+      ...current,
+      linearSeed: nextSeed,
+    }))
+  }, [isGlazeLinearSeedEditing])
+
+  const randomizeGlazeRadialSeed = useCallback(() => {
+    if (isGlazeRadialSeedEditing) return
+
+    const nextSeed = Math.floor(Math.random() * 1000001)
+    setGlazeSettings((current) => ({
+      ...current,
+      radialSeed: nextSeed,
+    }))
+  }, [isGlazeRadialSeedEditing])
+
   const startTextureSeedEdit = useCallback(() => {
     setTextureSeedInput(String(texturePreviewMaterial.seed))
     setIsTextureSeedEditing(true)
   }, [texturePreviewMaterial.seed])
+
+  const startGlazeLinearSeedEdit = useCallback(() => {
+    setGlazeLinearSeedInput(String(glazeSettings.linearSeed))
+    setIsGlazeLinearSeedEditing(true)
+  }, [glazeSettings.linearSeed])
+
+  const startGlazeRadialSeedEdit = useCallback(() => {
+    setGlazeRadialSeedInput(String(glazeSettings.radialSeed))
+    setIsGlazeRadialSeedEditing(true)
+  }, [glazeSettings.radialSeed])
 
   useEffect(() => {
     if (!isTextureSeedEditing) return
@@ -9346,6 +9516,22 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       textureSeedInputRef.current?.select()
     })
   }, [isTextureSeedEditing])
+
+  useEffect(() => {
+    if (!isGlazeLinearSeedEditing) return
+    window.requestAnimationFrame(() => {
+      glazeLinearSeedInputRef.current?.focus()
+      glazeLinearSeedInputRef.current?.select()
+    })
+  }, [isGlazeLinearSeedEditing])
+
+  useEffect(() => {
+    if (!isGlazeRadialSeedEditing) return
+    window.requestAnimationFrame(() => {
+      glazeRadialSeedInputRef.current?.focus()
+      glazeRadialSeedInputRef.current?.select()
+    })
+  }, [isGlazeRadialSeedEditing])
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -9357,7 +9543,9 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       const isTagField = target === tagInputRef.current
       const isPageJumpField = target === pageJumpInputRef.current
       const isTextureSeedField = target === textureSeedInputRef.current
-      const isEditorControlField = isSearchField || isTagField || isPageJumpField || isTextureSeedField
+      const isGlazeLinearSeedField = target === glazeLinearSeedInputRef.current
+      const isGlazeRadialSeedField = target === glazeRadialSeedInputRef.current
+      const isEditorControlField = isSearchField || isTagField || isPageJumpField || isTextureSeedField || isGlazeLinearSeedField || isGlazeRadialSeedField
 
       if (isEditorControlField && ['Escape', 'Enter', 'Tab'].includes(event.key)) {
         event.preventDefault()
