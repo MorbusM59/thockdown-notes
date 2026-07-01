@@ -143,6 +143,7 @@
   --color-text-dark:      #000000DD;
   --color-text-faded:     #000000BB;
   --color-text-label:     #00000088;
+  --color-text-icon:      #000000AA;
 
   /* Danger / status colors */
   --color-danger:         #b71c1c;
@@ -264,6 +265,10 @@
     0 0 2px #FFFFFF99,
     0 1px 0 #FFFFFF;
 
+  --text-shadow-icon:
+    0 0 5px #ffffff99,
+    0 0 2px #ffffff99;
+
   --text-info-size:  12px;
   --text-info-color: var(--color-text-label);
 
@@ -313,6 +318,8 @@
     inset 0 0 2px rgba(0, 0, 0, 0.5),
     inset 0 0 6px rgba(0, 0, 0, 0.2),
     0 0 2px var(--color-shadow-white);
+
+  --btn-icon-size: 18px;
 
   /* ---------------------------------------------------------------------------
      1g. Scrollbar Tokens
@@ -661,15 +668,6 @@ button.active,
   border-bottom: 1px solid #d2cec9;
 }
 
-.notes-sidebar-title {
-  margin:        0;
-  font-family:   'Syne Mono', monospace;
-  font-size:     18px;
-  color:         var(--color-text-dark);
-  letter-spacing: 0.04em;
-  text-shadow:   var(--text-shadow-emboss-panel);
-}
-
 .notes-action-button {
   padding:     6px 16px;
   font-weight: 600;
@@ -715,10 +713,6 @@ button.active,
   margin:  0;
 }
 
-.toggle-btn {
-  font-size: 15px;
-}
-
 .notes-sidebar .view-toggle .icon-btn {
   width:      var(--sidebar-view-button-size);
   height:     var(--sidebar-view-button-size);
@@ -737,6 +731,10 @@ button.active,
   position: relative;
 }
 
+.icon-btn {
+  font-size: var(--btn-icon-size);
+}
+
 .notes-sidebar .view-toggle .icon-btn.btn-date     { background-image: url('/assets/buttons/latest.png');   }
 .notes-sidebar .view-toggle .icon-btn.btn-category  { background-image: url('/assets/buttons/active.png');   }
 .notes-sidebar .view-toggle .icon-btn.btn-archived  { background-image: url('/assets/buttons/archived.png'); }
@@ -746,10 +744,6 @@ button.active,
 .notes-sidebar .view-toggle .icon-btn.btn-options {
   background-image: none;
   color:  var(--color-text-faded);
-}
-
-.notes-sidebar .view-toggle .icon-btn.btn-options .toolbar-gear-glyph {
-  font-size: 18px;
 }
 
 .find-mode-glyph {
@@ -1567,12 +1561,11 @@ button.active,
   background-size:     auto;
   background-repeat:   no-repeat;
   background-position: center;
-  color: var(--color-text-label);
+  color: var(--color-text-icon);
 }
 
 .toolbar-gear-glyph {
   display:    block;
-  font-size:  16px;
   line-height: 1;
   margin:     0;
   transform:  translateY(0);
@@ -1809,7 +1802,8 @@ button.active,
   width:      100%;
   height:     100%;
   font-size: 18px;
-  color:      var(--color-text-faded);
+  color:      var(--color-text-icon);
+  text-shadow:  var(--text-shadow-icon);
   transition: none;
 }
 
@@ -1852,7 +1846,8 @@ button.active,
 .toolbar-flyout-color-swatch-glyph {
   font-size:   18px;
   line-height: 1;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
+  color:      var(--color-text-icon);
+  text-shadow: var(--text-shadow-icon);
 }
 
 .toolbar-flyout-glaze-grid, .toolbar-flyout-darkmode-grid {
@@ -2095,11 +2090,14 @@ button.active,
   height:      100%;
   font-size:   18px;
   font-weight: 600;
-  color:       var(--color-text-faded);
+  color:      var(--color-text-icon);
+  text-shadow:  var(--text-shadow-icon);
 }
 
 .toolbar-flyout-audio-btn {
   font-size: 18px;
+  color:      var(--color-text-icon);
+  text-shadow:  var(--text-shadow-icon);
 }
 
 /* 8h. HSVA drag cursor override */
@@ -2363,24 +2361,30 @@ body.hsva-dragging * {
 }
 
 .markdown-preview {
-  /* Local tokens scoped to the preview renderer */
-  --preview-edge-padding:        18px;
-  --preview-edge-fade-color:     var(--color-background-light);
-  --preview-code-font:           'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
-  --preview-inline-code-size:    0.95em;
-  --preview-inline-code-padding: 0.08em 0.35em;
-
   width:          100%;
   height:         100%;
   overflow-y:     auto;
   scroll-behavior: smooth;
   padding:        var(--preview-edge-padding);
   box-sizing:     border-box;
-  color:          var(--color-editor-render-text, var(--color-text-dark));
   text-shadow:    var(--text-shadow-emboss-base);
   font-synthesis: style;
   position:       relative;
   z-index:        2;
+}
+
+.render-container {
+  /* Local tokens scoped to the render container */
+  --preview-edge-padding:        18px;
+  --preview-edge-fade-color:     var(--color-background-light);
+  --preview-code-font:           'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
+  --preview-inline-code-size:    0.95em;
+  --preview-inline-code-padding: 0.08em 0.35em;
+  color: var(--color-editor-render-text);
+}
+
+.edit-container {
+  color: var(--color-editor-edit-text);
 }
 
 .markdown-preview > *:not(.markdown-preview-texture),
@@ -2738,6 +2742,8 @@ body.pdf-exporting .markdown-preview img {
 .window-control-glyph {
   display:     block;
   font-size:   18px;
+  color:      var(--color-text-icon);
+  text-shadow:  var(--text-shadow-icon);
   line-height: 1;
 }
 
