@@ -10,6 +10,7 @@
 //   DEFAULT_CUSTOM_DARK          -> dark id   -6
 
 import { DEFAULT_TEXTURE_MATERIALS } from '../textures/types';
+import { DEFAULT_GLAZE_SETTINGS } from './glaze';
 import type { UiLayoutLoadout } from './loadouts';
 
 // A neutral, untextured, unfiltered baseline shared by both default-custom
@@ -34,7 +35,7 @@ const NEUTRAL_BASE: UiLayoutLoadout = {
   renderScrollTotalTimeSec: 0.4,
   renderScrollMaxSpeedPxPerSec: 20000,
   renderScrollSkew: 0.5,
-  glazeMode: 'none',
+  glaze: DEFAULT_GLAZE_SETTINGS,
   darkMode: 'none',
   filterInvert: 0,
   filterSepia: 0,
@@ -77,7 +78,7 @@ export const LIGHT_FACTORY_PRESETS: UiLayoutLoadout[] = [
   { ...NEUTRAL_BASE, filterSepia: 0.2, filterBrightness: 1.05 },
   { ...NEUTRAL_BASE, filterContrast: 1.15, filterSaturate: 0.7 },
   { ...NEUTRAL_BASE, filterHueRotate: 30, filterSaturate: 0.6 },
-  { ...NEUTRAL_BASE, glazeMode: 'light', filterBrightness: 1.1 },
+  { ...NEUTRAL_BASE, filterBrightness: 1.1, glaze: { ...NEUTRAL_BASE.glaze, linearStackCount: 2, radialCount: 1, bellyOpacity: 0.65 } },
 ];
 
 export const DARK_FACTORY_PRESETS: UiLayoutLoadout[] = [
@@ -85,7 +86,7 @@ export const DARK_FACTORY_PRESETS: UiLayoutLoadout[] = [
   { ...NEUTRAL_BASE, filterInvert: 1, filterSepia: 0.3, filterHueRotate: 200, filterSaturate: 0.6 },
   { ...NEUTRAL_BASE, filterInvert: 1, filterContrast: 1.1, filterBrightness: 0.85 },
   { ...NEUTRAL_BASE, filterInvert: 1, filterSepia: 0.5, filterHueRotate: 280, filterSaturate: 0.7 },
-  { ...NEUTRAL_BASE, filterInvert: 1, glazeMode: 'medium', filterBrightness: 0.8 },
+  { ...NEUTRAL_BASE, filterInvert: 1, filterBrightness: 0.8, glaze: { ...NEUTRAL_BASE.glaze, linearStackCount: 4, radialCount: 2, linearOpacity: 0.24 } },
 ];
 
 if (LIGHT_FACTORY_PRESETS.length !== 5 || DARK_FACTORY_PRESETS.length !== 5) {

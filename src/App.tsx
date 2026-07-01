@@ -22,6 +22,7 @@ import {
   typingSoundManager,
 } from './sound/TypingSoundManager'
 import type { PersistedMenuState, PersistedSidebarViewState, PersistedViewportState } from './shared/appState'
+import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings, type GlazeSettings } from './shared/glaze'
 import type { UiLayoutLoadout, UiLoadoutEntry, UiLoadoutMode } from './shared/loadouts'
 import {
   idKind,
@@ -233,15 +234,7 @@ type HsvaColor = {
 }
 
 type HsvaControlKey = 'h' | 's' | 'v' | 'a'
-
-type GlazeModeKey = 'none' | 'light' | 'medium' | 'heavy'
-
-const GLAZE_MODES: Array<{ key: GlazeModeKey; title: string; ariaLabel: string; faicon: string }> = [
-  { key: 'none', title: 'No glaze', ariaLabel: 'No glaze overlay', faicon: 'fa-solid fa-ban' },
-  { key: 'light', title: 'Light glaze', ariaLabel: 'Light glaze overlay', faicon: 'fa-solid fa-barcode' },
-  { key: 'medium', title: 'Medium glaze', ariaLabel: 'Medium glaze overlay', faicon: 'fa-solid fa-barcode' },
-  { key: 'heavy', title: 'Heavy glaze', ariaLabel: 'Heavy glaze overlay', faicon: 'fa-solid fa-barcode' },
-]
+const GLAZE_RADIAL_CORNERS = ['top left', 'top right', 'bottom right', 'bottom left'] as const
 
 type DarkModeKey = 'none' | 'mono' | 'red' | 'dusk' | 'neon' | 'matrix'
 
@@ -769,6 +762,108 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 
+function mulberry32(seed: number): () => number {
+  let state = (seed >>> 0) + 0x6d2b79f5
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0
+    let t = Math.imul(state ^ (state >>> 15), 1 | state)
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+function buildLinearGlazeLayers(settings: GlazeSettings): string[] {
+  if (settings.linearStackCount <= 0 || settings.linearOpacity <= 0) return []
+
+  const rand = mulberry32(settings.linearSeed)
+  const averageDistancePx = 28 + (rand() * 128)
+  const lightRatio = 0.2 + (rand() * 0.65)
+  const layers: string[] = []
+
+  for (let layerIndex = 0; layerIndex < settings.linearStackCount; layerIndex += 1) {
+    const angle = 45
+    const phase = rand() * averageDistancePx
+    const stops: string[] = []
+    let cursor = 0
+
+    for (let stripIndex = 0; stripIndex < 18; stripIndex += 1) {
+      const distance = Math.max(12, averageDistancePx * (0.55 + (rand() * 1.05)))
+      const litWidth = Math.max(3, distance * lightRatio * (0.7 + (rand() * 0.65)))
+      const clearWidth = Math.max(4, distance - litWidth)
+      const lightAlpha = clamp(settings.linearOpacity * (0.55 + (rand() * 0.9)), 0, 1)
+      const warmJitter = Math.round((rand() * 22) - 11)
+      const red = clamp(245 + warmJitter, 0, 255)
+      const green = clamp(245 + warmJitter, 0, 255)
+      const blue = clamp(255 - Math.round(rand() * 18), 0, 255)
+      const clearEnd = cursor + clearWidth
+      const lightEnd = clearEnd + litWidth
+      stops.push(`transparent ${Math.max(0, cursor - phase).toFixed(1)}px`)
+      stops.push(`transparent ${Math.max(0, clearEnd - phase).toFixed(1)}px`)
+      stops.push(`rgba(${red}, ${green}, ${blue}, ${lightAlpha.toFixed(3)}) ${Math.max(0, clearEnd - phase).toFixed(1)}px`)
+      stops.push(`rgba(${red}, ${green}, ${blue}, ${lightAlpha.toFixed(3)}) ${Math.max(0, lightEnd - phase).toFixed(1)}px`)
+      cursor += distance
+    }
+
+    layers.push(`repeating-linear-gradient(${angle}deg, ${stops.join(', ')})`)
+  }
+
+  return layers
+}
+
+function buildRadialGlazeLayers(settings: GlazeSettings): string[] {
+  if (settings.radialCount <= 0 || settings.radialOpacity <= 0) return []
+
+  const rand = mulberry32(settings.radialSeed)
+  const layers: string[] = []
+
+  const nextPrismaticRgb = (): [number, number, number] => {
+    const channels: [number, number, number] = [0, 0, 0]
+    const channelOrder: [number, number, number] = [0, 1, 2]
+
+    for (let i = channelOrder.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(rand() * (i + 1))
+      const temp = channelOrder[i]
+      channelOrder[i] = channelOrder[j]
+      channelOrder[j] = temp
+    }
+
+    channels[channelOrder[0]] = 255
+    channels[channelOrder[1]] = 127 + Math.round(rand() * 128)
+    channels[channelOrder[2]] = 0
+    return channels
+  }
+
+  for (let index = 0; index < settings.radialCount; index += 1) {
+    const corner = GLAZE_RADIAL_CORNERS[index % GLAZE_RADIAL_CORNERS.length]
+    const [innerR, innerG, innerB] = nextPrismaticRgb()
+    const [midR, midG, midB] = nextPrismaticRgb()
+    const [outerR, outerG, outerB] = nextPrismaticRgb()
+    const radiusInner = Math.round(18 + (rand() * 14))
+    const radiusMid = Math.round(46 + (rand() * 20))
+    const radiusOuter = Math.round(74 + (rand() * 22))
+    const alphaScale = clamp(settings.radialOpacity * (0.8 + (rand() * 0.7)), 0, 1)
+    const alphaInner = clamp(alphaScale * (1.0 + (rand() * 0.2)), 0, 1)
+    const alphaMid = clamp(alphaScale * (0.8 + (rand() * 0.2)), 0, 1)
+    const alphaOuter = clamp(alphaScale * (0.52 + (rand() * 0.2)), 0, 1)
+    layers.push(
+      `radial-gradient(circle at ${corner}, rgba(${innerR}, ${innerG}, ${innerB}, ${alphaInner.toFixed(3)}) ${radiusInner}%, rgba(${midR}, ${midG}, ${midB}, ${alphaMid.toFixed(3)}) ${radiusMid}%, rgba(${outerR}, ${outerG}, ${outerB}, ${alphaOuter.toFixed(3)}) ${radiusOuter}%, transparent 100%)`,
+    )
+  }
+
+  return layers
+}
+
+function buildBellyGlazeLayer(settings: GlazeSettings): string {
+  if (settings.bellyOpacity <= 0) return 'none'
+  const centerPct = clamp(settings.bellyPosition, 0, 1) * 100
+  const halfSpanPct = 6 + (clamp(settings.bellyWidth, 0.15, 1) * 34)
+  const topPct = clamp(centerPct - halfSpanPct, 0, 100)
+  const bottomPct = clamp(centerPct + halfSpanPct, 0, 100)
+  const edgeAlpha = clamp(settings.bellyOpacity * 0.38, 0, 1)
+  const centerAlpha = clamp(settings.bellyOpacity, 0, 1)
+  return `linear-gradient(180deg, rgba(0, 0, 0, ${edgeAlpha.toFixed(3)}) 0%, rgba(0, 0, 0, ${centerAlpha.toFixed(3)}) ${topPct.toFixed(1)}%, rgba(0, 0, 0, ${centerAlpha.toFixed(3)}) ${bottomPct.toFixed(1)}%, rgba(0, 0, 0, ${edgeAlpha.toFixed(3)}) 100%)`
+}
+
 function resolvePreviewAnchorRatioFromEditState(params: {
   text: string
   selectionEnd: number
@@ -1123,10 +1218,6 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     ? source.viewStyle
     : 'modern'
 
-  const glazeMode = source.glazeMode === 'none' || source.glazeMode === 'light' || source.glazeMode === 'medium' || source.glazeMode === 'heavy'
-    ? source.glazeMode
-    : 'none'
-
   const darkMode = source.darkMode === 'none' || source.darkMode === 'mono' || source.darkMode === 'red' || source.darkMode === 'dusk' || source.darkMode === 'neon' || source.darkMode === 'matrix'
     ? source.darkMode
     : 'none'
@@ -1175,7 +1266,7 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     typingSoundSet: source.typingSoundSet === 'A' || source.typingSoundSet === 'B' || source.typingSoundSet === 'C'
       ? source.typingSoundSet
       : DEFAULT_TYPING_SOUND_SET,
-    glazeMode,
+    glaze: sanitizeGlazeSettings(source.glaze, DEFAULT_GLAZE_SETTINGS),
     darkMode,
     filterInvert: clamp(toFiniteNumber(source.filterInvert, 0), 0, 1),
     filterSepia: clamp(toFiniteNumber(source.filterSepia, 0), 0, 1),
@@ -1826,7 +1917,7 @@ function App() {
   const [texturePreviewMaterial, setTexturePreviewMaterial] = useState<TextureMaterialSettings>(() => toTexturePreviewMaterial(DEFAULT_TEXTURE_MATERIALS.appGrid))
   const [textureSeedInput, setTextureSeedInput] = useState(() => String(DEFAULT_TEXTURE_MATERIALS.appGrid.seed))
   const [isTextureSeedEditing, setIsTextureSeedEditing] = useState(false)
-  const [glazeMode, setGlazeMode] = useState<GlazeModeKey>('none')
+  const [glazeSettings, setGlazeSettings] = useState<GlazeSettings>(() => DEFAULT_GLAZE_SETTINGS)
   const [darkMode, setDarkMode] = useState<DarkModeKey>('none')
   const [filterInvert, setFilterInvert] = useState(0)
   const [filterSepia, setFilterSepia] = useState(0)
@@ -2166,7 +2257,7 @@ function App() {
       renderScrollTotalTimeSec,
       renderScrollMaxSpeedPxPerSec,
       renderScrollSkew,
-      glazeMode,
+      glaze: glazeSettings,
       darkMode,
       filterInvert,
       filterSepia,
@@ -2195,7 +2286,7 @@ function App() {
     editorGlyphPaddingPx,
     editorSpacing,
     editorStyle,
-    glazeMode,
+    glazeSettings,
     darkMode,
     filterInvert,
     filterSepia,
@@ -2245,7 +2336,7 @@ function App() {
     setAudioTrebleVolume(clamp(loadout.audioTrebleVolume, 0, 1))
     setTypingSoundEnabled(loadout.typingSoundEnabled)
     setTypingSoundSet(loadout.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
-    setGlazeMode(loadout.glazeMode ?? 'none')
+    setGlazeSettings(sanitizeGlazeSettings(loadout.glaze, DEFAULT_GLAZE_SETTINGS))
     // Apply darkMode preset to sliders; individual filter values from the
     // loadout then override preset values if they were customised further.
     applyDarkModePreset(loadout.darkMode ?? 'none')
@@ -2869,7 +2960,7 @@ function App() {
       renderScrollTotalTimeSec,
       renderScrollMaxSpeedPxPerSec,
       renderScrollSkew,
-      glazeMode,
+      glaze: glazeSettings,
       darkMode,
       filterInvert,
       filterSepia,
@@ -2933,7 +3024,7 @@ function App() {
     audioBassVolume,
     audioTrebleVolume,
     textureEnabled,
-    glazeMode,
+    glazeSettings,
     musicVolume,
     musicReverbAmount,
     musicReverbRoom,
@@ -3372,6 +3463,28 @@ function App() {
     if (Math.abs(saturateCssValue - 1) <= 0.001) return undefined
     return { filter: `saturate(${saturateCssValue.toFixed(4)})` } as CSSProperties
   }, [filterSaturate])
+
+  const glazeLinearBackgroundImage = useMemo(() => {
+    const linearLayers = buildLinearGlazeLayers(glazeSettings)
+    return linearLayers.length > 0 ? linearLayers.join(', ') : 'none'
+  }, [glazeSettings])
+
+  const glazeRadialBackgroundImage = useMemo(() => {
+    const radialLayers = buildRadialGlazeLayers(glazeSettings)
+    return radialLayers.length > 0 ? radialLayers.join(', ') : 'none'
+  }, [glazeSettings])
+
+  const glazeBellyBackgroundImage = useMemo(() => {
+    return buildBellyGlazeLayer(glazeSettings)
+  }, [glazeSettings])
+
+  const appRootStyle = useMemo(() => {
+    return {
+      '--glaze-linear-background-image': glazeLinearBackgroundImage,
+      '--glaze-radial-background-image': glazeRadialBackgroundImage,
+      '--glaze-belly-background-image': glazeBellyBackgroundImage,
+    } as CSSProperties & Record<string, string>
+  }, [glazeLinearBackgroundImage, glazeRadialBackgroundImage, glazeBellyBackgroundImage])
 
   // Writes a structured debug entry to a session-scoped debug note (tagged
   // "debug"). No-ops when debuggingEnabled is false. Safe to call from any
@@ -5204,7 +5317,7 @@ ${markdownHtml}
             setRenderScrollTotalTimeSec(appState.menu.renderScrollTotalTimeSec ?? getRenderScrollTotalTimeSec())
                   setRenderScrollMaxSpeedPxPerSec(appState.menu.renderScrollMaxSpeedPxPerSec ?? getRenderScrollMaxSpeedPxPerSec())
             setRenderScrollSkew(appState.menu.renderScrollSkew ?? getRenderScrollSkew())
-            setGlazeMode(appState.menu.glazeMode ?? 'none')
+            setGlazeSettings(sanitizeGlazeSettings(appState.menu.glaze, DEFAULT_GLAZE_SETTINGS))
             setUiMode(appState.menu.uiMode === 'dark' ? 'dark' : 'light')
             applyDarkModePreset(appState.menu.darkMode ?? 'none')
             setFilterInvert(appState.menu.filterInvert ?? 0)
@@ -8735,17 +8848,161 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         ariaLabel="Glaze"
         heading="Glaze"
       >
-<div className="toolbar-flyout-color-grid toolbar-flyout-glaze-grid" role="group" aria-label="Glaze overlay options">
-          {GLAZE_MODES.map((mode) => (
+        <div className="toolbar-flyout-glaze-settings-grid" role="group" aria-label="Glaze overlay controls">
+          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-3">
             <button
-              key={mode.key}
               type="button"
-              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-glaze-swatch glaze-${mode.key}${glazeMode === mode.key ? ' active' : ''}`}
-              title={mode.title}
-              aria-label={mode.ariaLabel}
-              onClick={() => setGlazeMode(mode.key)}
-            ><span className={`${mode.faicon}`}></span></button>
-          ))}
+              className="sidebar-page-number-btn toolbar-flyout-seed-btn"
+              aria-label={`Linear gradient seed ${glazeSettings.linearSeed}. Click to randomize linear strips.`}
+              title="Randomize repeating linear glaze pattern"
+              onClick={() => {
+                setGlazeSettings((current) => ({
+                  ...current,
+                  linearSeed: Math.floor(Math.random() * 1000001),
+                }))
+              }}
+            >
+              linear seed {glazeSettings.linearSeed}
+            </button>
+          </div>
+          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-3">
+            <button
+              type="button"
+              className="sidebar-page-number-btn toolbar-flyout-seed-btn"
+              aria-label={`Radial gradient seed ${glazeSettings.radialSeed}. Click to randomize radial colors and radii.`}
+              title="Randomize radial glaze colors and radii"
+              onClick={() => {
+                setGlazeSettings((current) => ({
+                  ...current,
+                  radialSeed: Math.floor(Math.random() * 1000001),
+                }))
+              }}
+            >
+              radial seed {glazeSettings.radialSeed}
+            </button>
+          </div>
+
+          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-3">
+            <CompactScrollbarSlider
+              id="glaze-linear-stack-count"
+              min={0}
+              max={5}
+              step={1}
+              value={glazeSettings.linearStackCount}
+              trackLabel="linear stacks"
+              ariaLabel="Number of linear glaze stacks"
+              onCommit={(value) => {
+                setGlazeSettings((current) => ({
+                  ...current,
+                  linearStackCount: clamp(Math.round(value), 0, 5),
+                }))
+              }}
+            />
+          </div>
+          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-3">
+            <CompactScrollbarSlider
+              id="glaze-radial-count"
+              min={0}
+              max={4}
+              step={1}
+              value={glazeSettings.radialCount}
+              trackLabel="radial corners"
+              ariaLabel="Number of radial corner gradients"
+              onCommit={(value) => {
+                setGlazeSettings((current) => ({
+                  ...current,
+                  radialCount: clamp(Math.round(value), 0, 4),
+                }))
+              }}
+            />
+          </div>
+
+          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-3">
+            <CompactScrollbarSlider
+              id="glaze-linear-opacity"
+              min={0}
+              max={1}
+              step={0.01}
+              value={glazeSettings.linearOpacity}
+              trackLabel="linear opacity"
+              ariaLabel="Linear gradient stack opacity"
+              onCommit={(value) => {
+                setGlazeSettings((current) => ({
+                  ...current,
+                  linearOpacity: clamp(value, 0, 1),
+                }))
+              }}
+            />
+          </div>
+          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-3">
+            <CompactScrollbarSlider
+              id="glaze-radial-opacity"
+              min={0}
+              max={1}
+              step={0.01}
+              value={glazeSettings.radialOpacity}
+              trackLabel="radial opacity"
+              ariaLabel="Radial gradient stack opacity"
+              onCommit={(value) => {
+                setGlazeSettings((current) => ({
+                  ...current,
+                  radialOpacity: clamp(value, 0, 1),
+                }))
+              }}
+            />
+          </div>
+
+          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="glaze-belly-position"
+              min={0}
+              max={1}
+              step={0.01}
+              value={glazeSettings.bellyPosition}
+              trackLabel="belly y"
+              ariaLabel="Black gradient belly vertical position"
+              onCommit={(value) => {
+                setGlazeSettings((current) => ({
+                  ...current,
+                  bellyPosition: clamp(value, 0, 1),
+                }))
+              }}
+            />
+          </div>
+          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="glaze-belly-width"
+              min={0.15}
+              max={1}
+              step={0.01}
+              value={glazeSettings.bellyWidth}
+              trackLabel="belly width"
+              ariaLabel="Black gradient belly width"
+              onCommit={(value) => {
+                setGlazeSettings((current) => ({
+                  ...current,
+                  bellyWidth: clamp(value, 0.15, 1),
+                }))
+              }}
+            />
+          </div>
+          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="glaze-belly-opacity"
+              min={0}
+              max={1}
+              step={0.01}
+              value={glazeSettings.bellyOpacity}
+              trackLabel="belly opacity"
+              ariaLabel="Black gradient belly opacity"
+              onCommit={(value) => {
+                setGlazeSettings((current) => ({
+                  ...current,
+                  bellyOpacity: clamp(value, 0, 1),
+                }))
+              }}
+            />
+          </div>
         </div>
       </AccordionSection>
 
@@ -9280,7 +9537,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }, [syncSidebarTexture, sidebarMode, isSidebarScrollbarMode])
 
   return (
-    <div className={`app-root glaze-${glazeMode}`} onDragOver={handleAppDragOver} onDrop={handleAppDrop}>
+    <div className="app-root" style={appRootStyle} onDragOver={handleAppDragOver} onDrop={handleAppDrop}>
+      <div className="glaze-overlay-stack" aria-hidden="true">
+        <div className="glaze-overlay-layer glaze-overlay-layer-linear" />
+        <div className="glaze-overlay-layer glaze-overlay-layer-radial" />
+        <div className="glaze-overlay-layer glaze-overlay-layer-belly" />
+      </div>
       <div className="app-saturate-wrapper" style={{ ...appOuterStyle, position: 'fixed', inset: 0 }}>
       <div
         className={`app-shell app-grid${filterInvert > 0.5 ? ' shadow-flip' : ''}`}

@@ -25,6 +25,7 @@ import {
   DEFAULT_CUSTOM_LIGHT,
   DEFAULT_CUSTOM_DARK,
 } from '../src/shared/presets';
+import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '../src/shared/glaze';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureMaterialSettings, type TextureMaterialsBySurface } from '../src/textures/types';
 import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../src/shared/audioPlayer';
 import { AUDIO_EXTENSIONS } from '../src/shared/audioPlayer';
@@ -60,7 +61,7 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   renderScrollTotalTimeSec: 0.4,
   renderScrollMaxSpeedPxPerSec: 6000,
   renderScrollSkew: 0.5,
-  glazeMode: 'none',
+  glaze: DEFAULT_GLAZE_SETTINGS,
   darkMode: 'none',
   filterInvert: 0,
   filterSepia: 0,
@@ -358,10 +359,6 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     ? source.editorSpacing
     : DEFAULT_UI_LAYOUT_LOADOUT.editorSpacing;
 
-  const glazeMode = source.glazeMode === 'none' || source.glazeMode === 'light' || source.glazeMode === 'medium' || source.glazeMode === 'heavy'
-    ? source.glazeMode
-    : DEFAULT_UI_LAYOUT_LOADOUT.glazeMode;
-
   const darkMode = source.darkMode === 'none' || source.darkMode === 'mono' || source.darkMode === 'red' || source.darkMode === 'dusk' || source.darkMode === 'neon' || source.darkMode === 'matrix'
     ? source.darkMode
     : DEFAULT_UI_LAYOUT_LOADOUT.darkMode;
@@ -388,7 +385,7 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     typingSoundSet: source.typingSoundSet === 'A' || source.typingSoundSet === 'B' || source.typingSoundSet === 'C'
       ? source.typingSoundSet
       : DEFAULT_UI_LAYOUT_LOADOUT.typingSoundSet,
-    glazeMode,
+    glaze: sanitizeGlazeSettings(source.glaze, DEFAULT_UI_LAYOUT_LOADOUT.glaze),
     darkMode,
     filterInvert: Math.max(0, Math.min(1, source.filterInvert ?? 0)),
     filterSepia: Math.max(0, Math.min(1, source.filterSepia ?? 0)),
@@ -430,7 +427,7 @@ const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
   'typingSoundEnabled', 'typingSoundSet',
   'renderScrollDynamic', 'renderScrollResponsiveness', 'renderScrollTotalTimeSec',
   'renderScrollMaxSpeedPxPerSec', 'renderScrollSkew',
-  'glazeMode', 'darkMode',
+  'darkMode',
   'filterInvert', 'filterSepia', 'filterHueRotate', 'filterBrightness',
   'filterContrast', 'filterSaturate', 'filterColorize',
 ];
@@ -438,7 +435,7 @@ const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
 // Keys whose values are nested objects; they're emitted as inline JSON when
 // they differ from NEUTRAL_BASE (DEFAULT_CUSTOM_LIGHT).
 const TDL_OBJECT_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
-  'highlightColors', 'editorTextColors', 'textureMaterials',
+  'glaze', 'highlightColors', 'editorTextColors', 'textureMaterials',
 ];
 
 function formatTdlScalar(value: unknown): string {

@@ -1372,7 +1372,6 @@ button.active,
   display:          inline-flex;
   align-items:      center;
   gap:              4px;
-  padding:          5px 10px;
   border:           1px solid var(--btn-border-default);
   border-radius:    var(--border-radius-regular);
   background:       var(--btn-bg-default);
@@ -1897,97 +1896,70 @@ button.active,
   text-shadow: var(--text-shadow-emboss-base);
 }
 
-.toolbar-flyout-glaze-grid, .toolbar-flyout-darkmode-grid {
+.toolbar-flyout-darkmode-grid {
   grid-auto-columns: var(--color-grid-cell);
   grid-auto-rows:    var(--color-grid-cell);
   grid-auto-flow:    column;
 }
 
-.glaze-light > .fa-barcode {
-  opacity: 0.2;
+.toolbar-flyout-glaze-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(6, var(--color-grid-cell));
+  grid-template-rows: repeat(4, var(--color-grid-cell));
+  gap: var(--color-grid-gap);
 }
 
-.glaze-medium > .fa-barcode {
-  opacity: 0.4;
+.toolbar-flyout-glaze-cell {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
 }
 
-.glaze-heavy > .fa-barcode {
-  opacity: 0.8;
+.toolbar-flyout-glaze-cell-span-3 {
+  grid-column: span 3;
+}
+
+.toolbar-flyout-glaze-cell-span-2 {
+  grid-column: span 2;
+}
+
+.toolbar-flyout-glaze-cell .utility-setting-scrollbar-shell,
+.toolbar-flyout-glaze-cell .toolbar-flyout-seed-btn {
+  width: 100%;
 }
 
 /* Glaze overlay */
-.app-root::after {
-  content: '';
+.glaze-overlay-stack {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.glaze-overlay-layer {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 2;
-  opacity: 0;
-  transition: opacity 220ms ease;
-  background-image:
-    repeating-linear-gradient(225deg,
-      transparent 0, transparent 53px,
-      rgba(222,255,255,0.2) 53px, rgba(222,255,255,0.2) 142px,
-      transparent 142px, transparent 214px,
-      rgba(255,222,255,0.2) 214px, rgba(255,222,255,0.2) 371px,
-      transparent 371px, transparent 412px,
-      rgba(255,255,222,0.2) 412px, rgba(255,255,222,0.2) 468px,
-      transparent 468px, transparent 525px,
-      rgba(222,255,222,0.2) 525px, rgba(222,255,222,0.2) 612px,
-      transparent 612px, transparent 677px),
-    repeating-linear-gradient(45deg,
-      transparent 0, transparent 79px,
-      rgba(255,255,255,0.2) 79px, rgba(255,255,255,0.2) 112px,
-      transparent 112px, transparent 244px,
-      rgba(255,255,255,0.2) 244px, rgba(255,255,255,0.2) 321px,
-      transparent 321px, transparent 442px,
-      rgba(255,255,255,0.2) 442px, rgba(255,255,255,0.2) 488px,
-      transparent 488px, transparent 555px,
-      rgba(255,255,255,0.2) 555px, rgba(255,255,255,0.2) 612px,
-      transparent 612px, transparent 648px),
-    repeating-linear-gradient(45deg,
-      transparent 0, transparent 34px,
-      rgba(255,255,255,0.22) 34px, rgba(255,255,255,0.22) 51px,
-      transparent 51px, transparent 94px,
-      rgba(255,255,255,0.24) 94px, rgba(255,255,255,0.24) 100px,
-      transparent 100px, transparent 147px,
-      rgba(255,255,255,0.22) 147px, rgba(255,255,255,0.22) 162px,
-      transparent 162px, transparent 202px,
-      rgba(255,255,255,0.26) 202px, rgba(255,255,255,0.26) 226px,
-      transparent 226px, transparent 260px),
-    linear-gradient(180deg,
-      rgba(0,0,0,0.3) 0, rgba(0,0,0,0.8) 33%,
-      rgba(0,0,0,0.8) 33%, rgba(0,0,0,0.8) 66%,
-      rgba(0,0,0,0.8) 66%, rgba(0,0,0,0.3) 100%),
-    radial-gradient(circle at top left, rgba(0,222,255,0.2), transparent 90%),
-    radial-gradient(circle at bottom right, rgba(255,0,222,0.2), transparent 90%);
   background-repeat: no-repeat;
-  background-size: 100%;
+  background-size: 100% 100%;
+}
+
+.glaze-overlay-layer-linear {
+  background-image: var(--glaze-linear-background-image, none);
   mix-blend-mode: luminosity;
 }
 
-.app-root.glaze-light::after { opacity: 0.08; }
-.app-root.glaze-medium::after { opacity: 0.12; }
-.app-root.glaze-heavy::after { opacity: 0.16; }
+.glaze-overlay-layer-radial {
+  background-image: var(--glaze-radial-background-image, none);
+  mix-blend-mode: screen;
+}
 
-.app-root.glaze-light:has(.app-shell.darkmode-mono)::after,
-.app-root.glaze-light:has(.app-shell.darkmode-red)::after,
-.app-root.glaze-light:has(.app-shell.darkmode-dusk)::after,
-.app-root.glaze-light:has(.app-shell.darkmode-neon)::after,
-.app-root.glaze-light:has(.app-shell.darkmode-matrix)::after
-  { opacity: 0.03; }
-.app-root.glaze-medium:has(.app-shell.darkmode-mono)::after,
-.app-root.glaze-medium:has(.app-shell.darkmode-red)::after,
-.app-root.glaze-medium:has(.app-shell.darkmode-dusk)::after,
-.app-root.glaze-medium:has(.app-shell.darkmode-neon)::after,
-.app-root.glaze-medium:has(.app-shell.darkmode-matrix)::after
-  { opacity: 0.06; }
-.app-root.glaze-heavy:has(.app-shell.darkmode-mono)::after,
-.app-root.glaze-heavy:has(.app-shell.darkmode-red)::after,
-.app-root.glaze-heavy:has(.app-shell.darkmode-dusk)::after,
-.app-root.glaze-heavy:has(.app-shell.darkmode-neon)::after,
-.app-root.glaze-heavy:has(.app-shell.darkmode-matrix)::after
-  { opacity: 0.09; }
+.glaze-overlay-layer-belly {
+  background-image: var(--glaze-belly-background-image, none);
+  mix-blend-mode: multiply;
+}
 
 /* HSVA controls */
 .toolbar-flyout-hsva-control {
@@ -2132,7 +2104,7 @@ button.active,
   min-height:          0;
 }
 
-.toolbar-flyout-loadout-btn, .toolbar-flyout-glaze-swatch {
+.toolbar-flyout-loadout-btn {
   width:       100%;
   height:      100%;
   font-size:   18px;

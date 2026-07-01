@@ -1,4 +1,5 @@
 import type { TextureMaterialsBySurface, TextureSurfaceKey } from '../textures/types';
+import type { GlazeSettings } from './glaze';
 
 export const APP_STATE_CHANNELS = {
   loadAppState: 'state:app:load',
@@ -32,7 +33,7 @@ export interface PersistedMenuState {
   editorGlyphPaddingPx?: number;
   sidebarWidthRatio: number;
   tagSplitRatio: number;
-  glazeMode?: 'none' | 'light' | 'medium' | 'heavy';
+  glaze?: GlazeSettings;
   darkMode?: 'none' | 'mono' | 'red' | 'dusk' | 'neon' | 'matrix';
   uiMode?: 'light' | 'dark';
   filterInvert?: number;

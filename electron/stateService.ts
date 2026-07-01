@@ -8,6 +8,7 @@ import type {
   SidebarMode,
   WindowState,
 } from '../src/shared/appState';
+import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '../src/shared/glaze';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureColorHsva, type TextureMaterialSettings, type TextureMaterialsBySurface, type TextureSurfaceKey } from '../src/textures/types';
 
 const APP_STATE_FILE = 'app-state.json';
@@ -31,6 +32,7 @@ const DEFAULT_APP_STATE: AppState = {
     editorGlyphPaddingPx: 1,
     highlightGridOutlineColor: '#00000022',
     textureEnabled: false,
+    glaze: DEFAULT_GLAZE_SETTINGS,
     textureActiveSurface: 'appGrid',
     textureMaterials: DEFAULT_TEXTURE_MATERIALS,
     sidebarWidthRatio: 0.306,
@@ -252,6 +254,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
         ? input.highlightGridOutlineColor
         : (DEFAULT_APP_STATE.menu!.highlightGridOutlineColor ?? '#00000022'),
     textureEnabled: Boolean(input?.textureEnabled),
+    glaze: sanitizeGlazeSettings(input?.glaze, DEFAULT_APP_STATE.menu!.glaze ?? DEFAULT_GLAZE_SETTINGS),
     textureActiveSurface: sanitizeTextureSurface(input?.textureActiveSurface),
     textureMaterials: sanitizeTextureMaterials(input?.textureMaterials),
     sidebarWidthRatio: sanitizeRatio(input?.sidebarWidthRatio, DEFAULT_APP_STATE.menu!.sidebarWidthRatio),

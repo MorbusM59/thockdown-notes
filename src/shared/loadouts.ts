@@ -1,4 +1,5 @@
 import type { TextureMaterialsBySurface } from '../textures/types';
+import type { GlazeSettings } from './glaze';
 
 export const LOADOUT_CHANNELS = {
   list: 'loadout:list',
@@ -30,7 +31,7 @@ export type UiLayoutLoadout = {
   renderScrollTotalTimeSec: number;
   renderScrollMaxSpeedPxPerSec: number;
   renderScrollSkew: number;
-  glazeMode: 'none' | 'light' | 'medium' | 'heavy';
+  glaze: GlazeSettings;
   darkMode: 'none' | 'mono' | 'red' | 'dusk' | 'neon' | 'matrix';
   filterInvert: number;
   filterSepia: number;
