@@ -1358,6 +1358,7 @@ button.active,
   gap:         6px;
   align-items: center;
   overflow:    hidden;
+  padding: 4px 0 0 0;
 }
 
 .tag-empty-state {
@@ -1371,7 +1372,7 @@ button.active,
   display:          inline-flex;
   align-items:      center;
   gap:              4px;
-  padding:          4px 10px;
+  padding:          3px 10px;
   border:           1px solid var(--btn-border-default);
   border-radius:    999px;
   background:       var(--btn-bg-default);
@@ -2165,6 +2166,11 @@ body.hsva-dragging * {
   -webkit-app-region: drag;
   width:           100%;
   height:          100%;
+  border-radius:    0 0 0 var(--border-radius-regular);
+  border-left:      1px solid var(--color-border-highlight);
+  border-bottom:    1px solid var(--color-border-highlight);
+  box-shadow:       var(--box-shadow-inverted);
+  background:       var(--color-input-backdrop);
 }
 
 .utility-settings-panel {
@@ -2746,16 +2752,11 @@ body.pdf-exporting .markdown-preview img {
 
 .window-controls {
   display:          flex;
-  padding:          8px;
+  padding:          8px 8px 8px 8px;
   gap:              8px;
   align-items:      center;
   margin-bottom:    auto;
   margin-left:      auto;
-  border-radius:    0 0 0 var(--border-radius-regular);
-  border-left:      1px solid var(--color-border-highlight);
-  border-bottom:    1px solid var(--color-border-highlight);
-  box-shadow:       var(--box-shadow-inverted);
-  background:       var(--color-input-backdrop);
 }
 
 .window-control-btn {
@@ -2773,7 +2774,6 @@ body.pdf-exporting .markdown-preview img {
   border-radius:   var(--border-radius-regular);
   background:      var(--btn-bg-default);
   color:           var(--color-text-label);
-  cursor:          pointer;
   transition:      background 0.2s, border-color 0.2s, color 0.2s;
 }
 
@@ -2804,16 +2804,7 @@ body.pdf-exporting .markdown-preview img {
    ============================================================================= */
 
 .audio-controls {
-  display:          flex;
-  padding:          2px;
-  gap:              2px;
-  align-items:      center;
-  margin:           4px auto 0 auto;
-  border-radius:    var(--border-radius-regular) 0 0 var(--border-radius-regular);
-  border:           1px solid var(--color-border-highlight);
-  border-right:     none;
-  box-shadow:       var(--box-shadow-inverted);
-  background:       var(--color-input-backdrop);
+  padding:          0 8px 8px 8px;
 }
 
 .audio-micro-grid {
@@ -2821,7 +2812,6 @@ body.pdf-exporting .markdown-preview img {
   grid-template-columns: repeat(5, 1fr);
   grid-template-rows:    auto auto;
   gap:                   3px;
-  padding:               6px;
 }
 
 .audio-ctrl-btn {
