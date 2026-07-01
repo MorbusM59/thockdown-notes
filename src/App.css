@@ -1576,7 +1576,7 @@ button.active,
 }
 
 /* 8c. Flyout panel */
-.toolbar-flyout-panel {
+.options-panel {
   width:           100%;
   box-sizing:      border-box;
   display:         grid;
@@ -1593,7 +1593,7 @@ button.active,
     visibility         0s   linear 220ms;
 }
 
-.toolbar-flyout-panel.is-open {
+.options-panel.is-open {
   grid-template-rows: 1fr;
   opacity:            1;
   transform:          translateY(0);
@@ -1607,14 +1607,14 @@ button.active,
     visibility         0s   linear 0s;
 }
 
-.toolbar-flyout-panel-inner {
+.options-panel-inner {
   min-height: 0;
   overflow:   hidden;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .toolbar-flyout-panel,
-  .toolbar-flyout-panel.is-open {
+  .options-panel,
+  .options-panel.is-open {
     transition: none;
     transform:  none;
   }
@@ -1636,8 +1636,8 @@ button.active,
 }
 
 /* Mode visibility filters */
-.toolbar-flyout-content.mode-view .toolbar-flyout-section.display-in-edit:not(.display-in-view) { display: none; }
-.toolbar-flyout-content.mode-edit .toolbar-flyout-section.display-in-view:not(.display-in-edit) { display: none; }
+.options-content.mode-view .options-section.display-in-edit:not(.display-in-view) { display: none; }
+.options-content.mode-edit .options-section.display-in-view:not(.display-in-edit) { display: none; }
 
 /* 8e. Flyout sections */
 .sidebar-options-section {
@@ -1710,7 +1710,7 @@ button.active,
   border-radius: var(--border-radius-small);
 }
 
-.toolbar-flyout-section {
+.options-section {
   box-sizing:     border-box;
   margin:         0 calc(var(--toolbar-options-gap) + 5px);
   display:        flex;
@@ -1719,12 +1719,12 @@ button.active,
   width: calc(var(--btn-square-regular-size) * 6 + 7 * var(--toolbar-options-gap)) + 2px;
 }
 
-.toolbar-flyout-section:first-child {
+.options-section:first-child {
   margin-top: calc(var(--toolbar-options-gap) + 5px);
 }
 
-.toolbar-flyout-section-scrolling,
-.toolbar-flyout-section-layout {
+.options-section-scrolling,
+.options-section-layout {
   width:     100px;
   min-width: 100px;
   max-width: 100px;
@@ -1736,19 +1736,19 @@ button.active,
   --color-grid-cell: 32px;
 }
 
-.toolbar-flyout-section-info {
+.options-section-info {
   flex:      1 1 220px;
   min-width: 220px;
   max-width: none;
   align-self: stretch;
 }
 
-.toolbar-flyout-content.mode-view .toolbar-flyout-section-info {
+.options-content.mode-view .options-section-info {
   flex-basis: 300px;
   min-width:  300px;
 }
 
-.toolbar-flyout-info-empty {
+.options-info-empty {
   margin:          0;
   flex:            1 1 auto;
   display:         flex;
@@ -1761,7 +1761,7 @@ button.active,
 }
 
 /* 8f. Color & texture picker system */
-.toolbar-flyout-color-layout {
+.options-color-layout {
   display:    flex;
   align-items: stretch;
   gap:        var(--toolbar-options-gap);
@@ -1772,33 +1772,33 @@ button.active,
   --color-grid-cell: 32px;
 }
 
-.toolbar-flyout-color-grid {
+.options-color-grid {
   display: grid;
   gap:     var(--color-grid-gap);
   flex:    0 0 auto;
 }
 
-.toolbar-flyout-element-grid,
-.toolbar-flyout-texture-grid {
+.options-element-grid,
+.options-texture-grid {
   grid-auto-columns: var(--color-grid-cell);
   grid-auto-rows:    var(--color-grid-cell);
   grid-auto-flow:    column;
 }
 
-.toolbar-flyout-hsva-grid {
+.options-hsva-grid {
   grid-template-columns: repeat(3, var(--color-grid-cell));
   grid-template-rows:    repeat(2, var(--color-grid-cell));
   grid-auto-flow:        column;
 }
 
-.toolbar-flyout-color-separator {
+.options-color-separator {
   width:       1px;
   background:  #ccc;
   align-self:  stretch;
 }
 
 /* Swatch base */
-.toolbar-flyout-color-swatch {
+.options-color-swatch {
   width:      100%;
   height:     100%;
   font-size: 18px;
@@ -1807,18 +1807,18 @@ button.active,
   transition: none;
 }
 
-.toolbar-flyout-element-grid .toolbar-flyout-color-swatch,
-.toolbar-flyout-texture-grid .toolbar-flyout-color-swatch {
+.options-element-grid .options-color-swatch,
+.options-texture-grid .options-color-swatch {
   position:   relative;
   background: transparent;
   overflow:   hidden;
 }
 
 /* Swatch pseudo-layer stack: ::before = bg, ::after = swatch color */
-.toolbar-flyout-element-grid .toolbar-flyout-color-swatch::before,
-.toolbar-flyout-element-grid .toolbar-flyout-color-swatch::after,
-.toolbar-flyout-texture-grid .toolbar-flyout-color-swatch::before,
-.toolbar-flyout-texture-grid .toolbar-flyout-color-swatch::after {
+.options-element-grid .options-color-swatch::before,
+.options-element-grid .options-color-swatch::after,
+.options-texture-grid .options-color-swatch::before,
+.options-texture-grid .options-color-swatch::after {
   content:        '';
   position:       absolute;
   inset:          0;
@@ -1827,23 +1827,23 @@ button.active,
   z-index:        0;
 }
 
-.toolbar-flyout-element-grid .toolbar-flyout-color-swatch::before,
-.toolbar-flyout-texture-grid .toolbar-flyout-color-swatch::before {
+.options-element-grid .options-color-swatch::before,
+.options-texture-grid .options-color-swatch::before {
   background: var(--color-background-light);
 }
 
-.toolbar-flyout-element-grid .toolbar-flyout-color-swatch::after,
-.toolbar-flyout-texture-grid .toolbar-flyout-color-swatch::after {
-  background: var(--toolbar-flyout-swatch-color, transparent);
+.options-element-grid .options-color-swatch::after,
+.options-texture-grid .options-color-swatch::after {
+  background: var(--options-swatch-color, transparent);
 }
 
-.toolbar-flyout-element-grid .toolbar-flyout-color-swatch > *,
-.toolbar-flyout-texture-grid .toolbar-flyout-color-swatch > * {
+.options-element-grid .options-color-swatch > *,
+.options-texture-grid .options-color-swatch > * {
   position: relative;
   z-index:  1;
 }
 
-.toolbar-flyout-color-swatch-glyph {
+.options-color-swatch-glyph {
   font-size:   18px;
   line-height: 1;
   color:      var(--color-text-icon);
@@ -1855,11 +1855,11 @@ button.active,
    Layer 0 (element bg): parchment base — same as editor-shell background.
    Layer 1 (::before):   texture tint + mask — mirrors editor-stage overlay.
    Layer 2 (::after):    box background (edit only) — mirrors --color-bg-regular. */
-.toolbar-flyout-element-grid .toolbar-flyout-color-swatch.text-icon {
+.options-element-grid .options-color-swatch.text-icon {
   background: var(--color-background-light);
 }
 
-.mode-edit .toolbar-flyout-element-grid .toolbar-flyout-color-swatch.text-icon::before {
+.mode-edit .options-element-grid .options-color-swatch.text-icon::before {
   background-color:      var(--texture-editor-edit-tint);
   -webkit-mask-image:    var(--texture-editor-edit);
   -webkit-mask-repeat:   repeat;
@@ -1871,7 +1871,7 @@ button.active,
   mask-position: 0 0;
 }
 
-.mode-view .toolbar-flyout-element-grid .toolbar-flyout-color-swatch.text-icon::before {
+.mode-view .options-element-grid .options-color-swatch.text-icon::before {
   background-color:      var(--texture-editor-render-tint);
   -webkit-mask-image:    var(--texture-editor-render);
   -webkit-mask-repeat:   repeat;
@@ -1883,33 +1883,33 @@ button.active,
   mask-position: 0 0;
 }
 
-.mode-edit .toolbar-flyout-element-grid .toolbar-flyout-color-swatch.text-icon::after {
+.mode-edit .options-element-grid .options-color-swatch.text-icon::after {
   background: var(--color-bg-regular);
 }
 
-.mode-view .toolbar-flyout-element-grid .toolbar-flyout-color-swatch.text-icon::after {
+.mode-view .options-element-grid .options-color-swatch.text-icon::after {
   background: transparent;
 }
 
-.text-icon .toolbar-flyout-color-swatch-glyph {
-  color:       var(--toolbar-flyout-swatch-color, var(--color-text-icon));
+.text-icon .options-color-swatch-glyph {
+  color:       var(--options-swatch-color, var(--color-text-icon));
   text-shadow: var(--text-shadow-emboss-base);
 }
 
-.toolbar-flyout-darkmode-grid {
+.options-darkmode-grid {
   grid-auto-columns: var(--color-grid-cell);
   grid-auto-rows:    var(--color-grid-cell);
   grid-auto-flow:    column;
 }
 
-.toolbar-flyout-glaze-settings-grid {
+.options-glaze-settings-grid {
   display: grid;
   grid-template-columns: repeat(6, var(--color-grid-cell));
   grid-template-rows: repeat(4, var(--color-grid-cell));
   gap: var(--color-grid-gap);
 }
 
-.toolbar-flyout-glaze-cell {
+.options-glaze-cell {
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -1917,29 +1917,29 @@ button.active,
   justify-content: stretch;
 }
 
-.toolbar-flyout-glaze-cell-span-3 {
+.options-glaze-cell-span-3 {
   grid-column: span 3;
 }
 
-.toolbar-flyout-glaze-cell-span-2 {
+.options-glaze-cell-span-2 {
   grid-column: span 2;
 }
 
-.toolbar-flyout-glaze-top-left,
-.toolbar-flyout-glaze-top-center,
-.toolbar-flyout-glaze-top-right {
+.options-glaze-top-left,
+.options-glaze-top-center,
+.options-glaze-top-right {
   grid-row: 1;
 }
 
-.toolbar-flyout-glaze-layer-order-btn {
+.options-glaze-layer-order-btn {
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
 }
 
-.toolbar-flyout-glaze-cell .utility-setting-scrollbar-shell,
-.toolbar-flyout-glaze-cell .toolbar-flyout-seed-btn {
+.options-glaze-cell .utility-setting-scrollbar-shell,
+.options-glaze-cell .options-seed-btn {
   width: 100%;
 }
 
@@ -1986,31 +1986,31 @@ button.active,
 }
 
 /* HSVA controls */
-.toolbar-flyout-hsva-control {
+.options-hsva-control {
   cursor:     ns-resize;
   transition: none;
 }
 
-.toolbar-flyout-hsva-control.is-dragging { cursor: crosshair; }
+.options-hsva-control.is-dragging { cursor: crosshair; }
 
-.toolbar-flyout-hsva-alpha {
+.options-hsva-alpha {
   background: var(--color-background-light);
   padding:    0;
 }
 
-.toolbar-flyout-hsva-glyph,
-.toolbar-flyout-hsva-ghost {
+.options-hsva-glyph,
+.options-hsva-ghost {
   line-height: 1;
 }
 
-.toolbar-flyout-hsva-ghost { display: inline-block; }
+.options-hsva-ghost { display: inline-block; }
 
-.toolbar-flyout-hsva-ghost::before,
-.toolbar-flyout-hsva-glyph::before {
+.options-hsva-ghost::before,
+.options-hsva-glyph::before {
   display: block;
 }
 
-.toolbar-flyout-active-color {
+.options-active-color {
   grid-row:     span 2;
   aspect-ratio: auto;
   justify-self: center;
@@ -2019,7 +2019,7 @@ button.active,
 }
 
 /* Texture picker */
-.toolbar-flyout-texture-settings {
+.options-texture-settings {
   display:           grid;
   grid-auto-columns: var(--color-grid-cell);
   grid-auto-rows:    var(--color-grid-cell);
@@ -2031,7 +2031,7 @@ button.active,
   flex:      0 0 auto;
 }
 
-.toolbar-flyout-texture-stack {
+.options-texture-stack {
   grid-column:    2 / span 2;
   grid-row:       1 / span 2;
   min-width:      0;
@@ -2042,20 +2042,20 @@ button.active,
   gap:            var(--toolbar-options-gap);
 }
 
-.toolbar-flyout-texture-slider-slot {
+.options-texture-slider-slot {
   min-width:   0;
   min-height:  0;
   display:     flex;
   align-items: center;
 }
 
-.toolbar-flyout-seed-editor {
+.options-seed-editor {
   width:       100%;
   display:     flex;
   align-items: center;
 }
 
-.toolbar-flyout-seed-btn {
+.options-seed-btn {
   width:           100%;
   min-width:       0;
   justify-content: center;
@@ -2064,7 +2064,7 @@ button.active,
   color:           var(--color-text-faded);
 }
 
-.toolbar-flyout-texture-preview-row {
+.options-texture-preview-row {
   grid-row:        1 / span 2;
   grid-column:     1;
   min-width:       0;
@@ -2074,25 +2074,25 @@ button.active,
   justify-content: center;
 }
 
-.toolbar-flyout-texture-slider-slot .utility-setting-scrollbar-shell,
-.toolbar-flyout-texture-preview-row .toolbar-flyout-texture-preview {
+.options-texture-slider-slot .utility-setting-scrollbar-shell,
+.options-texture-preview-row .options-texture-preview {
   width: 100%;
 }
 
-.toolbar-flyout-texture-preview {
+.options-texture-preview {
   position:   relative;
   overflow:   hidden;
   border:     1px solid var(--btn-border-default);
   background: var(--btn-bg-default);
 }
 
-.toolbar-flyout-texture-preview.active {
+.options-texture-preview.active {
   border-color: var(--btn-border-active);
   box-shadow:   var(--box-shadow-inverted-harsh);
 }
 
-.toolbar-flyout-texture-preview::before,
-.toolbar-flyout-texture-preview::after {
+.options-texture-preview::before,
+.options-texture-preview::after {
   content:        '';
   position:       absolute;
   inset:          0;
@@ -2100,7 +2100,7 @@ button.active,
   pointer-events: none;
 }
 
-.toolbar-flyout-texture-preview::before {
+.options-texture-preview::before {
   background-color: var(--texture-preview-color, transparent);
   -webkit-mask-image:    var(--texture-preview-mask);
   -webkit-mask-repeat:   repeat;
@@ -2113,7 +2113,7 @@ button.active,
 }
 
 /* 8g. Loadout grid */
-.toolbar-flyout-loadout-grid {
+.options-loadout-grid {
   --loadout-cell-size: 32px;
   --loadout-gap:       var(--toolbar-options-gap);
   display:             grid;
@@ -2128,7 +2128,7 @@ button.active,
   min-height:          0;
 }
 
-.toolbar-flyout-loadout-btn {
+.options-loadout-btn {
   width:       100%;
   height:      100%;
   font-size:   18px;
@@ -2137,7 +2137,7 @@ button.active,
   text-shadow:  var(--text-shadow-icon);
 }
 
-.toolbar-flyout-audio-btn {
+.options-audio-btn {
   font-size: 18px;
   color:      var(--color-text-icon);
   text-shadow:  var(--text-shadow-icon);

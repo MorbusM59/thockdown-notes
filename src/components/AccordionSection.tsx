@@ -208,7 +208,7 @@ export function AccordionSection({
 
   return (
     <section
-      className={`toolbar-flyout-section sidebar-options-section${className ? ` ${className}` : ''}`}
+      className={`options-section sidebar-options-section${className ? ` ${className}` : ''}`}
       aria-label={ariaLabel}
     >
       <details ref={detailsRef} className="sidebar-options-accordion">

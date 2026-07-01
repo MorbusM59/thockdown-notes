@@ -4072,7 +4072,7 @@ ${markdownHtml}
       return true
     }
 
-    if (target.closest('.toolbar-flyout-seed-editor')) {
+    if (target.closest('.options-seed-editor')) {
       return true
     }
 
@@ -8387,9 +8387,9 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }, [glazeRadialSeedInput, glazeSettings.radialSeed])
 
   const renderSidebarOptionsContent = () => (
-    <div className={`toolbar-flyout-content sidebar-options-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`} aria-label="Settings panel">
+    <div className={`options-content sidebar-options-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`} aria-label="Settings panel">
       <div className="preset-section">
-        <div className="toolbar-flyout-loadout-grid" role="group" aria-label="UI mode presets">
+        <div className="options-loadout-grid" role="group" aria-label="UI mode presets">
           {factoryPresetEntriesForCurrentMode.map((entry) => {
             const presetIcons = uiMode === 'dark' ? DARK_PRESET_ICONS : LIGHT_PRESET_ICONS
             const presetThemes = uiMode === 'dark' ? DARK_PRESET_THEMES : LIGHT_PRESET_THEMES
@@ -8399,7 +8399,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               <button
                 key={`preset-${entry.id}`}
                 type="button"
-                className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}`}
+                className={`toolbar-btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}`}
                 title={theme}
                 aria-label={theme}
                 onClick={() => void selectLoadoutPreset(entry.id)}
@@ -8410,7 +8410,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           })}
           <button
             type="button"
-            className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn${isDynamicCustomPresetActive ? ' active' : ''}`}
+            className={`toolbar-btn-icon options-color-swatch options-loadout-btn${isDynamicCustomPresetActive ? ' active' : ''}`}
             title="Custom"
             aria-label="Custom preset"
             onClick={selectDynamicCustomPreset}
@@ -8425,31 +8425,31 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         ariaLabel="Custom Presets"
         heading="Custom Presets"
       >
-        <div className="toolbar-flyout-loadout-grid" role="group" aria-label="Custom UI layout presets">
+        <div className="options-loadout-grid" role="group" aria-label="Custom UI layout presets">
           {customSlotEntriesForCurrentMode.map((entry) => (
             <button
               key={`custom-${entry.id}`}
               type="button"
-              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}`}
+              className={`toolbar-btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}`}
               title={`Custom ${Math.abs(entry.id) - LOADOUT_FACTORY_PRESET_COUNT - 2}`}
               onClick={() => void selectLoadoutPreset(entry.id)}
             >
-              <span className="toolbar-flyout-loadout-index">{Math.abs(entry.id) - LOADOUT_FACTORY_PRESET_COUNT - 2}</span>
+              <span className="options-loadout-index">{Math.abs(entry.id) - LOADOUT_FACTORY_PRESET_COUNT - 2}</span>
             </button>
           ))}
 
           <button
             type="button"
-            className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn toolbar-flyout-loadout-plus${hasUnsavedUiLoadoutChanges ? ' active' : ''}`}
+            className={`toolbar-btn-icon options-color-swatch options-loadout-btn options-loadout-plus${hasUnsavedUiLoadoutChanges ? ' active' : ''}`}
             title="Save current settings as a new custom preset"
             aria-label="Save current settings as a new custom preset"
             onClick={() => void saveCustomLoadout()}
           >
-            <span className="toolbar-flyout-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
+            <span className="options-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
           </button>
           <button
             type="button"
-            className="toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn"
+            className="toolbar-btn-icon options-color-swatch options-loadout-btn"
             title="Reset custom preset to defaults"
             aria-label="Reset custom preset to defaults"
             onClick={() => void resetCustomLoadout()}
@@ -8466,11 +8466,11 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         ariaLabel="Colors & Textures"
         heading="Colors & Textures"
       >
-        <div className="toolbar-flyout-color-layout" aria-label="Color and texture controls">
-          <div className="toolbar-flyout-color-grid toolbar-flyout-hsva-grid" role="group" aria-label="HSVA value controls">
+        <div className="options-color-layout" aria-label="Color and texture controls">
+          <div className="options-color-grid options-hsva-grid" role="group" aria-label="HSVA value controls">
             <button
               type="button"
-              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 'h' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'h' ? ' active' : ''}`}
+              className={`toolbar-btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'h' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'h' ? ' active' : ''}`}
               style={{ background: hsvaDisplayColors.hColor }}
               title="Hue"
               onPointerDown={(event) => {
@@ -8501,10 +8501,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 event.preventDefault()
                 clearColorArmTimer()
               }}
-            ><span className="toolbar-flyout-hsva-glyph fa-solid fa-circle-notch" aria-hidden="true" /></button>
+            ><span className="options-hsva-glyph fa-solid fa-circle-notch" aria-hidden="true" /></button>
             <button
               type="button"
-              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 's' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 's' ? ' active' : ''}`}
+              className={`toolbar-btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 's' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 's' ? ' active' : ''}`}
               style={{ background: hsvaDisplayColors.sColor }}
               title="Saturation"
               onPointerDown={(event) => {
@@ -8535,10 +8535,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 event.preventDefault()
                 clearColorArmTimer()
               }}
-            ><span className="toolbar-flyout-hsva-glyph fa-solid fa-droplet" aria-hidden="true" /></button>
+            ><span className="options-hsva-glyph fa-solid fa-droplet" aria-hidden="true" /></button>
             <button
               type="button"
-              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-hsva-control${hsvaDragState?.control === 'v' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'v' ? ' active' : ''}`}
+              className={`toolbar-btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'v' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'v' ? ' active' : ''}`}
               style={{ background: hsvaDisplayColors.vColor }}
               title="Value"
               onPointerDown={(event) => {
@@ -8569,14 +8569,14 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 event.preventDefault()
                 clearColorArmTimer()
               }}
-            ><span className="toolbar-flyout-hsva-glyph fa-solid fa-sun" aria-hidden="true" /></button>
+            ><span className="options-hsva-glyph fa-solid fa-sun" aria-hidden="true" /></button>
             <button
               type="button"
               className={[
                 'toolbar-btn-icon',
-                'toolbar-flyout-color-swatch',
-                'toolbar-flyout-hsva-control',
-                'toolbar-flyout-hsva-alpha',
+                'options-color-swatch',
+                'options-hsva-control',
+                'options-hsva-alpha',
                 hsvaDragState?.control === 'a' ? 'is-dragging' : '',
                 armedColorSource.kind === 'hsva' && armedColorSource.key === 'a' ? 'active' : '',
               ]
@@ -8612,10 +8612,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 event.preventDefault()
                 clearColorArmTimer()
               }}
-            ><span className="toolbar-flyout-hsva-glyph fa-solid fa-ghost" aria-hidden="true" /></button>
+            ><span className="options-hsva-glyph fa-solid fa-ghost" aria-hidden="true" /></button>
             <button
               type="button"
-              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color${armedColorSource.kind === 'active-color' ? ' active' : ''}`}
+              className={`toolbar-btn-icon options-color-swatch options-active-color${armedColorSource.kind === 'active-color' ? ' active' : ''}`}
               title="Active color"
               style={{ background: `linear-gradient(${activeColorCss}, ${activeColorCss}), var(--color-background-light)` }}
               onMouseDown={(event) => {
@@ -8634,12 +8634,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               onClick={() => {}}
             />
           </div>
-          <div className="toolbar-flyout-texture-settings" aria-label="Texture generation settings">
-            <div className="toolbar-flyout-texture-stack">
-              <div className="toolbar-flyout-texture-slider-slot">
-                <div className="toolbar-flyout-seed-editor" aria-label="Texture seed">
+          <div className="options-texture-settings" aria-label="Texture generation settings">
+            <div className="options-texture-stack">
+              <div className="options-texture-slider-slot">
+                <div className="options-seed-editor" aria-label="Texture seed">
                   {isTextureSeedEditing ? (
-                    <label className="sidebar-page-number-btn toolbar-flyout-seed-btn" aria-label="Edit texture seed">
+                    <label className="sidebar-page-number-btn options-seed-btn" aria-label="Edit texture seed">
                       <input
                         ref={textureSeedInputRef}
                         type="number"
@@ -8678,7 +8678,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   ) : (
                     <button
                       type="button"
-                      className="sidebar-page-number-btn toolbar-flyout-seed-btn"
+                      className="sidebar-page-number-btn options-seed-btn"
                       aria-label={`Texture seed ${texturePreviewMaterial.seed}. Left click to randomize. Right click to edit.`}
                       title="Left click: random seed. Right click: edit seed."
                       onClick={randomizeTextureSeed}
@@ -8692,7 +8692,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   )}
                 </div>
               </div>
-              <div className="toolbar-flyout-texture-slider-slot">
+              <div className="options-texture-slider-slot">
                 <CompactScrollbarSlider
                   id="texture-granularity"
                   min={TEXTURE_GRANULARITY_MIN}
@@ -8709,7 +8709,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   }}
                 />
               </div>
-              <div className="toolbar-flyout-texture-slider-slot">
+              <div className="options-texture-slider-slot">
                 <CompactScrollbarSlider
                   id="texture-smoothness"
                   min={TEXTURE_VSTEPS_MIN}
@@ -8727,10 +8727,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 />
               </div>
             </div>
-            <div className="toolbar-flyout-texture-preview-row">
+            <div className="options-texture-preview-row">
               <button
                 type="button"
-                className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-active-color toolbar-flyout-texture-preview${armedColorSource.kind === 'texture-preview' ? ' active' : ''}`}
+                className={`toolbar-btn-icon options-color-swatch options-active-color options-texture-preview${armedColorSource.kind === 'texture-preview' ? ' active' : ''}`}
                 title="Texture preview"
                 style={{
                   '--texture-preview-color': texturePreviewTintCss,
@@ -8759,7 +8759,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
         <div className="sidebar-options-divider" aria-hidden="true" />
 
-        <div className="toolbar-flyout-color-grid toolbar-flyout-element-grid" role="group" aria-label="Editor highlight elements">
+        <div className="options-color-grid options-element-grid" role="group" aria-label="Editor highlight elements">
           {HIGHLIGHT_COLOR_ORDER.map((key) => {
             const resolvedKey: HighlightColorKey = isPreviewMode && key === 'caret' ? 'search' : key
             const isSearchHighlightControl = key === 'caret' && isPreviewMode
@@ -8770,7 +8770,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               <button
                 key={key}
                 type="button"
-                className="toolbar-btn-icon toolbar-flyout-color-swatch"
+                className="toolbar-btn-icon options-color-swatch"
                 onClick={() => {
                   if (armedColorSource.kind === 'active-color') {
                     applyActiveColorToElement(resolvedKey)
@@ -8798,10 +8798,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   event.preventDefault()
                   clearColorArmTimer()
                 }}
-                style={{ '--toolbar-flyout-swatch-color': highlightColors[resolvedKey] } as React.CSSProperties}
+                style={{ '--options-swatch-color': highlightColors[resolvedKey] } as React.CSSProperties}
                 title={buttonTitle}
               >
-                <span className={`toolbar-flyout-color-swatch-glyph ${buttonIcon}`} aria-hidden="true" />
+                <span className={`options-color-swatch-glyph ${buttonIcon}`} aria-hidden="true" />
               </button>
             )
           })}
@@ -8809,10 +8809,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
         <div className="sidebar-options-divider" aria-hidden="true" />
 
-        <div className="toolbar-flyout-color-grid toolbar-flyout-element-grid" role="group" aria-label="Text elements">
+        <div className="options-color-grid options-element-grid" role="group" aria-label="Text elements">
           <button
             type="button"
-            className="toolbar-btn-icon toolbar-flyout-color-swatch text-icon"
+            className="toolbar-btn-icon options-color-swatch text-icon"
             onClick={() => {
               const target: EditorTextColorTargetKey = isPreviewMode ? 'editorRenderText' : 'editorEditText'
 
@@ -8844,22 +8844,22 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               clearColorArmTimer()
             }}
             style={{
-              '--toolbar-flyout-swatch-color': editorTextColors[isPreviewMode ? 'editorRenderText' : 'editorEditText'],
+              '--options-swatch-color': editorTextColors[isPreviewMode ? 'editorRenderText' : 'editorEditText'],
             } as React.CSSProperties}
             title={isPreviewMode ? 'Render mode text color' : 'Edit mode text color'}
           >
-            <span className={`toolbar-flyout-color-swatch-glyph ${isPreviewMode ? 'fa-solid fa-font' : 'fa-solid fa-font'}`} aria-hidden="true" />
+            <span className={`options-color-swatch-glyph ${isPreviewMode ? 'fa-solid fa-font' : 'fa-solid fa-font'}`} aria-hidden="true" />
           </button>
         </div>
 
         <div className="sidebar-options-divider" aria-hidden="true" />
 
-        <div className="toolbar-flyout-color-grid toolbar-flyout-texture-grid" role="group" aria-label="Texture color targets">
+        <div className="options-color-grid options-texture-grid" role="group" aria-label="Texture color targets">
           {(['appGrid', 'sidebarContent', isPreviewMode ? 'editorRenderText' : 'editorEditText'] as TextureSurfaceKey[]).map((surface) => (
             <button
               key={surface}
               type="button"
-              className="toolbar-btn-icon toolbar-flyout-color-swatch"
+              className="toolbar-btn-icon options-color-swatch"
               onClick={() => {
                 if (armedColorSource.kind === 'active-color') {
                   applyActiveColorToTexture(surface)
@@ -8888,10 +8888,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 event.preventDefault()
                 clearColorArmTimer()
               }}
-              style={{ '--toolbar-flyout-swatch-color': rgbaToCssColor(hsvaToRgba(textureMaterials[surface].color)) } as React.CSSProperties}
+              style={{ '--options-swatch-color': rgbaToCssColor(hsvaToRgba(textureMaterials[surface].color)) } as React.CSSProperties}
               title={TEXTURE_SURFACE_TITLES[surface]}
             >
-              <span className={`toolbar-flyout-color-swatch-glyph ${TEXTURE_SURFACE_ICONS[surface]}`} aria-hidden="true" />
+              <span className={`options-color-swatch-glyph ${TEXTURE_SURFACE_ICONS[surface]}`} aria-hidden="true" />
             </button>
           ))}
         </div>
@@ -8901,11 +8901,11 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         ariaLabel="Glaze"
         heading="Glaze"
       >
-        <div className="toolbar-flyout-glaze-settings-grid" role="group" aria-label="Glaze overlay controls">
-          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-2 toolbar-flyout-glaze-top-left">
-            <div className="toolbar-flyout-seed-editor" aria-label="Linear glaze seed">
+        <div className="options-glaze-settings-grid" role="group" aria-label="Glaze overlay controls">
+          <div className="options-glaze-cell options-glaze-cell-span-2 options-glaze-top-left">
+            <div className="options-seed-editor" aria-label="Linear glaze seed">
               {isGlazeLinearSeedEditing ? (
-                <label className="sidebar-page-number-btn toolbar-flyout-seed-btn" aria-label="Edit linear glaze seed">
+                <label className="sidebar-page-number-btn options-seed-btn" aria-label="Edit linear glaze seed">
                   <input
                     ref={glazeLinearSeedInputRef}
                     type="number"
@@ -8945,7 +8945,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               ) : (
                 <button
                   type="button"
-                  className="sidebar-page-number-btn toolbar-flyout-seed-btn"
+                  className="sidebar-page-number-btn options-seed-btn"
                   aria-label={`Linear glaze seed ${glazeSettings.linearSeed}. Left click to randomize. Right click to edit.`}
                   title="Left click: random seed. Right click: edit seed."
                   onClick={randomizeGlazeLinearSeed}
@@ -8959,10 +8959,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               )}
             </div>
           </div>
-          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-2 toolbar-flyout-glaze-top-center">
+          <div className="options-glaze-cell options-glaze-cell-span-2 options-glaze-top-center">
             <button
               type="button"
-              className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-glaze-layer-order-btn${glazeSettings.radialAboveLinear ? ' active' : ''}`}
+              className={`toolbar-btn-icon options-color-swatch options-glaze-layer-order-btn${glazeSettings.radialAboveLinear ? ' active' : ''}`}
               aria-label={glazeSettings.radialAboveLinear ? 'Radial layer above linear layer' : 'Linear layer above radial layer'}
               title={glazeSettings.radialAboveLinear ? 'Radial layer above linear layer' : 'Linear layer above radial layer'}
               onClick={() => {
@@ -8975,10 +8975,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               <span className="fa-solid fa-layer-group" aria-hidden="true" />
             </button>
           </div>
-          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-2 toolbar-flyout-glaze-top-right">
-            <div className="toolbar-flyout-seed-editor" aria-label="Radial glaze seed">
+          <div className="options-glaze-cell options-glaze-cell-span-2 options-glaze-top-right">
+            <div className="options-seed-editor" aria-label="Radial glaze seed">
               {isGlazeRadialSeedEditing ? (
-                <label className="sidebar-page-number-btn toolbar-flyout-seed-btn" aria-label="Edit radial glaze seed">
+                <label className="sidebar-page-number-btn options-seed-btn" aria-label="Edit radial glaze seed">
                   <input
                     ref={glazeRadialSeedInputRef}
                     type="number"
@@ -9018,7 +9018,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               ) : (
                 <button
                   type="button"
-                  className="sidebar-page-number-btn toolbar-flyout-seed-btn"
+                  className="sidebar-page-number-btn options-seed-btn"
                   aria-label={`Radial glaze seed ${glazeSettings.radialSeed}. Left click to randomize. Right click to edit.`}
                   title="Left click: random seed. Right click: edit seed."
                   onClick={randomizeGlazeRadialSeed}
@@ -9033,7 +9033,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             </div>
           </div>
 
-          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-3">
+          <div className="options-glaze-cell options-glaze-cell-span-3">
             <CompactScrollbarSlider
               id="glaze-linear-stack-count"
               min={0}
@@ -9050,7 +9050,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               }}
             />
           </div>
-          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-3">
+          <div className="options-glaze-cell options-glaze-cell-span-3">
             <CompactScrollbarSlider
               id="glaze-radial-count"
               min={0}
@@ -9068,7 +9068,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             />
           </div>
 
-          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-3">
+          <div className="options-glaze-cell options-glaze-cell-span-3">
             <CompactScrollbarSlider
               id="glaze-linear-opacity"
               min={0}
@@ -9085,7 +9085,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               }}
             />
           </div>
-          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-3">
+          <div className="options-glaze-cell options-glaze-cell-span-3">
             <CompactScrollbarSlider
               id="glaze-radial-opacity"
               min={0}
@@ -9103,7 +9103,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             />
           </div>
 
-          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-2">
+          <div className="options-glaze-cell options-glaze-cell-span-2">
             <CompactScrollbarSlider
               id="glaze-belly-position"
               min={-0.5}
@@ -9120,7 +9120,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               }}
             />
           </div>
-          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-2">
+          <div className="options-glaze-cell options-glaze-cell-span-2">
             <CompactScrollbarSlider
               id="glaze-belly-shape"
               min={0}
@@ -9137,7 +9137,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               }}
             />
           </div>
-          <div className="toolbar-flyout-glaze-cell toolbar-flyout-glaze-cell-span-2">
+          <div className="options-glaze-cell options-glaze-cell-span-2">
             <CompactScrollbarSlider
               id="glaze-belly-opacity"
               min={0}
@@ -9243,7 +9243,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           <div className="utility-setting-button-row" role="group" aria-label="Typing sound controls">
             <button
               type="button"
-              className={`toolbar-btn-icon toolbar-flyout-audio-btn${!typingSoundEnabled ? ' is-active' : ''}`}
+              className={`toolbar-btn-icon options-audio-btn${!typingSoundEnabled ? ' is-active' : ''}`}
               onClick={() => {
                 setTypingSoundEnabled(false)
                 typingSoundManager.setTypingSoundEnabled(false)
@@ -9257,7 +9257,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               <button
                 key={setId}
                 type="button"
-                className={`toolbar-btn-icon toolbar-flyout-audio-btn${typingSoundEnabled && typingSoundSet === setId ? ' is-active' : ''}`}
+                className={`toolbar-btn-icon options-audio-btn${typingSoundEnabled && typingSoundSet === setId ? ' is-active' : ''}`}
                 onClick={() => {
                   setTypingSoundEnabled(true)
                   setTypingSoundSet(setId)
@@ -9394,10 +9394,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         ariaLabel="Notes and Import"
         heading="Data Synchronization"
       >
-<div className="toolbar-flyout-loadout-grid" role="group" aria-label="Note sync and import actions">
+<div className="options-loadout-grid" role="group" aria-label="Note sync and import actions">
           <button
             type="button"
-            className="toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn"
+            className="toolbar-btn-icon options-color-swatch options-loadout-btn"
             onClick={syncExistingNotes}
             title="Sync stored note files"
             aria-label="Sync stored note files"
@@ -9406,7 +9406,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           </button>
           <button
             type="button"
-            className="toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn"
+            className="toolbar-btn-icon options-color-swatch options-loadout-btn"
             onClick={importNotes}
             title="Import notes from files or folders"
             aria-label="Import notes from files or folders"
@@ -9415,7 +9415,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           </button>
           <button
             type="button"
-            className="toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn"
+            className="toolbar-btn-icon options-color-swatch options-loadout-btn"
             onClick={() => void exportLayoutsTdl()}
             title="Export custom layouts to a .tdl file"
             aria-label="Export custom layouts to a .tdl file"
@@ -9424,7 +9424,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           </button>
           <button
             type="button"
-            className="toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn"
+            className="toolbar-btn-icon options-color-swatch options-loadout-btn"
             onClick={() => void importLayoutsTdl()}
             title="Import layouts from a .tdl file"
             aria-label="Import layouts from a .tdl file"
@@ -9439,10 +9439,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         ariaLabel="Debugging"
         heading="Debugging"
       >
-<div className="toolbar-flyout-loadout-grid" role="group" aria-label="Debug tools">
+<div className="options-loadout-grid" role="group" aria-label="Debug tools">
           <button
             type="button"
-            className={`toolbar-btn-icon toolbar-flyout-color-swatch toolbar-flyout-loadout-btn${debuggingEnabled ? ' is-active' : ''}`}
+            className={`toolbar-btn-icon options-color-swatch options-loadout-btn${debuggingEnabled ? ' is-active' : ''}`}
             onClick={() => {
               const next = !debuggingEnabled
               setDebuggingEnabled(next)
