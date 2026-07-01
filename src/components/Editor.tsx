@@ -1227,7 +1227,7 @@ export function Editor({
               <RichTextPlugin
                 contentEditable={
                   <ContentEditable 
-                    className="outline-none text-gray-800 editor-text min-h-full w-full relative z-10"
+                    className="outline-none editor-text min-h-full w-full relative z-10"
                     contentEditable={!editorReadOnly}
                     style={{
                       paddingTop: topBoundary,
@@ -1264,7 +1264,7 @@ export function Editor({
                 }
                 placeholder={
                   hasViewportLines && fontReady ? (
-                    <div className="absolute text-gray-400 pointer-events-none select-none editor-text z-0" style={{ top: topBoundary, left: 0 }}>
+                    <div className="absolute pointer-events-none select-none editor-text z-0" style={{ top: topBoundary, left: 0 }}>
                       Jot down a measly note...
                     </div>
                   ) : null
