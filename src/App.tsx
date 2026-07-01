@@ -2207,6 +2207,8 @@ function App() {
     audioBassVolume,
     audioTrebleVolume,
     textureMaterials,
+    highlightColors,
+    editorTextColors,
     viewFontSize,
     viewSpacing,
     viewStyle,
@@ -2909,6 +2911,7 @@ function App() {
     filterSaturate,
     textureMaterials,
     highlightColors,
+    editorTextColors,
     searchQuery,
     selectedMonths,
     selectedYears,
@@ -3317,6 +3320,8 @@ function App() {
     filterInvert,
     filterSepia,
     highlightColors,
+    editorEditTextColorCss,
+    editorRenderTextColorCss,
     layout.gridTemplateColumns,
     sidebarTextureCss,
     sidebarTextureTintCss,
@@ -9868,7 +9873,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       <div className="editor-viewer-frame" style={{ gridArea: 'viewer' }}>
         <main className="editor-shell">
           <div ref={editorStageRef} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
-            <div style={{ display: isPreviewMode ? 'none' : undefined }}>
+            <div className="edit-container" style={{ display: isPreviewMode ? 'none' : undefined }}>
               <Editor
                 key={activeNoteId ?? 'editor' }
                 bindings={bindings}
@@ -9886,7 +9891,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 caretSuspended={isCaretSuspended}
               />
             </div>
-            <div className="preview-container" style={{ display: isPreviewMode ? undefined : 'none' }} aria-hidden={!isPreviewMode}>
+            <div className="render-container" style={{ display: isPreviewMode ? undefined : 'none' }} aria-hidden={!isPreviewMode}>
               <div ref={previewTextureRef} className="markdown-preview-texture" />
               <div
                 ref={previewScrollRef}

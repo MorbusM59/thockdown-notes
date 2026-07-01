@@ -2340,7 +2340,7 @@ body.hsva-dragging * {
    ============================================================================= */
 
 /* 11a. Container & texture layer */
-.preview-container {
+.render-container {
   position: relative;
   width:    100%;
   height:   100%;
