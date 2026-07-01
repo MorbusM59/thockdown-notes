@@ -1850,7 +1850,7 @@ export class DatabaseService {
     const db = this.requireDb();
     const insert = db.prepare(`
       INSERT INTO music_songs (filePath, playlistSlot, title, artist)
-      VALUES (?, ?, ?, '')
+      VALUES (?, ?, ?, ?)
       ON CONFLICT(filePath) DO NOTHING
     `);
 

@@ -36,8 +36,13 @@ export const AudioControls = memo(function AudioControls({
   const [armedSlot, setArmedSlot] = useState<PlaylistSlot | null>(null)
 
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const seekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const seekIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const isSeekScrubbing = useRef(false)
   const activeRef = useRef(activeSlots)
   activeRef.current = activeSlots
+
+  const currentSongRef = useRef<MusicSongEntry | null>(null)
 
   const refreshCountsRef = useRef(async () => {
     const c = await window.measlyAudioPlayer?.getPlaylistCounts()
@@ -56,9 +61,18 @@ export const AudioControls = memo(function AudioControls({
     })
   }, [])
 
+  // Keep currentSongRef in sync so the onEnded closure can read it without going stale.
+  useEffect(() => {
+    currentSongRef.current = currentSong
+  }, [currentSong])
+
   // Register "song ended" → auto-advance.
   useEffect(() => {
     musicPlayerService.onEnded(() => {
+      const finished = currentSongRef.current
+      if (finished) {
+        void window.measlyAudioPlayer?.afterPlay(finished.id)
+      }
       void advanceToNextSong()
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -198,10 +212,54 @@ export const AudioControls = memo(function AudioControls({
     // Normal right-click handled by contextmenu event.
   }, [currentSong, advanceToNextSong, refreshCounts])
 
-  // ---------------------------------------------------------------- forward button
+  // ---------------------------------------------------------------- seek button
+  // Left-click: +20%.  Right-click: −20%.
+  // Hold either button: ±5% per 100 ms after a 200 ms initial delay.
 
-  const handleForward = useCallback(() => {
-    musicPlayerService.forward(0.2)
+  const SEEK_HOLD_DELAY_MS = 200
+  const SEEK_INTERVAL_MS = 100
+  const SEEK_HOLD_STEP = 0.05
+  const SEEK_CLICK_STEP = 0.2
+
+  const stopSeekScrub = useCallback(() => {
+    if (seekTimerRef.current) {
+      clearTimeout(seekTimerRef.current)
+      seekTimerRef.current = null
+    }
+    if (seekIntervalRef.current) {
+      clearInterval(seekIntervalRef.current)
+      seekIntervalRef.current = null
+    }
+    isSeekScrubbing.current = false
+  }, [])
+
+  const handleSeekPointerDown = useCallback((event: React.PointerEvent) => {
+    if (event.button !== 0 && event.button !== 2) return
+    event.preventDefault()
+    const direction = event.button === 0 ? 1 : -1
+    seekTimerRef.current = setTimeout(() => {
+      isSeekScrubbing.current = true
+      musicPlayerService.seek(direction * SEEK_HOLD_STEP)
+      seekIntervalRef.current = setInterval(() => {
+        musicPlayerService.seek(direction * SEEK_HOLD_STEP)
+      }, SEEK_INTERVAL_MS)
+    }, SEEK_HOLD_DELAY_MS)
+  }, [])
+
+  const handleSeekPointerUp = useCallback((event: React.PointerEvent) => {
+    if (event.button !== 0 && event.button !== 2) return
+    stopSeekScrub()
+  }, [stopSeekScrub])
+
+  const handleSeekClick = useCallback(() => {
+    if (isSeekScrubbing.current) return
+    musicPlayerService.seek(SEEK_CLICK_STEP)
+  }, [])
+
+  const handleSeekContextMenu = useCallback((event: React.MouseEvent) => {
+    event.preventDefault()
+    if (isSeekScrubbing.current) return
+    musicPlayerService.seek(-SEEK_CLICK_STEP)
   }, [])
 
   // ---------------------------------------------------------------- playlist buttons
@@ -335,13 +393,17 @@ export const AudioControls = memo(function AudioControls({
           <span className="fa-solid fa-heart" aria-hidden="true" />
         </button>
 
-        {/* Forward 20 % button */}
+        {/* Seek button — left-click: +20%, right-click: −20%, hold: ±5%/100 ms */}
         <button
           type="button"
           className="audio-ctrl-btn"
-          title="Skip forward 20 % of duration"
-          aria-label="Skip forward 20 percent"
-          onClick={handleForward}
+          title="Left-click: forward 20%. Right-click: rewind 20%. Hold: scrub ±5%/100 ms."
+          aria-label="Seek forward or backward"
+          onClick={handleSeekClick}
+          onContextMenu={handleSeekContextMenu}
+          onPointerDown={handleSeekPointerDown}
+          onPointerUp={handleSeekPointerUp}
+          onPointerLeave={stopSeekScrub}
         >
           <span className="fa-solid fa-forward-step" aria-hidden="true" />
         </button>

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain, dialog, protocol } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { existsSync, promises as fsPromises, readFileSync, writeFileSync } from 'node:fs'
@@ -58,6 +58,15 @@ const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
 }
+
+// Register the measly-music:// protocol BEFORE app.ready so Electron treats it
+// as a privileged scheme.  The handler (registered after ready) proxies the
+// request through net.fetch() to a file:// URL, which works from the main
+// process regardless of whether the renderer loaded from http://localhost (dev)
+// or file:// (production).
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'measly-music', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true } },
+]);
 
 function normalizeExternalFilePath(value: string): string {
   const trimmed = value.trim().replace(/^"|"$/g, '');
@@ -717,6 +726,70 @@ app.whenReady().then(async () => {
     console.warn('[db] startup sanity issues', sanity)
   }
   registerIpcHandlers()
+
+  // Proxy measly-music:// → file system reads so the renderer can load local
+  // audio files regardless of origin (http://localhost in dev, file:// in prod).
+  // Supports HTTP Range requests so Chromium can seek within audio files
+  // without resetting playback to position 0.
+  const AUDIO_MIME: Record<string, string> = {
+    mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg',
+    flac: 'audio/flac', m4a: 'audio/mp4', aac: 'audio/aac',
+    opus: 'audio/opus', webm: 'audio/webm', weba: 'audio/webm',
+  };
+  protocol.handle('measly-music', async (request) => {
+    try {
+      const url = new URL(request.url);
+      // url.pathname arrives as '/C:/path/to/file.mp3' on Windows; strip the leading '/'.
+      const rawPath = decodeURIComponent(url.pathname);
+      const nativePath = rawPath.replace(/^\/([A-Za-z]:)/, '$1').replace(/\//g, path.sep);
+
+      const stat = await fsPromises.stat(nativePath);
+      const totalSize = stat.size;
+      const ext = nativePath.split('.').pop()?.toLowerCase() ?? '';
+      const mime = AUDIO_MIME[ext] ?? 'application/octet-stream';
+
+      const rangeHeader = request.headers.get('Range');
+      if (rangeHeader) {
+        // Parse "bytes=start-end" (end may be omitted)
+        const match = rangeHeader.match(/bytes=(\d*)-(\d*)/);
+        if (match) {
+          const start = match[1] ? parseInt(match[1], 10) : 0;
+          const end   = match[2] ? parseInt(match[2], 10) : totalSize - 1;
+          const chunkSize = end - start + 1;
+          const buffer = Buffer.allocUnsafe(chunkSize);
+          const fd = await fsPromises.open(nativePath, 'r');
+          try {
+            await fd.read(buffer, 0, chunkSize, start);
+          } finally {
+            await fd.close();
+          }
+          return new Response(buffer, {
+            status: 206,
+            headers: {
+              'Content-Type': mime,
+              'Content-Range': `bytes ${start}-${end}/${totalSize}`,
+              'Content-Length': String(chunkSize),
+              'Accept-Ranges': 'bytes',
+            },
+          });
+        }
+      }
+
+      // Full-file response (initial load or no Range header).
+      const data = await fsPromises.readFile(nativePath);
+      return new Response(data, {
+        headers: {
+          'Content-Type': mime,
+          'Content-Length': String(totalSize),
+          'Accept-Ranges': 'bytes',
+        },
+      });
+    } catch (err) {
+      console.error('[measly-music protocol] failed to serve', request.url, err);
+      return new Response(null, { status: 404 });
+    }
+  });
+
   Menu.setApplicationMenu(null)
   await createWindow()
 }).catch((error) => {
