@@ -9,11 +9,15 @@ export type GlazeSettings = {
   gloomPosition: number;
   gloomShape: number;
   gloomOpacity: number;
+  sheenPosition: number;
+  sheenShape: number;
+  sheenOpacity: number;
 };
 
 export const GLAZE_LINEAR_OPACITY_MAX = 0.15;
 export const GLAZE_RADIAL_OPACITY_MAX = 0.25;
 export const GLAZE_GLOOM_OPACITY_MAX = 0.5;
+export const GLAZE_SHEEN_OPACITY_MAX = 0.5;
 
 export const DEFAULT_GLAZE_SETTINGS: GlazeSettings = {
   linearStackCount: 3,
@@ -26,6 +30,9 @@ export const DEFAULT_GLAZE_SETTINGS: GlazeSettings = {
   gloomPosition: 0.5,
   gloomShape: 0.38,
   gloomOpacity: 0,
+  sheenPosition: 0.385,
+  sheenShape: 0,
+  sheenOpacity: 0,
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -57,5 +64,8 @@ export function sanitizeGlazeSettings(input: unknown, fallback: GlazeSettings = 
     gloomPosition: clamp(toFinite(source.gloomPosition, fallback.gloomPosition), -0.5, 1.5),
     gloomShape: clamp(toFinite(source.gloomShape, fallback.gloomShape), 0, 2),
     gloomOpacity: clamp(toFinite(source.gloomOpacity, fallback.gloomOpacity), 0, GLAZE_GLOOM_OPACITY_MAX),
+    sheenPosition: clamp(toFinite(source.sheenPosition, fallback.sheenPosition), -0.5, 1.5),
+    sheenShape: clamp(toFinite(source.sheenShape, fallback.sheenShape), 0, 2),
+    sheenOpacity: clamp(toFinite(source.sheenOpacity, fallback.sheenOpacity), 0, GLAZE_SHEEN_OPACITY_MAX),
   };
 }

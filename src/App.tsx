@@ -27,6 +27,7 @@ import {
   GLAZE_GLOOM_OPACITY_MAX,
   GLAZE_LINEAR_OPACITY_MAX,
   GLAZE_RADIAL_OPACITY_MAX,
+  GLAZE_SHEEN_OPACITY_MAX,
   sanitizeGlazeSettings,
   type GlazeSettings,
 } from './shared/glaze'
@@ -936,13 +937,24 @@ function buildRadialGlazeLayers(settings: GlazeSettings): string[] {
   return layers
 }
 
-function buildGloomGlazeLayer(settings: GlazeSettings): string {
+function buildGloomGlazeLayer(settings: GlazeSettings, useLightColor: boolean): string {
   if (settings.gloomOpacity <= 0) return 'none'
   const centerPct = clamp(settings.gloomPosition, -0.5, 1.5) * 100
   const edgeScale = clamp(settings.gloomShape, 0, 2)
   const edgeAlpha = clamp(settings.gloomOpacity * edgeScale, 0, GLAZE_GLOOM_OPACITY_MAX)
   const centerAlpha = clamp(settings.gloomOpacity, 0, GLAZE_GLOOM_OPACITY_MAX)
-  return `linear-gradient(180deg, rgba(0, 0, 0, ${edgeAlpha.toFixed(3)}) -100%, rgba(0, 0, 0, ${centerAlpha.toFixed(3)}) ${centerPct.toFixed(1)}%, rgba(0, 0, 0, ${edgeAlpha.toFixed(3)}) 200%)`
+  const channel = useLightColor ? 255 : 0
+  return `linear-gradient(180deg, rgba(${channel}, ${channel}, ${channel}, ${edgeAlpha.toFixed(3)}) -100%, rgba(${channel}, ${channel}, ${channel}, ${centerAlpha.toFixed(3)}) ${centerPct.toFixed(1)}%, rgba(${channel}, ${channel}, ${channel}, ${edgeAlpha.toFixed(3)}) 200%)`
+}
+
+function buildSheenGlazeLayer(settings: GlazeSettings, useDarkColor: boolean): string {
+  if (settings.sheenOpacity <= 0) return 'none'
+  const centerPct = clamp(settings.sheenPosition, -0.5, 1.5) * 100
+  const edgeScale = clamp(settings.sheenShape, 0, 2)
+  const edgeAlpha = clamp(settings.sheenOpacity * edgeScale, 0, GLAZE_SHEEN_OPACITY_MAX)
+  const centerAlpha = clamp(settings.sheenOpacity, 0, GLAZE_SHEEN_OPACITY_MAX)
+  const channel = useDarkColor ? 0 : 255
+  return `linear-gradient(180deg, rgba(${channel}, ${channel}, ${channel}, ${edgeAlpha.toFixed(3)}) -100%, rgba(${channel}, ${channel}, ${channel}, ${centerAlpha.toFixed(3)}) ${centerPct.toFixed(1)}%, rgba(${channel}, ${channel}, ${channel}, ${edgeAlpha.toFixed(3)}) 200%)`
 }
 
 function resolvePreviewAnchorRatioFromEditState(params: {
@@ -3685,12 +3697,6 @@ function App() {
   }, [appShellWidthPx])
 
   const appShellStyle = useMemo(() => {
-    const filterParts: string[] = []
-    if (filterInvert > 0) filterParts.push(`invert(${filterInvert})`)
-    if (filterSepia > 0) filterParts.push(`sepia(${filterSepia})`)
-    if (filterHueRotate !== 0) filterParts.push(`hue-rotate(${filterHueRotate}deg)`)
-    if (filterBrightness !== 1) filterParts.push(`brightness(${filterBrightness})`)
-    if (filterContrast !== 1) filterParts.push(`contrast(${filterContrast})`)
     const style: CSSProperties & Record<string, string> = {
       gridTemplateColumns: layout.gridTemplateColumns,
       '--color-bg-regular': highlightColors.background,
@@ -3711,9 +3717,6 @@ function App() {
       '--texture-editor-edit-tint': editorEditTextureTintCss,
       '--texture-editor-render-tint': editorRenderTextureTintCss,
     }
-    if (filterParts.length > 0) {
-      style.filter = filterParts.join(' ')
-    }
     return style
   }, [
     appGridTextureCss,
@@ -3722,11 +3725,6 @@ function App() {
     editorEditTextureTintCss,
     editorRenderTextTextureCss,
     editorRenderTextureTintCss,
-    filterBrightness,
-    filterContrast,
-    filterHueRotate,
-    filterInvert,
-    filterSepia,
     highlightColors,
     editorEditTextColorCss,
     editorRenderTextColorCss,
@@ -3735,14 +3733,36 @@ function App() {
     sidebarTextureTintCss,
   ])
 
-  // Saturate is applied on a wrapper that contains BOTH app-shell and the
-  // colorize overlay, so it operates on the post-colorization composited
-  // result rather than the pre-colorize content underneath the overlay.
+  // Apply all filter sliders at one wrapper level so the full composited scene
+  // (base backdrop + glaze + sheen + app-shell + colorize) is filtered as one.
   const appOuterStyle = useMemo(() => {
+    const filterParts: string[] = []
+    if (filterInvert > 0) filterParts.push(`invert(${filterInvert})`)
+    if (filterSepia > 0) filterParts.push(`sepia(${filterSepia})`)
+    if (filterHueRotate !== 0) filterParts.push(`hue-rotate(${filterHueRotate}deg)`)
+    if (filterBrightness !== 1) filterParts.push(`brightness(${filterBrightness})`)
+    if (filterContrast !== 1) filterParts.push(`contrast(${filterContrast})`)
+
     const saturateCssValue = saturatePosToValue(filterSaturate)
-    if (Math.abs(saturateCssValue - 1) <= 0.001) return undefined
-    return { filter: `saturate(${saturateCssValue.toFixed(4)})` } as CSSProperties
-  }, [filterSaturate])
+    if (Math.abs(saturateCssValue - 1) > 0.001) {
+      filterParts.push(`saturate(${saturateCssValue.toFixed(4)})`)
+    }
+
+    const style: CSSProperties = {
+      backgroundColor: 'var(--palette-parchment-lightest)',
+    }
+    if (filterParts.length > 0) {
+      style.filter = filterParts.join(' ')
+    }
+    return style
+  }, [
+    filterBrightness,
+    filterContrast,
+    filterHueRotate,
+    filterInvert,
+    filterSepia,
+    filterSaturate,
+  ])
 
   const glazeLinearBackgroundImage = useMemo(() => {
     const linearLayers = buildLinearGlazeLayers(glazeSettings)
@@ -3755,14 +3775,19 @@ function App() {
   }, [glazeSettings])
 
   const glazeGloomBackgroundImage = useMemo(() => {
-    return buildGloomGlazeLayer(glazeSettings)
-  }, [glazeSettings])
+    return buildGloomGlazeLayer(glazeSettings, filterInvert > 0.5)
+  }, [glazeSettings, filterInvert])
+
+  const glazeSheenBackgroundImage = useMemo(() => {
+    return buildSheenGlazeLayer(glazeSettings, filterInvert > 0.5)
+  }, [glazeSettings, filterInvert])
 
   const appRootStyle = useMemo(() => {
     return {
       '--glaze-linear-background-image': glazeLinearBackgroundImage,
       '--glaze-radial-background-image': glazeRadialBackgroundImage,
       '--glaze-gloom-background-image': glazeGloomBackgroundImage,
+      '--glaze-sheen-background-image': glazeSheenBackgroundImage,
       '--palette-parchment-lightest': derivedPaletteColors.parchmentLightest,
       '--palette-parchment-light': derivedPaletteColors.parchmentLight,
       '--palette-parchment-mid': derivedPaletteColors.parchmentMid,
@@ -3777,6 +3802,7 @@ function App() {
     glazeLinearBackgroundImage,
     glazeRadialBackgroundImage,
     glazeGloomBackgroundImage,
+    glazeSheenBackgroundImage,
   ])
 
   // Writes a structured debug entry to a session-scoped debug note (tagged
@@ -9570,6 +9596,58 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               }}
             />
           </div>
+
+          <div className="options-glaze-cell options-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="glaze-sheen-position"
+              min={-0.5}
+              max={1.5}
+              step={0.005}
+              value={glazeSettings.sheenPosition}
+              trackLabel="position"
+              ariaLabel="White gradient sheen vertical position"
+              onCommit={(value) => {
+                setGlazeSettings((current) => ({
+                  ...current,
+                  sheenPosition: clamp(value, -0.5, 1.5),
+                }))
+              }}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="glaze-sheen-shape"
+              min={0}
+              max={2}
+              step={0.01}
+              value={glazeSettings.sheenShape}
+              trackLabel="shape"
+              ariaLabel="White gradient sheen edge shape"
+              onCommit={(value) => {
+                setGlazeSettings((current) => ({
+                  ...current,
+                  sheenShape: clamp(value, 0, 2),
+                }))
+              }}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="glaze-sheen-opacity"
+              min={0}
+              max={GLAZE_SHEEN_OPACITY_MAX}
+              step={0.005}
+              value={glazeSettings.sheenOpacity}
+              trackLabel="sheen"
+              ariaLabel="White gradient sheen opacity"
+              onCommit={(value) => {
+                setGlazeSettings((current) => ({
+                  ...current,
+                  sheenOpacity: clamp(value, 0, GLAZE_SHEEN_OPACITY_MAX),
+                }))
+              }}
+            />
+          </div>
         </div>
       </AccordionSection>
 
@@ -10163,12 +10241,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
   return (
     <div className="app-root" style={appRootStyle} onDragOver={handleAppDragOver} onDrop={handleAppDrop}>
-      <div className={`glaze-overlay-stack${glazeSettings.radialAboveLinear ? ' radial-above-linear' : ''}`} aria-hidden="true">
-        <div className="glaze-overlay-layer glaze-overlay-layer-linear" />
-        <div className="glaze-overlay-layer glaze-overlay-layer-radial" />
-        <div className="glaze-overlay-layer glaze-overlay-layer-gloom" />
-      </div>
       <div className="app-saturate-wrapper" style={{ ...appOuterStyle, position: 'fixed', inset: 0 }}>
+        <div className={`glaze-overlay-stack${glazeSettings.radialAboveLinear ? ' radial-above-linear' : ''}`} aria-hidden="true">
+          <div className="glaze-overlay-layer glaze-overlay-layer-linear" />
+          <div className="glaze-overlay-layer glaze-overlay-layer-radial" />
+          <div className="glaze-overlay-layer glaze-overlay-layer-gloom" />
+        </div>
         <div className="app-sheen">
           <div
             className={`app-shell app-grid${filterInvert > 0.5 ? ' shadow-flip' : ''}`}
