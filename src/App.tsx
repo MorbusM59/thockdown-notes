@@ -3700,14 +3700,6 @@ function App() {
       '--color-grid-bg': highlightColors.grid,
       '--color-caret': highlightColors.caret,
       '--color-selection': highlightColors.selection,
-      '--palette-parchment-lightest': derivedPaletteColors.parchmentLightest,
-      '--palette-parchment-light': derivedPaletteColors.parchmentLight,
-      '--palette-parchment-mid': derivedPaletteColors.parchmentMid,
-      '--palette-parchment-dark': derivedPaletteColors.parchmentDark,
-      '--palette-parchment-input': derivedPaletteColors.parchmentInput,
-      '--palette-shadow-white-lo': derivedPaletteColors.shadowWhiteLo,
-      '--palette-shadow-white-mid': derivedPaletteColors.shadowWhiteMid,
-      '--palette-shadow-white-hi': derivedPaletteColors.shadowWhiteHi,
       '--color-editor-edit-text': editorEditTextColorCss,
       '--color-editor-render-text': editorRenderTextColorCss,
       '--texture-app-grid': appGridTextureCss,
@@ -3736,7 +3728,6 @@ function App() {
     filterInvert,
     filterSepia,
     highlightColors,
-    derivedPaletteColors,
     editorEditTextColorCss,
     editorRenderTextColorCss,
     layout.gridTemplateColumns,
@@ -3772,8 +3763,21 @@ function App() {
       '--glaze-linear-background-image': glazeLinearBackgroundImage,
       '--glaze-radial-background-image': glazeRadialBackgroundImage,
       '--glaze-gloom-background-image': glazeGloomBackgroundImage,
+      '--palette-parchment-lightest': derivedPaletteColors.parchmentLightest,
+      '--palette-parchment-light': derivedPaletteColors.parchmentLight,
+      '--palette-parchment-mid': derivedPaletteColors.parchmentMid,
+      '--palette-parchment-dark': derivedPaletteColors.parchmentDark,
+      '--palette-parchment-input': derivedPaletteColors.parchmentInput,
+      '--palette-shadow-white-lo': derivedPaletteColors.shadowWhiteLo,
+      '--palette-shadow-white-mid': derivedPaletteColors.shadowWhiteMid,
+      '--palette-shadow-white-hi': derivedPaletteColors.shadowWhiteHi,
     } as CSSProperties & Record<string, string>
-  }, [glazeLinearBackgroundImage, glazeRadialBackgroundImage, glazeGloomBackgroundImage])
+  }, [
+    derivedPaletteColors,
+    glazeLinearBackgroundImage,
+    glazeRadialBackgroundImage,
+    glazeGloomBackgroundImage,
+  ])
 
   // Writes a structured debug entry to a session-scoped debug note (tagged
   // "debug"). No-ops when debuggingEnabled is false. Safe to call from any
