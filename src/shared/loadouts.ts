@@ -49,6 +49,8 @@ export type UiLayoutLoadout = {
     topBackground: string;
     bottomBackground: string;
     gridOutline: string;
+    grid: string;
+    base: string;
   };
   editorTextColors: {
     editorEditText: string;

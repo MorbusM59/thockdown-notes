@@ -62,6 +62,8 @@ export interface PersistedMenuState {
   highlightTopBackgroundColor?: string;
   highlightBottomBackgroundColor?: string;
   highlightGridOutlineColor?: string;
+  highlightGridColor?: string;
+  highlightBaseColor?: string;
   textureEnabled?: boolean;
   textureActiveSurface?: TextureSurfaceKey;
   textureMaterials?: TextureMaterialsBySurface;

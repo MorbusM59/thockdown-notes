@@ -136,14 +136,25 @@ const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   topBackground: 'rgba(196, 187, 182, 0.49)',
   bottomBackground: 'rgba(196, 187, 182, 0.49)',
   gridOutline: '#00000022',
+  grid: '#f9f6f3',
+  base: '#f9f6f4',
 }
+
+const DEFAULT_BASE_PALETTE_COLOR = '#f9f6f4'
+const DEFAULT_PALETTE_LIGHT = '#f5f3f2'
+const DEFAULT_PALETTE_MID = '#e9e5e2'
+const DEFAULT_PALETTE_DARK = '#ece8e4'
+const DEFAULT_PALETTE_INPUT = '#ffffff'
+const DEFAULT_PALETTE_SHADOW_LO = '#fcf9f677'
+const DEFAULT_PALETTE_SHADOW_MID = '#fcf9f6bb'
+const DEFAULT_PALETTE_SHADOW_HI = '#fcf9f6ee'
 
 const DEFAULT_EDITOR_TEXT_COLORS: Record<EditorTextColorTargetKey, string> = {
   editorEditText: '#000000DD',
   editorRenderText: '#000000DD',
 }
 
-const HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['topBackground', 'bottomBackground', 'background', 'gridOutline', 'caret', 'selection']
+const HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['topBackground', 'bottomBackground', 'background', 'gridOutline', 'grid', 'base']
 
 const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   caret: 'Caret Color',
@@ -153,6 +164,8 @@ const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   topBackground: 'Upper Box Background',
   bottomBackground: 'Lower Box Background',
   gridOutline: 'Box Outline',
+  grid: 'Box Grid',
+  base: 'App Base Background',
 }
 
 const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
@@ -163,6 +176,8 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   topBackground: 'fa-solid fa-square-caret-up',
   bottomBackground: 'fa-solid fa-square-caret-down',
   gridOutline: 'fa-regular fa-square',
+  grid: 'fa-solid fa-border-all',
+  base: 'fa-solid fa-layer-group',
 }
 
 // Icons for the 5 factory presets per mode, indexed by abs(id) - 1 (0-based).
@@ -220,7 +235,7 @@ type TextDecorationFormat = 'bold' | 'italic' | 'strikethrough'
 type ViewStyleKey = 'modern' | 'narrow' | 'cute' | 'xkcd' | 'print'
 type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
 type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
-type HighlightColorKey = 'caret' | 'search' | 'selection' | 'background' | 'topBackground' | 'bottomBackground' | 'gridOutline'
+type HighlightColorKey = 'caret' | 'search' | 'selection' | 'background' | 'topBackground' | 'bottomBackground' | 'gridOutline' | 'grid' | 'base'
 
 type EditorTextColorTargetKey = 'editorEditText' | 'editorRenderText'
 
@@ -596,6 +611,58 @@ function hsvaToRgba(color: HsvaColor): RgbaColor {
     g: clampColorChannel((gPrime + m) * 255),
     b: clampColorChannel((bPrime + m) * 255),
     a: clampAlphaChannel(color.a),
+  }
+}
+
+type DerivedPaletteColors = {
+  parchmentLightest: string
+  parchmentLight: string
+  parchmentMid: string
+  parchmentDark: string
+  parchmentInput: string
+  shadowWhiteLo: string
+  shadowWhiteMid: string
+  shadowWhiteHi: string
+}
+
+function derivePaletteTokensFromBaseColor(baseColorCss: string): DerivedPaletteColors {
+  const fallbackBase = parseCssColorToRgba(DEFAULT_BASE_PALETTE_COLOR) ?? { r: 249, g: 246, b: 244, a: 1 }
+  const baseRgba = parseCssColorToRgba(baseColorCss) ?? fallbackBase
+  const baseHsva = rgbaToHsva(baseRgba)
+  const defaultBaseHsva = rgbaToHsva(fallbackBase)
+  const safeBaseDefaultV = Math.max(0.0001, defaultBaseHsva.v)
+
+  const defaultLightHsva = rgbaToHsva(parseCssColorToRgba(DEFAULT_PALETTE_LIGHT) ?? fallbackBase)
+  const defaultMidHsva = rgbaToHsva(parseCssColorToRgba(DEFAULT_PALETTE_MID) ?? fallbackBase)
+  const defaultDarkHsva = rgbaToHsva(parseCssColorToRgba(DEFAULT_PALETTE_DARK) ?? fallbackBase)
+  const defaultInputHsva = rgbaToHsva(parseCssColorToRgba(DEFAULT_PALETTE_INPUT) ?? fallbackBase)
+
+  const defaultShadowLo = parseCssColorToRgba(DEFAULT_PALETTE_SHADOW_LO) ?? { ...fallbackBase, a: 0.466 }
+  const defaultShadowMid = parseCssColorToRgba(DEFAULT_PALETTE_SHADOW_MID) ?? { ...fallbackBase, a: 0.733 }
+  const defaultShadowHi = parseCssColorToRgba(DEFAULT_PALETTE_SHADOW_HI) ?? { ...fallbackBase, a: 0.933 }
+  const defaultShadowLoHsva = rgbaToHsva(defaultShadowLo)
+  const defaultShadowMidHsva = rgbaToHsva(defaultShadowMid)
+  const defaultShadowHiHsva = rgbaToHsva(defaultShadowHi)
+
+  const withScaledValue = (valueScale: number, alpha = 1): string => {
+    const nextHsva: HsvaColor = {
+      h: baseHsva.h,
+      s: baseHsva.s,
+      v: clamp(baseHsva.v * valueScale, 0, 1),
+      a: clamp(alpha, 0, 1),
+    }
+    return rgbaToCssColor(hsvaToRgba(nextHsva))
+  }
+
+  return {
+    parchmentLightest: rgbaToCssColor({ ...baseRgba, a: 1 }),
+    parchmentLight: withScaledValue(defaultLightHsva.v / safeBaseDefaultV, 1),
+    parchmentMid: withScaledValue(defaultMidHsva.v / safeBaseDefaultV, 1),
+    parchmentDark: withScaledValue(defaultDarkHsva.v / safeBaseDefaultV, 1),
+    parchmentInput: withScaledValue(defaultInputHsva.v / safeBaseDefaultV, 1),
+    shadowWhiteLo: withScaledValue(defaultShadowLoHsva.v / safeBaseDefaultV, defaultShadowLo.a),
+    shadowWhiteMid: withScaledValue(defaultShadowMidHsva.v / safeBaseDefaultV, defaultShadowMid.a),
+    shadowWhiteHi: withScaledValue(defaultShadowHiHsva.v / safeBaseDefaultV, defaultShadowHi.a),
   }
 }
 
@@ -1175,6 +1242,8 @@ function normalizeLoadoutHighlightColors(source: unknown): HighlightColors {
     topBackground: typeof record.topBackground === 'string' ? record.topBackground : DEFAULT_HIGHLIGHT_COLORS.topBackground,
     bottomBackground: typeof record.bottomBackground === 'string' ? record.bottomBackground : DEFAULT_HIGHLIGHT_COLORS.bottomBackground,
     gridOutline: typeof record.gridOutline === 'string' ? record.gridOutline : DEFAULT_HIGHLIGHT_COLORS.gridOutline,
+    grid: typeof record.grid === 'string' ? record.grid : DEFAULT_HIGHLIGHT_COLORS.grid,
+    base: typeof record.base === 'string' ? record.base : DEFAULT_HIGHLIGHT_COLORS.base,
   }
 }
 
@@ -2098,6 +2167,10 @@ function App() {
   const editorEditTextColorCss = useMemo(() => editorTextColors.editorEditText, [editorTextColors.editorEditText])
   const editorRenderTextColorCss = useMemo(() => editorTextColors.editorRenderText, [editorTextColors.editorRenderText])
   const texturePreviewTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(texturePreviewMaterial.color)), [texturePreviewMaterial.color])
+  const derivedPaletteColors = useMemo(
+    () => derivePaletteTokensFromBaseColor(highlightColors.base),
+    [highlightColors.base],
+  )
 
   useEffect(() => {
     const textureApi = window.measlyTextures
@@ -2286,6 +2359,8 @@ function App() {
         topBackground: highlightColors.topBackground,
         bottomBackground: highlightColors.bottomBackground,
         gridOutline: highlightColors.gridOutline,
+        grid: highlightColors.grid,
+        base: highlightColors.base,
       },
       editorTextColors: {
         editorEditText: editorTextColors.editorEditText,
@@ -2367,6 +2442,8 @@ function App() {
       topBackground: loadout.highlightColors.topBackground,
       bottomBackground: loadout.highlightColors.bottomBackground,
       gridOutline: loadout.highlightColors.gridOutline,
+      grid: loadout.highlightColors.grid,
+      base: loadout.highlightColors.base,
     })
     setEditorTextColors({
       editorEditText: loadout.editorTextColors.editorEditText,
@@ -3026,12 +3103,15 @@ function App() {
       musicReverbAmount,
       musicReverbRoom,
       musicActiveSlots,
+      highlightCaretColor: highlightColors.caret,
       highlightSearchColor: highlightColors.search,
       highlightSelectionColor: highlightColors.selection,
       highlightBackgroundColor: highlightColors.background,
       highlightTopBackgroundColor: highlightColors.topBackground,
       highlightBottomBackgroundColor: highlightColors.bottomBackground,
       highlightGridOutlineColor: highlightColors.gridOutline,
+      highlightGridColor: highlightColors.grid,
+      highlightBaseColor: highlightColors.base,
       textureEnabled,
       editorEditTextColor: editorTextColors.editorEditText,
       editorRenderTextColor: editorTextColors.editorRenderText,
@@ -3288,6 +3368,8 @@ function App() {
 
     if (sidebarMode === 'options' && nextMode !== 'options') {
       setLastSidebarModeBeforeOptions(nextMode)
+      // Clear one-shot music force-open intent when leaving options mode.
+      setMusicAccordionNonce(0)
     }
 
     setSidebarViewStateByMode(nextSidebarViewStateByMode)
@@ -3467,8 +3549,17 @@ function App() {
       '--color-bg-leading': highlightColors.topBackground,
       '--color-bg-trailing': highlightColors.bottomBackground,
       '--color-grid-outline': highlightColors.gridOutline,
+      '--color-grid-bg': highlightColors.grid,
       '--color-caret': highlightColors.caret,
       '--color-selection': highlightColors.selection,
+      '--palette-parchment-lightest': derivedPaletteColors.parchmentLightest,
+      '--palette-parchment-light': derivedPaletteColors.parchmentLight,
+      '--palette-parchment-mid': derivedPaletteColors.parchmentMid,
+      '--palette-parchment-dark': derivedPaletteColors.parchmentDark,
+      '--palette-parchment-input': derivedPaletteColors.parchmentInput,
+      '--palette-shadow-white-lo': derivedPaletteColors.shadowWhiteLo,
+      '--palette-shadow-white-mid': derivedPaletteColors.shadowWhiteMid,
+      '--palette-shadow-white-hi': derivedPaletteColors.shadowWhiteHi,
       '--color-editor-edit-text': editorEditTextColorCss,
       '--color-editor-render-text': editorRenderTextColorCss,
       '--texture-app-grid': appGridTextureCss,
@@ -3497,6 +3588,7 @@ function App() {
     filterInvert,
     filterSepia,
     highlightColors,
+    derivedPaletteColors,
     editorEditTextColorCss,
     editorRenderTextColorCss,
     layout.gridTemplateColumns,
@@ -5401,6 +5493,8 @@ ${markdownHtml}
               topBackground: appState.menu.highlightTopBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.topBackground,
               bottomBackground: appState.menu.highlightBottomBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.bottomBackground,
               gridOutline: appState.menu.highlightGridOutlineColor ?? DEFAULT_HIGHLIGHT_COLORS.gridOutline,
+              grid: appState.menu.highlightGridColor ?? DEFAULT_HIGHLIGHT_COLORS.grid,
+              base: appState.menu.highlightBaseColor ?? DEFAULT_HIGHLIGHT_COLORS.base,
             })
             setEditorTextColors({
               editorEditText: appState.menu.editorEditTextColor ?? DEFAULT_EDITOR_TEXT_COLORS.editorEditText,
@@ -8821,6 +8915,59 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             const isSearchHighlightControl = key === 'caret' && isPreviewMode
             const buttonTitle = isSearchHighlightControl ? 'Search highlight color' : HIGHLIGHT_COLOR_TITLES[key]
             const buttonIcon = isSearchHighlightControl ? 'fa-solid fa-magnifying-glass' : HIGHLIGHT_COLOR_ICONS[key]
+            const isLabelButton = key === 'grid' || key === 'base'
+
+            return (
+              <button
+                key={key}
+                type="button"
+                className="toolbar-btn-icon options-color-swatch"
+                onClick={() => {
+                  if (armedColorSource.kind === 'active-color') {
+                    applyActiveColorToElement(resolvedKey)
+                    return
+                  }
+
+                  if (armedColorSource.kind === 'texture-preview') {
+                    updateHighlightColor(resolvedKey, hsvaToRgba(texturePreviewMaterial.color))
+                    return
+                  }
+
+                  if (armedColorSource.kind === 'hsva') {
+                    applyHsvaValueToElement(armedColorSource.key, resolvedKey)
+                  }
+                }}
+                onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'element', key: resolvedKey }, event)}
+                onMouseUp={(event) => {
+                  if (event.button !== 2) return
+                  clearColorArmTimer()
+                }}
+                onMouseLeave={() => {
+                  clearColorArmTimer()
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  clearColorArmTimer()
+                }}
+                style={{ '--options-swatch-color': highlightColors[resolvedKey] } as React.CSSProperties}
+                title={buttonTitle}
+              >
+                {isLabelButton
+                  ? <span className="options-color-swatch-label" aria-hidden="true">{key}</span>
+                  : <span className={`options-color-swatch-glyph ${buttonIcon}`} aria-hidden="true" />}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="sidebar-options-divider" aria-hidden="true" />
+
+        <div className="options-color-grid options-element-grid" role="group" aria-label="Text elements">
+          {(['caret', 'selection'] as Array<'caret' | 'selection'>).map((key) => {
+            const resolvedKey: HighlightColorKey = isPreviewMode && key === 'caret' ? 'search' : key
+            const isSearchHighlightControl = key === 'caret' && isPreviewMode
+            const buttonTitle = isSearchHighlightControl ? 'Search highlight color' : HIGHLIGHT_COLOR_TITLES[key]
+            const buttonIcon = isSearchHighlightControl ? 'fa-solid fa-magnifying-glass' : HIGHLIGHT_COLOR_ICONS[key]
 
             return (
               <button
@@ -8861,11 +9008,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               </button>
             )
           })}
-        </div>
 
-        <div className="sidebar-options-divider" aria-hidden="true" />
-
-        <div className="options-color-grid options-element-grid" role="group" aria-label="Text elements">
           <button
             type="button"
             className="toolbar-btn-icon options-color-swatch text-icon"

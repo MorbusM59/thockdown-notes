@@ -52,6 +52,8 @@ const NEUTRAL_BASE: UiLayoutLoadout = {
     topBackground: 'rgba(196, 187, 182, 0.3)',
     bottomBackground: 'rgba(196, 187, 182, 0.3)',
     gridOutline: '#00000022',
+    grid: '#f9f6f3',
+    base: '#f9f6f4',
   },
   editorTextColors: {
     editorEditText: '#000000DD',

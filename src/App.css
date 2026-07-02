@@ -1851,6 +1851,16 @@ button.active,
   text-shadow: var(--text-shadow-icon);
 }
 
+.options-color-swatch-label {
+  font-size:      10px;
+  line-height:    1;
+  font-weight:    700;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  color:          var(--color-text-faded);
+  text-shadow:    var(--text-shadow-icon);
+}
+
 /* Text-color swatch: replicates the exact editor background stack so the glyph
    color preview matches how the text actually looks in the editor.
    Layer 0 (element bg): parchment base — same as editor-shell background.

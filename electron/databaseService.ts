@@ -78,6 +78,8 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
     topBackground: 'rgba(196, 187, 182, 0.49)',
     bottomBackground: 'rgba(196, 187, 182, 0.49)',
     gridOutline: '#00000022',
+    grid: '#f9f6f3',
+    base: '#f9f6f4',
   },
   textureMaterials: DEFAULT_TEXTURE_MATERIALS,
   editorTextColors: {
@@ -402,6 +404,8 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
       topBackground: sanitizeString(highlights.topBackground, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.topBackground),
       bottomBackground: sanitizeString(highlights.bottomBackground, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.bottomBackground),
       gridOutline: sanitizeString(highlights.gridOutline, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.gridOutline),
+      grid: sanitizeString(highlights.grid, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.grid),
+      base: sanitizeString(highlights.base, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.base),
     },
     textureMaterials: normalizeTextureMaterials(source.textureMaterials),
     editorTextColors: {
