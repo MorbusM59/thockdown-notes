@@ -1973,6 +1973,14 @@ button.active,
   width: 100%;
 }
 
+/* Sheen overlay */
+.app-sheen
+{
+  position:absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, #ffffff22, #00000022);
+}
+
 /* Glaze overlay */
 .glaze-overlay-stack {
   position: fixed;
