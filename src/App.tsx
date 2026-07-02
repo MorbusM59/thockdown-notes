@@ -8789,7 +8789,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               <div className="options-texture-slider-slot">
                 <div className="options-seed-editor" aria-label="Texture seed">
                   {isTextureSeedEditing ? (
-                    <label className="sidebar-page-number-btn options-seed-btn" aria-label="Edit texture seed">
+                    <label className="options-seed-btn is-editing" aria-label="Edit texture seed">
                       <input
                         ref={textureSeedInputRef}
                         type="number"
@@ -8828,7 +8828,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   ) : (
                     <button
                       type="button"
-                      className="sidebar-page-number-btn options-seed-btn"
+                      className="options-seed-btn"
                       aria-label={`Texture seed ${texturePreviewMaterial.seed}. Left click to randomize. Right click to edit.`}
                       title="Left click: random seed. Right click: edit seed."
                       onClick={randomizeTextureSeed}
@@ -8836,8 +8836,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                         event.preventDefault()
                         startTextureSeedEdit()
                       }}
-                    >
-                      {texturePreviewMaterial.seed}
+                    ><span className="fa-solid fa-seedling" />
                     </button>
                   )}
                 </div>
@@ -8915,7 +8914,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             const isSearchHighlightControl = key === 'caret' && isPreviewMode
             const buttonTitle = isSearchHighlightControl ? 'Search highlight color' : HIGHLIGHT_COLOR_TITLES[key]
             const buttonIcon = isSearchHighlightControl ? 'fa-solid fa-magnifying-glass' : HIGHLIGHT_COLOR_ICONS[key]
-            const isLabelButton = key === 'grid' || key === 'base'
 
             return (
               <button
@@ -8952,9 +8950,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 style={{ '--options-swatch-color': highlightColors[resolvedKey] } as React.CSSProperties}
                 title={buttonTitle}
               >
-                {isLabelButton
-                  ? <span className="options-color-swatch-label" aria-hidden="true">{key}</span>
-                  : <span className={`options-color-swatch-glyph ${buttonIcon}`} aria-hidden="true" />}
+                <span className={`options-color-swatch-glyph ${buttonIcon}`} aria-hidden="true" />
               </button>
             )
           })}
@@ -9104,7 +9100,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           <div className="options-glaze-cell options-glaze-cell-span-2 options-glaze-top-left">
             <div className="options-seed-editor" aria-label="Linear glaze seed">
               {isGlazeLinearSeedEditing ? (
-                <label className="sidebar-page-number-btn options-seed-btn" aria-label="Edit linear glaze seed">
+                <label className="options-seed-btn is-editing" aria-label="Edit linear glaze seed">
                   <input
                     ref={glazeLinearSeedInputRef}
                     type="number"
@@ -9144,7 +9140,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               ) : (
                 <button
                   type="button"
-                  className="sidebar-page-number-btn options-seed-btn"
+                  className="options-seed-btn"
                   aria-label={`Linear glaze seed ${glazeSettings.linearSeed}. Left click to randomize. Right click to edit.`}
                   title="Left click: random seed. Right click: edit seed."
                   onClick={randomizeGlazeLinearSeed}
@@ -9177,7 +9173,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           <div className="options-glaze-cell options-glaze-cell-span-2 options-glaze-top-right">
             <div className="options-seed-editor" aria-label="Radial glaze seed">
               {isGlazeRadialSeedEditing ? (
-                <label className="sidebar-page-number-btn options-seed-btn" aria-label="Edit radial glaze seed">
+                <label className="options-seed-btn is-editing" aria-label="Edit radial glaze seed">
                   <input
                     ref={glazeRadialSeedInputRef}
                     type="number"
@@ -9217,7 +9213,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               ) : (
                 <button
                   type="button"
-                  className="sidebar-page-number-btn options-seed-btn"
+                  className="options-seed-btn"
                   aria-label={`Radial glaze seed ${glazeSettings.radialSeed}. Left click to randomize. Right click to edit.`}
                   title="Left click: random seed. Right click: edit seed."
                   onClick={randomizeGlazeRadialSeed}

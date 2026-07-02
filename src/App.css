@@ -121,7 +121,7 @@
 
   --color-border-regular:       #00000033;
   --color-border-selected:      #00000066;
-  --color-border-highlight:     #fcf9f6;
+  --color-border-highlight:     #ffffffbb;
 
   --color-toggle-default:       #eeeeee;
   --color-toggle-hover:         #f0f0f0;
@@ -606,7 +606,6 @@ button.active,
   border-left:     none;
   border-radius:   0 9px 9px 0;
   box-shadow:      var(--box-shadow-inverted);
-  background-color: var(--palette-parchment-dark);
 }
 
 .sidebar-content.is-scrollbar-mode > div:nth-child(2) {
@@ -1951,7 +1950,7 @@ button.active,
 }
 
 .options-glaze-cell .utility-setting-scrollbar-shell,
-.options-glaze-cell .options-seed-btn {
+ .options-seed-btn {
   width: 100%;
 }
 
@@ -2068,13 +2067,22 @@ button.active,
 }
 
 .options-seed-btn {
-  height:          32px;
   width:           100%;
-  min-width:       0;
-  justify-content: center;
+  height:          100%;
   font-size:       var(--btn-icon-size);
-  font-weight:     600;
   color:           var(--color-text-label);
+  padding:         0 6px;
+  border:          1px solid var(--btn-border-default);
+  border-radius:   var(--border-radius-regular);
+  background:      var(--btn-bg-default);
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  box-sizing:      border-box;
+}
+
+.options-seed-btn.is-editing {
+  box-shadow:      var(--box-shadow-inverted-light);
 }
 
 .options-texture-preview-row {
