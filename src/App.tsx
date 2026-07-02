@@ -8651,7 +8651,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 event.preventDefault()
                 clearColorArmTimer()
               }}
-            ><span className="options-hsva-glyph fa-solid fa-circle-notch" aria-hidden="true" /></button>
+            ><span className="options-hsva-glyph fa-solid fa-rainbow" aria-hidden="true" /></button>
             <button
               type="button"
               className={`toolbar-btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 's' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 's' ? ' active' : ''}`}
@@ -8719,7 +8719,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 event.preventDefault()
                 clearColorArmTimer()
               }}
-            ><span className="options-hsva-glyph fa-solid fa-sun" aria-hidden="true" /></button>
+            ><span className="options-hsva-glyph fa-solid fa-circle-half-stroke" aria-hidden="true" /></button>
             <button
               type="button"
               className={[
@@ -8762,7 +8762,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 event.preventDefault()
                 clearColorArmTimer()
               }}
-            ><span className="options-hsva-glyph fa-solid fa-ghost" aria-hidden="true" /></button>
+            ><span className="options-hsva-glyph fa-solid fa-eye" aria-hidden="true" /></button>
             <button
               type="button"
               className={`toolbar-btn-icon options-color-swatch options-active-color${armedColorSource.kind === 'active-color' ? ' active' : ''}`}
