@@ -1911,6 +1911,7 @@ function App() {
   const adapterRef = useRef<EditorAdapter | null>(null)
   const appShellRef = useRef<HTMLDivElement | null>(null)
   const sidebarContentRef = useRef<HTMLDivElement | null>(null)
+  const optionsContentRef = useRef<HTMLDivElement | null>(null)
   const editorStageRef = useRef<HTMLDivElement | null>(null)
   const sidebarSearchInputRef = useRef<HTMLInputElement | null>(null)
   const tagInputRef = useRef<HTMLInputElement | null>(null)
@@ -2790,6 +2791,26 @@ function App() {
     })
   }, [])
 
+  const getWheelStepDirection = useCallback((event: React.WheelEvent<HTMLElement>) => {
+    const dominantDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
+    if (dominantDelta === 0) return 0
+    return dominantDelta > 0 ? -1 : 1
+  }, [])
+
+  const wheelAdjustHsvaControl = useCallback((control: HsvaControlKey, event: React.WheelEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    const stepDirection = getWheelStepDirection(event)
+    if (stepDirection === 0) return
+
+    const baseValue = control === 'h'
+      ? activeColorHsva.h
+      : activeColorHsva[control] * 255
+
+    updateHsvaControlValue(control, baseValue + stepDirection)
+  }, [activeColorHsva, getWheelStepDirection, updateHsvaControlValue])
+
   const startHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return
 
@@ -2878,6 +2899,16 @@ function App() {
     })
   }, [getTextureControlBounds])
 
+  const wheelAdjustTextureControl = useCallback((control: TextureControlKey, event: React.WheelEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    const stepDirection = getWheelStepDirection(event)
+    if (stepDirection === 0) return
+
+    updateTextureControlValue(control, getTextureControlValue(control) + stepDirection)
+  }, [getTextureControlValue, getWheelStepDirection, updateTextureControlValue])
+
   const startTextureControlDrag = useCallback((control: TextureControlKey, event: PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return
     event.preventDefault()
@@ -2919,10 +2950,6 @@ function App() {
     setTextureControlDragState(null)
   }, [textureControlDragState])
 
-  const nudgeTextureControlBy = useCallback((control: TextureControlKey, delta: number) => {
-    updateTextureControlValue(control, getTextureControlValue(control) + delta)
-  }, [getTextureControlValue, updateTextureControlValue])
-
   useEffect(() => {
     if (!hsvaDragState && !textureControlDragState) {
       document.body.classList.remove('hsva-dragging')
@@ -2934,6 +2961,29 @@ function App() {
       document.body.classList.remove('hsva-dragging')
     }
   }, [hsvaDragState, textureControlDragState])
+
+  useEffect(() => {
+    if (sidebarMode !== 'options') return
+
+    const optionsContentEl = optionsContentRef.current
+    if (!optionsContentEl) return
+
+    const handleOptionsWheelCapture = (event: WheelEvent) => {
+      const target = event.target
+      if (!(target instanceof Element)) return
+
+      if (!target.closest('.options-hsva-control, .options-texture-control-btn')) {
+        return
+      }
+
+      event.preventDefault()
+    }
+
+    optionsContentEl.addEventListener('wheel', handleOptionsWheelCapture, { capture: true, passive: false })
+    return () => {
+      optionsContentEl.removeEventListener('wheel', handleOptionsWheelCapture, true)
+    }
+  }, [sidebarMode])
 
   useEffect(() => {
     return () => {
@@ -8625,7 +8675,11 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }, [glazeRadialSeedInput, glazeSettings.radialSeed])
 
   const renderSidebarOptionsContent = () => (
-    <div className={`options-content sidebar-options-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`} aria-label="Settings panel">
+    <div
+      ref={optionsContentRef}
+      className={`options-content sidebar-options-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`}
+      aria-label="Settings panel"
+    >
       <div className="preset-section">
         <div className="options-loadout-grid" role="group" aria-label="UI mode presets">
           {factoryPresetEntriesForCurrentMode.map((entry) => {
@@ -8749,6 +8803,9 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 event.preventDefault()
                 clearColorArmTimer()
               }}
+              onWheel={(event) => {
+                wheelAdjustHsvaControl('h', event)
+              }}
             ><span className="options-hsva-glyph fa-solid fa-rainbow" aria-hidden="true" /></button>
             <button
               type="button"
@@ -8783,6 +8840,9 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 event.preventDefault()
                 clearColorArmTimer()
               }}
+              onWheel={(event) => {
+                wheelAdjustHsvaControl('s', event)
+              }}
             ><span className="options-hsva-glyph fa-solid fa-droplet" aria-hidden="true" /></button>
             <button
               type="button"
@@ -8816,6 +8876,9 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               onContextMenu={(event) => {
                 event.preventDefault()
                 clearColorArmTimer()
+              }}
+              onWheel={(event) => {
+                wheelAdjustHsvaControl('v', event)
               }}
             ><span className="options-hsva-glyph fa-solid fa-circle-half-stroke" aria-hidden="true" /></button>
             <button
@@ -8859,6 +8922,9 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               onContextMenu={(event) => {
                 event.preventDefault()
                 clearColorArmTimer()
+              }}
+              onWheel={(event) => {
+                wheelAdjustHsvaControl('a', event)
               }}
             ><span className="options-hsva-glyph fa-solid fa-eye" aria-hidden="true" /></button>
             <button
@@ -9000,39 +9066,11 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               onLostPointerCapture={(event) => {
                 stopTextureControlDrag('granularity', event)
               }}
-              onKeyDown={(event) => {
-                if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
-                  event.preventDefault()
-                  nudgeTextureControlBy('granularity', -1)
-                  return
-                }
-                if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
-                  event.preventDefault()
-                  nudgeTextureControlBy('granularity', 1)
-                  return
-                }
-                if (event.key === 'PageDown') {
-                  event.preventDefault()
-                  nudgeTextureControlBy('granularity', -5)
-                  return
-                }
-                if (event.key === 'PageUp') {
-                  event.preventDefault()
-                  nudgeTextureControlBy('granularity', 5)
-                  return
-                }
-                if (event.key === 'Home') {
-                  event.preventDefault()
-                  updateTextureControlValue('granularity', TEXTURE_GRANULARITY_MIN)
-                  return
-                }
-                if (event.key === 'End') {
-                  event.preventDefault()
-                  updateTextureControlValue('granularity', TEXTURE_GRANULARITY_MAX)
-                }
-              }}
               onContextMenu={(event) => {
                 event.preventDefault()
+              }}
+              onWheel={(event) => {
+                wheelAdjustTextureControl('granularity', event)
               }}
             >
               <span className="options-hsva-glyph fa-solid fa-chess-board" aria-hidden="true" />
@@ -9072,39 +9110,11 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               onLostPointerCapture={(event) => {
                 stopTextureControlDrag('smoothness', event)
               }}
-              onKeyDown={(event) => {
-                if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
-                  event.preventDefault()
-                  nudgeTextureControlBy('smoothness', -1)
-                  return
-                }
-                if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
-                  event.preventDefault()
-                  nudgeTextureControlBy('smoothness', 1)
-                  return
-                }
-                if (event.key === 'PageDown') {
-                  event.preventDefault()
-                  nudgeTextureControlBy('smoothness', -5)
-                  return
-                }
-                if (event.key === 'PageUp') {
-                  event.preventDefault()
-                  nudgeTextureControlBy('smoothness', 5)
-                  return
-                }
-                if (event.key === 'Home') {
-                  event.preventDefault()
-                  updateTextureControlValue('smoothness', TEXTURE_VSTEPS_MIN)
-                  return
-                }
-                if (event.key === 'End') {
-                  event.preventDefault()
-                  updateTextureControlValue('smoothness', TEXTURE_VSTEPS_MAX)
-                }
-              }}
               onContextMenu={(event) => {
                 event.preventDefault()
+              }}
+              onWheel={(event) => {
+                wheelAdjustTextureControl('smoothness', event)
               }}
             >
               <span className="options-hsva-glyph fa-solid fa-pen-nib" aria-hidden="true" />
