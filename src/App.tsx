@@ -10169,797 +10169,796 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         <div className="glaze-overlay-layer glaze-overlay-layer-gloom" />
       </div>
       <div className="app-saturate-wrapper" style={{ ...appOuterStyle, position: 'fixed', inset: 0 }}>
-      <div
-        className={`app-shell app-grid${filterInvert > 0.5 ? ' shadow-flip' : ''}`}
-        ref={appShellRef}
-        style={appShellStyle}
-      >
-      <aside className="notes-sidebar" style={{ gridArea: 'sidebar' }}>
-        <div className="search-box" aria-label="Search panel">
-          <input
-            ref={sidebarSearchInputRef}
-            type="text"
-            placeholder={isFindMode ? 'Find in current note...' : 'Search notes or #tag...'}
-            value={isFindMode ? documentFindQuery : searchQuery}
-            onChange={(event) => {
-              const value = event.target.value
-              if (isFindMode) {
-                setDocumentFindQuery(value)
-              } else {
-                setSearchQuery(value)
-              }
-            }}
-            onBlur={() => {
-              window.setTimeout(() => {
-                if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
-                  scheduleFocusEditorInEditMode()
-                }
-              }, 0)
-            }}
-          />
-        </div>
+        <div
+          className={`app-shell app-grid${filterInvert > 0.5 ? ' shadow-flip' : ''}`}
+          ref={appShellRef}
+          style={appShellStyle}
+        >
+          <aside className="notes-sidebar" style={{ gridArea: 'sidebar' }}>
+            <div className="search-box" aria-label="Search panel">
+              <input
+                ref={sidebarSearchInputRef}
+                type="text"
+                placeholder={isFindMode ? 'Find in current note...' : 'Search notes or #tag...'}
+                value={isFindMode ? documentFindQuery : searchQuery}
+                onChange={(event) => {
+                  const value = event.target.value
+                  if (isFindMode) {
+                    setDocumentFindQuery(value)
+                  } else {
+                    setSearchQuery(value)
+                  }
+                }}
+                onBlur={() => {
+                  window.setTimeout(() => {
+                    if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
+                      scheduleFocusEditorInEditMode()
+                    }
+                  }, 0)
+                }}
+              />
+            </div>
 
-        <div className="view-toggle" role="tablist" aria-label="Note view modes">
-          {SIDEBAR_MODES.map(({ mode, label }) => {
-            const isActive = sidebarMode === mode
-            const iconClassByMode: Record<SidebarMode, string> = {
-              date: 'btn-date',
-              category: 'btn-category',
-              archive: 'btn-archived',
-              trash: 'btn-deleted',
-              find: 'btn-find',
-              options: 'btn-options',
-            }
-            return (
-              <button
-                key={mode}
-                className={`toggle-btn notes-mode-button icon-btn ${iconClassByMode[mode]}${isActive ? ' is-active' : ''}${mode === 'trash' && isTrashViewDeleteArmed ? ' is-armed-for-deletion' : ''}`}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                title={label}
-                aria-label={label}
-                onClick={() => handleViewModeButtonClick(mode)}
-                onContextMenu={
-                  mode === 'trash'
-                    ? handleTrashViewButtonContextMenu
-                    : mode === 'find'
-                      ? handleFindViewButtonContextMenu
-                      : undefined
+            <div className="view-toggle" role="tablist" aria-label="Note view modes">
+              {SIDEBAR_MODES.map(({ mode, label }) => {
+                const isActive = sidebarMode === mode
+                const iconClassByMode: Record<SidebarMode, string> = {
+                  date: 'btn-date',
+                  category: 'btn-category',
+                  archive: 'btn-archived',
+                  trash: 'btn-deleted',
+                  find: 'btn-find',
+                  options: 'btn-options',
                 }
-                onMouseDown={mode === 'trash' ? handleTrashViewButtonMouseDown : undefined}
-                onMouseUp={mode === 'trash' ? handleTrashViewButtonMouseUp : undefined}
-                onMouseLeave={mode === 'trash' ? () => {
-                  clearTrashButtonArmTimer()
-                  setIsTrashViewDeleteArmed(false)
-                } : undefined}
-              >
-                {mode === 'find' ? (
-                  <span className="find-mode-glyph fa-solid fa-magnifying-glass" aria-hidden="true" />
-                ) : (
-                  <span className="sr-only-mode-label">{label}</span>
-                )}
-              </button>
-            )
-          })}
-        </div>
+                return (
+                  <button
+                    key={mode}
+                    className={`toggle-btn notes-mode-button icon-btn ${iconClassByMode[mode]}${isActive ? ' is-active' : ''}${mode === 'trash' && isTrashViewDeleteArmed ? ' is-armed-for-deletion' : ''}`}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    title={label}
+                    aria-label={label}
+                    onClick={() => handleViewModeButtonClick(mode)}
+                    onContextMenu={
+                      mode === 'trash'
+                        ? handleTrashViewButtonContextMenu
+                        : mode === 'find'
+                          ? handleFindViewButtonContextMenu
+                          : undefined
+                    }
+                    onMouseDown={mode === 'trash' ? handleTrashViewButtonMouseDown : undefined}
+                    onMouseUp={mode === 'trash' ? handleTrashViewButtonMouseUp : undefined}
+                    onMouseLeave={mode === 'trash' ? () => {
+                      clearTrashButtonArmTimer()
+                      setIsTrashViewDeleteArmed(false)
+                    } : undefined}
+                  >
+                    {mode === 'find' ? (
+                      <span className="find-mode-glyph fa-solid fa-magnifying-glass" aria-hidden="true" />
+                    ) : (
+                      <span className="sr-only-mode-label">{label}</span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
 
-        <div className={`sidebar-scroll-frame${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}`}>
-          <div
-            className={`sidebar-content${(sidebarMode === 'date' || sidebarMode === 'trash') ? ' is-paged-mode' : ''}${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}${isSidebarScrollbarMode && !isSidebarCustomScrollbarMode ? ' is-scrollbar-mode' : ''}`}
-            ref={sidebarContentRef}
-            onScroll={handleSidebarScroll}
-          >
-            <div ref={sidebarTextureRef} className="sidebar-content-texture" />
-            {(sidebarMode === 'date' || sidebarMode === 'trash') ? (
+            <div className={`sidebar-scroll-frame${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}`}>
               <div
-                className={`notes-list date-view${hasDateFilter ? ' is-filtered' : ''}`}
-                role="listbox"
-                aria-label="Note list"
+                className={`sidebar-content${(sidebarMode === 'date' || sidebarMode === 'trash') ? ' is-paged-mode' : ''}${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}${isSidebarScrollbarMode && !isSidebarCustomScrollbarMode ? ' is-scrollbar-mode' : ''}`}
+                ref={sidebarContentRef}
+                onScroll={handleSidebarScroll}
               >
-                {pagedVisibleNotes.map((note) => {
-                  const isActive = note.id === activeNoteId
-                  const isModified = isExternalNote(note) && getCurrentExternalNoteModifiedState(note)
-                  return (
-                    <NoteListItem
-                      key={note.id}
-                      note={note}
-                      isActive={isActive}
-                      isModified={isModified}
+                <div ref={sidebarTextureRef} className="sidebar-content-texture" />
+                {(sidebarMode === 'date' || sidebarMode === 'trash') ? (
+                  <div
+                    className={`notes-list date-view${hasDateFilter ? ' is-filtered' : ''}`}
+                    role="listbox"
+                    aria-label="Note list"
+                  >
+                    {pagedVisibleNotes.map((note) => {
+                      const isActive = note.id === activeNoteId
+                      const isModified = isExternalNote(note) && getCurrentExternalNoteModifiedState(note)
+                      return (
+                        <NoteListItem
+                          key={note.id}
+                          note={note}
+                          isActive={isActive}
+                          isModified={isModified}
+                          onSelect={handleSelectNote}
+                          onArmedLeftClick={handleArmedNoteLeftClick}
+                          armedAction={armedNoteActionById.get(note.id) ?? null}
+                          onLeftPressStart={handleNoteLeftPressStart}
+                          onLeftPressEnd={handleNoteLeftPressEnd}
+                          onRightPressStart={handleNoteRightPressStart}
+                          onRightPressEnd={handleNoteRightPressEnd}
+                          onArmHoverLeave={handleNoteArmHoverLeave}
+                        />
+                      )
+                    })}
+                    {pagedVisibleNotes.length === 0 ? (
+                      <div className="notes-empty-state">
+                        {searchQuery.trim()
+                          ? 'No notes match the current search.'
+                          : 'No notes match the current date filters.'}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : isFindMode ? (
+                  <div
+                    className="notes-list find-view measly-custom-scrollbar"
+                    ref={setSidebarTreeScrollerEl}
+                  >
+                    {documentFindHits.map((hit, index) => (
+                      <button
+                        key={hit.id}
+                        type="button"
+                        className="find-hit-item"
+                        onClick={() => handleJumpToDocumentFindHit(hit)}
+                        onContextMenu={(event) => {
+                          event.preventDefault()
+                          replaceDocumentFindHit(hit)
+                        }}
+                        title={`Jump to occurrence ${index + 1}`}
+                      >
+                        <span className="find-hit-snippet">
+                          {hit.hasSnippetPrefixEllipsis ? '... ' : ''}
+                          {hit.snippetBefore}
+                          <span className="find-hit-match">{hit.snippetMatch}</span>
+                          {hit.snippetAfter}
+                          {hit.hasSnippetSuffixEllipsis ? ' ...' : ''}
+                        </span>
+                      </button>
+                    ))}
+                    {documentFindHits.length === 0 ? (
+                      <div className="notes-empty-state">
+                        {documentFindQuery.trim()
+                          ? 'No matches in the current note.'
+                          : 'Type in the search field to find text in the current note.'}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : sidebarMode === 'options' ? (
+                  renderSidebarOptionsContent()
+                ) : (
+                  <div
+                    className={`notes-list tree-view measly-custom-scrollbar${hasDateFilter ? ' is-filtered' : ''}`}
+                    ref={setSidebarTreeScrollerEl}
+                  >
+                    <CategoryTreeView
+                      groups={sidebarMode === 'category' ? categoryTree : archiveTree}
+                      activeNoteId={activeNoteId}
+                      persistedCollapsedPrimary={sidebarMode === 'category' ? categoryCollapsedPrimary : archiveCollapsedPrimary}
+                      persistedCollapsedSecondary={sidebarMode === 'category' ? categoryCollapsedSecondary : archiveCollapsedSecondary}
+                      focusNoteRequestKey={sidebarMode === 'category' ? categoryFocusRequestKey : archiveFocusRequestKey}
+                      onCollapseChange={sidebarMode === 'category' ? handleCategoryCollapseChange : handleArchiveCollapseChange}
                       onSelect={handleSelectNote}
                       onArmedLeftClick={handleArmedNoteLeftClick}
-                      armedAction={armedNoteActionById.get(note.id) ?? null}
+                      armedNoteActionById={armedNoteActionById}
                       onLeftPressStart={handleNoteLeftPressStart}
                       onLeftPressEnd={handleNoteLeftPressEnd}
-                      onRightPressStart={handleNoteRightPressStart}
-                      onRightPressEnd={handleNoteRightPressEnd}
-                      onArmHoverLeave={handleNoteArmHoverLeave}
+                      onNoteRightPressStart={handleNoteRightPressStart}
+                      onNoteRightPressEnd={handleNoteRightPressEnd}
+                      onNoteArmHoverLeave={handleNoteArmHoverLeave}
                     />
-                  )
-                })}
-                {pagedVisibleNotes.length === 0 ? (
-                  <div className="notes-empty-state">
-                    {searchQuery.trim()
-                      ? 'No notes match the current search.'
-                      : 'No notes match the current date filters.'}
                   </div>
-                ) : null}
+                )}
               </div>
-            ) : isFindMode ? (
-              <div
-                className="notes-list find-view measly-custom-scrollbar"
-                ref={setSidebarTreeScrollerEl}
-              >
-                {documentFindHits.map((hit, index) => (
-                  <button
-                    key={hit.id}
-                    type="button"
-                    className="find-hit-item"
-                    onClick={() => handleJumpToDocumentFindHit(hit)}
-                    onContextMenu={(event) => {
-                      event.preventDefault()
-                      replaceDocumentFindHit(hit)
-                    }}
-                    title={`Jump to occurrence ${index + 1}`}
-                  >
-                    <span className="find-hit-snippet">
-                      {hit.hasSnippetPrefixEllipsis ? '... ' : ''}
-                      {hit.snippetBefore}
-                      <span className="find-hit-match">{hit.snippetMatch}</span>
-                      {hit.snippetAfter}
-                      {hit.hasSnippetSuffixEllipsis ? ' ...' : ''}
-                    </span>
-                  </button>
-                ))}
-                {documentFindHits.length === 0 ? (
-                  <div className="notes-empty-state">
-                    {documentFindQuery.trim()
-                      ? 'No matches in the current note.'
-                      : 'Type in the search field to find text in the current note.'}
-                  </div>
-                ) : null}
-              </div>
-            ) : sidebarMode === 'options' ? (
-              renderSidebarOptionsContent()
-            ) : (
-              <div
-                className={`notes-list tree-view measly-custom-scrollbar${hasDateFilter ? ' is-filtered' : ''}`}
-                ref={setSidebarTreeScrollerEl}
-              >
-                <CategoryTreeView
-                  groups={sidebarMode === 'category' ? categoryTree : archiveTree}
-                  activeNoteId={activeNoteId}
-                  persistedCollapsedPrimary={sidebarMode === 'category' ? categoryCollapsedPrimary : archiveCollapsedPrimary}
-                  persistedCollapsedSecondary={sidebarMode === 'category' ? categoryCollapsedSecondary : archiveCollapsedSecondary}
-                  focusNoteRequestKey={sidebarMode === 'category' ? categoryFocusRequestKey : archiveFocusRequestKey}
-                  onCollapseChange={sidebarMode === 'category' ? handleCategoryCollapseChange : handleArchiveCollapseChange}
-                  onSelect={handleSelectNote}
-                  onArmedLeftClick={handleArmedNoteLeftClick}
-                  armedNoteActionById={armedNoteActionById}
-                  onLeftPressStart={handleNoteLeftPressStart}
-                  onLeftPressEnd={handleNoteLeftPressEnd}
-                  onNoteRightPressStart={handleNoteRightPressStart}
-                  onNoteRightPressEnd={handleNoteRightPressEnd}
-                  onNoteArmHoverLeave={handleNoteArmHoverLeave}
-                />
-              </div>
-            )}
-          </div>
 
-          {isSidebarScrollbarMode ? (
-            <aside className="sidebar-scrollbar-slot" aria-hidden="true">
-              <div className="sidebar-scrollbar-slot-inner">
-                <div className="measly-scroll-rail sidebar-measly-scroll-rail">
-                  <div
-                    ref={sidebarScrollbarTrackRef}
-                    className="measly-scroll-track"
-                    onMouseDown={handleSidebarTrackMouseDown}
+              {isSidebarScrollbarMode ? (
+                <aside className="sidebar-scrollbar-slot" aria-hidden="true">
+                  <div className="sidebar-scrollbar-slot-inner">
+                    <div className="measly-scroll-rail sidebar-measly-scroll-rail">
+                      <div
+                        ref={sidebarScrollbarTrackRef}
+                        className="measly-scroll-track"
+                        onMouseDown={handleSidebarTrackMouseDown}
+                      >
+                        <div
+                          ref={sidebarScrollbarThumbRef}
+                          className={`measly-scroll-thumb${isDraggingSidebarScrollThumb ? ' is-dragging' : ''}${isSidebarScrollThumbActive ? '' : ' is-inactive'}`}
+                          onMouseDown={handleSidebarThumbMouseDown}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </aside>
+              ) : null}
+            </div>
+
+            {showPagination ? (
+              <div className="sidebar-pagination" aria-label="Sidebar pagination">
+                <button
+                  type="button"
+                  className="sidebar-page-btn"
+                  disabled={effectiveCurrentPage === 1}
+                  onClick={() => setCurrentPage((previous) => Math.max(1, previous - 1))}
+                >
+                  &lt;
+                </button>
+                {isPageJumpEditing ? (
+                  <label className="sidebar-page-number-btn" aria-label="Jump to page">
+                    <input
+                      ref={pageJumpInputRef}
+                      type="number"
+                      min={1}
+                      max={totalPages}
+                      step={1}
+                      inputMode="numeric"
+                      className="sidebar-page-number-input sidebar-page-number-input--edit"
+                      value={pageJumpInput}
+                      onChange={(event) => {
+                        setPageJumpInput(event.target.value.replace(/[^0-9]/g, ''))
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          commitPageJump()
+                          scheduleFocusEditorInEditMode()
+                          return
+                        }
+
+                        if (event.key === 'Escape' || event.key === 'Tab') {
+                          event.preventDefault()
+                          cancelPageJumpEdit()
+                          scheduleFocusEditorInEditMode()
+                        }
+                      }}
+                      onBlur={() => {
+                        window.setTimeout(() => {
+                          if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
+                            scheduleFocusEditorInEditMode()
+                          }
+                        }, 0)
+                      }}
+                    />
+                  </label>
+                ) : (
+                  <button
+                    type="button"
+                    className="sidebar-page-number-btn sidebar-page-number-display"
+                    aria-label={`Current page ${effectiveCurrentPage} of ${totalPages}. Click to edit.`}
+                    onClick={startPageJumpEdit}
                   >
-                    <div
-                      ref={sidebarScrollbarThumbRef}
-                      className={`measly-scroll-thumb${isDraggingSidebarScrollThumb ? ' is-dragging' : ''}${isSidebarScrollThumbActive ? '' : ' is-inactive'}`}
-                      onMouseDown={handleSidebarThumbMouseDown}
+                    {`${effectiveCurrentPage} / ${totalPages}`}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="sidebar-page-btn"
+                  disabled={effectiveCurrentPage === totalPages}
+                  onClick={() => setCurrentPage((previous) => Math.min(totalPages, previous + 1))}
+                >
+                  &gt;
+                </button>
+              </div>
+            ) : null}
+
+            {sidebarMode === 'options' ? (
+              <div className="date-filter-rail date-filter-rail-placeholder" aria-hidden="true" />
+            ) : null}
+
+            {isFindMode ? (
+              <div className="find-options-rail" aria-label="Find options">
+                <button
+                  type="button"
+                  className={`find-option-btn${isDocumentFindCaseSensitive ? ' is-active' : ''}`}
+                  aria-pressed={isDocumentFindCaseSensitive}
+                  title="Match letter case"
+                  onClick={() => setIsDocumentFindCaseSensitive((previous) => !previous)}
+                >
+                  Case
+                </button>
+              </div>
+            ) : (sidebarMode === 'date' || sidebarMode === 'trash' || isSidebarTreeMode) ? (
+              <div className="date-filter-rail" aria-label="Date filters">
+                <div
+                  className="date-filter-line"
+                  onContextMenu={handleMonthRowContextMenu}
+                >
+                  {FILTER_MONTHS.map((month) => (
+                    <button
+                      key={month}
+                      type="button"
+                      className={`date-filter-chip${selectedMonths.has(month) ? ' is-active' : ''}`}
+                      onClick={(event) => handleMonthToggle(month, event)}
+                      onContextMenu={(event) => event.preventDefault()}
+                    >
+                      {month}
+                    </button>
+                  ))}
+                </div>
+                <div
+                  className="date-filter-line"
+                  onContextMenu={handleYearRowContextMenu}
+                >
+                  {FILTER_YEARS.map((year) => (
+                    <button
+                      key={year}
+                      type="button"
+                      className={`date-filter-chip${selectedYears.has(year) ? ' is-active' : ''}`}
+                      onClick={(event) => handleYearToggle(year, event)}
+                      onContextMenu={(event) => event.preventDefault()}
+                    >
+                      {year === 'older' ? 'Older' : year}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </aside>
+          <div
+            className="grid-divider divider-sidebar"
+            style={{ gridArea: 'd-sidebar' }}
+          />
+
+          <section className="tag-input-grid" style={{ gridArea: 'taginput' }} aria-label="Tag input manager">
+            <div className="tag-input-container">
+              <div className="tag-input-section">
+                <div className="tag-input-bar">
+                  <div className="tag-input-wrapper">
+                    <input
+                      ref={tagInputRef}
+                      className="tag-input"
+                      type="text"
+                      value={tagInputValue}
+                      placeholder={
+                        !activeNoteId
+                          ? (notes.length > 0 ? 'Select a note to edit tags.' : 'Once you have created a note, you can add tags here.')
+                          : (renamingTagName ? 'Rename tag and press Enter...' : 'Type to add tag...')
+                      }
+                      onChange={(event) => setTagInputValue(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          handleTagInputEnter()
+                          scheduleFocusEditorInEditMode()
+                          return
+                        }
+                        if (event.key === 'Escape') {
+                          event.preventDefault()
+                          if (renamingTagName) {
+                            setRenamingTagName(null)
+                            setTagInputValue('')
+                          }
+                          scheduleFocusEditorInEditMode()
+                          return
+                        }
+                        if (event.key === 'Tab') {
+                          event.preventDefault()
+                          if (renamingTagName) {
+                            setRenamingTagName(null)
+                            setTagInputValue('')
+                          }
+                          scheduleFocusEditorInEditMode()
+                        }
+                      }}
+                      disabled={!persistenceReady || !activeNoteId || isTagMutationPending || activeNoteIsExternal}
+                      aria-label="Tag input"
                     />
                   </div>
                 </div>
+
+                <div className="tags-display" aria-live="polite">
+                  {!activeNoteId ? (
+                    <div className="tag-empty-state">Tags go here. Drag to change order, left click to remove, right click to rename.</div>
+                  ) : orderedActiveTags.length === 0 ? (
+                    <div className="tag-empty-state">No tags on active note.</div>
+                  ) : (
+                    orderedActiveTags.map((tagName, index) => {
+                      const normalized = normalizeTagName(tagName)
+                      const isProtected = isProtectedTagName(tagName)
+                      return (
+                        <div
+                          key={tagName}
+                          className={`tag-pill active${deleteArmedTagName === tagName ? ' armed' : ''}${isProtected ? ` protected ${normalized}` : ''}`}
+                          draggable={!isProtected}
+                          onDragStart={() => handleTagDragStart(index)}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={(event) => handleTagDrop(event, index)}
+                          onClick={() => handleTagChipClick(tagName)}
+                          onContextMenu={(event) => handleTagContextMenu(event, tagName)}
+                          onMouseLeave={() => handleTagChipMouseLeave(tagName)}
+                          title={deleteArmedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion'}
+                        >
+                          <span className="tag-pill-label">
+                            {tagName}
+                          </span>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="suggested-grid" style={{ gridArea: 'suggested' }} aria-label="Suggested tags panel">
+            <div className="suggested-tags" aria-hidden={suggestedTags.length === 0}>
+              {suggestedTags.map((tagName) => (
+                <div
+                  key={tagName}
+                  className="tag-pill suggested"
+                  onClick={() => handleAddSuggestedTag(tagName)}
+                  title={`Add ${tagName}`}
+                  aria-disabled={!activeNoteId || isTagMutationPending || activeNoteIsExternal}
+                >
+                  {tagName}
+                </div>
+              ))}
+              {suggestedTags.length === 0 ? (
+                <div className="suggested-empty">
+                  {activeNoteId
+                    ? ''
+                    : 'Tags you have used before will appear here. Click them to quickly assign them to your current note. If a tag is no longer in use, it will disappear from this list.'}
+                </div>
+              ) : null}
+            </div>
+          </section>
+
+          <div className="grid-divider divider-right" style={{ gridArea: 'd-right' }} aria-hidden="true" />
+
+          <section className="utility-grid" style={{ gridArea: 'utility' }} aria-label="Utility grid">
+            <div className="window-controls" aria-label="Window controls">
+              <button
+                type="button"
+                className="toolbar-gear-btn window-control-btn"
+                title="Minimize"
+                aria-label="Minimize window"
+                onClick={handleWindowMinimize}
+              >
+                <span className="window-control-glyph fa-solid fa-turn-down fa-flip-horizontal" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="toolbar-gear-btn window-control-btn"
+                title={windowIsMaximized ? 'Restore' : 'Maximize'}
+                aria-label={windowIsMaximized ? 'Restore window' : 'Maximize window'}
+                onClick={handleWindowToggleMaximize}
+              >
+                <span
+                  className={`window-control-glyph fa-solid ${windowIsMaximized ? 'fa-down-left-and-up-right-to-center' : 'fa-up-right-and-down-left-from-center'}`}
+                  aria-hidden="true"
+                />
+              </button>
+              <button
+                type="button"
+                className="toolbar-gear-btn window-control-btn window-control-close"
+                title="Close"
+                aria-label="Close window"
+                onClick={handleWindowClose}
+              >
+                <span className="window-control-glyph fa-brands fa-twitter" aria-hidden="true" />
+              </button>
+            </div>
+
+            <AudioControls
+              volume={musicVolume}
+              reverbAmount={musicReverbAmount}
+              reverbRoom={musicReverbRoom}
+              activeSlots={musicActiveSlots}
+              onActiveSlotsChange={setMusicActiveSlots}
+              isOptionsOpen={sidebarMode === 'options'}
+              onOpenMusicOptions={() => {
+                if (sidebarMode !== 'options') setMusicAccordionNonce((n) => n + 1)
+                toggleSidebarOptionsMenu()
+              }}
+            />
+          </section>
+
+          <section className="toolbar-grid" style={{ gridArea: 'toolbar' }} aria-label="Editor toolbar">
+            <div className="editor-toolbar">
+              <div className="toolbar-left-tools">
+                <button
+                  className={`toolbar-toggle-btn ${!isPreviewMode ? 'active' : ''}`}
+                  type="button"
+                  title={isPreviewMode ? 'Edit mode inactive' : 'Edit mode active'}
+                  aria-label={isPreviewMode ? 'Edit mode inactive' : 'Edit mode active'}
+                  onClick={toggleRenderViewMode}
+                >
+                  Edit
+                </button>
+
+                {isPreviewMode ? (
+                  <div className="toolbar-action-group" aria-label="Print toolbar">
+                    <button
+                      type="button"
+                      className="toolbar-btn-icon"
+                      title="Export PDF"
+                      aria-label="Export current note to PDF"
+                      onClick={handleExportPdf}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        void chooseExportFolder()
+                      }}
+                      disabled={!activeNoteId || isExportingPdf}
+                    >
+                      <span className="fa-solid fa-file-pdf" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className="toolbar-btn-icon"
+                      title="Export Markdown"
+                      aria-label="Export current note to Markdown"
+                      onClick={() => void handleExportMd()}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        void handleExportMd(true)
+                      }}
+                      disabled={!activeNoteId || isExportingMd}
+                    >
+                      <span className="fa-solid fa-file-code" aria-hidden="true" />
+                    </button>
+                  </div>
+                ) : null}
+
+                {!isPreviewMode ? (
+                  <div className="markdown-toolbar" aria-label="Markdown toolbar">
+                  <button
+                    type="button"
+                    className={`toolbar-btn-icon ${activeDecorationFormats.has('bold') ? 'active' : ''}`}
+                    onClick={() => applyTextDecoration('bold')}
+                    title="Bold"
+                    aria-label="Bold"
+                    disabled={!activeNoteId}
+                  >
+                    <strong>B</strong>
+                  </button>
+                  <button
+                    type="button"
+                    className={`toolbar-btn-icon ${activeDecorationFormats.has('italic') ? 'active' : ''}`}
+                    onClick={() => applyTextDecoration('italic')}
+                    title="Italic"
+                    aria-label="Italic"
+                    disabled={!activeNoteId}
+                  >
+                    <em>I</em>
+                  </button>
+                  <button
+                    type="button"
+                    className={`toolbar-btn-icon ${activeDecorationFormats.has('strikethrough') ? 'active' : ''}`}
+                    onClick={() => applyTextDecoration('strikethrough')}
+                    title="Strikethrough"
+                    aria-label="Strikethrough"
+                    disabled={!activeNoteId}
+                  >
+                    <span style={{ textDecoration: 'line-through' }}>S</span>
+                  </button>
+
+                  <span className="toolbar-divider">|</span>
+
+                  <button type="button" className={`toolbar-btn-icon ${activeHeadingLevel === 1 ? 'active' : ''}`} title="Heading 1" onClick={() => applyHeading(1)} disabled={!activeNoteId}>H1</button>
+                  <button type="button" className={`toolbar-btn-icon ${activeHeadingLevel === 2 ? 'active' : ''}`} title="Heading 2" onClick={() => applyHeading(2)} disabled={!activeNoteId}>H2</button>
+                  <button type="button" className={`toolbar-btn-icon ${activeHeadingLevel === 3 ? 'active' : ''}`} title="Heading 3" onClick={() => applyHeading(3)} disabled={!activeNoteId}>H3</button>
+
+                  <span className="toolbar-divider">|</span>
+
+                  <button type="button" className={`toolbar-btn-icon ${isBulletedListActive ? 'active' : ''}`} title="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>≡</button>
+                  <button type="button" className={`toolbar-btn-icon ${isNumberedListActive ? 'active' : ''}`} title="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>#</button>
+                  <button type="button" className="toolbar-btn-icon" title="Link" onClick={applyLink} disabled={!activeNoteId}>🔗</button>
+
+                  <span className="toolbar-divider">|</span>
+
+                  <button type="button" className={`toolbar-btn-icon ${isBlockquoteActive ? 'active' : ''}`} title="Blockquote" onClick={toggleBlockquote} disabled={!activeNoteId}>&quot;</button>
+                  <button type="button" className={`toolbar-btn-icon ${isCodeBlockActive ? 'active' : ''}`} title="Code block" onClick={applyCodeBlock} disabled={!activeNoteId}>{'{ }'}</button>
+                  <button type="button" className={`toolbar-btn-icon ${isInlineCodeActive ? 'active' : ''}`} title="Inline code" onClick={applyInlineCode} disabled={!activeNoteId}>{'<>'}</button>
+
+                  <span className="toolbar-divider">|</span>
+
+                  <button type="button" className="toolbar-btn-icon" title="Horizontal rule" onClick={insertHorizontalRule} disabled={!activeNoteId}>—</button>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="toolbar-right-tools" aria-label="Toolbar right controls">
+                {isPreviewMode ? (
+                  <>
+                    <div className="style-selector">
+                      <select
+                        value={viewStyle}
+                        onChange={(event) => setViewStyle(event.target.value as ViewStyleKey)}
+                        aria-label="Render style"
+                        disabled={!activeNoteId}
+                      >
+                        <option value="modern">Modern</option>
+                        <option value="narrow">Narrow</option>
+                        <option value="cute">Cute</option>
+                        <option value="xkcd">xkcd</option>
+                        <option value="print">Print</option>
+                      </select>
+                    </div>
+
+                    <div className="style-selector">
+                      <select
+                        value={viewFontSize}
+                        onChange={(event) => setViewFontSize(event.target.value as ViewSizeKey)}
+                        aria-label="Render font size"
+                        disabled={!activeNoteId}
+                      >
+                        <option value="xs">XS</option>
+                        <option value="s">S</option>
+                        <option value="m">M</option>
+                        <option value="l">L</option>
+                        <option value="xl">XL</option>
+                      </select>
+                    </div>
+
+                    <div className="style-selector">
+                      <select
+                        value={viewSpacing}
+                        onChange={(event) => setViewSpacing(event.target.value as ViewSpacingKey)}
+                        aria-label="Render spacing"
+                        disabled={!activeNoteId}
+                      >
+                        <option value="tight">Tight</option>
+                        <option value="compact">Compact</option>
+                        <option value="cozy">Cozy</option>
+                        <option value="wide">Wide</option>
+                      </select>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="style-selector">
+                      <select
+                        value={editorStyle}
+                        onChange={(event) => {
+                          setEditorStyle(event.target.value as EditorStyleKey)
+                          scheduleFocusEditorInEditMode()
+                        }}
+                        aria-label="Editor style"
+                        disabled={!activeNoteId}
+                      >
+                        {EDITOR_STYLE_OPTIONS.map((option) => (
+                          <option key={option.key} value={option.key}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="style-selector">
+                      <select
+                        value={editorFontSize}
+                        onChange={(event) => {
+                          setEditorFontSize(event.target.value as EditorFontSizeKey)
+                          scheduleFocusEditorInEditMode()
+                        }}
+                        aria-label="Editor font size"
+                        disabled={!activeNoteId}
+                      >
+                        {EDITOR_FONT_SIZE_OPTIONS.map((option) => (
+                          <option key={option.key} value={option.key}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="style-selector">
+                      <select
+                        value={editorSpacing}
+                        onChange={(event) => {
+                          setEditorSpacing(event.target.value as EditorSpacingKey)
+                          scheduleFocusEditorInEditMode()
+                        }}
+                        aria-label="Editor spacing"
+                        disabled={!activeNoteId}
+                      >
+                        {EDITOR_SPACING_OPTIONS.map((option) => (
+                          <option key={option.key} value={option.key}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
+
+                <button
+                  type="button"
+                  className={`toggle-btn icon-btn toolbar-gear-btn${uiMode === 'dark' ? ' is-active' : ''}`}
+                  title="Toggle dark mode"
+                  aria-label="Toggle dark mode"
+                  onClick={toggleUiMode}
+                >
+                  <span className="toolbar-gear-glyph fa-solid fa-moon" aria-hidden="true" />
+                </button>
+
+                <button
+                  type="button"
+                  className={`toggle-btn icon-btn toolbar-gear-btn${sidebarMode === 'options' ? ' is-active' : ''}`}
+                  title="View options"
+                  aria-label="View options"
+                  onClick={toggleSidebarOptionsMenu}
+                >
+                  <span className="toolbar-gear-glyph fa-solid fa-gear" aria-hidden="true" />
+                </button>
+
+              </div>
+            </div>
+          </section>
+
+          <div className="editor-viewer-frame" style={{ gridArea: 'viewer' }}>
+            <main className="editor-shell">
+              <div className="editor-background">
+                <div ref={editorStageRef} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
+                  <div className="edit-container" style={{ display: isPreviewMode ? 'none' : undefined }}>
+                    <Editor
+                      key={activeNoteId ?? 'editor' }
+                      bindings={bindings}
+                      adapterRef={adapterRef}
+                      noteId={activeNoteId}
+                      initialText={activeNoteText}
+                      scrollbarHost={scrollbarHostEl}
+                      fontFamily={editorFontFamily}
+                      fontSizePx={editorRuntimeMetrics.fontSizePx}
+                      lineHeightPx={editorRuntimeMetrics.lineHeightPx}
+                      glyphWidthPx={editorRuntimeMetrics.glyphWidthPx}
+                      cellWidthPx={editorRuntimeMetrics.cellWidthPx}
+                      fontReady={editorFontLoadVersion > 0}
+                      editorReadOnly={activeNoteHasDebugTag}
+                      caretSuspended={isCaretSuspended}
+                    />
+                  </div>
+                  <div className="render-container" style={{ display: isPreviewMode ? undefined : 'none' }} aria-hidden={!isPreviewMode}>
+                    <div ref={previewTextureRef} className="markdown-preview-texture" />
+                    <div
+                      ref={previewScrollRef}
+                      onScroll={handlePreviewScroll}
+                      className={`markdown-preview measly-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
+                      style={{ '--search-hit-color': highlightColors.search } as CSSProperties}
+                    >
+                      {previewMarkdownElement}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </main>
+            <aside className="editor-scrollbar-slot" aria-hidden="true">
+              <div className="editor-scrollbar-slot-inner">
+                {!isPreviewMode ? (
+                  <div ref={setScrollbarHostEl} className="editor-scrollbar-slot-inner" />
+                ) : (
+                  <div className="measly-scroll-rail">
+                    <div
+                      ref={previewScrollbarTrackRef}
+                      className="measly-scroll-track"
+                      onMouseDown={handlePreviewTrackMouseDown}
+                    >
+                      <div
+                        ref={previewScrollbarThumbRef}
+                        className={`measly-scroll-thumb${isDraggingPreviewScrollThumb ? ' is-dragging' : ''}${isPreviewScrollThumbActive ? '' : ' is-inactive'}`}
+                        onMouseDown={handlePreviewThumbMouseDown}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </aside>
-          ) : null}
-        </div>
-
-        {showPagination ? (
-          <div className="sidebar-pagination" aria-label="Sidebar pagination">
-            <button
-              type="button"
-              className="sidebar-page-btn"
-              disabled={effectiveCurrentPage === 1}
-              onClick={() => setCurrentPage((previous) => Math.max(1, previous - 1))}
-            >
-              &lt;
-            </button>
-            {isPageJumpEditing ? (
-              <label className="sidebar-page-number-btn" aria-label="Jump to page">
-                <input
-                  ref={pageJumpInputRef}
-                  type="number"
-                  min={1}
-                  max={totalPages}
-                  step={1}
-                  inputMode="numeric"
-                  className="sidebar-page-number-input sidebar-page-number-input--edit"
-                  value={pageJumpInput}
-                  onChange={(event) => {
-                    setPageJumpInput(event.target.value.replace(/[^0-9]/g, ''))
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      commitPageJump()
-                      scheduleFocusEditorInEditMode()
-                      return
-                    }
-
-                    if (event.key === 'Escape' || event.key === 'Tab') {
-                      event.preventDefault()
-                      cancelPageJumpEdit()
-                      scheduleFocusEditorInEditMode()
-                    }
-                  }}
-                  onBlur={() => {
-                    window.setTimeout(() => {
-                      if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
-                        scheduleFocusEditorInEditMode()
-                      }
-                    }, 0)
-                  }}
-                />
-              </label>
-            ) : (
-              <button
-                type="button"
-                className="sidebar-page-number-btn sidebar-page-number-display"
-                aria-label={`Current page ${effectiveCurrentPage} of ${totalPages}. Click to edit.`}
-                onClick={startPageJumpEdit}
-              >
-                {`${effectiveCurrentPage} / ${totalPages}`}
-              </button>
-            )}
-            <button
-              type="button"
-              className="sidebar-page-btn"
-              disabled={effectiveCurrentPage === totalPages}
-              onClick={() => setCurrentPage((previous) => Math.min(totalPages, previous + 1))}
-            >
-              &gt;
-            </button>
-          </div>
-        ) : null}
-
-        {sidebarMode === 'options' ? (
-          <div className="date-filter-rail date-filter-rail-placeholder" aria-hidden="true" />
-        ) : null}
-
-        {isFindMode ? (
-          <div className="find-options-rail" aria-label="Find options">
-            <button
-              type="button"
-              className={`find-option-btn${isDocumentFindCaseSensitive ? ' is-active' : ''}`}
-              aria-pressed={isDocumentFindCaseSensitive}
-              title="Match letter case"
-              onClick={() => setIsDocumentFindCaseSensitive((previous) => !previous)}
-            >
-              Case
-            </button>
-          </div>
-        ) : (sidebarMode === 'date' || sidebarMode === 'trash' || isSidebarTreeMode) ? (
-          <div className="date-filter-rail" aria-label="Date filters">
-            <div
-              className="date-filter-line"
-              onContextMenu={handleMonthRowContextMenu}
-            >
-              {FILTER_MONTHS.map((month) => (
-                <button
-                  key={month}
-                  type="button"
-                  className={`date-filter-chip${selectedMonths.has(month) ? ' is-active' : ''}`}
-                  onClick={(event) => handleMonthToggle(month, event)}
-                  onContextMenu={(event) => event.preventDefault()}
-                >
-                  {month}
-                </button>
-              ))}
-            </div>
-            <div
-              className="date-filter-line"
-              onContextMenu={handleYearRowContextMenu}
-            >
-              {FILTER_YEARS.map((year) => (
-                <button
-                  key={year}
-                  type="button"
-                  className={`date-filter-chip${selectedYears.has(year) ? ' is-active' : ''}`}
-                  onClick={(event) => handleYearToggle(year, event)}
-                  onContextMenu={(event) => event.preventDefault()}
-                >
-                  {year === 'older' ? 'Older' : year}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-      </aside>
-
-      <div
-        className="grid-divider divider-sidebar"
-        style={{ gridArea: 'd-sidebar' }}
-      />
-
-      <section className="tag-input-grid" style={{ gridArea: 'taginput' }} aria-label="Tag input manager">
-        <div className="tag-input-container">
-          <div className="tag-input-section">
-            <div className="tag-input-bar">
-              <div className="tag-input-wrapper">
-                <input
-                  ref={tagInputRef}
-                  className="tag-input"
-                  type="text"
-                  value={tagInputValue}
-                  placeholder={
-                    !activeNoteId
-                      ? (notes.length > 0 ? 'Select a note to edit tags.' : 'Once you have created a note, you can add tags here.')
-                      : (renamingTagName ? 'Rename tag and press Enter...' : 'Type to add tag...')
-                  }
-                  onChange={(event) => setTagInputValue(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      handleTagInputEnter()
-                      scheduleFocusEditorInEditMode()
-                      return
-                    }
-                    if (event.key === 'Escape') {
-                      event.preventDefault()
-                      if (renamingTagName) {
-                        setRenamingTagName(null)
-                        setTagInputValue('')
-                      }
-                      scheduleFocusEditorInEditMode()
-                      return
-                    }
-                    if (event.key === 'Tab') {
-                      event.preventDefault()
-                      if (renamingTagName) {
-                        setRenamingTagName(null)
-                        setTagInputValue('')
-                      }
-                      scheduleFocusEditorInEditMode()
-                    }
-                  }}
-                  disabled={!persistenceReady || !activeNoteId || isTagMutationPending || activeNoteIsExternal}
-                  aria-label="Tag input"
-                />
-              </div>
-            </div>
-
-            <div className="tags-display" aria-live="polite">
-              {!activeNoteId ? (
-                <div className="tag-empty-state">Tags go here. Drag to change order, left click to remove, right click to rename.</div>
-              ) : orderedActiveTags.length === 0 ? (
-                <div className="tag-empty-state">No tags on active note.</div>
-              ) : (
-                orderedActiveTags.map((tagName, index) => {
-                  const normalized = normalizeTagName(tagName)
-                  const isProtected = isProtectedTagName(tagName)
-                  return (
-                    <div
-                      key={tagName}
-                      className={`tag-pill active${deleteArmedTagName === tagName ? ' armed' : ''}${isProtected ? ` protected ${normalized}` : ''}`}
-                      draggable={!isProtected}
-                      onDragStart={() => handleTagDragStart(index)}
-                      onDragOver={(event) => event.preventDefault()}
-                      onDrop={(event) => handleTagDrop(event, index)}
-                      onClick={() => handleTagChipClick(tagName)}
-                      onContextMenu={(event) => handleTagContextMenu(event, tagName)}
-                      onMouseLeave={() => handleTagChipMouseLeave(tagName)}
-                      title={deleteArmedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion'}
-                    >
-                      <span className="tag-pill-label">
-                        {tagName}
-                      </span>
-                    </div>
-                  )
-                })
-              )}
-            </div>
           </div>
         </div>
-      </section>
 
-      <section className="suggested-grid" style={{ gridArea: 'suggested' }} aria-label="Suggested tags panel">
-        <div className="suggested-tags" aria-hidden={suggestedTags.length === 0}>
-          {suggestedTags.map((tagName) => (
-            <div
-              key={tagName}
-              className="tag-pill suggested"
-              onClick={() => handleAddSuggestedTag(tagName)}
-              title={`Add ${tagName}`}
-              aria-disabled={!activeNoteId || isTagMutationPending || activeNoteIsExternal}
-            >
-              {tagName}
-            </div>
-          ))}
-          {suggestedTags.length === 0 ? (
-            <div className="suggested-empty">
-              {activeNoteId
-                ? ''
-                : 'Tags you have used before will appear here. Click them to quickly assign them to your current note. If a tag is no longer in use, it will disappear from this list.'}
-            </div>
-          ) : null}
-        </div>
-      </section>
-
-      <div className="grid-divider divider-right" style={{ gridArea: 'd-right' }} aria-hidden="true" />
-
-      <section className="utility-grid" style={{ gridArea: 'utility' }} aria-label="Utility grid">
-        <div className="window-controls" aria-label="Window controls">
-          <button
-            type="button"
-            className="toolbar-gear-btn window-control-btn"
-            title="Minimize"
-            aria-label="Minimize window"
-            onClick={handleWindowMinimize}
-          >
-            <span className="window-control-glyph fa-solid fa-turn-down fa-flip-horizontal" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="toolbar-gear-btn window-control-btn"
-            title={windowIsMaximized ? 'Restore' : 'Maximize'}
-            aria-label={windowIsMaximized ? 'Restore window' : 'Maximize window'}
-            onClick={handleWindowToggleMaximize}
-          >
-            <span
-              className={`window-control-glyph fa-solid ${windowIsMaximized ? 'fa-down-left-and-up-right-to-center' : 'fa-up-right-and-down-left-from-center'}`}
-              aria-hidden="true"
-            />
-          </button>
-          <button
-            type="button"
-            className="toolbar-gear-btn window-control-btn window-control-close"
-            title="Close"
-            aria-label="Close window"
-            onClick={handleWindowClose}
-          >
-            <span className="window-control-glyph fa-brands fa-twitter" aria-hidden="true" />
-          </button>
-        </div>
-
-        <AudioControls
-          volume={musicVolume}
-          reverbAmount={musicReverbAmount}
-          reverbRoom={musicReverbRoom}
-          activeSlots={musicActiveSlots}
-          onActiveSlotsChange={setMusicActiveSlots}
-          isOptionsOpen={sidebarMode === 'options'}
-          onOpenMusicOptions={() => {
-            if (sidebarMode !== 'options') setMusicAccordionNonce((n) => n + 1)
-            toggleSidebarOptionsMenu()
-          }}
-        />
-      </section>
-
-      <section className="toolbar-grid" style={{ gridArea: 'toolbar' }} aria-label="Editor toolbar">
-        <div className="editor-toolbar">
-          <div className="toolbar-left-tools">
-            <button
-              className={`toolbar-toggle-btn ${!isPreviewMode ? 'active' : ''}`}
-              type="button"
-              title={isPreviewMode ? 'Edit mode inactive' : 'Edit mode active'}
-              aria-label={isPreviewMode ? 'Edit mode inactive' : 'Edit mode active'}
-              onClick={toggleRenderViewMode}
-            >
-              Edit
-            </button>
-
-            {isPreviewMode ? (
-              <div className="toolbar-action-group" aria-label="Print toolbar">
-                <button
-                  type="button"
-                  className="toolbar-btn-icon"
-                  title="Export PDF"
-                  aria-label="Export current note to PDF"
-                  onClick={handleExportPdf}
-                  onContextMenu={(event) => {
-                    event.preventDefault()
-                    void chooseExportFolder()
-                  }}
-                  disabled={!activeNoteId || isExportingPdf}
-                >
-                  <span className="fa-solid fa-file-pdf" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  className="toolbar-btn-icon"
-                  title="Export Markdown"
-                  aria-label="Export current note to Markdown"
-                  onClick={() => void handleExportMd()}
-                  onContextMenu={(event) => {
-                    event.preventDefault()
-                    void handleExportMd(true)
-                  }}
-                  disabled={!activeNoteId || isExportingMd}
-                >
-                  <span className="fa-solid fa-file-code" aria-hidden="true" />
-                </button>
-              </div>
-            ) : null}
-
-            {!isPreviewMode ? (
-              <div className="markdown-toolbar" aria-label="Markdown toolbar">
-              <button
-                type="button"
-                className={`toolbar-btn-icon ${activeDecorationFormats.has('bold') ? 'active' : ''}`}
-                onClick={() => applyTextDecoration('bold')}
-                title="Bold"
-                aria-label="Bold"
-                disabled={!activeNoteId}
-              >
-                <strong>B</strong>
-              </button>
-              <button
-                type="button"
-                className={`toolbar-btn-icon ${activeDecorationFormats.has('italic') ? 'active' : ''}`}
-                onClick={() => applyTextDecoration('italic')}
-                title="Italic"
-                aria-label="Italic"
-                disabled={!activeNoteId}
-              >
-                <em>I</em>
-              </button>
-              <button
-                type="button"
-                className={`toolbar-btn-icon ${activeDecorationFormats.has('strikethrough') ? 'active' : ''}`}
-                onClick={() => applyTextDecoration('strikethrough')}
-                title="Strikethrough"
-                aria-label="Strikethrough"
-                disabled={!activeNoteId}
-              >
-                <span style={{ textDecoration: 'line-through' }}>S</span>
-              </button>
-
-              <span className="toolbar-divider">|</span>
-
-              <button type="button" className={`toolbar-btn-icon ${activeHeadingLevel === 1 ? 'active' : ''}`} title="Heading 1" onClick={() => applyHeading(1)} disabled={!activeNoteId}>H1</button>
-              <button type="button" className={`toolbar-btn-icon ${activeHeadingLevel === 2 ? 'active' : ''}`} title="Heading 2" onClick={() => applyHeading(2)} disabled={!activeNoteId}>H2</button>
-              <button type="button" className={`toolbar-btn-icon ${activeHeadingLevel === 3 ? 'active' : ''}`} title="Heading 3" onClick={() => applyHeading(3)} disabled={!activeNoteId}>H3</button>
-
-              <span className="toolbar-divider">|</span>
-
-              <button type="button" className={`toolbar-btn-icon ${isBulletedListActive ? 'active' : ''}`} title="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>≡</button>
-              <button type="button" className={`toolbar-btn-icon ${isNumberedListActive ? 'active' : ''}`} title="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>#</button>
-              <button type="button" className="toolbar-btn-icon" title="Link" onClick={applyLink} disabled={!activeNoteId}>🔗</button>
-
-              <span className="toolbar-divider">|</span>
-
-              <button type="button" className={`toolbar-btn-icon ${isBlockquoteActive ? 'active' : ''}`} title="Blockquote" onClick={toggleBlockquote} disabled={!activeNoteId}>&quot;</button>
-              <button type="button" className={`toolbar-btn-icon ${isCodeBlockActive ? 'active' : ''}`} title="Code block" onClick={applyCodeBlock} disabled={!activeNoteId}>{'{ }'}</button>
-              <button type="button" className={`toolbar-btn-icon ${isInlineCodeActive ? 'active' : ''}`} title="Inline code" onClick={applyInlineCode} disabled={!activeNoteId}>{'<>'}</button>
-
-              <span className="toolbar-divider">|</span>
-
-              <button type="button" className="toolbar-btn-icon" title="Horizontal rule" onClick={insertHorizontalRule} disabled={!activeNoteId}>—</button>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="toolbar-right-tools" aria-label="Toolbar right controls">
-            {isPreviewMode ? (
-              <>
-                <div className="style-selector">
-                  <select
-                    value={viewStyle}
-                    onChange={(event) => setViewStyle(event.target.value as ViewStyleKey)}
-                    aria-label="Render style"
-                    disabled={!activeNoteId}
-                  >
-                    <option value="modern">Modern</option>
-                    <option value="narrow">Narrow</option>
-                    <option value="cute">Cute</option>
-                    <option value="xkcd">xkcd</option>
-                    <option value="print">Print</option>
-                  </select>
-                </div>
-
-                <div className="style-selector">
-                  <select
-                    value={viewFontSize}
-                    onChange={(event) => setViewFontSize(event.target.value as ViewSizeKey)}
-                    aria-label="Render font size"
-                    disabled={!activeNoteId}
-                  >
-                    <option value="xs">XS</option>
-                    <option value="s">S</option>
-                    <option value="m">M</option>
-                    <option value="l">L</option>
-                    <option value="xl">XL</option>
-                  </select>
-                </div>
-
-                <div className="style-selector">
-                  <select
-                    value={viewSpacing}
-                    onChange={(event) => setViewSpacing(event.target.value as ViewSpacingKey)}
-                    aria-label="Render spacing"
-                    disabled={!activeNoteId}
-                  >
-                    <option value="tight">Tight</option>
-                    <option value="compact">Compact</option>
-                    <option value="cozy">Cozy</option>
-                    <option value="wide">Wide</option>
-                  </select>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="style-selector">
-                  <select
-                    value={editorStyle}
-                    onChange={(event) => {
-                      setEditorStyle(event.target.value as EditorStyleKey)
-                      scheduleFocusEditorInEditMode()
-                    }}
-                    aria-label="Editor style"
-                    disabled={!activeNoteId}
-                  >
-                    {EDITOR_STYLE_OPTIONS.map((option) => (
-                      <option key={option.key} value={option.key}>{option.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="style-selector">
-                  <select
-                    value={editorFontSize}
-                    onChange={(event) => {
-                      setEditorFontSize(event.target.value as EditorFontSizeKey)
-                      scheduleFocusEditorInEditMode()
-                    }}
-                    aria-label="Editor font size"
-                    disabled={!activeNoteId}
-                  >
-                    {EDITOR_FONT_SIZE_OPTIONS.map((option) => (
-                      <option key={option.key} value={option.key}>{option.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="style-selector">
-                  <select
-                    value={editorSpacing}
-                    onChange={(event) => {
-                      setEditorSpacing(event.target.value as EditorSpacingKey)
-                      scheduleFocusEditorInEditMode()
-                    }}
-                    aria-label="Editor spacing"
-                    disabled={!activeNoteId}
-                  >
-                    {EDITOR_SPACING_OPTIONS.map((option) => (
-                      <option key={option.key} value={option.key}>{option.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </>
-            )}
-
-            <button
-              type="button"
-              className={`toggle-btn icon-btn toolbar-gear-btn${uiMode === 'dark' ? ' is-active' : ''}`}
-              title="Toggle dark mode"
-              aria-label="Toggle dark mode"
-              onClick={toggleUiMode}
-            >
-              <span className="toolbar-gear-glyph fa-solid fa-moon" aria-hidden="true" />
-            </button>
-
-            <button
-              type="button"
-              className={`toggle-btn icon-btn toolbar-gear-btn${sidebarMode === 'options' ? ' is-active' : ''}`}
-              title="View options"
-              aria-label="View options"
-              onClick={toggleSidebarOptionsMenu}
-            >
-              <span className="toolbar-gear-glyph fa-solid fa-gear" aria-hidden="true" />
-            </button>
-
-          </div>
-        </div>
-      </section>
-
-      <div className="editor-viewer-frame" style={{ gridArea: 'viewer' }}>
-        <main className="editor-shell">
-          <div className="editor-background">
-            <div ref={editorStageRef} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
-              <div className="edit-container" style={{ display: isPreviewMode ? 'none' : undefined }}>
-                <Editor
-                  key={activeNoteId ?? 'editor' }
-                  bindings={bindings}
-                  adapterRef={adapterRef}
-                  noteId={activeNoteId}
-                  initialText={activeNoteText}
-                  scrollbarHost={scrollbarHostEl}
-                  fontFamily={editorFontFamily}
-                  fontSizePx={editorRuntimeMetrics.fontSizePx}
-                  lineHeightPx={editorRuntimeMetrics.lineHeightPx}
-                  glyphWidthPx={editorRuntimeMetrics.glyphWidthPx}
-                  cellWidthPx={editorRuntimeMetrics.cellWidthPx}
-                  fontReady={editorFontLoadVersion > 0}
-                  editorReadOnly={activeNoteHasDebugTag}
-                  caretSuspended={isCaretSuspended}
-                />
-              </div>
-              <div className="render-container" style={{ display: isPreviewMode ? undefined : 'none' }} aria-hidden={!isPreviewMode}>
-                <div ref={previewTextureRef} className="markdown-preview-texture" />
-                <div
-                  ref={previewScrollRef}
-                  onScroll={handlePreviewScroll}
-                  className={`markdown-preview measly-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
-                  style={{ '--search-hit-color': highlightColors.search } as CSSProperties}
-                >
-                  {previewMarkdownElement}
-                </div>
-              </div>
-            </div>
-          </div>
-        </main>
-        <aside className="editor-scrollbar-slot" aria-hidden="true">
-          <div className="editor-scrollbar-slot-inner">
-            {!isPreviewMode ? (
-              <div ref={setScrollbarHostEl} className="editor-scrollbar-slot-inner" />
-            ) : (
-              <div className="measly-scroll-rail">
-                <div
-                  ref={previewScrollbarTrackRef}
-                  className="measly-scroll-track"
-                  onMouseDown={handlePreviewTrackMouseDown}
-                >
-                  <div
-                    ref={previewScrollbarThumbRef}
-                    className={`measly-scroll-thumb${isDraggingPreviewScrollThumb ? ' is-dragging' : ''}${isPreviewScrollThumbActive ? '' : ' is-inactive'}`}
-                    onMouseDown={handlePreviewThumbMouseDown}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        </aside>
+        {filterColorize > 0 && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              // 50% saturation gives a GIMP-colorize-like result: strong enough to
+              // be visible on neutral text colours, not so strong it oversaturates
+              // already-colourful UI elements. Lightness 50% keeps the hue pure.
+              background: `hsl(${filterHueRotate}deg, 50%, 50%)`,
+              opacity: filterColorize,
+              // 'color' blend mode takes hue+saturation from this overlay and keeps
+              // only the backdrop's luminosity — unlike 'hue', it still colorizes
+              // near-neutral/grey pixels (e.g. text at #222) since the saturation
+              // comes entirely from the overlay rather than being multiplied by
+              // the (near-zero) backdrop saturation.
+              mixBlendMode: 'color',
+              pointerEvents: 'none',
+              zIndex: 9999,
+            }}
+            aria-hidden="true"
+          />
+        )}
       </div>
     </div>
-
-    {filterColorize > 0 && (
-      <div
-        style={{
-          position: 'fixed',
-          inset: 0,
-          // 50% saturation gives a GIMP-colorize-like result: strong enough to
-          // be visible on neutral text colours, not so strong it oversaturates
-          // already-colourful UI elements. Lightness 50% keeps the hue pure.
-          background: `hsl(${filterHueRotate}deg, 50%, 50%)`,
-          opacity: filterColorize,
-          // 'color' blend mode takes hue+saturation from this overlay and keeps
-          // only the backdrop's luminosity — unlike 'hue', it still colorizes
-          // near-neutral/grey pixels (e.g. text at #222) since the saturation
-          // comes entirely from the overlay rather than being multiplied by
-          // the (near-zero) backdrop saturation.
-          mixBlendMode: 'color',
-          pointerEvents: 'none',
-          zIndex: 9999,
-        }}
-        aria-hidden="true"
-      />
-    )}
-    </div>
-  </div>
-)
+  )
 }
 
 export default App
