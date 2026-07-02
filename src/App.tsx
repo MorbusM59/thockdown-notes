@@ -8474,12 +8474,13 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     }
 
     scheduleSync()
-    const treeContentEl = sidebarTreeScrollerEl?.firstElementChild as HTMLElement | null
+    const observedContentEl = (sidebarTreeScrollerEl?.firstElementChild as HTMLElement | null)
+      ?? (sidebarMode === 'options' ? optionsContentRef.current : null)
 
     const resizeObserver = new ResizeObserver(() => scheduleSync())
     resizeObserver.observe(scroller)
-    if (treeContentEl) {
-      resizeObserver.observe(treeContentEl)
+    if (observedContentEl) {
+      resizeObserver.observe(observedContentEl)
     }
 
     const mutationObserver = new MutationObserver(() => scheduleSync())
@@ -8488,19 +8489,19 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       childList: true,
       characterData: true,
       attributes: true,
-      attributeFilter: ['open'],
+      attributeFilter: ['open', 'style'],
     })
 
     const onDetailsToggle = (event: Event) => {
-      if (isSidebarTreeMode && event.target instanceof HTMLDetailsElement) {
+      if (event.target instanceof HTMLDetailsElement) {
         scheduleSync()
       }
     }
 
-    sidebarTreeScrollerEl?.addEventListener('toggle', onDetailsToggle, true)
+    scroller.addEventListener('toggle', onDetailsToggle, true)
 
     return () => {
-      sidebarTreeScrollerEl?.removeEventListener('toggle', onDetailsToggle, true)
+      scroller.removeEventListener('toggle', onDetailsToggle, true)
       mutationObserver.disconnect()
       resizeObserver.disconnect()
       if (sidebarScrollbarRafRef.current !== null) {
@@ -8508,7 +8509,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         sidebarScrollbarRafRef.current = null
       }
     }
-  }, [isSidebarCustomScrollbarMode, isSidebarTreeMode, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
+  }, [isSidebarScrollbarMode, sidebarMode, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
 
   useEffect(() => {
     if (!isDraggingSidebarScrollThumb) return
