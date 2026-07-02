@@ -301,6 +301,15 @@ type HsvaDragState = {
   baseValue: number
 }
 
+type TextureControlKey = 'granularity' | 'smoothness'
+
+type TextureControlDragState = {
+  control: TextureControlKey
+  pointerId: number
+  startY: number
+  baseValue: number
+}
+
 type ColorArmSource =
   | { kind: 'hsva'; key: HsvaControlKey }
   | { kind: 'active-color' }
@@ -2028,6 +2037,7 @@ function App() {
     return rgbaToHsva(seed)
   })
   const [hsvaDragState, setHsvaDragState] = useState<HsvaDragState | null>(null)
+  const [textureControlDragState, setTextureControlDragState] = useState<TextureControlDragState | null>(null)
   const colorArmTimerRef = useRef<number | null>(null)
   const pendingUpdateDebounceRef = useRef<number | null>(null)
   const pendingSaveTextRef = useRef<string | null>(null)
@@ -2825,8 +2835,96 @@ function App() {
     setHsvaDragState(null)
   }, [hsvaDragState])
 
+  const getTextureControlBounds = useCallback((control: TextureControlKey) => {
+    if (control === 'granularity') {
+      return {
+        min: TEXTURE_GRANULARITY_MIN,
+        max: TEXTURE_GRANULARITY_MAX,
+      }
+    }
+
+    return {
+      min: TEXTURE_VSTEPS_MIN,
+      max: TEXTURE_VSTEPS_MAX,
+    }
+  }, [])
+
+  const getTextureControlValue = useCallback((control: TextureControlKey) => {
+    if (control === 'granularity') {
+      return texturePreviewMaterial.granularity
+    }
+
+    return texturePreviewMaterial.vSteps
+  }, [texturePreviewMaterial.granularity, texturePreviewMaterial.vSteps])
+
+  const updateTextureControlValue = useCallback((control: TextureControlKey, rawValue: number) => {
+    const bounds = getTextureControlBounds(control)
+    const nextValue = clamp(Math.round(rawValue), bounds.min, bounds.max)
+
+    setTexturePreviewMaterial((current) => {
+      if (control === 'granularity') {
+        if (current.granularity === nextValue) return current
+        return {
+          ...current,
+          granularity: nextValue,
+        }
+      }
+
+      if (current.vSteps === nextValue) return current
+      return {
+        ...current,
+        vSteps: nextValue,
+      }
+    })
+  }, [getTextureControlBounds])
+
+  const startTextureControlDrag = useCallback((control: TextureControlKey, event: PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+
+    const baseValue = getTextureControlValue(control)
+    event.currentTarget.setPointerCapture(event.pointerId)
+
+    setTextureControlDragState({
+      control,
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      baseValue,
+    })
+
+    updateTextureControlValue(control, baseValue)
+  }, [getTextureControlValue, updateTextureControlValue])
+
+  const handleTextureControlDragMove = useCallback((control: TextureControlKey, event: PointerEvent<HTMLButtonElement>) => {
+    const currentDrag = textureControlDragState
+    if (!currentDrag) return
+    if (currentDrag.control !== control) return
+    if (currentDrag.pointerId !== event.pointerId) return
+
+    event.preventDefault()
+    const delta = currentDrag.startY - event.clientY
+    updateTextureControlValue(control, currentDrag.baseValue + delta)
+  }, [textureControlDragState, updateTextureControlValue])
+
+  const stopTextureControlDrag = useCallback((control: TextureControlKey, event: PointerEvent<HTMLButtonElement>) => {
+    const currentDrag = textureControlDragState
+    if (!currentDrag) return
+    if (currentDrag.control !== control) return
+    if (currentDrag.pointerId !== event.pointerId) return
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+
+    setTextureControlDragState(null)
+  }, [textureControlDragState])
+
+  const nudgeTextureControlBy = useCallback((control: TextureControlKey, delta: number) => {
+    updateTextureControlValue(control, getTextureControlValue(control) + delta)
+  }, [getTextureControlValue, updateTextureControlValue])
+
   useEffect(() => {
-    if (!hsvaDragState) {
+    if (!hsvaDragState && !textureControlDragState) {
       document.body.classList.remove('hsva-dragging')
       return
     }
@@ -2835,7 +2933,7 @@ function App() {
     return () => {
       document.body.classList.remove('hsva-dragging')
     }
-  }, [hsvaDragState])
+  }, [hsvaDragState, textureControlDragState])
 
   useEffect(() => {
     return () => {
@@ -8785,97 +8883,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             />
           </div>
           <div className="options-texture-settings" aria-label="Texture generation settings">
-            <div className="options-texture-stack">
-              <div className="options-texture-slider-slot">
-                <div className="options-seed-editor" aria-label="Texture seed">
-                  {isTextureSeedEditing ? (
-                    <label className="options-seed-btn is-editing" aria-label="Edit texture seed">
-                      <input
-                        ref={textureSeedInputRef}
-                        type="number"
-                        min={0}
-                        max={1000000}
-                        step={1}
-                        inputMode="numeric"
-                        className="sidebar-page-number-input sidebar-page-number-input--edit"
-                        value={textureSeedInput}
-                        onChange={(event) => {
-                          setTextureSeedInput(event.target.value.replace(/[^0-9]/g, ''))
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault()
-                            commitTextureSeedEdit()
-                            scheduleFocusEditorInEditMode()
-                            return
-                          }
-
-                          if (event.key === 'Escape' || event.key === 'Tab') {
-                            event.preventDefault()
-                            cancelTextureSeedEdit()
-                            scheduleFocusEditorInEditMode()
-                          }
-                        }}
-                        onBlur={() => {
-                          window.setTimeout(() => {
-                            if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
-                              scheduleFocusEditorInEditMode()
-                            }
-                          }, 0)
-                        }}
-                      />
-                    </label>
-                  ) : (
-                    <button
-                      type="button"
-                      className="options-seed-btn"
-                      aria-label={`Texture seed ${texturePreviewMaterial.seed}. Left click to randomize. Right click to edit.`}
-                      title="Left click: random seed. Right click: edit seed."
-                      onClick={randomizeTextureSeed}
-                      onContextMenu={(event) => {
-                        event.preventDefault()
-                        startTextureSeedEdit()
-                      }}
-                    ><span className="fa-solid fa-seedling" />
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div className="options-texture-slider-slot">
-                <CompactScrollbarSlider
-                  id="texture-granularity"
-                  min={TEXTURE_GRANULARITY_MIN}
-                  max={TEXTURE_GRANULARITY_MAX}
-                  step={1}
-                  value={texturePreviewMaterial.granularity}
-                  trackLabel="granularity"
-                  ariaLabel="Texture granularity"
-                  onCommit={(value) => {
-                    setTexturePreviewMaterial((current) => ({
-                      ...current,
-                      granularity: clamp(Math.round(value), TEXTURE_GRANULARITY_MIN, TEXTURE_GRANULARITY_MAX),
-                    }))
-                  }}
-                />
-              </div>
-              <div className="options-texture-slider-slot">
-                <CompactScrollbarSlider
-                  id="texture-smoothness"
-                  min={TEXTURE_VSTEPS_MIN}
-                  max={TEXTURE_VSTEPS_MAX}
-                  step={1}
-                  value={texturePreviewMaterial.vSteps}
-                  trackLabel="smoothness"
-                  ariaLabel="Texture smoothness"
-                  onCommit={(value) => {
-                    setTexturePreviewMaterial((current) => ({
-                      ...current,
-                      vSteps: clamp(Math.round(value), TEXTURE_VSTEPS_MIN, TEXTURE_VSTEPS_MAX),
-                    }))
-                  }}
-                />
-              </div>
-            </div>
             <div className="options-texture-preview-row">
               <button
                 type="button"
@@ -8903,6 +8910,205 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 }}
               />
             </div>
+            <div className="options-texture-seed-slot">
+              <div className="options-seed-editor" aria-label="Texture seed">
+                {isTextureSeedEditing ? (
+                  <label className="options-seed-btn is-editing" aria-label="Edit texture seed">
+                    <input
+                      ref={textureSeedInputRef}
+                      type="number"
+                      min={0}
+                      max={1000000}
+                      step={1}
+                      inputMode="numeric"
+                      className="sidebar-page-number-input sidebar-page-number-input--edit"
+                      value={textureSeedInput}
+                      onChange={(event) => {
+                        setTextureSeedInput(event.target.value.replace(/[^0-9]/g, ''))
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          commitTextureSeedEdit()
+                          scheduleFocusEditorInEditMode()
+                          return
+                        }
+
+                        if (event.key === 'Escape' || event.key === 'Tab') {
+                          event.preventDefault()
+                          cancelTextureSeedEdit()
+                          scheduleFocusEditorInEditMode()
+                        }
+                      }}
+                      onBlur={() => {
+                        window.setTimeout(() => {
+                          if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
+                            scheduleFocusEditorInEditMode()
+                          }
+                        }, 0)
+                      }}
+                    />
+                  </label>
+                ) : (
+                  <button
+                    type="button"
+                    className="options-seed-btn"
+                    aria-label={`Texture seed ${texturePreviewMaterial.seed}. Left click to randomize. Right click to edit.`}
+                    title="Left click: random seed. Right click: edit seed."
+                    onClick={randomizeTextureSeed}
+                    onContextMenu={(event) => {
+                      event.preventDefault()
+                      startTextureSeedEdit()
+                    }}
+                  ><span className="fa-solid fa-seedling" />
+                  </button>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              role="slider"
+              aria-label="Texture granularity"
+              aria-orientation="vertical"
+              aria-valuemin={TEXTURE_GRANULARITY_MIN}
+              aria-valuemax={TEXTURE_GRANULARITY_MAX}
+              aria-valuenow={texturePreviewMaterial.granularity}
+              className={[
+                'toolbar-btn-icon',
+                'options-color-swatch',
+                'options-hsva-control',
+                'options-hsva-alpha',
+                'options-texture-control-btn',
+                'options-texture-control-btn-granularity',
+                textureControlDragState?.control === 'granularity' ? 'is-dragging' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              title={`Granularity (${texturePreviewMaterial.granularity})`}
+              onPointerDown={(event) => {
+                startTextureControlDrag('granularity', event)
+              }}
+              onPointerMove={(event) => {
+                handleTextureControlDragMove('granularity', event)
+              }}
+              onPointerUp={(event) => {
+                stopTextureControlDrag('granularity', event)
+              }}
+              onPointerCancel={(event) => {
+                stopTextureControlDrag('granularity', event)
+              }}
+              onLostPointerCapture={(event) => {
+                stopTextureControlDrag('granularity', event)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
+                  event.preventDefault()
+                  nudgeTextureControlBy('granularity', -1)
+                  return
+                }
+                if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
+                  event.preventDefault()
+                  nudgeTextureControlBy('granularity', 1)
+                  return
+                }
+                if (event.key === 'PageDown') {
+                  event.preventDefault()
+                  nudgeTextureControlBy('granularity', -5)
+                  return
+                }
+                if (event.key === 'PageUp') {
+                  event.preventDefault()
+                  nudgeTextureControlBy('granularity', 5)
+                  return
+                }
+                if (event.key === 'Home') {
+                  event.preventDefault()
+                  updateTextureControlValue('granularity', TEXTURE_GRANULARITY_MIN)
+                  return
+                }
+                if (event.key === 'End') {
+                  event.preventDefault()
+                  updateTextureControlValue('granularity', TEXTURE_GRANULARITY_MAX)
+                }
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault()
+              }}
+            >
+              <span className="options-hsva-glyph fa-solid fa-chess-board" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              role="slider"
+              aria-label="Texture smoothness"
+              aria-orientation="vertical"
+              aria-valuemin={TEXTURE_VSTEPS_MIN}
+              aria-valuemax={TEXTURE_VSTEPS_MAX}
+              aria-valuenow={texturePreviewMaterial.vSteps}
+              className={[
+                'toolbar-btn-icon',
+                'options-color-swatch',
+                'options-hsva-control',
+                'options-hsva-alpha',
+                'options-texture-control-btn',
+                'options-texture-control-btn-smoothness',
+                textureControlDragState?.control === 'smoothness' ? 'is-dragging' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              title={`Smoothness (${texturePreviewMaterial.vSteps})`}
+              onPointerDown={(event) => {
+                startTextureControlDrag('smoothness', event)
+              }}
+              onPointerMove={(event) => {
+                handleTextureControlDragMove('smoothness', event)
+              }}
+              onPointerUp={(event) => {
+                stopTextureControlDrag('smoothness', event)
+              }}
+              onPointerCancel={(event) => {
+                stopTextureControlDrag('smoothness', event)
+              }}
+              onLostPointerCapture={(event) => {
+                stopTextureControlDrag('smoothness', event)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
+                  event.preventDefault()
+                  nudgeTextureControlBy('smoothness', -1)
+                  return
+                }
+                if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
+                  event.preventDefault()
+                  nudgeTextureControlBy('smoothness', 1)
+                  return
+                }
+                if (event.key === 'PageDown') {
+                  event.preventDefault()
+                  nudgeTextureControlBy('smoothness', -5)
+                  return
+                }
+                if (event.key === 'PageUp') {
+                  event.preventDefault()
+                  nudgeTextureControlBy('smoothness', 5)
+                  return
+                }
+                if (event.key === 'Home') {
+                  event.preventDefault()
+                  updateTextureControlValue('smoothness', TEXTURE_VSTEPS_MIN)
+                  return
+                }
+                if (event.key === 'End') {
+                  event.preventDefault()
+                  updateTextureControlValue('smoothness', TEXTURE_VSTEPS_MAX)
+                }
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault()
+              }}
+            >
+              <span className="options-hsva-glyph fa-solid fa-pen-nib" aria-hidden="true" />
+            </button>
           </div>
         </div>
 
@@ -9158,8 +9364,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <button
               type="button"
               className={`toolbar-btn-icon options-color-swatch options-glaze-layer-order-btn${glazeSettings.radialAboveLinear ? ' active' : ''}`}
-              aria-label={glazeSettings.radialAboveLinear ? 'Radial layer above linear layer' : 'Linear layer above radial layer'}
-              title={glazeSettings.radialAboveLinear ? 'Radial layer above linear layer' : 'Linear layer above radial layer'}
+              aria-label={glazeSettings.radialAboveLinear ? 'Display flair above glare.' : 'Display flair above glare.'}
+              title={glazeSettings.radialAboveLinear ? 'Display flair above glare.' : 'Display flair above glare.'}
               onClick={() => {
                 setGlazeSettings((current) => ({
                   ...current,
@@ -9222,7 +9428,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     startGlazeRadialSeedEdit()
                   }}
                 >
-                  <span className="fa-solid fa-bullseye"/>
+                  <span className="fa-solid fa-wand-magic-sparkles"/>
                 </button>
               )}
             </div>

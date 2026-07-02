@@ -2032,36 +2032,25 @@ button.active,
 /* Texture picker */
 .options-texture-settings {
   display:           grid;
-  grid-auto-columns: var(--color-grid-cell);
-  grid-auto-rows:    var(--color-grid-cell);
-  grid-auto-flow:    column;
+  grid-template-columns: repeat(3, var(--color-grid-cell));
+  grid-template-rows:    repeat(2, var(--color-grid-cell));
   gap:               var(--color-grid-gap);
-  width:     calc((var(--color-grid-cell) * 2) + var(--color-grid-gap));
-  min-width: calc((var(--color-grid-cell) * 2) + var(--color-grid-gap));
-  max-width: calc((var(--color-grid-cell) * 2) + var(--color-grid-gap));
+  width:     calc((var(--color-grid-cell) * 3) + (var(--color-grid-gap) * 2));
+  min-width: calc((var(--color-grid-cell) * 3) + (var(--color-grid-gap) * 2));
+  max-width: calc((var(--color-grid-cell) * 3) + (var(--color-grid-gap) * 2));
   flex:      0 0 auto;
 }
 
-.options-texture-stack {
+.options-texture-seed-slot {
   grid-column:    2 / span 2;
-  grid-row:       1 / span 2;
-  min-width:      0;
-  min-height:     0;
-  display:        flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  gap:            var(--toolbar-options-gap);
-}
-
-.options-texture-slider-slot {
-  min-width:   0;
-  min-height:  0;
-  display:     flex;
-  align-items: center;
+  grid-row:       1;
+  height:         100%;
+  display:        block;
 }
 
 .options-seed-editor {
   width:       100%;
+  height:         100%;
   display:     flex;
   align-items: center;
 }
@@ -2095,9 +2084,39 @@ button.active,
   justify-content: center;
 }
 
-.options-texture-slider-slot .utility-setting-scrollbar-shell,
+.options-texture-control-btn,
 .options-texture-preview-row .options-texture-preview {
   width: 100%;
+}
+
+.options-texture-control-btn {
+  min-width:      0;
+  min-height:     0;
+  padding:        2px;
+  display:        inline-flex;
+  flex-direction: column;
+  align-items:    center;
+  justify-content: center;
+  gap:            2px;
+}
+
+.options-texture-control-btn-granularity {
+  grid-column: 2;
+  grid-row:    2;
+}
+
+.options-texture-control-btn-smoothness {
+  grid-column: 3;
+  grid-row:    2;
+}
+
+.options-texture-control-value {
+  font-size:      9px;
+  line-height:    1;
+  font-weight:    700;
+  color:          var(--color-text-faded);
+  text-shadow:    var(--text-shadow-icon);
+  letter-spacing: 0.02em;
 }
 
 .options-texture-preview {
