@@ -101,6 +101,8 @@
      Warm-tone neutral palette derived from #fcf9f6 / #ece8e4.
   --------------------------------------------------------------------------- */
 
+  --background-color-root:      white;
+
   --palette-parchment-lightest: #f9f6f4;   /* --color-background-light  */
   --palette-parchment-light:    #f5f3f2;   /* gradient start            */
   --palette-parchment-mid:      #e9e5e2;   /* gradient end              */
@@ -114,7 +116,6 @@
   /* Semantic color tokens */
   --color-background-light:     var(--palette-parchment-lightest);
   --color-background-dark:      #eeeeee;
-  --color-panel-top-gradient:   linear-gradient(135deg, var(--palette-parchment-light), var(--palette-parchment-mid));
   --color-panel-shadow:         rgba(20, 0, 0, 0.4);
   --color-panel-border:         #ffffff88;
   --color-input-backdrop:       var(--palette-parchment-input);
@@ -371,13 +372,25 @@
 /* =============================================================================
    2. GLOBAL RESET & BASE
    ============================================================================= */
+.app-root {
+  height: 100%;
+  width: 100%;
+  background-color: var(--background-color-root);
+}
+
+.app-root::before {
+  content:          '';
+  position:         absolute;
+  inset:            0;
+  background-color: var(--palette-parchment-lightest);
+}
+
 
 .app-shell {
   height: 100vh;
   width: 100%;
   display: grid;
   overflow: hidden;
-  background: var(--color-panel-top-gradient);
   text-shadow: var(--text-shadow-emboss-base);
 }
 
@@ -498,8 +511,6 @@ button.active,
 .app-grid {
   position:             relative;
   isolation:            isolate;
-  background-color:     var(--palette-parchment-dark);
-  background-image:     var(--color-panel-top-gradient);
   background-repeat:    no-repeat;
   background-size:      100% 100%;
   background-position:  0 0;
@@ -606,6 +617,14 @@ button.active,
   border-left:     none;
   border-radius:   0 9px 9px 0;
   box-shadow:      var(--box-shadow-inverted);
+  background-color: var(--background-color-root);
+}
+
+.sidebar-content::before {
+  content:          '';
+  position:         absolute;
+  inset:            0;
+  background-color: var(--palette-parchment-lightest);
 }
 
 .sidebar-content.is-scrollbar-mode > div:nth-child(2) {
@@ -2372,6 +2391,19 @@ body.hsva-dragging * {
 }
 
 /* 10b. Editor stage + texture overlay */
+.editor-background {
+  position: absolute;
+  inset: 0;
+  background-color: var(--background-color-root);
+}
+
+.editor-background::before {
+  content:          '';
+  position:         absolute;
+  inset:            0;
+  background-color: var(--palette-parchment-lightest);
+}
+
 .editor-stage {
   position:      relative;
   width:         100%;

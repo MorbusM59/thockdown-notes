@@ -664,7 +664,7 @@ function derivePaletteTokensFromBaseColor(baseColorCss: string): DerivedPaletteC
   }
 
   return {
-    parchmentLightest: rgbaToCssColor({ ...baseRgba, a: 1 }),
+    parchmentLightest: rgbaToCssColor({ ...baseRgba}),
     parchmentLight: withScaledValue(defaultLightHsva.v / safeBaseDefaultV, 1),
     parchmentMid: withScaledValue(defaultMidHsva.v / safeBaseDefaultV, 1),
     parchmentDark: withScaledValue(defaultDarkHsva.v / safeBaseDefaultV, 1),
@@ -10873,34 +10873,36 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
       <div className="editor-viewer-frame" style={{ gridArea: 'viewer' }}>
         <main className="editor-shell">
-          <div ref={editorStageRef} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
-            <div className="edit-container" style={{ display: isPreviewMode ? 'none' : undefined }}>
-              <Editor
-                key={activeNoteId ?? 'editor' }
-                bindings={bindings}
-                adapterRef={adapterRef}
-                noteId={activeNoteId}
-                initialText={activeNoteText}
-                scrollbarHost={scrollbarHostEl}
-                fontFamily={editorFontFamily}
-                fontSizePx={editorRuntimeMetrics.fontSizePx}
-                lineHeightPx={editorRuntimeMetrics.lineHeightPx}
-                glyphWidthPx={editorRuntimeMetrics.glyphWidthPx}
-                cellWidthPx={editorRuntimeMetrics.cellWidthPx}
-                fontReady={editorFontLoadVersion > 0}
-                editorReadOnly={activeNoteHasDebugTag}
-                caretSuspended={isCaretSuspended}
-              />
-            </div>
-            <div className="render-container" style={{ display: isPreviewMode ? undefined : 'none' }} aria-hidden={!isPreviewMode}>
-              <div ref={previewTextureRef} className="markdown-preview-texture" />
-              <div
-                ref={previewScrollRef}
-                onScroll={handlePreviewScroll}
-                className={`markdown-preview measly-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
-                style={{ '--search-hit-color': highlightColors.search } as CSSProperties}
-              >
-                {previewMarkdownElement}
+          <div className="editor-background">
+            <div ref={editorStageRef} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
+              <div className="edit-container" style={{ display: isPreviewMode ? 'none' : undefined }}>
+                <Editor
+                  key={activeNoteId ?? 'editor' }
+                  bindings={bindings}
+                  adapterRef={adapterRef}
+                  noteId={activeNoteId}
+                  initialText={activeNoteText}
+                  scrollbarHost={scrollbarHostEl}
+                  fontFamily={editorFontFamily}
+                  fontSizePx={editorRuntimeMetrics.fontSizePx}
+                  lineHeightPx={editorRuntimeMetrics.lineHeightPx}
+                  glyphWidthPx={editorRuntimeMetrics.glyphWidthPx}
+                  cellWidthPx={editorRuntimeMetrics.cellWidthPx}
+                  fontReady={editorFontLoadVersion > 0}
+                  editorReadOnly={activeNoteHasDebugTag}
+                  caretSuspended={isCaretSuspended}
+                />
+              </div>
+              <div className="render-container" style={{ display: isPreviewMode ? undefined : 'none' }} aria-hidden={!isPreviewMode}>
+                <div ref={previewTextureRef} className="markdown-preview-texture" />
+                <div
+                  ref={previewScrollRef}
+                  onScroll={handlePreviewScroll}
+                  className={`markdown-preview measly-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
+                  style={{ '--search-hit-color': highlightColors.search } as CSSProperties}
+                >
+                  {previewMarkdownElement}
+                </div>
               </div>
             </div>
           </div>
