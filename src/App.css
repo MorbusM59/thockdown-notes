@@ -258,6 +258,27 @@
   --text-shadow-emboss-main:      #ffffff;
   --text-shadow-emboss-secondary: #55000022;
 
+  --text-shadow-emboss-ui:
+    0 -1px 0px var(--text-shadow-emboss-ui-secondary),
+    0 1px 0px var(--text-shadow-emboss-ui-main);
+
+  --text-shadow-emboss-ui-main:      #ffffff;
+  --text-shadow-emboss-ui-secondary: #55000022;
+
+  --text-shadow-emboss-edit:
+    0 -1px 0px var(--text-shadow-emboss-edit-secondary),
+    0 1px 0px var(--text-shadow-emboss-edit-main);
+
+  --text-shadow-emboss-edit-main:      #ffffff;
+  --text-shadow-emboss-edit-secondary: #55000022;
+
+  --text-shadow-emboss-render:
+    0 -1px 0px var(--text-shadow-emboss-render-secondary),
+    0 1px 0px var(--text-shadow-emboss-render-main);
+
+  --text-shadow-emboss-render-main:      #ffffff;
+  --text-shadow-emboss-render-secondary: #55000022;
+
 
   --text-shadow-emboss-panel:
     0 1px 1px rgba(255, 255, 255, 1),
@@ -270,8 +291,8 @@
     0 1px 0 #FFFFFF;
 
   --text-shadow-icon:
-    0 0 5px #ffffff99,
-    0 0 2px #ffffff99;
+    0 -1px 0px var(--text-shadow-emboss-ui-secondary),
+    0 1px 0px var(--text-shadow-emboss-ui-main);
 
   --text-info-size:  12px;
   --text-info-color: var(--color-text-label);
@@ -386,7 +407,9 @@
   width: 100%;
   display: grid;
   overflow: hidden;
-  text-shadow: var(--text-shadow-emboss-base);
+  text-shadow:
+    0 -1px 0px var(--text-shadow-emboss-ui-secondary),
+    0 1px 0px var(--text-shadow-emboss-ui-main);
 }
 
 /* =============================================================================
@@ -1813,7 +1836,7 @@ button.active,
 }
 
 .options-row-grid-middle {
-  grid-template-columns: repeat(4, var(--color-grid-cell));
+  grid-template-columns: repeat(5, var(--color-grid-cell));
 }
 
 .options-row-grid-bottom {
@@ -1938,7 +1961,9 @@ button.active,
 
 .text-icon .options-color-swatch-glyph {
   color:       var(--options-swatch-color, var(--color-text-icon));
-  text-shadow: var(--text-shadow-emboss-base);
+  text-shadow:
+    0 -1px 0px var(--text-shadow-emboss-ui-secondary),
+    0 1px 0px var(--text-shadow-emboss-ui-main);
 }
 
 .options-darkmode-grid {
@@ -2516,7 +2541,9 @@ body.hsva-dragging * {
   scroll-behavior: smooth;
   padding:        var(--preview-edge-padding);
   box-sizing:     border-box;
-  text-shadow:    var(--text-shadow-emboss-base);
+  text-shadow:
+    0 -1px 0px var(--text-shadow-emboss-render-secondary),
+    0 1px 0px var(--text-shadow-emboss-render-main);
   font-synthesis: style;
   position:       relative;
   z-index:        2;

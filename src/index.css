@@ -256,6 +256,9 @@ body {
   font-family: var(--editor-font);
   font-size: var(--editor-font-size);
   line-height: var(--editor-line-height);
+  text-shadow:
+    0 -1px 0px var(--text-shadow-emboss-edit-secondary),
+    0 1px 0px var(--text-shadow-emboss-edit-main);
   
   /* Space each glyph by the exact measured gap to match the runtime cell width. */
   letter-spacing: calc(var(--editor-cell-width) - var(--editor-glyph-width)); 

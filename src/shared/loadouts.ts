@@ -46,7 +46,9 @@ export type UiLayoutLoadout = {
     search: string;
     selectionEdit: string;
     selectionRender: string;
-    textEmboss: string;
+    textEmbossEdit: string;
+    textEmbossRender: string;
+    textEmbossUi: string;
     background: string;
     topBackground: string;
     bottomBackground: string;

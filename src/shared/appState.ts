@@ -58,6 +58,9 @@ export interface PersistedMenuState {
   highlightSelectionEditColor?: string;
   highlightSelectionRenderColor?: string;
   highlightTextEmbossColor?: string;
+  highlightTextEmbossEditColor?: string;
+  highlightTextEmbossRenderColor?: string;
+  highlightTextEmbossUiColor?: string;
   highlightBackgroundColor?: string;
   editorEditTextColor?: string;
   editorRenderTextColor?: string;

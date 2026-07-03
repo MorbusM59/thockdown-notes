@@ -134,7 +134,9 @@ const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   search: 'rgba(255, 221, 105, 0.55)',
   selectionEdit: 'rgba(199, 94, 0, 0.49)',
   selectionRender: 'rgba(199, 94, 0, 0.49)',
-  textEmboss: '#ffffff',
+  textEmbossEdit: '#ffffff',
+  textEmbossRender: '#ffffff',
+  textEmbossUi: '#ffffff',
   background: '#e9e6e3',
   topBackground: 'rgba(196, 187, 182, 0.49)',
   bottomBackground: 'rgba(196, 187, 182, 0.49)',
@@ -166,7 +168,9 @@ const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   search: 'Search Highlight color',
   selectionEdit: 'Edit selection color',
   selectionRender: 'Render selection color',
-  textEmboss: 'Text embossing color',
+  textEmbossEdit: 'Edit text embossing color',
+  textEmbossRender: 'Render text embossing color',
+  textEmbossUi: 'UI text embossing color',
   background: 'Default Box Background',
   topBackground: 'Upper Box Background',
   bottomBackground: 'Lower Box Background',
@@ -182,15 +186,17 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   search: 'fa-solid fa-magnifying-glass',
   selectionEdit: 'fa-solid fa-expand',
   selectionRender: 'fa-solid fa-expand',
-  textEmboss: 'fa-solid fa-sun',
+  textEmbossEdit: 'fa-solid fa-sun',
+  textEmbossRender: 'fa-solid fa-sun',
+  textEmbossUi: 'fa-solid fa-icons',
   background: 'fa-solid fa-square',
   topBackground: 'fa-solid fa-square-caret-up',
   bottomBackground: 'fa-solid fa-square-caret-down',
   gridOutline: 'fa-regular fa-square',
   grid: 'fa-solid fa-border-all',
-  base: 'fa-solid fa-layer-group',
-  inputFields: 'fa-solid fa-keyboard',
-  appButtons: 'fa-solid fa-hand-pointer',
+  base: 'fa-solid fa-display',
+  inputFields: 'fa-solid fa-pen-to-square',
+  appButtons: 'fa-solid fa-hockey-puck',
 }
 
 // Icons for the 5 factory presets per mode, indexed by abs(id) - 1 (0-based).
@@ -237,8 +243,8 @@ const TEXTURE_SURFACE_TITLES: Record<TextureSurfaceKey, string> = {
 const TEXTURE_SURFACE_ICONS: Record<TextureSurfaceKey, string> = {
   appGrid: 'fa-solid fa-table-columns',
   sidebarContent: 'fa-solid fa-list',
-  editorEditText: 'fa-solid fa-pen-to-square',
-  editorRenderText: 'fa-solid fa-book-open',
+  editorEditText: 'fa-solid fa-align-justify',
+  editorRenderText: 'fa-solid fa-align-justify',
 }
 
 type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find' | 'options'
@@ -253,7 +259,9 @@ type HighlightColorKey =
   | 'search'
   | 'selectionEdit'
   | 'selectionRender'
-  | 'textEmboss'
+  | 'textEmbossEdit'
+  | 'textEmbossRender'
+  | 'textEmbossUi'
   | 'background'
   | 'topBackground'
   | 'bottomBackground'
@@ -1289,6 +1297,7 @@ function toTexturePreviewMaterial(source: unknown): TextureMaterialSettings {
 function normalizeLoadoutHighlightColors(source: unknown): HighlightColors {
   const record = toRecord(source)
   const legacySelection = typeof record.selection === 'string' ? record.selection : null
+  const legacyTextEmboss = typeof record.textEmboss === 'string' ? record.textEmboss : null
 
   return {
     caret: typeof record.caret === 'string' ? record.caret : DEFAULT_HIGHLIGHT_COLORS.caret,
@@ -1299,7 +1308,15 @@ function normalizeLoadoutHighlightColors(source: unknown): HighlightColors {
     selectionRender: typeof record.selectionRender === 'string'
       ? record.selectionRender
       : (legacySelection ?? DEFAULT_HIGHLIGHT_COLORS.selectionRender),
-    textEmboss: typeof record.textEmboss === 'string' ? record.textEmboss : DEFAULT_HIGHLIGHT_COLORS.textEmboss,
+    textEmbossEdit: typeof record.textEmbossEdit === 'string'
+      ? record.textEmbossEdit
+      : (legacyTextEmboss ?? DEFAULT_HIGHLIGHT_COLORS.textEmbossEdit),
+    textEmbossRender: typeof record.textEmbossRender === 'string'
+      ? record.textEmbossRender
+      : (legacyTextEmboss ?? DEFAULT_HIGHLIGHT_COLORS.textEmbossRender),
+    textEmbossUi: typeof record.textEmbossUi === 'string'
+      ? record.textEmbossUi
+      : (legacyTextEmboss ?? DEFAULT_HIGHLIGHT_COLORS.textEmbossUi),
     background: typeof record.background === 'string' ? record.background : DEFAULT_HIGHLIGHT_COLORS.background,
     topBackground: typeof record.topBackground === 'string' ? record.topBackground : DEFAULT_HIGHLIGHT_COLORS.topBackground,
     bottomBackground: typeof record.bottomBackground === 'string' ? record.bottomBackground : DEFAULT_HIGHLIGHT_COLORS.bottomBackground,
@@ -2237,13 +2254,29 @@ function App() {
     () => derivePaletteTokensFromBaseColor(highlightColors.base),
     [highlightColors.base],
   )
-  const textEmbossPrimaryRgba = useMemo(
-    () => parseCssColorToRgba(highlightColors.textEmboss) ?? { r: 255, g: 255, b: 255, a: 1 },
-    [highlightColors.textEmboss],
+  const textEmbossUiPrimaryRgba = useMemo(
+    () => parseCssColorToRgba(highlightColors.textEmbossUi) ?? { r: 255, g: 255, b: 255, a: 1 },
+    [highlightColors.textEmbossUi],
   )
-  const textEmbossSecondaryCss = useMemo(
-    () => rgbaToCssColor(invertRgbaColor(textEmbossPrimaryRgba, 0.22)),
-    [textEmbossPrimaryRgba],
+  const textEmbossUiSecondaryCss = useMemo(
+    () => rgbaToCssColor(invertRgbaColor(textEmbossUiPrimaryRgba, 0.22)),
+    [textEmbossUiPrimaryRgba],
+  )
+  const textEmbossEditPrimaryRgba = useMemo(
+    () => parseCssColorToRgba(highlightColors.textEmbossEdit) ?? { r: 255, g: 255, b: 255, a: 1 },
+    [highlightColors.textEmbossEdit],
+  )
+  const textEmbossEditSecondaryCss = useMemo(
+    () => rgbaToCssColor(invertRgbaColor(textEmbossEditPrimaryRgba, 0.22)),
+    [textEmbossEditPrimaryRgba],
+  )
+  const textEmbossRenderPrimaryRgba = useMemo(
+    () => parseCssColorToRgba(highlightColors.textEmbossRender) ?? { r: 255, g: 255, b: 255, a: 1 },
+    [highlightColors.textEmbossRender],
+  )
+  const textEmbossRenderSecondaryCss = useMemo(
+    () => rgbaToCssColor(invertRgbaColor(textEmbossRenderPrimaryRgba, 0.22)),
+    [textEmbossRenderPrimaryRgba],
   )
 
   useEffect(() => {
@@ -2430,7 +2463,9 @@ function App() {
         search: highlightColors.search,
         selectionEdit: highlightColors.selectionEdit,
         selectionRender: highlightColors.selectionRender,
-        textEmboss: highlightColors.textEmboss,
+        textEmbossEdit: highlightColors.textEmbossEdit,
+        textEmbossRender: highlightColors.textEmbossRender,
+        textEmbossUi: highlightColors.textEmbossUi,
         background: highlightColors.background,
         topBackground: highlightColors.topBackground,
         bottomBackground: highlightColors.bottomBackground,
@@ -2517,7 +2552,9 @@ function App() {
       search: loadout.highlightColors.search,
       selectionEdit: loadout.highlightColors.selectionEdit,
       selectionRender: loadout.highlightColors.selectionRender,
-      textEmboss: loadout.highlightColors.textEmboss,
+      textEmbossEdit: loadout.highlightColors.textEmbossEdit,
+      textEmbossRender: loadout.highlightColors.textEmbossRender,
+      textEmbossUi: loadout.highlightColors.textEmbossUi,
       background: loadout.highlightColors.background,
       topBackground: loadout.highlightColors.topBackground,
       bottomBackground: loadout.highlightColors.bottomBackground,
@@ -3327,7 +3364,10 @@ function App() {
       highlightSelectionColor: highlightColors.selectionEdit,
       highlightSelectionEditColor: highlightColors.selectionEdit,
       highlightSelectionRenderColor: highlightColors.selectionRender,
-      highlightTextEmbossColor: highlightColors.textEmboss,
+      highlightTextEmbossColor: highlightColors.textEmbossUi,
+      highlightTextEmbossEditColor: highlightColors.textEmbossEdit,
+      highlightTextEmbossRenderColor: highlightColors.textEmbossRender,
+      highlightTextEmbossUiColor: highlightColors.textEmbossUi,
       highlightBackgroundColor: highlightColors.background,
       highlightTopBackgroundColor: highlightColors.topBackground,
       highlightBottomBackgroundColor: highlightColors.bottomBackground,
@@ -3774,8 +3814,14 @@ function App() {
       '--canonical-scroll-track-bg': highlightColors.inputFields,
       '--btn-bg-default': highlightColors.appButtons,
       '--canonical-handle-bg': highlightColors.appButtons,
-      '--text-shadow-emboss-main': highlightColors.textEmboss,
-      '--text-shadow-emboss-secondary': textEmbossSecondaryCss,
+      '--text-shadow-emboss-main': highlightColors.textEmbossUi,
+      '--text-shadow-emboss-secondary': textEmbossUiSecondaryCss,
+      '--text-shadow-emboss-ui-main': highlightColors.textEmbossUi,
+      '--text-shadow-emboss-ui-secondary': textEmbossUiSecondaryCss,
+      '--text-shadow-emboss-edit-main': highlightColors.textEmbossEdit,
+      '--text-shadow-emboss-edit-secondary': textEmbossEditSecondaryCss,
+      '--text-shadow-emboss-render-main': highlightColors.textEmbossRender,
+      '--text-shadow-emboss-render-secondary': textEmbossRenderSecondaryCss,
       '--color-editor-edit-text': editorEditTextColorCss,
       '--color-editor-render-text': editorRenderTextColorCss,
       '--texture-app-grid': appGridTextureCss,
@@ -3802,7 +3848,9 @@ function App() {
     layout.gridTemplateColumns,
     sidebarTextureCss,
     sidebarTextureTintCss,
-    textEmbossSecondaryCss,
+    textEmbossUiSecondaryCss,
+    textEmbossEditSecondaryCss,
+    textEmbossRenderSecondaryCss,
   ])
 
   // Apply all filter sliders at one wrapper level so the full composited scene
@@ -3860,6 +3908,14 @@ function App() {
       '--glaze-radial-background-image': glazeRadialBackgroundImage,
       '--glaze-gloom-background-image': glazeGloomBackgroundImage,
       '--glaze-sheen-background-image': glazeSheenBackgroundImage,
+      '--text-shadow-emboss-main': highlightColors.textEmbossUi,
+      '--text-shadow-emboss-secondary': textEmbossUiSecondaryCss,
+      '--text-shadow-emboss-ui-main': highlightColors.textEmbossUi,
+      '--text-shadow-emboss-ui-secondary': textEmbossUiSecondaryCss,
+      '--text-shadow-emboss-edit-main': highlightColors.textEmbossEdit,
+      '--text-shadow-emboss-edit-secondary': textEmbossEditSecondaryCss,
+      '--text-shadow-emboss-render-main': highlightColors.textEmbossRender,
+      '--text-shadow-emboss-render-secondary': textEmbossRenderSecondaryCss,
       '--palette-parchment-lightest': derivedPaletteColors.parchmentLightest,
       '--palette-parchment-light': derivedPaletteColors.parchmentLight,
       '--palette-parchment-mid': derivedPaletteColors.parchmentMid,
@@ -3875,6 +3931,12 @@ function App() {
     glazeRadialBackgroundImage,
     glazeGloomBackgroundImage,
     glazeSheenBackgroundImage,
+    highlightColors.textEmbossUi,
+    highlightColors.textEmbossEdit,
+    highlightColors.textEmbossRender,
+    textEmbossUiSecondaryCss,
+    textEmbossEditSecondaryCss,
+    textEmbossRenderSecondaryCss,
   ])
 
   // Writes a structured debug entry to a session-scoped debug note (tagged
@@ -5746,7 +5808,18 @@ ${markdownHtml}
                 appState.menu.highlightSelectionRenderColor
                 ?? appState.menu.highlightSelectionColor
                 ?? DEFAULT_HIGHLIGHT_COLORS.selectionRender,
-              textEmboss: appState.menu.highlightTextEmbossColor ?? DEFAULT_HIGHLIGHT_COLORS.textEmboss,
+              textEmbossEdit:
+                appState.menu.highlightTextEmbossEditColor
+                ?? appState.menu.highlightTextEmbossColor
+                ?? DEFAULT_HIGHLIGHT_COLORS.textEmbossEdit,
+              textEmbossRender:
+                appState.menu.highlightTextEmbossRenderColor
+                ?? appState.menu.highlightTextEmbossColor
+                ?? DEFAULT_HIGHLIGHT_COLORS.textEmbossRender,
+              textEmbossUi:
+                appState.menu.highlightTextEmbossUiColor
+                ?? appState.menu.highlightTextEmbossColor
+                ?? DEFAULT_HIGHLIGHT_COLORS.textEmbossUi,
               background: appState.menu.highlightBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.background,
               topBackground: appState.menu.highlightTopBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.topBackground,
               bottomBackground: appState.menu.highlightBottomBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.bottomBackground,
@@ -8790,9 +8863,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   const renderSidebarOptionsContent = () => {
     const topRowHighlightKeys: HighlightColorKey[] = ['base', 'inputFields', 'appButtons']
     const middleRowHighlightKeys: HighlightColorKey[] = [
-      'textEmboss',
+      isPreviewMode ? 'textEmbossRender' : 'textEmbossEdit',
       'caret',
       isPreviewMode ? 'selectionRender' : 'selectionEdit',
+      'textEmbossUi',
     ]
     const textureTargets = ['appGrid', 'sidebarContent', isPreviewMode ? 'editorRenderText' : 'editorEditText'] as TextureSurfaceKey[]
 
