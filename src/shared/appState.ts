@@ -55,6 +55,9 @@ export interface PersistedMenuState {
   highlightCaretColor?: string;
   highlightSearchColor?: string;
   highlightSelectionColor?: string;
+  highlightSelectionEditColor?: string;
+  highlightSelectionRenderColor?: string;
+  highlightTextEmbossColor?: string;
   highlightBackgroundColor?: string;
   editorEditTextColor?: string;
   editorRenderTextColor?: string;
@@ -64,6 +67,8 @@ export interface PersistedMenuState {
   highlightGridOutlineColor?: string;
   highlightGridColor?: string;
   highlightBaseColor?: string;
+  highlightInputFieldsColor?: string;
+  highlightAppButtonsColor?: string;
   textureEnabled?: boolean;
   textureActiveSurface?: TextureSurfaceKey;
   textureMaterials?: TextureMaterialsBySurface;

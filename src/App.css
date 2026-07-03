@@ -252,8 +252,11 @@
   --------------------------------------------------------------------------- */
 
   --text-shadow-emboss-base:
-    0 -1px 0px #55000022,
-    0 1px 0px #ffffff;
+    0 -1px 0px var(--text-shadow-emboss-secondary),
+    0 1px 0px var(--text-shadow-emboss-main);
+
+  --text-shadow-emboss-main:      #ffffff;
+  --text-shadow-emboss-secondary: #55000022;
 
 
   --text-shadow-emboss-panel:
@@ -310,7 +313,7 @@
   --btn-border-hover:   #00000088;
   --btn-border-active:  var(--color-border-selected);
 
-  --btn-bg-default: #FFFFFFBB;
+  --btn-bg-default: var(--palette-parchment-input);
   --btn-bg-hover:   #EEEEEEBB;
   --btn-bg-pressed: #DDDDDDBB;
   --btn-bg-active:  var(--color-input-backdrop);
@@ -333,10 +336,10 @@
     var(--canonical-scroll-thickness) - (var(--canonical-scroll-handle-gap) * 2)
   );
 
-  --canonical-scroll-track-bg:     rgba(255, 255, 255, 0.92);
+  --canonical-scroll-track-bg:     var(--color-input-backdrop);
   --canonical-scroll-track-border: rgba(106, 92, 79, 0.45);
   --canonical-handle-border:       rgba(81, 73, 66, 0.6);
-  --canonical-handle-bg:           linear-gradient(135deg, var(--palette-parchment-light), var(--palette-parchment-mid));
+  --canonical-handle-bg:           var(--btn-bg-default);
 
   --canonical-handle-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.65),
@@ -1797,6 +1800,24 @@ button.active,
   grid-auto-columns: var(--color-grid-cell);
   grid-auto-rows:    var(--color-grid-cell);
   grid-auto-flow:    column;
+}
+
+.options-color-grid.options-row-grid {
+  grid-auto-flow: row;
+  grid-auto-columns: unset;
+  grid-auto-rows: var(--color-grid-cell);
+}
+
+.options-row-grid-top {
+  grid-template-columns: repeat(6, var(--color-grid-cell));
+}
+
+.options-row-grid-middle {
+  grid-template-columns: repeat(4, var(--color-grid-cell));
+}
+
+.options-row-grid-bottom {
+  grid-template-columns: repeat(5, var(--color-grid-cell));
 }
 
 .options-hsva-grid {

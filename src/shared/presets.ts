@@ -47,13 +47,17 @@ const NEUTRAL_BASE: UiLayoutLoadout = {
   highlightColors: {
     caret: 'rgba(0, 0, 0, 0.3)',
     search: 'rgba(255, 221, 105, 0.55)',
-    selection: 'rgba(0, 0, 0, 0.1)',
+    selectionEdit: 'rgba(0, 0, 0, 0.1)',
+    selectionRender: 'rgba(0, 0, 0, 0.1)',
+    textEmboss: '#ffffff',
     background: 'rgba(196, 187, 182, 0.2)',
     topBackground: 'rgba(196, 187, 182, 0.3)',
     bottomBackground: 'rgba(196, 187, 182, 0.3)',
     gridOutline: '#00000022',
     grid: '#f9f6f3',
     base: '#f9f6f4',
+    inputFields: '#ffffff',
+    appButtons: '#FFFFFFBB',
   },
   editorTextColors: {
     editorEditText: '#000000DD',

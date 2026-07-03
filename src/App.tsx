@@ -132,13 +132,17 @@ const PREVIEW_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPEED_M
 const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   caret: 'rgba(120, 115, 112, 0.8)',
   search: 'rgba(255, 221, 105, 0.55)',
-  selection: 'rgba(199, 94, 0, 0.49)',
+  selectionEdit: 'rgba(199, 94, 0, 0.49)',
+  selectionRender: 'rgba(199, 94, 0, 0.49)',
+  textEmboss: '#ffffff',
   background: '#e9e6e3',
   topBackground: 'rgba(196, 187, 182, 0.49)',
   bottomBackground: 'rgba(196, 187, 182, 0.49)',
   gridOutline: '#00000022',
   grid: '#f9f6f3',
   base: '#f9f6f4',
+  inputFields: '#ffffff',
+  appButtons: '#FFFFFFBB',
 }
 
 const DEFAULT_BASE_PALETTE_COLOR = '#f9f6f4'
@@ -155,30 +159,38 @@ const DEFAULT_EDITOR_TEXT_COLORS: Record<EditorTextColorTargetKey, string> = {
   editorRenderText: '#000000DD',
 }
 
-const HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['topBackground', 'bottomBackground', 'background', 'gridOutline', 'grid', 'base']
+const BOX_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['background', 'grid', 'gridOutline', 'topBackground', 'bottomBackground']
 
 const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   caret: 'Caret Color',
   search: 'Search Highlight color',
-  selection: 'Selection Box color',
+  selectionEdit: 'Edit selection color',
+  selectionRender: 'Render selection color',
+  textEmboss: 'Text embossing color',
   background: 'Default Box Background',
   topBackground: 'Upper Box Background',
   bottomBackground: 'Lower Box Background',
   gridOutline: 'Box Outline',
   grid: 'Box Grid',
   base: 'App Base Background',
+  inputFields: 'App (Input) Fields',
+  appButtons: 'App Buttons',
 }
 
 const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   caret: 'fa-solid fa-i',
   search: 'fa-solid fa-magnifying-glass',
-  selection: 'fa-solid fa-expand',
+  selectionEdit: 'fa-solid fa-expand',
+  selectionRender: 'fa-solid fa-expand',
+  textEmboss: 'fa-solid fa-sun',
   background: 'fa-solid fa-square',
   topBackground: 'fa-solid fa-square-caret-up',
   bottomBackground: 'fa-solid fa-square-caret-down',
   gridOutline: 'fa-regular fa-square',
   grid: 'fa-solid fa-border-all',
   base: 'fa-solid fa-layer-group',
+  inputFields: 'fa-solid fa-keyboard',
+  appButtons: 'fa-solid fa-hand-pointer',
 }
 
 // Icons for the 5 factory presets per mode, indexed by abs(id) - 1 (0-based).
@@ -236,7 +248,20 @@ type TextDecorationFormat = 'bold' | 'italic' | 'strikethrough'
 type ViewStyleKey = 'modern' | 'narrow' | 'cute' | 'xkcd' | 'print'
 type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
 type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
-type HighlightColorKey = 'caret' | 'search' | 'selection' | 'background' | 'topBackground' | 'bottomBackground' | 'gridOutline' | 'grid' | 'base'
+type HighlightColorKey =
+  | 'caret'
+  | 'search'
+  | 'selectionEdit'
+  | 'selectionRender'
+  | 'textEmboss'
+  | 'background'
+  | 'topBackground'
+  | 'bottomBackground'
+  | 'gridOutline'
+  | 'grid'
+  | 'base'
+  | 'inputFields'
+  | 'appButtons'
 
 type EditorTextColorTargetKey = 'editorEditText' | 'editorRenderText'
 
@@ -552,6 +577,15 @@ function parseCssColorToRgba(color: string): RgbaColor | null {
 function rgbaToCssColor(color: RgbaColor): string {
   const alpha = Number(clampAlphaChannel(color.a).toFixed(3))
   return `rgba(${clampColorChannel(color.r)}, ${clampColorChannel(color.g)}, ${clampColorChannel(color.b)}, ${alpha})`
+}
+
+function invertRgbaColor(color: RgbaColor, alphaScale = 1): RgbaColor {
+  return {
+    r: 255 - clampColorChannel(color.r),
+    g: 255 - clampColorChannel(color.g),
+    b: 255 - clampColorChannel(color.b),
+    a: clamp(color.a * alphaScale, 0, 1),
+  }
 }
 
 function rgbaToHsva(color: RgbaColor): HsvaColor {
@@ -1254,17 +1288,26 @@ function toTexturePreviewMaterial(source: unknown): TextureMaterialSettings {
 
 function normalizeLoadoutHighlightColors(source: unknown): HighlightColors {
   const record = toRecord(source)
+  const legacySelection = typeof record.selection === 'string' ? record.selection : null
 
   return {
     caret: typeof record.caret === 'string' ? record.caret : DEFAULT_HIGHLIGHT_COLORS.caret,
     search: typeof record.search === 'string' ? record.search : DEFAULT_HIGHLIGHT_COLORS.search,
-    selection: typeof record.selection === 'string' ? record.selection : DEFAULT_HIGHLIGHT_COLORS.selection,
+    selectionEdit: typeof record.selectionEdit === 'string'
+      ? record.selectionEdit
+      : (legacySelection ?? DEFAULT_HIGHLIGHT_COLORS.selectionEdit),
+    selectionRender: typeof record.selectionRender === 'string'
+      ? record.selectionRender
+      : (legacySelection ?? DEFAULT_HIGHLIGHT_COLORS.selectionRender),
+    textEmboss: typeof record.textEmboss === 'string' ? record.textEmboss : DEFAULT_HIGHLIGHT_COLORS.textEmboss,
     background: typeof record.background === 'string' ? record.background : DEFAULT_HIGHLIGHT_COLORS.background,
     topBackground: typeof record.topBackground === 'string' ? record.topBackground : DEFAULT_HIGHLIGHT_COLORS.topBackground,
     bottomBackground: typeof record.bottomBackground === 'string' ? record.bottomBackground : DEFAULT_HIGHLIGHT_COLORS.bottomBackground,
     gridOutline: typeof record.gridOutline === 'string' ? record.gridOutline : DEFAULT_HIGHLIGHT_COLORS.gridOutline,
     grid: typeof record.grid === 'string' ? record.grid : DEFAULT_HIGHLIGHT_COLORS.grid,
     base: typeof record.base === 'string' ? record.base : DEFAULT_HIGHLIGHT_COLORS.base,
+    inputFields: typeof record.inputFields === 'string' ? record.inputFields : DEFAULT_HIGHLIGHT_COLORS.inputFields,
+    appButtons: typeof record.appButtons === 'string' ? record.appButtons : DEFAULT_HIGHLIGHT_COLORS.appButtons,
   }
 }
 
@@ -2194,6 +2237,14 @@ function App() {
     () => derivePaletteTokensFromBaseColor(highlightColors.base),
     [highlightColors.base],
   )
+  const textEmbossPrimaryRgba = useMemo(
+    () => parseCssColorToRgba(highlightColors.textEmboss) ?? { r: 255, g: 255, b: 255, a: 1 },
+    [highlightColors.textEmboss],
+  )
+  const textEmbossSecondaryCss = useMemo(
+    () => rgbaToCssColor(invertRgbaColor(textEmbossPrimaryRgba, 0.22)),
+    [textEmbossPrimaryRgba],
+  )
 
   useEffect(() => {
     const textureApi = window.measlyTextures
@@ -2377,13 +2428,17 @@ function App() {
       highlightColors: {
         caret: highlightColors.caret,
         search: highlightColors.search,
-        selection: highlightColors.selection,
+        selectionEdit: highlightColors.selectionEdit,
+        selectionRender: highlightColors.selectionRender,
+        textEmboss: highlightColors.textEmboss,
         background: highlightColors.background,
         topBackground: highlightColors.topBackground,
         bottomBackground: highlightColors.bottomBackground,
         gridOutline: highlightColors.gridOutline,
         grid: highlightColors.grid,
         base: highlightColors.base,
+        inputFields: highlightColors.inputFields,
+        appButtons: highlightColors.appButtons,
       },
       editorTextColors: {
         editorEditText: editorTextColors.editorEditText,
@@ -2460,13 +2515,17 @@ function App() {
     setHighlightColors({
       caret: loadout.highlightColors.caret,
       search: loadout.highlightColors.search,
-      selection: loadout.highlightColors.selection,
+      selectionEdit: loadout.highlightColors.selectionEdit,
+      selectionRender: loadout.highlightColors.selectionRender,
+      textEmboss: loadout.highlightColors.textEmboss,
       background: loadout.highlightColors.background,
       topBackground: loadout.highlightColors.topBackground,
       bottomBackground: loadout.highlightColors.bottomBackground,
       gridOutline: loadout.highlightColors.gridOutline,
       grid: loadout.highlightColors.grid,
       base: loadout.highlightColors.base,
+      inputFields: loadout.highlightColors.inputFields,
+      appButtons: loadout.highlightColors.appButtons,
     })
     setEditorTextColors({
       editorEditText: loadout.editorTextColors.editorEditText,
@@ -3265,13 +3324,18 @@ function App() {
       musicActiveSlots,
       highlightCaretColor: highlightColors.caret,
       highlightSearchColor: highlightColors.search,
-      highlightSelectionColor: highlightColors.selection,
+      highlightSelectionColor: highlightColors.selectionEdit,
+      highlightSelectionEditColor: highlightColors.selectionEdit,
+      highlightSelectionRenderColor: highlightColors.selectionRender,
+      highlightTextEmbossColor: highlightColors.textEmboss,
       highlightBackgroundColor: highlightColors.background,
       highlightTopBackgroundColor: highlightColors.topBackground,
       highlightBottomBackgroundColor: highlightColors.bottomBackground,
       highlightGridOutlineColor: highlightColors.gridOutline,
       highlightGridColor: highlightColors.grid,
       highlightBaseColor: highlightColors.base,
+      highlightInputFieldsColor: highlightColors.inputFields,
+      highlightAppButtonsColor: highlightColors.appButtons,
       textureEnabled,
       editorEditTextColor: editorTextColors.editorEditText,
       editorRenderTextColor: editorTextColors.editorRenderText,
@@ -3705,7 +3769,13 @@ function App() {
       '--color-grid-outline': highlightColors.gridOutline,
       '--color-grid-bg': highlightColors.grid,
       '--color-caret': highlightColors.caret,
-      '--color-selection': highlightColors.selection,
+      '--color-selection': isPreviewMode ? highlightColors.selectionRender : highlightColors.selectionEdit,
+      '--color-input-backdrop': highlightColors.inputFields,
+      '--canonical-scroll-track-bg': highlightColors.inputFields,
+      '--btn-bg-default': highlightColors.appButtons,
+      '--canonical-handle-bg': highlightColors.appButtons,
+      '--text-shadow-emboss-main': highlightColors.textEmboss,
+      '--text-shadow-emboss-secondary': textEmbossSecondaryCss,
       '--color-editor-edit-text': editorEditTextColorCss,
       '--color-editor-render-text': editorRenderTextColorCss,
       '--texture-app-grid': appGridTextureCss,
@@ -3726,11 +3796,13 @@ function App() {
     editorRenderTextTextureCss,
     editorRenderTextureTintCss,
     highlightColors,
+    isPreviewMode,
     editorEditTextColorCss,
     editorRenderTextColorCss,
     layout.gridTemplateColumns,
     sidebarTextureCss,
     sidebarTextureTintCss,
+    textEmbossSecondaryCss,
   ])
 
   // Apply all filter sliders at one wrapper level so the full composited scene
@@ -5666,13 +5738,23 @@ ${markdownHtml}
             setHighlightColors({
               caret: appState.menu.highlightCaretColor ?? DEFAULT_HIGHLIGHT_COLORS.caret,
               search: appState.menu.highlightSearchColor ?? DEFAULT_HIGHLIGHT_COLORS.search,
-              selection: appState.menu.highlightSelectionColor ?? DEFAULT_HIGHLIGHT_COLORS.selection,
+              selectionEdit:
+                appState.menu.highlightSelectionEditColor
+                ?? appState.menu.highlightSelectionColor
+                ?? DEFAULT_HIGHLIGHT_COLORS.selectionEdit,
+              selectionRender:
+                appState.menu.highlightSelectionRenderColor
+                ?? appState.menu.highlightSelectionColor
+                ?? DEFAULT_HIGHLIGHT_COLORS.selectionRender,
+              textEmboss: appState.menu.highlightTextEmbossColor ?? DEFAULT_HIGHLIGHT_COLORS.textEmboss,
               background: appState.menu.highlightBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.background,
               topBackground: appState.menu.highlightTopBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.topBackground,
               bottomBackground: appState.menu.highlightBottomBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.bottomBackground,
               gridOutline: appState.menu.highlightGridOutlineColor ?? DEFAULT_HIGHLIGHT_COLORS.gridOutline,
               grid: appState.menu.highlightGridColor ?? DEFAULT_HIGHLIGHT_COLORS.grid,
               base: appState.menu.highlightBaseColor ?? DEFAULT_HIGHLIGHT_COLORS.base,
+              inputFields: appState.menu.highlightInputFieldsColor ?? DEFAULT_HIGHLIGHT_COLORS.inputFields,
+              appButtons: appState.menu.highlightAppButtonsColor ?? DEFAULT_HIGHLIGHT_COLORS.appButtons,
             })
             setEditorTextColors({
               editorEditText: appState.menu.editorEditTextColor ?? DEFAULT_EDITOR_TEXT_COLORS.editorEditText,
@@ -8705,7 +8787,101 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     setIsGlazeRadialSeedEditing(false)
   }, [glazeRadialSeedInput, glazeSettings.radialSeed])
 
-  const renderSidebarOptionsContent = () => (
+  const renderSidebarOptionsContent = () => {
+    const topRowHighlightKeys: HighlightColorKey[] = ['base', 'inputFields', 'appButtons']
+    const middleRowHighlightKeys: HighlightColorKey[] = [
+      'textEmboss',
+      'caret',
+      isPreviewMode ? 'selectionRender' : 'selectionEdit',
+    ]
+    const textureTargets = ['appGrid', 'sidebarContent', isPreviewMode ? 'editorRenderText' : 'editorEditText'] as TextureSurfaceKey[]
+
+    const renderHighlightSwatchButton = (key: HighlightColorKey) => {
+      const resolvedKey: HighlightColorKey = isPreviewMode && key === 'caret' ? 'search' : key
+      const isSearchHighlightControl = key === 'caret' && isPreviewMode
+      const buttonTitle = isSearchHighlightControl ? 'Search highlight color' : HIGHLIGHT_COLOR_TITLES[key]
+      const buttonIcon = isSearchHighlightControl ? 'fa-solid fa-magnifying-glass' : HIGHLIGHT_COLOR_ICONS[key]
+
+      return (
+        <button
+          key={key}
+          type="button"
+          className="toolbar-btn-icon options-color-swatch"
+          onClick={() => {
+            if (armedColorSource.kind === 'active-color') {
+              applyActiveColorToElement(resolvedKey)
+              return
+            }
+
+            if (armedColorSource.kind === 'texture-preview') {
+              updateHighlightColor(resolvedKey, hsvaToRgba(texturePreviewMaterial.color))
+              return
+            }
+
+            if (armedColorSource.kind === 'hsva') {
+              applyHsvaValueToElement(armedColorSource.key, resolvedKey)
+            }
+          }}
+          onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'element', key: resolvedKey }, event)}
+          onMouseUp={(event) => {
+            if (event.button !== 2) return
+            clearColorArmTimer()
+          }}
+          onMouseLeave={() => {
+            clearColorArmTimer()
+          }}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            clearColorArmTimer()
+          }}
+          style={{ '--options-swatch-color': highlightColors[resolvedKey] } as React.CSSProperties}
+          title={buttonTitle}
+        >
+          <span className={`options-color-swatch-glyph ${buttonIcon}`} aria-hidden="true" />
+        </button>
+      )
+    }
+
+    const renderTextureSwatchButton = (surface: TextureSurfaceKey) => (
+      <button
+        key={surface}
+        type="button"
+        className="toolbar-btn-icon options-color-swatch"
+        onClick={() => {
+          if (armedColorSource.kind === 'active-color') {
+            applyActiveColorToTexture(surface)
+            return
+          }
+
+          if (armedColorSource.kind === 'texture-preview') {
+            applyTexturePreviewToSurface(surface)
+            return
+          }
+
+          if (armedColorSource.kind === 'hsva') {
+            applyHsvaValueToTexture(armedColorSource.key, surface)
+          }
+        }}
+        onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'texture', key: surface }, event)}
+        onMouseUp={(event) => {
+          if (event.button !== 2) return
+          clearColorArmTimer()
+        }}
+        onMouseLeave={() => {
+          clearColorArmTimer()
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault()
+          clearColorArmTimer()
+        }}
+        style={{ '--options-swatch-color': rgbaToCssColor(hsvaToRgba(textureMaterials[surface].color)) } as React.CSSProperties}
+        title={TEXTURE_SURFACE_TITLES[surface]}
+      >
+        <span className={`options-color-swatch-glyph ${TEXTURE_SURFACE_ICONS[surface]}`} aria-hidden="true" />
+      </button>
+    )
+
+    return (
     <div
       ref={optionsContentRef}
       className={`options-content sidebar-options-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`}
@@ -9155,103 +9331,14 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
         <div className="sidebar-options-divider" aria-hidden="true" />
 
-        <div className="options-color-grid options-element-grid" role="group" aria-label="Editor highlight elements">
-          {HIGHLIGHT_COLOR_ORDER.map((key) => {
-            const resolvedKey: HighlightColorKey = isPreviewMode && key === 'caret' ? 'search' : key
-            const isSearchHighlightControl = key === 'caret' && isPreviewMode
-            const buttonTitle = isSearchHighlightControl ? 'Search highlight color' : HIGHLIGHT_COLOR_TITLES[key]
-            const buttonIcon = isSearchHighlightControl ? 'fa-solid fa-magnifying-glass' : HIGHLIGHT_COLOR_ICONS[key]
-
-            return (
-              <button
-                key={key}
-                type="button"
-                className="toolbar-btn-icon options-color-swatch"
-                onClick={() => {
-                  if (armedColorSource.kind === 'active-color') {
-                    applyActiveColorToElement(resolvedKey)
-                    return
-                  }
-
-                  if (armedColorSource.kind === 'texture-preview') {
-                    updateHighlightColor(resolvedKey, hsvaToRgba(texturePreviewMaterial.color))
-                    return
-                  }
-
-                  if (armedColorSource.kind === 'hsva') {
-                    applyHsvaValueToElement(armedColorSource.key, resolvedKey)
-                  }
-                }}
-                onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'element', key: resolvedKey }, event)}
-                onMouseUp={(event) => {
-                  if (event.button !== 2) return
-                  clearColorArmTimer()
-                }}
-                onMouseLeave={() => {
-                  clearColorArmTimer()
-                }}
-                onContextMenu={(event) => {
-                  event.preventDefault()
-                  clearColorArmTimer()
-                }}
-                style={{ '--options-swatch-color': highlightColors[resolvedKey] } as React.CSSProperties}
-                title={buttonTitle}
-              >
-                <span className={`options-color-swatch-glyph ${buttonIcon}`} aria-hidden="true" />
-              </button>
-            )
-          })}
+        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-top" role="group" aria-label="App base and texture colors">
+          {topRowHighlightKeys.map((key) => renderHighlightSwatchButton(key))}
+          {textureTargets.map((surface) => renderTextureSwatchButton(surface))}
         </div>
 
         <div className="sidebar-options-divider" aria-hidden="true" />
 
-        <div className="options-color-grid options-element-grid" role="group" aria-label="Text elements">
-          {(['caret', 'selection'] as Array<'caret' | 'selection'>).map((key) => {
-            const resolvedKey: HighlightColorKey = isPreviewMode && key === 'caret' ? 'search' : key
-            const isSearchHighlightControl = key === 'caret' && isPreviewMode
-            const buttonTitle = isSearchHighlightControl ? 'Search highlight color' : HIGHLIGHT_COLOR_TITLES[key]
-            const buttonIcon = isSearchHighlightControl ? 'fa-solid fa-magnifying-glass' : HIGHLIGHT_COLOR_ICONS[key]
-
-            return (
-              <button
-                key={key}
-                type="button"
-                className="toolbar-btn-icon options-color-swatch"
-                onClick={() => {
-                  if (armedColorSource.kind === 'active-color') {
-                    applyActiveColorToElement(resolvedKey)
-                    return
-                  }
-
-                  if (armedColorSource.kind === 'texture-preview') {
-                    updateHighlightColor(resolvedKey, hsvaToRgba(texturePreviewMaterial.color))
-                    return
-                  }
-
-                  if (armedColorSource.kind === 'hsva') {
-                    applyHsvaValueToElement(armedColorSource.key, resolvedKey)
-                  }
-                }}
-                onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'element', key: resolvedKey }, event)}
-                onMouseUp={(event) => {
-                  if (event.button !== 2) return
-                  clearColorArmTimer()
-                }}
-                onMouseLeave={() => {
-                  clearColorArmTimer()
-                }}
-                onContextMenu={(event) => {
-                  event.preventDefault()
-                  clearColorArmTimer()
-                }}
-                style={{ '--options-swatch-color': highlightColors[resolvedKey] } as React.CSSProperties}
-                title={buttonTitle}
-              >
-                <span className={`options-color-swatch-glyph ${buttonIcon}`} aria-hidden="true" />
-              </button>
-            )
-          })}
-
+        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Mode text and selection colors">
           <button
             type="button"
             className="toolbar-btn-icon options-color-swatch text-icon"
@@ -9270,7 +9357,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
               if (armedColorSource.kind === 'hsva') {
                 applyHsvaValueToEditorText(armedColorSource.key, target)
-                return
               }
             }}
             onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'text', key: isPreviewMode ? 'editorRenderText' : 'editorEditText' }, event)}
@@ -9290,53 +9376,20 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             } as React.CSSProperties}
             title={isPreviewMode ? 'Render mode text color' : 'Edit mode text color'}
           >
-            <span className={`options-color-swatch-glyph ${isPreviewMode ? 'fa-solid fa-font' : 'fa-solid fa-font'}`} aria-hidden="true" />
+            <span className="options-color-swatch-glyph fa-solid fa-font" aria-hidden="true" />
           </button>
+
+          {middleRowHighlightKeys.map((key) => renderHighlightSwatchButton(key))}
         </div>
 
-        <div className="sidebar-options-divider" aria-hidden="true" />
-
-        <div className="options-color-grid options-texture-grid" role="group" aria-label="Texture color targets">
-          {(['appGrid', 'sidebarContent', isPreviewMode ? 'editorRenderText' : 'editorEditText'] as TextureSurfaceKey[]).map((surface) => (
-            <button
-              key={surface}
-              type="button"
-              className="toolbar-btn-icon options-color-swatch"
-              onClick={() => {
-                if (armedColorSource.kind === 'active-color') {
-                  applyActiveColorToTexture(surface)
-                  return
-                }
-
-                if (armedColorSource.kind === 'texture-preview') {
-                  applyTexturePreviewToSurface(surface)
-                  return
-                }
-
-                if (armedColorSource.kind === 'hsva') {
-                  applyHsvaValueToTexture(armedColorSource.key, surface)
-                  return
-                }
-              }}
-              onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'texture', key: surface }, event)}
-              onMouseUp={(event) => {
-                if (event.button !== 2) return
-                clearColorArmTimer()
-              }}
-              onMouseLeave={() => {
-                clearColorArmTimer()
-              }}
-              onContextMenu={(event) => {
-                event.preventDefault()
-                clearColorArmTimer()
-              }}
-              style={{ '--options-swatch-color': rgbaToCssColor(hsvaToRgba(textureMaterials[surface].color)) } as React.CSSProperties}
-              title={TEXTURE_SURFACE_TITLES[surface]}
-            >
-              <span className={`options-color-swatch-glyph ${TEXTURE_SURFACE_ICONS[surface]}`} aria-hidden="true" />
-            </button>
-          ))}
-        </div>
+        {!isPreviewMode ? (
+          <>
+            <div className="sidebar-options-divider" aria-hidden="true" />
+            <div className="options-color-grid options-element-grid options-row-grid options-row-grid-bottom" role="group" aria-label="Edit mode box colors">
+              {BOX_HIGHLIGHT_COLOR_ORDER.map((key) => renderHighlightSwatchButton(key))}
+            </div>
+          </>
+        ) : null}
       </AccordionSection>
 
       <AccordionSection
@@ -9957,7 +10010,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       </AccordionSection>
       </AccordionGroup>
     </div>
-  )
+    )
+  }
 
   const cancelTextureSeedEdit = useCallback(() => {
     setTextureSeedInput(String(texturePreviewMaterial.seed))

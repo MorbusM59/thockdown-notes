@@ -44,13 +44,17 @@ export type UiLayoutLoadout = {
   highlightColors: {
     caret: string;
     search: string;
-    selection: string;
+    selectionEdit: string;
+    selectionRender: string;
+    textEmboss: string;
     background: string;
     topBackground: string;
     bottomBackground: string;
     gridOutline: string;
     grid: string;
     base: string;
+    inputFields: string;
+    appButtons: string;
   };
   editorTextColors: {
     editorEditText: string;
