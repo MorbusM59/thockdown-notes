@@ -2510,6 +2510,8 @@ body.hsva-dragging * {
   outline:        none;
   background:     var(--color-input-backdrop);
   color:          var(--color-text-80);
+  min-width:      76px;
+  text-align: center;
 }
 
 .editor-shell {

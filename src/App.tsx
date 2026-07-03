@@ -7025,7 +7025,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }, [activeNoteText, editorTextVersion])
 
   const activeNoteDocumentStats = useMemo(() => {
-    const text = currentEditorText
+    const hasSelection = !editorSelection.isCollapsed && editorSelection.end > editorSelection.start
+    const selectionStart = Math.max(0, Math.min(currentEditorText.length, editorSelection.start))
+    const selectionEnd = Math.max(selectionStart, Math.min(currentEditorText.length, editorSelection.end))
+    const text = hasSelection
+      ? currentEditorText.slice(selectionStart, selectionEnd)
+      : currentEditorText
     const characterCount = text.length
     const trimmed = text.trim()
     const wordCount = trimmed.length === 0 ? 0 : trimmed.split(/\s+/u).length
@@ -7034,7 +7039,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       wordCount,
       characterCount,
     }
-  }, [currentEditorText])
+  }, [currentEditorText, editorSelection.end, editorSelection.isCollapsed, editorSelection.start])
 
   const documentFindDirective = useMemo<DocumentFindDirective>(() => {
     return resolveDocumentFindDirective(documentFindQuery, currentEditorText, isDocumentFindCaseSensitive)
