@@ -1842,7 +1842,7 @@ button.active,
 }
 
 .options-row-grid-middle {
-  grid-template-columns: repeat(5, var(--color-grid-cell));
+  grid-template-columns: repeat(6, var(--color-grid-cell));
 }
 
 .options-row-grid-bottom {
@@ -1967,6 +1967,25 @@ button.active,
 
 .text-icon .options-color-swatch-glyph {
   color:       var(--options-swatch-color, var(--color-text-80));
+  text-shadow:
+    0 -1px 0px var(--text-shadow-emboss-ui-secondary),
+    0 1px 0px var(--text-shadow-emboss-ui-main);
+}
+
+.options-element-grid .options-color-swatch.text-ui-icon {
+  background: var(--btn-bg-default);
+}
+
+.options-element-grid .options-color-swatch.text-ui-icon::before {
+  background: var(--btn-bg-default);
+}
+
+.options-element-grid .options-color-swatch.text-ui-icon::after {
+  background: transparent;
+}
+
+.text-ui-icon .options-color-swatch-glyph {
+  color:       var(--options-swatch-color, var(--color-text-base));
   text-shadow:
     0 -1px 0px var(--text-shadow-emboss-ui-secondary),
     0 1px 0px var(--text-shadow-emboss-ui-main);

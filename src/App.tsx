@@ -8946,7 +8946,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         <button
           key={key}
           type="button"
-          className="toolbar-btn-icon options-color-swatch"
+          className={`toolbar-btn-icon options-color-swatch${key === 'textBase' ? ' text-ui-icon' : ''}`}
           onClick={() => {
             if (armedColorSource.kind === 'active-color') {
               applyActiveColorToElement(resolvedKey)
