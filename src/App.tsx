@@ -10899,16 +10899,26 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               aria-label="Utility grid"
             >
               <div className="window-controls" aria-label="Window controls">
-                <button
-                  type="button"
-                  className="toolbar-gear-btn btn-icon"
-                  title="Minimize"
-                  aria-label="Minimize window"
-                  onClick={handleWindowMinimize}
-                  onContextMenu={handleWindowUtilityCollapseToggle}
-                >
-                  <span className="fa-solid fa-caret-down" aria-hidden="true" />
-                </button>
+                <div className="window-minimize-split" role="group" aria-label="Mini mode and minimize controls">
+                  <button
+                    type="button"
+                    className="toolbar-gear-btn btn-icon window-minimize-split-btn mini-mode"
+                    title="Enter mini mode"
+                    aria-label="Enter mini mode"
+                    onClick={handleWindowUtilityCollapseToggle}
+                  >
+                    <span className="fa-solid fa-caret-up" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="toolbar-gear-btn btn-icon window-minimize-split-btn minimize"
+                    title="Minimize"
+                    aria-label="Minimize window"
+                    onClick={handleWindowMinimize}
+                  >
+                    <span className="fa-solid fa-caret-down" aria-hidden="true" />
+                  </button>
+                </div>
                 <button
                   type="button"
                   className="toolbar-gear-btn btn-icon"

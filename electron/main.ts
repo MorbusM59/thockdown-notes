@@ -53,6 +53,7 @@ let databaseService: DatabaseService | null = null;
 let pendingExternalFilePaths: string[] = [];
 let windowIsUtilityCollapsed = false;
 let utilityCollapseRestoreState: WindowState | null = null;
+let alwaysOnTopBeforeUtilityCollapse: boolean | null = null;
 
 const UTILITY_COLLAPSE_MIN_WIDTH_PX = 96;
 const UTILITY_COLLAPSE_MIN_HEIGHT_PX = 72;
@@ -686,9 +687,11 @@ function collapseWindowToUtilityGrid(targetSize: { width: number; height: number
   const nextX = currentBounds.x + (currentBounds.width - targetSize.width);
   const nextY = currentBounds.y;
 
+  alwaysOnTopBeforeUtilityCollapse = win.isAlwaysOnTop();
   windowIsUtilityCollapsed = true;
   win.setMinimumSize(UTILITY_COLLAPSE_MIN_WIDTH_PX, UTILITY_COLLAPSE_MIN_HEIGHT_PX);
   win.setResizable(false);
+  win.setAlwaysOnTop(true);
   win.setBounds({ x: nextX, y: nextY, width: targetSize.width, height: targetSize.height });
   emitWindowCollapsedState();
   return true;
@@ -702,8 +705,12 @@ function restoreWindowFromUtilityCollapse(): boolean {
   windowIsUtilityCollapsed = false;
   utilityCollapseRestoreState = null;
 
+  const shouldKeepAlwaysOnTop = alwaysOnTopBeforeUtilityCollapse ?? false;
+  alwaysOnTopBeforeUtilityCollapse = null;
+
   win.setMinimumSize(APP_WINDOW_MIN_WIDTH_PX, APP_WINDOW_MIN_HEIGHT_PX);
   win.setResizable(true);
+  win.setAlwaysOnTop(shouldKeepAlwaysOnTop);
   if (restoreState) {
     if (typeof restoreState.x === 'number' && typeof restoreState.y === 'number') {
       win.setBounds({
@@ -729,6 +736,7 @@ async function createWindow() {
   const savedWindowState = await stateService.loadWindowState();
   windowIsUtilityCollapsed = false;
   utilityCollapseRestoreState = null;
+  alwaysOnTopBeforeUtilityCollapse = null;
 
 win = new BrowserWindow({
   icon: resolveWindowIconPath(),

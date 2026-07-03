@@ -2940,6 +2940,36 @@ body.pdf-exporting .markdown-preview img {
   margin-left:      auto;
 }
 
+.window-minimize-split {
+  width: var(--btn-square-regular-size);
+  height: var(--btn-square-regular-size);
+  min-width: var(--btn-square-regular-size);
+  min-height: var(--btn-square-regular-size);
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.window-minimize-split-btn {
+  width: 100%;
+  min-width: 0;
+  height: calc((var(--btn-square-regular-size) - 2px) / 2);
+  min-height: 0;
+  aspect-ratio: auto;
+  border-radius: var(--border-radius-small);
+}
+
+.window-minimize-split-btn.mini-mode {
+  border-radius: var(--border-radius-regular) var(--border-radius-regular) var(--border-radius-small) var(--border-radius-small);
+  padding: 2px 0 0 0;
+}
+
+.window-minimize-split-btn.minimize {
+  border-radius: var(--border-radius-small) var(--border-radius-small) var(--border-radius-regular) var(--border-radius-regular);
+  padding: 0 0 2px 0;
+}
+
 .window-control-btn {
   -webkit-app-region: no-drag;
   width:           var(--btn-square-regular-size);
