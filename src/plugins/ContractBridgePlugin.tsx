@@ -635,6 +635,10 @@ export function ContractBridgePlugin({
     const removeTabCommand = editor.registerCommand(
       KEY_TAB_COMMAND,
       (event: KeyboardEvent) => {
+        // Never allow Tab/Shift+Tab to escape the editor and trigger focus/menu navigation.
+        event.preventDefault();
+        event.stopPropagation();
+
         const transformCallback = onTabIndentTransformRef.current;
         if (transformCallback) {
           let canonicalText = '';
@@ -654,9 +658,7 @@ export function ContractBridgePlugin({
             text: canonicalText,
             selection: currentSelection,
           });
-          if (!next) return false;
-
-          event.preventDefault();
+          if (!next) return true;
 
           const rootEl = editor.getRootElement();
           const scroller = rootEl?.closest('.measly-custom-scrollbar');
@@ -673,10 +675,9 @@ export function ContractBridgePlugin({
         }
 
         const callback = onTabIndentRef.current;
-        if (!callback) return false;
-
-        event.preventDefault();
-        callback({ shiftKey: event.shiftKey });
+        if (callback) {
+          callback({ shiftKey: event.shiftKey });
+        }
         return true;
       },
       COMMAND_PRIORITY_BEFORE_EDITOR,
