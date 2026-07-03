@@ -417,6 +417,26 @@
     0 1px 0px var(--text-shadow-emboss-ui-main);
 }
 
+.window-mode-transition-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1000;
+  background: var(--background-color-root);
+  opacity: 1;
+  animation: window-mode-transition-fade-out 400ms ease-out forwards;
+}
+
+@keyframes window-mode-transition-fade-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
 /* =============================================================================
    3. SCROLLBAR SYSTEM
    ============================================================================= */

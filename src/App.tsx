@@ -2000,6 +2000,8 @@ function App() {
   const debugNoteIdRef = useRef<string | null>(null)
   const [windowIsMaximized, setWindowIsMaximized] = useState(false)
   const [windowIsCollapsed, setWindowIsCollapsed] = useState(false)
+  const [windowModeTransitionOverlayNonce, setWindowModeTransitionOverlayNonce] = useState(0)
+  const hasInitializedWindowModeTransitionRef = useRef(false)
   const [viewStyle, setViewStyle] = useState<ViewStyleKey>('modern')
   const [viewFontSize, setViewFontSize] = useState<ViewSizeKey>('m')
   const [viewSpacing, setViewSpacing] = useState<ViewSpacingKey>('cozy')
@@ -3710,6 +3712,14 @@ function App() {
     })
     return () => unsubscribe?.()
   }, [])
+
+  useEffect(() => {
+    if (!hasInitializedWindowModeTransitionRef.current) {
+      hasInitializedWindowModeTransitionRef.current = true
+      return
+    }
+    setWindowModeTransitionOverlayNonce((previous) => previous + 1)
+  }, [windowIsCollapsed])
 
   useEffect(() => {
     applyRenderScrollDynamic(renderScrollDynamic)
@@ -10452,6 +10462,9 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           <div className="glaze-overlay-layer glaze-overlay-layer-radial" />
           <div className="glaze-overlay-layer glaze-overlay-layer-gloom" />
         </div>
+        {windowModeTransitionOverlayNonce > 0 ? (
+          <div key={windowModeTransitionOverlayNonce} className="window-mode-transition-overlay" aria-hidden="true" />
+        ) : null}
         <div className="app-sheen">
           <div
             className={`app-shell app-grid${filterInvert > 0.5 ? ' shadow-flip' : ''}${windowIsCollapsed ? ' is-window-collapsed' : ''}`}
