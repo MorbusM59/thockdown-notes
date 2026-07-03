@@ -1606,6 +1606,7 @@ color:           var(--color-text-80);
   align-items: center;
   min-width:   0;
   overflow:    hidden;
+  max-height: 32px;
 }
 
 .toolbar-right-tools {
@@ -1614,6 +1615,7 @@ color:           var(--color-text-80);
   gap:          8px;
   margin-left:  12px;
   flex-shrink:  0;
+  max-height: 32px;
 }
 
 /* 8b. Toolbar buttons & controls */
@@ -1639,13 +1641,11 @@ color:           var(--color-text-80);
   min-width:   0;
   overflow:    wrap;
   flex-wrap:   wrap;
-  max-height:  44px;
+  max-height:  32px;
 }
 
-.toolbar-divider {
-  color:       var(--btn-border-default);
-  margin:      0 4px;
-  font-size:   18px;
+.toolbar-spacer {
+  width: 4px;
   user-select: none;
 }
 
