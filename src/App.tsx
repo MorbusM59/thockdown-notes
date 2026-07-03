@@ -3674,6 +3674,7 @@ function App() {
 
     const utilityEl = utilityGridRef.current
     if (!utilityEl) return
+    const utilityRect = utilityEl.getBoundingClientRect()
 
     const probe = utilityEl.cloneNode(true) as HTMLElement
     probe.classList.add('is-collapsed', 'is-measure-probe')
@@ -3682,7 +3683,7 @@ function App() {
     const probeRect = probe.getBoundingClientRect()
     probe.remove()
 
-    const targetWidth = Math.max(96, Math.ceil(probeRect.width || UTILITY_WIDTH_PX))
+    const targetWidth = Math.max(96, Math.round(utilityRect.width || UTILITY_WIDTH_PX))
     const targetHeight = Math.max(72, Math.ceil(probeRect.height || 160))
 
     void window.windowControls?.toggleUtilityCollapse?.({ width: targetWidth, height: targetHeight })
