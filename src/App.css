@@ -1631,6 +1631,7 @@ color:           var(--color-text-80);
   color:         var(--color-text-base);
   font-size:     12px;
   padding:       0 8px;
+  box-shadow:   var(--box-shadow-inverted-light);
 }
 
 .toolbar-gear-btn {
