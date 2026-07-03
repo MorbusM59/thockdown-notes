@@ -8946,7 +8946,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         <button
           key={key}
           type="button"
-          className={`toolbar-btn-icon options-color-swatch${key === 'textBase' ? ' text-ui-icon' : ''}`}
+          className={`btn-icon options-color-swatch${key === 'textBase' ? ' text-ui-icon' : ''}`}
           onClick={() => {
             if (armedColorSource.kind === 'active-color') {
               applyActiveColorToElement(resolvedKey)
@@ -8986,7 +8986,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       <button
         key={surface}
         type="button"
-        className="toolbar-btn-icon options-color-swatch"
+        className="btn-icon options-color-swatch"
         onClick={() => {
           if (armedColorSource.kind === 'active-color') {
             applyActiveColorToTexture(surface)
@@ -9038,7 +9038,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               <button
                 key={`preset-${entry.id}`}
                 type="button"
-                className={`toolbar-btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}`}
+                className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}`}
                 title={theme}
                 aria-label={theme}
                 onClick={() => void selectLoadoutPreset(entry.id)}
@@ -9049,7 +9049,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           })}
           <button
             type="button"
-            className={`toolbar-btn-icon options-color-swatch options-loadout-btn${isDynamicCustomPresetActive ? ' active' : ''}`}
+            className={`btn-icon options-color-swatch options-loadout-btn${isDynamicCustomPresetActive ? ' active' : ''}`}
             title="Custom"
             aria-label="Custom preset"
             onClick={selectDynamicCustomPreset}
@@ -9069,7 +9069,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <button
               key={`custom-${entry.id}`}
               type="button"
-              className={`toolbar-btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}${deleteArmedCustomLoadoutId === entry.id ? ' armed' : ''}`}
+              className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}${deleteArmedCustomLoadoutId === entry.id ? ' armed' : ''}`}
               title={deleteArmedCustomLoadoutId === entry.id
                 ? 'Click to delete this custom preset or move cursor away to cancel'
                 : `Custom ${Math.abs(entry.id) - LOADOUT_FACTORY_PRESET_COUNT - 2}. Right click to arm deletion.`}
@@ -9089,7 +9089,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
           <button
             type="button"
-            className={`toolbar-btn-icon options-color-swatch options-loadout-btn options-loadout-plus${hasUnsavedUiLoadoutChanges ? ' active' : ''}`}
+            className={`btn-icon options-color-swatch options-loadout-btn options-loadout-plus${hasUnsavedUiLoadoutChanges ? ' active' : ''}`}
             title="Save current settings as a new custom preset"
             aria-label="Save current settings as a new custom preset"
             onClick={() => void saveCustomLoadout()}
@@ -9098,7 +9098,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           </button>
           <button
             type="button"
-            className="toolbar-btn-icon options-color-swatch options-loadout-btn"
+            className="btn-icon options-color-swatch options-loadout-btn"
             title="Reset custom preset to defaults"
             aria-label="Reset custom preset to defaults"
             onClick={() => void resetCustomLoadout()}
@@ -9119,7 +9119,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           <div className="options-color-grid options-hsva-grid" role="group" aria-label="HSVA value controls">
             <button
               type="button"
-              className={`toolbar-btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'h' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'h' ? ' active' : ''}`}
+              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'h' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'h' ? ' active' : ''}`}
               style={{ background: hsvaDisplayColors.hColor }}
               title="Hue"
               onPointerDown={(event) => {
@@ -9156,7 +9156,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             ><span className="options-hsva-glyph fa-solid fa-rainbow" aria-hidden="true" /></button>
             <button
               type="button"
-              className={`toolbar-btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 's' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 's' ? ' active' : ''}`}
+              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 's' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 's' ? ' active' : ''}`}
               style={{ background: hsvaDisplayColors.sColor }}
               title="Saturation"
               onPointerDown={(event) => {
@@ -9193,7 +9193,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             ><span className="options-hsva-glyph fa-solid fa-droplet" aria-hidden="true" /></button>
             <button
               type="button"
-              className={`toolbar-btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'v' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'v' ? ' active' : ''}`}
+              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'v' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'v' ? ' active' : ''}`}
               style={{ background: hsvaDisplayColors.vColor }}
               title="Value"
               onPointerDown={(event) => {
@@ -9231,7 +9231,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <button
               type="button"
               className={[
-                'toolbar-btn-icon',
+                'btn-icon',
                 'options-color-swatch',
                 'options-hsva-control',
                 'options-hsva-alpha',
@@ -9276,7 +9276,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             ><span className="options-hsva-glyph fa-solid fa-eye" aria-hidden="true" /></button>
             <button
               type="button"
-              className={`toolbar-btn-icon options-color-swatch options-active-color${armedColorSource.kind === 'active-color' ? ' active' : ''}`}
+              className={`btn-icon options-color-swatch options-active-color${armedColorSource.kind === 'active-color' ? ' active' : ''}`}
               title="Active color"
               style={{ background: `linear-gradient(${activeColorCss}, ${activeColorCss}), var(--color-background-light)` }}
               onMouseDown={(event) => {
@@ -9299,7 +9299,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <div className="options-texture-preview-row">
               <button
                 type="button"
-                className={`toolbar-btn-icon options-color-swatch options-active-color options-texture-preview${armedColorSource.kind === 'texture-preview' ? ' active' : ''}`}
+                className={`btn-icon options-color-swatch options-active-color options-texture-preview${armedColorSource.kind === 'texture-preview' ? ' active' : ''}`}
                 title="Texture preview"
                 style={{
                   '--texture-preview-color': texturePreviewTintCss,
@@ -9387,7 +9387,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               aria-valuemax={TEXTURE_GRANULARITY_MAX}
               aria-valuenow={texturePreviewMaterial.granularity}
               className={[
-                'toolbar-btn-icon',
+                'btn-icon',
                 'options-color-swatch',
                 'options-hsva-control',
                 'options-hsva-alpha',
@@ -9431,7 +9431,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               aria-valuemax={TEXTURE_VSTEPS_MAX}
               aria-valuenow={texturePreviewMaterial.vSteps}
               className={[
-                'toolbar-btn-icon',
+                'btn-icon',
                 'options-color-swatch',
                 'options-hsva-control',
                 'options-hsva-alpha',
@@ -9481,7 +9481,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Mode text and selection colors">
           <button
             type="button"
-            className="toolbar-btn-icon options-color-swatch text-icon"
+            className="btn-icon options-color-swatch text-icon"
             onClick={() => {
               const target: EditorTextColorTargetKey = isPreviewMode ? 'editorRenderText' : 'editorEditText'
 
@@ -9597,7 +9597,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           <div className="options-glaze-cell options-glaze-cell-span-2 options-glaze-top-center">
             <button
               type="button"
-              className={`toolbar-btn-icon options-color-swatch options-glaze-layer-order-btn${glazeSettings.radialAboveLinear ? ' active' : ''}`}
+              className={`btn-icon options-color-swatch options-glaze-layer-order-btn${glazeSettings.radialAboveLinear ? ' active' : ''}`}
               aria-label={glazeSettings.radialAboveLinear ? 'Display flair above glare.' : 'Display flair above glare.'}
               title={glazeSettings.radialAboveLinear ? 'Display flair above glare.' : 'Display flair above glare.'}
               onClick={() => {
@@ -9930,7 +9930,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           <div className="utility-setting-button-row" role="group" aria-label="Typing sound controls">
             <button
               type="button"
-              className={`toolbar-btn-icon options-audio-btn${!typingSoundEnabled ? ' is-active' : ''}`}
+              className={`btn-icon options-audio-btn${!typingSoundEnabled ? ' is-active' : ''}`}
               onClick={() => {
                 setTypingSoundEnabled(false)
                 typingSoundManager.setTypingSoundEnabled(false)
@@ -9944,7 +9944,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               <button
                 key={setId}
                 type="button"
-                className={`toolbar-btn-icon options-audio-btn${typingSoundEnabled && typingSoundSet === setId ? ' is-active' : ''}`}
+                className={`btn-icon options-audio-btn${typingSoundEnabled && typingSoundSet === setId ? ' is-active' : ''}`}
                 onClick={() => {
                   setTypingSoundEnabled(true)
                   setTypingSoundSet(setId)
@@ -10084,7 +10084,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 <div className="options-loadout-grid" role="group" aria-label="Note sync and import actions">
           <button
             type="button"
-            className="toolbar-btn-icon options-color-swatch options-loadout-btn"
+            className="btn-icon options-color-swatch options-loadout-btn"
             onClick={syncExistingNotes}
             title="Sync stored note files"
             aria-label="Sync stored note files"
@@ -10093,7 +10093,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           </button>
           <button
             type="button"
-            className="toolbar-btn-icon options-color-swatch options-loadout-btn"
+            className="btn-icon options-color-swatch options-loadout-btn"
             onClick={importNotes}
             title="Import notes from files or folders"
             aria-label="Import notes from files or folders"
@@ -10102,7 +10102,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           </button>
           <button
             type="button"
-            className="toolbar-btn-icon options-color-swatch options-loadout-btn"
+            className="btn-icon options-color-swatch options-loadout-btn"
             onClick={() => void exportLayoutsTdl()}
             title="Export custom layouts to a .tdl file"
             aria-label="Export custom layouts to a .tdl file"
@@ -10111,7 +10111,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           </button>
           <button
             type="button"
-            className="toolbar-btn-icon options-color-swatch options-loadout-btn"
+            className="btn-icon options-color-swatch options-loadout-btn"
             onClick={() => void importLayoutsTdl()}
             title="Import layouts from a .tdl file"
             aria-label="Import layouts from a .tdl file"
@@ -10129,7 +10129,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 <div className="options-loadout-grid" role="group" aria-label="Debug tools">
           <button
             type="button"
-            className={`toolbar-btn-icon options-color-swatch options-loadout-btn${debuggingEnabled ? ' is-active' : ''}`}
+            className={`btn-icon options-color-swatch options-loadout-btn${debuggingEnabled ? ' is-active' : ''}`}
             onClick={() => {
               const next = !debuggingEnabled
               setDebuggingEnabled(next)
@@ -10878,33 +10878,33 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               <div className="window-controls" aria-label="Window controls">
                 <button
                   type="button"
-                  className="toolbar-gear-btn window-control-btn"
+                  className="toolbar-gear-btn btn-icon"
                   title="Minimize"
                   aria-label="Minimize window"
                   onClick={handleWindowMinimize}
                 >
-                  <span className="window-control-glyph fa-solid fa-turn-down fa-flip-horizontal" aria-hidden="true" />
+                  <span className="fa-solid fa-caret-down" aria-hidden="true" />
                 </button>
                 <button
                   type="button"
-                  className="toolbar-gear-btn window-control-btn"
+                  className="toolbar-gear-btn btn-icon"
                   title={windowIsMaximized ? 'Restore' : 'Maximize'}
                   aria-label={windowIsMaximized ? 'Restore window' : 'Maximize window'}
                   onClick={handleWindowToggleMaximize}
                 >
                   <span
-                    className={`window-control-glyph fa-solid ${windowIsMaximized ? 'fa-down-left-and-up-right-to-center' : 'fa-up-right-and-down-left-from-center'}`}
+                    className={`fa-solid ${windowIsMaximized ? 'fa-down-left-and-up-right-to-center' : 'fa-up-right-and-down-left-from-center'}`}
                     aria-hidden="true"
                   />
                 </button>
                 <button
                   type="button"
-                  className="toolbar-gear-btn window-control-btn window-control-close"
+                  className="toolbar-gear-btn btn-icon"
                   title="Close"
                   aria-label="Close window"
                   onClick={handleWindowClose}
                 >
-                  <span className="window-control-glyph fa-brands fa-twitter" aria-hidden="true" />
+                  <span className="fa-solid fa-dove" aria-hidden="true" />
                 </button>
               </div>
 
@@ -10926,20 +10926,20 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               <div className="editor-toolbar">
                 <div className="toolbar-left-tools">
                   <button
-                    className={`toolbar-toggle-btn ${!isPreviewMode ? 'active' : ''}`}
+                    className={`btn-icon ${!isPreviewMode ? 'active' : ''}`}
                     type="button"
                     title={isPreviewMode ? 'Edit mode inactive' : 'Edit mode active'}
                     aria-label={isPreviewMode ? 'Edit mode inactive' : 'Edit mode active'}
                     onClick={toggleRenderViewMode}
                   >
-                    Edit
+                    <span className="fa-solid fa-pen-to-square" aria-hidden="true" />
                   </button>
 
                   {isPreviewMode ? (
                     <div className="toolbar-action-group" aria-label="Print toolbar">
                       <button
                         type="button"
-                        className="toolbar-btn-icon"
+                        className="btn-icon"
                         title="Export PDF"
                         aria-label="Export current note to PDF"
                         onClick={handleExportPdf}
@@ -10953,7 +10953,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                       </button>
                       <button
                         type="button"
-                        className="toolbar-btn-icon"
+                        className="btn-icon"
                         title="Export Markdown"
                         aria-label="Export current note to Markdown"
                         onClick={() => void handleExportMd()}
@@ -10972,7 +10972,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     <div className="markdown-toolbar" aria-label="Markdown toolbar">
                     <button
                       type="button"
-                      className={`toolbar-btn-icon ${activeDecorationFormats.has('bold') ? 'active' : ''}`}
+                      className={`btn-icon ${activeDecorationFormats.has('bold') ? 'active' : ''}`}
                       onClick={() => applyTextDecoration('bold')}
                       title="Bold"
                       aria-label="Bold"
@@ -10982,7 +10982,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     </button>
                     <button
                       type="button"
-                      className={`toolbar-btn-icon ${activeDecorationFormats.has('italic') ? 'active' : ''}`}
+                      className={`btn-icon ${activeDecorationFormats.has('italic') ? 'active' : ''}`}
                       onClick={() => applyTextDecoration('italic')}
                       title="Italic"
                       aria-label="Italic"
@@ -10992,7 +10992,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     </button>
                     <button
                       type="button"
-                      className={`toolbar-btn-icon ${activeDecorationFormats.has('strikethrough') ? 'active' : ''}`}
+                      className={`btn-icon ${activeDecorationFormats.has('strikethrough') ? 'active' : ''}`}
                       onClick={() => applyTextDecoration('strikethrough')}
                       title="Strikethrough"
                       aria-label="Strikethrough"
@@ -11003,25 +11003,25 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
                     <span className="toolbar-divider">|</span>
 
-                    <button type="button" className={`toolbar-btn-icon ${activeHeadingLevel === 1 ? 'active' : ''}`} title="Heading 1" onClick={() => applyHeading(1)} disabled={!activeNoteId}>H1</button>
-                    <button type="button" className={`toolbar-btn-icon ${activeHeadingLevel === 2 ? 'active' : ''}`} title="Heading 2" onClick={() => applyHeading(2)} disabled={!activeNoteId}>H2</button>
-                    <button type="button" className={`toolbar-btn-icon ${activeHeadingLevel === 3 ? 'active' : ''}`} title="Heading 3" onClick={() => applyHeading(3)} disabled={!activeNoteId}>H3</button>
+                    <button type="button" className={`btn-icon ${activeHeadingLevel === 1 ? 'active' : ''}`} title="Heading 1" onClick={() => applyHeading(1)} disabled={!activeNoteId}>H1</button>
+                    <button type="button" className={`btn-icon ${activeHeadingLevel === 2 ? 'active' : ''}`} title="Heading 2" onClick={() => applyHeading(2)} disabled={!activeNoteId}>H2</button>
+                    <button type="button" className={`btn-icon ${activeHeadingLevel === 3 ? 'active' : ''}`} title="Heading 3" onClick={() => applyHeading(3)} disabled={!activeNoteId}>H3</button>
 
                     <span className="toolbar-divider">|</span>
 
-                    <button type="button" className={`toolbar-btn-icon ${isBulletedListActive ? 'active' : ''}`} title="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>≡</button>
-                    <button type="button" className={`toolbar-btn-icon ${isNumberedListActive ? 'active' : ''}`} title="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>#</button>
-                    <button type="button" className="toolbar-btn-icon" title="Link" onClick={applyLink} disabled={!activeNoteId}>🔗</button>
+                    <button type="button" className={`btn-icon ${isBulletedListActive ? 'active' : ''}`} title="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>≡</button>
+                    <button type="button" className={`btn-icon ${isNumberedListActive ? 'active' : ''}`} title="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>#</button>
+                    <button type="button" className="btn-icon" title="Link" onClick={applyLink} disabled={!activeNoteId}>🔗</button>
 
                     <span className="toolbar-divider">|</span>
 
-                    <button type="button" className={`toolbar-btn-icon ${isBlockquoteActive ? 'active' : ''}`} title="Blockquote" onClick={toggleBlockquote} disabled={!activeNoteId}>&quot;</button>
-                    <button type="button" className={`toolbar-btn-icon ${isCodeBlockActive ? 'active' : ''}`} title="Code block" onClick={applyCodeBlock} disabled={!activeNoteId}>{'{ }'}</button>
-                    <button type="button" className={`toolbar-btn-icon ${isInlineCodeActive ? 'active' : ''}`} title="Inline code" onClick={applyInlineCode} disabled={!activeNoteId}>{'<>'}</button>
+                    <button type="button" className={`btn-icon ${isBlockquoteActive ? 'active' : ''}`} title="Blockquote" onClick={toggleBlockquote} disabled={!activeNoteId}>&quot;</button>
+                    <button type="button" className={`btn-icon ${isCodeBlockActive ? 'active' : ''}`} title="Code block" onClick={applyCodeBlock} disabled={!activeNoteId}>{'{ }'}</button>
+                    <button type="button" className={`btn-icon ${isInlineCodeActive ? 'active' : ''}`} title="Inline code" onClick={applyInlineCode} disabled={!activeNoteId}>{'<>'}</button>
 
                     <span className="toolbar-divider">|</span>
 
-                    <button type="button" className="toolbar-btn-icon" title="Horizontal rule" onClick={insertHorizontalRule} disabled={!activeNoteId}>—</button>
+                    <button type="button" className="btn-icon" title="Horizontal rule" onClick={insertHorizontalRule} disabled={!activeNoteId}>—</button>
                     </div>
                   ) : null}
                 </div>

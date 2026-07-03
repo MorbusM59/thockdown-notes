@@ -301,7 +301,6 @@
     0 1px 0px var(--text-shadow-emboss-ui-main);
 
   --text-info-size:  12px;
-  --text-info-color: var(--color-text-60);
 
   /* ---------------------------------------------------------------------------
      1d. Border & Radius
@@ -499,21 +498,23 @@ button.active,
 }
 
 /* 4c. Square icon buttons */
-.ui-btn--square,
-.toolbar-btn-icon,
+.btn-icon,
 .sidebar-page-btn {
-  width:           var(--btn-square-regular-size);
   min-width:       var(--btn-square-regular-size);
   height:          var(--btn-square-regular-size);
   padding:         0;
   border-radius:   var(--border-radius-regular);
-  font-size:       14px;
+  font-size:       var(--btn-icon-size);
+  color:           var(--color-text-80);
   font-weight:     600;
   display:         inline-flex;
   align-items:     center;
   justify-content: center;
   aspect-ratio:    1 / 1;
   box-sizing:      border-box;
+  text-shadow:      
+    0 -1px 0px var(--text-shadow-emboss-ui-secondary),
+    0 1px 0px var(--text-shadow-emboss-ui-main);
 }
 
 /* 4d. Mini / chip buttons */
@@ -1389,6 +1390,7 @@ button.active,
   outline:        none;
   background:     var(--color-input-backdrop);
   transition:     border-color 0.2s;
+  color:          var(--color-text-base);
 }
 
 .tag-input:focus {
@@ -1421,7 +1423,7 @@ button.active,
   border-radius:    var(--border-radius-regular);
   background:       var(--btn-bg-default);
   font-size:        13px;
-  color:            inherit;
+  color:            var(--color-text-80);
   user-select:      none;
   transition:       all 0.2s;
   white-space:      nowrap;
@@ -1475,7 +1477,7 @@ button.active,
 
 .tag-pill.suggested {
   border-radius: var(--border-radius-small);
-  color:         var(--color-tag-suggested-text);
+color:           var(--color-text-80);
   padding:       2px 6px;
   font-size:     11px;
   line-height:   1.2;
@@ -1719,7 +1721,7 @@ button.active,
   margin:    0;
   padding:   0;
   font-size: var(--text-info-size);
-  color:     var(--text-info-color);
+  color:     var(--color-text-60);
   display:   flex;
   align-items: center;
   gap:       6px;
@@ -1867,7 +1869,6 @@ button.active,
   height:     100%;
   font-size: 18px;
   color:      var(--color-text-80);
-  text-shadow:  var(--text-shadow-icon);
   transition: none;
 }
 
@@ -1905,23 +1906,6 @@ button.active,
 .options-texture-grid .options-color-swatch > * {
   position: relative;
   z-index:  1;
-}
-
-.options-color-swatch-glyph {
-  font-size:   18px;
-  line-height: 1;
-  color:      var(--color-text-80);
-  text-shadow: var(--text-shadow-icon);
-}
-
-.options-color-swatch-label {
-  font-size:      10px;
-  line-height:    1;
-  font-weight:    700;
-  letter-spacing: 0.02em;
-  text-transform: lowercase;
-  color:          var(--color-text-80);
-  text-shadow:    var(--text-shadow-icon);
 }
 
 /* Text-color swatch: replicates the exact editor background stack so the glyph
@@ -2203,15 +2187,6 @@ button.active,
   grid-row:    2;
 }
 
-.options-texture-control-value {
-  font-size:      9px;
-  line-height:    1;
-  font-weight:    700;
-  color:          var(--color-text-80);
-  text-shadow:    var(--text-shadow-icon);
-  letter-spacing: 0.02em;
-}
-
 .options-texture-preview {
   position:   relative;
   overflow:   hidden;
@@ -2261,24 +2236,9 @@ button.active,
   min-height:          0;
 }
 
-.options-loadout-btn {
-  width:       100%;
-  height:      100%;
-  font-size:   18px;
-  font-weight: 600;
-  color:      var(--color-text-80);
-  text-shadow:  var(--text-shadow-icon);
-}
-
 .options-loadout-btn.armed {
   background: var(--color-danger-bg);
   color:      var(--color-danger);
-}
-
-.options-audio-btn {
-  font-size: 18px;
-  color:      var(--color-text-80);
-  text-shadow:  var(--text-shadow-icon);
 }
 
 /* 8h. HSVA drag cursor override */
