@@ -1637,7 +1637,9 @@ color:           var(--color-text-80);
   gap:         4px;
   margin-left: 8px;
   min-width:   0;
-  overflow:    hidden;
+  overflow:    wrap;
+  flex-wrap:   wrap;
+  max-height:  44px;
 }
 
 .toolbar-divider {
