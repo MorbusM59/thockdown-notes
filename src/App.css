@@ -425,7 +425,7 @@
   background-color: var(--background-color-root);;
   background-image: linear-gradient(var(--palette-parchment-lightest), var(--palette-parchment-lightest));
   opacity: 1;
-  animation: window-mode-transition-fade-out 400ms ease-out forwards;
+  animation: window-mode-transition-fade-out 1000ms ease-out forwards;
 }
 
 @keyframes window-mode-transition-fade-out {

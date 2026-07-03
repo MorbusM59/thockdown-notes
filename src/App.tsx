@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
@@ -2001,7 +2002,6 @@ function App() {
   const [windowIsMaximized, setWindowIsMaximized] = useState(false)
   const [windowIsCollapsed, setWindowIsCollapsed] = useState(false)
   const [windowModeTransitionOverlayNonce, setWindowModeTransitionOverlayNonce] = useState(0)
-  const hasInitializedWindowModeTransitionRef = useRef(false)
   const [viewStyle, setViewStyle] = useState<ViewStyleKey>('modern')
   const [viewFontSize, setViewFontSize] = useState<ViewSizeKey>('m')
   const [viewSpacing, setViewSpacing] = useState<ViewSpacingKey>('cozy')
@@ -3688,7 +3688,21 @@ function App() {
     const targetWidth = Math.max(96, Math.round(utilityRect.width || UTILITY_WIDTH_PX))
     const targetHeight = Math.max(72, Math.ceil(probeRect.height || 160))
 
-    void window.windowControls?.toggleUtilityCollapse?.({ width: targetWidth, height: targetHeight })
+    // Ensure overlay is committed in the same event turn before native resize.
+    flushSync(() => {
+      setWindowModeTransitionOverlayNonce((previous) => previous + 1)
+    })
+
+    const toggleAfterOverlayFrame = async () => {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => resolve())
+        })
+      })
+      await window.windowControls?.toggleUtilityCollapse?.({ width: targetWidth, height: targetHeight })
+    }
+
+    void toggleAfterOverlayFrame()
   }, [])
 
   const handleWindowToggleMaximize = useCallback(() => {
@@ -3712,14 +3726,6 @@ function App() {
     })
     return () => unsubscribe?.()
   }, [])
-
-  useEffect(() => {
-    if (!hasInitializedWindowModeTransitionRef.current) {
-      hasInitializedWindowModeTransitionRef.current = true
-      return
-    }
-    setWindowModeTransitionOverlayNonce((previous) => previous + 1)
-  }, [windowIsCollapsed])
 
   useEffect(() => {
     applyRenderScrollDynamic(renderScrollDynamic)
