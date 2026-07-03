@@ -11066,6 +11066,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
                   {isPreviewMode ? (
                     <div className="toolbar-action-group" aria-label="Print toolbar">
+                      <div className="toolbar-spacer"/>
                       <button
                         type="button"
                         className="btn-icon"
