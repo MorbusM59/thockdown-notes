@@ -1478,7 +1478,10 @@ export class DatabaseService {
   private ensureLoadoutsSeeded(): void {
     const db = this.requireDb();
     const countRow = db.prepare('SELECT COUNT(*) as n FROM ui_loadout_entries').get() as { n: number };
-    if (countRow.n > 0) return;
+    if (countRow.n > 0) {
+      this.normalizeStoredLoadoutRows();
+      return;
+    }
 
     const timestamp = Date.now();
     const insertStmt = db.prepare(`
@@ -1505,6 +1508,44 @@ export class DatabaseService {
       const metaStmt = db.prepare(`INSERT OR REPLACE INTO ui_loadout_meta (key, value) VALUES (?, ?)`);
       metaStmt.run('lastCustomId:light', String(LOADOUT_DEFAULT_CUSTOM_ID_ABS));
       metaStmt.run('lastCustomId:dark', String(-LOADOUT_DEFAULT_CUSTOM_ID_ABS));
+    });
+
+    tx();
+    this.normalizeStoredLoadoutRows();
+  }
+
+  private normalizeStoredLoadoutRows(): void {
+    const db = this.requireDb();
+    const rows = db.prepare(`
+      SELECT id, signature, payloadJson
+      FROM ui_loadout_entries
+    `).all() as Array<{ id: number; signature: string; payloadJson: string }>;
+
+    if (rows.length === 0) return;
+
+    const updateStmt = db.prepare(`
+      UPDATE ui_loadout_entries
+      SET signature = ?, payloadJson = ?
+      WHERE id = ?
+    `);
+
+    const tx = db.transaction(() => {
+      for (const row of rows) {
+        let normalized: UiLayoutLoadout;
+        try {
+          normalized = normalizeUiLayoutLoadout(JSON.parse(row.payloadJson)) ?? DEFAULT_UI_LAYOUT_LOADOUT;
+        } catch {
+          normalized = DEFAULT_UI_LAYOUT_LOADOUT;
+        }
+
+        const nextSignature = stableStringify(normalized);
+        const nextPayloadJson = JSON.stringify(normalized);
+        if (row.signature === nextSignature && row.payloadJson === nextPayloadJson) {
+          continue;
+        }
+
+        updateStmt.run(nextSignature, nextPayloadJson, row.id);
+      }
     });
 
     tx();
@@ -1543,7 +1584,7 @@ export class DatabaseService {
     return {
       id: row.id,
       isActive: row.isActive === 1,
-      signature: row.signature,
+      signature: stableStringify(payload),
       payload,
       updatedAt: row.updatedAt,
     };
