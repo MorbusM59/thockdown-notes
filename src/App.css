@@ -1436,6 +1436,7 @@ button.active,
   flex-direction: column;
   gap:            8px;
   min-width:      0;
+  -webkit-app-region: no-drag;
 }
 
 .tag-input-bar {
@@ -1476,6 +1477,7 @@ button.active,
   align-items: center;
   overflow:    hidden;
   margin-top:  2px;
+  -webkit-app-region: no-drag;
 }
 
 .tag-empty-state {

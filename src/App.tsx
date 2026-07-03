@@ -4601,6 +4601,14 @@ ${markdownHtml}
       return true
     }
 
+    if (target.closest('.tag-pill, .tags-display, .suggested-tags, .tag-input-section')) {
+      return true
+    }
+
+    if (target.closest('[draggable="true"]')) {
+      return true
+    }
+
     return false
   }, [])
 
@@ -4739,10 +4747,23 @@ ${markdownHtml}
   }, [importExternalFileAsTempNote])
 
   const handleAppDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    const types = Array.from(event.dataTransfer?.types ?? [])
+    const isFileDrag = types.includes('Files')
+    if (!isFileDrag) {
+      return
+    }
+
     event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
   }, [])
 
   const handleAppDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
+    const types = Array.from(event.dataTransfer?.types ?? [])
+    const isFileDrop = types.includes('Files')
+    if (!isFileDrop) {
+      return
+    }
+
     event.preventDefault()
     event.stopPropagation()
 
@@ -5111,14 +5132,22 @@ ${markdownHtml}
     }
   }, [deleteArmedTagName])
 
-  const handleTagDragStart = useCallback((index: number) => {
+  const handleTagDragStart = useCallback((event: DragEvent<HTMLDivElement>, index: number) => {
     const tagName = orderedActiveTags[index] ?? ''
     if (isProtectedTagName(tagName)) return
+
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', tagName)
     setDraggedTagIndex(index)
   }, [orderedActiveTags])
 
+  const handleTagDragEnd = useCallback(() => {
+    setDraggedTagIndex(null)
+  }, [])
+
   const handleTagDrop = useCallback((event: DragEvent<HTMLDivElement>, targetIndex: number) => {
     event.preventDefault()
+    event.stopPropagation()
 
     if (draggedTagIndex === null || draggedTagIndex === targetIndex) {
       setDraggedTagIndex(null)
@@ -5133,7 +5162,44 @@ ${markdownHtml}
 
     const reordered = [...orderedActiveTags]
     const [moved] = reordered.splice(draggedTagIndex, 1)
+    if (!moved) {
+      setDraggedTagIndex(null)
+      return
+    }
     reordered.splice(targetIndex, 0, moved)
+    setDraggedTagIndex(null)
+
+    void runActiveNoteTagMutation(async (noteId) => {
+      await window.measlyNotes!.reorderNoteTags({ id: noteId, tagNames: reordered })
+    })
+  }, [draggedTagIndex, orderedActiveTags, runActiveNoteTagMutation])
+
+  const handleTagContainerDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (draggedTagIndex === null) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'move'
+  }, [draggedTagIndex])
+
+  const handleTagContainerDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (draggedTagIndex === null) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    const reordered = [...orderedActiveTags]
+    const [moved] = reordered.splice(draggedTagIndex, 1)
+    if (!moved) {
+      setDraggedTagIndex(null)
+      return
+    }
+
+    reordered.push(moved)
     setDraggedTagIndex(null)
 
     void runActiveNoteTagMutation(async (noteId) => {
@@ -10852,7 +10918,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     </div>
                   </div>
 
-                  <div className="tags-display" aria-live="polite">
+                  <div
+                    className="tags-display"
+                    aria-live="polite"
+                    onDragOver={handleTagContainerDragOver}
+                    onDrop={handleTagContainerDrop}
+                  >
                     {!activeNoteId ? (
                       <div className="tag-empty-state">Tags go here. Drag to change order, left click to remove, right click to rename.</div>
                     ) : orderedActiveTags.length === 0 ? (
@@ -10866,8 +10937,13 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                             key={tagName}
                             className={`tag-pill active${deleteArmedTagName === tagName ? ' armed' : ''}${isProtected ? ` protected ${normalized}` : ''}`}
                             draggable={!isProtected}
-                            onDragStart={() => handleTagDragStart(index)}
-                            onDragOver={(event) => event.preventDefault()}
+                            onDragStart={(event) => handleTagDragStart(event, index)}
+                            onDragEnd={handleTagDragEnd}
+                            onDragOver={(event) => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              event.dataTransfer.dropEffect = 'move'
+                            }}
                             onDrop={(event) => handleTagDrop(event, index)}
                             onClick={() => handleTagChipClick(tagName)}
                             onContextMenu={(event) => handleTagContextMenu(event, tagName)}
