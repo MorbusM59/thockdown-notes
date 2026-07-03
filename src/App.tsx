@@ -10685,7 +10685,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 </div>
               ) : null}
 
-              {sidebarMode === 'options' ? (
+              {(sidebarMode === 'options' || isFindMode) ? (
                 <div className="date-filter-rail date-filter-rail-placeholder" aria-hidden="true" />
               ) : null}
 
