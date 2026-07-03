@@ -702,6 +702,7 @@ function restoreWindowFromUtilityCollapse(): boolean {
   if (!windowIsUtilityCollapsed) return true;
 
   const collapsedBounds = win.getBounds();
+  const preRestoreOpacity = win.getOpacity();
 
   const restoreState = utilityCollapseRestoreState;
   windowIsUtilityCollapsed = false;
@@ -718,12 +719,20 @@ function restoreWindowFromUtilityCollapse(): boolean {
       const collapsedTopRightX = collapsedBounds.x + collapsedBounds.width;
       const restoredX = collapsedTopRightX - restoreState.width;
       const restoredY = collapsedBounds.y;
+      // Prevent one-frame stale mini-surface bleed during expand on Windows
+      // compositor: hide during bounds mutation, then reveal on next tick.
+      win.setOpacity(0);
       win.setBounds({
         x: restoredX,
         y: restoredY,
         width: restoreState.width,
         height: restoreState.height,
       });
+      setTimeout(() => {
+        if (win && !win.isDestroyed()) {
+          win.setOpacity(preRestoreOpacity);
+        }
+      }, 16);
     } else {
       win.setSize(restoreState.width, restoreState.height);
     }
