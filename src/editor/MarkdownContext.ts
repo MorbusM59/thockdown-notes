@@ -416,7 +416,7 @@ function parseLineStructure(lineText: string): ParsedLineStructure {
   const unorderedMatch = remainder.match(/^([-*+])\s+/)
   if (unorderedMatch) {
     const afterListPrefix = remainder.slice(unorderedMatch[0].length)
-    const checklistMatch = afterListPrefix.match(/^(\[ \])\s+/)
+    const checklistMatch = afterListPrefix.match(/^(\[[^\]\n\r]\])\s+/)
     const checklistPrefix = checklistMatch ? `${checklistMatch[1]} ` : null
 
     return {
@@ -506,7 +506,7 @@ export function applyMarkdownEnter(
 
   if (lineStructure.listKind === 'unordered') {
     const marker = lineStructure.unorderedMarker ?? '-'
-    const checklistPrefix = lineStructure.checklistPrefix ?? ''
+    const checklistPrefix = lineStructure.checklistPrefix !== null ? '[ ] ' : ''
     inserted = `\n${basePrefix}${marker} ${checklistPrefix}`
   } else if (
     lineStructure.listKind === 'ordered' &&

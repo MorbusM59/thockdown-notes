@@ -65,6 +65,18 @@ describe('resolveMarkdownEnterTransform', () => {
     expect(result?.selection.focus).toBe(result?.text.length)
   })
 
+  it('continues markdown checked checklist items for plain Enter', () => {
+    const text = '- [x] task'
+    const selection = collapsedSelection(text.length)
+
+    const result = resolveMarkdownEnterTransform(buildEvent(text, selection))
+
+    expect(result).not.toBeNull()
+    expect(result?.text).toBe('- [x] task\n- [ ] ')
+    expect(result?.selection.anchor).toBe(result?.text.length)
+    expect(result?.selection.focus).toBe(result?.text.length)
+  })
+
   it('continues leading indentation on plain indented lines', () => {
     const text = '   indented line'
     const selection = collapsedSelection(text.length)

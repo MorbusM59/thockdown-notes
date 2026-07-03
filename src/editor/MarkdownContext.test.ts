@@ -163,6 +163,26 @@ describe('applyMarkdownEnter', () => {
     expect(result?.text).toBe('- [ ] task\n- [ ] ')
   })
 
+  it('continues checklist items with a checked marker', () => {
+    const text = '- [x] task'
+    const selection = collapsedSelection(text.length)
+
+    const result = applyMarkdownEnter(text, selection)
+
+    expect(result).not.toBeNull()
+    expect(result?.text).toBe('- [x] task\n- [ ] ')
+  })
+
+  it('continues checklist items with arbitrary single-char marker', () => {
+    const text = '- [?] task'
+    const selection = collapsedSelection(text.length)
+
+    const result = applyMarkdownEnter(text, selection)
+
+    expect(result).not.toBeNull()
+    expect(result?.text).toBe('- [?] task\n- [ ] ')
+  })
+
   it('continues ordered list item with incremented number', () => {
     const text = '3. item'
     const selection = collapsedSelection(text.length)
@@ -197,6 +217,18 @@ describe('applyMarkdownEnter', () => {
 
   it('exits list continuation on empty checklist item', () => {
     const text = '- [ ] '
+    const selection = collapsedSelection(text.length)
+
+    const result = applyMarkdownEnter(text, selection)
+
+    expect(result).not.toBeNull()
+    expect(result?.text).toBe('')
+    expect(result?.selection.anchor).toBe(0)
+    expect(result?.selection.focus).toBe(0)
+  })
+
+  it('exits list continuation on empty checked checklist item', () => {
+    const text = '- [x] '
     const selection = collapsedSelection(text.length)
 
     const result = applyMarkdownEnter(text, selection)
