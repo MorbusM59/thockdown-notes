@@ -10925,7 +10925,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     onDrop={handleTagContainerDrop}
                   >
                     {!activeNoteId ? (
-                      <div className="tag-empty-state">Tags go here. Drag to change order, left click to remove, right click to rename.</div>
+                      <div className="tag-empty-state">Drag to order, left click to remove, right click to rename.</div>
                     ) : orderedActiveTags.length === 0 ? (
                       <div className="tag-empty-state">No tags on active note.</div>
                     ) : (

@@ -1544,7 +1544,7 @@ button.active,
   flex-wrap:  wrap;
   gap:        2px;
   overflow:   hidden;
-  max-height: 86px;
+  max-height: 83px;
 }
 
 .tag-pill.suggested {
