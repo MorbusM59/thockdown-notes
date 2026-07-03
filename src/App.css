@@ -130,10 +130,10 @@
   --color-toggle-shadow:        rgba(0, 0, 0, 0.1);
 
   --color-tag-active-bg:        #ffffff;
-  --color-tag-active-text:      var(--color-text-dark);
+  --color-tag-active-text:      var(--color-text-base);
   --color-tag-active-border:    #ffffff;
   --color-tag-suggested-bg:     #f5f5f5;
-  --color-tag-suggested-text:   var(--color-text-faded);
+  --color-tag-suggested-text:   var(--color-text-80);
   --color-tag-suggested-border: #ddd;
 
   --color-shadow-white-light:   var(--palette-shadow-white-lo);
@@ -141,10 +141,16 @@
   --color-shadow-white-harsh:   var(--palette-shadow-white-hi);
 
   /* Text colors */
-  --color-text-dark:      #000000DD;
-  --color-text-faded:     #000000BB;
-  --color-text-label:     #00000088;
-  --color-text-icon:      #000000AA;
+  --color-text-base:      #000000DD;
+  --color-text-90:        #000000C7;
+  --color-text-80:        #000000B0;
+  --color-text-70:        #0000009C;
+  --color-text-60:        #00000087;
+  --color-text-50:        #00000072;
+  --color-text-40:        #0000005C;
+  --color-text-30:        #00000047;
+  --color-text-20:        #00000033;
+  --color-text-10:        #0000001F;
 
   /* Danger / status colors */
   --color-danger:         #b71c1c;
@@ -295,7 +301,7 @@
     0 1px 0px var(--text-shadow-emboss-ui-main);
 
   --text-info-size:  12px;
-  --text-info-color: var(--color-text-label);
+  --text-info-color: var(--color-text-60);
 
   /* ---------------------------------------------------------------------------
      1d. Border & Radius
@@ -734,7 +740,7 @@ button.active,
   outline:        none;
   background:     var(--color-input-backdrop);
   transition:     border-color 0.2s;
-  color:           var(--color-text-dark);
+  color:           var(--color-text-base);
   box-sizing:     border-box;
 }
 
@@ -782,7 +788,7 @@ button.active,
 .notes-sidebar .view-toggle .icon-btn.btn-find,
 .notes-sidebar .view-toggle .icon-btn.btn-options {
   background-image: none;
-  color:  var(--color-text-faded);
+  color:  var(--color-text-80);
 }
 
 .find-mode-glyph {
@@ -919,7 +925,7 @@ button.active,
   font-size:     10px;
   font-weight:   500;
   aspect-ratio:  auto;
-  color:         var(--color-text-label);
+  color:         var(--color-text-60);
 }
 
 .sidebar-page-btn:disabled {
@@ -946,7 +952,7 @@ button.active,
 }
 
 .sidebar-page-number-display {
-  color:       var(--color-text-faded);
+  color:       var(--color-text-80);
   font-size:   10px;
   font-weight: 600;
   cursor:      text;
@@ -958,7 +964,7 @@ button.active,
   height:      100%;
   border:      none;
   background:  transparent;
-  color:       var(--color-text-faded);
+  color:       var(--color-text-80);
   font-size:   10px;
   font-weight: 600;
   text-align:  center;
@@ -1011,7 +1017,7 @@ button.active,
   flex:            1;
   min-width:       0;
   height:          20px;
-  color:            var(--color-text-faded);
+  color:            var(--color-text-80);
   display:         flex;
   align-items:     center;
   justify-content: center;
@@ -1034,7 +1040,7 @@ button.active,
   border-radius: 3px;
   font-size:   10px;
   font-weight: 500;
-  color:       var(--color-text-faded);
+  color:       var(--color-text-80);
   line-height: 1;
 }
 
@@ -1232,7 +1238,7 @@ button.active,
 
 .note-list-title {
   font-size:     12px;
-  color:         var(--color-text-dark);
+  color:         var(--color-text-base);
   font-weight:   600;
   white-space:   nowrap;
   overflow:      hidden;
@@ -1247,7 +1253,7 @@ button.active,
   justify-content: space-between;
   gap:             8px;
   font-size:       10px;
-  color:           var(--color-text-label);
+  color:           var(--color-text-60);
   font-weight:     800;
 }
 
@@ -1286,7 +1292,7 @@ button.active,
   list-style:     none;
   cursor:         default;
   padding:        4px;
-  color:          var(--color-text-label);
+  color:          var(--color-text-60);
   font-size:      10px;
   font-weight:    900;
   text-transform: uppercase;
@@ -1300,7 +1306,7 @@ button.active,
   cursor:           default;
   margin:           0;
   padding:          2px 4px;
-  color:            var(--color-text-label);
+  color:            var(--color-text-60);
   font-size:        10px;
   font-weight:      700;
   text-transform:   uppercase;
@@ -1402,7 +1408,7 @@ button.active,
 
 .tag-empty-state {
   font-size:  var(--text-info-size);
-  color:      var(--color-text-label);
+  color:      var(--color-text-60);
   text-align: center;
 }
 
@@ -1483,7 +1489,7 @@ button.active,
 
 .suggested-empty {
   font-size: 11px;
-  color:     var(--color-text-label);
+  color:     var(--color-text-60);
   padding:   8px 0;
 }
 
@@ -1574,7 +1580,7 @@ button.active,
 
 .selector-label {
   font-size: 12px;
-  color:     var(--color-text-label);
+  color:     var(--color-text-60);
 }
 
 .style-selector select {
@@ -1582,7 +1588,7 @@ button.active,
   border:        1px solid var(--btn-border-default);
   border-radius: var(--border-radius-regular);
   background:    var(--color-input-backdrop);
-  color:         var(--color-text-dark);
+  color:         var(--color-text-base);
   font-size:     12px;
   padding:       0 8px;
 }
@@ -1601,7 +1607,7 @@ button.active,
   background-size:     auto;
   background-repeat:   no-repeat;
   background-position: center;
-  color: var(--color-text-icon);
+  color: var(--color-text-80);
 }
 
 .toolbar-gear-glyph {
@@ -1797,7 +1803,7 @@ button.active,
   text-align:      center;
   font-size:       10px;
   line-height:     1.35;
-  color:           var(--color-text-faded);
+  color:           var(--color-text-80);
 }
 
 /* 8f. Color & texture picker system */
@@ -1860,7 +1866,7 @@ button.active,
   width:      100%;
   height:     100%;
   font-size: 18px;
-  color:      var(--color-text-icon);
+  color:      var(--color-text-80);
   text-shadow:  var(--text-shadow-icon);
   transition: none;
 }
@@ -1904,7 +1910,7 @@ button.active,
 .options-color-swatch-glyph {
   font-size:   18px;
   line-height: 1;
-  color:      var(--color-text-icon);
+  color:      var(--color-text-80);
   text-shadow: var(--text-shadow-icon);
 }
 
@@ -1914,7 +1920,7 @@ button.active,
   font-weight:    700;
   letter-spacing: 0.02em;
   text-transform: lowercase;
-  color:          var(--color-text-faded);
+  color:          var(--color-text-80);
   text-shadow:    var(--text-shadow-icon);
 }
 
@@ -1960,7 +1966,7 @@ button.active,
 }
 
 .text-icon .options-color-swatch-glyph {
-  color:       var(--options-swatch-color, var(--color-text-icon));
+  color:       var(--options-swatch-color, var(--color-text-80));
   text-shadow:
     0 -1px 0px var(--text-shadow-emboss-ui-secondary),
     0 1px 0px var(--text-shadow-emboss-ui-main);
@@ -2006,7 +2012,7 @@ button.active,
   height: 100%;
   min-width: 0;
   min-height: 0;
-  color: var(--color-text-icon);
+  color: var(--color-text-80);
 }
 
 .options-glaze-cell .utility-setting-scrollbar-shell,
@@ -2127,7 +2133,7 @@ button.active,
   width:           100%;
   height:          100%;
   font-size:       var(--btn-icon-size);
-  color:           var(--color-text-label);
+  color:           var(--color-text-60);
   padding:         0 6px;
   border:          1px solid var(--btn-border-default);
   border-radius:   var(--border-radius-regular);
@@ -2182,7 +2188,7 @@ button.active,
   font-size:      9px;
   line-height:    1;
   font-weight:    700;
-  color:          var(--color-text-faded);
+  color:          var(--color-text-80);
   text-shadow:    var(--text-shadow-icon);
   letter-spacing: 0.02em;
 }
@@ -2241,7 +2247,7 @@ button.active,
   height:      100%;
   font-size:   18px;
   font-weight: 600;
-  color:      var(--color-text-icon);
+  color:      var(--color-text-80);
   text-shadow:  var(--text-shadow-icon);
 }
 
@@ -2252,7 +2258,7 @@ button.active,
 
 .options-audio-btn {
   font-size: 18px;
-  color:      var(--color-text-icon);
+  color:      var(--color-text-80);
   text-shadow:  var(--text-shadow-icon);
 }
 
@@ -2303,7 +2309,7 @@ body.hsva-dragging * {
   border:        1px solid #c6b9ab;
   border-radius: var(--border-radius-regular);
   background:    var(--color-input-backdrop);
-  color:         var(--color-text-dark);
+  color:         var(--color-text-base);
   font-size:     11px;
   padding:       4px 6px;
 }
@@ -2646,7 +2652,7 @@ body.hsva-dragging * {
   padding-left:   10px;
   letter-spacing: 0.1em;
   font-size:      80%;
-  color:          var(--color-text-faded);
+  color:          var(--color-text-80);
 }
 
 .markdown-preview hr {
@@ -2897,7 +2903,7 @@ body.pdf-exporting .markdown-preview img {
   border:          1px solid var(--btn-border-default);
   border-radius:   var(--border-radius-regular);
   background:      var(--btn-bg-default);
-  color:           var(--color-text-label);
+  color:           var(--color-text-60);
   transition:      background 0.2s, border-color 0.2s, color 0.2s;
 }
 
@@ -2912,7 +2918,7 @@ body.pdf-exporting .markdown-preview img {
 .window-control-glyph {
   display:     block;
   font-size:   18px;
-  color:      var(--color-text-icon);
+  color:      var(--color-text-80);
   text-shadow:  var(--text-shadow-icon);
   line-height: 1;
 }
@@ -2950,7 +2956,7 @@ body.pdf-exporting .markdown-preview img {
   border:             1px solid var(--btn-border-default);
   border-radius:      var(--border-radius-small);
   background:         var(--btn-bg-default);
-  color:              var(--color-text-label);
+  color:              var(--color-text-60);
   font-size:          10px;
   cursor:             default;
   overflow:           hidden;
@@ -2969,7 +2975,7 @@ body.pdf-exporting .markdown-preview img {
 .audio-ctrl-btn.is-active {
   background:   var(--btn-bg-active, rgba(120, 100, 80, 0.22));
   border-color: var(--btn-border-active, #9a8070);
-  color:        var(--color-text-dark);
+  color:        var(--color-text-base);
 }
 
 .audio-ctrl-btn.is-armed {
@@ -3012,7 +3018,7 @@ body.pdf-exporting .markdown-preview img {
   border-radius: 8px;
   border:        1px solid #d2cec9;
   background:    rgba(255, 255, 255, 0.62);
-  color:         var(--color-text-dark);
+  color:         var(--color-text-base);
   text-align:    left;
   font-size:     11px;
   line-height:   1.45;
@@ -3024,7 +3030,7 @@ body.pdf-exporting .markdown-preview img {
 .find-hit-snippet {
   min-width:    0;
   overflow-wrap: anywhere;
-  color:        var(--color-text-dark);
+  color:        var(--color-text-base);
 }
 
 .find-hit-match {
@@ -3036,7 +3042,7 @@ body.pdf-exporting .markdown-preview img {
   border:        1px dashed #ccbfb2;
   border-radius: 8px;
   background:    rgba(255, 255, 255, 0.45);
-  color:         var(--color-text-label);
+  color:         var(--color-text-60);
   font-size:     12px;
   padding:       14px 10px;
   text-align:    center;

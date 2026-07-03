@@ -49,6 +49,7 @@ const NEUTRAL_BASE: UiLayoutLoadout = {
     search: 'rgba(255, 221, 105, 0.55)',
     selectionEdit: 'rgba(0, 0, 0, 0.1)',
     selectionRender: 'rgba(0, 0, 0, 0.1)',
+    textBase: '#000000DD',
     textEmbossEdit: '#ffffff',
     textEmbossRender: '#ffffff',
     textEmbossUi: '#ffffff',

@@ -328,7 +328,7 @@ function resolveExportTokens(
 
   const resolvedTokens: ExportStyleTokens = {
     bodyBackground: resolveCssVar('--color-background-light', defaultExportTokens.bodyBackground),
-    bodyTextColor: resolveCssVar('--color-text-dark', defaultExportTokens.bodyTextColor),
+    bodyTextColor: resolveCssVar('--color-text-base', defaultExportTokens.bodyTextColor),
     bodyLinkColor: resolveCssVar('--color-text-link', defaultExportTokens.bodyLinkColor),
     bodyBorderColor: resolveCssVar('--color-border-hr', defaultExportTokens.bodyBorderColor),
     bodyBlockquoteBorderColor: resolveCssVar('--color-border-blockquote', defaultExportTokens.bodyBlockquoteBorderColor),
@@ -337,7 +337,7 @@ function resolveExportTokens(
     codeRadius: resolveCssVar('--border-radius-regular', defaultExportTokens.codeRadius),
     textBorderColor: resolveCssVar('--btn-border-default', defaultExportTokens.textBorderColor),
     textRadius: resolveCssVar('--border-radius-small', defaultExportTokens.textRadius),
-    bodyBlockquoteColor: resolveCssVar('--color-text-faded', defaultExportTokens.bodyBlockquoteColor),
+    bodyBlockquoteColor: resolveCssVar('--color-text-80', defaultExportTokens.bodyBlockquoteColor),
     previewFontFamily: computed.fontFamily || defaultExportTokens.previewFontFamily,
     previewFontSize: computed.fontSize || defaultExportTokens.previewFontSize,
     previewLineHeight: computed.lineHeight || defaultExportTokens.previewLineHeight,

@@ -134,6 +134,7 @@ const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   search: 'rgba(255, 221, 105, 0.55)',
   selectionEdit: 'rgba(199, 94, 0, 0.49)',
   selectionRender: 'rgba(199, 94, 0, 0.49)',
+  textBase: '#000000DD',
   textEmbossEdit: '#ffffff',
   textEmbossRender: '#ffffff',
   textEmbossUi: '#ffffff',
@@ -168,6 +169,7 @@ const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   search: 'Search Highlight color',
   selectionEdit: 'Edit selection color',
   selectionRender: 'Render selection color',
+  textBase: 'UI text base color',
   textEmbossEdit: 'Edit text embossing color',
   textEmbossRender: 'Render text embossing color',
   textEmbossUi: 'UI text embossing color',
@@ -186,6 +188,7 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   search: 'fa-solid fa-magnifying-glass',
   selectionEdit: 'fa-solid fa-expand',
   selectionRender: 'fa-solid fa-expand',
+  textBase: 'fa-solid fa-font',
   textEmbossEdit: 'fa-solid fa-sun',
   textEmbossRender: 'fa-solid fa-sun',
   textEmbossUi: 'fa-solid fa-icons',
@@ -259,6 +262,7 @@ type HighlightColorKey =
   | 'search'
   | 'selectionEdit'
   | 'selectionRender'
+  | 'textBase'
   | 'textEmbossEdit'
   | 'textEmbossRender'
   | 'textEmbossUi'
@@ -1308,6 +1312,7 @@ function normalizeLoadoutHighlightColors(source: unknown): HighlightColors {
     selectionRender: typeof record.selectionRender === 'string'
       ? record.selectionRender
       : (legacySelection ?? DEFAULT_HIGHLIGHT_COLORS.selectionRender),
+    textBase: typeof record.textBase === 'string' ? record.textBase : DEFAULT_HIGHLIGHT_COLORS.textBase,
     textEmbossEdit: typeof record.textEmbossEdit === 'string'
       ? record.textEmbossEdit
       : (legacyTextEmboss ?? DEFAULT_HIGHLIGHT_COLORS.textEmbossEdit),
@@ -2278,6 +2283,23 @@ function App() {
     () => rgbaToCssColor(invertRgbaColor(textEmbossRenderPrimaryRgba, 0.22)),
     [textEmbossRenderPrimaryRgba],
   )
+  const textBaseRgba = useMemo(
+    () => parseCssColorToRgba(highlightColors.textBase) ?? { r: 0, g: 0, b: 0, a: 0.867 },
+    [highlightColors.textBase],
+  )
+  const textColorWithAlphaScale = useCallback((alphaScale: number) => rgbaToCssColor({
+    ...textBaseRgba,
+    a: clamp(textBaseRgba.a * alphaScale, 0, 1),
+  }), [textBaseRgba])
+  const textColor90 = useMemo(() => textColorWithAlphaScale(0.9), [textColorWithAlphaScale])
+  const textColor80 = useMemo(() => textColorWithAlphaScale(0.8), [textColorWithAlphaScale])
+  const textColor70 = useMemo(() => textColorWithAlphaScale(0.7), [textColorWithAlphaScale])
+  const textColor60 = useMemo(() => textColorWithAlphaScale(0.6), [textColorWithAlphaScale])
+  const textColor50 = useMemo(() => textColorWithAlphaScale(0.5), [textColorWithAlphaScale])
+  const textColor40 = useMemo(() => textColorWithAlphaScale(0.4), [textColorWithAlphaScale])
+  const textColor30 = useMemo(() => textColorWithAlphaScale(0.3), [textColorWithAlphaScale])
+  const textColor20 = useMemo(() => textColorWithAlphaScale(0.2), [textColorWithAlphaScale])
+  const textColor10 = useMemo(() => textColorWithAlphaScale(0.1), [textColorWithAlphaScale])
 
   useEffect(() => {
     const textureApi = window.measlyTextures
@@ -2463,6 +2485,7 @@ function App() {
         search: highlightColors.search,
         selectionEdit: highlightColors.selectionEdit,
         selectionRender: highlightColors.selectionRender,
+        textBase: highlightColors.textBase,
         textEmbossEdit: highlightColors.textEmbossEdit,
         textEmbossRender: highlightColors.textEmbossRender,
         textEmbossUi: highlightColors.textEmbossUi,
@@ -2552,6 +2575,7 @@ function App() {
       search: loadout.highlightColors.search,
       selectionEdit: loadout.highlightColors.selectionEdit,
       selectionRender: loadout.highlightColors.selectionRender,
+      textBase: loadout.highlightColors.textBase,
       textEmbossEdit: loadout.highlightColors.textEmbossEdit,
       textEmbossRender: loadout.highlightColors.textEmbossRender,
       textEmbossUi: loadout.highlightColors.textEmbossUi,
@@ -3364,6 +3388,7 @@ function App() {
       highlightSelectionColor: highlightColors.selectionEdit,
       highlightSelectionEditColor: highlightColors.selectionEdit,
       highlightSelectionRenderColor: highlightColors.selectionRender,
+      highlightTextBaseColor: highlightColors.textBase,
       highlightTextEmbossColor: highlightColors.textEmbossUi,
       highlightTextEmbossEditColor: highlightColors.textEmbossEdit,
       highlightTextEmbossRenderColor: highlightColors.textEmbossRender,
@@ -3822,6 +3847,16 @@ function App() {
       '--text-shadow-emboss-edit-secondary': textEmbossEditSecondaryCss,
       '--text-shadow-emboss-render-main': highlightColors.textEmbossRender,
       '--text-shadow-emboss-render-secondary': textEmbossRenderSecondaryCss,
+      '--color-text-base': highlightColors.textBase,
+      '--color-text-90': textColor90,
+      '--color-text-80': textColor80,
+      '--color-text-70': textColor70,
+      '--color-text-60': textColor60,
+      '--color-text-50': textColor50,
+      '--color-text-40': textColor40,
+      '--color-text-30': textColor30,
+      '--color-text-20': textColor20,
+      '--color-text-10': textColor10,
       '--color-editor-edit-text': editorEditTextColorCss,
       '--color-editor-render-text': editorRenderTextColorCss,
       '--texture-app-grid': appGridTextureCss,
@@ -3851,6 +3886,15 @@ function App() {
     textEmbossUiSecondaryCss,
     textEmbossEditSecondaryCss,
     textEmbossRenderSecondaryCss,
+    textColor90,
+    textColor80,
+    textColor70,
+    textColor60,
+    textColor50,
+    textColor40,
+    textColor30,
+    textColor20,
+    textColor10,
   ])
 
   // Apply all filter sliders at one wrapper level so the full composited scene
@@ -3916,6 +3960,16 @@ function App() {
       '--text-shadow-emboss-edit-secondary': textEmbossEditSecondaryCss,
       '--text-shadow-emboss-render-main': highlightColors.textEmbossRender,
       '--text-shadow-emboss-render-secondary': textEmbossRenderSecondaryCss,
+      '--color-text-base': highlightColors.textBase,
+      '--color-text-90': textColor90,
+      '--color-text-80': textColor80,
+      '--color-text-70': textColor70,
+      '--color-text-60': textColor60,
+      '--color-text-50': textColor50,
+      '--color-text-40': textColor40,
+      '--color-text-30': textColor30,
+      '--color-text-20': textColor20,
+      '--color-text-10': textColor10,
       '--palette-parchment-lightest': derivedPaletteColors.parchmentLightest,
       '--palette-parchment-light': derivedPaletteColors.parchmentLight,
       '--palette-parchment-mid': derivedPaletteColors.parchmentMid,
@@ -3934,9 +3988,19 @@ function App() {
     highlightColors.textEmbossUi,
     highlightColors.textEmbossEdit,
     highlightColors.textEmbossRender,
+    highlightColors.textBase,
     textEmbossUiSecondaryCss,
     textEmbossEditSecondaryCss,
     textEmbossRenderSecondaryCss,
+    textColor90,
+    textColor80,
+    textColor70,
+    textColor60,
+    textColor50,
+    textColor40,
+    textColor30,
+    textColor20,
+    textColor10,
   ])
 
   // Writes a structured debug entry to a session-scoped debug note (tagged
@@ -5808,6 +5872,7 @@ ${markdownHtml}
                 appState.menu.highlightSelectionRenderColor
                 ?? appState.menu.highlightSelectionColor
                 ?? DEFAULT_HIGHLIGHT_COLORS.selectionRender,
+              textBase: appState.menu.highlightTextBaseColor ?? DEFAULT_HIGHLIGHT_COLORS.textBase,
               textEmbossEdit:
                 appState.menu.highlightTextEmbossEditColor
                 ?? appState.menu.highlightTextEmbossColor
@@ -8866,6 +8931,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       isPreviewMode ? 'textEmbossRender' : 'textEmbossEdit',
       'caret',
       isPreviewMode ? 'selectionRender' : 'selectionEdit',
+      'textBase',
       'textEmbossUi',
     ]
     const textureTargets = ['appGrid', 'sidebarContent', isPreviewMode ? 'editorRenderText' : 'editorEditText'] as TextureSurfaceKey[]
