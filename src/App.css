@@ -2324,14 +2324,19 @@ body.hsva-dragging * {
 }
 
 .utility-grid.is-collapsed .window-controls {
-  padding-left: 7px;
-  padding-right: 9px;
   margin-bottom: 0;
 }
 
-.utility-grid.is-collapsed .audio-controls {
-  padding-left: 7px;
-  padding-right: 9px;
+.utility-grid.is-measure-probe {
+  position: fixed;
+  left: -10000px;
+  top: -10000px;
+  width: max-content !important;
+  height: auto !important;
+  display: inline-grid;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: -1;
 }
 
 .utility-settings-panel {

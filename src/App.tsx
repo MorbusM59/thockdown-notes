@@ -3673,25 +3673,17 @@ function App() {
     event.preventDefault()
 
     const utilityEl = utilityGridRef.current
-    const utilityRect = utilityEl?.getBoundingClientRect()
-    const utilityStyles = utilityEl ? window.getComputedStyle(utilityEl) : null
-    const utilityBorderY = utilityStyles
-      ? (Number.parseFloat(utilityStyles.borderTopWidth || '0') + Number.parseFloat(utilityStyles.borderBottomWidth || '0'))
-      : 0
-    const utilityPaddingY = utilityStyles
-      ? (Number.parseFloat(utilityStyles.paddingTop || '0') + Number.parseFloat(utilityStyles.paddingBottom || '0'))
-      : 0
+    if (!utilityEl) return
 
-    const windowControlsEl = utilityEl?.querySelector<HTMLElement>('.window-controls')
-    const audioControlsEl = utilityEl?.querySelector<HTMLElement>('.audio-controls')
+    const probe = utilityEl.cloneNode(true) as HTMLElement
+    probe.classList.add('is-collapsed', 'is-measure-probe')
+    document.body.appendChild(probe)
 
-    const controlsHeight = (windowControlsEl?.offsetHeight ?? 0) + (audioControlsEl?.offsetHeight ?? 0)
-    const intrinsicUtilityHeight = controlsHeight + utilityBorderY + utilityPaddingY
+    const probeRect = probe.getBoundingClientRect()
+    probe.remove()
 
-    // Collapsed bounds are anchored to top-right in the main process. Subtract
-    // measured residuals so left/bottom control margins match top/right.
-    const targetWidth = Math.max(96, Math.round((utilityRect?.width ?? UTILITY_WIDTH_PX) - 1))
-    const targetHeight = Math.max(72, Math.round((intrinsicUtilityHeight || utilityRect?.height || 160) - 2))
+    const targetWidth = Math.max(96, Math.ceil(probeRect.width || UTILITY_WIDTH_PX))
+    const targetHeight = Math.max(72, Math.ceil(probeRect.height || 160))
 
     void window.windowControls?.toggleUtilityCollapse?.({ width: targetWidth, height: targetHeight })
   }, [])
