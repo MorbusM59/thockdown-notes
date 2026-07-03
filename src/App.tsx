@@ -6641,7 +6641,14 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
   useEffect(() => {
     if (isPreviewMode) return
-    if (!persistenceReady || !activeNoteId) return
+    if (!persistenceReady) return
+    if (!activeNoteId) {
+      // Reset the restore sentinel when editor selection is cleared.
+      // Without this, re-selecting the same note id after a clear path can
+      // skip edit-mode restore and leave the remounted editor unhydrated.
+      previousActiveNoteIdForEditRestoreRef.current = null
+      return
+    }
 
     const previousActiveNoteId = previousActiveNoteIdForEditRestoreRef.current
     previousActiveNoteIdForEditRestoreRef.current = activeNoteId
