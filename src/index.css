@@ -137,6 +137,14 @@
   --color-bg-trailing: #d9d6d3;   /* Bottom section overlay */
   --color-caret: rgba(120, 115, 112, 0.8);
   --color-selection: rgba(199, 94, 0, 0.49);
+
+  /* Styling */
+  --markdown-headline-color: rgba(255,0,255,1.0);
+  --markdown-list-color: rgba(0,255,255,1.0);
+  --markdown-blockquote-color: rgba(255,255,0,1.0);
+  --markdown-code-color: rgba(255,0,127,1.0);
+  --markdown-checked-color: rgba(0,255,0,1.0);
+  --markdown-unchecked-color: rgba(255,0,0,1.0);
 }
 
 body {
@@ -294,18 +302,36 @@ body {
   background: transparent;
 }
 
-.measly-token-heading {
-  font-weight: bold;
-  text-shadow: 0 0 8px #FFFFFF, 0 0 4px #FFFFFF, 0 0 2px #FFFFFF99, 0 1px 0 #FFFFFF;
-}
+/* -------------------------------------------------------------------------- */
+/* Markdown Edit-Mode Decoration Placeholders (No default styling assigned)   */
+/* -------------------------------------------------------------------------- */
 
-.measly-token-list {
-  text-shadow: 0 0 5px green;
-}
+/* Block-level markdown line kinds */
+.measly-md-line--blockquote {text-shadow: 0 0 8px var(--markdown-blockquote-color), 0 0 12px var(--markdown-blockquote-color), 0 0 24px var(--markdown-blockquote-color)}
+.measly-md-line--code-fence {text-shadow: 0 0 1px var(--markdown-code-color), 0 0 2px var(--markdown-code-color), 0 0 4px var(--markdown-code-color), 0 0 8px var(--markdown-code-color),  0 0 12px var(--markdown-code-color)}
 
-.measly-token-quote {
-  font-style: italic;
-}
+/* Heading depth placeholders */
+
+.measly-md-heading-level-1 {text-shadow: 0 0 2px var(--markdown-headline-color), 0 0 4px var(--markdown-headline-color), 0 0 8px var(--markdown-headline-color), 0 0 16px var(--markdown-headline-color)}
+.measly-md-heading-level-2 {text-shadow: 0 0 4px var(--markdown-headline-color), 0 0 8px var(--markdown-headline-color), 0 0 16px var(--markdown-headline-color)}
+.measly-md-heading-level-3 {text-shadow: 0 0 8px var(--markdown-headline-color), 0 0 16px var(--markdown-headline-color)}
+.measly-md-heading-level-4 {text-shadow: 0 0 12px var(--markdown-headline-color)}
+.measly-md-heading-level-5 {text-shadow: 0 0 18px var(--markdown-headline-color)}
+.measly-md-heading-level-6 {text-shadow: 0 0 24px var(--markdown-headline-color)}
+
+/* List nesting depth placeholders (extend as needed) */
+.measly-md-list-depth-0 {text-shadow: 0 0 2px var(--markdown-list-color), 0 0 4px var(--markdown-list-color), 0 0 8px var(--markdown-list-color), 0 0 16px var(--markdown-list-color)}
+.measly-md-list-depth-1 {text-shadow: 0 0 4px var(--markdown-list-color), 0 0 8px var(--markdown-list-color), 0 0 16px var(--markdown-list-color)}
+.measly-md-list-depth-2 {text-shadow: 0 0 8px var(--markdown-list-color), 0 0 16px var(--markdown-list-color)}
+.measly-md-list-depth-3 {text-shadow: 0 0 12px var(--markdown-list-color)}
+.measly-md-list-depth-4 {text-shadow: 0 0 18px var(--markdown-list-color)}
+.measly-md-list-depth-5 {text-shadow: 0 0 24px var(--markdown-list-color)}
+.measly-md-list-depth-6 {text-shadow: 0 0 32px var(--markdown-list-color)}
+
+/* Task state placeholders */
+.measly-md-task--unchecked {text-shadow: 0 0 4px var(--markdown-unchecked-color), 0 0 8px var(--markdown-unchecked-color),  0 0 12px var(--markdown-unchecked-color)}
+.measly-md-task--checked {text-shadow: 0 0 4px var(--markdown-checked-color), 0 0 8px var(--markdown-checked-color),  0 0 12px var(--markdown-checked-color)}
+
 
 /* We will apply this to all standard text nodes */
 .editor-text-regular {
