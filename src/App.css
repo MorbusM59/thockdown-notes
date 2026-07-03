@@ -2478,6 +2478,38 @@ body.hsva-dragging * {
   height:      100%;
   min-width:   0;
   min-height:  0;
+  position:    relative;
+}
+
+.editor-document-stats {
+  position:      absolute;
+  left:          8px;
+  right:         24px;
+  bottom:        1px;
+  height:        20px;
+  display:       flex;
+  align-items:   center;
+  justify-content: center;
+  gap:           14px;
+  padding:       0 8px;
+  box-sizing:    border-box;
+  font-size:     9px;
+  letter-spacing: 0.02em;
+  color:         var(--color-text-60);
+  text-shadow:   var(--text-shadow-emboss-ui);
+  pointer-events: none;
+  user-select:   none;
+}
+
+.editor-document-wordcount {
+  box-sizing:     border-box;
+  padding:        2px 6px 0 6px;
+  border:         1px solid var(--color-border-highlight);
+  border-radius:  var(--border-radius-small);
+  box-shadow:     var(--box-shadow-inverted);
+  outline:        none;
+  background:     var(--color-input-backdrop);
+  color:          var(--color-text-80);
 }
 
 .editor-shell {

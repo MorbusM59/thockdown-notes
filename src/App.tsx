@@ -7024,6 +7024,18 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     return normalizeInternalText(latestEditorTextRef.current || activeNoteText)
   }, [activeNoteText, editorTextVersion])
 
+  const activeNoteDocumentStats = useMemo(() => {
+    const text = currentEditorText
+    const characterCount = text.length
+    const trimmed = text.trim()
+    const wordCount = trimmed.length === 0 ? 0 : trimmed.split(/\s+/u).length
+
+    return {
+      wordCount,
+      characterCount,
+    }
+  }, [currentEditorText])
+
   const documentFindDirective = useMemo<DocumentFindDirective>(() => {
     return resolveDocumentFindDirective(documentFindQuery, currentEditorText, isDocumentFindCaseSensitive)
   }, [currentEditorText, documentFindQuery, isDocumentFindCaseSensitive])
@@ -11337,6 +11349,15 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   )}
                 </div>
               </aside>
+              <div className="editor-document-stats" aria-live="polite">
+                {activeNoteId ? (
+                  <>
+                    <div className="editor-document-wordcount"><span><b>{activeNoteDocumentStats.wordCount.toLocaleString()}</b> ({activeNoteDocumentStats.characterCount.toLocaleString()})</span></div>
+                  </>
+                ) : (
+                  <span>0 words</span>
+                )}
+              </div>
             </div>
           </div>
         </div>
