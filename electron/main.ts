@@ -669,6 +669,16 @@ function resolveUtilityCollapseSize(input: unknown): { width: number; height: nu
   return { width, height };
 }
 
+function applyUtilityCollapseWindowConstraints(windowRef: BrowserWindow): void {
+  windowRef.setMinimumSize(UTILITY_COLLAPSE_MIN_WIDTH_PX, UTILITY_COLLAPSE_MIN_HEIGHT_PX);
+  windowRef.setResizable(false);
+}
+
+function applyNormalWindowConstraints(windowRef: BrowserWindow): void {
+  windowRef.setResizable(true);
+  windowRef.setMinimumSize(APP_WINDOW_MIN_WIDTH_PX, APP_WINDOW_MIN_HEIGHT_PX);
+}
+
 function collapseWindowToUtilityGrid(targetSize: { width: number; height: number }): boolean {
   if (!win || win.isDestroyed()) return false;
   if (windowIsUtilityCollapsed) return true;
@@ -689,8 +699,7 @@ function collapseWindowToUtilityGrid(targetSize: { width: number; height: number
 
   alwaysOnTopBeforeUtilityCollapse = win.isAlwaysOnTop();
   windowIsUtilityCollapsed = true;
-  win.setMinimumSize(UTILITY_COLLAPSE_MIN_WIDTH_PX, UTILITY_COLLAPSE_MIN_HEIGHT_PX);
-  win.setResizable(false);
+  applyUtilityCollapseWindowConstraints(win);
   win.setAlwaysOnTop(true);
   win.setBounds({ x: nextX, y: nextY, width: targetSize.width, height: targetSize.height });
   emitWindowCollapsedState();
@@ -699,7 +708,10 @@ function collapseWindowToUtilityGrid(targetSize: { width: number; height: number
 
 function restoreWindowFromUtilityCollapse(): boolean {
   if (!win || win.isDestroyed()) return false;
-  if (!windowIsUtilityCollapsed) return true;
+  if (!windowIsUtilityCollapsed) {
+    applyNormalWindowConstraints(win);
+    return true;
+  }
 
   const collapsedBounds = win.getBounds();
   const preRestoreOpacity = win.getOpacity();
@@ -711,8 +723,7 @@ function restoreWindowFromUtilityCollapse(): boolean {
   const shouldKeepAlwaysOnTop = alwaysOnTopBeforeUtilityCollapse ?? false;
   alwaysOnTopBeforeUtilityCollapse = null;
 
-  win.setMinimumSize(APP_WINDOW_MIN_WIDTH_PX, APP_WINDOW_MIN_HEIGHT_PX);
-  win.setResizable(true);
+  applyNormalWindowConstraints(win);
   win.setAlwaysOnTop(shouldKeepAlwaysOnTop);
   if (restoreState) {
     if (typeof restoreState.x === 'number' && typeof restoreState.y === 'number') {
