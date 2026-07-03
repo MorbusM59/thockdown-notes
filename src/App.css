@@ -733,7 +733,11 @@ button.active,
   padding: 4px 0 0 8px;
 }
 
-.search-box input {
+.search-input-shell {
+  position: relative;
+}
+
+.search-box .search-input-field {
   width:          100%;
   padding:        10px;
   border:         1px solid var(--color-border-highlight);
@@ -747,8 +751,20 @@ button.active,
   box-sizing:     border-box;
 }
 
-.search-box input:focus    { border-color: var(--color-border-selected); }
-.search-box input:disabled { opacity: 0.75; cursor: not-allowed; }
+.search-box .search-input-field:focus    { border-color: var(--color-border-selected); }
+.search-box .search-input-field:disabled { opacity: 0.75; cursor: not-allowed; }
+
+.search-box .search-input-field.has-case-toggle {
+  padding-right: 40px;
+}
+
+.search-input-case-toggle {
+  position: absolute;
+  top:      5px;
+  right:    5px;
+  font-weight: 600;
+  border-radius: var(--border-radius-small);
+}
 
 /* 6d. View toggle & icon buttons */
 .view-toggle {
@@ -1064,27 +1080,6 @@ button.active,
   display:         flex;
   align-items:     center;
   justify-content: center;
-}
-
-/* Find options */
-.find-options-rail {
-  min-height:  20px;
-  height:      20px;
-  display:     flex;
-  align-items: center;
-  /* NOTE: asymmetric padding is intentional for rail alignment */
-  padding: 0 0 4px 8px;
-}
-
-.find-option-btn {
-  height:      20px;
-  min-width:   52px;
-  padding:     0 8px;
-  border-radius: 3px;
-  font-size:   10px;
-  font-weight: 500;
-  color:       var(--color-text-80);
-  line-height: 1;
 }
 
 /* 6h. Notes mode bar & quick actions */

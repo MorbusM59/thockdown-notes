@@ -10409,10 +10409,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           >
             <aside className="notes-sidebar" style={{ gridArea: 'sidebar' }}>
               <div className="search-box" aria-label="Search panel">
+                <div className="search-input-shell">
                 <input
+                  className={`search-input-field${isFindMode ? ' has-case-toggle' : ''}`}
                   ref={sidebarSearchInputRef}
                   type="text"
-                  placeholder={isFindMode ? 'Find in current note...' : 'Search notes or #tag...'}
+                  placeholder={isFindMode ? 'Find in current note...' : 'Filters notes by content or #tag...'}
                   value={isFindMode ? documentFindQuery : searchQuery}
                   onChange={(event) => {
                     const value = event.target.value
@@ -10430,6 +10432,19 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     }, 0)
                   }}
                 />
+                {isFindMode ? (
+                  <button
+                    type="button"
+                    className={`btn-icon search-input-case-toggle${isDocumentFindCaseSensitive ? ' is-active' : ''}`}
+                    aria-pressed={isDocumentFindCaseSensitive}
+                    title="Match letter case"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => setIsDocumentFindCaseSensitive((previous) => !previous)}
+                  >
+                    Aa
+                  </button>
+                ) : null}
+                </div>
               </div>
 
               <div className="view-toggle" role="tablist" aria-label="Note view modes">
@@ -10674,19 +10689,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 <div className="date-filter-rail date-filter-rail-placeholder" aria-hidden="true" />
               ) : null}
 
-              {isFindMode ? (
-                <div className="find-options-rail" aria-label="Find options">
-                  <button
-                    type="button"
-                    className={`find-option-btn${isDocumentFindCaseSensitive ? ' is-active' : ''}`}
-                    aria-pressed={isDocumentFindCaseSensitive}
-                    title="Match letter case"
-                    onClick={() => setIsDocumentFindCaseSensitive((previous) => !previous)}
-                  >
-                    Case
-                  </button>
-                </div>
-              ) : (sidebarMode === 'date' || sidebarMode === 'trash' || isSidebarTreeMode) ? (
+              {(sidebarMode === 'date' || sidebarMode === 'trash' || isSidebarTreeMode) ? (
                 <div className="date-filter-rail" aria-label="Date filters">
                   <div
                     className="date-filter-line"
