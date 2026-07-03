@@ -10903,11 +10903,11 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   <button
                     type="button"
                     className="toolbar-gear-btn btn-icon window-minimize-split-btn mini-mode"
-                    title="Enter mini mode"
-                    aria-label="Enter mini mode"
+                    title={windowIsCollapsed ? 'Exit mini mode' : 'Enter mini mode'}
+                    aria-label={windowIsCollapsed ? 'Exit mini mode' : 'Enter mini mode'}
                     onClick={handleWindowUtilityCollapseToggle}
                   >
-                    <span className="fa-solid fa-caret-up" aria-hidden="true" />
+                    <span className={`fa-solid ${windowIsCollapsed ? 'fa-arrows-left-right' : 'fa-caret-up'}`} aria-hidden="true" />
                   </button>
                   <button
                     type="button"
