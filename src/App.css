@@ -492,7 +492,6 @@ button.is-active,
 button.active,
 .ui-btn.is-active,
 .ui-btn.active {
-  background:   var(--btn-bg-active);
   border-color: var(--btn-border-active);
   box-shadow:   var(--box-shadow-inverted);
 }
