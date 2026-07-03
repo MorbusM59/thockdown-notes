@@ -1374,39 +1374,11 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
   const normalizedTextureMaterials = cloneTextureMaterials(source.textureMaterials as Partial<TextureMaterialsBySurface> | null | undefined)
   const normalizedHighlightColors = normalizeLoadoutHighlightColors(source.highlightColors)
 
-  const viewStyle = source.viewStyle === 'modern' || source.viewStyle === 'narrow' || source.viewStyle === 'cute' || source.viewStyle === 'print'
-    ? source.viewStyle
-    : 'modern'
-
   const darkMode = source.darkMode === 'none' || source.darkMode === 'mono' || source.darkMode === 'red' || source.darkMode === 'dusk' || source.darkMode === 'neon' || source.darkMode === 'matrix'
     ? source.darkMode
     : 'none'
 
-  const viewSpacing = source.viewSpacing === 'tight' || source.viewSpacing === 'compact' || source.viewSpacing === 'cozy' || source.viewSpacing === 'wide'
-    ? source.viewSpacing
-    : 'cozy'
-
-  const editorStyle = source.editorStyle === 'syne' || source.editorStyle === 'redhat'
-    ? source.editorStyle
-    : DEFAULT_EDITOR_STYLE
-
-  const editorFontSize = source.editorFontSize === 'xs' || source.editorFontSize === 's' || source.editorFontSize === 'm' || source.editorFontSize === 'l' || source.editorFontSize === 'xl'
-    ? source.editorFontSize
-    : DEFAULT_EDITOR_FONT_SIZE
-
-  const editorSpacing = source.editorSpacing === 'tight' || source.editorSpacing === 'compact' || source.editorSpacing === 'cozy' || source.editorSpacing === 'wide'
-    ? source.editorSpacing
-    : DEFAULT_EDITOR_SPACING
-
   return {
-    viewStyle,
-    viewFontSize: source.viewFontSize === 'xs' || source.viewFontSize === 's' || source.viewFontSize === 'm' || source.viewFontSize === 'l' || source.viewFontSize === 'xl'
-      ? source.viewFontSize
-      : 'm',
-    viewSpacing,
-    editorStyle,
-    editorFontSize,
-    editorSpacing,
     editorGlyphPaddingPx: clamp(
       Math.round(toFiniteNumber(source.editorGlyphPaddingPx, DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX)),
       EDITOR_GLYPH_PADDING_MIN_PX,
@@ -2452,12 +2424,6 @@ function App() {
 
   const captureUiLayoutLoadout = useCallback((): UiLayoutLoadout => {
     return {
-      viewStyle,
-      viewFontSize,
-      viewSpacing,
-      editorStyle,
-      editorFontSize,
-      editorSpacing,
       editorGlyphPaddingPx,
       audioKeyVolume,
       audioBassVolume,
@@ -2505,10 +2471,7 @@ function App() {
       textureMaterials: cloneTextureMaterials(textureMaterials),
     }
   }, [
-    editorFontSize,
     editorGlyphPaddingPx,
-    editorSpacing,
-    editorStyle,
     glazeSettings,
     darkMode,
     filterInvert,
@@ -2526,22 +2489,17 @@ function App() {
     audioKeyVolume,
     audioBassVolume,
     audioTrebleVolume,
+    audioReverbStrength,
+    audioReverbSpace,
+    typingSoundEnabled,
+    typingSoundSet,
     textureMaterials,
     highlightColors,
     editorTextColors,
-    viewFontSize,
-    viewSpacing,
-    viewStyle,
   ])
 
   const applyUiLayoutLoadout = useCallback((loadoutInput: unknown) => {
     const loadout = normalizeUiLoadoutForSignature(loadoutInput)
-    setViewStyle(loadout.viewStyle)
-    setViewFontSize(loadout.viewFontSize)
-    setViewSpacing(loadout.viewSpacing)
-    setEditorStyle(loadout.editorStyle)
-    setEditorFontSize(loadout.editorFontSize)
-    setEditorSpacing(loadout.editorSpacing)
     setEditorGlyphPaddingPx(
       clamp(
         Math.round(loadout.editorGlyphPaddingPx),
@@ -2557,6 +2515,8 @@ function App() {
     setAudioKeyVolume(clamp(loadout.audioKeyVolume, 0, 1))
     setAudioBassVolume(clamp(loadout.audioBassVolume, 0, 1))
     setAudioTrebleVolume(clamp(loadout.audioTrebleVolume, 0, 1))
+    setAudioReverbStrength(clamp(loadout.audioReverbStrength, 0, 1))
+    setAudioReverbSpace(clamp(loadout.audioReverbSpace, 0, 1))
     setTypingSoundEnabled(loadout.typingSoundEnabled)
     setTypingSoundSet(loadout.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
     setGlazeSettings(sanitizeGlazeSettings(loadout.glaze, DEFAULT_GLAZE_SETTINGS))

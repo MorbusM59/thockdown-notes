@@ -42,12 +42,6 @@ const TEXTURE_CACHE_DEFAULT_MAX_ENTRIES = 96;
 const TEXTURE_CACHE_DEFAULT_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 14;
 
 const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
-  viewStyle: 'modern',
-  viewFontSize: 'm',
-  viewSpacing: 'cozy',
-  editorStyle: 'syne',
-  editorFontSize: 'm',
-  editorSpacing: 'cozy',
   editorGlyphPaddingPx: 1,
   audioKeyVolume: 1,
   audioBassVolume: 0,
@@ -73,13 +67,20 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   highlightColors: {
     caret: 'rgba(120, 115, 112, 0.8)',
     search: 'rgba(255, 221, 105, 0.55)',
-    selection: 'rgba(199, 94, 0, 0.49)',
+    selectionEdit: 'rgba(199, 94, 0, 0.49)',
+    selectionRender: 'rgba(199, 94, 0, 0.49)',
+    textBase: '#000000DD',
+    textEmbossEdit: '#ffffff',
+    textEmbossRender: '#ffffff',
+    textEmbossUi: '#ffffff',
     background: '#e9e6e3',
     topBackground: 'rgba(196, 187, 182, 0.49)',
     bottomBackground: 'rgba(196, 187, 182, 0.49)',
     gridOutline: '#00000022',
     grid: '#f9f6f3',
     base: '#f9f6f4',
+    inputFields: '#ffffff',
+    appButtons: '#FFFFFFBB',
   },
   textureMaterials: DEFAULT_TEXTURE_MATERIALS,
   editorTextColors: {
@@ -337,41 +338,14 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     ? source.highlightColors as Partial<UiLayoutLoadout['highlightColors']>
     : {};
 
-  const viewStyle = source.viewStyle === 'modern' || source.viewStyle === 'narrow' || source.viewStyle === 'cute' || source.viewStyle === 'print'
-    ? source.viewStyle
-    : DEFAULT_UI_LAYOUT_LOADOUT.viewStyle;
-
-  const viewFontSize = source.viewFontSize === 'xs' || source.viewFontSize === 's' || source.viewFontSize === 'm' || source.viewFontSize === 'l' || source.viewFontSize === 'xl'
-    ? source.viewFontSize
-    : DEFAULT_UI_LAYOUT_LOADOUT.viewFontSize;
-
-  const viewSpacing = source.viewSpacing === 'tight' || source.viewSpacing === 'compact' || source.viewSpacing === 'cozy' || source.viewSpacing === 'wide'
-    ? source.viewSpacing
-    : DEFAULT_UI_LAYOUT_LOADOUT.viewSpacing;
-
-  const editorStyle = source.editorStyle === 'syne' || source.editorStyle === 'redhat'
-    ? source.editorStyle
-    : DEFAULT_UI_LAYOUT_LOADOUT.editorStyle;
-
-  const editorFontSize = source.editorFontSize === 'xs' || source.editorFontSize === 's' || source.editorFontSize === 'm' || source.editorFontSize === 'l' || source.editorFontSize === 'xl'
-    ? source.editorFontSize
-    : DEFAULT_UI_LAYOUT_LOADOUT.editorFontSize;
-
-  const editorSpacing = source.editorSpacing === 'tight' || source.editorSpacing === 'compact' || source.editorSpacing === 'cozy' || source.editorSpacing === 'wide'
-    ? source.editorSpacing
-    : DEFAULT_UI_LAYOUT_LOADOUT.editorSpacing;
-
   const darkMode = source.darkMode === 'none' || source.darkMode === 'mono' || source.darkMode === 'red' || source.darkMode === 'dusk' || source.darkMode === 'neon' || source.darkMode === 'matrix'
     ? source.darkMode
     : DEFAULT_UI_LAYOUT_LOADOUT.darkMode;
 
+  const legacySelection = sanitizeString((highlights as Record<string, unknown>).selection, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.selectionEdit);
+  const legacyTextEmboss = sanitizeString((highlights as Record<string, unknown>).textEmboss, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.textEmbossUi);
+
   return {
-    viewStyle,
-    viewFontSize,
-    viewSpacing,
-    editorStyle,
-    editorFontSize,
-    editorSpacing,
     editorGlyphPaddingPx: clampInteger(source.editorGlyphPaddingPx, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.editorGlyphPaddingPx),
     audioKeyVolume: clampNumber(source.audioKeyVolume, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.audioKeyVolume),
     audioBassVolume: clampNumber(source.audioBassVolume, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.audioBassVolume),
@@ -399,13 +373,20 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     highlightColors: {
       caret: sanitizeString(highlights.caret, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.caret),
       search: sanitizeString(highlights.search, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.search),
-      selection: sanitizeString(highlights.selection, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.selection),
+      selectionEdit: sanitizeString(highlights.selectionEdit, legacySelection),
+      selectionRender: sanitizeString(highlights.selectionRender, legacySelection),
+      textBase: sanitizeString(highlights.textBase, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.textBase),
+      textEmbossEdit: sanitizeString(highlights.textEmbossEdit, legacyTextEmboss),
+      textEmbossRender: sanitizeString(highlights.textEmbossRender, legacyTextEmboss),
+      textEmbossUi: sanitizeString(highlights.textEmbossUi, legacyTextEmboss),
       background: sanitizeString(highlights.background, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.background),
       topBackground: sanitizeString(highlights.topBackground, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.topBackground),
       bottomBackground: sanitizeString(highlights.bottomBackground, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.bottomBackground),
       gridOutline: sanitizeString(highlights.gridOutline, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.gridOutline),
       grid: sanitizeString(highlights.grid, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.grid),
       base: sanitizeString(highlights.base, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.base),
+      inputFields: sanitizeString(highlights.inputFields, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.inputFields),
+      appButtons: sanitizeString(highlights.appButtons, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.appButtons),
     },
     textureMaterials: normalizeTextureMaterials(source.textureMaterials),
     editorTextColors: {
@@ -425,8 +406,7 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
 
 // Ordered list of scalar UiLayoutLoadout keys used for diff lines.
 const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
-  'viewStyle', 'viewFontSize', 'viewSpacing',
-  'editorStyle', 'editorFontSize', 'editorSpacing', 'editorGlyphPaddingPx',
+  'editorGlyphPaddingPx',
   'audioKeyVolume', 'audioBassVolume', 'audioTrebleVolume', 'audioReverbStrength', 'audioReverbSpace',
   'typingSoundEnabled', 'typingSoundSet',
   'renderScrollDynamic', 'renderScrollResponsiveness', 'renderScrollTotalTimeSec',

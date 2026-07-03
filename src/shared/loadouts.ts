@@ -13,12 +13,6 @@ export const LOADOUT_CHANNELS = {
 } as const;
 
 export type UiLayoutLoadout = {
-  viewStyle: 'modern' | 'narrow' | 'cute' | 'xkcd' | 'print';
-  viewFontSize: 'xs' | 's' | 'm' | 'l' | 'xl';
-  viewSpacing: 'tight' | 'compact' | 'cozy' | 'wide';
-  editorStyle: 'syne' | 'redhat';
-  editorFontSize: 'xs' | 's' | 'm' | 'l' | 'xl';
-  editorSpacing: 'tight' | 'compact' | 'cozy' | 'wide';
   editorGlyphPaddingPx: number;
   audioKeyVolume: number;
   audioBassVolume: number;
