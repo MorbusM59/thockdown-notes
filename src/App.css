@@ -1,4 +1,4 @@
-/* =============================================================================
+﻿/* =============================================================================
    App.css — measly-notes
    =============================================================================
 
@@ -781,10 +781,49 @@ button.active,
   font-size: var(--btn-icon-size);
 }
 
-.notes-sidebar .view-toggle .icon-btn.btn-date     { background-image: url('/assets/buttons/latest.png');   }
-.notes-sidebar .view-toggle .icon-btn.btn-category  { background-image: url('/assets/buttons/active.png');   }
-.notes-sidebar .view-toggle .icon-btn.btn-archived  { background-image: url('/assets/buttons/archived.png'); }
-.notes-sidebar .view-toggle .icon-btn.btn-deleted   { background-image: url('/assets/buttons/deleted.png');  }
+.notes-sidebar .view-toggle .icon-btn.btn-date,
+.notes-sidebar .view-toggle .icon-btn.btn-category,
+.notes-sidebar .view-toggle .icon-btn.btn-archived,
+.notes-sidebar .view-toggle .icon-btn.btn-deleted {
+  background-image: none;
+}
+
+.notes-sidebar .view-toggle .icon-btn.btn-date::before,
+.notes-sidebar .view-toggle .icon-btn.btn-category::before,
+.notes-sidebar .view-toggle .icon-btn.btn-archived::before,
+.notes-sidebar .view-toggle .icon-btn.btn-deleted::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  pointer-events: none;
+  background-color: var(--color-text-base);
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+}
+
+.notes-sidebar .view-toggle .icon-btn.btn-date::before {
+  -webkit-mask-image: url('/assets/buttons/latest.png');
+  mask-image: url('/assets/buttons/latest.png');
+}
+
+.notes-sidebar .view-toggle .icon-btn.btn-category::before {
+  -webkit-mask-image: url('/assets/buttons/active.png');
+  mask-image: url('/assets/buttons/active.png');
+}
+
+.notes-sidebar .view-toggle .icon-btn.btn-archived::before {
+  -webkit-mask-image: url('/assets/buttons/archived.png');
+  mask-image: url('/assets/buttons/archived.png');
+}
+
+.notes-sidebar .view-toggle .icon-btn.btn-deleted::before {
+  -webkit-mask-image: url('/assets/buttons/deleted.png');
+  mask-image: url('/assets/buttons/deleted.png');
+}
 
 .notes-sidebar .view-toggle .icon-btn.btn-find,
 .notes-sidebar .view-toggle .icon-btn.btn-options {
