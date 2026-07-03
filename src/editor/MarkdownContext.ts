@@ -388,6 +388,7 @@ type ParsedLineStructure = {
   listPrefix: string | null
   listKind: MarkdownListKind
   unorderedMarker: '-' | '*' | '+' | null
+  checklistPrefix: string | null
   listNumber: number | null
   listDelimiter: '.' | ')' | null
   contentAfterPrefixes: string
@@ -414,6 +415,10 @@ function parseLineStructure(lineText: string): ParsedLineStructure {
 
   const unorderedMatch = remainder.match(/^([-*+])\s+/)
   if (unorderedMatch) {
+    const afterListPrefix = remainder.slice(unorderedMatch[0].length)
+    const checklistMatch = afterListPrefix.match(/^(\[ \])\s+/)
+    const checklistPrefix = checklistMatch ? `${checklistMatch[1]} ` : null
+
     return {
       leadingSpaces,
       quotePrefix,
@@ -421,9 +426,12 @@ function parseLineStructure(lineText: string): ParsedLineStructure {
       listPrefix: unorderedMatch[0],
       listKind: 'unordered',
       unorderedMarker: unorderedMatch[1] as '-' | '*' | '+',
+      checklistPrefix,
       listNumber: null,
       listDelimiter: null,
-      contentAfterPrefixes: remainder.slice(unorderedMatch[0].length),
+      contentAfterPrefixes: checklistMatch
+        ? afterListPrefix.slice(checklistMatch[0].length)
+        : afterListPrefix,
     }
   }
 
@@ -436,6 +444,7 @@ function parseLineStructure(lineText: string): ParsedLineStructure {
       listPrefix: orderedMatch[0],
       listKind: 'ordered',
       unorderedMarker: null,
+      checklistPrefix: null,
       listNumber: Number.parseInt(orderedMatch[1], 10),
       listDelimiter: orderedMatch[2] as '.' | ')',
       contentAfterPrefixes: remainder.slice(orderedMatch[0].length),
@@ -449,6 +458,7 @@ function parseLineStructure(lineText: string): ParsedLineStructure {
     listPrefix: null,
     listKind: null,
     unorderedMarker: null,
+    checklistPrefix: null,
     listNumber: null,
     listDelimiter: null,
     contentAfterPrefixes: `${postQuoteIndent}${remainder}`,
@@ -496,7 +506,8 @@ export function applyMarkdownEnter(
 
   if (lineStructure.listKind === 'unordered') {
     const marker = lineStructure.unorderedMarker ?? '-'
-    inserted = `\n${basePrefix}${marker} `
+    const checklistPrefix = lineStructure.checklistPrefix ?? ''
+    inserted = `\n${basePrefix}${marker} ${checklistPrefix}`
   } else if (
     lineStructure.listKind === 'ordered' &&
     lineStructure.listNumber !== null &&

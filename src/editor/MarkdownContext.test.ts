@@ -153,6 +153,16 @@ describe('applyMarkdownEnter', () => {
     expect(result?.text).toBe('* item\n* ')
   })
 
+  it('continues checklist items with an unchecked marker', () => {
+    const text = '- [ ] task'
+    const selection = collapsedSelection(text.length)
+
+    const result = applyMarkdownEnter(text, selection)
+
+    expect(result).not.toBeNull()
+    expect(result?.text).toBe('- [ ] task\n- [ ] ')
+  })
+
   it('continues ordered list item with incremented number', () => {
     const text = '3. item'
     const selection = collapsedSelection(text.length)
@@ -175,6 +185,18 @@ describe('applyMarkdownEnter', () => {
 
   it('exits list continuation on empty list item', () => {
     const text = '- '
+    const selection = collapsedSelection(text.length)
+
+    const result = applyMarkdownEnter(text, selection)
+
+    expect(result).not.toBeNull()
+    expect(result?.text).toBe('')
+    expect(result?.selection.anchor).toBe(0)
+    expect(result?.selection.focus).toBe(0)
+  })
+
+  it('exits list continuation on empty checklist item', () => {
+    const text = '- [ ] '
     const selection = collapsedSelection(text.length)
 
     const result = applyMarkdownEnter(text, selection)
@@ -251,13 +273,16 @@ describe('applyMarkdownEnter', () => {
     expect(result?.selection.focus).toBe(0)
   })
 
-  it('returns null when no markdown-aware continuation applies', () => {
+  it('inserts a plain newline when no markdown-aware continuation applies', () => {
     const text = 'plain line'
     const selection = collapsedSelection(text.length)
 
     const result = applyMarkdownEnter(text, selection)
 
-    expect(result).toBeNull()
+    expect(result).not.toBeNull()
+    expect(result?.text).toBe('plain line\n')
+    expect(result?.selection.anchor).toBe(result?.text.length)
+    expect(result?.selection.focus).toBe(result?.text.length)
   })
 
   it('continues leading indentation on plain indented lines', () => {

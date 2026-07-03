@@ -1924,6 +1924,10 @@ color:           var(--color-text-80);
   grid-template-columns: repeat(5, var(--color-grid-cell));
 }
 
+.options-row-grid-edit-markdown {
+  grid-template-columns: repeat(6, var(--color-grid-cell));
+}
+
 .options-hsva-grid {
   grid-template-columns: repeat(3, var(--color-grid-cell));
   grid-template-rows:    repeat(2, var(--color-grid-cell));

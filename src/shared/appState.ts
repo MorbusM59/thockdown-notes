@@ -74,6 +74,12 @@ export interface PersistedMenuState {
   highlightBaseColor?: string;
   highlightInputFieldsColor?: string;
   highlightAppButtonsColor?: string;
+  highlightMarkdownHeadlineColor?: string;
+  highlightMarkdownListColor?: string;
+  highlightMarkdownBlockquoteColor?: string;
+  highlightMarkdownCodeColor?: string;
+  highlightMarkdownCheckedColor?: string;
+  highlightMarkdownUncheckedColor?: string;
   textureEnabled?: boolean;
   textureActiveSurface?: TextureSurfaceKey;
   textureMaterials?: TextureMaterialsBySurface;

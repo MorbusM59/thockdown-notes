@@ -52,6 +52,12 @@ export type UiLayoutLoadout = {
     base: string;
     inputFields: string;
     appButtons: string;
+    markdownHeadline: string;
+    markdownList: string;
+    markdownBlockquote: string;
+    markdownCode: string;
+    markdownChecked: string;
+    markdownUnchecked: string;
   };
   editorTextColors: {
     editorEditText: string;

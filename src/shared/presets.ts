@@ -55,6 +55,12 @@ const NEUTRAL_BASE: UiLayoutLoadout = {
     base: '#f9f6f4',
     inputFields: '#ffffff',
     appButtons: '#FFFFFFBB',
+    markdownHeadline: 'rgba(255, 0, 255, 1)',
+    markdownList: 'rgba(0, 255, 255, 1)',
+    markdownBlockquote: 'rgba(255, 255, 0, 1)',
+    markdownCode: 'rgba(255, 0, 127, 1)',
+    markdownChecked: 'rgba(0, 255, 0, 1)',
+    markdownUnchecked: 'rgba(255, 0, 0, 1)',
   },
   editorTextColors: {
     editorEditText: '#000000DD',

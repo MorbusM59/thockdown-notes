@@ -53,6 +53,18 @@ describe('resolveMarkdownEnterTransform', () => {
     expect(result?.selection.focus).toBe(result?.text.length)
   })
 
+  it('continues markdown checklist items for plain Enter', () => {
+    const text = '- [ ] task'
+    const selection = collapsedSelection(text.length)
+
+    const result = resolveMarkdownEnterTransform(buildEvent(text, selection))
+
+    expect(result).not.toBeNull()
+    expect(result?.text).toBe('- [ ] task\n- [ ] ')
+    expect(result?.selection.anchor).toBe(result?.text.length)
+    expect(result?.selection.focus).toBe(result?.text.length)
+  })
+
   it('continues leading indentation on plain indented lines', () => {
     const text = '   indented line'
     const selection = collapsedSelection(text.length)
@@ -99,12 +111,15 @@ describe('resolveMarkdownEnterTransform', () => {
     expect(result?.text).toBe('     - item\n     - ')
   })
 
-  it('returns null when no markdown-aware continuation applies', () => {
+  it('inserts a plain newline when no markdown-aware continuation applies', () => {
     const text = 'plain line'
     const selection = collapsedSelection(text.length)
 
     const result = resolveMarkdownEnterTransform(buildEvent(text, selection))
 
-    expect(result).toBeNull()
+    expect(result).not.toBeNull()
+    expect(result?.text).toBe('plain line\n')
+    expect(result?.selection.anchor).toBe(result?.text.length)
+    expect(result?.selection.focus).toBe(result?.text.length)
   })
 })

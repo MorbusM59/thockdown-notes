@@ -147,6 +147,12 @@ const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   base: '#f9f6f4',
   inputFields: '#ffffff',
   appButtons: '#FFFFFFBB',
+  markdownHeadline: 'rgba(255, 0, 255, 1)',
+  markdownList: 'rgba(0, 255, 255, 1)',
+  markdownBlockquote: 'rgba(255, 255, 0, 1)',
+  markdownCode: 'rgba(255, 0, 127, 1)',
+  markdownChecked: 'rgba(0, 255, 0, 1)',
+  markdownUnchecked: 'rgba(255, 0, 0, 1)',
 }
 
 const DEFAULT_BASE_PALETTE_COLOR = '#f9f6f4'
@@ -164,6 +170,14 @@ const DEFAULT_EDITOR_TEXT_COLORS: Record<EditorTextColorTargetKey, string> = {
 }
 
 const BOX_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['background', 'grid', 'gridOutline', 'topBackground', 'bottomBackground']
+const MARKDOWN_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = [
+  'markdownHeadline',
+  'markdownList',
+  'markdownBlockquote',
+  'markdownCode',
+  'markdownChecked',
+  'markdownUnchecked',
+]
 
 const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   caret: 'Caret Color',
@@ -182,6 +196,12 @@ const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   base: 'App Base Background',
   inputFields: 'App (Input) Fields',
   appButtons: 'App Buttons',
+  markdownHeadline: 'Markdown heading color',
+  markdownList: 'Markdown list color',
+  markdownBlockquote: 'Markdown blockquote color',
+  markdownCode: 'Markdown code fence color',
+  markdownChecked: 'Markdown checked task color',
+  markdownUnchecked: 'Markdown unchecked task color',
 }
 
 const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
@@ -201,6 +221,12 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   base: 'fa-solid fa-display',
   inputFields: 'fa-solid fa-pen-to-square',
   appButtons: 'fa-solid fa-hockey-puck',
+  markdownHeadline: 'fa-solid fa-heading',
+  markdownList: 'fa-solid fa-list-ul',
+  markdownBlockquote: 'fa-solid fa-quote-left',
+  markdownCode: 'fa-solid fa-code',
+  markdownChecked: 'fa-solid fa-square-check',
+  markdownUnchecked: 'fa-regular fa-square',
 }
 
 // Icons for the 5 factory presets per mode, indexed by abs(id) - 1 (0-based).
@@ -275,6 +301,12 @@ type HighlightColorKey =
   | 'base'
   | 'inputFields'
   | 'appButtons'
+  | 'markdownHeadline'
+  | 'markdownList'
+  | 'markdownBlockquote'
+  | 'markdownCode'
+  | 'markdownChecked'
+  | 'markdownUnchecked'
 
 type EditorTextColorTargetKey = 'editorEditText' | 'editorRenderText'
 
@@ -1331,6 +1363,12 @@ function normalizeLoadoutHighlightColors(source: unknown): HighlightColors {
     base: typeof record.base === 'string' ? record.base : DEFAULT_HIGHLIGHT_COLORS.base,
     inputFields: typeof record.inputFields === 'string' ? record.inputFields : DEFAULT_HIGHLIGHT_COLORS.inputFields,
     appButtons: typeof record.appButtons === 'string' ? record.appButtons : DEFAULT_HIGHLIGHT_COLORS.appButtons,
+    markdownHeadline: typeof record.markdownHeadline === 'string' ? record.markdownHeadline : DEFAULT_HIGHLIGHT_COLORS.markdownHeadline,
+    markdownList: typeof record.markdownList === 'string' ? record.markdownList : DEFAULT_HIGHLIGHT_COLORS.markdownList,
+    markdownBlockquote: typeof record.markdownBlockquote === 'string' ? record.markdownBlockquote : DEFAULT_HIGHLIGHT_COLORS.markdownBlockquote,
+    markdownCode: typeof record.markdownCode === 'string' ? record.markdownCode : DEFAULT_HIGHLIGHT_COLORS.markdownCode,
+    markdownChecked: typeof record.markdownChecked === 'string' ? record.markdownChecked : DEFAULT_HIGHLIGHT_COLORS.markdownChecked,
+    markdownUnchecked: typeof record.markdownUnchecked === 'string' ? record.markdownUnchecked : DEFAULT_HIGHLIGHT_COLORS.markdownUnchecked,
   }
 }
 
@@ -2479,6 +2517,12 @@ function App() {
         base: highlightColors.base,
         inputFields: highlightColors.inputFields,
         appButtons: highlightColors.appButtons,
+        markdownHeadline: highlightColors.markdownHeadline,
+        markdownList: highlightColors.markdownList,
+        markdownBlockquote: highlightColors.markdownBlockquote,
+        markdownCode: highlightColors.markdownCode,
+        markdownChecked: highlightColors.markdownChecked,
+        markdownUnchecked: highlightColors.markdownUnchecked,
       },
       editorTextColors: {
         editorEditText: editorTextColors.editorEditText,
@@ -2563,6 +2607,12 @@ function App() {
       base: loadout.highlightColors.base,
       inputFields: loadout.highlightColors.inputFields,
       appButtons: loadout.highlightColors.appButtons,
+      markdownHeadline: loadout.highlightColors.markdownHeadline,
+      markdownList: loadout.highlightColors.markdownList,
+      markdownBlockquote: loadout.highlightColors.markdownBlockquote,
+      markdownCode: loadout.highlightColors.markdownCode,
+      markdownChecked: loadout.highlightColors.markdownChecked,
+      markdownUnchecked: loadout.highlightColors.markdownUnchecked,
     })
     setEditorTextColors({
       editorEditText: loadout.editorTextColors.editorEditText,
@@ -3378,6 +3428,12 @@ function App() {
       highlightBaseColor: highlightColors.base,
       highlightInputFieldsColor: highlightColors.inputFields,
       highlightAppButtonsColor: highlightColors.appButtons,
+      highlightMarkdownHeadlineColor: highlightColors.markdownHeadline,
+      highlightMarkdownListColor: highlightColors.markdownList,
+      highlightMarkdownBlockquoteColor: highlightColors.markdownBlockquote,
+      highlightMarkdownCodeColor: highlightColors.markdownCode,
+      highlightMarkdownCheckedColor: highlightColors.markdownChecked,
+      highlightMarkdownUncheckedColor: highlightColors.markdownUnchecked,
       textureEnabled,
       editorEditTextColor: editorTextColors.editorEditText,
       editorRenderTextColor: editorTextColors.editorRenderText,
@@ -3886,6 +3942,12 @@ function App() {
       '--texture-sidebar-content-tint': sidebarTextureTintCss,
       '--texture-editor-edit-tint': editorEditTextureTintCss,
       '--texture-editor-render-tint': editorRenderTextureTintCss,
+      '--markdown-headline-color': highlightColors.markdownHeadline,
+      '--markdown-list-color': highlightColors.markdownList,
+      '--markdown-blockquote-color': highlightColors.markdownBlockquote,
+      '--markdown-code-color': highlightColors.markdownCode,
+      '--markdown-checked-color': highlightColors.markdownChecked,
+      '--markdown-unchecked-color': highlightColors.markdownUnchecked,
     }
     return style
   }, [
@@ -5979,6 +6041,12 @@ ${markdownHtml}
               base: appState.menu.highlightBaseColor ?? DEFAULT_HIGHLIGHT_COLORS.base,
               inputFields: appState.menu.highlightInputFieldsColor ?? DEFAULT_HIGHLIGHT_COLORS.inputFields,
               appButtons: appState.menu.highlightAppButtonsColor ?? DEFAULT_HIGHLIGHT_COLORS.appButtons,
+              markdownHeadline: appState.menu.highlightMarkdownHeadlineColor ?? DEFAULT_HIGHLIGHT_COLORS.markdownHeadline,
+              markdownList: appState.menu.highlightMarkdownListColor ?? DEFAULT_HIGHLIGHT_COLORS.markdownList,
+              markdownBlockquote: appState.menu.highlightMarkdownBlockquoteColor ?? DEFAULT_HIGHLIGHT_COLORS.markdownBlockquote,
+              markdownCode: appState.menu.highlightMarkdownCodeColor ?? DEFAULT_HIGHLIGHT_COLORS.markdownCode,
+              markdownChecked: appState.menu.highlightMarkdownCheckedColor ?? DEFAULT_HIGHLIGHT_COLORS.markdownChecked,
+              markdownUnchecked: appState.menu.highlightMarkdownUncheckedColor ?? DEFAULT_HIGHLIGHT_COLORS.markdownUnchecked,
             })
             setEditorTextColors({
               editorEditText: appState.menu.editorEditTextColor ?? DEFAULT_EDITOR_TEXT_COLORS.editorEditText,
@@ -9637,6 +9705,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <div className="sidebar-options-divider" aria-hidden="true" />
             <div className="options-color-grid options-element-grid options-row-grid options-row-grid-bottom" role="group" aria-label="Edit mode box colors">
               {BOX_HIGHLIGHT_COLOR_ORDER.map((key) => renderHighlightSwatchButton(key))}
+            </div>
+            <div className="sidebar-options-divider" aria-hidden="true" />
+            <div className="options-color-grid options-element-grid options-row-grid options-row-grid-edit-markdown" role="group" aria-label="Edit mode markdown colors">
+              {MARKDOWN_HIGHLIGHT_COLOR_ORDER.map((key) => renderHighlightSwatchButton(key))}
             </div>
           </>
         ) : null}

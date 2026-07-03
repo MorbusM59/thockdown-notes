@@ -255,6 +255,24 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
       typeof input?.highlightGridOutlineColor === 'string'
         ? input.highlightGridOutlineColor
         : (DEFAULT_APP_STATE.menu!.highlightGridOutlineColor ?? '#00000022'),
+    highlightMarkdownHeadlineColor: typeof input?.highlightMarkdownHeadlineColor === 'string'
+      ? input.highlightMarkdownHeadlineColor
+      : undefined,
+    highlightMarkdownListColor: typeof input?.highlightMarkdownListColor === 'string'
+      ? input.highlightMarkdownListColor
+      : undefined,
+    highlightMarkdownBlockquoteColor: typeof input?.highlightMarkdownBlockquoteColor === 'string'
+      ? input.highlightMarkdownBlockquoteColor
+      : undefined,
+    highlightMarkdownCodeColor: typeof input?.highlightMarkdownCodeColor === 'string'
+      ? input.highlightMarkdownCodeColor
+      : undefined,
+    highlightMarkdownCheckedColor: typeof input?.highlightMarkdownCheckedColor === 'string'
+      ? input.highlightMarkdownCheckedColor
+      : undefined,
+    highlightMarkdownUncheckedColor: typeof input?.highlightMarkdownUncheckedColor === 'string'
+      ? input.highlightMarkdownUncheckedColor
+      : undefined,
     textureEnabled: Boolean(input?.textureEnabled),
     glaze: sanitizeGlazeSettings(input?.glaze, DEFAULT_APP_STATE.menu!.glaze ?? DEFAULT_GLAZE_SETTINGS),
     textureActiveSurface: sanitizeTextureSurface(input?.textureActiveSurface),
