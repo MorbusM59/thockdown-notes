@@ -701,6 +701,8 @@ function restoreWindowFromUtilityCollapse(): boolean {
   if (!win || win.isDestroyed()) return false;
   if (!windowIsUtilityCollapsed) return true;
 
+  const collapsedBounds = win.getBounds();
+
   const restoreState = utilityCollapseRestoreState;
   windowIsUtilityCollapsed = false;
   utilityCollapseRestoreState = null;
@@ -713,9 +715,12 @@ function restoreWindowFromUtilityCollapse(): boolean {
   win.setAlwaysOnTop(shouldKeepAlwaysOnTop);
   if (restoreState) {
     if (typeof restoreState.x === 'number' && typeof restoreState.y === 'number') {
+      const collapsedTopRightX = collapsedBounds.x + collapsedBounds.width;
+      const restoredX = collapsedTopRightX - restoreState.width;
+      const restoredY = collapsedBounds.y;
       win.setBounds({
-        x: restoreState.x,
-        y: restoreState.y,
+        x: restoredX,
+        y: restoredY,
         width: restoreState.width,
         height: restoreState.height,
       });
