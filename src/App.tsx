@@ -10324,105 +10324,107 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               </div>
 
               <div className={`sidebar-scroll-frame${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}`}>
-                <div
-                  className={`sidebar-content${(sidebarMode === 'date' || sidebarMode === 'trash') ? ' is-paged-mode' : ''}${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}${isSidebarScrollbarMode && !isSidebarCustomScrollbarMode ? ' is-scrollbar-mode' : ''}`}
-                  ref={sidebarContentRef}
-                  onScroll={handleSidebarScroll}
-                >
-                  <div ref={sidebarTextureRef} className="sidebar-content-texture" />
-                  {(sidebarMode === 'date' || sidebarMode === 'trash') ? (
-                    <div
-                      className={`notes-list date-view${hasDateFilter ? ' is-filtered' : ''}`}
-                      role="listbox"
-                      aria-label="Note list"
-                    >
-                      {pagedVisibleNotes.map((note) => {
-                        const isActive = note.id === activeNoteId
-                        const isModified = isExternalNote(note) && getCurrentExternalNoteModifiedState(note)
-                        return (
-                          <NoteListItem
-                            key={note.id}
-                            note={note}
-                            isActive={isActive}
-                            isModified={isModified}
-                            onSelect={handleSelectNote}
-                            onArmedLeftClick={handleArmedNoteLeftClick}
-                            armedAction={armedNoteActionById.get(note.id) ?? null}
-                            onLeftPressStart={handleNoteLeftPressStart}
-                            onLeftPressEnd={handleNoteLeftPressEnd}
-                            onRightPressStart={handleNoteRightPressStart}
-                            onRightPressEnd={handleNoteRightPressEnd}
-                            onArmHoverLeave={handleNoteArmHoverLeave}
-                          />
-                        )
-                      })}
-                      {pagedVisibleNotes.length === 0 ? (
-                        <div className="notes-empty-state">
-                          {searchQuery.trim()
-                            ? 'No notes match the current search.'
-                            : 'No notes match the current date filters.'}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : isFindMode ? (
-                    <div
-                      className="notes-list find-view measly-custom-scrollbar"
-                      ref={setSidebarTreeScrollerEl}
-                    >
-                      {documentFindHits.map((hit, index) => (
-                        <button
-                          key={hit.id}
-                          type="button"
-                          className="find-hit-item"
-                          onClick={() => handleJumpToDocumentFindHit(hit)}
-                          onContextMenu={(event) => {
-                            event.preventDefault()
-                            replaceDocumentFindHit(hit)
-                          }}
-                          title={`Jump to occurrence ${index + 1}`}
-                        >
-                          <span className="find-hit-snippet">
-                            {hit.hasSnippetPrefixEllipsis ? '... ' : ''}
-                            {hit.snippetBefore}
-                            <span className="find-hit-match">{hit.snippetMatch}</span>
-                            {hit.snippetAfter}
-                            {hit.hasSnippetSuffixEllipsis ? ' ...' : ''}
-                          </span>
-                        </button>
-                      ))}
-                      {documentFindHits.length === 0 ? (
-                        <div className="notes-empty-state">
-                          {documentFindQuery.trim()
-                            ? 'No matches in the current note.'
-                            : 'Type in the search field to find text in the current note.'}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : sidebarMode === 'options' ? (
-                    renderSidebarOptionsContent()
-                  ) : (
-                    <div
-                      className={`notes-list tree-view measly-custom-scrollbar${hasDateFilter ? ' is-filtered' : ''}`}
-                      ref={setSidebarTreeScrollerEl}
-                    >
-                      <CategoryTreeView
-                        groups={sidebarMode === 'category' ? categoryTree : archiveTree}
-                        activeNoteId={activeNoteId}
-                        persistedCollapsedPrimary={sidebarMode === 'category' ? categoryCollapsedPrimary : archiveCollapsedPrimary}
-                        persistedCollapsedSecondary={sidebarMode === 'category' ? categoryCollapsedSecondary : archiveCollapsedSecondary}
-                        focusNoteRequestKey={sidebarMode === 'category' ? categoryFocusRequestKey : archiveFocusRequestKey}
-                        onCollapseChange={sidebarMode === 'category' ? handleCategoryCollapseChange : handleArchiveCollapseChange}
-                        onSelect={handleSelectNote}
-                        onArmedLeftClick={handleArmedNoteLeftClick}
-                        armedNoteActionById={armedNoteActionById}
-                        onLeftPressStart={handleNoteLeftPressStart}
-                        onLeftPressEnd={handleNoteLeftPressEnd}
-                        onNoteRightPressStart={handleNoteRightPressStart}
-                        onNoteRightPressEnd={handleNoteRightPressEnd}
-                        onNoteArmHoverLeave={handleNoteArmHoverLeave}
-                      />
-                    </div>
-                  )}
+                <div className="sidebar-wrapper">
+                  <div
+                    className={`sidebar-content${(sidebarMode === 'date' || sidebarMode === 'trash') ? ' is-paged-mode' : ''}${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}${isSidebarScrollbarMode && !isSidebarCustomScrollbarMode ? ' is-scrollbar-mode' : ''}`}
+                    ref={sidebarContentRef}
+                    onScroll={handleSidebarScroll}
+                  >
+                    <div ref={sidebarTextureRef} className="sidebar-content-texture" />
+                    {(sidebarMode === 'date' || sidebarMode === 'trash') ? (
+                      <div
+                        className={`notes-list date-view${hasDateFilter ? ' is-filtered' : ''}`}
+                        role="listbox"
+                        aria-label="Note list"
+                      >
+                        {pagedVisibleNotes.map((note) => {
+                          const isActive = note.id === activeNoteId
+                          const isModified = isExternalNote(note) && getCurrentExternalNoteModifiedState(note)
+                          return (
+                            <NoteListItem
+                              key={note.id}
+                              note={note}
+                              isActive={isActive}
+                              isModified={isModified}
+                              onSelect={handleSelectNote}
+                              onArmedLeftClick={handleArmedNoteLeftClick}
+                              armedAction={armedNoteActionById.get(note.id) ?? null}
+                              onLeftPressStart={handleNoteLeftPressStart}
+                              onLeftPressEnd={handleNoteLeftPressEnd}
+                              onRightPressStart={handleNoteRightPressStart}
+                              onRightPressEnd={handleNoteRightPressEnd}
+                              onArmHoverLeave={handleNoteArmHoverLeave}
+                            />
+                          )
+                        })}
+                        {pagedVisibleNotes.length === 0 ? (
+                          <div className="notes-empty-state">
+                            {searchQuery.trim()
+                              ? 'No notes match the current search.'
+                              : 'No notes match the current date filters.'}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : isFindMode ? (
+                      <div
+                        className="notes-list find-view measly-custom-scrollbar"
+                        ref={setSidebarTreeScrollerEl}
+                      >
+                        {documentFindHits.map((hit, index) => (
+                          <button
+                            key={hit.id}
+                            type="button"
+                            className="find-hit-item"
+                            onClick={() => handleJumpToDocumentFindHit(hit)}
+                            onContextMenu={(event) => {
+                              event.preventDefault()
+                              replaceDocumentFindHit(hit)
+                            }}
+                            title={`Jump to occurrence ${index + 1}`}
+                          >
+                            <span className="find-hit-snippet">
+                              {hit.hasSnippetPrefixEllipsis ? '... ' : ''}
+                              {hit.snippetBefore}
+                              <span className="find-hit-match">{hit.snippetMatch}</span>
+                              {hit.snippetAfter}
+                              {hit.hasSnippetSuffixEllipsis ? ' ...' : ''}
+                            </span>
+                          </button>
+                        ))}
+                        {documentFindHits.length === 0 ? (
+                          <div className="notes-empty-state">
+                            {documentFindQuery.trim()
+                              ? 'No matches in the current note.'
+                              : 'Type in the search field to find text in the current note.'}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : sidebarMode === 'options' ? (
+                      renderSidebarOptionsContent()
+                    ) : (
+                      <div
+                        className={`notes-list tree-view measly-custom-scrollbar${hasDateFilter ? ' is-filtered' : ''}`}
+                        ref={setSidebarTreeScrollerEl}
+                      >
+                        <CategoryTreeView
+                          groups={sidebarMode === 'category' ? categoryTree : archiveTree}
+                          activeNoteId={activeNoteId}
+                          persistedCollapsedPrimary={sidebarMode === 'category' ? categoryCollapsedPrimary : archiveCollapsedPrimary}
+                          persistedCollapsedSecondary={sidebarMode === 'category' ? categoryCollapsedSecondary : archiveCollapsedSecondary}
+                          focusNoteRequestKey={sidebarMode === 'category' ? categoryFocusRequestKey : archiveFocusRequestKey}
+                          onCollapseChange={sidebarMode === 'category' ? handleCategoryCollapseChange : handleArchiveCollapseChange}
+                          onSelect={handleSelectNote}
+                          onArmedLeftClick={handleArmedNoteLeftClick}
+                          armedNoteActionById={armedNoteActionById}
+                          onLeftPressStart={handleNoteLeftPressStart}
+                          onLeftPressEnd={handleNoteLeftPressEnd}
+                          onNoteRightPressStart={handleNoteRightPressStart}
+                          onNoteRightPressEnd={handleNoteRightPressEnd}
+                          onNoteArmHoverLeave={handleNoteArmHoverLeave}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {isSidebarScrollbarMode ? (
