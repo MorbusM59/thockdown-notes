@@ -551,6 +551,18 @@ button.active,
   min-height: 420px;
 }
 
+.app-grid.is-window-collapsed {
+  grid-template-columns: 1fr !important;
+  grid-template-rows: 1fr;
+  grid-template-areas: 'utility';
+  min-width: 0;
+  min-height: 0;
+}
+
+.app-grid.is-window-collapsed > :not(.utility-grid) {
+  display: none !important;
+}
+
 /* Texture overlay — shared pattern used across app-grid, sidebar-content, editor-stage */
 .app-grid::before {
   content:          '';
@@ -2303,6 +2315,23 @@ body.hsva-dragging * {
   border-bottom:    1px solid var(--color-border-highlight);
   box-shadow:       var(--box-shadow-inverted);
   background:       var(--color-input-backdrop);
+}
+
+.utility-grid.is-collapsed {
+  border-radius: var(--border-radius-regular);
+  border-left: 1px solid var(--color-border-highlight);
+  align-content: start;
+}
+
+.utility-grid.is-collapsed .window-controls {
+  padding-left: 7px;
+  padding-right: 9px;
+  margin-bottom: 0;
+}
+
+.utility-grid.is-collapsed .audio-controls {
+  padding-left: 7px;
+  padding-right: 9px;
 }
 
 .utility-settings-panel {

@@ -84,6 +84,8 @@ const windowControls = {
   minimize: () => ipcRenderer.send('window-control', 'minimize'),
   toggleMaximize: () => ipcRenderer.send('window-control', 'toggle-maximize'),
   close: () => ipcRenderer.send('window-control', 'close'),
+  toggleUtilityCollapse: (size: { width: number; height: number }) =>
+    ipcRenderer.invoke('window-control:toggle-utility-collapse', size),
   onMaximizeStateChange: (callback: (isMaximized: boolean) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, value: boolean) => {
       callback(value)
@@ -91,6 +93,15 @@ const windowControls = {
     ipcRenderer.on('window-maximize-state', listener)
     return () => {
       ipcRenderer.off('window-maximize-state', listener)
+    }
+  },
+  onCollapsedStateChange: (callback: (isCollapsed: boolean) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, value: boolean) => {
+      callback(value)
+    }
+    ipcRenderer.on('window-collapsed-state', listener)
+    return () => {
+      ipcRenderer.off('window-collapsed-state', listener)
     }
   },
 }

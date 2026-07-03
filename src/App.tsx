@@ -1970,6 +1970,7 @@ async function hashNormalizedText(text: string): Promise<string> {
 function App() {
   const adapterRef = useRef<EditorAdapter | null>(null)
   const appShellRef = useRef<HTMLDivElement | null>(null)
+  const utilityGridRef = useRef<HTMLElement | null>(null)
   const sidebarContentRef = useRef<HTMLDivElement | null>(null)
   const optionsContentRef = useRef<HTMLDivElement | null>(null)
   const editorStageRef = useRef<HTMLDivElement | null>(null)
@@ -1998,6 +1999,7 @@ function App() {
   const [debuggingEnabled, setDebuggingEnabled] = useState(false)
   const debugNoteIdRef = useRef<string | null>(null)
   const [windowIsMaximized, setWindowIsMaximized] = useState(false)
+  const [windowIsCollapsed, setWindowIsCollapsed] = useState(false)
   const [viewStyle, setViewStyle] = useState<ViewStyleKey>('modern')
   const [viewFontSize, setViewFontSize] = useState<ViewSizeKey>('m')
   const [viewSpacing, setViewSpacing] = useState<ViewSpacingKey>('cozy')
@@ -3667,6 +3669,33 @@ function App() {
     ;(window as any).windowControls?.minimize?.()
   }, [])
 
+  const handleWindowUtilityCollapseToggle = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+
+    const utilityEl = utilityGridRef.current
+    const utilityRect = utilityEl?.getBoundingClientRect()
+    const utilityStyles = utilityEl ? window.getComputedStyle(utilityEl) : null
+    const utilityBorderY = utilityStyles
+      ? (Number.parseFloat(utilityStyles.borderTopWidth || '0') + Number.parseFloat(utilityStyles.borderBottomWidth || '0'))
+      : 0
+    const utilityPaddingY = utilityStyles
+      ? (Number.parseFloat(utilityStyles.paddingTop || '0') + Number.parseFloat(utilityStyles.paddingBottom || '0'))
+      : 0
+
+    const windowControlsEl = utilityEl?.querySelector<HTMLElement>('.window-controls')
+    const audioControlsEl = utilityEl?.querySelector<HTMLElement>('.audio-controls')
+
+    const controlsHeight = (windowControlsEl?.offsetHeight ?? 0) + (audioControlsEl?.offsetHeight ?? 0)
+    const intrinsicUtilityHeight = controlsHeight + utilityBorderY + utilityPaddingY
+
+    // Collapsed bounds are anchored to top-right in the main process. Subtract
+    // measured residuals so left/bottom control margins match top/right.
+    const targetWidth = Math.max(96, Math.round((utilityRect?.width ?? UTILITY_WIDTH_PX) - 1))
+    const targetHeight = Math.max(72, Math.round((intrinsicUtilityHeight || utilityRect?.height || 160) - 2))
+
+    void window.windowControls?.toggleUtilityCollapse?.({ width: targetWidth, height: targetHeight })
+  }, [])
+
   const handleWindowToggleMaximize = useCallback(() => {
     ;(window as any).windowControls?.toggleMaximize?.()
   }, [])
@@ -3678,6 +3707,13 @@ function App() {
   useEffect(() => {
     const unsubscribe = window.windowControls?.onMaximizeStateChange?.((isMaximized) => {
       setWindowIsMaximized(isMaximized)
+    })
+    return () => unsubscribe?.()
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = window.windowControls?.onCollapsedStateChange?.((isCollapsed) => {
+      setWindowIsCollapsed(isCollapsed)
     })
     return () => unsubscribe?.()
   }, [])
@@ -10425,7 +10461,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         </div>
         <div className="app-sheen">
           <div
-            className={`app-shell app-grid${filterInvert > 0.5 ? ' shadow-flip' : ''}`}
+            className={`app-shell app-grid${filterInvert > 0.5 ? ' shadow-flip' : ''}${windowIsCollapsed ? ' is-window-collapsed' : ''}`}
             ref={appShellRef}
             style={appShellStyle}
           >
@@ -10863,7 +10899,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
             <div className="grid-divider divider-right" style={{ gridArea: 'd-right' }} aria-hidden="true" />
 
-            <section className="utility-grid" style={{ gridArea: 'utility' }} aria-label="Utility grid">
+            <section
+              className={`utility-grid${windowIsCollapsed ? ' is-collapsed' : ''}`}
+              ref={utilityGridRef}
+              style={{ gridArea: 'utility' }}
+              aria-label="Utility grid"
+            >
               <div className="window-controls" aria-label="Window controls">
                 <button
                   type="button"
@@ -10871,6 +10912,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   title="Minimize"
                   aria-label="Minimize window"
                   onClick={handleWindowMinimize}
+                  onContextMenu={handleWindowUtilityCollapseToggle}
                 >
                   <span className="fa-solid fa-caret-down" aria-hidden="true" />
                 </button>

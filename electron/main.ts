@@ -51,6 +51,13 @@ let noteLifecycleService: NoteLifecycleService | null = null;
 let stateService: StateService | null = null;
 let databaseService: DatabaseService | null = null;
 let pendingExternalFilePaths: string[] = [];
+let windowIsUtilityCollapsed = false;
+let utilityCollapseRestoreState: WindowState | null = null;
+
+const UTILITY_COLLAPSE_MIN_WIDTH_PX = 96;
+const UTILITY_COLLAPSE_MIN_HEIGHT_PX = 72;
+const APP_WINDOW_MIN_WIDTH_PX = 840;
+const APP_WINDOW_MIN_HEIGHT_PX = 525;
 
 const OPENABLE_EXTENSIONS = new Set(['.md', '.txt']);
 
@@ -318,6 +325,9 @@ function registerIpcHandlers() {
         win.minimize()
         break
       case 'toggle-maximize':
+        if (windowIsUtilityCollapsed) {
+          restoreWindowFromUtilityCollapse()
+        }
         if (win.isMaximized()) {
           win.unmaximize()
         } else {
@@ -330,6 +340,17 @@ function registerIpcHandlers() {
       default:
         break
     }
+  })
+
+  ipcMain.handle('window-control:toggle-utility-collapse', (_event, payload: unknown) => {
+    if (!win || win.isDestroyed()) return false
+
+    if (windowIsUtilityCollapsed) {
+      return restoreWindowFromUtilityCollapse()
+    }
+
+    const targetSize = resolveUtilityCollapseSize(payload)
+    return collapseWindowToUtilityGrid(targetSize)
   })
 
   ipcMain.handle(EXTERNAL_FILE_CHANNELS.getPendingPaths, async () => {
@@ -616,12 +637,98 @@ function readCurrentWindowState(windowRef: BrowserWindow): WindowState {
   };
 }
 
+function readPersistableWindowState(windowRef: BrowserWindow): WindowState {
+  if (windowIsUtilityCollapsed && utilityCollapseRestoreState) {
+    return { ...utilityCollapseRestoreState };
+  }
+  return readCurrentWindowState(windowRef);
+}
+
+function emitWindowCollapsedState(): void {
+  if (!win || win.isDestroyed()) return;
+  win.webContents.send('window-collapsed-state', windowIsUtilityCollapsed);
+}
+
+function resolveUtilityCollapseSize(input: unknown): { width: number; height: number } {
+  if (!input || typeof input !== 'object') {
+    return { width: UTILITY_COLLAPSE_MIN_WIDTH_PX, height: UTILITY_COLLAPSE_MIN_HEIGHT_PX };
+  }
+
+  const rawWidth = Number((input as { width?: unknown }).width);
+  const rawHeight = Number((input as { height?: unknown }).height);
+
+  const width = Number.isFinite(rawWidth)
+    ? Math.max(UTILITY_COLLAPSE_MIN_WIDTH_PX, Math.round(rawWidth))
+    : UTILITY_COLLAPSE_MIN_WIDTH_PX;
+
+  const height = Number.isFinite(rawHeight)
+    ? Math.max(UTILITY_COLLAPSE_MIN_HEIGHT_PX, Math.round(rawHeight))
+    : UTILITY_COLLAPSE_MIN_HEIGHT_PX;
+
+  return { width, height };
+}
+
+function collapseWindowToUtilityGrid(targetSize: { width: number; height: number }): boolean {
+  if (!win || win.isDestroyed()) return false;
+  if (windowIsUtilityCollapsed) return true;
+
+  if (win.isMaximized()) {
+    win.unmaximize();
+  }
+
+  const restoreState = readCurrentWindowState(win);
+  utilityCollapseRestoreState = {
+    ...restoreState,
+    isMaximized: false,
+  };
+
+  const currentBounds = win.getBounds();
+  const nextX = currentBounds.x + (currentBounds.width - targetSize.width);
+  const nextY = currentBounds.y;
+
+  windowIsUtilityCollapsed = true;
+  win.setMinimumSize(UTILITY_COLLAPSE_MIN_WIDTH_PX, UTILITY_COLLAPSE_MIN_HEIGHT_PX);
+  win.setResizable(false);
+  win.setBounds({ x: nextX, y: nextY, width: targetSize.width, height: targetSize.height });
+  emitWindowCollapsedState();
+  return true;
+}
+
+function restoreWindowFromUtilityCollapse(): boolean {
+  if (!win || win.isDestroyed()) return false;
+  if (!windowIsUtilityCollapsed) return true;
+
+  const restoreState = utilityCollapseRestoreState;
+  windowIsUtilityCollapsed = false;
+  utilityCollapseRestoreState = null;
+
+  win.setMinimumSize(APP_WINDOW_MIN_WIDTH_PX, APP_WINDOW_MIN_HEIGHT_PX);
+  win.setResizable(true);
+  if (restoreState) {
+    if (typeof restoreState.x === 'number' && typeof restoreState.y === 'number') {
+      win.setBounds({
+        x: restoreState.x,
+        y: restoreState.y,
+        width: restoreState.width,
+        height: restoreState.height,
+      });
+    } else {
+      win.setSize(restoreState.width, restoreState.height);
+    }
+  }
+
+  emitWindowCollapsedState();
+  return true;
+}
+
 async function createWindow() {
   if (!stateService) {
     stateService = new StateService(resolveDataRoot());
   }
 
   const savedWindowState = await stateService.loadWindowState();
+  windowIsUtilityCollapsed = false;
+  utilityCollapseRestoreState = null;
 
 win = new BrowserWindow({
   icon: resolveWindowIconPath(),
@@ -629,8 +736,8 @@ win = new BrowserWindow({
   height: savedWindowState.height,
   x: savedWindowState.x,
   y: savedWindowState.y,
-  minWidth: 840,
-  minHeight: 525,
+  minWidth: APP_WINDOW_MIN_WIDTH_PX,
+  minHeight: APP_WINDOW_MIN_HEIGHT_PX,
   frame: false,
   titleBarStyle: 'hidden',
   autoHideMenuBar: true,
@@ -647,7 +754,7 @@ win = new BrowserWindow({
 
   const persistWindowState = () => {
     if (!win || !stateService) return;
-    void stateService.saveWindowState(readCurrentWindowState(win));
+    void stateService.saveWindowState(readPersistableWindowState(win));
   };
 
   win.on('resize', persistWindowState);
@@ -670,6 +777,7 @@ win = new BrowserWindow({
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
     win?.webContents.send('window-maximize-state', win.isMaximized())
+    win?.webContents.send('window-collapsed-state', windowIsUtilityCollapsed)
   })
 
   if (VITE_DEV_SERVER_URL) {
