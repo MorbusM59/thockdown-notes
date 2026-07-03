@@ -1931,20 +1931,31 @@ function escapeAttributeSelectorValue(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
 
-function matchesSearchQuery(note: NoteSummary, query: string): boolean {
-  const normalized = query.trim().toLowerCase()
+function matchesSearchQuery(note: NoteSummary, query: string, isCaseSensitive: boolean): boolean {
+  const trimmed = query.trim()
+  const normalized = isCaseSensitive ? trimmed : trimmed.toLowerCase()
   if (!normalized) return true
 
-  if (normalized.startsWith('#')) {
-    const tagQuery = normalized.slice(1).trim()
+  if (trimmed.startsWith('#')) {
+    const rawTagQuery = trimmed.slice(1).trim()
+    const tagQuery = isCaseSensitive ? rawTagQuery : rawTagQuery.toLowerCase()
     if (!tagQuery) return true
-    return note.tags.some((tag) => tag.toLowerCase().includes(tagQuery))
+    return note.tags.some((tag) => {
+      const comparableTag = isCaseSensitive ? tag : tag.toLowerCase()
+      return comparableTag.includes(tagQuery)
+    })
   }
 
+  const title = isCaseSensitive ? note.title : note.title.toLowerCase()
+  const fileName = isCaseSensitive ? note.fileName : note.fileName.toLowerCase()
+
   return (
-    note.title.toLowerCase().includes(normalized) ||
-    note.fileName.toLowerCase().includes(normalized) ||
-    note.tags.some((tag) => tag.toLowerCase().includes(normalized))
+    title.includes(normalized) ||
+    fileName.includes(normalized) ||
+    note.tags.some((tag) => {
+      const comparableTag = isCaseSensitive ? tag : tag.toLowerCase()
+      return comparableTag.includes(normalized)
+    })
   )
 }
 
@@ -1976,6 +1987,7 @@ function App() {
   }, [notes])
   const [tagInputValue, setTagInputValue] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [isSearchQueryCaseSensitive, setIsSearchQueryCaseSensitive] = useState(false)
   const [documentFindQuery, setDocumentFindQuery] = useState('')
   const [isDocumentFindCaseSensitive, setIsDocumentFindCaseSensitive] = useState(false)
   // Terminology convention: false = edit mode, true = render view.
@@ -3309,6 +3321,7 @@ function App() {
       selectedMonths: [...selectedMonths],
       selectedYears: [...selectedYears],
       searchQuery,
+      searchQueryCaseSensitive: isSearchQueryCaseSensitive,
       documentFindCaseSensitive: isDocumentFindCaseSensitive,
       isPreviewMode,
       viewStyle,
@@ -3418,6 +3431,7 @@ function App() {
     textureMaterials,
     highlightColors,
     editorTextColors,
+    isSearchQueryCaseSensitive,
     searchQuery,
     selectedMonths,
     selectedYears,
@@ -5776,6 +5790,7 @@ ${markdownHtml}
             setSelectedMonths(new Set(appState.menu.selectedMonths))
             setSelectedYears(new Set(appState.menu.selectedYears))
             setSearchQuery(appState.menu.searchQuery)
+            setIsSearchQueryCaseSensitive(appState.menu.searchQueryCaseSensitive ?? false)
             setIsDocumentFindCaseSensitive(appState.menu.documentFindCaseSensitive ?? false)
             setIsPreviewMode(appState.menu.isPreviewMode ?? false)
             setViewStyle(appState.menu.viewStyle ?? 'modern')
@@ -6883,8 +6898,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }, [notes])
 
   const searchedNotes = useMemo(() => {
-    return sortedNotes.filter((note) => matchesSearchQuery(note, searchQuery))
-  }, [searchQuery, sortedNotes])
+    return sortedNotes.filter((note) => matchesSearchQuery(note, searchQuery, isSearchQueryCaseSensitive))
+  }, [isSearchQueryCaseSensitive, searchQuery, sortedNotes])
 
   const isFindMode = sidebarMode === 'find'
   const currentEditorText = useMemo(() => {
@@ -8143,7 +8158,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [selectedMonths, selectedYears, searchQuery])
+  }, [isSearchQueryCaseSensitive, selectedMonths, selectedYears, searchQuery])
 
   useEffect(() => {
     setDeleteArmedTagName(null)
@@ -10411,7 +10426,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               <div className="search-box" aria-label="Search panel">
                 <div className="search-input-shell">
                 <input
-                  className={`search-input-field${isFindMode ? ' has-case-toggle' : ''}`}
+                  className="search-input-field has-case-toggle"
                   ref={sidebarSearchInputRef}
                   type="text"
                   placeholder={isFindMode ? 'Find in current note...' : 'Filters notes by content or #tag...'}
@@ -10432,18 +10447,22 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     }, 0)
                   }}
                 />
-                {isFindMode ? (
-                  <button
-                    type="button"
-                    className={`btn-icon search-input-case-toggle${isDocumentFindCaseSensitive ? ' is-active' : ''}`}
-                    aria-pressed={isDocumentFindCaseSensitive}
-                    title="Match letter case"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => setIsDocumentFindCaseSensitive((previous) => !previous)}
-                  >
-                    Aa
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  className={`btn-icon search-input-case-toggle${(isFindMode ? isDocumentFindCaseSensitive : isSearchQueryCaseSensitive) ? ' is-active' : ''}`}
+                  aria-pressed={isFindMode ? isDocumentFindCaseSensitive : isSearchQueryCaseSensitive}
+                  title="Match letter case"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    if (isFindMode) {
+                      setIsDocumentFindCaseSensitive((previous) => !previous)
+                    } else {
+                      setIsSearchQueryCaseSensitive((previous) => !previous)
+                    }
+                  }}
+                >
+                  Aa
+                </button>
                 </div>
               </div>
 

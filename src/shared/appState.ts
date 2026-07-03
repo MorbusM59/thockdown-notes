@@ -22,6 +22,7 @@ export interface PersistedMenuState {
   selectedMonths: number[];
   selectedYears: Array<number | 'older'>;
   searchQuery: string;
+  searchQueryCaseSensitive?: boolean;
   documentFindCaseSensitive?: boolean;
   isPreviewMode?: boolean;
   viewStyle?: 'modern' | 'narrow' | 'cute' | 'xkcd' | 'print';
