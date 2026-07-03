@@ -2506,7 +2506,7 @@ body.hsva-dragging * {
   padding:        2px 6px 0 6px;
   border:         1px solid var(--color-border-highlight);
   border-radius:  var(--border-radius-small);
-  box-shadow:     var(--box-shadow-inverted);
+  box-shadow:     var(--box-shadow-inverted-filtered);
   outline:        none;
   background:     var(--color-input-backdrop);
   color:          var(--color-text-80);
