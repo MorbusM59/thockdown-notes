@@ -607,6 +607,30 @@ body {
 .markdown-preview ol { list-style-type: decimal; }
 .markdown-preview li { display: list-item; }
 
+.markdown-preview ul.contains-task-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.markdown-preview li.task-list-item {
+  list-style: none;
+}
+
+.markdown-preview li.task-list-item::marker {
+  content: '';
+}
+
+.markdown-preview li.task-list-item > .markdown-task-checkbox-icon {
+  display: inline-block;
+  width: 1.1em;
+  margin-right: 0.2em;
+  font-family: 'Segoe UI Symbol', 'Apple Symbols', 'Arial Unicode MS', sans-serif;
+  opacity: 1;
+  color: currentColor;
+  font-size: 1em;
+  line-height: 1;
+}
+
 .markdown-preview ul ul { list-style-type: circle; }
 .markdown-preview ul ul ul { list-style-type: square; }
 .markdown-preview ol ol { list-style-type: lower-alpha; }

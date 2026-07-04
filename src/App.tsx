@@ -807,6 +807,25 @@ const PREVIEW_MARKDOWN_COMPONENTS = {
     }
     return <span>{alt ?? 'Image'}</span>
   },
+  input: ({ checked, type, className }: { checked?: boolean; type?: string; className?: string }) => {
+    if (type !== 'checkbox') {
+      return null
+    }
+
+    const mergedClassName = [
+      className,
+      'markdown-task-checkbox-icon',
+      checked ? 'markdown-task-checkbox-checked' : 'markdown-task-checkbox-unchecked',
+    ]
+      .filter((value) => typeof value === 'string' && value.length > 0)
+      .join(' ')
+
+    return (
+      <span className={mergedClassName} aria-hidden="true">
+        {checked ? '☑' : '☐'}
+      </span>
+    )
+  },
 } as const
 
 function createPreviewSearchHighlightRehypePlugin(needle: string, isCaseSensitive: boolean) {
