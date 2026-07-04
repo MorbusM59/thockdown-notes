@@ -92,6 +92,8 @@ export type NoteUiStatePayload = {
   progressEdit?: number | null;
   cursorPos?: number | null;
   scrollTop?: number | null;
+  sourceAnchorLine?: number | null;
+  sourceAnchorText?: string | null;
 };
 
 export type NoteUiState = {
@@ -99,6 +101,8 @@ export type NoteUiState = {
   progressEdit: number | null;
   cursorPos: number | null;
   scrollTop: number | null;
+  sourceAnchorLine: number | null;
+  sourceAnchorText: string | null;
 };
 
 export interface NoteLifecycleApi {

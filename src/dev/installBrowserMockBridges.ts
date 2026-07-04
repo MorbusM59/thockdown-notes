@@ -38,6 +38,7 @@ const MOCK_STORAGE_KEY = 'measly-notes:browser-mock:v1'
 
 type BrowserMockStore = {
   notes: NoteDocument[]
+  noteUiStates: Record<string, NoteUiState>
   appState: AppState
   windowState: WindowState
   uiLoadoutEntries: UiLoadoutEntry[]
@@ -180,6 +181,7 @@ function loadStore(): BrowserMockStore {
       const seeded = seedUiLoadoutEntries()
       return {
         notes: [],
+        noteUiStates: {},
         appState: clone(DEFAULT_APP_STATE),
         windowState: clone(DEFAULT_WINDOW_STATE),
         uiLoadoutEntries: seeded.entries,
@@ -193,8 +195,23 @@ function loadStore(): BrowserMockStore {
       ? parsed.notes.map((note) => normalizeDocument(note as NoteDocument))
       : []
 
+    const noteUiStates = typeof parsed.noteUiStates === 'object' && parsed.noteUiStates !== null
+      ? Object.fromEntries(
+          Object.entries(parsed.noteUiStates as Record<string, NoteUiState>)
+            .map(([key, value]) => [key, {
+              progressPreview: value?.progressPreview ?? null,
+              progressEdit: value?.progressEdit ?? null,
+              cursorPos: value?.cursorPos ?? null,
+              scrollTop: value?.scrollTop ?? null,
+              sourceAnchorLine: value?.sourceAnchorLine ?? null,
+              sourceAnchorText: value?.sourceAnchorText ?? null,
+            }]),
+        )
+      : {}
+
     return {
       notes,
+      noteUiStates,
       appState: parsed.appState && typeof parsed.appState === 'object'
         ? clone(parsed.appState as AppState)
         : clone(DEFAULT_APP_STATE),
@@ -226,6 +243,7 @@ function loadStore(): BrowserMockStore {
     const seeded = seedUiLoadoutEntries()
     return {
       notes: [],
+      noteUiStates: {},
       appState: clone(DEFAULT_APP_STATE),
       windowState: clone(DEFAULT_WINDOW_STATE),
       uiLoadoutEntries: seeded.entries,
@@ -295,17 +313,39 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
       })
     },
 
-    async saveNoteUiState(_input: { id: string; payload: NoteUiStatePayload }): Promise<void> {
-      // Browser mock does not persist UI state outside memory yet.
-      return
+    async saveNoteUiState(input: { id: string; payload: NoteUiStatePayload }): Promise<void> {
+      return mutate((store) => {
+        const previousState = store.noteUiStates[input.id] ?? {
+          progressPreview: null,
+          progressEdit: null,
+          cursorPos: null,
+          scrollTop: null,
+          sourceAnchorLine: null,
+          sourceAnchorText: null,
+        }
+
+        const nextState: NoteUiState = {
+          ...previousState,
+          progressPreview: Object.prototype.hasOwnProperty.call(input.payload, 'progressPreview') ? input.payload.progressPreview ?? null : previousState.progressPreview,
+          progressEdit: Object.prototype.hasOwnProperty.call(input.payload, 'progressEdit') ? input.payload.progressEdit ?? null : previousState.progressEdit,
+          cursorPos: Object.prototype.hasOwnProperty.call(input.payload, 'cursorPos') ? input.payload.cursorPos ?? null : previousState.cursorPos,
+          scrollTop: Object.prototype.hasOwnProperty.call(input.payload, 'scrollTop') ? input.payload.scrollTop ?? null : previousState.scrollTop,
+          sourceAnchorLine: Object.prototype.hasOwnProperty.call(input.payload, 'sourceAnchorLine') ? input.payload.sourceAnchorLine ?? null : previousState.sourceAnchorLine,
+          sourceAnchorText: Object.prototype.hasOwnProperty.call(input.payload, 'sourceAnchorText') ? input.payload.sourceAnchorText ?? null : previousState.sourceAnchorText,
+        }
+
+        store.noteUiStates[input.id] = nextState
+      })
     },
 
-    async getNoteUiState(_input: LoadNoteInput): Promise<NoteUiState> {
-      return {
+    async getNoteUiState(input: LoadNoteInput): Promise<NoteUiState> {
+      return storeRef.current.noteUiStates[input.id] ?? {
         progressPreview: null,
         progressEdit: null,
         cursorPos: null,
         scrollTop: null,
+        sourceAnchorLine: null,
+        sourceAnchorText: null,
       }
     },
 

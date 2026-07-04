@@ -1119,12 +1119,16 @@ export class DatabaseService {
     progressEdit?: number | null;
     cursorPos?: number | null;
     scrollTop?: number | null;
+    sourceAnchorLine?: number | null;
+    sourceAnchorText?: string | null;
   }): void {
     const db = this.requireDb();
     const hasProgressPreview = Object.prototype.hasOwnProperty.call(payload, 'progressPreview');
     const hasProgressEdit = Object.prototype.hasOwnProperty.call(payload, 'progressEdit');
     const hasCursorPos = Object.prototype.hasOwnProperty.call(payload, 'cursorPos');
     const hasScrollTop = Object.prototype.hasOwnProperty.call(payload, 'scrollTop');
+    const hasSourceAnchorLine = Object.prototype.hasOwnProperty.call(payload, 'sourceAnchorLine');
+    const hasSourceAnchorText = Object.prototype.hasOwnProperty.call(payload, 'sourceAnchorText');
 
     db.prepare(`
       UPDATE notes
@@ -1132,7 +1136,9 @@ export class DatabaseService {
         progressPreview = CASE WHEN ? THEN ? ELSE progressPreview END,
         progressEdit = CASE WHEN ? THEN ? ELSE progressEdit END,
         cursorPos = CASE WHEN ? THEN ? ELSE cursorPos END,
-        scrollTop = CASE WHEN ? THEN ? ELSE scrollTop END
+        scrollTop = CASE WHEN ? THEN ? ELSE scrollTop END,
+        sourceAnchorLine = CASE WHEN ? THEN ? ELSE sourceAnchorLine END,
+        sourceAnchorText = CASE WHEN ? THEN ? ELSE sourceAnchorText END
       WHERE id = ?
     `).run(
       hasProgressPreview ? 1 : 0,
@@ -1143,6 +1149,10 @@ export class DatabaseService {
       payload.cursorPos ?? null,
       hasScrollTop ? 1 : 0,
       payload.scrollTop ?? null,
+      hasSourceAnchorLine ? 1 : 0,
+      payload.sourceAnchorLine ?? null,
+      hasSourceAnchorText ? 1 : 0,
+      payload.sourceAnchorText ?? null,
       noteId,
     );
   }
@@ -1152,18 +1162,22 @@ export class DatabaseService {
     progressEdit: number | null;
     cursorPos: number | null;
     scrollTop: number | null;
+    sourceAnchorLine: number | null;
+    sourceAnchorText: string | null;
   } {
     const db = this.requireDb();
 
     const row = db.prepare(`
-      SELECT progressPreview, progressEdit, cursorPos, scrollTop
+      SELECT progressPreview, progressEdit, cursorPos, scrollTop, sourceAnchorLine, sourceAnchorText
       FROM notes
       WHERE id = ?
     `).get(noteId) as {
-      progressPreview: number | null;
-      progressEdit: number | null;
-      cursorPos: number | null;
-      scrollTop: number | null;
+      progressPreview?: number | null;
+      progressEdit?: number | null;
+      cursorPos?: number | null;
+      scrollTop?: number | null;
+      sourceAnchorLine?: number | null;
+      sourceAnchorText?: string | null;
     } | undefined;
 
     return {
@@ -1171,6 +1185,8 @@ export class DatabaseService {
       progressEdit: row?.progressEdit ?? null,
       cursorPos: row?.cursorPos ?? null,
       scrollTop: row?.scrollTop ?? null,
+      sourceAnchorLine: row?.sourceAnchorLine ?? null,
+      sourceAnchorText: row?.sourceAnchorText ?? null,
     };
   }
 
@@ -2047,6 +2063,8 @@ export class DatabaseService {
         progressEdit REAL,
         cursorPos INTEGER,
         scrollTop INTEGER,
+        sourceAnchorLine INTEGER,
+        sourceAnchorText TEXT,
         contentChecksum TEXT,
         isTemp INTEGER DEFAULT 0,
         externalPath TEXT,
@@ -2137,6 +2155,8 @@ export class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_music_songs_priority ON music_songs(priority);
     `);
 
+    this.ensureNotesColumn('sourceAnchorLine', 'INTEGER');
+    this.ensureNotesColumn('sourceAnchorText', 'TEXT');
     this.ensureNotesColumn('contentChecksum', 'TEXT');
   }
 

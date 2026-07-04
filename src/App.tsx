@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { visit } from 'unist-util-visit'
 import { Editor } from './components/Editor'
 import { AccordionGroup, AccordionSection } from './components/AccordionSection'
 import { AudioControls } from './components/AudioControls'
@@ -1085,6 +1086,122 @@ function resolvePreviewAnchorRatioFromEditState(params: {
   return viewportRatio
 }
 
+function resolveSourceAnchorFromEditState(params: {
+  text: string
+  lineHeightPx: number
+  telemetry?: EditViewportTelemetry | null
+  viewport?: PersistedViewportState | null
+}): { sourceAnchorLine: number; sourceAnchorText: string | null } {
+  const { text, lineHeightPx, telemetry, viewport } = params
+  const lines = text.split('\n')
+  const safeLineHeight = Math.max(1, lineHeightPx)
+
+  const anchorLine = telemetry
+    ? Math.max(0, Math.ceil(telemetry.scrollTopPx / safeLineHeight))
+    : viewport?.scrollTopLines ?? 0
+  const clampedLine = Math.min(Math.max(0, anchorLine), Math.max(0, lines.length - 1))
+
+  return {
+    sourceAnchorLine: clampedLine,
+    sourceAnchorText: lines[clampedLine]?.trim() ?? null,
+  }
+}
+
+function resolveEditSourceAnchorLineFromUiState(text: string, uiState: { sourceAnchorLine?: unknown; sourceAnchorText?: unknown } | null | undefined): number | null {
+  const totalLines = Math.max(1, text.split('\n').length)
+  const sourceAnchorLine = typeof uiState?.sourceAnchorLine === 'number' && Number.isFinite(uiState.sourceAnchorLine)
+    ? Math.max(0, Math.round(uiState.sourceAnchorLine))
+    : null
+
+  if (sourceAnchorLine !== null) {
+    return Math.min(sourceAnchorLine, totalLines - 1)
+  }
+
+  const sourceAnchorText = typeof uiState?.sourceAnchorText === 'string'
+    ? uiState.sourceAnchorText.trim()
+    : ''
+
+  if (!sourceAnchorText) {
+    return null
+  }
+
+  const lines = text.split('\n')
+  const exactLine = lines.findIndex((line) => line.trim() === sourceAnchorText)
+  if (exactLine >= 0) {
+    return exactLine
+  }
+
+  const fuzzyLine = lines.findIndex((line) => line.trim().toLowerCase().includes(sourceAnchorText.toLowerCase()))
+  if (fuzzyLine >= 0) {
+    return fuzzyLine
+  }
+
+  return null
+}
+
+function findPreviewSourceAnchorElement(container: HTMLElement, sourceLine: number, sourceText: string | null = null): HTMLElement | null {
+  const anchors = Array.from(container.querySelectorAll<HTMLElement>('[data-source-line]'))
+  if (anchors.length === 0) return null
+
+  type AnchorEntry = { element: HTMLElement; line: number; text: string | null }
+  const entries: AnchorEntry[] = []
+
+  for (const element of anchors) {
+    const lineValue = Number(element.dataset.sourceLine)
+    if (!Number.isFinite(lineValue)) continue
+    entries.push({
+      element,
+      line: Math.max(0, Math.round(lineValue)),
+      text: element.textContent?.trim() ?? null,
+    })
+  }
+
+  if (entries.length === 0) return null
+  entries.sort((a, b) => a.line - b.line)
+
+  const exactLine = entries.find((entry) => entry.line === sourceLine)
+  if (exactLine) return exactLine.element
+
+  const normalizedSourceText = typeof sourceText === 'string' ? sourceText.trim().toLowerCase() : ''
+  if (normalizedSourceText) {
+    const fuzzyMatch = entries.find((entry) => {
+      const anchorText = entry.text?.trim().toLowerCase() ?? ''
+      return anchorText === normalizedSourceText || anchorText.includes(normalizedSourceText)
+    })
+    if (fuzzyMatch) {
+      return fuzzyMatch.element
+    }
+  }
+
+  const nearestByLine = entries.reduce((best, entry) => {
+    return Math.abs(entry.line - sourceLine) < Math.abs(best.line - sourceLine) ? entry : best
+  }, entries[0])
+  return nearestByLine.element
+}
+
+function createPreviewSourceAnchorRehypePlugin() {
+  return () => {
+    return (tree: any) => {
+      const sourceAnchorTags = new Set([
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'p', 'blockquote', 'ul', 'ol', 'pre', 'table', 'hr', 'li',
+      ])
+
+      visit(tree, 'element', (node: any) => {
+        if (typeof node.tagName !== 'string') return
+        if (!sourceAnchorTags.has(node.tagName)) return
+        const position = node.position?.start?.line
+        if (typeof position !== 'number' || Number.isNaN(position)) return
+
+        node.properties = node.properties ?? {}
+        if (node.properties['data-source-line'] === undefined) {
+          node.properties['data-source-line'] = String(Math.max(0, Math.round(position - 1)))
+        }
+      })
+    }
+  }
+}
+
 // Converts a pixel scroll position (e.g. from the legacy per-note SQLite
 // scrollTop column) to an integer line count for storage in
 // PersistedViewportState/EditRestoreSnapshot.viewport.
@@ -1103,7 +1220,7 @@ function scrollTopLinesToPx(scrollTopLines: number, lineHeightPx: number): numbe
 function buildEditRestoreSnapshotFromUiState(params: {
   noteId: string
   text: string
-  uiState: { scrollTop?: unknown; cursorPos?: unknown } | null | undefined
+  uiState: { scrollTop?: unknown; cursorPos?: unknown; sourceAnchorLine?: unknown; sourceAnchorText?: unknown } | null | undefined
   fallbackViewport: PersistedViewportState | null
   lineHeightPx: number
   overrideCursorPos?: number
@@ -1120,10 +1237,13 @@ function buildEditRestoreSnapshotFromUiState(params: {
       : typeof uiState?.cursorPos === 'number' && Number.isFinite(uiState.cursorPos)
         ? Math.max(0, Math.min(Math.round(uiState.cursorPos), selectionTextLength))
         : 0
+  const anchorLine = resolveEditSourceAnchorLineFromUiState(text, uiState)
   const storedScrollTopLines =
-    typeof uiState?.scrollTop === 'number' && Number.isFinite(uiState.scrollTop)
-      ? scrollTopPxToLines(Math.max(0, uiState.scrollTop), lineHeightPx)
-      : Math.max(0, Math.round(fallbackViewport?.scrollTopLines ?? 0))
+    anchorLine !== null
+      ? anchorLine
+      : typeof uiState?.scrollTop === 'number' && Number.isFinite(uiState.scrollTop)
+        ? scrollTopPxToLines(Math.max(0, uiState.scrollTop), lineHeightPx)
+        : Math.max(0, Math.round(fallbackViewport?.scrollTopLines ?? 0))
 
   const collapsedSelection: EditorSelectionState = {
     anchor: persistedCursor,
@@ -2203,11 +2323,12 @@ function App() {
     )
   }, []);
   const editUiStateSaveTimerRef = useRef<number | null>(null)
-  const lastPersistedEditUiStateRef = useRef<{ noteId: string; progressEdit: number; cursorPos: number; scrollTop: number } | null>(null)
+  const lastPersistedEditUiStateRef = useRef<{ noteId: string; progressEdit: number; cursorPos: number; scrollTop: number; sourceAnchorLine: number; sourceAnchorText: string | null } | null>(null)
   const pendingEditRestoreSnapshotRef = useRef<EditRestoreSnapshot | null>(null)
   const editModeSnapshotByNoteIdRef = useRef<Map<string, EditRestoreSnapshot>>(new Map())
   const previousActiveNoteIdForEditRestoreRef = useRef<string | null>(null)
   const pendingRenderViewAnchorRatioRef = useRef<number | null>(null)
+  const pendingRenderViewSourceAnchorRef = useRef<{ sourceAnchorLine: number; sourceAnchorText: string | null } | null>(null)
   const previousPreviewModeRef = useRef(false)
   const hasPreviewModeBaselineRef = useRef(false)
   const latestViewportRef = useRef<PersistedViewportState | null>(null)
@@ -3242,7 +3363,7 @@ function App() {
     }
   }, [activeEntryForCurrentMode, currentUiLoadoutSignature, uiMode, capturedUiLayoutLoadout])
 
-  const readCurrentEditUiPayload = useCallback((): { progressEdit: number; cursorPos: number; scrollTop: number } | null => {
+  const readCurrentEditUiPayload = useCallback((): { progressEdit: number; cursorPos: number; scrollTop: number; sourceAnchorLine: number; sourceAnchorText: string | null } | null => {
     const selection = latestEditorSelectionRef.current
 
     const liveSnapshot = adapterRef.current?.getSnapshot()
@@ -3272,6 +3393,14 @@ function App() {
     const viewport = snapshotViewportState ?? latestEditViewportRef.current ?? latestViewportRef.current
     if (!viewport) return null
 
+    const activeText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+    const { sourceAnchorLine, sourceAnchorText } = resolveSourceAnchorFromEditState({
+      text: activeText,
+      lineHeightPx: editorRuntimeMetrics.lineHeightPx,
+      telemetry: latestEditViewportTelemetryRef.current ?? undefined,
+      viewport,
+    })
+
     const scrollTopLines = Math.max(0, Math.round(viewport.scrollTopLines))
     const scrollTop = scrollTopLinesToPx(scrollTopLines, editorRuntimeMetrics.lineHeightPx)
     const progressEdit = scrollTopLines
@@ -3281,8 +3410,10 @@ function App() {
       progressEdit,
       cursorPos,
       scrollTop,
+      sourceAnchorLine,
+      sourceAnchorText,
     }
-  }, [editorRuntimeMetrics.lineHeightPx])
+  }, [activeNoteText, editorRuntimeMetrics.lineHeightPx])
 
   const updateEditModeSnapshotCache = useCallback((snapshot: EditRestoreSnapshot) => {
     editModeSnapshotByNoteIdRef.current.set(snapshot.noteId, snapshot)
@@ -3338,18 +3469,20 @@ function App() {
 
   const persistEditUiPayloadForNote = useCallback(async (
     noteId: string,
-    payload: { progressEdit: number; cursorPos: number; scrollTop: number },
+    payload: { progressEdit: number; cursorPos: number; scrollTop: number; sourceAnchorLine: number; sourceAnchorText: string | null },
   ) => {
     const notesApi = window.measlyNotes
     if (!notesApi) return
 
-    const { progressEdit, cursorPos, scrollTop } = payload
+    const { progressEdit, cursorPos, scrollTop, sourceAnchorLine, sourceAnchorText } = payload
     const previousPersisted = lastPersistedEditUiStateRef.current
     const changed =
       !previousPersisted
       || previousPersisted.noteId !== noteId
       || previousPersisted.scrollTop !== scrollTop
       || previousPersisted.cursorPos !== cursorPos
+      || previousPersisted.sourceAnchorLine !== sourceAnchorLine
+      || previousPersisted.sourceAnchorText !== sourceAnchorText
       || Math.abs(previousPersisted.progressEdit - progressEdit) >= 0.0001
 
     if (changed) {
@@ -3358,6 +3491,8 @@ function App() {
         progressEdit,
         cursorPos,
         scrollTop,
+        sourceAnchorLine,
+        sourceAnchorText,
       }
       await notesApi.saveNoteUiState({ id: noteId, payload })
       return
@@ -4424,14 +4559,54 @@ ${markdownHtml}
     })
   }, [buildMenuStateSnapshot])
 
+  const resolvePreviewSourceAnchorFromContainer = useCallback((container: HTMLElement): { sourceAnchorLine: number; sourceAnchorText: string | null } | null => {
+    const containerRect = container.getBoundingClientRect()
+    const anchors = Array.from(container.querySelectorAll<HTMLElement>('[data-source-line]'))
+      .map((element) => {
+        const rect = element.getBoundingClientRect()
+        const line = Number(element.dataset.sourceLine)
+        return {
+          element,
+          line: Number.isFinite(line) ? Math.max(0, Math.round(line)) : -1,
+          top: rect.top - containerRect.top,
+          bottom: rect.bottom - containerRect.top,
+        }
+      })
+      .filter((entry) => entry.line >= 0)
+
+    if (anchors.length === 0) {
+      return null
+    }
+
+    anchors.sort((a, b) => a.top - b.top)
+    const visibleAtOrBelowTop = anchors.filter((entry) => entry.top >= 0)
+    const selected = visibleAtOrBelowTop.length > 0
+      ? visibleAtOrBelowTop.reduce((best, candidate) => (candidate.top < best.top ? candidate : best))
+      : anchors.reduce((best, candidate) => (candidate.top > best.top ? candidate : best))
+
+    return {
+      sourceAnchorLine: selected.line,
+      sourceAnchorText: selected.element.textContent?.trim() ?? null,
+    }
+  }, [])
+
   const persistRenderViewStateForNoteNow = useCallback(async (noteId: string) => {
     const container = previewScrollRef.current
     if (!container) return
 
     const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
     const ratio = maxScrollTop <= 0 ? 0 : clamp(container.scrollTop / maxScrollTop, 0, 1)
-    await window.measlyNotes?.saveNoteUiState({ id: noteId, payload: { progressPreview: ratio } })
-  }, [])
+    const sourceAnchor = resolvePreviewSourceAnchorFromContainer(container)
+    const payload: { progressPreview: number; sourceAnchorLine?: number | null; sourceAnchorText?: string | null } = {
+      progressPreview: ratio,
+    }
+    if (sourceAnchor) {
+      payload.sourceAnchorLine = sourceAnchor.sourceAnchorLine
+      payload.sourceAnchorText = sourceAnchor.sourceAnchorText
+    }
+
+    await window.measlyNotes?.saveNoteUiState({ id: noteId, payload })
+  }, [resolvePreviewSourceAnchorFromContainer])
 
   const activateNote = useCallback(async (noteId: string, overrideCursorPos?: number) => {
     if (!window.measlyNotes) return
@@ -4439,19 +4614,18 @@ ${markdownHtml}
     setIsCaretSuspended(true)
     const previousNoteId = activeNoteId
     if (persistenceReady && previousNoteId && previousNoteId !== noteId) {
-      const previousSnapshot = editModeSnapshotByNoteIdRef.current.get(previousNoteId)
-      const snapshotPayload = previousSnapshot
-        ? {
-            progressEdit: previousSnapshot.viewport.scrollTopLines,
-            cursorPos: previousSnapshot.fullSelection.end,
-            scrollTop: scrollTopLinesToPx(previousSnapshot.viewport.scrollTopLines, editorRuntimeMetrics.lineHeightPx),
-          }
-        : null
-      const payload = snapshotPayload
+      const previousPayload = readCurrentEditUiPayload()
+    const snapshotPayload = previousPayload ?? (previousSnapshot ? {
+      progressEdit: previousSnapshot.viewport.scrollTopLines,
+      cursorPos: previousSnapshot.fullSelection.end,
+      scrollTop: scrollTopLinesToPx(previousSnapshot.viewport.scrollTopLines, editorRuntimeMetrics.lineHeightPx),
+      sourceAnchorLine: previousSnapshot.viewport.scrollTopLines,
+      sourceAnchorText: null,
+    } : null)
 
-      if (payload) {
-        await persistEditUiPayloadForNote(previousNoteId, payload)
-      }
+    if (snapshotPayload) {
+      await persistEditUiPayloadForNote(previousNoteId, snapshotPayload)
+    }
     }
 
     const [loaded, nextUiState] = await Promise.all([
@@ -4926,7 +5100,7 @@ ${markdownHtml}
     const persistNow = async () => {
       const payload = readCurrentEditUiPayload()
       if (!payload) return
-      const { progressEdit, cursorPos, scrollTop } = payload
+      const { progressEdit, cursorPos, scrollTop, sourceAnchorLine, sourceAnchorText } = payload
 
       const cached = editModeSnapshotByNoteIdRef.current.get(noteId)
       if (cached) {
@@ -4959,6 +5133,8 @@ ${markdownHtml}
         previousPersisted.noteId === noteId &&
         previousPersisted.scrollTop === scrollTop &&
         previousPersisted.cursorPos === cursorPos &&
+        previousPersisted.sourceAnchorLine === sourceAnchorLine &&
+        previousPersisted.sourceAnchorText === sourceAnchorText &&
         Math.abs(previousPersisted.progressEdit - progressEdit) < 0.0001
       ) {
         return
@@ -4969,6 +5145,8 @@ ${markdownHtml}
         progressEdit,
         cursorPos,
         scrollTop,
+        sourceAnchorLine,
+        sourceAnchorText,
       }
 
       await notesApi.saveNoteUiState({ id: noteId, payload })
@@ -5000,15 +5178,17 @@ ${markdownHtml}
       captureEditModeSnapshotFromEditor(activeNoteId)
     }
 
-    const cachedSnapshot = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
-    const snapshotPayload = cachedSnapshot
-      ? {
-          progressEdit: cachedSnapshot.viewport.scrollTopLines,
-          cursorPos: cachedSnapshot.fullSelection.end,
-          scrollTop: scrollTopLinesToPx(cachedSnapshot.viewport.scrollTopLines, editorRuntimeMetrics.lineHeightPx),
-        }
-      : null
-    const payload = snapshotPayload
+    const payload = readCurrentEditUiPayload() ?? (() => {
+      const cachedSnapshot = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
+      if (!cachedSnapshot) return null
+      return {
+        progressEdit: cachedSnapshot.viewport.scrollTopLines,
+        cursorPos: cachedSnapshot.fullSelection.end,
+        scrollTop: scrollTopLinesToPx(cachedSnapshot.viewport.scrollTopLines, editorRuntimeMetrics.lineHeightPx),
+        sourceAnchorLine: cachedSnapshot.viewport.scrollTopLines,
+        sourceAnchorText: null,
+      }
+    })()
     if (!payload) return
 
     void persistEditUiPayloadForNote(activeNoteId, payload)
@@ -6625,6 +6805,11 @@ ${markdownHtml}
 
     if (!persistenceReady || !activeNoteId) return
 
+    if (wasPreviewMode && !isPreviewMode) {
+      pendingRenderViewAnchorRatioRef.current = null
+      pendingRenderViewSourceAnchorRef.current = null
+    }
+
     const activeText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
 
     if (!wasPreviewMode && isPreviewMode) {
@@ -6764,11 +6949,41 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       viewport,
       telemetry: latestEditViewportTelemetryRef.current,
     })
-  }, [captureEditModeSnapshotFromEditor])
 
-  const toggleRenderViewMode = useCallback(() => {
+    if (viewport) {
+      pendingRenderViewSourceAnchorRef.current = resolveSourceAnchorFromEditState({
+        text: activeText,
+        lineHeightPx: editorRuntimeMetrics.lineHeightPx,
+        telemetry: latestEditViewportTelemetryRef.current ?? undefined,
+        viewport,
+      })
+    }
+  }, [captureEditModeSnapshotFromEditor, editorRuntimeMetrics.lineHeightPx])
+
+  const toggleRenderViewMode = useCallback(async () => {
     if (isPreviewMode && activeNoteId) {
-      void persistRenderViewStateForNoteNow(activeNoteId)
+      try {
+        await persistRenderViewStateForNoteNow(activeNoteId)
+        const uiState = await window.measlyNotes?.getNoteUiState({ id: activeNoteId })
+        if (uiState) {
+          const activeText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+          const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
+          const restoreSnapshot = buildEditRestoreSnapshotFromUiState({
+            noteId: activeNoteId,
+            text: activeText,
+            uiState,
+            fallbackViewport,
+            lineHeightPx: editorRuntimeMetrics.lineHeightPx,
+          })
+          pendingEditRestoreSnapshotRef.current = restoreSnapshot
+          updateEditModeSnapshotCache(restoreSnapshot)
+        }
+      } catch (error) {
+        console.warn('Failed to persist render view state before toggling mode', error)
+      }
+
+      pendingRenderViewAnchorRatioRef.current = null
+      pendingRenderViewSourceAnchorRef.current = null
     }
 
     setIsPreviewMode((previous) => {
@@ -6779,7 +6994,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       }
       return !previous
     })
-  }, [activeNoteId, activeNoteText, captureEditModeSnapshotForRenderView, isPreviewMode, persistRenderViewStateForNoteNow])
+  }, [activeNoteId, activeNoteText, captureEditModeSnapshotForRenderView, editorRuntimeMetrics.lineHeightPx, isPreviewMode, persistRenderViewStateForNoteNow, updateEditModeSnapshotCache])
 
   const handleExportPdf = useCallback(async () => {
     if (!activeNoteId || isExportingPdf) return
@@ -6879,10 +7094,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       return
     }
 
+    const wasPreviewMode = previousPreviewModeRef.current
     const previousActiveNoteId = previousActiveNoteIdForEditRestoreRef.current
     previousActiveNoteIdForEditRestoreRef.current = activeNoteId
-    if (previousActiveNoteId === activeNoteId) {
-      // Note identity did not change; avoid re-restoring on edit/render mode toggles.
+    if (previousActiveNoteId === activeNoteId && !wasPreviewMode) {
+      // Note identity did not change and we are not returning from preview.
+      // Avoid re-restoring on plain edit-mode re-renders or same-note updates.
       return
     }
 
@@ -6898,7 +7115,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     }
 
     const memorySnapshot = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
-    if (memorySnapshot) {
+    if (memorySnapshot && !wasPreviewMode) {
       applyEditRestoreSnapshot(memorySnapshot, {
         restoreFullSelection: true,
         focusAfterApply: true,
@@ -6969,49 +7186,45 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     }
 
     const applyPreviewRatioImmediate = (ratio: number) => {
+      const container = previewScrollRef.current
+      if (!container) return
+
       const clampedRatio = clamp(ratio, 0, 1)
-      setPreviewScrollBehavior('auto')
+      const previousScrollBehavior = container.style.scrollBehavior
+      container.style.scrollBehavior = 'auto'
 
-      const reconcilePreviewRatio = (attempt: number, previousMaxScrollTop: number, stableFrames: number) => {
-        if (cancelled) return
-
-        const container = previewScrollRef.current
-        if (!container) {
-          setPreviewScrollBehavior('')
-          return
-        }
-
-        const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
-        const targetScrollTop = Math.max(0, Math.min(maxScrollTop, clampedRatio * maxScrollTop))
-        if (Math.abs(container.scrollTop - targetScrollTop) > 0.5) {
-          container.scrollTop = targetScrollTop
-        }
-
-        const observedDelta = Math.abs(container.scrollTop - targetScrollTop)
-        const maxScrollStable = Math.abs(maxScrollTop - previousMaxScrollTop) <= 0.5
-        const nextStableFrames = maxScrollStable && observedDelta <= 1 ? (stableFrames + 1) : 0
-
-        if (nextStableFrames >= 2 || attempt >= 24) {
-          setPreviewScrollBehavior('')
-          return
-        }
-
-        requestAnimationFrame(() => {
-          reconcilePreviewRatio(attempt + 1, maxScrollTop, nextStableFrames)
-        })
-      }
-
-      applyPreviewRatio(clampedRatio)
-      requestAnimationFrame(() => {
-        reconcilePreviewRatio(0, -1, 0)
-      })
+      const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
+      container.scrollTop = Math.max(0, Math.min(maxScrollTop, clampedRatio * maxScrollTop))
+      container.style.scrollBehavior = previousScrollBehavior
     }
 
-    const pendingAnchorRatio = pendingRenderViewAnchorRatioRef.current
-    if (typeof pendingAnchorRatio === 'number') {
-      pendingRenderViewAnchorRatioRef.current = null
-      applyPreviewRatioImmediate(pendingAnchorRatio)
+    const applyPreviewSourceAnchor = (sourceLine: number, sourceText: string | null = null) => {
+      const container = previewScrollRef.current
+      if (!container) return
 
+      const previousScrollBehavior = container.style.scrollBehavior
+      container.style.scrollBehavior = 'auto'
+
+      const target = findPreviewSourceAnchorElement(container, sourceLine, sourceText)
+      if (!target) {
+        const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
+        container.scrollTop = Math.max(0, Math.min(maxScrollTop, sourceLine * editorRuntimeMetrics.lineHeightPx))
+        container.style.scrollBehavior = previousScrollBehavior
+        return
+      }
+
+      const containerRect = container.getBoundingClientRect()
+      const targetRect = target.getBoundingClientRect()
+      const delta = targetRect.top - containerRect.top
+      const targetScrollTop = Math.max(0, Math.min(container.scrollHeight - container.clientHeight, container.scrollTop + delta))
+      container.scrollTop = targetScrollTop
+      container.style.scrollBehavior = previousScrollBehavior
+    }
+
+    const pendingSourceAnchor = pendingRenderViewSourceAnchorRef.current
+    if (pendingSourceAnchor) {
+      pendingRenderViewSourceAnchorRef.current = null
+      applyPreviewSourceAnchor(pendingSourceAnchor.sourceAnchorLine, pendingSourceAnchor.sourceAnchorText)
       return () => {
         cancelled = true
         setPreviewScrollBehavior('')
@@ -7022,6 +7235,13 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       try {
         const uiState = await window.measlyNotes?.getNoteUiState({ id: activeNoteId })
         if (cancelled) return
+
+        const sourceAnchorLine = uiState?.sourceAnchorLine
+        const sourceAnchorText = typeof uiState?.sourceAnchorText === 'string' ? uiState.sourceAnchorText : null
+        if (typeof sourceAnchorLine === 'number' && Number.isFinite(sourceAnchorLine)) {
+          applyPreviewSourceAnchor(sourceAnchorLine, sourceAnchorText)
+          return
+        }
 
         const ratio = uiState?.progressPreview
         if (typeof ratio !== 'number' || Number.isNaN(ratio)) {
@@ -7066,7 +7286,15 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         previewScrollSaveTimerRef.current = null
         const maxScrollTop = Math.max(1, container.scrollHeight - container.clientHeight)
         const ratio = maxScrollTop <= 0 ? 0 : (container.scrollTop / maxScrollTop)
-        void window.measlyNotes?.saveNoteUiState({ id: activeNoteId, payload: { progressPreview: ratio } })
+        const sourceAnchor = resolvePreviewSourceAnchorFromContainer(container)
+        const payload: { progressPreview: number; sourceAnchorLine?: number | null; sourceAnchorText?: string | null } = {
+          progressPreview: ratio,
+        }
+        if (sourceAnchor) {
+          payload.sourceAnchorLine = sourceAnchor.sourceAnchorLine
+          payload.sourceAnchorText = sourceAnchor.sourceAnchorText
+        }
+        void window.measlyNotes?.saveNoteUiState({ id: activeNoteId, payload })
       }, 120)
     }
 
@@ -7168,18 +7396,23 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     [documentFindDirective.findText, isDocumentFindCaseSensitive],
   )
 
+  const previewSourceAnchorPlugin = useMemo(
+    () => createPreviewSourceAnchorRehypePlugin(),
+    [],
+  )
+
   // Memoized so per-frame App re-renders (scroll thumb state, etc.) do not
   // trigger a full ReactMarkdown reconciliation of long notes. That heavy
   // reconciliation was stalling the main thread and freezing rAF mid-scroll.
   const previewMarkdownElement = useMemo(() => (
     <ReactMarkdown
       remarkPlugins={PREVIEW_MARKDOWN_REMARK_PLUGINS}
-      rehypePlugins={[previewSearchHighlightPlugin]}
+      rehypePlugins={[previewSearchHighlightPlugin, previewSourceAnchorPlugin]}
       components={PREVIEW_MARKDOWN_COMPONENTS}
     >
       {currentEditorText}
     </ReactMarkdown>
-  ), [currentEditorText, previewSearchHighlightPlugin])
+  ), [currentEditorText, previewSearchHighlightPlugin, previewSourceAnchorPlugin])
 
   const documentFindHits = useMemo<DocumentFindHit[]>(() => {
     return buildDocumentFindHits(currentEditorText, documentFindDirective.findText, isDocumentFindCaseSensitive)
