@@ -410,6 +410,8 @@ type EditRestoreSnapshot = {
   collapsedSelection: EditorSelectionState
   fullSelection: EditorSelectionState
   viewport: PersistedViewportState
+  sourceAnchorLine?: number
+  sourceAnchorText?: string | null
 }
 
 type EditViewportTelemetry = {
@@ -1332,6 +1334,8 @@ function buildEditRestoreSnapshotFromUiState(params: {
       bottomBoundaryLines: fallbackBottomBoundaryLines,
       scrollTopLines: storedScrollTopLines,
     },
+    sourceAnchorText: typeof uiState?.sourceAnchorText === 'string' ? uiState.sourceAnchorText : null,
+    ...(anchorLine !== null ? { sourceAnchorLine: anchorLine } : {}),
   }
 }
 
@@ -5272,6 +5276,44 @@ ${markdownHtml}
     const onComplete = options?.onComplete
     let cancelled = false
 
+    const applySourceAnchorToEditor = () => {
+      if (typeof snapshot.sourceAnchorLine !== 'number' || !Number.isFinite(snapshot.sourceAnchorLine)) {
+        return
+      }
+
+      const scroller = document.querySelector<HTMLElement>('.editor-stage .measly-custom-scrollbar')
+      const editorRoot = document.querySelector<HTMLElement>('.editor-stage .editor-text[contenteditable="true"]')
+      if (!scroller || !editorRoot) {
+        return
+      }
+
+      const paragraphs = Array.from(editorRoot.children).filter((child): child is HTMLElement => child instanceof HTMLElement)
+      if (paragraphs.length === 0) {
+        return
+      }
+
+      const targetIndex = Math.max(0, Math.min(paragraphs.length - 1, Math.round(snapshot.sourceAnchorLine)))
+      const targetParagraph = paragraphs[targetIndex]
+      const scrollerRect = scroller.getBoundingClientRect()
+      const paragraphRect = targetParagraph.getBoundingClientRect()
+      const topBoundaryPx = Math.max(0, Math.round(snapshot.viewport.topBoundaryLines * editorRuntimeMetrics.lineHeightPx))
+      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+      const targetScrollTop = Math.max(
+        0,
+        Math.min(
+          maxScrollTop,
+          scroller.scrollTop + (paragraphRect.top - scrollerRect.top) - topBoundaryPx,
+        ),
+      )
+
+      scroller.scrollTop = targetScrollTop
+      requestAnimationFrame(() => {
+        if (!cancelled) {
+          scroller.scrollTop = targetScrollTop
+        }
+      })
+    }
+
     // Restoring from integer line counts is direct and idempotent: no
     // measurement-dependent clamping happens at apply time (see
     // EditorViewportLines / clampBoundaryLines), so a single applySnapshot
@@ -5294,6 +5336,11 @@ ${markdownHtml}
         viewportLines: snapshot.viewport,
       })
 
+      requestAnimationFrame(() => {
+        if (cancelled) return
+        applySourceAnchorToEditor()
+      })
+
       latestViewportRef.current = snapshot.viewport
       latestEditViewportRef.current = snapshot.viewport
 
@@ -5313,7 +5360,7 @@ ${markdownHtml}
     return () => {
       cancelled = true
     }
-  }, [focusEditorInEditMode])
+  }, [editorRuntimeMetrics.lineHeightPx, focusEditorInEditMode])
 
   const orderedActiveTags = activeNoteSummary?.tags ?? []
   const activeNoteIsExternal = orderedActiveTags.some((tag) => isExternalTagName(tag))
