@@ -8296,6 +8296,57 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
   }, [applyProgrammaticEditorText, buildToggleNumberedListTransform, currentEditorText])
 
+  const buildToggleChecklistListTransform = useCallback((
+    sourceText: string,
+    baseSelection: EditorSelectionState,
+  ): { text: string; selection: EditorSelectionState } => {
+    const checklistPattern = /^(\s*(?:>\s*)*)(?:[-*+])\s+\[[ xX]\]\s+/;
+    const splitListPrefix = (line: string) => {
+      const quotePrefixMatch = line.match(/^(\s*(?:>\s*)*)/)
+      const quotePrefix = quotePrefixMatch ? quotePrefixMatch[1] : ''
+      const remainder = line.slice(quotePrefix.length)
+      const withoutListMarker = remainder.replace(/^(?:[-*+]\s+|\d+[.)]\s+)/, '')
+      return { quotePrefix, withoutListMarker }
+    }
+
+    const resolveContentStart = (line: string) => {
+      const match = line.match(/^(\s*(?:>\s*)*)(?:[-*+]\s+|\d+[.)]\s+)/)
+      if (match) return match[0].length
+      const quotePrefixMatch = line.match(/^(\s*(?:>\s*)*)/)
+      return quotePrefixMatch ? quotePrefixMatch[0].length : 0
+    }
+
+    const { start, end } = resolveSelectionBoundsFromSelection(sourceText, baseSelection)
+    const { lineStart, lineEndExclusive } = resolveLineRange(sourceText, start, end)
+    const selectedBlock = sourceText.slice(lineStart, lineEndExclusive)
+    const lines = selectedBlock.split('\n')
+    const allChecklist = lines.every((line) => line.trim().length === 0 || checklistPattern.test(line))
+
+    return transformSelectedLinesForSelection(sourceText, baseSelection, (line) => {
+      if (line.trim().length === 0) return line
+      const checklistMatch = line.match(checklistPattern)
+      if (allChecklist && checklistMatch) {
+        return `${checklistMatch[1]}${line.slice(checklistMatch[0].length)}`
+      }
+
+      const { quotePrefix, withoutListMarker } = splitListPrefix(line)
+      return `${quotePrefix}- [ ] ${withoutListMarker}`
+    }, ({ oldLine, newLine, localOffsetInLine }) => {
+      const oldContentStart = resolveContentStart(oldLine)
+      const newContentStart = resolveContentStart(newLine)
+
+      if (localOffsetInLine <= oldContentStart) {
+        return Math.min(localOffsetInLine, newContentStart)
+      }
+      return localOffsetInLine + (newContentStart - oldContentStart)
+    })
+  }, [resolveLineRange, resolveSelectionBoundsFromSelection, transformSelectedLinesForSelection])
+
+  const toggleChecklistList = useCallback(() => {
+    const next = buildToggleChecklistListTransform(currentEditorText, latestEditorSelectionRef.current)
+    applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
+  }, [applyProgrammaticEditorText, buildToggleChecklistListTransform, currentEditorText])
+
   const toggleBlockquote = useCallback(() => {
     const quotePattern = /^>\s?/
     const sourceText = currentEditorText
@@ -11273,7 +11324,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
                       <button type="button" className={`btn-icon ${isBulletedListActive ? 'active' : ''}`} title="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>≡</button>
                       <button type="button" className={`btn-icon ${isNumberedListActive ? 'active' : ''}`} title="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>#</button>
-                      <button type="button" className="btn-icon" title="Link" onClick={applyLink} disabled={!activeNoteId}>🔗</button>
+                      <button type="button" className={`btn-icon ${isBulletedListActive ? 'active' : ''}`} title="Checklist" onClick={toggleChecklistList} disabled={!activeNoteId}>☐</button>
 
                       <div className="toolbar-spacer"/>
 
@@ -11284,6 +11335,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                       <div className="toolbar-spacer"/>
 
                       <button type="button" className="btn-icon" title="Horizontal rule" onClick={insertHorizontalRule} disabled={!activeNoteId}>—</button>
+                      <button type="button" className="btn-icon" title="Link" onClick={applyLink} disabled={!activeNoteId}>🔗</button>
                     </div>
                   ) : null}
                 </div>
