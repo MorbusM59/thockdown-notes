@@ -71,6 +71,7 @@ import { resolveMarkdownEnterTransform } from './editor/EnterTransformPolicy'
 import { resolveMarkdownChecklistTypeoverTransform } from './editor/ChecklistTypingTransformPolicy'
 import { normalizeInternalText } from './editor/TextPolicy'
 import { resolvePreviewSourceAnchorEntry } from './editor/PreviewScrollAnchor'
+import { readSelectionOffsetFromClientPoint } from './editor/SelectionOffsets'
 import {
   buildReleaseRampDownPlanFromCurrentParams,
   cancelNonQuantizedSmoothScroll,
@@ -1068,7 +1069,38 @@ function resolveSourceAnchorFromEditState(params: {
   const lines = text.split('\n')
   const safeLineHeight = Math.max(1, lineHeightPx)
 
-  const anchorLine = viewport?.scrollTopLines ??
+  const editorScroller = document.querySelector<HTMLElement>('.editor-stage .measly-custom-scrollbar')
+  const editorRoot = document.querySelector<HTMLElement>('.editor-stage .editor-text[contenteditable="true"]')
+
+  if (editorScroller && editorRoot && document.body.contains(editorRoot)) {
+    const scrollerRect = editorScroller.getBoundingClientRect()
+    const rootRect = editorRoot.getBoundingClientRect()
+    const topBoundaryPx = Math.max(0, Math.round((viewport?.topBoundaryLines ?? 0) * safeLineHeight))
+    const sampleX = Math.max(scrollerRect.left + 4, rootRect.left + 4)
+    const sampleY = Math.min(
+      scrollerRect.bottom - 1,
+      scrollerRect.top + topBoundaryPx + Math.max(1, Math.round(safeLineHeight / 2)),
+    )
+    const anchorOffset = readSelectionOffsetFromClientPoint(
+      editorRoot,
+      sampleX,
+      sampleY,
+      text.length,
+      0,
+    )
+    const prefix = text.slice(0, Math.max(0, Math.min(text.length, anchorOffset)))
+    const sourceAnchorLine = prefix.length === 0 ? 0 : (prefix.match(/\n/g)?.length ?? 0)
+    const clampedLine = Math.min(Math.max(0, sourceAnchorLine), Math.max(0, lines.length - 1))
+
+    return {
+      sourceAnchorLine: clampedLine,
+      sourceAnchorText: buildSourceAnchorTextSnippet(lines, clampedLine),
+    }
+  }
+
+  const anchorLine = viewport
+    ? Math.max(0, Math.round(viewport.scrollTopLines) + Math.round(viewport.topBoundaryLines))
+    :
     (telemetry ? Math.max(0, Math.floor(telemetry.scrollTopPx / safeLineHeight)) : 0)
   const clampedLine = Math.min(Math.max(0, anchorLine), Math.max(0, lines.length - 1))
 
@@ -1278,7 +1310,7 @@ function buildEditRestoreSnapshotFromUiState(params: {
   const anchorLine = resolveEditSourceAnchorLineFromUiState(text, uiState)
   const storedScrollTopLines =
     anchorLine !== null
-      ? anchorLine
+      ? Math.max(0, anchorLine - fallbackTopBoundaryLines)
       : typeof uiState?.scrollTop === 'number' && Number.isFinite(uiState.scrollTop)
         ? scrollTopPxToLines(Math.max(0, uiState.scrollTop), lineHeightPx)
         : Math.max(0, Math.round(fallbackViewport?.scrollTopLines ?? 0))
@@ -4654,7 +4686,7 @@ ${markdownHtml}
         progressEdit: previousSnapshot.viewport.scrollTopLines,
         cursorPos: previousSnapshot.fullSelection.end,
         scrollTop: scrollTopLinesToPx(previousSnapshot.viewport.scrollTopLines, editorRuntimeMetrics.lineHeightPx),
-        sourceAnchorLine: previousSnapshot.viewport.scrollTopLines,
+        sourceAnchorLine: Math.max(0, previousSnapshot.viewport.scrollTopLines + previousSnapshot.viewport.topBoundaryLines),
         sourceAnchorText: null,
       } : null)
 
@@ -5219,7 +5251,7 @@ ${markdownHtml}
         progressEdit: cachedSnapshot.viewport.scrollTopLines,
         cursorPos: cachedSnapshot.fullSelection.end,
         scrollTop: scrollTopLinesToPx(cachedSnapshot.viewport.scrollTopLines, editorRuntimeMetrics.lineHeightPx),
-        sourceAnchorLine: cachedSnapshot.viewport.scrollTopLines,
+        sourceAnchorLine: Math.max(0, cachedSnapshot.viewport.scrollTopLines + cachedSnapshot.viewport.topBoundaryLines),
         sourceAnchorText: null,
       }
     })()
