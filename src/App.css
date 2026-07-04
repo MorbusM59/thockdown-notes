@@ -1649,6 +1649,11 @@ color:           var(--color-text-80);
   user-select: none;
 }
 
+.toolbar-spacer-large {
+  width: 12px;
+  user-select: none;
+}
+
 .style-selector {
   display:     flex;
   align-items: center;

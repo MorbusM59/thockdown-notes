@@ -2056,6 +2056,8 @@ function App() {
   const [isExportingMd, setIsExportingMd] = useState(false)
   const [exportFolder, setExportFolder] = useState<string | null>(null)
   const [debuggingEnabled, setDebuggingEnabled] = useState(false)
+  const [spellCheckEditEnabled, setSpellCheckEditEnabled] = useState(false)
+  const [spellCheckRenderEnabled, setSpellCheckRenderEnabled] = useState(false)
   const debugNoteIdRef = useRef<string | null>(null)
   const [windowIsMaximized, setWindowIsMaximized] = useState(false)
   const [windowIsCollapsed, setWindowIsCollapsed] = useState(false)
@@ -3472,6 +3474,8 @@ function App() {
         },
       },
       debuggingEnabled,
+      spellCheckEditEnabled,
+      spellCheckRenderEnabled,
     }
   }, [
     archiveCollapsedPrimary,
@@ -3479,6 +3483,8 @@ function App() {
     categoryCollapsedPrimary,
     categoryCollapsedSecondary,
     debuggingEnabled,
+    spellCheckEditEnabled,
+    spellCheckRenderEnabled,
     editorFontSize,
     editorGlyphPaddingPx,
     editorSpacing,
@@ -6075,6 +6081,8 @@ ${markdownHtml}
             // Global texture enable is intentionally fixed on; per-surface alpha controls visibility.
             setTextureMaterials(cloneTextureMaterials(appState.menu.textureMaterials ?? DEFAULT_TEXTURE_MATERIALS))
             setDebuggingEnabled(appState.menu.debuggingEnabled ?? false)
+            setSpellCheckEditEnabled(appState.menu.spellCheckEditEnabled ?? false)
+            setSpellCheckRenderEnabled(appState.menu.spellCheckRenderEnabled ?? false)
 
             setCurrentPage(loadedSidebarViewState[appState.menu.sidebarMode].page)
             setCategoryCollapsedPrimary(loadedSidebarViewState.category.collapsedPrimary)
@@ -10708,6 +10716,17 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     syncTextureToScroll(previewScrollRef.current.scrollTop, previewTextureRef.current);
   }, []);
 
+  // The render view is normally plain (non-editable) rendered markdown, but
+  // Chromium's native spellchecker only underlines misspellings inside an
+  // editable region. To let spell check work in render view too, we make the
+  // preview container contentEditable when the render-view spell check
+  // toggle is on, and block every event that would actually mutate its
+  // content — so it stays visually read-only while still being "editable"
+  // enough for the OS/Chromium spellchecker to run against it.
+  const blockPreviewEditMutation = useCallback((event: { preventDefault: () => void }) => {
+    event.preventDefault()
+  }, [])
+
   const handleSidebarScroll = useCallback(() => {
     syncSidebarTexture()
   }, [syncSidebarTexture])
@@ -11253,6 +11272,32 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   >
                     <span className="fa-solid fa-pen-to-square" aria-hidden="true" />
                   </button>
+                  <div className="toolbar-spacer-large"/>
+                  <button
+                    className={`btn-icon ${(isPreviewMode ? spellCheckRenderEnabled : spellCheckEditEnabled) ? 'active' : ''}`}
+                    type="button"
+                    title={
+                      isPreviewMode
+                        ? (spellCheckRenderEnabled ? 'Disable spell check (render view)' : 'Enable spell check (render view)')
+                        : (spellCheckEditEnabled ? 'Disable spell check (edit mode)' : 'Enable spell check (edit mode)')
+                    }
+                    aria-label={
+                      isPreviewMode
+                        ? (spellCheckRenderEnabled ? 'Spell check active in render view' : 'Spell check inactive in render view')
+                        : (spellCheckEditEnabled ? 'Spell check active in edit mode' : 'Spell check inactive in edit mode')
+                    }
+                    aria-pressed={isPreviewMode ? spellCheckRenderEnabled : spellCheckEditEnabled}
+                    onClick={() => {
+                      if (isPreviewMode) {
+                        setSpellCheckRenderEnabled((prev) => !prev)
+                      } else {
+                        setSpellCheckEditEnabled((prev) => !prev)
+                      }
+                      queueAppStateSave(activeNoteId)
+                    }}
+                  >
+                    <span className="fa-solid fa-spell-check" aria-hidden="true" />
+                  </button>
 
                   {isPreviewMode ? (
                     <div className="toolbar-action-group" aria-label="Print toolbar">
@@ -11491,6 +11536,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                         fontReady={editorFontLoadVersion > 0}
                         editorReadOnly={activeNoteHasDebugTag}
                         caretSuspended={isCaretSuspended}
+                        spellCheckEnabled={spellCheckEditEnabled}
                       />
                     </div>
                     <div className="render-container" style={{ display: isPreviewMode ? undefined : 'none' }} aria-hidden={!isPreviewMode}>
@@ -11500,6 +11546,13 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                         onScroll={handlePreviewScroll}
                         className={`markdown-preview measly-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
                         style={{ '--search-hit-color': highlightColors.search } as CSSProperties}
+                        contentEditable={spellCheckRenderEnabled}
+                        suppressContentEditableWarning={spellCheckRenderEnabled}
+                        spellCheck={spellCheckRenderEnabled}
+                        onBeforeInput={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
+                        onPaste={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
+                        onCut={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
+                        onDrop={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
                       >
                         {previewMarkdownElement}
                       </div>

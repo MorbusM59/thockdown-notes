@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, ipcMain, dialog, protocol } from 'electron'
+import type { Session } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { existsSync, promises as fsPromises, readFileSync, writeFileSync } from 'node:fs'
@@ -33,6 +34,35 @@ export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron')
 export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
+
+// Chromium's built-in spellchecker (used for the contentEditable regions in
+// both edit mode and, optionally, render view) needs to be told which
+// dictionaries to load. We resolve the OS-preferred language(s) plus English
+// (deduped, and only if English isn't already one of the OS languages), and
+// match each against the dictionaries Chromium actually ships.
+function configureSpellChecker(session: Session) {
+  try {
+    const available = session.availableSpellCheckerLanguages
+    if (!available || available.length === 0) return
+
+    const osLanguages = app.getPreferredSystemLanguages()
+    const wanted = [...osLanguages, 'en-US', 'en']
+
+    const resolved: string[] = []
+    for (const lang of wanted) {
+      const normalized = lang.toLowerCase()
+      const exact = available.find((code) => code.toLowerCase() === normalized)
+      const baseMatch = exact ?? available.find((code) => code.toLowerCase().startsWith(normalized.slice(0, 2)))
+      if (baseMatch && !resolved.includes(baseMatch)) {
+        resolved.push(baseMatch)
+      }
+    }
+
+    session.setSpellCheckerLanguages(resolved.length > 0 ? resolved : ['en-US'])
+  } catch (error) {
+    console.warn('Failed to configure spell checker languages', error)
+  }
+}
 
 function resolveWindowIconPath(): string {
   if (process.platform === 'win32') {
@@ -778,6 +808,8 @@ win = new BrowserWindow({
     preload: path.join(__dirname, 'preload.mjs'),
   },
 })
+
+  configureSpellChecker(win.webContents.session)
 
   win.setMenuBarVisibility(false)
 

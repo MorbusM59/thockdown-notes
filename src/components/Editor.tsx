@@ -60,6 +60,7 @@ interface EditorProps {
   fontReady: boolean;
   editorReadOnly?: boolean;
   caretSuspended?: boolean;
+  spellCheckEnabled?: boolean;
 }
 
 const ENABLE_CONTRACT_ASSERTIONS = import.meta.env.DEV;
@@ -326,6 +327,7 @@ export function Editor({
   fontReady,
   editorReadOnly = false,
   caretSuspended = false,
+  spellCheckEnabled = false,
 }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -1246,7 +1248,7 @@ export function Editor({
                       // hydration can proceed) but is not visible.
                       visibility: hasViewportLines && fontReady ? 'visible' : 'hidden',
                     }}
-                    spellCheck={false}
+                    spellCheck={spellCheckEnabled}
                     onKeyDown={handleEditorKeyDown}
                     onDragStart={(e) => e.preventDefault()}
                     onMouseDown={(e) => {
