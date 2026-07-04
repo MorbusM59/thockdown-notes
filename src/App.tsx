@@ -630,6 +630,14 @@ function rgbaToCssColor(color: RgbaColor): string {
   return `rgba(${clampColorChannel(color.r)}, ${clampColorChannel(color.g)}, ${clampColorChannel(color.b)}, ${alpha})`
 }
 
+function rgbaToHex(color: RgbaColor): string {
+  const r = clampColorChannel(color.r).toString(16).padStart(2, '0').toUpperCase()
+  const g = clampColorChannel(color.g).toString(16).padStart(2, '0').toUpperCase()
+  const b = clampColorChannel(color.b).toString(16).padStart(2, '0').toUpperCase()
+  const a = clampColorChannel(Math.round(clampAlphaChannel(color.a) * 255)).toString(16).padStart(2, '0').toUpperCase()
+  return `#${r}${g}${b}${a}`
+}
+
 function invertRgbaColor(color: RgbaColor, alphaScale = 1): RgbaColor {
   return {
     r: 255 - clampColorChannel(color.r),
@@ -2429,6 +2437,9 @@ function App() {
   })
   const activeColorRgba = useMemo(() => hsvaToRgba(activeColorHsva), [activeColorHsva])
   const activeColorCss = useMemo(() => rgbaToCssColor(activeColorRgba), [activeColorRgba])
+  const activeColorHex = useMemo(() => rgbaToHex(activeColorRgba), [activeColorRgba])
+  const texturePreviewRgba = useMemo(() => hsvaToRgba(texturePreviewMaterial.color), [texturePreviewMaterial.color])
+  const texturePreviewHex = useMemo(() => rgbaToHex(texturePreviewRgba), [texturePreviewRgba])
   const appGridTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.appGrid.color)), [textureMaterials.appGrid.color])
   const sidebarTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.sidebarContent.color)), [textureMaterials.sidebarContent.color])
   const editorEditTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.editorEditText.color)), [textureMaterials.editorEditText.color])
@@ -9633,7 +9644,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               type="button"
               className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'h' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'h' ? ' active' : ''}`}
               style={{ background: hsvaDisplayColors.hColor }}
-              title="Hue"
+              title={`Hue: ${Math.round(activeColorHsva.h)}\n${activeColorHex}`}
               onPointerDown={(event) => {
                 startHsvaDrag('h', event)
               }}
@@ -9670,7 +9681,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               type="button"
               className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 's' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 's' ? ' active' : ''}`}
               style={{ background: hsvaDisplayColors.sColor }}
-              title="Saturation"
+              title={`Saturation: ${Math.round(activeColorHsva.s * 255)}\n${activeColorHex}`}
               onPointerDown={(event) => {
                 startHsvaDrag('s', event)
               }}
@@ -9707,7 +9718,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               type="button"
               className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'v' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'v' ? ' active' : ''}`}
               style={{ background: hsvaDisplayColors.vColor }}
-              title="Value"
+              title={`Value: ${Math.round(activeColorHsva.v * 255)}\n${activeColorHex}`}
               onPointerDown={(event) => {
                 startHsvaDrag('v', event)
               }}
@@ -9753,7 +9764,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 .filter(Boolean)
                 .join(' ')}
               style={{ background: 'var(--color-background-light)', color: hsvaDisplayColors.aGhostColor }}
-              title="Alpha"
+              title={`Alpha: ${Math.round(activeColorHsva.a * 255)}\n${activeColorHex}`}
               onPointerDown={(event) => {
                 startHsvaDrag('a', event)
               }}
@@ -9789,7 +9800,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <button
               type="button"
               className={`btn-icon options-color-swatch options-active-color${armedColorSource.kind === 'active-color' ? ' active' : ''}`}
-              title="Active color"
+              title={`Active color:\n${activeColorHex}`}
               style={{ background: `linear-gradient(${activeColorCss}, ${activeColorCss}), var(--color-background-light)` }}
               onMouseDown={(event) => {
                 if (event.button !== 2) return
@@ -9812,7 +9823,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               <button
                 type="button"
                 className={`btn-icon options-color-swatch options-active-color options-texture-preview${armedColorSource.kind === 'texture-preview' ? ' active' : ''}`}
-                title="Texture preview"
+                title={`Texture preview: ${texturePreviewHex}`}
                 style={{
                   '--texture-preview-color': texturePreviewTintCss,
                   '--texture-preview-mask': texturePreviewCss,
