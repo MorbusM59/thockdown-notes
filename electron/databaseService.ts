@@ -625,6 +625,7 @@ export class DatabaseService {
     this.db = db;
     this.ensureSchema();
     this.ensureProtectedTags();
+    this.ensureLoadoutsSeeded();
   }
 
   close(): void {
@@ -1545,7 +1546,7 @@ export class DatabaseService {
 
     const timestamp = Date.now();
     const insertStmt = db.prepare(`
-      INSERT INTO ui_loadout_entries (id, isActive, signature, payloadJson, updatedAt)
+      INSERT OR IGNORE INTO ui_loadout_entries (id, isActive, signature, payloadJson, updatedAt)
       VALUES (?, ?, ?, ?, ?)
     `);
 
@@ -1593,7 +1594,7 @@ export class DatabaseService {
       WHERE id = ?
     `);
     const insertStmt = db.prepare(`
-      INSERT INTO ui_loadout_entries (id, isActive, signature, payloadJson, updatedAt)
+      INSERT OR IGNORE INTO ui_loadout_entries (id, isActive, signature, payloadJson, updatedAt)
       VALUES (?, ?, ?, ?, ?)
     `);
 
