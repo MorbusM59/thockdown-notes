@@ -122,7 +122,7 @@ function getOffsetWithinParagraph(paragraphEl: HTMLElement, node: Node, offset: 
 }
 
 function getOffsetWithinRoot(rootEl: HTMLElement, node: Node, offset: number): number {
-  const paragraphs = Array.from(rootEl.children);
+  const paragraphs = Array.from(rootEl.children).filter((child): child is HTMLElement => child instanceof HTMLElement);
   if (paragraphs.length === 0) {
     return getOffsetWithinContainer(rootEl, node, offset);
   }

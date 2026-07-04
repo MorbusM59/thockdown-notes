@@ -1131,49 +1131,12 @@ function resolveEditSourceAnchorLineFromUiState(text: string, uiState: { sourceA
     return Math.min(sourceAnchorLine, totalLines - 1)
   }
 
-  const sourceAnchorText = typeof uiState?.sourceAnchorText === 'string'
-    ? uiState.sourceAnchorText.trim()
-    : ''
-
-  if (!sourceAnchorText) {
-    return null
-  }
-
   return null
 }
 
-const PREVIEW_ANCHOR_DEBUG = true
-
-function debugPreviewAnchorSelection(params: {
-  sourceLine: number
-  sourceText: string | null
-  path: 'exact-line' | 'text-match' | 'nearest-floor' | 'first-anchor' | 'no-anchors'
-  targetLine: number | null
-  targetText: string | null
-  anchorLines: number[]
-}) {
-  if (!PREVIEW_ANCHOR_DEBUG) return
-  console.debug('[preview-anchor-restore]', {
-    sourceLine: params.sourceLine,
-    sourceTextPreview: params.sourceText ? params.sourceText.slice(0, 256) : null,
-    path: params.path,
-    targetLine: params.targetLine,
-    targetTextPreview: params.targetText ? params.targetText.slice(0, 256) : null,
-    anchorLines: params.anchorLines,
-  })
-}
-
-function findPreviewSourceAnchorElement(container: HTMLElement, sourceLine: number, sourceText: string | null = null): HTMLElement | null {
+function findPreviewSourceAnchorElement(container: HTMLElement, sourceLine: number): HTMLElement | null {
   const anchors = Array.from(container.querySelectorAll<HTMLElement>('[data-source-line-start], [data-source-line]'))
   if (anchors.length === 0) {
-    debugPreviewAnchorSelection({
-      sourceLine,
-      sourceText,
-      path: 'no-anchors',
-      targetLine: null,
-      targetText: null,
-      anchorLines: [],
-    })
     return null
   }
 
@@ -1212,30 +1175,6 @@ function findPreviewSourceAnchorElement(container: HTMLElement, sourceLine: numb
     return null
   }
 
-  const anchorLines = entries.map((entry) => entry.lineStart)
-  const normalizedSourceText = typeof sourceText === 'string' ? sourceText.trim().toLowerCase() : ''
-  const matchingTextEntry = normalizedSourceText
-    ? entries.filter((entry) => entry.lineStart <= sourceLine && entry.lineEnd >= sourceLine)
-      .reduce<AnchorEntry | null>((best, entry) => {
-        const anchorText = entry.text?.trim().toLowerCase() ?? ''
-        const isMatch = anchorText === normalizedSourceText
-          || anchorText.includes(normalizedSourceText)
-          || normalizedSourceText.includes(anchorText)
-        if (!isMatch) return best
-        if (best === null || entry.lineStart > best.lineStart) return entry
-        return best
-      }, null)
-    : null
-
-  const path = matchingTextEntry ? 'text-match' : resolvedEntry.lineStart <= sourceLine && sourceLine <= resolvedEntry.lineEnd ? 'exact-line' : 'nearest-floor'
-  debugPreviewAnchorSelection({
-    sourceLine,
-    sourceText,
-    path,
-    targetLine: resolvedEntry.lineStart,
-    targetText: resolvedEntry.text,
-    anchorLines,
-  })
   return resolvedEntry.element
 }
 
@@ -7052,14 +6991,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     })
 
     pendingRenderViewSourceAnchorRef.current = anchor
-    if (anchor) {
-      console.debug('[preview-anchor-capture]', {
-        noteId,
-        sourceAnchorLine: anchor.sourceAnchorLine,
-        sourceAnchorTextPreview: anchor.sourceAnchorText ? anchor.sourceAnchorText.slice(0, 256) : null,
-        viewport,
-      })
-    }
   }, [captureEditModeSnapshotFromEditor, editorRuntimeMetrics.lineHeightPx])
 
   const toggleRenderViewMode = useCallback(async () => {
@@ -7279,35 +7210,21 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       container.style.scrollBehavior = behavior
     }
 
-    const applyPreviewSourceAnchor = (sourceLine: number, sourceText: string | null = null) => {
+    const applyPreviewSourceAnchor = (sourceLine: number) => {
       const container = previewScrollRef.current
       if (!container) return
 
       const previousScrollBehavior = container.style.scrollBehavior
       container.style.scrollBehavior = 'auto'
 
-      const target = findPreviewSourceAnchorElement(container, sourceLine, sourceText)
+      const target = findPreviewSourceAnchorElement(container, sourceLine)
       if (!target) {
-        console.debug('[preview-anchor-apply]', {
-          sourceLine,
-          sourceTextPreview: sourceText ? sourceText.slice(0, 256) : null,
-          path: 'no-anchor-target',
-          scrollTopBefore: container.scrollTop,
-        })
         container.style.scrollBehavior = previousScrollBehavior
         return
       }
 
       requestAnimationFrame(() => {
         if (!container || !document.body.contains(target)) return
-
-        console.debug('[preview-anchor-apply]', {
-          sourceLine,
-          sourceTextPreview: sourceText ? sourceText.slice(0, 256) : null,
-          targetLine: Number(target.dataset.sourceLineStart ?? target.dataset.sourceLine),
-          targetTextPreview: target.textContent?.trim()?.slice(0, 256) ?? null,
-          scrollTopBefore: container.scrollTop,
-        })
 
         target.scrollIntoView({ block: 'start', inline: 'nearest' })
         container.style.scrollBehavior = previousScrollBehavior
@@ -7317,7 +7234,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     const pendingSourceAnchor = pendingRenderViewSourceAnchorRef.current
     if (pendingSourceAnchor) {
       pendingRenderViewSourceAnchorRef.current = null
-      applyPreviewSourceAnchor(pendingSourceAnchor.sourceAnchorLine, pendingSourceAnchor.sourceAnchorText)
+      applyPreviewSourceAnchor(pendingSourceAnchor.sourceAnchorLine)
       return () => {
         cancelled = true
         setPreviewScrollBehavior('')
@@ -7330,9 +7247,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         if (cancelled) return
 
         const sourceAnchorLine = uiState?.sourceAnchorLine
-        const sourceAnchorText = typeof uiState?.sourceAnchorText === 'string' ? uiState.sourceAnchorText : null
         if (typeof sourceAnchorLine === 'number' && Number.isFinite(sourceAnchorLine)) {
-          applyPreviewSourceAnchor(sourceAnchorLine, sourceAnchorText)
+          applyPreviewSourceAnchor(sourceAnchorLine)
           return
         }
 
