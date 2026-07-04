@@ -49,6 +49,14 @@ interface ContractBridgePluginProps {
     text: string;
     selection: EditorSelectionState;
   } | null;
+  onCharacterInsertTransform?: (event: {
+    char: string;
+    text: string;
+    selection: EditorSelectionState;
+  }) => {
+    text: string;
+    selection: EditorSelectionState;
+  } | null;
   onEnterTransform?: (event: {
     shiftKey: boolean;
     altKey: boolean;
@@ -110,6 +118,7 @@ export function ContractBridgePlugin({
   onTabIndent,
   onTabIndentTransform,
   onMarkdownShortcutTransform,
+  onCharacterInsertTransform,
   onEnterTransform,
 }: ContractBridgePluginProps) {
   const [editor] = useLexicalComposerContext();
@@ -127,6 +136,7 @@ export function ContractBridgePlugin({
   const onTabIndentRef = useRef(onTabIndent);
   const onTabIndentTransformRef = useRef(onTabIndentTransform);
   const onMarkdownShortcutTransformRef = useRef(onMarkdownShortcutTransform);
+  const onCharacterInsertTransformRef = useRef(onCharacterInsertTransform);
   const onEnterTransformRef = useRef(onEnterTransform);
 
   useEffect(() => {
@@ -135,8 +145,9 @@ export function ContractBridgePlugin({
     onTabIndentRef.current = onTabIndent;
     onTabIndentTransformRef.current = onTabIndentTransform;
     onMarkdownShortcutTransformRef.current = onMarkdownShortcutTransform;
+    onCharacterInsertTransformRef.current = onCharacterInsertTransform;
     onEnterTransformRef.current = onEnterTransform;
-  }, [onTextChange, onSelectionChange, onTabIndent, onTabIndentTransform, onMarkdownShortcutTransform, onEnterTransform]);
+  }, [onTextChange, onSelectionChange, onTabIndent, onTabIndentTransform, onMarkdownShortcutTransform, onCharacterInsertTransform, onEnterTransform]);
 
   useEffect(() => {
     // Emit stable initial state from current editor content.
@@ -553,7 +564,11 @@ export function ContractBridgePlugin({
         const previousText = previousTextRef.current;
         const previousSelection = previousSelectionRef.current;
 
-        const isTransformCommit = tags.has('enter-transform') || tags.has('tab-indent') || tags.has('shortcut-transform');
+        const isTransformCommit =
+          tags.has('enter-transform') ||
+          tags.has('tab-indent') ||
+          tags.has('shortcut-transform') ||
+          tags.has('character-transform');
 
         if (normalizedText !== previousText) {
           const source = resolveChangeSource(tags);
@@ -686,6 +701,51 @@ export function ContractBridgePlugin({
     const removeMarkdownShortcutCommand = editor.registerCommand(
       KEY_DOWN_COMMAND,
       (event: KeyboardEvent) => {
+        const characterTransformCallback = onCharacterInsertTransformRef.current;
+        const isPlainCharacterInsert =
+          !!characterTransformCallback &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          !event.altKey &&
+          !event.isComposing &&
+          event.key.length === 1;
+
+        if (isPlainCharacterInsert) {
+          let canonicalText = '';
+          let currentSelection = previousSelectionRef.current;
+
+          editor.getEditorState().read(() => {
+            canonicalText = readCanonicalRootText();
+            const rootEl = editor.getRootElement();
+            const lexicalSelection = $getSelection();
+            if (rootEl && $isRangeSelection(lexicalSelection)) {
+              currentSelection = readSelectionStateFromDom(rootEl, window.getSelection(), canonicalText.length);
+            }
+          });
+
+          const next = characterTransformCallback({
+            char: event.key,
+            text: canonicalText,
+            selection: currentSelection,
+          });
+
+          if (next) {
+            event.preventDefault();
+
+            const rootEl = editor.getRootElement();
+            const scroller = rootEl?.closest('.measly-custom-scrollbar');
+            const scrollerEl = scroller instanceof HTMLElement ? scroller : null;
+            const preservedScrollTopAtCommand = scrollerEl ? scrollerEl.scrollTop : null;
+
+            editor.update(() => {
+              replaceEditorTextFromCanonical(next.text);
+            }, { tag: 'character-transform' });
+
+            scheduleTransformSelectionReplay(next.text, next.selection, preservedScrollTopAtCommand);
+            return true;
+          }
+        }
+
         const callback = onMarkdownShortcutTransformRef.current;
         if (!callback) return false;
 

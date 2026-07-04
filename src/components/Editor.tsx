@@ -1295,6 +1295,7 @@ export function Editor({
               onTabIndent={bindings?.onTabIndent}
               onTabIndentTransform={bindings?.onTabIndentTransform}
               onMarkdownShortcutTransform={bindings?.onMarkdownShortcutTransform}
+              onCharacterInsertTransform={bindings?.onCharacterInsertTransform}
               onEnterTransform={bindings?.onEnterTransform}
             />
             

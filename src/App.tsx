@@ -67,6 +67,7 @@ import {
   resolveMarkdownSelectionContext,
 } from './editor/MarkdownContext'
 import { resolveMarkdownEnterTransform } from './editor/EnterTransformPolicy'
+import { resolveMarkdownChecklistTypeoverTransform } from './editor/ChecklistTypingTransformPolicy'
 import { normalizeInternalText } from './editor/TextPolicy'
 import {
   buildReleaseRampDownPlanFromCurrentParams,
@@ -6446,6 +6447,28 @@ ${markdownHtml}
       }
 
       if (!next) return null
+
+      latestEditorTextRef.current = next.text
+      setActiveNoteText(next.text)
+      setEditorTextVersion((previous) => previous + 1)
+      updateActiveNoteTitlePreview(next.text)
+      queueSave(next.text)
+      latestEditorSelectionRef.current = next.selection
+      setEditorSelection(next.selection)
+      return next
+    },
+    onCharacterInsertTransform: ({ char, text, selection }) => {
+      if (!activeNoteId || activeNoteHasDebugTag) return null
+
+      const sourceText = normalizeInternalText(text)
+      const next = resolveMarkdownChecklistTypeoverTransform({
+        char,
+        text: sourceText,
+        selection,
+      })
+      if (!next) {
+        return null
+      }
 
       latestEditorTextRef.current = next.text
       setActiveNoteText(next.text)

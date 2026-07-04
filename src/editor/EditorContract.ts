@@ -128,6 +128,14 @@ export interface EditorBindings {
     text: string;
     selection: EditorSelectionState;
   } | null;
+  onCharacterInsertTransform?: (event: {
+    char: string;
+    text: string;
+    selection: EditorSelectionState;
+  }) => {
+    text: string;
+    selection: EditorSelectionState;
+  } | null;
   onEnterTransform?: (event: {
     shiftKey: boolean;
     altKey: boolean;
