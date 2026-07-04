@@ -7804,7 +7804,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }, [markdownSelectionContext])
 
   const activeHeadingLevel = markdownSelectionContext.line.headingLevel
-  const isBulletedListActive = markdownSelectionContext.line.listKind === 'unordered'
+  const isChecklistActive = /^\s*(?:>\s*)*[-*+]\s+\[[ xX]\]\s+/.test(markdownSelectionContext.line.lineText)
+  const isBulletedListActive = markdownSelectionContext.line.listKind === 'unordered' && !isChecklistActive
   const isNumberedListActive = markdownSelectionContext.line.listKind === 'ordered'
   const isBlockquoteActive = markdownSelectionContext.line.blockquoteDepth > 0
   const isCodeBlockActive = markdownSelectionContext.inline.inFencedCodeBlock
@@ -8334,6 +8335,13 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     }, ({ oldLine, newLine, localOffsetInLine }) => {
       const oldContentStart = resolveContentStart(oldLine)
       const newContentStart = resolveContentStart(newLine)
+
+      if (oldLine.match(/^(\s*(?:>\s*)*[-*+]\s+)\[[ xX]\]\s+/)) {
+        const checkboxPrefixLength = oldLine.match(/^(\s*(?:>\s*)*[-*+]\s+\[[ xX]\]\s+)/)![1].length
+        if (localOffsetInLine <= checkboxPrefixLength) {
+          return Math.min(localOffsetInLine, newContentStart)
+        }
+      }
 
       if (localOffsetInLine <= oldContentStart) {
         return Math.min(localOffsetInLine, newContentStart)
@@ -11324,7 +11332,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
                       <button type="button" className={`btn-icon ${isBulletedListActive ? 'active' : ''}`} title="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>≡</button>
                       <button type="button" className={`btn-icon ${isNumberedListActive ? 'active' : ''}`} title="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>#</button>
-                      <button type="button" className={`btn-icon ${isBulletedListActive ? 'active' : ''}`} title="Checklist" onClick={toggleChecklistList} disabled={!activeNoteId}>☐</button>
+                      <button type="button" className={`btn-icon ${isChecklistActive ? 'active' : ''}`} title="Checklist" onClick={toggleChecklistList} disabled={!activeNoteId}>☐</button>
 
                       <div className="toolbar-spacer"/>
 
