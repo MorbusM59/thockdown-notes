@@ -70,6 +70,7 @@ import {
 import { resolveMarkdownEnterTransform } from './editor/EnterTransformPolicy'
 import { resolveMarkdownChecklistTypeoverTransform } from './editor/ChecklistTypingTransformPolicy'
 import { normalizeInternalText } from './editor/TextPolicy'
+import { resolvePreviewSourceAnchorEntry } from './editor/PreviewScrollAnchor'
 import {
   buildReleaseRampDownPlanFromCurrentParams,
   cancelNonQuantizedSmoothScroll,
@@ -1129,7 +1130,7 @@ function debugPreviewAnchorSelection(params: {
 }
 
 function findPreviewSourceAnchorElement(container: HTMLElement, sourceLine: number, sourceText: string | null = null): HTMLElement | null {
-  const anchors = Array.from(container.querySelectorAll<HTMLElement>('[data-source-line]'))
+  const anchors = Array.from(container.querySelectorAll<HTMLElement>('[data-source-line-start], [data-source-line]'))
   if (anchors.length === 0) {
     debugPreviewAnchorSelection({
       sourceLine,
@@ -1142,94 +1143,66 @@ function findPreviewSourceAnchorElement(container: HTMLElement, sourceLine: numb
     return null
   }
 
-  type AnchorEntry = { element: HTMLElement; tagName: string; line: number; text: string | null }
+  type AnchorEntry = { element: HTMLElement; tagName: string; line: number; lineStart: number; lineEnd: number; text: string | null }
   const entries: AnchorEntry[] = []
 
   for (const element of anchors) {
-    const lineValue = Number(element.dataset.sourceLine)
-    if (!Number.isFinite(lineValue)) continue
+    const startValue = Number(element.dataset.sourceLineStart)
+    const endValue = Number(element.dataset.sourceLineEnd)
+    const fallbackStartValue = Number(element.dataset.sourceLine)
+    const lineStart = Number.isFinite(startValue)
+      ? Math.max(0, Math.round(startValue))
+      : Number.isFinite(fallbackStartValue)
+        ? Math.max(0, Math.round(fallbackStartValue))
+        : null
+    const lineEnd = Number.isFinite(endValue)
+      ? Math.max(0, Math.round(endValue))
+      : lineStart
+
+    if (lineStart === null) continue
+
     entries.push({
       element,
       tagName: element.tagName,
-      line: Math.max(0, Math.round(lineValue)),
+      line: lineStart,
+      lineStart,
+      lineEnd: lineEnd ?? lineStart,
       text: element.textContent?.trim() ?? null,
     })
   }
 
   if (entries.length === 0) return null
-  entries.sort((a, b) => a.line - b.line)
 
-  const anchorLines = entries.map((entry) => entry.line)
-  const exactLineEntries = entries.filter((entry) => entry.line === sourceLine)
-  if (exactLineEntries.length > 0) {
-    const exactLine = exactLineEntries
-      .filter((entry) => entry.text && entry.text.length > 0)
-      .slice(-1)[0] ?? exactLineEntries[exactLineEntries.length - 1]
-
-    debugPreviewAnchorSelection({
-      sourceLine,
-      sourceText,
-      path: 'exact-line',
-      targetLine: exactLine.line,
-      targetText: exactLine.text,
-      anchorLines,
-    })
-    return exactLine.element
+  const resolvedEntry = resolvePreviewSourceAnchorEntry(entries, sourceLine)
+  if (!resolvedEntry) {
+    return null
   }
 
+  const anchorLines = entries.map((entry) => entry.lineStart)
   const normalizedSourceText = typeof sourceText === 'string' ? sourceText.trim().toLowerCase() : ''
-  const floorEntries = entries.filter((entry) => entry.line <= sourceLine)
+  const matchingTextEntry = normalizedSourceText
+    ? entries.filter((entry) => entry.lineStart <= sourceLine && entry.lineEnd >= sourceLine)
+      .reduce<AnchorEntry | null>((best, entry) => {
+        const anchorText = entry.text?.trim().toLowerCase() ?? ''
+        const isMatch = anchorText === normalizedSourceText
+          || anchorText.includes(normalizedSourceText)
+          || normalizedSourceText.includes(anchorText)
+        if (!isMatch) return best
+        if (best === null || entry.lineStart > best.lineStart) return entry
+        return best
+      }, null)
+    : null
 
-  if (normalizedSourceText && floorEntries.length > 0) {
-    const textMatch = floorEntries.reduce<AnchorEntry | null>((best, entry) => {
-      const anchorText = entry.text?.trim().toLowerCase() ?? ''
-      const isMatch = anchorText === normalizedSourceText
-        || anchorText.includes(normalizedSourceText)
-        || normalizedSourceText.includes(anchorText)
-      if (!isMatch) return best
-      if (best === null || entry.line > best.line) return entry
-      return best
-    }, null)
-
-    if (textMatch) {
-      debugPreviewAnchorSelection({
-        sourceLine,
-        sourceText,
-        path: 'text-match',
-        targetLine: textMatch.line,
-        targetText: textMatch.text,
-        anchorLines,
-      })
-      return textMatch.element
-    }
-  }
-
-  const floorEntry = floorEntries.reduce<AnchorEntry | null>((best, entry) => {
-    if (best === null || entry.line > best.line) return entry
-    return best
-  }, null)
-  if (floorEntry) {
-    debugPreviewAnchorSelection({
-      sourceLine,
-      sourceText,
-      path: 'nearest-floor',
-      targetLine: floorEntry.line,
-      targetText: floorEntry.text,
-      anchorLines,
-    })
-    return floorEntry.element
-  }
-
-  const firstAnchor = entries[0]
+  const path = matchingTextEntry ? 'text-match' : resolvedEntry.lineStart <= sourceLine && sourceLine <= resolvedEntry.lineEnd ? 'exact-line' : 'nearest-floor'
   debugPreviewAnchorSelection({
     sourceLine,
     sourceText,
-    path: 'first-anchor',
-    targetLine: firstAnchor.line,
-    targetText: firstAnchor.text,
+    path,
+    targetLine: resolvedEntry.lineStart,
+    targetText: resolvedEntry.text,
     anchorLines,
   })
-  return firstAnchor.element
+  return resolvedEntry.element
 }
 
 function createPreviewSourceAnchorRehypePlugin() {
@@ -1243,12 +1216,24 @@ function createPreviewSourceAnchorRehypePlugin() {
       visit(tree, 'element', (node: any) => {
         if (typeof node.tagName !== 'string') return
         if (!sourceAnchorTags.has(node.tagName)) return
-        const position = node.position?.start?.line
-        if (typeof position !== 'number' || Number.isNaN(position)) return
+        const startLine = node.position?.start?.line
+        const endLine = node.position?.end?.line
+        if (typeof startLine !== 'number' || Number.isNaN(startLine)) return
+
+        const normalizedStartLine = Math.max(0, Math.round(startLine - 1))
+        const normalizedEndLine = typeof endLine === 'number' && !Number.isNaN(endLine)
+          ? Math.max(normalizedStartLine, Math.round(endLine - 1))
+          : normalizedStartLine
 
         node.properties = node.properties ?? {}
         if (node.properties['data-source-line'] === undefined) {
-          node.properties['data-source-line'] = String(Math.max(0, Math.round(position - 1)))
+          node.properties['data-source-line'] = String(normalizedStartLine)
+        }
+        if (node.properties['data-source-line-start'] === undefined) {
+          node.properties['data-source-line-start'] = String(normalizedStartLine)
+        }
+        if (node.properties['data-source-line-end'] === undefined) {
+          node.properties['data-source-line-end'] = String(normalizedEndLine)
         }
       })
     }
@@ -6523,6 +6508,7 @@ ${markdownHtml}
       const normalizedText = normalizeInternalText(event.text)
       latestEditorTextRef.current = normalizedText
       latestEditorSelectionRef.current = event.selection
+      setActiveNoteText(normalizedText)
       setEditorSelection(event.selection)
       setEditorTextVersion((previous) => previous + 1)
 
@@ -7223,40 +7209,30 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
       const target = findPreviewSourceAnchorElement(container, sourceLine, sourceText)
       if (!target) {
-        const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
-        const targetScrollTop = Math.max(0, Math.min(maxScrollTop, sourceLine * editorRuntimeMetrics.lineHeightPx))
         console.debug('[preview-anchor-apply]', {
           sourceLine,
           sourceTextPreview: sourceText ? sourceText.slice(0, 256) : null,
-          path: 'fallback-linear',
-          targetScrollTop,
-          maxScrollTop,
-          lineHeightPx: editorRuntimeMetrics.lineHeightPx,
+          path: 'no-anchor-target',
           scrollTopBefore: container.scrollTop,
         })
-        container.scrollTop = targetScrollTop
         container.style.scrollBehavior = previousScrollBehavior
         return
       }
 
-      const containerRect = container.getBoundingClientRect()
-      const targetRect = target.getBoundingClientRect()
-      const delta = targetRect.top - containerRect.top
-      const targetScrollTop = Math.max(0, Math.min(container.scrollHeight - container.clientHeight, container.scrollTop + delta))
-      console.debug('[preview-anchor-apply]', {
-        sourceLine,
-        sourceTextPreview: sourceText ? sourceText.slice(0, 256) : null,
-        targetLine: Number(target.dataset.sourceLine),
-        targetTextPreview: target.textContent?.trim()?.slice(0, 256) ?? null,
-        scrollTopBefore: container.scrollTop,
-        containerTop: containerRect.top,
-        targetTop: targetRect.top,
-        delta,
-        targetScrollTop,
-        maxScrollTop: Math.max(0, container.scrollHeight - container.clientHeight),
+      requestAnimationFrame(() => {
+        if (!container || !document.body.contains(target)) return
+
+        console.debug('[preview-anchor-apply]', {
+          sourceLine,
+          sourceTextPreview: sourceText ? sourceText.slice(0, 256) : null,
+          targetLine: Number(target.dataset.sourceLineStart ?? target.dataset.sourceLine),
+          targetTextPreview: target.textContent?.trim()?.slice(0, 256) ?? null,
+          scrollTopBefore: container.scrollTop,
+        })
+
+        target.scrollIntoView({ block: 'start', inline: 'nearest' })
+        container.style.scrollBehavior = previousScrollBehavior
       })
-      container.scrollTop = targetScrollTop
-      container.style.scrollBehavior = previousScrollBehavior
     }
 
     const pendingSourceAnchor = pendingRenderViewSourceAnchorRef.current

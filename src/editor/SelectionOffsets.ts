@@ -82,6 +82,45 @@ function getOffsetWithinContainer(container: Node, node: Node, offset: number): 
   return accumulated;
 }
 
+function getOffsetWithinParagraph(paragraphEl: HTMLElement, node: Node, offset: number): number {
+  const paragraphText = normalizePlainText(paragraphEl.textContent ?? '');
+  if (paragraphText.length === 0) {
+    return 0;
+  }
+
+  const textNodes = collectTextNodes(paragraphEl);
+  if (textNodes.length === 0) {
+    return 0;
+  }
+
+  let accumulated = 0;
+  for (const textNode of textNodes) {
+    const textLength = normalizePlainText(textNode.data).length;
+    if (textNode === node) {
+      const safeRawOffset = clamp(offset, 0, textNode.data.length);
+      return accumulated + normalizePlainText(textNode.data.slice(0, safeRawOffset)).length;
+    }
+
+    try {
+      const beforeOrAtTextStart = compareDomPoints(node, offset, textNode, 0) <= 0;
+      if (beforeOrAtTextStart) {
+        return accumulated;
+      }
+
+      const beforeOrAtTextEnd = compareDomPoints(node, offset, textNode, textNode.data.length) <= 0;
+      if (beforeOrAtTextEnd) {
+        return accumulated + textLength;
+      }
+    } catch {
+      return accumulated;
+    }
+
+    accumulated += textLength;
+  }
+
+  return accumulated;
+}
+
 function getOffsetWithinRoot(rootEl: HTMLElement, node: Node, offset: number): number {
   const paragraphs = Array.from(rootEl.children);
   if (paragraphs.length === 0) {
@@ -106,7 +145,7 @@ function getOffsetWithinRoot(rootEl: HTMLElement, node: Node, offset: number): n
   for (let index = 0; index < paragraphs.length; index += 1) {
     const paragraph = paragraphs[index];
     if (paragraph.contains(node) || paragraph === node) {
-      const innerOffset = getOffsetWithinContainer(paragraph, node, offset);
+      const innerOffset = getOffsetWithinParagraph(paragraph, node, offset);
       const paraTextLength = normalizePlainText(paragraph.textContent ?? '').length;
       const hasNextParagraph = index < paragraphs.length - 1;
 

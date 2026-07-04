@@ -125,6 +125,7 @@ export function ContractBridgePlugin({
   const previousTextRef = useRef('');
   const previousSelectionRef = useRef<EditorSelectionState>(EMPTY_SELECTION);
   const selectionRafRef = useRef<number | null>(null);
+  const selectionRefreshRafRef = useRef<number | null>(null);
   const pendingSelectionSourceRef = useRef<EditorTextChangeEvent['source']>('user-input');
   const rightClickCycleRef = useRef<{
     scope: SelectionScope;
@@ -550,6 +551,39 @@ export function ContractBridgePlugin({
       });
     };
 
+    const refreshSelectionModelFromDom = (source: EditorTextChangeEvent['source']) => {
+      if (selectionRefreshRafRef.current !== null) {
+        cancelAnimationFrame(selectionRefreshRafRef.current);
+      }
+
+      selectionRefreshRafRef.current = requestAnimationFrame(() => {
+        selectionRefreshRafRef.current = null;
+
+        let nextSelection = previousSelectionRef.current;
+        editor.getEditorState().read(() => {
+          const rootEl = editor.getRootElement();
+          const lexicalSelection = $getSelection();
+          const canonicalText = readCanonicalRootText();
+          if (!rootEl || !$isRangeSelection(lexicalSelection)) {
+            return;
+          }
+
+          nextSelection = readSelectionStateFromDom(rootEl, window.getSelection(), canonicalText.length);
+        });
+
+        if (nextSelection.anchor === previousSelectionRef.current.anchor &&
+          nextSelection.focus === previousSelectionRef.current.focus &&
+          nextSelection.start === previousSelectionRef.current.start &&
+          nextSelection.end === previousSelectionRef.current.end &&
+          nextSelection.isCollapsed === previousSelectionRef.current.isCollapsed) {
+          return;
+        }
+
+        previousSelectionRef.current = nextSelection;
+        onSelectionChangeRef.current({ source, selection: nextSelection });
+      });
+    };
+
     const removeListener = editor.registerUpdateListener(({ editorState, tags }) => {
       editorState.read(() => {
         const normalizedText = readCanonicalRootText();
@@ -572,7 +606,7 @@ export function ContractBridgePlugin({
 
         if (normalizedText !== previousText) {
           const source = resolveChangeSource(tags);
-
+          const emittedSelection = isTransformCommit ? previousSelection : nextSelection;
 
           onTextChangeRef.current({
             source,
@@ -581,9 +615,14 @@ export function ContractBridgePlugin({
             // Transform commits own their own selection via scheduleTransformSelectionReplay.
             // The DOM selection immediately post-commit is unreliable (Lexical default placement),
             // so report the pre-transform position to avoid poisoning latestEditorSelectionRef.
-            selection: isTransformCommit ? previousSelection : nextSelection,
+            selection: emittedSelection,
           });
           previousTextRef.current = normalizedText;
+          previousSelectionRef.current = emittedSelection;
+
+          if (!isTransformCommit) {
+            refreshSelectionModelFromDom(source);
+          }
         }
 
         if (
@@ -872,6 +911,10 @@ export function ContractBridgePlugin({
       if (selectionRafRef.current !== null) {
         cancelAnimationFrame(selectionRafRef.current);
         selectionRafRef.current = null;
+      }
+      if (selectionRefreshRafRef.current !== null) {
+        cancelAnimationFrame(selectionRefreshRafRef.current);
+        selectionRefreshRafRef.current = null;
       }
       removeListener();
       removeSelectionCommand();
