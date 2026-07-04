@@ -1057,35 +1057,6 @@ function buildSheenGlazeLayer(settings: GlazeSettings, useDarkColor: boolean): s
   return `linear-gradient(180deg, rgba(${channel}, ${channel}, ${channel}, ${edgeAlpha.toFixed(3)}) -100%, rgba(${channel}, ${channel}, ${channel}, ${centerAlpha.toFixed(3)}) ${centerPct.toFixed(1)}%, rgba(${channel}, ${channel}, ${channel}, ${edgeAlpha.toFixed(3)}) 200%)`
 }
 
-function resolvePreviewAnchorRatioFromEditState(params: {
-  text: string
-  selectionEnd: number
-  viewport: PersistedViewportState | null
-  telemetry?: EditViewportTelemetry | null
-}): number {
-  const { text, selectionEnd, viewport, telemetry } = params
-
-  const safeTextLength = Math.max(1, text.length)
-  const cursorRatio = clamp(selectionEnd / safeTextLength, 0, 1)
-
-  if (telemetry) {
-    const maxScrollTopPx = Math.max(0, telemetry.scrollHeightPx - telemetry.clientHeightPx)
-    if (maxScrollTopPx > 0) {
-      return clamp(telemetry.scrollTopPx / maxScrollTopPx, 0, 1)
-    }
-  }
-
-  if (!viewport) {
-    return cursorRatio
-  }
-
-  const totalRows = Math.max(1, text.split('\n').length)
-  const scrolledRows = Math.max(0, viewport.scrollTopLines)
-  const viewportRatio = clamp(scrolledRows / Math.max(1, totalRows - 1), 0, 1)
-
-  return viewportRatio
-}
-
 function resolveSourceAnchorFromEditState(params: {
   text: string
   lineHeightPx: number
@@ -1096,15 +1067,23 @@ function resolveSourceAnchorFromEditState(params: {
   const lines = text.split('\n')
   const safeLineHeight = Math.max(1, lineHeightPx)
 
-  const anchorLine = telemetry
-    ? Math.max(0, Math.ceil(telemetry.scrollTopPx / safeLineHeight))
-    : viewport?.scrollTopLines ?? 0
+  const anchorLine = viewport?.scrollTopLines ??
+    (telemetry ? Math.max(0, Math.floor(telemetry.scrollTopPx / safeLineHeight)) : 0)
   const clampedLine = Math.min(Math.max(0, anchorLine), Math.max(0, lines.length - 1))
+
+  const sourceAnchorText = buildSourceAnchorTextSnippet(lines, clampedLine)
 
   return {
     sourceAnchorLine: clampedLine,
-    sourceAnchorText: lines[clampedLine]?.trim() ?? null,
+    sourceAnchorText,
   }
+}
+
+function buildSourceAnchorTextSnippet(lines: string[], anchorLine: number): string | null {
+  const startLine = Math.max(0, anchorLine - 12)
+  const endLine = Math.min(lines.length - 1, anchorLine + 12)
+  const snippet = lines.slice(startLine, endLine + 1).join('\n').trim()
+  return snippet.length === 0 ? null : snippet.slice(0, 4096)
 }
 
 function resolveEditSourceAnchorLineFromUiState(text: string, uiState: { sourceAnchorLine?: unknown; sourceAnchorText?: unknown } | null | undefined): number | null {
@@ -1125,25 +1104,45 @@ function resolveEditSourceAnchorLineFromUiState(text: string, uiState: { sourceA
     return null
   }
 
-  const lines = text.split('\n')
-  const exactLine = lines.findIndex((line) => line.trim() === sourceAnchorText)
-  if (exactLine >= 0) {
-    return exactLine
-  }
-
-  const fuzzyLine = lines.findIndex((line) => line.trim().toLowerCase().includes(sourceAnchorText.toLowerCase()))
-  if (fuzzyLine >= 0) {
-    return fuzzyLine
-  }
-
   return null
+}
+
+const PREVIEW_ANCHOR_DEBUG = true
+
+function debugPreviewAnchorSelection(params: {
+  sourceLine: number
+  sourceText: string | null
+  path: 'exact-line' | 'text-match' | 'nearest-floor' | 'first-anchor' | 'no-anchors'
+  targetLine: number | null
+  targetText: string | null
+  anchorLines: number[]
+}) {
+  if (!PREVIEW_ANCHOR_DEBUG) return
+  console.debug('[preview-anchor-restore]', {
+    sourceLine: params.sourceLine,
+    sourceTextPreview: params.sourceText ? params.sourceText.slice(0, 256) : null,
+    path: params.path,
+    targetLine: params.targetLine,
+    targetTextPreview: params.targetText ? params.targetText.slice(0, 256) : null,
+    anchorLines: params.anchorLines,
+  })
 }
 
 function findPreviewSourceAnchorElement(container: HTMLElement, sourceLine: number, sourceText: string | null = null): HTMLElement | null {
   const anchors = Array.from(container.querySelectorAll<HTMLElement>('[data-source-line]'))
-  if (anchors.length === 0) return null
+  if (anchors.length === 0) {
+    debugPreviewAnchorSelection({
+      sourceLine,
+      sourceText,
+      path: 'no-anchors',
+      targetLine: null,
+      targetText: null,
+      anchorLines: [],
+    })
+    return null
+  }
 
-  type AnchorEntry = { element: HTMLElement; line: number; text: string | null }
+  type AnchorEntry = { element: HTMLElement; tagName: string; line: number; text: string | null }
   const entries: AnchorEntry[] = []
 
   for (const element of anchors) {
@@ -1151,6 +1150,7 @@ function findPreviewSourceAnchorElement(container: HTMLElement, sourceLine: numb
     if (!Number.isFinite(lineValue)) continue
     entries.push({
       element,
+      tagName: element.tagName,
       line: Math.max(0, Math.round(lineValue)),
       text: element.textContent?.trim() ?? null,
     })
@@ -1159,24 +1159,77 @@ function findPreviewSourceAnchorElement(container: HTMLElement, sourceLine: numb
   if (entries.length === 0) return null
   entries.sort((a, b) => a.line - b.line)
 
-  const exactLine = entries.find((entry) => entry.line === sourceLine)
-  if (exactLine) return exactLine.element
+  const anchorLines = entries.map((entry) => entry.line)
+  const exactLineEntries = entries.filter((entry) => entry.line === sourceLine)
+  if (exactLineEntries.length > 0) {
+    const exactLine = exactLineEntries
+      .filter((entry) => entry.text && entry.text.length > 0)
+      .slice(-1)[0] ?? exactLineEntries[exactLineEntries.length - 1]
+
+    debugPreviewAnchorSelection({
+      sourceLine,
+      sourceText,
+      path: 'exact-line',
+      targetLine: exactLine.line,
+      targetText: exactLine.text,
+      anchorLines,
+    })
+    return exactLine.element
+  }
 
   const normalizedSourceText = typeof sourceText === 'string' ? sourceText.trim().toLowerCase() : ''
-  if (normalizedSourceText) {
-    const fuzzyMatch = entries.find((entry) => {
+  const floorEntries = entries.filter((entry) => entry.line <= sourceLine)
+
+  if (normalizedSourceText && floorEntries.length > 0) {
+    const textMatch = floorEntries.reduce<AnchorEntry | null>((best, entry) => {
       const anchorText = entry.text?.trim().toLowerCase() ?? ''
-      return anchorText === normalizedSourceText || anchorText.includes(normalizedSourceText)
-    })
-    if (fuzzyMatch) {
-      return fuzzyMatch.element
+      const isMatch = anchorText === normalizedSourceText
+        || anchorText.includes(normalizedSourceText)
+        || normalizedSourceText.includes(anchorText)
+      if (!isMatch) return best
+      if (best === null || entry.line > best.line) return entry
+      return best
+    }, null)
+
+    if (textMatch) {
+      debugPreviewAnchorSelection({
+        sourceLine,
+        sourceText,
+        path: 'text-match',
+        targetLine: textMatch.line,
+        targetText: textMatch.text,
+        anchorLines,
+      })
+      return textMatch.element
     }
   }
 
-  const nearestByLine = entries.reduce((best, entry) => {
-    return Math.abs(entry.line - sourceLine) < Math.abs(best.line - sourceLine) ? entry : best
-  }, entries[0])
-  return nearestByLine.element
+  const floorEntry = floorEntries.reduce<AnchorEntry | null>((best, entry) => {
+    if (best === null || entry.line > best.line) return entry
+    return best
+  }, null)
+  if (floorEntry) {
+    debugPreviewAnchorSelection({
+      sourceLine,
+      sourceText,
+      path: 'nearest-floor',
+      targetLine: floorEntry.line,
+      targetText: floorEntry.text,
+      anchorLines,
+    })
+    return floorEntry.element
+  }
+
+  const firstAnchor = entries[0]
+  debugPreviewAnchorSelection({
+    sourceLine,
+    sourceText,
+    path: 'first-anchor',
+    targetLine: firstAnchor.line,
+    targetText: firstAnchor.text,
+    anchorLines,
+  })
+  return firstAnchor.element
 }
 
 function createPreviewSourceAnchorRehypePlugin() {
@@ -1184,7 +1237,7 @@ function createPreviewSourceAnchorRehypePlugin() {
     return (tree: any) => {
       const sourceAnchorTags = new Set([
         'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-        'p', 'blockquote', 'ul', 'ol', 'pre', 'table', 'hr', 'li',
+        'p', 'blockquote', 'pre', 'table', 'hr', 'li',
       ])
 
       visit(tree, 'element', (node: any) => {
@@ -2327,7 +2380,6 @@ function App() {
   const pendingEditRestoreSnapshotRef = useRef<EditRestoreSnapshot | null>(null)
   const editModeSnapshotByNoteIdRef = useRef<Map<string, EditRestoreSnapshot>>(new Map())
   const previousActiveNoteIdForEditRestoreRef = useRef<string | null>(null)
-  const pendingRenderViewAnchorRatioRef = useRef<number | null>(null)
   const pendingRenderViewSourceAnchorRef = useRef<{ sourceAnchorLine: number; sourceAnchorText: string | null } | null>(null)
   const previousPreviewModeRef = useRef(false)
   const hasPreviewModeBaselineRef = useRef(false)
@@ -4579,10 +4631,10 @@ ${markdownHtml}
     }
 
     anchors.sort((a, b) => a.top - b.top)
-    const visibleAtOrBelowTop = anchors.filter((entry) => entry.top >= 0)
-    const selected = visibleAtOrBelowTop.length > 0
-      ? visibleAtOrBelowTop.reduce((best, candidate) => (candidate.top < best.top ? candidate : best))
-      : anchors.reduce((best, candidate) => (candidate.top > best.top ? candidate : best))
+    const visibleAtOrAboveTop = anchors.filter((entry) => entry.top <= 0)
+    const selected = visibleAtOrAboveTop.length > 0
+      ? visibleAtOrAboveTop.reduce((best, candidate) => (candidate.top > best.top ? candidate : best))
+      : anchors.reduce((best, candidate) => (candidate.top < best.top ? candidate : best))
 
     return {
       sourceAnchorLine: selected.line,
@@ -4594,15 +4646,12 @@ ${markdownHtml}
     const container = previewScrollRef.current
     if (!container) return
 
-    const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
-    const ratio = maxScrollTop <= 0 ? 0 : clamp(container.scrollTop / maxScrollTop, 0, 1)
     const sourceAnchor = resolvePreviewSourceAnchorFromContainer(container)
-    const payload: { progressPreview: number; sourceAnchorLine?: number | null; sourceAnchorText?: string | null } = {
-      progressPreview: ratio,
-    }
-    if (sourceAnchor) {
-      payload.sourceAnchorLine = sourceAnchor.sourceAnchorLine
-      payload.sourceAnchorText = sourceAnchor.sourceAnchorText
+    if (!sourceAnchor) return
+
+    const payload: { sourceAnchorLine: number; sourceAnchorText: string | null } = {
+      sourceAnchorLine: sourceAnchor.sourceAnchorLine,
+      sourceAnchorText: sourceAnchor.sourceAnchorText,
     }
 
     await window.measlyNotes?.saveNoteUiState({ id: noteId, payload })
@@ -4615,17 +4664,18 @@ ${markdownHtml}
     const previousNoteId = activeNoteId
     if (persistenceReady && previousNoteId && previousNoteId !== noteId) {
       const previousPayload = readCurrentEditUiPayload()
-    const snapshotPayload = previousPayload ?? (previousSnapshot ? {
-      progressEdit: previousSnapshot.viewport.scrollTopLines,
-      cursorPos: previousSnapshot.fullSelection.end,
-      scrollTop: scrollTopLinesToPx(previousSnapshot.viewport.scrollTopLines, editorRuntimeMetrics.lineHeightPx),
-      sourceAnchorLine: previousSnapshot.viewport.scrollTopLines,
-      sourceAnchorText: null,
-    } : null)
+      const previousSnapshot = editModeSnapshotByNoteIdRef.current.get(previousNoteId)
+      const snapshotPayload = previousPayload ?? (previousSnapshot ? {
+        progressEdit: previousSnapshot.viewport.scrollTopLines,
+        cursorPos: previousSnapshot.fullSelection.end,
+        scrollTop: scrollTopLinesToPx(previousSnapshot.viewport.scrollTopLines, editorRuntimeMetrics.lineHeightPx),
+        sourceAnchorLine: previousSnapshot.viewport.scrollTopLines,
+        sourceAnchorText: null,
+      } : null)
 
-    if (snapshotPayload) {
-      await persistEditUiPayloadForNote(previousNoteId, snapshotPayload)
-    }
+      if (snapshotPayload) {
+        await persistEditUiPayloadForNote(previousNoteId, snapshotPayload)
+      }
     }
 
     const [loaded, nextUiState] = await Promise.all([
@@ -4681,7 +4731,6 @@ ${markdownHtml}
 
     latestEditorTextRef.current = hydratedText
     pendingEditRestoreSnapshotRef.current = preloadedSnapshot
-    pendingRenderViewAnchorRatioRef.current = null
     setActiveNoteId(loaded.id)
     setActiveNoteText(hydratedText)
     pendingViewportRestoreRef.current = null
@@ -6806,69 +6855,53 @@ ${markdownHtml}
     if (!persistenceReady || !activeNoteId) return
 
     if (wasPreviewMode && !isPreviewMode) {
-      pendingRenderViewAnchorRatioRef.current = null
       pendingRenderViewSourceAnchorRef.current = null
     }
 
     const activeText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
 
     if (!wasPreviewMode && isPreviewMode) {
-      const shouldResetPendingEditRestoreSnapshot =
-        pendingRenderViewAnchorRatioRef.current === null ||
-        !pendingEditRestoreSnapshotRef.current ||
-        pendingEditRestoreSnapshotRef.current.noteId !== activeNoteId
+      const liveSnapshot = adapterRef.current?.getSnapshot()
+      const selection = liveSnapshot?.selection ?? latestEditorSelectionRef.current
+      const snapshotViewport = liveSnapshot?.viewport
+      const snapshotViewportLines = liveSnapshot?.viewportLines
+      const viewport: PersistedViewportState | null = snapshotViewportLines
+        ? {
+            topBoundaryLines: Math.max(0, Math.round(snapshotViewportLines.topBoundaryLines)),
+            bottomBoundaryLines: Math.max(0, Math.round(snapshotViewportLines.bottomBoundaryLines)),
+            scrollTopLines: Math.max(0, Math.round(snapshotViewportLines.scrollTopLines)),
+          }
+        : (latestEditViewportRef.current ?? latestViewportRef.current)
 
-      if (shouldResetPendingEditRestoreSnapshot) {
-        const liveSnapshot = adapterRef.current?.getSnapshot()
-        const selection = liveSnapshot?.selection ?? latestEditorSelectionRef.current
-        const snapshotViewport = liveSnapshot?.viewport
-        const snapshotViewportLines = liveSnapshot?.viewportLines
-        const viewport: PersistedViewportState | null = snapshotViewportLines
-          ? {
-              topBoundaryLines: Math.max(0, Math.round(snapshotViewportLines.topBoundaryLines)),
-              bottomBoundaryLines: Math.max(0, Math.round(snapshotViewportLines.bottomBoundaryLines)),
-              scrollTopLines: Math.max(0, Math.round(snapshotViewportLines.scrollTopLines)),
-            }
-          : (latestEditViewportRef.current ?? latestViewportRef.current)
+      if (snapshotViewportLines) {
+        latestViewportRef.current = viewport
+        latestEditViewportRef.current = viewport
+      }
 
-        if (snapshotViewportLines) {
-          latestViewportRef.current = viewport
-          latestEditViewportRef.current = viewport
+      if (snapshotViewport) {
+        latestEditViewportTelemetryRef.current = {
+          scrollTopPx: Math.round(snapshotViewport.scrollTopPx),
+          scrollHeightPx: Math.max(0, Math.round(snapshotViewport.scrollHeightPx ?? 0)),
+          clientHeightPx: Math.max(0, Math.round(snapshotViewport.clientHeightPx ?? 0)),
+        }
+      }
+
+      if (viewport) {
+        const collapsedSelection: EditorSelectionState = {
+          anchor: selection.end,
+          focus: selection.end,
+          start: selection.end,
+          end: selection.end,
+          isCollapsed: true,
         }
 
-        if (snapshotViewport) {
-          latestEditViewportTelemetryRef.current = {
-            scrollTopPx: Math.round(snapshotViewport.scrollTopPx),
-            scrollHeightPx: Math.max(0, Math.round(snapshotViewport.scrollHeightPx ?? 0)),
-            clientHeightPx: Math.max(0, Math.round(snapshotViewport.clientHeightPx ?? 0)),
-          }
-        }
-
-        if (viewport) {
-          const collapsedSelection: EditorSelectionState = {
-            anchor: selection.end,
-            focus: selection.end,
-            start: selection.end,
-            end: selection.end,
-            isCollapsed: true,
-          }
-
-          pendingEditRestoreSnapshotRef.current = {
-            noteId: activeNoteId,
-            collapsedSelection,
-            fullSelection: selection,
-            viewport,
-          }
-          updateEditModeSnapshotCache(pendingEditRestoreSnapshotRef.current)
-        }
-
-        const cursorPos = Math.max(0, Math.min(selection.end, Math.max(1, activeText.length)))
-        pendingRenderViewAnchorRatioRef.current = resolvePreviewAnchorRatioFromEditState({
-          text: activeText,
-          selectionEnd: cursorPos,
+        pendingEditRestoreSnapshotRef.current = {
+          noteId: activeNoteId,
+          collapsedSelection,
+          fullSelection: selection,
           viewport,
-          telemetry: latestEditViewportTelemetryRef.current,
-        })
+        }
+        updateEditModeSnapshotCache(pendingEditRestoreSnapshotRef.current)
       }
 
       persistEditUiState(activeNoteId, { immediate: true })
@@ -6939,22 +6972,26 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
   const captureEditModeSnapshotForRenderView = useCallback((noteId: string, activeText: string) => {
     const snapshot = captureEditModeSnapshotFromEditor(noteId)
-    const selectionEnd = snapshot?.fullSelection.end ?? latestEditorSelectionRef.current.end
     const viewport = snapshot?.viewport ?? latestEditViewportRef.current ?? latestViewportRef.current
 
-    const cursorPos = Math.max(0, Math.min(selectionEnd, Math.max(1, activeText.length)))
-    pendingRenderViewAnchorRatioRef.current = resolvePreviewAnchorRatioFromEditState({
+    if (!viewport) {
+      pendingRenderViewSourceAnchorRef.current = null
+      return
+    }
+
+    const anchor = resolveSourceAnchorFromEditState({
       text: activeText,
-      selectionEnd: cursorPos,
+      lineHeightPx: editorRuntimeMetrics.lineHeightPx,
+      telemetry: latestEditViewportTelemetryRef.current ?? undefined,
       viewport,
-      telemetry: latestEditViewportTelemetryRef.current,
     })
 
-    if (viewport) {
-      pendingRenderViewSourceAnchorRef.current = resolveSourceAnchorFromEditState({
-        text: activeText,
-        lineHeightPx: editorRuntimeMetrics.lineHeightPx,
-        telemetry: latestEditViewportTelemetryRef.current ?? undefined,
+    pendingRenderViewSourceAnchorRef.current = anchor
+    if (anchor) {
+      console.debug('[preview-anchor-capture]', {
+        noteId,
+        sourceAnchorLine: anchor.sourceAnchorLine,
+        sourceAnchorTextPreview: anchor.sourceAnchorText ? anchor.sourceAnchorText.slice(0, 256) : null,
         viewport,
       })
     }
@@ -6982,7 +7019,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         console.warn('Failed to persist render view state before toggling mode', error)
       }
 
-      pendingRenderViewAnchorRatioRef.current = null
       pendingRenderViewSourceAnchorRef.current = null
     }
 
@@ -7178,26 +7214,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       container.style.scrollBehavior = behavior
     }
 
-    const applyPreviewRatio = (ratio: number) => {
-      const container = previewScrollRef.current
-      if (!container) return
-      const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
-      container.scrollTop = Math.max(0, Math.min(maxScrollTop, ratio * maxScrollTop))
-    }
-
-    const applyPreviewRatioImmediate = (ratio: number) => {
-      const container = previewScrollRef.current
-      if (!container) return
-
-      const clampedRatio = clamp(ratio, 0, 1)
-      const previousScrollBehavior = container.style.scrollBehavior
-      container.style.scrollBehavior = 'auto'
-
-      const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
-      container.scrollTop = Math.max(0, Math.min(maxScrollTop, clampedRatio * maxScrollTop))
-      container.style.scrollBehavior = previousScrollBehavior
-    }
-
     const applyPreviewSourceAnchor = (sourceLine: number, sourceText: string | null = null) => {
       const container = previewScrollRef.current
       if (!container) return
@@ -7208,7 +7224,17 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       const target = findPreviewSourceAnchorElement(container, sourceLine, sourceText)
       if (!target) {
         const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
-        container.scrollTop = Math.max(0, Math.min(maxScrollTop, sourceLine * editorRuntimeMetrics.lineHeightPx))
+        const targetScrollTop = Math.max(0, Math.min(maxScrollTop, sourceLine * editorRuntimeMetrics.lineHeightPx))
+        console.debug('[preview-anchor-apply]', {
+          sourceLine,
+          sourceTextPreview: sourceText ? sourceText.slice(0, 256) : null,
+          path: 'fallback-linear',
+          targetScrollTop,
+          maxScrollTop,
+          lineHeightPx: editorRuntimeMetrics.lineHeightPx,
+          scrollTopBefore: container.scrollTop,
+        })
+        container.scrollTop = targetScrollTop
         container.style.scrollBehavior = previousScrollBehavior
         return
       }
@@ -7217,6 +7243,18 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       const targetRect = target.getBoundingClientRect()
       const delta = targetRect.top - containerRect.top
       const targetScrollTop = Math.max(0, Math.min(container.scrollHeight - container.clientHeight, container.scrollTop + delta))
+      console.debug('[preview-anchor-apply]', {
+        sourceLine,
+        sourceTextPreview: sourceText ? sourceText.slice(0, 256) : null,
+        targetLine: Number(target.dataset.sourceLine),
+        targetTextPreview: target.textContent?.trim()?.slice(0, 256) ?? null,
+        scrollTopBefore: container.scrollTop,
+        containerTop: containerRect.top,
+        targetTop: targetRect.top,
+        delta,
+        targetScrollTop,
+        maxScrollTop: Math.max(0, container.scrollHeight - container.clientHeight),
+      })
       container.scrollTop = targetScrollTop
       container.style.scrollBehavior = previousScrollBehavior
     }
@@ -7243,20 +7281,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           return
         }
 
-        const ratio = uiState?.progressPreview
-        if (typeof ratio !== 'number' || Number.isNaN(ratio)) {
-          if (previewScrollRef.current) {
-            setPreviewScrollBehavior('auto')
-            previewScrollRef.current.scrollTop = 0
-            requestAnimationFrame(() => {
-              if (cancelled) return
-              setPreviewScrollBehavior('')
-            })
-          }
-          return
-        }
-
-        applyPreviewRatioImmediate(ratio)
+        // No source anchor available; preserve the current default scroll state.
       } catch (error) {
         console.warn('Failed to restore preview scroll state', error)
       }
@@ -7284,15 +7309,11 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
       previewScrollSaveTimerRef.current = window.setTimeout(() => {
         previewScrollSaveTimerRef.current = null
-        const maxScrollTop = Math.max(1, container.scrollHeight - container.clientHeight)
-        const ratio = maxScrollTop <= 0 ? 0 : (container.scrollTop / maxScrollTop)
         const sourceAnchor = resolvePreviewSourceAnchorFromContainer(container)
-        const payload: { progressPreview: number; sourceAnchorLine?: number | null; sourceAnchorText?: string | null } = {
-          progressPreview: ratio,
-        }
-        if (sourceAnchor) {
-          payload.sourceAnchorLine = sourceAnchor.sourceAnchorLine
-          payload.sourceAnchorText = sourceAnchor.sourceAnchorText
+        if (!sourceAnchor) return
+        const payload: { sourceAnchorLine: number; sourceAnchorText: string | null } = {
+          sourceAnchorLine: sourceAnchor.sourceAnchorLine,
+          sourceAnchorText: sourceAnchor.sourceAnchorText,
         }
         void window.measlyNotes?.saveNoteUiState({ id: activeNoteId, payload })
       }, 120)
