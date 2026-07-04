@@ -9,6 +9,7 @@ export const LOADOUT_CHANNELS = {
   resetCustom: 'loadout:resetCustom',
   updatePending: 'loadout:updatePending',
   exportTdl: 'loadout:exportTdl',
+  exportTdlEntry: 'loadout:exportTdlEntry',
   importTdl: 'loadout:importTdl',
 } as const;
 
@@ -144,6 +145,7 @@ export interface UiLoadoutApi {
   // Opens a save dialog and writes all user custom layouts (abs id >= 8)
   // to a .tdl file as NEUTRAL_BASE diffs. Returns void.
   exportTdl(): Promise<void>;
+  exportTdlEntry(id: number): Promise<void>;
   // Opens an open dialog, parses the chosen .tdl file, and inserts any new
   // custom layouts into the database (skipping duplicates by signature).
   // Returns the updated snapshot.

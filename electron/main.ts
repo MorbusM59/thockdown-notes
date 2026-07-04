@@ -556,6 +556,18 @@ function registerIpcHandlers() {
     await fsPromises.writeFile(filePath, content, 'utf-8');
   });
 
+  ipcMain.handle(LOADOUT_CHANNELS.exportTdlEntry, async (_event, id: number) => {
+    const content = databaseService!.buildTdlContentForEntry(id);
+    const defaultName = `layout-${Math.abs(id)}.tdl`;
+    const { filePath, canceled } = await dialog.showSaveDialog({
+      title: 'Export layout',
+      defaultPath: defaultName,
+      filters: [{ name: 'Thockdown Layout', extensions: ['tdl'] }],
+    });
+    if (canceled || !filePath) return;
+    await fsPromises.writeFile(filePath, content, 'utf-8');
+  });
+
   ipcMain.handle(LOADOUT_CHANNELS.importTdl, async () => {
     const { filePaths, canceled } = await dialog.showOpenDialog({
       title: 'Import layouts',
