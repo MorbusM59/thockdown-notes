@@ -22,6 +22,7 @@ import {
 import {
   LIGHT_FACTORY_PRESETS,
   DARK_FACTORY_PRESETS,
+  NEUTRAL_BASE,
   DEFAULT_CUSTOM_LIGHT,
   DEFAULT_CUSTOM_DARK,
 } from '../src/shared/presets';
@@ -439,9 +440,36 @@ function formatTdlScalar(value: unknown): string {
   return String(value); // number or boolean
 }
 
+function buildNeutralBaseObjectDiff(value: unknown, baseValue: unknown): unknown | undefined {
+  if (value === null || typeof value !== 'object') {
+    return stableStringify(value) !== stableStringify(baseValue) ? value : undefined;
+  }
+
+  if (Array.isArray(value)) {
+    return stableStringify(value) !== stableStringify(baseValue) ? value : undefined;
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right));
+  const result: Record<string, unknown> = {};
+  const baseObject = typeof baseValue === 'object' && baseValue !== null && !Array.isArray(baseValue)
+    ? (baseValue as Record<string, unknown>)
+    : {};
+
+  for (const [key, nestedValue] of entries) {
+    const nestedBaseValue = baseObject[key];
+    const diff = buildNeutralBaseObjectDiff(nestedValue, nestedBaseValue);
+    if (diff !== undefined) {
+      result[key] = diff;
+    }
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
 /** Build the override fragment of one .tdl line against NEUTRAL_BASE. */
 function buildNeutralBaseDiff(payload: Record<string, unknown>): string[] {
-  const base = DEFAULT_CUSTOM_LIGHT as Record<string, unknown>;
+  const base = NEUTRAL_BASE as Record<string, unknown>;
   const parts: string[] = [];
 
   for (const key of TDL_SCALAR_KEYS) {
@@ -455,8 +483,11 @@ function buildNeutralBaseDiff(payload: Record<string, unknown>): string[] {
   for (const key of TDL_OBJECT_KEYS) {
     const val = payload[key];
     const baseVal = base[key];
-    if (val !== undefined && stableStringify(val) !== stableStringify(baseVal)) {
-      parts.push(`${key}: ${JSON.stringify(val)}`);
+    if (val === undefined) continue;
+
+    const diff = buildNeutralBaseObjectDiff(val, baseVal);
+    if (diff !== undefined) {
+      parts.push(`${key}: ${JSON.stringify(diff)}`);
     }
   }
 
@@ -1507,6 +1538,7 @@ export class DatabaseService {
     const db = this.requireDb();
     const countRow = db.prepare('SELECT COUNT(*) as n FROM ui_loadout_entries').get() as { n: number };
     if (countRow.n > 0) {
+      this.refreshHardcodedLoadoutRows();
       this.normalizeStoredLoadoutRows();
       return;
     }
@@ -1540,6 +1572,58 @@ export class DatabaseService {
 
     tx();
     this.normalizeStoredLoadoutRows();
+  }
+
+  private refreshHardcodedLoadoutRows(): void {
+    const db = this.requireDb();
+    const rows = db.prepare(`
+      SELECT id, signature, payloadJson
+      FROM ui_loadout_entries
+      WHERE ABS(id) < ?
+    `).all(LOADOUT_DEFAULT_CUSTOM_ID_ABS) as Array<{ id: number; signature: string; payloadJson: string }>;
+
+    const existing = new Map<number, { signature: string; payloadJson: string }>();
+    for (const row of rows) {
+      existing.set(row.id, { signature: row.signature, payloadJson: row.payloadJson });
+    }
+
+    const updateStmt = db.prepare(`
+      UPDATE ui_loadout_entries
+      SET signature = ?, payloadJson = ?, updatedAt = ?
+      WHERE id = ?
+    `);
+    const insertStmt = db.prepare(`
+      INSERT INTO ui_loadout_entries (id, isActive, signature, payloadJson, updatedAt)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+
+    const timestamp = Date.now();
+    const seedRows: Array<{ id: number; payload: UiLayoutLoadout }> = [];
+
+    LIGHT_FACTORY_PRESETS.forEach((preset, index) => seedRows.push({ id: index + 1, payload: preset }));
+    DARK_FACTORY_PRESETS.forEach((preset, index) => seedRows.push({ id: -(index + 1), payload: preset }));
+    seedRows.push({ id: LOADOUT_DEFAULT_CUSTOM_ID_ABS, payload: DEFAULT_CUSTOM_LIGHT });
+    seedRows.push({ id: -LOADOUT_DEFAULT_CUSTOM_ID_ABS, payload: DEFAULT_CUSTOM_DARK });
+
+    const upsert = db.transaction(() => {
+      for (const { id, payload } of seedRows) {
+        const normalized = normalizeUiLayoutLoadout(payload) ?? DEFAULT_UI_LAYOUT_LOADOUT;
+        const signature = stableStringify(normalized);
+        const payloadJson = JSON.stringify(normalized);
+
+        const row = existing.get(id);
+        if (row) {
+          if (row.signature !== signature || row.payloadJson !== payloadJson) {
+            updateStmt.run(signature, payloadJson, timestamp, id);
+          }
+          continue;
+        }
+
+        insertStmt.run(id, 0, signature, payloadJson, timestamp);
+      }
+    });
+
+    upsert();
   }
 
   private normalizeStoredLoadoutRows(): void {
@@ -1813,8 +1897,8 @@ export class DatabaseService {
   }
 
   /**
-   * Build the string content of a .tdl file containing all user custom
-   * loadouts (abs id >= 8), expressed as NEUTRAL_BASE diffs.
+   * Build the string content of a .tdl file containing all user custom and
+   * active pending loadouts (abs id >= 7), expressed as NEUTRAL_BASE diffs.
    */
   buildTdlContent(): string {
     this.ensureLoadoutsSeeded();
@@ -1823,7 +1907,7 @@ export class DatabaseService {
     const rows = db.prepare(`
       SELECT id, payloadJson FROM ui_loadout_entries
       WHERE ABS(id) >= ? ORDER BY id ASC
-    `).all(LOADOUT_FIRST_CUSTOM_ID_ABS) as Array<{ id: number; payloadJson: string }>;
+    `).all(LOADOUT_PENDING_ID_ABS) as Array<{ id: number; payloadJson: string }>;
 
     const lines: string[] = [
       '// Thockdown Layout file',
@@ -1857,7 +1941,7 @@ export class DatabaseService {
       SELECT id, payloadJson FROM ui_loadout_entries
       WHERE id = ? AND ABS(id) >= ?
       LIMIT 1
-    `).get(id, LOADOUT_FIRST_CUSTOM_ID_ABS) as { id: number; payloadJson: string } | undefined;
+    `).get(id, LOADOUT_PENDING_ID_ABS) as { id: number; payloadJson: string } | undefined;
 
     if (!row) {
       throw new Error(`Loadout entry ${id} cannot be exported because it does not exist or is not a saved custom slot.`);

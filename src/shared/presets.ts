@@ -15,7 +15,7 @@ import type { UiLayoutLoadout } from './loadouts';
 
 // A neutral, untextured, unfiltered baseline shared by both default-custom
 // loadouts. Dark mode's default-custom is this base with filterInvert = 1.
-const NEUTRAL_BASE: UiLayoutLoadout = {
+export const NEUTRAL_BASE: UiLayoutLoadout = {
   editorGlyphPaddingPx: 1,
   audioKeyVolume: 0.5,
   audioBassVolume: 0,
