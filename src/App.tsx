@@ -8311,7 +8311,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     }
 
     const resolveContentStart = (line: string) => {
-      const match = line.match(/^(\s*(?:>\s*)*)(?:[-*+]\s+|\d+[.)]\s+)/)
+      const match = line.match(/^(\s*(?:>\s*)*)(?:[-*+]\s+\[[ xX]\]\s+|[-*+]\s+|\d+[.)]\s+)/)
       if (match) return match[0].length
       const quotePrefixMatch = line.match(/^(\s*(?:>\s*)*)/)
       return quotePrefixMatch ? quotePrefixMatch[0].length : 0
