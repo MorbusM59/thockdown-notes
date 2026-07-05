@@ -129,7 +129,7 @@ This is where you write. The app automatically saves your changes, so you never 
 2. **Hover over elements** to read what they do. There is a LOT to discover that can facilitate your workflow.
 3. **Shortcuts** can make your life easier. For example. use Ctrl+Shift+N to create a new note with the content of your clipboard as a title. This is great way to get started with a note about an existing topic quickly.
 4. **Smart pasting** tries to eliminate needless line breaks when copying text from preformatted formats like PDFs. Use Ctrl+Shift+V to paste without sanitation.
-5. More tips and a comprehensive list of shortcuts will follow.
+5. More tips and a comprehensive list of all features will follow later. For now, have fun exploring and hunting undocumented features.
 
 ## Ready to Dive In?
 
