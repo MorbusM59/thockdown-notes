@@ -3,6 +3,7 @@ import { existsSync, promises as fs } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { sanitizeDocumentText } from '../src/shared/textSanitization';
+import { ensureHelpNote } from './help/helpNote';
 import type { TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../src/shared/textures';
 import type {
   UiLayoutLoadout,
@@ -634,6 +635,7 @@ export class DatabaseService {
     this.db = db;
     this.ensureSchema();
     this.ensureProtectedTags();
+    ensureHelpNote(this);
     this.ensureLoadoutsSeeded();
   }
 
