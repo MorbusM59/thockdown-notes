@@ -3065,7 +3065,7 @@ body.pdf-exporting .markdown-preview img {
 
 .window-minimize-split-btn.mini-mode {
   border-radius: var(--border-radius-regular) var(--border-radius-regular) var(--border-radius-small) var(--border-radius-small);
-  padding: 2px 0 0 0;
+  padding: 0;
 }
 
 .window-minimize-split-btn.minimize {
