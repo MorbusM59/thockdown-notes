@@ -1651,6 +1651,7 @@ color:           var(--color-text-80);
 
 .toolbar-spacer-large {
   width: 12px;
+  min-width: 12px;
   user-select: none;
 }
 
