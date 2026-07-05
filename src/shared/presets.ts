@@ -83,7 +83,7 @@ export const DEFAULT_CUSTOM_DARK: UiLayoutLoadout = {
 // they're visually distinct in the UI before real designs replace them.
 
 export const LIGHT_FACTORY_PRESETS: UiLayoutLoadout[] = [
-  { ...NEUTRAL_BASE },
+  { ...NEUTRAL_BASE, renderScrollMaxSpeedPxPerSec: 48000, renderScrollSkew: 0.62, filterSaturate: 0.498, glaze: {"gloomPosition":-0.5,"gloomShape":1.08,"radialCount":3,"radialSeed":325650,"sheenOpacity":0.5}, highlightColors: {"appButtons":"rgba(255, 254, 254, 1)","background":"rgba(0, 0, 0, 0.024)","base":"rgba(249, 242, 238, 1)","bottomBackground":"rgba(0, 0, 0, 0.079)","grid":"rgba(249, 246, 244, 0.886)","gridOutline":"rgba(0, 0, 0, 0.075)","inputFields":"rgba(232, 234, 235, 1)","markdownBlockquote":"rgba(255, 255, 0, 0.325)","markdownChecked":"rgba(0, 255, 0, 0.325)","markdownHeadline":"rgba(255, 0, 255, 0.325)","markdownList":"rgba(0, 255, 255, 0.325)","markdownUnchecked":"rgba(255, 0, 0, 0.325)","textBase":"rgba(0, 0, 0, 0.871)","textEmbossEdit":"rgba(255, 255, 255, 0.682)","textEmbossUi":"rgba(255, 255, 255, 0.682)","topBackground":"rgba(0, 0, 0, 0.079)"}, editorTextColors: {"editorEditText":"rgba(0, 0, 0, 0.871)"}, textureMaterials: {"appGrid":{"color":{"a":0.11372549019607843,"h":0,"s":0,"v":0},"granularity":1,"vSteps":20}} },
   { ...NEUTRAL_BASE, filterSepia: 0.2, filterBrightness: 1.05 },
   { ...NEUTRAL_BASE, filterContrast: 1.15, filterSaturate: 0.7 },
   { ...NEUTRAL_BASE, filterHueRotate: 30, filterSaturate: 0.6 },
