@@ -35,6 +35,7 @@ const DEFAULT_APP_STATE: AppState = {
     highlightGridOutlineColor: '#00000022',
     textureEnabled: false,
     glaze: DEFAULT_GLAZE_SETTINGS,
+    uiMode: 'light',
     textureActiveSurface: 'appGrid',
     textureMaterials: DEFAULT_TEXTURE_MATERIALS,
     sidebarWidthRatio: 0.306,
@@ -94,6 +95,13 @@ function sanitizeEditorStyle(input: unknown): 'syne' | 'redhat' {
     return input;
   }
   return DEFAULT_APP_STATE.menu!.editorStyle ?? 'syne';
+}
+
+function sanitizeUiMode(input: unknown): 'light' | 'dark' {
+  if (input === 'light' || input === 'dark') {
+    return input;
+  }
+  return DEFAULT_APP_STATE.menu!.uiMode ?? 'light';
 }
 
 function sanitizeViewStyle(input: unknown): 'modern' | 'narrow' | 'cute' | 'xkcd' | 'print' {
@@ -282,6 +290,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
       : undefined,
     textureEnabled: Boolean(input?.textureEnabled),
     glaze: sanitizeGlazeSettings(input?.glaze, DEFAULT_APP_STATE.menu!.glaze ?? DEFAULT_GLAZE_SETTINGS),
+    uiMode: sanitizeUiMode(input?.uiMode),
     textureActiveSurface: sanitizeTextureSurface(input?.textureActiveSurface),
     textureMaterials: sanitizeTextureMaterials(input?.textureMaterials),
     sidebarWidthRatio: sanitizeRatio(input?.sidebarWidthRatio, DEFAULT_APP_STATE.menu!.sidebarWidthRatio),

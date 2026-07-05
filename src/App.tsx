@@ -3409,9 +3409,20 @@ function App() {
     }
   }, [clearColorArmTimer])
 
-  // On mount: fetch the full loadout table, then apply whichever entry is
-  // active for the current uiMode to the live editable state.
+  // Runs once persistence has fully restored appState (including uiMode,
+  // set deep inside the bootstrap effect further below). Firing this on
+  // plain mount (`[]`) instead of `[persistenceReady]` was the bug: uiMode
+  // is a state value closed over at the time this effect was created, and
+  // with an empty dependency array that's permanently the initial 'light'
+  // default — no matter what the bootstrap effect later restores it to.
+  // That meant every launch re-applied the light-mode loadout's payload
+  // (colors, filters, glaze, audio, everything — see applyEntryToLiveState)
+  // over whatever appState had just correctly restored, even when the app
+  // was last closed in dark mode. Gating on persistenceReady means this
+  // effect's closure is freshly created on the render where uiMode already
+  // holds its final restored value.
   useEffect(() => {
+    if (!persistenceReady) return
     if (!window.measlyLoadouts) return
     let cancelled = false
 
@@ -3431,10 +3442,11 @@ function App() {
     return () => {
       cancelled = true
     }
-    // Intentionally runs once on mount only — uiMode here reflects whatever
-    // was restored from appState before this effect fires.
+    // uiMode is intentionally excluded: manual light/dark toggling already
+    // applies the target mode's loadout itself (see toggleUiMode) — this
+    // effect's job is only the one-time apply-on-launch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [persistenceReady])
 
   useEffect(() => {
     const handleGlobalMouseDown = (event: globalThis.MouseEvent) => {
@@ -3670,6 +3682,7 @@ function App() {
       renderScrollSkew,
       glaze: glazeSettings,
       darkMode,
+      uiMode,
       filterInvert,
       filterSepia,
       filterHueRotate,
