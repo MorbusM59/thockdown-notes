@@ -624,6 +624,11 @@ export class DatabaseService {
     this.dbPath = path.join(dataRoot, DB_FILE_NAME);
   }
 
+  /** The on-disk directory note content files live in (see upsertNoteContent). */
+  getNotesDir(): string {
+    return this.notesDir;
+  }
+
   async initialize(): Promise<void> {
     await fs.mkdir(this.dataRoot, { recursive: true });
 
@@ -635,7 +640,7 @@ export class DatabaseService {
     this.db = db;
     this.ensureSchema();
     this.ensureProtectedTags();
-    ensureHelpNote(this);
+    await ensureHelpNote(this);
     this.ensureLoadoutsSeeded();
   }
 
