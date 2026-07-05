@@ -236,35 +236,35 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
 // Icons for the 5 factory presets per mode, indexed by abs(id) - 1 (0-based).
 const LIGHT_PRESET_ICONS: string[] = [
   'fa-solid fa-sun',
-  'fa-solid fa-film',
-  'fa-solid fa-droplet',
-  'fa-solid fa-feather',
+  'fa-solid fa-mound',
+  'fa-solid fa-leaf',
   'fa-regular fa-file',
+  'fa-regular fa-ring',
 ]
 
 const DARK_PRESET_ICONS: string[] = [
   'fa-solid fa-moon',
-  'fa-solid fa-layer-group',
   'fa-solid fa-archway',
   'fa-solid fa-droplet',
   'fa-solid fa-burst',
+  'fa-solid fa-shield',
 ]
 
 // Names for the 5 factory presets per mode, indexed by abs(id) - 1 (0-based).
 const LIGHT_PRESET_THEMES: string[] = [
   'Light (Default)',
-  'Faded Film',
-  'Droplet',
-  'Feather',
+  'Sand',
+  'Forest',
   'Paper',
+  'Gold',
 ]
 
 const DARK_PRESET_THEMES: string[] = [
   'Dark (Default)',
-  'Slate',
   'Ancient',
   'Ocean',
   'Bubblegum',
+  'Metal',
 ]
 
 const TEXTURE_SURFACE_TITLES: Record<TextureSurfaceKey, string> = {
