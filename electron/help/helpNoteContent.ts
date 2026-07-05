@@ -1,6 +1,10 @@
-export const HELP_NOTE_CONTENT = `# Welcome to Measly Notes
+export const HELP_NOTE_CONTENT = `# Welcome to Thockdown Notes
 
-Hey there! This is your first note. Thrilled to have you here. Let's get you up to speed on how to use this app.
+Hey there! This is Thockdown Notes, a **Markdown** editor built to make typing as enjoyable as possible. Absolutely thrilled to have you here! Let's get you up to speed on how to use this app...
+
+To that end, Thockdown Notes has endless customization options, satisfying typing sounds, a high focus low distraction integrated music player that shuffles your song smartly and lots of things you might not even notice, because they simply work as they should (looking at you, Microsoft universe Ctrl+V).
+
+But first...
 
 ## What is Markdown?
 
