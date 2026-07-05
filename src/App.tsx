@@ -11700,7 +11700,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     aria-label="Toggle dark mode"
                     onClick={toggleUiMode}
                   >
-                    <span className="toolbar-gear-glyph fa-solid fa-moon" aria-hidden="true" />
+                    <span
+                      className={`toolbar-gear-glyph fa-solid ${uiMode === 'dark' ? 'fa-sun' : 'fa-moon'}`}
+                      aria-hidden="true"
+                    />
                   </button>
 
                   <button

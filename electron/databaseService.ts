@@ -293,6 +293,12 @@ function clampInteger(value: unknown, min: number, max: number, fallback: number
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
+function roundForSignature(value: number, decimals = 4): number {
+  if (!Number.isFinite(value)) return 0;
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
+}
+
 function sanitizeString(value: unknown, fallback: string): string {
   if (typeof value !== 'string') {
     return fallback;
@@ -317,9 +323,9 @@ function normalizeTextureMaterialSettings(
     vSteps: clampInteger(source.vSteps, 1, 20, fallback.vSteps),
     color: {
       h: clampInteger(color.h, 0, 360, fallback.color.h),
-      s: clampNumber(color.s, 0, 1, fallback.color.s),
-      v: clampNumber(color.v, 0, 1, fallback.color.v),
-      a: clampNumber(color.a, 0, 1, fallback.color.a),
+      s: roundForSignature(clampNumber(color.s, 0, 1, fallback.color.s)),
+      v: roundForSignature(clampNumber(color.v, 0, 1, fallback.color.v)),
+      a: roundForSignature(clampNumber(color.a, 0, 1, fallback.color.a)),
     },
   };
 }
@@ -360,11 +366,11 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     audioReverbStrength: clampNumber(source.audioReverbStrength, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.audioReverbStrength),
     audioReverbSpace: clampNumber(source.audioReverbSpace, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.audioReverbSpace),
     typingSoundEnabled: typeof source.typingSoundEnabled === 'boolean' ? source.typingSoundEnabled : DEFAULT_UI_LAYOUT_LOADOUT.typingSoundEnabled,
-    renderScrollDynamic: clampNumber(source.renderScrollDynamic, 0.1, 5, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollDynamic),
-    renderScrollResponsiveness: clampNumber(source.renderScrollResponsiveness, 0.1, 5, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollResponsiveness),
-    renderScrollTotalTimeSec: clampNumber(source.renderScrollTotalTimeSec, 0, 2, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollTotalTimeSec),
-    renderScrollMaxSpeedPxPerSec: clampNumber(source.renderScrollMaxSpeedPxPerSec, 1000, 100000, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollMaxSpeedPxPerSec),
-    renderScrollSkew: clampNumber(source.renderScrollSkew, 0.1, 0.9, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollSkew),
+    renderScrollDynamic: roundForSignature(clampNumber(source.renderScrollDynamic, 0.1, 5, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollDynamic)),
+    renderScrollResponsiveness: roundForSignature(clampNumber(source.renderScrollResponsiveness, 0.1, 5, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollResponsiveness)),
+    renderScrollTotalTimeSec: roundForSignature(clampNumber(source.renderScrollTotalTimeSec, 0, 2, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollTotalTimeSec)),
+    renderScrollMaxSpeedPxPerSec: Math.round(clampNumber(source.renderScrollMaxSpeedPxPerSec, 1000, 100000, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollMaxSpeedPxPerSec)),
+    renderScrollSkew: roundForSignature(clampNumber(source.renderScrollSkew, 0.1, 0.9, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollSkew)),
     typingSoundSet: source.typingSoundSet === 'A' || source.typingSoundSet === 'B' || source.typingSoundSet === 'C'
       ? source.typingSoundSet
       : DEFAULT_UI_LAYOUT_LOADOUT.typingSoundSet,
