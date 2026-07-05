@@ -90,6 +90,17 @@ const UTILITY_COLLAPSE_MIN_HEIGHT_PX = 72;
 const APP_WINDOW_MIN_WIDTH_PX = 840;
 const APP_WINDOW_MIN_HEIGHT_PX = 525;
 
+// Matches the renderer's DEFAULT_BASE_PALETTE_COLOR (src/App.tsx). Used as the
+// BrowserWindow's native backing-store fill until the renderer reports the
+// active theme's resolved background color (see 'window-control:report-
+// background-color' below). Without this, Chromium falls back to opaque
+// white for any window surface it hasn't painted content into yet, which is
+// visible as a white flash whenever the OS-level window grows faster than
+// the renderer can repaint (e.g. expanding out of utility/mini mode).
+const DEFAULT_ROOT_BACKGROUND_COLOR_HEX = '#F9F6F4';
+const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+let currentRootBackgroundColorHex = DEFAULT_ROOT_BACKGROUND_COLOR_HEX;
+
 const OPENABLE_EXTENSIONS = new Set(['.md', '.txt']);
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -382,6 +393,19 @@ function registerIpcHandlers() {
 
     const targetSize = resolveUtilityCollapseSize(payload)
     return collapseWindowToUtilityGrid(targetSize)
+  })
+
+  // The renderer reports the active theme's resolved root background color
+  // (opaque #RRGGBB) whenever it changes, so the native window's own paint
+  // fallback stays in sync with the current preset. This closes the white-
+  // flash gap during native bounds changes (see restoreWindowFromUtilityCollapse)
+  // where Chromium has to fill screen area the renderer hasn't painted yet.
+  ipcMain.on('window-control:report-background-color', (_event, hex: unknown) => {
+    if (typeof hex !== 'string' || !HEX_COLOR_PATTERN.test(hex)) return
+    currentRootBackgroundColorHex = hex
+    if (win && !win.isDestroyed()) {
+      win.setBackgroundColor(hex)
+    }
   })
 
   ipcMain.handle(EXTERNAL_FILE_CHANNELS.getPendingPaths, async () => {
@@ -785,7 +809,7 @@ function restoreWindowFromUtilityCollapse(): boolean {
         if (win && !win.isDestroyed()) {
           win.setOpacity(preRestoreOpacity);
         }
-      }, 16);
+      }, 50);
     } else {
       win.setSize(restoreState.width, restoreState.height);
     }
@@ -816,6 +840,7 @@ win = new BrowserWindow({
   frame: false,
   titleBarStyle: 'hidden',
   autoHideMenuBar: true,
+  backgroundColor: currentRootBackgroundColorHex,
   webPreferences: {
     preload: path.join(__dirname, 'preload.mjs'),
   },

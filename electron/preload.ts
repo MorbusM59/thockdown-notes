@@ -86,6 +86,8 @@ const windowControls = {
   close: () => ipcRenderer.send('window-control', 'close'),
   toggleUtilityCollapse: (size: { width: number; height: number }) =>
     ipcRenderer.invoke('window-control:toggle-utility-collapse', size),
+  reportBackgroundColor: (hex: string) =>
+    ipcRenderer.send('window-control:report-background-color', hex),
   onMaximizeStateChange: (callback: (isMaximized: boolean) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, value: boolean) => {
       callback(value)

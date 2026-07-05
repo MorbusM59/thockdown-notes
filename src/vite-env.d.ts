@@ -19,6 +19,7 @@ interface Window {
 		toggleMaximize: () => void;
 		close: () => void;
 		toggleUtilityCollapse: (size: { width: number; height: number }) => Promise<boolean>;
+		reportBackgroundColor: (hex: string) => void;
 		onMaximizeStateChange: (callback: (isMaximized: boolean) => void) => () => void;
 		onCollapsedStateChange: (callback: (isCollapsed: boolean) => void) => () => void;
 	};

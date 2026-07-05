@@ -2459,6 +2459,15 @@ function App() {
     () => derivePaletteTokensFromBaseColor(highlightColors.base),
     [highlightColors.base],
   )
+  // Opaque #RRGGBB form of the app's current root background (same color
+  // driving .window-mode-transition-overlay's fill). Reported to the main
+  // process so the native BrowserWindow's own paint fallback matches the
+  // active theme instead of defaulting to white during native bounds changes.
+  const rootBackgroundColorHex = useMemo(() => {
+    const rgba = parseCssColorToRgba(derivedPaletteColors.parchmentLightest)
+      ?? { r: 249, g: 246, b: 244, a: 1 }
+    return rgbaToHex({ ...rgba, a: 1 }).slice(0, 7)
+  }, [derivedPaletteColors.parchmentLightest])
   const textEmbossUiPrimaryRgba = useMemo(
     () => parseCssColorToRgba(highlightColors.textEmbossUi) ?? { r: 255, g: 255, b: 255, a: 1 },
     [highlightColors.textEmbossUi],
@@ -4053,6 +4062,10 @@ function App() {
     })
     return () => unsubscribe?.()
   }, [])
+
+  useEffect(() => {
+    window.windowControls?.reportBackgroundColor?.(rootBackgroundColorHex)
+  }, [rootBackgroundColorHex])
 
   useEffect(() => {
     applyRenderScrollDynamic(renderScrollDynamic)
