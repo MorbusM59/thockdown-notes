@@ -2902,18 +2902,89 @@ function App() {
     }
   }, [uiMode, applyEntryToLiveState])
 
-  const handleCustomLoadoutSlotClick = useCallback((entryId: number) => {
-    void selectLoadoutPreset(entryId)
-  }, [selectLoadoutPreset])
+  const [armedCustomLayoutId, setArmedCustomLayoutId] = useState<number | null>(null)
+  const customLoadoutRightClickHoldTimerRef = useRef<number | null>(null)
+  const customLoadoutHoldExportEntryIdRef = useRef<number | null>(null)
 
-  const handleCustomLoadoutSlotContextMenu = useCallback(async (event: MouseEvent<HTMLButtonElement>, entryId: number) => {
-    event.preventDefault()
+  const clearCustomLoadoutRightClickHoldTimer = useCallback(() => {
+    if (customLoadoutRightClickHoldTimerRef.current !== null) {
+      window.clearTimeout(customLoadoutRightClickHoldTimerRef.current)
+      customLoadoutRightClickHoldTimerRef.current = null
+    }
+  }, [])
+
+  const triggerCustomLoadoutExport = useCallback(async (entryId: number) => {
     if (!window.measlyLoadouts) return
-
+    setArmedCustomLayoutId(null)
     try {
       await window.measlyLoadouts.exportTdlEntry(entryId)
     } catch (error) {
       console.error('Failed to export custom UI loadout', error)
+    }
+  }, [])
+
+  const handleDeleteCustomLoadout = useCallback(async (entryId: number) => {
+    if (!window.measlyLoadouts) return
+    try {
+      const result = await window.measlyLoadouts.deleteCustom(entryId)
+      setUiLoadoutEntries(result.entries)
+      setLastCustomIdByMode(result.lastCustomIdByMode)
+      setArmedCustomLayoutId(null)
+    } catch (error) {
+      console.error('Failed to delete custom UI loadout', error)
+    }
+  }, [])
+
+  const handleCustomLoadoutSlotClick = useCallback((entryId: number) => {
+    if (armedCustomLayoutId === entryId) {
+      void handleDeleteCustomLoadout(entryId)
+      return
+    }
+
+    void selectLoadoutPreset(entryId)
+  }, [armedCustomLayoutId, handleDeleteCustomLoadout, selectLoadoutPreset])
+
+  const handleCustomLoadoutSlotRightMouseDown = useCallback((event: MouseEvent<HTMLButtonElement>, entryId: number) => {
+    if (event.button !== 2) return
+
+    clearCustomLoadoutRightClickHoldTimer()
+    customLoadoutHoldExportEntryIdRef.current = null
+    customLoadoutRightClickHoldTimerRef.current = window.setTimeout(() => {
+      customLoadoutRightClickHoldTimerRef.current = null
+      customLoadoutHoldExportEntryIdRef.current = entryId
+      void triggerCustomLoadoutExport(entryId)
+    }, 500)
+  }, [clearCustomLoadoutRightClickHoldTimer, triggerCustomLoadoutExport])
+
+  const handleCustomLoadoutSlotRightMouseUp = useCallback((event: MouseEvent<HTMLButtonElement>, entryId: number) => {
+    if (event.button !== 2) return
+
+    if (customLoadoutRightClickHoldTimerRef.current !== null) {
+      clearCustomLoadoutRightClickHoldTimer()
+      setArmedCustomLayoutId(entryId)
+      event.preventDefault()
+      event.stopPropagation()
+      return
+    }
+
+    if (customLoadoutHoldExportEntryIdRef.current === entryId) {
+      event.preventDefault()
+      event.stopPropagation()
+      customLoadoutHoldExportEntryIdRef.current = null
+    }
+  }, [clearCustomLoadoutRightClickHoldTimer])
+
+  const handleCustomLoadoutSlotMouseLeave = useCallback(() => {
+    clearCustomLoadoutRightClickHoldTimer()
+    setArmedCustomLayoutId(null)
+  }, [clearCustomLoadoutRightClickHoldTimer])
+
+  const handleCustomLoadoutSlotContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>, entryId: number) => {
+    if (customLoadoutHoldExportEntryIdRef.current === entryId) {
+      event.preventDefault()
+      event.stopPropagation()
+      customLoadoutHoldExportEntryIdRef.current = null
+      return
     }
   }, [])
 
@@ -2936,6 +3007,21 @@ function App() {
       }
     } catch (error) {
       console.error('Failed to import layouts', error)
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleGlobalMouseUp = (event: globalThis.MouseEvent) => {
+      if (event.button !== 2) return
+      if (customLoadoutHoldExportEntryIdRef.current === null) return
+      event.preventDefault()
+      event.stopPropagation()
+      customLoadoutHoldExportEntryIdRef.current = null
+    }
+
+    window.addEventListener('mouseup', handleGlobalMouseUp, true)
+    return () => {
+      window.removeEventListener('mouseup', handleGlobalMouseUp, true)
     }
   }, [])
 
@@ -9562,11 +9648,18 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <button
               key={`custom-${entry.id}`}
               type="button"
-              className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}`}
+              className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}${armedCustomLayoutId === entry.id ? ' armed' : ''}`}
               title={`Custom ${Math.abs(entry.id) - LOADOUT_FACTORY_PRESET_COUNT - 2}. Right click to export this custom layout.`}
               onClick={() => {
                 handleCustomLoadoutSlotClick(entry.id)
               }}
+              onMouseDown={(event) => {
+                handleCustomLoadoutSlotRightMouseDown(event, entry.id)
+              }}
+              onMouseUp={(event) => {
+                handleCustomLoadoutSlotRightMouseUp(event, entry.id)
+              }}
+              onMouseLeave={handleCustomLoadoutSlotMouseLeave}
               onContextMenu={(event) => {
                 handleCustomLoadoutSlotContextMenu(event, entry.id)
               }}
