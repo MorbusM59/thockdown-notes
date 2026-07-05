@@ -11631,6 +11631,18 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   </button>
                   <div className="toolbar-spacer-large"/>
                   <button
+                    className="btn-icon"
+                    type="button"
+                    title="Create note (Ctrl+N)"
+                    aria-label="Create note"
+                    onClick={() => {
+                      void createNote()
+                    }}
+                  >
+                    <span className="fa-solid fa-file" aria-hidden="true" />
+                  </button>
+                  <div className="toolbar-spacer-large"/>
+                  <button
                     className={`btn-icon ${(isPreviewMode ? spellCheckRenderEnabled : spellCheckEditEnabled) ? 'active' : ''}`}
                     type="button"
                     title={

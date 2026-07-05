@@ -507,6 +507,8 @@ button:hover,
 button:active,
 .ui-btn:active {
   background: var(--btn-bg-pressed);
+  border-color: var(--btn-border-active);
+  box-shadow:   var(--box-shadow-inverted-harsh);
 }
 
 button.is-active,
