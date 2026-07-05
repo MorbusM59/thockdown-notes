@@ -244,10 +244,10 @@ const LIGHT_PRESET_ICONS: string[] = [
 
 const DARK_PRESET_ICONS: string[] = [
   'fa-solid fa-moon',
-  'fa-solid fa-water',
-  'fa-solid fa-mountain',
-  'fa-solid fa-meteor',
-  'fa-solid fa-fire',
+  'fa-solid fa-layer-group',
+  'fa-solid fa-archway',
+  'fa-solid fa-droplet',
+  'fa-solid fa-burst',
 ]
 
 // Names for the 5 factory presets per mode, indexed by abs(id) - 1 (0-based).
@@ -261,10 +261,10 @@ const LIGHT_PRESET_THEMES: string[] = [
 
 const DARK_PRESET_THEMES: string[] = [
   'Dark (Default)',
-  'Flow',
-  'Mountain',
-  'Meteor',
-  'Fire',
+  'Slate',
+  'Ancient',
+  'Ocean',
+  'Bubblegum',
 ]
 
 const TEXTURE_SURFACE_TITLES: Record<TextureSurfaceKey, string> = {
