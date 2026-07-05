@@ -9,9 +9,70 @@
 //   DEFAULT_CUSTOM_LIGHT         -> light id  +6
 //   DEFAULT_CUSTOM_DARK          -> dark id   -6
 
-import { DEFAULT_TEXTURE_MATERIALS } from '../textures/types';
+import { DEFAULT_TEXTURE_MATERIALS, type TextureMaterialSettings, type TextureColorHsva } from '../textures/types';
 import { DEFAULT_GLAZE_SETTINGS } from './glaze';
 import type { UiLayoutLoadout } from './loadouts';
+
+type PartialTextureMaterialSettings = Omit<Partial<TextureMaterialSettings>, 'color'> & {
+  color?: Partial<TextureColorHsva>;
+};
+
+type UiLayoutLoadoutNestedOverrides = {
+  glaze?: Partial<UiLayoutLoadout['glaze']>;
+  highlightColors?: Partial<UiLayoutLoadout['highlightColors']>;
+  editorTextColors?: Partial<UiLayoutLoadout['editorTextColors']>;
+  textureMaterials?: Partial<{
+    appGrid?: PartialTextureMaterialSettings;
+    sidebarContent?: PartialTextureMaterialSettings;
+    editorEditText?: PartialTextureMaterialSettings;
+    editorRenderText?: PartialTextureMaterialSettings;
+  }>;
+};
+
+type UiLayoutLoadoutOverrides = Partial<Omit<UiLayoutLoadout, 'glaze' | 'highlightColors' | 'editorTextColors' | 'textureMaterials'>> & UiLayoutLoadoutNestedOverrides;
+
+function mergeTextureMaterialSettings(
+  base: TextureMaterialSettings,
+  override: PartialTextureMaterialSettings | undefined,
+) {
+  return {
+    enabled: override?.enabled ?? base.enabled,
+    seed: override?.seed ?? base.seed,
+    granularity: override?.granularity ?? base.granularity,
+    vSteps: override?.vSteps ?? base.vSteps,
+    color: {
+      h: override?.color?.h ?? base.color.h,
+      s: override?.color?.s ?? base.color.s,
+      v: override?.color?.v ?? base.color.v,
+      a: override?.color?.a ?? base.color.a,
+    },
+  };
+}
+
+function buildPreset(overrides: UiLayoutLoadoutOverrides): UiLayoutLoadout {
+  return {
+    ...NEUTRAL_BASE,
+    ...overrides,
+    glaze: {
+      ...NEUTRAL_BASE.glaze,
+      ...overrides.glaze,
+    },
+    highlightColors: {
+      ...NEUTRAL_BASE.highlightColors,
+      ...overrides.highlightColors,
+    },
+    editorTextColors: {
+      ...NEUTRAL_BASE.editorTextColors,
+      ...overrides.editorTextColors,
+    },
+    textureMaterials: {
+      appGrid: mergeTextureMaterialSettings(DEFAULT_TEXTURE_MATERIALS.appGrid, overrides.textureMaterials?.appGrid),
+      sidebarContent: mergeTextureMaterialSettings(DEFAULT_TEXTURE_MATERIALS.sidebarContent, overrides.textureMaterials?.sidebarContent),
+      editorEditText: mergeTextureMaterialSettings(DEFAULT_TEXTURE_MATERIALS.editorEditText, overrides.textureMaterials?.editorEditText),
+      editorRenderText: mergeTextureMaterialSettings(DEFAULT_TEXTURE_MATERIALS.editorRenderText, overrides.textureMaterials?.editorRenderText),
+    },
+  };
+}
 
 // A neutral, untextured, unfiltered baseline shared by both default-custom
 // loadouts. Dark mode's default-custom is this base with filterInvert = 1.
@@ -83,19 +144,82 @@ export const DEFAULT_CUSTOM_DARK: UiLayoutLoadout = {
 // they're visually distinct in the UI before real designs replace them.
 
 export const LIGHT_FACTORY_PRESETS: UiLayoutLoadout[] = [
-  { ...NEUTRAL_BASE, renderScrollMaxSpeedPxPerSec: 48000, renderScrollSkew: 0.62, filterSaturate: 0.498, glaze: {"gloomPosition":-0.5,"gloomShape":1.08,"radialCount":3,"radialSeed":325650,"sheenOpacity":0.5}, highlightColors: {"appButtons":"rgba(255, 254, 254, 1)","background":"rgba(0, 0, 0, 0.024)","base":"rgba(249, 242, 238, 1)","bottomBackground":"rgba(0, 0, 0, 0.079)","grid":"rgba(249, 246, 244, 0.886)","gridOutline":"rgba(0, 0, 0, 0.075)","inputFields":"rgba(232, 234, 235, 1)","markdownBlockquote":"rgba(255, 255, 0, 0.325)","markdownChecked":"rgba(0, 255, 0, 0.325)","markdownHeadline":"rgba(255, 0, 255, 0.325)","markdownList":"rgba(0, 255, 255, 0.325)","markdownUnchecked":"rgba(255, 0, 0, 0.325)","textBase":"rgba(0, 0, 0, 0.871)","textEmbossEdit":"rgba(255, 255, 255, 0.682)","textEmbossUi":"rgba(255, 255, 255, 0.682)","topBackground":"rgba(0, 0, 0, 0.079)"}, editorTextColors: {"editorEditText":"rgba(0, 0, 0, 0.871)"}, textureMaterials: {"appGrid":{"color":{"a":0.11372549019607843,"h":0,"s":0,"v":0},"granularity":1,"vSteps":20}} },
-  { ...NEUTRAL_BASE, filterSepia: 0.2, filterBrightness: 1.05 },
-  { ...NEUTRAL_BASE, filterContrast: 1.15, filterSaturate: 0.7 },
-  { ...NEUTRAL_BASE, filterHueRotate: 30, filterSaturate: 0.6 },
-  { ...NEUTRAL_BASE, filterBrightness: 1.1, glaze: { ...NEUTRAL_BASE.glaze, linearStackCount: 2, radialCount: 1, gloomOpacity: 0.65 } },
+  buildPreset({
+    renderScrollMaxSpeedPxPerSec: 48000,
+    renderScrollSkew: 0.62,
+    filterSaturate: 0.498,
+    glaze: { gloomPosition: -0.5, gloomShape: 1.08, radialCount: 3, radialSeed: 325650, sheenOpacity: 0.5 },
+    highlightColors: {
+      appButtons: 'rgba(255, 254, 254, 1)',
+      background: 'rgba(0, 0, 0, 0.024)',
+      base: 'rgba(249, 242, 238, 1)',
+      bottomBackground: 'rgba(0, 0, 0, 0.079)',
+      grid: 'rgba(249, 246, 244, 0.886)',
+      gridOutline: 'rgba(0, 0, 0, 0.075)',
+      inputFields: 'rgba(232, 234, 235, 1)',
+      markdownBlockquote: 'rgba(255, 255, 0, 0.325)',
+      markdownChecked: 'rgba(0, 255, 0, 0.325)',
+      markdownHeadline: 'rgba(255, 0, 255, 0.325)',
+      markdownList: 'rgba(0, 255, 255, 0.325)',
+      markdownUnchecked: 'rgba(255, 0, 0, 0.325)',
+      textBase: 'rgba(0, 0, 0, 0.871)',
+      textEmbossEdit: 'rgba(255, 255, 255, 0.682)',
+      textEmbossUi: 'rgba(255, 255, 255, 0.682)',
+      topBackground: 'rgba(0, 0, 0, 0.079)',
+    },
+    editorTextColors: { editorEditText: 'rgba(0, 0, 0, 0.871)' },
+    textureMaterials: { appGrid: { color: { a: 0.11372549019607843, h: 0, s: 0, v: 0 }, granularity: 1, vSteps: 20 } },
+  }),
+  buildPreset({ filterSepia: 0.2, filterBrightness: 1.05 }),
+  buildPreset({ filterContrast: 1.15, filterSaturate: 0.7 }),
+  buildPreset({ filterHueRotate: 30, filterSaturate: 0.6 }),
+  buildPreset({ filterBrightness: 1.1, glaze: { linearStackCount: 2, radialCount: 1, gloomOpacity: 0.65 } }),
 ];
 
 export const DARK_FACTORY_PRESETS: UiLayoutLoadout[] = [
-  { ...NEUTRAL_BASE, audioKeyVolume: 1, renderScrollDynamic: 4, renderScrollResponsiveness: 0.6, renderScrollMaxSpeedPxPerSec: 30000, renderScrollSkew: 0.65, filterInvert: 1, filterSaturate: 0.434, glaze: {"sheenOpacity":0.03,"sheenPosition":0.12}, highlightColors: {"appButtons":"rgba(255, 244, 235, 0.681)","background":"rgba(196, 187, 182, 0.196)","base":"rgba(237, 234, 232, 1)","bottomBackground":"rgba(196, 187, 182, 0)","caret":"rgba(120, 115, 112, 0.8)","grid":"rgba(255, 252, 249, 1)","gridOutline":"rgba(0, 0, 0, 0.051)","inputFields":"rgba(235, 221, 208, 0.14)","markdownBlockquote":"rgba(11, 120, 236, 0.635)","markdownChecked":"rgba(255, 0, 103, 0.321)","markdownCode":"rgba(255, 0, 0, 1)","markdownHeadline":"rgba(0, 0, 0, 0.548)","markdownList":"rgba(38, 255, 0, 0.321)","markdownUnchecked":"rgba(0, 226, 255, 1)","search":"rgba(199, 94, 0, 0.27)","selectionEdit":"rgba(199, 94, 0, 0.27)","selectionRender":"rgba(199, 94, 0, 0.27)","textBase":"rgba(0, 0, 0, 0.663)","textEmbossEdit":"rgba(255, 255, 255, 0.882)","textEmbossRender":"rgba(255, 255, 255, 1)","textEmbossUi":"rgba(255, 255, 255, 0.882)","topBackground":"rgba(196, 187, 182, 0)"}, editorTextColors: {"editorEditText":"rgba(0, 0, 0, 0.663)","editorRenderText":"rgba(51, 51, 51, 1)"}, textureMaterials: {"editorEditText":{"color":{"s":0.11489361702127655,"v":0.9215686274509803},"enabled":false},"sidebarContent":{"color":{"a":0.14,"h":29,"s":0.11489361702127655,"v":0.9215686274509803},"enabled":false}} },
-  { ...NEUTRAL_BASE, filterInvert: 1, filterSepia: 0.3, filterHueRotate: 200, filterSaturate: 0.6 },
-  { ...NEUTRAL_BASE, filterInvert: 1, filterContrast: 1.1, filterBrightness: 0.85 },
-  { ...NEUTRAL_BASE, filterInvert: 1, filterSepia: 0.5, filterHueRotate: 280, filterSaturate: 0.7 },
-  { ...NEUTRAL_BASE, filterInvert: 1, filterBrightness: 0.8, glaze: { ...NEUTRAL_BASE.glaze, linearStackCount: 4, radialCount: 2, linearOpacity: 0.15 } },
+  buildPreset({
+    audioKeyVolume: 1,
+    renderScrollDynamic: 4,
+    renderScrollResponsiveness: 0.6,
+    renderScrollMaxSpeedPxPerSec: 30000,
+    renderScrollSkew: 0.65,
+    filterInvert: 1,
+    filterSaturate: 0.434,
+    glaze: { sheenOpacity: 0.03, sheenPosition: 0.12 },
+    highlightColors: {
+      appButtons: 'rgba(255, 244, 235, 0.681)',
+      background: 'rgba(196, 187, 182, 0.196)',
+      base: 'rgba(237, 234, 232, 1)',
+      bottomBackground: 'rgba(196, 187, 182, 0)',
+      caret: 'rgba(120, 115, 112, 0.8)',
+      grid: 'rgba(255, 252, 249, 1)',
+      gridOutline: 'rgba(0, 0, 0, 0.051)',
+      inputFields: 'rgba(235, 221, 208, 0.14)',
+      markdownBlockquote: 'rgba(11, 120, 236, 0.635)',
+      markdownChecked: 'rgba(255, 0, 103, 0.321)',
+      markdownCode: 'rgba(255, 0, 0, 1)',
+      markdownHeadline: 'rgba(0, 0, 0, 0.548)',
+      markdownList: 'rgba(38, 255, 0, 0.321)',
+      markdownUnchecked: 'rgba(0, 226, 255, 1)',
+      search: 'rgba(199, 94, 0, 0.27)',
+      selectionEdit: 'rgba(199, 94, 0, 0.27)',
+      selectionRender: 'rgba(199, 94, 0, 0.27)',
+      textBase: 'rgba(0, 0, 0, 0.663)',
+      textEmbossEdit: 'rgba(255, 255, 255, 0.882)',
+      textEmbossRender: 'rgba(255, 255, 255, 1)',
+      textEmbossUi: 'rgba(255, 255, 255, 0.882)',
+      topBackground: 'rgba(196, 187, 182, 0)',
+    },
+    editorTextColors: { editorEditText: 'rgba(0, 0, 0, 0.663)', editorRenderText: 'rgba(51, 51, 51, 1)' },
+    textureMaterials: {
+      editorEditText: { color: { s: 0.11489361702127655, v: 0.9215686274509803 }, enabled: false },
+      sidebarContent: { color: { a: 0.14, h: 29, s: 0.11489361702127655, v: 0.9215686274509803 }, enabled: false },
+    },
+  }),
+  buildPreset({ filterInvert: 1, filterSepia: 0.3, filterHueRotate: 200, filterSaturate: 0.6 }),
+  buildPreset({ filterInvert: 1, filterContrast: 1.1, filterBrightness: 0.85 }),
+  buildPreset({ filterInvert: 1, filterSepia: 0.5, filterHueRotate: 280, filterSaturate: 0.7 }),
+  buildPreset({ filterInvert: 1, filterBrightness: 0.8, glaze: { linearStackCount: 4, radialCount: 2, linearOpacity: 0.15 } }),
 ];
 
 if (LIGHT_FACTORY_PRESETS.length !== 5 || DARK_FACTORY_PRESETS.length !== 5) {
