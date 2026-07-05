@@ -2941,12 +2941,14 @@ function App() {
       return
     }
 
+    setArmedCustomLayoutId(null)
     void selectLoadoutPreset(entryId)
   }, [armedCustomLayoutId, handleDeleteCustomLoadout, selectLoadoutPreset])
 
   const handleCustomLoadoutSlotRightMouseDown = useCallback((event: MouseEvent<HTMLButtonElement>, entryId: number) => {
     if (event.button !== 2) return
 
+    setArmedCustomLayoutId(null)
     clearCustomLoadoutRightClickHoldTimer()
     customLoadoutHoldExportEntryIdRef.current = null
     customLoadoutRightClickHoldTimerRef.current = window.setTimeout(() => {
@@ -2980,13 +2982,15 @@ function App() {
   }, [clearCustomLoadoutRightClickHoldTimer])
 
   const handleCustomLoadoutSlotContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>, entryId: number) => {
-    if (customLoadoutHoldExportEntryIdRef.current === entryId) {
+    if (customLoadoutHoldExportEntryIdRef.current === entryId || armedCustomLayoutId === entryId) {
       event.preventDefault()
       event.stopPropagation()
-      customLoadoutHoldExportEntryIdRef.current = null
+      if (customLoadoutHoldExportEntryIdRef.current === entryId) {
+        customLoadoutHoldExportEntryIdRef.current = null
+      }
       return
     }
-  }, [])
+  }, [armedCustomLayoutId])
 
   const exportLayoutsTdl = useCallback(async () => {
     if (!window.measlyLoadouts) return
@@ -9649,7 +9653,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               key={`custom-${entry.id}`}
               type="button"
               className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}${armedCustomLayoutId === entry.id ? ' armed' : ''}`}
-              title={`Custom ${Math.abs(entry.id) - LOADOUT_FACTORY_PRESET_COUNT - 2}. Right click to export this custom layout.`}
+              title={`Custom Layout ${Math.abs(entry.id) - LOADOUT_FACTORY_PRESET_COUNT - 2}\nClick RMB to mark for deletion. \nHold RMB to export.`}
               onClick={() => {
                 handleCustomLoadoutSlotClick(entry.id)
               }}
