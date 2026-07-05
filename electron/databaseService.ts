@@ -44,6 +44,7 @@ const TEXTURE_CACHE_DEFAULT_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 14;
 
 const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   editorGlyphPaddingPx: 1,
+  borderRadiusRegularPx: 6,
   audioKeyVolume: 1,
   audioBassVolume: 0,
   audioTrebleVolume: 0,
@@ -360,6 +361,7 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
 
   return {
     editorGlyphPaddingPx: clampInteger(source.editorGlyphPaddingPx, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.editorGlyphPaddingPx),
+    borderRadiusRegularPx: clampInteger(source.borderRadiusRegularPx, 0, 20, DEFAULT_UI_LAYOUT_LOADOUT.borderRadiusRegularPx),
     audioKeyVolume: clampNumber(source.audioKeyVolume, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.audioKeyVolume),
     audioBassVolume: clampNumber(source.audioBassVolume, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.audioBassVolume),
     audioTrebleVolume: clampNumber(source.audioTrebleVolume, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.audioTrebleVolume),
@@ -426,6 +428,7 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
 // Ordered list of scalar UiLayoutLoadout keys used for diff lines.
 const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
   'editorGlyphPaddingPx',
+  'borderRadiusRegularPx',
   'audioKeyVolume', 'audioBassVolume', 'audioTrebleVolume', 'audioReverbStrength', 'audioReverbSpace',
   'typingSoundEnabled', 'typingSoundSet',
   'renderScrollDynamic', 'renderScrollResponsiveness', 'renderScrollTotalTimeSec',

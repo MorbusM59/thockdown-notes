@@ -78,6 +78,7 @@ function buildPreset(overrides: UiLayoutLoadoutOverrides): UiLayoutLoadout {
 // loadouts. Dark mode's default-custom is this base with filterInvert = 1.
 export const NEUTRAL_BASE: UiLayoutLoadout = {
   editorGlyphPaddingPx: 1,
+  borderRadiusRegularPx: 6,
   audioKeyVolume: 0.5,
   audioBassVolume: 0,
   audioTrebleVolume: 0,

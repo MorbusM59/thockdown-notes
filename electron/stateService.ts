@@ -31,6 +31,7 @@ const DEFAULT_APP_STATE: AppState = {
     editorFontSize: 'm',
     editorSpacing: 'cozy',
     editorGlyphPaddingPx: 1,
+    borderRadiusRegularPx: 6,
     highlightGridOutlineColor: '#00000022',
     textureEnabled: false,
     glaze: DEFAULT_GLAZE_SETTINGS,
@@ -250,6 +251,12 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
       0,
       1,
       DEFAULT_APP_STATE.menu!.editorGlyphPaddingPx ?? 1,
+    ),
+    borderRadiusRegularPx: sanitizeIntegerInRange(
+      input?.borderRadiusRegularPx,
+      0,
+      20,
+      DEFAULT_APP_STATE.menu!.borderRadiusRegularPx ?? 6,
     ),
     highlightGridOutlineColor:
       typeof input?.highlightGridOutlineColor === 'string'

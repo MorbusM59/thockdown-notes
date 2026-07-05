@@ -122,6 +122,9 @@ const DEFAULT_SIDEBAR_RATIO = 0.306
 const DEFAULT_TAG_SPLIT_RATIO = 0.645
 const EDITOR_GLYPH_PADDING_MIN_PX = 0
 const EDITOR_GLYPH_PADDING_MAX_PX = 1
+const BORDER_RADIUS_REGULAR_MIN_PX = 0
+const BORDER_RADIUS_REGULAR_MAX_PX = 20
+const DEFAULT_BORDER_RADIUS_REGULAR_PX = 6
 const TEXTURE_GRANULARITY_MIN = 1
 const TEXTURE_GRANULARITY_MAX = 20
 const TEXTURE_VSTEPS_MIN = 1
@@ -239,7 +242,7 @@ const LIGHT_PRESET_ICONS: string[] = [
   'fa-solid fa-mound',
   'fa-solid fa-leaf',
   'fa-regular fa-file',
-  'fa-regular fa-ring',
+  'fa-solid fa-ring',
 ]
 
 const DARK_PRESET_ICONS: string[] = [
@@ -1584,6 +1587,11 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
       EDITOR_GLYPH_PADDING_MIN_PX,
       EDITOR_GLYPH_PADDING_MAX_PX,
     ),
+    borderRadiusRegularPx: clamp(
+      Math.round(toFiniteNumber(source.borderRadiusRegularPx, DEFAULT_BORDER_RADIUS_REGULAR_PX)),
+      BORDER_RADIUS_REGULAR_MIN_PX,
+      BORDER_RADIUS_REGULAR_MAX_PX,
+    ),
     renderScrollDynamic: roundForSignature(clamp(toFiniteNumber(source.renderScrollDynamic, getRenderScrollDynamic()), 0.1, 5)),
     renderScrollResponsiveness: roundForSignature(clamp(toFiniteNumber(source.renderScrollResponsiveness, getRenderScrollResponsiveness()), 0.1, 5)),
     renderScrollTotalTimeSec: roundForSignature(clamp(toFiniteNumber(source.renderScrollTotalTimeSec, getRenderScrollTotalTimeSec()), 0, 2)),
@@ -2210,6 +2218,7 @@ function App() {
   const [editorFontSize, setEditorFontSize] = useState<EditorFontSizeKey>(DEFAULT_EDITOR_FONT_SIZE)
   const [editorSpacing, setEditorSpacing] = useState<EditorSpacingKey>(DEFAULT_EDITOR_SPACING)
   const [editorGlyphPaddingPx, setEditorGlyphPaddingPx] = useState<number>(DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX)
+  const [borderRadiusRegularPx, setBorderRadiusRegularPx] = useState<number>(DEFAULT_BORDER_RADIUS_REGULAR_PX)
   const [editorFontLoadVersion, setEditorFontLoadVersion] = useState(0)
   const [isTagMutationPending, setIsTagMutationPending] = useState(false)
   const [deleteArmedTagName, setDeleteArmedTagName] = useState<string | null>(null)
@@ -2644,6 +2653,7 @@ function App() {
   const captureUiLayoutLoadout = useCallback((): UiLayoutLoadout => {
     return {
       editorGlyphPaddingPx,
+      borderRadiusRegularPx,
       audioKeyVolume,
       audioBassVolume,
       audioTrebleVolume,
@@ -2697,6 +2707,7 @@ function App() {
     }
   }, [
     editorGlyphPaddingPx,
+    borderRadiusRegularPx,
     glazeSettings,
     darkMode,
     filterInvert,
@@ -2730,6 +2741,13 @@ function App() {
         Math.round(loadout.editorGlyphPaddingPx),
         EDITOR_GLYPH_PADDING_MIN_PX,
         EDITOR_GLYPH_PADDING_MAX_PX,
+      ),
+    )
+    setBorderRadiusRegularPx(
+      clamp(
+        Math.round(loadout.borderRadiusRegularPx),
+        BORDER_RADIUS_REGULAR_MIN_PX,
+        BORDER_RADIUS_REGULAR_MAX_PX,
       ),
     )
     setRenderScrollDynamic(clamp(loadout.renderScrollDynamic, 0.1, 5))
@@ -3632,6 +3650,7 @@ function App() {
       editorFontSize,
       editorSpacing,
       editorGlyphPaddingPx,
+      borderRadiusRegularPx,
       sidebarWidthRatio: DEFAULT_SIDEBAR_RATIO,
       tagSplitRatio: DEFAULT_TAG_SPLIT_RATIO,
       exportFolder: exportFolder ?? undefined,
@@ -3712,6 +3731,7 @@ function App() {
     spellCheckRenderEnabled,
     editorFontSize,
     editorGlyphPaddingPx,
+    borderRadiusRegularPx,
     editorSpacing,
     editorStyle,
     exportFolder,
@@ -4152,8 +4172,12 @@ function App() {
   }, [appShellWidthPx])
 
   const appShellStyle = useMemo(() => {
+    const borderRadiusRegularPxCss = `${borderRadiusRegularPx}px`
+    const borderRadiusSmallPxCss = `${Math.max(0, borderRadiusRegularPx / 2)}px`
     const style: CSSProperties & Record<string, string> = {
       gridTemplateColumns: layout.gridTemplateColumns,
+      '--border-radius-regular': borderRadiusRegularPxCss,
+      '--border-radius-small': borderRadiusSmallPxCss,
       '--color-bg-regular': highlightColors.background,
       '--color-bg-leading': highlightColors.topBackground,
       '--color-bg-trailing': highlightColors.bottomBackground,
@@ -4204,6 +4228,7 @@ function App() {
   }, [
     appGridTextureCss,
     appGridTextureTintCss,
+    borderRadiusRegularPx,
     editorEditTextTextureCss,
     editorEditTextureTintCss,
     editorRenderTextTextureCss,
@@ -4279,7 +4304,11 @@ function App() {
   }, [glazeSettings, filterInvert])
 
   const appRootStyle = useMemo(() => {
+    const borderRadiusRegularPxCss = `${borderRadiusRegularPx}px`
+    const borderRadiusSmallPxCss = `${Math.max(0, borderRadiusRegularPx / 2)}px`
     return {
+      '--border-radius-regular': borderRadiusRegularPxCss,
+      '--border-radius-small': borderRadiusSmallPxCss,
       '--glaze-linear-background-image': glazeLinearBackgroundImage,
       '--glaze-radial-background-image': glazeRadialBackgroundImage,
       '--glaze-gloom-background-image': glazeGloomBackgroundImage,
@@ -4313,6 +4342,7 @@ function App() {
     } as CSSProperties & Record<string, string>
   }, [
     derivedPaletteColors,
+    borderRadiusRegularPx,
     glazeLinearBackgroundImage,
     glazeRadialBackgroundImage,
     glazeGloomBackgroundImage,
@@ -4334,6 +4364,12 @@ function App() {
     textColor20,
     textColor10,
   ])
+
+  useEffect(() => {
+    const rootStyle = document.documentElement.style
+    rootStyle.setProperty('--border-radius-regular', `${borderRadiusRegularPx}px`)
+    rootStyle.setProperty('--border-radius-small', `${Math.max(0, borderRadiusRegularPx / 2)}px`)
+  }, [borderRadiusRegularPx])
 
   // Writes a structured debug entry to a session-scoped debug note (tagged
   // "debug"). No-ops when debuggingEnabled is false. Safe to call from any
@@ -6313,6 +6349,13 @@ ${markdownHtml}
                 Math.round(appState.menu.editorGlyphPaddingPx ?? DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX),
                 EDITOR_GLYPH_PADDING_MIN_PX,
                 EDITOR_GLYPH_PADDING_MAX_PX,
+              ),
+            )
+            setBorderRadiusRegularPx(
+              clamp(
+                Math.round(appState.menu.borderRadiusRegularPx ?? DEFAULT_BORDER_RADIUS_REGULAR_PX),
+                BORDER_RADIUS_REGULAR_MIN_PX,
+                BORDER_RADIUS_REGULAR_MAX_PX,
               ),
             )
             setRenderScrollDynamic(appState.menu.renderScrollDynamic ?? appState.menu.renderScrollEaseMultiplier ?? getRenderScrollDynamic())
@@ -10646,6 +10689,22 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         heading="Miscellaneous Settings"
       >
 <div className="utility-setting-slider-stack" aria-label="Miscellaneous settings controls">
+          <CompactScrollbarSlider
+            id="ui-border-radius"
+            min={BORDER_RADIUS_REGULAR_MIN_PX}
+            max={BORDER_RADIUS_REGULAR_MAX_PX}
+            step={1}
+            value={borderRadiusRegularPx}
+            trackLabel="radius"
+            ariaLabel="UI border radius in pixels"
+            onCommit={(value) => setBorderRadiusRegularPx(
+              clamp(
+                Math.round(value),
+                BORDER_RADIUS_REGULAR_MIN_PX,
+                BORDER_RADIUS_REGULAR_MAX_PX,
+              ),
+            )}
+          />
           <CompactScrollbarSlider
             id="editor-glyph-padding"
             min={EDITOR_GLYPH_PADDING_MIN_PX}

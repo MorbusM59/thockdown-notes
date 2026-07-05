@@ -32,6 +32,7 @@ export interface PersistedMenuState {
   editorFontSize?: 'xs' | 's' | 'm' | 'l' | 'xl';
   editorSpacing?: 'tight' | 'compact' | 'cozy' | 'wide';
   editorGlyphPaddingPx?: number;
+  borderRadiusRegularPx?: number;
   sidebarWidthRatio: number;
   tagSplitRatio: number;
   glaze?: GlazeSettings;
