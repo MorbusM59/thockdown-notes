@@ -11636,8 +11636,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   <button
                     className={`btn-icon ${!isPreviewMode ? 'active' : ''}`}
                     type="button"
-                    title={isPreviewMode ? 'Edit mode inactive' : 'Edit mode active'}
-                    aria-label={isPreviewMode ? 'Edit mode inactive' : 'Edit mode active'}
+                    title={isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)'}
+                    aria-label={isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)'}
                     onClick={toggleRenderViewMode}
                   >
                     <span className="fa-solid fa-pen-to-square" aria-hidden="true" />
@@ -11660,13 +11660,13 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     type="button"
                     title={
                       isPreviewMode
-                        ? (spellCheckRenderEnabled ? 'Disable spell check (render view)' : 'Enable spell check (render view)')
-                        : (spellCheckEditEnabled ? 'Disable spell check (edit mode)' : 'Enable spell check (edit mode)')
+                        ? (spellCheckRenderEnabled ? 'Disable spell check' : 'Enable spell check')
+                        : (spellCheckEditEnabled ? 'Disable spell check' : 'Enable spell check')
                     }
                     aria-label={
                       isPreviewMode
-                        ? (spellCheckRenderEnabled ? 'Spell check active in render view' : 'Spell check inactive in render view')
-                        : (spellCheckEditEnabled ? 'Spell check active in edit mode' : 'Spell check inactive in edit mode')
+                        ? (spellCheckRenderEnabled ? 'Disable spell check' : 'Enable spell check')
+                        : (spellCheckEditEnabled ? 'Disable spell check' : 'Enable spell check')
                     }
                     aria-pressed={isPreviewMode ? spellCheckRenderEnabled : spellCheckEditEnabled}
                     onClick={() => {
