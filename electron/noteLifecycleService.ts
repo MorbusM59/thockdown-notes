@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type {
   AddTagInput,
+  BranchNoteFromSnapshotInput,
   CreateNoteInput,
   DeleteNoteInput,
   LoadNoteInput,
@@ -95,6 +96,23 @@ function buildNoteId(now: Date): string {
   const min = String(now.getMinutes()).padStart(2, '0');
   const suffix = randomBytes(5).toString('base64url').toUpperCase();
   return `${yy}-${mm}-${dd}_${hh}-${min}_${suffix}`;
+}
+
+// "yy-mm-dd hh:mm" label for the snapshot moment a branch was created from.
+function formatBranchLabel(when: Date): string {
+  const yy = String(when.getFullYear()).slice(-2);
+  const mm = String(when.getMonth() + 1).padStart(2, '0');
+  const dd = String(when.getDate()).padStart(2, '0');
+  const hh = String(when.getHours()).padStart(2, '0');
+  const min = String(when.getMinutes()).padStart(2, '0');
+  return `${yy}-${mm}-${dd} ${hh}:${min}`;
+}
+
+// Branching a branch shouldn't stack "[Branch: ...] [Branch: ...]" suffixes
+// onto the title indefinitely -- strip a trailing one before appending a new one.
+const TRAILING_BRANCH_SUFFIX_RE = / \[Branch: \d{2}-\d{2}-\d{2} \d{2}:\d{2}\]$/;
+function stripExistingBranchSuffix(title: string): string {
+  return title.replace(TRAILING_BRANCH_SUFFIX_RE, '');
 }
 
 export class NoteLifecycleService {
@@ -306,6 +324,34 @@ export class NoteLifecycleService {
       }
     }
     return this.loadNote({ id });
+  }
+
+  // Clones a past snapshot of an existing note into a brand-new, independent
+  // note: same content as of that moment, same tags, and the shared snapshot
+  // history up to (and including) the branch point. The two notes diverge
+  // from here on -- the branch has no further connection to the source note.
+  async branchNoteFromSnapshot(input: BranchNoteFromSnapshotInput): Promise<NoteDocument> {
+    const snapshot = this.databaseService.getSnapshotById(input.snapshotId);
+    if (!snapshot || snapshot.noteId !== input.sourceNoteId) {
+      throw new Error(`Snapshot ${input.snapshotId} does not belong to note ${input.sourceNoteId}`);
+    }
+
+    const sourceRecord = this.databaseService.getNoteRecord(input.sourceNoteId);
+    const sourceTitle = sourceRecord?.title?.trim() || titleFromText(snapshot.content);
+    const sourceTags = this.databaseService.getNoteTags(input.sourceNoteId);
+
+    const branchLabel = formatBranchLabel(new Date(snapshot.timestamp));
+    const newTitle = `${stripExistingBranchSuffix(sourceTitle)} [Branch: ${branchLabel}]`;
+
+    const created = await this.createNote({
+      initialText: snapshot.content,
+      title: newTitle,
+      initialTags: sourceTags,
+    });
+
+    this.databaseService.cloneSnapshotsUpTo(input.sourceNoteId, created.id, snapshot.timestamp);
+
+    return this.loadNote({ id: created.id });
   }
 
   async saveNote(input: SaveNoteInput): Promise<NoteSummary> {

@@ -17,6 +17,7 @@ export const NOTE_LIFECYCLE_CHANNELS = {
   getNoteIdByExternalPath: 'notes:get-note-id-by-external-path',
   saveNoteSnapshot: 'notes:save-note-snapshot',
   getNoteSnapshots: 'notes:get-note-snapshots',
+  branchNoteFromSnapshot: 'notes:branch-from-snapshot',
 } as const;
 
 export interface NoteSummary {
@@ -83,6 +84,11 @@ export interface NoteTagsInput {
   id: string;
 }
 
+export interface BranchNoteFromSnapshotInput {
+  sourceNoteId: string;
+  snapshotId: number;
+}
+
 export interface TagSummary {
   name: string;
   usageCount: number;
@@ -125,4 +131,5 @@ export interface NoteLifecycleApi {
   getNoteIdByExternalPath(input: { externalPath: string }): Promise<string | null>;
   saveNoteSnapshot(input: { id: string; content: string; isManual?: boolean }): Promise<void>;
   getNoteSnapshots(input: LoadNoteInput): Promise<Array<{ id: number; noteId: string; content: string; timestamp: string; isManual: boolean }>>;
+  branchNoteFromSnapshot(input: BranchNoteFromSnapshotInput): Promise<NoteDocument>;
 }

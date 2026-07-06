@@ -1290,6 +1290,70 @@ export class DatabaseService {
     db.prepare('DELETE FROM note_snapshots WHERE id = ?').run(snapshotId);
   }
 
+  getSnapshotById(snapshotId: number): {
+    id: number;
+    noteId: string;
+    content: string;
+    timestamp: string;
+    isManual: boolean;
+  } | undefined {
+    const db = this.requireDb();
+    const row = db.prepare(`
+      SELECT id, noteId, content, timestamp, isManual
+      FROM note_snapshots
+      WHERE id = ?
+    `).get(snapshotId) as {
+      id: number;
+      noteId: string;
+      content: string;
+      timestamp: string;
+      isManual: number;
+    } | undefined;
+
+    if (!row) return undefined;
+
+    return {
+      id: row.id,
+      noteId: row.noteId,
+      content: row.content,
+      timestamp: row.timestamp,
+      isManual: Boolean(row.isManual),
+    };
+  }
+
+  // Copies every snapshot of `sourceNoteId` at or before `cutoffTimestamp` onto
+  // `newNoteId`, preserving original timestamps and manual/automatic flags.
+  // Used when branching a new note off an existing note's timeline: the branch
+  // should open with the shared history intact up to the point it diverged.
+  cloneSnapshotsUpTo(sourceNoteId: string, newNoteId: string, cutoffTimestamp: string): void {
+    const db = this.requireDb();
+    const rows = db.prepare(`
+      SELECT content, timestamp, isManual
+      FROM note_snapshots
+      WHERE noteId = ? AND datetime(timestamp) <= datetime(?)
+      ORDER BY datetime(timestamp) ASC
+    `).all(sourceNoteId, cutoffTimestamp) as Array<{
+      content: string;
+      timestamp: string;
+      isManual: number;
+    }>;
+
+    if (rows.length === 0) return;
+
+    const insertStmt = db.prepare(`
+      INSERT INTO note_snapshots (noteId, content, timestamp, isManual)
+      VALUES (?, ?, ?, ?)
+    `);
+
+    const tx = db.transaction((items: typeof rows) => {
+      for (const row of items) {
+        insertStmt.run(newNoteId, row.content, row.timestamp, row.isManual);
+      }
+    });
+
+    tx(rows);
+  }
+
   createTempNote(input: { title: string; externalPath: string; originalEncoding?: string }): string {
     const db = this.requireDb();
     const id = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
