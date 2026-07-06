@@ -71,7 +71,7 @@ import { resolveMarkdownEnterTransform } from './editor/EnterTransformPolicy'
 import { resolveMarkdownChecklistTypeoverTransform } from './editor/ChecklistTypingTransformPolicy'
 import { normalizeInternalText } from './editor/TextPolicy'
 import { resolvePreviewSourceAnchorEntry } from './editor/PreviewScrollAnchor'
-import { matchesNoteSearchQuery } from './shared/noteSearch'
+import { isNoteSearchQueryActive, matchesNoteSearchQuery } from './shared/noteSearch'
 import { readSelectionOffsetFromClientPoint } from './editor/SelectionOffsets'
 import {
   buildReleaseRampDownPlanFromCurrentParams,
@@ -7681,8 +7681,14 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     return true
   }, [sidebarMode, dateFilteredNotes, trashFilteredNotes])
 
+  const isSidebarSearchActive = isNoteSearchQueryActive(searchQuery)
+
   useEffect(() => {
     if (sidebarMode !== 'date' && sidebarMode !== 'trash' && sidebarMode !== 'category' && sidebarMode !== 'archive') {
+      return
+    }
+
+    if (isSidebarSearchActive) {
       return
     }
 
@@ -7712,7 +7718,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       setActiveNoteId(null)
       setActiveNoteText('')
     }
-  }, [activeNoteId, sidebarMode, isNoteDisplayedInCurrentMenu, getNextActiveNoteIdAfterRemoval, activateNote])
+  }, [activeNoteId, isSidebarSearchActive, sidebarMode, isNoteDisplayedInCurrentMenu, getNextActiveNoteIdAfterRemoval, activateNote])
   const totalPages = Math.max(1, Math.ceil(totalPagedNotes / Math.max(1, itemsPerPage)))
   const effectiveCurrentPage = Math.min(Math.max(1, currentPage), totalPages)
   const isSidebarTreeMode = sidebarMode === 'category' || sidebarMode === 'archive'

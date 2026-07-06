@@ -5,6 +5,10 @@ export interface NoteSearchCandidate {
   contentText?: string
 }
 
+export function isNoteSearchQueryActive(query: string): boolean {
+  return query.trim().length > 0
+}
+
 export function matchesNoteSearchQuery(note: NoteSearchCandidate, query: string, isCaseSensitive: boolean): boolean {
   const trimmed = query.trim()
   const normalized = isCaseSensitive ? trimmed : trimmed.toLowerCase()

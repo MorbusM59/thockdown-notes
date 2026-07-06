@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { matchesNoteSearchQuery } from './noteSearch'
+import { isNoteSearchQueryActive, matchesNoteSearchQuery } from './noteSearch'
+
+describe('isNoteSearchQueryActive', () => {
+  it('treats non-empty search input as active filtering', () => {
+    expect(isNoteSearchQueryActive('alpha')).toBe(true)
+    expect(isNoteSearchQueryActive('   ')).toBe(false)
+  })
+})
 
 describe('matchesNoteSearchQuery', () => {
   it('matches note content even when the title does not contain the query', () => {
