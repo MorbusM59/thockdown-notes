@@ -71,6 +71,7 @@ import { resolveMarkdownEnterTransform } from './editor/EnterTransformPolicy'
 import { resolveMarkdownChecklistTypeoverTransform } from './editor/ChecklistTypingTransformPolicy'
 import { normalizeInternalText } from './editor/TextPolicy'
 import { resolvePreviewSourceAnchorEntry } from './editor/PreviewScrollAnchor'
+import { matchesNoteSearchQuery } from './shared/noteSearch'
 import { readSelectionOffsetFromClientPoint } from './editor/SelectionOffsets'
 import {
   buildReleaseRampDownPlanFromCurrentParams,
@@ -2137,34 +2138,6 @@ function isExternalNote(note: NoteSummary): boolean {
 
 function escapeAttributeSelectorValue(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-}
-
-function matchesSearchQuery(note: NoteSummary, query: string, isCaseSensitive: boolean): boolean {
-  const trimmed = query.trim()
-  const normalized = isCaseSensitive ? trimmed : trimmed.toLowerCase()
-  if (!normalized) return true
-
-  if (trimmed.startsWith('#')) {
-    const rawTagQuery = trimmed.slice(1).trim()
-    const tagQuery = isCaseSensitive ? rawTagQuery : rawTagQuery.toLowerCase()
-    if (!tagQuery) return true
-    return note.tags.some((tag) => {
-      const comparableTag = isCaseSensitive ? tag : tag.toLowerCase()
-      return comparableTag.includes(tagQuery)
-    })
-  }
-
-  const title = isCaseSensitive ? note.title : note.title.toLowerCase()
-  const fileName = isCaseSensitive ? note.fileName : note.fileName.toLowerCase()
-
-  return (
-    title.includes(normalized) ||
-    fileName.includes(normalized) ||
-    note.tags.some((tag) => {
-      const comparableTag = isCaseSensitive ? tag : tag.toLowerCase()
-      return comparableTag.includes(normalized)
-    })
-  )
 }
 
 async function hashNormalizedText(text: string): Promise<string> {
@@ -7501,7 +7474,16 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }, [notes])
 
   const searchedNotes = useMemo(() => {
-    return sortedNotes.filter((note) => matchesSearchQuery(note, searchQuery, isSearchQueryCaseSensitive))
+    return sortedNotes.filter((note) => matchesNoteSearchQuery(
+      {
+        title: note.title,
+        fileName: note.fileName,
+        tags: note.tags,
+        contentText: note.contentText,
+      },
+      searchQuery,
+      isSearchQueryCaseSensitive,
+    ))
   }, [isSearchQueryCaseSensitive, searchQuery, sortedNotes])
 
   const isFindMode = sidebarMode === 'find'

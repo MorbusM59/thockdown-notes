@@ -24,6 +24,7 @@ export interface NoteSummary {
   fileName: string;
   title: string;
   tags: string[];
+  contentText?: string;
   createdAtMs: number;
   updatedAtMs: number;
   sizeBytes: number;
