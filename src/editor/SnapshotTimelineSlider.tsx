@@ -136,7 +136,7 @@ export function SnapshotTimelineSlider({
           />
         ))}
         <div
-          className="utility-setting-scrollbar-thumb snapshot-timeline-thumb"
+          className="timeline-thumb"
           style={{ left: `${activeRatio * 100}%` }}
         />
       </div>
