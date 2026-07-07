@@ -8,6 +8,9 @@ import { visit } from 'unist-util-visit'
 import { Editor } from './components/Editor'
 import { AccordionGroup, AccordionSection } from './components/AccordionSection'
 import { AudioControls } from './components/AudioControls'
+import { useNoteSnapshots } from './editor/useNoteSnapshots'
+import { SnapshotTimelineSlider } from './editor/SnapshotTimelineSlider'
+import { PresentStateCircle } from './editor/PresentStateCircle'
 import './App.css'
 import { buildExportCss, type ExportViewStyle, type ExportFontSize, type ExportSpacing } from './exportStyles'
 import type {
@@ -2219,6 +2222,9 @@ function App() {
   const [sidebarTreeScrollerEl, setSidebarTreeScrollerEl] = useState<HTMLDivElement | null>(null)
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null)
   const [activeNoteText, setActiveNoteText] = useState('')
+  // null = viewing/editing the live note; a snapshot id = read-only preview
+  // of that point in the note's history (see SnapshotTimelineSlider).
+  const [previewedSnapshotId, setPreviewedSnapshotId] = useState<number | null>(null)
   const activeNoteExternalPathRef = useRef<string | null>(null)
   const [currentExternalNoteHash, setCurrentExternalNoteHash] = useState<string | null>(null)
   const [editorSelection, setEditorSelection] = useState<EditorSelectionState>({
@@ -7491,6 +7497,36 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     return normalizeInternalText(latestEditorTextRef.current || activeNoteText)
   }, [activeNoteText, editorTextVersion])
 
+  const noteSnapshots = useNoteSnapshots(activeNoteId, currentEditorText)
+
+  // Leaving a note (or its history disappearing from under us, e.g. after a
+  // retention pass or a delete) should never leave the UI pointed at a
+  // snapshot id that no longer applies to the note now on screen.
+  useEffect(() => {
+    setPreviewedSnapshotId(null)
+  }, [activeNoteId])
+
+  const previewedSnapshotContent = previewedSnapshotId !== null
+    ? noteSnapshots.snapshotsById.get(previewedSnapshotId)?.content
+    : undefined
+
+  const isPreviewingSnapshot = previewedSnapshotContent !== undefined
+  const editorDisplayText = isPreviewingSnapshot ? previewedSnapshotContent : activeNoteText
+
+  const handleNavigateSnapshot = useCallback((snapshotId: number | null) => {
+    // Flush any in-flight edit before switching the editor's content out from
+    // under the user -- scrubbing history should never silently drop an
+    // unsaved edit to the live document.
+    void flushPendingSaveNow().then(() => {
+      setPreviewedSnapshotId(snapshotId)
+    })
+  }, [flushPendingSaveNow])
+
+  const handleBranchOpened = useCallback((newNoteId: string) => {
+    setPreviewedSnapshotId(null)
+    void activateNote(newNoteId)
+  }, [activateNote])
+
   const activeNoteDocumentStats = useMemo(() => {
     const hasSelection = !editorSelection.isCollapsed && editorSelection.end > editorSelection.start
     const selectionStart = Math.max(0, Math.min(currentEditorText.length, editorSelection.start))
@@ -11906,13 +11942,18 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               <main className="editor-shell">
                 <div className="editor-background">
                   <div ref={editorStageRef} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
+                    {activeNoteId && (
+                      <div className="editor-document-wordcount-corner" aria-live="polite">
+                        <span><b>{activeNoteDocumentStats.wordCount.toLocaleString()}</b> ({activeNoteDocumentStats.characterCount.toLocaleString()})</span>
+                      </div>
+                    )}
                     <div className="edit-container" style={{ display: isPreviewMode ? 'none' : undefined }}>
                       <Editor
-                        key={activeNoteId ?? 'editor' }
+                        key={`${activeNoteId ?? 'editor'}:${isPreviewingSnapshot ? `snap-${previewedSnapshotId}` : 'live'}`}
                         bindings={bindings}
                         adapterRef={adapterRef}
                         noteId={activeNoteId}
-                        initialText={activeNoteText}
+                        initialText={editorDisplayText}
                         scrollbarHost={scrollbarHostEl}
                         fontFamily={editorFontFamily}
                         fontSizePx={editorRuntimeMetrics.fontSizePx}
@@ -11920,7 +11961,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                         glyphWidthPx={editorRuntimeMetrics.glyphWidthPx}
                         cellWidthPx={editorRuntimeMetrics.cellWidthPx}
                         fontReady={editorFontLoadVersion > 0}
-                        editorReadOnly={activeNoteHasDebugTag}
+                        editorReadOnly={activeNoteHasDebugTag || isPreviewingSnapshot}
                         caretSuspended={isCaretSuspended}
                         spellCheckEnabled={spellCheckEditEnabled}
                       />
@@ -11946,8 +11987,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   </div>
                 </div>
               </main>
-              <aside className="editor-scrollbar-slot" aria-hidden="true">
-                <div className="editor-scrollbar-slot-inner">
+              <aside className="editor-scrollbar-slot">
+                <div className="editor-scrollbar-slot-inner" aria-hidden="true">
                   {!isPreviewMode ? (
                     <div ref={setScrollbarHostEl} className="editor-scrollbar-slot-inner" />
                   ) : (
@@ -11966,12 +12007,23 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     </div>
                   )}
                 </div>
+                {activeNoteId && (
+                  <PresentStateCircle
+                    hasPendingManualChanges={noteSnapshots.hasPendingManualChanges}
+                    onCreateManualSnapshot={() => { void noteSnapshots.createManualSnapshot() }}
+                    disabled={isPreviewingSnapshot}
+                  />
+                )}
               </aside>
               <div className="editor-document-stats" aria-live="polite">
                 {activeNoteId ? (
-                  <>
-                    <div className="editor-document-wordcount"><span><b>{activeNoteDocumentStats.wordCount.toLocaleString()}</b> ({activeNoteDocumentStats.characterCount.toLocaleString()})</span></div>
-                  </>
+                  <SnapshotTimelineSlider
+                    sourceNoteId={activeNoteId}
+                    placements={noteSnapshots.placements}
+                    activeSnapshotId={previewedSnapshotId}
+                    onNavigate={handleNavigateSnapshot}
+                    onBranchOpened={handleBranchOpened}
+                  />
                 ) : (
                   <span>0 words</span>
                 )}
