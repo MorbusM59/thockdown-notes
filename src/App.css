@@ -2491,17 +2491,19 @@ body.hsva-dragging * {
   position:    relative;
 }
 
+:root {
+  --wordcount-panel-width: 80px;
+}
+
 .editor-document-stats {
   position:      absolute;
-  left:          8px;
-  right:         24px;
-  bottom:        1px;
-  height:        20px;
+  inset:         auto 0 0 0;
+  padding:       0;
+  height:        24px;
   display:       flex;
   align-items:   center;
   justify-content: center;
   gap:           14px;
-  padding:       0 8px;
   box-sizing:    border-box;
   font-size:     9px;
   letter-spacing: 0.02em;
@@ -2511,17 +2513,12 @@ body.hsva-dragging * {
   user-select:   none;
 }
 
-/* Word count moved to the editor's top-right corner; the bottom bar is now
-   the snapshot timeline slider. */
-.editor-document-wordcount-corner {
+.wordcount-panel {
   position:       absolute;
-  top:            6px;
-  right:          10px;
-  z-index:        5;
+  inset:          3px auto 3px 8px;
   box-sizing:     border-box;
-  padding:        2px 6px 0 6px;
   border:         1px solid var(--color-border-highlight);
-  border-radius:  var(--border-radius-small);
+  border-radius:  999px;
   box-shadow:     var(--box-shadow-inverted-filtered);
   background:     var(--color-input-backdrop);
   color:          var(--color-text-80);
@@ -2530,30 +2527,33 @@ body.hsva-dragging * {
   text-shadow:    var(--text-shadow-emboss-ui);
   pointer-events: none;
   user-select:    none;
-}
-
-.editor-document-wordcount {
-  box-sizing:     border-box;
-  padding:        2px 6px 0 6px;
-  border:         1px solid var(--color-border-highlight);
-  border-radius:  var(--border-radius-small);
-  box-shadow:     var(--box-shadow-inverted-filtered);
   outline:        none;
-  background:     var(--color-input-backdrop);
-  color:          var(--color-text-80);
-  min-width:      76px;
-  text-align: center;
+  min-width:      var(--wordcount-panel-width);
+  text-align:     center;
+  align-content:  center;
 }
 
 /* Snapshot timeline slider -- same rail/thumb shell as CompactScrollbarSlider
    (.utility-setting-scrollbar-*), with its own modifier classes for marks. */
+.timeline-panel {
+    position: relative;
+    width: 100%;
+    height: var(--canonical-scroll-thickness);
+    display: block;
+    touch-action: none;
+    cursor: default;
+    user-select: none;
+}
+
 .snapshot-timeline-shell {
   flex: 1 1 auto;
   min-width: 0;
 }
 
 .snapshot-timeline-rail {
-  position: relative;
+  position:      relative;
+  height: var(--canonical-scroll-thickness);
+  margin: 2px 24px 2px calc(var(--wordcount-panel-width) + 12px);
 }
 
 .snapshot-timeline-mark {
@@ -2601,14 +2601,22 @@ body.hsva-dragging * {
 
 .snapshot-timeline-thumb {
   pointer-events: none;
+
 }
 
 /* Present-state circle -- sits at the bottom of the vertical scrollbar
    column, reading as that scrollbar's "collapsed" twin. */
+.present-state-panel {
+  position: absolute;
+  inset: 2px 3px 2px auto;
+  width: 20px;
+  height: 20px;
+  padding: 2px;
+}
+
 .present-state-circle {
-  position:        absolute;
-  right:           2px;
-  bottom:          1px;
+  position:        relative;
+
   width:           18px;
   height:          18px;
   display:         flex;
@@ -2644,7 +2652,7 @@ body.hsva-dragging * {
 
 .editor-shell {
   /* NOTE: margin 0 0 20px 8px is intentional layout spacing; do not unify */
-  margin:        0 0 20px 8px;
+  margin:        0 0 24px 8px;
   flex:          1 1 auto;
   min-width:     0;
   position:      relative;
@@ -2674,7 +2682,7 @@ body.hsva-dragging * {
   min-width: 24px;
   max-width: 24px;
   /* NOTE: margin-bottom 20px is layout-specific alignment; do not unify */
-  margin:    0 0 20px;
+  margin:    0 0 24px;
   position:  relative;
 }
 

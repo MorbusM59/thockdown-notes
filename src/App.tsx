@@ -11942,11 +11942,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               <main className="editor-shell">
                 <div className="editor-background">
                   <div ref={editorStageRef} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
-                    {activeNoteId && (
-                      <div className="editor-document-wordcount-corner" aria-live="polite">
-                        <span><b>{activeNoteDocumentStats.wordCount.toLocaleString()}</b> ({activeNoteDocumentStats.characterCount.toLocaleString()})</span>
-                      </div>
-                    )}
                     <div className="edit-container" style={{ display: isPreviewMode ? 'none' : undefined }}>
                       <Editor
                         key={`${activeNoteId ?? 'editor'}:${isPreviewingSnapshot ? `snap-${previewedSnapshotId}` : 'live'}`}
@@ -12007,15 +12002,14 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     </div>
                   )}
                 </div>
-                {activeNoteId && (
-                  <PresentStateCircle
-                    hasPendingManualChanges={noteSnapshots.hasPendingManualChanges}
-                    onCreateManualSnapshot={() => { void noteSnapshots.createManualSnapshot() }}
-                    disabled={isPreviewingSnapshot}
-                  />
-                )}
               </aside>
               <div className="editor-document-stats" aria-live="polite">
+              {activeNoteId && (
+                <div className="wordcount-panel" aria-live="polite">
+                  <span><b>{activeNoteDocumentStats.wordCount.toLocaleString()}</b> ({activeNoteDocumentStats.characterCount.toLocaleString()})</span>
+                </div>
+              )}
+                <div className="timeline-panel">
                 {activeNoteId ? (
                   <SnapshotTimelineSlider
                     sourceNoteId={activeNoteId}
@@ -12027,6 +12021,16 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 ) : (
                   <span>0 words</span>
                 )}
+                </div>
+                <div className="present-state-panel">
+                {activeNoteId && (
+                  <PresentStateCircle
+                    hasPendingManualChanges={noteSnapshots.hasPendingManualChanges}
+                    onCreateManualSnapshot={() => { void noteSnapshots.createManualSnapshot() }}
+                    disabled={isPreviewingSnapshot}
+                  />
+                )}
+                </div>
               </div>
             </div>
           </div>
