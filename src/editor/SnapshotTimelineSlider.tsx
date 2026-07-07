@@ -136,8 +136,10 @@ export function SnapshotTimelineSlider({
           />
         ))}
         <div
-          className="timeline-thumb"
-          style={{ left: `${activeRatio * 100}%` }}
+          className="utility-setting-scrollbar-thumb snapshot-timeline-thumb"
+          style={{
+            left: `calc((var(--canonical-scroll-handle-gap) - 1px) + (${activeRatio} * (100% - ((var(--canonical-scroll-handle-gap) - 1px) * 2) - (var(--canonical-scroll-handle-thickness) + 2px))))`,
+          }}
         />
       </div>
     </div>

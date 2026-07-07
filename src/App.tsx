@@ -7511,7 +7511,17 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     : undefined
 
   const isPreviewingSnapshot = previewedSnapshotContent !== undefined
+  // Two panes, two different non-preview sources -- preserved exactly as
+  // they were before snapshot preview existed (editorDisplayText mirrors the
+  // Editor's original `activeNoteText`, renderedDisplayText mirrors the
+  // rendered pane's original `currentEditorText`). Unifying these into one
+  // variable would mean feeding the Editor its own live-typed text back
+  // through `initialText` on every keystroke instead of only on save-commit
+  // -- cheap per keystroke, but an unnecessary behavior change for a
+  // performance-sensitive component. Word count / find-in-document /
+  // autosave keep using currentEditorText directly, untouched by preview.
   const editorDisplayText = isPreviewingSnapshot ? previewedSnapshotContent : activeNoteText
+  const renderedDisplayText = isPreviewingSnapshot ? previewedSnapshotContent : currentEditorText
 
   const handleNavigateSnapshot = useCallback((snapshotId: number | null) => {
     // Flush any in-flight edit before switching the editor's content out from
@@ -7567,9 +7577,9 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       rehypePlugins={[previewSearchHighlightPlugin, previewSourceAnchorPlugin]}
       components={PREVIEW_MARKDOWN_COMPONENTS}
     >
-      {currentEditorText}
+      {renderedDisplayText}
     </ReactMarkdown>
-  ), [currentEditorText, previewSearchHighlightPlugin, previewSourceAnchorPlugin])
+  ), [renderedDisplayText, previewSearchHighlightPlugin, previewSourceAnchorPlugin])
 
   const documentFindHits = useMemo<DocumentFindHit[]>(() => {
     return buildDocumentFindHits(currentEditorText, documentFindDirective.findText, isDocumentFindCaseSensitive)

@@ -2491,32 +2491,31 @@ body.hsva-dragging * {
   position:    relative;
 }
 
-:root {
-  --wordcount-panel-width: 80px;
-}
-
 .editor-document-stats {
-  position:      absolute;
-  inset:         auto 0 0 0;
-  padding:       0;
-  height:        24px;
-  display:       flex;
-  align-items:   center;
-  justify-content: center;
-  gap:           14px;
-  box-sizing:    border-box;
-  font-size:     9px;
+  position:       absolute;
+  inset:          auto 0 0 0;
+  height:         24px;
+  display:        flex;
+  align-items:    center;
+  gap:            10px;
+  padding:        0 8px;
+  box-sizing:     border-box;
+  font-size:      9px;
   letter-spacing: 0.02em;
-  color:         var(--color-text-60);
-  text-shadow:   var(--text-shadow-emboss-ui);
+  color:          var(--color-text-60);
+  text-shadow:    var(--text-shadow-emboss-ui);
   pointer-events: auto;
-  user-select:   none;
+  user-select:    none;
 }
 
+/* Real flex items, in DOM order: wordcount | timeline (grows to fill) |
+   present-state circle. No absolute positioning, no hand-tuned offsets --
+   the rail's available width falls out of flexbox on its own, so it stays
+   correct regardless of word-count digit count or locale. */
 .wordcount-panel {
-  position:       absolute;
-  inset:          3px auto 3px 8px;
+  flex:           0 0 auto;
   box-sizing:     border-box;
+  padding:        2px 8px 0 8px;
   border:         1px solid var(--color-border-highlight);
   border-radius:  999px;
   box-shadow:     var(--box-shadow-inverted-filtered);
@@ -2527,59 +2526,59 @@ body.hsva-dragging * {
   text-shadow:    var(--text-shadow-emboss-ui);
   pointer-events: none;
   user-select:    none;
-  outline:        none;
-  min-width:      var(--wordcount-panel-width);
   text-align:     center;
-  align-content:  center;
+}
+
+.timeline-panel {
+  flex:      1 1 auto;
+  min-width: 0;
+}
+
+/* Present-state circle -- sits at the end of the same bar, reading as a
+   collapsed twin of the vertical scrollbar it lines up with. */
+.present-state-panel {
+  flex: 0 0 auto;
 }
 
 /* Snapshot timeline slider -- same rail/thumb shell as CompactScrollbarSlider
    (.utility-setting-scrollbar-*), with its own modifier classes for marks. */
-.timeline-panel {
-    position: relative;
-    width: 100%;
-    height: var(--canonical-scroll-thickness);
-    display: block;
-    touch-action: none;
-    cursor: default;
-    user-select: none;
-}
-
 .snapshot-timeline-shell {
-  flex: 1 1 auto;
-  min-width: 0;
+  display: block;
 }
 
 .snapshot-timeline-rail {
-  position:      relative;
-  height: 16px;
-  margin: 2px 24px 2px calc(var(--wordcount-panel-width) + 12px);
+  position:      absolute;
+  inset:         0;
+  border:        1px solid var(--canonical-scroll-track-border);
+  border-radius: 999px;
+  background:    var(--canonical-scroll-track-bg);
+  box-shadow:    var(--box-shadow-inverted-light);
 }
 
 .snapshot-timeline-mark {
-  position:        absolute;
-  top:             50%;
-  width:           6px;
-  height:          6px;
-  margin-left:     -3px;
-  border-radius:   50%;
-  transform:       translateY(-50%);
-  background:      var(--color-text-60);
-  cursor:          pointer;
-  pointer-events:  auto;
-  z-index: 1111111;
+  position:       absolute;
+  top:            50%;
+  width:          6px;
+  height:         6px;
+  margin-left:    -3px;
+  border-radius:  50%;
+  transform:      translateY(-50%);
+  background:     var(--color-text-60);
+  cursor:         pointer;
+  pointer-events: auto;
+  z-index:        2;
 }
 
 .snapshot-timeline-mark.is-manual {
-  width:  8px;
-  height: 8px;
+  width:       8px;
+  height:      8px;
   margin-left: -4px;
-  background: var(--color-accent, var(--color-text-80));
-  box-shadow: var(--box-shadow-inverted-filtered);
+  background:  var(--color-accent, var(--color-text-80));
+  box-shadow:  var(--box-shadow-inverted-filtered);
 }
 
 .snapshot-timeline-mark.is-active {
-  outline: 1px solid var(--color-border-highlight);
+  outline:        1px solid var(--color-border-highlight);
   outline-offset: 2px;
 }
 
@@ -2588,11 +2587,11 @@ body.hsva-dragging * {
 }
 
 .snapshot-timeline-hold-ring {
-  position: absolute;
-  inset: -7px;
-  width: 20px;
-  height: 20px;
-  transform: rotate(-90deg);
+  position:       absolute;
+  inset:          -7px;
+  width:          20px;
+  height:         20px;
+  transform:      rotate(-90deg);
   pointer-events: none;
 }
 
@@ -2600,33 +2599,26 @@ body.hsva-dragging * {
   stroke: var(--color-warning, #c0392b);
 }
 
-.timeline-thumb {
-  pointer-events: none;
-  transform: translateX(-12px) translateY(3px);
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  border: 1px solid var(--canonical-handle-border);
+/* Thumb reuses the exact bounds-aware formula CompactScrollbarSlider uses
+   (see the `left` calc passed inline in SnapshotTimelineSlider.tsx) instead
+   of a fixed pixel transform, so it never runs out past the rail edges
+   regardless of shell width. */
+.snapshot-timeline-thumb {
+  position:      absolute;
+  top:           calc(var(--canonical-scroll-handle-gap) - 2px);
+  width:         calc(var(--canonical-scroll-handle-thickness) + 2px);
+  height:        calc(var(--canonical-scroll-handle-thickness) + 2px);
+  border:        1px solid var(--canonical-handle-border);
   border-radius: 999px;
-  box-sizing: border-box;
-  background: var(--canonical-handle-bg);
-  box-shadow: var(--box-shadow-regular-light);
-  cursor: ns-resize;
-}
-
-/* Present-state circle -- sits at the bottom of the vertical scrollbar
-   column, reading as that scrollbar's "collapsed" twin. */
-.present-state-panel {
-  position: absolute;
-  right: 3px;
-  bottom: 3px;
-  width: 18px;
-  height: 18px;
+  box-sizing:    border-box;
+  background:    var(--canonical-handle-bg);
+  box-shadow:    var(--box-shadow-regular-light);
+  pointer-events: none;
+  z-index:       1;
 }
 
 .present-state-circle {
   position:        relative;
-
   width:           18px;
   height:          18px;
   display:         flex;
@@ -2641,7 +2633,7 @@ body.hsva-dragging * {
 }
 
 .present-state-circle:disabled {
-  cursor: default;
+  cursor:  default;
   opacity: 0.5;
 }
 
@@ -2653,7 +2645,7 @@ body.hsva-dragging * {
 
 .present-state-circle.is-hollow .present-state-circle-dot {
   background: transparent;
-  border: 1px solid var(--color-text-60);
+  border:     1px solid var(--color-text-60);
 }
 
 .present-state-circle.is-filled .present-state-circle-dot {
