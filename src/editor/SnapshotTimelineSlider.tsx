@@ -32,7 +32,7 @@ const PRESENT_RATIO = 1
 // Half the widest mark's rendered width (the manual-snapshot dot, 8px) --
 // how far a mark's center gets pulled in from each rail edge so it never
 // renders partially outside the track.
-const MARK_INSET_PX = 4
+const MARK_INSET_PX = 8
 
 function markLeftStyle(ratio: number): string {
   return `calc(${MARK_INSET_PX}px + (${ratio} * (100% - ${MARK_INSET_PX * 2}px)))`
