@@ -211,7 +211,7 @@ body {
   width: var(--canonical-scroll-thickness);
   height: 100%;
   border: 1px solid var(--canonical-scroll-track-border);
-  border-radius: var(--border-radius-regular);
+  border-radius: 999px;
   box-shadow: var(--box-shadow-inverted-light);
   background: var(--canonical-scroll-track-bg);
   box-sizing: border-box;

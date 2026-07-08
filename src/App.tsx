@@ -12074,7 +12074,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   <span>0 words</span>
                 )}
                 </div>
-                <div className="present-state-panel">
+                <div className="manual-snapshot-panel">
                 {activeNoteId && (
                   <PresentStateCircle
                     hasPendingManualChanges={noteSnapshots.hasPendingManualChanges}

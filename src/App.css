@@ -356,7 +356,7 @@
      Shared by both native WebKit scrollbars and the custom JS scrollbar widget.
   --------------------------------------------------------------------------- */
 
-  --canonical-scroll-thickness:       20px;
+  --canonical-scroll-thickness:       16px;
   --canonical-scroll-handle-gap:      4px;
   --canonical-scroll-handle-thickness: calc(
     var(--canonical-scroll-thickness) - (var(--canonical-scroll-handle-gap) * 2)
@@ -2489,16 +2489,17 @@ body.hsva-dragging * {
   min-width:   0;
   min-height:  0;
   position:    relative;
+  padding: 0 4px 0 0;
 }
 
 .editor-document-stats {
   position:       absolute;
   inset:          auto 0 0 0;
-  height:         24px;
+  height:         var(--bottom-utility-bar-height);
   display:        flex;
   align-items:    center;
-  gap:            10px;
-  padding:        0 8px;
+  gap:            4px;
+  padding:        4px 8px 8px 8px;
   box-sizing:     border-box;
   font-size:      9px;
   letter-spacing: 0.02em;
@@ -2509,35 +2510,36 @@ body.hsva-dragging * {
 }
 
 /* Real flex items, in DOM order: wordcount | timeline (grows to fill) |
-   present-state circle. No absolute positioning, no hand-tuned offsets --
+   manual-snapshot circle. No absolute positioning, no hand-tuned offsets --
    the rail's available width falls out of flexbox on its own, so it stays
    correct regardless of word-count digit count or locale. */
+:root {
+  --wordcount-panel-width: 80px;
+}
+
 .wordcount-panel {
-  flex:           0 0 auto;
+  flex:           0 0 var(--wordcount-panel-width);
+  min-width:      var(--wordcount-panel-width);
+  height:         var(--canonical-scroll-thickness);
   box-sizing:     border-box;
-  padding:        2px 8px 0 8px;
-  border:         1px solid var(--color-border-highlight);
+  padding:        0 8px;
+  border:         1px solid var(--canonical-scroll-track-border);
   border-radius:  999px;
-  box-shadow:     var(--box-shadow-inverted-filtered);
-  background:     var(--color-input-backdrop);
+  box-shadow:     var(--box-shadow-inverted-light);
+  background:     var(--canonical-scroll-track-bg);
   color:          var(--color-text-80);
   font-size:      9px;
   letter-spacing: 0.02em;
-  text-shadow:    var(--text-shadow-emboss-ui);
+  text-shadow:    none;
   pointer-events: none;
   user-select:    none;
   text-align:     center;
+  align-content:  center;
 }
 
 .timeline-panel {
   flex:      1 1 auto;
   min-width: 0;
-}
-
-/* Present-state circle -- sits at the end of the same bar, reading as a
-   collapsed twin of the vertical scrollbar it lines up with. */
-.present-state-panel {
-  flex: 0 0 auto;
 }
 
 /* Snapshot timeline slider -- same rail/thumb shell as CompactScrollbarSlider
@@ -2621,44 +2623,51 @@ body.hsva-dragging * {
   stroke: var(--color-warning, #c0392b);
 }
 
-.present-state-circle {
+/* Manual-snapshot circle -- sits at the end of the same bar, reading as a
+   collapsed twin of the vertical scrollbar it lines up with. */
+.manual-snapshot-panel {
+  width: var(--canonical-scroll-thickness);;
+  height: var(--canonical-scroll-thickness);;
+}
+
+.manual-snapshot-circle {
   position:        relative;
-  width:           18px;
-  height:          18px;
+  width:           var(--canonical-scroll-thickness);
+  height:          var(--canonical-scroll-thickness);
   display:         flex;
   align-items:     center;
   justify-content: center;
-  border:          1px solid var(--color-border-highlight);
-  border-radius:   50%;
-  background:      var(--color-input-backdrop);
-  box-shadow:      var(--box-shadow-inverted-filtered);
   padding:         0;
   cursor:          pointer;
+  border: 1px solid var(--canonical-scroll-track-border);
+  border-radius: 999px;
+  box-shadow: var(--box-shadow-inverted-light);
+  background: var(--canonical-scroll-track-bg);
 }
 
-.present-state-circle:disabled {
+.manual-snapshot-circle:disabled {
   cursor:  default;
   opacity: 0.5;
 }
 
-.present-state-circle-dot {
+.manual-snapshot-circle-dot {
   width:         8px;
   height:        8px;
   border-radius: 50%;
 }
 
-.present-state-circle.is-hollow .present-state-circle-dot {
+.manual-snapshot-circle.is-hollow .manual-snapshot-circle-dot {
   background: transparent;
   border:     1px solid var(--color-text-60);
 }
 
-.present-state-circle.is-filled .present-state-circle-dot {
+.manual-snapshot-circle.is-filled .manual-snapshot-circle-dot {
   background: var(--color-text-80);
 }
 
 .editor-shell {
   /* NOTE: margin 0 0 20px 8px is intentional layout spacing; do not unify */
-  margin:        0 0 24px 8px;
+  margin:        0 0 var(--bottom-utility-bar-height) 8px;
   flex:          1 1 auto;
   min-width:     0;
   position:      relative;
@@ -2682,13 +2691,16 @@ body.hsva-dragging * {
 }
 
 /* Editor scrollbar slot */
+:root {
+  --bottom-utility-bar-height: 28px;
+}
+
 .editor-scrollbar-slot {
   flex:      0 0 24px;
   width:     24px;
   min-width: 24px;
   max-width: 24px;
-  /* NOTE: margin-bottom 20px is layout-specific alignment; do not unify */
-  margin:    0 0 24px;
+  margin:    0 0 var(--bottom-utility-bar-height);
   position:  relative;
 }
 

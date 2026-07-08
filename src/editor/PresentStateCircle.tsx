@@ -20,7 +20,7 @@ export function PresentStateCircle({
     <button
       type="button"
       className={[
-        'present-state-circle',
+        'manual-snapshot-circle',
         hasPendingManualChanges ? 'is-hollow' : 'is-filled',
       ].join(' ')}
       disabled={disabled}
@@ -39,7 +39,7 @@ export function PresentStateCircle({
         if (hasPendingManualChanges) onCreateManualSnapshot()
       }}
     >
-      <span className="present-state-circle-dot" aria-hidden="true" />
+      <span className="manual-snapshot-circle-dot" aria-hidden="true" />
     </button>
   )
 }
