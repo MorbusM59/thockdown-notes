@@ -421,6 +421,9 @@ type EditRestoreSnapshot = {
   sourceAnchorText?: string | null
 }
 
+const ZERO_EDITOR_SELECTION: EditorSelectionState = { anchor: 0, focus: 0, start: 0, end: 0, isCollapsed: true }
+const ZERO_PERSISTED_VIEWPORT: PersistedViewportState = { topBoundaryLines: 0, bottomBoundaryLines: 0, scrollTopLines: 0 }
+
 type EditViewportTelemetry = {
   scrollTopPx: number
   scrollHeightPx: number
@@ -7522,6 +7525,45 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   // autosave keep using currentEditorText directly, untouched by preview.
   const editorDisplayText = isPreviewingSnapshot ? previewedSnapshotContent : activeNoteText
   const renderedDisplayText = isPreviewingSnapshot ? previewedSnapshotContent : currentEditorText
+
+  // The Editor only makes its content visible once something calls
+  // adapter.applySnapshot({ viewportLines: ... }) on it (see Editor.tsx's
+  // hasViewportLines gate). Normally that happens via the note-activation
+  // restore effect, keyed on activeNoteId -- but activeNoteId never changes
+  // when toggling snapshot preview (only the synthetic `key` on <Editor>
+  // does), so that effect never re-fires for a preview remount and the
+  // freshly-mounted editor is left permanently hidden. This effect is the
+  // preview-specific equivalent: it fires on every preview transition and
+  // explicitly restores visibility for whichever content just got mounted.
+  useEffect(() => {
+    if (!activeNoteId) return
+
+    if (isPreviewingSnapshot) {
+      // A historical snapshot has no saved scroll/cursor position of its
+      // own -- just show it from the top, read-only.
+      applyEditRestoreSnapshot({
+        noteId: activeNoteId,
+        collapsedSelection: ZERO_EDITOR_SELECTION,
+        fullSelection: ZERO_EDITOR_SELECTION,
+        viewport: ZERO_PERSISTED_VIEWPORT,
+      }, { restoreFullSelection: false, focusAfterApply: false })
+      return
+    }
+
+    // Returning to present: prefer the note's last-known live edit position
+    // if we have one cached, so leaving and re-entering preview doesn't
+    // reset your place in the document every time.
+    const cached = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
+    applyEditRestoreSnapshot(
+      cached ?? {
+        noteId: activeNoteId,
+        collapsedSelection: ZERO_EDITOR_SELECTION,
+        fullSelection: ZERO_EDITOR_SELECTION,
+        viewport: ZERO_PERSISTED_VIEWPORT,
+      },
+      { restoreFullSelection: Boolean(cached), focusAfterApply: false },
+    )
+  }, [activeNoteId, applyEditRestoreSnapshot, isPreviewingSnapshot, previewedSnapshotId])
 
   const handleNavigateSnapshot = useCallback((snapshotId: number | null) => {
     // Flush any in-flight edit before switching the editor's content out from

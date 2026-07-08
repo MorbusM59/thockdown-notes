@@ -3,10 +3,19 @@ import type { PlacedSnapshot } from './SnapshotTimelineCurve'
 import { clusterPlacements } from './SnapshotTimelineCurve'
 import { useHoldToBranch } from './useHoldToBranch'
 
-// Reuses the same rail/thumb visual language and CSS custom properties as
-// CompactScrollbarSlider (the filter/settings sliders) via the shared
-// .utility-setting-scrollbar-* classes -- this is meant to look like a
-// sibling of that component, not a new visual idiom.
+// Reuses the same rail visual language as CompactScrollbarSlider (the
+// filter/settings sliders) via the shared .utility-setting-scrollbar-*
+// classes -- this is meant to look like a sibling of that component, not a
+// new visual idiom.
+//
+// All marks (including the synthetic "present" mark) share ONE position
+// formula (markLeftStyle, below), inset by half a mark's width on each end
+// so a mark at ratio 0 or 1 stays fully inside the rail instead of having
+// its center sit exactly on the boundary (which pushes half of it outside).
+// There's deliberately no separately-positioned "thumb" element: earlier
+// versions had one, positioned with a different formula than the marks, so
+// the two could only ever coincide by coincidence. The active mark's own
+// ring is the selection indicator now, so there's nothing to keep in sync.
 
 export type SnapshotTimelineSliderProps = {
   sourceNoteId: string
@@ -18,9 +27,15 @@ export type SnapshotTimelineSliderProps = {
   onBranchError?: (message: string) => void
 }
 
-// A synthetic entry representing "now" -- always the rightmost point on the
-// rail, even when there are zero real snapshots yet.
 const PRESENT_RATIO = 1
+// Half the widest mark's rendered width (the manual-snapshot dot, 8px) --
+// how far a mark's center gets pulled in from each rail edge so it never
+// renders partially outside the track.
+const MARK_INSET_PX = 4
+
+function markLeftStyle(ratio: number): string {
+  return `calc(${MARK_INSET_PX}px + (${ratio} * (100% - ${MARK_INSET_PX * 2}px)))`
+}
 
 export function SnapshotTimelineSlider({
   sourceNoteId,
@@ -34,19 +49,19 @@ export function SnapshotTimelineSlider({
 
   const clusters = useMemo(() => clusterPlacements(placements), [placements])
 
-  // One representative mark per cluster (the newest member), plus the
-  // synthetic present mark. Clustering keeps visually-overlapping snapshots
-  // from fighting for the same pixels; clicking/holding a cluster acts on
-  // its newest member. (A flyout to pick a specific member of a dense
-  // cluster is a natural follow-up, not implemented here yet.)
-  const marks = useMemo(() => {
+  // One representative mark per cluster (the newest member). Clustering
+  // keeps visually-overlapping snapshots from fighting for the same pixels;
+  // clicking/holding a cluster acts on its newest member. (A flyout to pick
+  // a specific member of a dense cluster is a natural follow-up, not
+  // implemented here yet.)
+  const historyMarks = useMemo(() => {
     const fromClusters = clusters.map((cluster) => cluster[0])
     return [...fromClusters].sort((a, b) => a.ratio - b.ratio)
   }, [clusters])
 
   const orderedNavTargets = useMemo(
-    () => [...marks.map((m) => m.id as number | null), null],
-    [marks],
+    () => [...historyMarks.map((m) => m.id as number | null), null],
+    [historyMarks],
   )
 
   const ratioForClientX = useCallback((clientX: number): number => {
@@ -59,14 +74,14 @@ export function SnapshotTimelineSlider({
 
   const nearestMarkIdForRatio = useCallback((ratio: number): number | null => {
     let best: { id: number | null; distance: number } = { id: null, distance: Math.abs(PRESENT_RATIO - ratio) }
-    for (const mark of marks) {
+    for (const mark of historyMarks) {
       const distance = Math.abs(mark.ratio - ratio)
       if (distance < best.distance) {
         best = { id: mark.id, distance }
       }
     }
     return best.id
-  }, [marks])
+  }, [historyMarks])
 
   const handleRailPointerDown = useCallback((event: React.PointerEvent) => {
     if (event.button !== 0) return
@@ -102,11 +117,6 @@ export function SnapshotTimelineSlider({
     }
   }, [activeSnapshotId, onNavigate, orderedNavTargets])
 
-  const activeRatio = useMemo(() => {
-    if (activeSnapshotId === null) return PRESENT_RATIO
-    return marks.find((m) => m.id === activeSnapshotId)?.ratio ?? PRESENT_RATIO
-  }, [activeSnapshotId, marks])
-
   return (
     <div
       role="slider"
@@ -114,7 +124,7 @@ export function SnapshotTimelineSlider({
       aria-label="Snapshot history"
       aria-orientation="horizontal"
       aria-valuemin={0}
-      aria-valuemax={marks.length}
+      aria-valuemax={orderedNavTargets.length - 1}
       aria-valuenow={orderedNavTargets.findIndex((id) => id === activeSnapshotId)}
       className="utility-setting-scrollbar-shell snapshot-timeline-shell"
       onKeyDown={handleKeyDown}
@@ -124,7 +134,7 @@ export function SnapshotTimelineSlider({
         ref={railRef}
         onPointerDown={handleRailPointerDown}
       >
-        {marks.map((mark) => (
+        {historyMarks.map((mark) => (
           <SnapshotMark
             key={mark.id}
             sourceNoteId={sourceNoteId}
@@ -136,10 +146,15 @@ export function SnapshotTimelineSlider({
           />
         ))}
         <div
-          className="utility-setting-scrollbar-thumb snapshot-timeline-thumb"
-          style={{
-            left: `calc((var(--canonical-scroll-handle-gap) - 1px) + (${activeRatio} * (100% - ((var(--canonical-scroll-handle-gap) - 1px) * 2) - (var(--canonical-scroll-handle-thickness) + 2px))))`,
+          className={`snapshot-timeline-mark is-present${activeSnapshotId === null ? ' is-active' : ''}`}
+          style={{ left: markLeftStyle(PRESENT_RATIO) }}
+          onClick={(event) => {
+            event.stopPropagation()
+            onNavigate(null)
           }}
+          role="button"
+          aria-label="Present"
+          title="Present"
         />
       </div>
     </div>
@@ -183,7 +198,7 @@ function SnapshotMark({
         isActive ? 'is-active' : '',
         isHolding ? 'is-holding' : '',
       ].join(' ').trim()}
-      style={{ left: `${placement.ratio * 100}%` }}
+      style={{ left: markLeftStyle(placement.ratio) }}
       onClick={(event) => {
         event.stopPropagation()
         onNavigate(placement.id)

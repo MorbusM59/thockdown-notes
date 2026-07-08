@@ -2566,6 +2566,7 @@ body.hsva-dragging * {
   background:     var(--color-text-60);
   cursor:         pointer;
   pointer-events: auto;
+  box-sizing:     border-box;
   z-index:        2;
 }
 
@@ -2577,9 +2578,30 @@ body.hsva-dragging * {
   box-shadow:  var(--box-shadow-inverted-filtered);
 }
 
+/* The "zero mark" for present -- always rendered at the right end of the
+   rail regardless of how far into history the active selection currently
+   sits, so there's always a fixed landmark to click back to. Hollow by
+   default so it doesn't read as just another automatic snapshot; fills to
+   match the active style when it *is* the active position. */
+.snapshot-timeline-mark.is-present {
+  width:          8px;
+  height:         8px;
+  margin-left:    -4px;
+  background:     transparent;
+  border:         1.5px solid var(--color-text-80);
+}
+
+.snapshot-timeline-mark.is-present.is-active {
+  background: var(--color-text-80);
+}
+
+/* Selection ring lives directly on whichever mark is active -- present or
+   historical -- so it is always exactly flush with that mark's own
+   position. There is deliberately no separate, independently-positioned
+   "thumb" element to keep in sync with the marks; two elements positioned
+   by two different formulas is how the previous version drifted apart. */
 .snapshot-timeline-mark.is-active {
-  outline:        1px solid var(--color-border-highlight);
-  outline-offset: 2px;
+  box-shadow: 0 0 0 1px var(--color-border-highlight), 0 0 0 3px var(--color-input-backdrop);
 }
 
 .snapshot-timeline-mark.is-holding {
@@ -2597,24 +2619,6 @@ body.hsva-dragging * {
 
 .snapshot-timeline-hold-ring circle {
   stroke: var(--color-warning, #c0392b);
-}
-
-/* Thumb reuses the exact bounds-aware formula CompactScrollbarSlider uses
-   (see the `left` calc passed inline in SnapshotTimelineSlider.tsx) instead
-   of a fixed pixel transform, so it never runs out past the rail edges
-   regardless of shell width. */
-.snapshot-timeline-thumb {
-  position:      absolute;
-  top:           calc(var(--canonical-scroll-handle-gap) - 2px);
-  width:         calc(var(--canonical-scroll-handle-thickness) + 2px);
-  height:        calc(var(--canonical-scroll-handle-thickness) + 2px);
-  border:        1px solid var(--canonical-handle-border);
-  border-radius: 999px;
-  box-sizing:    border-box;
-  background:    var(--canonical-handle-bg);
-  box-shadow:    var(--box-shadow-regular-light);
-  pointer-events: none;
-  z-index:       1;
 }
 
 .present-state-circle {
