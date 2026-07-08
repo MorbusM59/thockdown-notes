@@ -62,24 +62,29 @@ export function SnapshotTimelineSlider({
     return () => observer.disconnect()
   }, [])
 
-  const clusters = useMemo(() => clusterPlacements(placements), [placements])
+  const automaticClusters = useMemo(
+    () => clusterPlacements(placements.filter((placement) => !placement.isManual)),
+    [placements],
+  )
+  const manualMarks = useMemo(
+    () => placements.filter((placement) => placement.isManual),
+    [placements],
+  )
 
-  // One representative mark per cluster (the newest member). Clustering
-  // keeps visually-overlapping snapshots from fighting for the same pixels;
-  // clicking/holding a cluster acts on its newest member. (A flyout to pick
-  // a specific member of a dense cluster is a natural follow-up, not
-  // implemented here yet.)
+  // Manual snapshots should always render individually; only automatic
+  // history marks get clustered to reduce visual clutter.
   const historyMarks = useMemo(() => {
-    const fromClusters = clusters.map((cluster) => cluster[0])
-    return [...fromClusters].sort((a, b) => a.ratio - b.ratio)
-  }, [clusters])
+    const fromClusters = automaticClusters.map((cluster) => cluster[0])
+    return [...manualMarks, ...fromClusters].sort((a, b) => a.ratio - b.ratio)
+  }, [automaticClusters, manualMarks])
 
   const latestHistoryMark = historyMarks.length > 0 ? historyMarks[historyMarks.length - 1] : null
   const latestHistoryMarkIsAtPresent = latestHistoryMark?.ratio === PRESENT_RATIO
   const latestPresentHistoryMarkId = latestHistoryMarkIsAtPresent ? latestHistoryMark?.id : null
   const latestPresentHistoryIsManual = latestHistoryMarkIsAtPresent && latestHistoryMark?.isManual === true
+  const suppressPresentDuplicate = latestHistoryMarkIsAtPresent && !hasPendingManualChanges
 
-  const historyMarksToRender = historyMarks
+  const historyMarksToRender = suppressPresentDuplicate ? historyMarks.slice(0, -1) : historyMarks
 
   const orderedNavTargets = useMemo(
     () => [...historyMarks.map((m) => m.id as number | null), null],
@@ -113,37 +118,34 @@ export function SnapshotTimelineSlider({
 
     const usableWidth = Math.max(0, railWidthPx - MARK_INSET_PX * 2)
     const presentCenter = railWidthPx - MARK_INSET_PX
-    const presentHalfWidth = 4
+    const presentOuterHalf = 5
 
     const targetCenters = marks.map((mark) => MARK_INSET_PX + mark.ratio * usableWidth)
     const renderedCenters: number[] = []
 
     let nextCenter = presentCenter
-    let nextHalfWidth = presentHalfWidth
+    let nextOuterHalf = presentOuterHalf
 
     for (let i = marks.length - 1; i >= 0; i -= 1) {
       const mark = marks[i]
-      const halfWidth = mark.isManual ? 4 : 3
+      const outerHalf = mark.isManual ? 5 : 4
       const targetCenter = targetCenters[i]
-      let center: number
-
-      if (mark.ratio === PRESENT_RATIO && !hasPendingManualChanges && i === marks.length - 1) {
-        center = presentCenter
-      } else {
-        const minGap = halfWidth + nextHalfWidth + 4
-        center = Math.min(targetCenter, nextCenter - minGap)
-      }
+      const minGap = outerHalf + nextOuterHalf + 4
+      const center = Math.min(targetCenter, nextCenter - minGap)
 
       renderedCenters[i] = Math.max(MARK_INSET_PX, center)
       nextCenter = renderedCenters[i]
-      nextHalfWidth = halfWidth
+      nextOuterHalf = outerHalf
     }
 
     return renderedCenters.map((center) => `${center}px`)
-  }, [historyMarksToRender, hasPendingManualChanges, railWidthPx])
+  }, [historyMarksToRender, railWidthPx])
 
   const handleRailPointerDown = useCallback((event: React.PointerEvent) => {
     if (event.button !== 0) return
+    if (event.target instanceof Element && event.target.closest('.snapshot-timeline-mark')) {
+      return
+    }
     event.preventDefault()
     const ratio = ratioForClientX(event.clientX)
     onNavigate(nearestMarkIdForRatio(ratio))
