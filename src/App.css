@@ -2565,36 +2565,40 @@ body.hsva-dragging * {
   margin-left:    -3px;
   border-radius:  50%;
   transform:      translateY(-50%);
-  background:     var(--color-text-60);
+  background:     rgba(0, 0, 0, 0.5);
   cursor:         pointer;
   pointer-events: auto;
   box-sizing:     border-box;
   z-index:        2;
+  border:         1px solid #000;
+}
+
+.snapshot-timeline-mark.is-automatic {
+  background: rgba(0, 0, 0, 0.5);
 }
 
 .snapshot-timeline-mark.is-manual {
   width:       8px;
   height:      8px;
   margin-left: -4px;
-  background:  var(--color-accent, var(--color-text-80));
-  box-shadow:  var(--box-shadow-inverted-filtered);
+  background:  #000;
 }
 
 /* The "zero mark" for present -- always rendered at the right end of the
    rail regardless of how far into history the active selection currently
    sits, so there's always a fixed landmark to click back to. Hollow by
    default so it doesn't read as just another automatic snapshot; fills to
-   match the active style when it *is* the active position. */
+   match the active style when it coincides with a manual save. */
 .snapshot-timeline-mark.is-present {
   width:          8px;
   height:         8px;
   margin-left:    -4px;
   background:     transparent;
-  border:         1.5px solid var(--color-text-80);
+  border:         1px solid #000;
 }
 
-.snapshot-timeline-mark.is-present.is-active {
-  background: var(--color-text-80);
+.snapshot-timeline-mark.is-present.is-manual {
+  background: #000;
 }
 
 /* Selection ring lives directly on whichever mark is active -- present or
@@ -2603,7 +2607,7 @@ body.hsva-dragging * {
    "thumb" element to keep in sync with the marks; two elements positioned
    by two different formulas is how the previous version drifted apart. */
 .snapshot-timeline-mark.is-active {
-  box-shadow: 0 0 0 1px var(--color-border-highlight), 0 0 0 3px var(--color-input-backdrop);
+  box-shadow: 0 0 0 2px #fff;
 }
 
 .snapshot-timeline-mark.is-holding {

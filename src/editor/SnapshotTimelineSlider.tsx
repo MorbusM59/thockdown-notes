@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PlacedSnapshot } from './SnapshotTimelineCurve'
 import { clusterPlacements } from './SnapshotTimelineCurve'
 import { useHoldToBranch } from './useHoldToBranch'
@@ -22,6 +22,7 @@ export type SnapshotTimelineSliderProps = {
   placements: PlacedSnapshot[]
   /** null = viewing the live present text. A snapshot id = previewing history (read-only). */
   activeSnapshotId: number | null
+  hasPendingManualChanges: boolean
   onNavigate: (snapshotId: number | null) => void
   onBranchOpened: (newNoteId: string) => void
   onBranchError?: (message: string) => void
@@ -41,11 +42,25 @@ export function SnapshotTimelineSlider({
   sourceNoteId,
   placements,
   activeSnapshotId,
+  hasPendingManualChanges,
   onNavigate,
   onBranchOpened,
   onBranchError,
 }: SnapshotTimelineSliderProps) {
   const railRef = useRef<HTMLDivElement | null>(null)
+  const [railWidthPx, setRailWidthPx] = useState(0)
+
+  useLayoutEffect(() => {
+    const rail = railRef.current
+    if (!rail) return
+
+    const updateWidth = () => setRailWidthPx(rail.getBoundingClientRect().width)
+    updateWidth()
+
+    const observer = new ResizeObserver(() => updateWidth())
+    observer.observe(rail)
+    return () => observer.disconnect()
+  }, [])
 
   const clusters = useMemo(() => clusterPlacements(placements), [placements])
 
@@ -58,6 +73,13 @@ export function SnapshotTimelineSlider({
     const fromClusters = clusters.map((cluster) => cluster[0])
     return [...fromClusters].sort((a, b) => a.ratio - b.ratio)
   }, [clusters])
+
+  const latestHistoryMark = historyMarks.length > 0 ? historyMarks[historyMarks.length - 1] : null
+  const latestHistoryMarkIsAtPresent = latestHistoryMark?.ratio === PRESENT_RATIO
+  const latestPresentHistoryMarkId = latestHistoryMarkIsAtPresent ? latestHistoryMark?.id : null
+  const latestPresentHistoryIsManual = latestHistoryMarkIsAtPresent && latestHistoryMark?.isManual === true
+
+  const historyMarksToRender = historyMarks
 
   const orderedNavTargets = useMemo(
     () => [...historyMarks.map((m) => m.id as number | null), null],
@@ -82,6 +104,43 @@ export function SnapshotTimelineSlider({
     }
     return best.id
   }, [historyMarks])
+
+  const historyMarkLeftStyles = useMemo(() => {
+    const marks = historyMarksToRender
+    if (railWidthPx <= 0 || marks.length === 0) {
+      return marks.map(() => undefined)
+    }
+
+    const usableWidth = Math.max(0, railWidthPx - MARK_INSET_PX * 2)
+    const presentCenter = railWidthPx - MARK_INSET_PX
+    const presentHalfWidth = 4
+
+    const targetCenters = marks.map((mark) => MARK_INSET_PX + mark.ratio * usableWidth)
+    const renderedCenters: number[] = []
+
+    let nextCenter = presentCenter
+    let nextHalfWidth = presentHalfWidth
+
+    for (let i = marks.length - 1; i >= 0; i -= 1) {
+      const mark = marks[i]
+      const halfWidth = mark.isManual ? 4 : 3
+      const targetCenter = targetCenters[i]
+      let center: number
+
+      if (mark.ratio === PRESENT_RATIO && !hasPendingManualChanges && i === marks.length - 1) {
+        center = presentCenter
+      } else {
+        const minGap = halfWidth + nextHalfWidth + 4
+        center = Math.min(targetCenter, nextCenter - minGap)
+      }
+
+      renderedCenters[i] = Math.max(MARK_INSET_PX, center)
+      nextCenter = renderedCenters[i]
+      nextHalfWidth = halfWidth
+    }
+
+    return renderedCenters.map((center) => `${center}px`)
+  }, [historyMarksToRender, hasPendingManualChanges, railWidthPx])
 
   const handleRailPointerDown = useCallback((event: React.PointerEvent) => {
     if (event.button !== 0) return
@@ -134,7 +193,7 @@ export function SnapshotTimelineSlider({
         ref={railRef}
         onPointerDown={handleRailPointerDown}
       >
-        {historyMarks.map((mark) => (
+        {historyMarksToRender.map((mark, index) => (
           <SnapshotMark
             key={mark.id}
             sourceNoteId={sourceNoteId}
@@ -143,10 +202,18 @@ export function SnapshotTimelineSlider({
             onNavigate={onNavigate}
             onBranchOpened={onBranchOpened}
             onBranchError={onBranchError}
+            leftStyle={historyMarkLeftStyles[index]}
           />
         ))}
         <div
-          className={`snapshot-timeline-mark is-present${activeSnapshotId === null ? ' is-active' : ''}`}
+          className={[
+            'snapshot-timeline-mark',
+            'is-present',
+            latestPresentHistoryIsManual ? 'is-manual' : '',
+            activeSnapshotId === null || activeSnapshotId === latestPresentHistoryMarkId ? 'is-active' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
           style={{ left: markLeftStyle(PRESENT_RATIO) }}
           onClick={(event) => {
             event.stopPropagation()
@@ -165,6 +232,7 @@ type SnapshotMarkProps = {
   sourceNoteId: string
   placement: PlacedSnapshot
   isActive: boolean
+  leftStyle?: string
   onNavigate: (snapshotId: number | null) => void
   onBranchOpened: (newNoteId: string) => void
   onBranchError?: (message: string) => void
@@ -174,6 +242,7 @@ function SnapshotMark({
   sourceNoteId,
   placement,
   isActive,
+  leftStyle,
   onNavigate,
   onBranchOpened,
   onBranchError,
@@ -198,7 +267,7 @@ function SnapshotMark({
         isActive ? 'is-active' : '',
         isHolding ? 'is-holding' : '',
       ].join(' ').trim()}
-      style={{ left: markLeftStyle(placement.ratio) }}
+      style={{ left: leftStyle ?? markLeftStyle(placement.ratio) }}
       onClick={(event) => {
         event.stopPropagation()
         onNavigate(placement.id)
