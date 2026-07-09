@@ -30,7 +30,6 @@ export type SnapshotTimelineSliderProps = {
   onBranchError?: (message: string) => void
 }
 
-const PRESENT_RATIO = 1
 // Half the widest mark's rendered width (the manual-snapshot dot, 8px) --
 // how far a mark's center gets pulled in from each rail edge so it never
 // renders partially outside the track.
@@ -257,7 +256,8 @@ function SnapshotMark({
         isHolding ? 'is-holding' : '',
       ].filter(Boolean).join(' ')}
       style={{ left: leftStyle ?? markLeftStyle(placement.ratio) }}
-      onClick={(event) => {
+      onClick={(event: React.MouseEvent) => {
+        if (event.button !== 0) return
         event.stopPropagation()
         onNavigate(placement.id)
       }}
@@ -271,8 +271,4 @@ function SnapshotMark({
       )}
     </div>
   )
-}
-
-function clamp01(value: number): number {
-  return Math.min(1, Math.max(0, value))
 }

@@ -360,8 +360,6 @@ export class NoteLifecycleService {
       initialTags: sourceTags,
     });
 
-    this.databaseService.cloneSnapshotsUpTo(input.sourceNoteId, created.id, snapshot.timestamp);
-
     return this.loadNote({ id: created.id });
   }
 

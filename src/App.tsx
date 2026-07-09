@@ -7588,10 +7588,15 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     }
   }, [previewedSnapshotId])
 
-  const handleBranchOpened = useCallback((newNoteId: string) => {
+  const handleBranchOpened = useCallback(async (newNoteId: string) => {
     setPreviewedSnapshotId(null)
+    await refreshNotes(newNoteId)
     void activateNote(newNoteId)
-  }, [activateNote])
+  }, [activateNote, refreshNotes])
+
+  const handleBranchError = useCallback((message: string) => {
+    console.error('Snapshot branch failed:', message)
+  }, [])
 
   const activeNoteDocumentStats = useMemo(() => {
     const hasSelection = !editorSelection.isCollapsed && editorSelection.end > editorSelection.start
@@ -12084,6 +12089,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     activeSnapshotId={previewedSnapshotId}
                     onNavigate={handleNavigateSnapshot}
                     onBranchOpened={handleBranchOpened}
+                    onBranchError={handleBranchError}
                   />
                 ) : (
                   <span>0 words</span>
