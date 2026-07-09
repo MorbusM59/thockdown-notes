@@ -7576,6 +7576,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
   const handleCreateManualSnapshot = useCallback(async () => {
     await noteSnapshots.createManualSnapshot()
+    await noteSnapshots.refresh()
     if (previewedSnapshotId !== null) {
       setPreviewedSnapshotId(null)
     }
@@ -12079,7 +12080,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     sourceNoteId={activeNoteId}
                     placements={noteSnapshots.placements}
                     activeSnapshotId={previewedSnapshotId}
-                    hasPendingManualChanges={noteSnapshots.hasPendingManualChanges}
                     onNavigate={handleNavigateSnapshot}
                     onBranchOpened={handleBranchOpened}
                   />

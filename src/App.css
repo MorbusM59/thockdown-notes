@@ -2638,16 +2638,16 @@ body.hsva-dragging * {
   width:         8px;
   height:        8px;
   border-radius: 50%;
-  outline: 1px solid var(--color-text-60);
   border: 1px solid var(--canonical-scroll-track-bg);
+  background-color: var(--color-text-60);
 }
 
 .manual-snapshot-circle.is-hollow .manual-snapshot-circle-dot {
-  background-color: transparent;
+  outline: none;
 }
 
 .manual-snapshot-circle.is-filled .manual-snapshot-circle-dot {
-  background-color: var(--color-text-60);
+  outline: 1px solid var(--color-text-60);
 }
 
 .editor-shell {

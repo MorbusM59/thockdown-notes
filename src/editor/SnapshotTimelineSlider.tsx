@@ -22,7 +22,6 @@ export type SnapshotTimelineSliderProps = {
   placements: PlacedSnapshot[]
   /** null = viewing the live present text. A snapshot id = previewing history (read-only). */
   activeSnapshotId: number | null
-  hasPendingManualChanges: boolean
   onNavigate: (snapshotId: number | null) => void
   onBranchOpened: (newNoteId: string) => void
   onBranchError?: (message: string) => void
@@ -42,7 +41,6 @@ export function SnapshotTimelineSlider({
   sourceNoteId,
   placements,
   activeSnapshotId,
-  hasPendingManualChanges,
   onNavigate,
   onBranchOpened,
   onBranchError,
