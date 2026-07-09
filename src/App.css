@@ -2596,10 +2596,10 @@ body.hsva-dragging * {
 }
 
 .snapshot-timeline-mark.is-holding {
-  background: var(--color-warning, #c0392b);
+  background-color: var(--color-text-60);
 }
 
-.snapshot-timeline-hold-ring {
+.snapshot-timeline-hold-ring, .snapshot-merge-circle {
   position:       absolute;
   inset:          -7px;
   width:          20px;
@@ -2608,8 +2608,12 @@ body.hsva-dragging * {
   pointer-events: none;
 }
 
-.snapshot-timeline-hold-ring circle {
-  stroke: var(--color-warning, #c0392b);
+.snapshot-timeline-hold-ring circle, .snapshot-merge-circle circle {
+  stroke: var(--color-text-60);
+}
+
+.snapshot-merge-circle {
+  transform: translate(4px, 4px);
 }
 
 /* Manual-snapshot circle -- sits at the end of the same bar, reading as a
