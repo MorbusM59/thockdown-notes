@@ -7589,17 +7589,17 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     if (!activeNoteId || timelineTrackLengthPx <= 0 || noteSnapshots.placements.length < 2 || !window.measlyNotes) return
 
     const MERGE_ADJACENCY_THRESHOLD_PX = 10
-    const sortedByOldestFirst = [...noteSnapshots.placements].sort((a, b) => {
-      if (a.ageMs !== b.ageMs) return b.ageMs - a.ageMs
-      return a.timestamp.localeCompare(b.timestamp)
+    const sortedByNewestFirst = [...noteSnapshots.placements].sort((a, b) => {
+      if (a.ageMs !== b.ageMs) return a.ageMs - b.ageMs
+      return b.timestamp.localeCompare(a.timestamp)
     })
 
     const toDelete: number[] = []
-    let anchor = sortedByOldestFirst[0]
+    let anchor = sortedByNewestFirst[0]
 
-    for (let i = 1; i < sortedByOldestFirst.length; i += 1) {
-      const candidate = sortedByOldestFirst[i]
-      if ((candidate.ratio - anchor.ratio) * timelineTrackLengthPx <= MERGE_ADJACENCY_THRESHOLD_PX) {
+    for (let i = 1; i < sortedByNewestFirst.length; i += 1) {
+      const candidate = sortedByNewestFirst[i]
+      if ((anchor.ratio - candidate.ratio) * timelineTrackLengthPx <= MERGE_ADJACENCY_THRESHOLD_PX) {
         toDelete.push(candidate.id)
       } else {
         anchor = candidate
