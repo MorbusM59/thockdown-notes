@@ -17,6 +17,7 @@ export const NOTE_LIFECYCLE_CHANNELS = {
   getNoteIdByExternalPath: 'notes:get-note-id-by-external-path',
   saveNoteSnapshot: 'notes:save-note-snapshot',
   getNoteSnapshots: 'notes:get-note-snapshots',
+  deleteNoteSnapshot: 'notes:delete-note-snapshot',
   branchNoteFromSnapshot: 'notes:branch-from-snapshot',
 } as const;
 
@@ -53,6 +54,10 @@ export interface SaveNoteInput {
 
 export interface DeleteNoteInput {
   id: string;
+}
+
+export interface DeleteNoteSnapshotInput {
+  snapshotId: number;
 }
 
 export interface LoadNoteInput {
@@ -131,5 +136,6 @@ export interface NoteLifecycleApi {
   getNoteIdByExternalPath(input: { externalPath: string }): Promise<string | null>;
   saveNoteSnapshot(input: { id: string; content: string; isManual?: boolean }): Promise<void>;
   getNoteSnapshots(input: LoadNoteInput): Promise<Array<{ id: number; noteId: string; content: string; timestamp: string; isManual: boolean }>>;
+  deleteNoteSnapshot(input: DeleteNoteSnapshotInput): Promise<void>;
   branchNoteFromSnapshot(input: BranchNoteFromSnapshotInput): Promise<NoteDocument>;
 }

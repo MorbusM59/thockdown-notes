@@ -375,6 +375,11 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
       return []
     },
 
+    async deleteNoteSnapshot(_input: { snapshotId: number }): Promise<void> {
+      // Browser mock does not persist snapshots.
+      return
+    },
+
     async branchNoteFromSnapshot(_input: { sourceNoteId: string; snapshotId: number }): Promise<NoteDocument> {
       // Browser mock has no real snapshot history to branch from (see getNoteSnapshots above).
       throw new Error('Branching from a snapshot is only available in the desktop app.')

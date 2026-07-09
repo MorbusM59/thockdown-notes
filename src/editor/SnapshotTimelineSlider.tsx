@@ -30,6 +30,7 @@ export type SnapshotTimelineSliderProps = {
   onBranchError?: (message: string) => void
   curveConstant: number
   onCurveConstantChange: (nextCurveConstant: number) => void
+  onTrackLengthChange?: (trackLength: number) => void
 }
 
 // Half the widest mark's rendered width (the manual-snapshot dot, 8px) --
@@ -77,6 +78,7 @@ export function SnapshotTimelineSlider({
   onBranchError,
   curveConstant,
   onCurveConstantChange,
+  onTrackLengthChange,
 }: SnapshotTimelineSliderProps) {
   const railRef = useRef<HTMLDivElement | null>(null)
   const [railWidthPx, setRailWidthPx] = useState(0)
@@ -85,13 +87,17 @@ export function SnapshotTimelineSlider({
     const rail = railRef.current
     if (!rail) return
 
-    const updateWidth = () => setRailWidthPx(rail.getBoundingClientRect().width)
+    const updateWidth = () => {
+      const width = rail.getBoundingClientRect().width
+      setRailWidthPx(width)
+      onTrackLengthChange?.(Math.max(0, width - MARK_INSET_PX * 2))
+    }
     updateWidth()
 
     const observer = new ResizeObserver(() => updateWidth())
     observer.observe(rail)
     return () => observer.disconnect()
-  }, [])
+  }, [onTrackLengthChange])
 
   const automaticClusters = useMemo(
     () => clusterPlacements(placements.filter((placement) => !placement.isManual)),

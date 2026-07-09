@@ -67,6 +67,7 @@ const noteLifecycleApi: NoteLifecycleApi = {
   getNoteIdByExternalPath: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.getNoteIdByExternalPath, input),
   saveNoteSnapshot: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.saveNoteSnapshot, input),
   getNoteSnapshots: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.getNoteSnapshots, input),
+  deleteNoteSnapshot: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.deleteNoteSnapshot, input),
   branchNoteFromSnapshot: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.branchNoteFromSnapshot, input),
 }
 

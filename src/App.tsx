@@ -7501,6 +7501,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }, [activeNoteText, editorTextVersion])
 
   const [timelineCurveConstant, setTimelineCurveConstant] = useState(10)
+  const [timelineTrackLengthPx, setTimelineTrackLengthPx] = useState(0)
   const noteSnapshots = useNoteSnapshots(activeNoteId, currentEditorText, timelineCurveConstant)
 
   // Leaving a note (or its history disappearing from under us, e.g. after a
@@ -7583,6 +7584,37 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       setPreviewedSnapshotId(null)
     }
   }, [noteSnapshots, previewedSnapshotId])
+
+  const handleMergeAdjacentSnapshots = useCallback(async () => {
+    if (!activeNoteId || timelineTrackLengthPx <= 0 || noteSnapshots.placements.length < 2 || !window.measlyNotes) return
+
+    const MERGE_ADJACENCY_THRESHOLD_PX = 10
+    const sortedByOldestFirst = [...noteSnapshots.placements].sort((a, b) => {
+      if (a.ageMs !== b.ageMs) return b.ageMs - a.ageMs
+      return a.timestamp.localeCompare(b.timestamp)
+    })
+
+    const toDelete: number[] = []
+    let anchor = sortedByOldestFirst[0]
+
+    for (let i = 1; i < sortedByOldestFirst.length; i += 1) {
+      const candidate = sortedByOldestFirst[i]
+      if ((candidate.ratio - anchor.ratio) * timelineTrackLengthPx <= MERGE_ADJACENCY_THRESHOLD_PX) {
+        toDelete.push(candidate.id)
+      } else {
+        anchor = candidate
+      }
+    }
+
+    for (const snapshotId of toDelete) {
+      await window.measlyNotes.deleteNoteSnapshot({ snapshotId })
+    }
+
+    await noteSnapshots.refresh()
+    if (previewedSnapshotId !== null && toDelete.includes(previewedSnapshotId)) {
+      setPreviewedSnapshotId(null)
+    }
+  }, [activeNoteId, noteSnapshots, previewedSnapshotId, timelineTrackLengthPx])
 
   const handleReturnToPresent = useCallback(() => {
     if (previewedSnapshotId !== null) {
@@ -12094,6 +12126,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     onBranchError={handleBranchError}
                     curveConstant={timelineCurveConstant}
                     onCurveConstantChange={setTimelineCurveConstant}
+                    onTrackLengthChange={setTimelineTrackLengthPx}
                   />
                 ) : (
                   <span>0 words</span>
@@ -12105,6 +12138,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     hasPendingManualChanges={noteSnapshots.hasPendingManualChanges}
                     onCreateManualSnapshot={() => { void handleCreateManualSnapshot() }}
                     onGoToPresent={handleReturnToPresent}
+                    onMergeAdjacentSnapshots={handleMergeAdjacentSnapshots}
                     isPresent={previewedSnapshotId === null}
                   />
                 )}

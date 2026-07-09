@@ -6,6 +6,7 @@ import type {
   BranchNoteFromSnapshotInput,
   CreateNoteInput,
   DeleteNoteInput,
+  DeleteNoteSnapshotInput,
   LoadNoteInput,
   NoteDocument,
   NoteSummary,
@@ -480,6 +481,10 @@ export class NoteLifecycleService {
 
   async getNoteSnapshots(input: LoadNoteInput): Promise<Array<{ id: number; noteId: string; content: string; timestamp: string; isManual: boolean }>> {
     return this.databaseService.getNoteSnapshots(input.id);
+  }
+
+  async deleteNoteSnapshot(input: DeleteNoteSnapshotInput): Promise<void> {
+    this.databaseService.deleteNoteSnapshot(input.snapshotId);
   }
 
   private static readonly RETENTION_THROTTLE_MS = 5 * 60 * 1000;

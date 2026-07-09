@@ -1,3 +1,6 @@
+import { useCallback } from 'react'
+import { useHoldToBranch } from './useHoldToBranch'
+
 // The "empty scrollbar that's just a circle" affordance. Single
 // responsibility, deliberately: it only reflects/toggles the present manual
 // save-point state. Returning from a history preview to the live document is
@@ -9,6 +12,7 @@ export type PresentStateCircleProps = {
   hasPendingManualChanges: boolean
   onCreateManualSnapshot: () => void
   onGoToPresent?: () => void
+  onMergeAdjacentSnapshots?: () => void
   isPresent?: boolean
   disabled?: boolean
 }
@@ -17,9 +21,16 @@ export function PresentStateCircle({
   hasPendingManualChanges,
   onCreateManualSnapshot,
   onGoToPresent,
+  onMergeAdjacentSnapshots,
   isPresent = true,
   disabled,
 }: PresentStateCircleProps) {
+  const doMerge = useCallback(() => {
+    onMergeAdjacentSnapshots?.()
+  }, [onMergeAdjacentSnapshots])
+
+  const { isHolding, progress, handlers } = useHoldToBranch(doMerge, 1000)
+
   return (
     <button
       type="button"
@@ -27,6 +38,7 @@ export function PresentStateCircle({
         'manual-snapshot-circle',
         hasPendingManualChanges ? 'is-hollow' : 'is-filled',
         !isPresent ? 'not-present' : '',
+        isHolding ? 'is-holding' : '',
       ].filter(Boolean).join(' ')}
       disabled={disabled}
       aria-pressed={!hasPendingManualChanges}
@@ -52,8 +64,14 @@ export function PresentStateCircle({
           onGoToPresent?.()
         }
       }}
+      {...handlers}
     >
       <span className="manual-snapshot-circle-dot" aria-hidden="true" />
+      {isHolding && (
+        <svg viewBox="0 0 20 20" className="snapshot-timeline-hold-ring" aria-hidden="true">
+          <circle cx="10" cy="10" r="8" fill="none" strokeWidth="2" strokeDasharray={`${progress * 50.3} 50.3`} />
+        </svg>
+      )}
     </button>
   )
 }

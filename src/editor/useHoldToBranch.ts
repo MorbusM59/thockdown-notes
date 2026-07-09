@@ -9,9 +9,9 @@ import { useCallback, useRef, useState } from 'react'
 // held, giving the user feedback that something is about to happen before
 // it's irreversible.
 
-const HOLD_MS = 550
+const DEFAULT_HOLD_MS = 550
 
-export function useHoldToBranch(onBranch: () => void) {
+export function useHoldToBranch(onBranch: () => void, holdMs = DEFAULT_HOLD_MS) {
   const [isHolding, setIsHolding] = useState(false)
   const [progress, setProgress] = useState(0)
 
@@ -35,7 +35,7 @@ export function useHoldToBranch(onBranch: () => void) {
     if (startedAt === null) return
 
     const elapsed = Date.now() - startedAt
-    const ratio = Math.min(1, elapsed / HOLD_MS)
+    const ratio = Math.min(1, elapsed / holdMs)
     setProgress(ratio)
 
     if (ratio >= 1 && !firedRef.current) {
@@ -46,7 +46,7 @@ export function useHoldToBranch(onBranch: () => void) {
     }
 
     rafRef.current = requestAnimationFrame(tick)
-  }, [clear, onBranch])
+  }, [clear, onBranch, holdMs])
 
   const onContextMenu = useCallback((event: React.MouseEvent) => {
     // Suppress the native context menu entirely -- right-click is repurposed.
