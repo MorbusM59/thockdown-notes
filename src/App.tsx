@@ -11996,7 +11996,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   <div ref={editorStageRef} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
                     <div className="edit-container" style={{ display: isPreviewMode ? 'none' : undefined }}>
                       <Editor
-                        key={`${activeNoteId ?? 'editor'}:${isPreviewingSnapshot ? `snap-${previewedSnapshotId}` : 'live'}`}
                         bindings={bindings}
                         adapterRef={adapterRef}
                         noteId={activeNoteId}
