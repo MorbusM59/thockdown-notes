@@ -22,6 +22,7 @@ export type SnapshotTimelineSliderProps = {
   sourceNoteId: string
   placements: PlacedSnapshot[]
   snapshotsById: Map<number, NoteSnapshotRecord>
+  snapshotIdsMatchingPresent: Set<number>
   /** null = viewing the live present text. A snapshot id = previewing history (read-only). */
   activeSnapshotId: number | null
   onNavigate: (snapshotId: number | null) => void
@@ -68,6 +69,7 @@ export function SnapshotTimelineSlider({
   sourceNoteId,
   placements,
   snapshotsById,
+  snapshotIdsMatchingPresent,
   activeSnapshotId,
   onNavigate,
   onBranchOpened,
@@ -221,6 +223,7 @@ export function SnapshotTimelineSlider({
             sourceNoteId={sourceNoteId}
             placement={mark}
             snapshotRecord={snapshotsById.get(mark.id)}
+            matchesPresent={snapshotIdsMatchingPresent.has(mark.id)}
             isActive={mark.id === activeSnapshotId}
             onNavigate={onNavigate}
             onBranchOpened={onBranchOpened}
@@ -237,6 +240,7 @@ type SnapshotMarkProps = {
   sourceNoteId: string
   placement: PlacedSnapshot
   snapshotRecord?: NoteSnapshotRecord
+  matchesPresent?: boolean
   isActive: boolean
   leftStyle?: string
   onNavigate: (snapshotId: number | null) => void
@@ -248,6 +252,7 @@ function SnapshotMark({
   sourceNoteId,
   placement,
   snapshotRecord,
+  matchesPresent = false,
   isActive,
   leftStyle,
   onNavigate,
@@ -271,9 +276,10 @@ function SnapshotMark({
       className={[
         'snapshot-timeline-mark',
         placement.isManual ? 'is-manual' : 'is-automatic',
+        matchesPresent ? 'matches-present' : '',
         isActive ? 'is-active' : '',
         isHolding ? 'is-holding' : '',
-      ].join(' ').trim()}
+      ].filter(Boolean).join(' ')}
       style={{ left: leftStyle ?? markLeftStyle(placement.ratio) }}
       onClick={(event) => {
         event.stopPropagation()

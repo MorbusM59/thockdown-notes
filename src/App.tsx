@@ -12080,6 +12080,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     sourceNoteId={activeNoteId}
                     placements={noteSnapshots.placements}
                     snapshotsById={noteSnapshots.snapshotsById}
+                    snapshotIdsMatchingPresent={noteSnapshots.snapshotIdsMatchingPresent}
                     activeSnapshotId={previewedSnapshotId}
                     onNavigate={handleNavigateSnapshot}
                     onBranchOpened={handleBranchOpened}

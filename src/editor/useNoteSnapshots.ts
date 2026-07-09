@@ -18,6 +18,8 @@ export type UseNoteSnapshotsResult = {
   placements: PlacedSnapshot[]
   /** Raw records, newest first -- keyed lookup for previewing a specific snapshot's content. */
   snapshotsById: Map<number, NoteSnapshotRecord>
+  /** Snapshot ids whose content exactly matches the current live present text. */
+  snapshotIdsMatchingPresent: Set<number>
   /** True while the initial fetch for the current noteId is in flight. */
   isLoading: boolean
   /** Content of the most recent *manual* snapshot, or null if none exists yet. */
@@ -86,6 +88,17 @@ export function useNoteSnapshots(noteId: string | null, liveText: string): UseNo
     return manualOnes[0].content
   }, [snapshots])
 
+  const snapshotIdsMatchingPresent = useMemo(() => {
+    const normalizedLive = normalizeForComparison(liveText)
+    const result = new Set<number>()
+    for (const snapshot of snapshots) {
+      if (normalizeForComparison(snapshot.content) === normalizedLive) {
+        result.add(snapshot.id)
+      }
+    }
+    return result
+  }, [liveText, snapshots])
+
   const hasPendingManualChanges = useMemo(() => {
     if (latestManualContent === null) return true // nothing to be "on" yet
     return normalizeForComparison(liveText) !== normalizeForComparison(latestManualContent)
@@ -100,6 +113,7 @@ export function useNoteSnapshots(noteId: string | null, liveText: string): UseNo
   return {
     placements,
     snapshotsById,
+    snapshotIdsMatchingPresent,
     isLoading,
     latestManualContent,
     hasPendingManualChanges,
