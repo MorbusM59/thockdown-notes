@@ -31,7 +31,7 @@ const PRESENT_RATIO = 1
 // Half the widest mark's rendered width (the manual-snapshot dot, 8px) --
 // how far a mark's center gets pulled in from each rail edge so it never
 // renders partially outside the track.
-const MARK_INSET_PX = 8
+const MARK_INSET_PX = 10
 
 function markLeftStyle(ratio: number): string {
   return `calc(${MARK_INSET_PX}px + (${ratio} * (100% - ${MARK_INSET_PX * 2}px)))`
@@ -109,23 +109,23 @@ export function SnapshotTimelineSlider({
     }
 
     const usableWidth = Math.max(0, railWidthPx - MARK_INSET_PX * 2)
-    const presentCenter = railWidthPx - MARK_INSET_PX
-    const presentOuterHalf = 7
-
     const targetCenters = marks.map((mark) => MARK_INSET_PX + mark.ratio * usableWidth)
     const renderedCenters: number[] = []
 
-    let nextCenter = presentCenter
-    let nextOuterHalf = presentOuterHalf
+    let nextCenter = railWidthPx - MARK_INSET_PX
+    let nextOuterHalf = 0
 
     for (let i = marks.length - 1; i >= 0; i -= 1) {
       const mark = marks[i]
       const outerHalf = mark.isManual ? 5 : 4
       const targetCenter = targetCenters[i]
-      const minGap = outerHalf + nextOuterHalf + 2
-      const center = Math.min(targetCenter, nextCenter - minGap)
-
-      renderedCenters[i] = Math.max(MARK_INSET_PX, center)
+      if (i === marks.length - 1) {
+        renderedCenters[i] = Math.max(MARK_INSET_PX, Math.min(targetCenter, nextCenter))
+      } else {
+        const minGap = outerHalf + nextOuterHalf + 2
+        const center = Math.min(targetCenter, nextCenter - minGap)
+        renderedCenters[i] = Math.max(MARK_INSET_PX, center)
+      }
       nextCenter = renderedCenters[i]
       nextOuterHalf = outerHalf
     }
