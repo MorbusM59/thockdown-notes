@@ -78,13 +78,7 @@ export function SnapshotTimelineSlider({
     return [...manualMarks, ...fromClusters].sort((a, b) => a.ratio - b.ratio)
   }, [automaticClusters, manualMarks])
 
-  const latestHistoryMark = historyMarks.length > 0 ? historyMarks[historyMarks.length - 1] : null
-  const latestHistoryMarkIsAtPresent = latestHistoryMark?.ratio === PRESENT_RATIO
-  const latestPresentHistoryMarkId = latestHistoryMarkIsAtPresent ? latestHistoryMark?.id : null
-  const latestPresentHistoryIsManual = latestHistoryMarkIsAtPresent && latestHistoryMark?.isManual === true
-  const suppressPresentDuplicate = latestHistoryMarkIsAtPresent && !hasPendingManualChanges
-
-  const historyMarksToRender = suppressPresentDuplicate ? historyMarks.slice(0, -1) : historyMarks
+  const historyMarksToRender = historyMarks
 
   const orderedNavTargets = useMemo(
     () => [...historyMarks.map((m) => m.id as number | null), null],
@@ -207,24 +201,6 @@ export function SnapshotTimelineSlider({
             leftStyle={historyMarkLeftStyles[index]}
           />
         ))}
-        <div
-          className={[
-            'snapshot-timeline-mark',
-            'is-present',
-            latestPresentHistoryIsManual ? 'is-manual' : '',
-            activeSnapshotId === null || activeSnapshotId === latestPresentHistoryMarkId ? 'is-active' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-          style={{ left: markLeftStyle(PRESENT_RATIO) }}
-          onClick={(event) => {
-            event.stopPropagation()
-            onNavigate(null)
-          }}
-          role="button"
-          aria-label="Present"
-          title="Present"
-        />
       </div>
     </div>
   )
