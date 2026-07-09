@@ -9,6 +9,7 @@ import { Editor } from './components/Editor'
 import { AccordionGroup, AccordionSection } from './components/AccordionSection'
 import { AudioControls } from './components/AudioControls'
 import { useNoteSnapshots } from './editor/useNoteSnapshots'
+import type { PlacedSnapshot } from './editor/SnapshotTimelineCurve'
 import { SnapshotTimelineSlider } from './editor/SnapshotTimelineSlider'
 import { PresentStateCircle } from './editor/PresentStateCircle'
 import './App.css'
@@ -7586,11 +7587,16 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     }
   }, [noteSnapshots, previewedSnapshotId])
 
-  const handleMergeAdjacentSnapshots = useCallback(async () => {
-    if (!activeNoteId || timelineTrackLengthPx <= 0 || noteSnapshots.placements.length < 2 || !window.measlyNotes) return
+  const MERGE_ADJACENCY_THRESHOLD_PX = 10
 
-    const MERGE_ADJACENCY_THRESHOLD_PX = 10
-    const sortedByNewestFirst = [...noteSnapshots.placements].sort((a, b) => {
+  function computeSnapshotsToDelete(
+    placements: readonly PlacedSnapshot[],
+    trackLengthPx: number,
+    automaticOnly: boolean,
+  ): number[] {
+    if (placements.length < 2 || trackLengthPx <= 0) return []
+
+    const sortedByNewestFirst = [...placements].sort((a, b) => {
       if (a.ageMs !== b.ageMs) return a.ageMs - b.ageMs
       return b.timestamp.localeCompare(a.timestamp)
     })
@@ -7600,12 +7606,54 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
     for (let i = 1; i < sortedByNewestFirst.length; i += 1) {
       const candidate = sortedByNewestFirst[i]
-      if ((anchor.ratio - candidate.ratio) * timelineTrackLengthPx <= MERGE_ADJACENCY_THRESHOLD_PX) {
-        toDelete.push(candidate.id)
-      } else {
+      const isAdjacent = (anchor.ratio - candidate.ratio) * trackLengthPx <= MERGE_ADJACENCY_THRESHOLD_PX
+
+      if (!isAdjacent) {
         anchor = candidate
+        continue
       }
+
+      const anchorIsManual = anchor.isManual
+      const candidateIsManual = candidate.isManual
+      const oneManualOneAutomatic = anchorIsManual !== candidateIsManual
+      const bothManual = anchorIsManual && candidateIsManual
+
+      if (oneManualOneAutomatic) {
+        const automaticSnapshot = anchorIsManual ? candidate : anchor
+        const latestSnapshot = sortedByNewestFirst[0]
+        if (automaticSnapshot.id === latestSnapshot.id) {
+          // Never delete the latest snapshot, even if it's automatic and
+          // adjacent to a manual snapshot. Continue compacting from the
+          // manual snapshot instead.
+          if (automaticSnapshot === anchor) {
+            anchor = candidate
+          }
+          continue
+        }
+
+        toDelete.push(automaticSnapshot.id)
+        if (automaticSnapshot === anchor) {
+          anchor = candidate
+        }
+        continue
+      }
+
+      if (automaticOnly && bothManual) {
+        anchor = candidate
+        continue
+      }
+
+      // Same type (both manual or both automatic): delete the older snapshot.
+      toDelete.push(candidate.id)
     }
+
+    return toDelete
+  }
+
+  const handleMergeAdjacentSnapshots = useCallback(async () => {
+    if (!activeNoteId || timelineTrackLengthPx <= 0 || noteSnapshots.placements.length < 2 || !window.measlyNotes) return
+
+    const toDelete = computeSnapshotsToDelete(noteSnapshots.placements, timelineTrackLengthPx, false)
 
     for (const snapshotId of toDelete) {
       await window.measlyNotes.deleteNoteSnapshot({ snapshotId })
@@ -7628,6 +7676,16 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       const currentText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
       const normalizedLatestSnapshot = latestSnapshotContent ? normalizeForComparison(latestSnapshotContent) : null
       const normalizedCurrent = normalizeForComparison(currentText)
+
+      if (noteSnapshots.placements.length >= 2 && timelineTrackLengthPx > 0) {
+        const automaticDeletes = computeSnapshotsToDelete(noteSnapshots.placements, timelineTrackLengthPx, true)
+        for (const snapshotId of automaticDeletes) {
+          await notesApi.deleteNoteSnapshot({ snapshotId })
+        }
+        if (automaticDeletes.length > 0) {
+          await refreshSnapshots()
+        }
+      }
 
       if (normalizedLatestSnapshot !== normalizedCurrent) {
         await notesApi.saveNoteSnapshot({ id: activeNoteId, content: currentText, isManual: false })
