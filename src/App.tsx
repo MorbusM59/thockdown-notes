@@ -7508,6 +7508,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   // snapshot id that no longer applies to the note now on screen.
   useEffect(() => {
     setPreviewedSnapshotId(null)
+    setTimelineCurveConstant(16)
   }, [activeNoteId])
 
   const previewedSnapshotContent = previewedSnapshotId !== null
