@@ -2,6 +2,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PlacedSnapshot } from './SnapshotTimelineCurve'
 import { clusterPlacements } from './SnapshotTimelineCurve'
 import { useHoldToBranch } from './useHoldToBranch'
+import type { NoteSnapshotRecord } from './useNoteSnapshots'
 
 // Reuses the same rail visual language as CompactScrollbarSlider (the
 // filter/settings sliders) via the shared .utility-setting-scrollbar-*
@@ -20,6 +21,7 @@ import { useHoldToBranch } from './useHoldToBranch'
 export type SnapshotTimelineSliderProps = {
   sourceNoteId: string
   placements: PlacedSnapshot[]
+  snapshotsById: Map<number, NoteSnapshotRecord>
   /** null = viewing the live present text. A snapshot id = previewing history (read-only). */
   activeSnapshotId: number | null
   onNavigate: (snapshotId: number | null) => void
@@ -37,9 +39,35 @@ function markLeftStyle(ratio: number): string {
   return `calc(${MARK_INSET_PX}px + (${ratio} * (100% - ${MARK_INSET_PX * 2}px)))`
 }
 
+const ONE_DAY_MS = 24 * 60 * 60 * 1000
+
+function formatSnapshotTooltip(record: NoteSnapshotRecord): string {
+  const timestamp = new Date(record.timestamp)
+  const now = new Date()
+  const isSameDay =
+    timestamp.getFullYear() === now.getFullYear() &&
+    timestamp.getMonth() === now.getMonth() &&
+    timestamp.getDate() === now.getDate()
+
+  const elapsedMs = Math.max(0, now.getTime() - timestamp.getTime())
+  const days = Math.floor(elapsedMs / ONE_DAY_MS)
+  const hours = String(timestamp.getHours()).padStart(2, '0')
+  const minutes = String(timestamp.getMinutes()).padStart(2, '0')
+  const wordCount = countWords(record.content)
+  const dayPrefix = isSameDay ? '' : `[${days}] `
+  return `${dayPrefix}${hours}:${minutes} (${wordCount})`
+}
+
+function countWords(text: string): number {
+  const trimmed = text.trim()
+  if (trimmed.length === 0) return 0
+  return trimmed.split(/\s+/u).length
+}
+
 export function SnapshotTimelineSlider({
   sourceNoteId,
   placements,
+  snapshotsById,
   activeSnapshotId,
   onNavigate,
   onBranchOpened,
@@ -192,6 +220,7 @@ export function SnapshotTimelineSlider({
             key={mark.id}
             sourceNoteId={sourceNoteId}
             placement={mark}
+            snapshotRecord={snapshotsById.get(mark.id)}
             isActive={mark.id === activeSnapshotId}
             onNavigate={onNavigate}
             onBranchOpened={onBranchOpened}
@@ -207,6 +236,7 @@ export function SnapshotTimelineSlider({
 type SnapshotMarkProps = {
   sourceNoteId: string
   placement: PlacedSnapshot
+  snapshotRecord?: NoteSnapshotRecord
   isActive: boolean
   leftStyle?: string
   onNavigate: (snapshotId: number | null) => void
@@ -217,6 +247,7 @@ type SnapshotMarkProps = {
 function SnapshotMark({
   sourceNoteId,
   placement,
+  snapshotRecord,
   isActive,
   leftStyle,
   onNavigate,
@@ -248,6 +279,7 @@ function SnapshotMark({
         event.stopPropagation()
         onNavigate(placement.id)
       }}
+      title={snapshotRecord ? formatSnapshotTooltip(snapshotRecord) : undefined}
       {...handlers}
     >
       {isHolding && (

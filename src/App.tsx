@@ -12079,6 +12079,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   <SnapshotTimelineSlider
                     sourceNoteId={activeNoteId}
                     placements={noteSnapshots.placements}
+                    snapshotsById={noteSnapshots.snapshotsById}
                     activeSnapshotId={previewedSnapshotId}
                     onNavigate={handleNavigateSnapshot}
                     onBranchOpened={handleBranchOpened}
