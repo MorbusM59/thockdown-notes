@@ -26,49 +26,27 @@ export type PlacedSnapshot = SnapshotLike & {
 
 export type TimelineCurveOptions = {
   /**
-   * Higher = recent saves spread out more, older ones compress harder.
-   * 1 is linear. v1 shipped with 10 and it's the value being ported
-   * forward because it's the one already validated by daily use.
+   * A larger constant makes the curve compress faster. 10 is the current
+   * default. The user will be able to configure this value.
    */
-  curvature?: number
-  /** Anything this recent always maps to ratio 1 (the present end). */
-  presentThresholdMs?: number
+  curveConstant?: number
 }
 
-const DEFAULT_CURVATURE = 10
-const DEFAULT_PRESENT_THRESHOLD_MS = ONE_MINUTE_MS
+const DEFAULT_CURVE_CONSTANT = 10
 
 /**
- * Maps a single age (ms) into a 0..1 ratio across a span, using a log-like
- * curve. `spanMs` should be the age of the oldest snapshot being placed --
- * NOT a hardcoded ceiling. Because retention now keeps most auto-history
- * within a ~30 day active window (see SnapshotRetention.ts), the span will
- * usually be small; manual snapshots can still be very old, and the curve
- * degrades gracefully to "very old things all land near 0" rather than v1's
- * hard 1-year cap that made anything beyond it indistinguishable.
+ * Maps a single age (ms) into a 0..1 ratio using a minutes-based base-2
+ * logarithmic scale.
+ *
+ * The formula is:
+ *   ratio = min((1 - log2(t + 1)) / c, 1)
+ * where t = floor(ageMs / ONE_MINUTE_MS) and c = curveConstant.
  */
-export function ageToRatio(
-  ageMs: number,
-  spanMs: number,
-  options: TimelineCurveOptions = {},
-): number {
-  const curvature = Math.max(1.0001, options.curvature ?? DEFAULT_CURVATURE)
-  const presentThresholdMs = Math.max(1, options.presentThresholdMs ?? DEFAULT_PRESENT_THRESHOLD_MS)
-
-  if (ageMs <= presentThresholdMs) return 1
-  const safeSpan = Math.max(spanMs, presentThresholdMs + 1)
-  if (ageMs >= safeSpan) return 0
-
-  const k = 1 / curvature
-  const minK = presentThresholdMs ** k
-  const spanK = safeSpan ** k
-  const ageK = ageMs ** k
-
-  const denom = spanK - minK
-  if (denom <= 0) return 1 // degenerate span (all ages basically equal) -- avoid NaN/Infinity
-
-  const climbed = (ageK - minK) / denom
-  return clamp01(1 - climbed)
+export function ageToRatio(ageMs: number, options: TimelineCurveOptions = {}): number {
+  const curveConstant = Math.max(0.0001, options.curveConstant ?? DEFAULT_CURVE_CONSTANT)
+  const minutes = Math.floor(ageMs / ONE_MINUTE_MS)
+  const ratio = 1 - (Math.log2(minutes + 1)) / curveConstant
+  return clamp01(ratio)
 }
 
 function clamp01(value: number): number {
@@ -90,12 +68,11 @@ export function computeSnapshotPlacements(
   if (snapshots.length === 0) return []
 
   const ages = snapshots.map((snap) => Math.max(0, now - new Date(snap.timestamp).getTime()))
-  const spanMs = Math.max(ONE_DAY_MS, ...ages)
 
   return snapshots.map((snap, index) => ({
     ...snap,
     ageMs: ages[index],
-    ratio: ageToRatio(ages[index], spanMs, options),
+    ratio: ageToRatio(ages[index], options),
   }))
 }
 

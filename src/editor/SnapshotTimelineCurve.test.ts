@@ -9,17 +9,18 @@ import {
 } from './SnapshotTimelineCurve'
 
 describe('ageToRatio', () => {
-  it('maps anything within the present threshold to 1', () => {
-    expect(ageToRatio(0, ONE_DAY_MS)).toBe(1)
-    expect(ageToRatio(ONE_MINUTE_MS, ONE_DAY_MS)).toBe(1)
+  it('maps 0 minutes to 1 and rounds sub-minute ages down to 0', () => {
+    expect(ageToRatio(0)).toBe(1)
+    expect(ageToRatio(50 * 1000)).toBe(1)
   })
 
-  it('maps the oldest age in the span to 0', () => {
-    expect(ageToRatio(ONE_DAY_MS, ONE_DAY_MS)).toBe(0)
+  it('maps 1 minute to a lower ratio than 0 minutes', () => {
+    expect(ageToRatio(0)).toBe(1)
+    expect(ageToRatio(ONE_MINUTE_MS)).toBeLessThan(1)
   })
 
-  it('maps ages beyond the span to 0 rather than negative or NaN', () => {
-    expect(ageToRatio(ONE_DAY_MS * 10, ONE_DAY_MS)).toBe(0)
+  it('maps very old ages to 0', () => {
+    expect(ageToRatio(ONE_DAY_MS * 10)).toBe(0)
   })
 
   it('spreads recent ages further apart than older ages (log-like curvature)', () => {
