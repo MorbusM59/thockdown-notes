@@ -103,7 +103,12 @@ export function SnapshotTimelineSlider({
   // history marks get clustered to reduce visual clutter.
   const historyMarks = useMemo(() => {
     const fromClusters = automaticClusters.map((cluster) => cluster[0])
-    return [...manualMarks, ...fromClusters].sort((a, b) => a.ratio - b.ratio)
+    return [...manualMarks, ...fromClusters].sort((a, b) => {
+      if (a.ratio !== b.ratio) return a.ratio - b.ratio
+      const timeCompare = a.timestamp.localeCompare(b.timestamp)
+      if (timeCompare !== 0) return timeCompare
+      return a.id - b.id
+    })
   }, [automaticClusters, manualMarks])
 
   const historyMarksToRender = historyMarks
