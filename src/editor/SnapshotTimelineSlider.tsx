@@ -113,24 +113,6 @@ export function SnapshotTimelineSlider({
     [historyMarks],
   )
 
-  const ratioForClientX = useCallback((clientX: number): number => {
-    const rail = railRef.current
-    if (!rail) return PRESENT_RATIO
-    const rect = rail.getBoundingClientRect()
-    if (rect.width <= 0) return PRESENT_RATIO
-    return clamp01((clientX - rect.left) / rect.width)
-  }, [])
-
-  const nearestMarkIdForRatio = useCallback((ratio: number): number | null => {
-    let best: { id: number | null; distance: number } = { id: null, distance: Math.abs(PRESENT_RATIO - ratio) }
-    for (const mark of historyMarks) {
-      const distance = Math.abs(mark.ratio - ratio)
-      if (distance < best.distance) {
-        best = { id: mark.id, distance }
-      }
-    }
-    return best.id
-  }, [historyMarks])
 
   const historyMarkLeftStyles = useMemo(() => {
     const marks = historyMarksToRender
@@ -162,16 +144,6 @@ export function SnapshotTimelineSlider({
 
     return renderedCenters.map((center) => `${center}px`)
   }, [historyMarksToRender, railWidthPx])
-
-  const handleRailPointerDown = useCallback((event: React.PointerEvent) => {
-    if (event.button !== 0) return
-    if (event.target instanceof Element && event.target.closest('.snapshot-timeline-mark')) {
-      return
-    }
-    event.preventDefault()
-    const ratio = ratioForClientX(event.clientX)
-    onNavigate(nearestMarkIdForRatio(ratio))
-  }, [nearestMarkIdForRatio, onNavigate, ratioForClientX])
 
   const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
     const currentIndex = orderedNavTargets.findIndex((id) => id === activeSnapshotId)
@@ -215,7 +187,6 @@ export function SnapshotTimelineSlider({
       <div
         className="utility-setting-scrollbar-rail snapshot-timeline-rail"
         ref={railRef}
-        onPointerDown={handleRailPointerDown}
       >
         {historyMarksToRender.map((mark, index) => (
           <SnapshotMark
