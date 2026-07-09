@@ -37,7 +37,7 @@ export type UseNoteSnapshotsResult = {
  * Deliberately does not know about pixels, sliders, or DOM -- see
  * SnapshotTimelineSlider.tsx for the rendering layer that consumes this.
  */
-export function useNoteSnapshots(noteId: string | null, liveText: string): UseNoteSnapshotsResult {
+export function useNoteSnapshots(noteId: string | null, liveText: string, curveConstant = 10): UseNoteSnapshotsResult {
   const [snapshots, setSnapshots] = useState<NoteSnapshotRecord[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const requestIdRef = useRef(0)
@@ -72,8 +72,8 @@ export function useNoteSnapshots(noteId: string | null, liveText: string): UseNo
       timestamp: s.timestamp,
       isManual: s.isManual,
     }))
-    return computeSnapshotPlacements(likeSnapshots, Date.now())
-  }, [snapshots])
+    return computeSnapshotPlacements(likeSnapshots, Date.now(), { curveConstant })
+  }, [curveConstant, snapshots])
 
   const snapshotsById = useMemo(() => {
     const map = new Map<number, NoteSnapshotRecord>()

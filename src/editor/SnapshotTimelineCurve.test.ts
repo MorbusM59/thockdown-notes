@@ -24,11 +24,10 @@ describe('ageToRatio', () => {
   })
 
   it('spreads recent ages further apart than older ages (log-like curvature)', () => {
-    const span = 30 * ONE_DAY_MS
-    const r1h = ageToRatio(ONE_HOUR_MS, span)
-    const r6h = ageToRatio(6 * ONE_HOUR_MS, span)
-    const r29d = ageToRatio(29 * ONE_DAY_MS, span)
-    const r30d = ageToRatio(30 * ONE_DAY_MS, span)
+    const r1h = ageToRatio(ONE_HOUR_MS)
+    const r6h = ageToRatio(6 * ONE_HOUR_MS)
+    const r29d = ageToRatio(29 * ONE_DAY_MS)
+    const r30d = ageToRatio(30 * ONE_DAY_MS)
 
     const recentGap = r1h - r6h
     const oldGap = r29d - r30d
@@ -36,25 +35,23 @@ describe('ageToRatio', () => {
     expect(recentGap).toBeGreaterThan(oldGap)
   })
 
-  it('never produces NaN or Infinity for a degenerate (near-zero) span', () => {
-    const ratio = ageToRatio(1, 1, { presentThresholdMs: 1 })
+  it('never produces NaN or Infinity for any age', () => {
+    const ratio = ageToRatio(1)
     expect(Number.isFinite(ratio)).toBe(true)
   })
 
   it('is monotonic: newer ages never sit behind older ages', () => {
-    const span = 60 * ONE_DAY_MS
     const samples = [0, ONE_HOUR_MS, ONE_DAY_MS, 5 * ONE_DAY_MS, 20 * ONE_DAY_MS, 59 * ONE_DAY_MS]
-    const ratios = samples.map((age) => ageToRatio(age, span))
+    const ratios = samples.map((age) => ageToRatio(age))
     for (let i = 1; i < ratios.length; i += 1) {
       expect(ratios[i]).toBeLessThanOrEqual(ratios[i - 1])
     }
   })
 
-  it('curvature of ~1 behaves close to linear', () => {
-    const span = 100
-    const mid = ageToRatio(50, span, { curvature: 1.0001, presentThresholdMs: 0.001 })
-    expect(mid).toBeGreaterThan(0.4)
-    expect(mid).toBeLessThan(0.6)
+  it('reduces the ratio when curve constant increases', () => {
+    const low = ageToRatio(ONE_HOUR_MS, { curveConstant: 5 })
+    const high = ageToRatio(ONE_HOUR_MS, { curveConstant: 20 })
+    expect(high).toBeLessThan(low)
   })
 })
 

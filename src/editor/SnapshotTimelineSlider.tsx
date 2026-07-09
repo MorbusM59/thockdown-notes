@@ -28,6 +28,8 @@ export type SnapshotTimelineSliderProps = {
   onNavigate: (snapshotId: number | null) => void
   onBranchOpened: (newNoteId: string) => void
   onBranchError?: (message: string) => void
+  curveConstant: number
+  onCurveConstantChange: (nextCurveConstant: number) => void
 }
 
 // Half the widest mark's rendered width (the manual-snapshot dot, 8px) --
@@ -73,6 +75,8 @@ export function SnapshotTimelineSlider({
   onNavigate,
   onBranchOpened,
   onBranchError,
+  curveConstant,
+  onCurveConstantChange,
 }: SnapshotTimelineSliderProps) {
   const railRef = useRef<HTMLDivElement | null>(null)
   const [railWidthPx, setRailWidthPx] = useState(0)
@@ -176,6 +180,20 @@ export function SnapshotTimelineSlider({
     }
   }, [activeSnapshotId, onNavigate, orderedNavTargets])
 
+  const handleWheel = useCallback(
+    (event: React.WheelEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+
+      const delta = event.deltaY
+      if (delta === 0) return
+
+      const nextCurveConstant = delta < 0 ? curveConstant / 1.1 : curveConstant * 1.1
+      onCurveConstantChange(Math.min(25,Math.max(6, nextCurveConstant)))
+    },
+    [curveConstant, onCurveConstantChange],
+  )
+
   return (
     <div
       role="slider"
@@ -191,6 +209,8 @@ export function SnapshotTimelineSlider({
       <div
         className="utility-setting-scrollbar-rail snapshot-timeline-rail"
         ref={railRef}
+        onWheel={handleWheel}
+        title={`Curve constant: ${curveConstant.toFixed(2)}\nScroll up/down to adjust`}
       >
         {historyMarksToRender.map((mark, index) => (
           <SnapshotMark

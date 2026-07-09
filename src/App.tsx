@@ -7500,7 +7500,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     return normalizeInternalText(latestEditorTextRef.current || activeNoteText)
   }, [activeNoteText, editorTextVersion])
 
-  const noteSnapshots = useNoteSnapshots(activeNoteId, currentEditorText)
+  const [timelineCurveConstant, setTimelineCurveConstant] = useState(10)
+  const noteSnapshots = useNoteSnapshots(activeNoteId, currentEditorText, timelineCurveConstant)
 
   // Leaving a note (or its history disappearing from under us, e.g. after a
   // retention pass or a delete) should never leave the UI pointed at a
@@ -12090,6 +12091,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     onNavigate={handleNavigateSnapshot}
                     onBranchOpened={handleBranchOpened}
                     onBranchError={handleBranchError}
+                    curveConstant={timelineCurveConstant}
+                    onCurveConstantChange={setTimelineCurveConstant}
                   />
                 ) : (
                   <span>0 words</span>
