@@ -2576,7 +2576,7 @@ body.hsva-dragging * {
 }
 
 .snapshot-timeline-mark.is-automatic {
-  outline: 1px solid var(--color-text-40);
+  outline: 1px solid var(--color-text-30);
 }
 
 .snapshot-timeline-mark.is-manual {
@@ -2585,10 +2585,6 @@ body.hsva-dragging * {
 
 .snapshot-timeline-mark.matches-present {
   background-color: var(--color-text-30);
-}
-
-.snapshot-timeline-mark.is-present {
-  outline: 1px solid var(--color-text-20);
 }
 
 .snapshot-timeline-mark.is-active {

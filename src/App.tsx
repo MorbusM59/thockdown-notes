@@ -7505,6 +7505,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   const [timelineTrackLengthPx, setTimelineTrackLengthPx] = useState(0)
   const noteSnapshots = useNoteSnapshots(activeNoteId, currentEditorText, timelineCurveConstant)
   const { latestSnapshotContent, refresh: refreshSnapshots } = noteSnapshots
+  const lastAutoCompactNoteIdRef = useRef<string | null>(null)
 
   // Leaving a note (or its history disappearing from under us, e.g. after a
   // retention pass or a delete) should never leave the UI pointed at a
@@ -7579,13 +7580,29 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     })
   }, [flushPendingSaveNow])
 
+  const compactAutomaticSnapshots = useCallback(async () => {
+    if (!activeNoteId || timelineTrackLengthPx <= 0 || noteSnapshots.placements.length < 2 || !window.measlyNotes) return
+
+    const compactDeletes = computeSnapshotsToDelete(noteSnapshots.placements, timelineTrackLengthPx, true)
+    if (compactDeletes.length === 0) return
+
+    for (const snapshotId of compactDeletes) {
+      await window.measlyNotes.deleteNoteSnapshot({ snapshotId })
+    }
+
+    await noteSnapshots.refresh()
+    if (previewedSnapshotId !== null && compactDeletes.includes(previewedSnapshotId)) {
+      setPreviewedSnapshotId(null)
+    }
+  }, [activeNoteId, noteSnapshots, previewedSnapshotId, timelineTrackLengthPx])
+
   const handleCreateManualSnapshot = useCallback(async () => {
     await noteSnapshots.createManualSnapshot()
-    await noteSnapshots.refresh()
+    await compactAutomaticSnapshots()
     if (previewedSnapshotId !== null) {
       setPreviewedSnapshotId(null)
     }
-  }, [noteSnapshots, previewedSnapshotId])
+  }, [compactAutomaticSnapshots, noteSnapshots, previewedSnapshotId])
 
   const MERGE_ADJACENCY_THRESHOLD_PX = 10
 
@@ -7696,7 +7713,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     return () => {
       window.clearInterval(intervalId)
     }
-  }, [activeNoteId, activeNoteText, latestSnapshotContent, refreshSnapshots, isPreviewingSnapshot])
+  }, [activeNoteId, activeNoteText, latestSnapshotContent, noteSnapshots.placements.length, refreshSnapshots, isPreviewingSnapshot, timelineTrackLengthPx])
 
   const handleReturnToPresent = useCallback(() => {
     if (previewedSnapshotId !== null) {
@@ -7713,6 +7730,14 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   const handleBranchError = useCallback((message: string) => {
     console.error('Snapshot branch failed:', message)
   }, [])
+
+  useEffect(() => {
+    if (!activeNoteId || isPreviewingSnapshot || timelineTrackLengthPx <= 0 || noteSnapshots.placements.length < 2 || !window.measlyNotes) return
+    if (lastAutoCompactNoteIdRef.current === activeNoteId) return
+
+    lastAutoCompactNoteIdRef.current = activeNoteId
+    void compactAutomaticSnapshots()
+  }, [activeNoteId, compactAutomaticSnapshots, isPreviewingSnapshot, noteSnapshots.placements.length, timelineTrackLengthPx])
 
   const activeNoteDocumentStats = useMemo(() => {
     const hasSelection = !editorSelection.isCollapsed && editorSelection.end > editorSelection.start
