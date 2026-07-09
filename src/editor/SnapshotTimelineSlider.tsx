@@ -118,7 +118,7 @@ export function SnapshotTimelineSlider({
 
     const usableWidth = Math.max(0, railWidthPx - MARK_INSET_PX * 2)
     const presentCenter = railWidthPx - MARK_INSET_PX
-    const presentOuterHalf = 5
+    const presentOuterHalf = 7
 
     const targetCenters = marks.map((mark) => MARK_INSET_PX + mark.ratio * usableWidth)
     const renderedCenters: number[] = []
@@ -130,7 +130,7 @@ export function SnapshotTimelineSlider({
       const mark = marks[i]
       const outerHalf = mark.isManual ? 5 : 4
       const targetCenter = targetCenters[i]
-      const minGap = outerHalf + nextOuterHalf + 4
+      const minGap = outerHalf + nextOuterHalf + 2
       const center = Math.min(targetCenter, nextCenter - minGap)
 
       renderedCenters[i] = Math.max(MARK_INSET_PX, center)
