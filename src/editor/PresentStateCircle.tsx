@@ -42,6 +42,10 @@ export function PresentStateCircle({
       }
       onClick={() => {
         if (disabled) return
+        if (!isPresent) {
+          onGoToPresent?.()
+          return
+        }
         if (hasPendingManualChanges) {
           onCreateManualSnapshot()
         } else {
