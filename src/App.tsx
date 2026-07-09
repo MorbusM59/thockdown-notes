@@ -7503,6 +7503,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   const [timelineCurveConstant, setTimelineCurveConstant] = useState(10)
   const [timelineTrackLengthPx, setTimelineTrackLengthPx] = useState(0)
   const noteSnapshots = useNoteSnapshots(activeNoteId, currentEditorText, timelineCurveConstant)
+  const { latestSnapshotContent, refresh: refreshSnapshots } = noteSnapshots
 
   // Leaving a note (or its history disappearing from under us, e.g. after a
   // retention pass or a delete) should never leave the UI pointed at a
@@ -7616,6 +7617,29 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     }
   }, [activeNoteId, noteSnapshots, previewedSnapshotId, timelineTrackLengthPx])
 
+  useEffect(() => {
+    if (!activeNoteId || isPreviewingSnapshot) return
+    const notesApi = window.measlyNotes
+    if (!notesApi) return
+
+    const intervalId = window.setInterval(async () => {
+      if (!activeNoteId || !notesApi || isPreviewingSnapshot) return
+
+      const currentText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+      const normalizedLatestSnapshot = latestSnapshotContent ? normalizeForComparison(latestSnapshotContent) : null
+      const normalizedCurrent = normalizeForComparison(currentText)
+
+      if (normalizedLatestSnapshot !== normalizedCurrent) {
+        await notesApi.saveNoteSnapshot({ id: activeNoteId, content: currentText, isManual: false })
+        await refreshSnapshots()
+      }
+    }, 60 * 1000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [activeNoteId, activeNoteText, latestSnapshotContent, refreshSnapshots, isPreviewingSnapshot])
+
   const handleReturnToPresent = useCallback(() => {
     if (previewedSnapshotId !== null) {
       setPreviewedSnapshotId(null)
@@ -7648,6 +7672,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       characterCount,
     }
   }, [currentEditorText, editorSelection.end, editorSelection.isCollapsed, editorSelection.start])
+
+  function normalizeForComparison(text: string): string {
+    return text.replace(/\r\n/g, '\n').replace(/[ \t]+$/gm, '')
+  }
 
   const documentFindDirective = useMemo<DocumentFindDirective>(() => {
     return resolveDocumentFindDirective(documentFindQuery, currentEditorText, isDocumentFindCaseSensitive)

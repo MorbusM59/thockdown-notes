@@ -24,6 +24,8 @@ export type UseNoteSnapshotsResult = {
   isLoading: boolean
   /** Content of the most recent *manual* snapshot, or null if none exists yet. */
   latestManualContent: string | null
+  /** Content of the most recent snapshot, whether manual or automatic. */
+  latestSnapshotContent: string | null
   /** Whether `liveText` differs from the latest manual snapshot (or there is no manual snapshot at all). */
   hasPendingManualChanges: boolean
   /** Re-fetches from the DB -- call after a save or a branch so the rail reflects the new snapshot immediately. */
@@ -99,6 +101,10 @@ export function useNoteSnapshots(noteId: string | null, liveText: string, curveC
     return result
   }, [liveText, snapshots])
 
+  const latestSnapshotContent = useMemo(() => {
+    return snapshots.length > 0 ? snapshots[0].content : null
+  }, [snapshots])
+
   const hasPendingManualChanges = useMemo(() => {
     if (latestManualContent === null) return true // nothing to be "on" yet
     return normalizeForComparison(liveText) !== normalizeForComparison(latestManualContent)
@@ -117,6 +123,7 @@ export function useNoteSnapshots(noteId: string | null, liveText: string, curveC
     isLoading,
     latestManualContent,
     hasPendingManualChanges,
+    latestSnapshotContent,
     refresh: fetchSnapshots,
     createManualSnapshot,
   }
