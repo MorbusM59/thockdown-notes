@@ -7574,6 +7574,19 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     })
   }, [flushPendingSaveNow])
 
+  const handleCreateManualSnapshot = useCallback(async () => {
+    await noteSnapshots.createManualSnapshot()
+    if (previewedSnapshotId !== null) {
+      setPreviewedSnapshotId(null)
+    }
+  }, [noteSnapshots, previewedSnapshotId])
+
+  const handleReturnToPresent = useCallback(() => {
+    if (previewedSnapshotId !== null) {
+      setPreviewedSnapshotId(null)
+    }
+  }, [previewedSnapshotId])
+
   const handleBranchOpened = useCallback((newNoteId: string) => {
     setPreviewedSnapshotId(null)
     void activateNote(newNoteId)
@@ -12066,6 +12079,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     sourceNoteId={activeNoteId}
                     placements={noteSnapshots.placements}
                     activeSnapshotId={previewedSnapshotId}
+                    hasPendingManualChanges={noteSnapshots.hasPendingManualChanges}
                     onNavigate={handleNavigateSnapshot}
                     onBranchOpened={handleBranchOpened}
                   />
@@ -12077,8 +12091,9 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 {activeNoteId && (
                   <PresentStateCircle
                     hasPendingManualChanges={noteSnapshots.hasPendingManualChanges}
-                    onCreateManualSnapshot={() => { void noteSnapshots.createManualSnapshot() }}
-                    disabled={isPreviewingSnapshot}
+                    onCreateManualSnapshot={() => { void handleCreateManualSnapshot() }}
+                    onGoToPresent={handleReturnToPresent}
+                    isPresent={previewedSnapshotId === null}
                   />
                 )}
                 </div>

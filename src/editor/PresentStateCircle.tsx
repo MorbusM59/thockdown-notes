@@ -8,12 +8,16 @@
 export type PresentStateCircleProps = {
   hasPendingManualChanges: boolean
   onCreateManualSnapshot: () => void
+  onGoToPresent?: () => void
+  isPresent?: boolean
   disabled?: boolean
 }
 
 export function PresentStateCircle({
   hasPendingManualChanges,
   onCreateManualSnapshot,
+  onGoToPresent,
+  isPresent = true,
   disabled,
 }: PresentStateCircleProps) {
   return (
@@ -22,7 +26,8 @@ export function PresentStateCircle({
       className={[
         'manual-snapshot-circle',
         hasPendingManualChanges ? 'is-hollow' : 'is-filled',
-      ].join(' ')}
+        !isPresent ? 'not-present' : '',
+      ].filter(Boolean).join(' ')}
       disabled={disabled}
       aria-pressed={!hasPendingManualChanges}
       aria-label={
@@ -36,7 +41,12 @@ export function PresentStateCircle({
           : 'On your last manual save'
       }
       onClick={() => {
-        if (hasPendingManualChanges) onCreateManualSnapshot()
+        if (disabled) return
+        if (hasPendingManualChanges) {
+          onCreateManualSnapshot()
+        } else {
+          onGoToPresent?.()
+        }
       }}
     >
       <span className="manual-snapshot-circle-dot" aria-hidden="true" />

@@ -2629,7 +2629,8 @@ body.hsva-dragging * {
   background: var(--canonical-scroll-track-bg);
 }
 
-.manual-snapshot-circle:disabled .manual-snapshot-circle-dot {
+.manual-snapshot-circle:disabled .manual-snapshot-circle-dot,
+.manual-snapshot-circle.not-present .manual-snapshot-circle-dot {
   display: none;
 }
 
