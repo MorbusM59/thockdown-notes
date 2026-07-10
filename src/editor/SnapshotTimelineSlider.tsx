@@ -67,6 +67,26 @@ function countWords(text: string): number {
   return trimmed.split(/\s+/u).length
 }
 
+const MINUTES_PER_HOUR = 60
+const MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR
+
+function formatTimescaleLabel(curveConstant: number): string {
+  const timescaleMinutes = Math.pow(2, curveConstant)
+
+  if (timescaleMinutes >= 2 * MINUTES_PER_DAY) {
+    const days = Math.round(timescaleMinutes / MINUTES_PER_DAY)
+    return `${days} day${days === 1 ? '' : 's'}`
+  }
+
+  if (timescaleMinutes >= 2 * MINUTES_PER_HOUR) {
+    const hours = Math.round(timescaleMinutes / MINUTES_PER_HOUR)
+    return `${hours} hour${hours === 1 ? '' : 's'}`
+  }
+
+  const minutes = Math.round(timescaleMinutes)
+  return `${minutes} minute${minutes === 1 ? '' : 's'}`
+}
+
 export function SnapshotTimelineSlider({
   sourceNoteId,
   placements,
@@ -216,7 +236,7 @@ export function SnapshotTimelineSlider({
         className="utility-setting-scrollbar-rail snapshot-timeline-rail"
         ref={railRef}
         onWheel={handleWheel}
-        title={`Curve constant: ${curveConstant.toFixed(2)}\nScroll up/down to adjust`}
+        title={`Cut-off: ${formatTimescaleLabel(curveConstant)}\nScroll up/down to zoom.`}
       >
         {historyMarksToRender.map((mark, index) => (
           <SnapshotMark
