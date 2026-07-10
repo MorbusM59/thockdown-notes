@@ -1253,6 +1253,18 @@ export function Editor({
                     onDragStart={(e) => e.preventDefault()}
                     onMouseDown={(e) => {
                       if (e.button !== 0) return;
+                      const editorRoot = e.currentTarget as HTMLElement;
+
+                      // Prevent clicks on editor background/blank space from forcing
+                      // the native caret into the nearest text line.
+                      if (e.target === editorRoot) {
+                        e.preventDefault();
+                        if (document.activeElement !== editorRoot) {
+                          editorRoot.focus({ preventScroll: true });
+                        }
+                        return;
+                      }
+
                       const selection = window.getSelection();
                       if (selection && !selection.isCollapsed) {
                         const range = selection.getRangeAt(0);
