@@ -5766,7 +5766,6 @@ ${markdownHtml}
 
   const saveExternalNoteToFile = useCallback(async (noteId: string) => {
     if (!window.measlyNotes || !window.measlyExternalFiles) return
-    if (activeNoteId !== noteId) return
 
     const summary = notes.find((note) => note.id === noteId)
     let externalPath = summary?.externalPath ?? activeNoteExternalPathRef.current ?? null
@@ -5853,19 +5852,30 @@ ${markdownHtml}
         console.debug('[external-note] saveExternalNoteToFile persisted temp note text into DB', { noteId, externalPath, savedSummary })
 
         const nextSummary = syncedSummary ?? savedSummary
+        const normalizedNextSummary = {
+          ...nextSummary,
+          hasUnsavedChanges: false,
+        }
+
         setNotes((previous) => {
-          const index = previous.findIndex((note) => note.id === nextSummary.id)
+          const index = previous.findIndex((note) => note.id === normalizedNextSummary.id)
           if (index < 0) return previous
 
           const existing = previous[index]
-          if (isSameNoteSummary(existing, nextSummary)) {
+          if (isSameNoteSummary(existing, normalizedNextSummary)) {
             return previous
           }
 
           const next = [...previous]
-          next[index] = nextSummary
+          next[index] = normalizedNextSummary
           return next
         })
+
+        externalNoteOriginalHashByIdRef.current.set(noteId, currentHash)
+        setCurrentExternalNoteHash(currentHash)
+        if (activeNoteId === noteId) {
+          setActiveNoteText(currentText)
+        }
       } catch (error) {
         console.error('[external-note] saveExternalNoteToFile failed to persist temp note in DB', { noteId, externalPath, error })
       }
