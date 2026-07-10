@@ -722,10 +722,11 @@ export class DatabaseService {
         contentChecksum = excluded.contentChecksum
     `);
 
-    const deleteMissingNotesStmt = db.prepare('DELETE FROM notes WHERE id = ?');
+    const deleteMissingNotesStmt = db.prepare('DELETE FROM notes WHERE id = ? AND isTemp = 0');
     const deleteNoteTagsStmt = db.prepare('DELETE FROM note_tags WHERE noteId = ?');
     const insertNoteTagStmt = db.prepare('INSERT OR REPLACE INTO note_tags (noteId, tagId, position) VALUES (?, ?, ?)');
     const selectAllNoteIdsStmt = db.prepare('SELECT id FROM notes');
+    const selectIsTempStmt = db.prepare('SELECT isTemp FROM notes WHERE id = ?');
 
     const findTagStmt = db.prepare('SELECT id FROM tags WHERE name = ?');
     const insertTagStmt = db.prepare('INSERT INTO tags (name) VALUES (?)');
@@ -775,6 +776,14 @@ export class DatabaseService {
       const existingIds = selectAllNoteIdsStmt.all() as Array<{ id: string }>;
       for (const { id } of existingIds) {
         if (seenIds.has(id)) continue;
+
+        // Preserve temp/external note records across restarts. Only delete
+        // regular notes that no longer have a corresponding .md file.
+        const tempRow = selectIsTempStmt.get(id) as { isTemp: number } | undefined;
+        if (tempRow?.isTemp === 1) {
+          continue;
+        }
+
         deleteMissingNotesStmt.run(id);
         deleteMissingFtsStmt.run(id);
       }
