@@ -787,7 +787,7 @@ button.active,
 }
 
 .search-box .search-input-field:focus    { border-color: var(--color-border-selected); }
-.search-box .search-input-field:disabled { opacity: 0.75; cursor: not-allowed; }
+.search-box .search-input-field:disabled { opacity: 0.75;}
 
 .search-box .search-input-field.has-case-toggle {
   padding-right: 40px;
@@ -1143,7 +1143,7 @@ button.active,
 }
 
 .notes-mini-action:hover    { background: var(--color-toggle-hover); }
-.notes-mini-action:disabled { opacity: 0.45; cursor: not-allowed; }
+.notes-mini-action:disabled { opacity: 0.45;}
 
 /* 6i. Notes mode button */
 .notes-mode-button {
@@ -1178,8 +1178,101 @@ button.active,
   box-shadow:      var(--box-shadow-regular);
 }
 
-.note-list-item:hover        { background: #ffffffBB; }
-.note-list-item:focus-visible { outline: 2px solid #82614a; outline-offset: 1px; }
+.note-list-item.is-external:not(.is-tree-card) {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.note-list-columns {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  gap: 4px;
+  min-height: 44px;
+}
+
+.note-list-column {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--border-radius-regular);
+  border: 1px solid var(--color-border-highlight);
+  background: #ffffff55;
+  box-shadow: var(--box-shadow-regular);
+}
+
+.note-list-column-primary {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 8px;
+}
+
+.note-list-column-action {
+  flex: 0 0 24px;
+  min-width: 24px;
+  max-width: 24px;
+  padding: 0;
+}
+
+.note-list-column-action .note-list-action-button {
+  width: 100%;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+}
+
+.note-list-column-action .note-list-action-button:disabled {
+  opacity: 0.35;
+}
+
+.note-list-column-action .note-list-action-button-save {
+  color: var(--color-text-base);
+}
+
+.note-list-column-action .note-list-action-button-close {
+  color: var(--color-danger);
+}
+
+.note-list-item.is-active .note-list-column,
+.note-list-item.is-active .note-list-column-action .note-list-action-button {
+  box-shadow: var(--box-shadow-inverted-harsh);
+}
+
+.note-list-item.is-active .note-list-column-primary {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.note-list-item.is-external .note-list-columns .note-list-column {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.note-list-item.is-external .note-list-columns .note-list-column:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.note-list-item.is-external .note-list-column-action .note-list-action-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.note-list-item.is-external .note-list-action-button {
+  width: 100%;
+  height: 100%;
+}
+
+.note-list-item.is-external .note-list-content {
+  width: 100%;
+}
+
+.note-list-item.is-external .note-list-meta-row {
+  margin-top: 3px;
+}
 
 .note-list-item.is-active {
   border-color: #80604a;
@@ -2164,8 +2257,6 @@ color:           var(--color-text-80);
   transition: none;
 }
 
-.options-hsva-control.is-dragging { cursor: crosshair; }
-
 .options-hsva-alpha {
   background: var(--color-background-light);
   padding:    0;
@@ -2566,7 +2657,6 @@ body.hsva-dragging * {
   border-radius:  50%;
   transform:      translateY(-50%);
   background:     transparent;
-  cursor:         pointer;
   pointer-events: auto;
   box-sizing:     border-box;
   z-index:        2;

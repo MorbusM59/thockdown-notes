@@ -1702,6 +1702,8 @@ type NoteListItemProps = {
   isModified?: boolean
   onSelect: (noteId: string) => void
   onArmedLeftClick: (noteId: string) => void
+  onSaveClick?: (noteId: string) => void
+  onCloseClick?: (noteId: string) => void
   armedAction?: NoteArmedAction | null
   onLeftPressStart: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   onLeftPressEnd: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
@@ -1717,6 +1719,8 @@ const NoteListItem = memo(function NoteListItem({
   isModified = false,
   onSelect,
   onArmedLeftClick,
+  onSaveClick,
+  onCloseClick,
   armedAction = null,
   onLeftPressStart,
   onLeftPressEnd,
@@ -1745,6 +1749,18 @@ const NoteListItem = memo(function NoteListItem({
       onSelect(note.id)
     }
   }, [note.id, onSelect])
+
+  const handleSaveClick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    onSaveClick?.(note.id)
+  }, [note.id, onSaveClick])
+
+  const handleCloseClick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    onCloseClick?.(note.id)
+  }, [note.id, onCloseClick])
 
   const handleMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
     if (event.button === 2) {
@@ -1782,10 +1798,12 @@ const NoteListItem = memo(function NoteListItem({
   }, [note.id, onArmHoverLeave])
 
   const displayTitle = isExternalNote(note) ? note.fileName : note.title
+  const isExternal = isExternalNote(note)
+  const hasActionColumns = isExternal && !isTreeVariant
 
   return (
     <div
-      className={`note-list-item${isActive ? ' is-active' : ''}${isTreeVariant ? ' is-tree-card' : ''}${isModified ? ' is-modified' : ''}${isExternalNote(note) ? ' is-external' : ''}${armedAction === 'archive' ? ' is-armed-for-archiving' : ''}${armedAction === 'deletion' ? ' is-armed-for-deletion' : ''}${armedAction === 'save' ? ' is-armed-for-saving' : ''}${armedAction === 'close' ? ' is-armed-for-closing' : ''}`}
+      className={`note-list-item${isActive ? ' is-active' : ''}${isTreeVariant ? ' is-tree-card' : ''}${isModified ? ' is-modified' : ''}${isExternal ? ' is-external' : ''}${armedAction === 'archive' ? ' is-armed-for-archiving' : ''}${armedAction === 'deletion' ? ' is-armed-for-deletion' : ''}${armedAction === 'save' ? ' is-armed-for-saving' : ''}${armedAction === 'close' ? ' is-armed-for-closing' : ''}`}
       data-note-id={note.id}
       role="option"
       aria-selected={isActive}
@@ -1797,15 +1815,61 @@ const NoteListItem = memo(function NoteListItem({
       onContextMenu={handleContextMenu}
       tabIndex={0}
     >
-      <div className="note-list-content">
-        <div className="note-list-title">{displayTitle || 'Untitled'}</div>
-        {isTreeVariant ? null : (
-          <div className="note-list-meta-row">
-            <span className="note-list-meta-left">{createdDate}</span>
-            <span className="note-list-meta-right">{formatModifiedDate(note.updatedAtMs)}</span>
+      {hasActionColumns ? (
+        <div className="note-list-columns">
+          <div className="note-list-column note-list-column-primary">
+            <div className="note-list-content">
+              <div className="note-list-title">{displayTitle || 'Untitled'}</div>
+              <div className="note-list-meta-row">
+                <span className="note-list-meta-left">{createdDate}</span>
+                <span className="note-list-meta-right">{formatModifiedDate(note.updatedAtMs)}</span>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
+
+          <div className="note-list-column note-list-column-action note-list-column-save">
+            <button
+              type="button"
+              className="note-list-action-button note-list-action-button-save"
+              disabled={!isModified}
+              aria-label={isModified ? 'Save external note' : 'Save disabled'}
+              title={isModified ? 'Save external note' : 'Save disabled'}
+              onClick={handleSaveClick}
+              onMouseDown={(event) => event.stopPropagation()}
+              onMouseUp={(event) => event.stopPropagation()}
+              onContextMenu={(event) => event.stopPropagation()}
+            >
+              <span className="fa-solid fa-floppy-disk" aria-hidden="true" />
+            </button>
+          </div>
+
+          <div className="note-list-column note-list-column-action note-list-column-close">
+            <button
+              type="button"
+              className="note-list-action-button note-list-action-button-close"
+              disabled={!isExternal}
+              aria-label="Close external note"
+              title="Close external note"
+              onClick={handleCloseClick}
+              onMouseDown={(event) => event.stopPropagation()}
+              onMouseUp={(event) => event.stopPropagation()}
+              onContextMenu={(event) => event.stopPropagation()}
+            >
+              <span className="fa-solid fa-xmark" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="note-list-content">
+          <div className="note-list-title">{displayTitle || 'Untitled'}</div>
+          {isTreeVariant ? null : (
+            <div className="note-list-meta-row">
+              <span className="note-list-meta-left">{createdDate}</span>
+              <span className="note-list-meta-right">{formatModifiedDate(note.updatedAtMs)}</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 })
@@ -6166,6 +6230,22 @@ ${markdownHtml}
     setArmedNoteActionState(null)
     void executeArmedNoteAction(noteId, armed.action)
   }, [armedNoteActionState, clearNoteArmTimer, executeArmedNoteAction])
+
+  const handleSaveButtonClick = useCallback(async (noteId: string) => {
+    if (!isExternalNote(notes.find((note) => note.id === noteId)!)) {
+      return
+    }
+
+    if (activeNoteId !== noteId) {
+      await activateNote(noteId)
+    }
+
+    await saveExternalNoteToFile(noteId)
+  }, [activateNote, activeNoteId, notes, saveExternalNoteToFile])
+
+  const handleCloseButtonClick = useCallback((noteId: string) => {
+    void closeExternalNoteWithoutSaving(noteId)
+  }, [closeExternalNoteWithoutSaving])
 
   const handleNoteArmHoverLeave = useCallback((noteId: string) => {
     const pendingArm = noteArmTimerRef.current
@@ -11498,6 +11578,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                               isModified={isModified}
                               onSelect={handleSelectNote}
                               onArmedLeftClick={handleArmedNoteLeftClick}
+                              onSaveClick={handleSaveButtonClick}
+                              onCloseClick={handleCloseButtonClick}
                               armedAction={armedNoteActionById.get(note.id) ?? null}
                               onLeftPressStart={handleNoteLeftPressStart}
                               onLeftPressEnd={handleNoteLeftPressEnd}
