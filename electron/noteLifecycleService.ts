@@ -119,12 +119,6 @@ function stripExistingBranchSuffix(title: string): string {
 export class NoteLifecycleService {
   private readonly notesDir: string;
   private readonly databaseService: DatabaseService;
-  // Keeps runSnapshotRetention() off the hot path: it's a real (if cheap) DB
-  // scan, so it only runs once per note per RETENTION_THROTTLE_MS, not on
-  // every autosave. In-memory and per-process is fine here -- worst case
-  // after a restart is one extra retention pass, not a correctness issue.
-  private readonly lastRetentionRunAtByNoteId = new Map<string, number>();
-
   constructor(dataRoot: string, databaseService: DatabaseService) {
     this.notesDir = path.join(dataRoot, NOTES_DIR_NAME);
     this.databaseService = databaseService;
@@ -267,11 +261,6 @@ export class NoteLifecycleService {
     const parsed = parseNoteMetadata(text, shouldSanitize);
 
     const tags = this.databaseService.getNoteTags(input.id);
-
-    // Opening a note is also a good, low-frequency point to let old
-    // auto-snapshots age out of the active retention window, even for notes
-    // nobody has actively edited in a while.
-    this.maybeRunSnapshotRetention(input.id);
 
     return {
       id: input.id,
@@ -476,7 +465,6 @@ export class NoteLifecycleService {
 
   async saveNoteSnapshot(input: { id: string; content: string; isManual?: boolean }): Promise<void> {
     this.databaseService.saveNoteSnapshot(input.id, input.content, Boolean(input.isManual));
-    this.maybeRunSnapshotRetention(input.id);
   }
 
   async getNoteSnapshots(input: LoadNoteInput): Promise<Array<{ id: number; noteId: string; content: string; timestamp: string; isManual: boolean }>> {
@@ -487,22 +475,6 @@ export class NoteLifecycleService {
     this.databaseService.deleteNoteSnapshot(input.snapshotId);
   }
 
-  private static readonly RETENTION_THROTTLE_MS = 5 * 60 * 1000;
-
-  private maybeRunSnapshotRetention(noteId: string): void {
-    const now = Date.now();
-    const lastRun = this.lastRetentionRunAtByNoteId.get(noteId) ?? 0;
-    if (now - lastRun < NoteLifecycleService.RETENTION_THROTTLE_MS) return;
-
-    this.lastRetentionRunAtByNoteId.set(noteId, now);
-    // Best-effort maintenance: a failure here should never break the save
-    // that triggered it.
-    try {
-      this.databaseService.runSnapshotRetention(noteId, now);
-    } catch (err) {
-      console.error(`[snapshot retention] failed for note ${noteId}:`, err);
-    }
-  }
 
   async syncExternalNoteToFile(input: { id: string; content: string }): Promise<boolean> {
     const record = this.databaseService.getNoteRecord(input.id);

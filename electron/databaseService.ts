@@ -38,7 +38,6 @@ const BetterSqlite3 = require('better-sqlite3') as typeof import('better-sqlite3
 const DB_FILE_NAME = 'measly-notes.db';
 const EXTERNAL_TAG = 'EXTERNAL';
 const PROTECTED_TAGS = ['deleted', 'archived', EXTERNAL_TAG] as const;
-const ONE_HOUR_MS_LOCAL = 60 * 60 * 1000;
 const META_PREFIX = '<!-- measly-meta:';
 const META_SUFFIX = '-->';
 const TEXTURE_CACHE_DEFAULT_MAX_ENTRIES = 96;
@@ -1376,83 +1375,6 @@ export class DatabaseService {
     tx(rows);
   }
 
-  // --- Retention -----------------------------------------------------------
-  //
-  // Two-tier policy, matching the "I only need last-auto + manuals once a
-  // note is old" mental model:
-  //
-  //  - Within ACTIVE_WINDOW_MS of "now": automatic snapshots are thinned
-  //    using an age-doubling rule (a survivor must be at least half again as
-  //    old as the next-newest survivor), so recent history stays dense and
-  //    the last day or two is finely grained.
-  //  - Older than ACTIVE_WINDOW_MS: every automatic snapshot is discarded
-  //    except the single newest one before the boundary (the "baseline" --
-  //    what the note looked like when it left the active window).
-  //  - Manual snapshots are never touched, at any age.
-  //
-  // This intentionally runs as an occasional maintenance pass (see the
-  // throttling in NoteLifecycleService), not on every keystroke-triggered
-  // save -- v1's compaction re-scanned a note's *entire* snapshot history on
-  // every single save, which is fine for a young note and a real cost for
-  // one that's been actively worked on for months.
-  runSnapshotRetention(noteId: string, now: number = Date.now(), activeWindowMs: number = 30 * 24 * 60 * 60 * 1000): void {
-    const db = this.requireDb();
-
-    const rows = db.prepare(`
-      SELECT id, timestamp, isManual
-      FROM note_snapshots
-      WHERE noteId = ?
-      ORDER BY datetime(timestamp) DESC
-    `).all(noteId) as Array<{ id: number; timestamp: string; isManual: number }>;
-
-    if (rows.length === 0) return;
-
-    const boundary = now - activeWindowMs;
-    const toDelete: number[] = [];
-
-    let withinWindowLastKeptAgeMs: number | null = null;
-    let baselineKept = false;
-
-    for (const row of rows) {
-      if (row.isManual === 1) continue; // manual snapshots are always kept
-
-      const timestampMs = new Date(row.timestamp).getTime();
-
-      if (timestampMs >= boundary) {
-        // Active window: age-doubling thinning, same curve-friendly spirit
-        // as v1 but decoupled from any rendering concerns.
-        const ageMs = now - timestampMs;
-        if (withinWindowLastKeptAgeMs === null) {
-          withinWindowLastKeptAgeMs = ageMs; // newest automatic snapshot always survives
-          continue;
-        }
-        const gap = ageMs - withinWindowLastKeptAgeMs
-        const threshold = Math.min(ageMs / 2, 12 * ONE_HOUR_MS_LOCAL)
-        if (gap >= threshold) {
-          withinWindowLastKeptAgeMs = ageMs
-        } else {
-          toDelete.push(row.id)
-        }
-        continue;
-      }
-
-      // Outside the active window: keep exactly one baseline snapshot
-      // (the newest one before the boundary), discard the rest.
-      if (!baselineKept) {
-        baselineKept = true;
-      } else {
-        toDelete.push(row.id);
-      }
-    }
-
-    if (toDelete.length === 0) return;
-
-    const deleteStmt = db.prepare('DELETE FROM note_snapshots WHERE id = ?');
-    const tx = db.transaction((ids: number[]) => {
-      for (const id of ids) deleteStmt.run(id);
-    });
-    tx(toDelete);
-  }
 
   createTempNote(input: { title: string; externalPath: string; originalEncoding?: string }): string {
     const db = this.requireDb();
