@@ -2143,6 +2143,15 @@ function isExternalNote(note: NoteSummary): boolean {
   return note.tags.some((tag) => isExternalTagName(tag))
 }
 
+function compareExternalNotesFirst(a: NoteSummary, b: NoteSummary): number {
+  const aIsExternal = isExternalNote(a)
+  const bIsExternal = isExternalNote(b)
+  if (aIsExternal !== bIsExternal) {
+    return aIsExternal ? -1 : 1
+  }
+  return b.updatedAtMs - a.updatedAtMs
+}
+
 function escapeAttributeSelectorValue(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
@@ -7846,7 +7855,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }, [searchedNotes])
 
   const dateFilteredNotes = useMemo(() => {
-    return filterNotesBySelectedDate(dateEligibleNotes)
+    return filterNotesBySelectedDate(dateEligibleNotes).sort(compareExternalNotesFirst)
   }, [dateEligibleNotes, filterNotesBySelectedDate])
 
   const trashFilteredNotes = useMemo(() => {
