@@ -121,7 +121,7 @@
   --color-input-backdrop:       var(--palette-parchment-input);
 
   --color-border-regular:       #00000033;
-  --color-border-selected:      #00000066;
+  --color-border-selected:      #ffffff55;
   --color-border-highlight:     #ffffffbb;
 
   --color-toggle-default:       #eeeeee;
@@ -1197,26 +1197,41 @@ button.active,
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--border-radius-regular);
   border: 1px solid var(--color-border-highlight);
   background: #ffffff55;
   box-shadow: var(--box-shadow-regular);
+  padding: 4px 8px;
+}
+
+.note-list-column-primary {
+  border-radius: var(--border-radius-regular) 0 0 var(--border-radius-regular);
+}
+
+.note-list-action-button.note-list-action-button-save {
+  border-radius: 0;
+}
+
+.note-list-action-button.note-list-action-button-close {
+  border-radius: 0 var(--border-radius-regular) var(--border-radius-regular) 0;
+}
+
+.note-list-column.is-disabled {
+  display: none;
 }
 
 .note-list-column-primary {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 0 8px;
 }
 
 .note-list-column-action {
-  flex: 0 0 24px;
-  min-width: 24px;
-  max-width: 24px;
+  flex: 0 0 30px;
+  min-width: 30px;
+  max-width: 30px;
   padding: 0;
 }
 
-.note-list-column-action .note-list-action-button {
+.btn-icon.note-list-action-button {
   width: 100%;
   height: 100%;
   display: inline-flex;
@@ -1225,40 +1240,35 @@ button.active,
   border: none;
   background: transparent;
   color: inherit;
-  font-size: 14px;
 }
 
-.note-list-column-action .note-list-action-button:disabled {
-  opacity: 0.35;
+.note-list-item .note-list-column.note-list-column-primary {
+  box-shadow: var(--box-shadow-regular);
+  border: 1px solid var(--color-border-highlight);
+  background: none;
 }
 
-.note-list-column-action .note-list-action-button-save {
-  color: var(--color-text-base);
-}
-
-.note-list-column-action .note-list-action-button-close {
-  color: var(--color-danger);
-}
-
-.note-list-item.is-active .note-list-column,
-.note-list-item.is-active .note-list-column-action .note-list-action-button {
+.note-list-item.is-active .note-list-column.note-list-column-primary {
   box-shadow: var(--box-shadow-inverted-harsh);
+  border: 1px solid var(--color-border-selected)
 }
 
-.note-list-item.is-active .note-list-column-primary {
-  background: rgba(255, 255, 255, 0.4);
+.note-list-column.note-list-column-action {
+  box-shadow: none;
+  border: none;
+  background: none;
 }
 
-.note-list-item.is-external .note-list-columns .note-list-column {
-  background: rgba(255, 255, 255, 0.2);
+.note-list-column.note-list-column-action .note-list-action-button {
+  box-shadow: var(--box-shadow-regular);
+  border: 1px solid var(--color-border-highlight);
+  background: none;
+  font-size: var(--btn-icon-size);
 }
 
-.note-list-item.is-external .note-list-columns .note-list-column:hover {
-  background: rgba(255, 255, 255, 0.35);
-}
-
-.note-list-item.is-external .note-list-column-action .note-list-action-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.6);
+.note-list-column.note-list-column-action .note-list-action-button:active {
+  box-shadow: var(--box-shadow-inverted-harsh);
+  border: 1px solid var(--color-border-highlight)
 }
 
 .note-list-item.is-external .note-list-action-button {
@@ -1275,7 +1285,7 @@ button.active,
 }
 
 .note-list-item.is-active {
-  border-color: #80604a;
+  border-color: var(--btn-border-active);
   background:   #ffffff11;
   box-shadow:   var(--box-shadow-inverted-harsh);
 }
@@ -1372,25 +1382,6 @@ button.active,
 .date-view .note-list-item.is-armed-for-deletion.is-active,
 .date-view .note-list-item.is-armed-for-deletion.is-active:hover {
   background-color: #ffe1e1;
-}
-
-.date-view .note-list-item.is-external {
-  border-radius: 0;
-}
-
-.date-view .note-list-item.is-external.is-modified {
-  border: 1px solid #FFDDAA;
-  outline: 3px double #FFDDAAAA;
-}
-
-.date-view .note-list-item.is-modified.is-armed-for-saving {
-  border: 1px solid #BBFFAA;
-  outline: 3px double #BBFFAAAA;
-}
-
-.date-view .note-list-item.is-modified.is-armed-for-closing {
-  border: 1px solid #FF9999;
-  outline: 3px double #FF9999AA;
 }
 
 .note-list-content {

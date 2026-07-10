@@ -1827,7 +1827,7 @@ const NoteListItem = memo(function NoteListItem({
             </div>
           </div>
 
-          <div className="note-list-column note-list-column-action note-list-column-save">
+          <div className={`note-list-column note-list-column-action note-list-column-save${!isModified ? ' is-disabled' : ' is-modified'}`}>
             <button
               type="button"
               className="note-list-action-button note-list-action-button-save"
@@ -1843,7 +1843,7 @@ const NoteListItem = memo(function NoteListItem({
             </button>
           </div>
 
-          <div className="note-list-column note-list-column-action note-list-column-close">
+          <div className={`note-list-column note-list-column-action note-list-column-close${isModified ? ' is-modified' : ''}`}>
             <button
               type="button"
               className="note-list-action-button note-list-action-button-close"
