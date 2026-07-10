@@ -4,7 +4,7 @@ import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
 import { typingSoundManager } from '../sound/TypingSoundManager';
-import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
+import { HistoryPlugin, createEmptyHistoryState } from '@lexical/react/LexicalHistoryPlugin';
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
 import { cancelQuantizedSmoothScroll, scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
 import { CagedScrollPlugin } from '../plugins/CagedScrollPlugin';
@@ -352,6 +352,7 @@ export function Editor({
   // count (see topBoundary/bottomBoundary below).
   const [topBoundaryLines, setTopBoundaryLines] = useState(0);
   const [bottomBoundaryLines, setBottomBoundaryLines] = useState(0);
+  const [historyState, setHistoryState] = useState(() => createEmptyHistoryState());
 
   // Whether the editor has received its restored (or default 0/0/0)
   // boundary/scroll line counts via applySnapshot. Until this is true, the
@@ -376,6 +377,10 @@ export function Editor({
     bottomBoundaryLines,
     availableLines,
   );
+
+  useEffect(() => {
+    setHistoryState(createEmptyHistoryState());
+  }, [noteId]);
   const topBoundary = displayTopLines * lineHeightPx;
   const bottomBoundary = displayBottomLines * lineHeightPx;
 
@@ -1298,7 +1303,7 @@ export function Editor({
               />
             )}
         
-            <HistoryPlugin />
+            <HistoryPlugin externalHistoryState={historyState} />
             <PasteSanitizationPlugin />
             <TextSanitizationPlugin />
             <SyntaxHighlightPlugin />
