@@ -1201,18 +1201,7 @@ button.active,
   background: #ffffff55;
   box-shadow: var(--box-shadow-regular);
   padding: 4px 8px;
-}
-
-.note-list-column-primary {
-  border-radius: var(--border-radius-regular) 0 0 var(--border-radius-regular);
-}
-
-.note-list-action-button.note-list-action-button-save {
-  border-radius: 0;
-}
-
-.note-list-action-button.note-list-action-button-close {
-  border-radius: 0 var(--border-radius-regular) var(--border-radius-regular) 0;
+  border-radius: var(--border-radius-regular);
 }
 
 .note-list-column.is-disabled {
