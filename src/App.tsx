@@ -1703,6 +1703,8 @@ type NoteListItemProps = {
   onArmedLeftClick: (noteId: string) => void
   onSaveClick?: (noteId: string) => void
   onCloseClick?: (noteId: string) => void
+  onArchiveClick?: (noteId: string) => void
+  onTrashClick?: (noteId: string) => void
   armedAction?: NoteArmedAction | null
   onRightPressStart: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   onRightPressEnd: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
@@ -1717,6 +1719,8 @@ const NoteListItem = memo(function NoteListItem({
   onArmedLeftClick,
   onSaveClick,
   onCloseClick,
+  onArchiveClick,
+  onTrashClick,
   armedAction = null,
   onRightPressStart,
   onRightPressEnd,
@@ -1755,6 +1759,18 @@ const NoteListItem = memo(function NoteListItem({
     onCloseClick?.(note.id)
   }, [note.id, onCloseClick])
 
+  const handleArchiveClick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    onArchiveClick?.(note.id)
+  }, [note.id, onArchiveClick])
+
+  const handleTrashClick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    onTrashClick?.(note.id)
+  }, [note.id, onTrashClick])
+
   const isExternal = isExternalNote(note)
   const displayTitle = isExternal ? note.fileName : note.title
 
@@ -1783,7 +1799,11 @@ const NoteListItem = memo(function NoteListItem({
     event.stopPropagation()
   }, [])
 
-  const hasActionColumns = isExternal && !isTreeVariant
+  const hasActionColumns = !isTreeVariant
+  const isArchived = isArchivedNote(note)
+  const isDeleted = isDeletedNote(note)
+  const isArchiveButtonDisabled = !onArchiveClick || isArchived || isDeleted
+  const isTrashButtonDisabled = !onTrashClick || isDeleted
 
   return (
     <div
@@ -1810,37 +1830,75 @@ const NoteListItem = memo(function NoteListItem({
             </div>
           </div>
 
-          <div className={`note-list-column note-list-column-action note-list-column-save${!isModified ? ' is-disabled' : ' is-modified'}`}>
-            <button
-              type="button"
-              className="note-list-action-button note-list-action-button-save"
-              disabled={!isModified}
-              aria-label={isModified ? 'Save external note' : 'Save disabled'}
-              title={isModified ? 'Save external note' : 'Save disabled'}
-              onClick={handleSaveClick}
-              onMouseDown={(event) => event.stopPropagation()}
-              onMouseUp={(event) => event.stopPropagation()}
-              onContextMenu={(event) => event.stopPropagation()}
-            >
-              <span className="fa-solid fa-floppy-disk" aria-hidden="true" />
-            </button>
-          </div>
+          {isExternal ? (
+            <>
+              <div className={`note-list-column note-list-column-action note-list-column-save${!isModified ? ' is-disabled' : ' is-modified'}`}>
+                <button
+                  type="button"
+                  className="note-list-action-button note-list-action-button-save"
+                  disabled={!isModified}
+                  aria-label={isModified ? 'Save external note' : 'Save disabled'}
+                  title={isModified ? 'Save external note' : 'Save disabled'}
+                  onClick={handleSaveClick}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onMouseUp={(event) => event.stopPropagation()}
+                  onContextMenu={(event) => event.stopPropagation()}
+                >
+                  <span className="fa-solid fa-floppy-disk" aria-hidden="true" />
+                </button>
+              </div>
 
-          <div className={`note-list-column note-list-column-action note-list-column-close${isModified ? ' is-modified' : ''}`}>
-            <button
-              type="button"
-              className="note-list-action-button note-list-action-button-close"
-              disabled={!isExternal}
-              aria-label="Close external note"
-              title="Close external note"
-              onClick={handleCloseClick}
-              onMouseDown={(event) => event.stopPropagation()}
-              onMouseUp={(event) => event.stopPropagation()}
-              onContextMenu={(event) => event.stopPropagation()}
-            >
-              <span className="fa-solid fa-xmark" aria-hidden="true" />
-            </button>
-          </div>
+              <div className={`note-list-column note-list-column-action note-list-column-close${isModified ? ' is-modified' : ''}`}>
+                <button
+                  type="button"
+                  className="note-list-action-button note-list-action-button-close"
+                  disabled={!isExternal}
+                  aria-label="Close external note"
+                  title="Close external note"
+                  onClick={handleCloseClick}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onMouseUp={(event) => event.stopPropagation()}
+                  onContextMenu={(event) => event.stopPropagation()}
+                >
+                  <span className="fa-solid fa-xmark" aria-hidden="true" />
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className={`note-list-column note-list-column-action note-list-column-archive${isArchiveButtonDisabled ? ' is-disabled' : ''}`}>
+                <button
+                  type="button"
+                  className="note-list-action-button note-list-action-button-archive"
+                  disabled={isArchiveButtonDisabled}
+                  aria-label={isArchiveButtonDisabled ? 'Archive disabled' : 'Archive note'}
+                  title={isArchiveButtonDisabled ? 'Archive disabled' : 'Archive note'}
+                  onClick={handleArchiveClick}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onMouseUp={(event) => event.stopPropagation()}
+                  onContextMenu={(event) => event.stopPropagation()}
+                >
+                  <span className="fa-solid fa-archive" aria-hidden="true" />
+                </button>
+              </div>
+
+              <div className={`note-list-column note-list-column-action note-list-column-trash${isTrashButtonDisabled ? ' is-disabled' : ''}`}>
+                <button
+                  type="button"
+                  className="note-list-action-button note-list-action-button-trash"
+                  disabled={isTrashButtonDisabled}
+                  aria-label={isTrashButtonDisabled ? 'Trash disabled' : 'Trash note'}
+                  title={isTrashButtonDisabled ? 'Trash disabled' : 'Trash note'}
+                  onClick={handleTrashClick}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onMouseUp={(event) => event.stopPropagation()}
+                  onContextMenu={(event) => event.stopPropagation()}
+                >
+                  <span className="fa-solid fa-trash" aria-hidden="true" />
+                </button>
+              </div>
+            </>
+          )}
         </div>
       ) : (
         <div className="note-list-content">
@@ -1883,7 +1941,6 @@ const CategoryTreeView = memo(function CategoryTreeView({
   armedNoteActionById,
   onNoteRightPressStart,
   onNoteRightPressEnd,
-  onNoteArmHoverLeave,
 }: CategoryTreeViewProps) {
   const collapsedPrimary = useMemo(() => new Set(persistedCollapsedPrimary), [persistedCollapsedPrimary])
   const collapsedSecondary = useMemo(() => new Set(persistedCollapsedSecondary), [persistedCollapsedSecondary])
@@ -6163,20 +6220,55 @@ await flushPendingSaveNow()
     void closeExternalNoteWithoutSaving(noteId)
   }, [closeExternalNoteWithoutSaving])
 
-  const handleNoteArmHoverLeave = useCallback((noteId: string) => {
-    const pendingArm = noteArmTimerRef.current
-    if (pendingArm && pendingArm.noteId === noteId) {
-      clearNoteArmTimer()
-    }
+  const handleArchiveClick = useCallback(async (noteId: string) => {
+    if (!window.measlyNotes || !persistenceReady) return
+    if (noteTransitionLockRef.current) return
 
-    setArmedNoteActionState((previous) => {
-      if (!previous || previous.noteId !== noteId) {
-        return previous
+    noteTransitionLockRef.current = true
+    try {
+      await flushPendingSaveNow()
+      await applyProtectedNoteDestination(noteId, 'archived')
+      await refreshNotes(activeNoteId ?? noteId)
+      if (activeNoteId === noteId) {
+        const nextActiveId = getNextActiveNoteIdAfterRemoval(noteId)
+        if (nextActiveId) {
+          await activateNote(nextActiveId)
+        } else {
+          setActiveNoteId(null)
+          setActiveNoteText('')
+        }
       }
+    } catch (error) {
+      console.error('Failed to archive note', error)
+    } finally {
+      noteTransitionLockRef.current = false
+    }
+  }, [activeNoteId, activateNote, applyProtectedNoteDestination, flushPendingSaveNow, persistenceReady, refreshNotes])
 
-      return null
-    })
-  }, [clearNoteArmTimer])
+  const handleTrashClick = useCallback(async (noteId: string) => {
+    if (!window.measlyNotes || !persistenceReady) return
+    if (noteTransitionLockRef.current) return
+
+    noteTransitionLockRef.current = true
+    try {
+      await flushPendingSaveNow()
+      await applyProtectedNoteDestination(noteId, 'deleted')
+      await refreshNotes(activeNoteId ?? noteId)
+      if (activeNoteId === noteId) {
+        const nextActiveId = getNextActiveNoteIdAfterRemoval(noteId)
+        if (nextActiveId) {
+          await activateNote(nextActiveId)
+        } else {
+          setActiveNoteId(null)
+          setActiveNoteText('')
+        }
+      }
+    } catch (error) {
+      console.error('Failed to trash note', error)
+    } finally {
+      noteTransitionLockRef.current = false
+    }
+  }, [activeNoteId, activateNote, applyProtectedNoteDestination, flushPendingSaveNow, persistenceReady, refreshNotes])
 
   const purgeDeletedNotesPermanently = useCallback(async () => {
     if (!window.measlyNotes) return
@@ -11496,6 +11588,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                               onArmedLeftClick={handleArmedNoteLeftClick}
                               onSaveClick={handleSaveButtonClick}
                               onCloseClick={handleCloseButtonClick}
+                              onArchiveClick={handleArchiveClick}
+                              onTrashClick={handleTrashClick}
                               armedAction={armedNoteActionById.get(note.id) ?? null}
                               onRightPressStart={handleNoteRightPressStart}
                               onRightPressEnd={handleNoteRightPressEnd}
@@ -11563,7 +11657,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                           armedNoteActionById={armedNoteActionById}
                           onNoteRightPressStart={handleNoteRightPressStart}
                           onNoteRightPressEnd={handleNoteRightPressEnd}
-                          onNoteArmHoverLeave={handleNoteArmHoverLeave}
                         />
                       </div>
                     )}

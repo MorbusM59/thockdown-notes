@@ -167,6 +167,10 @@
   --color-border-blockquote:  #00000044;
   --color-border-hr:          #00000044;
 
+  /* Note card colors */
+  --bg-menu-card:           #FFFFFF44;
+  --bg-menu-card-active:    #FFFFFF88;
+
   /* ---------------------------------------------------------------------------
      1b. Shadow System
      Convention: regular = outer glow, inverted = inset/recessed.
@@ -937,16 +941,16 @@ button.active,
   z-index: 2;
 }
 
-.notes-list.is-filtered.date-view .note-list-item {
+.notes-list.is-filtered.date-view .note-list-item .note-list-column-primary{
   position: relative;
   border-top-right-radius: 0;
 }
 
-.notes-list.is-filtered.date-view .note-list-item::after {
+.notes-list.is-filtered.date-view .note-list-item .note-list-column-primary::after {
   content: "";
   position: absolute;
-  top: 2px;
-  right: 2px;
+  top: 4px;
+  right: 4px;
   width: 12px;
   height: 12px;
   border-radius: 50%;
@@ -974,9 +978,9 @@ button.active,
   pointer-events: none;
 }
 
-.notes-list.is-filtered.date-view .note-list-item.is-active::after {
-  top: 3px;
-  right: 3px;
+.notes-list.is-filtered.date-view .note-list-item.is-active .note-list-column-primary::after {
+  top: 5px;
+  right: 5px;
   width: 10px;
   height: 10px;
   border: 1px none var(--color-border-highlight);
@@ -1171,14 +1175,7 @@ button.active,
   display:         flex;
   align-items:     center;
   justify-content: space-between;
-  border-radius:   var(--border-radius-regular);
-  background:      #ffffff55;
   cursor:          default;
-  border:          1px solid var(--color-border-highlight);
-  box-shadow:      var(--box-shadow-regular);
-}
-
-.note-list-item.is-external:not(.is-tree-card) {
   background: transparent;
   border: none;
   box-shadow: none;
@@ -1198,7 +1195,7 @@ button.active,
   align-items: center;
   justify-content: center;
   border: 1px solid var(--color-border-highlight);
-  background: #ffffff55;
+  background: var(--bg-menu-card);
   box-shadow: var(--box-shadow-regular);
   padding: 4px 8px;
   border-radius: var(--border-radius-regular);
@@ -1263,43 +1260,21 @@ button.active,
   border: 1px solid var(--color-border-highlight)
 }
 
-.note-list-item.is-external .note-list-action-button {
+.note-list-item .note-list-action-button {
   width: 100%;
   height: 100%;
 }
 
-.note-list-item.is-external .note-list-content {
+.note-list-item .note-list-content {
   width: 100%;
 }
 
-.note-list-item.is-external .note-list-meta-row {
+.note-list-item .note-list-meta-row {
   margin-top: 3px;
 }
 
-.note-list-item.is-active {
-  border-color: var(--btn-border-active);
-  background:   #ffffff11;
-  box-shadow:   var(--box-shadow-inverted-harsh);
-}
 
-/* Armed states — standard card */
-.note-list-item.is-armed-for-archiving,
-.note-list-item.is-armed-for-archiving:hover {
-  color: var(--color-archive);
-  background-color: var(--color-archive-bg);
-  border: 1px solid var(--color-archive-border);
-  outline: 1px solid var(--color-archive-glow);
-  transition: all 300ms ease-in;
-}
-
-.note-list-item.is-armed-for-deletion,
-.note-list-item.is-armed-for-deletion:hover {
-  color: var(--color-danger);
-  background-color: var(--color-danger-bg);
-  border: 1px solid var(--color-danger-border);
-  outline: 1px solid var(--color-danger-glow);
-  transition: all 200ms ease-out;
-}
+/* Armed states — tree card */
 
 .note-list-item.is-armed-for-archiving.is-tree-card,
 .note-list-item.is-armed-for-archiving.is-tree-card:hover,
@@ -1352,28 +1327,7 @@ button.active,
 /* Date view variant */
 .date-view .note-list-item {
   height:     var(--btn-square-large-size);
-  padding:    0 8px;
   box-sizing: border-box;
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.date-view .note-list-item:hover,
-.date-view .note-list-item.is-active {
-  background: rgba(255, 255, 255, 0.4);
-}
-
-.date-view .note-list-item.is-armed-for-archiving,
-.date-view .note-list-item.is-armed-for-archiving:hover,
-.date-view .note-list-item.is-armed-for-archiving.is-active,
-.date-view .note-list-item.is-armed-for-archiving.is-active:hover {
-  background-color: #dcebff;
-}
-
-.date-view .note-list-item.is-armed-for-deletion,
-.date-view .note-list-item.is-armed-for-deletion:hover,
-.date-view .note-list-item.is-armed-for-deletion.is-active,
-.date-view .note-list-item.is-armed-for-deletion.is-active:hover {
-  background-color: #ffe1e1;
 }
 
 .note-list-content {
