@@ -1876,10 +1876,7 @@ const NoteListItem = memo(function NoteListItem({
                   onClick={handleArchiveClick}
                   onMouseDown={(event) => event.stopPropagation()}
                   onMouseUp={(event) => event.stopPropagation()}
-                  onContextMenu={(event) => event.stopPropagation()}
-                >
-                  <span className="fa-solid fa-archive" aria-hidden="true" />
-                </button>
+                  onContextMenu={(event) => event.stopPropagation()}/>
               </div>
 
               <div className={`note-list-column note-list-column-action note-list-column-trash${isTrashButtonDisabled ? ' is-disabled' : ''}`}>
@@ -1892,10 +1889,7 @@ const NoteListItem = memo(function NoteListItem({
                   onClick={handleTrashClick}
                   onMouseDown={(event) => event.stopPropagation()}
                   onMouseUp={(event) => event.stopPropagation()}
-                  onContextMenu={(event) => event.stopPropagation()}
-                >
-                  <span className="fa-solid fa-trash" aria-hidden="true" />
-                </button>
+                  onContextMenu={(event) => event.stopPropagation()}/>
               </div>
             </>
           )}
