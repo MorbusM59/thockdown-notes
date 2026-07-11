@@ -81,7 +81,7 @@ Legend:
 4. `EXPLICIT` - Search supports text and `#tag` modes with dedicated handling.
    - Source ref: `main:src/components/Sidebar.tsx`, `main:src/main/database.ts`
 
-5. `EXPLICIT` - Two-step armed actions are used for destructive operations.
+5. `EXPLICIT` - Two-step primed actions are used for destructive operations.
    - Source ref: `main:src/components/Sidebar.tsx`
 
 ## 5. Tags and Classification

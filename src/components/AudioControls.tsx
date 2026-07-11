@@ -36,8 +36,8 @@ export const AudioControls = memo(function AudioControls({
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentSong, setCurrentSong] = useState<MusicSongEntry | null>(null)
   const [counts, setCounts] = useState<PlaylistCountsResult>({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 })
-  // Slot button that is currently "armed" for clearing (held right-click)
-  const [armedSlot, setArmedSlot] = useState<PlaylistSlot | null>(null)
+  // Slot button that is currently "primed" for clearing (held right-click)
+  const [primedSlot, setPrimedSlot] = useState<PlaylistSlot | null>(null)
 
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const seekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -186,14 +186,14 @@ export const AudioControls = memo(function AudioControls({
 
   // Held right-click on the favorability button = purge song.
   const favHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const favArmedRef = useRef(false)
+  const favPrimedRef = useRef(false)
 
   const handleFavPointerDown = useCallback((event: React.PointerEvent) => {
     if (event.button !== 2) return
     event.preventDefault()
-    favArmedRef.current = false
+    favPrimedRef.current = false
     favHoldTimerRef.current = setTimeout(() => {
-      favArmedRef.current = true
+      favPrimedRef.current = true
     }, HOLD_THRESHOLD_MS)
   }, [])
 
@@ -203,8 +203,8 @@ export const AudioControls = memo(function AudioControls({
       clearTimeout(favHoldTimerRef.current)
       favHoldTimerRef.current = null
     }
-    if (favArmedRef.current && currentSong) {
-      favArmedRef.current = false
+    if (favPrimedRef.current && currentSong) {
+      favPrimedRef.current = false
       musicPlayerService.stop()
       setIsPlaying(false)
       await window.measlyAudioPlayer?.purgeSong(currentSong.id)
@@ -295,20 +295,20 @@ export const AudioControls = memo(function AudioControls({
 
   const handleSlotRightClick = useCallback(async (event: MouseEvent, slot: PlaylistSlot) => {
     event.preventDefault()
-    if (armedSlot === slot) return // Already armed — wait for pointer-up.
+    if (primedSlot === slot) return // Already primed — wait for pointer-up.
     // Normal right-click = add more files.
     const files = await window.measlyAudioPlayer?.pickFiles()
     if (files && files.length > 0) {
       await window.measlyAudioPlayer?.addSongs(slot, files)
       await refreshCounts()
     }
-  }, [armedSlot, refreshCounts])
+  }, [primedSlot, refreshCounts])
 
   const handleSlotPointerDown = useCallback((event: React.PointerEvent, slot: PlaylistSlot) => {
     if (event.button !== 2) return
     event.preventDefault()
     holdTimerRef.current = setTimeout(() => {
-      setArmedSlot(slot)
+      setPrimedSlot(slot)
     }, HOLD_THRESHOLD_MS)
   }, [])
 
@@ -318,8 +318,8 @@ export const AudioControls = memo(function AudioControls({
       clearTimeout(holdTimerRef.current)
       holdTimerRef.current = null
     }
-    if (armedSlot === slot) {
-      setArmedSlot(null)
+    if (primedSlot === slot) {
+      setPrimedSlot(null)
       await window.measlyAudioPlayer?.clearPlaylist(slot)
       await refreshCounts()
       // Remove this slot from active set if it was active.
@@ -332,15 +332,15 @@ export const AudioControls = memo(function AudioControls({
         await advanceToNextSong()
       }
     }
-  }, [armedSlot, activeSlots, currentSong, onActiveSlotsChange, refreshCounts, advanceToNextSong])
+  }, [primedSlot, activeSlots, currentSong, onActiveSlotsChange, refreshCounts, advanceToNextSong])
 
   const handleSlotPointerLeave = useCallback((slot: PlaylistSlot) => {
     if (holdTimerRef.current) {
       clearTimeout(holdTimerRef.current)
       holdTimerRef.current = null
     }
-    if (armedSlot === slot) setArmedSlot(null)
-  }, [armedSlot])
+    if (primedSlot === slot) setPrimedSlot(null)
+  }, [primedSlot])
 
   const handleSlotShiftRightClick = useCallback(async (event: MouseEvent, slot: PlaylistSlot) => {
     if (!event.shiftKey) return
@@ -440,16 +440,16 @@ export const AudioControls = memo(function AudioControls({
         {SLOTS.map((slot) => {
           const isEmpty = counts[slot] === 0
           const isActive = activeSlots.includes(slot)
-          const isArmed = armedSlot === slot
+          const isPrimed = primedSlot === slot
           return (
             <button
               key={slot}
               type="button"
-              className={`audio-ctrl-btn audio-playlist-btn${isActive ? ' is-active' : ''}${isArmed ? ' is-armed' : ''}${isEmpty ? ' is-empty' : ''}`}
+              className={`audio-ctrl-btn audio-playlist-btn${isActive ? ' is-active' : ''}${isPrimed ? ' is-primed' : ''}${isEmpty ? ' is-empty' : ''}`}
               title={
                 isEmpty
                   ? `${PLAYLIST_SLOT_THEMES[slot]}: empty — click to add files`
-                  : isArmed
+                  : isPrimed
                     ? `${PLAYLIST_SLOT_THEMES[slot]}: release to clear all ${counts[slot]} songs`
                     : `${PLAYLIST_SLOT_THEMES[slot]}: ${counts[slot]} song${counts[slot] !== 1 ? 's' : ''}${isActive ? ' (active)' : ''}`
               }

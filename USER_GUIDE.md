@@ -68,7 +68,7 @@ The app centers on three primary areas:
 
 ### Managing tags
 - Click a tag once to arm deletion.
-- Click the armed tag again to delete it immediately.
+- Click the primed tag again to delete it immediately.
 - Drag tags to reorder them.
 - Protected tags like `deleted` and `archived` cannot be created from the tag input and are managed through sidebar actions.
 

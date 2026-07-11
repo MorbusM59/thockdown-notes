@@ -47,7 +47,7 @@
 
    7.  Tag System
        7a. Tag input area
-       7b. Tag pills (active / protected / armed)
+       7b. Tag pills (active / protected / primed)
        7c. Suggested tags
 
    8.  Toolbar
@@ -904,10 +904,10 @@ button.active,
   line-height:     1;
 }
 
-.icon-btn.btn-deleted.is-armed-for-deletion,
-.icon-btn.btn-deleted.is-armed-for-deletion:hover,
-.icon-btn.btn-deleted.is-armed-for-deletion.is-active,
-.icon-btn.btn-deleted.is-armed-for-deletion.is-active:hover {
+.icon-btn.btn-deleted.is-primed-for-deletion,
+.icon-btn.btn-deleted.is-primed-for-deletion:hover,
+.icon-btn.btn-deleted.is-primed-for-deletion.is-active,
+.icon-btn.btn-deleted.is-primed-for-deletion.is-active:hover {
   background-color: #FF000022;
   transition: all 300ms;
 }
@@ -1326,12 +1326,12 @@ button.active,
   margin-top: 3px;
 }
 
-/* Armed states — tree card */
+/* Primed states — tree card */
 
-.note-list-item.is-armed-for-archiving.is-tree-card,
-.note-list-item.is-armed-for-archiving.is-tree-card:hover,
-.note-list-item.is-armed-for-archiving.is-tree-card.is-active,
-.note-list-item.is-armed-for-archiving.is-tree-card.is-active:hover {
+.note-list-item.is-primed-for-archiving.is-tree-card,
+.note-list-item.is-primed-for-archiving.is-tree-card:hover,
+.note-list-item.is-primed-for-archiving.is-tree-card.is-active,
+.note-list-item.is-primed-for-archiving.is-tree-card.is-active:hover {
   color: var(--color-archive);
   background-color: var(--color-archive-bg);
   border: 1px solid var(--color-archive-border);
@@ -1339,10 +1339,10 @@ button.active,
   transition: all 300ms ease-in;
 }
 
-.note-list-item.is-armed-for-deletion.is-tree-card,
-.note-list-item.is-armed-for-deletion.is-tree-card:hover,
-.note-list-item.is-armed-for-deletion.is-tree-card.is-active,
-.note-list-item.is-armed-for-deletion.is-tree-card.is-active:hover {
+.note-list-item.is-primed-for-deletion.is-tree-card,
+.note-list-item.is-primed-for-deletion.is-tree-card:hover,
+.note-list-item.is-primed-for-deletion.is-tree-card.is-active,
+.note-list-item.is-primed-for-deletion.is-tree-card.is-active:hover {
   color: var(--color-danger);
   background-color: var(--color-danger-bg);
   border: 1px solid var(--color-danger-border);
@@ -1614,7 +1614,7 @@ button.active,
   cursor: default;
 }
 
-.tag-pill.active.armed {
+.tag-pill.active.primed {
   background: var(--color-danger-bg);
   color:      var(--color-danger);
 }
@@ -2402,7 +2402,7 @@ color:           var(--color-text-80);
   min-height:          0;
 }
 
-.options-loadout-btn.armed {
+.options-loadout-btn.primed {
   background: var(--color-danger-bg);
   color:      var(--color-danger);
 }
@@ -3375,7 +3375,7 @@ body.pdf-exporting .markdown-preview img {
   color:        var(--color-text-base);
 }
 
-.audio-ctrl-btn.is-armed {
+.audio-ctrl-btn.is-primed {
   border-color: var(--color-danger);
   color:        var(--color-danger);
 }

@@ -289,7 +289,7 @@ const TEXTURE_SURFACE_ICONS: Record<TextureSurfaceKey, string> = {
 }
 
 type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find' | 'options'
-type NoteArmedAction = 'archive' | 'deletion'
+type NotePrimedAction = 'archive' | 'deletion'
 type ProtectedQuickReleaseAction = 'remove-archived' | 'remove-deleted' | null
 type TextDecorationFormat = 'bold' | 'italic' | 'strikethrough'
 type ViewStyleKey = 'modern' | 'narrow' | 'cute' | 'xkcd' | 'print'
@@ -1700,12 +1700,12 @@ type NoteListItemProps = {
   isActive: boolean
   isModified?: boolean
   onSelect: (noteId: string) => void
-  onArmedLeftClick: (noteId: string) => void
+  onPrimedLeftClick: (noteId: string) => void
   onSaveClick?: (noteId: string) => void
   onCloseClick?: (noteId: string) => void
   onArchiveClick?: (noteId: string) => void
   onTrashClick?: (noteId: string) => void
-  armedAction?: NoteArmedAction | null
+  primedAction?: NotePrimedAction | null
   onRightPressStart: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   onRightPressEnd: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   variant?: 'default' | 'tree'
@@ -1716,12 +1716,12 @@ const NoteListItem = memo(function NoteListItem({
   isActive,
   isModified = false,
   onSelect,
-  onArmedLeftClick,
+  onPrimedLeftClick,
   onSaveClick,
   onCloseClick,
   onArchiveClick,
   onTrashClick,
-  armedAction = null,
+  primedAction = null,
   onRightPressStart,
   onRightPressEnd,
   variant = 'default',
@@ -1730,15 +1730,15 @@ const NoteListItem = memo(function NoteListItem({
   const createdDate = isTreeVariant ? '' : formatCreatedDate(note.createdAtMs)
 
   const handleSelect = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    if (armedAction) {
+    if (primedAction) {
       event.preventDefault()
       event.stopPropagation()
-      onArmedLeftClick(note.id)
+      onPrimedLeftClick(note.id)
       return
     }
 
     onSelect(note.id)
-  }, [armedAction, note.id, onArmedLeftClick, onSelect])
+  }, [primedAction, note.id, onPrimedLeftClick, onSelect])
 
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -1807,7 +1807,7 @@ const NoteListItem = memo(function NoteListItem({
 
   return (
     <div
-      className={`note-list-item${isActive ? ' is-active' : ''}${isTreeVariant ? ' is-tree-card' : ''}${isModified ? ' is-modified' : ''}${isExternal ? ' is-external' : ''}${armedAction === 'archive' ? ' is-armed-for-archiving' : ''}${armedAction === 'deletion' ? ' is-armed-for-deletion' : ''}`}
+      className={`note-list-item${isActive ? ' is-active' : ''}${isTreeVariant ? ' is-tree-card' : ''}${isModified ? ' is-modified' : ''}${isExternal ? ' is-external' : ''}${primedAction === 'archive' ? ' is-primed-for-archiving' : ''}${primedAction === 'deletion' ? ' is-primed-for-deletion' : ''}`}
       data-note-id={note.id}
       role="option"
       aria-selected={isActive}
@@ -1917,8 +1917,8 @@ type CategoryTreeViewProps = {
   focusNoteRequestKey: number
   onCollapseChange: (next: { collapsedPrimary: string[]; collapsedSecondary: string[] }) => void
   onSelect: (noteId: string) => void
-  onArmedLeftClick: (noteId: string) => void
-  armedNoteActionById: Map<string, NoteArmedAction>
+  onPrimedLeftClick: (noteId: string) => void
+  primedNoteActionById: Map<string, NotePrimedAction>
   onNoteRightPressStart: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   onNoteRightPressEnd: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
 }
@@ -1931,8 +1931,8 @@ const CategoryTreeView = memo(function CategoryTreeView({
   focusNoteRequestKey,
   onCollapseChange,
   onSelect,
-  onArmedLeftClick,
-  armedNoteActionById,
+  onPrimedLeftClick,
+  primedNoteActionById,
   onNoteRightPressStart,
   onNoteRightPressEnd,
 }: CategoryTreeViewProps) {
@@ -2204,8 +2204,8 @@ const CategoryTreeView = memo(function CategoryTreeView({
                       note={note}
                       isActive={note.id === activeNoteId}
                       onSelect={onSelect}
-                      onArmedLeftClick={onArmedLeftClick}
-                      armedAction={armedNoteActionById.get(note.id) ?? null}
+                      onPrimedLeftClick={onPrimedLeftClick}
+                      primedAction={primedNoteActionById.get(note.id) ?? null}
                       onRightPressStart={onNoteRightPressStart}
                       onRightPressEnd={onNoteRightPressEnd}
                       variant="tree"
@@ -2300,7 +2300,7 @@ function App() {
   const [borderRadiusRegularPx, setBorderRadiusRegularPx] = useState<number>(DEFAULT_BORDER_RADIUS_REGULAR_PX)
   const [editorFontLoadVersion, setEditorFontLoadVersion] = useState(0)
   const [isTagMutationPending, setIsTagMutationPending] = useState(false)
-  const [deleteArmedTagName, setDeleteArmedTagName] = useState<string | null>(null)
+  const [deletePrimedTagName, setDeletePrimedTagName] = useState<string | null>(null)
   const [isCaretSuspended, setIsCaretSuspended] = useState(false)
   const [renamingTagName, setRenamingTagName] = useState<string | null>(null)
   const [draggedTagIndex, setDraggedTagIndex] = useState<number | null>(null)
@@ -2388,7 +2388,7 @@ function App() {
   const [appGridTextureSize, setAppGridTextureSize] = useState({ width: 1280, height: 720 })
   const [sidebarTextureSize, setSidebarTextureSize] = useState({ width: 512, height: 720 })
   const [editorStageTextureSize, setEditorStageTextureSize] = useState({ width: 1280, height: 720 })
-  const [armedColorSource, setArmedColorSource] = useState<ColorArmSource>({ kind: 'active-color' })
+  const [primedColorSource, setPrimedColorSource] = useState<ColorArmSource>({ kind: 'active-color' })
   const [activeColorHsva, setActiveColorHsva] = useState<HsvaColor>(() => {
     const seed = parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS.caret) ?? { r: 120, g: 115, b: 112, a: 0.8 }
     return rgbaToHsva(seed)
@@ -2457,8 +2457,8 @@ function App() {
   const sidebarScrollThumbHeightRef = useRef(0)
   const [isSidebarScrollThumbActive, setIsSidebarScrollThumbActive] = useState(false)
   const [isDraggingSidebarScrollThumb, setIsDraggingSidebarScrollThumb] = useState(false)
-  const [isTrashViewDeleteArmed, setIsTrashViewDeleteArmed] = useState(false)
-  const [armedNoteActionState, setArmedNoteActionState] = useState<{ noteId: string; action: NoteArmedAction } | null>(null)
+  const [isTrashViewDeletePrimed, setIsTrashViewDeletePrimed] = useState(false)
+  const [primedNoteActionState, setPrimedNoteActionState] = useState<{ noteId: string; action: NotePrimedAction } | null>(null)
   const noteArmTimerRef = useRef<{ noteId: string; button: 0 | 2; timeoutId: number; quickReleaseAction: ProtectedQuickReleaseAction | null } | null>(null)
   const trashButtonArmTimerRef = useRef<number | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
@@ -3010,7 +3010,7 @@ function App() {
     }
   }, [uiMode, applyEntryToLiveState])
 
-  const [armedCustomLayoutId, setArmedCustomLayoutId] = useState<number | null>(null)
+  const [primedCustomLayoutId, setPrimedCustomLayoutId] = useState<number | null>(null)
   const customLoadoutRightClickHoldTimerRef = useRef<number | null>(null)
   const customLoadoutHoldExportEntryIdRef = useRef<number | null>(null)
 
@@ -3023,7 +3023,7 @@ function App() {
 
   const triggerCustomLoadoutExport = useCallback(async (entryId: number) => {
     if (!window.measlyLoadouts) return
-    setArmedCustomLayoutId(null)
+    setPrimedCustomLayoutId(null)
     try {
       await window.measlyLoadouts.exportTdlEntry(entryId)
     } catch (error) {
@@ -3037,26 +3037,26 @@ function App() {
       const result = await window.measlyLoadouts.deleteCustom(entryId)
       setUiLoadoutEntries(result.entries)
       setLastCustomIdByMode(result.lastCustomIdByMode)
-      setArmedCustomLayoutId(null)
+      setPrimedCustomLayoutId(null)
     } catch (error) {
       console.error('Failed to delete custom UI loadout', error)
     }
   }, [])
 
   const handleCustomLoadoutSlotClick = useCallback((entryId: number) => {
-    if (armedCustomLayoutId === entryId) {
+    if (primedCustomLayoutId === entryId) {
       void handleDeleteCustomLoadout(entryId)
       return
     }
 
-    setArmedCustomLayoutId(null)
+    setPrimedCustomLayoutId(null)
     void selectLoadoutPreset(entryId)
-  }, [armedCustomLayoutId, handleDeleteCustomLoadout, selectLoadoutPreset])
+  }, [primedCustomLayoutId, handleDeleteCustomLoadout, selectLoadoutPreset])
 
   const handleCustomLoadoutSlotRightMouseDown = useCallback((event: MouseEvent<HTMLButtonElement>, entryId: number) => {
     if (event.button !== 2) return
 
-    setArmedCustomLayoutId(null)
+    setPrimedCustomLayoutId(null)
     clearCustomLoadoutRightClickHoldTimer()
     customLoadoutHoldExportEntryIdRef.current = null
     customLoadoutRightClickHoldTimerRef.current = window.setTimeout(() => {
@@ -3071,7 +3071,7 @@ function App() {
 
     if (customLoadoutRightClickHoldTimerRef.current !== null) {
       clearCustomLoadoutRightClickHoldTimer()
-      setArmedCustomLayoutId(entryId)
+      setPrimedCustomLayoutId(entryId)
       event.preventDefault()
       event.stopPropagation()
       return
@@ -3086,11 +3086,11 @@ function App() {
 
   const handleCustomLoadoutSlotMouseLeave = useCallback(() => {
     clearCustomLoadoutRightClickHoldTimer()
-    setArmedCustomLayoutId(null)
+    setPrimedCustomLayoutId(null)
   }, [clearCustomLoadoutRightClickHoldTimer])
 
   const handleCustomLoadoutSlotContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>, entryId: number) => {
-    if (customLoadoutHoldExportEntryIdRef.current === entryId || armedCustomLayoutId === entryId) {
+    if (customLoadoutHoldExportEntryIdRef.current === entryId || primedCustomLayoutId === entryId) {
       event.preventDefault()
       event.stopPropagation()
       if (customLoadoutHoldExportEntryIdRef.current === entryId) {
@@ -3098,7 +3098,7 @@ function App() {
       }
       return
     }
-  }, [armedCustomLayoutId])
+  }, [primedCustomLayoutId])
 
   const exportLayoutsTdl = useCallback(async () => {
     if (!window.measlyLoadouts) return
@@ -3255,7 +3255,7 @@ function App() {
     clearColorArmTimer()
 
     colorArmTimerRef.current = window.setTimeout(() => {
-      setArmedColorSource(source)
+      setPrimedColorSource(source)
       colorArmTimerRef.current = null
     }, COLOR_BUTTON_ARM_HOLD_MS)
   }, [clearColorArmTimer])
@@ -3709,13 +3709,13 @@ function App() {
     }
   }, [])
 
-  const armedNoteActionById = useMemo(() => {
-    if (!armedNoteActionState) {
-      return new Map<string, NoteArmedAction>()
+  const primedNoteActionById = useMemo(() => {
+    if (!primedNoteActionState) {
+      return new Map<string, NotePrimedAction>()
     }
 
-    return new Map<string, NoteArmedAction>([[armedNoteActionState.noteId, armedNoteActionState.action]])
-  }, [armedNoteActionState])
+    return new Map<string, NotePrimedAction>([[primedNoteActionState.noteId, primedNoteActionState.action]])
+  }, [primedNoteActionState])
 
   const clearNoteArmTimer = useCallback(() => {
     if (!noteArmTimerRef.current) return
@@ -5656,22 +5656,22 @@ ${markdownHtml}
   ])
 
   const handleTagChipClick = useCallback((tagName: string) => {
-    if (deleteArmedTagName === tagName) {
-      setDeleteArmedTagName(null)
+    if (deletePrimedTagName === tagName) {
+      setDeletePrimedTagName(null)
       void runActiveNoteTagMutation(async (noteId) => {
         await window.measlyNotes!.removeTagFromNote({ id: noteId, tagName })
       })
       return
     }
 
-    setDeleteArmedTagName(tagName)
-  }, [deleteArmedTagName, runActiveNoteTagMutation])
+    setDeletePrimedTagName(tagName)
+  }, [deletePrimedTagName, runActiveNoteTagMutation])
 
   const handleTagChipMouseLeave = useCallback((tagName: string) => {
-    if (deleteArmedTagName === tagName) {
-      setDeleteArmedTagName(null)
+    if (deletePrimedTagName === tagName) {
+      setDeletePrimedTagName(null)
     }
-  }, [deleteArmedTagName])
+  }, [deletePrimedTagName])
 
   const handleTagDragStart = useCallback((event: DragEvent<HTMLDivElement>, index: number) => {
     const tagName = orderedActiveTags[index] ?? ''
@@ -6004,7 +6004,7 @@ ${markdownHtml}
   }, [sidebarMode])
 
 
-  const executeArmedNoteAction = useCallback(async (noteId: string, action: NoteArmedAction) => {
+  const executePrimedNoteAction = useCallback(async (noteId: string, action: NotePrimedAction) => {
     if (!window.measlyNotes) return
     if (!persistenceReady) return
     if (noteTransitionLockRef.current) return
@@ -6133,9 +6133,9 @@ await flushPendingSaveNow()
     const isNoteArchived = summary ? isArchivedNote(summary) : false
     const isNoteDeleted = summary ? isDeletedNote(summary) : false
     if (isNoteArchived || isNoteDeleted) {
-      setArmedNoteActionState(null)
+      setPrimedNoteActionState(null)
     } else {
-      setArmedNoteActionState({ noteId, action: 'archive' })
+      setPrimedNoteActionState({ noteId, action: 'archive' })
     }
 
     const quickReleaseAction: ProtectedQuickReleaseAction = isNoteDeleted
@@ -6143,7 +6143,7 @@ await flushPendingSaveNow()
       : (isNoteArchived ? 'remove-archived' : null)
 
     const timeoutId = window.setTimeout(() => {
-      setArmedNoteActionState((previous) => {
+      setPrimedNoteActionState((previous) => {
         if (quickReleaseAction) {
           return {
             noteId,
@@ -6167,7 +6167,7 @@ await flushPendingSaveNow()
     }, NOTE_RIGHT_CLICK_HOLD_MS)
 
     noteArmTimerRef.current = { noteId, button: 2, timeoutId, quickReleaseAction }
-  }, [activeNoteId, armedNoteActionState, clearNoteArmTimer, closeExternalNoteWithoutSaving, currentExternalNoteHash, notes])
+  }, [activeNoteId, primedNoteActionState, clearNoteArmTimer, closeExternalNoteWithoutSaving, currentExternalNoteHash, notes])
 
 
   const handleNoteRightPressEnd = useCallback((noteId: string, event: MouseEvent<HTMLDivElement>) => {
@@ -6182,21 +6182,21 @@ await flushPendingSaveNow()
     clearNoteArmTimer()
 
     if (quickReleaseAction) {
-      setArmedNoteActionState(null)
+      setPrimedNoteActionState(null)
       void applyQuickProtectedRightClickAction(noteId, quickReleaseAction)
     }
   }, [applyQuickProtectedRightClickAction, clearNoteArmTimer])
 
-  const handleArmedNoteLeftClick = useCallback((noteId: string) => {
-    const armed = armedNoteActionState
-    if (!armed || armed.noteId !== noteId) {
+  const handlePrimedNoteLeftClick = useCallback((noteId: string) => {
+    const primed = primedNoteActionState
+    if (!primed || primed.noteId !== noteId) {
       return
     }
 
     clearNoteArmTimer()
-    setArmedNoteActionState(null)
-    void executeArmedNoteAction(noteId, armed.action)
-  }, [armedNoteActionState, clearNoteArmTimer, executeArmedNoteAction])
+    setPrimedNoteActionState(null)
+    void executePrimedNoteAction(noteId, primed.action)
+  }, [primedNoteActionState, clearNoteArmTimer, executePrimedNoteAction])
 
   const handleSaveButtonClick = useCallback(async (noteId: string) => {
     if (!isExternalNote(notes.find((note) => note.id === noteId)!)) {
@@ -6309,10 +6309,10 @@ await flushPendingSaveNow()
     event.preventDefault()
     event.stopPropagation()
     clearTrashButtonArmTimer()
-    setIsTrashViewDeleteArmed(false)
+    setIsTrashViewDeletePrimed(false)
 
     trashButtonArmTimerRef.current = window.setTimeout(() => {
-      setIsTrashViewDeleteArmed(true)
+      setIsTrashViewDeletePrimed(true)
       trashButtonArmTimerRef.current = null
     }, NOTE_RIGHT_CLICK_HOLD_MS)
   }, [clearTrashButtonArmTimer])
@@ -6325,7 +6325,7 @@ await flushPendingSaveNow()
     // Quick release before timeout should not arm the trash purge action.
     if (trashButtonArmTimerRef.current !== null) {
       clearTrashButtonArmTimer()
-      setIsTrashViewDeleteArmed(false)
+      setIsTrashViewDeletePrimed(false)
     }
   }, [clearTrashButtonArmTimer])
 
@@ -6335,8 +6335,8 @@ await flushPendingSaveNow()
   }, [])
 
   const handleViewModeButtonClick = useCallback((mode: SidebarMode) => {
-    if (mode === 'trash' && isTrashViewDeleteArmed) {
-      setIsTrashViewDeleteArmed(false)
+    if (mode === 'trash' && isTrashViewDeletePrimed) {
+      setIsTrashViewDeletePrimed(false)
       void purgeDeletedNotesPermanently()
       runSidebarMenuTransition('trash')
       return
@@ -6353,7 +6353,7 @@ await flushPendingSaveNow()
     }
 
     if (mode === 'find') {
-      setIsTrashViewDeleteArmed(false)
+      setIsTrashViewDeletePrimed(false)
       clearTrashButtonArmTimer()
       runSidebarMenuTransition('find')
       requestAnimationFrame(() => {
@@ -6363,13 +6363,13 @@ await flushPendingSaveNow()
       return
     }
 
-    setIsTrashViewDeleteArmed(false)
+    setIsTrashViewDeletePrimed(false)
     clearTrashButtonArmTimer()
     runSidebarMenuTransition(mode)
   }, [
     clearTrashButtonArmTimer,
     focusActiveNoteInSidebarMode,
-    isTrashViewDeleteArmed,
+    isTrashViewDeletePrimed,
     purgeDeletedNotesPermanently,
     runSidebarMenuTransition,
     sidebarMode,
@@ -9176,24 +9176,24 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }, [isSearchQueryCaseSensitive, selectedMonths, selectedYears, searchQuery])
 
   useEffect(() => {
-    setDeleteArmedTagName(null)
+    setDeletePrimedTagName(null)
   }, [activeNoteId, orderedActiveTags])
 
 
   useEffect(() => {
-    if (!armedNoteActionState) return
-    if (!notes.some((note) => note.id === armedNoteActionState.noteId)) {
+    if (!primedNoteActionState) return
+    if (!notes.some((note) => note.id === primedNoteActionState.noteId)) {
       clearNoteArmTimer()
-      setArmedNoteActionState(null)
+      setPrimedNoteActionState(null)
     }
-  }, [armedNoteActionState, clearNoteArmTimer, notes])
+  }, [primedNoteActionState, clearNoteArmTimer, notes])
 
   useEffect(() => {
-    if (!isTrashViewDeleteArmed) return
+    if (!isTrashViewDeletePrimed) return
     if (!notes.some((note) => isDeletedNote(note))) {
-      setIsTrashViewDeleteArmed(false)
+      setIsTrashViewDeletePrimed(false)
     }
-  }, [isTrashViewDeleteArmed, notes])
+  }, [isTrashViewDeletePrimed, notes])
 
   useEffect(() => {
     return () => {
@@ -9931,18 +9931,18 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           type="button"
           className={`btn-icon options-color-swatch${key === 'textBase' ? ' text-ui-icon' : ''}`}
           onClick={() => {
-            if (armedColorSource.kind === 'active-color') {
+            if (primedColorSource.kind === 'active-color') {
               applyActiveColorToElement(resolvedKey)
               return
             }
 
-            if (armedColorSource.kind === 'texture-preview') {
+            if (primedColorSource.kind === 'texture-preview') {
               updateHighlightColor(resolvedKey, hsvaToRgba(texturePreviewMaterial.color))
               return
             }
 
-            if (armedColorSource.kind === 'hsva') {
-              applyHsvaValueToElement(armedColorSource.key, resolvedKey)
+            if (primedColorSource.kind === 'hsva') {
+              applyHsvaValueToElement(primedColorSource.key, resolvedKey)
             }
           }}
           onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'element', key: resolvedKey }, event)}
@@ -9971,18 +9971,18 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         type="button"
         className="btn-icon options-color-swatch"
         onClick={() => {
-          if (armedColorSource.kind === 'active-color') {
+          if (primedColorSource.kind === 'active-color') {
             applyActiveColorToTexture(surface)
             return
           }
 
-          if (armedColorSource.kind === 'texture-preview') {
+          if (primedColorSource.kind === 'texture-preview') {
             applyTexturePreviewToSurface(surface)
             return
           }
 
-          if (armedColorSource.kind === 'hsva') {
-            applyHsvaValueToTexture(armedColorSource.key, surface)
+          if (primedColorSource.kind === 'hsva') {
+            applyHsvaValueToTexture(primedColorSource.key, surface)
           }
         }}
         onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'texture', key: surface }, event)}
@@ -10052,7 +10052,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <button
               key={`custom-${entry.id}`}
               type="button"
-              className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}${armedCustomLayoutId === entry.id ? ' armed' : ''}`}
+              className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}${primedCustomLayoutId === entry.id ? ' primed' : ''}`}
               title={`Custom Layout ${Math.abs(entry.id) - LOADOUT_FACTORY_PRESET_COUNT - 2}\nClick RMB to mark for deletion. \nHold RMB to export.`}
               onClick={() => {
                 handleCustomLoadoutSlotClick(entry.id)
@@ -10104,7 +10104,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           <div className="options-color-grid options-hsva-grid" role="group" aria-label="HSVA value controls">
             <button
               type="button"
-              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'h' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'h' ? ' active' : ''}`}
+              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'h' ? ' is-dragging' : ''}${primedColorSource.kind === 'hsva' && primedColorSource.key === 'h' ? ' active' : ''}`}
               style={{ background: hsvaDisplayColors.hColor }}
               title={`Hue: ${Math.round(activeColorHsva.h)}\n${activeColorHex}`}
               onPointerDown={(event) => {
@@ -10141,7 +10141,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             ><span className="options-hsva-glyph fa-solid fa-rainbow" aria-hidden="true" /></button>
             <button
               type="button"
-              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 's' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 's' ? ' active' : ''}`}
+              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 's' ? ' is-dragging' : ''}${primedColorSource.kind === 'hsva' && primedColorSource.key === 's' ? ' active' : ''}`}
               style={{ background: hsvaDisplayColors.sColor }}
               title={`Saturation: ${Math.round(activeColorHsva.s * 255)}\n${activeColorHex}`}
               onPointerDown={(event) => {
@@ -10178,7 +10178,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             ><span className="options-hsva-glyph fa-solid fa-droplet" aria-hidden="true" /></button>
             <button
               type="button"
-              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'v' ? ' is-dragging' : ''}${armedColorSource.kind === 'hsva' && armedColorSource.key === 'v' ? ' active' : ''}`}
+              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'v' ? ' is-dragging' : ''}${primedColorSource.kind === 'hsva' && primedColorSource.key === 'v' ? ' active' : ''}`}
               style={{ background: hsvaDisplayColors.vColor }}
               title={`Value: ${Math.round(activeColorHsva.v * 255)}\n${activeColorHex}`}
               onPointerDown={(event) => {
@@ -10221,7 +10221,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 'options-hsva-control',
                 'options-hsva-alpha',
                 hsvaDragState?.control === 'a' ? 'is-dragging' : '',
-                armedColorSource.kind === 'hsva' && armedColorSource.key === 'a' ? 'active' : '',
+                primedColorSource.kind === 'hsva' && primedColorSource.key === 'a' ? 'active' : '',
               ]
                 .filter(Boolean)
                 .join(' ')}
@@ -10261,7 +10261,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             ><span className="options-hsva-glyph fa-solid fa-eye" aria-hidden="true" /></button>
             <button
               type="button"
-              className={`btn-icon options-color-swatch options-active-color${armedColorSource.kind === 'active-color' ? ' active' : ''}`}
+              className={`btn-icon options-color-swatch options-active-color${primedColorSource.kind === 'active-color' ? ' active' : ''}`}
               title={`Active color:\n${activeColorHex}`}
               style={{ background: `linear-gradient(${activeColorCss}, ${activeColorCss}), var(--color-background-light)` }}
               onMouseDown={(event) => {
@@ -10284,7 +10284,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <div className="options-texture-preview-row">
               <button
                 type="button"
-                className={`btn-icon options-color-swatch options-active-color options-texture-preview${armedColorSource.kind === 'texture-preview' ? ' active' : ''}`}
+                className={`btn-icon options-color-swatch options-active-color options-texture-preview${primedColorSource.kind === 'texture-preview' ? ' active' : ''}`}
                 title={`Texture preview: ${texturePreviewHex}`}
                 style={{
                   '--texture-preview-color': texturePreviewTintCss,
@@ -10304,7 +10304,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   clearColorArmTimer()
                 }}
                 onClick={() => {
-                  setArmedColorSource({ kind: 'texture-preview' })
+                  setPrimedColorSource({ kind: 'texture-preview' })
                 }}
               />
             </div>
@@ -10470,18 +10470,18 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             onClick={() => {
               const target: EditorTextColorTargetKey = isPreviewMode ? 'editorRenderText' : 'editorEditText'
 
-              if (armedColorSource.kind === 'active-color') {
+              if (primedColorSource.kind === 'active-color') {
                 applyActiveColorToEditorText(target)
                 return
               }
 
-              if (armedColorSource.kind === 'texture-preview') {
+              if (primedColorSource.kind === 'texture-preview') {
                 updateEditorTextColor(target, hsvaToRgba(texturePreviewMaterial.color))
                 return
               }
 
-              if (armedColorSource.kind === 'hsva') {
-                applyHsvaValueToEditorText(armedColorSource.key, target)
+              if (primedColorSource.kind === 'hsva') {
+                applyHsvaValueToEditorText(primedColorSource.key, target)
               }
             }}
             onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'text', key: isPreviewMode ? 'editorRenderText' : 'editorEditText' }, event)}
@@ -11524,7 +11524,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   return (
                     <button
                       key={mode}
-                      className={`toggle-btn notes-mode-button icon-btn ${iconClassByMode[mode]}${isActive ? ' is-active' : ''}${mode === 'trash' && isTrashViewDeleteArmed ? ' is-armed-for-deletion' : ''}`}
+                      className={`toggle-btn notes-mode-button icon-btn ${iconClassByMode[mode]}${isActive ? ' is-active' : ''}${mode === 'trash' && isTrashViewDeletePrimed ? ' is-primed-for-deletion' : ''}`}
                       type="button"
                       role="tab"
                       aria-selected={isActive}
@@ -11542,7 +11542,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                       onMouseUp={mode === 'trash' ? handleTrashViewButtonMouseUp : undefined}
                       onMouseLeave={mode === 'trash' ? () => {
                         clearTrashButtonArmTimer()
-                        setIsTrashViewDeleteArmed(false)
+                        setIsTrashViewDeletePrimed(false)
                       } : undefined}
                     >
                       {mode === 'find' ? (
@@ -11579,12 +11579,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                               isActive={isActive}
                               isModified={isModified}
                               onSelect={handleSelectNote}
-                              onArmedLeftClick={handleArmedNoteLeftClick}
+                              onPrimedLeftClick={handlePrimedNoteLeftClick}
                               onSaveClick={handleSaveButtonClick}
                               onCloseClick={handleCloseButtonClick}
                               onArchiveClick={handleArchiveClick}
                               onTrashClick={handleTrashClick}
-                              armedAction={armedNoteActionById.get(note.id) ?? null}
+                              primedAction={primedNoteActionById.get(note.id) ?? null}
                               onRightPressStart={handleNoteRightPressStart}
                               onRightPressEnd={handleNoteRightPressEnd}
                             />
@@ -11647,8 +11647,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                           focusNoteRequestKey={sidebarMode === 'category' ? categoryFocusRequestKey : archiveFocusRequestKey}
                           onCollapseChange={sidebarMode === 'category' ? handleCategoryCollapseChange : handleArchiveCollapseChange}
                           onSelect={handleSelectNote}
-                          onArmedLeftClick={handleArmedNoteLeftClick}
-                          armedNoteActionById={armedNoteActionById}
+                          onPrimedLeftClick={handlePrimedNoteLeftClick}
+                          primedNoteActionById={primedNoteActionById}
                           onNoteRightPressStart={handleNoteRightPressStart}
                           onNoteRightPressEnd={handleNoteRightPressEnd}
                         />
@@ -11856,7 +11856,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                         return (
                           <div
                             key={tagName}
-                            className={`tag-pill active${deleteArmedTagName === tagName ? ' armed' : ''}${isProtected ? ` protected ${normalized}` : ''}`}
+                            className={`tag-pill active${deletePrimedTagName === tagName ? ' primed' : ''}${isProtected ? ` protected ${normalized}` : ''}`}
                             draggable={!isProtected}
                             onDragStart={(event) => handleTagDragStart(event, index)}
                             onDragEnd={handleTagDragEnd}
@@ -11869,7 +11869,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                             onClick={() => handleTagChipClick(tagName)}
                             onContextMenu={(event) => handleTagContextMenu(event, tagName)}
                             onMouseLeave={() => handleTagChipMouseLeave(tagName)}
-                            title={deleteArmedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion'}
+                            title={deletePrimedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion'}
                           >
                             <span className="tag-pill-label">
                               {tagName}
