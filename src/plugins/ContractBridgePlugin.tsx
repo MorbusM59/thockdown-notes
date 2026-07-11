@@ -70,6 +70,217 @@ interface ContractBridgePluginProps {
   } | null;
 }
 
+const SENTENCE_ENDING_PUNCTUATION = new Set(['.', '!', '?', ':']);
+
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+const isWhitespace = (char: string) => /\s/u.test(char);
+
+const isSentenceBoundary = (char: string) => char === '\n' || SENTENCE_ENDING_PUNCTUATION.has(char);
+
+const trimWhitespaceRange = (text: string, start: number, end: number) => {
+  let nextStart = start;
+  let nextEnd = end;
+
+  while (nextStart < nextEnd && isWhitespace(text[nextStart])) {
+    nextStart += 1;
+  }
+  while (nextEnd > nextStart && isWhitespace(text[nextEnd - 1])) {
+    nextEnd -= 1;
+  }
+
+  return { start: nextStart, end: nextEnd };
+};
+
+const trimMatchingAsteriskPairs = (text: string, start: number, end: number) => {
+  let nextStart = start;
+  let nextEnd = end;
+
+  while (
+    nextEnd - nextStart >= 3 &&
+    text[nextStart] === '*' &&
+    text[nextEnd - 1] === '*'
+  ) {
+    nextStart += 1;
+    nextEnd -= 1;
+  }
+
+  return { start: nextStart, end: nextEnd };
+};
+
+const PAIR_OPENERS: Record<string, string> = {
+  '[': ']',
+  '(': ')',
+  '{': '}',
+  '<': '>',
+  '"': '"',
+  "'": "'",
+};
+
+const findMatchingCloser = (
+  text: string,
+  openerIndex: number,
+  closer: string,
+): number | null => {
+  let balance = 0;
+  for (let index = openerIndex + 1; index < text.length; index += 1) {
+    const current = text[index];
+    if (current === text[openerIndex] && current !== closer) {
+      balance += 1;
+      continue;
+    }
+    if (current === closer) {
+      if (balance === 0) {
+        return index;
+      }
+      balance -= 1;
+    }
+  }
+  return null;
+};
+
+export const resolvePairAwareRange = (
+  text: string,
+  regularRange: { start: number; end: number },
+  currentSelection?: EditorSelectionState,
+) => {
+  const { start: rangeStart, end: rangeEnd } = regularRange;
+  if (rangeStart + 1 >= rangeEnd) {
+    return null;
+  }
+
+  const opener = text[rangeStart];
+  const closer = text[rangeEnd - 1];
+  const expectedCloser = PAIR_OPENERS[opener];
+  if (expectedCloser && expectedCloser === closer) {
+    const secondary = { start: rangeStart + 1, end: rangeEnd - 1 };
+
+    if (
+      currentSelection &&
+      !currentSelection.isCollapsed &&
+      currentSelection.start === secondary.start &&
+      currentSelection.end === secondary.end
+    ) {
+      return regularRange;
+    }
+
+    return secondary;
+  }
+
+  if (!currentSelection || currentSelection.isCollapsed) {
+    return null;
+  }
+
+  const searchStart = Math.min(currentSelection.start - 1, rangeEnd - 2);
+  for (let openerIndex = searchStart; openerIndex >= rangeStart; openerIndex -= 1) {
+    const openerChar = text[openerIndex];
+    const closerChar = PAIR_OPENERS[openerChar];
+    if (!closerChar) {
+      continue;
+    }
+
+    const closerIndex = findMatchingCloser(text, openerIndex, closerChar);
+    if (closerIndex === null) {
+      continue;
+    }
+    if (closerIndex < currentSelection.end || closerIndex > rangeEnd) {
+      continue;
+    }
+
+    const inner = { start: openerIndex + 1, end: closerIndex };
+    if (inner.start >= rangeStart && inner.end <= rangeEnd) {
+      if (
+        currentSelection.start === inner.start &&
+        currentSelection.end === inner.end
+      ) {
+        const outer = { start: openerIndex, end: closerIndex + 1 };
+        return outer.start >= rangeStart && outer.end <= rangeEnd
+          ? outer
+          : regularRange;
+      }
+      return inner;
+    }
+  }
+
+  return null;
+};
+
+const normalizeAnchor = (
+  text: string,
+  offset: number,
+  predicate: (char: string) => boolean,
+) => {
+  const safeLength = text.length;
+  if (safeLength === 0) {
+    return 0;
+  }
+
+  const initial = clamp(offset, 0, safeLength - 1);
+  if (!predicate(text[initial])) {
+    return initial;
+  }
+
+  let right = initial;
+  while (right < safeLength && predicate(text[right])) {
+    right += 1;
+  }
+  if (right < safeLength) {
+    return right;
+  }
+
+  let left = initial - 1;
+  while (left >= 0 && predicate(text[left])) {
+    left -= 1;
+  }
+  if (left >= 0) {
+    return left;
+  }
+
+  return clamp(offset, 0, safeLength);
+};
+
+
+export const resolveWordRange = (
+  text: string,
+  offset: number,
+  currentSelection?: EditorSelectionState,
+) => {
+  const safeLength = text.length;
+  if (safeLength === 0) {
+    return { start: 0, end: 0 };
+  }
+
+  const boundary = (char: string) => isWhitespace(char) || isSentenceBoundary(char);
+  const anchor = normalizeAnchor(text, offset, boundary);
+  if (anchor >= safeLength) {
+    return { start: safeLength, end: safeLength };
+  }
+
+  let start = anchor;
+  while (start > 0 && !boundary(text[start - 1])) {
+    start -= 1;
+  }
+
+  let end = anchor + 1;
+  while (end < safeLength && !boundary(text[end])) {
+    end += 1;
+  }
+
+  const whitespaceTrimmed = trimWhitespaceRange(text, start, end);
+  const regularRange = trimMatchingAsteriskPairs(
+    text,
+    whitespaceTrimmed.start,
+    whitespaceTrimmed.end,
+  );
+
+  const pairAware = resolvePairAwareRange(text, regularRange, currentSelection);
+  if (pairAware !== null) {
+    return pairAware;
+  }
+
+  return regularRange;
+};
+
 type SelectionScope = 'word' | 'sentence' | 'line' | 'block';
 
 function resolveChangeSource(tags: Set<string>): EditorTextChangeEvent['source'] {
@@ -180,101 +391,6 @@ export function ContractBridgePlugin({
     const rootEl = editor.getRootElement();
     if (!rootEl) return;
 
-    const SENTENCE_ENDING_PUNCTUATION = new Set(['.', '!', '?', ':']);
-
-    const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-
-    const isWhitespace = (char: string) => /\s/u.test(char);
-
-    const isSentenceBoundary = (char: string) => char === '\n' || SENTENCE_ENDING_PUNCTUATION.has(char);
-
-    const trimWhitespaceRange = (text: string, start: number, end: number) => {
-      let nextStart = start;
-      let nextEnd = end;
-
-      while (nextStart < nextEnd && isWhitespace(text[nextStart])) {
-        nextStart += 1;
-      }
-      while (nextEnd > nextStart && isWhitespace(text[nextEnd - 1])) {
-        nextEnd -= 1;
-      }
-
-      return { start: nextStart, end: nextEnd };
-    };
-
-    const trimMatchingAsteriskPairs = (text: string, start: number, end: number) => {
-      let nextStart = start;
-      let nextEnd = end;
-
-      // Remove only balanced outer markdown emphasis markers, e.g. *word*, **word**.
-      while (
-        nextEnd - nextStart >= 3 &&
-        text[nextStart] === '*' &&
-        text[nextEnd - 1] === '*'
-      ) {
-        nextStart += 1;
-        nextEnd -= 1;
-      }
-
-      return { start: nextStart, end: nextEnd };
-    };
-
-    const normalizeAnchor = (text: string, offset: number, predicate: (char: string) => boolean) => {
-      const safeLength = text.length;
-      if (safeLength === 0) {
-        return 0;
-      }
-
-      const initial = clamp(offset, 0, safeLength - 1);
-      if (!predicate(text[initial])) {
-        return initial;
-      }
-
-      let right = initial;
-      while (right < safeLength && predicate(text[right])) {
-        right += 1;
-      }
-      if (right < safeLength) {
-        return right;
-      }
-
-      let left = initial - 1;
-      while (left >= 0 && predicate(text[left])) {
-        left -= 1;
-      }
-      if (left >= 0) {
-        return left;
-      }
-
-      return clamp(offset, 0, safeLength);
-    };
-
-    const resolveWordRange = (text: string, offset: number) => {
-      const safeLength = text.length;
-      if (safeLength === 0) {
-        return { start: 0, end: 0 };
-      }
-
-      const boundary = (char: string) => isWhitespace(char) || isSentenceBoundary(char);
-      const anchor = normalizeAnchor(text, offset, boundary);
-      if (anchor >= safeLength) {
-        return { start: safeLength, end: safeLength };
-      }
-
-      let start = anchor;
-      while (start > 0 && !boundary(text[start - 1])) {
-        start -= 1;
-      }
-
-      let end = anchor + 1;
-      while (end < safeLength && !boundary(text[end])) {
-        end += 1;
-      }
-
-      const whitespaceTrimmed = trimWhitespaceRange(text, start, end);
-      return trimMatchingAsteriskPairs(text, whitespaceTrimmed.start, whitespaceTrimmed.end);
-    };
-
     const resolveSentenceRange = (text: string, offset: number) => {
       const safeLength = text.length;
       if (safeLength === 0) {
@@ -381,17 +497,21 @@ export function ContractBridgePlugin({
       scope: SelectionScope,
       text: string,
       offset: number,
+      currentSelection: EditorSelectionState | null,
     ) => {
+      let regularRange;
       if (scope === 'word') {
-        return resolveWordRange(text, offset);
+        regularRange = resolveWordRange(text, offset);
+      } else if (scope === 'sentence') {
+        regularRange = resolveSentenceRange(text, offset);
+      } else if (scope === 'line') {
+        regularRange = resolveLineRange(text, offset);
+      } else {
+        regularRange = resolveBlockRange(text, offset);
       }
-      if (scope === 'sentence') {
-        return resolveSentenceRange(text, offset);
-      }
-      if (scope === 'line') {
-        return resolveLineRange(text, offset);
-      }
-      return resolveBlockRange(text, offset);
+
+      const pairAware = resolvePairAwareRange(text, regularRange, currentSelection ?? undefined);
+      return pairAware ?? regularRange;
     };
 
     const resolveNextScope = (current: SelectionScope): SelectionScope => {
@@ -429,7 +549,7 @@ export function ContractBridgePlugin({
         const priorCycle = rightClickCycleRef.current;
         const clickedInsideCurrentSelection = !currentSelection.isCollapsed
           && clickOffset >= currentSelection.start
-          && clickOffset <= currentSelection.end;
+          && clickOffset < currentSelection.end;
         const canAdvanceScope = priorCycle !== null
           && clickedInsideCurrentSelection
           && priorCycle.start === currentSelection.start
@@ -440,7 +560,7 @@ export function ContractBridgePlugin({
           : 'word';
 
         let resolvedScope = scope;
-        let nextRange = resolveRangeForScope(resolvedScope, canonicalText, clickOffset);
+        let nextRange = resolveRangeForScope(resolvedScope, canonicalText, clickOffset, currentSelection);
 
         // Avoid consuming clicks on no-op intermediate levels, e.g. sentence == line.
         if (canAdvanceScope) {
@@ -451,7 +571,7 @@ export function ContractBridgePlugin({
 
           while (isSameRange(nextRange, currentRange) && resolvedScope !== 'block') {
             resolvedScope = resolveNextScope(resolvedScope);
-            nextRange = resolveRangeForScope(resolvedScope, canonicalText, clickOffset);
+            nextRange = resolveRangeForScope(resolvedScope, canonicalText, clickOffset, currentSelection);
           }
         }
 
