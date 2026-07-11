@@ -32,7 +32,7 @@ export type TimelineCurveOptions = {
   curveConstant?: number
 }
 
-const DEFAULT_CURVE_CONSTANT = 10
+const DEFAULT_CURVE_CONSTANT = 16
 
 /**
  * Maps a single age (ms) into a 0..1 ratio using a minutes-based base-2
