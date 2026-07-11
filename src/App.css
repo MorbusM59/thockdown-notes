@@ -833,11 +833,15 @@ button.active,
   display:         inline-flex;
   align-items:     center;
   justify-content: center;
-  border-radius:       6px;
+  border-radius:       var(--border-radius-regular);
   background-size:     auto;
   background-repeat:   no-repeat;
   background-position: center;
   position: relative;
+}
+
+.notes-sidebar .view-toggle .icon-btn.is-active {
+  box-shadow: var(--box-shadow-inverted-harsh);
 }
 
 .icon-btn {
@@ -1207,6 +1211,12 @@ button.active,
   padding: 8px;
 }
 
+.note-list-column:hover,
+.note-list-column.is-active:hover {
+  border: 1px solid var(--color-border-light-90);
+  background: var(--bg-menu-card-active);
+}
+
 .note-list-column.is-disabled {
   display: none;
 }
@@ -1258,10 +1268,6 @@ button.active,
 .note-list-column.note-list-column-action {
   box-shadow: none;
   border: none;
-}
-
-.note-list-item.is-active .note-list-column.note-list-column-action {
-  background: none;
 }
 
 .note-list-column.note-list-column-action .note-list-action-button {

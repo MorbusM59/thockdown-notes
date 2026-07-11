@@ -6154,32 +6154,35 @@ await flushPendingSaveNow()
       ? 'remove-deleted'
       : (isNoteArchived ? 'remove-archived' : null)
 
-    const timeoutId = window.setTimeout(() => {
-      setPrimedNoteActionState((previous) => {
-        if (quickReleaseAction) {
+    let timeoutId = 0
+    if (sidebarMode !== 'trash') {
+      timeoutId = window.setTimeout(() => {
+        setPrimedNoteActionState((previous) => {
+          if (quickReleaseAction) {
+            return {
+              noteId,
+              action: 'deletion',
+            }
+          }
+
+          if (!previous || previous.noteId !== noteId) {
+            return previous
+          }
+
           return {
             noteId,
             action: 'deletion',
           }
-        }
+        })
 
-        if (!previous || previous.noteId !== noteId) {
-          return previous
+        if (noteArmTimerRef.current?.noteId === noteId) {
+          noteArmTimerRef.current = null
         }
-
-        return {
-          noteId,
-          action: 'deletion',
-        }
-      })
-
-      if (noteArmTimerRef.current?.noteId === noteId) {
-        noteArmTimerRef.current = null
-      }
-    }, NOTE_RIGHT_CLICK_HOLD_MS)
+      }, NOTE_RIGHT_CLICK_HOLD_MS)
+    }
 
     noteArmTimerRef.current = { noteId, button: 2, timeoutId, quickReleaseAction }
-  }, [activeNoteId, primedNoteActionState, clearNoteArmTimer, closeExternalNoteWithoutSaving, currentExternalNoteHash, notes])
+  }, [activeNoteId, primedNoteActionState, clearNoteArmTimer, closeExternalNoteWithoutSaving, currentExternalNoteHash, notes, sidebarMode])
 
 
   const handleNoteRightPressEnd = useCallback((noteId: string, event: MouseEvent<HTMLDivElement>) => {
