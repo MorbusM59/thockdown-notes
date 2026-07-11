@@ -200,7 +200,9 @@ const trimStrayBoundingCharacters = (
     if (expectedCloser) {
       const matchIndex = findMatchingCloser(text, nextStart, expectedCloser);
       if (matchIndex !== null && matchIndex >= nextEnd) {
-        nextStart += 1;
+        if (matchIndex !== nextEnd || text[nextEnd] !== expectedCloser) {
+          nextStart += 1;
+        }
       }
     }
   }
@@ -211,7 +213,9 @@ const trimStrayBoundingCharacters = (
     if (expectedOpener) {
       const matchIndex = findMatchingOpener(text, nextEnd - 1, expectedOpener);
       if (matchIndex !== null && matchIndex < nextStart) {
-        nextEnd -= 1;
+        if (matchIndex !== nextStart - 1 || text[nextStart - 1] !== expectedOpener) {
+          nextEnd -= 1;
+        }
       }
     }
   }
@@ -260,6 +264,24 @@ export const resolvePairAwareRange = (
   }
 
   const searchStart = Math.min(currentSelection.start - 1, rangeEnd - 2);
+
+  // If the regular range is bounded immediately by a matching pair, and the
+  // current selection already covers the full inner content, allow the next
+  // expansion to wrap out to the enclosing pair.
+  if (rangeStart > 0 && rangeEnd < text.length) {
+    const enclosingOpener = text[rangeStart - 1];
+    const enclosingCloser = text[rangeEnd];
+    const expectedCloser = PAIR_OPENERS[enclosingOpener];
+    if (expectedCloser && expectedCloser === enclosingCloser) {
+      const inner = { start: rangeStart, end: rangeEnd };
+      if (
+        currentSelection.start === inner.start &&
+        currentSelection.end === inner.end
+      ) {
+        return { start: rangeStart - 1, end: rangeEnd + 1 };
+      }
+    }
+  }
   for (let openerIndex = searchStart; openerIndex >= rangeStart; openerIndex -= 1) {
     const openerChar = text[openerIndex];
     const closerChar = PAIR_OPENERS[openerChar];
@@ -282,9 +304,7 @@ export const resolvePairAwareRange = (
         currentSelection.end === inner.end
       ) {
         const outer = { start: openerIndex, end: closerIndex + 1 };
-        return outer.start >= rangeStart && outer.end <= rangeEnd
-          ? outer
-          : regularRange;
+        return outer;
       }
       return inner;
     }
@@ -375,7 +395,11 @@ export const resolveWordRange = (
 
 export type SelectionScope = 'word' | 'sentence' | 'line' | 'block';
 
-const resolveSentenceRange = (text: string, offset: number) => {
+const resolveSentenceRange = (
+  text: string,
+  offset: number,
+  currentSelection?: EditorSelectionState,
+) => {
   const safeLength = text.length;
   if (safeLength === 0) {
     return { start: 0, end: 0 };
@@ -383,6 +407,32 @@ const resolveSentenceRange = (text: string, offset: number) => {
 
   const anchor = normalizeAnchor(text, offset, isWhitespace);
   const safeAnchor = clamp(anchor, 0, Math.max(0, safeLength - 1));
+
+  let guardOpener = -1;
+  let guardCloser = safeLength;
+  for (let index = safeAnchor - 1; index >= 0; index -= 1) {
+    const char = text[index];
+    if (!isPairOpener(char)) {
+      continue;
+    }
+
+    const closerIndex = findMatchingCloser(text, index, PAIR_OPENERS[char]);
+    if (closerIndex !== null && closerIndex > safeAnchor) {
+      guardOpener = index;
+      guardCloser = closerIndex;
+      break;
+    }
+  }
+
+  if (
+    guardOpener >= 0 &&
+    currentSelection &&
+    !currentSelection.isCollapsed &&
+    currentSelection.start === guardOpener + 1 &&
+    currentSelection.end === guardCloser
+  ) {
+    return { start: guardOpener, end: guardCloser + 1 };
+  }
 
   let startBoundary = -1;
   let rightGuard = safeLength;
@@ -393,26 +443,26 @@ const resolveSentenceRange = (text: string, offset: number) => {
       break;
     }
 
-    if (isPairOpener(char)) {
-      const closerIndex = findMatchingCloser(text, index, PAIR_OPENERS[char]);
-      if (closerIndex !== null && closerIndex > safeAnchor) {
-        startBoundary = index;
-        rightGuard = closerIndex;
-        break;
-      }
+    if (index === guardOpener) {
+      startBoundary = index;
+      rightGuard = guardCloser;
+      break;
     }
   }
 
   let endBoundary = -1;
+  let endBoundaryIsGuard = false;
   for (let index = safeAnchor; index < safeLength; index += 1) {
     if (index >= rightGuard) {
       endBoundary = rightGuard;
+      endBoundaryIsGuard = true;
       break;
     }
 
     const char = text[index];
     if (isSentenceBoundary(char)) {
       endBoundary = index;
+      endBoundaryIsGuard = false;
       break;
     }
 
@@ -420,6 +470,7 @@ const resolveSentenceRange = (text: string, offset: number) => {
       const openerIndex = findMatchingOpener(text, index, REVERSE_PAIR_OPENERS[char]);
       if (openerIndex !== null && openerIndex < safeAnchor) {
         endBoundary = index;
+        endBoundaryIsGuard = false;
         if (openerIndex > startBoundary) {
           startBoundary = openerIndex;
         }
@@ -429,7 +480,9 @@ const resolveSentenceRange = (text: string, offset: number) => {
   }
 
   const start = startBoundary + 1;
-  const end = endBoundary >= 0 ? endBoundary + 1 : rightGuard;
+  const end = endBoundary >= 0
+    ? (endBoundaryIsGuard ? endBoundary : endBoundary + 1)
+    : rightGuard;
   return trimWhitespaceRange(text, start, end);
 };
 
@@ -527,7 +580,7 @@ export const resolveScopeRange = (
   if (scope === 'word') {
     regularRange = resolveWordRange(text, offset, currentSelection ?? undefined);
   } else if (scope === 'sentence') {
-    regularRange = resolveSentenceRange(text, offset);
+    regularRange = resolveSentenceRange(text, offset, currentSelection ?? undefined);
   } else if (scope === 'line') {
     regularRange = resolveLineRange(text, offset);
   } else {

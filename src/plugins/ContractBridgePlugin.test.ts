@@ -59,6 +59,23 @@ describe('resolveWordRange pair-aware expansion', () => {
     expect(result.range).toEqual({ start: 16, end: 32 });
   });
 
+  it('allows a single word inside parentheses to expand beyond the word when selecting a sentence', () => {
+    const text = '(word)';
+    const result = resolveScopeRange('sentence', text, 2, { anchor: 1, focus: 5, start: 1, end: 5, isCollapsed: false });
+
+    expect(result.range).toEqual({ start: 0, end: 6 });
+    expect(result.isPairAwareAdjustment).toBe(true);
+  });
+
+  it('expands a single parenthesized word from word to pair scope', () => {
+    const text = '(word)';
+    const selection = { anchor: 1, focus: 5, start: 1, end: 5, isCollapsed: false };
+    const result = resolveScopeRange('word', text, 2, selection);
+
+    expect(result.range).toEqual({ start: 0, end: 6 });
+    expect(result.isPairAwareAdjustment).toBe(true);
+  });
+
   it('marks a sentence scope as pair-aware adjustment when sentence expansion is clamped to the bracket interior', () => {
     const text = 'Test sentence (here is an inclusion) that can stop.';
     const selection = { anchor: 23, focus: 25, start: 23, end: 25, isCollapsed: false };
