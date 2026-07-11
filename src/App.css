@@ -177,6 +177,10 @@
   --bg-menu-card:           #FFFFFF44;
   --bg-menu-card-active:    #FFFFFF88;
 
+  /* Filters */
+  --filter-primed-delete:  invert(1) sepia() contrast(0.5) brightness(2);
+  --filter-primed-archive: sepia() grayscale();
+
   /* ---------------------------------------------------------------------------
      1b. Shadow System
      Convention: regular = outer glow, inverted = inset/recessed.
@@ -912,7 +916,7 @@ button.active,
 .icon-btn.btn-deleted.is-primed-for-deletion:hover,
 .icon-btn.btn-deleted.is-primed-for-deletion.is-active,
 .icon-btn.btn-deleted.is-primed-for-deletion.is-active:hover {
-  background-color: #FF000022;
+  filter: var(--filter-primed-delete);
   transition: all 300ms;
 }
 
@@ -1338,22 +1342,30 @@ button.active,
 .note-list-item.is-primed-for-archiving.is-tree-card:hover,
 .note-list-item.is-primed-for-archiving.is-tree-card.is-active,
 .note-list-item.is-primed-for-archiving.is-tree-card.is-active:hover {
-  color: var(--color-archive);
-  background-color: var(--color-archive-bg);
-  border: 1px solid var(--color-archive-border);
-  outline: 1px solid var(--color-archive-glow);
-  transition: all 300ms ease-in;
+  filter: var(--filter-primed-archive);
+  background-image: repeating-linear-gradient(
+  45deg,
+  rgba(0, 0, 0, 0.2) 0,
+  rgba(0, 0, 0, 0.2) 1px,
+  transparent 2px,
+  transparent 3px
+  );
+  transition: none;
 }
 
 .note-list-item.is-primed-for-deletion.is-tree-card,
 .note-list-item.is-primed-for-deletion.is-tree-card:hover,
 .note-list-item.is-primed-for-deletion.is-tree-card.is-active,
 .note-list-item.is-primed-for-deletion.is-tree-card.is-active:hover {
-  color: var(--color-danger);
-  background-color: var(--color-danger-bg);
-  border: 1px solid var(--color-danger-border);
-  outline: 1px solid var(--color-danger-glow);
-  transition: all 200ms ease-out;
+  filter: var(--filter-primed-delete);
+  background-image: repeating-linear-gradient(
+  45deg,
+  rgba(0, 0, 0, 0.2) 0,
+  rgba(0, 0, 0, 0.2) 1px,
+  transparent 2px,
+  transparent 3px
+  );
+  transition: none;
 }
 
 /* Tree card variant */
@@ -1621,8 +1633,7 @@ button.active,
 }
 
 .tag-pill.active.primed {
-  background: var(--color-danger-bg);
-  color:      var(--color-danger);
+  filter: var(--filter-primed-delete);
 }
 
 /* 7c. Suggested tags */
@@ -2409,8 +2420,7 @@ color:           var(--color-text-80);
 }
 
 .options-loadout-btn.primed {
-  background: var(--color-danger-bg);
-  color:      var(--color-danger);
+  filter: var(--filter-primed-delete);
 }
 
 /* 8h. HSVA drag cursor override */
@@ -3382,8 +3392,7 @@ body.pdf-exporting .markdown-preview img {
 }
 
 .audio-ctrl-btn.is-primed {
-  border-color: var(--color-danger);
-  color:        var(--color-danger);
+  filter: var(--filter-primed-delete);
 }
 
 .audio-ctrl-btn.is-empty {
