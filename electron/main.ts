@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, ipcMain, dialog, protocol } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain, dialog, protocol, shell } from 'electron'
 import type { Session } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -295,6 +295,18 @@ function registerIpcHandlers() {
   ipcMain.handle(APP_STATE_CHANNELS.saveAppState, async (_event, payload) => stateService!.saveAppState(payload));
   ipcMain.handle(APP_STATE_CHANNELS.loadWindowState, async () => stateService!.loadWindowState());
   ipcMain.handle(APP_STATE_CHANNELS.saveWindowState, async (_event, payload) => stateService!.saveWindowState(payload));
+
+  ipcMain.handle('open-external-url', async (_event, url: string) => {
+    if (typeof url !== 'string') return
+    try {
+      const parsed = new URL(url)
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'mailto:' || parsed.protocol === 'tel:') {
+        await shell.openExternal(url)
+      }
+    } catch {
+      // ignore invalid URLs
+    }
+  })
 
   ipcMain.handle(FILE_SYNC_CHANNELS.syncExistingNotes, async () => {
     if (!databaseService) {

@@ -813,12 +813,26 @@ const PREVIEW_MARKDOWN_COMPONENTS = {
       typeof children === 'string' &&
       children.trim() === normalizedHref.trim()
 
+    const handleExternalLinkClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+      event.preventDefault()
+      if (!normalizedHref) return
+      if (window.ipcRenderer && typeof window.ipcRenderer.invoke === 'function') {
+        void window.ipcRenderer.invoke('open-external-url', normalizedHref)
+      } else {
+        window.open(normalizedHref, '_blank', 'noopener,noreferrer')
+      }
+    }
+
     if (isLiteralHrefChild) {
       return <span>{children}</span>
     }
 
     if (isSafePreviewHref(normalizedHref)) {
-      return <a href={normalizedHref} target="_blank" rel="noopener noreferrer">{children}</a>
+      return (
+        <a href={normalizedHref} rel="noopener noreferrer" onClick={handleExternalLinkClick}>
+          {children}
+        </a>
+      )
     }
 
     return <span>{children}</span>
