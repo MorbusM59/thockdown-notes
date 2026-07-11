@@ -1708,6 +1708,7 @@ type NoteListItemProps = {
   primedAction?: NotePrimedAction | null
   onRightPressStart: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   onRightPressEnd: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
+  onMouseLeave?: (noteId: string) => void
   variant?: 'default' | 'tree'
 }
 
@@ -1724,6 +1725,7 @@ const NoteListItem = memo(function NoteListItem({
   primedAction = null,
   onRightPressStart,
   onRightPressEnd,
+  onMouseLeave,
   variant = 'default',
 }: NoteListItemProps) {
   const isTreeVariant = variant === 'tree'
@@ -1799,6 +1801,10 @@ const NoteListItem = memo(function NoteListItem({
     event.stopPropagation()
   }, [])
 
+  const handleMouseLeave = useCallback(() => {
+    onMouseLeave?.(note.id)
+  }, [note.id, onMouseLeave])
+
   const hasActionColumns = !isTreeVariant
   const isArchived = isArchivedNote(note)
   const isDeleted = isDeletedNote(note)
@@ -1815,6 +1821,7 @@ const NoteListItem = memo(function NoteListItem({
       onKeyDown={handleKeyDown}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseLeave}
       onContextMenu={handleContextMenu}
       tabIndex={0}
     >
@@ -1921,6 +1928,7 @@ type CategoryTreeViewProps = {
   primedNoteActionById: Map<string, NotePrimedAction>
   onNoteRightPressStart: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   onNoteRightPressEnd: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
+  onNoteMouseLeave?: (noteId: string) => void
 }
 
 const CategoryTreeView = memo(function CategoryTreeView({
@@ -1935,6 +1943,7 @@ const CategoryTreeView = memo(function CategoryTreeView({
   primedNoteActionById,
   onNoteRightPressStart,
   onNoteRightPressEnd,
+  onNoteMouseLeave,
 }: CategoryTreeViewProps) {
   const collapsedPrimary = useMemo(() => new Set(persistedCollapsedPrimary), [persistedCollapsedPrimary])
   const collapsedSecondary = useMemo(() => new Set(persistedCollapsedSecondary), [persistedCollapsedSecondary])
@@ -2208,6 +2217,7 @@ const CategoryTreeView = memo(function CategoryTreeView({
                       primedAction={primedNoteActionById.get(note.id) ?? null}
                       onRightPressStart={onNoteRightPressStart}
                       onRightPressEnd={onNoteRightPressEnd}
+                      onMouseLeave={onNoteMouseLeave}
                       variant="tree"
                     />
                   ))}
@@ -6186,6 +6196,13 @@ await flushPendingSaveNow()
       void applyQuickProtectedRightClickAction(noteId, quickReleaseAction)
     }
   }, [applyQuickProtectedRightClickAction, clearNoteArmTimer])
+
+  const handleNoteMouseLeave = useCallback((noteId: string) => {
+    if (primedNoteActionState?.noteId === noteId) {
+      setPrimedNoteActionState(null)
+    }
+    clearNoteArmTimer()
+  }, [primedNoteActionState, clearNoteArmTimer])
 
   const handlePrimedNoteLeftClick = useCallback((noteId: string) => {
     const primed = primedNoteActionState
@@ -11587,6 +11604,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                               primedAction={primedNoteActionById.get(note.id) ?? null}
                               onRightPressStart={handleNoteRightPressStart}
                               onRightPressEnd={handleNoteRightPressEnd}
+                              onMouseLeave={handleNoteMouseLeave}
                             />
                           )
                         })}
@@ -11651,6 +11669,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                           primedNoteActionById={primedNoteActionById}
                           onNoteRightPressStart={handleNoteRightPressStart}
                           onNoteRightPressEnd={handleNoteRightPressEnd}
+                          onNoteMouseLeave={handleNoteMouseLeave}
                         />
                       </div>
                     )}
