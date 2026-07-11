@@ -13,7 +13,9 @@
     "dist-electron",
     "assets/icon.ico",
     "assets/icon.icns",
-    "assets/icon.png"
+    "assets/icon.png",
+    "assets/md.ico",
+    "assets/txt.ico"
   ],
   "mac": {
     "target": [
@@ -49,13 +51,15 @@
       "ext": "md",
       "name": "Markdown Document",
       "description": "Thockdown Notes Markdown File",
-      "role": "Editor"
+      "role": "Editor",
+      "icon": "assets/md.ico"
     },
     {
       "ext": "txt",
       "name": "Text Document",
       "description": "Thockdown Notes File",
-      "role": "Editor"
+      "role": "Editor",
+      "icon": "assets/txt.ico"
     }
   ]
 }
