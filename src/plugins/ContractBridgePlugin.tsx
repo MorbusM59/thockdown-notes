@@ -385,23 +385,51 @@ const resolveSentenceRange = (text: string, offset: number) => {
   const safeAnchor = clamp(anchor, 0, Math.max(0, safeLength - 1));
 
   let startBoundary = -1;
+  let rightGuard = safeLength;
   for (let index = safeAnchor - 1; index >= 0; index -= 1) {
-    if (isSentenceBoundary(text[index])) {
+    const char = text[index];
+    if (isSentenceBoundary(char)) {
       startBoundary = index;
       break;
+    }
+
+    if (isPairOpener(char)) {
+      const closerIndex = findMatchingCloser(text, index, PAIR_OPENERS[char]);
+      if (closerIndex !== null && closerIndex > safeAnchor) {
+        startBoundary = index;
+        rightGuard = closerIndex;
+        break;
+      }
     }
   }
 
   let endBoundary = -1;
   for (let index = safeAnchor; index < safeLength; index += 1) {
-    if (isSentenceBoundary(text[index])) {
+    if (index >= rightGuard) {
+      endBoundary = rightGuard;
+      break;
+    }
+
+    const char = text[index];
+    if (isSentenceBoundary(char)) {
       endBoundary = index;
       break;
+    }
+
+    if (isPairCloser(char)) {
+      const openerIndex = findMatchingOpener(text, index, REVERSE_PAIR_OPENERS[char]);
+      if (openerIndex !== null && openerIndex < safeAnchor) {
+        endBoundary = index;
+        if (openerIndex > startBoundary) {
+          startBoundary = openerIndex;
+        }
+        break;
+      }
     }
   }
 
   const start = startBoundary + 1;
-  const end = endBoundary >= 0 ? endBoundary + 1 : safeLength;
+  const end = endBoundary >= 0 ? endBoundary + 1 : rightGuard;
   return trimWhitespaceRange(text, start, end);
 };
 

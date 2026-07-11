@@ -52,6 +52,13 @@ describe('resolveWordRange pair-aware expansion', () => {
     expect(regularSentence).toEqual({ start: 15, end: 35 });
   });
 
+  it('treats an opening parenthesis as a hard guard when selecting a sentence inside parentheses', () => {
+    const text = 'first sentence (second sentence. third sentence.)';
+    const result = resolveScopeRange('sentence', text, 23, null);
+
+    expect(result.range).toEqual({ start: 16, end: 32 });
+  });
+
   it('marks a sentence scope as pair-aware adjustment when sentence expansion is clamped to the bracket interior', () => {
     const text = 'Test sentence (here is an inclusion) that can stop.';
     const selection = { anchor: 23, focus: 25, start: 23, end: 25, isCollapsed: false };
