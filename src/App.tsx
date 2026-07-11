@@ -1709,6 +1709,7 @@ type NoteListItemProps = {
   onRightPressStart: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   onRightPressEnd: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   onMouseLeave?: (noteId: string) => void
+  isTrashMode?: boolean
   variant?: 'default' | 'tree'
 }
 
@@ -1726,6 +1727,7 @@ const NoteListItem = memo(function NoteListItem({
   onRightPressStart,
   onRightPressEnd,
   onMouseLeave,
+  isTrashMode = false,
   variant = 'default',
 }: NoteListItemProps) {
   const isTreeVariant = variant === 'tree'
@@ -1808,8 +1810,8 @@ const NoteListItem = memo(function NoteListItem({
   const hasActionColumns = !isTreeVariant
   const isArchived = isArchivedNote(note)
   const isDeleted = isDeletedNote(note)
-  const isArchiveButtonDisabled = !onArchiveClick || isArchived || isDeleted
-  const isTrashButtonDisabled = !onTrashClick || isDeleted
+  const isArchiveButtonDisabled = !onArchiveClick || isArchived || (!isTrashMode && isDeleted)
+  const isTrashButtonDisabled = !onTrashClick || (!isTrashMode && isDeleted)
 
   return (
     <div
@@ -1891,8 +1893,8 @@ const NoteListItem = memo(function NoteListItem({
                   type="button"
                   className="note-list-action-button note-list-action-button-trash"
                   disabled={isTrashButtonDisabled}
-                  aria-label={isTrashButtonDisabled ? 'Trash disabled' : 'Trash note'}
-                  title={isTrashButtonDisabled ? 'Trash disabled' : 'Trash note'}
+                  aria-label={isTrashButtonDisabled ? 'Trash disabled' : isTrashMode && isDeleted ? 'Permanently delete note' : 'Trash note'}
+                  title={isTrashButtonDisabled ? 'Trash disabled' : isTrashMode && isDeleted ? 'Permanently delete note' : 'Trash note'}
                   onClick={handleTrashClick}
                   onMouseDown={(event) => event.stopPropagation()}
                   onMouseUp={(event) => event.stopPropagation()}
@@ -6260,10 +6262,19 @@ await flushPendingSaveNow()
     if (!window.measlyNotes || !persistenceReady) return
     if (noteTransitionLockRef.current) return
 
+    const summary = notes.find((note) => note.id === noteId)
+    const isCurrentlyDeleted = summary ? isDeletedNote(summary) : false
+
     noteTransitionLockRef.current = true
     try {
       await flushPendingSaveNow()
-      await applyProtectedNoteDestination(noteId, 'deleted')
+
+      if (isCurrentlyDeleted) {
+        await window.measlyNotes.deleteNote({ id: noteId })
+      } else {
+        await applyProtectedNoteDestination(noteId, 'deleted')
+      }
+
       await refreshNotes(activeNoteId ?? noteId)
       if (activeNoteId === noteId) {
         const nextActiveId = getNextActiveNoteIdAfterRemoval(noteId)
@@ -6279,7 +6290,7 @@ await flushPendingSaveNow()
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [activeNoteId, activateNote, applyProtectedNoteDestination, flushPendingSaveNow, persistenceReady, refreshNotes])
+  }, [activeNoteId, activateNote, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes])
 
   const purgeDeletedNotesPermanently = useCallback(async () => {
     if (!window.measlyNotes) return
@@ -11601,6 +11612,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                               onCloseClick={handleCloseButtonClick}
                               onArchiveClick={handleArchiveClick}
                               onTrashClick={handleTrashClick}
+                              isTrashMode={sidebarMode === 'trash'}
                               primedAction={primedNoteActionById.get(note.id) ?? null}
                               onRightPressStart={handleNoteRightPressStart}
                               onRightPressEnd={handleNoteRightPressEnd}
