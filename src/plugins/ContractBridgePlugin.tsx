@@ -360,7 +360,146 @@ export const resolveWordRange = (
   return regularRange;
 };
 
-type SelectionScope = 'word' | 'sentence' | 'line' | 'block';
+export type SelectionScope = 'word' | 'sentence' | 'line' | 'block';
+
+const resolveSentenceRange = (text: string, offset: number) => {
+  const safeLength = text.length;
+  if (safeLength === 0) {
+    return { start: 0, end: 0 };
+  }
+
+  const anchor = normalizeAnchor(text, offset, isWhitespace);
+  const safeAnchor = clamp(anchor, 0, Math.max(0, safeLength - 1));
+
+  let startBoundary = -1;
+  for (let index = safeAnchor - 1; index >= 0; index -= 1) {
+    if (isSentenceBoundary(text[index])) {
+      startBoundary = index;
+      break;
+    }
+  }
+
+  let endBoundary = -1;
+  for (let index = safeAnchor; index < safeLength; index += 1) {
+    if (isSentenceBoundary(text[index])) {
+      endBoundary = index;
+      break;
+    }
+  }
+
+  const start = startBoundary + 1;
+  const end = endBoundary >= 0 ? endBoundary + 1 : safeLength;
+  return trimWhitespaceRange(text, start, end);
+};
+
+const resolveLineRange = (text: string, offset: number) => {
+  const safeLength = text.length;
+  if (safeLength === 0) {
+    return { start: 0, end: 0 };
+  }
+
+  const safeOffset = clamp(offset, 0, safeLength);
+  const start = text.lastIndexOf('\n', Math.max(0, safeOffset - 1)) + 1;
+  const endBoundary = text.indexOf('\n', safeOffset);
+  const end = endBoundary >= 0 ? endBoundary : safeLength;
+  return { start, end };
+};
+
+const resolveLineIndexForOffset = (lineStarts: number[], offset: number, textLength: number) => {
+  const safeOffset = clamp(offset, 0, textLength);
+  let lineIndex = 0;
+  for (let index = 0; index < lineStarts.length; index += 1) {
+    if (lineStarts[index] <= safeOffset) {
+      lineIndex = index;
+    } else {
+      break;
+    }
+  }
+  return lineIndex;
+};
+
+const resolveBlockRange = (text: string, offset: number) => {
+  const lines = text.split('\n');
+  if (lines.length === 0) {
+    return { start: 0, end: 0 };
+  }
+
+  const lineStarts: number[] = [];
+  let cursor = 0;
+  for (let index = 0; index < lines.length; index += 1) {
+    lineStarts.push(cursor);
+    cursor += lines[index].length;
+    if (index < lines.length - 1) {
+      cursor += 1;
+    }
+  }
+
+  const currentLineIndex = resolveLineIndexForOffset(lineStarts, offset, text.length);
+
+  let startLine = currentLineIndex;
+  while (startLine > 0 && lines[startLine - 1].trim().length > 0) {
+    startLine -= 1;
+  }
+
+  let endLine = currentLineIndex;
+  while (endLine < lines.length - 1 && lines[endLine + 1].trim().length > 0) {
+    endLine += 1;
+  }
+
+  const start = lineStarts[startLine];
+  const end = lineStarts[endLine] + lines[endLine].length;
+  return { start, end };
+};
+
+export const isSameRange = (
+  left: { start: number; end: number },
+  right: { start: number; end: number },
+) => left.start === right.start && left.end === right.end;
+
+const isPairAwareRewrap = (
+  text: string,
+  regularRange: { start: number; end: number },
+  currentSelection: EditorSelectionState | null,
+) => {
+  if (!currentSelection || currentSelection.isCollapsed) {
+    return false;
+  }
+
+  const opener = text[regularRange.start];
+  const closer = text[regularRange.end - 1];
+  const expectedCloser = PAIR_OPENERS[opener];
+  if (!expectedCloser || expectedCloser !== closer) {
+    return false;
+  }
+
+  const secondary = { start: regularRange.start + 1, end: regularRange.end - 1 };
+  return currentSelection.start === secondary.start && currentSelection.end === secondary.end;
+};
+
+export const resolveScopeRange = (
+  scope: SelectionScope,
+  text: string,
+  offset: number,
+  currentSelection: EditorSelectionState | null,
+) => {
+  let regularRange;
+  if (scope === 'word') {
+    regularRange = resolveWordRange(text, offset, currentSelection ?? undefined);
+  } else if (scope === 'sentence') {
+    regularRange = resolveSentenceRange(text, offset);
+  } else if (scope === 'line') {
+    regularRange = resolveLineRange(text, offset);
+  } else {
+    regularRange = resolveBlockRange(text, offset);
+  }
+
+  const pairAware = resolvePairAwareRange(text, regularRange, currentSelection ?? undefined);
+  const range = pairAware ?? regularRange;
+  const isPairAwareAdjustment = pairAware !== null && (
+    !isSameRange(pairAware, regularRange) || isPairAwareRewrap(text, regularRange, currentSelection)
+  );
+  return { range, isPairAwareAdjustment };
+};
 
 function resolveChangeSource(tags: Set<string>): EditorTextChangeEvent['source'] {
   if (tags.has('restore')) return 'programmatic';
@@ -471,94 +610,6 @@ export function ContractBridgePlugin({
     const rootEl = editor.getRootElement();
     if (!rootEl) return;
 
-    const resolveSentenceRange = (text: string, offset: number) => {
-      const safeLength = text.length;
-      if (safeLength === 0) {
-        return { start: 0, end: 0 };
-      }
-
-      const anchor = normalizeAnchor(text, offset, isWhitespace);
-      const safeAnchor = clamp(anchor, 0, Math.max(0, safeLength - 1));
-
-      let startBoundary = -1;
-      for (let index = safeAnchor - 1; index >= 0; index -= 1) {
-        if (isSentenceBoundary(text[index])) {
-          startBoundary = index;
-          break;
-        }
-      }
-
-      let endBoundary = -1;
-      for (let index = safeAnchor; index < safeLength; index += 1) {
-        if (isSentenceBoundary(text[index])) {
-          endBoundary = index;
-          break;
-        }
-      }
-
-      const start = startBoundary + 1;
-      const end = endBoundary >= 0 ? endBoundary + 1 : safeLength;
-      return trimWhitespaceRange(text, start, end);
-    };
-
-    const resolveLineRange = (text: string, offset: number) => {
-      const safeLength = text.length;
-      if (safeLength === 0) {
-        return { start: 0, end: 0 };
-      }
-
-      const safeOffset = clamp(offset, 0, safeLength);
-      const start = text.lastIndexOf('\n', Math.max(0, safeOffset - 1)) + 1;
-      const endBoundary = text.indexOf('\n', safeOffset);
-      const end = endBoundary >= 0 ? endBoundary : safeLength;
-      return { start, end };
-    };
-
-    const resolveLineIndexForOffset = (lineStarts: number[], offset: number, textLength: number) => {
-      const safeOffset = clamp(offset, 0, textLength);
-      let lineIndex = 0;
-      for (let index = 0; index < lineStarts.length; index += 1) {
-        if (lineStarts[index] <= safeOffset) {
-          lineIndex = index;
-        } else {
-          break;
-        }
-      }
-      return lineIndex;
-    };
-
-    const resolveBlockRange = (text: string, offset: number) => {
-      const lines = text.split('\n');
-      if (lines.length === 0) {
-        return { start: 0, end: 0 };
-      }
-
-      const lineStarts: number[] = [];
-      let cursor = 0;
-      for (let index = 0; index < lines.length; index += 1) {
-        lineStarts.push(cursor);
-        cursor += lines[index].length;
-        if (index < lines.length - 1) {
-          cursor += 1;
-        }
-      }
-
-      const currentLineIndex = resolveLineIndexForOffset(lineStarts, offset, text.length);
-
-      let startLine = currentLineIndex;
-      while (startLine > 0 && lines[startLine - 1].trim().length > 0) {
-        startLine -= 1;
-      }
-
-      let endLine = currentLineIndex;
-      while (endLine < lines.length - 1 && lines[endLine + 1].trim().length > 0) {
-        endLine += 1;
-      }
-
-      const start = lineStarts[startLine];
-      const end = lineStarts[endLine] + lines[endLine].length;
-      return { start, end };
-    };
 
     const toSelectionState = (start: number, end: number): EditorSelectionState => ({
       anchor: start,
@@ -568,31 +619,12 @@ export function ContractBridgePlugin({
       isCollapsed: start === end,
     });
 
-    const isSameRange = (
-      left: { start: number; end: number },
-      right: { start: number; end: number },
-    ) => left.start === right.start && left.end === right.end;
-
     const resolveRangeForScope = (
       scope: SelectionScope,
       text: string,
       offset: number,
       currentSelection: EditorSelectionState | null,
-    ) => {
-      let regularRange;
-      if (scope === 'word') {
-        regularRange = resolveWordRange(text, offset);
-      } else if (scope === 'sentence') {
-        regularRange = resolveSentenceRange(text, offset);
-      } else if (scope === 'line') {
-        regularRange = resolveLineRange(text, offset);
-      } else {
-        regularRange = resolveBlockRange(text, offset);
-      }
-
-      const pairAware = resolvePairAwareRange(text, regularRange, currentSelection ?? undefined);
-      return pairAware ?? regularRange;
-    };
+    ) => resolveScopeRange(scope, text, offset, currentSelection);
 
     const resolveNextScope = (current: SelectionScope): SelectionScope => {
       if (current === 'word') return 'sentence';
@@ -640,7 +672,9 @@ export function ContractBridgePlugin({
           : 'word';
 
         let resolvedScope = scope;
-        let nextRange = resolveRangeForScope(resolvedScope, canonicalText, clickOffset, currentSelection);
+        let nextRangeResult = resolveRangeForScope(resolvedScope, canonicalText, clickOffset, currentSelection);
+        let nextRange = nextRangeResult.range;
+        let nextRangeIsPairAwareAdjusted = nextRangeResult.isPairAwareAdjustment;
 
         // Avoid consuming clicks on no-op intermediate levels, e.g. sentence == line.
         if (canAdvanceScope) {
@@ -650,22 +684,16 @@ export function ContractBridgePlugin({
           };
 
           while (isSameRange(nextRange, currentRange) && resolvedScope !== 'block') {
+            if (nextRangeResult.isPairAwareAdjustment) {
+              break;
+            }
+
             resolvedScope = resolveNextScope(resolvedScope);
-            nextRange = resolveRangeForScope(resolvedScope, canonicalText, clickOffset, currentSelection);
+            nextRangeResult = resolveRangeForScope(resolvedScope, canonicalText, clickOffset, currentSelection);
+            nextRange = nextRangeResult.range;
+            nextRangeIsPairAwareAdjusted = nextRangeResult.isPairAwareAdjustment;
           }
         }
-
-        // A pair-aware expansion can land on a trivial "add the bracket pair back"
-        // step: exactly the current selection plus one matching bounding character
-        // on each side. That step doesn't represent genuine progress for the scope
-        // we asked for (e.g. sentence), so don't let it consume that scope level —
-        // flag it so the next click retries the same scope instead of skipping
-        // ahead (which would otherwise blow past sentence/line boundaries straight
-        // to a much larger range).
-        const isBracketRewrapOnly = !currentSelection.isCollapsed
-          && nextRange.start === currentSelection.start - 1
-          && nextRange.end === currentSelection.end + 1
-          && PAIR_OPENERS[canonicalText[nextRange.start]] === canonicalText[nextRange.end - 1];
 
         nextSelection = toSelectionState(nextRange.start, nextRange.end);
         const applied = applySelectionStateToDom(editableRoot, canonicalText, nextSelection);
@@ -677,7 +705,7 @@ export function ContractBridgePlugin({
           scope: resolvedScope,
           start: nextSelection.start,
           end: nextSelection.end,
-          retrySameScope: isBracketRewrapOnly,
+          retrySameScope: nextRangeIsPairAwareAdjusted,
         };
       });
 

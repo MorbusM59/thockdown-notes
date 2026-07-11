@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveWordRange, resolvePairAwareRange } from './ContractBridgePlugin';
+import { resolveWordRange, resolvePairAwareRange, resolveScopeRange } from './ContractBridgePlugin';
 
 describe('resolveWordRange pair-aware expansion', () => {
   it('selects text inside brackets when the regular word expansion includes the pair', () => {
@@ -50,6 +50,24 @@ describe('resolveWordRange pair-aware expansion', () => {
     const regularSentence = resolvePairAwareRange(text, { start: 0, end: text.length }, selection);
 
     expect(regularSentence).toEqual({ start: 15, end: 35 });
+  });
+
+  it('marks a sentence scope as pair-aware adjustment when sentence expansion is clamped to the bracket interior', () => {
+    const text = 'Test sentence (here is an inclusion) that can stop.';
+    const selection = { anchor: 23, focus: 25, start: 23, end: 25, isCollapsed: false };
+    const result = resolveScopeRange('sentence', text, 24, selection);
+
+    expect(result.range).toEqual({ start: 15, end: 35 });
+    expect(result.isPairAwareAdjustment).toBe(true);
+  });
+
+  it('marks a word scope as pair-aware adjustment when the current selection equals the inner secondary range and rewraps to include the pair', () => {
+    const text = '[foo]';
+    const selection = { anchor: 1, focus: 4, start: 1, end: 4, isCollapsed: false };
+    const result = resolveScopeRange('word', text, 2, selection);
+
+    expect(result.range).toEqual({ start: 0, end: 5 });
+    expect(result.isPairAwareAdjustment).toBe(true);
   });
 
   it('excludes a single leading bounding character whose match lies outside the word range', () => {
