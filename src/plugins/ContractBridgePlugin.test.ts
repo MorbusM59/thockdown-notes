@@ -94,4 +94,19 @@ describe('resolveWordRange pair-aware expansion', () => {
 
     expect(range).toEqual({ start: 0, end: 4 });
   });
+
+  it('selects the inner word for the first click inside adjacent bracket groups', () => {
+    const text = '(worda)(wordb)';
+    const range = resolveWordRange(text, 2);
+
+    expect(range).toEqual({ start: 1, end: 6 });
+  });
+
+  it('expands from the inner word to include the bracket pair for adjacent groups', () => {
+    const text = '(worda)(wordb)';
+    const selection = { anchor: 1, focus: 6, start: 1, end: 6, isCollapsed: false };
+    const range = resolveWordRange(text, 2, selection);
+
+    expect(range).toEqual({ start: 0, end: 7 });
+  });
 });

@@ -108,6 +108,15 @@ const trimMatchingAsteriskPairs = (text: string, start: number, end: number) => 
   return { start: nextStart, end: nextEnd };
 };
 
+const isPairOpener = (char: string) => PAIR_OPENERS[char] !== undefined;
+const isPairCloser = (char: string) => REVERSE_PAIR_OPENERS[char] !== undefined;
+
+const isAdjacentPairBoundary = (text: string, index: number) => {
+  return index > 0 && index < text.length
+    && isPairCloser(text[index - 1])
+    && isPairOpener(text[index]);
+};
+
 const PAIR_OPENERS: Record<string, string> = {
   '[': ']',
   '(': ')',
@@ -336,12 +345,16 @@ export const resolveWordRange = (
   }
 
   let start = anchor;
-  while (start > 0 && !boundary(text[start - 1])) {
+  while (start > 0 && !boundary(text[start - 1]) && !isAdjacentPairBoundary(text, start)) {
     start -= 1;
   }
 
   let end = anchor + 1;
   while (end < safeLength && !boundary(text[end])) {
+    if (end + 1 < safeLength && isAdjacentPairBoundary(text, end + 1)) {
+      end += 1;
+      break;
+    }
     end += 1;
   }
 
