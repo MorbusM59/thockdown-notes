@@ -139,6 +139,77 @@ const findMatchingCloser = (
   return null;
 };
 
+const REVERSE_PAIR_OPENERS: Record<string, string> = Object.entries(PAIR_OPENERS).reduce(
+  (accumulator, [pairOpener, pairCloser]) => {
+    accumulator[pairCloser] = pairOpener;
+    return accumulator;
+  },
+  {} as Record<string, string>,
+);
+
+const findMatchingOpener = (
+  text: string,
+  closerIndex: number,
+  opener: string,
+): number | null => {
+  const closer = text[closerIndex];
+  let balance = 0;
+  for (let index = closerIndex - 1; index >= 0; index -= 1) {
+    const current = text[index];
+    if (current === closer && current !== opener) {
+      balance += 1;
+      continue;
+    }
+    if (current === opener) {
+      if (balance === 0) {
+        return index;
+      }
+      balance -= 1;
+    }
+  }
+  return null;
+};
+
+// Strips a single leading/trailing bounding character that doesn't pair up within
+// [start, end) — e.g. a word range that grabbed an adjacent "[" whose matching "]"
+// lives outside the current range. Matching is checked across the full text: a
+// character with no partner anywhere is left alone (it's not a stray pair edge,
+// just an unbalanced character), only one that closes/opens *outside* the range
+// gets trimmed. This gives us the intersection of the regular expansion and the
+// pair-aware expansion instead of blindly keeping the dangling character.
+const trimStrayBoundingCharacters = (
+  text: string,
+  start: number,
+  end: number,
+) => {
+  let nextStart = start;
+  let nextEnd = end;
+
+  if (nextEnd - nextStart > 0) {
+    const firstChar = text[nextStart];
+    const expectedCloser = PAIR_OPENERS[firstChar];
+    if (expectedCloser) {
+      const matchIndex = findMatchingCloser(text, nextStart, expectedCloser);
+      if (matchIndex !== null && matchIndex >= nextEnd) {
+        nextStart += 1;
+      }
+    }
+  }
+
+  if (nextEnd - nextStart > 0) {
+    const lastChar = text[nextEnd - 1];
+    const expectedOpener = REVERSE_PAIR_OPENERS[lastChar];
+    if (expectedOpener) {
+      const matchIndex = findMatchingOpener(text, nextEnd - 1, expectedOpener);
+      if (matchIndex !== null && matchIndex < nextStart) {
+        nextEnd -= 1;
+      }
+    }
+  }
+
+  return { start: nextStart, end: nextEnd };
+};
+
 export const resolvePairAwareRange = (
   text: string,
   regularRange: { start: number; end: number },
@@ -165,6 +236,14 @@ export const resolvePairAwareRange = (
     }
 
     return secondary;
+  }
+
+  // Neither end is a fully-balanced pair. Before falling back to the raw range,
+  // check whether one end is a lone bounding character whose partner exists but
+  // lies outside this range — if so, exclude it rather than dragging it along.
+  const strayTrimmed = trimStrayBoundingCharacters(text, rangeStart, rangeEnd);
+  if (strayTrimmed.start !== rangeStart || strayTrimmed.end !== rangeEnd) {
+    return strayTrimmed;
   }
 
   if (!currentSelection || currentSelection.isCollapsed) {
@@ -342,6 +421,7 @@ export function ContractBridgePlugin({
     scope: SelectionScope;
     start: number;
     end: number;
+    retrySameScope: boolean;
   } | null>(null);
   const onTextChangeRef = useRef(onTextChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
@@ -556,7 +636,7 @@ export function ContractBridgePlugin({
           && priorCycle.end === currentSelection.end;
 
         const scope = canAdvanceScope && priorCycle !== null
-          ? resolveNextScope(priorCycle.scope)
+          ? (priorCycle.retrySameScope ? priorCycle.scope : resolveNextScope(priorCycle.scope))
           : 'word';
 
         let resolvedScope = scope;
@@ -575,6 +655,18 @@ export function ContractBridgePlugin({
           }
         }
 
+        // A pair-aware expansion can land on a trivial "add the bracket pair back"
+        // step: exactly the current selection plus one matching bounding character
+        // on each side. That step doesn't represent genuine progress for the scope
+        // we asked for (e.g. sentence), so don't let it consume that scope level —
+        // flag it so the next click retries the same scope instead of skipping
+        // ahead (which would otherwise blow past sentence/line boundaries straight
+        // to a much larger range).
+        const isBracketRewrapOnly = !currentSelection.isCollapsed
+          && nextRange.start === currentSelection.start - 1
+          && nextRange.end === currentSelection.end + 1
+          && PAIR_OPENERS[canonicalText[nextRange.start]] === canonicalText[nextRange.end - 1];
+
         nextSelection = toSelectionState(nextRange.start, nextRange.end);
         const applied = applySelectionStateToDom(editableRoot, canonicalText, nextSelection);
         if (!applied) {
@@ -585,6 +677,7 @@ export function ContractBridgePlugin({
           scope: resolvedScope,
           start: nextSelection.start,
           end: nextSelection.end,
+          retrySameScope: isBracketRewrapOnly,
         };
       });
 

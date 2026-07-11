@@ -51,4 +51,29 @@ describe('resolveWordRange pair-aware expansion', () => {
 
     expect(regularSentence).toEqual({ start: 15, end: 35 });
   });
+
+  it('excludes a single leading bounding character whose match lies outside the word range', () => {
+    // "[" has no matching "]" within the word-level range, but one exists later
+    // in the text, so it should be treated as a stray character, not kept.
+    const text = 'value [count total items] processed';
+    const range = resolveWordRange(text, 8); // click inside "count"
+
+    expect(range).toEqual({ start: 7, end: 12 });
+  });
+
+  it('excludes a single trailing bounding character whose match lies outside the word range', () => {
+    // "]" at the end of "count]" has no opening "[" within the word-level range,
+    // but its match precedes it earlier in the text.
+    const text = '[first count] rest';
+    const range = resolveWordRange(text, 9); // click inside "count"
+
+    expect(range).toEqual({ start: 7, end: 12 });
+  });
+
+  it('keeps a lone bounding character when no matching partner exists anywhere in the text', () => {
+    const text = '[foo';
+    const range = resolveWordRange(text, 2);
+
+    expect(range).toEqual({ start: 0, end: 4 });
+  });
 });
