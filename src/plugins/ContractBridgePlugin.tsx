@@ -486,6 +486,52 @@ const resolveSentenceRange = (
   return trimWhitespaceRange(text, start, end);
 };
 
+const containsSentenceEndingCharacter = (
+  text: string,
+  start: number,
+  end: number,
+) => {
+  for (let index = start; index < end; index += 1) {
+    if (isSentenceBoundary(text[index])) {
+      return true;
+    }
+  }
+  return false;
+};
+
+// The natural sentence boundary around an anchor, ignoring bracket pairs
+// entirely. Used as a ceiling for "line" scope: until a selection actually
+// contains a sentence-ending character, we're not done growing within a
+// sentence yet, so "line" scope shouldn't be allowed to reach past it.
+const resolvePureSentenceRange = (text: string, offset: number) => {
+  const safeLength = text.length;
+  if (safeLength === 0) {
+    return { start: 0, end: 0 };
+  }
+
+  const anchor = clamp(normalizeAnchor(text, offset, isWhitespace), 0, Math.max(0, safeLength - 1));
+
+  let startBoundary = -1;
+  for (let index = anchor - 1; index >= 0; index -= 1) {
+    if (isSentenceBoundary(text[index])) {
+      startBoundary = index;
+      break;
+    }
+  }
+
+  let endBoundary = -1;
+  for (let index = anchor; index < safeLength; index += 1) {
+    if (isSentenceBoundary(text[index])) {
+      endBoundary = index;
+      break;
+    }
+  }
+
+  const start = startBoundary + 1;
+  const end = endBoundary >= 0 ? endBoundary + 1 : safeLength;
+  return trimWhitespaceRange(text, start, end);
+};
+
 const resolveLineRange = (text: string, offset: number) => {
   const safeLength = text.length;
   if (safeLength === 0) {
@@ -583,6 +629,22 @@ export const resolveScopeRange = (
     regularRange = resolveSentenceRange(text, offset, currentSelection ?? undefined);
   } else if (scope === 'line') {
     regularRange = resolveLineRange(text, offset);
+
+    // "Line" is only a meaningful step up from "sentence" once we've actually
+    // captured a full sentence (i.e. the selection contains a sentence-ending
+    // character). Until then — e.g. while still walking out through nested
+    // bracket pairs — cap the line-scope search sandbox at the natural
+    // sentence boundary so it can't blow past it into an unrelated sentence.
+    const hasSentenceEnding = currentSelection !== null
+      && containsSentenceEndingCharacter(text, currentSelection.start, currentSelection.end);
+
+    if (!hasSentenceEnding) {
+      const sentenceCeiling = resolvePureSentenceRange(text, offset);
+      regularRange = {
+        start: Math.max(regularRange.start, sentenceCeiling.start),
+        end: Math.min(regularRange.end, sentenceCeiling.end),
+      };
+    }
   } else {
     regularRange = resolveBlockRange(text, offset);
   }
