@@ -21,6 +21,7 @@ export interface TypingSoundPlayOptions {
   gain?: number
   echo?: TypingSoundEchoOptions
   frequencyScale?: number
+  flipChannels?: boolean
 }
 
 interface TypingSoundHistoryEntry {
@@ -34,6 +35,12 @@ interface TypingSoundHistoryEntry {
     echo?: TypingSoundEchoOptions
     bassDetune: number
     trebleDetune: number
+    frequencyScale: number
+    flipChannels: {
+      click: boolean
+      bass: boolean
+      treble: boolean
+    }
   }
 }
 
@@ -56,7 +63,15 @@ export class TypingSoundManager {
     C: [],
   }
   private reversedBufferGroups: Record<string, AudioBuffer[]> | null = null
+  private flippedBufferGroups: Record<string, AudioBuffer[]> | null = null
+  private reversedFlippedBufferGroups: Record<string, AudioBuffer[]> | null = null
   private reversedClickBuffersBySet: Record<TypingSoundSetId, AudioBuffer[]> | null = null
+  private flippedClickBuffersBySet: Record<TypingSoundSetId, AudioBuffer[]> = {
+    A: [],
+    B: [],
+    C: [],
+  }
+  private reversedFlippedClickBuffersBySet: Record<TypingSoundSetId, AudioBuffer[]> | null = null
   private activeKeySet: TypingSoundSetId = DEFAULT_TYPING_SOUND_SET
   private enabled = true
   private keyVariance = 0
@@ -140,9 +155,31 @@ export class TypingSoundManager {
         C: clickBuffersBySet.C.map((buffer) => this.createReversedBuffer(buffer, context)),
       }
 
+      this.flippedClickBuffersBySet = {
+        A: clickBuffersBySet.A.map((buffer) => this.createFlippedBuffer(buffer, context)),
+        B: clickBuffersBySet.B.map((buffer) => this.createFlippedBuffer(buffer, context)),
+        C: clickBuffersBySet.C.map((buffer) => this.createFlippedBuffer(buffer, context)),
+      }
+
+      this.reversedFlippedClickBuffersBySet = {
+        A: this.reversedClickBuffersBySet.A.map((buffer) => this.createFlippedBuffer(buffer, context)),
+        B: this.reversedClickBuffersBySet.B.map((buffer) => this.createFlippedBuffer(buffer, context)),
+        C: this.reversedClickBuffersBySet.C.map((buffer) => this.createFlippedBuffer(buffer, context)),
+      }
+
       this.reversedBufferGroups = {
         bass: [this.createReversedBuffer(bassBuffer, context)],
         treble: [this.createReversedBuffer(trebleBuffer, context)],
+      }
+
+      this.flippedBufferGroups = {
+        bass: [this.createFlippedBuffer(bassBuffer, context)],
+        treble: [this.createFlippedBuffer(trebleBuffer, context)],
+      }
+
+      this.reversedFlippedBufferGroups = {
+        bass: [this.createFlippedBuffer(this.reversedBufferGroups.bass[0], context)],
+        treble: [this.createFlippedBuffer(this.reversedBufferGroups.treble[0], context)],
       }
 
       this.loaded = true
@@ -178,10 +215,26 @@ export class TypingSoundManager {
         existing,
         ...this.recentKeySoundHistory.filter((entry) => entry.keyId !== keyId),
       ]
-      return existing.attributes
+      return {
+        ...existing.attributes,
+        frequencyScale: existing.attributes.frequencyScale ?? 1,
+        flipChannels: existing.attributes.flipChannels ?? {
+          click: Math.random() < 0.5,
+          bass: Math.random() < 0.5,
+          treble: Math.random() < 0.5,
+        },
+      }
     }
 
     const baseDetune = options?.detune ?? 0
+    const randomVariance = this.keyVariance > 0 ? (Math.random() * 2 - 1) * this.keyVariance : 0
+    const varianceScale = randomVariance >= 0 ? 1 + randomVariance : 1 / (1 - randomVariance)
+    const pitchScale = this.pitch >= 0 ? (100 + this.pitch) / 100 : 100 / (100 - this.pitch)
+    const flipChannels = {
+      click: Math.random() < 0.5,
+      bass: Math.random() < 0.5,
+      treble: Math.random() < 0.5,
+    }
     const attributes = {
       assetIndex: options?.assetIndex ?? Math.floor(Math.random() * TYPING_SOUND_ASSETS[this.activeKeySet].length),
       detune: options?.detune ?? 0,
@@ -191,6 +244,8 @@ export class TypingSoundManager {
       echo: options?.echo ? { ...options.echo } : undefined,
       bassDetune: baseDetune + this.getRandomLayerDetune(),
       trebleDetune: baseDetune + this.getRandomLayerDetune(),
+      frequencyScale: varianceScale * pitchScale,
+      flipChannels,
     }
 
     if (keyId) {
@@ -203,18 +258,10 @@ export class TypingSoundManager {
     return attributes
   }
 
-  private getLiveFrequencyScale(): number {
-    const randomVariance = this.keyVariance > 0 ? (Math.random() * 2 - 1) * this.keyVariance : 0
-    const varianceScale = randomVariance >= 0 ? 1 + randomVariance : 1 / (1 - randomVariance)
-    const pitchScale = this.pitch >= 0 ? (100 + this.pitch) / 100 : 100 / (100 - this.pitch)
-    return varianceScale * pitchScale
-  }
-
   async playRandomClick(options?: TypingSoundPlayOptions): Promise<void> {
     if (!this.enabled) return
 
     const soundAttributes = this.getSoundAttributes(options)
-    const frequencyScale = this.getLiveFrequencyScale()
 
     await this.playLayer('click', {
       ...options,
@@ -224,7 +271,8 @@ export class TypingSoundManager {
       reverse: soundAttributes.reverse,
       gain: soundAttributes.gain,
       echo: soundAttributes.echo,
-      frequencyScale,
+      frequencyScale: soundAttributes.frequencyScale,
+      flipChannels: soundAttributes.flipChannels.click,
     })
 
     void this.playLayer('bass', {
@@ -234,7 +282,8 @@ export class TypingSoundManager {
       reverse: soundAttributes.reverse,
       gain: soundAttributes.gain,
       echo: soundAttributes.echo,
-      frequencyScale,
+      frequencyScale: soundAttributes.frequencyScale,
+      flipChannels: soundAttributes.flipChannels.bass,
     })
     void this.playLayer('treble', {
       ...options,
@@ -243,7 +292,8 @@ export class TypingSoundManager {
       reverse: soundAttributes.reverse,
       gain: soundAttributes.gain,
       echo: soundAttributes.echo,
-      frequencyScale,
+      frequencyScale: soundAttributes.frequencyScale,
+      flipChannels: soundAttributes.flipChannels.treble,
     })
   }
 
@@ -253,10 +303,12 @@ export class TypingSoundManager {
 
   setTypingSoundVariance(amount: number): void {
     this.keyVariance = Math.max(0, Math.min(0.5, amount))
+    this.recentKeySoundHistory = []
   }
 
   setTypingSoundPitch(amount: number): void {
     this.pitch = Math.max(-100, Math.min(100, amount))
+    this.recentKeySoundHistory = []
   }
 
   setTypingSoundSet(setId: TypingSoundSetId): void {
@@ -310,7 +362,7 @@ export class TypingSoundManager {
     if (!buffer) return
 
     const source = this.audioContext.createBufferSource()
-    const selectedBuffer = options?.reverse ? this.getReversedBuffer(layerId, assetIndex) : buffer
+    const selectedBuffer = this.getLayerBuffer(layerId, assetIndex, options?.reverse ?? false, options?.flipChannels ?? false)
     if (!selectedBuffer) return
     source.buffer = selectedBuffer
 
@@ -409,6 +461,76 @@ export class TypingSoundManager {
     if (!this.reversedBufferGroups) return null
     const layerBuffers = this.reversedBufferGroups[layerId]
     return layerBuffers?.[assetIndex] ?? null
+  }
+
+  private getFlippedBuffer(layerId: string, assetIndex: number): AudioBuffer | null {
+    if (layerId === 'click') {
+      return this.flippedClickBuffersBySet[this.activeKeySet]?.[assetIndex] ?? null
+    }
+
+    if (!this.flippedBufferGroups) return null
+    const layerBuffers = this.flippedBufferGroups[layerId]
+    return layerBuffers?.[assetIndex] ?? null
+  }
+
+  private getReversedFlippedBuffer(layerId: string, assetIndex: number): AudioBuffer | null {
+    if (layerId === 'click') {
+      return this.reversedFlippedClickBuffersBySet?.[this.activeKeySet]?.[assetIndex] ?? null
+    }
+
+    if (!this.reversedFlippedBufferGroups) return null
+    const layerBuffers = this.reversedFlippedBufferGroups[layerId]
+    return layerBuffers?.[assetIndex] ?? null
+  }
+
+  private getLayerBuffer(layerId: string, assetIndex: number, reverse: boolean, flipChannels: boolean): AudioBuffer | null {
+    if (layerId === 'click') {
+      if (reverse && flipChannels) {
+        return this.getReversedFlippedBuffer(layerId, assetIndex)
+      }
+      if (reverse) {
+        return this.getReversedBuffer(layerId, assetIndex)
+      }
+      if (flipChannels) {
+        return this.getFlippedBuffer(layerId, assetIndex)
+      }
+      return this.clickBuffersBySet[this.activeKeySet]?.[assetIndex] ?? null
+    }
+
+    const baseLayer = this.bufferGroups[layerId]
+    if (!baseLayer) return null
+
+    if (reverse && flipChannels) {
+      return this.getReversedFlippedBuffer(layerId, assetIndex)
+    }
+    if (reverse) {
+      return this.getReversedBuffer(layerId, assetIndex)
+    }
+    if (flipChannels) {
+      return this.getFlippedBuffer(layerId, assetIndex)
+    }
+    return baseLayer[assetIndex]
+  }
+
+  private createFlippedBuffer(buffer: AudioBuffer, context: AudioContext): AudioBuffer {
+    const flipped = context.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate)
+    for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+      const sourceData = buffer.getChannelData(channel)
+      const flippedData = flipped.getChannelData(channel)
+      flippedData.set(sourceData)
+    }
+
+    if (buffer.numberOfChannels >= 2) {
+      const left = flipped.getChannelData(0)
+      const right = flipped.getChannelData(1)
+      for (let i = 0; i < buffer.length; i += 1) {
+        const temp = left[i]
+        left[i] = right[i]
+        right[i] = temp
+      }
+    }
+
+    return flipped
   }
 
   private async loadSingleBuffer(assetUrl: string, context: AudioContext): Promise<AudioBuffer> {
