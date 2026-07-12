@@ -190,15 +190,17 @@ export class TypingSoundManager {
 
   setLayerEnabled(layerId: string, enabled: boolean): void {
     const layer = this.layers[layerId]
-    if (layer) {
+    if (layer && layer.enabled !== enabled) {
       layer.enabled = enabled
+      this.recentKeySoundHistory = []
     }
   }
 
   setLayerGain(layerId: string, gain: number): void {
     const layer = this.layers[layerId]
-    if (layer) {
+    if (layer && layer.gain !== gain) {
       layer.gain = gain
+      this.recentKeySoundHistory = []
     }
   }
 
@@ -317,7 +319,10 @@ export class TypingSoundManager {
   }
 
   setTypingSoundEnabled(enabled: boolean): void {
-    this.enabled = enabled
+    if (this.enabled !== enabled) {
+      this.enabled = enabled
+      this.recentKeySoundHistory = []
+    }
   }
 
   setTypingSoundVariance(amount: number): void {
@@ -338,23 +343,31 @@ export class TypingSoundManager {
   }
 
   setReverbStrength(amount: number): void {
-    this.reverbStrength = Math.max(0, Math.min(1, amount))
-    if (this.reverbDryGain && this.reverbWetGain) {
-      this.reverbDryGain.gain.value = 1 - this.reverbStrength
-      this.reverbWetGain.gain.value = this.reverbStrength
+    const next = Math.max(0, Math.min(1, amount))
+    if (this.reverbStrength !== next) {
+      this.reverbStrength = next
+      this.recentKeySoundHistory = []
+      if (this.reverbDryGain && this.reverbWetGain) {
+        this.reverbDryGain.gain.value = 1 - this.reverbStrength
+        this.reverbWetGain.gain.value = this.reverbStrength
+      }
+      this.updateReverbImpulseResponse()
     }
-    this.updateReverbImpulseResponse()
   }
 
   setReverbSpace(amount: number): void {
-    this.reverbSpace = Math.max(0, Math.min(1, amount))
-    if (this.reverbFilter) {
-      const minFreq = 2000
-      const maxFreq = 12000
-      this.reverbFilter.frequency.value = minFreq + (maxFreq - minFreq) * (1 - this.reverbSpace)
-      this.reverbFilter.Q.value = 0.7 + this.reverbSpace * 0.8
+    const next = Math.max(0, Math.min(1, amount))
+    if (this.reverbSpace !== next) {
+      this.reverbSpace = next
+      this.recentKeySoundHistory = []
+      if (this.reverbFilter) {
+        const minFreq = 2000
+        const maxFreq = 12000
+        this.reverbFilter.frequency.value = minFreq + (maxFreq - minFreq) * (1 - this.reverbSpace)
+        this.reverbFilter.Q.value = 0.7 + this.reverbSpace * 0.8
+      }
+      this.updateReverbImpulseResponse()
     }
-    this.updateReverbImpulseResponse()
   }
 
   private getRandomLayerDetune(): number {
