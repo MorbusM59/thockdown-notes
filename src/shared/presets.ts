@@ -82,6 +82,8 @@ export const NEUTRAL_BASE: UiLayoutLoadout = {
   audioKeyVolume: 0.5,
   audioBassVolume: 0,
   audioTrebleVolume: 0,
+  audioKeyVariance: 0,
+  audioPitch: 0,
   audioReverbStrength: 0,
   audioReverbSpace: 0,
   typingSoundEnabled: false,

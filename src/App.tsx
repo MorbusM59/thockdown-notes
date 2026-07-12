@@ -1619,6 +1619,8 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     renderScrollMaxSpeedPxPerSec: Math.round(clamp(toFiniteNumber(source.renderScrollMaxSpeedPxPerSec, getRenderScrollMaxSpeedPxPerSec()), 1000, 100000)),
     renderScrollSkew: roundForSignature(clamp(toFiniteNumber(source.renderScrollSkew, getRenderScrollSkew()), RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX)),
     audioKeyVolume: clamp(toFiniteNumber(source.audioKeyVolume, 1), 0, 1),
+    audioKeyVariance: clamp(toFiniteNumber(source.audioKeyVariance, 0), 0, 0.5),
+    audioPitch: clamp(toFiniteNumber(source.audioPitch, 0), -100, 100),
     audioBassVolume: clamp(toFiniteNumber(source.audioBassVolume, 0), 0, 1),
     audioTrebleVolume: clamp(toFiniteNumber(source.audioTrebleVolume, 0), 0, 1),
     audioReverbStrength: clamp(toFiniteNumber(source.audioReverbStrength ?? source.audioReverbAmount, 0), 0, 1),
@@ -2400,6 +2402,8 @@ function App() {
   const [filterSaturate, setFilterSaturate] = useState(1)
   const [filterColorize, setFilterColorize] = useState(0)
   const [audioKeyVolume, setAudioKeyVolume] = useState(0.5)
+  const [audioKeyVariance, setAudioKeyVariance] = useState(0)
+  const [audioPitch, setAudioPitch] = useState(0)
   const [audioBassVolume, setAudioBassVolume] = useState(0)
   const [audioTrebleVolume, setAudioTrebleVolume] = useState(0)
   const [audioReverbStrength, setAudioReverbStrength] = useState(0)
@@ -2771,6 +2775,8 @@ function App() {
       editorGlyphPaddingPx,
       borderRadiusRegularPx,
       audioKeyVolume,
+      audioKeyVariance,
+      audioPitch,
       audioBassVolume,
       audioTrebleVolume,
       audioReverbStrength,
@@ -2839,6 +2845,8 @@ function App() {
     renderScrollMaxSpeedPxPerSec,
     renderScrollSkew,
     audioKeyVolume,
+    audioKeyVariance,
+    audioPitch,
     audioBassVolume,
     audioTrebleVolume,
     audioReverbStrength,
@@ -2872,6 +2880,8 @@ function App() {
     setRenderScrollMaxSpeedPxPerSec(clamp(loadout.renderScrollMaxSpeedPxPerSec, 1000, 100000))
     setRenderScrollSkew(clamp(loadout.renderScrollSkew, RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX))
     setAudioKeyVolume(clamp(loadout.audioKeyVolume, 0, 1))
+    setAudioKeyVariance(clamp(loadout.audioKeyVariance, 0, 0.5))
+    setAudioPitch(clamp(loadout.audioPitch, -100, 100))
     setAudioBassVolume(clamp(loadout.audioBassVolume, 0, 1))
     setAudioTrebleVolume(clamp(loadout.audioTrebleVolume, 0, 1))
     setAudioReverbStrength(clamp(loadout.audioReverbStrength, 0, 1))
@@ -3798,6 +3808,8 @@ function App() {
       filterSaturate,
       filterColorize,
       audioKeyVolume,
+      audioKeyVariance,
+      audioPitch,
       audioBassVolume,
       audioTrebleVolume,
       typingSoundSet,
@@ -6519,6 +6531,8 @@ await flushPendingSaveNow()
             setFilterSaturate(appState.menu.filterSaturate ?? 0.5)
             setFilterColorize(appState.menu.filterColorize ?? 0)
             setAudioKeyVolume(appState.menu.audioKeyVolume ?? 0.5)
+            setAudioKeyVariance(appState.menu.audioKeyVariance ?? 0)
+            setAudioPitch(appState.menu.audioPitch ?? 0)
             setAudioBassVolume(appState.menu.audioBassVolume ?? 0)
             setAudioTrebleVolume(appState.menu.audioTrebleVolume ?? 0)
             setAudioReverbStrength(appState.menu.audioReverbStrength ?? appState.menu.audioReverbAmount ?? 0)
@@ -6725,6 +6739,14 @@ await flushPendingSaveNow()
   useEffect(() => {
     typingSoundManager.setLayerGain('click', audioKeyVolume)
   }, [audioKeyVolume])
+
+  useEffect(() => {
+    typingSoundManager.setTypingSoundVariance(audioKeyVariance)
+  }, [audioKeyVariance])
+
+  useEffect(() => {
+    typingSoundManager.setTypingSoundPitch(audioPitch)
+  }, [audioPitch])
 
   useEffect(() => {
     typingSoundManager.setLayerGain('bass', audioBassVolume)
@@ -11001,6 +11023,34 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             trackLabel="key"
             ariaLabel="Key volume"
             onCommit={(value) => setAudioKeyVolume(clamp(value, 0, 1))}
+          />
+          <CompactScrollbarSlider
+            id="audio-key-variance"
+            min={0}
+            max={0.5}
+            step={0.005}
+            value={audioKeyVariance}
+            trackLabel="variance"
+            ariaLabel="Key sound variance"
+            onCommit={(value) => {
+              const nextValue = clamp(value, 0, 0.5)
+              setAudioKeyVariance(nextValue)
+              typingSoundManager.setTypingSoundVariance(nextValue)
+            }}
+          />
+          <CompactScrollbarSlider
+            id="audio-pitch"
+            min={-100}
+            max={100}
+            step={1}
+            value={audioPitch}
+            trackLabel="pitch"
+            ariaLabel="Global pitch"
+            onCommit={(value) => {
+              const nextValue = clamp(value, -100, 100)
+              setAudioPitch(nextValue)
+              typingSoundManager.setTypingSoundPitch(nextValue)
+            }}
           />
           <CompactScrollbarSlider
             id="audio-bass-volume"

@@ -19,6 +19,8 @@ export type UiLayoutLoadout = {
   audioKeyVolume: number;
   audioBassVolume: number;
   audioTrebleVolume: number;
+  audioKeyVariance: number;
+  audioPitch: number;
   audioReverbStrength: number;
   audioReverbSpace: number;
   typingSoundEnabled: boolean;

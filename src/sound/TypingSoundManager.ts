@@ -20,6 +20,7 @@ export interface TypingSoundPlayOptions {
   reverse?: boolean
   gain?: number
   echo?: TypingSoundEchoOptions
+  frequencyScale?: number
 }
 
 interface TypingSoundHistoryEntry {
@@ -58,6 +59,8 @@ export class TypingSoundManager {
   private reversedClickBuffersBySet: Record<TypingSoundSetId, AudioBuffer[]> | null = null
   private activeKeySet: TypingSoundSetId = DEFAULT_TYPING_SOUND_SET
   private enabled = true
+  private keyVariance = 0
+  private pitch = 0
   private recentKeySoundHistory: TypingSoundHistoryEntry[] = []
   private loaded = false
   private loadingPromise: Promise<void> | null = null
@@ -169,7 +172,8 @@ export class TypingSoundManager {
       : undefined
 
     if (existing) {
-      // Promote the existing key to recent usage.
+      // Promote the existing key to recent usage and keep the preserved key
+      // sound attributes intact for repeated typing.
       this.recentKeySoundHistory = [
         existing,
         ...this.recentKeySoundHistory.filter((entry) => entry.keyId !== keyId),
@@ -199,10 +203,18 @@ export class TypingSoundManager {
     return attributes
   }
 
+  private getLiveFrequencyScale(): number {
+    const randomVariance = this.keyVariance > 0 ? (Math.random() * 2 - 1) * this.keyVariance : 0
+    const varianceScale = randomVariance >= 0 ? 1 + randomVariance : 1 / (1 - randomVariance)
+    const pitchScale = this.pitch >= 0 ? (100 + this.pitch) / 100 : 100 / (100 - this.pitch)
+    return varianceScale * pitchScale
+  }
+
   async playRandomClick(options?: TypingSoundPlayOptions): Promise<void> {
     if (!this.enabled) return
 
     const soundAttributes = this.getSoundAttributes(options)
+    const frequencyScale = this.getLiveFrequencyScale()
 
     await this.playLayer('click', {
       ...options,
@@ -212,6 +224,7 @@ export class TypingSoundManager {
       reverse: soundAttributes.reverse,
       gain: soundAttributes.gain,
       echo: soundAttributes.echo,
+      frequencyScale,
     })
 
     void this.playLayer('bass', {
@@ -221,6 +234,7 @@ export class TypingSoundManager {
       reverse: soundAttributes.reverse,
       gain: soundAttributes.gain,
       echo: soundAttributes.echo,
+      frequencyScale,
     })
     void this.playLayer('treble', {
       ...options,
@@ -229,11 +243,20 @@ export class TypingSoundManager {
       reverse: soundAttributes.reverse,
       gain: soundAttributes.gain,
       echo: soundAttributes.echo,
+      frequencyScale,
     })
   }
 
   setTypingSoundEnabled(enabled: boolean): void {
     this.enabled = enabled
+  }
+
+  setTypingSoundVariance(amount: number): void {
+    this.keyVariance = Math.max(0, Math.min(0.5, amount))
+  }
+
+  setTypingSoundPitch(amount: number): void {
+    this.pitch = Math.max(-100, Math.min(100, amount))
   }
 
   setTypingSoundSet(setId: TypingSoundSetId): void {
@@ -291,7 +314,9 @@ export class TypingSoundManager {
     if (!selectedBuffer) return
     source.buffer = selectedBuffer
 
-    if (options?.playbackRate !== undefined) {
+    if (options?.frequencyScale !== undefined) {
+      source.playbackRate.value = (options?.playbackRate ?? 1) * options.frequencyScale
+    } else if (options?.playbackRate !== undefined) {
       source.playbackRate.value = options.playbackRate
     }
     if (options?.detune !== undefined) {
@@ -316,9 +341,10 @@ export class TypingSoundManager {
       for (let i = 1; i <= count; i += 1) {
         const echoSource = this.audioContext.createBufferSource()
         echoSource.buffer = source.buffer
-        if (options?.playbackRate !== undefined) {
-          echoSource.playbackRate.value = options.playbackRate
-        }
+        const echoPlaybackRate = options?.frequencyScale !== undefined
+          ? (options?.playbackRate ?? 1) * options.frequencyScale
+          : options?.playbackRate ?? 1
+        echoSource.playbackRate.value = echoPlaybackRate
         if (options?.detune !== undefined) {
           echoSource.detune.value = options.detune
         }
@@ -336,7 +362,9 @@ export class TypingSoundManager {
       }
     }
 
-    const playbackRate = options?.playbackRate ?? 1
+    const playbackRate = options?.frequencyScale !== undefined
+      ? (options?.playbackRate ?? 1) * options.frequencyScale
+      : options?.playbackRate ?? 1
     source.start()
     for (let i = 0; i < echoSources.length; i += 1) {
       const echo = echoSources[i]

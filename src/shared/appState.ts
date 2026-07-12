@@ -87,6 +87,8 @@ export interface PersistedMenuState {
   audioKeyVolume?: number;
   audioBassVolume?: number;
   audioTrebleVolume?: number;
+  audioKeyVariance?: number;
+  audioPitch?: number;
   audioReverbStrength?: number;
   audioReverbSpace?: number;
   audioReverbAmount?: number;
