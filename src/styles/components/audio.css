@@ -1,69 +1,158 @@
+
 /* =============================================================================
-   Audio Controls
+   12. WINDOW CONTROLS
    ============================================================================= */
 
-.utility-audio-row {
-  display:     grid;
-  grid-template-columns: 24px 1fr 24px;
-  grid-template-rows: 24px;
-  align-items: center;
-  gap:         6px;
-  width:       100%;
+.window-controls {
+  display:          flex;
+  padding:          8px 8px 8px 8px;
+  gap:              8px;
+  align-items:      center;
+  margin-bottom:    auto;
+  margin-left:      auto;
 }
 
-.utility-audio-play-btn {
-  width:           24px;
-  height:          24px;
-  min-width:       24px;
-  min-height:      24px;
+.window-minimize-split {
+  width: var(--btn-square-regular-size);
+  height: var(--btn-square-regular-size);
+  min-width: var(--btn-square-regular-size);
+  min-height: var(--btn-square-regular-size);
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.window-minimize-split-btn {
+  width: 100%;
+  min-width: 0;
+  height: calc((var(--btn-square-regular-size) - 2px) / 2);
+  min-height: 0;
+  aspect-ratio: auto;
+  border-radius: var(--border-radius-small);
+}
+
+.window-minimize-split-btn.mini-mode {
+  border-radius: var(--border-radius-regular) var(--border-radius-regular) var(--border-radius-small) var(--border-radius-small);
+  padding: 0;
+}
+
+.window-minimize-split-btn.minimize {
+  border-radius: var(--border-radius-small) var(--border-radius-small) var(--border-radius-regular) var(--border-radius-regular);
+  padding: 0 0 2px 0;
+}
+
+.window-control-btn {
+  -webkit-app-region: no-drag;
+  width:           var(--btn-square-regular-size);
+  height:          var(--btn-square-regular-size);
+  min-width:       var(--btn-square-regular-size);
+  min-height:      var(--btn-square-regular-size);
   padding:         0;
+  margin:          0;
   display:         inline-flex;
   align-items:     center;
   justify-content: center;
+  border:          1px solid var(--btn-border-default);
   border-radius:   var(--border-radius-regular);
   background:      var(--btn-bg-default);
-  color:           var(--color-text-base);
-  font-size:       12px;
+  color:           var(--color-text-60);
+  transition:      background 0.2s, border-color 0.2s, color 0.2s;
 }
 
-.utility-audio-play-btn.is-playing {
-  box-shadow: var(--box-shadow-inverted-light);
+.window-control-btn:hover {
+  background:   var(--btn-bg-hover);
+  border-color: var(--btn-border-hover);
 }
 
-.utility-audio-bar-shell {
-  height:      var(--canonical-scroll-thickness);
+.window-control-close       { color: var(--color-danger); }
+.window-control-close:hover { background: var(--color-danger-bg); }
+
+.window-control-glyph {
   display:     block;
-  cursor:      default;
-  user-select: none;
-  min-width:   0;
-  width:       100%;
+  font-size:   18px;
+  color:      var(--color-text-80);
+  text-shadow:  var(--text-shadow-icon);
+  line-height: 1;
 }
 
-.utility-audio-bar-rail {
-  position:      absolute;
-  inset:         0;
-  border:        1px solid var(--canonical-scroll-track-border);
-  border-radius: 999px;
-  background:    var(--canonical-scroll-track-bg);
-  box-shadow:    var(--box-shadow-inverted-light);
+.window-control-glyph.fa-turn-down {
+  font-size:   15px;
+  padding-left: 1px;
+}
+
+
+/* =============================================================================
+   12b. AUDIO CONTROLS
+   ============================================================================= */
+
+.audio-controls {
+  padding:          0 8px 8px 8px;
+}
+
+.audio-micro-grid {
+  display:               grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows:    auto auto;
+  gap:                   3px;
+}
+
+.audio-ctrl-btn {
+  -webkit-app-region: no-drag;
+  display:            inline-flex;
+  align-items:        center;
+  justify-content:    center;
+  gap:                4px;
+  padding:            0 4px;
+  height:             var(--btn-square-mini-size);
+  min-height:         var(--btn-square-mini-size);
+  border:             1px solid var(--btn-border-default);
+  border-radius:      var(--border-radius-small);
+  background:         var(--btn-bg-default);
+  color:              var(--color-text-60);
+  font-size:          10px;
+  cursor:             default;
+  overflow:           hidden;
+  transition:         background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.audio-playlist-btn {
+  font-size:          14px;
+}
+
+.audio-ctrl-btn:hover {
+  background:   var(--btn-bg-hover);
+  border-color: var(--btn-border-hover);
+}
+
+.audio-ctrl-btn.is-active {
+  background:   var(--btn-bg-active, rgba(120, 100, 80, 0.22));
+  border-color: var(--btn-border-active, #9a8070);
+  color:        var(--color-text-base);
+}
+
+.audio-ctrl-btn.is-primed {
+  filter: var(--filter-primed-delete);
+}
+
+.audio-ctrl-btn.is-empty {
+  opacity: 0.45;
+}
+
+/* Play button takes up 2 columns and shows a song label text. */
+.audio-play-btn {
+  justify-content: center;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.audio-song-label {
+  font-size:     9px;
+  white-space:   nowrap;
   overflow:      hidden;
-}
-
-.utility-audio-bar-inner {
-  position:      absolute;
-  inset:         0 auto 0 0;
-  background:    var(--color-text-40);
-  opacity:       0.3;
-}
-
-.utility-audio-time-label {
-  font-size:      9px;
-  letter-spacing: 0.02em;
-  color:          var(--color-text-60);
-  text-shadow:    var(--text-shadow-emboss-ui);
-  text-align:     right;
-  width:          24px;
-  min-width:      24px;
-  display:        inline-block;
-  user-select:    none;
+  text-overflow: ellipsis;
+  min-width:     0;
+  flex:          1;
+  text-align:    left;
+  opacity:       0.75;
 }
