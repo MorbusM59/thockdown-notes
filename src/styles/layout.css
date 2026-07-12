@@ -162,5 +162,46 @@
   padding-left: 1px;
 }
 
-/* Responsive / Media Queries */
-/* No media queries currently active. */
+
+/* 4d. Mini / chip buttons */
+.ui-btn--mini,
+.date-filter-chip {
+  border-radius: var(--border-radius-small);
+  font-size:     10px;
+  font-weight:   300;
+}
+
+/* Date filter */
+.date-filter-rail {
+  padding:        0 0 4px 8px;
+  display:        flex;
+  flex-direction: column;
+  gap:            0;
+}
+
+.date-filter-rail.date-filter-rail-placeholder {
+  min-height: 12px;
+  height:     12px;
+  padding:    0;
+}
+
+.date-filter-line {
+  display:       flex;
+  width:         100%;
+  gap:           3px;
+  margin-bottom: 3px;
+}
+
+.date-filter-line:last-child {
+  margin-bottom: 0;
+}
+
+.date-filter-chip {
+  flex:            1;
+  min-width:       0;
+  height:          20px;
+  color:            var(--color-text-80);
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+}
