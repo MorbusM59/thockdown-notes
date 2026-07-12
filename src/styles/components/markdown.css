@@ -2,18 +2,13 @@
    Preview / Markdown
    ============================================================================= */
 
-.markdown-preview {
-  position: absolute;
-  inset:    0;
-  display:  flex;
-  flex-direction: column;
-  overflow: hidden;
-  background-color: transparent;
-  z-index:  2;
+.render-container {
+  position: relative;
+  width:    100%;
+  height:   100%;
 }
 
-.mode-view .markdown-preview::before {
-  content:          '';
+.markdown-preview-texture {
   position:         absolute;
   inset:            0;
   pointer-events:   none;
@@ -29,60 +24,371 @@
   mask-position: 0 0;
 }
 
-.mode-view .markdown-preview-scroll-anchor {
-  padding-bottom: 250px;
+.markdown-preview {
+  width:          100%;
+  height:         100%;
+  overflow-y:     auto;
+  scroll-behavior: smooth;
+  padding:        var(--preview-edge-padding);
+  box-sizing:     border-box;
+  text-shadow:
+    0 -1px 0px var(--text-shadow-emboss-render-secondary),
+    0 1px 0px var(--text-shadow-emboss-render-main);
+  font-synthesis: style;
+  position:       relative;
+  z-index:        2;
 }
 
-.markdown-preview-content {
-  flex:       1 1 auto;
-  min-height: 0;
-  position:   relative;
-  z-index:    2;
+.render-container {
+  /* Local tokens scoped to the render container */
+  --preview-edge-padding:        18px;
+  --preview-edge-fade-color:     var(--color-background-light);
+  --preview-code-font:           'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
+  --preview-inline-code-size:    0.95em;
+  --preview-inline-code-padding: 0.08em 0.35em;
+  color: var(--color-editor-render-text);
 }
 
-/* Specific Markdown tag overrides */
-.markdown-preview-content div > img {
-  display:       block;
-  max-width:     100%;
-  margin-left:   auto;
-  margin-right:  auto;
-  border-radius: 4px;
+.edit-container {
+  color: var(--color-editor-edit-text);
 }
 
-.markdown-preview-content pre {
-  background:    var(--markdown-code-bg);
+.markdown-preview > *:not(.markdown-preview-texture),
+.markdown-preview > *:not(.markdown-preview-background) {
+  position: relative;
+  z-index:  3;
+}
+
+/* Search highlight */
+.markdown-preview .search-hit {
+  background-color: var(--search-hit-color, rgba(255, 221, 105, 0.55));
+  color:            inherit;
+  border-radius:    8px;
+  outline:          1px solid #00000022;
+  padding:          4px;
+}
+
+/* 11b. Markdown typography */
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4,
+.markdown-preview h5,
+.markdown-preview h6 {
+  margin:      0.75em 0 0.45em;
+  line-height: 1.25;
+  color:       inherit;
+  text-shadow: var(--text-shadow-emboss-heading-glow);
+}
+
+.markdown-preview h1 { font-size: 1.9em; }
+.markdown-preview h2 { font-size: 1.55em; }
+.markdown-preview h3 { font-size: 1.28em; }
+
+.markdown-preview p,
+.markdown-preview ul,
+.markdown-preview ol,
+.markdown-preview blockquote,
+.markdown-preview pre,
+.markdown-preview table {
+  margin: 0.55em 0;
+}
+
+.markdown-preview > *:first-child { margin-top: 0; }
+
+.markdown-preview a {
+  color:                var(--color-text-link);
+  text-decoration:      underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-preview em,
+.markdown-preview i {
+  font-style: italic;
+}
+
+.markdown-preview code {
+  font-family:    var(--preview-code-font);
+  font-size:      var(--preview-inline-code-size);
+  background:     var(--btn-bg-default);
+  border:         1px solid var(--btn-border-default);
+  border-radius:  var(--border-radius-small);
+  padding:        var(--preview-inline-code-padding);
+}
+
+.markdown-preview pre {
+  background:    var(--btn-bg-default);
+  border:        1px solid var(--btn-border-default);
+  border-radius: var(--border-radius-regular);
   padding:       12px;
-  border-radius: 4px;
-  border:        1px solid var(--color-border-dark-10);
   overflow-x:    auto;
 }
 
-.markdown-preview-content code {
-  font-family: var(--font-editor);
-  font-size:   0.9em;
+.markdown-preview pre code {
+  border:     none;
+  background: transparent;
+  font-size:  1em;
+  padding:    0;
 }
 
-.markdown-preview-content blockquote {
-  border-left:  4px solid var(--color-border-dark-40);
-  margin-left:  0px;
-  padding-left: 16px;
-  font-style:   italic;
-  color:        var(--color-text-60);
+.markdown-preview blockquote {
+  border-left:    3px solid var(--color-border-blockquote);
+  padding-left:   10px;
+  letter-spacing: 0.1em;
+  font-size:      80%;
+  color:          var(--color-text-80);
 }
 
-.markdown-preview-content table {
-  border-collapse: collapse;
-  width:           100%;
+.markdown-preview hr {
+  border:     none;
+  border-top: 1px solid var(--color-border-hr);
+  margin:     0.8em 0;
 }
 
-.markdown-preview-content th,
-.markdown-preview-content td {
-  border:  1px solid var(--color-border-dark-20);
-  padding: 8px;
+.markdown-preview ul,
+.markdown-preview ol  { padding-left: 1.35em; }
+.markdown-preview ul  { list-style-type: disc; }
+.markdown-preview ol  { list-style-type: decimal; }
+.markdown-preview li  { display: list-item; }
+
+.markdown-preview ul.contains-task-list {
+  list-style:  none;
+  padding-left: 0;
 }
 
-.markdown-preview-content hr {
-  border: none;
-  border-top: 1px solid var(--color-border-dark-20);
-  margin: 20px 0;
+.markdown-preview li.task-list-item {
+  list-style: none;
+}
+
+.markdown-preview li.task-list-item::marker {
+  content: '';
+}
+
+.markdown-preview li.task-list-item > .markdown-task-checkbox-icon {
+  display:       inline-block;
+  width:         1.1em;
+  margin-right:  0.2em;
+  font-family:   'Segoe UI Symbol', 'Apple Symbols', 'Arial Unicode MS', sans-serif;
+  font-size:     1em;
+  line-height:   1;
+  opacity:       1;
+  color:         currentColor;
+  text-shadow:   none;
+}
+
+.markdown-preview li.task-list-item > .markdown-task-checkbox-icon.markdown-task-checkbox-checked {
+  text-shadow: 0 0 2px #fff, 0 0 8px var(--markdown-checked-color);
+}
+
+.markdown-preview li.task-list-item > .markdown-task-checkbox-icon.markdown-task-checkbox-unchecked {
+  text-shadow: 0 0 2px #fff, 0 0 8px var(--markdown-unchecked-color);
+}
+
+
+.markdown-preview ul ul       { list-style-type: circle; }
+.markdown-preview ul ul ul    { list-style-type: square; }
+.markdown-preview ol ol       { list-style-type: lower-alpha; }
+.markdown-preview ol ol ol    { list-style-type: lower-roman; }
+
+.markdown-preview table {
+  width:            100%;
+  border-collapse:  collapse;
+  background:       var(--color-background-light);
+  border-radius:    var(--border-radius-regular);
+  overflow:         hidden;
+}
+
+.markdown-preview th,
+.markdown-preview td {
+  border:     1px solid var(--color-border-dark-20);
+  padding:    6px 8px;
+  text-align: left;
+}
+
+.markdown-preview img {
+  max-width:     100%;
+  height:        auto;
+  border-radius: 6px;
+}
+
+/* 11c. Style variants */
+.markdown-preview.style-modern {
+  font-family: 'Quicksand', 'Segoe UI', sans-serif;
+}
+
+.markdown-preview.style-narrow {
+  font-family:         'Roboto Condensed', 'Segoe UI', sans-serif;
+  --preview-code-font: 'Share Tech Mono', 'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
+}
+
+.markdown-preview.style-cute {
+  font-family:         'Sour Gummy', 'Quicksand', 'Segoe UI', sans-serif;
+  --preview-code-font: 'Syne Mono', 'Red Hat Mono', 'Menlo', 'Monaco', monospace;
+}
+
+.markdown-preview.style-xkcd {
+  font-family:         'xkcd', 'Comic Sans MS', 'Chalkboard SE', cursive;
+  --preview-code-font: 'Syne Mono', 'Red Hat Mono', 'Menlo', 'Monaco', monospace;
+  font-synthesis: style weight;
+}
+
+.markdown-preview.style-print {
+  font-family:                  'Big Shoulders', 'Times New Roman', Georgia, serif;
+  --preview-code-font:          'Share Tech Mono', 'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
+  --preview-inline-code-size:   0.82em;
+  --preview-inline-code-padding: 0.06em 0.3em;
+  letter-spacing: 0.05em;
+  font-weight:    400;
+  font-synthesis: style weight;
+}
+
+/* 11d. Size variants */
+.markdown-preview.size-xs { font-size: 12px; }
+.markdown-preview.size-s  { font-size: 14px; }
+.markdown-preview.size-m  { font-size: 16px; }
+.markdown-preview.size-l  { font-size: 18px; }
+.markdown-preview.size-xl { font-size: 20px; }
+
+/* 11e. Spacing variants */
+.markdown-preview.spacing-tight   { line-height: 1.2; --preview-edge-padding: 9px;  }
+.markdown-preview.spacing-compact { line-height: 1.4; --preview-edge-padding: 12px; }
+.markdown-preview.spacing-cozy    { line-height: 1.6; --preview-edge-padding: 18px; }
+.markdown-preview.spacing-wide    { line-height: 1.8; --preview-edge-padding: 24px; }
+
+body.pdf-exporting > *:not(.pdf-exporter-root) {
+  display: none !important;
+}
+
+body.pdf-exporting .pdf-exporter-root {
+  display: block !important;
+  position: static !important;
+  width: auto !important;
+  min-height: auto !important;
+  overflow: visible !important;
+}
+
+body.pdf-exporting .pdf-exporter-root .pdf-exporter-page {
+  display: block !important;
+  position: relative !important;
+  width: auto !important;
+  max-width: 210mm !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  page-break-before: auto;
+  page-break-after: auto;
+  break-inside: avoid;
+}
+
+body.pdf-exporting .pdf-exporter-root .pdf-exporter-markdown-preview {
+  visibility: visible !important;
+  opacity: 1 !important;
+  background: transparent !important;
+}
+
+body.pdf-exporting .markdown-preview {
+  visibility: visible !important;
+  opacity: 1 !important;
+  background: #ffffff !important;
+  color: #000000 !important;
+  box-shadow: none !important;
+  padding: 12mm !important;
+  width: auto !important;
+  max-width: 100% !important;
+  margin: 0 auto !important;
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+
+body.pdf-exporting .markdown-preview * {
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+body.pdf-exporting .markdown-preview img {
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+.pdf-exporter-root {
+  position: absolute;
+  inset: 0;
+  z-index: 10000;
+  background: #ffffff;
+  color: #000000;
+}
+
+.pdf-exporter-page {
+  width: 100%;
+  padding: 12mm;
+  box-sizing: border-box;
+  background: #ffffff;
+  color: #000000;
+  margin: 0 auto;
+  height: auto !important;
+  min-height: 0 !important;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.pdf-exporter-root .markdown-preview {
+  padding: 0 !important;
+  background: transparent !important;
+  color: #000000 !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+}
+
+.pdf-exporter-root .markdown-preview * {
+  text-shadow: none !important;
+}
+
+.pdf-exporter-root .markdown-preview h1,
+.pdf-exporter-root .markdown-preview h2,
+.pdf-exporter-root .markdown-preview h3,
+.pdf-exporter-root .markdown-preview h4,
+.pdf-exporter-root .markdown-preview h5,
+.pdf-exporter-root .markdown-preview h6 {
+  text-shadow: none !important;
+  page-break-after: avoid;
+  break-after: avoid;
+  page-break-inside: avoid;
+  break-inside: avoid;
+  orphans: 2;
+  widows: 2;
+}
+
+.pdf-exporter-root .markdown-preview p,
+.pdf-exporter-root .markdown-preview ul,
+.pdf-exporter-root .markdown-preview ol,
+.pdf-exporter-root .markdown-preview blockquote,
+.pdf-exporter-root .markdown-preview pre,
+.pdf-exporter-root .markdown-preview table,
+.pdf-exporter-root .markdown-preview li {
+  page-break-inside: avoid;
+  break-inside: avoid;
+  orphans: 2;
+  widows: 2;
+}
+
+.pdf-exporter-root .markdown-preview > * {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+@media print {
+  @page { size: A4; margin: 12mm; }
+  body.pdf-exporting {
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+  }
+  body.pdf-exporting .markdown-preview {
+    padding: 0 !important;
+  }
+  .pdf-exporter-root {
+    position: static !important;
+  }
 }
