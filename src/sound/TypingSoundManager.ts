@@ -226,7 +226,7 @@ export class TypingSoundManager {
       }
     }
 
-    const baseDetune = options?.detune ?? 0
+    const baseDetune = options?.detune ?? this.getRandomLayerDetune()
     const randomVariance = this.keyVariance > 0 ? (Math.random() * 2 - 1) * this.keyVariance : 0
     const varianceScale = randomVariance >= 0 ? 1 + randomVariance : 1 / (1 - randomVariance)
     const pitchScale = this.pitch >= 0 ? (100 + this.pitch) / 100 : 100 / (100 - this.pitch)
@@ -237,7 +237,7 @@ export class TypingSoundManager {
     }
     const attributes = {
       assetIndex: options?.assetIndex ?? Math.floor(Math.random() * TYPING_SOUND_ASSETS[this.activeKeySet].length),
-      detune: options?.detune ?? 0,
+      detune: options?.detune ?? baseDetune,
       playbackRate: options?.playbackRate ?? 1,
       reverse: options?.reverse ?? false,
       gain: options?.gain ?? 1,
@@ -252,7 +252,7 @@ export class TypingSoundManager {
       this.recentKeySoundHistory = [
         { keyId, attributes },
         ...this.recentKeySoundHistory.filter((entry) => entry.keyId !== keyId),
-      ].slice(0, 5)
+      ].slice(0, 10)
     }
 
     return attributes
