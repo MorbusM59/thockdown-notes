@@ -204,25 +204,43 @@ export class TypingSoundManager {
 
   private getSoundAttributes(options?: TypingSoundPlayOptions) {
     const keyId = options?.keyId
-    const existing = keyId
-      ? this.recentKeySoundHistory.find((entry) => entry.keyId === keyId)
-      : undefined
+    const existingIndex = keyId
+      ? this.recentKeySoundHistory.findIndex((entry) => entry.keyId === keyId)
+      : -1
 
-    if (existing) {
-      // Promote the existing key to recent usage and keep the preserved key
-      // sound attributes intact for repeated typing.
-      this.recentKeySoundHistory = [
-        existing,
-        ...this.recentKeySoundHistory.filter((entry) => entry.keyId !== keyId),
-      ]
-      return {
-        ...existing.attributes,
-        frequencyScale: existing.attributes.frequencyScale ?? 1,
-        flipChannels: existing.attributes.flipChannels ?? {
+    if (existingIndex !== -1) {
+      const existing = this.recentKeySoundHistory[existingIndex]
+
+      // Fill in any missing consistent attributes if they didn't exist in the history entry
+      // (e.g. from an older version of the sound history)
+      if (existing.attributes.frequencyScale === undefined) {
+        const randomVariance = this.keyVariance > 0 ? (Math.random() * 2 - 1) * this.keyVariance : 0
+        const varianceScale = randomVariance >= 0 ? 1 + randomVariance : 1 / (1 - randomVariance)
+        const pitchScale = this.pitch >= 0 ? (100 + this.pitch) / 100 : 100 / (100 - this.pitch)
+        existing.attributes.frequencyScale = varianceScale * pitchScale
+      }
+
+      if (!existing.attributes.flipChannels) {
+        existing.attributes.flipChannels = {
           click: Math.random() < 0.5,
           bass: Math.random() < 0.5,
           treble: Math.random() < 0.5,
-        },
+        }
+      }
+
+      // Promote the existing key to recent usage
+      this.recentKeySoundHistory.splice(existingIndex, 1)
+      this.recentKeySoundHistory.unshift(existing)
+
+      // Return the cached attributes, but allow explicit overrides from options
+      return {
+        ...existing.attributes,
+        assetIndex: options?.assetIndex !== undefined ? options.assetIndex : existing.attributes.assetIndex,
+        detune: options?.detune !== undefined ? options.detune : existing.attributes.detune,
+        playbackRate: options?.playbackRate !== undefined ? options.playbackRate : existing.attributes.playbackRate,
+        reverse: options?.reverse !== undefined ? options.reverse : existing.attributes.reverse,
+        gain: options?.gain !== undefined ? options.gain : existing.attributes.gain,
+        echo: options?.echo !== undefined ? options.echo : existing.attributes.echo,
       }
     }
 
@@ -235,6 +253,7 @@ export class TypingSoundManager {
       bass: Math.random() < 0.5,
       treble: Math.random() < 0.5,
     }
+
     const attributes = {
       assetIndex: options?.assetIndex ?? Math.floor(Math.random() * TYPING_SOUND_ASSETS[this.activeKeySet].length),
       detune: options?.detune ?? baseDetune,
@@ -249,10 +268,10 @@ export class TypingSoundManager {
     }
 
     if (keyId) {
-      this.recentKeySoundHistory = [
-        { keyId, attributes },
-        ...this.recentKeySoundHistory.filter((entry) => entry.keyId !== keyId),
-      ].slice(0, 10)
+      this.recentKeySoundHistory.unshift({ keyId, attributes })
+      if (this.recentKeySoundHistory.length > 10) {
+        this.recentKeySoundHistory.pop()
+      }
     }
 
     return attributes

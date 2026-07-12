@@ -6789,9 +6789,11 @@ await flushPendingSaveNow()
 
     const delta = event.text.length - event.previousText.length
     if (delta === 1) {
-      const inserted = event.text.slice(event.previousText.length)
-      if (inserted.length === 1) {
-        return `key:${inserted}`
+      // For single character insertions, the character is at the point of the new
+      // cursor position minus one.
+      const char = event.text[event.selection.start - 1]
+      if (char) {
+        return `key:${char}`
       }
     }
 
