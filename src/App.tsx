@@ -6814,6 +6814,14 @@ await flushPendingSaveNow()
       }
 
       const normalizedText = normalizeInternalText(event.text)
+
+      if (previewedSnapshotId !== null) {
+        // While previewing history, the editor is showing something other than
+        // the live document text. Ignore these changes; they are just UI
+        // reflections of the history data, not new edits to the note.
+        return
+      }
+
       latestEditorTextRef.current = normalizedText
       latestEditorSelectionRef.current = event.selection
       setActiveNoteText(normalizedText)
@@ -6882,6 +6890,10 @@ await flushPendingSaveNow()
       queueSave(normalizedText)
     },
     onSelectionChange: (event: EditorSelectionChangeEvent) => {
+      if (previewedSnapshotId !== null) {
+        return
+      }
+
       latestEditorSelectionRef.current = event.selection
       setEditorSelection(event.selection)
 
@@ -6903,6 +6915,9 @@ await flushPendingSaveNow()
       }
     },
     onTabIndentTransform: ({ shiftKey, text, selection }) => {
+      if (previewedSnapshotId !== null) {
+        return null
+      }
       if (!activeNoteId || activeNoteHasDebugTag) return null
 
       const sourceText = normalizeInternalText(text)
@@ -6981,6 +6996,9 @@ await flushPendingSaveNow()
       return { text: next.text, selection: next.selection }
     },
     onMarkdownShortcutTransform: ({ shortcut, text, selection }) => {
+      if (previewedSnapshotId !== null) {
+        return null
+      }
       if (!activeNoteId || activeNoteHasDebugTag) return null
 
       const sourceText = normalizeInternalText(text)
@@ -7008,6 +7026,9 @@ await flushPendingSaveNow()
       return next
     },
     onCharacterInsertTransform: ({ char, text, selection }) => {
+      if (previewedSnapshotId !== null) {
+        return null
+      }
       if (!activeNoteId || activeNoteHasDebugTag) return null
 
       const sourceText = normalizeInternalText(text)
@@ -7030,6 +7051,9 @@ await flushPendingSaveNow()
       return next
     },
     onEnterTransform: (event) => {
+      if (previewedSnapshotId !== null) {
+        return null
+      }
       if (!activeNoteId || activeNoteHasDebugTag) return null
       void typingSoundManager.playRandomClick({ detune: -500 })
       const next = resolveMarkdownEnterTransform(event)
@@ -7068,6 +7092,12 @@ await flushPendingSaveNow()
       }
 
       if (event.source !== 'user-input') {
+        return
+      }
+
+      if (previewedSnapshotId !== null) {
+        // Scrolling a history preview should never override the document's
+        // saved scroll position.
         return
       }
 
@@ -7123,6 +7153,7 @@ await flushPendingSaveNow()
     activeNoteId,
     isPreviewMode,
     persistenceReady,
+    previewedSnapshotId,
     queueSave,
     queueAppStateSave,
     updateActiveNoteTitlePreview,
@@ -12349,6 +12380,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   <div ref={editorStageRef} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
                     <div className="edit-container" style={{ display: isPreviewMode ? 'none' : undefined }}>
                       <Editor
+                        key={previewedSnapshotId ?? 'present'}
                         bindings={bindings}
                         adapterRef={adapterRef}
                         noteId={activeNoteId}
