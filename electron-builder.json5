@@ -15,7 +15,17 @@
     "assets/icon.icns",
     "assets/icon.png",
     "assets/md.ico",
-    "assets/txt.ico"
+    "assets/txt.ico",
+    "node_modules/**/*",
+    "package.json"
+  ],
+  // Native addons (.node binaries) can't be dlopen'd from inside an asar
+  // archive -- they need to live as real files on disk. Without this,
+  // better-sqlite3 can silently fail to load in a packaged build even
+  // though everything works fine under `npm run dev` (which never goes
+  // through asar at all).
+  "asarUnpack": [
+    "node_modules/better-sqlite3/**/*"
   ],
   "mac": {
     "target": [

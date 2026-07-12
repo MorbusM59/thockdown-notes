@@ -2353,6 +2353,12 @@ function App() {
   const [sidebarTreeScrollerEl, setSidebarTreeScrollerEl] = useState<HTMLDivElement | null>(null)
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null)
   const [activeNoteText, setActiveNoteText] = useState('')
+  // Set when the startup bootstrap (loading the note list / database) fails
+  // repeatedly. Surfaced as a visible banner -- previously a failure here
+  // just retried silently forever with only a console.error, leaving the
+  // app looking "half broken" (no active note, so word count/timeline/tag
+  // input all stayed empty) with no indication anything was wrong.
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null)
   // null = viewing/editing the live note; a snapshot id = read-only preview
   // of that point in the note's history (see SnapshotTimelineSlider).
   const [previewedSnapshotId, setPreviewedSnapshotId] = useState<number | null>(null)
@@ -6664,10 +6670,20 @@ await flushPendingSaveNow()
 
           isApplyingInitialViewportRef.current = true
           setPersistenceReady(true)
+          setBootstrapError(null)
           return
         } catch (error) {
           attempt += 1
+          const message = error instanceof Error ? error.message : String(error)
           console.error(`Failed to initialize note lifecycle (attempt ${attempt})`, error)
+          // Keep retrying (transient startup races are real -- e.g. the IPC
+          // bridge not being ready yet) but stop suffering in silence after
+          // a few tries: tell the user something is actually wrong instead
+          // of leaving them looking at an app with no active note, no
+          // timeline, and no way to tell why.
+          if (attempt >= 3 && !disposed) {
+            setBootstrapError(message)
+          }
           await new Promise((resolve) => window.setTimeout(resolve, Math.min(1500, 200 * attempt)))
         }
       }
@@ -11579,6 +11595,47 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
   return (
     <div className="app-root" style={appRootStyle} onDragOver={handleAppDragOver} onDrop={handleAppDrop}>
+      {bootstrapError ? (
+        <div
+          role="alert"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 999999,
+            padding: '10px 16px',
+            background: '#b3261e',
+            color: '#ffffff',
+            fontSize: '13px',
+            fontFamily: 'sans-serif',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+          }}
+        >
+          <span>
+            Thockdown Notes couldn't load your notes ({bootstrapError}). It will keep retrying, but your notes
+            and the timeline may not appear until this is resolved.
+          </span>
+          <button
+            type="button"
+            onClick={() => setBootstrapError(null)}
+            style={{
+              background: 'transparent',
+              border: '1px solid #ffffff',
+              color: '#ffffff',
+              borderRadius: '4px',
+              padding: '2px 8px',
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
       <div className="app-saturate-wrapper" style={{ ...appOuterStyle, position: 'fixed', inset: 0 }}>
         <div className={`glaze-overlay-stack${glazeSettings.radialAboveLinear ? ' radial-above-linear' : ''}`} aria-hidden="true">
           <div className="glaze-overlay-layer glaze-overlay-layer-linear" />

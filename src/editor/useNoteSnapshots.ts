@@ -57,6 +57,14 @@ export function useNoteSnapshots(noteId: string | null, liveText: string, curveC
       if (requestIdRef.current === requestId) {
         setSnapshots(rows)
       }
+    } catch (error) {
+      // Previously uncaught: a rejected getNoteSnapshots call (e.g. a
+      // database/IPC failure) surfaced as an "Uncaught (in promise)" that no
+      // user would ever see, and just left the timeline silently empty.
+      console.error('[useNoteSnapshots] failed to fetch snapshots for note', noteId, error)
+      if (requestIdRef.current === requestId) {
+        setSnapshots([])
+      }
     } finally {
       if (requestIdRef.current === requestId) {
         setIsLoading(false)

@@ -33,7 +33,17 @@ import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../src/
 import { AUDIO_EXTENSIONS } from '../src/shared/audioPlayer';
 
 const require = createRequire(import.meta.url);
-const BetterSqlite3 = require('better-sqlite3') as typeof import('better-sqlite3');
+let BetterSqlite3: typeof import('better-sqlite3');
+try {
+  BetterSqlite3 = require('better-sqlite3') as typeof import('better-sqlite3');
+} catch (error) {
+  const detail = error instanceof Error ? error.message : String(error);
+  throw new Error(
+    `Failed to load the better-sqlite3 native module: ${detail}. ` +
+    `This usually means the packaged build is missing the native binary for this platform, ` +
+    `or it was compiled against a different Electron/Node ABI than the one this app is running.`,
+  );
+}
 
 const DB_FILE_NAME = 'measly-notes.db';
 const EXTERNAL_TAG = 'EXTERNAL';

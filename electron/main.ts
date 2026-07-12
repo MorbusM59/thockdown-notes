@@ -15,6 +15,20 @@ import { LOADOUT_CHANNELS } from '../src/shared/loadouts'
 import { AUDIO_PLAYER_CHANNELS, AUDIO_EXTENSIONS } from '../src/shared/audioPlayer'
 import type { PlaylistSlot } from '../src/shared/audioPlayer'
 
+// Defense in depth: if something throws outside of a path we've explicitly
+// wrapped (e.g. during startup, before a window exists to show an in-app
+// error), make sure it's at least visible to the user instead of the app
+// just quitting/hanging with nothing on screen and nothing but a
+// console.error nobody will ever read.
+process.on('uncaughtException', (error) => {
+  console.error('[main] uncaught exception', error)
+  dialog.showErrorBox(
+    'Thockdown Notes failed to start',
+    `An unexpected error occurred:\n\n${error?.stack ?? String(error)}`,
+  )
+  app.quit()
+})
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
@@ -1022,6 +1036,11 @@ app.whenReady().then(async () => {
   await createWindow()
 }).catch((error) => {
   console.error('[main] fatal startup failure', error)
+  dialog.showErrorBox(
+    'Thockdown Notes failed to start',
+    `The app couldn't initialize its database:\n\n${error?.stack ?? String(error)}\n\n` +
+    `Please report this along with the message above.`,
+  )
   app.quit()
 })
 
