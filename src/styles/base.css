@@ -1,0 +1,141 @@
+/* =============================================================================
+   Global Reset & Base
+   ============================================================================= */
+
+.app-root {
+  height: 100%;
+  width: 100%;
+  background-color: var(--background-color-root);
+}
+
+.app-shell {
+  height: 100vh;
+  width: 100%;
+  display: grid;
+  overflow: hidden;
+  text-shadow:
+    0 -1px 0px var(--text-shadow-emboss-ui-secondary),
+    0 1px 0px var(--text-shadow-emboss-ui-main);
+}
+
+.window-mode-transition-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1000;
+  background-color: var(--background-color-root);;
+  background-image: linear-gradient(var(--palette-parchment-lightest), var(--palette-parchment-lightest));
+  opacity: 1;
+  animation: window-mode-transition-fade-out 400ms ease-out forwards;
+}
+
+@keyframes window-mode-transition-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* =============================================================================
+   Scrollbar System
+   ============================================================================= */
+
+/* Firefox */
+.app-shell,
+.app-shell * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--canonical-handle-border) var(--canonical-scroll-track-bg);
+}
+
+/* WebKit */
+.app-shell *::-webkit-scrollbar {
+  width:  var(--canonical-scroll-thickness);
+  height: var(--canonical-scroll-thickness);
+}
+
+.app-shell *::-webkit-scrollbar-track {
+  border:        1px solid var(--canonical-scroll-track-border);
+  border-radius: 999px;
+  background:    var(--canonical-scroll-track-bg);
+  box-shadow:    var(--box-shadow-inverted);
+}
+
+.app-shell *::-webkit-scrollbar-thumb {
+  border:        1px solid var(--canonical-handle-border);
+  border-radius: 999px;
+  background:    var(--canonical-handle-bg);
+  box-shadow:    var(--box-shadow-regular);
+}
+
+.app-shell *::-webkit-scrollbar-thumb:hover {
+  border-color: rgba(81, 73, 66, 0.8);
+}
+
+/* =============================================================================
+   Base Button System
+   ============================================================================= */
+
+button,
+.ui-btn {
+  border:        1px solid var(--btn-border-default);
+  background:    var(--btn-bg-default);
+  color:         inherit;
+  border-radius: var(--border-radius-regular);
+  font-size:     14px;
+  transition:    all 0.2s;
+  cursor:        default;
+}
+
+.app-shell button:focus,
+.app-shell button:focus-visible,
+.app-shell select:focus,
+.app-shell select:focus-visible {
+  outline: none;
+}
+
+button:hover,
+.ui-btn:hover {
+  background:   var(--btn-bg-hover);
+  border-color: var(--btn-border-hover);
+}
+
+button:active,
+.ui-btn:active {
+  background: var(--btn-bg-pressed);
+  border-color: var(--btn-border-active);
+  box-shadow:   var(--box-shadow-inverted-harsh);
+}
+
+button.is-active,
+button.active,
+.ui-btn.is-active,
+.ui-btn.active {
+  border-color: var(--btn-border-active);
+  box-shadow:   var(--box-shadow-inverted);
+}
+
+/* Square icon buttons */
+.btn-icon,
+.sidebar-page-btn {
+  min-width:       var(--btn-square-regular-size);
+  height:          var(--btn-square-regular-size);
+  padding:         0;
+  border-radius:   var(--border-radius-regular);
+  font-size:       var(--btn-icon-size);
+  color:           var(--color-text-80);
+  font-weight:     600;
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  aspect-ratio:    1 / 1;
+  box-sizing:      border-box;
+  text-shadow:      
+    0 -1px 0px var(--text-shadow-emboss-ui-secondary),
+    0 1px 0px var(--text-shadow-emboss-ui-main);
+}
+
+/* Mini / chip buttons */
+.ui-btn--mini,
+.date-filter-chip {
+  border-radius: var(--border-radius-small);
+  font-size:     10px;
+  font-weight:   300;
+}

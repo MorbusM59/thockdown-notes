@@ -1,0 +1,314 @@
+/* =============================================================================
+   Design Tokens (:root)
+   ============================================================================= */
+
+:root {
+
+  /* ---------------------------------------------------------------------------
+     1a. Color Palette
+     Raw palette values — used by the tokens below.
+     Warm-tone neutral palette derived from #fcf9f6 / #ece8e4.
+  --------------------------------------------------------------------------- */
+
+  --background-color-root:      white;
+
+  --palette-parchment-lightest: #f9f6f4;   /* --color-background-light  */
+  --palette-parchment-light:    #f5f3f2;   /* gradient start            */
+  --palette-parchment-mid:      #e9e5e2;   /* gradient end              */
+  --palette-parchment-dark:     #ece8e4;   /* app-grid / sidebar bg     */
+  --palette-parchment-input:    #ffffff;   /* input backdrop            */
+
+  --palette-shadow-white-lo:    #fcf9f677;
+  --palette-shadow-white-mid:   #fcf9f6bb;
+  --palette-shadow-white-hi:    #fcf9f6ee;
+
+  /* Semantic color tokens */
+  --color-background-light:     var(--palette-parchment-lightest);
+  --color-background-dark:      #eeeeee;
+  --color-panel-shadow:         rgba(20, 0, 0, 0.4);
+  --color-panel-border:         #ffffff88;
+  --color-input-backdrop:       var(--palette-parchment-input);
+
+  --color-border-dark-20:       rgba(0, 0, 0, 0.2);
+  --color-border-dark-40:       rgba(0, 0, 0, 0.4);
+  --color-border-dark-60:       rgba(0, 0, 0, 0.5);
+  --color-border-dark-80:       rgba(0, 0, 0, 0.8);
+  --color-border-light-10:      rgba(255, 255, 255, 0.1);
+  --color-border-light-30:      rgba(255, 255, 255, 0.3);
+  --color-border-light-50:      rgba(255, 255, 255, 0.5);
+  --color-border-light-70:      rgba(255, 255, 255, 0.7);
+  --color-border-light-90:      rgba(255, 255, 255, 0.9);
+
+  --color-toggle-default:       #eeeeee;
+  --color-toggle-hover:         #f0f0f0;
+  --color-toggle-active:        #ffffff;
+  --color-toggle-shadow:        rgba(0, 0, 0, 0.1);
+
+  --color-tag-active-bg:        #ffffff;
+  --color-tag-active-text:      var(--color-text-base);
+  --color-tag-active-border:    #ffffff;
+  --color-tag-suggested-bg:     #f5f5f5;
+  --color-tag-suggested-text:   var(--color-text-80);
+  --color-tag-suggested-border: #ddd;
+
+  --color-shadow-white-light:   var(--palette-shadow-white-lo);
+  --color-shadow-white:         var(--palette-shadow-white-mid);
+  --color-shadow-white-harsh:   var(--palette-shadow-white-hi);
+
+  /* Text colors */
+  --color-text-base:      #000000DD;
+  --color-text-90:        #000000C7;
+  --color-text-80:        #000000B0;
+  --color-text-70:        #0000009C;
+  --color-text-60:        #00000087;
+  --color-text-50:        #00000072;
+  --color-text-40:        #0000005C;
+  --color-text-30:        #00000047;
+  --color-text-20:        #00000033;
+  --color-text-10:        #0000001F;
+
+  /* Danger / status colors */
+  --color-danger:         #b71c1c;
+  --color-danger-bg:      #feecec;
+  --color-danger-border:  #b71c1c88;
+  --color-danger-glow:    #b71c1c33;
+  --color-archive:        #0066bb;
+  --color-archive-bg:     #ecf2fe;
+  --color-archive-border: #0066bb88;
+  --color-archive-glow:   #0066bb33;
+
+  /* Markdown colors */
+  --color-text-link:          #00459edd;
+  --color-border-blockquote:  #00000044;
+  --color-border-hr:          #00000044;
+
+  /* Note card colors */
+  --bg-menu-card:           #FFFFFF44;
+  --bg-menu-card-active:    #FFFFFF88;
+
+  /* Filters */
+  --filter-primed-delete:  invert(1) sepia() contrast(0.5) brightness(2);
+  --filter-primed-archive: sepia() grayscale();
+
+  /* ---------------------------------------------------------------------------
+     1b. Shadow System
+     Convention: regular = outer glow, inverted = inset/recessed.
+     Intensity tiers: light < (default) < harsh.
+  --------------------------------------------------------------------------- */
+
+  --box-shadow-regular-light:
+    0 0 2px rgba(0, 0, 0, 0.3),
+    0 0 6px rgba(0, 0, 0, 0.1),
+    inset 0 0 2px var(--color-shadow-white-light);
+
+  --box-shadow-inverted-light:
+    inset 0 0 2px rgba(0, 0, 0, 0.3),
+    inset 0 0 6px rgba(0, 0, 0, 0.1),
+    0 0 2px var(--color-shadow-white-light);
+
+  --box-shadow-regular:
+    0 0 2px rgba(26, 15, 15, 0.5),
+    0 0 6px rgba(0, 0, 0, 0.2),
+    inset 0 0 2px var(--color-shadow-white);
+
+  --box-shadow-inverted:
+    inset 0 0 2px rgba(0, 0, 0, 0.5),
+    inset 0 0 6px rgba(0, 0, 0, 0.2),
+    0 0 2px var(--color-shadow-white);
+
+  --box-shadow-regular-harsh:
+    0 0 2px rgba(0, 0, 0, 1),
+    0 0 6px rgba(0, 0, 0, 0.5),
+    inset 0 0 2px var(--color-shadow-white-harsh);
+
+  --box-shadow-inverted-harsh:
+    inset 0 0 2px rgba(0, 0, 0, 1),
+    inset 0 0 6px rgba(0, 0, 0, 0.5),
+    0 0 2px var(--color-shadow-white-harsh);
+
+  --box-shadow-regular-filtered:
+    0 0 2px rgba(0, 0, 0, 1),
+    0 0 6px rgba(0, 0, 0, 0.2),
+    inset 0 0 2px var(--color-shadow-white-harsh);
+
+  --box-shadow-inverted-filtered:
+    inset 0 0 2px rgba(0, 0, 0, 1),
+    inset 0 0 6px rgba(0, 0, 0, 0.2),
+    0 0 2px var(--color-shadow-white-harsh);
+
+  --box-shadow-regular-light-original: var(--box-shadow-regular-light);
+
+  --box-shadow-inverted-light-original: var(--box-shadow-inverted-light);
+
+  --box-shadow-regular-original: var(--box-shadow-regular);
+
+  --box-shadow-inverted-original: var(--box-shadow-inverted);
+
+  --box-shadow-regular-harsh-original: var(--box-shadow-regular-harsh);
+
+  --box-shadow-inverted-harsh-original: var(--box-shadow-inverted-harsh);
+
+  --box-shadow-regular-filtered-original: var(--box-shadow-regular-filtered);
+
+  --box-shadow-inverted-filtered-original: var(--box-shadow-inverted-filtered);
+
+  /* ---------------------------------------------------------------------------
+     1c. Typography
+  --------------------------------------------------------------------------- */
+
+  --text-shadow-emboss-base:
+    0 -1px 0px var(--text-shadow-emboss-secondary),
+    0 1px 0px var(--text-shadow-emboss-main);
+
+  --text-shadow-emboss-main:      #ffffff;
+  --text-shadow-emboss-secondary: #55000022;
+
+  --text-shadow-emboss-ui:
+    0 -1px 0px var(--text-shadow-emboss-ui-secondary),
+    0 1px 0px var(--text-shadow-emboss-ui-main);
+
+  --text-shadow-emboss-ui-main:      #ffffff;
+  --text-shadow-emboss-ui-secondary: #55000022;
+
+  --text-shadow-emboss-edit:
+    0 -1px 0px var(--text-shadow-emboss-edit-secondary),
+    0 1px 0px var(--text-shadow-emboss-edit-main);
+
+  --text-shadow-emboss-edit-main:      #ffffff;
+  --text-shadow-emboss-edit-secondary: #55000022;
+
+  --text-shadow-emboss-render:
+    0 -1px 0px var(--text-shadow-emboss-render-secondary),
+    0 1px 0px var(--text-shadow-emboss-render-main);
+
+  --text-shadow-emboss-render-main:      #ffffff;
+  --text-shadow-emboss-render-secondary: #55000022;
+
+
+  --text-shadow-emboss-panel:
+    0 1px 1px rgba(255, 255, 255, 1),
+    0 -1px 0 rgba(0, 0, 0, 0.2);
+
+  --text-shadow-emboss-heading-glow:
+    0 0 8px #FFFFFF,
+    0 0 4px #FFFFFF,
+    0 0 2px #FFFFFF99,
+    0 1px 0 #FFFFFF;
+
+  --text-shadow-icon:
+    0 -1px 0px var(--text-shadow-emboss-ui-secondary),
+    0 1px 0px var(--text-shadow-emboss-ui-main);
+
+  --text-info-size:  12px;
+
+  /* ---------------------------------------------------------------------------
+     1d. Border & Radius
+  --------------------------------------------------------------------------- */
+
+  --border-radius-regular: 6px;
+  --border-radius-small:   3px;
+
+  /* ---------------------------------------------------------------------------
+     1e. Texture System
+     All texture slots default to none / transparent.
+     JS sets these at runtime from user-selected blobs.
+  --------------------------------------------------------------------------- */
+
+  --texture-tile-size:             512px;
+  --texture-app-grid:              none;
+  --texture-sidebar-content:       none;
+  --texture-editor-edit:           none;
+  --texture-editor-render:         none;
+  --texture-app-grid-tint:         rgba(0, 0, 0, 0);
+  --texture-sidebar-content-tint:  rgba(0, 0, 0, 0);
+  --texture-editor-edit-tint:      rgba(0, 0, 0, 0);
+  --texture-editor-render-tint:    rgba(0, 0, 0, 0);
+
+  /* ---------------------------------------------------------------------------
+     1f. Button Tokens
+  --------------------------------------------------------------------------- */
+
+  --btn-square-micro-size:   12px;
+  --btn-square-mini-size:    20px;
+  --btn-square-small-size:   24px;
+  --btn-square-regular-size: 32px;
+  --btn-square-large-size:   48px;
+
+  --btn-border-default: #00000055;
+  --btn-border-hover:   #00000088;
+  --btn-border-active:  var(--color-border-light-30);
+
+  --btn-bg-default: var(--palette-parchment-input);
+  --btn-bg-hover:   #EEEEEEBB;
+  --btn-bg-pressed: #DDDDDDBB;
+  --btn-bg-active:  var(--color-input-backdrop);
+
+  --btn-shadow-active:
+    inset 0 0 2px rgba(0, 0, 0, 0.5),
+    inset 0 0 6px rgba(0, 0, 0, 0.2),
+    0 0 2px var(--color-shadow-white);
+
+  --btn-icon-size: 18px;
+
+  /* ---------------------------------------------------------------------------
+     1g. Scrollbar Tokens
+     Shared by both native WebKit scrollbars and the custom JS scrollbar widget.
+  --------------------------------------------------------------------------- */
+
+  --canonical-scroll-thickness:       16px;
+  --canonical-scroll-handle-gap:      4px;
+  --canonical-scroll-handle-thickness: calc(
+    var(--canonical-scroll-thickness) - (var(--canonical-scroll-handle-gap) * 2)
+  );
+
+  --canonical-scroll-track-bg:     var(--color-input-backdrop);
+  --canonical-scroll-track-border: rgba(106, 92, 79, 0.45);
+  --canonical-handle-border:       rgba(81, 73, 66, 0.6);
+  --canonical-handle-bg:           var(--btn-bg-default);
+
+  --canonical-handle-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 -1px 0 rgba(48, 40, 34, 0.2),
+    0 0 1px rgba(0, 0, 0, 0.25);
+
+  /* ---------------------------------------------------------------------------
+     1h. Sidebar Layout Tokens
+  --------------------------------------------------------------------------- */
+
+  --sidebar-view-button-size:  var(--btn-square-large-size);
+  --sidebar-view-gap-min:      8px;
+  --sidebar-view-padding-left: 8px;
+  --sidebar-padding-right:     8px;
+
+  --sidebar-min-width: calc(
+    (var(--sidebar-view-button-size) * 5) +
+    (var(--sidebar-view-gap-min) * 4) +
+    var(--sidebar-view-padding-left) +
+    var(--sidebar-padding-right)
+  );
+
+  /* ---------------------------------------------------------------------------
+     1i. Flyout / Toolbar Tokens
+  --------------------------------------------------------------------------- */
+
+  --toolbar-options-gap: 6px;
+  --color-grid-gap:      var(--toolbar-options-gap);
+  --color-grid-cell:     32px;
+
+  /* Additional Editor tokens found later in file */
+  --bottom-utility-bar-height: 28px;
+  --wordcount-panel-width: 80px;
+}
+
+/* ---------------------------------------------------------------------------
+   1b-i. Shadow flip
+--------------------------------------------------------------------------- */
+
+.app-shell.shadow-flip {
+  --box-shadow-regular-light: var(--box-shadow-inverted-light-original);
+  --box-shadow-inverted-light: var(--box-shadow-regular-light-original);
+  --box-shadow-regular: var(--box-shadow-inverted-original);
+  --box-shadow-inverted: var(--box-shadow-regular-original);
+  --box-shadow-regular-harsh: var(--box-shadow-inverted-original);
+  --box-shadow-inverted-harsh: var(--box-shadow-regular-harsh-original);
+}

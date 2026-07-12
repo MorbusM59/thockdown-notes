@@ -1,0 +1,272 @@
+/* =============================================================================
+   Editor Area
+   ============================================================================= */
+
+.editor-viewer-frame {
+  display:     flex;
+  align-items: stretch;
+  width:       100%;
+  height:      100%;
+  min-width:   0;
+  min-height:  0;
+  position:    relative;
+  padding: 0 4px 0 0;
+}
+
+.editor-document-stats {
+  position:       absolute;
+  inset:          auto 0 0 0;
+  height:         var(--bottom-utility-bar-height);
+  display:        flex;
+  align-items:    center;
+  gap:            4px;
+  padding:        4px 8px 8px 8px;
+  box-sizing:     border-box;
+  font-size:      9px;
+  letter-spacing: 0.02em;
+  color:          var(--color-text-60);
+  text-shadow:    var(--text-shadow-emboss-ui);
+  pointer-events: auto;
+  user-select:    none;
+}
+
+.wordcount-panel {
+  flex:           0 0 var(--wordcount-panel-width);
+  min-width:      var(--wordcount-panel-width);
+  height:         var(--canonical-scroll-thickness);
+  box-sizing:     border-box;
+  padding:        0 8px;
+  border:         1px solid var(--canonical-scroll-track-border);
+  border-radius:  999px;
+  box-shadow:     var(--box-shadow-inverted-light);
+  background:     var(--canonical-scroll-track-bg);
+  color:          var(--color-text-80);
+  font-size:      9px;
+  letter-spacing: 0.02em;
+  text-shadow:    none;
+  pointer-events: none;
+  user-select:    none;
+  text-align:     center;
+  align-content:  center;
+}
+
+.timeline-panel {
+  flex:      1 1 auto;
+  min-width: 0;
+}
+
+/* Snapshot timeline slider */
+.snapshot-timeline-shell {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: var(--canonical-scroll-thickness);
+}
+
+.snapshot-timeline-rail {
+  position:      absolute;
+  inset:         0;
+  border:        1px solid var(--canonical-scroll-track-border);
+  border-radius: 999px;
+  background:    var(--canonical-scroll-track-bg);
+  box-shadow:    var(--box-shadow-inverted-light);
+}
+
+.snapshot-timeline-mark {
+  position:       absolute;
+  top:            50%;
+  width:          8px;
+  height:         8px;
+  margin-left:    -4px;
+  border-radius:  50%;
+  transform:      translateY(-50%);
+  background:     transparent;
+  pointer-events: auto;
+  box-sizing:     border-box;
+  z-index:        2;
+  border: 1px solid var(--canonical-scroll-track-bg);
+  outline: 1px solid var(--color-text-40);
+  background-color: transparent;
+}
+
+.snapshot-timeline-mark.is-automatic {
+  outline: 1px solid var(--color-text-30);
+}
+
+.snapshot-timeline-mark.is-manual {
+  outline: 1px solid var(--color-text-60);
+}
+
+.snapshot-timeline-mark.matches-present {
+  background-color: var(--color-text-30);
+}
+
+.snapshot-timeline-mark.is-active {
+  background-color: var(--color-text-60);
+}
+
+.snapshot-timeline-mark.is-holding {
+  background-color: var(--color-text-60);
+}
+
+.snapshot-timeline-hold-ring, .snapshot-merge-circle {
+  position:       absolute;
+  inset:          -7px;
+  width:          20px;
+  height:         20px;
+  transform:      rotate(-90deg);
+  pointer-events: none;
+}
+
+.snapshot-timeline-hold-ring circle, .snapshot-merge-circle circle {
+  stroke: var(--color-text-60);
+}
+
+.snapshot-merge-circle {
+  transform: translate(4px, 4px);
+}
+
+/* Manual-snapshot circle */
+.manual-snapshot-panel {
+  width: var(--canonical-scroll-thickness);
+  height: var(--canonical-scroll-thickness);
+}
+
+.manual-snapshot-circle {
+  position:        relative;
+  width:           var(--canonical-scroll-thickness);
+  height:          var(--canonical-scroll-thickness);
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  padding:         0;
+  border: 1px solid var(--canonical-scroll-track-border);
+  border-radius: 999px;
+  box-shadow: var(--box-shadow-inverted-light);
+  background: var(--canonical-scroll-track-bg);
+}
+
+.manual-snapshot-circle:disabled .manual-snapshot-circle-dot,
+.manual-snapshot-circle.not-present .manual-snapshot-circle-dot {
+  display: none;
+}
+
+.manual-snapshot-circle-dot {
+  width:         8px;
+  height:        8px;
+  border-radius: 50%;
+  border: 1px solid var(--canonical-scroll-track-bg);
+  background-color: var(--color-text-60);
+}
+
+.manual-snapshot-circle.is-hollow .manual-snapshot-circle-dot {
+  outline: none;
+}
+
+.manual-snapshot-circle.is-filled .manual-snapshot-circle-dot {
+  outline: 1px solid var(--color-text-60);
+}
+
+.editor-shell {
+  margin:        0 0 var(--bottom-utility-bar-height) 8px;
+  flex:          1 1 auto;
+  min-width:     0;
+  position:      relative;
+  padding:       0;
+  box-sizing:    border-box;
+  border:        1px solid var(--color-border-light-70);
+  border-radius: var(--border-radius-regular);
+  background:    var(--color-background-light);
+  overflow:      hidden;
+}
+
+.editor-shell::after {
+  content:        '';
+  position:       absolute;
+  inset:          0;
+  border-radius:  inherit;
+  pointer-events: none;
+  box-shadow:     var(--box-shadow-inverted);
+  z-index:        4;
+}
+
+.editor-scrollbar-slot {
+  flex:      0 0 24px;
+  width:     24px;
+  min-width: 24px;
+  max-width: 24px;
+  margin:    0 0 var(--bottom-utility-bar-height);
+  position:  relative;
+}
+
+.editor-scrollbar-slot-inner {
+  position: absolute;
+  inset:    0;
+}
+
+/* Editor stage + texture overlay */
+.editor-background {
+  position: absolute;
+  inset: 0;
+  background-color: var(--background-color-root);
+}
+
+.editor-background::before {
+  content:          '';
+  position:         absolute;
+  inset:            0;
+  background-color: var(--palette-parchment-lightest);
+}
+
+.editor-stage {
+  position:      relative;
+  width:         100%;
+  height:        100%;
+  box-sizing:    border-box;
+  border-radius: 6px;
+  overflow:      hidden;
+  z-index:       1;
+}
+
+.editor-stage::before {
+  content:          '';
+  position:         absolute;
+  inset:            0;
+  pointer-events:   none;
+  z-index:          1;
+  background-color: var(--texture-editor-edit-tint);
+  -webkit-mask-image:    var(--texture-editor-edit);
+  -webkit-mask-repeat:   repeat;
+  -webkit-mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  -webkit-mask-position: 0 0;
+  mask-image:    var(--texture-editor-edit);
+  mask-repeat:   repeat;
+  mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  mask-position: 0 0;
+}
+
+.editor-stage > * {
+  z-index: 2;
+}
+
+/* Preview mode edge fades */
+.editor-stage.is-preview-mode::before,
+.editor-stage.is-preview-mode::after {
+  content:        '';
+  position:       absolute;
+  left:           1px;
+  right:          1px;
+  height:         4px;
+  pointer-events: none;
+  z-index:        3;
+}
+
+.editor-stage.is-preview-mode::before {
+  top:        0;
+  background: linear-gradient(to bottom, var(--preview-edge-fade-color, var(--color-background-light)), transparent);
+}
+
+.editor-stage.is-preview-mode::after {
+  bottom:     0;
+  background: linear-gradient(to top, var(--preview-edge-fade-color, var(--color-background-light)), transparent);
+}

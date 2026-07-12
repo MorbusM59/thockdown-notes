@@ -1,0 +1,88 @@
+/* =============================================================================
+   Preview / Markdown
+   ============================================================================= */
+
+.markdown-preview {
+  position: absolute;
+  inset:    0;
+  display:  flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: transparent;
+  z-index:  2;
+}
+
+.mode-view .markdown-preview::before {
+  content:          '';
+  position:         absolute;
+  inset:            0;
+  pointer-events:   none;
+  z-index:          1;
+  background-color: var(--texture-editor-render-tint);
+  -webkit-mask-image:    var(--texture-editor-render);
+  -webkit-mask-repeat:   repeat;
+  -webkit-mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  -webkit-mask-position: 0 0;
+  mask-image:    var(--texture-editor-render);
+  mask-repeat:   repeat;
+  mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  mask-position: 0 0;
+}
+
+.mode-view .markdown-preview-scroll-anchor {
+  padding-bottom: 250px;
+}
+
+.markdown-preview-content {
+  flex:       1 1 auto;
+  min-height: 0;
+  position:   relative;
+  z-index:    2;
+}
+
+/* Specific Markdown tag overrides */
+.markdown-preview-content div > img {
+  display:       block;
+  max-width:     100%;
+  margin-left:   auto;
+  margin-right:  auto;
+  border-radius: 4px;
+}
+
+.markdown-preview-content pre {
+  background:    var(--markdown-code-bg);
+  padding:       12px;
+  border-radius: 4px;
+  border:        1px solid var(--color-border-dark-10);
+  overflow-x:    auto;
+}
+
+.markdown-preview-content code {
+  font-family: var(--font-editor);
+  font-size:   0.9em;
+}
+
+.markdown-preview-content blockquote {
+  border-left:  4px solid var(--color-border-dark-40);
+  margin-left:  0px;
+  padding-left: 16px;
+  font-style:   italic;
+  color:        var(--color-text-60);
+}
+
+.markdown-preview-content table {
+  border-collapse: collapse;
+  width:           100%;
+}
+
+.markdown-preview-content th,
+.markdown-preview-content td {
+  border:  1px solid var(--color-border-dark-20);
+  padding: 8px;
+}
+
+.markdown-preview-content hr {
+  border: none;
+  border-top: 1px solid var(--color-border-dark-20);
+  margin: 20px 0;
+}

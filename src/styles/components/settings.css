@@ -1,0 +1,140 @@
+/* =============================================================================
+   Utility Settings Panel
+   ============================================================================= */
+
+.utility-grid {
+  display:         grid;
+  grid-template-columns: auto;
+  grid-template-rows: auto auto;
+  -webkit-app-region: drag;
+  width:           100%;
+  height:          100%;
+  border-radius:    0 0 0 var(--border-radius-regular);
+  border-left:      1px solid var(--color-border-light-70);
+  border-bottom:    1px solid var(--color-border-light-70);
+  box-shadow:       var(--box-shadow-inverted);
+  background:       var(--color-input-backdrop);
+}
+
+.utility-grid.is-collapsed {
+  border-radius: var(--border-radius-regular);
+  border-left: 1px solid var(--color-border-light-70);
+  align-content: start;
+}
+
+.utility-grid.is-collapsed .window-controls {
+  margin-bottom: 0;
+}
+
+.utility-grid.is-measure-probe {
+  position: fixed;
+  left: -10000px;
+  top: -10000px;
+  width: max-content !important;
+  height: auto !important;
+  display: inline-grid;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.utility-settings-panel {
+  justify-content: flex-start;
+  gap:             8px;
+}
+
+.utility-setting-row {
+  display:        flex;
+  flex-direction: column;
+  gap:            4px;
+}
+
+.utility-setting-row-range {
+  gap: 3px;
+}
+
+.utility-setting-row input {
+  width:         100%;
+  box-sizing:    border-box;
+  border:        1px solid #c6b9ab;
+  border-radius: var(--border-radius-regular);
+  background:    var(--color-input-backdrop);
+  color:         var(--color-text-base);
+  font-size:     11px;
+  padding:       4px 6px;
+}
+
+.utility-setting-stack {
+  display:        flex;
+  flex-direction: column;
+  gap:            4px;
+}
+
+.utility-setting-button-row {
+  display:        flex;
+  flex-direction: row;
+  gap:            6px;
+  align-items:    center;
+}
+
+.utility-setting-slider-stack {
+  display:        flex;
+  flex-direction: column;
+  gap:            6px;
+}
+
+/* Custom slider / scrollbar shell */
+.utility-setting-scrollbar-shell {
+  position:    relative;
+  width:       100%;
+  height:      var(--canonical-scroll-thickness);
+  display:     block;
+  touch-action: none;
+  cursor:      default;
+  user-select: none;
+}
+
+.utility-setting-scrollbar-shell:focus-visible {
+  outline:       1px solid #8f7f70;
+  border-radius: 999px;
+}
+
+.utility-setting-scrollbar-rail {
+  position:      absolute;
+  inset:         0;
+  border:        1px solid var(--canonical-scroll-track-border);
+  border-radius: 999px;
+  background:    var(--canonical-scroll-track-bg);
+  box-shadow:    var(--box-shadow-inverted-light);
+}
+
+.utility-setting-scrollbar-track-label {
+  position:        absolute;
+  inset:           0;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  pointer-events:  none;
+  user-select:     none;
+  font-size:       10px;
+  letter-spacing:  0.03em;
+  text-transform:  lowercase;
+  color:           var(--canonical-scroll-track-border);
+}
+
+.utility-setting-scrollbar-thumb {
+  position:      absolute;
+  top:           calc(var(--canonical-scroll-handle-gap) - 2px);
+  width:         calc(var(--canonical-scroll-handle-thickness) + 2px);
+  height:        calc(var(--canonical-scroll-handle-thickness) + 2px);
+  border:        1px solid var(--canonical-handle-border);
+  border-radius: 999px;
+  box-sizing:    border-box;
+  background:    var(--canonical-handle-bg);
+  box-shadow:    var(--box-shadow-regular-light);
+  z-index:       1;
+}
+
+.utility-setting-scrollbar-shell.is-dragging .utility-setting-scrollbar-thumb {
+  border-color: rgba(81, 73, 66, 0.8);
+}
