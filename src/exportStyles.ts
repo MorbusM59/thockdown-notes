@@ -178,113 +178,158 @@ function resolveCssVar(name: string, fallback: string): string {
   return value || fallback
 }
 
-function resolveExportFontUrl(relativePath: string): string {
-  return new URL(relativePath, import.meta.url).href
+async function fetchFontAsDataUri(url: string, mimeType: string): Promise<string> {
+  try {
+    const response = await fetch(url)
+    const buffer = await response.arrayBuffer()
+    const bytes = new Uint8Array(buffer)
+    let binary = ''
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i])
+    }
+    return `data:${mimeType};base64,${btoa(binary)}`
+  } catch {
+    return url
+  }
 }
 
-function buildExportFontFaceCss(): string {
+async function buildExportFontFaceCss(): Promise<string> {
+  const [
+    syneMono,
+    redHatMono,
+    robotoCond400,
+    robotoCond500,
+    robotoCond700,
+    quicksand400,
+    quicksand500,
+    quicksand700,
+    sourGummy400,
+    sourGummy500,
+    sourGummy700,
+    alumniSans,
+    bigShoulders,
+    xkcd,
+    shareTechMono,
+  ] = await Promise.all([
+    fetchFontAsDataUri(new URL('./fonts/SyneMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/RedHatMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/RobotoCondensed-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/RobotoCondensed-Medium.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/RobotoCondensed-Bold.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/Quicksand-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/Quicksand-Medium.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/Quicksand-Bold.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/SourGummy-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/SourGummy-Medium.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/SourGummy-Bold.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/AlumniSans-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/BigShoulders-ExtraLight.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/xkcd.otf', import.meta.url).href, 'font/otf'),
+    fetchFontAsDataUri(new URL('./fonts/ShareTechMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
+  ])
+
   return `
 @font-face {
   font-family: 'Syne Mono';
-  src: url('${resolveExportFontUrl('./fonts/SyneMono-Regular.woff2')}') format('woff2');
+  src: url('${syneMono}') format('woff2');
   font-weight: normal;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'Red Hat Mono';
-  src: url('${resolveExportFontUrl('./fonts/RedHatMono-Regular.woff2')}') format('woff2');
+  src: url('${redHatMono}') format('woff2');
   font-weight: normal;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'Roboto Condensed';
-  src: url('${resolveExportFontUrl('./fonts/RobotoCondensed-Regular.woff2')}') format('woff2');
+  src: url('${robotoCond400}') format('woff2');
   font-weight: 400;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'Roboto Condensed';
-  src: url('${resolveExportFontUrl('./fonts/RobotoCondensed-Medium.woff2')}') format('woff2');
+  src: url('${robotoCond500}') format('woff2');
   font-weight: 500;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'Roboto Condensed';
-  src: url('${resolveExportFontUrl('./fonts/RobotoCondensed-Bold.woff2')}') format('woff2');
+  src: url('${robotoCond700}') format('woff2');
   font-weight: 700;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'Quicksand';
-  src: url('${resolveExportFontUrl('./fonts/Quicksand-Regular.woff2')}') format('woff2');
+  src: url('${quicksand400}') format('woff2');
   font-weight: 400;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'Quicksand';
-  src: url('${resolveExportFontUrl('./fonts/Quicksand-Medium.woff2')}') format('woff2');
+  src: url('${quicksand500}') format('woff2');
   font-weight: 500;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'Quicksand';
-  src: url('${resolveExportFontUrl('./fonts/Quicksand-Bold.woff2')}') format('woff2');
+  src: url('${quicksand700}') format('woff2');
   font-weight: 700;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'Sour Gummy';
-  src: url('${resolveExportFontUrl('./fonts/SourGummy-Regular.woff2')}') format('woff2');
+  src: url('${sourGummy400}') format('woff2');
   font-weight: 400;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'Sour Gummy';
-  src: url('${resolveExportFontUrl('./fonts/SourGummy-Medium.woff2')}') format('woff2');
+  src: url('${sourGummy500}') format('woff2');
   font-weight: 500;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'Sour Gummy';
-  src: url('${resolveExportFontUrl('./fonts/SourGummy-Bold.woff2')}') format('woff2');
+  src: url('${sourGummy700}') format('woff2');
   font-weight: 700;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'Alumni Sans';
-  src: url('${resolveExportFontUrl('./fonts/AlumniSans-Regular.woff2')}') format('woff2');
+  src: url('${alumniSans}') format('woff2');
   font-weight: 400;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'Big Shoulders';
-  src: url('${resolveExportFontUrl('./fonts/BigShoulders-ExtraLight.woff2')}') format('woff2');
+  src: url('${bigShoulders}') format('woff2');
   font-weight: 200;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'xkcd';
-  src: url('${resolveExportFontUrl('./fonts/xkcd.otf')}') format('opentype');
+  src: url('${xkcd}') format('opentype');
   font-weight: 400;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'Share Tech Mono';
-  src: url('${resolveExportFontUrl('./fonts/ShareTechMono-Regular.woff2')}') format('woff2');
+  src: url('${shareTechMono}') format('woff2');
   font-weight: 400;
   font-style: normal;
 }
@@ -444,14 +489,17 @@ function resolveExportTokens(
   return tokens
 }
 
-export function buildExportCss(
+export async function buildExportCss(
   viewStyle: ExportViewStyle,
   viewFontSize: ExportFontSize,
   viewSpacing: ExportSpacing,
-): string {
-  const tokens = resolveExportTokens(viewStyle, viewFontSize, viewSpacing)
+): Promise<string> {
+  const [tokens, fontFaceCss] = await Promise.all([
+    Promise.resolve(resolveExportTokens(viewStyle, viewFontSize, viewSpacing)),
+    buildExportFontFaceCss(),
+  ])
 
-  return `${buildExportFontFaceCss()}
+  return `${fontFaceCss}
 
 html, body {
   margin: 0;

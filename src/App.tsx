@@ -4748,7 +4748,7 @@ function App() {
 
   const buildExportHtmlContent = useCallback(async () => {
     const currentEditorText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
-    const exportCss = buildExportCss(viewStyle as ExportViewStyle, viewFontSize as ExportFontSize, viewSpacing as ExportSpacing)
+    const exportCss = await buildExportCss(viewStyle as ExportViewStyle, viewFontSize as ExportFontSize, viewSpacing as ExportSpacing)
 
     const markdownHtml = renderToStaticMarkup(
       <div className="pdf-exporter-page">
