@@ -10142,23 +10142,23 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       className={`options-content sidebar-options-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`}
       aria-label="Settings panel"
     >
-      <div className="preset-section options-typography-section">
+      <div className="typography-section">
         {isPreviewMode ? (
-          <div className="options-typography-grid" role="group" aria-label="Render typography">
+          <div className="typography-grid" role="group" aria-label="Render typography">
             {VIEW_STYLE_OPTIONS.map((option) => (
               <button
                 key={option.key}
                 type="button"
-                className={`btn-icon options-typography-font-btn${viewStyle === option.key ? ' active' : ''}`}
+                className={`btn-icon typography-font-btn${viewStyle === option.key ? ' active' : ''}`}
                 title={option.label}
                 aria-label={option.label}
                 aria-pressed={viewStyle === option.key}
                 onClick={() => setViewStyle(option.key)}
               >
-                <span className="options-typography-font-glyph" style={{ fontFamily: option.family }} aria-hidden="true">Aa</span>
+                <span className="typography-font-glyph" style={{ fontFamily: option.family }} aria-hidden="true">Aa</span>
               </button>
             ))}
-            <div className="options-typography-slider">
+            <div className="typography-slider">
               <CompactScrollbarSlider
                 id="typography-font-size"
                 min={0}
@@ -10173,7 +10173,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 }}
               />
             </div>
-            <div className="options-typography-slider">
+            <div className="typography-slider">
               <CompactScrollbarSlider
                 id="typography-spacing"
                 min={0}
@@ -10190,12 +10190,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             </div>
           </div>
         ) : (
-          <div className="options-typography-grid" role="group" aria-label="Editor typography">
+          <div className="typography-grid" role="group" aria-label="Editor typography">
             {EDITOR_STYLE_OPTIONS.map((option) => (
               <button
                 key={option.key}
                 type="button"
-                className={`btn-icon options-typography-font-btn${editorStyle === option.key ? ' active' : ''}`}
+                className={`btn-icon typography-font-btn${editorStyle === option.key ? ' active' : ''}`}
                 title={option.label}
                 aria-label={option.label}
                 aria-pressed={editorStyle === option.key}
@@ -10204,10 +10204,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   scheduleFocusEditorInEditMode()
                 }}
               >
-                <span className="options-typography-font-glyph" style={{ fontFamily: option.family }} aria-hidden="true">Aa</span>
+                <span className="typography-font-glyph" style={{ fontFamily: option.family }} aria-hidden="true">Aa</span>
               </button>
             ))}
-            <div className="options-typography-slider">
+            <div className="typography-slider">
               <CompactScrollbarSlider
                 id="typography-font-size"
                 min={0}
@@ -10223,7 +10223,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 }}
               />
             </div>
-            <div className="options-typography-slider">
+            <div className="typography-slider">
               <CompactScrollbarSlider
                 id="typography-spacing"
                 min={0}
