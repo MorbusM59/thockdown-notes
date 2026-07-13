@@ -127,7 +127,6 @@
   display:    flex;
   flex-wrap:  wrap;
   gap:        2px;
-  overflow:   hidden;
 }
 
 .tag-pill.suggested {
