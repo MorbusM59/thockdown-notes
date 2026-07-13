@@ -117,10 +117,6 @@ const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
 const DEBUG_TAG_NAME = 'debug'
 const PROTECTED_TAGS = new Set(['archived', 'deleted', 'external', DEBUG_TAG_NAME])
 const GRID_DIVIDER_PX = 8
-const SIDEBAR_VIEW_BUTTON_SIZE_PX = 40
-const SIDEBAR_VIEW_GAP_PX = 8
-const SIDEBAR_VIEW_PADDING_LEFT_PX = 8
-const SIDEBAR_PADDING_RIGHT_PX = 8
 const SIDEBAR_MIN_WIDTH_PX = 288
 const TAG_INPUT_BAR_WIDTH_PX = 120
 const TAG_DISPLAY_WIDTH_PX = 200
@@ -346,6 +342,29 @@ type HsvaColor = {
 
 type HsvaControlKey = 'h' | 's' | 'v' | 'a'
 const GLAZE_RADIAL_CORNERS = ['top left', 'top right', 'bottom right', 'bottom left'] as const
+
+const VIEW_STYLE_OPTIONS: Array<{ key: ViewStyleKey; label: string; family: string }> = [
+  { key: 'modern', label: 'Modern', family: "'Quicksand', 'Segoe UI', sans-serif" },
+  { key: 'narrow', label: 'Narrow', family: "'Roboto Condensed', 'Segoe UI', sans-serif" },
+  { key: 'cute', label: 'Cute', family: "'Sour Gummy', 'Quicksand', 'Segoe UI', sans-serif" },
+  { key: 'xkcd', label: 'xkcd', family: "'xkcd', 'Comic Sans MS', 'Chalkboard SE', cursive" },
+  { key: 'print', label: 'Print', family: "'Big Shoulders', 'Times New Roman', Georgia, serif" },
+]
+
+const VIEW_FONT_SIZE_OPTIONS: Array<{ key: ViewSizeKey; label: string }> = [
+  { key: 'xs', label: 'XS' },
+  { key: 's', label: 'S' },
+  { key: 'm', label: 'M' },
+  { key: 'l', label: 'L' },
+  { key: 'xl', label: 'XL' },
+]
+
+const VIEW_SPACING_OPTIONS: Array<{ key: ViewSpacingKey; label: string }> = [
+  { key: 'tight', label: 'Tight' },
+  { key: 'compact', label: 'Compact' },
+  { key: 'cozy', label: 'Cozy' },
+  { key: 'wide', label: 'Wide' },
+]
 
 type DarkModeKey = 'none' | 'mono' | 'red' | 'dusk' | 'neon' | 'matrix'
 
@@ -10123,6 +10142,106 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       className={`options-content sidebar-options-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`}
       aria-label="Settings panel"
     >
+      <div className="preset-section options-typography-section">
+        {isPreviewMode ? (
+          <div className="options-typography-grid" role="group" aria-label="Render typography">
+            {VIEW_STYLE_OPTIONS.map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                className={`btn-icon options-typography-font-btn${viewStyle === option.key ? ' active' : ''}`}
+                title={option.label}
+                aria-label={option.label}
+                aria-pressed={viewStyle === option.key}
+                onClick={() => setViewStyle(option.key)}
+              >
+                <span className="options-typography-font-glyph" style={{ fontFamily: option.family }} aria-hidden="true">Aa</span>
+              </button>
+            ))}
+            <div className="options-typography-slider">
+              <CompactScrollbarSlider
+                id="typography-font-size"
+                min={0}
+                max={VIEW_FONT_SIZE_OPTIONS.length - 1}
+                step={1}
+                value={VIEW_FONT_SIZE_OPTIONS.findIndex((option) => option.key === viewFontSize)}
+                trackLabel="size"
+                ariaLabel="Render font size"
+                onCommit={(value) => {
+                  const index = Math.max(0, Math.min(VIEW_FONT_SIZE_OPTIONS.length - 1, Math.round(value)))
+                  setViewFontSize(VIEW_FONT_SIZE_OPTIONS[index]!.key)
+                }}
+              />
+            </div>
+            <div className="options-typography-slider">
+              <CompactScrollbarSlider
+                id="typography-spacing"
+                min={0}
+                max={VIEW_SPACING_OPTIONS.length - 1}
+                step={1}
+                value={VIEW_SPACING_OPTIONS.findIndex((option) => option.key === viewSpacing)}
+                trackLabel="spacing"
+                ariaLabel="Render spacing"
+                onCommit={(value) => {
+                  const index = Math.max(0, Math.min(VIEW_SPACING_OPTIONS.length - 1, Math.round(value)))
+                  setViewSpacing(VIEW_SPACING_OPTIONS[index]!.key)
+                }}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="options-typography-grid" role="group" aria-label="Editor typography">
+            {EDITOR_STYLE_OPTIONS.map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                className={`btn-icon options-typography-font-btn${editorStyle === option.key ? ' active' : ''}`}
+                title={option.label}
+                aria-label={option.label}
+                aria-pressed={editorStyle === option.key}
+                onClick={() => {
+                  setEditorStyle(option.key)
+                  scheduleFocusEditorInEditMode()
+                }}
+              >
+                <span className="options-typography-font-glyph" style={{ fontFamily: option.family }} aria-hidden="true">Aa</span>
+              </button>
+            ))}
+            <div className="options-typography-slider">
+              <CompactScrollbarSlider
+                id="typography-font-size"
+                min={0}
+                max={EDITOR_FONT_SIZE_OPTIONS.length - 1}
+                step={1}
+                value={EDITOR_FONT_SIZE_OPTIONS.findIndex((option) => option.key === editorFontSize)}
+                trackLabel="size"
+                ariaLabel="Editor font size"
+                onCommit={(value) => {
+                  const index = Math.max(0, Math.min(EDITOR_FONT_SIZE_OPTIONS.length - 1, Math.round(value)))
+                  setEditorFontSize(EDITOR_FONT_SIZE_OPTIONS[index]!.key)
+                  scheduleFocusEditorInEditMode()
+                }}
+              />
+            </div>
+            <div className="options-typography-slider">
+              <CompactScrollbarSlider
+                id="typography-spacing"
+                min={0}
+                max={EDITOR_SPACING_OPTIONS.length - 1}
+                step={1}
+                value={EDITOR_SPACING_OPTIONS.findIndex((option) => option.key === editorSpacing)}
+                trackLabel="spacing"
+                ariaLabel="Editor spacing"
+                onCommit={(value) => {
+                  const index = Math.max(0, Math.min(EDITOR_SPACING_OPTIONS.length - 1, Math.round(value)))
+                  setEditorSpacing(EDITOR_SPACING_OPTIONS[index]!.key)
+                  scheduleFocusEditorInEditMode()
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
       <div className="preset-section">
         <div className="options-loadout-grid" role="group" aria-label="UI mode presets">
           {factoryPresetEntriesForCurrentMode.map((entry) => {
@@ -12301,104 +12420,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 </div>
 
                 <div className="toolbar-right-tools" aria-label="Toolbar right controls">
-                  {isPreviewMode ? (
-                    <>
-                      <div className="style-selector">
-                        <select
-                          value={viewStyle}
-                          onChange={(event) => setViewStyle(event.target.value as ViewStyleKey)}
-                          aria-label="Render style"
-                          disabled={!activeNoteId}
-                        >
-                          <option value="modern">Modern</option>
-                          <option value="narrow">Narrow</option>
-                          <option value="cute">Cute</option>
-                          <option value="xkcd">xkcd</option>
-                          <option value="print">Print</option>
-                        </select>
-                      </div>
-
-                      <div className="style-selector">
-                        <select
-                          value={viewFontSize}
-                          onChange={(event) => setViewFontSize(event.target.value as ViewSizeKey)}
-                          aria-label="Render font size"
-                          disabled={!activeNoteId}
-                        >
-                          <option value="xs">XS</option>
-                          <option value="s">S</option>
-                          <option value="m">M</option>
-                          <option value="l">L</option>
-                          <option value="xl">XL</option>
-                        </select>
-                      </div>
-
-                      <div className="style-selector">
-                        <select
-                          value={viewSpacing}
-                          onChange={(event) => setViewSpacing(event.target.value as ViewSpacingKey)}
-                          aria-label="Render spacing"
-                          disabled={!activeNoteId}
-                        >
-                          <option value="tight">Tight</option>
-                          <option value="compact">Compact</option>
-                          <option value="cozy">Cozy</option>
-                          <option value="wide">Wide</option>
-                        </select>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="style-selector">
-                        <select
-                          value={editorStyle}
-                          onChange={(event) => {
-                            setEditorStyle(event.target.value as EditorStyleKey)
-                            scheduleFocusEditorInEditMode()
-                          }}
-                          aria-label="Editor style"
-                          disabled={!activeNoteId}
-                        >
-                          {EDITOR_STYLE_OPTIONS.map((option) => (
-                            <option key={option.key} value={option.key}>{option.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="style-selector">
-                        <select
-                          value={editorFontSize}
-                          onChange={(event) => {
-                            setEditorFontSize(event.target.value as EditorFontSizeKey)
-                            scheduleFocusEditorInEditMode()
-                          }}
-                          aria-label="Editor font size"
-                          disabled={!activeNoteId}
-                        >
-                          {EDITOR_FONT_SIZE_OPTIONS.map((option) => (
-                            <option key={option.key} value={option.key}>{option.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="style-selector">
-                        <select
-                          value={editorSpacing}
-                          onChange={(event) => {
-                            setEditorSpacing(event.target.value as EditorSpacingKey)
-                            scheduleFocusEditorInEditMode()
-                          }}
-                          aria-label="Editor spacing"
-                          disabled={!activeNoteId}
-                        >
-                          {EDITOR_SPACING_OPTIONS.map((option) => (
-                            <option key={option.key} value={option.key}>{option.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </>
-                  )}
-
                   <button
                     type="button"
                     className={`toggle-btn icon-btn toolbar-gear-btn${uiMode === 'dark' ? ' is-active' : ''}`}
