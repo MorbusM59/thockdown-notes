@@ -119,6 +119,8 @@
 /* Suggested tags */
 .suggested-grid {
   padding: 8px 8px 4px 8px;
+  overflow-y: hidden;
+  max-height: 50px;
 }
 
 .suggested-tags {
@@ -126,7 +128,6 @@
   flex-wrap:  wrap;
   gap:        2px;
   overflow:   hidden;
-  max-height: 83px;
 }
 
 .tag-pill.suggested {
