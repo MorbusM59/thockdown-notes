@@ -4297,12 +4297,12 @@ function App() {
   }, [isPreviewMode])
 
   const layout = useMemo(() => {
-    const dividerTotalWidthPx = GRID_DIVIDER_PX * 2
+    const dividerWidthPx = GRID_DIVIDER_PX
     const sidebarWidthPx = SIDEBAR_MIN_WIDTH_PX
 
     const mainColumnsWidthPx = Math.max(
       TAG_INPUT_MIN_WIDTH_PX + SUGGESTED_MIN_WIDTH_PX,
-      appShellWidthPx - dividerTotalWidthPx - UTILITY_WIDTH_PX - sidebarWidthPx,
+      appShellWidthPx - dividerWidthPx - UTILITY_WIDTH_PX - sidebarWidthPx,
     )
 
     // Tag-input and suggested-tags share remaining space at a 1:2 growth
@@ -4318,7 +4318,7 @@ function App() {
       mainColumnsWidthPx,
       tagInputWidthPx,
       suggestedWidthPx,
-      gridTemplateColumns: `${Math.round(sidebarWidthPx)}px ${GRID_DIVIDER_PX}px ${Math.round(tagInputWidthPx)}px ${Math.round(suggestedWidthPx)}px ${GRID_DIVIDER_PX}px ${UTILITY_WIDTH_PX}px`,
+      gridTemplateColumns: `${Math.round(sidebarWidthPx)}px ${dividerWidthPx}px ${Math.round(tagInputWidthPx)}px ${Math.round(suggestedWidthPx)}px ${UTILITY_WIDTH_PX}px`,
     }
   }, [appShellWidthPx])
 
@@ -12093,8 +12093,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 ) : null}
               </div>
             </section>
-
-            <div className="grid-divider divider-right" style={{ gridArea: 'd-right' }} aria-hidden="true" />
 
             <section
               className={`utility-grid${windowIsCollapsed ? ' is-collapsed' : ''}`}
