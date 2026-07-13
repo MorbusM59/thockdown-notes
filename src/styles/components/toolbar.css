@@ -25,6 +25,7 @@
   flex-wrap:   nowrap;
   box-sizing:  border-box;
   overflow:    hidden;
+  height: 100%;
 }
 
 .toolbar-left-tools {
@@ -81,7 +82,7 @@
   user-select: none;
 }
 
-.toolbar-gear-btn {
+.window-control-btn {
   width:           var(--btn-square-regular-size);
   height:          var(--btn-square-regular-size);
   min-width:       var(--btn-square-regular-size);
@@ -98,14 +99,14 @@
   color: var(--color-text-80);
 }
 
-.toolbar-gear-glyph {
+.window-control-glyph {
   display:    block;
   line-height: 1;
   margin:     0;
   transform:  translateY(0);
 }
 
-.toolbar-gear-glyph::before {
+.window-control-glyph::before {
   display: block;
 }
 

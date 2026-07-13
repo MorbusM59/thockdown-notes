@@ -9,7 +9,7 @@
   background-size:      100% 100%;
   background-position:  0 0;
   grid-template-columns: 288px 8px minmax(300px, 1fr) 129px;
-  grid-template-rows:   auto 24px minmax(0, 1fr);
+  grid-template-rows:   auto 32px minmax(0, 1fr);
   grid-template-areas:
     'sidebar d-sidebar toolbar  utility'
     'sidebar d-sidebar tabbar   tabbar'

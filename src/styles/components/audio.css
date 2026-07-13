@@ -13,20 +13,20 @@
 }
 
 .window-minimize-split {
-  width: var(--btn-square-regular-size);
-  height: var(--btn-square-regular-size);
-  min-width: var(--btn-square-regular-size);
-  min-height: var(--btn-square-regular-size);
+  width: var(--btn-square-large-size);
+  height: var(--btn-square-large-size);
+  min-width: var(--btn-square-large-size);
+  min-height: var(--btn-square-large-size);
   display: inline-flex;
   flex-direction: column;
   gap: 2px;
   -webkit-app-region: no-drag;
 }
 
-.window-minimize-split-btn {
+.window-control-btn.window-minimize-split-btn {
   width: 100%;
   min-width: 0;
-  height: calc((var(--btn-square-regular-size) - 2px) / 2);
+  height: calc((var(--btn-square-large-size) - 2px) / 2);
   min-height: 0;
   aspect-ratio: auto;
   border-radius: var(--border-radius-small);
@@ -44,10 +44,10 @@
 
 .window-control-btn {
   -webkit-app-region: no-drag;
-  width:           var(--btn-square-regular-size);
-  height:          var(--btn-square-regular-size);
-  min-width:       var(--btn-square-regular-size);
-  min-height:      var(--btn-square-regular-size);
+  width:           var(--btn-square-large-size);
+  height:          var(--btn-square-large-size);
+  min-width:       var(--btn-square-large-size);
+  min-height:      var(--btn-square-large-size);
   padding:         0;
   margin:          0;
   display:         inline-flex;
@@ -87,7 +87,7 @@
    ============================================================================= */
 
 .audio-controls {
-  padding:          0 8px 8px 8px;
+  padding:          8px 0 8px 8px;
 }
 
 .audio-micro-grid {

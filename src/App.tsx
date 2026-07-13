@@ -118,7 +118,7 @@ const DEBUG_TAG_NAME = 'debug'
 const PROTECTED_TAGS = new Set(['archived', 'deleted', 'external', DEBUG_TAG_NAME])
 const GRID_DIVIDER_PX = 8
 const SIDEBAR_MIN_WIDTH_PX = 288
-const UTILITY_WIDTH_PX = 129
+const UTILITY_WIDTH_PX = 300
 const APP_GRID_MIN_WIDTH_PX = SIDEBAR_MIN_WIDTH_PX + GRID_DIVIDER_PX + UTILITY_WIDTH_PX + 300
 const DEFAULT_SIDEBAR_RATIO = 0.306
 const DEFAULT_TAG_SPLIT_RATIO = 0.645
@@ -12093,50 +12093,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               style={{ gridArea: 'utility' }}
               aria-label="Utility grid"
             >
-              <div className="window-controls" aria-label="Window controls">
-                <div className="window-minimize-split" role="group" aria-label="Mini mode and minimize controls">
-                  <button
-                    type="button"
-                    className="toolbar-gear-btn btn-icon window-minimize-split-btn mini-mode"
-                    title={windowIsCollapsed ? 'Exit mini mode' : 'Enter mini mode'}
-                    aria-label={windowIsCollapsed ? 'Exit mini mode' : 'Enter mini mode'}
-                    onClick={handleWindowUtilityCollapseToggle}
-                  >
-                    <span className={`fa-solid ${windowIsCollapsed ? 'fa-arrows-left-right' : 'fa-caret-up'}`} aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className="toolbar-gear-btn btn-icon window-minimize-split-btn minimize"
-                    title="Minimize"
-                    aria-label="Minimize window"
-                    onClick={handleWindowMinimize}
-                  >
-                    <span className="fa-solid fa-caret-down" aria-hidden="true" />
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  className="toolbar-gear-btn btn-icon"
-                  title={windowIsMaximized ? 'Restore' : 'Maximize'}
-                  aria-label={windowIsMaximized ? 'Restore window' : 'Maximize window'}
-                  onClick={handleWindowToggleMaximize}
-                >
-                  <span
-                    className={`fa-solid ${windowIsMaximized ? 'fa-down-left-and-up-right-to-center' : 'fa-up-right-and-down-left-from-center'}`}
-                    aria-hidden="true"
-                  />
-                </button>
-                <button
-                  type="button"
-                  className="toolbar-gear-btn btn-icon"
-                  title="Close"
-                  aria-label="Close window"
-                  onClick={handleWindowClose}
-                >
-                  <span className="fa-solid fa-dove" aria-hidden="true" />
-                </button>
-              </div>
-
               <AudioControls
                 volume={musicVolume}
                 reverbAmount={musicReverbAmount}
@@ -12149,6 +12105,50 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   toggleSidebarOptionsMenu()
                 }}
               />
+
+              <div className="window-controls" aria-label="Window controls">
+                <div className="window-minimize-split" role="group" aria-label="Mini mode and minimize controls">
+                  <button
+                    type="button"
+                    className="window-control-btn btn-icon window-minimize-split-btn mini-mode"
+                    title={windowIsCollapsed ? 'Exit mini mode' : 'Enter mini mode'}
+                    aria-label={windowIsCollapsed ? 'Exit mini mode' : 'Enter mini mode'}
+                    onClick={handleWindowUtilityCollapseToggle}
+                  >
+                    <span className={`fa-solid ${windowIsCollapsed ? 'fa-arrows-left-right' : 'fa-caret-up'}`} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="window-control-btn btn-icon window-minimize-split-btn minimize"
+                    title="Minimize"
+                    aria-label="Minimize window"
+                    onClick={handleWindowMinimize}
+                  >
+                    <span className="fa-solid fa-caret-down" aria-hidden="true" />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="window-control-btn btn-icon"
+                  title={windowIsMaximized ? 'Restore' : 'Maximize'}
+                  aria-label={windowIsMaximized ? 'Restore window' : 'Maximize window'}
+                  onClick={handleWindowToggleMaximize}
+                >
+                  <span
+                    className={`fa-solid ${windowIsMaximized ? 'fa-down-left-and-up-right-to-center' : 'fa-up-right-and-down-left-from-center'}`}
+                    aria-hidden="true"
+                  />
+                </button>
+                <button
+                  type="button"
+                  className="window-control-btn btn-icon"
+                  title="Close"
+                  aria-label="Close window"
+                  onClick={handleWindowClose}
+                >
+                  <span className="fa-solid fa-dove" aria-hidden="true" />
+                </button>
+              </div>
             </section>
 
             <section className="toolbar-grid" style={{ gridArea: 'toolbar' }} aria-label="Editor toolbar">
@@ -12299,25 +12299,25 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 <div className="toolbar-right-tools" aria-label="Toolbar right controls">
                   <button
                     type="button"
-                    className={`toggle-btn icon-btn toolbar-gear-btn${uiMode === 'dark' ? ' is-active' : ''}`}
+                    className={`toggle-btn icon-btn window-control-btn${uiMode === 'dark' ? ' is-active' : ''}`}
                     title="Toggle dark mode"
                     aria-label="Toggle dark mode"
                     onClick={toggleUiMode}
                   >
                     <span
-                      className={`toolbar-gear-glyph fa-solid ${uiMode === 'dark' ? 'fa-sun' : 'fa-moon'}`}
+                      className={`window-control-glyph fa-solid ${uiMode === 'dark' ? 'fa-sun' : 'fa-moon'}`}
                       aria-hidden="true"
                     />
                   </button>
 
                   <button
                     type="button"
-                    className={`toggle-btn icon-btn toolbar-gear-btn${sidebarMode === 'options' ? ' is-active' : ''}`}
+                    className={`toggle-btn icon-btn window-control-btn${sidebarMode === 'options' ? ' is-active' : ''}`}
                     title="View options"
                     aria-label="View options"
                     onClick={toggleSidebarOptionsMenu}
                   >
-                    <span className="toolbar-gear-glyph fa-solid fa-gear" aria-hidden="true" />
+                    <span className="window-control-glyph fa-solid fa-gear" aria-hidden="true" />
                   </button>
 
                 </div>

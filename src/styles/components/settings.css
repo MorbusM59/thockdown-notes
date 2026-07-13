@@ -4,8 +4,8 @@
 
 .utility-grid {
   display:         grid;
-  grid-template-columns: auto;
-  grid-template-rows: auto auto;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto;
   -webkit-app-region: drag;
   width:           100%;
   height:          100%;
