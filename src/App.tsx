@@ -117,12 +117,16 @@ const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
 const DEBUG_TAG_NAME = 'debug'
 const PROTECTED_TAGS = new Set(['archived', 'deleted', 'external', DEBUG_TAG_NAME])
 const GRID_DIVIDER_PX = 8
-const SIDEBAR_MIN_WIDTH_PX = 288
+const SIDEBAR_VIEW_BUTTON_SIZE_PX = 40
+const SIDEBAR_VIEW_GAP_PX = 8
+const SIDEBAR_VIEW_PADDING_LEFT_PX = 8
+const SIDEBAR_PADDING_RIGHT_PX = 8
+const SIDEBAR_MIN_WIDTH_PX = (SIDEBAR_VIEW_BUTTON_SIZE_PX * 5) + (SIDEBAR_VIEW_GAP_PX * 4) + SIDEBAR_VIEW_PADDING_LEFT_PX + SIDEBAR_PADDING_RIGHT_PX
 const TAG_INPUT_MIN_WIDTH_PX = 150
 const TAG_INPUT_MAX_WIDTH_PX = 250
 const SUGGESTED_MIN_WIDTH_PX = 150
 const UTILITY_WIDTH_PX = 129
-const APP_GRID_MIN_WIDTH_PX = SIDEBAR_MIN_WIDTH_PX + (GRID_DIVIDER_PX * 2) + TAG_INPUT_MIN_WIDTH_PX + SUGGESTED_MIN_WIDTH_PX + UTILITY_WIDTH_PX
+const APP_GRID_MIN_WIDTH_PX = SIDEBAR_MIN_WIDTH_PX + GRID_DIVIDER_PX + TAG_INPUT_MIN_WIDTH_PX + SUGGESTED_MIN_WIDTH_PX + UTILITY_WIDTH_PX
 const DEFAULT_SIDEBAR_RATIO = 0.306
 const DEFAULT_TAG_SPLIT_RATIO = 0.645
 const EDITOR_GLYPH_PADDING_MIN_PX = 0
@@ -11658,7 +11662,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   className="search-input-field has-case-toggle"
                   ref={sidebarSearchInputRef}
                   type="text"
-                  placeholder={isFindMode ? 'Find in current note...' : 'Filters notes by content or #tag...'}
+                  placeholder={isFindMode ? 'Find in current note...' : 'Search for content or #tag...'}
                   value={isFindMode ? documentFindQuery : searchQuery}
                   onChange={(event) => {
                     const value = event.target.value

@@ -100,7 +100,7 @@
   background:    var(--color-input-backdrop);
   color:         var(--color-text-base);
   font-size:     12px;
-  padding:       0 8px;
+  padding:       0 2px;
   box-shadow:   var(--box-shadow-inverted-light);
 }
 

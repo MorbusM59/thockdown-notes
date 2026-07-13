@@ -13,7 +13,7 @@
 
 .tag-input-section {
   display:        flex;
-  flex-direction: column;
+  flex-direction: row;
   gap:            8px;
   min-width:      0;
   -webkit-app-region: no-drag;

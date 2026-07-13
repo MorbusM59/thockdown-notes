@@ -232,7 +232,8 @@
   --btn-square-mini-size:    20px;
   --btn-square-small-size:   24px;
   --btn-square-regular-size: 32px;
-  --btn-square-large-size:   48px;
+  --btn-square-large-size:   40px;
+  --btn-square-larger-size:  48px;
 
   --btn-border-default: #00000055;
   --btn-border-hover:   #00000088;
