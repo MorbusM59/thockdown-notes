@@ -118,14 +118,8 @@ const DEBUG_TAG_NAME = 'debug'
 const PROTECTED_TAGS = new Set(['archived', 'deleted', 'external', DEBUG_TAG_NAME])
 const GRID_DIVIDER_PX = 8
 const SIDEBAR_MIN_WIDTH_PX = 288
-const TAG_INPUT_BAR_WIDTH_PX = 120
-const TAG_DISPLAY_WIDTH_PX = 200
-const TAG_INPUT_INNER_GAP_PX = 8
-const TAG_INPUT_GRID_PADDING_X_PX = 16
-const TAG_INPUT_WIDTH_PX = TAG_INPUT_BAR_WIDTH_PX + TAG_INPUT_INNER_GAP_PX + TAG_DISPLAY_WIDTH_PX + TAG_INPUT_GRID_PADDING_X_PX
-const SUGGESTED_MIN_WIDTH_PX = 150
 const UTILITY_WIDTH_PX = 129
-const APP_GRID_MIN_WIDTH_PX = SIDEBAR_MIN_WIDTH_PX + GRID_DIVIDER_PX + TAG_INPUT_WIDTH_PX + SUGGESTED_MIN_WIDTH_PX + UTILITY_WIDTH_PX
+const APP_GRID_MIN_WIDTH_PX = SIDEBAR_MIN_WIDTH_PX + GRID_DIVIDER_PX + UTILITY_WIDTH_PX + 300
 const DEFAULT_SIDEBAR_RATIO = 0.306
 const DEFAULT_TAG_SPLIT_RATIO = 0.645
 const EDITOR_GLYPH_PADDING_MIN_PX = 0
@@ -4325,16 +4319,13 @@ function App() {
   const layout = useMemo(() => {
     const dividerWidthPx = GRID_DIVIDER_PX
     const sidebarWidthPx = SIDEBAR_MIN_WIDTH_PX
-    const tagInputWidthPx = TAG_INPUT_WIDTH_PX
 
-    const availableForSuggestedPx = appShellWidthPx - dividerWidthPx - UTILITY_WIDTH_PX - sidebarWidthPx - tagInputWidthPx
-    const suggestedWidthPx = Math.max(SUGGESTED_MIN_WIDTH_PX, availableForSuggestedPx)
+    const availableForMainPx = Math.max(300, appShellWidthPx - dividerWidthPx - UTILITY_WIDTH_PX - sidebarWidthPx)
 
     return {
       sidebarWidthPx,
-      tagInputWidthPx,
-      suggestedWidthPx,
-      gridTemplateColumns: `${Math.round(sidebarWidthPx)}px ${dividerWidthPx}px ${Math.round(tagInputWidthPx)}px ${Math.round(suggestedWidthPx)}px ${UTILITY_WIDTH_PX}px`,
+      mainWidthPx: availableForMainPx,
+      gridTemplateColumns: `${Math.round(sidebarWidthPx)}px ${dividerWidthPx}px minmax(300px, ${availableForMainPx}px) ${UTILITY_WIDTH_PX}px`,
     }
   }, [appShellWidthPx])
 
@@ -5153,7 +5144,7 @@ ${markdownHtml}
       return true
     }
 
-    if (target.closest('.tag-pill, .tags-display, .suggested-tags, .tag-input-section')) {
+    if (target.closest('.tag-pill, .tabbar-tags-display, .tabbar-suggested-tags, .tab-mode-shell')) {
       return true
     }
 
@@ -12096,120 +12087,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               style={{ gridArea: 'd-sidebar' }}
             />
 
-            <section className="tag-input-grid" style={{ gridArea: 'taginput' }} aria-label="Tag input manager">
-              <div className="tag-input-container">
-                <div className="tag-input-section">
-                  <div className="tag-input-bar">
-                    <div className="tag-input-wrapper">
-                      <input
-                        ref={tagInputRef}
-                        className="tag-input"
-                        type="text"
-                        value={tagInputValue}
-                        placeholder={
-                          !activeNoteId
-                            ? (notes.length > 0 ? 'Select a note to edit tags.' : 'Once you have created a note, you can add tags here.')
-                            : (renamingTagName ? 'Rename tag...' : 'Add tag...')
-                        }
-                        onChange={(event) => setTagInputValue(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault()
-                            handleTagInputEnter()
-                            scheduleFocusEditorInEditMode()
-                            return
-                          }
-                          if (event.key === 'Escape') {
-                            event.preventDefault()
-                            if (renamingTagName) {
-                              setRenamingTagName(null)
-                              setTagInputValue('')
-                            }
-                            scheduleFocusEditorInEditMode()
-                            return
-                          }
-                          if (event.key === 'Tab') {
-                            event.preventDefault()
-                            if (renamingTagName) {
-                              setRenamingTagName(null)
-                              setTagInputValue('')
-                            }
-                            scheduleFocusEditorInEditMode()
-                          }
-                        }}
-                        disabled={!persistenceReady || !activeNoteId || isTagMutationPending || activeNoteIsExternal}
-                        aria-label="Tag input"
-                      />
-                    </div>
-                  </div>
-
-                  <div
-                    className="tags-display"
-                    aria-live="polite"
-                    onDragOver={handleTagContainerDragOver}
-                    onDrop={handleTagContainerDrop}
-                  >
-                    {!activeNoteId ? (
-                      <div className="tag-empty-state">Drag to order, left click to remove, right click to rename.</div>
-                    ) : orderedActiveTags.length === 0 ? (
-                      <div className="tag-empty-state">No tags on active note.</div>
-                    ) : (
-                      orderedActiveTags.map((tagName, index) => {
-                        const normalized = normalizeTagName(tagName)
-                        const isProtected = isProtectedTagName(tagName)
-                        return (
-                          <div
-                            key={tagName}
-                            className={`tag-pill active${deletePrimedTagName === tagName ? ' primed' : ''}${isProtected ? ` protected ${normalized}` : ''}`}
-                            draggable={!isProtected}
-                            onDragStart={(event) => handleTagDragStart(event, index)}
-                            onDragEnd={handleTagDragEnd}
-                            onDragOver={(event) => {
-                              event.preventDefault()
-                              event.stopPropagation()
-                              event.dataTransfer.dropEffect = 'move'
-                            }}
-                            onDrop={(event) => handleTagDrop(event, index)}
-                            onClick={() => handleTagChipClick(tagName)}
-                            onContextMenu={(event) => handleTagContextMenu(event, tagName)}
-                            onMouseLeave={() => handleTagChipMouseLeave(tagName)}
-                            title={deletePrimedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion'}
-                          >
-                            <span className="tag-pill-label">
-                              {tagName}
-                            </span>
-                          </div>
-                        )
-                      })
-                    )}
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="suggested-grid" style={{ gridArea: 'suggested' }} aria-label="Suggested tags panel">
-              <div className="suggested-tags" aria-hidden={suggestedTags.length === 0}>
-                {suggestedTags.map((tagName) => (
-                  <div
-                    key={tagName}
-                    className="tag-pill suggested"
-                    onClick={() => handleAddSuggestedTag(tagName)}
-                    title={`Add ${tagName}`}
-                    aria-disabled={!activeNoteId || isTagMutationPending || activeNoteIsExternal}
-                  >
-                    {tagName}
-                  </div>
-                ))}
-                {suggestedTags.length === 0 ? (
-                  <div className="suggested-empty">
-                    {activeNoteId
-                      ? ''
-                      : 'Tags you have used before will appear here. Click them to quickly assign them to your current note. If a tag is no longer in use, it will disappear from this list.'}
-                  </div>
-                ) : null}
-              </div>
-            </section>
-
             <section
               className={`utility-grid${windowIsCollapsed ? ' is-collapsed' : ''}`}
               ref={utilityGridRef}
@@ -12443,6 +12320,106 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     <span className="toolbar-gear-glyph fa-solid fa-gear" aria-hidden="true" />
                   </button>
 
+                </div>
+              </div>
+            </section>
+
+            <section className="tabbar-grid" style={{ gridArea: 'tabbar' }} aria-label="Tab bar">
+              <div className="tab-mode-shell" role="group" aria-label="Tag manager">
+                <div className="tabbar-tag-input">
+                  <input
+                    ref={tagInputRef}
+                    className="tabbar-tag-input-field"
+                    type="text"
+                    value={tagInputValue}
+                    placeholder={
+                      !activeNoteId
+                        ? (notes.length > 0 ? 'Select a note...' : 'Create a note...')
+                        : (renamingTagName ? 'Rename tag...' : 'Add tag...')
+                    }
+                    onChange={(event) => setTagInputValue(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        handleTagInputEnter()
+                        scheduleFocusEditorInEditMode()
+                        return
+                      }
+                      if (event.key === 'Escape') {
+                        event.preventDefault()
+                        if (renamingTagName) {
+                          setRenamingTagName(null)
+                          setTagInputValue('')
+                        }
+                        scheduleFocusEditorInEditMode()
+                        return
+                      }
+                      if (event.key === 'Tab') {
+                        event.preventDefault()
+                        if (renamingTagName) {
+                          setRenamingTagName(null)
+                          setTagInputValue('')
+                        }
+                        scheduleFocusEditorInEditMode()
+                      }
+                    }}
+                    disabled={!persistenceReady || !activeNoteId || isTagMutationPending || activeNoteIsExternal}
+                    aria-label="Tag input"
+                  />
+                </div>
+                <div
+                  className="tabbar-tags-display"
+                  aria-live="polite"
+                  onDragOver={handleTagContainerDragOver}
+                  onDrop={handleTagContainerDrop}
+                >
+                  {!activeNoteId ? (
+                    <span className="tabbar-tag-hint">Drag to order, click to remove.</span>
+                  ) : orderedActiveTags.length === 0 ? (
+                    <span className="tabbar-tag-hint">No tags on active note.</span>
+                  ) : (
+                    orderedActiveTags.map((tagName, index) => {
+                      const normalized = normalizeTagName(tagName)
+                      const isProtected = isProtectedTagName(tagName)
+                      return (
+                        <div
+                          key={tagName}
+                          className={`tag-pill active${deletePrimedTagName === tagName ? ' primed' : ''}${isProtected ? ` protected ${normalized}` : ''}`}
+                          draggable={!isProtected}
+                          onDragStart={(event) => handleTagDragStart(event, index)}
+                          onDragEnd={handleTagDragEnd}
+                          onDragOver={(event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            event.dataTransfer.dropEffect = 'move'
+                          }}
+                          onDrop={(event) => handleTagDrop(event, index)}
+                          onClick={() => handleTagChipClick(tagName)}
+                          onContextMenu={(event) => handleTagContextMenu(event, tagName)}
+                          onMouseLeave={() => handleTagChipMouseLeave(tagName)}
+                          title={deletePrimedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion'}
+                        >
+                          <span className="tag-pill-label">{tagName}</span>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+                <div className="tabbar-suggested-tags" aria-hidden={suggestedTags.length === 0}>
+                  {suggestedTags.map((tagName) => (
+                    <div
+                      key={tagName}
+                      className="tag-pill suggested"
+                      onClick={() => handleAddSuggestedTag(tagName)}
+                      title={`Add ${tagName}`}
+                      aria-disabled={!activeNoteId || isTagMutationPending || activeNoteIsExternal}
+                    >
+                      {tagName}
+                    </div>
+                  ))}
+                  {suggestedTags.length === 0 ? (
+                    <span className="tabbar-tag-hint">Suggested tags appear here.</span>
+                  ) : null}
                 </div>
               </div>
             </section>
