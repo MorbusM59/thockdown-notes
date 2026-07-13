@@ -122,11 +122,14 @@ const SIDEBAR_VIEW_GAP_PX = 8
 const SIDEBAR_VIEW_PADDING_LEFT_PX = 8
 const SIDEBAR_PADDING_RIGHT_PX = 8
 const SIDEBAR_MIN_WIDTH_PX = (SIDEBAR_VIEW_BUTTON_SIZE_PX * 5) + (SIDEBAR_VIEW_GAP_PX * 4) + SIDEBAR_VIEW_PADDING_LEFT_PX + SIDEBAR_PADDING_RIGHT_PX
-const TAG_INPUT_MIN_WIDTH_PX = 150
-const TAG_INPUT_MAX_WIDTH_PX = 250
+const TAG_INPUT_BAR_WIDTH_PX = 120
+const TAG_DISPLAY_WIDTH_PX = 200
+const TAG_INPUT_INNER_GAP_PX = 8
+const TAG_INPUT_GRID_PADDING_X_PX = 16
+const TAG_INPUT_WIDTH_PX = TAG_INPUT_BAR_WIDTH_PX + TAG_INPUT_INNER_GAP_PX + TAG_DISPLAY_WIDTH_PX + TAG_INPUT_GRID_PADDING_X_PX
 const SUGGESTED_MIN_WIDTH_PX = 150
 const UTILITY_WIDTH_PX = 129
-const APP_GRID_MIN_WIDTH_PX = SIDEBAR_MIN_WIDTH_PX + GRID_DIVIDER_PX + TAG_INPUT_MIN_WIDTH_PX + SUGGESTED_MIN_WIDTH_PX + UTILITY_WIDTH_PX
+const APP_GRID_MIN_WIDTH_PX = SIDEBAR_MIN_WIDTH_PX + GRID_DIVIDER_PX + TAG_INPUT_WIDTH_PX + SUGGESTED_MIN_WIDTH_PX + UTILITY_WIDTH_PX
 const DEFAULT_SIDEBAR_RATIO = 0.306
 const DEFAULT_TAG_SPLIT_RATIO = 0.645
 const EDITOR_GLYPH_PADDING_MIN_PX = 0
@@ -4303,23 +4306,13 @@ function App() {
   const layout = useMemo(() => {
     const dividerWidthPx = GRID_DIVIDER_PX
     const sidebarWidthPx = SIDEBAR_MIN_WIDTH_PX
+    const tagInputWidthPx = TAG_INPUT_WIDTH_PX
 
-    const mainColumnsWidthPx = Math.max(
-      TAG_INPUT_MIN_WIDTH_PX + SUGGESTED_MIN_WIDTH_PX,
-      appShellWidthPx - dividerWidthPx - UTILITY_WIDTH_PX - sidebarWidthPx,
-    )
-
-    // Tag-input and suggested-tags share remaining space at a 1:2 growth
-    // ratio above their combined minimums, until tag-input hits its max.
-    const baselineWidthPx = TAG_INPUT_MIN_WIDTH_PX + SUGGESTED_MIN_WIDTH_PX
-    const growthPx = Math.max(0, mainColumnsWidthPx - baselineWidthPx)
-    const tagInputGrowthPx = Math.min(growthPx / 3, TAG_INPUT_MAX_WIDTH_PX - TAG_INPUT_MIN_WIDTH_PX)
-    const tagInputWidthPx = TAG_INPUT_MIN_WIDTH_PX + tagInputGrowthPx
-    const suggestedWidthPx = mainColumnsWidthPx - tagInputWidthPx
+    const availableForSuggestedPx = appShellWidthPx - dividerWidthPx - UTILITY_WIDTH_PX - sidebarWidthPx - tagInputWidthPx
+    const suggestedWidthPx = Math.max(SUGGESTED_MIN_WIDTH_PX, availableForSuggestedPx)
 
     return {
       sidebarWidthPx,
-      mainColumnsWidthPx,
       tagInputWidthPx,
       suggestedWidthPx,
       gridTemplateColumns: `${Math.round(sidebarWidthPx)}px ${dividerWidthPx}px ${Math.round(tagInputWidthPx)}px ${Math.round(suggestedWidthPx)}px ${UTILITY_WIDTH_PX}px`,
@@ -11997,7 +11990,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                         placeholder={
                           !activeNoteId
                             ? (notes.length > 0 ? 'Select a note to edit tags.' : 'Once you have created a note, you can add tags here.')
-                            : (renamingTagName ? 'Rename tag and press Enter...' : 'Type to add tag...')
+                            : (renamingTagName ? 'Rename tag...' : 'Add tag...')
                         }
                         onChange={(event) => setTagInputValue(event.target.value)}
                         onKeyDown={(event) => {

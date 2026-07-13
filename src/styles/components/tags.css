@@ -3,7 +3,7 @@
    ============================================================================= */
 
 .tag-input-grid {
-  padding: 8px;
+  padding: 8px 8px 12px 8px;
 }
 
 .tag-input-container {
@@ -23,6 +23,8 @@
   display:     flex;
   align-items: center;
   gap:         8px;
+  width:       120px;
+  flex:        0 0 120px;
 }
 
 .tag-input-wrapper {
@@ -50,13 +52,14 @@
 
 .tags-display {
   display:     flex;
-  flex-wrap:   nowrap;
-  min-height:  32px;
-  max-height:  32px;
-  gap:         6px;
-  align-items: center;
+  flex-wrap:   wrap;
+  min-height:  42px;
+  max-height:  42px;
+  gap:         2px;
+  align-items: top;
+  width:       200px;
+  flex:        0 0 200px;
   overflow:    hidden;
-  margin-top:  2px;
   -webkit-app-region: no-drag;
 }
 
@@ -70,17 +73,17 @@
 .tag-pill {
   display:          inline-flex;
   align-items:      center;
-  gap:              4px;
   border:           1px solid var(--btn-border-default);
-  border-radius:    var(--border-radius-regular);
+  border-radius:    var(--border-radius-small);
   background:       var(--btn-bg-default);
-  font-size:        13px;
+  font-size:        11px;
   color:            var(--color-text-80);
   user-select:      none;
   transition:       all 0.2s;
   white-space:      nowrap;
   overflow:         hidden;
-  padding:          5px 10px;
+  padding:          0 4px;
+  height:           20px;
   -webkit-app-region: no-drag;
 }
 
@@ -115,7 +118,7 @@
 
 /* Suggested tags */
 .suggested-grid {
-  padding: 9px 0;
+  padding: 8px 8px 4px 8px;
 }
 
 .suggested-tags {
