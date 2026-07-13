@@ -8,13 +8,13 @@
   background-repeat:    no-repeat;
   background-size:      100% 100%;
   background-position:  0 0;
-  grid-template-columns: var(--sidebar-min-width) 8px 344px minmax(150px, 1fr) 129px;
+  grid-template-columns: 288px 8px 344px minmax(150px, 1fr) 129px;
   grid-template-rows:   auto auto minmax(0, 1fr);
   grid-template-areas:
     'sidebar d-sidebar taginput suggested utility'
     'sidebar d-sidebar toolbar  toolbar  utility'
     'sidebar d-sidebar viewer   viewer   viewer';
-  min-width:  879px;
+  min-width:  919px;
   min-height: 420px;
 }
 

@@ -276,17 +276,12 @@
      1h. Sidebar Layout Tokens
   --------------------------------------------------------------------------- */
 
-  --sidebar-view-button-size:  var(--btn-square-large-size);
+  --sidebar-view-button-size:  var(--btn-square-larger-size);
   --sidebar-view-gap-min:      8px;
   --sidebar-view-padding-left: 8px;
   --sidebar-padding-right:     8px;
 
-  --sidebar-min-width: calc(
-    (var(--sidebar-view-button-size) * 5) +
-    (var(--sidebar-view-gap-min) * 4) +
-    var(--sidebar-view-padding-left) +
-    var(--sidebar-padding-right)
-  );
+  --sidebar-min-width: 288px;
 
   /* ---------------------------------------------------------------------------
      1i. Flyout / Toolbar Tokens
