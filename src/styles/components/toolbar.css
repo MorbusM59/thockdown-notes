@@ -588,6 +588,11 @@
 
 .options-hsva-ghost { display: inline-block; }
 
+.options-hsva-glyph,
+.options-hsva-ghost {
+  line-height: 1;
+}
+
 .options-hsva-ghost::before,
 .options-hsva-glyph::before {
   display: block;
