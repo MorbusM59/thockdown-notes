@@ -12221,11 +12221,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 >
                   <span className="fa-solid fa-spell-check" aria-hidden="true" />
                 </button>
-              </div>
 
-              {isPreviewMode ? (
-                <div className="toolbar-action-group" aria-label="Print toolbar">
-                  <div className="toolbar-spacer"/>
+                {isPreviewMode ? (
                   <button
                     type="button"
                     className="btn-icon"
@@ -12240,6 +12237,9 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   >
                     <span className="fa-solid fa-file-pdf" aria-hidden="true" />
                   </button>
+                ) : null}
+
+                {!isPreviewMode ? (
                   <button
                     type="button"
                     className="btn-icon"
@@ -12254,8 +12254,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   >
                     <span className="fa-solid fa-file-code" aria-hidden="true" />
                   </button>
-                </div>
-              ) : null}
+                ) : null}
+              </div>
 
               {!isPreviewMode ? (
                 <div className="markdown-toolbar" aria-label="Markdown toolbar">
