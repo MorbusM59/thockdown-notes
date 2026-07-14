@@ -2,15 +2,19 @@
    AUDIO CONTROLS
    ============================================================================= */
 
+:root {
+  --audio-control-gap: 2px;
+}
+
 .audio-controls {
-  padding:          8px;
+  padding:          4px;
 }
 
 .audio-micro-grid {
   display:               grid;
   grid-template-columns: repeat(5, 1fr);
   grid-template-rows:    auto auto;
-  gap:                   2px;
+  gap:                   var(--audio-control-gap);
 }
 
 .audio-ctrl-btn {
@@ -20,8 +24,8 @@
   justify-content:    center;
   gap:                4px;
   padding:            0 4px;
-  height:             var(--btn-square-mini-size);
-  min-height:         var(--btn-square-mini-size);
+  height:             calc((var(--btn-square-large-size) - var(--audio-control-gap))/2);
+  min-height:         calc((var(--btn-square-large-size) - var(--audio-control-gap))/2);
   border:             1px solid var(--btn-border-default);
   border-radius:      var(--border-radius-small);
   background:         var(--btn-bg-default);

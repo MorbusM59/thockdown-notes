@@ -146,19 +146,11 @@
 
 .window-controls {
   display:          flex;
-  padding:          8px;
-  gap:              8px;
+  padding:          4px;
+  gap:              4px;
   align-items:      center;
   margin-bottom:    auto;
   margin-left:      auto;
-}
-
-.window-controls-left {
-  padding-right: 0;
-}
-
-.window-controls-right {
-  padding-left: 0;
 }
 
 .window-minimize-split {

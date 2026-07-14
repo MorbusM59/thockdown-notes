@@ -12176,148 +12176,146 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
             <section className="toolbar-grid" style={{ gridArea: 'toolbar' }} aria-label="Editor toolbar">
               <div className="editor-toolbar">
-                <div className="toolbar-left-tools">
-                  <button
-                    className={`btn-icon ${!isPreviewMode ? 'active' : ''}`}
-                    type="button"
-                    title={isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)'}
-                    aria-label={isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)'}
-                    onClick={toggleRenderViewMode}
-                  >
-                    <span className="fa-solid fa-pen-to-square" aria-hidden="true" />
-                  </button>
-                  <div className="toolbar-spacer-large"/>
-                  <button
-                    className="btn-icon"
-                    type="button"
-                    title="Create note (Ctrl+N)"
-                    aria-label="Create note"
-                    onClick={() => {
-                      void createNote()
-                    }}
-                  >
-                    <span className="fa-solid fa-file" aria-hidden="true" />
-                  </button>
-                  <div className="toolbar-spacer-large"/>
-                  <button
-                    className={`btn-icon ${(isPreviewMode ? spellCheckRenderEnabled : spellCheckEditEnabled) ? 'active' : ''}`}
-                    type="button"
-                    title={
-                      isPreviewMode
-                        ? (spellCheckRenderEnabled ? 'Disable spell check' : 'Enable spell check')
-                        : (spellCheckEditEnabled ? 'Disable spell check' : 'Enable spell check')
+                <button
+                  className={`btn-icon ${!isPreviewMode ? 'active' : ''}`}
+                  type="button"
+                  title={isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)'}
+                  aria-label={isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)'}
+                  onClick={toggleRenderViewMode}
+                >
+                  <span className="fa-solid fa-pen-to-square" aria-hidden="true" />
+                </button>
+                <div className="toolbar-spacer-large"/>
+                <button
+                  className="btn-icon"
+                  type="button"
+                  title="Create note (Ctrl+N)"
+                  aria-label="Create note"
+                  onClick={() => {
+                    void createNote()
+                  }}
+                >
+                  <span className="fa-solid fa-file" aria-hidden="true" />
+                </button>
+                <div className="toolbar-spacer-large"/>
+                <button
+                  className={`btn-icon ${(isPreviewMode ? spellCheckRenderEnabled : spellCheckEditEnabled) ? 'active' : ''}`}
+                  type="button"
+                  title={
+                    isPreviewMode
+                      ? (spellCheckRenderEnabled ? 'Disable spell check' : 'Enable spell check')
+                      : (spellCheckEditEnabled ? 'Disable spell check' : 'Enable spell check')
+                  }
+                  aria-label={
+                    isPreviewMode
+                      ? (spellCheckRenderEnabled ? 'Disable spell check' : 'Enable spell check')
+                      : (spellCheckEditEnabled ? 'Disable spell check' : 'Enable spell check')
+                  }
+                  aria-pressed={isPreviewMode ? spellCheckRenderEnabled : spellCheckEditEnabled}
+                  onClick={() => {
+                    if (isPreviewMode) {
+                      setSpellCheckRenderEnabled((prev) => !prev)
+                    } else {
+                      setSpellCheckEditEnabled((prev) => !prev)
                     }
-                    aria-label={
-                      isPreviewMode
-                        ? (spellCheckRenderEnabled ? 'Disable spell check' : 'Enable spell check')
-                        : (spellCheckEditEnabled ? 'Disable spell check' : 'Enable spell check')
-                    }
-                    aria-pressed={isPreviewMode ? spellCheckRenderEnabled : spellCheckEditEnabled}
-                    onClick={() => {
-                      if (isPreviewMode) {
-                        setSpellCheckRenderEnabled((prev) => !prev)
-                      } else {
-                        setSpellCheckEditEnabled((prev) => !prev)
-                      }
-                      queueAppStateSave(activeNoteId)
-                    }}
-                  >
-                    <span className="fa-solid fa-spell-check" aria-hidden="true" />
-                  </button>
+                    queueAppStateSave(activeNoteId)
+                  }}
+                >
+                  <span className="fa-solid fa-spell-check" aria-hidden="true" />
+                </button>
 
-                  {isPreviewMode ? (
-                    <div className="toolbar-action-group" aria-label="Print toolbar">
-                      <div className="toolbar-spacer"/>
-                      <button
-                        type="button"
-                        className="btn-icon"
-                        title="Export PDF"
-                        aria-label="Export current note to PDF"
-                        onClick={handleExportPdf}
-                        onContextMenu={(event) => {
-                          event.preventDefault()
-                          void chooseExportFolder()
-                        }}
-                        disabled={!activeNoteId || isExportingPdf}
-                      >
-                        <span className="fa-solid fa-file-pdf" aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-icon"
-                        title="Export Markdown"
-                        aria-label="Export current note to Markdown"
-                        onClick={() => void handleExportMd()}
-                        onContextMenu={(event) => {
-                          event.preventDefault()
-                          void handleExportMd(true)
-                        }}
-                        disabled={!activeNoteId || isExportingMd}
-                      >
-                        <span className="fa-solid fa-file-code" aria-hidden="true" />
-                      </button>
-                    </div>
-                  ) : null}
+                {isPreviewMode ? (
+                  <div className="toolbar-action-group" aria-label="Print toolbar">
+                    <div className="toolbar-spacer"/>
+                    <button
+                      type="button"
+                      className="btn-icon"
+                      title="Export PDF"
+                      aria-label="Export current note to PDF"
+                      onClick={handleExportPdf}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        void chooseExportFolder()
+                      }}
+                      disabled={!activeNoteId || isExportingPdf}
+                    >
+                      <span className="fa-solid fa-file-pdf" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-icon"
+                      title="Export Markdown"
+                      aria-label="Export current note to Markdown"
+                      onClick={() => void handleExportMd()}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        void handleExportMd(true)
+                      }}
+                      disabled={!activeNoteId || isExportingMd}
+                    >
+                      <span className="fa-solid fa-file-code" aria-hidden="true" />
+                    </button>
+                  </div>
+                ) : null}
 
-                  {!isPreviewMode ? (
-                    <div className="markdown-toolbar" aria-label="Markdown toolbar">
-                      <div className="toolbar-spacer"/>
-                      <button
-                        type="button"
-                        className={`btn-icon ${activeDecorationFormats.has('bold') ? 'active' : ''}`}
-                        onClick={() => applyTextDecoration('bold')}
-                        title="Bold"
-                        aria-label="Bold"
-                        disabled={!activeNoteId}
-                      >
-                        <strong>B</strong>
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn-icon ${activeDecorationFormats.has('italic') ? 'active' : ''}`}
-                        onClick={() => applyTextDecoration('italic')}
-                        title="Italic"
-                        aria-label="Italic"
-                        disabled={!activeNoteId}
-                      >
-                        <em>I</em>
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn-icon ${activeDecorationFormats.has('strikethrough') ? 'active' : ''}`}
-                        onClick={() => applyTextDecoration('strikethrough')}
-                        title="Strikethrough"
-                        aria-label="Strikethrough"
-                        disabled={!activeNoteId}
-                      >
-                        <span style={{ textDecoration: 'line-through' }}>S</span>
-                      </button>
+                {!isPreviewMode ? (
+                  <div className="markdown-toolbar" aria-label="Markdown toolbar">
+                    <div className="toolbar-spacer"/>
+                    <button
+                      type="button"
+                      className={`btn-icon ${activeDecorationFormats.has('bold') ? 'active' : ''}`}
+                      onClick={() => applyTextDecoration('bold')}
+                      title="Bold"
+                      aria-label="Bold"
+                      disabled={!activeNoteId}
+                    >
+                      <strong>B</strong>
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-icon ${activeDecorationFormats.has('italic') ? 'active' : ''}`}
+                      onClick={() => applyTextDecoration('italic')}
+                      title="Italic"
+                      aria-label="Italic"
+                      disabled={!activeNoteId}
+                    >
+                      <em>I</em>
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-icon ${activeDecorationFormats.has('strikethrough') ? 'active' : ''}`}
+                      onClick={() => applyTextDecoration('strikethrough')}
+                      title="Strikethrough"
+                      aria-label="Strikethrough"
+                      disabled={!activeNoteId}
+                    >
+                      <span style={{ textDecoration: 'line-through' }}>S</span>
+                    </button>
 
-                      <div className="toolbar-spacer"/>
+                    <div className="toolbar-spacer"/>
 
-                      <button type="button" className={`btn-icon ${activeHeadingLevel === 1 ? 'active' : ''}`} title="Heading 1" onClick={() => applyHeading(1)} disabled={!activeNoteId}>H1</button>
-                      <button type="button" className={`btn-icon ${activeHeadingLevel === 2 ? 'active' : ''}`} title="Heading 2" onClick={() => applyHeading(2)} disabled={!activeNoteId}>H2</button>
-                      <button type="button" className={`btn-icon ${activeHeadingLevel === 3 ? 'active' : ''}`} title="Heading 3" onClick={() => applyHeading(3)} disabled={!activeNoteId}>H3</button>
+                    <button type="button" className={`btn-icon ${activeHeadingLevel === 1 ? 'active' : ''}`} title="Heading 1" onClick={() => applyHeading(1)} disabled={!activeNoteId}>H1</button>
+                    <button type="button" className={`btn-icon ${activeHeadingLevel === 2 ? 'active' : ''}`} title="Heading 2" onClick={() => applyHeading(2)} disabled={!activeNoteId}>H2</button>
+                    <button type="button" className={`btn-icon ${activeHeadingLevel === 3 ? 'active' : ''}`} title="Heading 3" onClick={() => applyHeading(3)} disabled={!activeNoteId}>H3</button>
 
-                      <div className="toolbar-spacer"/>
+                    <div className="toolbar-spacer"/>
 
-                      <button type="button" className={`btn-icon ${isBulletedListActive ? 'active' : ''}`} title="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>≡</button>
-                      <button type="button" className={`btn-icon ${isNumberedListActive ? 'active' : ''}`} title="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>#</button>
-                      <button type="button" className={`btn-icon ${isChecklistActive ? 'active' : ''}`} title="Checklist" onClick={toggleChecklistList} disabled={!activeNoteId}>☐</button>
+                    <button type="button" className={`btn-icon ${isBulletedListActive ? 'active' : ''}`} title="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>≡</button>
+                    <button type="button" className={`btn-icon ${isNumberedListActive ? 'active' : ''}`} title="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>#</button>
+                    <button type="button" className={`btn-icon ${isChecklistActive ? 'active' : ''}`} title="Checklist" onClick={toggleChecklistList} disabled={!activeNoteId}>☐</button>
 
-                      <div className="toolbar-spacer"/>
+                    <div className="toolbar-spacer"/>
 
-                      <button type="button" className={`btn-icon ${isBlockquoteActive ? 'active' : ''}`} title="Blockquote" onClick={toggleBlockquote} disabled={!activeNoteId}>&quot;</button>
-                      <button type="button" className={`btn-icon ${isCodeBlockActive ? 'active' : ''}`} title="Code block" onClick={applyCodeBlock} disabled={!activeNoteId}>{'{ }'}</button>
-                      <button type="button" className={`btn-icon ${isInlineCodeActive ? 'active' : ''}`} title="Inline code" onClick={applyInlineCode} disabled={!activeNoteId}>{'<>'}</button>
+                    <button type="button" className={`btn-icon ${isBlockquoteActive ? 'active' : ''}`} title="Blockquote" onClick={toggleBlockquote} disabled={!activeNoteId}>&quot;</button>
+                    <button type="button" className={`btn-icon ${isCodeBlockActive ? 'active' : ''}`} title="Code block" onClick={applyCodeBlock} disabled={!activeNoteId}>{'{ }'}</button>
+                    <button type="button" className={`btn-icon ${isInlineCodeActive ? 'active' : ''}`} title="Inline code" onClick={applyInlineCode} disabled={!activeNoteId}>{'<>'}</button>
 
-                      <div className="toolbar-spacer"/>
+                    <div className="toolbar-spacer"/>
 
-                      <button type="button" className="btn-icon" title="Horizontal rule" onClick={insertHorizontalRule} disabled={!activeNoteId}>—</button>
-                      <button type="button" className="btn-icon" title="Link" onClick={applyLink} disabled={!activeNoteId}>🔗</button>
-                    </div>
-                  ) : null}
-                </div>
+                    <button type="button" className="btn-icon" title="Horizontal rule" onClick={insertHorizontalRule} disabled={!activeNoteId}>—</button>
+                    <button type="button" className="btn-icon" title="Link" onClick={applyLink} disabled={!activeNoteId}>🔗</button>
+                  </div>
+                ) : null}
               </div>
             </section>
 
