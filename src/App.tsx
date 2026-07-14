@@ -119,6 +119,7 @@ const PROTECTED_TAGS = new Set(['archived', 'deleted', 'external', DEBUG_TAG_NAM
 const GRID_DIVIDER_PX = 8
 const SIDEBAR_WIDTH_PX = 288
 const WINDOW_CONTROLS_WIDTH_PX = 380
+const WINDOW_CONTROLS_COLLAPSED_WIDTH_PX = 210
 const APP_WINDOW_MIN_WIDTH_PX = 840
 const TOOLBAR_MIN_WIDTH_PX = APP_WINDOW_MIN_WIDTH_PX - SIDEBAR_WIDTH_PX - GRID_DIVIDER_PX - WINDOW_CONTROLS_WIDTH_PX
 const APP_SHELL_MIN_WIDTH_PX = SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX + TOOLBAR_MIN_WIDTH_PX + WINDOW_CONTROLS_WIDTH_PX
@@ -4169,7 +4170,6 @@ function App() {
 
     const windowControlsEl = windowControlsGridRef.current
     if (!windowControlsEl) return
-    const windowControlsRect = windowControlsEl.getBoundingClientRect()
 
     const probe = windowControlsEl.cloneNode(true) as HTMLElement
     probe.classList.add('is-collapsed', 'is-measure-probe')
@@ -4178,8 +4178,8 @@ function App() {
     const probeRect = probe.getBoundingClientRect()
     probe.remove()
 
-    const targetWidth = Math.max(96, Math.round(windowControlsRect.width || WINDOW_CONTROLS_WIDTH_PX))
-    const targetHeight = Math.max(72, Math.ceil(probeRect.height || 160))
+    const targetWidth = Math.max(96, WINDOW_CONTROLS_COLLAPSED_WIDTH_PX)
+    const targetHeight = Math.max(52, Math.ceil(probeRect.height || 160))
 
     // Ensure overlay is committed in the same event turn before native resize.
     flushSync(() => {
@@ -12094,7 +12094,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               <div className="window-controls window-controls-left" aria-label="Window controls left">
                 <button
                   type="button"
-                  className={`toggle-btn icon-btn window-control-btn${uiMode === 'dark' ? ' is-active' : ''}`}
+                  className={`toggle-btn icon-btn window-control-btn dark-mode-btn${uiMode === 'dark' ? ' is-active' : ''}`}
                   title="Toggle dark mode"
                   aria-label="Toggle dark mode"
                   onClick={toggleUiMode}
@@ -12107,7 +12107,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
                 <button
                   type="button"
-                  className={`toggle-btn icon-btn window-control-btn${sidebarMode === 'options' ? ' is-active' : ''}`}
+                  className={`toggle-btn icon-btn window-control-btn options-btn${sidebarMode === 'options' ? ' is-active' : ''}`}
                   title="View options"
                   aria-label="View options"
                   onClick={toggleSidebarOptionsMenu}
@@ -12152,7 +12152,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 </div>
                 <button
                   type="button"
-                  className="window-control-btn btn-icon"
+                  className="window-control-btn btn-icon maximize-btn"
                   title={windowIsMaximized ? 'Restore' : 'Maximize'}
                   aria-label={windowIsMaximized ? 'Restore window' : 'Maximize window'}
                   onClick={handleWindowToggleMaximize}
@@ -12164,7 +12164,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 </button>
                 <button
                   type="button"
-                  className="window-control-btn btn-icon"
+                  className="window-control-btn btn-icon close-btn"
                   title="Close"
                   aria-label="Close window"
                   onClick={handleWindowClose}
