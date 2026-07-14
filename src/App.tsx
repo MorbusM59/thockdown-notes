@@ -12259,60 +12259,61 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
               {!isPreviewMode ? (
                 <div className="markdown-toolbar" aria-label="Markdown toolbar">
-                  <div className="toolbar-spacer"/>
-                  <button
-                    type="button"
-                    className={`btn-icon ${activeDecorationFormats.has('bold') ? 'active' : ''}`}
-                    onClick={() => applyTextDecoration('bold')}
-                    title="Bold"
-                    aria-label="Bold"
-                    disabled={!activeNoteId}
-                  >
-                    <strong>B</strong>
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn-icon ${activeDecorationFormats.has('italic') ? 'active' : ''}`}
-                    onClick={() => applyTextDecoration('italic')}
-                    title="Italic"
-                    aria-label="Italic"
-                    disabled={!activeNoteId}
-                  >
-                    <em>I</em>
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn-icon ${activeDecorationFormats.has('strikethrough') ? 'active' : ''}`}
-                    onClick={() => applyTextDecoration('strikethrough')}
-                    title="Strikethrough"
-                    aria-label="Strikethrough"
-                    disabled={!activeNoteId}
-                  >
-                    <span style={{ textDecoration: 'line-through' }}>S</span>
-                  </button>
+                  <div className="toolbar-group">
+                    <button
+                      type="button"
+                      className={`btn-icon ${activeDecorationFormats.has('bold') ? 'active' : ''}`}
+                      onClick={() => applyTextDecoration('bold')}
+                      title="Bold"
+                      aria-label="Bold"
+                      disabled={!activeNoteId}
+                    >
+                      <strong>B</strong>
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-icon ${activeDecorationFormats.has('italic') ? 'active' : ''}`}
+                      onClick={() => applyTextDecoration('italic')}
+                      title="Italic"
+                      aria-label="Italic"
+                      disabled={!activeNoteId}
+                    >
+                      <em>I</em>
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-icon ${activeDecorationFormats.has('strikethrough') ? 'active' : ''}`}
+                      onClick={() => applyTextDecoration('strikethrough')}
+                      title="Strikethrough"
+                      aria-label="Strikethrough"
+                      disabled={!activeNoteId}
+                    >
+                      <span style={{ textDecoration: 'line-through' }}>S</span>
+                    </button>
+                  </div>
 
-                  <div className="toolbar-spacer"/>
+                  <div className="toolbar-group">
+                    <button type="button" className={`btn-icon ${activeHeadingLevel === 1 ? 'active' : ''}`} title="Heading 1" onClick={() => applyHeading(1)} disabled={!activeNoteId}>H1</button>
+                    <button type="button" className={`btn-icon ${activeHeadingLevel === 2 ? 'active' : ''}`} title="Heading 2" onClick={() => applyHeading(2)} disabled={!activeNoteId}>H2</button>
+                    <button type="button" className={`btn-icon ${activeHeadingLevel === 3 ? 'active' : ''}`} title="Heading 3" onClick={() => applyHeading(3)} disabled={!activeNoteId}>H3</button>
+                  </div>
 
-                  <button type="button" className={`btn-icon ${activeHeadingLevel === 1 ? 'active' : ''}`} title="Heading 1" onClick={() => applyHeading(1)} disabled={!activeNoteId}>H1</button>
-                  <button type="button" className={`btn-icon ${activeHeadingLevel === 2 ? 'active' : ''}`} title="Heading 2" onClick={() => applyHeading(2)} disabled={!activeNoteId}>H2</button>
-                  <button type="button" className={`btn-icon ${activeHeadingLevel === 3 ? 'active' : ''}`} title="Heading 3" onClick={() => applyHeading(3)} disabled={!activeNoteId}>H3</button>
+                  <div className="toolbar-group">
+                    <button type="button" className={`btn-icon ${isBulletedListActive ? 'active' : ''}`} title="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>≡</button>
+                    <button type="button" className={`btn-icon ${isNumberedListActive ? 'active' : ''}`} title="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>#</button>
+                    <button type="button" className={`btn-icon ${isChecklistActive ? 'active' : ''}`} title="Checklist" onClick={toggleChecklistList} disabled={!activeNoteId}>☐</button>
+                  </div>
 
-                  <div className="toolbar-spacer"/>
+                  <div className="toolbar-group">
+                    <button type="button" className={`btn-icon ${isBlockquoteActive ? 'active' : ''}`} title="Blockquote" onClick={toggleBlockquote} disabled={!activeNoteId}>&quot;</button>
+                    <button type="button" className={`btn-icon ${isCodeBlockActive ? 'active' : ''}`} title="Code block" onClick={applyCodeBlock} disabled={!activeNoteId}>{'{ }'}</button>
+                    <button type="button" className={`btn-icon ${isInlineCodeActive ? 'active' : ''}`} title="Inline code" onClick={applyInlineCode} disabled={!activeNoteId}>{'<>'}</button>
+                  </div>
 
-                  <button type="button" className={`btn-icon ${isBulletedListActive ? 'active' : ''}`} title="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>≡</button>
-                  <button type="button" className={`btn-icon ${isNumberedListActive ? 'active' : ''}`} title="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>#</button>
-                  <button type="button" className={`btn-icon ${isChecklistActive ? 'active' : ''}`} title="Checklist" onClick={toggleChecklistList} disabled={!activeNoteId}>☐</button>
-
-                  <div className="toolbar-spacer"/>
-
-                  <button type="button" className={`btn-icon ${isBlockquoteActive ? 'active' : ''}`} title="Blockquote" onClick={toggleBlockquote} disabled={!activeNoteId}>&quot;</button>
-                  <button type="button" className={`btn-icon ${isCodeBlockActive ? 'active' : ''}`} title="Code block" onClick={applyCodeBlock} disabled={!activeNoteId}>{'{ }'}</button>
-                  <button type="button" className={`btn-icon ${isInlineCodeActive ? 'active' : ''}`} title="Inline code" onClick={applyInlineCode} disabled={!activeNoteId}>{'<>'}</button>
-
-                  <div className="toolbar-spacer"/>
-
-                  <button type="button" className="btn-icon" title="Horizontal rule" onClick={insertHorizontalRule} disabled={!activeNoteId}>—</button>
-                  <button type="button" className="btn-icon" title="Link" onClick={applyLink} disabled={!activeNoteId}>🔗</button>
+                  <div className="toolbar-group">
+                    <button type="button" className="btn-icon" title="Horizontal rule" onClick={insertHorizontalRule} disabled={!activeNoteId}>—</button>
+                    <button type="button" className="btn-icon" title="Link" onClick={applyLink} disabled={!activeNoteId}>🔗</button>
+                  </div>
                 </div>
               ) : null}
             </section>

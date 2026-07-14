@@ -101,7 +101,7 @@ let alwaysOnTopBeforeUtilityCollapse: boolean | null = null;
 
 const UTILITY_COLLAPSE_MIN_WIDTH_PX = 96;
 const UTILITY_COLLAPSE_MIN_HEIGHT_PX = 72;
-const APP_WINDOW_MIN_WIDTH_PX = 872;
+const APP_WINDOW_MIN_WIDTH_PX = 873;
 const APP_WINDOW_MIN_HEIGHT_PX = 525;
 
 // Matches the renderer's DEFAULT_BASE_PALETTE_COLOR (src/App.tsx). Used as the
