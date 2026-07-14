@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import type { MouseEvent } from 'react'
+import type { MouseEvent, WheelEvent } from 'react'
 import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../shared/audioPlayer'
 import { PLAYLIST_SLOT_ICONS } from '../shared/audioPlayer'
 import { PLAYLIST_SLOT_THEMESS as PLAYLIST_SLOT_THEMES } from '../shared/audioPlayer'
@@ -22,6 +22,12 @@ export interface AudioControlsProps {
   isOptionsOpen: boolean
   /** Called to toggle the options panel (opens to Music section, or closes if already open). */
   onOpenMusicOptions: () => void
+  /** Called when mouse wheel should nudge music volume (delta is additive). */
+  onAdjustMusicVolume?: (delta: number) => void
+  /** Called when mouse wheel with Shift should nudge music reverb amount. */
+  onAdjustMusicReverb?: (delta: number) => void
+  /** Called when mouse wheel with Ctrl should nudge music reverb room. */
+  onAdjustMusicRoom?: (delta: number) => void
 }
 
 export const AudioControls = memo(function AudioControls({
@@ -32,6 +38,9 @@ export const AudioControls = memo(function AudioControls({
   onActiveSlotsChange,
   isOptionsOpen,
   onOpenMusicOptions,
+  onAdjustMusicVolume,
+  onAdjustMusicReverb,
+  onAdjustMusicRoom,
 }: AudioControlsProps) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentSong, setCurrentSong] = useState<MusicSongEntry | null>(null)
@@ -374,6 +383,26 @@ export const AudioControls = memo(function AudioControls({
 
   // ---------------------------------------------------------------- render
 
+  const handleOptionsWheel = useCallback((event: WheelEvent) => {
+    // Determine a sensible step for the sliders (matches CompactScrollbarSlider step=0.01)
+    const STEP = 0.05
+    // Wheel: negative deltaY => wheel up => increase.
+    const delta = event.deltaY < 0 ? STEP : -STEP
+    // Prefer Shift for reverb amount, Ctrl for reverb room, otherwise volume.
+    try {
+      event.preventDefault()
+    } catch (e) {
+      // ignore
+    }
+    if (event.shiftKey) {
+      if (onAdjustMusicReverb) onAdjustMusicReverb(delta)
+    } else if (event.ctrlKey || event.metaKey) {
+      if (onAdjustMusicRoom) onAdjustMusicRoom(delta)
+    } else {
+      if (onAdjustMusicVolume) onAdjustMusicVolume(delta)
+    }
+  }, [onAdjustMusicVolume, onAdjustMusicReverb, onAdjustMusicRoom])
+
   return (
     <div className="audio-controls" aria-label="Audio player controls">
       {/* Top row — playback controls */}
@@ -432,6 +461,7 @@ export const AudioControls = memo(function AudioControls({
           aria-label={isOptionsOpen ? 'Close options panel' : 'Open music options'}
           aria-pressed={isOptionsOpen}
           onClick={onOpenMusicOptions}
+          onWheel={handleOptionsWheel}
         >
           <span className="fa-solid fa-headphones" aria-hidden="true" />
         </button>

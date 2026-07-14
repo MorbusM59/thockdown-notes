@@ -12144,6 +12144,9 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   if (sidebarMode !== 'options') setMusicAccordionNonce((n) => n + 1)
                   toggleSidebarOptionsMenu()
                 }}
+                onAdjustMusicVolume={(delta) => setMusicVolume((v) => clamp(v + delta, 0, 1))}
+                onAdjustMusicReverb={(delta) => setMusicReverbAmount((v) => clamp(v + delta, 0, 1))}
+                onAdjustMusicRoom={(delta) => setMusicReverbRoom((v) => clamp(v + delta, 0, 1))}
               />
 
               <div className="window-controls window-controls-right" aria-label="Window controls right">
