@@ -1,100 +1,16 @@
-
-/* =============================================================================
-   WINDOW CONTROLS
-   ============================================================================= */
-
-.window-controls {
-  display:          flex;
-  padding:          8px 8px 8px 8px;
-  gap:              8px;
-  align-items:      center;
-  margin-bottom:    auto;
-  margin-left:      auto;
-}
-
-.window-minimize-split {
-  width: var(--btn-square-large-size);
-  height: var(--btn-square-large-size);
-  min-width: var(--btn-square-large-size);
-  min-height: var(--btn-square-large-size);
-  display: inline-flex;
-  flex-direction: column;
-  gap: 2px;
-  -webkit-app-region: no-drag;
-}
-
-.window-control-btn.window-minimize-split-btn {
-  width: 100%;
-  min-width: 0;
-  height: calc((var(--btn-square-large-size) - 2px) / 2);
-  min-height: 0;
-  aspect-ratio: auto;
-  border-radius: var(--border-radius-small);
-}
-
-.window-minimize-split-btn.mini-mode {
-  border-radius: var(--border-radius-regular) var(--border-radius-regular) var(--border-radius-small) var(--border-radius-small);
-  padding: 0;
-}
-
-.window-minimize-split-btn.minimize {
-  border-radius: var(--border-radius-small) var(--border-radius-small) var(--border-radius-regular) var(--border-radius-regular);
-  padding: 0 0 2px 0;
-}
-
-.window-control-btn {
-  -webkit-app-region: no-drag;
-  width:           var(--btn-square-large-size);
-  height:          var(--btn-square-large-size);
-  min-width:       var(--btn-square-large-size);
-  min-height:      var(--btn-square-large-size);
-  padding:         0;
-  margin:          0;
-  display:         inline-flex;
-  align-items:     center;
-  justify-content: center;
-  border:          1px solid var(--btn-border-default);
-  border-radius:   var(--border-radius-regular);
-  background:      var(--btn-bg-default);
-  color:           var(--color-text-60);
-  transition:      background 0.2s, border-color 0.2s, color 0.2s;
-}
-
-.window-control-btn:hover {
-  background:   var(--btn-bg-hover);
-  border-color: var(--btn-border-hover);
-}
-
-.window-control-close       { color: var(--color-danger); }
-.window-control-close:hover { background: var(--color-danger-bg); }
-
-.window-control-glyph {
-  display:     block;
-  font-size:   18px;
-  color:      var(--color-text-80);
-  text-shadow:  var(--text-shadow-icon);
-  line-height: 1;
-}
-
-.window-control-glyph.fa-turn-down {
-  font-size:   15px;
-  padding-left: 1px;
-}
-
-
 /* =============================================================================
    AUDIO CONTROLS
    ============================================================================= */
 
 .audio-controls {
-  padding:          8px 0 8px 8px;
+  padding:          8px;
 }
 
 .audio-micro-grid {
   display:               grid;
   grid-template-columns: repeat(5, 1fr);
   grid-template-rows:    auto auto;
-  gap:                   3px;
+  gap:                   2px;
 }
 
 .audio-ctrl-btn {
