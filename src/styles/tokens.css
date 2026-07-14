@@ -250,6 +250,7 @@
     0 0 2px var(--color-shadow-white);
 
   --btn-icon-size: 18px;
+  --btn-large-icon-size: 24px;
 
   /* ---------------------------------------------------------------------------
      1g. Scrollbar Tokens

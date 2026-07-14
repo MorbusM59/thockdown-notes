@@ -33,6 +33,7 @@
   background:      var(--btn-bg-default);
   color:           var(--color-text-60);
   transition:      background 0.2s, border-color 0.2s, color 0.2s;
+  font-size: var(--btn-large-icon-size);
 }
 
 .toolbar-grid {

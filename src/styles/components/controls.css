@@ -171,6 +171,7 @@
   min-height: 0;
   aspect-ratio: auto;
   border-radius: var(--border-radius-small);
+  font-size: var(--btn-icon-size);
 }
 
 .window-minimize-split-btn.mini-mode {
@@ -199,6 +200,7 @@
   background:      var(--btn-bg-default);
   color:           var(--color-text-60);
   transition:      background 0.2s, border-color 0.2s, color 0.2s;
+  font-size: var(--btn-large-icon-size);
 }
 
 .window-control-btn:hover {
@@ -211,13 +213,8 @@
 
 .window-control-glyph {
   display:     block;
-  font-size:   18px;
+  font-size: var(--btn-large-icon-size);
   color:      var(--color-text-80);
   text-shadow:  var(--text-shadow-icon);
   line-height: 1;
-}
-
-.window-control-glyph.fa-turn-down {
-  font-size:   15px;
-  padding-left: 1px;
 }
