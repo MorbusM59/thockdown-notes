@@ -1,31 +1,56 @@
 /* =============================================================================
    Toolbar
    ============================================================================= */
+.note-tools {
+  flex: 0 0 120px;
+  display: flex;
+  flex-direction: row;
+  -webkit-app-region: drag;
+  width:           100%;
+  height:          100%;
+  border-radius:    0 0 var(--border-radius-regular) var(--border-radius-regular);
+  border-top: none;
+  border:      1px solid var(--color-border-light-70);
+  box-shadow:       var(--box-shadow-inverted);
+  background:       var(--color-input-backdrop);
+  padding: 5px;
+  gap: 3px;
+}
+
+.note-tools > .btn-icon  {
+  -webkit-app-region: no-drag;
+  width:           var(--btn-square-large-size);
+  height:          var(--btn-square-large-size);
+  min-width:       var(--btn-square-large-size);
+  min-height:      var(--btn-square-large-size);
+  padding:         0;
+  margin:          0;
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  border:          1px solid var(--btn-border-default);
+  border-radius:   var(--border-radius-regular);
+  background:      var(--btn-bg-default);
+  color:           var(--color-text-60);
+  transition:      background 0.2s, border-color 0.2s, color 0.2s;
+}
 
 .toolbar-grid {
-  margin:          0;
-  padding:         8px 4px;
+  padding:         0;
   display:         flex;
-  flex-direction:  column;
-  align-items:     stretch;
+  flex-direction:  row;
+  align-items:     center;
+  justify-content: flex-start;
+  margin:      0 8px;
+  flex-wrap:   nowrap;
+  box-sizing:  border-box;
+  overflow:    hidden;
   -webkit-app-region: drag;
 }
 
 .toolbar-grid button,
 .toolbar-grid select {
   -webkit-app-region: no-drag;
-}
-
-.editor-toolbar {
-  display:         flex;
-  align-items:     center;
-  justify-content: space-between;
-  margin:      0 4px;
-  padding:     0;
-  flex-wrap:   nowrap;
-  box-sizing:  border-box;
-  overflow:    hidden;
-  height: 100%;
 }
 
 /* Toolbar buttons & controls */
@@ -47,7 +72,6 @@
   display:     flex;
   align-items: center;
   gap:         4px;
-  margin-left: 4px;
   min-width:   0;
   overflow:    wrap;
   flex-wrap:   wrap;
@@ -60,8 +84,8 @@
 }
 
 .toolbar-spacer-large {
-  width: 12px;
-  min-width: 12px;
+  width: 4px;
+  min-width: 4px;
   user-select: none;
 }
 

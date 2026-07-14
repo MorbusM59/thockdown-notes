@@ -146,8 +146,8 @@
 
 .window-controls {
   display:          flex;
-  padding:          4px;
-  gap:              4px;
+  padding:          5px;
+  gap:              3px;
   align-items:      center;
   margin-bottom:    auto;
   margin-left:      auto;
