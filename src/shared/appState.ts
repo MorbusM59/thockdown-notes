@@ -33,8 +33,6 @@ export interface PersistedMenuState {
   editorSpacing?: 'tight' | 'compact' | 'cozy' | 'wide';
   editorGlyphPaddingPx?: number;
   borderRadiusRegularPx?: number;
-  sidebarWidthRatio: number;
-  tagSplitRatio: number;
   glaze?: GlazeSettings;
   darkMode?: 'none' | 'mono' | 'red' | 'dusk' | 'neon' | 'matrix';
   uiMode?: 'light' | 'dark';

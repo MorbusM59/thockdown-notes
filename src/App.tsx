@@ -117,11 +117,11 @@ const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
 const DEBUG_TAG_NAME = 'debug'
 const PROTECTED_TAGS = new Set(['archived', 'deleted', 'external', DEBUG_TAG_NAME])
 const GRID_DIVIDER_PX = 8
-const SIDEBAR_MIN_WIDTH_PX = 288
-const UTILITY_WIDTH_PX = 300
-const APP_GRID_MIN_WIDTH_PX = SIDEBAR_MIN_WIDTH_PX + GRID_DIVIDER_PX + UTILITY_WIDTH_PX + 300
-const DEFAULT_SIDEBAR_RATIO = 0.306
-const DEFAULT_TAG_SPLIT_RATIO = 0.645
+const SIDEBAR_WIDTH_PX = 288
+const WINDOW_CONTROLS_WIDTH_PX = 129
+const APP_WINDOW_MIN_WIDTH_PX = 840
+const TOOLBAR_MIN_WIDTH_PX = APP_WINDOW_MIN_WIDTH_PX - SIDEBAR_WIDTH_PX - GRID_DIVIDER_PX - WINDOW_CONTROLS_WIDTH_PX
+const APP_SHELL_MIN_WIDTH_PX = SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX + TOOLBAR_MIN_WIDTH_PX + WINDOW_CONTROLS_WIDTH_PX
 const EDITOR_GLYPH_PADDING_MIN_PX = 0
 const EDITOR_GLYPH_PADDING_MAX_PX = 1
 const BORDER_RADIUS_REGULAR_MIN_PX = 0
@@ -2305,7 +2305,7 @@ async function hashNormalizedText(text: string): Promise<string> {
 function App() {
   const adapterRef = useRef<EditorAdapter | null>(null)
   const appShellRef = useRef<HTMLDivElement | null>(null)
-  const utilityGridRef = useRef<HTMLElement | null>(null)
+  const windowControlsGridRef = useRef<HTMLElement | null>(null)
   const sidebarContentRef = useRef<HTMLDivElement | null>(null)
   const optionsContentRef = useRef<HTMLDivElement | null>(null)
   const editorStageRef = useRef<HTMLDivElement | null>(null)
@@ -2392,7 +2392,7 @@ function App() {
     isCollapsed: true,
   })
   const [persistenceReady, setPersistenceReady] = useState(false)
-  const [appShellWidthPx, setAppShellWidthPx] = useState(APP_GRID_MIN_WIDTH_PX)
+  const [appShellWidthPx, setAppShellWidthPx] = useState(APP_SHELL_MIN_WIDTH_PX)
   const [renderScrollDynamic, setRenderScrollDynamic] = useState(() => getRenderScrollDynamic())
   const [renderScrollResponsiveness, setRenderScrollResponsiveness] = useState(() => getRenderScrollResponsiveness())
   const [renderScrollTotalTimeSec, setRenderScrollTotalTimeSec] = useState(() => getRenderScrollTotalTimeSec())
@@ -3815,8 +3815,7 @@ function App() {
       editorSpacing,
       editorGlyphPaddingPx,
       borderRadiusRegularPx,
-      sidebarWidthRatio: DEFAULT_SIDEBAR_RATIO,
-      tagSplitRatio: DEFAULT_TAG_SPLIT_RATIO,
+
       exportFolder: exportFolder ?? undefined,
       renderScrollDynamic,
       renderScrollResponsiveness,
@@ -4168,18 +4167,18 @@ function App() {
   const handleWindowUtilityCollapseToggle = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
 
-    const utilityEl = utilityGridRef.current
-    if (!utilityEl) return
-    const utilityRect = utilityEl.getBoundingClientRect()
+    const windowControlsEl = windowControlsGridRef.current
+    if (!windowControlsEl) return
+    const windowControlsRect = windowControlsEl.getBoundingClientRect()
 
-    const probe = utilityEl.cloneNode(true) as HTMLElement
+    const probe = windowControlsEl.cloneNode(true) as HTMLElement
     probe.classList.add('is-collapsed', 'is-measure-probe')
     document.body.appendChild(probe)
 
     const probeRect = probe.getBoundingClientRect()
     probe.remove()
 
-    const targetWidth = Math.max(96, Math.round(utilityRect.width || UTILITY_WIDTH_PX))
+    const targetWidth = Math.max(96, Math.round(windowControlsRect.width || WINDOW_CONTROLS_WIDTH_PX))
     const targetHeight = Math.max(72, Math.ceil(probeRect.height || 160))
 
     // Ensure overlay is committed in the same event turn before native resize.
@@ -4317,15 +4316,14 @@ function App() {
   }, [isPreviewMode])
 
   const layout = useMemo(() => {
-    const dividerWidthPx = GRID_DIVIDER_PX
-    const sidebarWidthPx = SIDEBAR_MIN_WIDTH_PX
-
-    const availableForMainPx = Math.max(300, appShellWidthPx - dividerWidthPx - UTILITY_WIDTH_PX - sidebarWidthPx)
+    const toolbarWidthPx = Math.max(
+      TOOLBAR_MIN_WIDTH_PX,
+      appShellWidthPx - SIDEBAR_WIDTH_PX - GRID_DIVIDER_PX - WINDOW_CONTROLS_WIDTH_PX,
+    )
 
     return {
-      sidebarWidthPx,
-      mainWidthPx: availableForMainPx,
-      gridTemplateColumns: `${Math.round(sidebarWidthPx)}px ${dividerWidthPx}px minmax(300px, ${availableForMainPx}px) ${UTILITY_WIDTH_PX}px`,
+      toolbarWidthPx,
+      gridTemplateColumns: `${SIDEBAR_WIDTH_PX}px ${GRID_DIVIDER_PX}px ${Math.round(toolbarWidthPx)}px ${WINDOW_CONTROLS_WIDTH_PX}px`,
     }
   }, [appShellWidthPx])
 
@@ -7678,7 +7676,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     if (!shellElement) return
 
     const updateShellWidth = () => {
-      setAppShellWidthPx(Math.max(APP_GRID_MIN_WIDTH_PX, Math.round(shellElement.clientWidth)))
+      setAppShellWidthPx(Math.max(APP_SHELL_MIN_WIDTH_PX, Math.round(shellElement.clientWidth)))
     }
 
     updateShellWidth()
@@ -7686,7 +7684,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0]
       if (!entry) return
-      setAppShellWidthPx(Math.max(APP_GRID_MIN_WIDTH_PX, Math.round(entry.contentRect.width)))
+      setAppShellWidthPx(Math.max(APP_SHELL_MIN_WIDTH_PX, Math.round(entry.contentRect.width)))
     })
 
     observer.observe(shellElement)
@@ -12088,10 +12086,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             />
 
             <section
-              className={`utility-grid${windowIsCollapsed ? ' is-collapsed' : ''}`}
-              ref={utilityGridRef}
-              style={{ gridArea: 'utility' }}
-              aria-label="Utility grid"
+              className={`window-controls-grid${windowIsCollapsed ? ' is-collapsed' : ''}`}
+              ref={windowControlsGridRef}
+              style={{ gridArea: 'window_control' }}
+              aria-label="Window controls grid"
             >
               <AudioControls
                 volume={musicVolume}
