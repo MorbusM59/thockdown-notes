@@ -36,6 +36,12 @@
   font-size: var(--btn-large-icon-size);
 }
 
+.note-tools > .btn-icon.active
+{
+  border-color: var(--btn-border-active);
+  box-shadow:   var(--box-shadow-inverted-harsh);
+}
+
 .toolbar-grid {
   padding:         0;
   display:         flex;
@@ -61,7 +67,7 @@
   min-height:  32px;
   padding:     0 12px;
   border:      1px solid var(--btn-border-default);
-  background:  var(--btn-bg-default);;
+  background:  var(--btn-bg-default);
   border-radius: var(--border-radius-regular);
   font-size:   14px;
   font-weight: 500;
