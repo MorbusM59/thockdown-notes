@@ -75,6 +75,7 @@
   overflow:    hidden;
   padding: 0 2px 0 30px;
   height: 18px;
+  font-style: italic;
 }
 
 .tabbar-tag-hint {
