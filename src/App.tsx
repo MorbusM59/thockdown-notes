@@ -12376,7 +12376,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   {!activeNoteId ? (
                     <span className="tabbar-tag-hint">Drag to order, click to remove.</span>
                   ) : orderedActiveTags.length === 0 ? (
-                    <span className="tabbar-tag-hint">No tags on active note.</span>
+                    <span className="tabbar-tag-hint"></span>
                   ) : (
                     orderedActiveTags.map((tagName, index) => {
                       const normalized = normalizeTagName(tagName)
