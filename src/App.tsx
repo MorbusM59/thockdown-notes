@@ -118,7 +118,7 @@ const DEBUG_TAG_NAME = 'debug'
 const PROTECTED_TAGS = new Set(['archived', 'deleted', 'external', DEBUG_TAG_NAME])
 const GRID_DIVIDER_PX = 8
 const SIDEBAR_WIDTH_PX = 288
-const WINDOW_CONTROLS_WIDTH_PX = 288
+const WINDOW_CONTROLS_WIDTH_PX = 380
 const APP_WINDOW_MIN_WIDTH_PX = 840
 const TOOLBAR_MIN_WIDTH_PX = APP_WINDOW_MIN_WIDTH_PX - SIDEBAR_WIDTH_PX - GRID_DIVIDER_PX - WINDOW_CONTROLS_WIDTH_PX
 const APP_SHELL_MIN_WIDTH_PX = SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX + TOOLBAR_MIN_WIDTH_PX + WINDOW_CONTROLS_WIDTH_PX
@@ -12091,6 +12091,31 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               style={{ gridArea: 'window_control' }}
               aria-label="Window controls grid"
             >
+              <div className="window-controls window-controls-left" aria-label="Window controls left">
+                <button
+                  type="button"
+                  className={`toggle-btn icon-btn window-control-btn${uiMode === 'dark' ? ' is-active' : ''}`}
+                  title="Toggle dark mode"
+                  aria-label="Toggle dark mode"
+                  onClick={toggleUiMode}
+                >
+                  <span
+                    className={`window-control-glyph fa-solid ${uiMode === 'dark' ? 'fa-sun' : 'fa-moon'}`}
+                    aria-hidden="true"
+                  />
+                </button>
+
+                <button
+                  type="button"
+                  className={`toggle-btn icon-btn window-control-btn${sidebarMode === 'options' ? ' is-active' : ''}`}
+                  title="View options"
+                  aria-label="View options"
+                  onClick={toggleSidebarOptionsMenu}
+                >
+                  <span className="window-control-glyph fa-solid fa-gear" aria-hidden="true" />
+                </button>
+              </div>
+
               <AudioControls
                 volume={musicVolume}
                 reverbAmount={musicReverbAmount}
@@ -12104,7 +12129,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 }}
               />
 
-              <div className="window-controls" aria-label="Window controls">
+              <div className="window-controls window-controls-right" aria-label="Window controls right">
                 <div className="window-minimize-split" role="group" aria-label="Mini mode and minimize controls">
                   <button
                     type="button"
@@ -12292,32 +12317,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                       <button type="button" className="btn-icon" title="Link" onClick={applyLink} disabled={!activeNoteId}>🔗</button>
                     </div>
                   ) : null}
-                </div>
-
-                <div className="toolbar-right-tools" aria-label="Toolbar right controls">
-                  <button
-                    type="button"
-                    className={`toggle-btn icon-btn window-control-btn${uiMode === 'dark' ? ' is-active' : ''}`}
-                    title="Toggle dark mode"
-                    aria-label="Toggle dark mode"
-                    onClick={toggleUiMode}
-                  >
-                    <span
-                      className={`window-control-glyph fa-solid ${uiMode === 'dark' ? 'fa-sun' : 'fa-moon'}`}
-                      aria-hidden="true"
-                    />
-                  </button>
-
-                  <button
-                    type="button"
-                    className={`toggle-btn icon-btn window-control-btn${sidebarMode === 'options' ? ' is-active' : ''}`}
-                    title="View options"
-                    aria-label="View options"
-                    onClick={toggleSidebarOptionsMenu}
-                  >
-                    <span className="window-control-glyph fa-solid fa-gear" aria-hidden="true" />
-                  </button>
-
                 </div>
               </div>
             </section>
