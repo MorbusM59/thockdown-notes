@@ -7931,7 +7931,24 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     if (previewedSnapshotId !== null) {
       setPreviewedSnapshotId(null)
     }
-  }, [previewedSnapshotId])
+
+    // Ensure the editor is returned to edit mode even when the note text
+    // itself didn't change (e.g. the selected snapshot was identical to
+    // the present). Reapply the cached edit-mode snapshot and focus the
+    // editor so that contentEditable and input handlers are active.
+    if (activeNoteId) {
+      const cached = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
+      applyEditRestoreSnapshot(
+        cached ?? {
+          noteId: activeNoteId,
+          collapsedSelection: ZERO_EDITOR_SELECTION,
+          fullSelection: ZERO_EDITOR_SELECTION,
+          viewport: ZERO_PERSISTED_VIEWPORT,
+        },
+        { restoreFullSelection: Boolean(cached), focusAfterApply: true },
+      )
+    }
+  }, [previewedSnapshotId, activeNoteId, applyEditRestoreSnapshot])
 
   const handleBranchOpened = useCallback(async (newNoteId: string) => {
     setPreviewedSnapshotId(null)
