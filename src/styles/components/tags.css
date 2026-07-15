@@ -58,7 +58,13 @@
   border-color: var(--color-border-dark-40);
 }
 
-.tabbar-tags-display {
+.tabbar-assigned-id-display .tag-pill-label,
+.note-tab-pill {
+  letter-spacing: 0.1em;
+}
+
+.tabbar-tags-display,
+.tabbar-assigned-id-display {
   display:     flex;
   flex-wrap:   nowrap;
   align-items: center;

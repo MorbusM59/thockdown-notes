@@ -12606,7 +12606,9 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                           })() : null}
                           {pinnedTabs.map((tab) => {
                             const note = notes.find((entry) => entry.id === tab.noteId)
-                            const label = note?.assignedId ?? '···'
+                            const label = note?.assignedId != null
+                              ? `$${note.assignedId}`
+                              : '···';
                             const isGhost = note ? (isArchivedNote(note) || isDeletedNote(note)) : true
                             const isActive = tab.noteId === activeNoteId
                             const isPrimed = unpinPrimedTabNoteId === tab.noteId
@@ -12676,6 +12678,13 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     aria-label="Tag input"
                   />
                 </div>
+                {activeNoteSummary?.assignedId ? (
+                  <div className="tabbar-assigned-id-display">
+                    <div className="tag-pill">
+                      <span className="tag-pill-label">${activeNoteSummary.assignedId}</span>
+                    </div>
+                  </div>
+                ) : null}
                 <div
                   className="tabbar-tags-display"
                   aria-live="polite"
