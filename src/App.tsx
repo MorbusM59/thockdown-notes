@@ -825,69 +825,205 @@ function isSafePreviewImageSrc(src: string | undefined): boolean {
   }
 }
 
+// ── Internal note/anchor links ────────────────────────────────────────────
+//
+// Link destinations of the form `$NOTE-ID`, `~anchorname`, `~anchorname#uid`,
+// or `$NOTE-ID~anchorname[#uid]` are handled entirely in-app instead of being
+// treated as external URLs. `$` selects another note by its user-assignable
+// internal ID (see setNoteInternalId); `~` jumps to an anchor marked with
+// `[~anchorname]` (or `[~anchorname#uid]` to disambiguate repeated names)
+// somewhere in the document, current or target.
+
+function escapeRegExpLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/** Mirrors the desktop's note-ID normalization so `$meeting-2` in a link matches a stored `MEETING-2` ID regardless of case. */
+function normalizeInternalIdForLookup(raw: string): string {
+  return raw.trim().toUpperCase().replace(/\s+/g, '-')
+}
+
+/** Matches every `[~name]` / `[~name#uid]` anchor marker in a block of text. Free-text name/uid, only `]` and `#` are excluded so the grammar stays unambiguous. */
+const NOTE_ANCHOR_DEFINITION_PATTERN = /\[~([^\]#]+)(?:#([^\]]+))?\]/g
+
+interface ParsedInternalPreviewLink {
+  noteIdRaw: string | null
+  anchorName: string | null
+  anchorUid: string | null
+}
+
+/** Parses a preview link href into its `$id` / `~anchor[#uid]` parts, or null if it isn't one of ours. */
+function parseInternalPreviewHref(href: string): ParsedInternalPreviewLink | null {
+  const match = /^(?:\$([^~]+))?(?:~(.+))?$/.exec(href)
+  if (!match) return null
+
+  const noteIdRaw = match[1] ?? null
+  const anchorRaw = match[2] ?? null
+  if (noteIdRaw === null && anchorRaw === null) return null
+
+  if (anchorRaw === null) {
+    return { noteIdRaw, anchorName: null, anchorUid: null }
+  }
+
+  const hashIndex = anchorRaw.indexOf('#')
+  const anchorName = hashIndex === -1 ? anchorRaw : anchorRaw.slice(0, hashIndex)
+  const anchorUid = hashIndex === -1 ? null : anchorRaw.slice(hashIndex + 1)
+  if (!anchorName) return null
+
+  return { noteIdRaw, anchorName, anchorUid }
+}
+
+/** Exact match only — a bare `~name` link resolves only a bare `[~name]` marker; disambiguated markers need the matching `#uid`. */
+function noteContainsAnchorDefinition(contentText: string, name: string, uid: string | null): boolean {
+  const namePattern = escapeRegExpLiteral(name)
+  const pattern = uid !== null
+    ? new RegExp(`\\[~${namePattern}#${escapeRegExpLiteral(uid)}\\]`)
+    : new RegExp(`\\[~${namePattern}\\]`)
+  return pattern.test(contentText)
+}
+
+// Replaces `[~name]` / `[~name#uid]` occurrences in rendered text with a
+// plain span carrying the anchor as data attributes — same manual
+// text-node-splice technique as createPreviewSearchHighlightRehypePlugin,
+// run first so search highlighting operates on the already-cleaned text.
+function createPreviewNoteAnchorMarkerRehypePlugin() {
+  return () => {
+    return (tree: any) => {
+      const transformNode = (node: any, parent: any, index: number | null) => {
+        if (!node || typeof node !== 'object') return
+
+        if (node.type === 'text' && typeof node.value === 'string' && node.value.includes('[~')) {
+          const textValue = node.value
+          const replacements: any[] = []
+          let cursor = 0
+          NOTE_ANCHOR_DEFINITION_PATTERN.lastIndex = 0
+          let match = NOTE_ANCHOR_DEFINITION_PATTERN.exec(textValue)
+          while (match) {
+            const [fullMatch, name, uid] = match
+            if (match.index > cursor) {
+              replacements.push({ type: 'text', value: textValue.slice(cursor, match.index) })
+            }
+            replacements.push({
+              type: 'element',
+              tagName: 'span',
+              properties: {
+                className: ['note-anchor-marker'],
+                'data-note-anchor-name': name,
+                'data-note-anchor-uid': uid ?? '',
+              },
+              children: [{ type: 'text', value: name }],
+            })
+            cursor = match.index + fullMatch.length
+            match = NOTE_ANCHOR_DEFINITION_PATTERN.exec(textValue)
+          }
+
+          if (replacements.length > 0) {
+            if (cursor < textValue.length) {
+              replacements.push({ type: 'text', value: textValue.slice(cursor) })
+            }
+            if (parent && Array.isArray(parent.children) && typeof index === 'number') {
+              parent.children.splice(index, 1, ...replacements)
+            }
+            return
+          }
+        }
+
+        if (Array.isArray(node.children)) {
+          for (let childIndex = 0; childIndex < node.children.length; childIndex += 1) {
+            transformNode(node.children[childIndex], node, childIndex)
+          }
+        }
+      }
+
+      transformNode(tree, null, null)
+    }
+  }
+}
+
 // Stable references for ReactMarkdown so per-frame App re-renders (e.g. from
 // scroll-driven thumb state updates) don't force a full markdown reconciliation.
 const PREVIEW_MARKDOWN_REMARK_PLUGINS = [remarkGfm]
 
-const PREVIEW_MARKDOWN_COMPONENTS = {
-  a: ({ children, href }: { children?: ReactNode; href?: string }) => {
-    const normalizedHref = typeof href === 'string' ? href : undefined
-    const isLiteralHrefChild =
-      normalizedHref !== undefined &&
-      typeof children === 'string' &&
-      children.trim() === normalizedHref.trim()
+// The PDF-export render path (renderToStaticMarkup) never dispatches click
+// events, so it gets a no-op navigator instead of threading live app state
+// into a static export.
+const PREVIEW_MARKDOWN_NOOP_NAVIGATE = (): void => {}
+function createPreviewMarkdownComponents(navigateToInternalLink: (target: ParsedInternalPreviewLink) => void) {
+  return {
+    a: ({ children, href }: { children?: ReactNode; href?: string }) => {
+      const normalizedHref = typeof href === 'string' ? href : undefined
+      const isLiteralHrefChild =
+        normalizedHref !== undefined &&
+        typeof children === 'string' &&
+        children.trim() === normalizedHref.trim()
 
-    const handleExternalLinkClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
-      event.preventDefault()
-      if (!normalizedHref) return
-      if (window.ipcRenderer && typeof window.ipcRenderer.invoke === 'function') {
-        void window.ipcRenderer.invoke('open-external-url', normalizedHref)
-      } else {
-        window.open(normalizedHref, '_blank', 'noopener,noreferrer')
+      const internalTarget = normalizedHref ? parseInternalPreviewHref(normalizedHref) : null
+
+      const handleExternalLinkClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+        event.preventDefault()
+        if (!normalizedHref) return
+        if (window.ipcRenderer && typeof window.ipcRenderer.invoke === 'function') {
+          void window.ipcRenderer.invoke('open-external-url', normalizedHref)
+        } else {
+          window.open(normalizedHref, '_blank', 'noopener,noreferrer')
+        }
       }
-    }
 
-    if (isLiteralHrefChild) {
+      const handleInternalLinkClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+        event.preventDefault()
+        if (internalTarget) navigateToInternalLink(internalTarget)
+      }
+
+      if (isLiteralHrefChild) {
+        return <span>{children}</span>
+      }
+
+      if (internalTarget) {
+        return (
+          <a href={normalizedHref} rel="noopener noreferrer" onClick={handleInternalLinkClick}>
+            {children}
+          </a>
+        )
+      }
+
+      if (isSafePreviewHref(normalizedHref)) {
+        return (
+          <a href={normalizedHref} rel="noopener noreferrer" onClick={handleExternalLinkClick}>
+            {children}
+          </a>
+        )
+      }
+
       return <span>{children}</span>
-    }
+    },
+    img: ({ src, alt }: { src?: string; alt?: string }) => {
+      const normalizedSrc = typeof src === 'string' ? src : undefined
+      if (isSafePreviewImageSrc(normalizedSrc)) {
+        return <img src={normalizedSrc} alt={alt ?? ''} />
+      }
+      return <span>{alt ?? 'Image'}</span>
+    },
+    input: ({ checked, type, className }: { checked?: boolean; type?: string; className?: string }) => {
+      if (type !== 'checkbox') {
+        return null
+      }
 
-    if (isSafePreviewHref(normalizedHref)) {
+      const mergedClassName = [
+        className,
+        'markdown-task-checkbox-icon',
+        checked ? 'markdown-task-checkbox-checked' : 'markdown-task-checkbox-unchecked',
+      ]
+        .filter((value) => typeof value === 'string' && value.length > 0)
+        .join(' ')
+
       return (
-        <a href={normalizedHref} rel="noopener noreferrer" onClick={handleExternalLinkClick}>
-          {children}
-        </a>
+        <span className={mergedClassName} aria-hidden="true">
+          {checked ? '☑' : '☐'}
+        </span>
       )
-    }
-
-    return <span>{children}</span>
-  },
-  img: ({ src, alt }: { src?: string; alt?: string }) => {
-    const normalizedSrc = typeof src === 'string' ? src : undefined
-    if (isSafePreviewImageSrc(normalizedSrc)) {
-      return <img src={normalizedSrc} alt={alt ?? ''} />
-    }
-    return <span>{alt ?? 'Image'}</span>
-  },
-  input: ({ checked, type, className }: { checked?: boolean; type?: string; className?: string }) => {
-    if (type !== 'checkbox') {
-      return null
-    }
-
-    const mergedClassName = [
-      className,
-      'markdown-task-checkbox-icon',
-      checked ? 'markdown-task-checkbox-checked' : 'markdown-task-checkbox-unchecked',
-    ]
-      .filter((value) => typeof value === 'string' && value.length > 0)
-      .join(' ')
-
-    return (
-      <span className={mergedClassName} aria-hidden="true">
-        {checked ? '☑' : '☐'}
-      </span>
-    )
-  },
-} as const
+    },
+  } as const
+}
 
 function createPreviewSearchHighlightRehypePlugin(needle: string, isCaseSensitive: boolean) {
   const normalizedNeedle = isCaseSensitive ? needle : needle.toLocaleLowerCase()
@@ -4768,7 +4904,8 @@ function App() {
         <div className={`pdf-exporter-markdown-preview markdown-preview style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}>
           <ReactMarkdown
             remarkPlugins={PREVIEW_MARKDOWN_REMARK_PLUGINS}
-            components={PREVIEW_MARKDOWN_COMPONENTS}
+            rehypePlugins={[createPreviewNoteAnchorMarkerRehypePlugin()]}
+            components={createPreviewMarkdownComponents(PREVIEW_MARKDOWN_NOOP_NAVIGATE)}
           >
             {currentEditorText}
           </ReactMarkdown>
@@ -8197,6 +8334,79 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     return resolveDocumentFindDirective(documentFindQuery, currentEditorText, isDocumentFindCaseSensitive)
   }, [currentEditorText, documentFindQuery, isDocumentFindCaseSensitive])
 
+  const previewNoteAnchorMarkerPlugin = useMemo(
+    () => createPreviewNoteAnchorMarkerRehypePlugin(),
+    [],
+  )
+
+  // Scrolls the currently rendered preview to a `[~name]`/`[~name#uid]`
+  // marker, if present. `waitForNoteSwitch` retries across a few animation
+  // frames since switching notes re-renders ReactMarkdown asynchronously —
+  // the target span may not exist in the DOM yet on the frame this fires.
+  const scrollToAnchorInPreview = useCallback((name: string, uid: string | null, waitForNoteSwitch: boolean) => {
+    const attemptScroll = (attemptsLeft: number) => {
+      const candidates = Array.from(document.querySelectorAll<HTMLElement>('.note-anchor-marker'))
+      const target = candidates.find((el) => (
+        el.dataset.noteAnchorName === name && (el.dataset.noteAnchorUid ?? '') === (uid ?? '')
+      ))
+
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        target.classList.add('note-anchor-marker-flash')
+        window.setTimeout(() => target.classList.remove('note-anchor-marker-flash'), 1200)
+        return
+      }
+
+      if (attemptsLeft <= 0) return
+      window.requestAnimationFrame(() => attemptScroll(attemptsLeft - 1))
+    }
+
+    if (waitForNoteSwitch) {
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => attemptScroll(30)))
+    } else {
+      attemptScroll(5)
+    }
+  }, [])
+
+  // Resolves and follows a `$id`, `~anchor[#uid]`, or `$id~anchor[#uid]`
+  // preview link. Broken destinations (unknown note ID, missing anchor) are
+  // silently ignored rather than partially navigating.
+  const navigateToInternalPreviewLink = useCallback((target: ParsedInternalPreviewLink) => {
+    if (target.noteIdRaw !== null) {
+      const normalizedTarget = normalizeInternalIdForLookup(target.noteIdRaw)
+      const targetNote = notes.find((note) => note.internalId && normalizeInternalIdForLookup(note.internalId) === normalizedTarget)
+      if (!targetNote) return
+
+      if (target.anchorName !== null && !noteContainsAnchorDefinition(targetNote.contentText ?? '', target.anchorName, target.anchorUid)) {
+        return
+      }
+
+      const isAlreadyActive = targetNote.id === activeNoteId
+      const followUp = () => {
+        if (target.anchorName !== null) {
+          scrollToAnchorInPreview(target.anchorName, target.anchorUid, !isAlreadyActive)
+        }
+      }
+
+      if (isAlreadyActive) {
+        followUp()
+      } else {
+        void activateNote(targetNote.id).then(followUp)
+      }
+      return
+    }
+
+    if (target.anchorName === null || !activeNoteId) return
+    const currentText = latestEditorTextRef.current || activeNoteText
+    if (!noteContainsAnchorDefinition(currentText, target.anchorName, target.anchorUid)) return
+    scrollToAnchorInPreview(target.anchorName, target.anchorUid, false)
+  }, [notes, activeNoteId, activateNote, activeNoteText, scrollToAnchorInPreview])
+
+  const previewMarkdownComponents = useMemo(
+    () => createPreviewMarkdownComponents(navigateToInternalPreviewLink),
+    [navigateToInternalPreviewLink],
+  )
+
   const previewSearchHighlightPlugin = useMemo(
     () => createPreviewSearchHighlightRehypePlugin(documentFindDirective.findText, isDocumentFindCaseSensitive),
     [documentFindDirective.findText, isDocumentFindCaseSensitive],
@@ -8213,12 +8423,13 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   const previewMarkdownElement = useMemo(() => (
     <ReactMarkdown
       remarkPlugins={PREVIEW_MARKDOWN_REMARK_PLUGINS}
-      rehypePlugins={[previewSearchHighlightPlugin, previewSourceAnchorPlugin]}
-      components={PREVIEW_MARKDOWN_COMPONENTS}
+      rehypePlugins={[previewNoteAnchorMarkerPlugin, previewSearchHighlightPlugin, previewSourceAnchorPlugin]}
+      components={previewMarkdownComponents}
     >
       {renderedDisplayText}
     </ReactMarkdown>
-  ), [renderedDisplayText, previewSearchHighlightPlugin, previewSourceAnchorPlugin])
+  ), [renderedDisplayText, previewNoteAnchorMarkerPlugin, previewSearchHighlightPlugin, previewSourceAnchorPlugin, previewMarkdownComponents])
+
 
   const documentFindHits = useMemo<DocumentFindHit[]>(() => {
     return buildDocumentFindHits(currentEditorText, documentFindDirective.findText, isDocumentFindCaseSensitive)

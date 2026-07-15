@@ -68,6 +68,18 @@
   padding:          4px;
 }
 
+/* Anchor markers ([~name] / [~name#uid]) render as plain, indistinguishable
+   text — the only feedback is a brief highlight fade when scrolled to. */
+.markdown-preview .note-anchor-marker {
+  cursor:        default;
+  border-radius: 4px;
+  transition:    background-color 0.8s ease;
+}
+
+.markdown-preview .note-anchor-marker-flash {
+  background-color: var(--search-hit-color, rgba(255, 221, 105, 0.55));
+}
+
 /* 11b. Markdown typography */
 .markdown-preview h1,
 .markdown-preview h2,
