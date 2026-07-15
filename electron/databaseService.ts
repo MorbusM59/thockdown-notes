@@ -133,6 +133,7 @@ type NoteRecordRow = {
   externalPath: string | null;
   hasUnsavedChanges: number;
   syncMode: number;
+  internalId: string | null;
 };
 
 export type NoteRecord = {
@@ -146,7 +147,34 @@ export type NoteRecord = {
   externalPath: string | null;
   hasUnsavedChanges: boolean;
   syncMode: boolean;
+  internalId: string | null;
 };
+
+/** One entry pinned to the tab bar (quick-access note shortcut). */
+export type NoteTabEntry = {
+  noteId: string;
+  position: number;
+  addedAtMs: number;
+};
+
+const NOTE_INTERNAL_ID_MAX_LEN = 8;
+
+/**
+ * Normalizes user- or title-derived text into the tab-bar ID alphabet:
+ * upper-cased, whitespace collapsed to single hyphens, anything else left
+ * as-is (so punctuation the user deliberately typed survives).
+ */
+export function normalizeInternalIdInput(raw: string): string {
+  return raw.trim().toUpperCase().replace(/\s+/g, '-');
+}
+
+/** First 8 characters of the normalized title, trimmed of a trailing hyphen. */
+export function deriveDefaultInternalIdBase(title: string): string {
+  const normalized = normalizeInternalIdInput(title || 'NOTE');
+  const truncated = normalized.slice(0, NOTE_INTERNAL_ID_MAX_LEN);
+  const trimmed = truncated.replace(/-+$/, '');
+  return trimmed.length > 0 ? trimmed : 'NOTE';
+}
 
 export type ExternalSyncState = {
   isExternal: boolean;
@@ -920,7 +948,7 @@ export class DatabaseService {
   listNoteRecords(): NoteRecord[] {
     const db = this.requireDb();
     const rows = db.prepare(`
-      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode
+      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode, internalId
       FROM notes
       ORDER BY datetime(updatedAt) DESC
     `).all() as NoteRecordRow[];
@@ -936,13 +964,14 @@ export class DatabaseService {
       externalPath: row.externalPath,
       hasUnsavedChanges: Boolean(row.hasUnsavedChanges),
       syncMode: Boolean(row.syncMode),
+      internalId: row.internalId,
     }));
   }
 
   getNoteRecord(noteId: string): NoteRecord | null {
     const db = this.requireDb();
     const row = db.prepare(`
-      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode
+      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode, internalId
       FROM notes
       WHERE id = ?
       LIMIT 1
@@ -963,7 +992,104 @@ export class DatabaseService {
       externalPath: row.externalPath,
       hasUnsavedChanges: Boolean(row.hasUnsavedChanges),
       syncMode: Boolean(row.syncMode),
+      internalId: row.internalId,
     };
+  }
+
+  // ── Note internal IDs (tab-bar labels) ──────────────────────────────────
+
+  /**
+   * All internal IDs currently in use, optionally excluding one note (so a
+   * note can keep its own current ID without colliding with itself when
+   * re-resolving uniqueness).
+   */
+  private listUsedInternalIds(excludeNoteId?: string): Set<string> {
+    const db = this.requireDb();
+    const rows = excludeNoteId
+      ? db.prepare('SELECT internalId FROM notes WHERE internalId IS NOT NULL AND id != ?').all(excludeNoteId) as Array<{ internalId: string }>
+      : db.prepare('SELECT internalId FROM notes WHERE internalId IS NOT NULL').all() as Array<{ internalId: string }>;
+    return new Set(rows.map((row) => row.internalId));
+  }
+
+  /**
+   * Resolves `requestedBase` to a value that isn't already taken by another
+   * note. Collisions get an incremental "-2", "-3", ... suffix appended.
+   */
+  private resolveUniqueInternalId(requestedBase: string, excludeNoteId?: string): string {
+    const used = this.listUsedInternalIds(excludeNoteId);
+    if (!used.has(requestedBase)) return requestedBase;
+
+    let attempt = 2;
+    while (used.has(`${requestedBase}-${attempt}`)) {
+      attempt += 1;
+    }
+    return `${requestedBase}-${attempt}`;
+  }
+
+  /**
+   * Explicitly assigns an internal ID to a note (the `$id` entry path).
+   * Always overwrites any existing value. Returns the final, collision-
+   * resolved ID that was actually stored.
+   */
+  setNoteInternalId(noteId: string, requestedRaw: string): string {
+    const db = this.requireDb();
+    const normalized = normalizeInternalIdInput(requestedRaw);
+    const base = normalized.length > 0 ? normalized : deriveDefaultInternalIdBase(this.getNoteRecord(noteId)?.title ?? 'NOTE');
+    const resolved = this.resolveUniqueInternalId(base, noteId);
+    db.prepare('UPDATE notes SET internalId = ? WHERE id = ?').run(resolved, noteId);
+    return resolved;
+  }
+
+  /**
+   * Returns the note's internal ID, assigning and persisting the default
+   * (first 8 chars of the title, de-duplicated) on first use if it doesn't
+   * have one yet.
+   */
+  ensureNoteInternalId(noteId: string, currentTitle: string): string {
+    const db = this.requireDb();
+    const existing = db.prepare('SELECT internalId FROM notes WHERE id = ?').get(noteId) as { internalId: string | null } | undefined;
+    if (existing?.internalId) return existing.internalId;
+
+    const base = deriveDefaultInternalIdBase(currentTitle);
+    const resolved = this.resolveUniqueInternalId(base, noteId);
+    db.prepare('UPDATE notes SET internalId = ? WHERE id = ?').run(resolved, noteId);
+    return resolved;
+  }
+
+  // ── Tab bar (pinned quick-access notes) ─────────────────────────────────
+
+  listNoteTabs(): NoteTabEntry[] {
+    const db = this.requireDb();
+    const rows = db.prepare('SELECT noteId, position, addedAt FROM note_tabs ORDER BY position ASC').all() as Array<{ noteId: string; position: number; addedAt: number }>;
+    return rows.map((row) => ({ noteId: row.noteId, position: row.position, addedAtMs: row.addedAt }));
+  }
+
+  addNoteTab(noteId: string): NoteTabEntry[] {
+    const db = this.requireDb();
+    const existing = db.prepare('SELECT 1 FROM note_tabs WHERE noteId = ?').get(noteId);
+    if (!existing) {
+      const { maxPosition } = db.prepare('SELECT MAX(position) AS maxPosition FROM note_tabs').get() as { maxPosition: number | null };
+      db.prepare('INSERT INTO note_tabs (noteId, position, addedAt) VALUES (?, ?, ?)')
+        .run(noteId, (maxPosition ?? -1) + 1, Date.now());
+    }
+    return this.listNoteTabs();
+  }
+
+  removeNoteTab(noteId: string): NoteTabEntry[] {
+    const db = this.requireDb();
+    db.prepare('DELETE FROM note_tabs WHERE noteId = ?').run(noteId);
+    return this.listNoteTabs();
+  }
+
+  reorderNoteTabs(orderedNoteIds: string[]): NoteTabEntry[] {
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      orderedNoteIds.forEach((noteId, index) => {
+        db.prepare('UPDATE note_tabs SET position = ? WHERE noteId = ?').run(index, noteId);
+      });
+    });
+    tx();
+    return this.listNoteTabs();
   }
 
   getNoteContentSnapshot(noteId: string): string | null {
@@ -2400,11 +2526,25 @@ export class DatabaseService {
 
       CREATE INDEX IF NOT EXISTS idx_music_songs_slot     ON music_songs(playlistSlot);
       CREATE INDEX IF NOT EXISTS idx_music_songs_priority ON music_songs(priority);
+
+      CREATE TABLE IF NOT EXISTS note_tabs (
+        noteId    TEXT PRIMARY KEY,
+        position  INTEGER NOT NULL,
+        addedAt   INTEGER NOT NULL,
+        FOREIGN KEY (noteId) REFERENCES notes(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_note_tabs_position ON note_tabs(position);
     `);
 
     this.ensureNotesColumn('sourceAnchorLine', 'INTEGER');
     this.ensureNotesColumn('sourceAnchorText', 'TEXT');
     this.ensureNotesColumn('contentChecksum', 'TEXT');
+    this.ensureNotesColumn('internalId', 'TEXT');
+
+    this.requireDb().exec(`
+      CREATE INDEX IF NOT EXISTS idx_notes_internal_id ON notes(internalId);
+    `);
   }
 
   private ensureNotesColumn(columnName: string, columnDefinition: string): void {

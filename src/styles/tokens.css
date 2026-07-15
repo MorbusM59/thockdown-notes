@@ -208,6 +208,9 @@
   --border-radius-regular: 6px;
   --border-radius-small:   3px;
 
+  /* Tab bar */
+  --tab-width: 80px;
+
   /* ---------------------------------------------------------------------------
      1e. Texture System
      All texture slots default to none / transparent.

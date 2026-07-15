@@ -33,6 +33,7 @@ import type {
   SaveNoteInput,
   TagSummary,
 } from '../shared/noteLifecycle'
+import type { NoteTabEntry, NoteTabsApi } from '../shared/tabs'
 
 const MOCK_STORAGE_KEY = 'measly-notes:browser-mock:v1'
 
@@ -44,6 +45,7 @@ type BrowserMockStore = {
   uiLoadoutEntries: UiLoadoutEntry[]
   lastCustomIdByMode: { light: number; dark: number }
   textureCache: Record<string, { mimeType: string; dataBase64: string; createdAt: number }>
+  noteTabs: NoteTabEntry[]
 }
 
 type BrowserMockWindow = Window & {
@@ -99,6 +101,7 @@ function toSummary(note: NoteDocument): NoteSummary {
     createdAtMs: note.createdAtMs,
     updatedAtMs: note.updatedAtMs,
     sizeBytes: note.sizeBytes,
+    internalId: note.internalId ?? null,
   }
 }
 
@@ -106,6 +109,31 @@ function sortNotesDesc(notes: NoteDocument[]): NoteDocument[] {
   return notes
     .slice()
     .sort((a, b) => b.updatedAtMs - a.updatedAtMs || b.createdAtMs - a.createdAtMs || a.id.localeCompare(b.id))
+}
+
+const NOTE_INTERNAL_ID_MAX_LEN = 8
+
+function normalizeInternalIdInput(raw: string): string {
+  return raw.trim().toUpperCase().replace(/\s+/g, '-')
+}
+
+function deriveDefaultInternalIdBase(title: string): string {
+  const normalized = normalizeInternalIdInput(title || 'NOTE')
+  const trimmed = normalized.slice(0, NOTE_INTERNAL_ID_MAX_LEN).replace(/-+$/, '')
+  return trimmed.length > 0 ? trimmed : 'NOTE'
+}
+
+function resolveUniqueInternalId(notes: NoteDocument[], requestedBase: string, excludeNoteId: string): string {
+  const used = new Set(
+    notes.filter((note) => note.id !== excludeNoteId && note.internalId).map((note) => note.internalId as string),
+  )
+  if (!used.has(requestedBase)) return requestedBase
+
+  let attempt = 2
+  while (used.has(`${requestedBase}-${attempt}`)) {
+    attempt += 1
+  }
+  return `${requestedBase}-${attempt}`
 }
 
 function createId(): string {
@@ -187,6 +215,7 @@ function loadStore(): BrowserMockStore {
         uiLoadoutEntries: seeded.entries,
         lastCustomIdByMode: seeded.lastCustomIdByMode,
         textureCache: {},
+        noteTabs: [],
       }
     }
 
@@ -238,6 +267,15 @@ function loadStore(): BrowserMockStore {
             return acc
           }, {} as Record<string, { mimeType: string; dataBase64: string; createdAt: number }>)
         : {},
+      noteTabs: Array.isArray(parsed.noteTabs)
+        ? (parsed.noteTabs as NoteTabEntry[])
+            .filter((entry) => typeof entry?.noteId === 'string')
+            .map((entry, index) => ({
+              noteId: entry.noteId,
+              position: Number.isFinite(entry.position) ? entry.position : index,
+              addedAtMs: Number.isFinite(entry.addedAtMs) ? entry.addedAtMs : Date.now(),
+            }))
+        : [],
     }
   } catch {
     const seeded = seedUiLoadoutEntries()
@@ -249,6 +287,7 @@ function loadStore(): BrowserMockStore {
       uiLoadoutEntries: seeded.entries,
       lastCustomIdByMode: seeded.lastCustomIdByMode,
       textureCache: {},
+      noteTabs: [],
     }
   }
 }
@@ -385,12 +424,34 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
       throw new Error('Branching from a snapshot is only available in the desktop app.')
     },
 
+    async setNoteInternalId(input: { id: string; requestedId: string }): Promise<NoteSummary | null> {
+      return mutate((store) => {
+        const note = store.notes.find((entry) => entry.id === input.id)
+        if (!note) return null
+        const base = normalizeInternalIdInput(input.requestedId) || deriveDefaultInternalIdBase(note.title)
+        note.internalId = resolveUniqueInternalId(store.notes, base, note.id)
+        return clone(toSummary(note))
+      })
+    },
+
+    async ensureNoteInternalId(input: { id: string }): Promise<string | null> {
+      return mutate((store) => {
+        const note = store.notes.find((entry) => entry.id === input.id)
+        if (!note) return null
+        if (note.internalId) return note.internalId
+        const base = deriveDefaultInternalIdBase(note.title)
+        note.internalId = resolveUniqueInternalId(store.notes, base, note.id)
+        return note.internalId
+      })
+    },
+
     async deleteNote(input: DeleteNoteInput): Promise<void> {
       mutate((store) => {
         store.notes = store.notes.filter((note) => note.id !== input.id)
         if (store.appState.selectedNoteId === input.id) {
           store.appState.selectedNoteId = null
         }
+        store.noteTabs = store.noteTabs.filter((tab) => tab.noteId !== input.id)
       })
     },
 
@@ -763,6 +824,51 @@ function buildFileSyncBridge(): FileSyncApi {
   }
 }
 
+function buildTabsBridge(storeRef: { current: BrowserMockStore }): NoteTabsApi {
+  const mutate = <T,>(transform: (store: BrowserMockStore) => T): T => {
+    const result = transform(storeRef.current)
+    persistStore(storeRef.current)
+    return result
+  }
+
+  const sorted = (store: BrowserMockStore): NoteTabEntry[] =>
+    store.noteTabs.slice().sort((a, b) => a.position - b.position)
+
+  return {
+    async listTabs(): Promise<NoteTabEntry[]> {
+      return sorted(storeRef.current)
+    },
+
+    async addTab(noteId: string): Promise<NoteTabEntry[]> {
+      return mutate((store) => {
+        if (!store.noteTabs.some((tab) => tab.noteId === noteId)) {
+          const maxPosition = store.noteTabs.reduce((max, tab) => Math.max(max, tab.position), -1)
+          store.noteTabs.push({ noteId, position: maxPosition + 1, addedAtMs: Date.now() })
+        }
+        return sorted(store)
+      })
+    },
+
+    async removeTab(noteId: string): Promise<NoteTabEntry[]> {
+      return mutate((store) => {
+        store.noteTabs = store.noteTabs.filter((tab) => tab.noteId !== noteId)
+        return sorted(store)
+      })
+    },
+
+    async reorderTabs(orderedNoteIds: string[]): Promise<NoteTabEntry[]> {
+      return mutate((store) => {
+        const positionByNoteId = new Map(orderedNoteIds.map((noteId, index) => [noteId, index]))
+        store.noteTabs = store.noteTabs.map((tab) => ({
+          ...tab,
+          position: positionByNoteId.get(tab.noteId) ?? tab.position,
+        }))
+        return sorted(store)
+      })
+    },
+  }
+}
+
 export function installBrowserMockBridges(): void {
   if (!import.meta.env.DEV) return
 
@@ -770,7 +876,7 @@ export function installBrowserMockBridges(): void {
   if (scopedWindow.__measlyBrowserMockInstalled) return
 
   // Electron renderer already owns bridge provisioning through preload.
-  if (window.measlyNotes && window.measlyState && window.measlyTextures && window.measlyLoadouts) {
+  if (window.measlyNotes && window.measlyState && window.measlyTextures && window.measlyLoadouts && window.measlyTabs) {
     scopedWindow.__measlyBrowserMockInstalled = true
     return
   }
@@ -791,6 +897,9 @@ export function installBrowserMockBridges(): void {
   }
   if (!window.measlyFileSync) {
     window.measlyFileSync = buildFileSyncBridge()
+  }
+  if (!window.measlyTabs) {
+    window.measlyTabs = buildTabsBridge(storeRef)
   }
 
   scopedWindow.__measlyBrowserMockInstalled = true

@@ -14,6 +14,7 @@ import { TEXTURE_CHANNELS } from '../src/shared/textures'
 import { LOADOUT_CHANNELS } from '../src/shared/loadouts'
 import { AUDIO_PLAYER_CHANNELS, AUDIO_EXTENSIONS } from '../src/shared/audioPlayer'
 import type { PlaylistSlot } from '../src/shared/audioPlayer'
+import { NOTE_TABS_CHANNELS } from '../src/shared/tabs'
 
 // Defense in depth: if something throws outside of a path we've explicitly
 // wrapped (e.g. during startup, before a window exists to show an in-app
@@ -304,6 +305,8 @@ function registerIpcHandlers() {
   ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.branchNoteFromSnapshot, async (_event, input) => noteLifecycleService!.branchNoteFromSnapshot(input));
   ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.syncExternalNoteToFile, async (_event, input) => noteLifecycleService!.syncExternalNoteToFile(input));
   ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.getNoteIdByExternalPath, async (_event, input) => noteLifecycleService!.getNoteIdByExternalPath(input));
+  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.setInternalId, async (_event, input) => noteLifecycleService!.setNoteInternalId(input));
+  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.ensureInternalId, async (_event, input) => noteLifecycleService!.ensureNoteInternalId(input));
 
   ipcMain.handle(APP_STATE_CHANNELS.loadAppState, async () => stateService!.loadAppState());
   ipcMain.handle(APP_STATE_CHANNELS.saveAppState, async (_event, payload) => stateService!.saveAppState(payload));
@@ -718,6 +721,22 @@ function registerIpcHandlers() {
 
   ipcMain.handle(AUDIO_PLAYER_CHANNELS.getPlaylistCounts, async () => {
     return databaseService!.getMusicPlaylistCounts();
+  });
+
+  ipcMain.handle(NOTE_TABS_CHANNELS.list, async () => {
+    return databaseService!.listNoteTabs();
+  });
+
+  ipcMain.handle(NOTE_TABS_CHANNELS.add, async (_event, noteId: string) => {
+    return databaseService!.addNoteTab(noteId);
+  });
+
+  ipcMain.handle(NOTE_TABS_CHANNELS.remove, async (_event, noteId: string) => {
+    return databaseService!.removeNoteTab(noteId);
+  });
+
+  ipcMain.handle(NOTE_TABS_CHANNELS.reorder, async (_event, orderedNoteIds: string[]) => {
+    return databaseService!.reorderNoteTabs(orderedNoteIds);
   });
 }
 

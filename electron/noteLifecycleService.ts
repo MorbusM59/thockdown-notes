@@ -167,6 +167,7 @@ export class NoteLifecycleService {
         externalPath: record.externalPath ?? (record.isTemp ? record.filePath : null) ?? null,
         hasUnsavedChanges: record.hasUnsavedChanges,
         isInSync: Boolean(record.syncMode && !record.hasUnsavedChanges),
+        internalId: record.internalId,
       };
     } catch {
       return null;
@@ -391,6 +392,7 @@ export class NoteLifecycleService {
         externalPath: record.externalPath,
         hasUnsavedChanges,
         syncMode,
+        internalId: record.internalId ?? null,
       });
 
       if (!summary) {
@@ -424,6 +426,7 @@ export class NoteLifecycleService {
       externalPath: null,
       hasUnsavedChanges: false,
       syncMode: false,
+      internalId: record?.internalId ?? null,
     });
 
     if (!summary) {
@@ -540,6 +543,32 @@ export class NoteLifecycleService {
 
   async renameTag(input: RenameTagInput): Promise<{ updatedNoteIds: string[] }> {
     return this.databaseService.renameTag(input);
+  }
+
+  /**
+   * Assigns a user-entered `$id` value to a note (tab-bar label). Always
+   * overwrites any existing internal ID; collisions with another note's ID
+   * get an incremental "-2", "-3", ... suffix. Returns the refreshed
+   * summary so the renderer can pick up the resolved ID immediately.
+   */
+  async setNoteInternalId(input: { id: string; requestedId: string }): Promise<NoteSummary | null> {
+    this.databaseService.setNoteInternalId(input.id, input.requestedId);
+    const record = this.databaseService.getNoteRecord(input.id);
+    if (!record) return null;
+    return this.readSummary(record);
+  }
+
+  /**
+   * Returns the note's internal ID, lazily assigning the default (first 8
+   * characters of the current title, de-duplicated) the first time one is
+   * needed — e.g. when the note is pinned to the tab bar.
+   */
+  async ensureNoteInternalId(input: { id: string }): Promise<string | null> {
+    const record = this.databaseService.getNoteRecord(input.id);
+    if (!record) return null;
+    const summary = await this.readSummary(record);
+    const title = summary?.title ?? record.title;
+    return this.databaseService.ensureNoteInternalId(input.id, title);
   }
 
   async listTags(): Promise<TagSummary[]> {

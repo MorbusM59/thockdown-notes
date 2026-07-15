@@ -24,6 +24,8 @@ import type { FileSyncApi } from '../src/shared/fileSync'
 import { FILE_SYNC_CHANNELS } from '../src/shared/fileSync'
 import type { AudioPlayerApi } from '../src/shared/audioPlayer'
 import { AUDIO_PLAYER_CHANNELS } from '../src/shared/audioPlayer'
+import type { NoteTabsApi } from '../src/shared/tabs'
+import { NOTE_TABS_CHANNELS } from '../src/shared/tabs'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
@@ -69,6 +71,8 @@ const noteLifecycleApi: NoteLifecycleApi = {
   getNoteSnapshots: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.getNoteSnapshots, input),
   deleteNoteSnapshot: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.deleteNoteSnapshot, input),
   branchNoteFromSnapshot: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.branchNoteFromSnapshot, input),
+  setNoteInternalId: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.setInternalId, input),
+  ensureNoteInternalId: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.ensureInternalId, input),
 }
 
 contextBridge.exposeInMainWorld('measlyNotes', noteLifecycleApi)
@@ -185,3 +189,12 @@ const audioPlayerApi: AudioPlayerApi = {
 }
 
 contextBridge.exposeInMainWorld('measlyAudioPlayer', audioPlayerApi)
+
+const noteTabsApi: NoteTabsApi = {
+  listTabs:    () => ipcRenderer.invoke(NOTE_TABS_CHANNELS.list),
+  addTab:      (noteId) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.add, noteId),
+  removeTab:   (noteId) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.remove, noteId),
+  reorderTabs: (orderedNoteIds) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.reorder, orderedNoteIds),
+}
+
+contextBridge.exposeInMainWorld('measlyTabs', noteTabsApi)

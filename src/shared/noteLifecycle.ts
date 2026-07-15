@@ -19,6 +19,8 @@ export const NOTE_LIFECYCLE_CHANNELS = {
   getNoteSnapshots: 'notes:get-note-snapshots',
   deleteNoteSnapshot: 'notes:delete-note-snapshot',
   branchNoteFromSnapshot: 'notes:branch-from-snapshot',
+  setInternalId: 'notes:set-internal-id',
+  ensureInternalId: 'notes:ensure-internal-id',
 } as const;
 
 export interface NoteSummary {
@@ -34,6 +36,8 @@ export interface NoteSummary {
   externalPath?: string | null;
   hasUnsavedChanges?: boolean;
   isInSync?: boolean;
+  /** User-assignable tab-bar label. Null until first assigned (explicitly via `$id`, or lazily defaulted). */
+  internalId?: string | null;
 }
 
 export interface NoteDocument extends NoteSummary {
@@ -138,4 +142,8 @@ export interface NoteLifecycleApi {
   getNoteSnapshots(input: LoadNoteInput): Promise<Array<{ id: number; noteId: string; content: string; timestamp: string; isManual: boolean }>>;
   deleteNoteSnapshot(input: DeleteNoteSnapshotInput): Promise<void>;
   branchNoteFromSnapshot(input: BranchNoteFromSnapshotInput): Promise<NoteDocument>;
+  /** Explicit `$id` assignment. Overwrites any existing ID; resolves collisions with a "-2", "-3", ... suffix. */
+  setNoteInternalId(input: { id: string; requestedId: string }): Promise<NoteSummary | null>;
+  /** Lazily assigns + returns the default ID (first 8 chars of title) if the note doesn't have one yet. */
+  ensureNoteInternalId(input: { id: string }): Promise<string | null>;
 }

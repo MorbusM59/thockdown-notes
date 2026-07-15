@@ -106,6 +106,8 @@ export interface PersistedMenuState {
   debuggingEnabled?: boolean;
   spellCheckEditEnabled?: boolean;
   spellCheckRenderEnabled?: boolean;
+  /** Whether the tab bar shows tag management or pinned quick-access note tabs. */
+  tabBarMode?: 'tags' | 'tabs';
 }
 
 // Persisted boundary/scroll position as integer line counts. See

@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { renderToStaticMarkup } from 'react-dom/server'
-import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
+import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { visit } from 'unist-util-visit'
@@ -46,6 +46,7 @@ import {
   LOADOUT_FACTORY_PRESET_COUNT,
 } from './shared/loadouts'
 import type { NoteSummary } from './shared/noteLifecycle'
+import type { NoteTabEntry } from './shared/tabs'
 import type { TextureCacheRequest } from './shared/textures'
 import {
   DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
@@ -116,6 +117,8 @@ const NEW_NOTE_TEMPLATE = '# '
 const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
 const DEBUG_TAG_NAME = 'debug'
 const PROTECTED_TAGS = new Set(['archived', 'deleted', 'external', DEBUG_TAG_NAME])
+/** How long the temp tab must be held down (left mouse button) before it's promoted to a permanent pinned tab. */
+const TEMP_TAB_PIN_HOLD_MS = 500
 const GRID_DIVIDER_PX = 8
 const SIDEBAR_WIDTH_PX = 288
 const WINDOW_CONTROLS_WIDTH_PX = 380
@@ -2323,6 +2326,9 @@ function App() {
     notesRef.current = notes
   }, [notes])
   const [tagInputValue, setTagInputValue] = useState('')
+  const [tabBarMode, setTabBarMode] = useState<'tags' | 'tabs'>('tags')
+  const [pinnedTabs, setPinnedTabs] = useState<NoteTabEntry[]>([])
+  const [unpinPrimedTabNoteId, setUnpinPrimedTabNoteId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [isSearchQueryCaseSensitive, setIsSearchQueryCaseSensitive] = useState(false)
   const [documentFindQuery, setDocumentFindQuery] = useState('')
@@ -3887,6 +3893,7 @@ function App() {
       debuggingEnabled,
       spellCheckEditEnabled,
       spellCheckRenderEnabled,
+      tabBarMode,
     }
   }, [
     archiveCollapsedPrimary,
@@ -3896,6 +3903,7 @@ function App() {
     debuggingEnabled,
     spellCheckEditEnabled,
     spellCheckRenderEnabled,
+    tabBarMode,
     editorFontSize,
     editorGlyphPaddingPx,
     borderRadiusRegularPx,
@@ -5635,6 +5643,27 @@ ${markdownHtml}
     if (!activeNoteId || !persistenceReady) return
     if (activeNoteIsExternal) return
 
+    const rawInput = tagInputValue.trim()
+    if (rawInput.startsWith('$')) {
+      const requestedId = rawInput.slice(1)
+      setRenamingTagName(null)
+      setTagInputValue('')
+      if (!window.measlyNotes) return
+
+      const noteId = activeNoteId
+      void (async () => {
+        try {
+          const updated = await window.measlyNotes!.setNoteInternalId({ id: noteId, requestedId })
+          if (updated) {
+            setNotes((previous) => previous.map((note) => (note.id === noteId ? { ...note, internalId: updated.internalId } : note)))
+          }
+        } catch (error) {
+          console.error('Failed to set note internal ID', error)
+        }
+      })()
+      return
+    }
+
     const normalized = normalizeTagName(tagInputValue)
     if (!normalized) return
 
@@ -6135,6 +6164,174 @@ await flushPendingSaveNow()
     }
   }, [activateNote, activeNoteId, flushPendingSaveNow, persistenceReady, refreshNotes])
 
+  // ── Tab bar (pinned quick-access notes) ─────────────────────────────────
+
+  const toggleTabBarMode = useCallback(() => {
+    setTabBarMode((previous) => (previous === 'tags' ? 'tabs' : 'tags'))
+    setUnpinPrimedTabNoteId(null)
+  }, [])
+
+  // The currently open note gets a temporary, unsaved "preview" tab at the
+  // leftmost position whenever it isn't already pinned. It tracks whichever
+  // unpinned note is active — it isn't a real entry in note_tabs until the
+  // user holds it long enough to promote it (see handleTempTabMouseDown).
+  const activeNoteIsPinned = activeNoteId ? pinnedTabs.some((tab) => tab.noteId === activeNoteId) : false
+  const tempTabNoteId = activeNoteId && !activeNoteIsPinned ? activeNoteId : null
+
+  const pinNoteToTabs = useCallback(async (noteId: string) => {
+    if (!window.measlyTabs) return
+
+    // Make sure the tab has a label to show immediately, assigning the
+    // default (first 8 chars of the title) if the note doesn't have a
+    // custom $id yet.
+    if (window.measlyNotes) {
+      const assignedId = await window.measlyNotes.ensureNoteInternalId({ id: noteId }).catch(() => null)
+      if (assignedId) {
+        setNotes((previous) => previous.map((note) => (note.id === noteId ? { ...note, internalId: assignedId } : note)))
+      }
+    }
+
+    const updatedTabs = await window.measlyTabs.addTab(noteId).catch(() => null)
+    if (updatedTabs) {
+      setPinnedTabs(updatedTabs)
+    }
+  }, [])
+
+  // Removes a note's pinned tab. If that tab belonged to the currently
+  // active note, activation moves to whichever tab slides into its old
+  // position (i.e. the tab that was to its right) — falling back to the
+  // new rightmost tab if it was the last one, or staying put if no tabs
+  // remain.
+  const unpinNoteTab = useCallback(async (noteId: string) => {
+    if (!window.measlyTabs) return
+
+    const wasActiveTab = noteId === activeNoteId
+    const removedIndex = pinnedTabs.findIndex((tab) => tab.noteId === noteId)
+
+    const updatedTabs = await window.measlyTabs.removeTab(noteId).catch(() => null)
+    if (!updatedTabs) return
+    setPinnedTabs(updatedTabs)
+
+    if (wasActiveTab && removedIndex !== -1) {
+      const nextTab = updatedTabs[removedIndex] ?? updatedTabs[removedIndex - 1]
+      if (nextTab) {
+        void activateNote(nextTab.noteId)
+      }
+    }
+  }, [activeNoteId, pinnedTabs, activateNote])
+
+  // Dismissing the temp tab has nothing to persist-remove (it was never a
+  // real note_tabs row) — it just hands activation over to the leftmost
+  // pinned tab, same as closing the leftmost real tab would. If there are
+  // no pinned tabs left to fall back to, there's nowhere else to go, so it
+  // stays put.
+  const dismissTempTab = useCallback((noteId: string) => {
+    if (noteId !== activeNoteId) return
+    const nextTab = pinnedTabs[0]
+    if (nextTab) {
+      void activateNote(nextTab.noteId)
+    }
+  }, [activeNoteId, pinnedTabs, activateNote])
+
+  const handleAddCurrentNoteToTabs = useCallback(async () => {
+    if (!activeNoteId || !persistenceReady) return
+
+    // Ctrl+T toggles: pin if not already pinned, unpin if it is.
+    if (activeNoteIsPinned) {
+      void unpinNoteTab(activeNoteId)
+    } else {
+      void pinNoteToTabs(activeNoteId)
+    }
+  }, [activeNoteId, persistenceReady, activeNoteIsPinned, unpinNoteTab, pinNoteToTabs])
+
+  // Right-click primes a tab for unpinning — the tab-bar equivalent of
+  // closing it (same end result as Ctrl+T on an already-pinned note). A
+  // left-click while primed confirms the close; anything else (mouse
+  // leaving, clicking a different tab) cancels the priming. Works the same
+  // way for the temp tab, which just has nothing to persist-remove.
+  const handleTabContextMenu = useCallback((event: MouseEvent<HTMLDivElement>, noteId: string) => {
+    event.preventDefault()
+    setUnpinPrimedTabNoteId(noteId)
+  }, [])
+
+  const handleTabMouseLeave = useCallback((noteId: string) => {
+    setUnpinPrimedTabNoteId((previous) => (previous === noteId ? null : previous))
+  }, [])
+
+  const handleTabClick = useCallback((noteId: string) => {
+    const wasPrimed = unpinPrimedTabNoteId === noteId
+    setUnpinPrimedTabNoteId(null)
+
+    if (wasPrimed) {
+      const isPinned = pinnedTabs.some((tab) => tab.noteId === noteId)
+      if (isPinned) {
+        void unpinNoteTab(noteId)
+      } else {
+        dismissTempTab(noteId)
+      }
+      return
+    }
+
+    void activateNote(noteId)
+  }, [unpinPrimedTabNoteId, pinnedTabs, unpinNoteTab, dismissTempTab, activateNote])
+
+  // Holding the left mouse button on the temp tab for TEMP_TAB_PIN_HOLD_MS
+  // promotes it to a real, permanent pinned tab.
+  const tempTabHoldTimerRef = useRef<number | null>(null)
+  const [pinArmingTabNoteId, setPinArmingTabNoteId] = useState<string | null>(null)
+
+  const clearTempTabHoldTimer = useCallback(() => {
+    if (tempTabHoldTimerRef.current !== null) {
+      window.clearTimeout(tempTabHoldTimerRef.current)
+      tempTabHoldTimerRef.current = null
+    }
+    setPinArmingTabNoteId(null)
+  }, [])
+
+  const handleTempTabMouseDown = useCallback((event: MouseEvent<HTMLDivElement>, noteId: string) => {
+    if (event.button !== 0) return
+    clearTempTabHoldTimer()
+    setPinArmingTabNoteId(noteId)
+    tempTabHoldTimerRef.current = window.setTimeout(() => {
+      tempTabHoldTimerRef.current = null
+      setPinArmingTabNoteId(null)
+      void pinNoteToTabs(noteId)
+    }, TEMP_TAB_PIN_HOLD_MS)
+  }, [clearTempTabHoldTimer, pinNoteToTabs])
+
+  useEffect(() => () => clearTempTabHoldTimer(), [clearTempTabHoldTimer])
+
+  // ── Tab bar horizontal scrolling (fixed-width tabs, wheel-scroll, edge fades) ──
+
+  const tabsScrollerRef = useRef<HTMLDivElement | null>(null)
+  const [tabsCanScrollLeft, setTabsCanScrollLeft] = useState(false)
+  const [tabsCanScrollRight, setTabsCanScrollRight] = useState(false)
+
+  const updateTabsScrollEdges = useCallback(() => {
+    const el = tabsScrollerRef.current
+    if (!el) return
+    setTabsCanScrollLeft(el.scrollLeft > 1)
+    setTabsCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1)
+  }, [])
+
+  useEffect(() => {
+    updateTabsScrollEdges()
+  }, [pinnedTabs, tempTabNoteId, tabBarMode, updateTabsScrollEdges])
+
+  useEffect(() => {
+    if (tabBarMode !== 'tabs') return
+    window.addEventListener('resize', updateTabsScrollEdges)
+    return () => window.removeEventListener('resize', updateTabsScrollEdges)
+  }, [tabBarMode, updateTabsScrollEdges])
+
+  // Vertical wheel input scrolls the bar horizontally, regardless of
+  // browser/OS default wheel-axis behavior.
+  const handleTabsWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+    if (event.deltaY === 0) return
+    event.preventDefault()
+    event.currentTarget.scrollLeft += event.deltaY
+  }, [])
+
   const closeExternalNoteWithoutSaving = useCallback(async (noteId: string) => {
     if (!window.measlyNotes) return
 
@@ -6606,6 +6803,7 @@ await flushPendingSaveNow()
             setDebuggingEnabled(appState.menu.debuggingEnabled ?? false)
             setSpellCheckEditEnabled(appState.menu.spellCheckEditEnabled ?? false)
             setSpellCheckRenderEnabled(appState.menu.spellCheckRenderEnabled ?? false)
+            setTabBarMode(appState.menu.tabBarMode ?? 'tags')
 
             setCurrentPage(loadedSidebarViewState[appState.menu.sidebarMode].page)
             setCategoryCollapsedPrimary(loadedSidebarViewState.category.collapsedPrimary)
@@ -6639,6 +6837,12 @@ await flushPendingSaveNow()
 
           setNotes((previous) => mergeNoteSummaries(previous, listed))
           setActiveNoteId(loaded.id)
+
+          if (window.measlyTabs) {
+            void window.measlyTabs.listTabs().then((tabs) => {
+              if (!disposed) setPinnedTabs(tabs)
+            })
+          }
 
           const hydratedText = normalizeInternalText(loaded.text)
           latestEditorTextRef.current = hydratedText
@@ -11551,6 +11755,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         return
       }
 
+      if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 't') {
+        event.preventDefault()
+        void handleAddCurrentNoteToTabs()
+        return
+      }
+
       if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'n') {
         event.preventDefault()
         void createNote()
@@ -11621,6 +11831,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [
     toggleRenderViewMode,
+    handleAddCurrentNoteToTabs,
     createNote,
     createNoteFromClipboardTitle,
     activeNoteId,
@@ -12339,6 +12550,90 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             </section>
 
             <section className="tabbar-grid" style={{ gridArea: 'tabbar' }} aria-label="Tab bar">
+              <button
+                type="button"
+                className="btn-icon tabbar-mode-toggle"
+                title={tabBarMode === 'tags' ? 'Switch to tab bar' : 'Switch to tag bar'}
+                aria-label={tabBarMode === 'tags' ? 'Switch to tab bar' : 'Switch to tag bar'}
+                onClick={toggleTabBarMode}
+              >
+                <span className={`fa-solid ${tabBarMode === 'tags' ? 'fa-tags' : 'fa-table-cells-large'}`} aria-hidden="true" />
+              </button>
+
+              {tabBarMode === 'tabs' ? (
+                <div className="tab-mode-shell tabs-mode" role="group" aria-label="Note tabs">
+                  <div className="tabbar-tabs-scroll-shell">
+                    <div className={`tabbar-tabs-edge-fade left${tabsCanScrollLeft ? ' visible' : ''}`} aria-hidden="true" />
+                    <div
+                      className="tabbar-tabs-display"
+                      aria-live="polite"
+                      ref={tabsScrollerRef}
+                      onScroll={updateTabsScrollEdges}
+                      onWheel={handleTabsWheel}
+                    >
+                      {pinnedTabs.length === 0 && !tempTabNoteId ? (
+                        <span className="tabbar-tag-hint">Open a note to preview it here.</span>
+                      ) : (
+                        <>
+                          {tempTabNoteId ? (() => {
+                            const note = notes.find((entry) => entry.id === tempTabNoteId)
+                            const label = note?.internalId ?? '···'
+                            const isGhost = note ? (isArchivedNote(note) || isDeletedNote(note)) : true
+                            const isPrimed = unpinPrimedTabNoteId === tempTabNoteId
+                            const isArming = pinArmingTabNoteId === tempTabNoteId
+                            return (
+                              <div
+                                key={tempTabNoteId}
+                                className={`tag-pill note-tab-pill temp active${isGhost ? ' ghost' : ''}${isPrimed ? ' unpin-primed' : ''}${isArming ? ' pin-arming' : ''}`}
+                                style={{ '--temp-tab-pin-hold-ms': `${TEMP_TAB_PIN_HOLD_MS}ms` } as CSSProperties}
+                                onClick={() => handleTabClick(tempTabNoteId)}
+                                onContextMenu={(event) => handleTabContextMenu(event, tempTabNoteId)}
+                                onMouseDown={(event) => handleTempTabMouseDown(event, tempTabNoteId)}
+                                onMouseUp={clearTempTabHoldTimer}
+                                onMouseLeave={() => {
+                                  handleTabMouseLeave(tempTabNoteId)
+                                  clearTempTabHoldTimer()
+                                }}
+                                title={
+                                  isPrimed
+                                    ? 'Click again to close, or move cursor away to cancel'
+                                    : `${note?.title ?? 'Open note'} — hold to pin`
+                                }
+                              >
+                                <span className="tag-pill-label">{label}</span>
+                              </div>
+                            )
+                          })() : null}
+                          {pinnedTabs.map((tab) => {
+                            const note = notes.find((entry) => entry.id === tab.noteId)
+                            const label = note?.internalId ?? '···'
+                            const isGhost = note ? (isArchivedNote(note) || isDeletedNote(note)) : true
+                            const isActive = tab.noteId === activeNoteId
+                            const isPrimed = unpinPrimedTabNoteId === tab.noteId
+                            return (
+                              <div
+                                key={tab.noteId}
+                                className={`tag-pill note-tab-pill${isActive ? ' active' : ''}${isGhost ? ' ghost' : ''}${isPrimed ? ' unpin-primed' : ''}`}
+                                onClick={() => handleTabClick(tab.noteId)}
+                                onContextMenu={(event) => handleTabContextMenu(event, tab.noteId)}
+                                onMouseLeave={() => handleTabMouseLeave(tab.noteId)}
+                                title={
+                                  isPrimed
+                                    ? 'Click again to unpin, or move cursor away to cancel'
+                                    : (note?.title ?? 'Open note')
+                                }
+                              >
+                                <span className="tag-pill-label">{label}</span>
+                              </div>
+                            )
+                          })}
+                        </>
+                      )}
+                    </div>
+                    <div className={`tabbar-tabs-edge-fade right${tabsCanScrollRight ? ' visible' : ''}`} aria-hidden="true" />
+                  </div>
+                </div>
+              ) : (
               <div className="tab-mode-shell" role="group" aria-label="Tag manager">
                 <div className="tabbar-tag-input">
                   <input
@@ -12349,7 +12644,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     placeholder={
                       !activeNoteId
                         ? (notes.length > 0 ? 'Select a note...' : 'Create a note...')
-                        : (renamingTagName ? 'Rename tag...' : 'Add tag...')
+                        : (renamingTagName ? 'Rename tag...' : 'Add tag or $id...')
                     }
                     onChange={(event) => setTagInputValue(event.target.value)}
                     onKeyDown={(event) => {
@@ -12436,6 +12731,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   ) : null}
                 </div>
               </div>
+              )}
             </section>
 
             <div className="editor-viewer-frame" style={{ gridArea: 'viewer' }}>
