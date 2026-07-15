@@ -167,7 +167,7 @@ export class NoteLifecycleService {
         externalPath: record.externalPath ?? (record.isTemp ? record.filePath : null) ?? null,
         hasUnsavedChanges: record.hasUnsavedChanges,
         isInSync: Boolean(record.syncMode && !record.hasUnsavedChanges),
-        internalId: record.internalId,
+        assignedId: record.assignedId,
       };
     } catch {
       return null;
@@ -392,7 +392,7 @@ export class NoteLifecycleService {
         externalPath: record.externalPath,
         hasUnsavedChanges,
         syncMode,
-        internalId: record.internalId ?? null,
+        assignedId: record.assignedId ?? null,
       });
 
       if (!summary) {
@@ -426,7 +426,7 @@ export class NoteLifecycleService {
       externalPath: null,
       hasUnsavedChanges: false,
       syncMode: false,
-      internalId: record?.internalId ?? null,
+      assignedId: record?.assignedId ?? null,
     });
 
     if (!summary) {
@@ -551,8 +551,8 @@ export class NoteLifecycleService {
    * get an incremental "-2", "-3", ... suffix. Returns the refreshed
    * summary so the renderer can pick up the resolved ID immediately.
    */
-  async setNoteInternalId(input: { id: string; requestedId: string }): Promise<NoteSummary | null> {
-    this.databaseService.setNoteInternalId(input.id, input.requestedId);
+  async setNoteAssignedId(input: { id: string; requestedId: string }): Promise<NoteSummary | null> {
+    this.databaseService.setNoteAssignedId(input.id, input.requestedId);
     const record = this.databaseService.getNoteRecord(input.id);
     if (!record) return null;
     return this.readSummary(record);
@@ -563,12 +563,12 @@ export class NoteLifecycleService {
    * characters of the current title, de-duplicated) the first time one is
    * needed — e.g. when the note is pinned to the tab bar.
    */
-  async ensureNoteInternalId(input: { id: string }): Promise<string | null> {
+  async ensureNoteAssignedId(input: { id: string }): Promise<string | null> {
     const record = this.databaseService.getNoteRecord(input.id);
     if (!record) return null;
     const summary = await this.readSummary(record);
     const title = summary?.title ?? record.title;
-    return this.databaseService.ensureNoteInternalId(input.id, title);
+    return this.databaseService.ensureNoteAssignedId(input.id, title);
   }
 
   async listTags(): Promise<TagSummary[]> {

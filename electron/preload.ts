@@ -71,8 +71,8 @@ const noteLifecycleApi: NoteLifecycleApi = {
   getNoteSnapshots: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.getNoteSnapshots, input),
   deleteNoteSnapshot: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.deleteNoteSnapshot, input),
   branchNoteFromSnapshot: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.branchNoteFromSnapshot, input),
-  setNoteInternalId: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.setInternalId, input),
-  ensureNoteInternalId: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.ensureInternalId, input),
+  setNoteAssignedId: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.setAssignedId, input),
+  ensureNoteAssignedId: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.ensureAssignedId, input),
 }
 
 contextBridge.exposeInMainWorld('measlyNotes', noteLifecycleApi)

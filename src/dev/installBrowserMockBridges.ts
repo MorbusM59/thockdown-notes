@@ -101,7 +101,7 @@ function toSummary(note: NoteDocument): NoteSummary {
     createdAtMs: note.createdAtMs,
     updatedAtMs: note.updatedAtMs,
     sizeBytes: note.sizeBytes,
-    internalId: note.internalId ?? null,
+    assignedId: note.assignedId ?? null,
   }
 }
 
@@ -113,19 +113,19 @@ function sortNotesDesc(notes: NoteDocument[]): NoteDocument[] {
 
 const NOTE_INTERNAL_ID_MAX_LEN = 8
 
-function normalizeInternalIdInput(raw: string): string {
+function normalizeAssignedIdInput(raw: string): string {
   return raw.trim().toUpperCase().replace(/\s+/g, '-')
 }
 
-function deriveDefaultInternalIdBase(title: string): string {
-  const normalized = normalizeInternalIdInput(title || 'NOTE')
+function deriveDefaultAssignedIdBase(title: string): string {
+  const normalized = normalizeAssignedIdInput(title || 'NOTE')
   const trimmed = normalized.slice(0, NOTE_INTERNAL_ID_MAX_LEN).replace(/-+$/, '')
   return trimmed.length > 0 ? trimmed : 'NOTE'
 }
 
-function resolveUniqueInternalId(notes: NoteDocument[], requestedBase: string, excludeNoteId: string): string {
+function resolveUniqueAssignedId(notes: NoteDocument[], requestedBase: string, excludeNoteId: string): string {
   const used = new Set(
-    notes.filter((note) => note.id !== excludeNoteId && note.internalId).map((note) => note.internalId as string),
+    notes.filter((note) => note.id !== excludeNoteId && note.assignedId).map((note) => note.assignedId as string),
   )
   if (!used.has(requestedBase)) return requestedBase
 
@@ -424,24 +424,24 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
       throw new Error('Branching from a snapshot is only available in the desktop app.')
     },
 
-    async setNoteInternalId(input: { id: string; requestedId: string }): Promise<NoteSummary | null> {
+    async setNoteAssignedId(input: { id: string; requestedId: string }): Promise<NoteSummary | null> {
       return mutate((store) => {
         const note = store.notes.find((entry) => entry.id === input.id)
         if (!note) return null
-        const base = normalizeInternalIdInput(input.requestedId) || deriveDefaultInternalIdBase(note.title)
-        note.internalId = resolveUniqueInternalId(store.notes, base, note.id)
+        const base = normalizeAssignedIdInput(input.requestedId) || deriveDefaultAssignedIdBase(note.title)
+        note.assignedId = resolveUniqueAssignedId(store.notes, base, note.id)
         return clone(toSummary(note))
       })
     },
 
-    async ensureNoteInternalId(input: { id: string }): Promise<string | null> {
+    async ensureNoteAssignedId(input: { id: string }): Promise<string | null> {
       return mutate((store) => {
         const note = store.notes.find((entry) => entry.id === input.id)
         if (!note) return null
-        if (note.internalId) return note.internalId
-        const base = deriveDefaultInternalIdBase(note.title)
-        note.internalId = resolveUniqueInternalId(store.notes, base, note.id)
-        return note.internalId
+        if (note.assignedId) return note.assignedId
+        const base = deriveDefaultAssignedIdBase(note.title)
+        note.assignedId = resolveUniqueAssignedId(store.notes, base, note.id)
+        return note.assignedId
       })
     },
 

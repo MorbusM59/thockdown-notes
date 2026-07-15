@@ -5653,9 +5653,9 @@ ${markdownHtml}
       const noteId = activeNoteId
       void (async () => {
         try {
-          const updated = await window.measlyNotes!.setNoteInternalId({ id: noteId, requestedId })
+          const updated = await window.measlyNotes!.setNoteAssignedId({ id: noteId, requestedId })
           if (updated) {
-            setNotes((previous) => previous.map((note) => (note.id === noteId ? { ...note, internalId: updated.internalId } : note)))
+            setNotes((previous) => previous.map((note) => (note.id === noteId ? { ...note, assignedId: updated.assignedId } : note)))
           }
         } catch (error) {
           console.error('Failed to set note internal ID', error)
@@ -6185,9 +6185,9 @@ await flushPendingSaveNow()
     // default (first 8 chars of the title) if the note doesn't have a
     // custom $id yet.
     if (window.measlyNotes) {
-      const assignedId = await window.measlyNotes.ensureNoteInternalId({ id: noteId }).catch(() => null)
+      const assignedId = await window.measlyNotes.ensureNoteAssignedId({ id: noteId }).catch(() => null)
       if (assignedId) {
-        setNotes((previous) => previous.map((note) => (note.id === noteId ? { ...note, internalId: assignedId } : note)))
+        setNotes((previous) => previous.map((note) => (note.id === noteId ? { ...note, assignedId: assignedId } : note)))
       }
     }
 
@@ -12577,7 +12577,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                         <>
                           {tempTabNoteId ? (() => {
                             const note = notes.find((entry) => entry.id === tempTabNoteId)
-                            const label = note?.internalId ?? '···'
+                            const label = note?.assignedId ?? '···'
                             const isGhost = note ? (isArchivedNote(note) || isDeletedNote(note)) : true
                             const isPrimed = unpinPrimedTabNoteId === tempTabNoteId
                             const isArming = pinArmingTabNoteId === tempTabNoteId
@@ -12606,7 +12606,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                           })() : null}
                           {pinnedTabs.map((tab) => {
                             const note = notes.find((entry) => entry.id === tab.noteId)
-                            const label = note?.internalId ?? '···'
+                            const label = note?.assignedId ?? '···'
                             const isGhost = note ? (isArchivedNote(note) || isDeletedNote(note)) : true
                             const isActive = tab.noteId === activeNoteId
                             const isPrimed = unpinPrimedTabNoteId === tab.noteId

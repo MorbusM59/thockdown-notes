@@ -5,7 +5,7 @@ export const NOTE_TABS_CHANNELS = {
   reorder: 'tabs:reorder',
 } as const;
 
-/** One entry pinned to the tab bar. Display label comes from the note's `internalId`, looked up client-side. */
+/** One entry pinned to the tab bar. Display label comes from the note's `assignedId`, looked up client-side. */
 export interface NoteTabEntry {
   noteId: string;
   position: number;

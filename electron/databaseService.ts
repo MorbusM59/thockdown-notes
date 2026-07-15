@@ -133,7 +133,7 @@ type NoteRecordRow = {
   externalPath: string | null;
   hasUnsavedChanges: number;
   syncMode: number;
-  internalId: string | null;
+  assignedId: string | null;
 };
 
 export type NoteRecord = {
@@ -147,7 +147,7 @@ export type NoteRecord = {
   externalPath: string | null;
   hasUnsavedChanges: boolean;
   syncMode: boolean;
-  internalId: string | null;
+  assignedId: string | null;
 };
 
 /** One entry pinned to the tab bar (quick-access note shortcut). */
@@ -164,13 +164,13 @@ const NOTE_INTERNAL_ID_MAX_LEN = 8;
  * upper-cased, whitespace collapsed to single hyphens, anything else left
  * as-is (so punctuation the user deliberately typed survives).
  */
-export function normalizeInternalIdInput(raw: string): string {
+export function normalizeAssignedIdInput(raw: string): string {
   return raw.trim().toUpperCase().replace(/\s+/g, '-');
 }
 
 /** First 8 characters of the normalized title, trimmed of a trailing hyphen. */
-export function deriveDefaultInternalIdBase(title: string): string {
-  const normalized = normalizeInternalIdInput(title || 'NOTE');
+export function deriveDefaultAssignedIdBase(title: string): string {
+  const normalized = normalizeAssignedIdInput(title || 'NOTE');
   const truncated = normalized.slice(0, NOTE_INTERNAL_ID_MAX_LEN);
   const trimmed = truncated.replace(/-+$/, '');
   return trimmed.length > 0 ? trimmed : 'NOTE';
@@ -948,7 +948,7 @@ export class DatabaseService {
   listNoteRecords(): NoteRecord[] {
     const db = this.requireDb();
     const rows = db.prepare(`
-      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode, internalId
+      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode, assignedId
       FROM notes
       ORDER BY datetime(updatedAt) DESC
     `).all() as NoteRecordRow[];
@@ -964,14 +964,14 @@ export class DatabaseService {
       externalPath: row.externalPath,
       hasUnsavedChanges: Boolean(row.hasUnsavedChanges),
       syncMode: Boolean(row.syncMode),
-      internalId: row.internalId,
+      assignedId: row.assignedId,
     }));
   }
 
   getNoteRecord(noteId: string): NoteRecord | null {
     const db = this.requireDb();
     const row = db.prepare(`
-      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode, internalId
+      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode, assignedId
       FROM notes
       WHERE id = ?
       LIMIT 1
@@ -992,7 +992,7 @@ export class DatabaseService {
       externalPath: row.externalPath,
       hasUnsavedChanges: Boolean(row.hasUnsavedChanges),
       syncMode: Boolean(row.syncMode),
-      internalId: row.internalId,
+      assignedId: row.assignedId,
     };
   }
 
@@ -1003,20 +1003,20 @@ export class DatabaseService {
    * note can keep its own current ID without colliding with itself when
    * re-resolving uniqueness).
    */
-  private listUsedInternalIds(excludeNoteId?: string): Set<string> {
+  private listUsedAssignedIds(excludeNoteId?: string): Set<string> {
     const db = this.requireDb();
     const rows = excludeNoteId
-      ? db.prepare('SELECT internalId FROM notes WHERE internalId IS NOT NULL AND id != ?').all(excludeNoteId) as Array<{ internalId: string }>
-      : db.prepare('SELECT internalId FROM notes WHERE internalId IS NOT NULL').all() as Array<{ internalId: string }>;
-    return new Set(rows.map((row) => row.internalId));
+      ? db.prepare('SELECT assignedId FROM notes WHERE assignedId IS NOT NULL AND id != ?').all(excludeNoteId) as Array<{ assignedId: string }>
+      : db.prepare('SELECT assignedId FROM notes WHERE assignedId IS NOT NULL').all() as Array<{ assignedId: string }>;
+    return new Set(rows.map((row) => row.assignedId));
   }
 
   /**
    * Resolves `requestedBase` to a value that isn't already taken by another
    * note. Collisions get an incremental "-2", "-3", ... suffix appended.
    */
-  private resolveUniqueInternalId(requestedBase: string, excludeNoteId?: string): string {
-    const used = this.listUsedInternalIds(excludeNoteId);
+  private resolveUniqueAssignedId(requestedBase: string, excludeNoteId?: string): string {
+    const used = this.listUsedAssignedIds(excludeNoteId);
     if (!used.has(requestedBase)) return requestedBase;
 
     let attempt = 2;
@@ -1031,12 +1031,12 @@ export class DatabaseService {
    * Always overwrites any existing value. Returns the final, collision-
    * resolved ID that was actually stored.
    */
-  setNoteInternalId(noteId: string, requestedRaw: string): string {
+  setNoteAssignedId(noteId: string, requestedRaw: string): string {
     const db = this.requireDb();
-    const normalized = normalizeInternalIdInput(requestedRaw);
-    const base = normalized.length > 0 ? normalized : deriveDefaultInternalIdBase(this.getNoteRecord(noteId)?.title ?? 'NOTE');
-    const resolved = this.resolveUniqueInternalId(base, noteId);
-    db.prepare('UPDATE notes SET internalId = ? WHERE id = ?').run(resolved, noteId);
+    const normalized = normalizeAssignedIdInput(requestedRaw);
+    const base = normalized.length > 0 ? normalized : deriveDefaultAssignedIdBase(this.getNoteRecord(noteId)?.title ?? 'NOTE');
+    const resolved = this.resolveUniqueAssignedId(base, noteId);
+    db.prepare('UPDATE notes SET assignedId = ? WHERE id = ?').run(resolved, noteId);
     return resolved;
   }
 
@@ -1045,14 +1045,14 @@ export class DatabaseService {
    * (first 8 chars of the title, de-duplicated) on first use if it doesn't
    * have one yet.
    */
-  ensureNoteInternalId(noteId: string, currentTitle: string): string {
+  ensureNoteAssignedId(noteId: string, currentTitle: string): string {
     const db = this.requireDb();
-    const existing = db.prepare('SELECT internalId FROM notes WHERE id = ?').get(noteId) as { internalId: string | null } | undefined;
-    if (existing?.internalId) return existing.internalId;
+    const existing = db.prepare('SELECT assignedId FROM notes WHERE id = ?').get(noteId) as { assignedId: string | null } | undefined;
+    if (existing?.assignedId) return existing.assignedId;
 
-    const base = deriveDefaultInternalIdBase(currentTitle);
-    const resolved = this.resolveUniqueInternalId(base, noteId);
-    db.prepare('UPDATE notes SET internalId = ? WHERE id = ?').run(resolved, noteId);
+    const base = deriveDefaultAssignedIdBase(currentTitle);
+    const resolved = this.resolveUniqueAssignedId(base, noteId);
+    db.prepare('UPDATE notes SET assignedId = ? WHERE id = ?').run(resolved, noteId);
     return resolved;
   }
 
@@ -2540,10 +2540,10 @@ export class DatabaseService {
     this.ensureNotesColumn('sourceAnchorLine', 'INTEGER');
     this.ensureNotesColumn('sourceAnchorText', 'TEXT');
     this.ensureNotesColumn('contentChecksum', 'TEXT');
-    this.ensureNotesColumn('internalId', 'TEXT');
+    this.ensureNotesColumn('assignedId', 'TEXT');
 
     this.requireDb().exec(`
-      CREATE INDEX IF NOT EXISTS idx_notes_internal_id ON notes(internalId);
+      CREATE INDEX IF NOT EXISTS idx_notes_internal_id ON notes(assignedId);
     `);
   }
 
