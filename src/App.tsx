@@ -12644,7 +12644,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                     placeholder={
                       !activeNoteId
                         ? (notes.length > 0 ? 'Select a note...' : 'Create a note...')
-                        : (renamingTagName ? 'Rename tag...' : 'Add tag or $id...')
+                        : (renamingTagName ? 'Rename tag...' : '···')
                     }
                     onChange={(event) => setTagInputValue(event.target.value)}
                     onKeyDown={(event) => {

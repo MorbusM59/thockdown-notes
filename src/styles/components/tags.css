@@ -4,7 +4,7 @@
 
 .tabbar-grid {
   padding: 4px 8px;
-  height: 32px;
+  height: 100%;
   box-sizing: border-box;
 }
 
@@ -16,6 +16,7 @@
   flex-direction: row;
   align-items:    center;
   gap:            2px;
+  padding: 4px;
   flex:           1 1 auto;
   width:          auto;
   height: auto;
@@ -25,32 +26,36 @@
 }
 
 .tabbar-tag-input {
-  width:          100%;
-  height:         100%;
-  width:  50px;
-  flex:   0 0 50px;
-  box-sizing:     border-box;
-  display: flex;
+  position:   relative;
+  display:    block;
+  padding: 0;
+  height:      100%;
+  width:      60px;
+  overflow:    hidden;
+  -webkit-app-region: no-drag;
 }
 
 .tabbar-tag-input-field {
-  display:        block;
-  width:          100%;
-  box-sizing:     border-box;
-  border-radius:  var(--border-radius-small) 0 0 var(--border-radius-small);
-  box-shadow:     var(--box-shadow-inverted);
-  border:         none;
-  border-right :  1px solid var(--color-border-light-30);
-  font-size:      11px;
-  outline:        none;
-  background:     var(--color-input-backdrop);
-  color:          var(--color-text-base);
+  position: relative;
+  display: block;
+  height: 100%;
+  width: 100%;
+  border:           1px solid var(--btn-border-default);
+  border-radius:    var(--border-radius-small);
+  background:       var(--btn-bg-default);
+  font-size:        11px;
+  color:            var(--color-text-80);
+  user-select:      none;
+  transition:       all 0.2s;
+  white-space:      nowrap;
+  overflow:         hidden;
+  outline: none;
+  text-align: center;
   padding: 0 4px;
-  margin: 0;
 }
 
 .tabbar-tag-input-field:focus {
-  border-color: var(--color-border-light-30);
+  border-color: var(--color-border-dark-40);
 }
 
 .tabbar-tags-display {
@@ -58,7 +63,7 @@
   flex-wrap:   nowrap;
   align-items: center;
   gap:         2px;
-  height:      20px;
+  height:      100%;
   flex:        0 0 auto;
   overflow:    hidden;
   -webkit-app-region: no-drag;
@@ -70,14 +75,15 @@
   flex-direction: row;
   justify-content: flex-end;
   align-items: center;
+  padding: 0;
+  padding-left: 30px;
   gap:         2px;
   flex:        1 1 auto;
   min-width:   0;
   overflow:    hidden;
-  padding: 0 2px 0 30px;
-  height: 18px;
   font-style: italic;
   opacity: 75%;
+  height:      100%;
 }
 
 .tabbar-tag-hint {
@@ -104,7 +110,7 @@
   padding:          0 4px;
   -webkit-app-region: no-drag;
   flex: 0 0 auto;
-  height: 18px;
+  height: 100%;
 }
 
 .tag-pill-label {
@@ -156,16 +162,16 @@
 
 /* Tag bar / tab bar mode toggle */
 .tabbar-mode-toggle {
-  flex:       0 0 auto;
-  width:      24px;
-  height:     24px;
+  display: block;
+  height:     100%;
+  aspect-ratio: 1;
   margin-right: 4px;
   -webkit-app-region: no-drag;
 }
 
 /* Tab mode: pinned note pills fill the whole bar */
 .tab-mode-shell.tabs-mode {
-  padding: 0 2px;
+  padding: 4px;
   overflow: hidden;
 }
 
@@ -173,7 +179,7 @@
   position:  relative;
   flex:      1 1 auto;
   min-width: 0;
-  height:    20px;
+  height:    100%;
   overflow:  hidden;
 }
 
@@ -181,9 +187,10 @@
   display:     flex;
   flex-wrap:   nowrap;
   align-items: center;
-  gap:         3px;
+  padding: 0;
+  gap:         2px;
   width:       100%;
-  height:      20px;
+  height:      100%;
   overflow-x:  auto;
   overflow-y:  hidden;
   -webkit-app-region: no-drag;
@@ -235,8 +242,8 @@
 .note-tab-pill:active { background: var(--btn-bg-pressed); }
 
 .note-tab-pill.active {
-  border: 1px solid var(--color-archive-border);
-  box-shadow: inset 0 0 3px #00000033, inset 0 0 8px var(--color-archive-glow);
+  border: 1px solid var(--color-border-light-30);
+  box-shadow: var(--box-shadow-inverted-harsh);
 }
 
 /* Archived/trashed note whose tab is still pinned — dimmed, purely informational. */
