@@ -45,11 +45,11 @@ export function useNoteSnapshots(noteId: string | null, liveText: string, curveC
   const requestIdRef = useRef(0)
 
   const fetchSnapshots = useCallback(async () => {
-    if (!noteId || !window.measlyNotes) {
+    if (!noteId || !window.thockdownNotes) {
       setSnapshots([])
       return
     }
-    const notesApi = window.measlyNotes
+    const notesApi = window.thockdownNotes
     const requestId = ++requestIdRef.current
     setIsLoading(true)
     try {
@@ -119,8 +119,8 @@ export function useNoteSnapshots(noteId: string | null, liveText: string, curveC
   }, [latestManualContent, liveText])
 
   const createManualSnapshot = useCallback(async () => {
-    if (!noteId || !window.measlyNotes) return
-    await window.measlyNotes.saveNoteSnapshot({ id: noteId, content: liveText, isManual: true })
+    if (!noteId || !window.thockdownNotes) return
+    await window.thockdownNotes.saveNoteSnapshot({ id: noteId, content: liveText, isManual: true })
     await fetchSnapshots()
   }, [fetchSnapshots, liveText, noteId])
 

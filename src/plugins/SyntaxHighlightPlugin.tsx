@@ -1,7 +1,7 @@
 import { useLayoutEffect } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { TextNode, $createTextNode } from 'lexical';
-import { $createMeaslyTokenNode, $isMeaslyTokenNode, MeaslyTokenNode } from '../nodes/MeaslyTokenNode';
+import { $createThockdownTokenNode, $isThockdownTokenNode, ThockdownTokenNode } from '../nodes/ThockdownTokenNode';
 
 type TokenPresentation = {
   tokenType: string;
@@ -48,13 +48,13 @@ const isMarkdownTableRow = (line: string) => {
 
 function buildTokenPresentation(line: string): TokenPresentation | null {
   const raw = line;
-  const classes = ['measly-md-line'];
+  const classes = ['thockdown-md-line'];
   const data: Record<string, string> = {};
 
   if (raw.length === 0) {
     return {
       tokenType: 'blank',
-      classes: [...classes, 'measly-md-line--blank'],
+      classes: [...classes, 'thockdown-md-line--blank'],
       data,
     };
   }
@@ -62,7 +62,7 @@ function buildTokenPresentation(line: string): TokenPresentation | null {
   if (isMarkdownThematicBreak(raw)) {
     return {
       tokenType: 'thematic-break',
-      classes: [...classes, 'measly-md-line--thematic-break'],
+      classes: [...classes, 'thockdown-md-line--thematic-break'],
       data,
     };
   }
@@ -70,7 +70,7 @@ function buildTokenPresentation(line: string): TokenPresentation | null {
   if (isMarkdownFence(raw)) {
     return {
       tokenType: 'code-fence',
-      classes: [...classes, 'measly-md-line--code-fence'],
+      classes: [...classes, 'thockdown-md-line--code-fence'],
       data,
     };
   }
@@ -78,7 +78,7 @@ function buildTokenPresentation(line: string): TokenPresentation | null {
   if (isMarkdownTableDivider(raw)) {
     return {
       tokenType: 'table-divider',
-      classes: [...classes, 'measly-md-line--table-divider'],
+      classes: [...classes, 'thockdown-md-line--table-divider'],
       data,
     };
   }
@@ -86,7 +86,7 @@ function buildTokenPresentation(line: string): TokenPresentation | null {
   if (isMarkdownTableRow(raw)) {
     return {
       tokenType: 'table-row',
-      classes: [...classes, 'measly-md-line--table-row'],
+      classes: [...classes, 'thockdown-md-line--table-row'],
       data,
     };
   }
@@ -94,7 +94,7 @@ function buildTokenPresentation(line: string): TokenPresentation | null {
   if (isMarkdownSetextUnderline(raw)) {
     return {
       tokenType: 'setext-underline',
-      classes: [...classes, 'measly-md-line--setext-underline'],
+      classes: [...classes, 'thockdown-md-line--setext-underline'],
       data,
     };
   }
@@ -114,23 +114,23 @@ function buildTokenPresentation(line: string): TokenPresentation | null {
   }
 
   if (leadingSpaces > 0) {
-    classes.push('measly-md-line--indented');
-    classes.push(`measly-md-indent-depth-${Math.max(0, indentDepth)}`);
+    classes.push('thockdown-md-line--indented');
+    classes.push(`thockdown-md-indent-depth-${Math.max(0, indentDepth)}`);
     data.indentDepth = String(Math.max(0, indentDepth));
     data.indentSpaces = String(leadingSpaces);
   }
 
   if (quoteDepth > 0) {
-    classes.push('measly-md-line--blockquote');
-    classes.push(`measly-md-quote-depth-${quoteDepth}`);
+    classes.push('thockdown-md-line--blockquote');
+    classes.push(`thockdown-md-quote-depth-${quoteDepth}`);
     data.quoteDepth = String(quoteDepth);
   }
 
   const headingMatch = rest.match(/^(#{1,6})\s+(.*)$/);
   if (headingMatch) {
     const level = headingMatch[1].length;
-    classes.push('measly-md-line--heading');
-    classes.push(`measly-md-heading-level-${level}`);
+    classes.push('thockdown-md-line--heading');
+    classes.push(`thockdown-md-heading-level-${level}`);
     data.headingLevel = String(level);
     return {
       tokenType: 'heading',
@@ -142,15 +142,15 @@ function buildTokenPresentation(line: string): TokenPresentation | null {
   const taskMatch = rest.match(/^([-*+])\s+\[([ xX])\]\s+(.*)$/);
   if (taskMatch) {
     const isChecked = taskMatch[2].toLowerCase() === 'x';
-    classes.push('measly-md-line--list');
-    classes.push('measly-md-line--list-task');
-    classes.push('measly-md-line--list-unordered');
-    classes.push(isChecked ? 'measly-md-task--checked' : 'measly-md-task--unchecked');
+    classes.push('thockdown-md-line--list');
+    classes.push('thockdown-md-line--list-task');
+    classes.push('thockdown-md-line--list-unordered');
+    classes.push(isChecked ? 'thockdown-md-task--checked' : 'thockdown-md-task--unchecked');
     data.listKind = 'task';
     data.listDepth = String(Math.max(0, indentDepth));
     data.listMarker = taskMatch[1];
     data.taskState = isChecked ? 'checked' : 'unchecked';
-    classes.push(`measly-md-list-depth-${Math.max(0, indentDepth)}`);
+    classes.push(`thockdown-md-list-depth-${Math.max(0, indentDepth)}`);
     return {
       tokenType: 'task-list-item',
       classes,
@@ -160,9 +160,9 @@ function buildTokenPresentation(line: string): TokenPresentation | null {
 
   const unorderedListMatch = rest.match(/^([-*+])\s+(.*)$/);
   if (unorderedListMatch) {
-    classes.push('measly-md-line--list');
-    classes.push('measly-md-line--list-unordered');
-    classes.push(`measly-md-list-depth-${Math.max(0, indentDepth)}`);
+    classes.push('thockdown-md-line--list');
+    classes.push('thockdown-md-line--list-unordered');
+    classes.push(`thockdown-md-list-depth-${Math.max(0, indentDepth)}`);
     data.listKind = 'unordered';
     data.listDepth = String(Math.max(0, indentDepth));
     data.listMarker = unorderedListMatch[1];
@@ -175,9 +175,9 @@ function buildTokenPresentation(line: string): TokenPresentation | null {
 
   const orderedListMatch = rest.match(/^(\d+)([.)])\s+(.*)$/);
   if (orderedListMatch) {
-    classes.push('measly-md-line--list');
-    classes.push('measly-md-line--list-ordered');
-    classes.push(`measly-md-list-depth-${Math.max(0, indentDepth)}`);
+    classes.push('thockdown-md-line--list');
+    classes.push('thockdown-md-line--list-ordered');
+    classes.push(`thockdown-md-list-depth-${Math.max(0, indentDepth)}`);
     data.listKind = 'ordered';
     data.listDepth = String(Math.max(0, indentDepth));
     data.listOrdinal = orderedListMatch[1];
@@ -204,13 +204,13 @@ export function SyntaxHighlightPlugin() {
   const [editor] = useLexicalComposerContext();
 
   useLayoutEffect(() => {
-    if (!editor.hasNodes([MeaslyTokenNode])) {
-      console.error('SyntaxHighlightPlugin: MeaslyTokenNode not registered on editor!');
+    if (!editor.hasNodes([ThockdownTokenNode])) {
+      console.error('SyntaxHighlightPlugin: ThockdownTokenNode not registered on editor!');
       return;
     }
 
     const removeTransformTextNode = editor.registerNodeTransform(TextNode, (textNode: TextNode) => {
-      if ($isMeaslyTokenNode(textNode)) return;
+      if ($isThockdownTokenNode(textNode)) return;
 
       const text = textNode.getTextContent();
       const parent = textNode.getParent();
@@ -219,7 +219,7 @@ export function SyntaxHighlightPlugin() {
       if (isFirstChild) {
         const presentation = buildTokenPresentation(text);
         if (presentation) {
-          const tokenNode = $createMeaslyTokenNode(
+          const tokenNode = $createThockdownTokenNode(
             text,
             presentation.tokenType,
             presentation.classes,
@@ -238,7 +238,7 @@ export function SyntaxHighlightPlugin() {
       }
     });
 
-    const removeTransformTokenNode = editor.registerNodeTransform(MeaslyTokenNode, (tokenNode: MeaslyTokenNode) => {
+    const removeTransformTokenNode = editor.registerNodeTransform(ThockdownTokenNode, (tokenNode: ThockdownTokenNode) => {
       const text = tokenNode.getTextContent();
       const parent = tokenNode.getParent();
       const isFirstChild = parent?.getFirstChild() === tokenNode;

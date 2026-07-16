@@ -281,8 +281,8 @@ function SnapshotMark({
   onBranchError,
 }: SnapshotMarkProps) {
   const doBranch = useCallback(() => {
-    if (!window.measlyNotes) return
-    window.measlyNotes
+    if (!window.thockdownNotes) return
+    window.thockdownNotes
       .branchNoteFromSnapshot({ sourceNoteId, snapshotId: placement.id })
       .then((branched) => onBranchOpened(branched.id))
       .catch((err: unknown) => {

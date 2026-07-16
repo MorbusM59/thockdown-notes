@@ -2,7 +2,7 @@ import { TextNode, NodeKey, EditorConfig, SerializedTextNode } from 'lexical';
 
 type TokenData = Record<string, string>;
 
-type SerializedMeaslyTokenNode = SerializedTextNode & {
+type SerializedThockdownTokenNode = SerializedTextNode & {
   tokenType: string;
   tokenClasses?: string[];
   tokenData?: TokenData;
@@ -14,10 +14,10 @@ const resolveTokenClassList = (tokenType: string, tokenClasses: string[]) => {
   if (tokenClasses.length > 0) {
     return tokenClasses;
   }
-  return [`measly-token-${tokenType}`];
+  return [`thockdown-token-${tokenType}`];
 };
 
-export class MeaslyTokenNode extends TextNode {
+export class ThockdownTokenNode extends TextNode {
   __tokenType: string;
   __tokenClasses: string[];
   __tokenData: TokenData;
@@ -36,11 +36,11 @@ export class MeaslyTokenNode extends TextNode {
   }
 
   static getType(): string {
-    return 'measly-token';
+    return 'thockdown-token';
   }
 
-  static clone(node: MeaslyTokenNode): MeaslyTokenNode {
-    return new MeaslyTokenNode(
+  static clone(node: ThockdownTokenNode): ThockdownTokenNode {
+    return new ThockdownTokenNode(
       node.__text,
       node.__tokenType,
       [...node.__tokenClasses],
@@ -124,8 +124,8 @@ export class MeaslyTokenNode extends TextNode {
     writable.__tokenData = tokenData;
   }
 
-  static importJSON(serializedNode: SerializedMeaslyTokenNode): MeaslyTokenNode {
-    const node = $createMeaslyTokenNode(
+  static importJSON(serializedNode: SerializedThockdownTokenNode): ThockdownTokenNode {
+    const node = $createThockdownTokenNode(
       serializedNode.text,
       serializedNode.tokenType,
       serializedNode.tokenClasses,
@@ -138,10 +138,10 @@ export class MeaslyTokenNode extends TextNode {
     return node;
   }
 
-  exportJSON(): SerializedMeaslyTokenNode {
+  exportJSON(): SerializedThockdownTokenNode {
     return {
       ...super.exportJSON(),
-      type: 'measly-token',
+      type: 'thockdown-token',
       tokenType: this.__tokenType,
       tokenClasses: [...this.__tokenClasses],
       tokenData: { ...this.__tokenData },
@@ -150,15 +150,15 @@ export class MeaslyTokenNode extends TextNode {
   }
 }
 
-export function $createMeaslyTokenNode(
+export function $createThockdownTokenNode(
   text: string,
   tokenType: string,
   tokenClasses: string[] = [],
   tokenData: TokenData = {},
-): MeaslyTokenNode {
-  return new MeaslyTokenNode(text, tokenType, tokenClasses, tokenData);
+): ThockdownTokenNode {
+  return new ThockdownTokenNode(text, tokenType, tokenClasses, tokenData);
 }
 
-export function $isMeaslyTokenNode(node: unknown): node is MeaslyTokenNode {
-  return node instanceof MeaslyTokenNode;
+export function $isThockdownTokenNode(node: unknown): node is ThockdownTokenNode {
+  return node instanceof ThockdownTokenNode;
 }

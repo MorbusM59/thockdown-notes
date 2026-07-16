@@ -163,7 +163,7 @@ body {
 /* 
   The Magic Monospace Grid
 */
-.measly-grid-outline-lines {
+.thockdown-grid-outline-lines {
   background-image:
     repeating-linear-gradient(to right, var(--color-grid-outline) 0, var(--color-grid-outline) 3px, transparent 3px, transparent var(--editor-cell-width)),
     repeating-linear-gradient(to bottom, var(--color-grid-outline) 0, var(--color-grid-outline) 3px, transparent 3px, transparent var(--editor-line-height));
@@ -171,7 +171,7 @@ body {
   background-position: -1px -1px;
 }
 
-.measly-grid-lines {
+.thockdown-grid-lines {
   /* Exactly draw the 1px grid lines across the absolute width/height using the --color-grid-bg paper color to create the "plates" effect. */
   background-image: 
     repeating-linear-gradient(to right, var(--color-grid-bg) 0, var(--color-grid-bg) 1px, transparent 1px, transparent var(--editor-cell-width)),
@@ -183,17 +183,17 @@ body {
 }
 
 /* Dedicated editor scrollbar rail (lives in the 20px right-space zone). */
-.measly-custom-scrollbar {
+.thockdown-custom-scrollbar {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-.measly-custom-scrollbar::-webkit-scrollbar {
+.thockdown-custom-scrollbar::-webkit-scrollbar {
   width: 0;
   height: 0;
 }
 
-.measly-scroll-rail {
+.thockdown-scroll-rail {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -206,7 +206,7 @@ body {
   z-index: 14;
 }
 
-.measly-scroll-track {
+.thockdown-scroll-track {
   position: relative;
   width: var(--canonical-scroll-thickness);
   height: 100%;
@@ -217,7 +217,7 @@ body {
   box-sizing: border-box;
 }
 
-.measly-scroll-thumb {
+.thockdown-scroll-thumb {
   position: absolute;
   left: var(--canonical-scroll-handle-gap);
   right: var(--canonical-scroll-handle-gap);
@@ -229,9 +229,9 @@ body {
   cursor: ns-resize;
 }
 
-.measly-scroll-thumb:hover.is-inactive,
-.measly-scroll-thumb.is-dragging.is-inactive,
-.measly-scroll-thumb.is-inactive {
+.thockdown-scroll-thumb:hover.is-inactive,
+.thockdown-scroll-thumb.is-dragging.is-inactive,
+.thockdown-scroll-thumb.is-inactive {
   border-color: rgba(81, 73, 66, 0.30);
   background: var(--canonical-handle-bg);
   cursor: default;
@@ -243,12 +243,12 @@ body {
 }
 
 /* Custom Lexical Retro Block Caret */
-.measly-block-caret {
+.thockdown-block-caret {
   background-color: var(--color-caret);
-  animation: measly-blink 1.2s infinite cubic-bezier(0.4, 0, 0.2, 1);
+  animation: thockdown-blink 1.2s infinite cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-@keyframes measly-blink {
+@keyframes thockdown-blink {
   /* Restore the beloved ff-caret-heartbeat rhythm! */
   0%       { opacity: 0.6; }
   10%  { opacity: 0.1; }
@@ -296,9 +296,9 @@ body {
 }
 
 /* Syntax Highlighting Base Colors */
-.measly-token-heading,
-.measly-token-list,
-.measly-token-quote {
+.thockdown-token-heading,
+.thockdown-token-list,
+.thockdown-token-quote {
   background: transparent;
 }
 
@@ -307,30 +307,30 @@ body {
 /* -------------------------------------------------------------------------- */
 
 /* Block-level markdown line kinds */
-.measly-md-line--blockquote {text-shadow: 0 0 8px var(--markdown-blockquote-color), 0 0 12px var(--markdown-blockquote-color), 0 0 24px var(--markdown-blockquote-color)}
-.measly-md-line--code-fence {text-shadow: 0 0 1px var(--markdown-code-color), 0 0 2px var(--markdown-code-color), 0 0 4px var(--markdown-code-color), 0 0 8px var(--markdown-code-color),  0 0 12px var(--markdown-code-color)}
+.thockdown-md-line--blockquote {text-shadow: 0 0 8px var(--markdown-blockquote-color), 0 0 12px var(--markdown-blockquote-color), 0 0 24px var(--markdown-blockquote-color)}
+.thockdown-md-line--code-fence {text-shadow: 0 0 1px var(--markdown-code-color), 0 0 2px var(--markdown-code-color), 0 0 4px var(--markdown-code-color), 0 0 8px var(--markdown-code-color),  0 0 12px var(--markdown-code-color)}
 
 /* Heading depth placeholders */
 
-.measly-md-heading-level-1 {text-shadow: 0 0 2px var(--markdown-headline-color), 0 0 4px var(--markdown-headline-color), 0 0 8px var(--markdown-headline-color), 0 0 16px var(--markdown-headline-color)}
-.measly-md-heading-level-2 {text-shadow: 0 0 4px var(--markdown-headline-color), 0 0 8px var(--markdown-headline-color), 0 0 16px var(--markdown-headline-color)}
-.measly-md-heading-level-3 {text-shadow: 0 0 8px var(--markdown-headline-color), 0 0 16px var(--markdown-headline-color)}
-.measly-md-heading-level-4 {text-shadow: 0 0 12px var(--markdown-headline-color)}
-.measly-md-heading-level-5 {text-shadow: 0 0 18px var(--markdown-headline-color)}
-.measly-md-heading-level-6 {text-shadow: 0 0 24px var(--markdown-headline-color)}
+.thockdown-md-heading-level-1 {text-shadow: 0 0 2px var(--markdown-headline-color), 0 0 4px var(--markdown-headline-color), 0 0 8px var(--markdown-headline-color), 0 0 16px var(--markdown-headline-color)}
+.thockdown-md-heading-level-2 {text-shadow: 0 0 4px var(--markdown-headline-color), 0 0 8px var(--markdown-headline-color), 0 0 16px var(--markdown-headline-color)}
+.thockdown-md-heading-level-3 {text-shadow: 0 0 8px var(--markdown-headline-color), 0 0 16px var(--markdown-headline-color)}
+.thockdown-md-heading-level-4 {text-shadow: 0 0 12px var(--markdown-headline-color)}
+.thockdown-md-heading-level-5 {text-shadow: 0 0 18px var(--markdown-headline-color)}
+.thockdown-md-heading-level-6 {text-shadow: 0 0 24px var(--markdown-headline-color)}
 
 /* List nesting depth placeholders (extend as needed) */
-.measly-md-list-depth-0 {text-shadow: 0 0 2px var(--markdown-list-color), 0 0 4px var(--markdown-list-color), 0 0 8px var(--markdown-list-color), 0 0 16px var(--markdown-list-color)}
-.measly-md-list-depth-1 {text-shadow: 0 0 4px var(--markdown-list-color), 0 0 8px var(--markdown-list-color), 0 0 16px var(--markdown-list-color)}
-.measly-md-list-depth-2 {text-shadow: 0 0 8px var(--markdown-list-color), 0 0 16px var(--markdown-list-color)}
-.measly-md-list-depth-3 {text-shadow: 0 0 12px var(--markdown-list-color)}
-.measly-md-list-depth-4 {text-shadow: 0 0 18px var(--markdown-list-color)}
-.measly-md-list-depth-5 {text-shadow: 0 0 24px var(--markdown-list-color)}
-.measly-md-list-depth-6 {text-shadow: 0 0 32px var(--markdown-list-color)}
+.thockdown-md-list-depth-0 {text-shadow: 0 0 2px var(--markdown-list-color), 0 0 4px var(--markdown-list-color), 0 0 8px var(--markdown-list-color), 0 0 16px var(--markdown-list-color)}
+.thockdown-md-list-depth-1 {text-shadow: 0 0 4px var(--markdown-list-color), 0 0 8px var(--markdown-list-color), 0 0 16px var(--markdown-list-color)}
+.thockdown-md-list-depth-2 {text-shadow: 0 0 8px var(--markdown-list-color), 0 0 16px var(--markdown-list-color)}
+.thockdown-md-list-depth-3 {text-shadow: 0 0 12px var(--markdown-list-color)}
+.thockdown-md-list-depth-4 {text-shadow: 0 0 18px var(--markdown-list-color)}
+.thockdown-md-list-depth-5 {text-shadow: 0 0 24px var(--markdown-list-color)}
+.thockdown-md-list-depth-6 {text-shadow: 0 0 32px var(--markdown-list-color)}
 
 /* Task state placeholders */
-.measly-md-task--unchecked {text-shadow: 0 0 4px var(--markdown-unchecked-color), 0 0 8px var(--markdown-unchecked-color),  0 0 12px var(--markdown-unchecked-color)}
-.measly-md-task--checked {text-shadow: 0 0 4px var(--markdown-checked-color), 0 0 8px var(--markdown-checked-color),  0 0 12px var(--markdown-checked-color)}
+.thockdown-md-task--unchecked {text-shadow: 0 0 4px var(--markdown-unchecked-color), 0 0 8px var(--markdown-unchecked-color),  0 0 12px var(--markdown-unchecked-color)}
+.thockdown-md-task--checked {text-shadow: 0 0 4px var(--markdown-checked-color), 0 0 8px var(--markdown-checked-color),  0 0 12px var(--markdown-checked-color)}
 
 
 /* We will apply this to all standard text nodes */

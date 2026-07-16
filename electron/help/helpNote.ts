@@ -5,7 +5,7 @@ import type { DatabaseService } from '../databaseService';
 import { HELP_NOTE_CONTENT } from './helpNoteContent';
 
 const HELP_NOTE_ID = '26-07-04_00-00_WELCOME00';
-const HELP_NOTE_TITLE = 'Welcome to Measly Notes';
+const HELP_NOTE_TITLE = 'Welcome to Thockdown Notes';
 const HELP_NOTE_FILE_NAME = `${HELP_NOTE_ID}.md`;
 
 /**

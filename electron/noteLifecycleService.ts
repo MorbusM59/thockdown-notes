@@ -22,7 +22,7 @@ import { sanitizeDocumentText } from '../src/shared/textSanitization';
 import type { DatabaseService, NoteRecord } from './databaseService';
 
 const NOTES_DIR_NAME = 'notes';
-const META_PREFIX = '<!-- measly-meta:';
+const META_PREFIX = '<!-- thockdown-meta:';
 const META_SUFFIX = '-->';
 const EXTERNAL_TAG = 'EXTERNAL';
 

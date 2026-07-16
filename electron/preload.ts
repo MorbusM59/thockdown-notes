@@ -26,6 +26,8 @@ import type { AudioPlayerApi } from '../src/shared/audioPlayer'
 import { AUDIO_PLAYER_CHANNELS } from '../src/shared/audioPlayer'
 import type { NoteTabsApi } from '../src/shared/tabs'
 import { NOTE_TABS_CHANNELS } from '../src/shared/tabs'
+import type { EditorSectionsApi } from '../src/shared/sections'
+import { EDITOR_SECTIONS_CHANNELS } from '../src/shared/sections'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
@@ -75,7 +77,7 @@ const noteLifecycleApi: NoteLifecycleApi = {
   ensureNoteAssignedId: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.ensureAssignedId, input),
 }
 
-contextBridge.exposeInMainWorld('measlyNotes', noteLifecycleApi)
+contextBridge.exposeInMainWorld('thockdownNotes', noteLifecycleApi)
 
 const appStateApi: AppStateApi = {
   loadAppState: () => ipcRenderer.invoke(APP_STATE_CHANNELS.loadAppState),
@@ -84,7 +86,7 @@ const appStateApi: AppStateApi = {
   saveWindowState: (state) => ipcRenderer.invoke(APP_STATE_CHANNELS.saveWindowState, state),
 }
 
-contextBridge.exposeInMainWorld('measlyState', appStateApi)
+contextBridge.exposeInMainWorld('thockdownState', appStateApi)
 
 const windowControls = {
   minimize: () => ipcRenderer.send('window-control', 'minimize'),
@@ -121,7 +123,7 @@ const exportApi = {
 }
 
 contextBridge.exposeInMainWorld('windowControls', windowControls)
-contextBridge.exposeInMainWorld('measlyExport', exportApi)
+contextBridge.exposeInMainWorld('thockdownExport', exportApi)
 
 const externalFilesApi: ExternalFilesApi = {
   getPendingFilePaths: () => ipcRenderer.invoke(EXTERNAL_FILE_CHANNELS.getPendingPaths),
@@ -140,7 +142,7 @@ const externalFilesApi: ExternalFilesApi = {
   },
 }
 
-contextBridge.exposeInMainWorld('measlyExternalFiles', externalFilesApi)
+contextBridge.exposeInMainWorld('thockdownExternalFiles', externalFilesApi)
 
 
 const textureCacheApi: TextureCacheApi = {
@@ -149,7 +151,7 @@ const textureCacheApi: TextureCacheApi = {
   purgeCachedTextures: (request) => ipcRenderer.invoke(TEXTURE_CHANNELS.purgeCached, request),
 }
 
-contextBridge.exposeInMainWorld('measlyTextures', textureCacheApi)
+contextBridge.exposeInMainWorld('thockdownTextures', textureCacheApi)
 
 const uiLoadoutApi: UiLoadoutApi = {
   list: () => ipcRenderer.invoke(LOADOUT_CHANNELS.list),
@@ -163,14 +165,14 @@ const uiLoadoutApi: UiLoadoutApi = {
   importTdl: () => ipcRenderer.invoke(LOADOUT_CHANNELS.importTdl),
 }
 
-contextBridge.exposeInMainWorld('measlyLoadouts', uiLoadoutApi)
+contextBridge.exposeInMainWorld('thockdownLoadouts', uiLoadoutApi)
 
 const fileSyncApi: FileSyncApi = {
   syncExistingNotes: () => ipcRenderer.invoke(FILE_SYNC_CHANNELS.syncExistingNotes),
   importNotes: () => ipcRenderer.invoke(FILE_SYNC_CHANNELS.importNotes),
 }
 
-contextBridge.exposeInMainWorld('measlyFileSync', fileSyncApi)
+contextBridge.exposeInMainWorld('thockdownFileSync', fileSyncApi)
 
 const audioPlayerApi: AudioPlayerApi = {
   pickFiles:          () => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.pickFiles),
@@ -188,13 +190,24 @@ const audioPlayerApi: AudioPlayerApi = {
   getPlaylistCounts:  () => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.getPlaylistCounts),
 }
 
-contextBridge.exposeInMainWorld('measlyAudioPlayer', audioPlayerApi)
+contextBridge.exposeInMainWorld('thockdownAudioPlayer', audioPlayerApi)
 
 const noteTabsApi: NoteTabsApi = {
   listTabs:    () => ipcRenderer.invoke(NOTE_TABS_CHANNELS.list),
-  addTab:      (noteId) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.add, noteId),
-  removeTab:   (noteId) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.remove, noteId),
-  reorderTabs: (orderedNoteIds) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.reorder, orderedNoteIds),
+  addTab:      (sectionId, noteId) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.add, sectionId, noteId),
+  removeTab:   (sectionId, noteId) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.remove, sectionId, noteId),
+  reorderTabs: (sectionId, orderedNoteIds) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.reorder, sectionId, orderedNoteIds),
 }
 
-contextBridge.exposeInMainWorld('measlyTabs', noteTabsApi)
+contextBridge.exposeInMainWorld('thockdownTabs', noteTabsApi)
+
+const editorSectionsApi: EditorSectionsApi = {
+  listSections:        () => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.list),
+  createSection:       (name, afterPosition) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.create, name, afterPosition),
+  renameSection:       (id, name) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.rename, id, name),
+  removeSection:       (id) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.remove, id),
+  reorderSections:     (orderedSectionIds) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.reorder, orderedSectionIds),
+  updateSectionWidths: (widths) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.updateWidths, widths),
+}
+
+contextBridge.exposeInMainWorld('thockdownSections', editorSectionsApi)

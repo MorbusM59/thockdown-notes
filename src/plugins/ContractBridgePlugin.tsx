@@ -1053,7 +1053,7 @@ export function ContractBridgePlugin({
       const rootEl = editor.getRootElement();
       if (!rootEl) return;
 
-      const scroller = rootEl.closest('.measly-custom-scrollbar');
+      const scroller = rootEl.closest('.thockdown-custom-scrollbar');
       const scrollerEl = scroller instanceof HTMLElement ? scroller : null;
       const preservedScrollTop = preservedScrollTopOverride ?? (scrollerEl ? scrollerEl.scrollTop : null);
 
@@ -1112,7 +1112,7 @@ export function ContractBridgePlugin({
           if (!next) return true;
 
           const rootEl = editor.getRootElement();
-          const scroller = rootEl?.closest('.measly-custom-scrollbar');
+          const scroller = rootEl?.closest('.thockdown-custom-scrollbar');
           const scrollerEl = scroller instanceof HTMLElement ? scroller : null;
           const preservedScrollTopAtCommand = scrollerEl ? scrollerEl.scrollTop : null;
 
@@ -1169,7 +1169,7 @@ export function ContractBridgePlugin({
             event.preventDefault();
 
             const rootEl = editor.getRootElement();
-            const scroller = rootEl?.closest('.measly-custom-scrollbar');
+            const scroller = rootEl?.closest('.thockdown-custom-scrollbar');
             const scrollerEl = scroller instanceof HTMLElement ? scroller : null;
             const preservedScrollTopAtCommand = scrollerEl ? scrollerEl.scrollTop : null;
 
@@ -1284,7 +1284,7 @@ export function ContractBridgePlugin({
             // deterministic scroll step. Re-pinning scrollTop after addRange prevents that.
             const rootEl = editor.getRootElement();
             if (rootEl) {
-              const scroller = rootEl.closest('.measly-custom-scrollbar');
+              const scroller = rootEl.closest('.thockdown-custom-scrollbar');
               const scrollerEl = scroller instanceof HTMLElement ? scroller : null;
               const scrollTopBefore = scrollerEl ? scrollerEl.scrollTop : null;
               const applied = applySelectionStateToDom(rootEl, next.text, next.selection);

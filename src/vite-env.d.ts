@@ -1,13 +1,13 @@
 /// <reference types="vite/client" />
 
 interface Window {
-	measlyNotes?: import('./shared/noteLifecycle').NoteLifecycleApi;
-	measlyState?: import('./shared/appState').AppStateApi;
-	measlyExternalFiles?: import('./shared/externalFiles').ExternalFilesApi;
-	measlyTextures?: import('./shared/textures').TextureCacheApi;
-	measlyLoadouts?: import('./shared/loadouts').UiLoadoutApi;
-	measlyFileSync?: import('./shared/fileSync').FileSyncApi;
-	measlyExport?: {
+	thockdownNotes?: import('./shared/noteLifecycle').NoteLifecycleApi;
+	thockdownState?: import('./shared/appState').AppStateApi;
+	thockdownExternalFiles?: import('./shared/externalFiles').ExternalFilesApi;
+	thockdownTextures?: import('./shared/textures').TextureCacheApi;
+	thockdownLoadouts?: import('./shared/loadouts').UiLoadoutApi;
+	thockdownFileSync?: import('./shared/fileSync').FileSyncApi;
+	thockdownExport?: {
 		selectExportFolder: () => Promise<string | null>;
 		exportPdf: (folderPath: string, fileName: string, htmlContent?: string) => Promise<{ ok: boolean; path?: string; error?: string }>;
 	};

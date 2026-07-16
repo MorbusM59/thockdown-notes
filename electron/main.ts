@@ -15,6 +15,7 @@ import { LOADOUT_CHANNELS } from '../src/shared/loadouts'
 import { AUDIO_PLAYER_CHANNELS, AUDIO_EXTENSIONS } from '../src/shared/audioPlayer'
 import type { PlaylistSlot } from '../src/shared/audioPlayer'
 import { NOTE_TABS_CHANNELS } from '../src/shared/tabs'
+import { EDITOR_SECTIONS_CHANNELS } from '../src/shared/sections'
 
 // Defense in depth: if something throws outside of a path we've explicitly
 // wrapped (e.g. during startup, before a window exists to show an in-app
@@ -123,13 +124,13 @@ if (!gotSingleInstanceLock) {
   app.quit();
 }
 
-// Register the measly-music:// protocol BEFORE app.ready so Electron treats it
+// Register the thockdown-music:// protocol BEFORE app.ready so Electron treats it
 // as a privileged scheme.  The handler (registered after ready) proxies the
 // request through net.fetch() to a file:// URL, which works from the main
 // process regardless of whether the renderer loaded from http://localhost (dev)
 // or file:// (production).
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'measly-music', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true } },
+  { scheme: 'thockdown-music', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true } },
 ]);
 
 function normalizeExternalFilePath(value: string): string {
@@ -233,7 +234,7 @@ async function createHiddenExportWindow(htmlContent: string): Promise<BrowserWin
     },
   })
 
-  const tempHtmlPath = path.join(app.getPath('temp'), `measly-notes-export-${Date.now()}.html`)
+  const tempHtmlPath = path.join(app.getPath('temp'), `thockdown-notes-export-${Date.now()}.html`)
   await fsPromises.writeFile(tempHtmlPath, htmlContent, 'utf8')
 
   await new Promise<void>((resolve, reject) => {
@@ -727,16 +728,40 @@ function registerIpcHandlers() {
     return databaseService!.listNoteTabs();
   });
 
-  ipcMain.handle(NOTE_TABS_CHANNELS.add, async (_event, noteId: string) => {
-    return databaseService!.addNoteTab(noteId);
+  ipcMain.handle(NOTE_TABS_CHANNELS.add, async (_event, sectionId: string, noteId: string) => {
+    return databaseService!.addNoteTab(sectionId, noteId);
   });
 
-  ipcMain.handle(NOTE_TABS_CHANNELS.remove, async (_event, noteId: string) => {
-    return databaseService!.removeNoteTab(noteId);
+  ipcMain.handle(NOTE_TABS_CHANNELS.remove, async (_event, sectionId: string, noteId: string) => {
+    return databaseService!.removeNoteTab(sectionId, noteId);
   });
 
-  ipcMain.handle(NOTE_TABS_CHANNELS.reorder, async (_event, orderedNoteIds: string[]) => {
-    return databaseService!.reorderNoteTabs(orderedNoteIds);
+  ipcMain.handle(NOTE_TABS_CHANNELS.reorder, async (_event, sectionId: string, orderedNoteIds: string[]) => {
+    return databaseService!.reorderNoteTabs(sectionId, orderedNoteIds);
+  });
+
+  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.list, async () => {
+    return databaseService!.listEditorSections();
+  });
+
+  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.create, async (_event, name?: string | null, afterPosition?: number) => {
+    return databaseService!.createEditorSection(name ?? null, afterPosition);
+  });
+
+  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.rename, async (_event, id: string, name: string | null) => {
+    return databaseService!.renameEditorSection(id, name);
+  });
+
+  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.remove, async (_event, id: string) => {
+    return databaseService!.removeEditorSection(id);
+  });
+
+  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.reorder, async (_event, orderedSectionIds: string[]) => {
+    return databaseService!.reorderEditorSections(orderedSectionIds);
+  });
+
+  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.updateWidths, async (_event, widths: Array<{ id: string; widthFraction: number | null }>) => {
+    return databaseService!.updateEditorSectionWidths(widths);
   });
 }
 
@@ -988,7 +1013,7 @@ app.whenReady().then(async () => {
   }
   registerIpcHandlers()
 
-  // Proxy measly-music:// → file system reads so the renderer can load local
+  // Proxy thockdown-music:// → file system reads so the renderer can load local
   // audio files regardless of origin (http://localhost in dev, file:// in prod).
   // Supports HTTP Range requests so Chromium can seek within audio files
   // without resetting playback to position 0.
@@ -997,7 +1022,7 @@ app.whenReady().then(async () => {
     flac: 'audio/flac', m4a: 'audio/mp4', aac: 'audio/aac',
     opus: 'audio/opus', webm: 'audio/webm', weba: 'audio/webm',
   };
-  protocol.handle('measly-music', async (request) => {
+  protocol.handle('thockdown-music', async (request) => {
     try {
       const url = new URL(request.url);
       // url.pathname arrives as '/C:/path/to/file.mp3' on Windows; strip the leading '/'.
@@ -1046,7 +1071,7 @@ app.whenReady().then(async () => {
         },
       });
     } catch (err) {
-      console.error('[measly-music protocol] failed to serve', request.url, err);
+      console.error('[thockdown-music protocol] failed to serve', request.url, err);
       return new Response(null, { status: 404 });
     }
   });

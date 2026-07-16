@@ -34,8 +34,10 @@ import type {
   TagSummary,
 } from '../shared/noteLifecycle'
 import type { NoteTabEntry, NoteTabsApi } from '../shared/tabs'
+import type { EditorSectionEntry, EditorSectionsApi } from '../shared/sections'
+import { DEFAULT_EDITOR_SECTION_ID } from '../shared/sections'
 
-const MOCK_STORAGE_KEY = 'measly-notes:browser-mock:v1'
+const MOCK_STORAGE_KEY = 'thockdown-notes:browser-mock:v1'
 
 type BrowserMockStore = {
   notes: NoteDocument[]
@@ -46,11 +48,12 @@ type BrowserMockStore = {
   lastCustomIdByMode: { light: number; dark: number }
   textureCache: Record<string, { mimeType: string; dataBase64: string; createdAt: number }>
   noteTabs: NoteTabEntry[]
+  editorSections: EditorSectionEntry[]
 }
 
 type BrowserMockWindow = Window & {
-  __measlyBrowserMockInstalled?: boolean
-  measlyFileSync?: FileSyncApi
+  __thockdownBrowserMockInstalled?: boolean
+  thockdownFileSync?: FileSyncApi
 }
 
 const DEFAULT_WINDOW_STATE: WindowState = {
@@ -103,6 +106,11 @@ function toSummary(note: NoteDocument): NoteSummary {
     sizeBytes: note.sizeBytes,
     assignedId: note.assignedId ?? null,
   }
+}
+
+/** A fresh install always starts with exactly one (default, unnamed) section. */
+function createDefaultEditorSections(): EditorSectionEntry[] {
+  return [{ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null }]
 }
 
 function sortNotesDesc(notes: NoteDocument[]): NoteDocument[] {
@@ -216,6 +224,7 @@ function loadStore(): BrowserMockStore {
         lastCustomIdByMode: seeded.lastCustomIdByMode,
         textureCache: {},
         noteTabs: [],
+        editorSections: createDefaultEditorSections(),
       }
     }
 
@@ -271,11 +280,22 @@ function loadStore(): BrowserMockStore {
         ? (parsed.noteTabs as NoteTabEntry[])
             .filter((entry) => typeof entry?.noteId === 'string')
             .map((entry, index) => ({
+              sectionId: typeof entry.sectionId === 'string' ? entry.sectionId : DEFAULT_EDITOR_SECTION_ID,
               noteId: entry.noteId,
               position: Number.isFinite(entry.position) ? entry.position : index,
               addedAtMs: Number.isFinite(entry.addedAtMs) ? entry.addedAtMs : Date.now(),
             }))
         : [],
+      editorSections: Array.isArray(parsed.editorSections) && parsed.editorSections.length > 0
+        ? (parsed.editorSections as EditorSectionEntry[])
+            .filter((entry) => typeof entry?.id === 'string')
+            .map((entry, index) => ({
+              id: entry.id,
+              name: typeof entry.name === 'string' ? entry.name : null,
+              position: Number.isFinite(entry.position) ? entry.position : index,
+              widthFraction: Number.isFinite(entry.widthFraction) ? entry.widthFraction : null,
+            }))
+        : createDefaultEditorSections(),
     }
   } catch {
     const seeded = seedUiLoadoutEntries()
@@ -288,6 +308,7 @@ function loadStore(): BrowserMockStore {
       lastCustomIdByMode: seeded.lastCustomIdByMode,
       textureCache: {},
       noteTabs: [],
+      editorSections: createDefaultEditorSections(),
     }
   }
 }
@@ -832,37 +853,109 @@ function buildTabsBridge(storeRef: { current: BrowserMockStore }): NoteTabsApi {
   }
 
   const sorted = (store: BrowserMockStore): NoteTabEntry[] =>
-    store.noteTabs.slice().sort((a, b) => a.position - b.position)
+    store.noteTabs.slice().sort((a, b) => a.sectionId.localeCompare(b.sectionId) || a.position - b.position)
 
   return {
     async listTabs(): Promise<NoteTabEntry[]> {
       return sorted(storeRef.current)
     },
 
-    async addTab(noteId: string): Promise<NoteTabEntry[]> {
+    async addTab(sectionId: string, noteId: string): Promise<NoteTabEntry[]> {
       return mutate((store) => {
-        if (!store.noteTabs.some((tab) => tab.noteId === noteId)) {
-          const maxPosition = store.noteTabs.reduce((max, tab) => Math.max(max, tab.position), -1)
-          store.noteTabs.push({ noteId, position: maxPosition + 1, addedAtMs: Date.now() })
+        if (!store.noteTabs.some((tab) => tab.sectionId === sectionId && tab.noteId === noteId)) {
+          const maxPosition = store.noteTabs
+            .filter((tab) => tab.sectionId === sectionId)
+            .reduce((max, tab) => Math.max(max, tab.position), -1)
+          store.noteTabs.push({ sectionId, noteId, position: maxPosition + 1, addedAtMs: Date.now() })
         }
         return sorted(store)
       })
     },
 
-    async removeTab(noteId: string): Promise<NoteTabEntry[]> {
+    async removeTab(sectionId: string, noteId: string): Promise<NoteTabEntry[]> {
       return mutate((store) => {
-        store.noteTabs = store.noteTabs.filter((tab) => tab.noteId !== noteId)
+        store.noteTabs = store.noteTabs.filter((tab) => !(tab.sectionId === sectionId && tab.noteId === noteId))
         return sorted(store)
       })
     },
 
-    async reorderTabs(orderedNoteIds: string[]): Promise<NoteTabEntry[]> {
+    async reorderTabs(sectionId: string, orderedNoteIds: string[]): Promise<NoteTabEntry[]> {
       return mutate((store) => {
         const positionByNoteId = new Map(orderedNoteIds.map((noteId, index) => [noteId, index]))
-        store.noteTabs = store.noteTabs.map((tab) => ({
-          ...tab,
-          position: positionByNoteId.get(tab.noteId) ?? tab.position,
+        store.noteTabs = store.noteTabs.map((tab) => (
+          tab.sectionId === sectionId
+            ? { ...tab, position: positionByNoteId.get(tab.noteId) ?? tab.position }
+            : tab
+        ))
+        return sorted(store)
+      })
+    },
+  }
+}
+
+function buildSectionsBridge(storeRef: { current: BrowserMockStore }): EditorSectionsApi {
+  const mutate = <T,>(transform: (store: BrowserMockStore) => T): T => {
+    const result = transform(storeRef.current)
+    persistStore(storeRef.current)
+    return result
+  }
+
+  const sorted = (store: BrowserMockStore): EditorSectionEntry[] =>
+    store.editorSections.slice().sort((a, b) => a.position - b.position)
+
+  return {
+    async listSections(): Promise<EditorSectionEntry[]> {
+      return sorted(storeRef.current)
+    },
+
+    async createSection(name = null, afterPosition): Promise<EditorSectionEntry[]> {
+      return mutate((store) => {
+        const id = `section-${Math.random().toString(36).slice(2, 10)}`
+        const maxPosition = store.editorSections.reduce((max, section) => Math.max(max, section.position), -1)
+        const insertAt = afterPosition !== undefined ? afterPosition + 1 : maxPosition + 1
+        store.editorSections = store.editorSections.map((section) => (
+          section.position >= insertAt ? { ...section, position: section.position + 1 } : section
+        ))
+        store.editorSections.push({ id, name: name ?? null, position: insertAt, widthFraction: null })
+        return sorted(store)
+      })
+    },
+
+    async renameSection(id: string, name: string | null): Promise<EditorSectionEntry[]> {
+      return mutate((store) => {
+        store.editorSections = store.editorSections.map((section) => (
+          section.id === id ? { ...section, name } : section
+        ))
+        return sorted(store)
+      })
+    },
+
+    async removeSection(id: string): Promise<EditorSectionEntry[]> {
+      return mutate((store) => {
+        if (id === DEFAULT_EDITOR_SECTION_ID) return sorted(store)
+        store.editorSections = store.editorSections.filter((section) => section.id !== id)
+        store.noteTabs = store.noteTabs.filter((tab) => tab.sectionId !== id)
+        return sorted(store)
+      })
+    },
+
+    async reorderSections(orderedSectionIds: string[]): Promise<EditorSectionEntry[]> {
+      return mutate((store) => {
+        const positionById = new Map(orderedSectionIds.map((id, index) => [id, index]))
+        store.editorSections = store.editorSections.map((section) => ({
+          ...section,
+          position: positionById.get(section.id) ?? section.position,
         }))
+        return sorted(store)
+      })
+    },
+
+    async updateSectionWidths(widths): Promise<EditorSectionEntry[]> {
+      return mutate((store) => {
+        const widthById = new Map(widths.map((entry) => [entry.id, entry.widthFraction]))
+        store.editorSections = store.editorSections.map((section) => (
+          widthById.has(section.id) ? { ...section, widthFraction: widthById.get(section.id) ?? null } : section
+        ))
         return sorted(store)
       })
     },
@@ -873,34 +966,37 @@ export function installBrowserMockBridges(): void {
   if (!import.meta.env.DEV) return
 
   const scopedWindow = window as BrowserMockWindow
-  if (scopedWindow.__measlyBrowserMockInstalled) return
+  if (scopedWindow.__thockdownBrowserMockInstalled) return
 
   // Electron renderer already owns bridge provisioning through preload.
-  if (window.measlyNotes && window.measlyState && window.measlyTextures && window.measlyLoadouts && window.measlyTabs) {
-    scopedWindow.__measlyBrowserMockInstalled = true
+  if (window.thockdownNotes && window.thockdownState && window.thockdownTextures && window.thockdownLoadouts && window.thockdownTabs && window.thockdownSections) {
+    scopedWindow.__thockdownBrowserMockInstalled = true
     return
   }
 
   const storeRef = { current: loadStore() }
 
-  if (!window.measlyNotes) {
-    window.measlyNotes = buildNotesBridge(storeRef)
+  if (!window.thockdownNotes) {
+    window.thockdownNotes = buildNotesBridge(storeRef)
   }
-  if (!window.measlyState) {
-    window.measlyState = buildStateBridge(storeRef)
+  if (!window.thockdownState) {
+    window.thockdownState = buildStateBridge(storeRef)
   }
-  if (!window.measlyTextures) {
-    window.measlyTextures = buildTextureBridge(storeRef)
+  if (!window.thockdownTextures) {
+    window.thockdownTextures = buildTextureBridge(storeRef)
   }
-  if (!window.measlyLoadouts) {
-    window.measlyLoadouts = buildLoadoutBridge(storeRef)
+  if (!window.thockdownLoadouts) {
+    window.thockdownLoadouts = buildLoadoutBridge(storeRef)
   }
-  if (!window.measlyFileSync) {
-    window.measlyFileSync = buildFileSyncBridge()
+  if (!window.thockdownFileSync) {
+    window.thockdownFileSync = buildFileSyncBridge()
   }
-  if (!window.measlyTabs) {
-    window.measlyTabs = buildTabsBridge(storeRef)
+  if (!window.thockdownTabs) {
+    window.thockdownTabs = buildTabsBridge(storeRef)
+  }
+  if (!window.thockdownSections) {
+    window.thockdownSections = buildSectionsBridge(storeRef)
   }
 
-  scopedWindow.__measlyBrowserMockInstalled = true
+  scopedWindow.__thockdownBrowserMockInstalled = true
 }

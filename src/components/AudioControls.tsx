@@ -58,7 +58,7 @@ export const AudioControls = memo(function AudioControls({
   const currentSongRef = useRef<MusicSongEntry | null>(null)
 
   const refreshCountsRef = useRef(async () => {
-    const c = await window.measlyAudioPlayer?.getPlaylistCounts()
+    const c = await window.thockdownAudioPlayer?.getPlaylistCounts()
     if (c) setCounts(c)
   })
 
@@ -69,7 +69,7 @@ export const AudioControls = memo(function AudioControls({
 
   // Refresh playlist counts on mount.
   useEffect(() => {
-    void window.measlyAudioPlayer?.getPlaylistCounts().then((c) => {
+    void window.thockdownAudioPlayer?.getPlaylistCounts().then((c) => {
       if (c) setCounts(c)
     })
   }, [])
@@ -84,7 +84,7 @@ export const AudioControls = memo(function AudioControls({
     musicPlayerService.onEnded(() => {
       const finished = currentSongRef.current
       if (finished) {
-        void window.measlyAudioPlayer?.afterPlay(finished.id)
+        void window.thockdownAudioPlayer?.afterPlay(finished.id)
       }
       void advanceToNextSong()
     })
@@ -104,7 +104,7 @@ export const AudioControls = memo(function AudioControls({
     // Safety limit: avoid an infinite loop if every song in the pool is missing.
     const MAX_ATTEMPTS = 50
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      const next = await window.measlyAudioPlayer?.pickNextSong(slots)
+      const next = await window.thockdownAudioPlayer?.pickNextSong(slots)
       if (!next) {
         setIsPlaying(false)
         setCurrentSong(null)
@@ -118,7 +118,7 @@ export const AudioControls = memo(function AudioControls({
       } catch (err) {
         if (err instanceof MissingFileError) {
           // Silently purge the bad entry and try the next song.
-          await window.measlyAudioPlayer?.purgeSong(next.id)
+          await window.thockdownAudioPlayer?.purgeSong(next.id)
           await refreshCountsRef.current()
           musicPlayerService.stop()
           continue
@@ -152,7 +152,7 @@ export const AudioControls = memo(function AudioControls({
         } catch (err) {
           if (err instanceof MissingFileError) {
             // File gone since last session — purge and pick a fresh song.
-            await window.measlyAudioPlayer?.purgeSong(currentSong.id)
+            await window.thockdownAudioPlayer?.purgeSong(currentSong.id)
             setCurrentSong(null)
             musicPlayerService.stop()
             await refreshCountsRef.current()
@@ -171,7 +171,7 @@ export const AudioControls = memo(function AudioControls({
 
   const handleFavoriteLeft = useCallback(async () => {
     if (!currentSong) return
-    const updated = await window.measlyAudioPlayer?.favoriteSong(currentSong.id)
+    const updated = await window.thockdownAudioPlayer?.favoriteSong(currentSong.id)
     if (updated) setCurrentSong(updated)
     // Priority set to 0 = replay immediately on next advance; do nothing more here.
   }, [currentSong])
@@ -179,9 +179,9 @@ export const AudioControls = memo(function AudioControls({
   const handleSkipRight = useCallback(async (event: MouseEvent) => {
     event.preventDefault()
     if (!currentSong) return
-    await window.measlyAudioPlayer?.skipSong(currentSong.id)
+    await window.thockdownAudioPlayer?.skipSong(currentSong.id)
     if (currentSong.id != null) {
-      await window.measlyAudioPlayer?.afterPlay(currentSong.id)
+      await window.thockdownAudioPlayer?.afterPlay(currentSong.id)
     }
     await musicPlayerService.fadeOut()
     await advanceToNextSong()
@@ -216,7 +216,7 @@ export const AudioControls = memo(function AudioControls({
       favPrimedRef.current = false
       musicPlayerService.stop()
       setIsPlaying(false)
-      await window.measlyAudioPlayer?.purgeSong(currentSong.id)
+      await window.thockdownAudioPlayer?.purgeSong(currentSong.id)
       setCurrentSong(null)
       await refreshCounts()
       // Pick the next song.
@@ -284,9 +284,9 @@ export const AudioControls = memo(function AudioControls({
   const handleSlotLeftClick = useCallback(async (slot: PlaylistSlot) => {
     if (counts[slot] === 0) {
       // Empty playlist: open file picker.
-      const files = await window.measlyAudioPlayer?.pickFiles()
+      const files = await window.thockdownAudioPlayer?.pickFiles()
       if (files && files.length > 0) {
-        await window.measlyAudioPlayer?.addSongs(slot, files)
+        await window.thockdownAudioPlayer?.addSongs(slot, files)
         await refreshCounts()
         // Auto-toggle the slot on after first add.
         if (!activeSlots.includes(slot)) {
@@ -306,9 +306,9 @@ export const AudioControls = memo(function AudioControls({
     event.preventDefault()
     if (primedSlot === slot) return // Already primed — wait for pointer-up.
     // Normal right-click = add more files.
-    const files = await window.measlyAudioPlayer?.pickFiles()
+    const files = await window.thockdownAudioPlayer?.pickFiles()
     if (files && files.length > 0) {
-      await window.measlyAudioPlayer?.addSongs(slot, files)
+      await window.thockdownAudioPlayer?.addSongs(slot, files)
       await refreshCounts()
     }
   }, [primedSlot, refreshCounts])
@@ -329,7 +329,7 @@ export const AudioControls = memo(function AudioControls({
     }
     if (primedSlot === slot) {
       setPrimedSlot(null)
-      await window.measlyAudioPlayer?.clearPlaylist(slot)
+      await window.thockdownAudioPlayer?.clearPlaylist(slot)
       await refreshCounts()
       // Remove this slot from active set if it was active.
       onActiveSlotsChange(activeSlots.filter((s) => s !== slot))
@@ -354,11 +354,11 @@ export const AudioControls = memo(function AudioControls({
   const handleSlotShiftRightClick = useCallback(async (event: MouseEvent, slot: PlaylistSlot) => {
     if (!event.shiftKey) return
     event.preventDefault()
-    const folder = await window.measlyAudioPlayer?.pickFolder()
+    const folder = await window.thockdownAudioPlayer?.pickFolder()
     if (!folder) return
-    const files = await window.measlyAudioPlayer?.scanFolderForAudio(folder)
+    const files = await window.thockdownAudioPlayer?.scanFolderForAudio(folder)
     if (files && files.length > 0) {
-      await window.measlyAudioPlayer?.addSongs(slot, files)
+      await window.thockdownAudioPlayer?.addSongs(slot, files)
       await refreshCounts()
       if (!activeSlots.includes(slot)) {
         onActiveSlotsChange([...activeSlots, slot])

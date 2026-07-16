@@ -95,7 +95,7 @@ export function useTextureSurface(params: {
     };
 
     const run = async () => {
-      const textureApi = window.measlyTextures;
+      const textureApi = window.thockdownTextures;
       try {
         if (textureApi && usePersistentCache) {
           const cached = await textureApi.getCachedTexture(cacheKey);

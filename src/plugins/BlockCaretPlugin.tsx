@@ -171,7 +171,7 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx,
 
   return (
     <div 
-      className="measly-block-caret"
+      className="thockdown-block-caret"
       style={{
         position: 'absolute',
         pointerEvents: 'none',

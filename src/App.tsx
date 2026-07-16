@@ -47,6 +47,7 @@ import {
 } from './shared/loadouts'
 import type { NoteSummary } from './shared/noteLifecycle'
 import type { NoteTabEntry } from './shared/tabs'
+import { DEFAULT_EDITOR_SECTION_ID } from './shared/sections'
 import type { TextureCacheRequest } from './shared/textures'
 import {
   DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
@@ -1263,7 +1264,7 @@ function resolveSourceAnchorFromEditState(params: {
   const lines = text.split('\n')
   const safeLineHeight = Math.max(1, lineHeightPx)
 
-  const editorScroller = document.querySelector<HTMLElement>('.editor-stage .measly-custom-scrollbar')
+  const editorScroller = document.querySelector<HTMLElement>('.editor-stage .thockdown-custom-scrollbar')
   const editorRoot = document.querySelector<HTMLElement>('.editor-stage .editor-text[contenteditable="true"]')
 
   if (editorScroller && editorRoot && document.body.contains(editorRoot)) {
@@ -1863,7 +1864,7 @@ function formatModifiedDate(timestampMs: number): string {
 
 async function waitForNotesBridge(shouldStop: () => boolean): Promise<boolean> {
   while (!shouldStop()) {
-    if (window.measlyNotes) {
+    if (window.thockdownNotes) {
       return true
     }
     await new Promise((resolve) => window.setTimeout(resolve, 40))
@@ -2791,7 +2792,7 @@ function App() {
   const textColor10 = useMemo(() => textColorWithAlphaScale(0.1), [textColorWithAlphaScale])
 
   useEffect(() => {
-    const textureApi = window.measlyTextures
+    const textureApi = window.thockdownTextures
     if (!textureApi) return
 
     const keep: TextureCacheRequest[] = [
@@ -3173,9 +3174,9 @@ function App() {
   }, [applyUiLayoutLoadout])
 
   const selectLoadoutPreset = useCallback(async (id: number) => {
-    if (!window.measlyLoadouts) return
+    if (!window.thockdownLoadouts) return
     try {
-      const result = await window.measlyLoadouts.setActive(id)
+      const result = await window.thockdownLoadouts.setActive(id)
       setUiLoadoutEntries(result.entries)
       setLastCustomIdByMode(result.lastCustomIdByMode)
       const sign = modeSign(idMode(id))
@@ -3191,9 +3192,9 @@ function App() {
   }, [selectLoadoutPreset, dynamicCustomPresetId])
 
   const saveCustomLoadout = useCallback(async () => {
-    if (!window.measlyLoadouts) return
+    if (!window.thockdownLoadouts) return
     try {
-      const result = await window.measlyLoadouts.saveCustom(uiMode)
+      const result = await window.thockdownLoadouts.saveCustom(uiMode)
       setUiLoadoutEntries(result.entries)
       setLastCustomIdByMode(result.lastCustomIdByMode)
     } catch (error) {
@@ -3202,9 +3203,9 @@ function App() {
   }, [uiMode])
 
   const resetCustomLoadout = useCallback(async () => {
-    if (!window.measlyLoadouts) return
+    if (!window.thockdownLoadouts) return
     try {
-      const result = await window.measlyLoadouts.resetCustom(uiMode)
+      const result = await window.thockdownLoadouts.resetCustom(uiMode)
       setUiLoadoutEntries(result.entries)
       setLastCustomIdByMode(result.lastCustomIdByMode)
       const sign = modeSign(uiMode)
@@ -3227,19 +3228,19 @@ function App() {
   }, [])
 
   const triggerCustomLoadoutExport = useCallback(async (entryId: number) => {
-    if (!window.measlyLoadouts) return
+    if (!window.thockdownLoadouts) return
     setPrimedCustomLayoutId(null)
     try {
-      await window.measlyLoadouts.exportTdlEntry(entryId)
+      await window.thockdownLoadouts.exportTdlEntry(entryId)
     } catch (error) {
       console.error('Failed to export custom UI loadout', error)
     }
   }, [])
 
   const handleDeleteCustomLoadout = useCallback(async (entryId: number) => {
-    if (!window.measlyLoadouts) return
+    if (!window.thockdownLoadouts) return
     try {
-      const result = await window.measlyLoadouts.deleteCustom(entryId)
+      const result = await window.thockdownLoadouts.deleteCustom(entryId)
       setUiLoadoutEntries(result.entries)
       setLastCustomIdByMode(result.lastCustomIdByMode)
       setPrimedCustomLayoutId(null)
@@ -3306,18 +3307,18 @@ function App() {
   }, [primedCustomLayoutId])
 
   const exportLayoutsTdl = useCallback(async () => {
-    if (!window.measlyLoadouts) return
+    if (!window.thockdownLoadouts) return
     try {
-      await window.measlyLoadouts.exportTdl()
+      await window.thockdownLoadouts.exportTdl()
     } catch (error) {
       console.error('Failed to export layouts', error)
     }
   }, [])
 
   const importLayoutsTdl = useCallback(async () => {
-    if (!window.measlyLoadouts) return
+    if (!window.thockdownLoadouts) return
     try {
-      const result = await window.measlyLoadouts.importTdl()
+      const result = await window.thockdownLoadouts.importTdl()
       if (result) {
         setUiLoadoutEntries(result.entries)
         setLastCustomIdByMode(result.lastCustomIdByMode)
@@ -3709,10 +3710,10 @@ function App() {
   // holds its final restored value.
   useEffect(() => {
     if (!persistenceReady) return
-    if (!window.measlyLoadouts) return
+    if (!window.thockdownLoadouts) return
     let cancelled = false
 
-    void window.measlyLoadouts.list()
+    void window.thockdownLoadouts.list()
       .then((result) => {
         if (cancelled) return
         setUiLoadoutEntries(result.entries)
@@ -3749,7 +3750,7 @@ function App() {
   // Debounced: whenever the live captured state drifts from the active entry
   // for the current mode, push it to the pending row (+/-7) on the backend.
   useEffect(() => {
-    if (!window.measlyLoadouts) return
+    if (!window.thockdownLoadouts) return
     if (!activeEntryForCurrentMode) return
     if (activeEntryForCurrentMode.signature === currentUiLoadoutSignature) return
 
@@ -3759,7 +3760,7 @@ function App() {
 
     pendingUpdateDebounceRef.current = window.setTimeout(() => {
       pendingUpdateDebounceRef.current = null
-      void window.measlyLoadouts?.updatePending(uiMode, capturedUiLayoutLoadout)
+      void window.thockdownLoadouts?.updatePending(uiMode, capturedUiLayoutLoadout)
         .then((result) => {
           if (!result) return
           setUiLoadoutEntries(result.entries)
@@ -3886,7 +3887,7 @@ function App() {
     noteId: string,
     payload: { progressEdit: number; cursorPos: number; scrollTop: number; sourceAnchorLine: number; sourceAnchorText: string | null },
   ) => {
-    const notesApi = window.measlyNotes
+    const notesApi = window.thockdownNotes
     if (!notesApi) return
 
     const { progressEdit, cursorPos, scrollTop, sourceAnchorLine, sourceAnchorText } = payload
@@ -4160,7 +4161,7 @@ function App() {
     nextSidebarMode: SidebarMode,
     nextSidebarViewStateByMode: SidebarViewStateByMode,
   ) => {
-    if (!window.measlyState || !persistenceReady) return
+    if (!window.thockdownState || !persistenceReady) return
 
     const snapshot = buildMenuStateSnapshot({
       sidebarMode: nextSidebarMode,
@@ -4169,7 +4170,7 @@ function App() {
 
     persistedMenuStateRef.current = snapshot
 
-    await window.measlyState.saveAppState({
+    await window.thockdownState.saveAppState({
       selectedNoteId: activeNoteId,
       viewport: latestViewportRef.current ?? undefined,
       menu: snapshot,
@@ -4177,7 +4178,7 @@ function App() {
   }, [activeNoteId, buildMenuStateSnapshot, persistenceReady])
 
   const persistMenuStateOnUnload = useCallback(() => {
-    if (!window.measlyState || !persistenceReady) return
+    if (!window.thockdownState || !persistenceReady) return
 
     const currentModeSnapshot = captureSidebarModeState(sidebarMode)
     const nextSidebarViewStateByMode: SidebarViewStateByMode = {
@@ -4192,7 +4193,7 @@ function App() {
 
     persistedMenuStateRef.current = snapshot
 
-    void window.measlyState.saveAppState({
+    void window.thockdownState.saveAppState({
       selectedNoteId: activeNoteId,
       viewport: latestViewportRef.current ?? undefined,
       menu: snapshot,
@@ -4675,7 +4676,7 @@ function App() {
   // "debug"). No-ops when debuggingEnabled is false. Safe to call from any
   // async or sync context — creation and tagging are fire-and-forget.
   const createDebugNote = useCallback(async (): Promise<string | null> => {
-    if (!window.measlyNotes) return null
+    if (!window.thockdownNotes) return null
 
     const now = new Date()
     const pad = (n: number) => String(n).padStart(2, '0')
@@ -4683,14 +4684,14 @@ function App() {
     const title = `# Debug: ${dateStr} / ${pad(now.getHours())}:${pad(now.getMinutes())}`
 
     try {
-      const created = await window.measlyNotes.createNote({ initialText: `${title}\n` })
+      const created = await window.thockdownNotes.createNote({ initialText: `${title}\n` })
       debugNoteIdRef.current = created.id
       setNotes((previous) => {
         const index = previous.findIndex(n => n.id === created.id)
         if (index >= 0) return previous
         return [created, ...previous]
       })
-      await window.measlyNotes.addTagToNote({ id: created.id, tagName: DEBUG_TAG_NAME, position: 0 }).catch(() => {})
+      await window.thockdownNotes.addTagToNote({ id: created.id, tagName: DEBUG_TAG_NAME, position: 0 }).catch(() => {})
       return created.id
     } catch (error) {
       console.error('Failed to create debug note', error)
@@ -4699,10 +4700,10 @@ function App() {
   }, [persistenceReady])
 
   const findExistingDebugNoteId = useCallback(async (): Promise<string | null> => {
-    if (!window.measlyNotes) return null
+    if (!window.thockdownNotes) return null
 
     try {
-      const listed = await window.measlyNotes.listNotes()
+      const listed = await window.thockdownNotes.listNotes()
       const existing = listed.find((note) => {
         const normalizedTags = new Set(note.tags.map((tag) => normalizeTagName(tag)))
         return normalizedTags.has(DEBUG_TAG_NAME) && !normalizedTags.has('deleted') && !normalizedTags.has('archived')
@@ -4723,11 +4724,11 @@ function App() {
   }, [])
 
   const ensureDebugNoteExists = useCallback(async (): Promise<string | null> => {
-    if (!debuggingEnabled || !window.measlyNotes) return null
+    if (!debuggingEnabled || !window.thockdownNotes) return null
 
     if (debugNoteIdRef.current) {
       try {
-        const loaded = await window.measlyNotes.loadNote({ id: debugNoteIdRef.current })
+        const loaded = await window.thockdownNotes.loadNote({ id: debugNoteIdRef.current })
         const normalizedTags = new Set(loaded.tags.map((tag) => normalizeTagName(tag)))
         const isDeletedOrArchived = normalizedTags.has('deleted') || normalizedTags.has('archived')
         const isDebugTagged = normalizedTags.has(DEBUG_TAG_NAME)
@@ -4770,7 +4771,7 @@ function App() {
 
   const writeDebugEntry = useCallback(async (functionName: string, lines: string[]) => {
     if (!debuggingEnabled) return
-    if (!window.measlyNotes) return
+    if (!window.thockdownNotes) return
     if (isWritingDebugEntryRef.current) return
 
     const noteId = await ensureDebugNoteExists()
@@ -4783,8 +4784,8 @@ function App() {
     const section = `\n## ${timeStr} / ${functionName}\n${lines.map(l => `- ${l}`).join('\n')}`
 
     try {
-      const loaded = await window.measlyNotes.loadNote({ id: noteId })
-      const updated = await window.measlyNotes.saveNote({
+      const loaded = await window.thockdownNotes.loadNote({ id: noteId })
+      const updated = await window.thockdownNotes.saveNote({
         id: noteId,
         text: `${loaded.text}${section}`,
       })
@@ -4856,7 +4857,7 @@ function App() {
   }, [debuggingEnabled, writeDebugEntry])
 
   const queueAppStateSave = useCallback((selectedNoteId: string | null) => {
-    if (!window.measlyState) return
+    if (!window.thockdownState) return
     if (!persistenceReady) return
     if (isApplyingInitialViewportRef.current || pendingViewportRestoreRef.current) return
 
@@ -4867,7 +4868,7 @@ function App() {
     appStateSaveTimerRef.current = window.setTimeout(() => {
       appStateSaveTimerRef.current = null
       const viewport = latestViewportRef.current
-      void window.measlyState?.saveAppState({
+      void window.thockdownState?.saveAppState({
         selectedNoteId,
         viewport: viewport ?? undefined,
         menu: persistedMenuStateRef.current ?? buildMenuStateSnapshot(),
@@ -4876,7 +4877,7 @@ function App() {
   }, [buildMenuStateSnapshot, persistenceReady, writeDebugEntry])
 
   const chooseExportFolder = useCallback(async () => {
-    const exportApi = window.measlyExport
+    const exportApi = window.thockdownExport
     const selectExportFolder = exportApi
       ? exportApi.selectExportFolder
       : () => window.ipcRenderer?.invoke('select-export-folder')
@@ -4928,7 +4929,7 @@ ${markdownHtml}
   }, [activeNoteText, viewFontSize, viewSpacing, viewStyle])
 
   const flushSave = useCallback(async () => {
-    if (!window.measlyNotes || !activeNoteId) return
+    if (!window.thockdownNotes || !activeNoteId) return
     const nextText = pendingSaveTextRef.current
     if (nextText === null) return
 
@@ -4942,10 +4943,10 @@ ${markdownHtml}
       const normalizedText = normalizeInternalText(nextText)
       console.debug('[external-note] flushing note into DB', { noteId: activeNoteId, textLength: normalizedText.length, normalizedText })
 
-      const savedSummary = await window.measlyNotes.saveNote({ id: activeNoteId, text: normalizedText })
+      const savedSummary = await window.thockdownNotes.saveNote({ id: activeNoteId, text: normalizedText })
 
       if (isExternal) {
-        await window.measlyNotes?.saveNoteSnapshot({ id: activeNoteId, content: normalizedText, isManual: false })
+        await window.thockdownNotes?.saveNoteSnapshot({ id: activeNoteId, content: normalizedText, isManual: false })
         console.warn('[external-note] external note current state persisted into DB snapshot', { noteId: activeNoteId, textLength: normalizedText.length })
         latestEditorTextRef.current = normalizedText
         setActiveNoteText(normalizedText)
@@ -4978,8 +4979,8 @@ ${markdownHtml}
   }, [flushSave])
 
   const saveSelectedNoteState = useCallback(async (selectedNoteId: string | null) => {
-    if (!window.measlyState) return
-    await window.measlyState.saveAppState({
+    if (!window.thockdownState) return
+    await window.thockdownState.saveAppState({
       selectedNoteId,
       viewport: latestViewportRef.current ?? undefined,
       menu: persistedMenuStateRef.current ?? buildMenuStateSnapshot(),
@@ -5029,11 +5030,11 @@ ${markdownHtml}
       sourceAnchorText: sourceAnchor.sourceAnchorText,
     }
 
-    await window.measlyNotes?.saveNoteUiState({ id: noteId, payload })
+    await window.thockdownNotes?.saveNoteUiState({ id: noteId, payload })
   }, [resolvePreviewSourceAnchorFromContainer])
 
   const activateNote = useCallback(async (noteId: string, overrideCursorPos?: number) => {
-    if (!window.measlyNotes) return
+    if (!window.thockdownNotes) return
 
     setIsCaretSuspended(true)
     const previousNoteId = activeNoteId
@@ -5054,8 +5055,8 @@ ${markdownHtml}
     }
 
     const [loaded, nextUiState] = await Promise.all([
-      window.measlyNotes.loadNote({ id: noteId }),
-      window.measlyNotes?.getNoteUiState({ id: noteId }) ?? Promise.resolve(null),
+      window.thockdownNotes.loadNote({ id: noteId }),
+      window.thockdownNotes?.getNoteUiState({ id: noteId }) ?? Promise.resolve(null),
     ])
     const hydratedText = normalizeInternalText(loaded.text)
     const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
@@ -5073,7 +5074,7 @@ ${markdownHtml}
     let originalHash: string | null = null
 
     if (isExternalNote(loaded)) {
-      const snapshotRows = await window.measlyNotes?.getNoteSnapshots({ id: loaded.id }) ?? []
+      const snapshotRows = await window.thockdownNotes?.getNoteSnapshots({ id: loaded.id }) ?? []
       const originalSnapshotRow = snapshotRows.find((row) => !row.isManual) ?? snapshotRows[0]
 
       originalText = originalSnapshotRow
@@ -5089,7 +5090,7 @@ ${markdownHtml}
       })
 
       if (!snapshotRows.some((row) => !row.isManual)) {
-        await window.measlyNotes?.saveNoteSnapshot({ id: loaded.id, content: hydratedText, isManual: false })
+        await window.thockdownNotes?.saveNoteSnapshot({ id: loaded.id, content: hydratedText, isManual: false })
         console.warn('[external-note] created initial original snapshot for external note', { noteId: loaded.id, textLength: hydratedText.length })
       }
 
@@ -5120,9 +5121,9 @@ ${markdownHtml}
   ])
 
   const refreshNotes = useCallback(async (preferredId?: string | null) => {
-    if (!window.measlyNotes) return null
+    if (!window.thockdownNotes) return null
 
-    const listed = await window.measlyNotes.listNotes()
+    const listed = await window.thockdownNotes.listNotes()
     setNotes((previous) => mergeNoteSummaries(previous, listed))
     if (listed.length === 0) {
       return null
@@ -5141,7 +5142,7 @@ ${markdownHtml}
   const [, setFileSyncStatus] = useState<string | null>(null)
 
   const syncExistingNotes = useCallback(async () => {
-    const fileSyncApi = window.measlyFileSync
+    const fileSyncApi = window.thockdownFileSync
     if (!fileSyncApi || !persistenceReady) return
 
     setFileSyncStatus('Syncing notes from storage...')
@@ -5155,7 +5156,7 @@ ${markdownHtml}
   }, [persistenceReady, refreshNotes])
 
   const importNotes = useCallback(async () => {
-    const fileSyncApi = window.measlyFileSync
+    const fileSyncApi = window.thockdownFileSync
     if (!fileSyncApi || !persistenceReady) return
 
     setFileSyncStatus('Importing selected note files or folders...')
@@ -5173,7 +5174,7 @@ ${markdownHtml}
   }, [persistenceReady, refreshNotes])
 
   const selectNote = useCallback(async (noteId: string, options?: { forceReload?: boolean }) => {
-    if (!window.measlyNotes) return
+    if (!window.thockdownNotes) return
     if (!persistenceReady) return
     if (noteId === activeNoteId && !options?.forceReload) return
     if (noteTransitionLockRef.current) return
@@ -5321,7 +5322,7 @@ ${markdownHtml}
   }, [activeNoteId])
 
   const createNote = useCallback(async (initialText = NEW_NOTE_TEMPLATE) => {
-    if (!window.measlyNotes) return
+    if (!window.thockdownNotes) return
     if (!persistenceReady) return
     if (noteTransitionLockRef.current) return
 
@@ -5332,7 +5333,7 @@ ${markdownHtml}
     noteTransitionLockRef.current = true
     try {
       await flushPendingSaveNow()
-      const created = await window.measlyNotes.createNote({ initialText })
+      const created = await window.thockdownNotes.createNote({ initialText })
       await refreshNotes(created.id)
       await activateNote(created.id, initialText.length)
       setSidebarMode('date')
@@ -5357,8 +5358,8 @@ ${markdownHtml}
   }, [createNote])
 
   const importExternalFileAsTempNote = useCallback(async (filePath: string) => {
-    const externalApi = window.measlyExternalFiles
-    const notesApi = window.measlyNotes
+    const externalApi = window.thockdownExternalFiles
+    const notesApi = window.thockdownNotes
     if (!externalApi || !notesApi) return
     if (!persistenceReady) return
 
@@ -5518,7 +5519,7 @@ ${markdownHtml}
   }, [activeNoteId, activeNoteSummary, activeNoteText, editorTextVersion, getCurrentExternalNoteModifiedState])
 
   const persistEditUiState = useCallback((noteId: string, options?: { immediate?: boolean }) => {
-    const notesApi = window.measlyNotes
+    const notesApi = window.thockdownNotes
     if (!notesApi) return
 
     const persistNow = async () => {
@@ -5635,7 +5636,7 @@ ${markdownHtml}
         return
       }
 
-      const scroller = document.querySelector<HTMLElement>('.editor-stage .measly-custom-scrollbar')
+      const scroller = document.querySelector<HTMLElement>('.editor-stage .thockdown-custom-scrollbar')
       const editorRoot = document.querySelector<HTMLElement>('.editor-stage .editor-text[contenteditable="true"]')
       if (!scroller || !editorRoot) {
         return
@@ -5743,7 +5744,7 @@ ${markdownHtml}
   }, [notes, orderedActiveTags])
 
   const runActiveNoteTagMutation = useCallback(async (mutate: (noteId: string) => Promise<void>) => {
-    if (!window.measlyNotes) return
+    if (!window.thockdownNotes) return
     if (!persistenceReady) return
     if (!activeNoteId) return
     if (noteTransitionLockRef.current) return
@@ -5768,7 +5769,7 @@ ${markdownHtml}
     if (orderedActiveTags.includes(tagName)) return
 
     void runActiveNoteTagMutation(async (noteId) => {
-      await window.measlyNotes!.addTagToNote({
+      await window.thockdownNotes!.addTagToNote({
         id: noteId,
         tagName,
         position: orderedActiveTags.length,
@@ -5785,12 +5786,12 @@ ${markdownHtml}
       const requestedId = rawInput.slice(1)
       setRenamingTagName(null)
       setTagInputValue('')
-      if (!window.measlyNotes) return
+      if (!window.thockdownNotes) return
 
       const noteId = activeNoteId
       void (async () => {
         try {
-          const updated = await window.measlyNotes!.setNoteAssignedId({ id: noteId, requestedId })
+          const updated = await window.thockdownNotes!.setNoteAssignedId({ id: noteId, requestedId })
           if (updated) {
             setNotes((previous) => previous.map((note) => (note.id === noteId ? { ...note, assignedId: updated.assignedId } : note)))
           }
@@ -5818,7 +5819,7 @@ ${markdownHtml}
         return
       }
 
-      if (!window.measlyNotes) return
+      if (!window.thockdownNotes) return
       if (noteTransitionLockRef.current) return
 
       noteTransitionLockRef.current = true
@@ -5826,7 +5827,7 @@ ${markdownHtml}
       void (async () => {
         try {
           await flushPendingSaveNow()
-          await window.measlyNotes!.renameTag({ fromName, toName })
+          await window.thockdownNotes!.renameTag({ fromName, toName })
           await refreshNotes(activeNoteId)
           await activateNote(activeNoteId)
         } catch (error) {
@@ -5850,7 +5851,7 @@ ${markdownHtml}
     }
 
     void runActiveNoteTagMutation(async (noteId) => {
-      await window.measlyNotes!.addTagToNote({
+      await window.thockdownNotes!.addTagToNote({
         id: noteId,
         tagName: normalized,
         position: orderedActiveTags.length,
@@ -5874,7 +5875,7 @@ ${markdownHtml}
     if (deletePrimedTagName === tagName) {
       setDeletePrimedTagName(null)
       void runActiveNoteTagMutation(async (noteId) => {
-        await window.measlyNotes!.removeTagFromNote({ id: noteId, tagName })
+        await window.thockdownNotes!.removeTagFromNote({ id: noteId, tagName })
       })
       return
     }
@@ -5926,7 +5927,7 @@ ${markdownHtml}
     setDraggedTagIndex(null)
 
     void runActiveNoteTagMutation(async (noteId) => {
-      await window.measlyNotes!.reorderNoteTags({ id: noteId, tagNames: reordered })
+      await window.thockdownNotes!.reorderNoteTags({ id: noteId, tagNames: reordered })
     })
   }, [draggedTagIndex, orderedActiveTags, runActiveNoteTagMutation])
 
@@ -5959,7 +5960,7 @@ ${markdownHtml}
     setDraggedTagIndex(null)
 
     void runActiveNoteTagMutation(async (noteId) => {
-      await window.measlyNotes!.reorderNoteTags({ id: noteId, tagNames: reordered })
+      await window.thockdownNotes!.reorderNoteTags({ id: noteId, tagNames: reordered })
     })
   }, [draggedTagIndex, orderedActiveTags, runActiveNoteTagMutation])
 
@@ -5972,7 +5973,7 @@ ${markdownHtml}
   }, [])
 
   const applyProtectedNoteDestination = useCallback(async (noteId: string, destination: 'archived' | 'deleted') => {
-    if (!window.measlyNotes) return
+    if (!window.thockdownNotes) return
 
     const summary = notes.find((note) => note.id === noteId)
     const existingTags = summary?.tags ?? []
@@ -5982,11 +5983,11 @@ ${markdownHtml}
     const hasOpposite = existingTags.some((tag) => normalizeTagName(tag) === opposite)
 
     if (hasOpposite) {
-      await window.measlyNotes.removeTagFromNote({ id: noteId, tagName: opposite })
+      await window.thockdownNotes.removeTagFromNote({ id: noteId, tagName: opposite })
     }
 
     if (!hasDestination) {
-      await window.measlyNotes.addTagToNote({
+      await window.thockdownNotes.addTagToNote({
         id: noteId,
         tagName: destination,
         position: 0,
@@ -6001,18 +6002,18 @@ ${markdownHtml}
       }),
     ]
 
-    await window.measlyNotes.reorderNoteTags({ id: noteId, tagNames: reordered })
+    await window.thockdownNotes.reorderNoteTags({ id: noteId, tagNames: reordered })
   }, [notes])
 
   const saveExternalNoteToFile = useCallback(async (noteId: string) => {
-    if (!window.measlyNotes || !window.measlyExternalFiles) return
+    if (!window.thockdownNotes || !window.thockdownExternalFiles) return
 
     const summary = notes.find((note) => note.id === noteId)
     let externalPath = summary?.externalPath ?? activeNoteExternalPathRef.current ?? null
     if (!externalPath) {
       console.warn('[external-note] saveExternalNoteToFile missing externalPath on summary, attempting loadNote fallback', { noteId, summary })
       try {
-        const loadedNote = await window.measlyNotes.loadNote({ id: noteId })
+        const loadedNote = await window.thockdownNotes.loadNote({ id: noteId })
         externalPath = loadedNote.externalPath ?? null
         console.debug('[external-note] saveExternalNoteToFile loaded note path fallback', { noteId, loadedExternalPath: externalPath, loadedNote })
         if (externalPath) {
@@ -6056,10 +6057,10 @@ ${markdownHtml}
     let syncedSummary: NoteSummary | null = null
     try {
       writeAttemptedViaNoteApi = true
-      writeSucceeded = await window.measlyNotes.syncExternalNoteToFile({ id: noteId, content: currentText })
+      writeSucceeded = await window.thockdownNotes.syncExternalNoteToFile({ id: noteId, content: currentText })
       console.debug('[external-note] syncExternalNoteToFile result', { noteId, externalPath, writeSucceeded })
       if (writeSucceeded) {
-        syncedSummary = await window.measlyNotes.updateExternalNoteState({ id: noteId, hasUnsavedChanges: false, syncMode: true })
+        syncedSummary = await window.thockdownNotes.updateExternalNoteState({ id: noteId, hasUnsavedChanges: false, syncMode: true })
       }
     } catch (error) {
       console.error('[external-note] syncExternalNoteToFile exception', { noteId, externalPath, error })
@@ -6068,10 +6069,10 @@ ${markdownHtml}
     if (!writeSucceeded) {
       try {
         writeAttemptedViaExternalApi = true
-        writeSucceeded = await window.measlyExternalFiles.writeFileContent(externalPath, currentText)
+        writeSucceeded = await window.thockdownExternalFiles.writeFileContent(externalPath, currentText)
         console.debug('[external-note] writeFileContent fallback result', { noteId, externalPath, writeSucceeded })
         if (writeSucceeded) {
-          syncedSummary = await window.measlyNotes.updateExternalNoteState({ id: noteId, hasUnsavedChanges: false, syncMode: true })
+          syncedSummary = await window.thockdownNotes.updateExternalNoteState({ id: noteId, hasUnsavedChanges: false, syncMode: true })
         }
       } catch (error) {
         console.error('[external-note] writeFileContent fallback exception', { noteId, externalPath, error })
@@ -6088,7 +6089,7 @@ ${markdownHtml}
     } else {
       latestEditorTextRef.current = currentText
       try {
-        const savedSummary = await window.measlyNotes.saveNote({ id: noteId, text: currentText })
+        const savedSummary = await window.thockdownNotes.saveNote({ id: noteId, text: currentText })
         console.debug('[external-note] saveExternalNoteToFile persisted temp note text into DB', { noteId, externalPath, savedSummary })
 
         const nextSummary = syncedSummary ?? savedSummary
@@ -6122,7 +6123,7 @@ ${markdownHtml}
     }
 
     try {
-      const diskContent = await window.measlyExternalFiles.readFileContent(externalPath)
+      const diskContent = await window.thockdownExternalFiles.readFileContent(externalPath)
       console.debug('[external-note] readFileContent after save', { noteId, externalPath, diskContentLength: diskContent?.length ?? null, diskContentIsNull: diskContent === null })
       if (diskContent !== null) {
         diskSanityText = diskContent
@@ -6142,7 +6143,7 @@ ${markdownHtml}
 
     try {
       if (isDiskEqual) {
-        await window.measlyNotes.saveNoteSnapshot({ id: noteId, content: currentText, isManual: false })
+        await window.thockdownNotes.saveNoteSnapshot({ id: noteId, content: currentText, isManual: false })
         externalNoteOriginalTextByIdRef.current.set(noteId, currentText)
         externalNoteOriginalHashByIdRef.current.set(noteId, currentHash)
         setCurrentExternalNoteHash(currentHash)
@@ -6162,7 +6163,7 @@ ${markdownHtml}
         })
       } else {
         const diskHash = await hashNormalizedText(diskSanityNormalized)
-        await window.measlyNotes.saveNoteSnapshot({ id: noteId, content: diskSanityNormalized, isManual: false })
+        await window.thockdownNotes.saveNoteSnapshot({ id: noteId, content: diskSanityNormalized, isManual: false })
         externalNoteOriginalTextByIdRef.current.set(noteId, diskSanityNormalized)
         externalNoteOriginalHashByIdRef.current.set(noteId, diskHash)
         setCurrentExternalNoteHash(currentHash)
@@ -6220,7 +6221,7 @@ ${markdownHtml}
 
 
   const executePrimedNoteAction = useCallback(async (noteId: string, action: NotePrimedAction) => {
-    if (!window.measlyNotes) return
+    if (!window.thockdownNotes) return
     if (!persistenceReady) return
     if (noteTransitionLockRef.current) return
 
@@ -6232,7 +6233,7 @@ ${markdownHtml}
 await flushPendingSaveNow()
 
       if (action === 'deletion' && isCurrentlyDeleted) {
-        await window.measlyNotes.deleteNote({ id: noteId })
+        await window.thockdownNotes.deleteNote({ id: noteId })
         await refreshNotes(activeNoteId === noteId ? null : activeNoteId)
 
         if (activeNoteId === noteId) {
@@ -6276,7 +6277,7 @@ await flushPendingSaveNow()
   }, [activateNote, activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes, saveExternalNoteToFile])
 
   const applyQuickProtectedRightClickAction = useCallback(async (noteId: string, action: Exclude<ProtectedQuickReleaseAction, null>) => {
-    if (!window.measlyNotes) return
+    if (!window.thockdownNotes) return
     if (!persistenceReady) return
     if (noteTransitionLockRef.current) return
 
@@ -6285,9 +6286,9 @@ await flushPendingSaveNow()
       await flushPendingSaveNow()
 
       if (action === 'remove-archived') {
-        await window.measlyNotes.removeTagFromNote({ id: noteId, tagName: 'archived' })
+        await window.thockdownNotes.removeTagFromNote({ id: noteId, tagName: 'archived' })
       } else {
-        await window.measlyNotes.removeTagFromNote({ id: noteId, tagName: 'deleted' })
+        await window.thockdownNotes.removeTagFromNote({ id: noteId, tagName: 'deleted' })
       }
 
       await refreshNotes(activeNoteId ?? noteId)
@@ -6316,21 +6317,21 @@ await flushPendingSaveNow()
   const tempTabNoteId = activeNoteId && !activeNoteIsPinned ? activeNoteId : null
 
   const pinNoteToTabs = useCallback(async (noteId: string) => {
-    if (!window.measlyTabs) return
+    if (!window.thockdownTabs) return
 
     // Make sure the tab has a label to show immediately, assigning the
     // default (first 8 chars of the title) if the note doesn't have a
     // custom $id yet.
-    if (window.measlyNotes) {
-      const assignedId = await window.measlyNotes.ensureNoteAssignedId({ id: noteId }).catch(() => null)
+    if (window.thockdownNotes) {
+      const assignedId = await window.thockdownNotes.ensureNoteAssignedId({ id: noteId }).catch(() => null)
       if (assignedId) {
         setNotes((previous) => previous.map((note) => (note.id === noteId ? { ...note, assignedId: assignedId } : note)))
       }
     }
 
-    const updatedTabs = await window.measlyTabs.addTab(noteId).catch(() => null)
+    const updatedTabs = await window.thockdownTabs.addTab(DEFAULT_EDITOR_SECTION_ID, noteId).catch(() => null)
     if (updatedTabs) {
-      setPinnedTabs(updatedTabs)
+      setPinnedTabs(updatedTabs.filter((tab) => tab.sectionId === DEFAULT_EDITOR_SECTION_ID))
     }
   }, [])
 
@@ -6340,13 +6341,14 @@ await flushPendingSaveNow()
   // new rightmost tab if it was the last one, or staying put if no tabs
   // remain.
   const unpinNoteTab = useCallback(async (noteId: string) => {
-    if (!window.measlyTabs) return
+    if (!window.thockdownTabs) return
 
     const wasActiveTab = noteId === activeNoteId
     const removedIndex = pinnedTabs.findIndex((tab) => tab.noteId === noteId)
 
-    const updatedTabs = await window.measlyTabs.removeTab(noteId).catch(() => null)
-    if (!updatedTabs) return
+    const allUpdatedTabs = await window.thockdownTabs.removeTab(DEFAULT_EDITOR_SECTION_ID, noteId).catch(() => null)
+    if (!allUpdatedTabs) return
+    const updatedTabs = allUpdatedTabs.filter((tab) => tab.sectionId === DEFAULT_EDITOR_SECTION_ID)
     setPinnedTabs(updatedTabs)
 
     if (wasActiveTab && removedIndex !== -1) {
@@ -6470,7 +6472,7 @@ await flushPendingSaveNow()
   }, [])
 
   const closeExternalNoteWithoutSaving = useCallback(async (noteId: string) => {
-    if (!window.measlyNotes) return
+    if (!window.thockdownNotes) return
 
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current)
@@ -6486,7 +6488,7 @@ await flushPendingSaveNow()
     setCurrentExternalNoteHash((current) => (activeNoteId === noteId ? null : current))
 
     try {
-      await window.measlyNotes.deleteNote({ id: noteId })
+      await window.thockdownNotes.deleteNote({ id: noteId })
       setNotes((previous) => previous.filter((note) => note.id !== noteId))
 
       if (activeNoteId === noteId) {
@@ -6608,7 +6610,7 @@ await flushPendingSaveNow()
   }, [closeExternalNoteWithoutSaving])
 
   const handleArchiveClick = useCallback(async (noteId: string) => {
-    if (!window.measlyNotes || !persistenceReady) return
+    if (!window.thockdownNotes || !persistenceReady) return
     if (noteTransitionLockRef.current) return
 
     noteTransitionLockRef.current = true
@@ -6633,7 +6635,7 @@ await flushPendingSaveNow()
   }, [activeNoteId, activateNote, applyProtectedNoteDestination, flushPendingSaveNow, persistenceReady, refreshNotes])
 
   const handleTrashClick = useCallback(async (noteId: string) => {
-    if (!window.measlyNotes || !persistenceReady) return
+    if (!window.thockdownNotes || !persistenceReady) return
     if (noteTransitionLockRef.current) return
 
     const summary = notes.find((note) => note.id === noteId)
@@ -6644,7 +6646,7 @@ await flushPendingSaveNow()
       await flushPendingSaveNow()
 
       if (isCurrentlyDeleted) {
-        await window.measlyNotes.deleteNote({ id: noteId })
+        await window.thockdownNotes.deleteNote({ id: noteId })
       } else {
         await applyProtectedNoteDestination(noteId, 'deleted')
       }
@@ -6667,7 +6669,7 @@ await flushPendingSaveNow()
   }, [activeNoteId, activateNote, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes])
 
   const purgeDeletedNotesPermanently = useCallback(async () => {
-    if (!window.measlyNotes) return
+    if (!window.thockdownNotes) return
     if (!persistenceReady) return
     if (noteTransitionLockRef.current) return
 
@@ -6684,7 +6686,7 @@ await flushPendingSaveNow()
       await flushPendingSaveNow()
 
       for (const noteId of deletedNoteIds) {
-        await window.measlyNotes.deleteNote({ id: noteId })
+        await window.thockdownNotes.deleteNote({ id: noteId })
       }
 
       const activeDeleted = activeNoteId ? deletedNoteIds.includes(activeNoteId) : false
@@ -6798,8 +6800,8 @@ await flushPendingSaveNow()
       if (!hasBridge) {
         return
       }
-      const measlyNotes = window.measlyNotes
-      if (!measlyNotes) {
+      const thockdownNotes = window.thockdownNotes
+      if (!thockdownNotes) {
         return
       }
 
@@ -6808,18 +6810,18 @@ await flushPendingSaveNow()
       let attempt = 0
       while (!disposed) {
         try {
-          let listed = await measlyNotes.listNotes()
+          let listed = await thockdownNotes.listNotes()
           if (disposed) return
 
           if (listed.length === 0) {
-            await measlyNotes.createNote({ initialText: NEW_NOTE_TEMPLATE })
-            listed = await measlyNotes.listNotes()
+            await thockdownNotes.createNote({ initialText: NEW_NOTE_TEMPLATE })
+            listed = await thockdownNotes.listNotes()
             if (listed.length === 0) {
               throw new Error('Notes list remained empty after creating bootstrap note')
             }
           }
 
-          const appState = window.measlyState ? await window.measlyState.loadAppState() : { selectedNoteId: null }
+          const appState = window.thockdownState ? await window.thockdownState.loadAppState() : { selectedNoteId: null }
           if (disposed) return
 
           if (appState.menu) {
@@ -6969,15 +6971,15 @@ await flushPendingSaveNow()
               : undefined
           ) ?? listed[0]
 
-          const loaded = await measlyNotes.loadNote({ id: selectedSummary.id })
+          const loaded = await thockdownNotes.loadNote({ id: selectedSummary.id })
           if (disposed) return
 
           setNotes((previous) => mergeNoteSummaries(previous, listed))
           setActiveNoteId(loaded.id)
 
-          if (window.measlyTabs) {
-            void window.measlyTabs.listTabs().then((tabs) => {
-              if (!disposed) setPinnedTabs(tabs)
+          if (window.thockdownTabs) {
+            void window.thockdownTabs.listTabs().then((tabs) => {
+              if (!disposed) setPinnedTabs(tabs.filter((tab) => tab.sectionId === DEFAULT_EDITOR_SECTION_ID))
             })
           }
 
@@ -7006,8 +7008,8 @@ await flushPendingSaveNow()
             latestViewportRef.current = pendingViewportRestoreRef.current
           }
 
-          if (window.measlyState) {
-            await window.measlyState.saveAppState({
+          if (window.thockdownState) {
+            await window.thockdownState.saveAppState({
               selectedNoteId: loaded.id,
               viewport: pendingViewportRestoreRef.current ?? undefined,
               menu: persistedMenuStateRef.current ?? undefined,
@@ -7220,7 +7222,7 @@ await flushPendingSaveNow()
             return next
           })
 
-          const notesApi = window.measlyNotes
+          const notesApi = window.thockdownNotes
           if (notesApi) {
             void notesApi.updateExternalNoteState({
               id: activeNoteId,
@@ -7622,7 +7624,7 @@ applyEditRestoreSnapshot(memorySnapshot, { restoreFullSelection: true, focusAfte
 
     const restoreFromPersistedEditState = async () => {
       try {
-        const uiState = await window.measlyNotes?.getNoteUiState({ id: activeNoteId })
+        const uiState = await window.thockdownNotes?.getNoteUiState({ id: activeNoteId })
         if (cancelled) return
 
         const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
@@ -7680,7 +7682,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     if (isPreviewMode && activeNoteId) {
       try {
         await persistRenderViewStateForNoteNow(activeNoteId)
-        const uiState = await window.measlyNotes?.getNoteUiState({ id: activeNoteId })
+        const uiState = await window.thockdownNotes?.getNoteUiState({ id: activeNoteId })
         if (uiState) {
           const activeText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
           const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
@@ -7716,7 +7718,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     setIsExportingPdf(true)
 
     try {
-      const exportApi = window.measlyExport
+      const exportApi = window.thockdownExport
       const exportPdf = exportApi
         ? exportApi.exportPdf
         : (folderPath: string, fileName: string, htmlContent?: string) => window.ipcRenderer?.invoke('export-pdf', folderPath, fileName, htmlContent)
@@ -7762,7 +7764,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }, [activeNoteId, activeNoteText, exportFolder, isExportingMd, chooseExportFolder])
 
   useEffect(() => {
-    if (!window.measlyState || !activeNoteId) return
+    if (!window.thockdownState || !activeNoteId) return
     queueAppStateSave(activeNoteId)
   }, [activeNoteId, queueAppStateSave])
 
@@ -7773,7 +7775,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
     const preloadEditModeSnapshot = async () => {
       try {
-        const uiState = await window.measlyNotes?.getNoteUiState({ id: activeNoteId })
+        const uiState = await window.thockdownNotes?.getNoteUiState({ id: activeNoteId })
         if (cancelled) return
 
         const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
@@ -7843,7 +7845,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
     const restorePersistedEditState = async () => {
       try {
-        const uiState = await window.measlyNotes?.getNoteUiState({ id: activeNoteId })
+        const uiState = await window.thockdownNotes?.getNoteUiState({ id: activeNoteId })
         if (cancelled) return
 
         const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
@@ -7926,7 +7928,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
     const restorePreviewScroll = async () => {
       try {
-        const uiState = await window.measlyNotes?.getNoteUiState({ id: activeNoteId })
+        const uiState = await window.thockdownNotes?.getNoteUiState({ id: activeNoteId })
         if (cancelled) return
 
         const sourceAnchorLine = uiState?.sourceAnchorLine
@@ -7969,7 +7971,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           sourceAnchorLine: sourceAnchor.sourceAnchorLine,
           sourceAnchorText: sourceAnchor.sourceAnchorText,
         }
-        void window.measlyNotes?.saveNoteUiState({ id: activeNoteId, payload })
+        void window.thockdownNotes?.saveNoteUiState({ id: activeNoteId, payload })
       }, 120)
     }
 
@@ -7986,8 +7988,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   useEffect(() => {
     if (!persistenceReady) return
 
-    const externalApi = window.measlyExternalFiles
-    if (!externalApi || !window.measlyNotes) return
+    const externalApi = window.thockdownExternalFiles
+    if (!externalApi || !window.thockdownNotes) return
 
     let disposed = false
 
@@ -8134,13 +8136,13 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }, [flushPendingSaveNow])
 
   const compactAutomaticSnapshots = useCallback(async () => {
-    if (!activeNoteId || timelineTrackLengthPx <= 0 || noteSnapshots.placements.length < 2 || !window.measlyNotes) return
+    if (!activeNoteId || timelineTrackLengthPx <= 0 || noteSnapshots.placements.length < 2 || !window.thockdownNotes) return
 
     const compactDeletes = computeSnapshotsToDelete(noteSnapshots.placements, timelineTrackLengthPx, true)
     if (compactDeletes.length === 0) return
 
     for (const snapshotId of compactDeletes) {
-      await window.measlyNotes.deleteNoteSnapshot({ snapshotId })
+      await window.thockdownNotes.deleteNoteSnapshot({ snapshotId })
     }
 
     await noteSnapshots.refresh()
@@ -8221,12 +8223,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }
 
   const handleMergeAdjacentSnapshots = useCallback(async () => {
-    if (!activeNoteId || timelineTrackLengthPx <= 0 || noteSnapshots.placements.length < 2 || !window.measlyNotes) return
+    if (!activeNoteId || timelineTrackLengthPx <= 0 || noteSnapshots.placements.length < 2 || !window.thockdownNotes) return
 
     const toDelete = computeSnapshotsToDelete(noteSnapshots.placements, timelineTrackLengthPx, false)
 
     for (const snapshotId of toDelete) {
-      await window.measlyNotes.deleteNoteSnapshot({ snapshotId })
+      await window.thockdownNotes.deleteNoteSnapshot({ snapshotId })
     }
 
     await noteSnapshots.refresh()
@@ -8237,7 +8239,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
   useEffect(() => {
     if (!activeNoteId || isPreviewingSnapshot) return
-    const notesApi = window.measlyNotes
+    const notesApi = window.thockdownNotes
     if (!notesApi) return
 
     const intervalId = window.setInterval(async () => {
@@ -8302,7 +8304,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }, [])
 
   useEffect(() => {
-    if (!activeNoteId || isPreviewingSnapshot || timelineTrackLengthPx <= 0 || noteSnapshots.placements.length < 2 || !window.measlyNotes) return
+    if (!activeNoteId || isPreviewingSnapshot || timelineTrackLengthPx <= 0 || noteSnapshots.placements.length < 2 || !window.thockdownNotes) return
     if (lastAutoCompactNoteIdRef.current === activeNoteId) return
 
     lastAutoCompactNoteIdRef.current = activeNoteId
@@ -12108,7 +12110,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         window.clearTimeout(appStateSaveTimerRef.current)
         appStateSaveTimerRef.current = null
         const viewport = latestViewportRef.current
-        void window.measlyState?.saveAppState({
+        void window.thockdownState?.saveAppState({
           selectedNoteId: activeNoteId,
           viewport: viewport ?? undefined,
           menu: persistedMenuStateRef.current ?? buildMenuStateSnapshot(),
@@ -12351,7 +12353,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                       </div>
                     ) : isFindMode ? (
                       <div
-                        className="notes-list find-view measly-custom-scrollbar"
+                        className="notes-list find-view thockdown-custom-scrollbar"
                         ref={setSidebarTreeScrollerEl}
                       >
                         {documentFindHits.map((hit, index) => (
@@ -12387,7 +12389,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                       renderSidebarOptionsContent()
                     ) : (
                       <div
-                        className={`notes-list tree-view measly-custom-scrollbar${hasDateFilter ? ' is-filtered' : ''}`}
+                        className={`notes-list tree-view thockdown-custom-scrollbar${hasDateFilter ? ' is-filtered' : ''}`}
                         ref={setSidebarTreeScrollerEl}
                       >
                         <CategoryTreeView
@@ -12412,15 +12414,15 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 {isSidebarScrollbarMode ? (
                   <aside className="sidebar-scrollbar-slot" aria-hidden="true">
                     <div className="sidebar-scrollbar-slot-inner">
-                      <div className="measly-scroll-rail sidebar-measly-scroll-rail">
+                      <div className="thockdown-scroll-rail sidebar-thockdown-scroll-rail">
                         <div
                           ref={sidebarScrollbarTrackRef}
-                          className="measly-scroll-track"
+                          className="thockdown-scroll-track"
                           onMouseDown={handleSidebarTrackMouseDown}
                         >
                           <div
                             ref={sidebarScrollbarThumbRef}
-                            className={`measly-scroll-thumb${isDraggingSidebarScrollThumb ? ' is-dragging' : ''}${isSidebarScrollThumbActive ? '' : ' is-inactive'}`}
+                            className={`thockdown-scroll-thumb${isDraggingSidebarScrollThumb ? ' is-dragging' : ''}${isSidebarScrollThumbActive ? '' : ' is-inactive'}`}
                             onMouseDown={handleSidebarThumbMouseDown}
                           />
                         </div>
@@ -13002,7 +13004,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                       <div
                         ref={previewScrollRef}
                         onScroll={handlePreviewScroll}
-                        className={`markdown-preview measly-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
+                        className={`markdown-preview thockdown-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
                         style={{ '--search-hit-color': highlightColors.search } as CSSProperties}
                         contentEditable={spellCheckRenderEnabled}
                         suppressContentEditableWarning={spellCheckRenderEnabled}
@@ -13023,15 +13025,15 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                   {!isPreviewMode ? (
                     <div ref={setScrollbarHostEl} className="editor-scrollbar-slot-inner" />
                   ) : (
-                    <div className="measly-scroll-rail">
+                    <div className="thockdown-scroll-rail">
                       <div
                         ref={previewScrollbarTrackRef}
-                        className="measly-scroll-track"
+                        className="thockdown-scroll-track"
                         onMouseDown={handlePreviewTrackMouseDown}
                       >
                         <div
                           ref={previewScrollbarThumbRef}
-                          className={`measly-scroll-thumb${isDraggingPreviewScrollThumb ? ' is-dragging' : ''}${isPreviewScrollThumbActive ? '' : ' is-inactive'}`}
+                          className={`thockdown-scroll-thumb${isDraggingPreviewScrollThumb ? ' is-dragging' : ''}${isPreviewScrollThumbActive ? '' : ' is-inactive'}`}
                           onMouseDown={handlePreviewThumbMouseDown}
                         />
                       </div>

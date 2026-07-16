@@ -23,7 +23,7 @@ npm run dev:browser
 ```
 
 Browser-only mode disables the Electron plugin chain and installs dev-only mock bridges via
-`src/dev/installBrowserMockBridges.ts` so `window.measlyNotes` and `window.measlyState` are available.
+`src/dev/installBrowserMockBridges.ts` so `window.thockdownNotes` and `window.thockdownState` are available.
 
 ## Tests
 

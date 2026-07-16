@@ -16,18 +16,18 @@ export interface MusicPlayerConfig {
 }
 
 /**
- * Convert a native filesystem path to a measly-music:// URL.
+ * Convert a native filesystem path to a thockdown-music:// URL.
  * Electron registers this scheme as a privileged protocol that proxies
  * requests to file:// in the main process, bypassing the cross-origin block
  * that prevents http://localhost (dev mode) from loading file:// media.
  */
 function toMusicUrl(filePath: string): string {
-  if (filePath.startsWith('measly-music://')) return filePath;
+  if (filePath.startsWith('thockdown-music://')) return filePath;
   // Normalise backslashes, then encode special characters (spaces etc.) in
   // the path while preserving slashes and the Windows drive-letter colon.
   const posix = filePath.replace(/\\/g, '/');
   const encoded = encodeURI(posix);
-  return encoded.startsWith('/') ? `measly-music://${encoded}` : `measly-music:///${encoded}`;
+  return encoded.startsWith('/') ? `thockdown-music://${encoded}` : `thockdown-music:///${encoded}`;
 }
 
 /**

@@ -24,11 +24,12 @@ declare namespace NodeJS {
 // Used in Renderer process, expose in `preload.ts`
 interface Window {
   ipcRenderer?: import('electron').IpcRenderer
-  measlyNotes?: import('../src/shared/noteLifecycle').NoteLifecycleApi
-  measlyState?: import('../src/shared/appState').AppStateApi
-  measlyExternalFiles?: import('../src/shared/externalFiles').ExternalFilesApi
-  measlyTextures?: import('../src/shared/textures').TextureCacheApi
-  measlyLoadouts?: import('../src/shared/loadouts').UiLoadoutApi
-  measlyAudioPlayer?: import('../src/shared/audioPlayer').AudioPlayerApi
-  measlyTabs?: import('../src/shared/tabs').NoteTabsApi
+  thockdownNotes?: import('../src/shared/noteLifecycle').NoteLifecycleApi
+  thockdownState?: import('../src/shared/appState').AppStateApi
+  thockdownExternalFiles?: import('../src/shared/externalFiles').ExternalFilesApi
+  thockdownTextures?: import('../src/shared/textures').TextureCacheApi
+  thockdownLoadouts?: import('../src/shared/loadouts').UiLoadoutApi
+  thockdownAudioPlayer?: import('../src/shared/audioPlayer').AudioPlayerApi
+  thockdownTabs?: import('../src/shared/tabs').NoteTabsApi
+  thockdownSections?: import('../src/shared/sections').EditorSectionsApi
 }

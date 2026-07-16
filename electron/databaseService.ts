@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, promises as fs } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -45,10 +45,10 @@ try {
   );
 }
 
-const DB_FILE_NAME = 'measly-notes.db';
+const DB_FILE_NAME = 'thockdown-notes.db';
 const EXTERNAL_TAG = 'EXTERNAL';
 const PROTECTED_TAGS = ['deleted', 'archived', EXTERNAL_TAG] as const;
-const META_PREFIX = '<!-- measly-meta:';
+const META_PREFIX = '<!-- thockdown-meta:';
 const META_SUFFIX = '-->';
 const TEXTURE_CACHE_DEFAULT_MAX_ENTRIES = 96;
 const TEXTURE_CACHE_DEFAULT_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 14;
@@ -150,12 +150,30 @@ export type NoteRecord = {
   assignedId: string | null;
 };
 
-/** One entry pinned to the tab bar (quick-access note shortcut). */
+/** One entry pinned to a section's tab bar (quick-access note shortcut). */
 export type NoteTabEntry = {
+  sectionId: string;
   noteId: string;
   position: number;
   addedAtMs: number;
 };
+
+/**
+ * One side-by-side editor pane. `widthFraction` is the pane's share of the
+ * split-view width (null = "distribute evenly with its siblings", the
+ * everyday case while there's only ever one section). `name` is null until
+ * the user names it — surfaced later for saving/restoring named section
+ * collections independently from the UI loadout system.
+ */
+export type EditorSectionEntry = {
+  id: string;
+  name: string | null;
+  position: number;
+  widthFraction: number | null;
+};
+
+/** The sole section that exists on a fresh install — also where sidebar note clicks always land. */
+export const DEFAULT_EDITOR_SECTION_ID = 'default';
 
 const NOTE_INTERNAL_ID_MAX_LEN = 8;
 
@@ -1056,36 +1074,98 @@ export class DatabaseService {
     return resolved;
   }
 
-  // ── Tab bar (pinned quick-access notes) ─────────────────────────────────
+  // ── Editor sections (side-by-side panes) ────────────────────────────────
 
-  listNoteTabs(): NoteTabEntry[] {
+  listEditorSections(): EditorSectionEntry[] {
     const db = this.requireDb();
-    const rows = db.prepare('SELECT noteId, position, addedAt FROM note_tabs ORDER BY position ASC').all() as Array<{ noteId: string; position: number; addedAt: number }>;
-    return rows.map((row) => ({ noteId: row.noteId, position: row.position, addedAtMs: row.addedAt }));
+    return db.prepare('SELECT id, name, position, widthFraction FROM editor_sections ORDER BY position ASC').all() as EditorSectionEntry[];
   }
 
-  addNoteTab(noteId: string): NoteTabEntry[] {
+  createEditorSection(name: string | null = null, afterPosition?: number): EditorSectionEntry[] {
     const db = this.requireDb();
-    const existing = db.prepare('SELECT 1 FROM note_tabs WHERE noteId = ?').get(noteId);
+    const id = randomUUID();
+    const tx = db.transaction(() => {
+      const { maxPosition } = db.prepare('SELECT MAX(position) AS maxPosition FROM editor_sections').get() as { maxPosition: number | null };
+      const insertAt = afterPosition !== undefined ? afterPosition + 1 : (maxPosition ?? -1) + 1;
+      // Make room if inserting mid-row rather than appending at the end.
+      db.prepare('UPDATE editor_sections SET position = position + 1 WHERE position >= ?').run(insertAt);
+      db.prepare('INSERT INTO editor_sections (id, name, position, widthFraction) VALUES (?, ?, ?, NULL)').run(id, name, insertAt);
+    });
+    tx();
+    return this.listEditorSections();
+  }
+
+  renameEditorSection(id: string, name: string | null): EditorSectionEntry[] {
+    const db = this.requireDb();
+    db.prepare('UPDATE editor_sections SET name = ? WHERE id = ?').run(name, id);
+    return this.listEditorSections();
+  }
+
+  removeEditorSection(id: string): EditorSectionEntry[] {
+    const db = this.requireDb();
+    if (id === DEFAULT_EDITOR_SECTION_ID) {
+      // The default section is where sidebar clicks always land -- it's
+      // never closable, only auxiliary sections are.
+      return this.listEditorSections();
+    }
+    db.prepare('DELETE FROM editor_sections WHERE id = ?').run(id);
+    return this.listEditorSections();
+  }
+
+  reorderEditorSections(orderedSectionIds: string[]): EditorSectionEntry[] {
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      orderedSectionIds.forEach((id, index) => {
+        db.prepare('UPDATE editor_sections SET position = ? WHERE id = ?').run(index, id);
+      });
+    });
+    tx();
+    return this.listEditorSections();
+  }
+
+  /** Persists the divider layout (each section's share of the split-view width) after a drag settles. */
+  updateEditorSectionWidths(widths: Array<{ id: string; widthFraction: number | null }>): EditorSectionEntry[] {
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      widths.forEach(({ id, widthFraction }) => {
+        db.prepare('UPDATE editor_sections SET widthFraction = ? WHERE id = ?').run(widthFraction, id);
+      });
+    });
+    tx();
+    return this.listEditorSections();
+  }
+
+  // ── Tab bar (pinned quick-access notes, scoped per section) ─────────────
+
+  /** Every pinned tab across every section -- callers group by `sectionId` client-side. */
+  listNoteTabs(): NoteTabEntry[] {
+    const db = this.requireDb();
+    const rows = db.prepare('SELECT sectionId, noteId, position, addedAt FROM note_tabs ORDER BY sectionId ASC, position ASC').all() as Array<{ sectionId: string; noteId: string; position: number; addedAt: number }>;
+    return rows.map((row) => ({ sectionId: row.sectionId, noteId: row.noteId, position: row.position, addedAtMs: row.addedAt }));
+  }
+
+  addNoteTab(sectionId: string, noteId: string): NoteTabEntry[] {
+    const db = this.requireDb();
+    const existing = db.prepare('SELECT 1 FROM note_tabs WHERE sectionId = ? AND noteId = ?').get(sectionId, noteId);
     if (!existing) {
-      const { maxPosition } = db.prepare('SELECT MAX(position) AS maxPosition FROM note_tabs').get() as { maxPosition: number | null };
-      db.prepare('INSERT INTO note_tabs (noteId, position, addedAt) VALUES (?, ?, ?)')
-        .run(noteId, (maxPosition ?? -1) + 1, Date.now());
+      const { maxPosition } = db.prepare('SELECT MAX(position) AS maxPosition FROM note_tabs WHERE sectionId = ?').get(sectionId) as { maxPosition: number | null };
+      db.prepare('INSERT INTO note_tabs (sectionId, noteId, position, addedAt) VALUES (?, ?, ?, ?)')
+        .run(sectionId, noteId, (maxPosition ?? -1) + 1, Date.now());
     }
     return this.listNoteTabs();
   }
 
-  removeNoteTab(noteId: string): NoteTabEntry[] {
+  removeNoteTab(sectionId: string, noteId: string): NoteTabEntry[] {
     const db = this.requireDb();
-    db.prepare('DELETE FROM note_tabs WHERE noteId = ?').run(noteId);
+    db.prepare('DELETE FROM note_tabs WHERE sectionId = ? AND noteId = ?').run(sectionId, noteId);
     return this.listNoteTabs();
   }
 
-  reorderNoteTabs(orderedNoteIds: string[]): NoteTabEntry[] {
+  reorderNoteTabs(sectionId: string, orderedNoteIds: string[]): NoteTabEntry[] {
     const db = this.requireDb();
     const tx = db.transaction(() => {
       orderedNoteIds.forEach((noteId, index) => {
-        db.prepare('UPDATE note_tabs SET position = ? WHERE noteId = ?').run(index, noteId);
+        db.prepare('UPDATE note_tabs SET position = ? WHERE sectionId = ? AND noteId = ?').run(index, sectionId, noteId);
       });
     });
     tx();
@@ -2527,15 +2607,38 @@ export class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_music_songs_slot     ON music_songs(playlistSlot);
       CREATE INDEX IF NOT EXISTS idx_music_songs_priority ON music_songs(priority);
 
-      CREATE TABLE IF NOT EXISTS note_tabs (
-        noteId    TEXT PRIMARY KEY,
-        position  INTEGER NOT NULL,
-        addedAt   INTEGER NOT NULL,
-        FOREIGN KEY (noteId) REFERENCES notes(id) ON DELETE CASCADE
+      CREATE TABLE IF NOT EXISTS editor_sections (
+        id            TEXT PRIMARY KEY,
+        name          TEXT,
+        position      INTEGER NOT NULL,
+        widthFraction REAL
       );
 
-      CREATE INDEX IF NOT EXISTS idx_note_tabs_position ON note_tabs(position);
+      CREATE INDEX IF NOT EXISTS idx_editor_sections_position ON editor_sections(position);
+
+      CREATE TABLE IF NOT EXISTS note_tabs (
+        sectionId TEXT    NOT NULL,
+        noteId    TEXT    NOT NULL,
+        position  INTEGER NOT NULL,
+        addedAt   INTEGER NOT NULL,
+        PRIMARY KEY (sectionId, noteId),
+        FOREIGN KEY (sectionId) REFERENCES editor_sections(id) ON DELETE CASCADE,
+        FOREIGN KEY (noteId)    REFERENCES notes(id)            ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_note_tabs_section_position ON note_tabs(sectionId, position);
     `);
+
+    // A fresh install always starts with exactly one (default, unnamed)
+    // section — the split-view UI grows the rest from there.
+    const { sectionCount } = this.requireDb()
+      .prepare('SELECT COUNT(*) AS sectionCount FROM editor_sections')
+      .get() as { sectionCount: number };
+    if (sectionCount === 0) {
+      this.requireDb()
+        .prepare('INSERT INTO editor_sections (id, name, position, widthFraction) VALUES (?, NULL, 0, NULL)')
+        .run(DEFAULT_EDITOR_SECTION_ID);
+    }
 
     this.ensureNotesColumn('sourceAnchorLine', 'INTEGER');
     this.ensureNotesColumn('sourceAnchorText', 'TEXT');

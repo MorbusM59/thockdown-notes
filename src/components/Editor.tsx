@@ -10,7 +10,7 @@ import { cancelQuantizedSmoothScroll, scrollToQuantizedSmooth } from '../editor/
 import { CagedScrollPlugin } from '../plugins/CagedScrollPlugin';
 import { SyntaxHighlightPlugin } from '../plugins/SyntaxHighlightPlugin';
 import { BlockCaretPlugin } from '../plugins/BlockCaretPlugin';
-import { MeaslyTokenNode } from '../nodes/MeaslyTokenNode';
+import { ThockdownTokenNode } from '../nodes/ThockdownTokenNode';
 import { ContractBridgePlugin } from '../plugins/ContractBridgePlugin';
 import { NoteTextHydrationPlugin } from '../plugins/NoteTextHydrationPlugin';
 import { TextSanitizationPlugin } from '../plugins/TextSanitizationPlugin';
@@ -1094,21 +1094,21 @@ export function Editor({
   };
 
   const initialConfig = {
-    namespace: 'MeaslyNotes',
+    namespace: 'ThockdownNotes',
     theme,
     onError,
-    nodes: [MeaslyTokenNode],
+    nodes: [ThockdownTokenNode],
   };
 
   const scrollbarRail = (
-    <div className="measly-scroll-rail">
+    <div className="thockdown-scroll-rail">
       <div
         ref={scrollbarTrackRef}
-        className="measly-scroll-track"
+        className="thockdown-scroll-track"
         onMouseDown={handleTrackMouseDown}
       >
         <div
-          className={`measly-scroll-thumb${isDraggingScrollThumb ? ' is-dragging' : ''}${isScrollThumbActive ? '' : ' is-inactive'}`}
+          className={`thockdown-scroll-thumb${isDraggingScrollThumb ? ' is-dragging' : ''}${isScrollThumbActive ? '' : ' is-inactive'}`}
           style={{
             top: `${scrollThumbTopPx}px`,
             height: `${Math.max(0, scrollThumbHeightPx)}px`,
@@ -1200,8 +1200,8 @@ export function Editor({
                 pitch and redraws once font metrics settle. */}
             {hasViewportLines && fontReady && (
               <>
-                <div className="absolute pointer-events-none measly-grid-outline-lines" style={{ inset: 'var(--editor-frame-padding) var(--editor-frame-padding) calc(var(--editor-frame-padding) - 1px) var(--editor-frame-padding)', zIndex: 29 }} />
-                <div className="absolute pointer-events-none measly-grid-lines" style={{ inset: 'var(--editor-frame-padding) var(--editor-frame-padding) calc(var(--editor-frame-padding) - 1px) var(--editor-frame-padding)', zIndex: 30 }} />
+                <div className="absolute pointer-events-none thockdown-grid-outline-lines" style={{ inset: 'var(--editor-frame-padding) var(--editor-frame-padding) calc(var(--editor-frame-padding) - 1px) var(--editor-frame-padding)', zIndex: 29 }} />
+                <div className="absolute pointer-events-none thockdown-grid-lines" style={{ inset: 'var(--editor-frame-padding) var(--editor-frame-padding) calc(var(--editor-frame-padding) - 1px) var(--editor-frame-padding)', zIndex: 30 }} />
               </>
             )}
 
@@ -1228,7 +1228,7 @@ export function Editor({
             {/* Actual Scroller */}
             <div 
               ref={scrollerRef}
-              className="absolute overflow-y-auto overflow-x-hidden outline-none z-10 measly-custom-scrollbar"
+              className="absolute overflow-y-auto overflow-x-hidden outline-none z-10 thockdown-custom-scrollbar"
               style={{ inset: 'var(--editor-frame-padding)', scrollBehavior: 'auto' }}
             >
               <RichTextPlugin
@@ -1284,7 +1284,7 @@ export function Editor({
                 placeholder={
                   hasViewportLines && fontReady ? (
                     <div className="absolute pointer-events-none select-none editor-text z-0" style={{ top: topBoundary, left: 0 }}>
-                      Jot down a measly note...
+                      Jot down a thockdown note...
                     </div>
                   ) : null
                 }
