@@ -830,7 +830,7 @@ function isSafePreviewImageSrc(src: string | undefined): boolean {
 // Link destinations of the form `$NOTE-ID`, `~anchorname`, `~anchorname#uid`,
 // or `$NOTE-ID~anchorname[#uid]` are handled entirely in-app instead of being
 // treated as external URLs. `$` selects another note by its user-assignable
-// internal ID (see setNoteInternalId); `~` jumps to an anchor marked with
+// internal ID (see setNoteAssignedId); `~` jumps to an anchor marked with
 // `[~anchorname]` (or `[~anchorname#uid]` to disambiguate repeated names)
 // somewhere in the document, current or target.
 
@@ -8368,13 +8368,29 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     }
   }, [])
 
+  // Scrolls the preview pane to the top of the document. Used for cross-note
+  // links with no `~anchor` — deferred a couple of frames past the note
+  // switch so it wins over whatever scroll position the new note's own
+  // render-view restore might otherwise land on.
+  const scrollPreviewToTop = useCallback((waitForNoteSwitch: boolean) => {
+    const reset = () => {
+      previewScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+
+    if (waitForNoteSwitch) {
+      window.requestAnimationFrame(() => window.requestAnimationFrame(reset))
+    } else {
+      reset()
+    }
+  }, [])
+
   // Resolves and follows a `$id`, `~anchor[#uid]`, or `$id~anchor[#uid]`
   // preview link. Broken destinations (unknown note ID, missing anchor) are
   // silently ignored rather than partially navigating.
   const navigateToInternalPreviewLink = useCallback((target: ParsedInternalPreviewLink) => {
     if (target.noteIdRaw !== null) {
       const normalizedTarget = normalizeInternalIdForLookup(target.noteIdRaw)
-      const targetNote = notes.find((note) => note.internalId && normalizeInternalIdForLookup(note.internalId) === normalizedTarget)
+      const targetNote = notes.find((note) => note.assignedId && normalizeInternalIdForLookup(note.assignedId) === normalizedTarget)
       if (!targetNote) return
 
       if (target.anchorName !== null && !noteContainsAnchorDefinition(targetNote.contentText ?? '', target.anchorName, target.anchorUid)) {
@@ -8385,6 +8401,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       const followUp = () => {
         if (target.anchorName !== null) {
           scrollToAnchorInPreview(target.anchorName, target.anchorUid, !isAlreadyActive)
+        } else if (!isAlreadyActive) {
+          // Already-active notes stay wherever the reader currently is —
+          // only a genuine note switch resets to the top.
+          scrollPreviewToTop(true)
         }
       }
 
@@ -8400,7 +8420,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     const currentText = latestEditorTextRef.current || activeNoteText
     if (!noteContainsAnchorDefinition(currentText, target.anchorName, target.anchorUid)) return
     scrollToAnchorInPreview(target.anchorName, target.anchorUid, false)
-  }, [notes, activeNoteId, activateNote, activeNoteText, scrollToAnchorInPreview])
+  }, [notes, activeNoteId, activateNote, activeNoteText, scrollToAnchorInPreview, scrollPreviewToTop])
 
   const previewMarkdownComponents = useMemo(
     () => createPreviewMarkdownComponents(navigateToInternalPreviewLink),
