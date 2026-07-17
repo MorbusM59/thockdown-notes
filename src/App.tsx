@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { renderToStaticMarkup } from 'react-dom/server'
-import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react'
+import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { visit } from 'unist-util-visit'
@@ -46,7 +46,9 @@ import {
   LOADOUT_FACTORY_PRESET_COUNT,
 } from './shared/loadouts'
 import type { NoteSummary } from './shared/noteLifecycle'
-import type { NoteTabEntry } from './shared/tabs'
+import { isArchivedNote, isDeletedNote } from './shared/noteLifecycle'
+import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName, isProtectedTagName, isExternalTagName } from './shared/tags'
+import { useSectionTabs, TEMP_TAB_PIN_HOLD_MS } from './tabBar/useSectionTabs'
 import { DEFAULT_EDITOR_SECTION_ID } from './shared/sections'
 import type { TextureCacheRequest } from './shared/textures'
 import {
@@ -116,10 +118,6 @@ import { TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE, useTextureSurface 
 const SAVE_DEBOUNCE_MS = 350
 const NEW_NOTE_TEMPLATE = '# '
 const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
-const DEBUG_TAG_NAME = 'debug'
-const PROTECTED_TAGS = new Set(['archived', 'deleted', 'external', DEBUG_TAG_NAME])
-/** How long the temp tab must be held down (left mouse button) before it's promoted to a permanent pinned tab. */
-const TEMP_TAB_PIN_HOLD_MS = 500
 const GRID_DIVIDER_PX = 8
 const SIDEBAR_WIDTH_PX = 288
 const WINDOW_CONTROLS_WIDTH_PX = 380
@@ -590,18 +588,6 @@ function deriveNoteTitleFromText(text: string): string {
   })
 
   return firstContent?.trim() ?? 'Untitled'
-}
-
-function normalizeTagName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, '-')
-}
-
-function isProtectedTagName(name: string): boolean {
-  return PROTECTED_TAGS.has(normalizeTagName(name))
-}
-
-function isExternalTagName(name: string): boolean {
-  return normalizeTagName(name) === 'external'
 }
 
 function sanitizeClipboardTitle(raw: string): string {
@@ -2410,14 +2396,6 @@ const CategoryTreeView = memo(function CategoryTreeView({
   )
 })
 
-function isArchivedNote(note: NoteSummary): boolean {
-  return note.tags.includes('archived')
-}
-
-function isDeletedNote(note: NoteSummary): boolean {
-  return note.tags.includes('deleted')
-}
-
 function isExternalNote(note: NoteSummary): boolean {
   return note.tags.some((tag) => isExternalTagName(tag))
 }
@@ -2451,7 +2429,6 @@ function App() {
   const optionsContentRef = useRef<HTMLDivElement | null>(null)
   const editorStageRef = useRef<HTMLDivElement | null>(null)
   const sidebarSearchInputRef = useRef<HTMLInputElement | null>(null)
-  const tagInputRef = useRef<HTMLInputElement | null>(null)
   const pageJumpInputRef = useRef<HTMLInputElement | null>(null)
   const textureSeedInputRef = useRef<HTMLInputElement | null>(null)
   const glazeLinearSeedInputRef = useRef<HTMLInputElement | null>(null)
@@ -2462,10 +2439,6 @@ function App() {
   useEffect(() => {
     notesRef.current = notes
   }, [notes])
-  const [tagInputValue, setTagInputValue] = useState('')
-  const [tabBarMode, setTabBarMode] = useState<'tags' | 'tabs'>('tags')
-  const [pinnedTabs, setPinnedTabs] = useState<NoteTabEntry[]>([])
-  const [unpinPrimedTabNoteId, setUnpinPrimedTabNoteId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [isSearchQueryCaseSensitive, setIsSearchQueryCaseSensitive] = useState(false)
   const [documentFindQuery, setDocumentFindQuery] = useState('')
@@ -2491,11 +2464,7 @@ function App() {
   const [editorGlyphPaddingPx, setEditorGlyphPaddingPx] = useState<number>(DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX)
   const [borderRadiusRegularPx, setBorderRadiusRegularPx] = useState<number>(DEFAULT_BORDER_RADIUS_REGULAR_PX)
   const [editorFontLoadVersion, setEditorFontLoadVersion] = useState(0)
-  const [isTagMutationPending, setIsTagMutationPending] = useState(false)
-  const [deletePrimedTagName, setDeletePrimedTagName] = useState<string | null>(null)
   const [isCaretSuspended, setIsCaretSuspended] = useState(false)
-  const [renamingTagName, setRenamingTagName] = useState<string | null>(null)
-  const [draggedTagIndex, setDraggedTagIndex] = useState<number | null>(null)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('date')
   const [lastSidebarModeBeforeOptions, setLastSidebarModeBeforeOptions] = useState<Exclude<SidebarMode, 'options'>>('date')
   const [sidebarViewStateByMode, setSidebarViewStateByMode] = useState<SidebarViewStateByMode>(() => createDefaultSidebarViewStateByMode())
@@ -2611,6 +2580,11 @@ function App() {
   const saveTimerRef = useRef<number | null>(null)
   const appStateSaveTimerRef = useRef<number | null>(null)
   const noteTransitionLockRef = useRef(false)
+  // Mirrors useSectionTabs' tabBarMode so buildMenuStateSnapshot (defined
+  // earlier than the hook call, since it depends on things the hook itself
+  // depends on) can read the latest value without a definition-order cycle.
+  const tabBarModeRef = useRef<'tags' | 'tabs'>('tags')
+  const [restoredTabBarMode, setRestoredTabBarMode] = useState<'tags' | 'tabs' | null>(null)
   const pendingViewportRestoreRef = useRef<PersistedViewportState | null>(null)
   const originalConsoleMethodsRef = useRef<Partial<Record<ConsoleMethodName, (...args: any[]) => void>>>({})
   const isWritingDebugEntryRef = useRef(false)
@@ -4030,7 +4004,7 @@ function App() {
       debuggingEnabled,
       spellCheckEditEnabled,
       spellCheckRenderEnabled,
-      tabBarMode,
+      tabBarMode: tabBarModeRef.current,
     }
   }, [
     archiveCollapsedPrimary,
@@ -4040,7 +4014,6 @@ function App() {
     debuggingEnabled,
     spellCheckEditEnabled,
     spellCheckRenderEnabled,
-    tabBarMode,
     editorFontSize,
     editorGlyphPaddingPx,
     borderRadiusRegularPx,
@@ -5717,260 +5690,65 @@ ${markdownHtml}
     }
   }, [editorRuntimeMetrics.lineHeightPx, focusEditorInEditMode])
 
-  const orderedActiveTags = activeNoteSummary?.tags ?? []
-  const activeNoteIsExternal = orderedActiveTags.some((tag) => isExternalTagName(tag))
+  const updateNoteAssignedId = useCallback((noteId: string, assignedId: string) => {
+    setNotes((previous) => previous.map((note) => (note.id === noteId ? { ...note, assignedId } : note)))
+  }, [])
 
-  const suggestedTags = useMemo(() => {
-    const usageByName = new Map<string, number>()
-
-    for (const note of notes) {
-      for (const tag of note.tags) {
-        usageByName.set(tag, (usageByName.get(tag) ?? 0) + 1)
-      }
-    }
-
-    const activeTagSet = new Set(orderedActiveTags)
-
-    return [...usageByName.entries()]
-      .filter(([name]) => !PROTECTED_TAGS.has(normalizeTagName(name)) && !activeTagSet.has(name))
-      .sort((a, b) => {
-        if (b[1] !== a[1]) {
-          return b[1] - a[1]
-        }
-        return a[0].localeCompare(b[0], undefined, { sensitivity: 'base' })
-      })
-      .map(([name]) => name)
-        .slice(0, 15)
-  }, [notes, orderedActiveTags])
-
-  const runActiveNoteTagMutation = useCallback(async (mutate: (noteId: string) => Promise<void>) => {
-    if (!window.thockdownNotes) return
-    if (!persistenceReady) return
-    if (!activeNoteId) return
-    if (noteTransitionLockRef.current) return
-
-    noteTransitionLockRef.current = true
-    setIsTagMutationPending(true)
-    try {
-      await flushPendingSaveNow()
-      await mutate(activeNoteId)
-      await refreshNotes(activeNoteId)
-      await activateNote(activeNoteId)
-    } catch (error) {
-      console.error('Failed to mutate active note tags', error)
-    } finally {
-      setIsTagMutationPending(false)
-      noteTransitionLockRef.current = false
-    }
-  }, [activeNoteId, activateNote, flushPendingSaveNow, persistenceReady, refreshNotes])
-
-  const handleAddSuggestedTag = useCallback((tagName: string) => {
-    if (activeNoteIsExternal) return
-    if (orderedActiveTags.includes(tagName)) return
-
-    void runActiveNoteTagMutation(async (noteId) => {
-      await window.thockdownNotes!.addTagToNote({
-        id: noteId,
-        tagName,
-        position: orderedActiveTags.length,
-      })
-    })
-  }, [activeNoteIsExternal, orderedActiveTags, runActiveNoteTagMutation])
-
-  const handleTagInputEnter = useCallback(() => {
-    if (!activeNoteId || !persistenceReady) return
-    if (activeNoteIsExternal) return
-
-    const rawInput = tagInputValue.trim()
-    if (rawInput.startsWith('$')) {
-      const requestedId = rawInput.slice(1)
-      setRenamingTagName(null)
-      setTagInputValue('')
-      if (!window.thockdownNotes) return
-
-      const noteId = activeNoteId
-      void (async () => {
-        try {
-          const updated = await window.thockdownNotes!.setNoteAssignedId({ id: noteId, requestedId })
-          if (updated) {
-            setNotes((previous) => previous.map((note) => (note.id === noteId ? { ...note, assignedId: updated.assignedId } : note)))
-          }
-        } catch (error) {
-          console.error('Failed to set note internal ID', error)
-        }
-      })()
-      return
-    }
-
-    const normalized = normalizeTagName(tagInputValue)
-    if (!normalized) return
-
-    if (renamingTagName) {
-      const fromName = normalizeTagName(renamingTagName)
-      const toName = normalized
-      setRenamingTagName(null)
-      setTagInputValue('')
-
-      if (fromName === toName) {
-        return
-      }
-
-      if (isProtectedTagName(fromName)) {
-        return
-      }
-
-      if (!window.thockdownNotes) return
-      if (noteTransitionLockRef.current) return
-
-      noteTransitionLockRef.current = true
-      setIsTagMutationPending(true)
-      void (async () => {
-        try {
-          await flushPendingSaveNow()
-          await window.thockdownNotes!.renameTag({ fromName, toName })
-          await refreshNotes(activeNoteId)
-          await activateNote(activeNoteId)
-        } catch (error) {
-          console.error('Failed to rename tag', error)
-        } finally {
-          setIsTagMutationPending(false)
-          noteTransitionLockRef.current = false
-        }
-      })()
-      return
-    }
-
-    if (isProtectedTagName(normalized)) {
-      setTagInputValue('')
-      return
-    }
-
-    if (orderedActiveTags.map(normalizeTagName).includes(normalized)) {
-      setTagInputValue('')
-      return
-    }
-
-    void runActiveNoteTagMutation(async (noteId) => {
-      await window.thockdownNotes!.addTagToNote({
-        id: noteId,
-        tagName: normalized,
-        position: orderedActiveTags.length,
-      })
-    })
-    setTagInputValue('')
-  }, [
+  const {
+    tagInputRef,
+    tagInputValue,
+    setTagInputValue,
+    orderedActiveTags,
+    suggestedTags,
+    deletePrimedTagName,
+    renamingTagName,
+    isTagMutationPending,
+    activeNoteIsExternal,
+    handleTagInputKeyDown,
+    handleAddSuggestedTag,
+    handleTagChipClick,
+    handleTagChipMouseLeave,
+    handleTagDragStart,
+    handleTagDragEnd,
+    handleTagDrop,
+    handleTagContainerDragOver,
+    handleTagContainerDrop,
+    handleTagContextMenu,
+    tabBarMode,
+    toggleTabBarMode,
+    pinnedTabs,
+    unpinPrimedTabNoteId,
+    tempTabNoteId,
+    pinArmingTabNoteId,
+    tabsScrollerRef,
+    tabsCanScrollLeft,
+    tabsCanScrollRight,
+    handleAddCurrentNoteToTabs,
+    handleTabContextMenu,
+    handleTabMouseLeave,
+    handleTabClick,
+    handleTempTabMouseDown,
+    clearTempTabHoldTimer,
+    updateTabsScrollEdges,
+    handleTabsWheel,
+  } = useSectionTabs({
+    sectionId: DEFAULT_EDITOR_SECTION_ID,
     activeNoteId,
+    notes,
+    persistenceReady,
     activateNote,
     flushPendingSaveNow,
-    orderedActiveTags,
-    persistenceReady,
     refreshNotes,
-    renamingTagName,
-    runActiveNoteTagMutation,
-    tagInputValue,
-    activeNoteIsExternal,
-  ])
+    noteTransitionLockRef,
+    scheduleFocusEditorInEditMode,
+    updateNoteAssignedId,
+    initialTabBarMode: restoredTabBarMode,
+  })
 
-  const handleTagChipClick = useCallback((tagName: string) => {
-    if (deletePrimedTagName === tagName) {
-      setDeletePrimedTagName(null)
-      void runActiveNoteTagMutation(async (noteId) => {
-        await window.thockdownNotes!.removeTagFromNote({ id: noteId, tagName })
-      })
-      return
-    }
+  useEffect(() => {
+    tabBarModeRef.current = tabBarMode
+  }, [tabBarMode])
 
-    setDeletePrimedTagName(tagName)
-  }, [deletePrimedTagName, runActiveNoteTagMutation])
-
-  const handleTagChipMouseLeave = useCallback((tagName: string) => {
-    if (deletePrimedTagName === tagName) {
-      setDeletePrimedTagName(null)
-    }
-  }, [deletePrimedTagName])
-
-  const handleTagDragStart = useCallback((event: DragEvent<HTMLDivElement>, index: number) => {
-    const tagName = orderedActiveTags[index] ?? ''
-    if (isProtectedTagName(tagName)) return
-
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('text/plain', tagName)
-    setDraggedTagIndex(index)
-  }, [orderedActiveTags])
-
-  const handleTagDragEnd = useCallback(() => {
-    setDraggedTagIndex(null)
-  }, [])
-
-  const handleTagDrop = useCallback((event: DragEvent<HTMLDivElement>, targetIndex: number) => {
-    event.preventDefault()
-    event.stopPropagation()
-
-    if (draggedTagIndex === null || draggedTagIndex === targetIndex) {
-      setDraggedTagIndex(null)
-      return
-    }
-
-    const targetTag = orderedActiveTags[targetIndex] ?? ''
-    if (isProtectedTagName(targetTag)) {
-      setDraggedTagIndex(null)
-      return
-    }
-
-    const reordered = [...orderedActiveTags]
-    const [moved] = reordered.splice(draggedTagIndex, 1)
-    if (!moved) {
-      setDraggedTagIndex(null)
-      return
-    }
-    reordered.splice(targetIndex, 0, moved)
-    setDraggedTagIndex(null)
-
-    void runActiveNoteTagMutation(async (noteId) => {
-      await window.thockdownNotes!.reorderNoteTags({ id: noteId, tagNames: reordered })
-    })
-  }, [draggedTagIndex, orderedActiveTags, runActiveNoteTagMutation])
-
-  const handleTagContainerDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (draggedTagIndex === null) {
-      return
-    }
-
-    event.preventDefault()
-    event.stopPropagation()
-    event.dataTransfer.dropEffect = 'move'
-  }, [draggedTagIndex])
-
-  const handleTagContainerDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (draggedTagIndex === null) {
-      return
-    }
-
-    event.preventDefault()
-    event.stopPropagation()
-
-    const reordered = [...orderedActiveTags]
-    const [moved] = reordered.splice(draggedTagIndex, 1)
-    if (!moved) {
-      setDraggedTagIndex(null)
-      return
-    }
-
-    reordered.push(moved)
-    setDraggedTagIndex(null)
-
-    void runActiveNoteTagMutation(async (noteId) => {
-      await window.thockdownNotes!.reorderNoteTags({ id: noteId, tagNames: reordered })
-    })
-  }, [draggedTagIndex, orderedActiveTags, runActiveNoteTagMutation])
-
-  const handleTagContextMenu = useCallback((event: MouseEvent<HTMLDivElement>, tagName: string) => {
-    event.preventDefault()
-    if (isProtectedTagName(tagName)) return
-
-    setRenamingTagName(tagName)
-    setTagInputValue(tagName)
-  }, [])
 
   const applyProtectedNoteDestination = useCallback(async (noteId: string, destination: 'archived' | 'deleted') => {
     if (!window.thockdownNotes) return
@@ -6301,175 +6079,6 @@ await flushPendingSaveNow()
       noteTransitionLockRef.current = false
     }
   }, [activateNote, activeNoteId, flushPendingSaveNow, persistenceReady, refreshNotes])
-
-  // ── Tab bar (pinned quick-access notes) ─────────────────────────────────
-
-  const toggleTabBarMode = useCallback(() => {
-    setTabBarMode((previous) => (previous === 'tags' ? 'tabs' : 'tags'))
-    setUnpinPrimedTabNoteId(null)
-  }, [])
-
-  // The currently open note gets a temporary, unsaved "preview" tab at the
-  // leftmost position whenever it isn't already pinned. It tracks whichever
-  // unpinned note is active — it isn't a real entry in note_tabs until the
-  // user holds it long enough to promote it (see handleTempTabMouseDown).
-  const activeNoteIsPinned = activeNoteId ? pinnedTabs.some((tab) => tab.noteId === activeNoteId) : false
-  const tempTabNoteId = activeNoteId && !activeNoteIsPinned ? activeNoteId : null
-
-  const pinNoteToTabs = useCallback(async (noteId: string) => {
-    if (!window.thockdownTabs) return
-
-    // Make sure the tab has a label to show immediately, assigning the
-    // default (first 8 chars of the title) if the note doesn't have a
-    // custom $id yet.
-    if (window.thockdownNotes) {
-      const assignedId = await window.thockdownNotes.ensureNoteAssignedId({ id: noteId }).catch(() => null)
-      if (assignedId) {
-        setNotes((previous) => previous.map((note) => (note.id === noteId ? { ...note, assignedId: assignedId } : note)))
-      }
-    }
-
-    const updatedTabs = await window.thockdownTabs.addTab(DEFAULT_EDITOR_SECTION_ID, noteId).catch(() => null)
-    if (updatedTabs) {
-      setPinnedTabs(updatedTabs.filter((tab) => tab.sectionId === DEFAULT_EDITOR_SECTION_ID))
-    }
-  }, [])
-
-  // Removes a note's pinned tab. If that tab belonged to the currently
-  // active note, activation moves to whichever tab slides into its old
-  // position (i.e. the tab that was to its right) — falling back to the
-  // new rightmost tab if it was the last one, or staying put if no tabs
-  // remain.
-  const unpinNoteTab = useCallback(async (noteId: string) => {
-    if (!window.thockdownTabs) return
-
-    const wasActiveTab = noteId === activeNoteId
-    const removedIndex = pinnedTabs.findIndex((tab) => tab.noteId === noteId)
-
-    const allUpdatedTabs = await window.thockdownTabs.removeTab(DEFAULT_EDITOR_SECTION_ID, noteId).catch(() => null)
-    if (!allUpdatedTabs) return
-    const updatedTabs = allUpdatedTabs.filter((tab) => tab.sectionId === DEFAULT_EDITOR_SECTION_ID)
-    setPinnedTabs(updatedTabs)
-
-    if (wasActiveTab && removedIndex !== -1) {
-      const nextTab = updatedTabs[removedIndex] ?? updatedTabs[removedIndex - 1]
-      if (nextTab) {
-        void activateNote(nextTab.noteId)
-      }
-    }
-  }, [activeNoteId, pinnedTabs, activateNote])
-
-  // Dismissing the temp tab has nothing to persist-remove (it was never a
-  // real note_tabs row) — it just hands activation over to the leftmost
-  // pinned tab, same as closing the leftmost real tab would. If there are
-  // no pinned tabs left to fall back to, there's nowhere else to go, so it
-  // stays put.
-  const dismissTempTab = useCallback((noteId: string) => {
-    if (noteId !== activeNoteId) return
-    const nextTab = pinnedTabs[0]
-    if (nextTab) {
-      void activateNote(nextTab.noteId)
-    }
-  }, [activeNoteId, pinnedTabs, activateNote])
-
-  const handleAddCurrentNoteToTabs = useCallback(async () => {
-    if (!activeNoteId || !persistenceReady) return
-
-    // Ctrl+T toggles: pin if not already pinned, unpin if it is.
-    if (activeNoteIsPinned) {
-      void unpinNoteTab(activeNoteId)
-    } else {
-      void pinNoteToTabs(activeNoteId)
-    }
-  }, [activeNoteId, persistenceReady, activeNoteIsPinned, unpinNoteTab, pinNoteToTabs])
-
-  // Right-click primes a tab for unpinning — the tab-bar equivalent of
-  // closing it (same end result as Ctrl+T on an already-pinned note). A
-  // left-click while primed confirms the close; anything else (mouse
-  // leaving, clicking a different tab) cancels the priming. Works the same
-  // way for the temp tab, which just has nothing to persist-remove.
-  const handleTabContextMenu = useCallback((event: MouseEvent<HTMLDivElement>, noteId: string) => {
-    event.preventDefault()
-    setUnpinPrimedTabNoteId(noteId)
-  }, [])
-
-  const handleTabMouseLeave = useCallback((noteId: string) => {
-    setUnpinPrimedTabNoteId((previous) => (previous === noteId ? null : previous))
-  }, [])
-
-  const handleTabClick = useCallback((noteId: string) => {
-    const wasPrimed = unpinPrimedTabNoteId === noteId
-    setUnpinPrimedTabNoteId(null)
-
-    if (wasPrimed) {
-      const isPinned = pinnedTabs.some((tab) => tab.noteId === noteId)
-      if (isPinned) {
-        void unpinNoteTab(noteId)
-      } else {
-        dismissTempTab(noteId)
-      }
-      return
-    }
-
-    void activateNote(noteId)
-  }, [unpinPrimedTabNoteId, pinnedTabs, unpinNoteTab, dismissTempTab, activateNote])
-
-  // Holding the left mouse button on the temp tab for TEMP_TAB_PIN_HOLD_MS
-  // promotes it to a real, permanent pinned tab.
-  const tempTabHoldTimerRef = useRef<number | null>(null)
-  const [pinArmingTabNoteId, setPinArmingTabNoteId] = useState<string | null>(null)
-
-  const clearTempTabHoldTimer = useCallback(() => {
-    if (tempTabHoldTimerRef.current !== null) {
-      window.clearTimeout(tempTabHoldTimerRef.current)
-      tempTabHoldTimerRef.current = null
-    }
-    setPinArmingTabNoteId(null)
-  }, [])
-
-  const handleTempTabMouseDown = useCallback((event: MouseEvent<HTMLDivElement>, noteId: string) => {
-    if (event.button !== 0) return
-    clearTempTabHoldTimer()
-    setPinArmingTabNoteId(noteId)
-    tempTabHoldTimerRef.current = window.setTimeout(() => {
-      tempTabHoldTimerRef.current = null
-      setPinArmingTabNoteId(null)
-      void pinNoteToTabs(noteId)
-    }, TEMP_TAB_PIN_HOLD_MS)
-  }, [clearTempTabHoldTimer, pinNoteToTabs])
-
-  useEffect(() => () => clearTempTabHoldTimer(), [clearTempTabHoldTimer])
-
-  // ── Tab bar horizontal scrolling (fixed-width tabs, wheel-scroll, edge fades) ──
-
-  const tabsScrollerRef = useRef<HTMLDivElement | null>(null)
-  const [tabsCanScrollLeft, setTabsCanScrollLeft] = useState(false)
-  const [tabsCanScrollRight, setTabsCanScrollRight] = useState(false)
-
-  const updateTabsScrollEdges = useCallback(() => {
-    const el = tabsScrollerRef.current
-    if (!el) return
-    setTabsCanScrollLeft(el.scrollLeft > 1)
-    setTabsCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1)
-  }, [])
-
-  useEffect(() => {
-    updateTabsScrollEdges()
-  }, [pinnedTabs, tempTabNoteId, tabBarMode, updateTabsScrollEdges])
-
-  useEffect(() => {
-    if (tabBarMode !== 'tabs') return
-    window.addEventListener('resize', updateTabsScrollEdges)
-    return () => window.removeEventListener('resize', updateTabsScrollEdges)
-  }, [tabBarMode, updateTabsScrollEdges])
-
-  // Vertical wheel input scrolls the bar horizontally, regardless of
-  // browser/OS default wheel-axis behavior.
-  const handleTabsWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
-    if (event.deltaY === 0) return
-    event.preventDefault()
-    event.currentTarget.scrollLeft += event.deltaY
-  }, [])
 
   const closeExternalNoteWithoutSaving = useCallback(async (noteId: string) => {
     if (!window.thockdownNotes) return
@@ -6942,7 +6551,7 @@ await flushPendingSaveNow()
             setDebuggingEnabled(appState.menu.debuggingEnabled ?? false)
             setSpellCheckEditEnabled(appState.menu.spellCheckEditEnabled ?? false)
             setSpellCheckRenderEnabled(appState.menu.spellCheckRenderEnabled ?? false)
-            setTabBarMode(appState.menu.tabBarMode ?? 'tags')
+            setRestoredTabBarMode(appState.menu.tabBarMode ?? 'tags')
 
             setCurrentPage(loadedSidebarViewState[appState.menu.sidebarMode].page)
             setCategoryCollapsedPrimary(loadedSidebarViewState.category.collapsedPrimary)
@@ -6976,12 +6585,6 @@ await flushPendingSaveNow()
 
           setNotes((previous) => mergeNoteSummaries(previous, listed))
           setActiveNoteId(loaded.id)
-
-          if (window.thockdownTabs) {
-            void window.thockdownTabs.listTabs().then((tabs) => {
-              if (!disposed) setPinnedTabs(tabs.filter((tab) => tab.sectionId === DEFAULT_EDITOR_SECTION_ID))
-            })
-          }
 
           const hydratedText = normalizeInternalText(loaded.text)
           latestEditorTextRef.current = hydratedText
@@ -9749,10 +9352,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   useEffect(() => {
     setCurrentPage(1)
   }, [isSearchQueryCaseSensitive, selectedMonths, selectedYears, searchQuery])
-
-  useEffect(() => {
-    setDeletePrimedTagName(null)
-  }, [activeNoteId, orderedActiveTags])
 
 
   useEffect(() => {
@@ -12882,31 +12481,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                         : (renamingTagName ? 'Rename tag...' : '···')
                     }
                     onChange={(event) => setTagInputValue(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault()
-                        handleTagInputEnter()
-                        scheduleFocusEditorInEditMode()
-                        return
-                      }
-                      if (event.key === 'Escape') {
-                        event.preventDefault()
-                        if (renamingTagName) {
-                          setRenamingTagName(null)
-                          setTagInputValue('')
-                        }
-                        scheduleFocusEditorInEditMode()
-                        return
-                      }
-                      if (event.key === 'Tab') {
-                        event.preventDefault()
-                        if (renamingTagName) {
-                          setRenamingTagName(null)
-                          setTagInputValue('')
-                        }
-                        scheduleFocusEditorInEditMode()
-                      }
-                    }}
+                    onKeyDown={handleTagInputKeyDown}
                     disabled={!persistenceReady || !activeNoteId || isTagMutationPending || activeNoteIsExternal}
                     aria-label="Tag input"
                   />

@@ -147,3 +147,11 @@ export interface NoteLifecycleApi {
   /** Lazily assigns + returns the default ID (first 8 chars of title) if the note doesn't have one yet. */
   ensureNoteAssignedId(input: { id: string }): Promise<string | null>;
 }
+
+export function isArchivedNote(note: NoteSummary): boolean {
+  return note.tags.includes('archived')
+}
+
+export function isDeletedNote(note: NoteSummary): boolean {
+  return note.tags.includes('deleted')
+}
