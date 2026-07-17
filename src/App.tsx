@@ -68,9 +68,9 @@ import {
 import {
   buildDocumentFindHits,
   resolveDocumentFindDirective,
-  type DocumentFindDirective,
   type DocumentFindHit,
 } from './editor/FindReplaceEngine'
+import { useDocumentFind } from './find/useDocumentFind'
 import {
   indentSelectionByStep,
   resolveMarkdownSelectionContext,
@@ -2441,8 +2441,12 @@ function App() {
   }, [notes])
   const [searchQuery, setSearchQuery] = useState('')
   const [isSearchQueryCaseSensitive, setIsSearchQueryCaseSensitive] = useState(false)
-  const [documentFindQuery, setDocumentFindQuery] = useState('')
-  const [isDocumentFindCaseSensitive, setIsDocumentFindCaseSensitive] = useState(false)
+  // Mirrors useDocumentFind's isDocumentFindCaseSensitive so
+  // buildMenuStateSnapshot (defined earlier than the hook call can be) can
+  // read the latest value without a definition-order cycle -- same pattern
+  // as tabBarModeRef.
+  const documentFindCaseSensitiveRef = useRef(false)
+  const [restoredDocumentFindCaseSensitive, setRestoredDocumentFindCaseSensitive] = useState<boolean | null>(null)
   // Terminology convention: false = edit mode, true = render view.
   const [isPreviewMode, setIsPreviewMode] = useState(false)
   const [isExportingPdf, setIsExportingPdf] = useState(false)
@@ -2585,6 +2589,17 @@ function App() {
   // depends on) can read the latest value without a definition-order cycle.
   const tabBarModeRef = useRef<'tags' | 'tabs'>('tags')
   const [restoredTabBarMode, setRestoredTabBarMode] = useState<'tags' | 'tabs' | null>(null)
+
+  // Which section last received a caret placement, click, or keystroke.
+  // Interactions that target "the current note" without a section of their
+  // own -- Find & Replace today, drag-a-note-onto-a-section later -- read
+  // this rather than assuming there's only one section. With a single
+  // section it's always DEFAULT_EDITOR_SECTION_ID; the split-view work is
+  // what gives it real values to switch between.
+  const [, setActiveSectionId] = useState<string>(DEFAULT_EDITOR_SECTION_ID)
+  const markSectionActive = useCallback((sectionId: string) => {
+    setActiveSectionId((previous) => (previous === sectionId ? previous : sectionId))
+  }, [])
   const pendingViewportRestoreRef = useRef<PersistedViewportState | null>(null)
   const originalConsoleMethodsRef = useRef<Partial<Record<ConsoleMethodName, (...args: any[]) => void>>>({})
   const isWritingDebugEntryRef = useRef(false)
@@ -3923,7 +3938,7 @@ function App() {
       selectedYears: [...selectedYears],
       searchQuery,
       searchQueryCaseSensitive: isSearchQueryCaseSensitive,
-      documentFindCaseSensitive: isDocumentFindCaseSensitive,
+      documentFindCaseSensitive: documentFindCaseSensitiveRef.current,
       isPreviewMode,
       viewStyle,
       viewFontSize,
@@ -4020,7 +4035,6 @@ function App() {
     editorSpacing,
     editorStyle,
     exportFolder,
-    isDocumentFindCaseSensitive,
     isPreviewMode,
     renderScrollDynamic,
     renderScrollResponsiveness,
@@ -6449,7 +6463,7 @@ await flushPendingSaveNow()
             setSelectedYears(new Set(appState.menu.selectedYears))
             setSearchQuery(appState.menu.searchQuery)
             setIsSearchQueryCaseSensitive(appState.menu.searchQueryCaseSensitive ?? false)
-            setIsDocumentFindCaseSensitive(appState.menu.documentFindCaseSensitive ?? false)
+            setRestoredDocumentFindCaseSensitive(appState.menu.documentFindCaseSensitive ?? false)
             setIsPreviewMode(appState.menu.isPreviewMode ?? false)
             setViewStyle(appState.menu.viewStyle ?? 'modern')
             setViewFontSize(appState.menu.viewFontSize ?? 'm')
@@ -7935,9 +7949,21 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     return text.replace(/\r\n/g, '\n').replace(/[ \t]+$/gm, '')
   }
 
-  const documentFindDirective = useMemo<DocumentFindDirective>(() => {
-    return resolveDocumentFindDirective(documentFindQuery, currentEditorText, isDocumentFindCaseSensitive)
-  }, [currentEditorText, documentFindQuery, isDocumentFindCaseSensitive])
+  const {
+    documentFindQuery,
+    setDocumentFindQuery,
+    isDocumentFindCaseSensitive,
+    setIsDocumentFindCaseSensitive,
+    documentFindDirective,
+    documentFindHits,
+  } = useDocumentFind({
+    sourceText: currentEditorText,
+    initialCaseSensitive: restoredDocumentFindCaseSensitive,
+  })
+
+  useEffect(() => {
+    documentFindCaseSensitiveRef.current = isDocumentFindCaseSensitive
+  }, [isDocumentFindCaseSensitive])
 
   const previewNoteAnchorMarkerPlugin = useMemo(
     () => createPreviewNoteAnchorMarkerRehypePlugin(),
@@ -8055,10 +8081,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     </ReactMarkdown>
   ), [renderedDisplayText, previewNoteAnchorMarkerPlugin, previewSearchHighlightPlugin, previewSourceAnchorPlugin, previewMarkdownComponents])
 
-
-  const documentFindHits = useMemo<DocumentFindHit[]>(() => {
-    return buildDocumentFindHits(currentEditorText, documentFindDirective.findText, isDocumentFindCaseSensitive)
-  }, [currentEditorText, documentFindDirective.findText, isDocumentFindCaseSensitive])
 
   const hasMonthFilter = selectedMonths.size > 0
   const hasYearFilter = selectedYears.size > 0
@@ -12551,7 +12573,13 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               )}
             </section>
 
-            <div className="editor-viewer-frame" style={{ gridArea: 'viewer' }}>
+            <div
+              className="editor-viewer-frame"
+              style={{ gridArea: 'viewer' }}
+              onFocusCapture={() => markSectionActive(DEFAULT_EDITOR_SECTION_ID)}
+              onMouseDownCapture={() => markSectionActive(DEFAULT_EDITOR_SECTION_ID)}
+              onKeyDownCapture={() => markSectionActive(DEFAULT_EDITOR_SECTION_ID)}
+            >
               <main className="editor-shell">
                 <div className="editor-background">
                   <div ref={editorStageRef} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
