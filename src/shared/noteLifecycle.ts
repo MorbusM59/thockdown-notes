@@ -1,3 +1,5 @@
+import { isExternalTagName } from './tags'
+
 export const NOTE_LIFECYCLE_CHANNELS = {
   list: 'notes:list',
   load: 'notes:load',
@@ -155,4 +157,22 @@ export function isArchivedNote(note: NoteSummary): boolean {
 
 export function isDeletedNote(note: NoteSummary): boolean {
   return note.tags.includes('deleted')
+}
+
+export function isExternalNote(note: NoteSummary): boolean {
+  return note.tags.some((tag) => isExternalTagName(tag))
+}
+
+export function isSameNoteSummary(a: NoteSummary, b: NoteSummary): boolean {
+  return (
+    a.id === b.id &&
+    a.fileName === b.fileName &&
+    a.title === b.title &&
+    a.tags.length === b.tags.length &&
+    a.tags.every((tag, index) => tag === b.tags[index]) &&
+    a.createdAtMs === b.createdAtMs &&
+    a.updatedAtMs === b.updatedAtMs &&
+    a.sizeBytes === b.sizeBytes &&
+    Boolean(a.hasUnsavedChanges) === Boolean(b.hasUnsavedChanges)
+  )
 }

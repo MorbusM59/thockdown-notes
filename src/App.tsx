@@ -46,8 +46,8 @@ import {
   LOADOUT_FACTORY_PRESET_COUNT,
 } from './shared/loadouts'
 import type { NoteSummary } from './shared/noteLifecycle'
-import { isArchivedNote, isDeletedNote } from './shared/noteLifecycle'
-import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName, isProtectedTagName, isExternalTagName } from './shared/tags'
+import { isArchivedNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
+import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName, isProtectedTagName } from './shared/tags'
 import { useSectionTabs, TEMP_TAB_PIN_HOLD_MS } from './tabBar/useSectionTabs'
 import { DEFAULT_EDITOR_SECTION_ID } from './shared/sections'
 import type { TextureCacheRequest } from './shared/textures'
@@ -75,6 +75,7 @@ import { useSnapshotFreeze } from './editorSection/useSnapshotFreeze'
 import { useActiveNoteId } from './editorSection/useActiveNoteId'
 import { useDisplayedNoteText } from './editorSection/useDisplayedNoteText'
 import { usePreviewedSnapshot } from './editorSection/usePreviewedSnapshot'
+import { useNoteSaveQueue } from './editorSection/useNoteSaveQueue'
 import {
   indentSelectionByStep,
   resolveMarkdownSelectionContext,
@@ -119,7 +120,6 @@ import {
 } from './textures/types'
 import { TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE, useTextureSurface } from './textures/useTextureSurface'
 
-const SAVE_DEBOUNCE_MS = 350
 const NEW_NOTE_TEMPLATE = '# '
 const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
 const GRID_DIVIDER_PX = 8
@@ -1086,20 +1086,6 @@ function titleFromFileBasename(fileName: string): string {
 
   const normalized = withoutExtension.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
   return normalized || FALLBACK_NEW_NOTE_TITLE
-}
-
-function isSameNoteSummary(a: NoteSummary, b: NoteSummary): boolean {
-  return (
-    a.id === b.id &&
-    a.fileName === b.fileName &&
-    a.title === b.title &&
-    a.tags.length === b.tags.length &&
-    a.tags.every((tag, index) => tag === b.tags[index]) &&
-    a.createdAtMs === b.createdAtMs &&
-    a.updatedAtMs === b.updatedAtMs &&
-    a.sizeBytes === b.sizeBytes &&
-    Boolean(a.hasUnsavedChanges) === Boolean(b.hasUnsavedChanges)
-  )
 }
 
 function mergeNoteSummaries(previous: NoteSummary[], next: NoteSummary[]): NoteSummary[] {
@@ -2400,10 +2386,6 @@ const CategoryTreeView = memo(function CategoryTreeView({
   )
 })
 
-function isExternalNote(note: NoteSummary): boolean {
-  return note.tags.some((tag) => isExternalTagName(tag))
-}
-
 function compareExternalNotesFirst(a: NoteSummary, b: NoteSummary): number {
   const aIsExternal = isExternalNote(a)
   const bIsExternal = isExternalNote(b)
@@ -2620,7 +2602,6 @@ function App() {
   const [textureControlDragState, setTextureControlDragState] = useState<TextureControlDragState | null>(null)
   const colorArmTimerRef = useRef<number | null>(null)
   const pendingUpdateDebounceRef = useRef<number | null>(null)
-  const pendingSaveTextRef = useRef<string | null>(null)
   const lastHeadlineLevelRef = useRef<1 | 2 | 3 | 4 | 5 | 6>(1)
   const latestEditorSelectionRef = useRef<EditorSelectionState>({
     anchor: 0,
@@ -2630,7 +2611,6 @@ function App() {
     isCollapsed: true,
   })
   type ConsoleMethodName = 'log' | 'info' | 'warn' | 'error' | 'debug'
-  const saveTimerRef = useRef<number | null>(null)
   const appStateSaveTimerRef = useRef<number | null>(null)
   const noteTransitionLockRef = useRef(false)
   // Mirrors useSectionTabs' tabBarMode so buildMenuStateSnapshot (defined
@@ -4982,55 +4962,14 @@ ${markdownHtml}
 </html>`
   }, [activeNoteText, viewFontSize, viewSpacing, viewStyle])
 
-  const flushSave = useCallback(async () => {
-    if (!window.thockdownNotes || !activeNoteId) return
-    const nextText = pendingSaveTextRef.current
-    if (nextText === null) return
-
-    pendingSaveTextRef.current = null
-    try {
-      const noteSummary = notesRef.current.find((note) => note.id === activeNoteId)
-      const isExternal = noteSummary ? isExternalNote(noteSummary) : false
-      if (isExternal) {
-        console.warn('[external-note] flushSave triggered for external note', { noteId: activeNoteId, textLength: nextText.length, nextText })
-      }
-      const normalizedText = normalizeInternalText(nextText)
-      console.debug('[external-note] flushing note into DB', { noteId: activeNoteId, textLength: normalizedText.length, normalizedText })
-
-      const savedSummary = await window.thockdownNotes.saveNote({ id: activeNoteId, text: normalizedText })
-
-      if (isExternal) {
-        await window.thockdownNotes?.saveNoteSnapshot({ id: activeNoteId, content: normalizedText, isManual: false })
-        console.warn('[external-note] external note current state persisted into DB snapshot', { noteId: activeNoteId, textLength: normalizedText.length })
-        latestEditorTextRef.current = normalizedText
-        setActiveNoteText(normalizedText)
-      }
-
-      setNotes((previous) => {
-        const index = previous.findIndex((note) => note.id === savedSummary.id)
-        if (index < 0) return previous
-
-        const existing = previous[index]
-        if (isSameNoteSummary(existing, savedSummary)) {
-          return previous
-        }
-
-        const next = [...previous]
-        next[index] = savedSummary
-        return next
-      })
-    } catch (error) {
-      console.error('Failed to persist note', error)
-    }
-  }, [activeNoteId])
-
-  const flushPendingSaveNow = useCallback(async () => {
-    if (saveTimerRef.current !== null) {
-      window.clearTimeout(saveTimerRef.current)
-      saveTimerRef.current = null
-    }
-    await flushSave()
-  }, [flushSave])
+  const { queueSave, flushPendingSaveNow, cancelPendingSave } = useNoteSaveQueue({
+    activeNoteId,
+    persistenceReady,
+    notesRef,
+    latestEditorTextRef,
+    setActiveNoteText,
+    setNotes,
+  })
 
   const saveSelectedNoteState = useCallback(async (selectedNoteId: string | null) => {
     if (!window.thockdownState) return
@@ -6181,11 +6120,7 @@ await flushPendingSaveNow()
   const closeExternalNoteWithoutSaving = useCallback(async (noteId: string) => {
     if (!window.thockdownNotes) return
 
-    if (saveTimerRef.current !== null) {
-      window.clearTimeout(saveTimerRef.current)
-      saveTimerRef.current = null
-    }
-    pendingSaveTextRef.current = null
+    cancelPendingSave()
 
     clearNoteArmTimer()
     const nextActiveId = activeNoteId === noteId ? getNextActiveNoteIdAfterRemoval(noteId) : null
@@ -6209,7 +6144,7 @@ await flushPendingSaveNow()
     } catch (error) {
       console.error('Failed to delete external temp note', error)
     }
-  }, [activeNoteId, activateNote, clearNoteArmTimer, getNextActiveNoteIdAfterRemoval])
+  }, [activeNoteId, activateNote, cancelPendingSave, clearNoteArmTimer, getNextActiveNoteIdAfterRemoval])
 
   const handleNoteRightPressStart = useCallback((noteId: string, event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -6486,19 +6421,6 @@ await flushPendingSaveNow()
     sidebarMode,
   ])
 
-  const queueSave = useCallback((text: string) => {
-    if (!persistenceReady) return
-    pendingSaveTextRef.current = normalizeInternalText(text)
-    if (saveTimerRef.current !== null) {
-      window.clearTimeout(saveTimerRef.current)
-    }
-
-    saveTimerRef.current = window.setTimeout(() => {
-      saveTimerRef.current = null
-      void flushSave()
-    }, SAVE_DEBOUNCE_MS)
-  }, [flushSave, persistenceReady])
-
   useEffect(() => {
     let disposed = false
 
@@ -6749,10 +6671,7 @@ await flushPendingSaveNow()
         window.clearTimeout(editUiStateSaveTimerRef.current)
         editUiStateSaveTimerRef.current = null
       }
-      if (saveTimerRef.current !== null) {
-        window.clearTimeout(saveTimerRef.current)
-        saveTimerRef.current = null
-      }
+      cancelPendingSave()
       if (appStateSaveTimerRef.current !== null) {
         window.clearTimeout(appStateSaveTimerRef.current)
         appStateSaveTimerRef.current = null
