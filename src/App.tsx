@@ -72,6 +72,8 @@ import {
 } from './editor/FindReplaceEngine'
 import { useDocumentFind } from './find/useDocumentFind'
 import { useSnapshotFreeze } from './editorSection/useSnapshotFreeze'
+import { useActiveNoteId } from './editorSection/useActiveNoteId'
+import { useDisplayedNoteText } from './editorSection/useDisplayedNoteText'
 import {
   indentSelectionByStep,
   resolveMarkdownSelectionContext,
@@ -2486,11 +2488,16 @@ function App() {
   const [archiveFocusRequestKey, setArchiveFocusRequestKey] = useState(0)
   const [itemsPerPage, setItemsPerPage] = useState(20)
   const [showPagination, setShowPagination] = useState(false)
-  const [editorTextVersion, setEditorTextVersion] = useState(0)
   const [scrollbarHostEl, setScrollbarHostEl] = useState<HTMLDivElement | null>(null)
   const [sidebarTreeScrollerEl, setSidebarTreeScrollerEl] = useState<HTMLDivElement | null>(null)
-  const [activeNoteId, setActiveNoteId] = useState<string | null>(null)
-  const [activeNoteText, setActiveNoteText] = useState('')
+  const { activeNoteId, setActiveNoteId } = useActiveNoteId(DEFAULT_EDITOR_SECTION_ID)
+  const {
+    activeNoteText,
+    setActiveNoteText,
+    editorTextVersion,
+    setEditorTextVersion,
+    latestEditorTextRef,
+  } = useDisplayedNoteText(DEFAULT_EDITOR_SECTION_ID)
   // Set when the startup bootstrap (loading the note list / database) fails
   // repeatedly. Surfaced as a visible banner -- previously a failure here
   // just retried silently forever with only a console.error, leaving the
@@ -2613,7 +2620,6 @@ function App() {
   const colorArmTimerRef = useRef<number | null>(null)
   const pendingUpdateDebounceRef = useRef<number | null>(null)
   const pendingSaveTextRef = useRef<string | null>(null)
-  const latestEditorTextRef = useRef('')
   const lastHeadlineLevelRef = useRef<1 | 2 | 3 | 4 | 5 | 6>(1)
   const latestEditorSelectionRef = useRef<EditorSelectionState>({
     anchor: 0,
