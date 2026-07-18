@@ -7752,13 +7752,23 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }, [activeNoteId, applyEditRestoreSnapshot, isPreviewingSnapshot, previewedSnapshotId])
 
   const handleNavigateSnapshot = useCallback((snapshotId: number | null) => {
+    // Capture exactly where the user was in the live document before
+    // switching away from it -- this is the position "return to present"
+    // restores. Only meaningful when actually leaving live editing; scrubbing
+    // between two historical snapshots has no live position to save, and
+    // would otherwise overwrite a good cached position with a snapshot's
+    // read-only (zeroed) one.
+    if (previewedSnapshotId === null && activeNoteId) {
+      captureEditModeSnapshotFromEditor(activeNoteId)
+    }
+
     // Flush any in-flight edit before switching the editor's content out from
     // under the user -- scrubbing history should never silently drop an
     // unsaved edit to the live document.
     void flushPendingSaveNow().then(() => {
       setPreviewedSnapshotId(snapshotId)
     })
-  }, [flushPendingSaveNow])
+  }, [flushPendingSaveNow, previewedSnapshotId, activeNoteId, captureEditModeSnapshotFromEditor])
 
   const compactAutomaticSnapshots = useCallback(async () => {
     if (!activeNoteId || timelineTrackLengthPx <= 0 || noteSnapshots.placements.length < 2 || !window.thockdownNotes) return
