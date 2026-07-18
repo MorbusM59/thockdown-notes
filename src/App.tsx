@@ -15,7 +15,6 @@ import { PresentStateCircle } from './editor/PresentStateCircle'
 import './App.css'
 import { buildExportCss, type ExportViewStyle, type ExportFontSize, type ExportSpacing } from './exportStyles'
 import type {
-  EditorAdapter,
   EditorBindings,
   EditorSelectionChangeEvent,
   EditorSelectionState,
@@ -76,6 +75,7 @@ import { useActiveNoteId } from './editorSection/useActiveNoteId'
 import { useDisplayedNoteText } from './editorSection/useDisplayedNoteText'
 import { useDisplayedNoteSelection } from './editorSection/useDisplayedNoteSelection'
 import { useDisplayedNoteRenderMode } from './editorSection/useDisplayedNoteRenderMode'
+import { useEditorSectionMount } from './editorSection/useEditorSectionMount'
 import { usePreviewedSnapshot } from './editorSection/usePreviewedSnapshot'
 import { useNoteSaveQueue } from './editorSection/useNoteSaveQueue'
 import {
@@ -87,13 +87,9 @@ import { resolveMarkdownChecklistTypeoverTransform } from './editor/ChecklistTyp
 import { normalizeInternalText } from './editor/TextPolicy'
 import { isNoteSearchQueryActive, matchesNoteSearchQuery } from './shared/noteSearch'
 import {
-  type EditRestoreSnapshot,
-  type EditViewportTelemetry,
   ZERO_EDITOR_SELECTION,
   ZERO_PERSISTED_VIEWPORT,
-  resolveSourceAnchorFromEditState,
   findPreviewSourceAnchorElement,
-  scrollTopPxToLines,
   scrollTopLinesToPx,
   buildEditRestoreSnapshotFromUiState,
 } from './editor/EditRestoreMath'
@@ -2221,7 +2217,6 @@ async function hashNormalizedText(text: string): Promise<string> {
 }
 
 function App() {
-  const adapterRef = useRef<EditorAdapter | null>(null)
   const appShellRef = useRef<HTMLDivElement | null>(null)
   const windowControlsGridRef = useRef<HTMLElement | null>(null)
   const sidebarContentRef = useRef<HTMLDivElement | null>(null)
@@ -2437,8 +2432,6 @@ function App() {
   const externalNoteOriginalHashByIdRef = useRef<Map<string, string>>(new Map())
   const pendingSidebarScrollRestoreRef = useRef<{ mode: SidebarMode; scrollTop: number } | null>(null)
   const ignoreNextUserViewportChangeRef = useRef(false)
-  const latestEditViewportRef = useRef<PersistedViewportState | null>(null)
-  const latestEditViewportTelemetryRef = useRef<EditViewportTelemetry | null>(null)
 
   const areMatchingViewportLines = useCallback((expected: PersistedViewportState, event: EditorViewportState) => {
     const lineHeight = Math.max(1, event.lineHeightPx)
@@ -2451,15 +2444,9 @@ function App() {
       actualScrollTop === expected.scrollTopLines
     )
   }, []);
-  const editUiStateSaveTimerRef = useRef<number | null>(null)
-  const lastPersistedEditUiStateRef = useRef<{ noteId: string; progressEdit: number; cursorPos: number; scrollTop: number; sourceAnchorLine: number; sourceAnchorText: string | null } | null>(null)
-  const pendingEditRestoreSnapshotRef = useRef<EditRestoreSnapshot | null>(null)
-  const editModeSnapshotByNoteIdRef = useRef<Map<string, EditRestoreSnapshot>>(new Map())
   const previousActiveNoteIdForEditRestoreRef = useRef<string | null>(null)
-  const pendingRenderViewSourceAnchorRef = useRef<{ sourceAnchorLine: number; sourceAnchorText: string | null } | null>(null)
   const previousPreviewModeRef = useRef(false)
   const hasPreviewModeBaselineRef = useRef(false)
-  const latestViewportRef = useRef<PersistedViewportState | null>(null)
   const isApplyingInitialViewportRef = useRef(false)
   const dateFilteredNotesRef = useRef<NoteSummary[]>([])
   const trashFilteredNotesRef = useRef<NoteSummary[]>([])
@@ -2479,7 +2466,6 @@ function App() {
   const [primedNoteActionState, setPrimedNoteActionState] = useState<{ noteId: string; action: NotePrimedAction } | null>(null)
   const noteArmTimerRef = useRef<{ noteId: string; button: 0 | 2; timeoutId: number; quickReleaseAction: ProtectedQuickReleaseAction | null } | null>(null)
   const trashButtonArmTimerRef = useRef<number | null>(null)
-  const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const previewTextureRef = useRef<HTMLDivElement>(null)
   const previewScrollSaveTimerRef = useRef<number | null>(null)
   const previewScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
@@ -3597,141 +3583,35 @@ function App() {
     }
   }, [activeEntryForCurrentMode, currentUiLoadoutSignature, uiMode, capturedUiLayoutLoadout])
 
-  const readCurrentEditUiPayload = useCallback((): { progressEdit: number; cursorPos: number; scrollTop: number; sourceAnchorLine: number; sourceAnchorText: string | null } | null => {
-    const selection = latestEditorSelectionRef.current
-
-    const liveSnapshot = adapterRef.current?.getSnapshot()
-    const snapshotViewport = liveSnapshot?.viewport
-    const snapshotViewportLines = liveSnapshot?.viewportLines
-    let snapshotViewportState: PersistedViewportState | null = null
-
-    if (snapshotViewportLines) {
-      snapshotViewportState = {
-        topBoundaryLines: Math.max(0, Math.round(snapshotViewportLines.topBoundaryLines)),
-        bottomBoundaryLines: Math.max(0, Math.round(snapshotViewportLines.bottomBoundaryLines)),
-        scrollTopLines: Math.max(0, Math.round(snapshotViewportLines.scrollTopLines)),
-      }
-
-      latestViewportRef.current = snapshotViewportState
-      latestEditViewportRef.current = snapshotViewportState
-    }
-
-    if (snapshotViewport) {
-      latestEditViewportTelemetryRef.current = {
-        scrollTopPx: Math.round(snapshotViewport.scrollTopPx),
-        scrollHeightPx: Math.max(0, Math.round(snapshotViewport.scrollHeightPx ?? 0)),
-        clientHeightPx: Math.max(0, Math.round(snapshotViewport.clientHeightPx ?? 0)),
-      }
-    }
-
-    const viewport = snapshotViewportState ?? latestEditViewportRef.current ?? latestViewportRef.current
-    if (!viewport) return null
-
-    const activeText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
-    const { sourceAnchorLine, sourceAnchorText } = resolveSourceAnchorFromEditState({
-      text: activeText,
-      lineHeightPx: editorRuntimeMetrics.lineHeightPx,
-      telemetry: latestEditViewportTelemetryRef.current ?? undefined,
-      viewport,
-    })
-
-    const scrollTopLines = Math.max(0, Math.round(viewport.scrollTopLines))
-    const scrollTop = scrollTopLinesToPx(scrollTopLines, editorRuntimeMetrics.lineHeightPx)
-    const progressEdit = scrollTopLines
-    const cursorPos = Math.max(0, selection.end)
-
-    return {
-      progressEdit,
-      cursorPos,
-      scrollTop,
-      sourceAnchorLine,
-      sourceAnchorText,
-    }
-  }, [activeNoteText, editorRuntimeMetrics.lineHeightPx])
-
-  const updateEditModeSnapshotCache = useCallback((snapshot: EditRestoreSnapshot) => {
-    editModeSnapshotByNoteIdRef.current.set(snapshot.noteId, snapshot)
-  }, [])
-
-  const captureEditModeSnapshotFromEditor = useCallback((noteId: string): EditRestoreSnapshot | null => {
-    const liveSnapshot = adapterRef.current?.getSnapshot()
-    const selection = liveSnapshot?.selection ?? latestEditorSelectionRef.current
-    const snapshotViewport = liveSnapshot?.viewport
-    const snapshotViewportLines = liveSnapshot?.viewportLines
-    const viewport: PersistedViewportState | null = snapshotViewportLines
-      ? {
-          topBoundaryLines: Math.max(0, Math.round(snapshotViewportLines.topBoundaryLines)),
-          bottomBoundaryLines: Math.max(0, Math.round(snapshotViewportLines.bottomBoundaryLines)),
-          scrollTopLines: Math.max(0, Math.round(snapshotViewportLines.scrollTopLines)),
-        }
-      : (latestEditViewportRef.current ?? latestViewportRef.current)
-
-    if (snapshotViewportLines) {
-      latestViewportRef.current = viewport
-      latestEditViewportRef.current = viewport
-    }
-
-    if (snapshotViewport) {
-      latestEditViewportTelemetryRef.current = {
-        scrollTopPx: Math.round(snapshotViewport.scrollTopPx),
-        scrollHeightPx: Math.max(0, Math.round(snapshotViewport.scrollHeightPx ?? 0)),
-        clientHeightPx: Math.max(0, Math.round(snapshotViewport.clientHeightPx ?? 0)),
-      }
-    }
-
-    if (!viewport) return null
-
-    const collapsedSelection: EditorSelectionState = {
-      anchor: selection.end,
-      focus: selection.end,
-      start: selection.end,
-      end: selection.end,
-      isCollapsed: true,
-    }
-
-    const snapshot: EditRestoreSnapshot = {
-      noteId,
-      collapsedSelection,
-      fullSelection: selection,
-      viewport,
-    }
-
-    pendingEditRestoreSnapshotRef.current = snapshot
-    updateEditModeSnapshotCache(snapshot)
-    return snapshot
-  }, [updateEditModeSnapshotCache])
-
-  const persistEditUiPayloadForNote = useCallback(async (
-    noteId: string,
-    payload: { progressEdit: number; cursorPos: number; scrollTop: number; sourceAnchorLine: number; sourceAnchorText: string | null },
-  ) => {
-    const notesApi = window.thockdownNotes
-    if (!notesApi) return
-
-    const { progressEdit, cursorPos, scrollTop, sourceAnchorLine, sourceAnchorText } = payload
-    const previousPersisted = lastPersistedEditUiStateRef.current
-    const changed =
-      !previousPersisted
-      || previousPersisted.noteId !== noteId
-      || previousPersisted.scrollTop !== scrollTop
-      || previousPersisted.cursorPos !== cursorPos
-      || previousPersisted.sourceAnchorLine !== sourceAnchorLine
-      || previousPersisted.sourceAnchorText !== sourceAnchorText
-      || Math.abs(previousPersisted.progressEdit - progressEdit) >= 0.0001
-
-    if (changed) {
-      lastPersistedEditUiStateRef.current = {
-        noteId,
-        progressEdit,
-        cursorPos,
-        scrollTop,
-        sourceAnchorLine,
-        sourceAnchorText,
-      }
-      await notesApi.saveNoteUiState({ id: noteId, payload })
-      return
-    }
-  }, [])
+  const {
+    adapterRef,
+    previewScrollRef,
+    editModeSnapshotByNoteIdRef,
+    pendingEditRestoreSnapshotRef,
+    pendingRenderViewSourceAnchorRef,
+    latestViewportRef,
+    latestEditViewportRef,
+    latestEditViewportTelemetryRef,
+    readCurrentEditUiPayload,
+    updateEditModeSnapshotCache,
+    captureEditModeSnapshotFromEditor,
+    persistEditUiPayloadForNote,
+    resolvePreviewSourceAnchorFromContainer,
+    persistRenderViewStateForNoteNow,
+    scheduleFocusEditorInEditMode,
+    persistEditUiState,
+    cancelPendingEditUiStatePersist,
+    persistActiveNoteEditModeStateNow,
+    applyEditRestoreSnapshot,
+    captureEditModeSnapshotForRenderView,
+  } = useEditorSectionMount({
+    activeNoteId,
+    activeNoteText,
+    isPreviewMode,
+    lineHeightPx: editorRuntimeMetrics.lineHeightPx,
+    latestEditorTextRef,
+    latestEditorSelectionRef,
+  })
 
   const primedNoteActionById = useMemo(() => {
     if (!primedNoteActionState) {
@@ -4780,52 +4660,6 @@ ${markdownHtml}
     })
   }, [buildMenuStateSnapshot])
 
-  const resolvePreviewSourceAnchorFromContainer = useCallback((container: HTMLElement): { sourceAnchorLine: number; sourceAnchorText: string | null } | null => {
-    const containerRect = container.getBoundingClientRect()
-    const anchors = Array.from(container.querySelectorAll<HTMLElement>('[data-source-line]'))
-      .map((element) => {
-        const rect = element.getBoundingClientRect()
-        const line = Number(element.dataset.sourceLine)
-        return {
-          element,
-          line: Number.isFinite(line) ? Math.max(0, Math.round(line)) : -1,
-          top: rect.top - containerRect.top,
-          bottom: rect.bottom - containerRect.top,
-        }
-      })
-      .filter((entry) => entry.line >= 0)
-
-    if (anchors.length === 0) {
-      return null
-    }
-
-    anchors.sort((a, b) => a.top - b.top)
-    const visibleAtOrAboveTop = anchors.filter((entry) => entry.top <= 0)
-    const selected = visibleAtOrAboveTop.length > 0
-      ? visibleAtOrAboveTop.reduce((best, candidate) => (candidate.top > best.top ? candidate : best))
-      : anchors.reduce((best, candidate) => (candidate.top < best.top ? candidate : best))
-
-    return {
-      sourceAnchorLine: selected.line,
-      sourceAnchorText: selected.element.textContent?.trim() ?? null,
-    }
-  }, [])
-
-  const persistRenderViewStateForNoteNow = useCallback(async (noteId: string) => {
-    const container = previewScrollRef.current
-    if (!container) return
-
-    const sourceAnchor = resolvePreviewSourceAnchorFromContainer(container)
-    if (!sourceAnchor) return
-
-    const payload: { sourceAnchorLine: number; sourceAnchorText: string | null } = {
-      sourceAnchorLine: sourceAnchor.sourceAnchorLine,
-      sourceAnchorText: sourceAnchor.sourceAnchorText,
-    }
-
-    await window.thockdownNotes?.saveNoteUiState({ id: noteId, payload })
-  }, [resolvePreviewSourceAnchorFromContainer])
-
   const getActiveNoteLiveText = useCallback(() => (
     latestEditorTextRef.current || activeNoteText
   ), [activeNoteText])
@@ -5018,59 +4852,6 @@ ${markdownHtml}
     // Force a reload even for the active card to recover from any stale editor state.
     void selectNote(noteId, { forceReload: true })
   }, [selectNote])
-
-  const restoreEditorSelection = useCallback(() => {
-    const selection = latestEditorSelectionRef.current
-    if (!selection) return
-
-    const adapter = adapterRef.current
-    if (adapter) {
-      adapter.applySnapshot({
-        selectionScrollBehavior: 'preserve-scroll',
-        selection,
-      })
-      return
-    }
-
-    requestAnimationFrame(() => {
-      adapterRef.current?.applySnapshot({
-        selectionScrollBehavior: 'preserve-scroll',
-        selection,
-      })
-    })
-  }, [])
-
-  const focusEditorInEditMode = useCallback((options?: { restoreSelection?: boolean }) => {
-    if (isPreviewMode || !activeNoteId) return
-
-    const editorRoot = document.querySelector<HTMLElement>('.editor-stage .editor-text[contenteditable="true"]')
-    if (!editorRoot) return
-    if (document.activeElement === editorRoot) return
-
-    if (options?.restoreSelection ?? true) {
-      restoreEditorSelection()
-    }
-    editorRoot.focus({ preventScroll: true })
-  }, [activeNoteId, isPreviewMode, restoreEditorSelection])
-
-  const scheduleFocusEditorInEditMode = useCallback((options?: { restoreSelection?: boolean }) => {
-    const attemptFocus = () => {
-      if (isPreviewMode || !activeNoteId) return
-
-      const adapter = adapterRef.current
-      const editorRoot = document.querySelector<HTMLElement>('.editor-stage .editor-text[contenteditable="true"]')
-      if (!adapter || !editorRoot) {
-        requestAnimationFrame(attemptFocus)
-        return
-      }
-
-      focusEditorInEditMode(options)
-    }
-
-    window.setTimeout(() => {
-      requestAnimationFrame(attemptFocus)
-    }, 0)
-  }, [activeNoteId, focusEditorInEditMode, isPreviewMode])
 
   const isAllowedNonEditorFocusTarget = useCallback((target: EventTarget | null): boolean => {
     if (!(target instanceof HTMLElement)) return false
@@ -5327,205 +5108,6 @@ ${markdownHtml}
       disposed = true
     }
   }, [activeNoteId, activeNoteSummary, activeNoteText, editorTextVersion, getCurrentExternalNoteModifiedState])
-
-  const persistEditUiState = useCallback((noteId: string, options?: { immediate?: boolean }) => {
-    const notesApi = window.thockdownNotes
-    if (!notesApi) return
-
-    const persistNow = async () => {
-      const payload = readCurrentEditUiPayload()
-      if (!payload) return
-      const { progressEdit, cursorPos, scrollTop, sourceAnchorLine, sourceAnchorText } = payload
-
-      const cached = editModeSnapshotByNoteIdRef.current.get(noteId)
-      if (cached) {
-        updateEditModeSnapshotCache({
-          ...cached,
-          collapsedSelection: {
-            anchor: cursorPos,
-            focus: cursorPos,
-            start: cursorPos,
-            end: cursorPos,
-            isCollapsed: true,
-          },
-          fullSelection: {
-            anchor: cursorPos,
-            focus: cursorPos,
-            start: cursorPos,
-            end: cursorPos,
-            isCollapsed: true,
-          },
-          viewport: {
-            ...cached.viewport,
-            scrollTopLines: scrollTopPxToLines(scrollTop, editorRuntimeMetrics.lineHeightPx),
-          },
-        })
-      }
-
-      const previousPersisted = lastPersistedEditUiStateRef.current
-      if (
-        previousPersisted &&
-        previousPersisted.noteId === noteId &&
-        previousPersisted.scrollTop === scrollTop &&
-        previousPersisted.cursorPos === cursorPos &&
-        previousPersisted.sourceAnchorLine === sourceAnchorLine &&
-        previousPersisted.sourceAnchorText === sourceAnchorText &&
-        Math.abs(previousPersisted.progressEdit - progressEdit) < 0.0001
-      ) {
-        return
-      }
-
-      lastPersistedEditUiStateRef.current = {
-        noteId,
-        progressEdit,
-        cursorPos,
-        scrollTop,
-        sourceAnchorLine,
-        sourceAnchorText,
-      }
-
-      await notesApi.saveNoteUiState({ id: noteId, payload })
-    }
-
-    if (options?.immediate) {
-      if (editUiStateSaveTimerRef.current !== null) {
-        window.clearTimeout(editUiStateSaveTimerRef.current)
-        editUiStateSaveTimerRef.current = null
-      }
-      void persistNow()
-      return
-    }
-
-    if (editUiStateSaveTimerRef.current !== null) {
-      window.clearTimeout(editUiStateSaveTimerRef.current)
-    }
-
-    editUiStateSaveTimerRef.current = window.setTimeout(() => {
-      editUiStateSaveTimerRef.current = null
-      void persistNow()
-    }, 280)
-  }, [editorRuntimeMetrics.lineHeightPx, readCurrentEditUiPayload, updateEditModeSnapshotCache])
-
-  const persistActiveNoteEditModeStateNow = useCallback(() => {
-    if (!activeNoteId) return
-
-    if (!isPreviewMode) {
-      captureEditModeSnapshotFromEditor(activeNoteId)
-    }
-
-    const payload = readCurrentEditUiPayload() ?? (() => {
-      const cachedSnapshot = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
-      if (!cachedSnapshot) return null
-      return {
-        progressEdit: cachedSnapshot.viewport.scrollTopLines,
-        cursorPos: cachedSnapshot.fullSelection.end,
-        scrollTop: scrollTopLinesToPx(cachedSnapshot.viewport.scrollTopLines, editorRuntimeMetrics.lineHeightPx),
-        sourceAnchorLine: Math.max(0, cachedSnapshot.viewport.scrollTopLines + cachedSnapshot.viewport.topBoundaryLines),
-        sourceAnchorText: null,
-      }
-    })()
-    if (!payload) return
-
-    void persistEditUiPayloadForNote(activeNoteId, payload)
-  }, [
-    activeNoteId,
-    captureEditModeSnapshotFromEditor,
-    editorRuntimeMetrics.lineHeightPx,
-    isPreviewMode,
-    persistEditUiPayloadForNote,
-  ])
-
-  const applyEditRestoreSnapshot = useCallback((snapshot: EditRestoreSnapshot, options?: { restoreFullSelection?: boolean; focusAfterApply?: boolean; onComplete?: () => void }) => {
-    const restoreFullSelection = options?.restoreFullSelection ?? true
-    const focusAfterApply = options?.focusAfterApply ?? false
-    const onComplete = options?.onComplete
-    let cancelled = false
-
-    const applySourceAnchorToEditor = () => {
-      if (typeof snapshot.sourceAnchorLine !== 'number' || !Number.isFinite(snapshot.sourceAnchorLine)) {
-        return
-      }
-
-      const scroller = document.querySelector<HTMLElement>('.editor-stage .thockdown-custom-scrollbar')
-      const editorRoot = document.querySelector<HTMLElement>('.editor-stage .editor-text[contenteditable="true"]')
-      if (!scroller || !editorRoot) {
-        return
-      }
-
-      const paragraphs = Array.from(editorRoot.children).filter((child): child is HTMLElement => child instanceof HTMLElement)
-      if (paragraphs.length === 0) {
-        return
-      }
-
-      const targetIndex = Math.max(0, Math.min(paragraphs.length - 1, Math.round(snapshot.sourceAnchorLine)))
-      const targetParagraph = paragraphs[targetIndex]
-      const scrollerRect = scroller.getBoundingClientRect()
-      const paragraphRect = targetParagraph.getBoundingClientRect()
-      const topBoundaryPx = Math.max(0, Math.round(snapshot.viewport.topBoundaryLines * editorRuntimeMetrics.lineHeightPx))
-      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
-      const targetScrollTop = Math.max(
-        0,
-        Math.min(
-          maxScrollTop,
-          scroller.scrollTop + (paragraphRect.top - scrollerRect.top) - topBoundaryPx,
-        ),
-      )
-
-      scroller.scrollTop = targetScrollTop
-      requestAnimationFrame(() => {
-        if (!cancelled) {
-          scroller.scrollTop = targetScrollTop
-        }
-      })
-    }
-
-    // Restoring from integer line counts is direct and idempotent: no
-    // measurement-dependent clamping happens at apply time (see
-    // EditorViewportLines / clampBoundaryLines), so a single applySnapshot
-    // call is sufficient. The previous implementation needed a multi-frame
-    // reconciliation loop to work around pixel-based restores being
-    // invalidated by container-size races; that is no longer necessary.
-    const applyWhenReady = () => {
-      if (cancelled) return
-      const adapter = adapterRef.current
-      if (!adapter) {
-        requestAnimationFrame(applyWhenReady)
-        return
-      }
-
-      const selection = restoreFullSelection ? snapshot.fullSelection : snapshot.collapsedSelection
-
-      adapter.applySnapshot({
-        selectionScrollBehavior: 'preserve-scroll',
-        selection,
-        viewportLines: snapshot.viewport,
-      })
-
-      requestAnimationFrame(() => {
-        if (cancelled) return
-        applySourceAnchorToEditor()
-      })
-
-      latestViewportRef.current = snapshot.viewport
-      latestEditViewportRef.current = snapshot.viewport
-
-      if (focusAfterApply) {
-        requestAnimationFrame(() => {
-          focusEditorInEditMode({ restoreSelection: false })
-        })
-      }
-
-      if (onComplete) {
-        onComplete()
-      }
-    }
-
-    requestAnimationFrame(applyWhenReady)
-
-    return () => {
-      cancelled = true
-    }
-  }, [editorRuntimeMetrics.lineHeightPx, focusEditorInEditMode])
 
   const updateNoteAssignedId = useCallback((noteId: string, assignedId: string) => {
     setNotes((previous) => previous.map((note) => (note.id === noteId ? { ...note, assignedId } : note)))
@@ -6467,10 +6049,7 @@ await flushPendingSaveNow()
 
     return () => {
       disposed = true
-      if (editUiStateSaveTimerRef.current !== null) {
-        window.clearTimeout(editUiStateSaveTimerRef.current)
-        editUiStateSaveTimerRef.current = null
-      }
+      cancelPendingEditUiStatePersist()
       cancelPendingSave()
       if (appStateSaveTimerRef.current !== null) {
         window.clearTimeout(appStateSaveTimerRef.current)
@@ -7081,25 +6660,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     persistenceReady,
     updateEditModeSnapshotCache,
   ])
-
-  const captureEditModeSnapshotForRenderView = useCallback((noteId: string, activeText: string) => {
-    const snapshot = captureEditModeSnapshotFromEditor(noteId)
-    const viewport = snapshot?.viewport ?? latestEditViewportRef.current ?? latestViewportRef.current
-
-    if (!viewport) {
-      pendingRenderViewSourceAnchorRef.current = null
-      return
-    }
-
-    const anchor = resolveSourceAnchorFromEditState({
-      text: activeText,
-      lineHeightPx: editorRuntimeMetrics.lineHeightPx,
-      telemetry: latestEditViewportTelemetryRef.current ?? undefined,
-      viewport,
-    })
-
-    pendingRenderViewSourceAnchorRef.current = anchor
-  }, [captureEditModeSnapshotFromEditor, editorRuntimeMetrics.lineHeightPx])
 
   const toggleRenderViewMode = useCallback(async () => {
     if (isPreviewMode && activeNoteId) {
