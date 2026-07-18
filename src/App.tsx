@@ -2514,6 +2514,23 @@ function App() {
   const toggleSidebarVisible = useCallback(() => {
     setIsSidebarVisible((previous) => {
       const next = !previous
+      // If we're hiding the sidebar while the options panel is selected,
+      // restore the last non-options sidebar mode so the gear icon isn't
+      // left highlighted when the sidebar is not visible.
+        if (!next && sidebarMode === 'options') {
+          // Defer restoring the previous menu so we don't reference
+          // `runSidebarMenuTransition` during module initialization
+          // (avoids TDZ errors). The function will exist by the time
+          // this callback runs.
+          setTimeout(() => {
+            try {
+              // prefer the remembered previous mode, fallback to 'date'
+              runSidebarMenuTransition(lastSidebarModeBeforeOptions ?? 'date')
+            } catch (e) {
+              // ignore
+            }
+          }, 0)
+        }
       // Notify main process so it can adjust native window constraints immediately
       try {
         window.windowControls?.setSidebarVisible?.(next)
@@ -2533,7 +2550,7 @@ function App() {
 
       return next
     })
-  }, [activeNoteId, persistenceReady])
+  }, [activeNoteId, persistenceReady, sidebarMode])
   const [renderScrollDynamic, setRenderScrollDynamic] = useState(() => getRenderScrollDynamic())
   const [renderScrollResponsiveness, setRenderScrollResponsiveness] = useState(() => getRenderScrollResponsiveness())
   const [renderScrollTotalTimeSec, setRenderScrollTotalTimeSec] = useState(() => getRenderScrollTotalTimeSec())
@@ -4275,7 +4292,7 @@ function App() {
     return false
   }, [activeNoteId])
 
-  const runSidebarMenuTransition = useCallback((nextMode: SidebarMode) => {
+  function runSidebarMenuTransition(nextMode: SidebarMode) {
     if (nextMode === sidebarMode) {
       return
     }
@@ -4301,19 +4318,31 @@ function App() {
     requestAnimationFrame(() => {
       focusActiveNoteInSidebarMode(nextMode)
     })
-  }, [
-    captureSidebarModeState,
-    focusActiveNoteInSidebarMode,
-    persistMenuStateOnce,
-    restoreSidebarModeStateFrom,
-    sidebarMode,
-    sidebarViewStateByMode,
-  ])
+  }
 
   const toggleSidebarOptionsMenu = useCallback(() => {
     if (sidebarMode === 'options') {
       runSidebarMenuTransition(lastSidebarModeBeforeOptions)
       return
+    }
+
+    // Ensure the sidebar is visible when opening the options panel so the
+    // options content is accessible.
+    setIsSidebarVisible(true)
+    try {
+      window.windowControls?.setSidebarVisible?.(true)
+    } catch (e) {
+      // ignore
+    }
+
+    // Persist the menu state with sidebar visible.
+    if (window.thockdownState && persistenceReady) {
+      const snapshot = buildMenuStateSnapshot({ isSidebarVisible: true })
+      void window.thockdownState.saveAppState({
+        selectedNoteId: activeNoteId,
+        viewport: latestViewportRef.current ?? undefined,
+        menu: snapshot,
+      })
     }
 
     setLastSidebarModeBeforeOptions(sidebarMode)
