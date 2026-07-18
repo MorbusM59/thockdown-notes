@@ -74,6 +74,7 @@ import { useDocumentFind } from './find/useDocumentFind'
 import { useSnapshotFreeze } from './editorSection/useSnapshotFreeze'
 import { useActiveNoteId } from './editorSection/useActiveNoteId'
 import { useDisplayedNoteText } from './editorSection/useDisplayedNoteText'
+import { useDisplayedNoteSelection } from './editorSection/useDisplayedNoteSelection'
 import { usePreviewedSnapshot } from './editorSection/usePreviewedSnapshot'
 import { useNoteSaveQueue } from './editorSection/useNoteSaveQueue'
 import {
@@ -2492,13 +2493,7 @@ function App() {
   const { previewedSnapshotId, setPreviewedSnapshotId } = usePreviewedSnapshot(DEFAULT_EDITOR_SECTION_ID)
   const activeNoteExternalPathRef = useRef<string | null>(null)
   const [currentExternalNoteHash, setCurrentExternalNoteHash] = useState<string | null>(null)
-  const [editorSelection, setEditorSelection] = useState<EditorSelectionState>({
-    anchor: 0,
-    focus: 0,
-    start: 0,
-    end: 0,
-    isCollapsed: true,
-  })
+  const { editorSelection, setEditorSelection, latestEditorSelectionRef } = useDisplayedNoteSelection(DEFAULT_EDITOR_SECTION_ID)
   const [persistenceReady, setPersistenceReady] = useState(false)
   const [appShellWidthPx, setAppShellWidthPx] = useState(APP_SHELL_MIN_WIDTH_PX)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
@@ -2603,13 +2598,6 @@ function App() {
   const colorArmTimerRef = useRef<number | null>(null)
   const pendingUpdateDebounceRef = useRef<number | null>(null)
   const lastHeadlineLevelRef = useRef<1 | 2 | 3 | 4 | 5 | 6>(1)
-  const latestEditorSelectionRef = useRef<EditorSelectionState>({
-    anchor: 0,
-    focus: 0,
-    start: 0,
-    end: 0,
-    isCollapsed: true,
-  })
   type ConsoleMethodName = 'log' | 'info' | 'warn' | 'error' | 'debug'
   const appStateSaveTimerRef = useRef<number | null>(null)
   const noteTransitionLockRef = useRef(false)
