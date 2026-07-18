@@ -74,6 +74,7 @@ import { useDocumentFind } from './find/useDocumentFind'
 import { useSnapshotFreeze } from './editorSection/useSnapshotFreeze'
 import { useActiveNoteId } from './editorSection/useActiveNoteId'
 import { useDisplayedNoteText } from './editorSection/useDisplayedNoteText'
+import { usePreviewedSnapshot } from './editorSection/usePreviewedSnapshot'
 import {
   indentSelectionByStep,
   resolveMarkdownSelectionContext,
@@ -2506,7 +2507,7 @@ function App() {
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
   // null = viewing/editing the live note; a snapshot id = read-only preview
   // of that point in the note's history (see SnapshotTimelineSlider).
-  const [previewedSnapshotId, setPreviewedSnapshotId] = useState<number | null>(null)
+  const { previewedSnapshotId, setPreviewedSnapshotId } = usePreviewedSnapshot(DEFAULT_EDITOR_SECTION_ID)
   const activeNoteExternalPathRef = useRef<string | null>(null)
   const [currentExternalNoteHash, setCurrentExternalNoteHash] = useState<string | null>(null)
   const [editorSelection, setEditorSelection] = useState<EditorSelectionState>({
