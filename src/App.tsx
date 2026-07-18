@@ -4405,9 +4405,12 @@ function App() {
   useEffect(() => {
     const unsubscribe = window.windowControls?.onCollapsedStateChange?.((isCollapsed) => {
       setWindowIsCollapsed(isCollapsed)
+      if (isCollapsed && sidebarMode === 'options') {
+        runSidebarMenuTransition(lastSidebarModeBeforeOptions)
+      }
     })
     return () => unsubscribe?.()
-  }, [])
+  }, [runSidebarMenuTransition, sidebarMode, lastSidebarModeBeforeOptions])
 
   useEffect(() => {
     window.windowControls?.reportBackgroundColor?.(rootBackgroundColorHex)
@@ -12288,6 +12291,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 activeSlots={musicActiveSlots}
                 onActiveSlotsChange={setMusicActiveSlots}
                 isOptionsOpen={sidebarMode === 'options'}
+                isMiniMode={windowIsCollapsed}
                 onOpenMusicOptions={() => {
                   if (sidebarMode !== 'options') setMusicAccordionNonce((n) => n + 1)
                   toggleSidebarOptionsMenu()

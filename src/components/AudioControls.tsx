@@ -28,6 +28,8 @@ export interface AudioControlsProps {
   onAdjustMusicReverb?: (delta: number) => void
   /** Called when mouse wheel with Ctrl should nudge music reverb room. */
   onAdjustMusicRoom?: (delta: number) => void
+  /** When true, audio options clicks should be disabled (e.g. mini mode). */
+  isMiniMode?: boolean
 }
 
 export const AudioControls = memo(function AudioControls({
@@ -41,6 +43,7 @@ export const AudioControls = memo(function AudioControls({
   onAdjustMusicVolume,
   onAdjustMusicReverb,
   onAdjustMusicRoom,
+  isMiniMode,
 }: AudioControlsProps) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentSong, setCurrentSong] = useState<MusicSongEntry | null>(null)
@@ -457,10 +460,10 @@ export const AudioControls = memo(function AudioControls({
         <button
           type="button"
           className={`audio-ctrl-btn${isOptionsOpen ? ' is-active' : ''}`}
-          title={isOptionsOpen ? 'Close options' : 'Music options'}
+          title={isOptionsOpen ? 'Close options' : isMiniMode ? 'Music options (disabled in mini mode)' : 'Music options'}
           aria-label={isOptionsOpen ? 'Close options panel' : 'Open music options'}
           aria-pressed={isOptionsOpen}
-          onClick={onOpenMusicOptions}
+          onClick={() => { if (!isMiniMode) onOpenMusicOptions() }}
           onWheel={handleOptionsWheel}
         >
           <span className="fa-solid fa-headphones" aria-hidden="true" />
