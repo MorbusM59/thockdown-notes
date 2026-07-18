@@ -2510,6 +2510,30 @@ function App() {
   })
   const [persistenceReady, setPersistenceReady] = useState(false)
   const [appShellWidthPx, setAppShellWidthPx] = useState(APP_SHELL_MIN_WIDTH_PX)
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true)
+  const toggleSidebarVisible = useCallback(() => {
+    setIsSidebarVisible((previous) => {
+      const next = !previous
+      // Notify main process so it can adjust native window constraints immediately
+      try {
+        window.windowControls?.setSidebarVisible?.(next)
+      } catch (e) {
+        // ignore
+      }
+
+      // Persist app state menu snapshot with updated sidebar visibility
+      if (window.thockdownState && persistenceReady) {
+        const snapshot = buildMenuStateSnapshot({ isSidebarVisible: next })
+        void window.thockdownState.saveAppState({
+          selectedNoteId: activeNoteId,
+          viewport: latestViewportRef.current ?? undefined,
+          menu: snapshot,
+        })
+      }
+
+      return next
+    })
+  }, [activeNoteId, persistenceReady])
   const [renderScrollDynamic, setRenderScrollDynamic] = useState(() => getRenderScrollDynamic())
   const [renderScrollResponsiveness, setRenderScrollResponsiveness] = useState(() => getRenderScrollResponsiveness())
   const [renderScrollTotalTimeSec, setRenderScrollTotalTimeSec] = useState(() => getRenderScrollTotalTimeSec())
@@ -3929,6 +3953,7 @@ function App() {
   const buildMenuStateSnapshot = useCallback((overrides?: {
     sidebarMode?: SidebarMode
     sidebarViewStateByMode?: SidebarViewStateByMode
+    isSidebarVisible?: boolean
   }): PersistedMenuState => {
     const effectiveViewStateByMode = overrides?.sidebarViewStateByMode ?? sidebarViewStateByMode
 
@@ -4020,6 +4045,7 @@ function App() {
       spellCheckEditEnabled,
       spellCheckRenderEnabled,
       tabBarMode: tabBarModeRef.current,
+      isSidebarVisible: overrides?.isSidebarVisible ?? isSidebarVisible,
     }
   }, [
     archiveCollapsedPrimary,
@@ -4067,6 +4093,7 @@ function App() {
     selectedYears,
     sidebarMode,
     sidebarViewStateByMode,
+    isSidebarVisible,
     viewFontSize,
     viewSpacing,
     viewStyle,
@@ -4450,14 +4477,14 @@ function App() {
   const layout = useMemo(() => {
     const toolbarWidthPx = Math.max(
       TOOLBAR_MIN_WIDTH_PX,
-      appShellWidthPx - SIDEBAR_WIDTH_PX - GRID_DIVIDER_PX - WINDOW_CONTROLS_WIDTH_PX,
+      appShellWidthPx - (isSidebarVisible ? (SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX) : 0) - WINDOW_CONTROLS_WIDTH_PX,
     )
 
     return {
       toolbarWidthPx,
-      gridTemplateColumns: `${SIDEBAR_WIDTH_PX}px ${GRID_DIVIDER_PX}px ${Math.round(toolbarWidthPx)}px ${WINDOW_CONTROLS_WIDTH_PX}px`,
+      gridTemplateColumns: `${isSidebarVisible ? `${SIDEBAR_WIDTH_PX}px ${GRID_DIVIDER_PX}px` : '0px 0px'} ${Math.round(toolbarWidthPx)}px ${WINDOW_CONTROLS_WIDTH_PX}px`,
     }
-  }, [appShellWidthPx])
+  }, [appShellWidthPx, isSidebarVisible])
 
   const appShellStyle = useMemo(() => {
     const borderRadiusRegularPxCss = `${borderRadiusRegularPx}px`
@@ -6567,6 +6594,9 @@ await flushPendingSaveNow()
             setSpellCheckRenderEnabled(appState.menu.spellCheckRenderEnabled ?? false)
             setRestoredTabBarMode(appState.menu.tabBarMode ?? 'tags')
 
+            // Restore persisted sidebar visibility
+            setIsSidebarVisible(appState.menu.isSidebarVisible ?? true)
+
             setCurrentPage(loadedSidebarViewState[appState.menu.sidebarMode].page)
             setCategoryCollapsedPrimary(loadedSidebarViewState.category.collapsedPrimary)
             setCategoryCollapsedSecondary(loadedSidebarViewState.category.collapsedSecondary)
@@ -7635,8 +7665,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     const shellElement = appShellRef.current
     if (!shellElement) return
 
+    const effectiveMin = isSidebarVisible ? APP_SHELL_MIN_WIDTH_PX : (APP_SHELL_MIN_WIDTH_PX - (SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX))
+
     const updateShellWidth = () => {
-      setAppShellWidthPx(Math.max(APP_SHELL_MIN_WIDTH_PX, Math.round(shellElement.clientWidth)))
+      setAppShellWidthPx(Math.max(effectiveMin, Math.round(shellElement.clientWidth)))
     }
 
     updateShellWidth()
@@ -7644,12 +7676,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0]
       if (!entry) return
-      setAppShellWidthPx(Math.max(APP_SHELL_MIN_WIDTH_PX, Math.round(entry.contentRect.width)))
+      setAppShellWidthPx(Math.max(effectiveMin, Math.round(entry.contentRect.width)))
     })
 
     observer.observe(shellElement)
     return () => observer.disconnect()
-  }, [])
+  }, [isSidebarVisible])
 
   const sortedNotes = useMemo(() => {
     return [...notes].sort((a, b) => b.updatedAtMs - a.updatedAtMs)
@@ -11838,6 +11870,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             ref={appShellRef}
             style={appShellStyle}
           >
+            {isSidebarVisible ? (
             <aside className="notes-sidebar" style={{ gridArea: 'sidebar' }}>
               <div className="search-box" aria-label="Search panel">
                 <div className="search-input-shell">
@@ -12162,10 +12195,13 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
                 </div>
               ) : null}
             </aside>
+            ) : null}
+
+            {isSidebarVisible ? (
             <div
               className="grid-divider divider-sidebar"
               style={{ gridArea: 'd-sidebar' }}
-            />
+            />) : null}
 
             <section
               className={`window-controls-grid${windowIsCollapsed ? ' is-collapsed' : ''}`}
@@ -12408,6 +12444,9 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
               <button
                 type="button"
                 className="btn-icon sidebar-toggle"
+                title={isSidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
+                aria-label={isSidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
+                onClick={toggleSidebarVisible}
               >
                 <span className="fa-solid fa-bars" aria-hidden="true" />
               </button>

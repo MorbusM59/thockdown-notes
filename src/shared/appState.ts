@@ -108,6 +108,8 @@ export interface PersistedMenuState {
   spellCheckRenderEnabled?: boolean;
   /** Whether the tab bar shows tag management or pinned quick-access note tabs. */
   tabBarMode?: 'tags' | 'tabs';
+  /** Whether the sidebar is visible (not part of layout widths). */
+  isSidebarVisible?: boolean;
 }
 
 // Persisted boundary/scroll position as integer line counts. See

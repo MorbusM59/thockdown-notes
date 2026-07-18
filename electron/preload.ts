@@ -96,6 +96,7 @@ const windowControls = {
     ipcRenderer.invoke('window-control:toggle-utility-collapse', size),
   reportBackgroundColor: (hex: string) =>
     ipcRenderer.send('window-control:report-background-color', hex),
+  setSidebarVisible: (visible: boolean) => ipcRenderer.send('window-control:sidebar-visibility', visible),
   onMaximizeStateChange: (callback: (isMaximized: boolean) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, value: boolean) => {
       callback(value)

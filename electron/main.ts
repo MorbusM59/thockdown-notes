@@ -105,6 +105,9 @@ const UTILITY_COLLAPSE_MIN_WIDTH_PX = 96;
 const UTILITY_COLLAPSE_MIN_HEIGHT_PX = 52;
 const APP_WINDOW_MIN_WIDTH_PX = 873;
 const APP_WINDOW_MIN_HEIGHT_PX = 525;
+// Mirror renderer constants for sidebar sizing so main can compute effective minima
+const SIDEBAR_WIDTH_PX = 288;
+const GRID_DIVIDER_PX = 8;
 
 // Matches the renderer's DEFAULT_BASE_PALETTE_COLOR (src/App.tsx). Used as the
 // BrowserWindow's native backing-store fill until the renderer reports the
@@ -437,6 +440,28 @@ function registerIpcHandlers() {
     currentRootBackgroundColorHex = hex
     if (win && !win.isDestroyed()) {
       win.setBackgroundColor(hex)
+    }
+  })
+
+  // Adjust minimum size / bounds when the renderer reports the sidebar visibility
+  ipcMain.on('window-control:sidebar-visibility', (_event, visible: unknown) => {
+    try {
+      const isVisible = Boolean(visible)
+      if (!win || win.isDestroyed()) return
+      const minWidth = isVisible ? APP_WINDOW_MIN_WIDTH_PX : Math.max(200, APP_WINDOW_MIN_WIDTH_PX - (SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX))
+      win.setMinimumSize(minWidth, APP_WINDOW_MIN_HEIGHT_PX)
+
+      // If enabling the sidebar and the current width is smaller than the new minimum,
+      // expand the window so the toolbar and other content meet the min width.
+      if (isVisible) {
+        const bounds = win.getBounds()
+        if (bounds.width < minWidth) {
+          const nextX = bounds.x - (minWidth - bounds.width)
+          win.setBounds({ x: Math.max(0, nextX), y: bounds.y, width: minWidth, height: bounds.height })
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to apply sidebar-visibility window constraints', error)
     }
   })
 
@@ -895,19 +920,22 @@ async function createWindow() {
   if (!stateService) {
     stateService = new StateService(resolveDataRoot());
   }
-
   const savedWindowState = await stateService.loadWindowState();
+  // Load persisted app state so we can set an appropriate initial minimum width
+  const savedAppState = await stateService.loadAppState().catch(() => ({} as any));
+  const initialSidebarVisible = savedAppState?.menu?.isSidebarVisible ?? true;
+  const initialMinWidth = initialSidebarVisible ? APP_WINDOW_MIN_WIDTH_PX : Math.max(200, APP_WINDOW_MIN_WIDTH_PX - (SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX));
   windowIsUtilityCollapsed = false;
   utilityCollapseRestoreState = null;
   alwaysOnTopBeforeUtilityCollapse = null;
 
-win = new BrowserWindow({
+  win = new BrowserWindow({
   icon: resolveWindowIconPath(),
   width: savedWindowState.width,
   height: savedWindowState.height,
   x: savedWindowState.x,
   y: savedWindowState.y,
-  minWidth: APP_WINDOW_MIN_WIDTH_PX,
+  minWidth: initialMinWidth,
   minHeight: APP_WINDOW_MIN_HEIGHT_PX,
   frame: false,
   titleBarStyle: 'hidden',

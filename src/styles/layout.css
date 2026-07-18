@@ -14,8 +14,6 @@
     'sidebar d-sidebar toolbar  window_control'
     'sidebar d-sidebar tabbar   tabbar'
     'sidebar d-sidebar viewer   viewer';
-  min-width:  840px;
-  min-height: 420px;
 }
 
 .tabbar-grid {
