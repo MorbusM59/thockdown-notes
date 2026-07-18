@@ -75,6 +75,7 @@ import { useSnapshotFreeze } from './editorSection/useSnapshotFreeze'
 import { useActiveNoteId } from './editorSection/useActiveNoteId'
 import { useDisplayedNoteText } from './editorSection/useDisplayedNoteText'
 import { useDisplayedNoteSelection } from './editorSection/useDisplayedNoteSelection'
+import { useDisplayedNoteRenderMode } from './editorSection/useDisplayedNoteRenderMode'
 import { usePreviewedSnapshot } from './editorSection/usePreviewedSnapshot'
 import { useNoteSaveQueue } from './editorSection/useNoteSaveQueue'
 import {
@@ -2435,7 +2436,7 @@ function App() {
   const documentFindCaseSensitiveRef = useRef(false)
   const [restoredDocumentFindCaseSensitive, setRestoredDocumentFindCaseSensitive] = useState<boolean | null>(null)
   // Terminology convention: false = edit mode, true = render view.
-  const [isPreviewMode, setIsPreviewMode] = useState(false)
+  const { isPreviewMode, setIsPreviewMode } = useDisplayedNoteRenderMode(DEFAULT_EDITOR_SECTION_ID)
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [isExportingMd, setIsExportingMd] = useState(false)
   const [exportFolder, setExportFolder] = useState<string | null>(null)
