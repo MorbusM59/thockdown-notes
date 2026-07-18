@@ -167,7 +167,8 @@
 }
 
 /* Tag bar / tab bar mode toggle */
-.tabbar-mode-toggle {
+.tabbar-mode-toggle,
+.sidebar-toggle {
   display: block;
   height:     100%;
   aspect-ratio: 1;

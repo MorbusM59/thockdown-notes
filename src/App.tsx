@@ -12407,6 +12407,13 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             <section className="tabbar-grid" style={{ gridArea: 'tabbar' }} aria-label="Tab bar">
               <button
                 type="button"
+                className="btn-icon sidebar-toggle"
+              >
+                <span className="fa-solid fa-bars" aria-hidden="true" />
+              </button>
+
+              <button
+                type="button"
                 className="btn-icon tabbar-mode-toggle"
                 title={tabBarMode === 'tags' ? 'Switch to tab bar' : 'Switch to tag bar'}
                 aria-label={tabBarMode === 'tags' ? 'Switch to tab bar' : 'Switch to tag bar'}
