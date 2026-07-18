@@ -90,7 +90,7 @@
 
 @container markdownToolbar (width < 124px) {
   .toolbar-container .markdown-toolbar {
-    opacity: 0;
+    display: none;
   }
 }
 
