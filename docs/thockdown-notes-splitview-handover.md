@@ -1,9 +1,16 @@
 # Split-View Editor Sections — Handover
 
-Written for a fresh Claude Code conversation picking this up mid-stream. Not part of the
-project's own `docs/V*` ledger (that's Joe's own versioned sequence) — this is scoped
-specifically to the split-view initiative and can be deleted once that work is done and
-folded into whatever the project's normal docs become.
+Written for a fresh Claude Code conversation picking this up mid-stream, ideally with direct
+workspace file access (Claude Desktop's Code tab / a workspace folder attached), not the
+patch-file workflow this was built with. Not part of the project's own `docs/V*` ledger
+(that's Joe's own versioned sequence) — this is scoped specifically to the split-view
+initiative and can be deleted once that work is done and folded into whatever the project's
+normal docs become.
+
+**This supersedes an earlier version of this file** — the extraction is now substantially
+further along (the entire editor mount landed since it was first written), and one piece
+previously described as an open design question (same-note-in-two-sections) is resolved and
+shipped, not open.
 
 ## The goal
 
@@ -20,221 +27,248 @@ currently living as one-off global state in `App.tsx` into a parameterized custo
 (same shape as the codebase's own pre-existing `useNoteSnapshots(noteId, liveText, ...)`),
 verify each extraction is *behavior-identical* to the single-pane app before moving to the
 next concern, and only once every concern is a clean hook do we build the actual multi-pane
-UI on top. `App.tsx` was ~13,100 lines / 627 hooks when this started; it's meaningfully
-smaller now and should keep shrinking.
+UI on top.
 
-Every patch so far has been small, independently reviewable, and verified three ways before
-being handed over: `npx tsc --noEmit` clean, `npm run test -- --run` (same 5 pre-existing
+`App.tsx` was ~13,100 lines when this started. It's ~11,244 now. The extraction is
+functionally **complete** — `App.tsx` no longer owns any editor-mount internals directly,
+only orchestration that calls into the assembled hooks. What's left is rewiring three
+already-extracted hooks to actually *read from* the assembled state (currently mechanical,
+not architectural — see "What's left" below), then the split-view UI itself.
+
+Every patch has been small, independently reviewable, and verified three ways before being
+handed over: `npx tsc --noEmit` clean, `npm run test -- --run` (same 5 pre-existing
 failures every time, see below — never introduce new ones), and applied via `git apply
 --check` against a **fresh clone of the actual last-pushed commit**, not just the working
-tree. Keep doing this even with direct file access now — it's what's made ~10 sequential
-patches land without a single regression.
+tree. Keep doing this with direct file access too — point it at the real repo instead of a
+scratch clone, but keep the same three checks before calling anything done.
 
 **Pre-existing test baseline** (not yours to fix, just don't make it worse):
 `src/plugins/ContractBridgePlugin.test.ts` and `src/editor/SnapshotTimelineCurve.test.ts`
-have 5 failing assertions between them, present before any of this work started. Confirm
-this is still the *only* thing failing after any change.
+have 5 failing assertions between them, present before any of this work started.
 
-**Lint**: the whole repo has heavy pre-existing lint debt (`npm run lint` already fails
-project-wide with `--max-warnings 0`). Don't use whole-repo lint as a signal. Do run
-`npx eslint <files you touched>` directly — every new file added so far lints clean, and it
-should stay that way.
+**Lint**: whole-repo lint has heavy pre-existing debt, not a useful signal. Run `npx eslint
+<files you touched>` directly instead. New files created during this effort are lint-clean
+except for `useEditorSectionMount.ts`, which has 13 pre-existing "missing dependency"
+warnings — every one individually traced back to the *original* code before extraction and
+confirmed pre-existing, not introduced. Don't "fix" them reflexively; several are refs
+(correctly exempt from deps by React convention) and the rest (`notes`, several state
+setters, a couple of stable-identity callbacks) were already omitted in the source this was
+extracted from. Changing them now would be a real behavior question, not a lint cleanup.
 
 ## The core extraction trick (why every patch has been low-risk)
 
 When state moves from a raw `useState`/`useRef` in `App.tsx` into a hook, **the hook call is
-destructured into locals with the exact same names as before** (`const { activeNoteId,
-setActiveNoteId } = useActiveNoteId(sectionId)` instead of `const [activeNoteId,
-setActiveNoteId] = useState(...)`). Every downstream reference — JSX, other functions,
-dependency arrays — needs zero changes, because the identifier resolves the same way. This
-is *the* reason 40-write-site relocations (e.g. `activeNoteText`) have shipped as ~80-line
-diffs instead of thousand-line rewrites. Keep using it.
+destructured into locals with the exact same names as before**. Every downstream reference
+— JSX, other functions, dependency arrays — needs zero changes, because the identifier
+resolves the same way regardless of which file actually declares it. This is *the* reason
+even a ~1,000-line relocation (the final editor-mount patch) shipped as a diff you could
+actually review, instead of a rewrite.
 
-**One recurring gotcha this produces**: `buildMenuStateSnapshot` (the persisted-app-state
-snapshot builder) is defined early in `App.tsx`, before most of the hooks it wants values
-from even exist yet (those hooks need `activateNote`/`flushPendingSaveNow`/etc. as
-dependencies, which are defined later). Solution used twice already (`tabBarMode`,
-`isDocumentFindCaseSensitive`): keep a `useRef` mirror updated by a small `useEffect` right
-after the hook call, have `buildMenuStateSnapshot` read the *ref* instead of closing over
-the hook's returned value, and drop that value from its dependency array (refs don't need
-to be deps). Restoring a persisted value into a hook that's declared later works the
-opposite way — a bridge `useState<T | null>(null)` set once during bootstrap, passed into
-the hook as `initialX`, applied via a one-shot internal `useEffect` keyed on that prop.
-Expect this pattern again for `previewedSnapshotId` and anything else already in
-`PersistedMenuState`.
+**Gotcha #1 — the persisted-state snapshot ordering conflict.** `buildMenuStateSnapshot`
+(the persisted-app-state builder) is defined early in `App.tsx`, before several hooks it
+wants values from even exist yet. Fix used repeatedly: keep a `useRef` mirror updated by a
+plain assignment right after the hook call, have the snapshot builder read the *ref*
+instead of closing over the hook's value, and drop that value from the snapshot builder's
+own dependency array.
 
-**Another gotcha, already resolved, don't rediscover it**: in this project's `@types/react`
-(18.2.64), `useRef<T | null>(null)` resolves to `MutableRefObject<T | null>`, not
-`RefObject<T | null>`. If a hook's return-type interface declares a ref field as
-`RefObject<HTMLDivElement | null>` explicitly, passing it to a JSX `ref=` prop fails to
-typecheck (`RefObject<T>` already bakes in `| null` per its own definition — `readonly
-current: T | null` — so the extra `| null` produces a structurally-different, rejected
-type). Fix: declare it as plain `RefObject<HTMLDivElement>` (no explicit `| null`).
+**Gotcha #2 — the reverse ordering conflict, discovered late and repeatedly during the final
+editor-mount extraction.** Several things the mount hook needs as *input* are themselves
+defined in `App.tsx` *after* where the hook has to be called (because `activateNote`, called
+much earlier, needs the hook's *output*). Three different fixes were used depending on the
+actual shape of the problem — **pick the cheapest one that actually fits, don't reach for
+ref-indirection by default**:
+- If the dependency is itself independently relocatable (nothing between its old and new
+  position needs it) — **just move it earlier.** Done for `useNoteSaveQueue` when `queueSave`
+  turned out to be needed before its original position. This is the best outcome when it's
+  available: zero indirection, no proxy objects, done.
+- If the dependency is a plain reactive value used inside another hook's own effect
+  dependency array (so it *must* trigger re-runs correctly) — **derive it internally**
+  instead of injecting it, if the ingredients to derive it are already available early.
+  Done for `isPreviewingSnapshot`: rather than inject the late-computed boolean, the hook
+  derives it from `previewedSnapshotId !== null`, which it already has. Documented inline
+  why this is equivalent to the fuller version in every real code path.
+- Only if neither of those fits — **stable ref-proxy**: a `useRef` created early holding a
+  no-op default, a trivial `useCallback` wrapping `.current(...)` passed into the hook as
+  the "stable" value, and a **plain assignment** (not a `useEffect`) placed immediately after
+  the real function's own definition, wherever that ends up. Used for `queueAppStateSave`,
+  `updateActiveNoteTitlePreview`, `writeDebugEntry`, `activeNoteHasDebugTag`, and four
+  markdown-formatting functions shared with toolbar buttons. Note this is arguably *more*
+  correct than the original code for the cases where the original had these missing from a
+  `useMemo`/`useCallback`'s own dependency array (see the lint note above) — a ref proxy is
+  never stale, an under-specified dependency array can be.
+
+**Gotcha #3 — `RefObject` vs `MutableRefObject` typing.** In this project's `@types/react`
+(18.2.64), `useRef<T | null>(null)` resolves to `MutableRefObject<T | null>`. If a hook's
+return-type interface declares a ref field as `RefObject<HTMLDivElement | null>` explicitly,
+passing it to a JSX `ref=` prop fails to typecheck. Fix: declare it as plain
+`RefObject<HTMLDivElement>` (no explicit `| null` — `RefObject<T>` already bakes that in).
 
 ## What's landed (chronological, all pushed to `main`)
 
-1. **`editor_sections` + `note_tabs.sectionId` schema** — `electron/databaseService.ts`,
-   `src/shared/sections.ts` (new). One seeded default section (`DEFAULT_EDITOR_SECTION_ID =
-   'default'`, position 0) on fresh install. `note_tabs` primary key is now
-   `(sectionId, noteId)`. Blank-slate, no migration path — pre-beta, explicitly Joe's call.
-2. **`measly` → `thockdown` rebrand** — 340 replacements, 21 files, including a real file
-   rename (`MeaslyTokenNode.ts` → `ThockdownTokenNode.ts`) and the `window.measlyNotes` etc.
-   bridge names. Also renamed `internalId` → `assignedId` on `NoteSummary` (Joe's own
-   follow-up commit, not mine — mentioned here because it caused a real regression once,
-   see below).
-3. **`src/tabBar/useSectionTabs.ts`** — tag bar (add/remove/rename/reorder/`$id` assignment)
-   + pinned/temp tab bar, fully extracted. Pulled `isArchivedNote`/`isDeletedNote` into
-   `src/shared/noteLifecycle.ts` and tag helpers into `src/shared/tags.ts` since both were
-   used well beyond just the tab bar.
-4. **`src/find/useDocumentFind.ts`** — query state, case-sensitivity, hit computation.
-   Deliberately does *not* include jump-to-hit or replace-in-place — those reach into
-   `adapterRef`/`previewScrollRef` directly and belong with the not-yet-extracted editor
-   mount. `App.tsx` still owns `handleJumpToDocumentFindHit` /
-   `jumpToPreviewDocumentFindHit` / `replaceDocumentFindHit` /
-   `replaceAllDocumentFindHits`, reading `documentFindHits`/`documentFindDirective` back out
-   of the hook exactly like before.
-5. **`activeSectionId` infrastructure** (inline in `App.tsx`, not its own file yet) —
-   `markSectionActive(sectionId)`, wired via `onFocusCapture`/`onMouseDownCapture`/
-   `onKeyDownCapture` on `.editor-viewer-frame`. Correct today, inert today (only one
-   section exists so it can never change value) — real the moment a second section exists
-   to take focus away. This is the switch `useSnapshotFreeze` reads.
-6. **`src/editorSection/useSnapshotFreeze.ts`** — the freeze/thaw mechanism. Read the design
-   section below before touching this; the semantics took several turns of back-and-forth
-   with Joe to nail down and are *not* the obvious/naive design.
-7. **`src/editorSection/useActiveNoteId.ts`** — first slice of moving the note-identity state
-   itself. Just `{ activeNoteId, setActiveNoteId }`, nothing else.
-8. **`src/editorSection/useDisplayedNoteText.ts`** — second slice: `activeNoteText`,
-   `editorTextVersion`, `latestEditorTextRef`. Still ~40 write sites across `App.tsx` all
-   calling the same setter names as before, unchanged.
+1. **`editor_sections` + `note_tabs.sectionId` schema.** One seeded default section
+   (`DEFAULT_EDITOR_SECTION_ID = 'default'`, position 0). `note_tabs` primary key is
+   `(sectionId, noteId)`. Blank-slate, no migration — pre-beta, Joe's explicit call.
+2. **`measly` → `thockdown` rebrand.**
+3. **`src/tabBar/useSectionTabs.ts`** — tag bar + pinned/temp tab bar.
+4. **`src/find/useDocumentFind.ts`** — query state, case-sensitivity, hit computation. Does
+   *not* include jump-to-hit/replace-in-place — those needed the not-yet-extracted editor
+   mount at the time and still live in `App.tsx`, reading `documentFindHits` back out.
+5. **`activeSectionId` infrastructure** (inline in `App.tsx`) — `markSectionActive(sectionId)`,
+   wired via focus/mousedown/keydown capture on `.editor-viewer-frame`.
+6. **`src/editorSection/useSnapshotFreeze.ts`** — the freeze/thaw mechanism. **This is fully
+   shipped, correct, and no longer an open design question** — see the dedicated section
+   below, since a later turn nearly re-litigated it as still-open by mistake.
+7. **`src/editorSection/useActiveNoteId.ts`**, **`useDisplayedNoteText.ts`**,
+   **`usePreviewedSnapshot.ts`**, **`useDisplayedNoteSelection.ts`**,
+   **`useDisplayedNoteRenderMode.ts`** — sequential slices moving `activeNoteId`,
+   `activeNoteText`/`editorTextVersion`/`latestEditorTextRef`, `previewedSnapshotId`,
+   `editorSelection`/`latestEditorSelectionRef`, and `isPreviewMode` into section-scoped
+   hooks. Each shipped as its own tiny, independently-verified patch.
+8. **`src/editorSection/useNoteSaveQueue.ts`** — `queueSave`/`flushPendingSaveNow` and a
+   `cancelPendingSave()` (mirrors the pattern used for `cancelPendingEditUiStatePersist`
+   later). Also relocated `isExternalNote`/`isSameNoteSummary` to `shared/noteLifecycle.ts`
+   during this slice, since both were used well beyond just this concern.
+9. **A real bug fix, unrelated to the extraction**: `handleNavigateSnapshot` never captured
+   the live caret/scroll position before switching into a Time Machine preview, so "return
+   to present" restored a stale position from whatever *other* event last happened to touch
+   the cache. Fixed by capturing synchronously before the switch, only when actually leaving
+   live editing (not when scrubbing between two historical snapshots).
+10. **`src/editor/EditRestoreMath.ts`** — relocated seven pure functions and their types
+    (`EditRestoreSnapshot`, `EditViewportTelemetry`, `resolveSourceAnchorFromEditState`,
+    `buildEditRestoreSnapshotFromUiState`, etc.) out of `App.tsx` *before* the stateful
+    editor-mount work, since both the mount hook and code staying in `App.tsx` needed them
+    and duplicating ~200 lines of math was worse than a shared import. Also folded
+    `isAllowedNonEditorFocusTarget` out of scope entirely during this pass — it lives near
+    the editor-mount cluster but its call sites are scattered across unrelated UI, not the
+    editor itself.
+11. **`src/editorSection/useEditorSectionMount.ts`, part 1** — refs (`adapterRef`,
+    `editModeSnapshotByNoteIdRef`, and the rest), the position-memory functions, the restore
+    primitive (`applyEditRestoreSnapshot`), and the three focus functions needed to resolve
+    it internally (`restoreEditorSelection`, `focusEditorInEditMode`,
+    `scheduleFocusEditorInEditMode`).
+12. **`useEditorSectionMount`, part 2 — the rest of it.** `bindings` (the full
+    `EditorBindings` object: `onTextChange`/`onSelectionChange`/`onTabIndentTransform`/
+    `onMarkdownShortcutTransform`/`onCharacterInsertTransform`/`onEnterTransform`/
+    `onViewportChange`), `applyProgrammaticEditorText`, `toggleRenderViewMode`, the
+    mode-toggle transition effect, the note-activation-restore effect, the preload-snapshot
+    effect, the render-view scroll-restore and scroll-persist effects, the
+    snapshot-preview-change effect, and `seedInitialViewport` (a genuine redesign, not a
+    transplant — replaces a separate `useEffect` that used to watch a ref, with a function
+    called directly from bootstrap; see Gotcha #2's first bullet for the pattern that made
+    this possible, and the "known open issue" below for what's *not* yet done here).
+    `App.tsx` no longer owns any editor-mount internals directly after this patch.
 
-All of 3, 4, 6, 7, 8 are called exactly **once** today, with `DEFAULT_EDITOR_SECTION_ID`
-hardcoded as the `sectionId` argument. That's intentional — see "the approach" above.
+All of 3, 4, 6, and 7–9 are called exactly **once** today, with `DEFAULT_EDITOR_SECTION_ID`
+hardcoded as the `sectionId` argument. That's intentional, matching `useNoteSnapshots`'
+existing shape — see "the approach" above.
 
-## The freeze/thaw design — read this carefully before extending it
+## Freeze/thaw — shipped, correct, not an open question
 
-This is the one piece of genuinely new (not relocated) behavior, and it's specifically
-designed to sidestep a hard problem rather than solve it head-on. Worth understanding *why*
-before changing anything here.
+Flagging this explicitly because a later conversation almost re-opened it as unresolved by
+mistake, checking against an outdated mental model instead of the actual shipped code.
+**Only one section is ever active/live at a time, by construction** — so "two sections both
+live with the same note, needing sync" isn't a case the architecture has to manage, it's a
+state the architecture never allows to occur. There is no remaining seam here.
 
-**The problem it avoids**: if the same note is open in two sections, keeping them in sync
-live would mean either two independent Lexical `EditorState`s with real-time replication
-(collaborative-editing-grade machinery), or re-cloning rendered DOM on every keystroke.
-Both rejected as out of scope. Line-wrapping is computed from container width, so "the
-active editor's rendered range" doesn't have a stable mapping to a differently-sized second
-pane's rendered range either — that idea was explored and explicitly abandoned (see
-conversation history if it resurfaces).
-
-**The actual design**: inactive sections are never live-synced. Instead, they display a
-specific **Time Machine snapshot**, using the *existing* `previewedSnapshotId` /
-`isPreviewingSnapshot` mechanism (already built for manual history browsing — see
-`noteSnapshots.snapshotsById.get(previewedSnapshotId)?.content`). Concretely, per section:
+The mechanism (in `useSnapshotFreeze.ts`, using the pre-existing `previewedSnapshotId` /
+`isPreviewingSnapshot` Time Machine preview machinery):
 
 - **On losing active-section status**: if the section was showing live text
   (`previewedSnapshotId === null`), flush the pending save, create a snapshot through the
-  *normal* `saveNoteSnapshot` path (ordinary dedup/compaction applies — nothing
-  special-cased, confirmed explicitly with Joe), and set the section's `previewedSnapshotId`
-  to the new snapshot's ID. If the section was *already* showing a specific historical
-  snapshot (user was genuinely browsing Time Machine), there's nothing to freeze — leave it
-  alone, and remember that fact.
-- **On regaining active-section status**: only switch back to live (`previewedSnapshotId =
-  null`) if the section was live *at the moment it lost focus*. A section that was already
-  parked on a specific historical snapshot stays exactly where it was.
-- **This is deliberate, not a limitation**: if the same note is open in two sections and you
-  switch from a live one to another section showing the same note, that other section does
-  **not** jump to live — it keeps showing whatever it's frozen at. This lets a user rearrange
-  paragraphs live in one pane while comparing against / copying from a stable older version
-  in the other, without the comparison text shifting under them.
-- **Snapshots created this way are automatic** (`isManual: false`), explicitly confirmed —
-  they're compaction-eligible like any other auto-snapshot, not pinned forever just because
-  a section happened to hibernate on them.
-- **Race handled**: if a section is reactivated while its freeze-snapshot IPC call is still
-  in flight, the async callback checks whether the section is still inactive before applying
-  the result — a fast switch-back-in wins over a slow snapshot write.
+  *normal* `saveNoteSnapshot` path (ordinary dedup/compaction applies), and freeze the
+  section to that new snapshot's ID. If already showing a specific historical snapshot
+  (genuine manual Time Machine browsing), leave it alone.
+- **On regaining active-section status**: only switch back to live if the section was live
+  *at the moment it lost focus* (tracked via `wasLiveWhenLastActiveRef`, which **defaults to
+  `true`** — a section that's never been hibernated behaves normally the first time). A
+  section that was already parked on a historical snapshot stays exactly where it was.
+- **Deliberately, not incidentally**: switching from a live section to a different section
+  showing the *same* note does not jump that other section to live — it keeps showing
+  whatever it's frozen at. Rearrange paragraphs live in one pane while comparing against a
+  stable older version in the other, without the comparison text shifting underneath you.
+- Snapshots created this way are automatic (`isManual: false`) — compaction-eligible, not
+  pinned forever just because a section happened to hibernate on them.
+- Race handled: if a section is reactivated while its freeze-snapshot IPC call is still in
+  flight, the async callback checks whether the section is still inactive before applying
+  the result.
 
-`saveNoteSnapshot`'s return type changed from `Promise<void>` to `Promise<number>` (the
-resulting snapshot's ID, whether newly inserted or an existing deduped one) specifically to
-support this — updated across `electron/databaseService.ts` →
-`electron/noteLifecycleService.ts` → `src/shared/noteLifecycle.ts` → the browser dev-mode
-mock. All pre-existing callers just `await` it and ignore the return value; nothing else
-broke.
+`saveNoteSnapshot` returns the resulting snapshot's ID now (was `Promise<void>`) —
+threaded through `databaseService.ts` → `noteLifecycleService.ts` → the shared IPC type →
+the browser dev-mode mock — specifically to support this.
 
-**`useSnapshotFreeze` is currently wired to the *global* `previewedSnapshotId`**, not a
-section-owned one — same "correct today, inert today" situation as everything else. Moving
-`previewedSnapshotId` itself into per-section ownership is explicitly the **next** piece of
-work (see below), and is what turns this from "provably correct logic with only one
-possible input" into something actually exercised.
+**Currently wired to the single global `previewedSnapshotId`**, same "correct today, only
+exercised once section #2 exists" situation as the rest of this effort.
 
-## What's left, roughly in order
+## What's left
 
-1. **Move `previewedSnapshotId` ownership into per-section state.** ~22 read/write sites
-   (manual Time Machine browsing: clicking the timeline, the present-state circle,
-   hold-to-branch, compaction handling), all deeply threaded through snapshot
-   restore/branch functions that also need `activeNoteId`/`noteSnapshots`. Confirmed **not**
-   referenced by `buildMenuStateSnapshot`, so the ref-mirror dance isn't needed here — one
-   less thing to worry about. This is what makes `useSnapshotFreeze` genuinely
-   multi-instantiable rather than provably-correct-but-untestable.
-2. **Save/debounce + `applyProgrammaticEditorText`.** The riskiest remaining piece —
-   `queueSave`, `flushPendingSaveNow`, `saveTimerRef`, and `applyProgrammaticEditorText`
-   itself, which reaches into `adapterRef` (the `EditorAdapter` imperative handle) directly.
-   Text changes flow **down** via React state/props (the `<Editor initialText={...}
-   key={...}>` re-sync path — `snapshotWriteText: false` in the adapter's capabilities,
-   confirmed in `docs/V2_EDITOR_CONTRACT.md`), not through the adapter. Selection changes
-   flow **through** the adapter (`snapshotWriteSelection: true`). Don't conflate the two
-   mechanisms when extracting.
-3. **Selection tracking** — `editorSelection`, `latestEditorSelectionRef`.
-4. **Viewport / edit-mode-state persistence** — `persistRenderViewStateForNoteNow`,
-   `persistActiveNoteEditModeStateNow`. `noteUiStates` itself (the viewport cache) should
-   stay **shared/global storage**, keyed by `noteId` — if the same note is genuinely open in
-   two sections, they read/write the same note's cache entry, which is fine and arguably
-   desirable. Each section's hook only reads/writes the entry for whatever note *it*
-   currently shows.
-5. **Rewire `useSectionTabs` / `useDocumentFind` / `useNoteSnapshots`** to source
-   `activeNoteId` (and `currentEditorText`) from the fully-assembled per-section hook
-   instead of the current App-level bindings. Small mechanical change once 1–4 are done, not
-   before.
-6. **Then, and only then: the actual split-view UI.** Draggable vertical divider, minimum
-   300px per section (soft — enforced only when *creating* a new section; window resize
-   pauses recalculation while dragging, then redistributes proportionally across sections
-   respecting minimums on release — sections define the window's own minimum width, not the
-   other way around), the "+" button at the tab bar's right edge (same visual language as
-   the existing tag/tab-mode toggle at the left edge; right-click primes close, left-click
-   on the "+" opens a new section to its right). Section layouts (which sections exist, their
-   relative widths) persist separately from the existing UI "design" loadout system — the
-   `editor_sections.name` column already anticipates naming sections and saving them as
-   collections, a stated future feature, don't design that door shut.
-7. **Hibernation rendering.** Inactive sections should skip wiring `onTextChange` /
-   `onSelectionChange` on their `<Editor>` instance (nothing produces those events in a
-   pane nobody's typing in) but *keep* `onViewportChange` (each section keeps its own
-   scrollbar, confirmed as a hard requirement). Note: `Editor.tsx`'s existing
-   `editorReadOnly` prop currently *only* toggles `contentEditable` and caret visibility —
-   it does **not** yet skip attaching those bindings internally. That's new work, not
-   something to assume already happens.
-8. **Explicitly deferred** (Joe's own words, don't build unprompted): dragging a tab from
-   one section to another; dragging a note from the sidebar directly onto a specific
-   section to open it there (sidebar always opens into the leftmost/default section for
-   now — that's the *only* sidebar-to-section interaction that exists today).
+1. **Rewire `useSectionTabs` / `useDocumentFind` / `useNoteSnapshots` to read from the
+   assembled `useEditorSectionMount` state** instead of the raw App-level bindings they
+   currently receive. Concretely: `useSectionTabs` at `src/App.tsx` (search
+   `useSectionTabs({`) and `useDocumentFind` (search `useDocumentFind({`) both still take
+   `activeNoteId` from the top-level binding rather than explicitly from "this section's
+   note"; `useNoteSnapshots(activeNoteId, currentEditorText, timelineCurveConstant)` is the
+   same story. Functionally identical today (there's only one section, so "the top-level
+   binding" and "this section's state" are the same value) — this is about making the *seam*
+   explicit before there's a second section to prove it wrong. Mechanical, not a discovery
+   pass, following the same preserve-names pattern as everything above.
+2. **Bootstrap vs. `activateNote` viewport-restore unification** (see the known-issue
+   write-up immediately below). Explicitly deferred to here — needs live testing to attempt
+   safely.
+3. **Then, and only then: the actual split-view UI.** Draggable divider, 300px minimum
+   (soft — enforced at section-creation time, not live-enforced during resize; window
+   resize pauses recalculation while dragging, then redistributes proportionally on
+   release), the "+" button at the tab bar's right edge (right-click primes close,
+   left-click opens a new section to its right — same visual language as the existing
+   tag/tab-mode toggle at the left edge). Section layouts persist separately from the
+   existing UI "design" loadout system — `editor_sections.name` already anticipates
+   naming sections and saving them as collections, a stated future feature.
+4. **Hibernation rendering.** Inactive sections should skip wiring `onTextChange`/
+   `onSelectionChange` (nothing produces those events in a pane nobody's typing in) but
+   *keep* `onViewportChange` (each section keeps its own scrollbar). `Editor.tsx`'s
+   `editorReadOnly` prop currently only toggles `contentEditable` and caret visibility — it
+   does not yet skip attaching those bindings. New work, not something to assume already
+   works.
+5. **Explicitly deferred, Joe's own words, don't build unprompted**: dragging a tab between
+   sections; dragging a note from the sidebar onto a specific section (sidebar always opens
+   into the leftmost/default section for now).
 
-## Facts about the existing editor architecture worth knowing before you extract it
+## Known open issue: bootstrap's viewport seed vs. `activateNote`'s per-note restore
 
-- `src/editor/EditorContract.ts` + `docs/V2_EDITOR_CONTRACT.md` already define a formal,
-  documented `EditorAdapter` (imperative: `getCapabilities`/`getSnapshot`/`applySnapshot`)
-  /`EditorBindings` (`onTextChange`/`onSelectionChange`/`onViewportChange`, all
-  independently-optional callbacks) contract. `src/components/Editor.tsx` already takes
-  `noteId`/`initialText`/`adapterRef` as props — it was already built to be
-  per-note-instantiable. **This means the Editor↔App boundary does not need redesigning.**
-  The work is entirely on the `App.tsx` orchestration side.
-- `previewedSnapshotId: number | null` is the existing single global "am I viewing history
-  instead of live" flag, `null` = live. This is the exact mechanism `useSnapshotFreeze`
-  repurposes; there's no new rendering path to build for "show frozen content," only the
-  per-section state ownership.
+`activateNote` (stays in `App.tsx`) has its own complete per-note restore mechanism: every
+note switch persists the outgoing note's position, loads the new note, builds a restore
+snapshot from its saved UI state, caches it. This is already the thing a new section would
+reuse for "load a note into me."
+
+Bootstrap's `seedInitialViewport()` call is a *different* mechanism — it restores the
+app-level "last known viewport shape" (top/bottom boundary line counts) from
+`window.thockdownState`'s persisted app state, not from any specific note's own saved
+position. It exists because on cold start, the editor's viewport boundaries need *some* seed
+value before the first note's own restore data is even meaningful.
+
+These are two real, distinct concerns, not duplicated logic — but there's a plausible
+unification (bootstrap's first load becomes just another call to whatever `activateNote`
+uses) that wasn't attempted. Reason: cold start is the hardest path in this app to verify
+without actually launching it from a clean state — no test suite exercises "fresh install,
+empty app state, first note ever loads" — and if this is gotten wrong the failure mode is
+"app doesn't start," not "one feature misbehaves." This is exactly the kind of change to
+make *with* Joe driving the app interactively, not blind.
+
+## Standing limitation, not a TODO
+
+Every patch through this effort is `tsc`-clean and test-clean, but that's "provably not
+obviously broken," not "provably correct under real timing." Focus timing, DOM measurement
+races, rAF-retry timing (`seedInitialViewport`'s adapter-ready loop, `applyEditRestoreSnapshot`'s
+same pattern) are exactly the category of bug that doesn't show up in a type checker or a
+unit test. This isn't something to fix, it's something to keep in mind: verified in this
+document's sense means "carefully traced and type/test-checked," not "watched work in the
+running app." Direct file access closes part of this gap (test against the real tree
+instead of a scratch clone) but not the interactive-testing part — that still needs Joe.
 
 ## One thing to double check on pickup
 
-`isArchivedNote`/`isDeletedNote`/tag helpers were relocated to `shared/` during the
-`useSectionTabs` extraction (step 3). Joe's own later commit renamed `internalId` →
-`assignedId` on `NoteSummary` *after* that patch was generated but *before* he applied the
-internal-note-linking patch, which still referenced the old field name — silent regression
-(cross-note links stopped resolving) that took a dedicated fix turn to catch, since nothing
-failed to compile or test. **Always re-pull and grep for the exact current field/type names
-you're about to reference before extracting** — don't trust names from earlier in this
-document or from memory of earlier patches without checking the live tree first.
+A field rename (`internalId` → `assignedId` on `NoteSummary`) landed *between* a patch being
+generated and being applied once already, silently breaking cross-note link resolution with
+no compile or test failure to catch it. **Always re-pull and grep for the exact current
+field/type names you're about to reference before extracting** — don't trust names from
+earlier in this document, or from memory of earlier patches, without checking the live tree
+first.
