@@ -186,12 +186,6 @@
   gap:            0;
 }
 
-.date-filter-rail.date-filter-rail-placeholder {
-  min-height: 12px;
-  height:     12px;
-  padding:    0;
-}
-
 .date-filter-line {
   display:       flex;
   width:         100%;
