@@ -426,9 +426,10 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
       return note?.id ?? null
     },
 
-    async saveNoteSnapshot(_input: { id: string; content: string; isManual?: boolean }): Promise<void> {
-      // Browser mock does not persist snapshots.
-      return
+    async saveNoteSnapshot(_input: { id: string; content: string; isManual?: boolean }): Promise<number> {
+      // Browser mock does not persist snapshots; synthesize an ID so callers
+      // that need one (e.g. freeze-on-hibernate) still get a valid contract.
+      return Date.now()
     },
 
     async getNoteSnapshots(_input: LoadNoteInput): Promise<Array<{ id: number; noteId: string; content: string; timestamp: string; isManual: boolean }>> {

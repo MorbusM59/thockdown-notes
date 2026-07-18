@@ -466,8 +466,8 @@ export class NoteLifecycleService {
     return summary;
   }
 
-  async saveNoteSnapshot(input: { id: string; content: string; isManual?: boolean }): Promise<void> {
-    this.databaseService.saveNoteSnapshot(input.id, input.content, Boolean(input.isManual));
+  async saveNoteSnapshot(input: { id: string; content: string; isManual?: boolean }): Promise<number> {
+    return this.databaseService.saveNoteSnapshot(input.id, input.content, Boolean(input.isManual));
   }
 
   async getNoteSnapshots(input: LoadNoteInput): Promise<Array<{ id: number; noteId: string; content: string; timestamp: string; isManual: boolean }>> {

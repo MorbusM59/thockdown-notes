@@ -20,6 +20,7 @@ interface Window {
 		close: () => void;
 		toggleUtilityCollapse: (size: { width: number; height: number }) => Promise<boolean>;
 		reportBackgroundColor: (hex: string) => void;
+		setSidebarVisible: (visible: boolean) => void;
 		onMaximizeStateChange: (callback: (isMaximized: boolean) => void) => () => void;
 		onCollapsedStateChange: (callback: (isCollapsed: boolean) => void) => () => void;
 	};

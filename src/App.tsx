@@ -71,6 +71,7 @@ import {
   type DocumentFindHit,
 } from './editor/FindReplaceEngine'
 import { useDocumentFind } from './find/useDocumentFind'
+import { useSnapshotFreeze } from './editorSection/useSnapshotFreeze'
 import {
   indentSelectionByStep,
   resolveMarkdownSelectionContext,
@@ -2637,7 +2638,7 @@ function App() {
   // this rather than assuming there's only one section. With a single
   // section it's always DEFAULT_EDITOR_SECTION_ID; the split-view work is
   // what gives it real values to switch between.
-  const [, setActiveSectionId] = useState<string>(DEFAULT_EDITOR_SECTION_ID)
+  const [activeSectionId, setActiveSectionId] = useState<string>(DEFAULT_EDITOR_SECTION_ID)
   const markSectionActive = useCallback((sectionId: string) => {
     setActiveSectionId((previous) => (previous === sectionId ? previous : sectionId))
   }, [])
@@ -5075,6 +5076,23 @@ ${markdownHtml}
 
     await window.thockdownNotes?.saveNoteUiState({ id: noteId, payload })
   }, [resolvePreviewSourceAnchorFromContainer])
+
+  const getActiveNoteLiveText = useCallback(() => (
+    latestEditorTextRef.current || activeNoteText
+  ), [activeNoteText])
+
+  // Today this section is always the active one (there's only one), so this
+  // is correct-but-inert -- it starts doing real work the moment a second
+  // section can take focus away from it.
+  useSnapshotFreeze({
+    sectionId: DEFAULT_EDITOR_SECTION_ID,
+    activeSectionId,
+    noteId: activeNoteId,
+    previewedSnapshotId,
+    setPreviewedSnapshotId,
+    getLiveText: getActiveNoteLiveText,
+    flushPendingSaveNow,
+  })
 
   const activateNote = useCallback(async (noteId: string, overrideCursorPos?: number) => {
     if (!window.thockdownNotes) return

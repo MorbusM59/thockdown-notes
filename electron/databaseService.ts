@@ -1476,11 +1476,12 @@ export class DatabaseService {
   //    existing row is promoted to manual in place, rather than leaving a
   //    duplicate automatic snapshot sitting right next to a new manual one
   //    with the same content.
-  saveNoteSnapshot(noteId: string, content: string, isManual = false): void {
+  /** Returns the resulting snapshot's ID -- either newly inserted, or the existing latest one if content is unchanged (see dedup below). */
+  saveNoteSnapshot(noteId: string, content: string, isManual = false): number {
     const db = this.requireDb();
     const timestamp = new Date().toISOString();
 
-    const tx = db.transaction(() => {
+    return db.transaction(() => {
       const latest = db.prepare(`
         SELECT id, content, isManual FROM note_snapshots
         WHERE noteId = ?
@@ -1493,16 +1494,16 @@ export class DatabaseService {
           db.prepare('UPDATE note_snapshots SET isManual = 1, timestamp = ? WHERE id = ?')
             .run(timestamp, latest.id);
         }
-        return;
+        return latest.id;
       }
 
-      db.prepare(`
+      const result = db.prepare(`
         INSERT INTO note_snapshots (noteId, content, timestamp, isManual)
         VALUES (?, ?, ?, ?)
       `).run(noteId, content, timestamp, isManual ? 1 : 0);
-    });
 
-    tx();
+      return Number(result.lastInsertRowid);
+    })();
   }
 
   getNoteSnapshots(noteId: string): Array<{

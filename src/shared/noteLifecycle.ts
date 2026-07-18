@@ -138,7 +138,8 @@ export interface NoteLifecycleApi {
   updateExternalNoteState(input: { id: string; hasUnsavedChanges: boolean; syncMode: boolean }): Promise<NoteSummary>;
   syncExternalNoteToFile(input: { id: string; content: string }): Promise<boolean>;
   getNoteIdByExternalPath(input: { externalPath: string }): Promise<string | null>;
-  saveNoteSnapshot(input: { id: string; content: string; isManual?: boolean }): Promise<void>;
+  /** Returns the resulting snapshot's ID -- either newly inserted, or the existing latest one if the content is unchanged (dedup). */
+  saveNoteSnapshot(input: { id: string; content: string; isManual?: boolean }): Promise<number>;
   getNoteSnapshots(input: LoadNoteInput): Promise<Array<{ id: number; noteId: string; content: string; timestamp: string; isManual: boolean }>>;
   deleteNoteSnapshot(input: DeleteNoteSnapshotInput): Promise<void>;
   branchNoteFromSnapshot(input: BranchNoteFromSnapshotInput): Promise<NoteDocument>;
