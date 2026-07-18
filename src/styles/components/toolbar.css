@@ -76,6 +76,8 @@
 
 :root {
   --markdown-toolbar-gap: 4px;
+  --markdown-toolbar-padding: 5px;
+  --markdown-toolbar-button-height: calc((var(--btn-square-large-size) - var(--markdown-toolbar-gap)) / 2);
 }
 
 .markdown-toolbar {
@@ -86,10 +88,17 @@
   min-width:   0;
   overflow:    hidden;
   flex-wrap:   wrap-reverse;
-  height: 40px;
-  max-height:  40px;
-  margin: 5px;
-  padding: 0;
+  margin: 0 8px;
+  width:           100%;
+  height:          100%;
+  max-height: calc(2 * var(--markdown-toolbar-button-height) + var(--markdown-toolbar-gap) + 2 * var(--markdown-toolbar-padding) + 2px);
+  border-radius:    0 0 var(--border-radius-regular) var(--border-radius-regular);
+  border-top: none;
+  border:      1px solid var(--color-border-light-70);
+  box-shadow:       var(--box-shadow-inverted);
+  background:       var(--color-input-backdrop);
+  padding: var(--markdown-toolbar-padding);
+  gap: var(--markdown-toolbar-gap);
 }
 
 .toolbar-group {
@@ -106,7 +115,7 @@
 }
 
 .markdown-toolbar > .toolbar-group > .btn-icon {
-  height: calc((var(--btn-square-large-size) - var(--markdown-toolbar-gap)) / 2);
+  height: var(--markdown-toolbar-button-height);
   font-size: 12px;
 }
 
