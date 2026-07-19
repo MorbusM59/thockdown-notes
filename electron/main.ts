@@ -108,6 +108,34 @@ const APP_WINDOW_MIN_HEIGHT_PX = 525;
 // Mirror renderer constants for sidebar sizing so main can compute effective minima
 const SIDEBAR_WIDTH_PX = 288;
 const GRID_DIVIDER_PX = 8;
+// Mirrors the renderer's per-section minimum width (src/App.tsx) -- each
+// editor section beyond the first raises the window's own minimum width by
+// this much (+ one divider), so a section can never be forced narrower than
+// it's allowed to be just by resizing the window.
+const EDITOR_SECTION_MIN_WIDTH_PX = 300;
+
+// Tracked here (not just derived per-call) because the sidebar-visibility and
+// section-count constraints compose -- each handler needs to know the other's
+// current value, not just its own, or one would silently clobber the other's
+// effect on the next resize event.
+let currentSidebarVisible = true;
+let currentSectionCount = 1;
+
+function computeAppWindowMinWidthPx(sidebarVisible: boolean, sectionCount: number): number {
+  const sidebarAdjustedMinWidth = sidebarVisible
+    ? APP_WINDOW_MIN_WIDTH_PX
+    : Math.max(200, APP_WINDOW_MIN_WIDTH_PX - (SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX));
+  const extraSections = Math.max(0, sectionCount - 1);
+  return sidebarAdjustedMinWidth + extraSections * (EDITOR_SECTION_MIN_WIDTH_PX + GRID_DIVIDER_PX);
+}
+
+/** Grows the window's current bounds if they're now narrower than `minWidth` -- never shrinks it. */
+function growWindowToMinimumWidthIfNeeded(windowRef: BrowserWindow, minWidth: number): void {
+  const bounds = windowRef.getBounds();
+  if (bounds.width >= minWidth) return;
+  const nextX = bounds.x - (minWidth - bounds.width);
+  windowRef.setBounds({ x: Math.max(0, nextX), y: bounds.y, width: minWidth, height: bounds.height });
+}
 
 // Matches the renderer's DEFAULT_BASE_PALETTE_COLOR (src/App.tsx). Used as the
 // BrowserWindow's native backing-store fill until the renderer reports the
@@ -446,22 +474,35 @@ function registerIpcHandlers() {
   // Adjust minimum size / bounds when the renderer reports the sidebar visibility
   ipcMain.on('window-control:sidebar-visibility', (_event, visible: unknown) => {
     try {
-      const isVisible = Boolean(visible)
       if (!win || win.isDestroyed()) return
-      const minWidth = isVisible ? APP_WINDOW_MIN_WIDTH_PX : Math.max(200, APP_WINDOW_MIN_WIDTH_PX - (SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX))
+      currentSidebarVisible = Boolean(visible)
+      const minWidth = computeAppWindowMinWidthPx(currentSidebarVisible, currentSectionCount)
       win.setMinimumSize(minWidth, APP_WINDOW_MIN_HEIGHT_PX)
 
       // If enabling the sidebar and the current width is smaller than the new minimum,
       // expand the window so the toolbar and other content meet the min width.
-      if (isVisible) {
-        const bounds = win.getBounds()
-        if (bounds.width < minWidth) {
-          const nextX = bounds.x - (minWidth - bounds.width)
-          win.setBounds({ x: Math.max(0, nextX), y: bounds.y, width: minWidth, height: bounds.height })
-        }
+      if (currentSidebarVisible) {
+        growWindowToMinimumWidthIfNeeded(win, minWidth)
       }
     } catch (error) {
       console.warn('Failed to apply sidebar-visibility window constraints', error)
+    }
+  })
+
+  // Adjust minimum size / bounds when the renderer reports how many editor
+  // sections are currently open -- each section beyond the first raises the
+  // window's own minimum width, so a section can never be squeezed narrower
+  // than its own minimum just by resizing the window.
+  ipcMain.on('window-control:section-count', (_event, sectionCount: unknown) => {
+    try {
+      if (!win || win.isDestroyed()) return
+      const parsedCount = Number(sectionCount)
+      currentSectionCount = Number.isFinite(parsedCount) ? Math.max(1, Math.round(parsedCount)) : 1
+      const minWidth = computeAppWindowMinWidthPx(currentSidebarVisible, currentSectionCount)
+      win.setMinimumSize(minWidth, APP_WINDOW_MIN_HEIGHT_PX)
+      growWindowToMinimumWidthIfNeeded(win, minWidth)
+    } catch (error) {
+      console.warn('Failed to apply section-count window constraints', error)
     }
   })
 
@@ -851,7 +892,7 @@ function applyUtilityCollapseWindowConstraints(windowRef: BrowserWindow): void {
 
 function applyNormalWindowConstraints(windowRef: BrowserWindow): void {
   windowRef.setResizable(true);
-  windowRef.setMinimumSize(APP_WINDOW_MIN_WIDTH_PX, APP_WINDOW_MIN_HEIGHT_PX);
+  windowRef.setMinimumSize(computeAppWindowMinWidthPx(currentSidebarVisible, currentSectionCount), APP_WINDOW_MIN_HEIGHT_PX);
 }
 
 function collapseWindowToUtilityGrid(targetSize: { width: number; height: number }): boolean {
@@ -936,7 +977,11 @@ async function createWindow() {
   // Load persisted app state so we can set an appropriate initial minimum width
   const savedAppState = await stateService.loadAppState().catch(() => ({} as any));
   const initialSidebarVisible = savedAppState?.menu?.isSidebarVisible ?? true;
-  const initialMinWidth = initialSidebarVisible ? APP_WINDOW_MIN_WIDTH_PX : Math.max(200, APP_WINDOW_MIN_WIDTH_PX - (SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX));
+  // Section count isn't known yet at this point -- the DB hasn't loaded in the
+  // renderer -- so this starts at the default of 1 and the renderer corrects
+  // it via 'window-control:section-count' shortly after bootstrap resolves.
+  currentSidebarVisible = initialSidebarVisible;
+  const initialMinWidth = computeAppWindowMinWidthPx(currentSidebarVisible, currentSectionCount);
   windowIsUtilityCollapsed = false;
   utilityCollapseRestoreState = null;
   alwaysOnTopBeforeUtilityCollapse = null;

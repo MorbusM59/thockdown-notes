@@ -97,6 +97,7 @@ const windowControls = {
   reportBackgroundColor: (hex: string) =>
     ipcRenderer.send('window-control:report-background-color', hex),
   setSidebarVisible: (visible: boolean) => ipcRenderer.send('window-control:sidebar-visibility', visible),
+  setSectionCount: (count: number) => ipcRenderer.send('window-control:section-count', count),
   onMaximizeStateChange: (callback: (isMaximized: boolean) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, value: boolean) => {
       callback(value)
