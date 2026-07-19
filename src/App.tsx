@@ -57,11 +57,6 @@ import {
   type EditorSpacingKey,
   type EditorStyleKey,
 } from './editor/EditorTypography'
-import {
-  buildDocumentFindHits,
-  resolveDocumentFindDirective,
-  type DocumentFindHit,
-} from './editor/FindReplaceEngine'
 import { useDocumentFind } from './find/useDocumentFind'
 import { useSnapshotFreeze } from './editorSection/useSnapshotFreeze'
 import { useActiveNoteId } from './editorSection/useActiveNoteId'
@@ -73,14 +68,11 @@ import { usePreviewedSnapshot } from './editorSection/usePreviewedSnapshot'
 import { useNoteSaveQueue } from './editorSection/useNoteSaveQueue'
 import { getActiveSectionHandle, type SectionHandle } from './editorSection/sectionRegistry'
 import { useMarkdownFormattingToolbar } from './editorSection/useMarkdownFormattingToolbar'
+import { usePreviewMarkdownRendering } from './editorSection/usePreviewMarkdownRendering'
+import { useDocumentFindNavigation } from './editorSection/useDocumentFindNavigation'
 import {
-  type ParsedInternalPreviewLink,
-  normalizeInternalIdForLookup,
-  noteContainsAnchorDefinition,
   createPreviewNoteAnchorMarkerRehypePlugin,
   createPreviewMarkdownComponents,
-  createPreviewSearchHighlightRehypePlugin,
-  createPreviewSourceAnchorRehypePlugin,
   PREVIEW_MARKDOWN_REMARK_PLUGINS,
   PREVIEW_MARKDOWN_NOOP_NAVIGATE,
 } from './editor/PreviewMarkdown'
@@ -6242,122 +6234,17 @@ await flushPendingSaveNow()
     })
   }, [])
 
-  const previewNoteAnchorMarkerPlugin = useMemo(
-    () => createPreviewNoteAnchorMarkerRehypePlugin(),
-    [],
-  )
-
-  // Scrolls the currently rendered preview to a `[~name]`/`[~name#uid]`
-  // marker, if present. `waitForNoteSwitch` retries across a few animation
-  // frames since switching notes re-renders ReactMarkdown asynchronously —
-  // the target span may not exist in the DOM yet on the frame this fires.
-  const scrollToAnchorInPreview = useCallback((name: string, uid: string | null, waitForNoteSwitch: boolean) => {
-    const attemptScroll = (attemptsLeft: number) => {
-      const candidates = Array.from(document.querySelectorAll<HTMLElement>('.note-anchor-marker'))
-      const target = candidates.find((el) => (
-        el.dataset.noteAnchorName === name && (el.dataset.noteAnchorUid ?? '') === (uid ?? '')
-      ))
-
-      if (target) {
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        target.classList.add('note-anchor-marker-flash')
-        window.setTimeout(() => target.classList.remove('note-anchor-marker-flash'), 1200)
-        return
-      }
-
-      if (attemptsLeft <= 0) return
-      window.requestAnimationFrame(() => attemptScroll(attemptsLeft - 1))
-    }
-
-    if (waitForNoteSwitch) {
-      window.requestAnimationFrame(() => window.requestAnimationFrame(() => attemptScroll(30)))
-    } else {
-      attemptScroll(5)
-    }
-  }, [])
-
-  // Scrolls the preview pane to the top of the document. Used for cross-note
-  // links with no `~anchor` — deferred a couple of frames past the note
-  // switch so it wins over whatever scroll position the new note's own
-  // render-view restore might otherwise land on.
-  const scrollPreviewToTop = useCallback((waitForNoteSwitch: boolean) => {
-    const reset = () => {
-      previewScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
-    }
-
-    if (waitForNoteSwitch) {
-      window.requestAnimationFrame(() => window.requestAnimationFrame(reset))
-    } else {
-      reset()
-    }
-  }, [])
-
-  // Resolves and follows a `$id`, `~anchor[#uid]`, or `$id~anchor[#uid]`
-  // preview link. Broken destinations (unknown note ID, missing anchor) are
-  // silently ignored rather than partially navigating.
-  const navigateToInternalPreviewLink = useCallback((target: ParsedInternalPreviewLink) => {
-    if (target.noteIdRaw !== null) {
-      const normalizedTarget = normalizeInternalIdForLookup(target.noteIdRaw)
-      const targetNote = notes.find((note) => note.assignedId && normalizeInternalIdForLookup(note.assignedId) === normalizedTarget)
-      if (!targetNote) return
-
-      if (target.anchorName !== null && !noteContainsAnchorDefinition(targetNote.contentText ?? '', target.anchorName, target.anchorUid)) {
-        return
-      }
-
-      const isAlreadyActive = targetNote.id === activeNoteId
-      const followUp = () => {
-        if (target.anchorName !== null) {
-          scrollToAnchorInPreview(target.anchorName, target.anchorUid, !isAlreadyActive)
-        } else if (!isAlreadyActive) {
-          // Already-active notes stay wherever the reader currently is —
-          // only a genuine note switch resets to the top.
-          scrollPreviewToTop(true)
-        }
-      }
-
-      if (isAlreadyActive) {
-        followUp()
-      } else {
-        void activateNote(targetNote.id).then(followUp)
-      }
-      return
-    }
-
-    if (target.anchorName === null || !activeNoteId) return
-    const currentText = latestEditorTextRef.current || activeNoteText
-    if (!noteContainsAnchorDefinition(currentText, target.anchorName, target.anchorUid)) return
-    scrollToAnchorInPreview(target.anchorName, target.anchorUid, false)
-  }, [notes, activeNoteId, activateNote, activeNoteText, scrollToAnchorInPreview, scrollPreviewToTop])
-
-  const previewMarkdownComponents = useMemo(
-    () => createPreviewMarkdownComponents(navigateToInternalPreviewLink),
-    [navigateToInternalPreviewLink],
-  )
-
-  const previewSearchHighlightPlugin = useMemo(
-    () => createPreviewSearchHighlightRehypePlugin(documentFindDirective.findText, isDocumentFindCaseSensitive),
-    [documentFindDirective.findText, isDocumentFindCaseSensitive],
-  )
-
-  const previewSourceAnchorPlugin = useMemo(
-    () => createPreviewSourceAnchorRehypePlugin(),
-    [],
-  )
-
-  // Memoized so per-frame App re-renders (scroll thumb state, etc.) do not
-  // trigger a full ReactMarkdown reconciliation of long notes. That heavy
-  // reconciliation was stalling the main thread and freezing rAF mid-scroll.
-  const previewMarkdownElement = useMemo(() => (
-    <ReactMarkdown
-      remarkPlugins={PREVIEW_MARKDOWN_REMARK_PLUGINS}
-      rehypePlugins={[previewNoteAnchorMarkerPlugin, previewSearchHighlightPlugin, previewSourceAnchorPlugin]}
-      components={previewMarkdownComponents}
-    >
-      {renderedDisplayText}
-    </ReactMarkdown>
-  ), [renderedDisplayText, previewNoteAnchorMarkerPlugin, previewSearchHighlightPlugin, previewSourceAnchorPlugin, previewMarkdownComponents])
-
+  const { previewMarkdownElement } = usePreviewMarkdownRendering({
+    notes,
+    activeNoteId,
+    activeNoteText,
+    latestEditorTextRef,
+    activateNote,
+    previewScrollRef,
+    documentFindDirective,
+    isDocumentFindCaseSensitive,
+    renderedDisplayText,
+  })
 
   const hasMonthFilter = selectedMonths.size > 0
   const hasYearFilter = selectedYears.size > 0
@@ -6769,181 +6656,24 @@ await flushPendingSaveNow()
     syncSidebarCustomScrollbar,
   ])
 
-  const jumpToPreviewDocumentFindHit = useCallback((hit: DocumentFindHit) => {
-    const scroller = previewScrollRef.current
-    if (!scroller) return
-
-    const normalizedNeedle = normalizeInternalText(documentFindDirective.findText)
-    if (!normalizedNeedle) return
-
-    const hitOrdinal = documentFindHits.findIndex((candidate) => candidate.id === hit.id)
-    const compareNeedle = isDocumentFindCaseSensitive ? normalizedNeedle : normalizedNeedle.toLocaleLowerCase()
-
-    type TextSegment = {
-      node: Text
-      start: number
-      end: number
-    }
-
-    const segments: TextSegment[] = []
-    let aggregateText = ''
-    const walker = document.createTreeWalker(scroller, NodeFilter.SHOW_TEXT)
-    let node = walker.nextNode()
-    while (node) {
-      if (node instanceof Text && node.nodeValue && node.nodeValue.length > 0) {
-        const value = node.nodeValue
-        const start = aggregateText.length
-        aggregateText += value
-        segments.push({
-          node,
-          start,
-          end: aggregateText.length,
-        })
-      }
-      node = walker.nextNode()
-    }
-
-    const haystack = isDocumentFindCaseSensitive ? aggregateText : aggregateText.toLocaleLowerCase()
-    const resolvedOrdinal = hitOrdinal >= 0 ? hitOrdinal : 0
-
-    let occurrence = -1
-    let cursor = 0
-    for (let index = 0; index <= resolvedOrdinal; index += 1) {
-      const foundIndex = haystack.indexOf(compareNeedle, cursor)
-      if (foundIndex < 0) {
-        occurrence = -1
-        break
-      }
-      occurrence = foundIndex
-      cursor = foundIndex + Math.max(1, compareNeedle.length)
-    }
-
-    const fallbackTarget = (() => {
-      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
-      if (maxScrollTop <= 0) return 0
-      const ratio = clamp(hit.index / Math.max(1, currentEditorText.length), 0, 1)
-      return ratio * maxScrollTop
-    })()
-
-    if (occurrence < 0 || segments.length === 0) {
-      scrollToNonQuantizedSmooth(scroller, fallbackTarget, {
-        onStep: () => syncPreviewCustomScrollbar(),
-      })
-      return
-    }
-
-    const startSegment = segments.find((segment) => occurrence >= segment.start && occurrence < segment.end)
-    if (!startSegment) {
-      scrollToNonQuantizedSmooth(scroller, fallbackTarget, {
-        onStep: () => syncPreviewCustomScrollbar(),
-      })
-      return
-    }
-
-    const endOffsetGlobal = occurrence + Math.max(1, hit.matchLength)
-    const endSegment = segments.find((segment) => endOffsetGlobal > segment.start && endOffsetGlobal <= segment.end) ?? startSegment
-
-    const startOffsetInNode = Math.max(0, Math.min(startSegment.node.nodeValue?.length ?? 0, occurrence - startSegment.start))
-    const endOffsetInNode = Math.max(
-      startOffsetInNode,
-      Math.min(endSegment.node.nodeValue?.length ?? 0, endOffsetGlobal - endSegment.start),
-    )
-
-    const range = document.createRange()
-    range.setStart(startSegment.node, startOffsetInNode)
-    range.setEnd(endSegment.node, endOffsetInNode)
-
-    const rect = range.getBoundingClientRect()
-    if (rect.height <= 0 && rect.width <= 0) {
-      scrollToNonQuantizedSmooth(scroller, fallbackTarget, {
-        onStep: () => syncPreviewCustomScrollbar(),
-      })
-      return
-    }
-
-    const scrollerRect = scroller.getBoundingClientRect()
-    const absoluteTop = scroller.scrollTop + (rect.top - scrollerRect.top)
-    const targetScrollTop = absoluteTop - (scroller.clientHeight * 0.35)
-    scrollToNonQuantizedSmooth(scroller, targetScrollTop, {
-      onStep: () => syncPreviewCustomScrollbar(),
-    })
-  }, [
-    currentEditorText.length,
-    documentFindDirective.findText,
+  const {
+    handleJumpToDocumentFindHit,
+    replaceDocumentFindHit,
+    replaceAllDocumentFindHits,
+  } = useDocumentFindNavigation({
+    previewScrollRef,
+    documentFindDirective,
     documentFindHits,
     isDocumentFindCaseSensitive,
+    currentEditorText,
     syncPreviewCustomScrollbar,
-  ])
-
-  const handleJumpToDocumentFindHit = useCallback((hit: DocumentFindHit) => {
-    if (isPreviewMode) {
-      jumpToPreviewDocumentFindHit(hit)
-      return
-    }
-
-    const adapter = adapterRef.current
-    if (!adapter) return
-
-    adapter.applySnapshot({
-      selection: {
-        anchor: hit.index,
-        focus: hit.index + hit.matchLength,
-        start: hit.index,
-        end: hit.index + hit.matchLength,
-        isCollapsed: false,
-      },
-    })
-  }, [isPreviewMode, jumpToPreviewDocumentFindHit])
-
-  const replaceDocumentFindHit = useCallback((hit: DocumentFindHit) => {
-    const sourceText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
-    const directive = resolveDocumentFindDirective(documentFindQuery, sourceText, isDocumentFindCaseSensitive)
-
-    // Right-click should still behave like a normal jump when replace mode is not active.
-    if (!directive.isReplaceMode || !directive.findText) {
-      handleJumpToDocumentFindHit(hit)
-      return
-    }
-
-    const selectedText = sourceText.slice(hit.index, hit.index + hit.matchLength)
-    const selectedComparable = isDocumentFindCaseSensitive ? selectedText : selectedText.toLowerCase()
-    const findComparable = isDocumentFindCaseSensitive ? directive.findText : directive.findText.toLowerCase()
-    if (selectedComparable !== findComparable) {
-      // If content shifted since hit computation, just jump to keep behavior predictable.
-      handleJumpToDocumentFindHit(hit)
-      return
-    }
-
-    const nextText = `${sourceText.slice(0, hit.index)}${directive.replaceText}${sourceText.slice(hit.index + hit.matchLength)}`
-    const replacementEnd = hit.index + directive.replaceText.length
-    applyProgrammaticEditorText(nextText, hit.index, replacementEnd)
-  }, [activeNoteText, applyProgrammaticEditorText, documentFindQuery, handleJumpToDocumentFindHit, isDocumentFindCaseSensitive])
-
-  const replaceAllDocumentFindHits = useCallback(() => {
-    const sourceText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
-    const directive = resolveDocumentFindDirective(documentFindQuery, sourceText, isDocumentFindCaseSensitive)
-    if (!directive.isReplaceMode || !directive.findText) {
-      return
-    }
-
-    const hits = buildDocumentFindHits(sourceText, directive.findText, isDocumentFindCaseSensitive)
-    if (hits.length === 0) {
-      return
-    }
-
-    let cursor = 0
-    let nextText = ''
-    for (const hit of hits) {
-      nextText += sourceText.slice(cursor, hit.index)
-      nextText += directive.replaceText
-      cursor = hit.index + hit.matchLength
-    }
-    nextText += sourceText.slice(cursor)
-
-    const firstHitStart = hits[0]?.index ?? 0
-    const firstHitEnd = firstHitStart + directive.replaceText.length
-    applyProgrammaticEditorText(nextText, firstHitStart, firstHitEnd)
-  }, [activeNoteText, applyProgrammaticEditorText, documentFindQuery, isDocumentFindCaseSensitive])
+    isPreviewMode,
+    adapterRef,
+    latestEditorTextRef,
+    activeNoteText,
+    documentFindQuery,
+    applyProgrammaticEditorText,
+  })
 
   const {
     activeDecorationFormats,
