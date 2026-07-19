@@ -15,6 +15,8 @@ export interface UseSectionTabsOptions {
   persistenceReady: boolean
   /** Switches which note this section is showing. Will become section-scoped itself once sections can diverge; passed straight through for now. */
   activateNote: (noteId: string) => Promise<void>
+  /** Locates this section's active note in the (deliberately stable, non-chasing) menu -- triggered by clicking a tab that's already selected. */
+  revealNoteInMenu: () => void
   flushPendingSaveNow: () => Promise<void>
   refreshNotes: (preferredId?: string | null) => Promise<string | null>
   /** Shared across every note-mutating operation in the app, not owned by this hook -- guards against overlapping note transitions. */
@@ -84,6 +86,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     notes,
     persistenceReady,
     activateNote,
+    revealNoteInMenu,
     flushPendingSaveNow,
     refreshNotes,
     noteTransitionLockRef,
@@ -529,8 +532,16 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
       return
     }
 
+    // A second click on the tab that's already selected doesn't reload it --
+    // the menu is deliberately stable and doesn't otherwise know or care
+    // which note is active, so this is the one explicit way to locate it.
+    if (noteId === activeNoteId) {
+      revealNoteInMenu()
+      return
+    }
+
     void activateNote(noteId)
-  }, [unpinPrimedTabNoteId, pinnedTabs, unpinNoteTab, dismissTempTab, activateNote])
+  }, [unpinPrimedTabNoteId, pinnedTabs, unpinNoteTab, dismissTempTab, activeNoteId, revealNoteInMenu, activateNote])
 
   // Holding the left mouse button on the temp tab for TEMP_TAB_PIN_HOLD_MS
   // promotes it to a real, permanent pinned tab.

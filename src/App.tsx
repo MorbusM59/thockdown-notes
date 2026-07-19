@@ -3581,6 +3581,7 @@ function App() {
   // render behind.
   const queueAppStateSaveRef = useRef<(selectedNoteId: string | null) => void>(() => {})
   const updateActiveNoteTitlePreviewRef = useRef<(nextText: string) => void>(() => {})
+  const revealNoteInMenuRef = useRef<() => void>(() => {})
   const writeDebugEntryRef = useRef<(functionName: string, lines: string[]) => Promise<void>>(async () => {})
   const activeNoteHasDebugTagRef = useRef(false)
   const buildTextDecorationTransformRef = useRef<(text: string, selection: EditorSelectionState, format: 'bold' | 'italic' | 'strikethrough') => { text: string; selection: EditorSelectionState } | null>(() => null)
@@ -3590,6 +3591,7 @@ function App() {
 
   const queueAppStateSaveStable = useCallback((selectedNoteId: string | null) => queueAppStateSaveRef.current(selectedNoteId), [])
   const updateActiveNoteTitlePreviewStable = useCallback((nextText: string) => updateActiveNoteTitlePreviewRef.current(nextText), [])
+  const revealNoteInMenuStable = useCallback(() => revealNoteInMenuRef.current(), [])
   const writeDebugEntryStable = useCallback((functionName: string, lines: string[]) => writeDebugEntryRef.current(functionName, lines), [])
 
   const {
@@ -5181,6 +5183,7 @@ ${markdownHtml}
     notes,
     persistenceReady,
     activateNote,
+    revealNoteInMenu: revealNoteInMenuStable,
     flushPendingSaveNow,
     refreshNotes,
     noteTransitionLockRef,
@@ -6761,82 +6764,103 @@ await flushPendingSaveNow()
     ? visibleNotes.length
     : 0
 
-  const isNoteDisplayedInCurrentMenu = useCallback((noteId: string): boolean => {
-    if (sidebarMode === 'date') {
-      return dateFilteredNotes.some((note) => note.id === noteId)
-    }
-
-    if (sidebarMode === 'trash') {
-      return trashFilteredNotes.some((note) => note.id === noteId)
-    }
-
-    if (sidebarMode === 'category') {
-      for (const primary of categoryTreeRef.current) {
-        for (const secondary of primary.secondary) {
-          for (const tertiary of secondary.tertiary) {
-            if (tertiary.notes.some((note) => note.id === noteId)) {
-              return true
-            }
-          }
-        }
-      }
-      return false
-    }
-
-    if (sidebarMode === 'archive') {
-      for (const primary of archiveTreeRef.current) {
-        for (const secondary of primary.secondary) {
-          for (const tertiary of secondary.tertiary) {
-            if (tertiary.notes.some((note) => note.id === noteId)) {
-              return true
-            }
-          }
-        }
-      }
-      return false
-    }
-
-    return true
-  }, [sidebarMode, dateFilteredNotes, trashFilteredNotes])
-
   const isSidebarSearchActive = isNoteSearchQueryActive(searchQuery)
 
-  useEffect(() => {
-    if (sidebarMode !== 'date' && sidebarMode !== 'trash' && sidebarMode !== 'category' && sidebarMode !== 'archive') {
-      return
+  // The menu is deliberately a stable "file cabinet," not something that
+  // chases the active note -- browsing the sidebar (changing a filter,
+  // switching views) never used to reach back into the editor and swap the
+  // active note out from under the user (that used to happen here; removed).
+  // The one deliberate exception is this: clicking an already-selected tab
+  // explicitly asks to locate that note in the menu. Reused wholesale:
+  // isDeletedNote/isArchivedNote for where a note lives, matchesNoteSearchQuery/
+  // matchesSelectedDateFilter for which filter (if any) is actually hiding it,
+  // and the existing runSidebarMenuTransition/focusActiveNoteInSidebarMode
+  // pair for switching view + unfolding tree branches + scrolling into view --
+  // all of which already exist and already operate on activeNoteId, which is
+  // exactly what this reveals (the note the section that triggered this was
+  // already showing).
+  const revealNoteInMenu = useCallback(() => {
+    if (!activeNoteId || !activeNoteSummary) return
+
+    // Clear only whichever filter is actually hiding the note -- never one
+    // that isn't in the way.
+    if (isSidebarSearchActive && !matchesNoteSearchQuery(
+      { title: activeNoteSummary.title, fileName: activeNoteSummary.fileName, tags: activeNoteSummary.tags, contentText: activeNoteSummary.contentText },
+      searchQuery,
+      isSearchQueryCaseSensitive,
+    )) {
+      setSearchQuery('')
+    }
+    const isDeleted = isDeletedNote(activeNoteSummary)
+    const isArchived = isArchivedNote(activeNoteSummary)
+    const isExternal = isExternalNote(activeNoteSummary)
+
+    // The month/year filter never applies to trash (trashEligibleNotes skips
+    // it entirely) -- clearing it there would be an unrelated side effect,
+    // not "clearing whichever filter is actually hiding the note."
+    if (!isDeleted && hasDateFilter && !matchesSelectedDateFilter(activeNoteSummary.updatedAtMs)) {
+      setSelectedMonths(new Set())
+      setSelectedYears(new Set())
     }
 
-    if (isSidebarSearchActive) {
-      return
-    }
+    const targetMode: SidebarMode = isDeleted
+      ? 'trash'
+      : isArchived
+        ? 'archive'
+        // Category/archive trees exclude external (filesystem-synced) notes
+        // entirely, regardless of any filter -- 'date' is the only view
+        // that can ever show one, so there's no "stay in category" option
+        // for it even if that's the current mode.
+        : isExternal
+          ? 'date'
+          : (sidebarMode === 'date' || sidebarMode === 'category')
+            ? sidebarMode
+            : 'category'
 
-    if (!activeNoteId) {
-      // No active note — auto-load the first available note in date/trash/category/archive.
-      const firstId = getNextActiveNoteIdAfterRemoval('')
-      if (firstId) {
-        void activateNote(firstId)
+    const staysInCurrentMode = targetMode === sidebarMode
+    const needsDatePaginationPrep = !isDeleted && !isArchived && !isExternal && targetMode === 'category' && !staysInCurrentMode
+
+    // Deferred a frame: the filter-clearing state updates above need to
+    // commit (and dateFilteredNotes/categoryTree recompute) before switching
+    // mode / unfolding / paginating can find the note where it now is.
+    requestAnimationFrame(() => {
+      if (staysInCurrentMode) {
+        focusActiveNoteInSidebarMode(sidebarMode)
+      } else {
+        runSidebarMenuTransition(targetMode)
       }
-      return
-    }
 
-    if (isNoteDisplayedInCurrentMenu(activeNoteId)) {
-      return
-    }
+      // Silently prep date view's pagination so it's already positioned
+      // right if the user switches there by hand later -- without actually
+      // switching to date view now. This writes the *persisted* per-mode
+      // page (sidebarViewStateByMode.date.page), not the live currentPage,
+      // since currentPage only reflects whichever mode is presently active
+      // and would just get discarded the next time date mode is entered.
+      if (needsDatePaginationPrep) {
+        const noteIndex = dateFilteredNotesRef.current.findIndex((note) => note.id === activeNoteId)
+        if (noteIndex >= 0) {
+          const container = sidebarContentRef.current
+          const list = container?.querySelector('.notes-list') as HTMLElement | null
+          const firstItem = list?.querySelector('.note-list-item') as HTMLElement | null
+          const listStyles = list ? window.getComputedStyle(list) : null
+          const rowHeight = firstItem ? Math.round(firstItem.getBoundingClientRect().height) : 48
+          const rowGap = listStyles ? Math.round(parseFloat(listStyles.rowGap || listStyles.gap || '8')) : 8
+          const paddingTop = listStyles ? Math.round(parseFloat(listStyles.paddingTop || '10')) : 10
+          const paddingBottom = listStyles ? Math.round(parseFloat(listStyles.paddingBottom || '10')) : 10
+          const contentHeight = container ? container.clientHeight - paddingTop - paddingBottom : 0
+          const measuredItemsPerPage = Math.max(1, Math.floor((contentHeight + rowGap) / (rowHeight + rowGap)))
+          const targetPage = Math.floor(noteIndex / measuredItemsPerPage) + 1
 
-    // In tree views (category/archive), a note may not appear in that tree but
-    // still exists — keep it in the editor without replacement.
-    if (sidebarMode === 'category' || sidebarMode === 'archive') {
-      return
-    }
+          setSidebarViewStateByMode((previous) => ({
+            ...previous,
+            date: { ...previous.date, page: targetPage },
+          }))
+        }
+      }
+    })
+  }, [activeNoteId, activeNoteSummary, focusActiveNoteInSidebarMode, hasDateFilter, isSearchQueryCaseSensitive, isSidebarSearchActive, matchesSelectedDateFilter, runSidebarMenuTransition, searchQuery, sidebarMode])
+  revealNoteInMenuRef.current = revealNoteInMenu
 
-    const nextActiveId = getNextActiveNoteIdAfterRemoval(activeNoteId)
-    if (nextActiveId) {
-      void activateNote(nextActiveId)
-    } else {
-      setActiveNoteId(null)
-      setActiveNoteText('')
-    }
-  }, [activeNoteId, isSidebarSearchActive, sidebarMode, isNoteDisplayedInCurrentMenu, getNextActiveNoteIdAfterRemoval, activateNote])
   const totalPages = Math.max(1, Math.ceil(totalPagedNotes / Math.max(1, itemsPerPage)))
   const effectiveCurrentPage = Math.min(Math.max(1, currentPage), totalPages)
   const isSidebarTreeMode = sidebarMode === 'category' || sidebarMode === 'archive'
