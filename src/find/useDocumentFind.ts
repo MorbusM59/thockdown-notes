@@ -5,6 +5,15 @@ import { resolveDocumentFindDirective, buildDocumentFindHits } from '../editor/F
 
 export interface UseDocumentFindOptions {
   /**
+   * Which section this instance belongs to. Not read internally yet -- there's
+   * only one call site today -- but part of the signature now (mirroring
+   * useActiveNoteId/useSectionTabs) so the call site already reads as "this
+   * section's find state" rather than "the app's find state," and so a
+   * consistency check can confirm it matches the sectionId every sibling
+   * section-scoped hook was given.
+   */
+  sectionId: string
+  /**
    * The text to search -- deliberately just a string, not "the active
    * note" or "the active editor". The caller decides which section's live
    * text this is; today there's only one, but this is the seam a future
@@ -34,7 +43,8 @@ export interface UseDocumentFindResult {
  * `documentFindDirective` back out to drive them.
  */
 export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFindResult {
-  const { sourceText, initialCaseSensitive } = options
+  const { sectionId, sourceText, initialCaseSensitive } = options
+  void sectionId
 
   const [documentFindQuery, setDocumentFindQuery] = useState('')
   const [isDocumentFindCaseSensitive, setIsDocumentFindCaseSensitive] = useState(false)

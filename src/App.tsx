@@ -44,6 +44,7 @@ import { isArchivedNote, isDeletedNote, isExternalNote, isSameNoteSummary } from
 import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName, isProtectedTagName } from './shared/tags'
 import { useSectionTabs, TEMP_TAB_PIN_HOLD_MS } from './tabBar/useSectionTabs'
 import { DEFAULT_EDITOR_SECTION_ID } from './shared/sections'
+import { assertSectionIdsConsistent } from './shared/assertSectionIdsConsistent'
 import type { TextureCacheRequest } from './shared/textures'
 import {
   DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
@@ -6247,7 +6248,7 @@ await flushPendingSaveNow()
 
   const [timelineCurveConstant, setTimelineCurveConstant] = useState(10)
   const [timelineTrackLengthPx, setTimelineTrackLengthPx] = useState(0)
-  const noteSnapshots = useNoteSnapshots(activeNoteId, currentEditorText, timelineCurveConstant)
+  const noteSnapshots = useNoteSnapshots(DEFAULT_EDITOR_SECTION_ID, activeNoteId, currentEditorText, timelineCurveConstant)
   const { latestSnapshotContent, refresh: refreshSnapshots } = noteSnapshots
   const lastAutoCompactNoteIdRef = useRef<string | null>(null)
 
@@ -6500,6 +6501,7 @@ await flushPendingSaveNow()
     documentFindDirective,
     documentFindHits,
   } = useDocumentFind({
+    sectionId: DEFAULT_EDITOR_SECTION_ID,
     sourceText: currentEditorText,
     initialCaseSensitive: restoredDocumentFindCaseSensitive,
   })
@@ -6507,6 +6509,19 @@ await flushPendingSaveNow()
   useEffect(() => {
     documentFindCaseSensitiveRef.current = isDocumentFindCaseSensitive
   }, [isDocumentFindCaseSensitive])
+
+  // Dev-only tripwire: every section-scoped hook above is handed the same
+  // DEFAULT_EDITOR_SECTION_ID today. If a future second-section wiring pass
+  // updates some call sites but misses one, most of these hooks wouldn't
+  // notice on their own (sectionId isn't read internally yet by all of
+  // them) -- this catches the drift instead of letting it fail silently.
+  useEffect(() => {
+    assertSectionIdsConsistent({
+      useSectionTabs: DEFAULT_EDITOR_SECTION_ID,
+      useDocumentFind: DEFAULT_EDITOR_SECTION_ID,
+      useNoteSnapshots: DEFAULT_EDITOR_SECTION_ID,
+    })
+  }, [])
 
   const previewNoteAnchorMarkerPlugin = useMemo(
     () => createPreviewNoteAnchorMarkerRehypePlugin(),

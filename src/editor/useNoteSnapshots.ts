@@ -38,8 +38,16 @@ export type UseNoteSnapshotsResult = {
  * Fetches and derives everything the snapshot timeline needs for one note.
  * Deliberately does not know about pixels, sliders, or DOM -- see
  * SnapshotTimelineSlider.tsx for the rendering layer that consumes this.
+ *
+ * `sectionId` isn't read internally yet -- there's only one call site today,
+ * and snapshots are looked up by `noteId` alone -- but it's part of the
+ * signature now (mirroring useActiveNoteId/useSectionTabs) so the call site
+ * already reads as "this section's timeline" rather than "the app's
+ * timeline," and so a consistency check can confirm it matches the
+ * sectionId every sibling section-scoped hook was given.
  */
-export function useNoteSnapshots(noteId: string | null, liveText: string, curveConstant = 10): UseNoteSnapshotsResult {
+export function useNoteSnapshots(sectionId: string, noteId: string | null, liveText: string, curveConstant = 10): UseNoteSnapshotsResult {
+  void sectionId
   const [snapshots, setSnapshots] = useState<NoteSnapshotRecord[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const requestIdRef = useRef(0)
