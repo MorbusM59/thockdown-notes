@@ -5,13 +5,10 @@ import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent,
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { visit } from 'unist-util-visit'
-import { Editor } from './components/Editor'
 import { AccordionGroup, AccordionSection } from './components/AccordionSection'
 import { AudioControls } from './components/AudioControls'
 import { useNoteSnapshots } from './editor/useNoteSnapshots'
 import type { PlacedSnapshot } from './editor/SnapshotTimelineCurve'
-import { SnapshotTimelineSlider } from './editor/SnapshotTimelineSlider'
-import { PresentStateCircle } from './editor/PresentStateCircle'
 import './App.css'
 import { buildExportCss, type ExportViewStyle, type ExportFontSize, type ExportSpacing } from './exportStyles'
 import type {
@@ -44,6 +41,7 @@ import { isArchivedNote, isDeletedNote, isExternalNote, isSameNoteSummary } from
 import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName } from './shared/tags'
 import { useSectionTabs } from './tabBar/useSectionTabs'
 import { SectionTabBar } from './tabBar/SectionTabBar'
+import { SectionEditorArea } from './editorSection/SectionEditorArea'
 import { DEFAULT_EDITOR_SECTION_ID } from './shared/sections'
 import { assertSectionIdsConsistent } from './shared/assertSectionIdsConsistent'
 import type { TextureCacheRequest } from './shared/textures'
@@ -11027,115 +11025,53 @@ await flushPendingSaveNow()
               activeNoteSummary={activeNoteSummary}
             />
 
-            <div
-              className="editor-viewer-frame"
-              style={{ gridArea: 'viewer' }}
-              onFocusCapture={() => markSectionActive(DEFAULT_EDITOR_SECTION_ID)}
-              onMouseDownCapture={() => markSectionActive(DEFAULT_EDITOR_SECTION_ID)}
-              onKeyDownCapture={() => markSectionActive(DEFAULT_EDITOR_SECTION_ID)}
-            >
-              <main className="editor-shell">
-                <div className="editor-background">
-                  <div ref={editorStageRef} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
-                    <div className="edit-container" style={{ display: isPreviewMode ? 'none' : undefined }}>
-                      <Editor
-                        key={previewedSnapshotId ?? 'present'}
-                        bindings={bindings}
-                        adapterRef={adapterRef}
-                        noteId={activeNoteId}
-                        initialText={editorDisplayText}
-                        scrollbarHost={scrollbarHostEl}
-                        fontFamily={editorFontFamily}
-                        fontSizePx={editorRuntimeMetrics.fontSizePx}
-                        lineHeightPx={editorRuntimeMetrics.lineHeightPx}
-                        glyphWidthPx={editorRuntimeMetrics.glyphWidthPx}
-                        cellWidthPx={editorRuntimeMetrics.cellWidthPx}
-                        fontReady={editorFontLoadVersion > 0}
-                        editorReadOnly={activeNoteHasDebugTag || isPreviewingSnapshot}
-                        caretSuspended={isCaretSuspended}
-                        spellCheckEnabled={spellCheckEditEnabled}
-                      />
-                    </div>
-                    <div className="render-container" style={{ display: isPreviewMode ? undefined : 'none' }} aria-hidden={!isPreviewMode}>
-                      <div ref={previewTextureRef} className="markdown-preview-texture" />
-                      <div
-                        ref={previewScrollRef}
-                        onScroll={handlePreviewScroll}
-                        className={`markdown-preview thockdown-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
-                        style={{ '--search-hit-color': highlightColors.search } as CSSProperties}
-                        contentEditable={spellCheckRenderEnabled}
-                        suppressContentEditableWarning={spellCheckRenderEnabled}
-                        spellCheck={spellCheckRenderEnabled}
-                        onBeforeInput={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
-                        onPaste={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
-                        onCut={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
-                        onDrop={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
-                      >
-                        {previewMarkdownElement}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </main>
-              <aside className="editor-scrollbar-slot">
-                <div className="editor-scrollbar-slot-inner" aria-hidden="true">
-                  {!isPreviewMode ? (
-                    <div ref={setScrollbarHostEl} className="editor-scrollbar-slot-inner" />
-                  ) : (
-                    <div className="thockdown-scroll-rail">
-                      <div
-                        ref={previewScrollbarTrackRef}
-                        className="thockdown-scroll-track"
-                        onMouseDown={handlePreviewTrackMouseDown}
-                      >
-                        <div
-                          ref={previewScrollbarThumbRef}
-                          className={`thockdown-scroll-thumb${isDraggingPreviewScrollThumb ? ' is-dragging' : ''}${isPreviewScrollThumbActive ? '' : ' is-inactive'}`}
-                          onMouseDown={handlePreviewThumbMouseDown}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </aside>
-              <div className="editor-document-stats" aria-live="polite">
-              {activeNoteId && (
-                <div className="wordcount-panel" aria-live="polite">
-                  <span><b>{activeNoteDocumentStats.wordCount.toLocaleString()}</b> ({activeNoteDocumentStats.characterCount.toLocaleString()})</span>
-                </div>
-              )}
-                <div className="timeline-panel">
-                {activeNoteId ? (
-                  <SnapshotTimelineSlider
-                    sourceNoteId={activeNoteId}
-                    placements={noteSnapshots.placements}
-                    snapshotsById={noteSnapshots.snapshotsById}
-                    snapshotIdsMatchingPresent={noteSnapshots.snapshotIdsMatchingPresent}
-                    activeSnapshotId={previewedSnapshotId}
-                    onNavigate={handleNavigateSnapshot}
-                    onBranchOpened={handleBranchOpened}
-                    onBranchError={handleBranchError}
-                    curveConstant={timelineCurveConstant}
-                    onCurveConstantChange={setTimelineCurveConstant}
-                    onTrackLengthChange={setTimelineTrackLengthPx}
-                  />
-                ) : (
-                  <span>0 words</span>
-                )}
-                </div>
-                <div className="manual-snapshot-panel">
-                {activeNoteId && (
-                  <PresentStateCircle
-                    hasPendingManualChanges={noteSnapshots.hasPendingManualChanges}
-                    onCreateManualSnapshot={() => { void handleCreateManualSnapshot() }}
-                    onGoToPresent={handleReturnToPresent}
-                    onMergeAdjacentSnapshots={handleMergeAdjacentSnapshots}
-                    isPresent={previewedSnapshotId === null}
-                  />
-                )}
-                </div>
-              </div>
-            </div>
+            <SectionEditorArea
+              sectionId={DEFAULT_EDITOR_SECTION_ID}
+              markSectionActive={markSectionActive}
+              isPreviewMode={isPreviewMode}
+              editorStageRef={editorStageRef}
+              previewedSnapshotId={previewedSnapshotId}
+              bindings={bindings}
+              adapterRef={adapterRef}
+              activeNoteId={activeNoteId}
+              editorDisplayText={editorDisplayText}
+              scrollbarHostEl={scrollbarHostEl}
+              setScrollbarHostEl={setScrollbarHostEl}
+              editorFontFamily={editorFontFamily}
+              editorRuntimeMetrics={editorRuntimeMetrics}
+              editorFontLoadVersion={editorFontLoadVersion}
+              activeNoteHasDebugTag={activeNoteHasDebugTag}
+              isPreviewingSnapshot={isPreviewingSnapshot}
+              isCaretSuspended={isCaretSuspended}
+              spellCheckEditEnabled={spellCheckEditEnabled}
+              previewTextureRef={previewTextureRef}
+              previewScrollRef={previewScrollRef}
+              handlePreviewScroll={handlePreviewScroll}
+              viewStyle={viewStyle}
+              viewFontSize={viewFontSize}
+              viewSpacing={viewSpacing}
+              highlightSearchColor={highlightColors.search}
+              spellCheckRenderEnabled={spellCheckRenderEnabled}
+              blockPreviewEditMutation={blockPreviewEditMutation}
+              previewMarkdownElement={previewMarkdownElement}
+              previewScrollbarTrackRef={previewScrollbarTrackRef}
+              handlePreviewTrackMouseDown={handlePreviewTrackMouseDown}
+              previewScrollbarThumbRef={previewScrollbarThumbRef}
+              isDraggingPreviewScrollThumb={isDraggingPreviewScrollThumb}
+              isPreviewScrollThumbActive={isPreviewScrollThumbActive}
+              handlePreviewThumbMouseDown={handlePreviewThumbMouseDown}
+              activeNoteDocumentStats={activeNoteDocumentStats}
+              noteSnapshots={noteSnapshots}
+              handleNavigateSnapshot={handleNavigateSnapshot}
+              handleBranchOpened={handleBranchOpened}
+              handleBranchError={handleBranchError}
+              timelineCurveConstant={timelineCurveConstant}
+              setTimelineCurveConstant={setTimelineCurveConstant}
+              setTimelineTrackLengthPx={setTimelineTrackLengthPx}
+              handleCreateManualSnapshot={handleCreateManualSnapshot}
+              handleReturnToPresent={handleReturnToPresent}
+              handleMergeAdjacentSnapshots={handleMergeAdjacentSnapshots}
+            />
           </div>
         </div>
         {filterColorize > 0 && (
