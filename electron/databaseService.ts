@@ -162,14 +162,18 @@ export type NoteTabEntry = {
  * One side-by-side editor pane. `widthFraction` is the pane's share of the
  * split-view width (null = "distribute evenly with its siblings", the
  * everyday case while there's only ever one section). `name` is null until
- * the user names it — surfaced later for saving/restoring named section
- * collections independently from the UI loadout system.
+ * the user names it; a named section is kept forever and can be recalled
+ * into any slot later, an unnamed one is disposable and deleted outright
+ * when its slot is closed or replaced. `position` is null when the section
+ * isn't currently occupying a slot. `lastActiveNoteId` is this section's own
+ * "which note was I last showing" memory, independent of pinning.
  */
 export type EditorSectionEntry = {
   id: string;
   name: string | null;
-  position: number;
+  position: number | null;
   widthFraction: number | null;
+  lastActiveNoteId: string | null;
 };
 
 /** The sole section that exists on a fresh install — also where sidebar note clicks always land. */
@@ -1078,7 +1082,9 @@ export class DatabaseService {
 
   listEditorSections(): EditorSectionEntry[] {
     const db = this.requireDb();
-    return db.prepare('SELECT id, name, position, widthFraction FROM editor_sections ORDER BY position ASC').all() as EditorSectionEntry[];
+    // Parked (position IS NULL) sections sort after every visible one, rather
+    // than SQLite's NULLS-first default scrambling the visible layout's order.
+    return db.prepare('SELECT id, name, position, widthFraction, lastActiveNoteId FROM editor_sections ORDER BY position IS NULL, position ASC').all() as EditorSectionEntry[];
   }
 
   createEditorSection(name: string | null = null, afterPosition?: number): EditorSectionEntry[] {
@@ -1130,6 +1136,73 @@ export class DatabaseService {
       widths.forEach(({ id, widthFraction }) => {
         db.prepare('UPDATE editor_sections SET widthFraction = ? WHERE id = ?').run(widthFraction, id);
       });
+    });
+    tx();
+    return this.listEditorSections();
+  }
+
+  /** Records which note a section last showed -- independent of whether that note is pinned to its tab bar. */
+  setEditorSectionActiveNote(sectionId: string, noteId: string | null): EditorSectionEntry[] {
+    const db = this.requireDb();
+    db.prepare('UPDATE editor_sections SET lastActiveNoteId = ? WHERE id = ?').run(noteId, sectionId);
+    return this.listEditorSections();
+  }
+
+  /** Renumbers position 0..n-1 across every currently-visible (non-parked) section, in existing position order. */
+  private renumberVisibleEditorSectionPositions(): void {
+    const db = this.requireDb();
+    const visible = db.prepare('SELECT id FROM editor_sections WHERE position IS NOT NULL ORDER BY position ASC').all() as Array<{ id: string }>;
+    visible.forEach(({ id }, index) => {
+      db.prepare('UPDATE editor_sections SET position = ? WHERE id = ?').run(index, id);
+    });
+  }
+
+  /**
+   * Closes a section's slot via its own close button. Unnamed sections are
+   * deleted outright (cascading their pinned tabs); named sections are only
+   * parked (`position` set to null) so their row and tabs survive, reachable
+   * again later via `swapSectionIntoSlot`. Either way, the remaining visible
+   * sections' positions are renumbered to stay contiguous.
+   */
+  closeSectionSlot(sectionId: string): EditorSectionEntry[] {
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      const section = db.prepare('SELECT name FROM editor_sections WHERE id = ?').get(sectionId) as { name: string | null } | undefined;
+      if (!section) return;
+
+      if (section.name === null) {
+        db.prepare('DELETE FROM editor_sections WHERE id = ?').run(sectionId);
+      } else {
+        db.prepare('UPDATE editor_sections SET position = NULL WHERE id = ?').run(sectionId);
+      }
+      this.renumberVisibleEditorSectionPositions();
+    });
+    tx();
+    return this.listEditorSections();
+  }
+
+  /**
+   * Recalls `incomingSectionId` into whatever slot `outgoingSectionId`
+   * currently occupies. `outgoingSectionId` is closed the same way
+   * `closeSectionSlot` would (deleted if unnamed, parked if named) but
+   * in-place -- the slot itself isn't removed, just reassigned, so no
+   * renumbering of other rows is needed. Runs as one transaction: a crash
+   * mid-swap must never leave two sections at the same position or a
+   * position with nothing in it.
+   */
+  swapSectionIntoSlot(outgoingSectionId: string, incomingSectionId: string): EditorSectionEntry[] {
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      const outgoing = db.prepare('SELECT name, position FROM editor_sections WHERE id = ?').get(outgoingSectionId) as { name: string | null; position: number | null } | undefined;
+      if (!outgoing || outgoing.position === null) return;
+
+      const slotPosition = outgoing.position;
+      if (outgoing.name === null) {
+        db.prepare('DELETE FROM editor_sections WHERE id = ?').run(outgoingSectionId);
+      } else {
+        db.prepare('UPDATE editor_sections SET position = NULL WHERE id = ?').run(outgoingSectionId);
+      }
+      db.prepare('UPDATE editor_sections SET position = ? WHERE id = ?').run(slotPosition, incomingSectionId);
     });
     tx();
     return this.listEditorSections();
@@ -2609,20 +2682,22 @@ export class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_music_songs_priority ON music_songs(priority);
 
       CREATE TABLE IF NOT EXISTS editor_sections (
-        id            TEXT PRIMARY KEY,
-        name          TEXT,
-        position      INTEGER NOT NULL,
-        widthFraction REAL
+        id               TEXT PRIMARY KEY,
+        name             TEXT,
+        position         INTEGER,
+        widthFraction    REAL,
+        lastActiveNoteId TEXT REFERENCES notes(id) ON DELETE SET NULL
       );
 
       CREATE INDEX IF NOT EXISTS idx_editor_sections_position ON editor_sections(position);
 
       CREATE TABLE IF NOT EXISTS note_tabs (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
         sectionId TEXT    NOT NULL,
         noteId    TEXT    NOT NULL,
         position  INTEGER NOT NULL,
         addedAt   INTEGER NOT NULL,
-        PRIMARY KEY (sectionId, noteId),
+        UNIQUE (sectionId, noteId),
         FOREIGN KEY (sectionId) REFERENCES editor_sections(id) ON DELETE CASCADE,
         FOREIGN KEY (noteId)    REFERENCES notes(id)            ON DELETE CASCADE
       );
@@ -2637,7 +2712,7 @@ export class DatabaseService {
       .get() as { sectionCount: number };
     if (sectionCount === 0) {
       this.requireDb()
-        .prepare('INSERT INTO editor_sections (id, name, position, widthFraction) VALUES (?, NULL, 0, NULL)')
+        .prepare('INSERT INTO editor_sections (id, name, position, widthFraction, lastActiveNoteId) VALUES (?, NULL, 0, NULL, NULL)')
         .run(DEFAULT_EDITOR_SECTION_ID);
     }
 
@@ -2645,6 +2720,7 @@ export class DatabaseService {
     this.ensureNotesColumn('sourceAnchorText', 'TEXT');
     this.ensureNotesColumn('contentChecksum', 'TEXT');
     this.ensureNotesColumn('assignedId', 'TEXT');
+    this.ensureEditorSectionsColumn('lastActiveNoteId', 'TEXT REFERENCES notes(id) ON DELETE SET NULL');
 
     this.requireDb().exec(`
       CREATE INDEX IF NOT EXISTS idx_notes_internal_id ON notes(assignedId);
@@ -2659,6 +2735,16 @@ export class DatabaseService {
     }
 
     db.exec(`ALTER TABLE notes ADD COLUMN ${columnName} ${columnDefinition}`);
+  }
+
+  private ensureEditorSectionsColumn(columnName: string, columnDefinition: string): void {
+    const db = this.requireDb();
+    const columns = db.prepare('PRAGMA table_info(editor_sections)').all() as Array<{ name: string }>;
+    if (columns.some((column) => column.name === columnName)) {
+      return;
+    }
+
+    db.exec(`ALTER TABLE editor_sections ADD COLUMN ${columnName} ${columnDefinition}`);
   }
 
   private ensureProtectedTags(): void {

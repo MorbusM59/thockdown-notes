@@ -788,6 +788,18 @@ function registerIpcHandlers() {
   ipcMain.handle(EDITOR_SECTIONS_CHANNELS.updateWidths, async (_event, widths: Array<{ id: string; widthFraction: number | null }>) => {
     return databaseService!.updateEditorSectionWidths(widths);
   });
+
+  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.setActiveNote, async (_event, sectionId: string, noteId: string | null) => {
+    return databaseService!.setEditorSectionActiveNote(sectionId, noteId);
+  });
+
+  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.closeSlot, async (_event, sectionId: string) => {
+    return databaseService!.closeSectionSlot(sectionId);
+  });
+
+  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.swapIntoSlot, async (_event, outgoingSectionId: string, incomingSectionId: string) => {
+    return databaseService!.swapSectionIntoSlot(outgoingSectionId, incomingSectionId);
+  });
 }
 
 function readCurrentWindowState(windowRef: BrowserWindow): WindowState {

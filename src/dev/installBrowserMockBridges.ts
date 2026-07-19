@@ -110,7 +110,7 @@ function toSummary(note: NoteDocument): NoteSummary {
 
 /** A fresh install always starts with exactly one (default, unnamed) section. */
 function createDefaultEditorSections(): EditorSectionEntry[] {
-  return [{ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null }]
+  return [{ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, lastActiveNoteId: null }]
 }
 
 function sortNotesDesc(notes: NoteDocument[]): NoteDocument[] {
@@ -292,8 +292,13 @@ function loadStore(): BrowserMockStore {
             .map((entry, index) => ({
               id: entry.id,
               name: typeof entry.name === 'string' ? entry.name : null,
-              position: Number.isFinite(entry.position) ? entry.position : index,
+              // Distinguish "genuinely parked" (null) from malformed/missing
+              // data (fall back to index) -- Number.isFinite(null) is false,
+              // so a naive fallback would force every parked section back
+              // into a visible slot on every reload.
+              position: entry.position === null ? null : (Number.isFinite(entry.position) ? entry.position : index),
               widthFraction: Number.isFinite(entry.widthFraction) ? entry.widthFraction : null,
+              lastActiveNoteId: typeof entry.lastActiveNoteId === 'string' ? entry.lastActiveNoteId : null,
             }))
         : createDefaultEditorSections(),
     }
@@ -901,8 +906,25 @@ function buildSectionsBridge(storeRef: { current: BrowserMockStore }): EditorSec
     return result
   }
 
+  // Parked (position === null) sections sort after every visible one, same
+  // as the real DB's `ORDER BY position IS NULL, position ASC`.
   const sorted = (store: BrowserMockStore): EditorSectionEntry[] =>
-    store.editorSections.slice().sort((a, b) => a.position - b.position)
+    store.editorSections.slice().sort((a, b) => {
+      if (a.position === null && b.position === null) return 0
+      if (a.position === null) return 1
+      if (b.position === null) return -1
+      return a.position - b.position
+    })
+
+  const renumberVisible = (store: BrowserMockStore): void => {
+    const visible = store.editorSections
+      .filter((section) => section.position !== null)
+      .sort((a, b) => (a.position as number) - (b.position as number))
+    const positionById = new Map(visible.map((section, index) => [section.id, index]))
+    store.editorSections = store.editorSections.map((section) => (
+      section.position === null ? section : { ...section, position: positionById.get(section.id) ?? section.position }
+    ))
+  }
 
   return {
     async listSections(): Promise<EditorSectionEntry[]> {
@@ -912,12 +934,14 @@ function buildSectionsBridge(storeRef: { current: BrowserMockStore }): EditorSec
     async createSection(name = null, afterPosition): Promise<EditorSectionEntry[]> {
       return mutate((store) => {
         const id = `section-${Math.random().toString(36).slice(2, 10)}`
-        const maxPosition = store.editorSections.reduce((max, section) => Math.max(max, section.position), -1)
+        const maxPosition = store.editorSections.reduce((max, section) => (
+          section.position === null ? max : Math.max(max, section.position)
+        ), -1)
         const insertAt = afterPosition !== undefined ? afterPosition + 1 : maxPosition + 1
         store.editorSections = store.editorSections.map((section) => (
-          section.position >= insertAt ? { ...section, position: section.position + 1 } : section
+          section.position !== null && section.position >= insertAt ? { ...section, position: section.position + 1 } : section
         ))
-        store.editorSections.push({ id, name: name ?? null, position: insertAt, widthFraction: null })
+        store.editorSections.push({ id, name: name ?? null, position: insertAt, widthFraction: null, lastActiveNoteId: null })
         return sorted(store)
       })
     },
@@ -956,6 +980,54 @@ function buildSectionsBridge(storeRef: { current: BrowserMockStore }): EditorSec
         const widthById = new Map(widths.map((entry) => [entry.id, entry.widthFraction]))
         store.editorSections = store.editorSections.map((section) => (
           widthById.has(section.id) ? { ...section, widthFraction: widthById.get(section.id) ?? null } : section
+        ))
+        return sorted(store)
+      })
+    },
+
+    async setActiveNote(sectionId: string, noteId: string | null): Promise<EditorSectionEntry[]> {
+      return mutate((store) => {
+        store.editorSections = store.editorSections.map((section) => (
+          section.id === sectionId ? { ...section, lastActiveNoteId: noteId } : section
+        ))
+        return sorted(store)
+      })
+    },
+
+    async closeSlot(sectionId: string): Promise<EditorSectionEntry[]> {
+      return mutate((store) => {
+        const section = store.editorSections.find((entry) => entry.id === sectionId)
+        if (!section) return sorted(store)
+
+        if (section.name === null) {
+          store.editorSections = store.editorSections.filter((entry) => entry.id !== sectionId)
+          store.noteTabs = store.noteTabs.filter((tab) => tab.sectionId !== sectionId)
+        } else {
+          store.editorSections = store.editorSections.map((entry) => (
+            entry.id === sectionId ? { ...entry, position: null } : entry
+          ))
+        }
+        renumberVisible(store)
+        return sorted(store)
+      })
+    },
+
+    async swapIntoSlot(outgoingSectionId: string, incomingSectionId: string): Promise<EditorSectionEntry[]> {
+      return mutate((store) => {
+        const outgoing = store.editorSections.find((entry) => entry.id === outgoingSectionId)
+        if (!outgoing || outgoing.position === null) return sorted(store)
+
+        const slotPosition = outgoing.position
+        if (outgoing.name === null) {
+          store.editorSections = store.editorSections.filter((entry) => entry.id !== outgoingSectionId)
+          store.noteTabs = store.noteTabs.filter((tab) => tab.sectionId !== outgoingSectionId)
+        } else {
+          store.editorSections = store.editorSections.map((entry) => (
+            entry.id === outgoingSectionId ? { ...entry, position: null } : entry
+          ))
+        }
+        store.editorSections = store.editorSections.map((entry) => (
+          entry.id === incomingSectionId ? { ...entry, position: slotPosition } : entry
         ))
         return sorted(store)
       })
