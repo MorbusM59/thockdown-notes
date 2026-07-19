@@ -61,6 +61,14 @@ interface EditorProps {
   editorReadOnly?: boolean;
   caretSuspended?: boolean;
   spellCheckEnabled?: boolean;
+  /**
+   * True for a section that isn't the currently active one -- still renders
+   * correctly (syntax highlighting, scroll position, viewport tracking all
+   * stay live) but skips the per-keystroke/selection-change work nothing is
+   * listening to meaningfully. See ContractBridgePlugin's own `hibernated`
+   * handling for why this guards dispatch rather than registration itself.
+   */
+  hibernated?: boolean;
 }
 
 const ENABLE_CONTRACT_ASSERTIONS = import.meta.env.DEV;
@@ -327,6 +335,7 @@ export function Editor({
   fontReady,
   editorReadOnly = false,
   caretSuspended = false,
+  hibernated = false,
   spellCheckEnabled = false,
 }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -367,6 +376,9 @@ export function Editor({
   // before the new note content is fully stable.
   const [isSnapshotRestorePending, setIsSnapshotRestorePending] = useState(false);
   const snapshotRestoreRafRef = useRef<number | null>(null);
+  // Three independent reasons the caret shouldn't show, composed explicitly
+  // rather than threading all three deeper into BlockCaretPlugin.
+  const caretHidden = isSnapshotRestorePending || caretSuspended || hibernated;
 
   // Derived display values (px), recomputed every render from the stored
   // line counts + the current measured viewport height. Pure function of
@@ -1293,7 +1305,7 @@ export function Editor({
             </div>
 
             {/* Native Caret Replacement overlayed in viewport space */}
-            {hasViewportLines && fontReady && !isSnapshotRestorePending && !caretSuspended && (
+            {hasViewportLines && fontReady && !caretHidden && (
               <BlockCaretPlugin
                 scrollerRef={scrollerRef}
                 topBoundaryPx={topBoundary}
@@ -1316,6 +1328,7 @@ export function Editor({
               onMarkdownShortcutTransform={bindings?.onMarkdownShortcutTransform}
               onCharacterInsertTransform={bindings?.onCharacterInsertTransform}
               onEnterTransform={bindings?.onEnterTransform}
+              hibernated={hibernated}
             />
             
             {/* The Magic Cage Scroller! */}

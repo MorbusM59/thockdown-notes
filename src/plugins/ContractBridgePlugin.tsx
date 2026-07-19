@@ -68,6 +68,21 @@ interface ContractBridgePluginProps {
     text: string;
     selection: EditorSelectionState;
   } | null;
+  /**
+   * True for a section that isn't currently active. Guards the *dispatch*
+   * of onTextChange/onSelectionChange (which is what triggers React state
+   * updates/re-renders in a pane nobody's typing in), not their
+   * *registration* -- registerUpdateListener and the SELECTION_CHANGE_COMMAND
+   * handler live inside one large effect alongside context-menu handling,
+   * tab-indent, markdown-shortcut, and enter-transform wiring, so
+   * conditionally registering just these two would mean tearing down and
+   * rebuilding that whole effect (and every native DOM listener it owns)
+   * every time hibernation toggles. Not applied to the tab-indent/markdown-
+   * shortcut/character-insert/enter-transform commands: those only ever
+   * fire from actual typing, which editorReadOnly's contentEditable={false}
+   * already prevents in a hibernated pane.
+   */
+  hibernated?: boolean;
 }
 
 const SENTENCE_ENDING_PUNCTUATION = new Set(['.', '!', '?', ':']);
@@ -705,6 +720,7 @@ export function ContractBridgePlugin({
   onMarkdownShortcutTransform,
   onCharacterInsertTransform,
   onEnterTransform,
+  hibernated = false,
 }: ContractBridgePluginProps) {
   const [editor] = useLexicalComposerContext();
   const previousTextRef = useRef('');
@@ -725,6 +741,7 @@ export function ContractBridgePlugin({
   const onMarkdownShortcutTransformRef = useRef(onMarkdownShortcutTransform);
   const onCharacterInsertTransformRef = useRef(onCharacterInsertTransform);
   const onEnterTransformRef = useRef(onEnterTransform);
+  const hibernatedRef = useRef(hibernated);
 
   useEffect(() => {
     onTextChangeRef.current = onTextChange;
@@ -734,7 +751,8 @@ export function ContractBridgePlugin({
     onMarkdownShortcutTransformRef.current = onMarkdownShortcutTransform;
     onCharacterInsertTransformRef.current = onCharacterInsertTransform;
     onEnterTransformRef.current = onEnterTransform;
-  }, [onTextChange, onSelectionChange, onTabIndent, onTabIndentTransform, onMarkdownShortcutTransform, onCharacterInsertTransform, onEnterTransform]);
+    hibernatedRef.current = hibernated;
+  }, [onTextChange, onSelectionChange, onTabIndent, onTabIndentTransform, onMarkdownShortcutTransform, onCharacterInsertTransform, onEnterTransform, hibernated]);
 
   useEffect(() => {
     // Emit stable initial state from current editor content.
@@ -982,6 +1000,7 @@ export function ContractBridgePlugin({
     };
 
     const removeListener = editor.registerUpdateListener(({ editorState, tags }) => {
+      if (hibernatedRef.current) return;
       editorState.read(() => {
         const normalizedText = readCanonicalRootText();
         const rootEl = editor.getRootElement();
@@ -1039,6 +1058,7 @@ export function ContractBridgePlugin({
     const removeSelectionCommand = editor.registerCommand(
       SELECTION_CHANGE_COMMAND,
       () => {
+        if (hibernatedRef.current) return false;
         scheduleSelectionEmit('user-input');
         return false;
       },
