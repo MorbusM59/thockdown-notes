@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "measly-notes-browser-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:browser"],
+      "port": 5173
+    }
+  ]
+}
