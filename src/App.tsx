@@ -48,8 +48,7 @@ import type { HighlightColorKey, HighlightColors } from './shared/highlightColor
 import { BORDER_RADIUS_REGULAR_MIN_PX, BORDER_RADIUS_REGULAR_MAX_PX } from './shared/uiBounds'
 import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName } from './shared/tags'
 import { useSectionTabs } from './tabBar/useSectionTabs'
-import { SectionTabBar } from './tabBar/SectionTabBar'
-import { SectionEditorArea } from './editorSection/SectionEditorArea'
+import { EditorSection } from './editorSection/EditorSection'
 import { DEFAULT_EDITOR_SECTION_ID } from './shared/sections'
 import { assertSectionIdsConsistent } from './shared/assertSectionIdsConsistent'
 import type { TextureCacheRequest } from './shared/textures'
@@ -6679,208 +6678,88 @@ ${markdownHtml}
               </div>
             </section>
 
-            <section className="toolbar-grid" style={{ gridArea: 'toolbar' }} aria-label="Editor toolbar">
-              <div className="note-tools">
-                <button
-                  className={`btn-icon ${!isPreviewMode ? 'active' : ''}`}
-                  type="button"
-                  title={isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)'}
-                  aria-label={isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)'}
-                  onClick={toggleRenderViewMode}
-                >
-                  <span className="fa-solid fa-pen-to-square" aria-hidden="true" />
-                </button>
-                <button
-                  className="btn-icon"
-                  type="button"
-                  title="Create note (Ctrl+N)"
-                  aria-label="Create note"
-                  onClick={() => {
-                    void createNote()
-                  }}
-                >
-                  <span className="fa-solid fa-file" aria-hidden="true" />
-                </button>
-                <button
-                  className={`btn-icon ${(isPreviewMode ? spellCheckRenderEnabled : spellCheckEditEnabled) ? 'active' : ''}`}
-                  type="button"
-                  title={
-                    isPreviewMode
-                      ? (spellCheckRenderEnabled ? 'Disable spell check' : 'Enable spell check')
-                      : (spellCheckEditEnabled ? 'Disable spell check' : 'Enable spell check')
-                  }
-                  aria-label={
-                    isPreviewMode
-                      ? (spellCheckRenderEnabled ? 'Disable spell check' : 'Enable spell check')
-                      : (spellCheckEditEnabled ? 'Disable spell check' : 'Enable spell check')
-                  }
-                  aria-pressed={isPreviewMode ? spellCheckRenderEnabled : spellCheckEditEnabled}
-                  onClick={() => {
-                    if (isPreviewMode) {
-                      setSpellCheckRenderEnabled((prev) => !prev)
-                    } else {
-                      setSpellCheckEditEnabled((prev) => !prev)
-                    }
-                    queueAppStateSave(activeNoteId)
-                  }}
-                >
-                  <span className="fa-solid fa-spell-check" aria-hidden="true" />
-                </button>
-
-                {isPreviewMode ? (
-                  <button
-                    type="button"
-                    className="btn-icon"
-                    title="Export PDF"
-                    aria-label="Export current note to PDF"
-                    onClick={handleExportPdf}
-                    onContextMenu={(event) => {
-                      event.preventDefault()
-                      void chooseExportFolder()
-                    }}
-                    disabled={!activeNoteId || isExportingPdf}
-                  >
-                    <span className="fa-solid fa-file-pdf" aria-hidden="true" />
-                  </button>
-                ) : null}
-
-                {!isPreviewMode ? (
-                  <button
-                    type="button"
-                    className="btn-icon"
-                    title="Export Markdown"
-                    aria-label="Export current note to Markdown"
-                    onClick={() => void handleExportMd()}
-                    onContextMenu={(event) => {
-                      event.preventDefault()
-                      void handleExportMd(true)
-                    }}
-                    disabled={!activeNoteId || isExportingMd}
-                  >
-                    <span className="fa-solid fa-file-code" aria-hidden="true" />
-                  </button>
-                ) : null}
-              </div>
-              <div className="toolbar-container">
-                {!isPreviewMode ? (
-                  <div className="markdown-toolbar" aria-label="Markdown toolbar">
-                    <div className="toolbar-group">
-                      <button
-                        type="button"
-                        className={`btn-icon ${activeDecorationFormats.has('bold') ? 'active' : ''}`}
-                        onClick={() => applyTextDecoration('bold')}
-                        title="Bold"
-                        aria-label="Bold"
-                        disabled={!activeNoteId}
-                      >
-                        <strong>B</strong>
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn-icon ${activeDecorationFormats.has('italic') ? 'active' : ''}`}
-                        onClick={() => applyTextDecoration('italic')}
-                        title="Italic"
-                        aria-label="Italic"
-                        disabled={!activeNoteId}
-                      >
-                        <em>I</em>
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn-icon ${activeDecorationFormats.has('strikethrough') ? 'active' : ''}`}
-                        onClick={() => applyTextDecoration('strikethrough')}
-                        title="Strikethrough"
-                        aria-label="Strikethrough"
-                        disabled={!activeNoteId}
-                      >
-                        <span style={{ textDecoration: 'line-through' }}>S</span>
-                      </button>
-                    </div>
-
-                    <div className="toolbar-group">
-                      <button type="button" className={`btn-icon ${activeHeadingLevel === 1 ? 'active' : ''}`} title="Heading 1" onClick={() => applyHeading(1)} disabled={!activeNoteId}>H1</button>
-                      <button type="button" className={`btn-icon ${activeHeadingLevel === 2 ? 'active' : ''}`} title="Heading 2" onClick={() => applyHeading(2)} disabled={!activeNoteId}>H2</button>
-                      <button type="button" className={`btn-icon ${activeHeadingLevel === 3 ? 'active' : ''}`} title="Heading 3" onClick={() => applyHeading(3)} disabled={!activeNoteId}>H3</button>
-                    </div>
-
-                    <div className="toolbar-group">
-                      <button type="button" className={`btn-icon ${isBulletedListActive ? 'active' : ''}`} title="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>≡</button>
-                      <button type="button" className={`btn-icon ${isNumberedListActive ? 'active' : ''}`} title="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>#</button>
-                      <button type="button" className={`btn-icon ${isChecklistActive ? 'active' : ''}`} title="Checklist" onClick={toggleChecklistList} disabled={!activeNoteId}>☐</button>
-                    </div>
-
-                    <div className="toolbar-group">
-                      <button type="button" className={`btn-icon ${isBlockquoteActive ? 'active' : ''}`} title="Blockquote" onClick={toggleBlockquote} disabled={!activeNoteId}>&quot;</button>
-                      <button type="button" className={`btn-icon ${isCodeBlockActive ? 'active' : ''}`} title="Code block" onClick={applyCodeBlock} disabled={!activeNoteId}>{'{ }'}</button>
-                      <button type="button" className={`btn-icon ${isInlineCodeActive ? 'active' : ''}`} title="Inline code" onClick={applyInlineCode} disabled={!activeNoteId}>{'<>'}</button>
-                    </div>
-
-                    <div className="toolbar-group">
-                      <button type="button" className="btn-icon" title="Horizontal rule" onClick={insertHorizontalRule} disabled={!activeNoteId}>—</button>
-                      <button type="button" className="btn-icon" title="Link" onClick={applyLink} disabled={!activeNoteId}>🔗</button>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </section>
-
-            <SectionTabBar
-              tabs={{
-                tagInputRef,
-                tagInputValue,
-                setTagInputValue,
-                orderedActiveTags,
-                suggestedTags,
-                deletePrimedTagName,
-                renamingTagName,
-                isTagMutationPending,
-                activeNoteIsExternal,
-                handleTagInputKeyDown,
-                handleAddSuggestedTag,
-                handleTagChipClick,
-                handleTagChipMouseLeave,
-                handleTagDragStart,
-                handleTagDragEnd,
-                handleTagDrop,
-                handleTagContainerDragOver,
-                handleTagContainerDrop,
-                handleTagContextMenu,
-                tabBarMode,
-                toggleTabBarMode,
-                pinnedTabs,
-                unpinPrimedTabNoteId,
-                activeNoteIsPinned,
-                tempTabNoteId,
-                pinArmingTabNoteId,
-                tabsScrollerRef,
-                tabsCanScrollLeft,
-                tabsCanScrollRight,
-                handleAddCurrentNoteToTabs,
-                handleTabContextMenu,
-                handleTabMouseLeave,
-                handleTabClick,
-                handleTempTabMouseDown,
-                clearTempTabHoldTimer,
-                updateTabsScrollEdges,
-                handleTabsWheel,
-              }}
+            <EditorSection
+              sectionId={DEFAULT_EDITOR_SECTION_ID}
+              markSectionActive={markSectionActive}
+              activeNoteId={activeNoteId}
               isSidebarVisible={isSidebarVisible}
               toggleSidebarVisible={toggleSidebarVisible}
               persistenceReady={persistenceReady}
-              activeNoteId={activeNoteId}
               notes={notes}
               activeNoteSummary={activeNoteSummary}
-            />
-
-            <SectionEditorArea
-              sectionId={DEFAULT_EDITOR_SECTION_ID}
-              markSectionActive={markSectionActive}
+              toggleRenderViewMode={toggleRenderViewMode}
+              createNote={createNote}
+              setSpellCheckRenderEnabled={setSpellCheckRenderEnabled}
+              setSpellCheckEditEnabled={setSpellCheckEditEnabled}
+              queueAppStateSave={queueAppStateSave}
+              handleExportPdf={handleExportPdf}
+              chooseExportFolder={chooseExportFolder}
+              isExportingPdf={isExportingPdf}
+              handleExportMd={handleExportMd}
+              isExportingMd={isExportingMd}
+              activeDecorationFormats={activeDecorationFormats}
+              activeHeadingLevel={activeHeadingLevel}
+              isChecklistActive={isChecklistActive}
+              isBulletedListActive={isBulletedListActive}
+              isNumberedListActive={isNumberedListActive}
+              isBlockquoteActive={isBlockquoteActive}
+              isCodeBlockActive={isCodeBlockActive}
+              isInlineCodeActive={isInlineCodeActive}
+              applyTextDecoration={applyTextDecoration}
+              applyHeading={applyHeading}
+              toggleCurrentLineHeading={toggleCurrentLineHeading}
+              toggleBulletedList={toggleBulletedList}
+              toggleNumberedList={toggleNumberedList}
+              toggleChecklistList={toggleChecklistList}
+              toggleBlockquote={toggleBlockquote}
+              applyLink={applyLink}
+              applyInlineCode={applyInlineCode}
+              applyCodeBlock={applyCodeBlock}
+              insertHorizontalRule={insertHorizontalRule}
               isPreviewMode={isPreviewMode}
+              spellCheckEditEnabled={spellCheckEditEnabled}
+              spellCheckRenderEnabled={spellCheckRenderEnabled}
+              tagInputRef={tagInputRef}
+              tagInputValue={tagInputValue}
+              setTagInputValue={setTagInputValue}
+              orderedActiveTags={orderedActiveTags}
+              suggestedTags={suggestedTags}
+              deletePrimedTagName={deletePrimedTagName}
+              renamingTagName={renamingTagName}
+              isTagMutationPending={isTagMutationPending}
+              activeNoteIsExternal={activeNoteIsExternal}
+              handleTagInputKeyDown={handleTagInputKeyDown}
+              handleAddSuggestedTag={handleAddSuggestedTag}
+              handleTagChipClick={handleTagChipClick}
+              handleTagChipMouseLeave={handleTagChipMouseLeave}
+              handleTagDragStart={handleTagDragStart}
+              handleTagDragEnd={handleTagDragEnd}
+              handleTagDrop={handleTagDrop}
+              handleTagContainerDragOver={handleTagContainerDragOver}
+              handleTagContainerDrop={handleTagContainerDrop}
+              handleTagContextMenu={handleTagContextMenu}
+              tabBarMode={tabBarMode}
+              toggleTabBarMode={toggleTabBarMode}
+              pinnedTabs={pinnedTabs}
+              unpinPrimedTabNoteId={unpinPrimedTabNoteId}
+              activeNoteIsPinned={activeNoteIsPinned}
+              tempTabNoteId={tempTabNoteId}
+              pinArmingTabNoteId={pinArmingTabNoteId}
+              tabsScrollerRef={tabsScrollerRef}
+              tabsCanScrollLeft={tabsCanScrollLeft}
+              tabsCanScrollRight={tabsCanScrollRight}
+              handleAddCurrentNoteToTabs={handleAddCurrentNoteToTabs}
+              handleTabContextMenu={handleTabContextMenu}
+              handleTabMouseLeave={handleTabMouseLeave}
+              handleTabClick={handleTabClick}
+              handleTempTabMouseDown={handleTempTabMouseDown}
+              clearTempTabHoldTimer={clearTempTabHoldTimer}
+              updateTabsScrollEdges={updateTabsScrollEdges}
+              handleTabsWheel={handleTabsWheel}
               editorStageRef={editorStageRef}
               previewedSnapshotId={previewedSnapshotId}
               bindings={bindings}
               adapterRef={adapterRef}
-              activeNoteId={activeNoteId}
               editorDisplayText={editorDisplayText}
               scrollbarHostEl={scrollbarHostEl}
               setScrollbarHostEl={setScrollbarHostEl}
@@ -6890,7 +6769,6 @@ ${markdownHtml}
               activeNoteHasDebugTag={activeNoteHasDebugTag}
               isPreviewingSnapshot={isPreviewingSnapshot}
               isCaretSuspended={isCaretSuspended}
-              spellCheckEditEnabled={spellCheckEditEnabled}
               previewTextureRef={previewTextureRef}
               previewScrollRef={previewScrollRef}
               handlePreviewScroll={handlePreviewScroll}
@@ -6898,7 +6776,6 @@ ${markdownHtml}
               viewFontSize={viewFontSize}
               viewSpacing={viewSpacing}
               highlightSearchColor={highlightColors.search}
-              spellCheckRenderEnabled={spellCheckRenderEnabled}
               blockPreviewEditMutation={blockPreviewEditMutation}
               previewMarkdownElement={previewMarkdownElement}
               previewScrollbarTrackRef={previewScrollbarTrackRef}
