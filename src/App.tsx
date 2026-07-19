@@ -6010,7 +6010,10 @@ await flushPendingSaveNow()
               : undefined
           ) ?? listed[0]
 
-          const loaded = await thockdownNotes.loadNote({ id: selectedSummary.id })
+          const [loaded, initialUiState] = await Promise.all([
+            thockdownNotes.loadNote({ id: selectedSummary.id }),
+            thockdownNotes.getNoteUiState({ id: selectedSummary.id }),
+          ])
           if (disposed) return
 
           setNotes((previous) => mergeNoteSummaries(previous, listed))
@@ -6020,7 +6023,12 @@ await flushPendingSaveNow()
           latestEditorTextRef.current = hydratedText
           setActiveNoteText(hydratedText)
 
-          const initialViewport: PersistedViewportState = appState.viewport
+          // App-level "last known viewport shape" -- used only as a fallback
+          // below, for a note with no saved UI state of its own yet (a brand
+          // new note, or the very first note ever created). Whenever the
+          // note *does* have its own saved state, that takes priority, the
+          // same as every other note switch via activateNote.
+          const fallbackViewport: PersistedViewportState = appState.viewport
             ? {
                 // Line counts are stored as-is, with no clamping at load
                 // time. Display values are derived continuously inside
@@ -6036,15 +6044,24 @@ await flushPendingSaveNow()
                 { topBoundaryLines: 0, bottomBoundaryLines: 0, scrollTopLines: 0 }
               )
 
+          const initialRestoreSnapshot = buildEditRestoreSnapshotFromUiState({
+            noteId: loaded.id,
+            text: hydratedText,
+            uiState: initialUiState,
+            fallbackViewport,
+            lineHeightPx: editorRuntimeMetrics.lineHeightPx,
+          })
+          updateEditModeSnapshotCache(initialRestoreSnapshot)
+
           if (window.thockdownState) {
             await window.thockdownState.saveAppState({
               selectedNoteId: loaded.id,
-              viewport: initialViewport,
+              viewport: initialRestoreSnapshot.viewport,
               menu: persistedMenuStateRef.current ?? undefined,
             })
           }
 
-          seedInitialViewport(initialViewport)
+          seedInitialViewport(initialRestoreSnapshot)
           setPersistenceReady(true)
           setBootstrapError(null)
           return

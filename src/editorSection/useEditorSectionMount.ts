@@ -117,15 +117,26 @@ export interface UseEditorSectionMountResult {
   toggleRenderViewMode: () => Promise<void>
   applyProgrammaticEditorText: (nextText: string, selectionStart?: number, selectionEnd?: number) => void
   /**
-   * Seeds the app-level "last known viewport shape" on cold start, retrying
-   * against the adapter until it's ready. Replaces a separate effect that
-   * used to watch a ref for this -- called directly from App.tsx's
-   * bootstrap flow once, right after persisted app state resolves. Safe
-   * against a fast note-switch racing the retry loop: activateNote already
-   * nulls pendingViewportRestoreRef on every switch, and the retry loop
-   * checks that it's still the same pending value before applying.
+   * Seeds the initial editor state on cold start -- viewport *and*
+   * selection -- retrying against the adapter until it's ready. Replaces a
+   * separate effect that used to watch a ref for this -- called directly
+   * from App.tsx's bootstrap flow once, right after persisted app state and
+   * the initial note's own saved UI state both resolve. Safe against a fast
+   * note-switch racing the retry loop: activateNote already nulls
+   * pendingViewportRestoreRef on every switch, and the retry loop checks
+   * that it's still the same pending value before applying.
+   *
+   * Deliberately its own function rather than a thin call to
+   * `applyEditRestoreSnapshot` -- this one also owns
+   * `isApplyingInitialViewportRef`/`pendingViewportRestoreRef`, the guard
+   * that stops `queueAppStateSave` from persisting a spurious intermediate
+   * viewport over the one just restored (see `onViewportChange`).
+   * `applyEditRestoreSnapshot` doesn't touch those refs at all -- note
+   * switches aren't behind that particular guard -- so folding this into
+   * that function would either lose the guard or require threading it
+   * through a codepath that has no other reason to know about it.
    */
-  seedInitialViewport: (viewport: PersistedViewportState) => void
+  seedInitialViewport: (snapshot: EditRestoreSnapshot) => void
 }
 
 /**
@@ -1519,7 +1530,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }, [queueSave, updateActiveNoteTitlePreview])
 
 
-  const seedInitialViewport = useCallback((viewport: PersistedViewportState) => {
+  const seedInitialViewport = useCallback((snapshot: EditRestoreSnapshot) => {
+    const viewport = snapshot.viewport
     pendingViewportRestoreRef.current = viewport
     latestViewportRef.current = viewport
     isApplyingInitialViewportRef.current = true
@@ -1539,10 +1551,15 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       // Restoring from integer line counts is direct: no clamping or
       // measurement-dependent math happens here (see EditorViewportLines /
       // clampBoundaryLines in Editor.tsx). This call is correct even before
-      // the editor's container has been measured.
+      // the editor's container has been measured. Selection restores the
+      // same way activateNote's own restore does (applyEditRestoreSnapshot)
+      // -- this used to be viewport-only, which is why cold start never
+      // restored cursor position the way every other note switch does.
       ignoreNextUserViewportChangeRef.current = true
       adapter.applySnapshot({
         viewportLines: viewport,
+        selectionScrollBehavior: 'preserve-scroll',
+        selection: snapshot.fullSelection,
       })
 
       latestViewportRef.current = viewport

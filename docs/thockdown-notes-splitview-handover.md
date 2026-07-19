@@ -201,19 +201,74 @@ exercised once section #2 exists" situation as the rest of this effort.
 
 ## What's left
 
-1. **Rewire `useSectionTabs` / `useDocumentFind` / `useNoteSnapshots` to read from the
-   assembled `useEditorSectionMount` state** instead of the raw App-level bindings they
-   currently receive. Concretely: `useSectionTabs` at `src/App.tsx` (search
-   `useSectionTabs({`) and `useDocumentFind` (search `useDocumentFind({`) both still take
-   `activeNoteId` from the top-level binding rather than explicitly from "this section's
-   note"; `useNoteSnapshots(activeNoteId, currentEditorText, timelineCurveConstant)` is the
-   same story. Functionally identical today (there's only one section, so "the top-level
-   binding" and "this section's state" are the same value) — this is about making the *seam*
-   explicit before there's a second section to prove it wrong. Mechanical, not a discovery
-   pass, following the same preserve-names pattern as everything above.
-2. **Bootstrap vs. `activateNote` viewport-restore unification** (see the known-issue
-   write-up immediately below). Explicitly deferred to here — needs live testing to attempt
-   safely.
+1. ~~Rewire `useSectionTabs` / `useDocumentFind` / `useNoteSnapshots`...~~ **Done.** Turned
+   out `useEditorSectionMount` itself has no `sectionId`-bearing output to read from — it
+   only *takes* `activeNoteId`/`activeNoteText`/etc. as input, themselves produced by the
+   already-section-scoped hooks (`useActiveNoteId`, `useDisplayedNoteText`, ...). The actual
+   gap was narrower: `useDocumentFind` and `useNoteSnapshots` (unlike `useSectionTabs`,
+   `useActiveNoteId`, etc.) took no `sectionId` parameter at all. Fixed:
+   - `useDocumentFind`'s options gained `sectionId: string` (`src/find/useDocumentFind.ts`),
+     unused internally for now — same `void sectionId` placeholder pattern as
+     `useActiveNoteId`.
+   - `useNoteSnapshots` gained `sectionId` as its new first positional parameter
+     (`src/editor/useNoteSnapshots.ts`), same placeholder treatment.
+   - Both call sites in `App.tsx` now pass `DEFAULT_EDITOR_SECTION_ID` explicitly.
+   - New: `src/shared/assertSectionIdsConsistent.ts` — a dev-only (`import.meta.env.DEV`)
+     tripwire, called once from `App.tsx` right after the three call sites, asserting the
+     `sectionId` handed to `useSectionTabs`/`useDocumentFind`/`useNoteSnapshots` all agree.
+     Trivially true today (same hardcoded constant three times) — the point is to catch a
+     *future* second-section wiring pass that updates some of these call sites but misses
+     one, which most of these hooks can't detect on their own since they don't read
+     `sectionId` internally yet.
+   - Note: `useNoteSaveQueue` (`src/editorSection/useNoteSaveQueue.ts`) still has no
+     `sectionId` parameter at all, unlike its siblings — out of scope for this pass (not
+     named in the original ask), but worth folding in whenever it's next touched.
+2. ~~Bootstrap vs. `activateNote` viewport-restore unification~~ **Done** (code written; live
+   cold-start testing still pending — see below). Bootstrap now fetches the initial note's
+   own `getNoteUiState` (in parallel with `loadNote`, same shape as `activateNote`'s
+   `Promise.all`) and builds an `EditRestoreSnapshot` via the same
+   `buildEditRestoreSnapshotFromUiState` `activateNote` already uses, with the app-level
+   `appState.viewport` demoted to just the `fallbackViewport` input (used only when the note
+   has no saved UI state of its own yet — a brand new note, or the very first note ever
+   created). Concretely, in `App.tsx`'s bootstrap effect: `loaded`/`initialUiState` now load
+   together, `initialRestoreSnapshot` replaces the old viewport-only `initialViewport`, and
+   `updateEditModeSnapshotCache(initialRestoreSnapshot)` is called before
+   `seedInitialViewport(initialRestoreSnapshot)` — mirroring `activateNote`'s own
+   `updateEditModeSnapshotCache(preloadedSnapshot)` step.
+   - **The race guard is preserved, not dropped.** The obstacle found while investigating
+     this (see the now-resolved-in-code version of the known-issue write-up below) was that
+     `seedInitialViewport`'s `isApplyingInitialViewportRef`/`pendingViewportRestoreRef`
+     guard — which stops `queueAppStateSave` from persisting a spurious intermediate
+     viewport over the one just restored — isn't something `applyEditRestoreSnapshot`
+     (`activateNote`'s restore primitive) carries. Resolution: `seedInitialViewport` in
+     `useEditorSectionMount.ts` keeps owning that guard and its exact existing rAF-retry/
+     staleness-check structure; it now takes an `EditRestoreSnapshot` instead of a bare
+     `PersistedViewportState`, and its one `adapter.applySnapshot(...)` call gained
+     `selection: snapshot.fullSelection` / `selectionScrollBehavior: 'preserve-scroll'` —
+     same two fields `applyEditRestoreSnapshot` passes for the same call, applied through
+     the guarded function instead of the unguarded one. Deliberately not a call to
+     `applyEditRestoreSnapshot` itself — see the updated doc comment on `seedInitialViewport`
+     in `useEditorSectionMount.ts` for why folding the two together would either lose the
+     guard or force it onto a codepath (note-switching) that has no reason to know about it.
+   - **Not carried over**: the `applySourceAnchorToEditor` scroll-into-view behavior
+     `applyEditRestoreSnapshot` also does (scrolling to the exact paragraph a note was
+     scrolled to, via DOM measurement) — left out to keep this change's surface area
+     minimal and testable; `seedInitialViewport` restores viewport line-counts and full
+     selection, not the source-anchor scroll nicety. Worth folding in later if cold start
+     is confirmed working, but wasn't worth the added DOM-measurement risk in the same pass.
+   - `tsc --noEmit` clean, tests at the standard 5-failing baseline (unchanged), lint
+     unchanged (`useEditorSectionMount.ts` still exactly 13 pre-existing warnings; the
+     bootstrap effect in `App.tsx` already had an intentionally-empty `[]` dependency array
+     with several missing-dep warnings pre-existing before this change — two more names
+     were added to that already-accepted list, nothing newly non-compliant).
+   - **What's not yet verified: live cold start.** Nobody has actually launched the app from
+     a clean state and confirmed a note's cursor position/scroll now survives a restart the
+     way it survives a note switch. This is exactly the "no test suite exercises this" gap
+     called out below — next step is Joe running `npm run dev` and checking: (a) quit/reopen
+     restores cursor position and scroll, not just viewport boundaries; (b) a truly first-ever
+     note (no saved UI state) still opens cleanly with the old zero-default behavior; (c) no
+     regression in the existing "don't save a spurious 0/0/0 viewport during the restore
+     race" protection specifically.
 3. **Then, and only then: the actual split-view UI.** Draggable divider, 300px minimum
    (soft — enforced at section-creation time, not live-enforced during resize; window
    resize pauses recalculation while dragging, then redistributes proportionally on
@@ -232,26 +287,79 @@ exercised once section #2 exists" situation as the rest of this effort.
    sections; dragging a note from the sidebar onto a specific section (sidebar always opens
    into the leftmost/default section for now).
 
-## Known open issue: bootstrap's viewport seed vs. `activateNote`'s per-note restore
+## Resolved: bootstrap's viewport seed vs. `activateNote`'s per-note restore
+
+**Status: code written (see "What's left" item 2 above), live cold-start testing still
+pending.** Kept here for the reasoning trail, not because it's still open.
 
 `activateNote` (stays in `App.tsx`) has its own complete per-note restore mechanism: every
 note switch persists the outgoing note's position, loads the new note, builds a restore
-snapshot from its saved UI state, caches it. This is already the thing a new section would
-reuse for "load a note into me."
+snapshot from its saved UI state, caches it.
 
-Bootstrap's `seedInitialViewport()` call is a *different* mechanism — it restores the
-app-level "last known viewport shape" (top/bottom boundary line counts) from
-`window.thockdownState`'s persisted app state, not from any specific note's own saved
-position. It exists because on cold start, the editor's viewport boundaries need *some* seed
-value before the first note's own restore data is even meaningful.
+Bootstrap's `seedInitialViewport()` call used to be a *different*, narrower mechanism — it
+only restored the app-level "last known viewport shape" (top/bottom boundary line counts)
+from `window.thockdownState`'s persisted app state, not from any specific note's own saved
+position (cursor, scroll, source anchor). It existed because on cold start, the editor's
+viewport boundaries need *some* seed value before the first note's own restore data is even
+meaningful.
 
-These are two real, distinct concerns, not duplicated logic — but there's a plausible
-unification (bootstrap's first load becomes just another call to whatever `activateNote`
-uses) that wasn't attempted. Reason: cold start is the hardest path in this app to verify
-without actually launching it from a clean state — no test suite exercises "fresh install,
-empty app state, first note ever loads" — and if this is gotten wrong the failure mode is
-"app doesn't start," not "one feature misbehaves." This is exactly the kind of change to
-make *with* Joe driving the app interactively, not blind.
+The unification (bootstrap's first load becomes just another call to whatever `activateNote`
+uses) was deferred initially because cold start is the hardest path in this app to verify
+without actually launching it from a clean state, and getting it wrong risks "app doesn't
+start," not "one feature misbehaves."
+
+**The obstacle that made a naive version of this risky, found on a later investigation
+pass:** swapping bootstrap's `seedInitialViewport` call for `activateNote`'s
+`applyEditRestoreSnapshot` outright would have silently dropped a race guard that lives in a
+*different* function. `seedInitialViewport` sets `isApplyingInitialViewportRef.current =
+true` and `pendingViewportRestoreRef.current = viewport` before applying
+(`useEditorSectionMount.ts`); `onViewportChange` only clears both once the editor reports
+back a viewport matching what was seeded. `queueAppStateSave` (`App.tsx`, ~line 4607) checks
+both refs and bails while they're set — this is specifically what stops a spurious
+intermediate 0/0/0 viewport event, which can arrive right after `applySnapshot`, from getting
+persisted over the viewport that was just restored. `applyEditRestoreSnapshot`
+(`activateNote`'s restore primitive) never touches either ref — it doesn't need to, because
+note-switch restores aren't behind `queueAppStateSave`'s guard the same way. Dropping this
+guard would produce no compile error and no failing test — just an intermittent
+lost-viewport-on-cold-start bug under real timing, the same silent-failure shape as the
+`internalId` → `assignedId` incident below.
+
+**Resolution actually shipped:** `seedInitialViewport` keeps owning the guard and its
+existing rAF-retry/staleness-check structure unchanged; it now takes a full
+`EditRestoreSnapshot` (built the same way `activateNote` builds one, via
+`buildEditRestoreSnapshotFromUiState`) instead of a bare `PersistedViewportState`, and its one
+`adapter.applySnapshot(...)` call gained `selection`/`selectionScrollBehavior` — restoring
+cursor position and scroll on cold start the same way every other note switch already did,
+without touching (or duplicating) the guard logic. Not carried over: the
+`applySourceAnchorToEditor` scroll-into-view nicety `applyEditRestoreSnapshot` also does —
+left out to keep the change's surface area minimal; can be folded in later once cold start
+itself is confirmed working live.
+
+**Live-tested by Joe, confirmed working**: typing into an existing note, closing, reopening
+— caret position and scroll restore correctly, editor has focus. Creating a new note, typing,
+closing, reopening — text and correct note load with caret at the right position.
+
+**Follow-up noted, not a regression from this change, don't chase it now**: in one of two
+tests of the new-note case, the editor didn't have focus and the caret wasn't visible on
+reopen (fixed itself after switching notes away and back). Joe's read, and it matches: this is
+a pre-existing intermittent focus/caret-visibility bug that's shown up before without
+reliable repro, not something this patch introduced — bootstrap never called
+`focusAfterApply`/`focusEditorInEditMode` before this change either, only
+`seedInitialViewport`'s viewport (and now selection) application. Worth hardening later with
+a real repro, not worth chasing blind right now.
+
+**Second follow-up noted, also pre-existing, also out of scope for this pass**: scroll
+position restores on cold start now, but as an approximation, not the exact pixel/line
+position. Cause: `buildEditRestoreSnapshotFromUiState` (`EditRestoreMath.ts`) prefers the
+block/paragraph-based `sourceAnchorLine` over the raw persisted `scrollTop` whenever an
+anchor is available (`anchorLine !== null` branch) — likely built anchor-first to keep edit
+↔ render-view scroll syncing stable across the two views' potentially different layouts, not
+for the cold-start case specifically. This same function is what `activateNote` already uses
+for every regular note switch, so the imprecision predates today's change entirely — it just
+became visible for cold start too once cold start started reusing the same restore path.
+Whether the anchor-based approach should still win when restoring the *same* view (where the
+exact `scrollTop` that was captured is trivially valid) is a real, separate question — not
+attempted here.
 
 ## Standing limitation, not a TODO
 
