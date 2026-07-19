@@ -49,6 +49,7 @@ import { BORDER_RADIUS_REGULAR_MIN_PX, BORDER_RADIUS_REGULAR_MAX_PX } from './sh
 import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName } from './shared/tags'
 import { useSectionTabs } from './tabBar/useSectionTabs'
 import { EditorSection } from './editorSection/EditorSection'
+import { EditorToolbar } from './toolbar/EditorToolbar'
 import { DEFAULT_EDITOR_SECTION_ID } from './shared/sections'
 import { assertSectionIdsConsistent } from './shared/assertSectionIdsConsistent'
 import type { TextureCacheRequest } from './shared/textures'
@@ -6678,17 +6679,13 @@ ${markdownHtml}
               </div>
             </section>
 
-            <EditorSection
-              sectionId={DEFAULT_EDITOR_SECTION_ID}
-              markSectionActive={markSectionActive}
+            <EditorToolbar
+              isPreviewMode={isPreviewMode}
               activeNoteId={activeNoteId}
-              isSidebarVisible={isSidebarVisible}
-              toggleSidebarVisible={toggleSidebarVisible}
-              persistenceReady={persistenceReady}
-              notes={notes}
-              activeNoteSummary={activeNoteSummary}
               toggleRenderViewMode={toggleRenderViewMode}
               createNote={createNote}
+              spellCheckEditEnabled={spellCheckEditEnabled}
+              spellCheckRenderEnabled={spellCheckRenderEnabled}
               setSpellCheckRenderEnabled={setSpellCheckRenderEnabled}
               setSpellCheckEditEnabled={setSpellCheckEditEnabled}
               queueAppStateSave={queueAppStateSave}
@@ -6716,6 +6713,17 @@ ${markdownHtml}
               applyInlineCode={applyInlineCode}
               applyCodeBlock={applyCodeBlock}
               insertHorizontalRule={insertHorizontalRule}
+            />
+
+            <EditorSection
+              sectionId={DEFAULT_EDITOR_SECTION_ID}
+              markSectionActive={markSectionActive}
+              activeNoteId={activeNoteId}
+              isSidebarVisible={isSidebarVisible}
+              toggleSidebarVisible={toggleSidebarVisible}
+              persistenceReady={persistenceReady}
+              notes={notes}
+              activeNoteSummary={activeNoteSummary}
               isPreviewMode={isPreviewMode}
               spellCheckEditEnabled={spellCheckEditEnabled}
               spellCheckRenderEnabled={spellCheckRenderEnabled}
