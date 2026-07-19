@@ -269,23 +269,227 @@ exercised once section #2 exists" situation as the rest of this effort.
      note (no saved UI state) still opens cleanly with the old zero-default behavior; (c) no
      regression in the existing "don't save a spurious 0/0/0 viewport during the restore
      race" protection specifically.
-3. **Then, and only then: the actual split-view UI.** Draggable divider, 300px minimum
-   (soft — enforced at section-creation time, not live-enforced during resize; window
-   resize pauses recalculation while dragging, then redistributes proportionally on
-   release), the "+" button at the tab bar's right edge (right-click primes close,
-   left-click opens a new section to its right — same visual language as the existing
-   tag/tab-mode toggle at the left edge). Section layouts persist separately from the
-   existing UI "design" loadout system — `editor_sections.name` already anticipates
-   naming sections and saving them as collections, a stated future feature.
+3. **Then, and only then: the actual split-view UI.** Design settled (see "Design decisions:
+   multi-section note targeting and the menu's new role" below for the reasoning); still to
+   be planned and built:
+   - Sections sit side by side separated by the app's regular 8px gap, which doubles as the
+     drag handle. Each section: tag/tab bar, editor, scrollbar, Time Machine timeline +
+     manual-save dot.
+   - "+" button at the tab bar's right edge, present in both tag and tab mode, same visual
+     language as the existing tag/tab-mode toggle at the left edge. Always creates a new
+     section to the right of the one it's on. Disappears (tab bar spans full width again)
+     when there's no room left for another section.
+   - The left-edge button is the existing sidebar-collapse toggle **only on the leftmost
+     section**; every other section shows a "close this section" (left-arrow) button there
+     instead — a different button, not the same one repurposed by click type.
+   - 300px minimum per section (soft — enforced at section-creation time, not live-enforced
+     during resize; window resize pauses recalculation while dragging, then redistributes
+     proportionally on release). Each additional section raises the *window's* minimum
+     width by 300px (+ divider width), reusing the existing renderer→main IPC pattern that
+     already does exactly this for sidebar visibility (`electron/main.ts`'s
+     `win.setMinimumSize(...)` call keyed off a `setSidebarVisible`-style message — same
+     shape, keyed off section count instead). This is what makes "forced closing" of a
+     section a non-problem: the window physically cannot get narrower than what's open.
+   - Section layouts persist separately from the existing UI "design" loadout system —
+     `editor_sections.name`/`widthFraction` already anticipate this, including naming
+     sections and saving them as collections (a stated future feature, not this pass).
+   - **Real open problem, not yet designed**: every hook this effort extracted
+     (`useActiveNoteId`, `useDisplayedNoteText`, `useSectionTabs`, `useDocumentFind`,
+     `useNoteSnapshots`, `useEditorSectionMount`, `useSnapshotFreeze`, `useNoteSaveQueue`) is
+     called exactly once in `App.tsx` today, hardcoded to `DEFAULT_EDITOR_SECTION_ID`. N
+     sections needs an `<EditorSection sectionId>` component mounting its own instance of
+     that whole hook stack — see "Open problem: what `<EditorSection>` actually looks like"
+     below for what's resolved and what isn't.
 4. **Hibernation rendering.** Inactive sections should skip wiring `onTextChange`/
    `onSelectionChange` (nothing produces those events in a pane nobody's typing in) but
    *keep* `onViewportChange` (each section keeps its own scrollbar). `Editor.tsx`'s
    `editorReadOnly` prop currently only toggles `contentEditable` and caret visibility — it
    does not yet skip attaching those bindings. New work, not something to assume already
-   works.
+   works. Also a real performance lever, not just correctness — see the performance section
+   below.
 5. **Explicitly deferred, Joe's own words, don't build unprompted**: dragging a tab between
-   sections; dragging a note from the sidebar onto a specific section (sidebar always opens
-   into the leftmost/default section for now).
+   sections; dragging a note from the sidebar onto a specific section. (Superseded note: this
+   doc used to say "sidebar always opens into the leftmost/default section for now" — that's
+   now wrong, see below. The *drag-a-note-onto-a-specific-section* gesture is still
+   deliberately deferred; that's a different, additional way to target a section, not how
+   sidebar clicks resolve by default.)
+
+## Design decisions: multi-section note targeting and the menu's new role
+
+Settled during design conversation, not yet built. Two decisions, both falling out of the
+same underlying principle: **there is exactly one active editor at all times (whichever had
+the latest user interaction), and it is the sole authority on "the current note."**
+Everything else either derives from that or must not fight it. A `#ff0000` outline around
+the active section's container is the (deliberately unrefined-for-now) visual cue that makes
+this legible to the user.
+
+**1. `activateNote`/`selectNote` become per-section, not shared+parameterized.** Every piece
+of state `activateNote` touches (`activeNoteId`, `activeNoteText`, the restore-snapshot
+cache, `pendingViewportRestoreRef`) is already section-scoped or about to become so via
+`<EditorSection>`. A shared, `sectionId`-parameterized `activateNote` would need the exact
+same per-section setters/refs handed to it as arguments anyway — it would just relocate the
+same per-section state one layer up and call it a parameter instead of a closure, buying
+nothing. Worse, it would create a second place (alongside the already-shipped
+`useSnapshotFreeze`) reaching into the same per-section state, which is exactly the kind of
+seam this whole effort has been trying to design out. Each `<EditorSection>` gets its own
+`activateNote`, closing directly over its own hook instances; the only thing it reaches
+outward for is the shared `activeSectionId`, the same as `useSnapshotFreeze` already does.
+
+**2. The sidebar's "open a note" action targets the currently active section, not a
+hardcoded leftmost/default one.** Reasoning: the active note is *defined* as "whatever the
+active editor shows." If clicking a note in the sidebar always forced it into a fixed
+section regardless of which one is highlighted active, the app would have two competing,
+contradictory answers to "what's the current note" — the visible outline, and a silent
+hardcoded default that ignores it. That directly undermines the one thing the outline exists
+to communicate. It also matters for the freeze/thaw design specifically: hardcoding the
+target could reach into and mutate a section the user isn't currently driving, which is
+precisely the class of "arbitrary logical intervention" freeze/thaw was built to rule out
+elsewhere. Routing through the active section keeps that invariant — nothing changes except
+the section you're demonstrably in control of — intact for sidebar actions too.
+
+**3. The menu (sidebar) stops chasing the active note; it becomes a stable "file cabinet."**
+With multiple sections and a tab bar, the tab bar is now what anchors "where is my note" --
+the menu doesn't need to do that job too, and trying to do both jobs is exactly what made its
+current logic "involved." Concretely, **this removes** the existing reactive-coupling effect
+in `App.tsx` (~line 6804-6839, keyed off `isNoteDisplayedInCurrentMenu` /
+`getNextActiveNoteIdAfterRemoval`) that today silently swaps the *active note* whenever the
+sidebar's own filter/view state changes and the active note falls outside it (e.g. changing
+the month filter while editing a note from a different month currently forces a different
+note into the editor so the sidebar's highlighted item stays consistent). That's the same
+"don't let browsing the menu reach into the editor" principle freeze/thaw already
+established — the menu was just never brought in line with it before. After this change, the
+menu only ever changes because the user directly changed it (typed a search, clicked a tag,
+switched folders) or via the one deliberate exception below. It does **not** get re-scoped
+per-section — it goes away entirely; there is nothing to multiply per `<EditorSection>` here.
+
+**4. The one deliberate exception: clicking an already-selected tab "reveals" that note in
+the menu.** Trigger: clicking a tab in a section's own tab bar that is already the section's
+selected tab (a second click, not the first click that selected it). Scoped to whichever
+note that specific section is currently showing. Full resolved algorithm:
+   - Clear only whichever filter is actually hiding the note — a live sidebar/find search
+     query, or a month/year filter chip — never filters that aren't in the way. (Not "clear
+     everything unconditionally.")
+   - Resolve the target view, in priority order:
+     1. Note is deleted → switch to `trash`, select it there.
+     2. Note is archived → switch to `archive`, select it there (expanding whichever
+        primary/secondary/tertiary tree branches are currently collapsed so it's actually
+        visible, not just present in the tree data).
+     3. Otherwise (a normal note): if the *currently active* `sidebarMode` can already show
+        it (i.e. we're already in `date` or `category`) → stay there, select it (in
+        `category`'s case, also expanding collapsed branches as needed).
+     4. Otherwise (currently in `find`/`options`/`trash`/`archive`, and the note is neither
+        deleted nor archived, so none of those views can show it) → switch to `category`,
+        select it there, **and** silently recompute `date` view's pagination (`currentPage`)
+        so that if the user later flips to `date` view by hand, it's already on the right
+        page — without actually switching to `date` now.
+   - Should reuse existing code: `isNoteDisplayedInCurrentMenu`'s per-mode membership checks,
+     the category/archive tree-building logic, and the date-view pagination math already in
+     `App.tsx` are the same primitives the (now-removed) auto-chase effect used — this is
+     mostly recombining them behind an explicit trigger instead of an automatic one, not
+     writing new membership/pagination logic from scratch.
+
+## Open problem: what `<EditorSection>` actually looks like
+
+Flagged as "the crux of the whole feature" earlier in this effort, and the design
+conversation above resolved the *policy* questions around it (per-section `activateNote`,
+sidebar targeting, menu decoupling) without yet resolving the *mechanical* one: what the
+component itself contains, and what stays at `App.tsx` level. Still open:
+
+- **Bootstrap has to change shape, not just content.** The bootstrap-vs-`activateNote`
+  unification already shipped (see "What's left" item 2) was explicitly a stepping stone
+  toward this, not the destination: it taught bootstrap to restore *one* note's full state
+  the same way `activateNote` does, but it still only ever loads *one* note into *one* set
+  of top-level state, imperatively, before any `<EditorSection>` exists to own that state.
+  Once sections are real components, bootstrap's job changes to: list sections
+  (`window.thockdownSections.listSections()`, already implemented), determine which note
+  each section shows, and let each `<EditorSection>` do its *own* entry restore on mount —
+  it can no longer directly poke `setActiveNoteId`/`setActiveNoteText` etc. itself, because
+  those won't be App-level state anymore once they live inside per-section hook instances.
+- ~~Where "which note is section X currently showing" gets persisted isn't decided.~~
+  **Resolved.** `note_tabs` stays exactly what it is today — the *pinned* tabs list only;
+  browsing to a note without deliberately holding to pin it still creates no row (confirmed:
+  this existing temp/pinned distinction is good, not something this effort should change).
+  That means a pinned tab's row can't be the single source of truth for "the active note,"
+  since the active note is very often an unpinned/temp one. So a new nullable
+  `lastActiveNoteId` column goes on `editor_sections` itself instead — independent of
+  whether that note happens to be pinned. Whether a given tab row renders as "the active one"
+  is just `noteId === lastActiveNoteId`, computed at render time, not a stored flag — avoids
+  a second copy of the same fact that could drift out of sync. Reconciled schema:
+  ```sql
+  CREATE TABLE editor_sections (
+    id               TEXT PRIMARY KEY,
+    name             TEXT,
+    position         INTEGER NOT NULL,
+    widthFraction    REAL,
+    lastActiveNoteId TEXT REFERENCES notes(id) ON DELETE SET NULL
+  );
+
+  CREATE TABLE note_tabs (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    sectionId TEXT    NOT NULL,
+    noteId    TEXT    NOT NULL,
+    position  INTEGER NOT NULL,
+    addedAt   INTEGER NOT NULL,
+    UNIQUE (sectionId, noteId),
+    FOREIGN KEY (sectionId) REFERENCES editor_sections(id) ON DELETE CASCADE,
+    FOREIGN KEY (noteId)    REFERENCES notes(id)            ON DELETE CASCADE
+  );
+  ```
+  Changes from the schema currently live in `electron/databaseService.ts` (~line 2611-2630):
+  `editor_sections` gains `lastActiveNoteId`; `note_tabs` gains a surrogate `id` (matching
+  this file's own `ui_loadout_entries` convention: `INTEGER PRIMARY KEY AUTOINCREMENT`) and
+  swaps its composite `PRIMARY KEY (sectionId, noteId)` for `UNIQUE (sectionId, noteId)` so
+  the same "a note can't appear twice in one section's tab bar" invariant holds without that
+  pair being the row's actual identity. No `isActive` column anywhere — deliberately not
+  needed once `lastActiveNoteId` is the one source of truth. Blank-slate schema change, no
+  migration path needed (same pre-beta policy as the original `editor_sections`/`note_tabs`
+  addition).
+- **"Chrome" outside any single section can no longer read one global `activeNoteId`.**
+  Export-to-PDF/Markdown, spellcheck toggles, and any other App-level command that operates
+  on "the current note" currently just reads the one `activeNoteId` local. Once that state
+  lives inside per-section component instances instead of at `App.tsx` level, none of that
+  chrome can reach it directly anymore — needs some form of registry/context that each
+  `<EditorSection>` publishes its own `{ noteId, ... }` into, with "chrome" reading whichever
+  entry matches the shared `activeSectionId`. **Confirmed to stay this shape** (global
+  commands, always scoped to whichever section is active) — the registry/context mechanism
+  itself is still to be designed, this just confirms the target behavior it needs to serve.
+- **The existing ref-proxy workarounds (Gotcha #2) were built for exactly one call site.**
+  `queueAppStateSaveRef`, `updateActiveNoteTitlePreviewRef`, `writeDebugEntryRef`,
+  `activeNoteHasDebugTagRef`, and the four markdown-formatting-transform refs at the top of
+  `App.tsx` exist to solve an ordering problem for a *single* `useEditorSectionMount` call.
+  Some of these (markdown-formatting builders, `writeDebugEntry`) look like they're
+  genuinely App-global and can stay shared, passed down to every `<EditorSection>` instance
+  unchanged. Others (`queueAppStateSave`, `updateActiveNoteTitlePreview`) look more
+  section-specific (a title preview belongs to one tab). Which is which hasn't been worked
+  out — assuming they all generalize the same way would be a mistake.
+
+## Performance considerations for multi-section
+
+Not yet a problem (nothing's built), but worth designing around from the start rather than
+discovering later:
+
+- **N sections means N live Lexical editor mounts simultaneously**, not N-1 dormant
+  placeholders — each with its own reconciliation, decorator nodes, custom scrollbar, and
+  markdown syntax highlighting, even though only one section is ever actually being typed
+  into. **Confirmed high priority, not a follow-up**: hibernation rendering (What's left,
+  item 4 — `Editor.tsx` skipping `onTextChange`/`onSelectionChange` wiring for inactive
+  sections) should land alongside the initial multi-section work, not after it. Every
+  additional open section otherwise pays real per-keystroke/selection-event overhead for
+  events nothing is listening to meaningfully, app-wide, not just in the section being typed
+  in.
+- **N-multiplied IPC calls on note load/switch** — `getNoteUiState`, `loadNote`,
+  `getNoteSnapshots` all fire once per section on cold start / note switch. Local SQLite
+  round-trips are cheap individually, but this scales linearly with section count, which
+  matters more at cold start (all N sections restoring at once) than during steady-state use.
+- **N independent debounced save timers and freeze-on-hibernate snapshot writes.**
+  **Confirmed not a concern**: existing automatic-snapshot compaction already guards against
+  this getting out of hand regardless of how much more frequently section-switching triggers
+  freeze-snapshots than note-switching did — no separate mitigation needed here.
+- **Divider drag must not thrash layout across N containers per frame.** CSS flex-basis/
+  percentage-driven widths during drag, not per-frame JS-computed pixel widths for every
+  section — the existing "resize pauses recalculation while dragging, then redistributes
+  proportionally on release" plan already points this direction; worth being deliberate about
+  it when this is actually built, not just an incidental consequence of however it's coded.
 
 ## Resolved: bootstrap's viewport seed vs. `activateNote`'s per-note restore
 
