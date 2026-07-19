@@ -1,0 +1,2 @@
+export const BORDER_RADIUS_REGULAR_MIN_PX = 0;
+export const BORDER_RADIUS_REGULAR_MAX_PX = 20;

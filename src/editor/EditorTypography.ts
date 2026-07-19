@@ -34,6 +34,8 @@ export const EDITOR_SPACING_OPTIONS: Array<{ key: EditorSpacingKey; label: strin
 ];
 
 export const DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX = 1;
+export const EDITOR_GLYPH_PADDING_MIN_PX = 0;
+export const EDITOR_GLYPH_PADDING_MAX_PX = 1;
 const MIN_EDITOR_GLYPH_SIDE_GAP_PX = 0;
 const MAX_EDITOR_GLYPH_SIDE_GAP_PX = 1;
 

@@ -19,6 +19,11 @@ export type TextureMaterialsBySurface = Record<TextureSurfaceKey, TextureMateria
 
 export const TEXTURE_SURFACES: TextureSurfaceKey[] = ['appGrid', 'sidebarContent', 'editorEditText', 'editorRenderText'];
 
+export const TEXTURE_GRANULARITY_MIN = 1;
+export const TEXTURE_GRANULARITY_MAX = 20;
+export const TEXTURE_VSTEPS_MIN = 1;
+export const TEXTURE_VSTEPS_MAX = 20;
+
 export const DEFAULT_TEXTURE_MATERIALS: TextureMaterialsBySurface = {
   appGrid: {
     enabled: true,
