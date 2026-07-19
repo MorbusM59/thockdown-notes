@@ -1217,13 +1217,17 @@ export class DatabaseService {
     return rows.map((row) => ({ sectionId: row.sectionId, noteId: row.noteId, position: row.position, addedAtMs: row.addedAt }));
   }
 
+  /** Newly-pinned tabs join at the left edge, ahead of every existing tab -- not appended at the right. */
   addNoteTab(sectionId: string, noteId: string): NoteTabEntry[] {
     const db = this.requireDb();
     const existing = db.prepare('SELECT 1 FROM note_tabs WHERE sectionId = ? AND noteId = ?').get(sectionId, noteId);
     if (!existing) {
-      const { maxPosition } = db.prepare('SELECT MAX(position) AS maxPosition FROM note_tabs WHERE sectionId = ?').get(sectionId) as { maxPosition: number | null };
-      db.prepare('INSERT INTO note_tabs (sectionId, noteId, position, addedAt) VALUES (?, ?, ?, ?)')
-        .run(sectionId, noteId, (maxPosition ?? -1) + 1, Date.now());
+      const tx = db.transaction(() => {
+        db.prepare('UPDATE note_tabs SET position = position + 1 WHERE sectionId = ?').run(sectionId);
+        db.prepare('INSERT INTO note_tabs (sectionId, noteId, position, addedAt) VALUES (?, ?, 0, ?)')
+          .run(sectionId, noteId, Date.now());
+      });
+      tx();
     }
     return this.listNoteTabs();
   }

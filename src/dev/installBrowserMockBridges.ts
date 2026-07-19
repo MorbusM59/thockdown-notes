@@ -866,13 +866,14 @@ function buildTabsBridge(storeRef: { current: BrowserMockStore }): NoteTabsApi {
       return sorted(storeRef.current)
     },
 
+    // Newly-pinned tabs join at the left edge, ahead of every existing tab.
     async addTab(sectionId: string, noteId: string): Promise<NoteTabEntry[]> {
       return mutate((store) => {
         if (!store.noteTabs.some((tab) => tab.sectionId === sectionId && tab.noteId === noteId)) {
-          const maxPosition = store.noteTabs
-            .filter((tab) => tab.sectionId === sectionId)
-            .reduce((max, tab) => Math.max(max, tab.position), -1)
-          store.noteTabs.push({ sectionId, noteId, position: maxPosition + 1, addedAtMs: Date.now() })
+          store.noteTabs = store.noteTabs.map((tab) => (
+            tab.sectionId === sectionId ? { ...tab, position: tab.position + 1 } : tab
+          ))
+          store.noteTabs.push({ sectionId, noteId, position: 0, addedAtMs: Date.now() })
         }
         return sorted(store)
       })
