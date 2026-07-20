@@ -2,14 +2,36 @@ import { describe, expect, it } from 'vitest'
 import { computeSectionWidthsForClose, computeSectionWidthsForNewSection } from './sectionWidths'
 
 describe('computeSectionWidthsForNewSection', () => {
-  it('funds entirely from the source section when it has enough alone', () => {
+  it('splits the source section in half when it is larger than twice the minimum', () => {
     const { updatedWidths, newSectionWidthPx } = computeSectionWidthsForNewSection(
       [{ id: 'a', widthPx: 700 }, { id: 'b', widthPx: 500 }],
       'a',
       300,
       8,
     )
-    expect(updatedWidths).toEqual([{ id: 'a', widthPx: 392 }, { id: 'b', widthPx: 500 }])
+    expect(updatedWidths).toEqual([{ id: 'a', widthPx: 346 }, { id: 'b', widthPx: 500 }])
+    expect(newSectionWidthPx).toBe(346)
+  })
+
+  it('gives the source section the odd px when an uneven split cannot be exact', () => {
+    const { updatedWidths, newSectionWidthPx } = computeSectionWidthsForNewSection(
+      [{ id: 'a', widthPx: 701 }, { id: 'b', widthPx: 500 }],
+      'a',
+      300,
+      8,
+    )
+    expect(updatedWidths).toEqual([{ id: 'a', widthPx: 347 }, { id: 'b', widthPx: 500 }])
+    expect(newSectionWidthPx).toBe(346)
+  })
+
+  it('falls back to minimal funding when the source is not large enough to split in half', () => {
+    const { updatedWidths, newSectionWidthPx } = computeSectionWidthsForNewSection(
+      [{ id: 'a', widthPx: 607 }, { id: 'b', widthPx: 500 }],
+      'a',
+      300,
+      8,
+    )
+    expect(updatedWidths).toEqual([{ id: 'a', widthPx: 300 }, { id: 'b', widthPx: 499 }])
     expect(newSectionWidthPx).toBe(300)
   })
 

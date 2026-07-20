@@ -52,13 +52,16 @@ function distributeAcrossPool(neededPx: number, pool: SectionWidthPx[], minWidth
 
 /**
  * Computes new widths for creating a section immediately to the right of
- * `sourceSectionId`. Tries to fund the new section (plus the one new
- * divider it introduces) entirely from the source section first; only
- * spills over to the other sections, proportionally, if the source alone
- * can't cover it without dropping below `minWidthPx`. If rounding overshoots
- * the exact amount needed, the new section simply ends up a few px larger
- * rather than shorting any existing section below its measured give --
- * total width is always conserved exactly.
+ * `sourceSectionId`. When the source section is larger than twice
+ * `minWidthPx`, it's split evenly in half (minus the new divider) between
+ * itself and the new section -- visually "splitting the pane." Otherwise,
+ * falls back to funding the new section (plus the one new divider it
+ * introduces) entirely from the source section first; only spills over to
+ * the other sections, proportionally, if the source alone can't cover it
+ * without dropping below `minWidthPx`. If rounding overshoots the exact
+ * amount needed, the new section simply ends up a few px larger rather than
+ * shorting any existing section below its measured give -- total width is
+ * always conserved exactly.
  */
 export function computeSectionWidthsForNewSection(
   currentWidthsPx: SectionWidthPx[],
@@ -69,6 +72,18 @@ export function computeSectionWidthsForNewSection(
   const source = currentWidthsPx.find((entry) => entry.id === sourceSectionId)
   if (!source) {
     return { updatedWidths: currentWidthsPx, newSectionWidthPx: minWidthPx }
+  }
+
+  if (source.widthPx >= 2 * minWidthPx + dividerWidthPx) {
+    const splittableInnerPx = source.widthPx - dividerWidthPx
+    const newSectionWidthPx = Math.floor(splittableInnerPx / 2)
+    const sourceNewWidthPx = splittableInnerPx - newSectionWidthPx
+
+    const updatedWidths = currentWidthsPx.map((entry) => (
+      entry.id === sourceSectionId ? { id: entry.id, widthPx: sourceNewWidthPx } : entry
+    ))
+
+    return { updatedWidths, newSectionWidthPx }
   }
 
   // The new divider's fixed 8px comes out of the same pool as the new

@@ -4516,10 +4516,12 @@ ${markdownHtml}
 
   // Always creates a new section immediately to the right of the one the
   // "+" button was clicked on, per the handover doc's split-view design.
-  // Sizing policy: fund the new section (plus the one new divider it
-  // introduces) from its immediate left neighbor first, only spilling over
-  // to the other sections -- proportionally, capped at each one's own
-  // minimum -- if the neighbor alone can't cover it. See sectionWidths.ts.
+  // Sizing policy: split the immediate left neighbor in half if it's large
+  // enough to give up half its width and stay above the minimum; otherwise
+  // fund the new section (plus the one new divider it introduces) from that
+  // neighbor first, only spilling over to the other sections -- proportionally,
+  // capped at each one's own minimum -- if the neighbor alone can't cover it.
+  // See sectionWidths.ts.
   const handleCreateSection = useCallback(async (afterPosition: number, sourceSectionId: string) => {
     const sectionsApi = window.thockdownSections
     if (!sectionsApi) return
