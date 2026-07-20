@@ -76,7 +76,7 @@ import { useEditorSectionMount } from './editorSection/useEditorSectionMount'
 import { usePreviewedSnapshot } from './editorSection/usePreviewedSnapshot'
 import { useNoteSaveQueue } from './editorSection/useNoteSaveQueue'
 import { getActiveSectionHandle, type SectionHandle } from './editorSection/sectionRegistry'
-import { useMarkdownFormattingToolbar } from './editorSection/useMarkdownFormattingToolbar'
+import { useMarkdownFormattingToolbar, type TextDecorationFormat } from './editorSection/useMarkdownFormattingToolbar'
 import { usePreviewMarkdownRendering } from './editorSection/usePreviewMarkdownRendering'
 import { useDocumentFindNavigation } from './editorSection/useDocumentFindNavigation'
 import { useNoteSnapshotTimeline } from './editorSection/useNoteSnapshotTimeline'
@@ -190,6 +190,14 @@ type EditorTextColorTargetKey = 'editorEditText' | 'editorRenderText'
 
 type HsvaControlKey = 'h' | 's' | 'v' | 'a'
 const GLAZE_RADIAL_CORNERS = ['top left', 'top right', 'bottom right', 'bottom left'] as const
+
+// Fallbacks for chrome reading through the section registry before any
+// section has registered -- never actually hit in practice (registration
+// happens earlier in the same render this is read in), but keeps the read
+// side honest about what "no active section yet" looks like.
+const noop = () => {}
+const noopAsync = async () => {}
+const EMPTY_DECORATION_FORMATS = new Set<TextDecorationFormat>()
 
 type DarkModeKey = 'none' | 'mono' | 'red' | 'dusk' | 'neon' | 'matrix'
 
@@ -1643,9 +1651,6 @@ function App() {
   const getActiveSection = useCallback((): SectionHandle | undefined => (
     getActiveSectionHandle(sectionRegistryRef, activeSectionId)
   ), [activeSectionId])
-  // Not read yet -- becomes real as each chrome consumer is repointed
-  // through the registry in the following patches.
-  void getActiveSection
   const originalConsoleMethodsRef = useRef<Partial<Record<ConsoleMethodName, (...args: any[]) => void>>>({})
   const isWritingDebugEntryRef = useRef(false)
   const debugNoteCreationPromiseRef = useRef<Promise<string | null> | null>(null)
@@ -6075,6 +6080,13 @@ ${markdownHtml}
     syncSidebarTexture()
   }, [syncSidebarTexture, sidebarMode, isSidebarScrollbarMode])
 
+  // EditorToolbar is a global singleton that always targets the active
+  // section, resolved fresh each render -- the `?? ` fallbacks below only
+  // matter for the render before the first registerSectionHandle call ever
+  // runs (they're never hit in practice, since registration happens earlier
+  // in this same render).
+  const activeSectionForToolbar = getActiveSection()
+
   return (
     <div className="app-root" style={appRootStyle} onDragOver={handleAppDragOver} onDrop={handleAppDrop}>
       {bootstrapError ? (
@@ -6716,9 +6728,9 @@ ${markdownHtml}
             </section>
 
             <EditorToolbar
-              isPreviewMode={isPreviewMode}
-              activeNoteId={activeNoteId}
-              toggleRenderViewMode={toggleRenderViewMode}
+              isPreviewMode={activeSectionForToolbar?.isPreviewMode ?? false}
+              activeNoteId={activeSectionForToolbar?.activeNoteId ?? null}
+              toggleRenderViewMode={activeSectionForToolbar?.toggleRenderViewMode ?? noopAsync}
               createNote={createNote}
               spellCheckEditEnabled={spellCheckEditEnabled}
               spellCheckRenderEnabled={spellCheckRenderEnabled}
@@ -6730,25 +6742,25 @@ ${markdownHtml}
               isExportingPdf={isExportingPdf}
               handleExportMd={handleExportMd}
               isExportingMd={isExportingMd}
-              activeDecorationFormats={activeDecorationFormats}
-              activeHeadingLevel={activeHeadingLevel}
-              isChecklistActive={isChecklistActive}
-              isBulletedListActive={isBulletedListActive}
-              isNumberedListActive={isNumberedListActive}
-              isBlockquoteActive={isBlockquoteActive}
-              isCodeBlockActive={isCodeBlockActive}
-              isInlineCodeActive={isInlineCodeActive}
-              applyTextDecoration={applyTextDecoration}
-              applyHeading={applyHeading}
-              toggleCurrentLineHeading={toggleCurrentLineHeading}
-              toggleBulletedList={toggleBulletedList}
-              toggleNumberedList={toggleNumberedList}
-              toggleChecklistList={toggleChecklistList}
-              toggleBlockquote={toggleBlockquote}
-              applyLink={applyLink}
-              applyInlineCode={applyInlineCode}
-              applyCodeBlock={applyCodeBlock}
-              insertHorizontalRule={insertHorizontalRule}
+              activeDecorationFormats={activeSectionForToolbar?.activeDecorationFormats ?? EMPTY_DECORATION_FORMATS}
+              activeHeadingLevel={activeSectionForToolbar?.activeHeadingLevel ?? 0}
+              isChecklistActive={activeSectionForToolbar?.isChecklistActive ?? false}
+              isBulletedListActive={activeSectionForToolbar?.isBulletedListActive ?? false}
+              isNumberedListActive={activeSectionForToolbar?.isNumberedListActive ?? false}
+              isBlockquoteActive={activeSectionForToolbar?.isBlockquoteActive ?? false}
+              isCodeBlockActive={activeSectionForToolbar?.isCodeBlockActive ?? false}
+              isInlineCodeActive={activeSectionForToolbar?.isInlineCodeActive ?? false}
+              applyTextDecoration={activeSectionForToolbar?.applyTextDecoration ?? noop}
+              applyHeading={activeSectionForToolbar?.applyHeading ?? noop}
+              toggleCurrentLineHeading={activeSectionForToolbar?.toggleCurrentLineHeading ?? noop}
+              toggleBulletedList={activeSectionForToolbar?.toggleBulletedList ?? noop}
+              toggleNumberedList={activeSectionForToolbar?.toggleNumberedList ?? noop}
+              toggleChecklistList={activeSectionForToolbar?.toggleChecklistList ?? noop}
+              toggleBlockquote={activeSectionForToolbar?.toggleBlockquote ?? noop}
+              applyLink={activeSectionForToolbar?.applyLink ?? noop}
+              applyInlineCode={activeSectionForToolbar?.applyInlineCode ?? noop}
+              applyCodeBlock={activeSectionForToolbar?.applyCodeBlock ?? noop}
+              insertHorizontalRule={activeSectionForToolbar?.insertHorizontalRule ?? noop}
             />
 
             <EditorSection
