@@ -5441,6 +5441,13 @@ ${markdownHtml}
     insertHorizontalRule,
   })
 
+  // Resolved once per render, right after this section published itself
+  // above -- every chrome consumer below (keyboard shortcuts, the
+  // mousedown refocus guard, beforeunload persistence, EditorToolbar) reads
+  // through this single lookup rather than closing over section state
+  // directly.
+  const activeSection = getActiveSection()
+
   const handleFindViewButtonContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
     event.stopPropagation()
@@ -5938,43 +5945,43 @@ ${markdownHtml}
         return
       }
 
-      if (isEditorTarget && activeNoteId && event.ctrlKey && !event.altKey && !event.metaKey) {
+      if (isEditorTarget && activeSection?.activeNoteId && event.ctrlKey && !event.altKey && !event.metaKey) {
         const key = event.key.toLowerCase()
 
         if (!event.shiftKey && key === 'b') {
           event.preventDefault()
-          applyTextDecoration('bold')
+          activeSection.applyTextDecoration('bold')
           return
         }
 
         if (!event.shiftKey && key === 'i') {
           event.preventDefault()
-          applyTextDecoration('italic')
+          activeSection.applyTextDecoration('italic')
           return
         }
 
         if (!event.shiftKey && key === 'j') {
           event.preventDefault()
-          applyTextDecoration('strikethrough')
+          activeSection.applyTextDecoration('strikethrough')
           return
         }
 
         if (!event.shiftKey && key === 'h') {
           event.preventDefault()
-          toggleCurrentLineHeading()
+          activeSection.toggleCurrentLineHeading()
           return
         }
 
         const isOrderedListShortcut = event.key === '#' || (event.shiftKey && event.key === '3')
         if (isOrderedListShortcut) {
           event.preventDefault()
-          toggleNumberedList()
+          activeSection.toggleNumberedList()
           return
         }
 
         if (!event.shiftKey && event.key === '-') {
           event.preventDefault()
-          toggleBulletedList()
+          activeSection.toggleBulletedList()
           return
         }
       }
@@ -5994,29 +6001,29 @@ ${markdownHtml}
         }
 
         event.preventDefault()
-        toggleRenderViewMode()
+        void activeSection?.toggleRenderViewMode()
       }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [
-    toggleRenderViewMode,
+    activeSection?.activeNoteId,
+    activeSection?.applyTextDecoration,
+    activeSection?.toggleCurrentLineHeading,
+    activeSection?.toggleNumberedList,
+    activeSection?.toggleBulletedList,
+    activeSection?.toggleRenderViewMode,
     handleAddCurrentNoteToTabs,
     createNote,
     createNoteFromClipboardTitle,
-    activeNoteId,
-    applyTextDecoration,
-    toggleCurrentLineHeading,
-    toggleNumberedList,
-    toggleBulletedList,
     isFindMode,
     runSidebarMenuTransition,
     replaceAllDocumentFindHits,
   ])
 
   useEffect(() => {
-    if (isPreviewMode || !activeNoteId) return
+    if (activeSection?.isPreviewMode || !activeSection?.activeNoteId) return
 
     const onMouseDownCapture = (event: globalThis.MouseEvent) => {
       const target = event.target
@@ -6036,7 +6043,7 @@ ${markdownHtml}
 
     window.addEventListener('mousedown', onMouseDownCapture, true)
     return () => window.removeEventListener('mousedown', onMouseDownCapture, true)
-  }, [activeNoteId, isAllowedNonEditorFocusTarget, isPreviewMode, scheduleFocusEditorInEditMode])
+  }, [activeSection?.activeNoteId, activeSection?.isPreviewMode, isAllowedNonEditorFocusTarget, scheduleFocusEditorInEditMode])
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -6049,22 +6056,22 @@ ${markdownHtml}
         appStateSaveTimerRef.current = null
         const viewport = latestViewportRef.current
         void window.thockdownState?.saveAppState({
-          selectedNoteId: activeNoteId,
+          selectedNoteId: activeSection?.activeNoteId ?? null,
           viewport: viewport ?? undefined,
           menu: persistedMenuStateRef.current ?? buildMenuStateSnapshot(),
         })
       }
 
       persistActiveNoteEditModeStateNow()
-      if (isPreviewMode && activeNoteId) {
-        void persistRenderViewStateForNoteNow(activeNoteId)
+      if (activeSection?.isPreviewMode && activeSection.activeNoteId) {
+        void persistRenderViewStateForNoteNow(activeSection.activeNoteId)
       }
       persistMenuStateOnUnload()
     }
 
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [activeNoteId, buildMenuStateSnapshot, isPreviewMode, persistActiveNoteEditModeStateNow, persistMenuStateOnUnload, persistRenderViewStateForNoteNow, writeDebugEntry])
+  }, [activeSection?.activeNoteId, activeSection?.isPreviewMode, buildMenuStateSnapshot, persistActiveNoteEditModeStateNow, persistMenuStateOnUnload, persistRenderViewStateForNoteNow, writeDebugEntry])
 
   const syncSidebarTexture = useCallback(() => {
     const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
@@ -6079,13 +6086,6 @@ ${markdownHtml}
   useEffect(() => {
     syncSidebarTexture()
   }, [syncSidebarTexture, sidebarMode, isSidebarScrollbarMode])
-
-  // EditorToolbar is a global singleton that always targets the active
-  // section, resolved fresh each render -- the `?? ` fallbacks below only
-  // matter for the render before the first registerSectionHandle call ever
-  // runs (they're never hit in practice, since registration happens earlier
-  // in this same render).
-  const activeSectionForToolbar = getActiveSection()
 
   return (
     <div className="app-root" style={appRootStyle} onDragOver={handleAppDragOver} onDrop={handleAppDrop}>
@@ -6728,9 +6728,9 @@ ${markdownHtml}
             </section>
 
             <EditorToolbar
-              isPreviewMode={activeSectionForToolbar?.isPreviewMode ?? false}
-              activeNoteId={activeSectionForToolbar?.activeNoteId ?? null}
-              toggleRenderViewMode={activeSectionForToolbar?.toggleRenderViewMode ?? noopAsync}
+              isPreviewMode={activeSection?.isPreviewMode ?? false}
+              activeNoteId={activeSection?.activeNoteId ?? null}
+              toggleRenderViewMode={activeSection?.toggleRenderViewMode ?? noopAsync}
               createNote={createNote}
               spellCheckEditEnabled={spellCheckEditEnabled}
               spellCheckRenderEnabled={spellCheckRenderEnabled}
@@ -6742,25 +6742,25 @@ ${markdownHtml}
               isExportingPdf={isExportingPdf}
               handleExportMd={handleExportMd}
               isExportingMd={isExportingMd}
-              activeDecorationFormats={activeSectionForToolbar?.activeDecorationFormats ?? EMPTY_DECORATION_FORMATS}
-              activeHeadingLevel={activeSectionForToolbar?.activeHeadingLevel ?? 0}
-              isChecklistActive={activeSectionForToolbar?.isChecklistActive ?? false}
-              isBulletedListActive={activeSectionForToolbar?.isBulletedListActive ?? false}
-              isNumberedListActive={activeSectionForToolbar?.isNumberedListActive ?? false}
-              isBlockquoteActive={activeSectionForToolbar?.isBlockquoteActive ?? false}
-              isCodeBlockActive={activeSectionForToolbar?.isCodeBlockActive ?? false}
-              isInlineCodeActive={activeSectionForToolbar?.isInlineCodeActive ?? false}
-              applyTextDecoration={activeSectionForToolbar?.applyTextDecoration ?? noop}
-              applyHeading={activeSectionForToolbar?.applyHeading ?? noop}
-              toggleCurrentLineHeading={activeSectionForToolbar?.toggleCurrentLineHeading ?? noop}
-              toggleBulletedList={activeSectionForToolbar?.toggleBulletedList ?? noop}
-              toggleNumberedList={activeSectionForToolbar?.toggleNumberedList ?? noop}
-              toggleChecklistList={activeSectionForToolbar?.toggleChecklistList ?? noop}
-              toggleBlockquote={activeSectionForToolbar?.toggleBlockquote ?? noop}
-              applyLink={activeSectionForToolbar?.applyLink ?? noop}
-              applyInlineCode={activeSectionForToolbar?.applyInlineCode ?? noop}
-              applyCodeBlock={activeSectionForToolbar?.applyCodeBlock ?? noop}
-              insertHorizontalRule={activeSectionForToolbar?.insertHorizontalRule ?? noop}
+              activeDecorationFormats={activeSection?.activeDecorationFormats ?? EMPTY_DECORATION_FORMATS}
+              activeHeadingLevel={activeSection?.activeHeadingLevel ?? 0}
+              isChecklistActive={activeSection?.isChecklistActive ?? false}
+              isBulletedListActive={activeSection?.isBulletedListActive ?? false}
+              isNumberedListActive={activeSection?.isNumberedListActive ?? false}
+              isBlockquoteActive={activeSection?.isBlockquoteActive ?? false}
+              isCodeBlockActive={activeSection?.isCodeBlockActive ?? false}
+              isInlineCodeActive={activeSection?.isInlineCodeActive ?? false}
+              applyTextDecoration={activeSection?.applyTextDecoration ?? noop}
+              applyHeading={activeSection?.applyHeading ?? noop}
+              toggleCurrentLineHeading={activeSection?.toggleCurrentLineHeading ?? noop}
+              toggleBulletedList={activeSection?.toggleBulletedList ?? noop}
+              toggleNumberedList={activeSection?.toggleNumberedList ?? noop}
+              toggleChecklistList={activeSection?.toggleChecklistList ?? noop}
+              toggleBlockquote={activeSection?.toggleBlockquote ?? noop}
+              applyLink={activeSection?.applyLink ?? noop}
+              applyInlineCode={activeSection?.applyInlineCode ?? noop}
+              applyCodeBlock={activeSection?.applyCodeBlock ?? noop}
+              insertHorizontalRule={activeSection?.insertHorizontalRule ?? noop}
             />
 
             <EditorSection
