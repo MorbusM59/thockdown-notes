@@ -4543,15 +4543,30 @@ ${markdownHtml}
   const handleSwapSection = useCallback(async (outgoingSectionId: string, incomingSectionId: string) => {
     const sectionsApi = window.thockdownSections
     if (!sectionsApi) return
-    const updated = await sectionsApi.swapIntoSlot(outgoingSectionId, incomingSectionId)
+
+    // If the incoming section was already occupying a different slot, that
+    // slot is about to be silently vacated -- swapIntoSlot only fills the
+    // *destination* (outgoing's) slot, it has no notion of "what incoming
+    // left behind." Capture that beforehand so it can be backfilled with a
+    // fresh blank section afterward, rather than the pane count quietly
+    // shrinking by one.
+    const incomingPreviousPosition = editorSections.find((entry) => entry.id === incomingSectionId)?.position ?? null
+    const outgoingPosition = editorSections.find((entry) => entry.id === outgoingSectionId)?.position ?? null
+
+    let updated = await sectionsApi.swapIntoSlot(outgoingSectionId, incomingSectionId)
     sectionRegistryRef.current.delete(outgoingSectionId)
+
+    if (incomingPreviousPosition !== null && incomingPreviousPosition !== outgoingPosition) {
+      updated = await sectionsApi.createSection(null, incomingPreviousPosition - 1)
+    }
+
     const incomingEntry = updated.find((entry) => entry.id === incomingSectionId)
     if (incomingEntry?.lastActiveNoteId && notesRef.current.some((note) => note.id === incomingEntry.lastActiveNoteId)) {
       initialNoteIdBySectionIdRef.current.set(incomingSectionId, incomingEntry.lastActiveNoteId)
     }
     applyResolvedSections(updated)
     setActiveSectionId((previous) => (previous === outgoingSectionId ? incomingSectionId : previous))
-  }, [applyResolvedSections])
+  }, [applyResolvedSections, editorSections])
 
   const editorSectionsRowRef = useRef<HTMLDivElement | null>(null)
   const sectionSlotElByIdRef = useRef<Map<string, HTMLDivElement>>(new Map())
