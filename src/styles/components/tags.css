@@ -220,7 +220,6 @@
 
 .section-identity-tab {
   max-width: 96px;
-  cursor:    pointer;
 }
 
 .section-identity-input {
@@ -260,7 +259,6 @@
   color:      var(--color-text-80);
   background: transparent;
   border:     none;
-  cursor:     pointer;
 }
 
 .section-swap-menu-item:hover {

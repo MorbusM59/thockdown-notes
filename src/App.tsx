@@ -5896,7 +5896,6 @@ ${markdownHtml}
               color: '#ffffff',
               borderRadius: '4px',
               padding: '2px 8px',
-              cursor: 'pointer',
               flexShrink: 0,
             }}
           >
