@@ -3,6 +3,7 @@ import type { Dispatch, DragEvent, KeyboardEvent, MouseEvent, MutableRefObject, 
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { NoteTabEntry } from '../shared/tabs'
 import { PROTECTED_TAGS, normalizeTagName, isProtectedTagName, isExternalTagName } from '../shared/tags'
+import { NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload } from '../shared/noteDrag'
 
 /** How long the temp tab must be held down (left mouse button) before it's promoted to a permanent pinned tab. */
 export const TEMP_TAB_PIN_HOLD_MS = 500
@@ -69,6 +70,15 @@ export interface UseSectionTabsResult {
   clearTempTabHoldTimer: () => void
   updateTabsScrollEdges: () => void
   handleTabsWheel: (event: ReactWheelEvent<HTMLDivElement>) => void
+  handleTabDragStart: (event: DragEvent<HTMLDivElement>, index: number) => void
+  handleTabDragEnd: () => void
+  handleTabDrop: (event: DragEvent<HTMLDivElement>, targetIndex: number) => void
+  handleTabsContainerDragOver: (event: DragEvent<HTMLDivElement>) => void
+  handleTabsContainerDrop: (event: DragEvent<HTMLDivElement>) => void
+  /** Removes a note's pinned tab in this section, without touching activation -- used when a foreign section claims it via drag-and-drop. */
+  unpinNoteTab: (noteId: string) => Promise<void>
+  /** Pins `noteId` to this section (if not already pinned) and moves it to the rightmost position -- used by section-wide drop targets (cross-section tab moves, sidebar note drops). */
+  pinNoteAsRightmostTab: (noteId: string) => Promise<void>
 }
 
 /**
@@ -412,6 +422,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
 
   const [pinnedTabs, setPinnedTabs] = useState<NoteTabEntry[]>([])
   const [unpinPrimedTabNoteId, setUnpinPrimedTabNoteId] = useState<string | null>(null)
+  const [draggedTabIndex, setDraggedTabIndex] = useState<number | null>(null)
 
   useEffect(() => {
     if (!persistenceReady) return
@@ -479,6 +490,37 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
       }
     }
   }, [activeNoteId, pinnedTabs, activateNote, sectionId])
+
+  // Pins `noteId` to this section if it isn't already, then moves it to the
+  // rightmost slot -- idempotent either way, so it's safe to call whether
+  // the note is new to this section (a cross-section tab move, or a
+  // sidebar-note drop) or already pinned here (dropped elsewhere in its own
+  // bar). Re-derives the current order from addTab's own response rather
+  // than the possibly-stale `pinnedTabs` closure, since this can race with
+  // other tab mutations.
+  const pinNoteAsRightmostTab = useCallback(async (noteId: string) => {
+    if (!window.thockdownTabs) return
+
+    if (window.thockdownNotes) {
+      const assignedId = await window.thockdownNotes.ensureNoteAssignedId({ id: noteId }).catch(() => null)
+      if (assignedId) {
+        updateNoteAssignedId(noteId, assignedId)
+      }
+    }
+
+    const afterAdd = await window.thockdownTabs.addTab(sectionId, noteId).catch(() => null)
+    if (!afterAdd) return
+    const currentOrder = afterAdd.filter((tab) => tab.sectionId === sectionId)
+    const orderedNoteIds = [
+      ...currentOrder.filter((tab) => tab.noteId !== noteId).map((tab) => tab.noteId),
+      noteId,
+    ]
+
+    const afterReorder = await window.thockdownTabs.reorderTabs(sectionId, orderedNoteIds).catch(() => null)
+    if (afterReorder) {
+      setPinnedTabs(afterReorder.filter((tab) => tab.sectionId === sectionId))
+    }
+  }, [sectionId, updateNoteAssignedId])
 
   // Dismissing the temp tab has nothing to persist-remove (it was never a
   // real note_tabs row) — it just hands activation over to the leftmost
@@ -600,6 +642,85 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     event.currentTarget.scrollLeft += event.deltaY
   }, [])
 
+  // ── Tab drag-and-drop: reorder within this bar, or hand off to a
+  //    section-wide drop target (a different section, or nothing at all if
+  //    it's just an aborted drag). Mirrors the tag-pill drag-reorder pattern
+  //    (a plain useState index, not dataTransfer-borne data, drives the
+  //    reorder), but also stamps the cross-component NOTE_DRAG_MIME_TYPE
+  //    payload so a *different* section's drop handler -- which doesn't
+  //    share this closure -- can pick up the note if the drop lands there
+  //    instead of back in this bar.
+  const reorderPinnedTabsTo = useCallback(async (reordered: NoteTabEntry[]) => {
+    if (!window.thockdownTabs) return
+    const orderedNoteIds = reordered.map((tab) => tab.noteId)
+    const allUpdatedTabs = await window.thockdownTabs.reorderTabs(sectionId, orderedNoteIds).catch(() => null)
+    if (allUpdatedTabs) {
+      setPinnedTabs(allUpdatedTabs.filter((tab) => tab.sectionId === sectionId))
+    }
+  }, [sectionId])
+
+  const handleTabDragStart = useCallback((event: DragEvent<HTMLDivElement>, index: number) => {
+    const tab = pinnedTabs[index]
+    if (!tab) return
+
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData(NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload({ noteId: tab.noteId, sourceSectionId: sectionId }))
+    setDraggedTabIndex(index)
+  }, [pinnedTabs, sectionId])
+
+  const handleTabDragEnd = useCallback(() => {
+    setDraggedTabIndex(null)
+  }, [])
+
+  const handleTabDrop = useCallback((event: DragEvent<HTMLDivElement>, targetIndex: number) => {
+    // Not a drag that started in this bar -- leave the event alone so it
+    // keeps bubbling up to a section-wide drop target instead.
+    if (draggedTabIndex === null) return
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (draggedTabIndex === targetIndex) {
+      setDraggedTabIndex(null)
+      return
+    }
+
+    const reordered = [...pinnedTabs]
+    const [moved] = reordered.splice(draggedTabIndex, 1)
+    if (!moved) {
+      setDraggedTabIndex(null)
+      return
+    }
+    reordered.splice(targetIndex, 0, moved)
+    setDraggedTabIndex(null)
+
+    void reorderPinnedTabsTo(reordered)
+  }, [draggedTabIndex, pinnedTabs, reorderPinnedTabsTo])
+
+  const handleTabsContainerDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (draggedTabIndex === null) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'move'
+  }, [draggedTabIndex])
+
+  const handleTabsContainerDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (draggedTabIndex === null) return
+    event.preventDefault()
+    event.stopPropagation()
+
+    const reordered = [...pinnedTabs]
+    const [moved] = reordered.splice(draggedTabIndex, 1)
+    if (!moved) {
+      setDraggedTabIndex(null)
+      return
+    }
+    reordered.push(moved)
+    setDraggedTabIndex(null)
+
+    void reorderPinnedTabsTo(reordered)
+  }, [draggedTabIndex, pinnedTabs, reorderPinnedTabsTo])
+
   return {
     tagInputRef,
     tagInputValue,
@@ -639,5 +760,12 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     clearTempTabHoldTimer,
     updateTabsScrollEdges,
     handleTabsWheel,
+    handleTabDragStart,
+    handleTabDragEnd,
+    handleTabDrop,
+    handleTabsContainerDragOver,
+    handleTabsContainerDrop,
+    unpinNoteTab,
+    pinNoteAsRightmostTab,
   }
 }

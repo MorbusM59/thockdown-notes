@@ -31,6 +31,7 @@ import {
 } from './shared/loadouts'
 import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
+import { NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload } from './shared/noteDrag'
 import {
   type RgbaColor,
   type HsvaColor,
@@ -969,6 +970,14 @@ const NoteListItem = memo(function NoteListItem({
     onMouseLeave?.(note.id)
   }, [note.id, onMouseLeave])
 
+  const handleDragStart = useCallback((event: DragEvent<HTMLDivElement>) => {
+    // Section drop targets always set dropEffect = 'move' (shared with the
+    // cross-section tab-drag path) -- effectAllowed has to permit 'move' or
+    // the browser shows a no-drop cursor and silently blocks the drop.
+    event.dataTransfer.effectAllowed = 'copyMove'
+    event.dataTransfer.setData(NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload({ noteId: note.id, sourceSectionId: null }))
+  }, [note.id])
+
   const hasActionColumns = !isTreeVariant
   const isArchived = isArchivedNote(note)
   const isDeleted = isDeletedNote(note)
@@ -981,6 +990,8 @@ const NoteListItem = memo(function NoteListItem({
       data-note-id={note.id}
       role="option"
       aria-selected={isActive}
+      draggable
+      onDragStart={handleDragStart}
       onClick={handleSelect}
       onKeyDown={handleKeyDown}
       onMouseDown={handleMouseDown}
@@ -1525,6 +1536,15 @@ function App() {
   const getActiveSection = useCallback((): SectionHandle | undefined => (
     getActiveSectionHandle(sectionRegistryRef, activeSectionId)
   ), [activeSectionId])
+  // Lets one section's drop handler (a tab dragged in from elsewhere) reach
+  // into a *different* section's own handle to unpin it there -- each
+  // section's pinnedTabs state is local to its own useSectionTabs instance,
+  // not broadcast, so the section that's losing the tab has to be the one
+  // to update its own state (via its own registered handle), not the IPC
+  // layer directly.
+  const unpinNoteFromSection = useCallback((sectionId: string, noteId: string) => {
+    void sectionRegistryRef.current.get(sectionId)?.unpinNoteTab(noteId)
+  }, [])
   // Reactive counterpart to the plain registry above: each <EditorSection>
   // instance calls this from its own effect every render (see its
   // reportSectionHandle prop). A plain Map read during the parent's render
@@ -6547,6 +6567,7 @@ ${markdownHtml}
                   onRenameSection={(name) => void handleRenameSection(entry.id, name)}
                   onFetchSwapCandidates={() => handleFetchSwapCandidates(entry.id)}
                   onSwapSection={(incomingSectionId) => void handleSwapSection(entry.id, incomingSectionId)}
+                  unpinNoteFromSection={unpinNoteFromSection}
                   markSectionActive={markSectionActive}
                   isSidebarVisible={isSidebarVisible}
                   toggleSidebarVisible={toggleSidebarVisible}

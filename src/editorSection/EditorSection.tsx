@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
+import type { Dispatch, DragEvent, MutableRefObject, SetStateAction } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import { isExternalNote } from '../shared/noteLifecycle'
 import type { PersistedViewportState } from '../shared/appState'
+import { NOTE_DRAG_MIME_TYPE, parseNoteDragPayload } from '../shared/noteDrag'
 import { normalizeInternalText } from '../editor/TextPolicy'
 import { buildEditRestoreSnapshotFromUiState, scrollTopLinesToPx } from '../editor/EditRestoreMath'
 import type { EditorRuntimeMetrics } from '../editor/EditorTypography'
@@ -113,6 +114,9 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   onRenameSection: (name: string | null) => void
   onFetchSwapCandidates: () => Promise<{ id: string; name: string }[]>
   onSwapSection: (incomingSectionId: string) => void
+
+  /** Unpins a note's tab from a *different* section -- called when this section claims a tab dragged in from elsewhere. */
+  unpinNoteFromSection: (sectionId: string, noteId: string) => void
 }
 
 /**
@@ -182,6 +186,7 @@ export function EditorSection({
   onRenameSection,
   onFetchSwapCandidates,
   onSwapSection,
+  unpinNoteFromSection,
 }: EditorSectionProps) {
   // Local, not a prop: the scrollbar-slot DOM node lives entirely within
   // this section's own SectionEditorArea render, so each section needs its
@@ -468,6 +473,13 @@ export function EditorSection({
     clearTempTabHoldTimer,
     updateTabsScrollEdges,
     handleTabsWheel,
+    handleTabDragStart,
+    handleTabDragEnd,
+    handleTabDrop,
+    handleTabsContainerDragOver,
+    handleTabsContainerDrop,
+    unpinNoteTab,
+    pinNoteAsRightmostTab,
   }: UseSectionTabsResult = useSectionTabs({
     sectionId,
     activeNoteId,
@@ -734,6 +746,13 @@ export function EditorSection({
     clearTempTabHoldTimer,
     updateTabsScrollEdges,
     handleTabsWheel,
+    handleTabDragStart,
+    handleTabDragEnd,
+    handleTabDrop,
+    handleTabsContainerDragOver,
+    handleTabsContainerDrop,
+    unpinNoteTab,
+    pinNoteAsRightmostTab,
     adapterRef,
     previewScrollRef,
     editModeSnapshotByNoteIdRef,
@@ -807,6 +826,46 @@ export function EditorSection({
     replaceAllDocumentFindHits,
   }
 
+  // Section-wide drop target: a tab dragged in from another section, or a
+  // note dragged from the sidebar, lands anywhere on this section (not just
+  // its tab bar) and becomes its new rightmost tab. Individual drag-capable
+  // children (pinned tab pills, the tag bar's own reorder drop zones) only
+  // preventDefault/stopPropagation for their own in-bar drag; anything else
+  // bubbles up here unhandled.
+  const handleSectionDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes(NOTE_DRAG_MIME_TYPE)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+  }, [])
+
+  const handleSectionDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
+    const raw = event.dataTransfer.getData(NOTE_DRAG_MIME_TYPE)
+    if (!raw) return
+    const payload = parseNoteDragPayload(raw)
+    if (!payload) return
+
+    event.preventDefault()
+
+    // A sidebar-origin drop also loads the note into this section's editor
+    // -- unlike a tab dragged in from another section, there's no tab to
+    // switch away from, so nothing else should happen there. If it's
+    // already pinned here, this is just a shortcut to switch to it, not a
+    // request to re-pin/reorder it.
+    if (payload.sourceSectionId === null) {
+      if (pinnedTabs.some((tab) => tab.noteId === payload.noteId)) {
+        void activateNote(payload.noteId)
+      } else {
+        void pinNoteAsRightmostTab(payload.noteId).then(() => activateNote(payload.noteId))
+      }
+      return
+    }
+
+    void pinNoteAsRightmostTab(payload.noteId)
+    if (payload.sourceSectionId !== sectionId) {
+      unpinNoteFromSection(payload.sourceSectionId, payload.noteId)
+    }
+  }, [activateNote, pinNoteAsRightmostTab, pinnedTabs, sectionId, unpinNoteFromSection])
+
   // Plain assignment (not an effect) -- safe, it's just a ref mutation. Powers
   // imperative, non-reactive registry lookups (getActiveSectionHandle()).
   registerSectionHandle(sectionId, currentSectionHandle)
@@ -824,6 +883,8 @@ export function EditorSection({
   return (
     <div
       className={`editor-section-column${sectionId === activeSectionId ? ' is-active' : ''}`}
+      onDragOver={handleSectionDragOver}
+      onDrop={handleSectionDrop}
     >
       <SectionTabBar
         tabs={{
@@ -864,6 +925,13 @@ export function EditorSection({
           clearTempTabHoldTimer,
           updateTabsScrollEdges,
           handleTabsWheel,
+          handleTabDragStart,
+          handleTabDragEnd,
+          handleTabDrop,
+          handleTabsContainerDragOver,
+          handleTabsContainerDrop,
+          unpinNoteTab,
+          pinNoteAsRightmostTab,
         }}
         isSidebarVisible={isSidebarVisible}
         toggleSidebarVisible={toggleSidebarVisible}

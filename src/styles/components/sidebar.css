@@ -550,6 +550,11 @@
   border: none;
   box-shadow: none;
   padding: 0;
+  /* Without this, dragging over the row's selectable title/date text starts
+   * a native text-selection drag instead of firing our draggable's own
+   * dragstart -- the same reason .tag-pill (which note-tab-pill reuses)
+   * sets this. */
+  user-select: none;
 }
 
 .note-list-columns {

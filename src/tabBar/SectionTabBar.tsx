@@ -103,6 +103,11 @@ export function SectionTabBar({
     clearTempTabHoldTimer,
     updateTabsScrollEdges,
     handleTabsWheel,
+    handleTabDragStart,
+    handleTabDragEnd,
+    handleTabDrop,
+    handleTabsContainerDragOver,
+    handleTabsContainerDrop,
   } = tabs
 
   return (
@@ -203,6 +208,8 @@ export function SectionTabBar({
               ref={tabsScrollerRef}
               onScroll={updateTabsScrollEdges}
               onWheel={handleTabsWheel}
+              onDragOver={handleTabsContainerDragOver}
+              onDrop={handleTabsContainerDrop}
             >
               {pinnedTabs.length === 0 && !tempTabNoteId ? (
                 <span className="tabbar-tag-hint">Open a note to preview it here.</span>
@@ -237,7 +244,7 @@ export function SectionTabBar({
                       </div>
                     )
                   })() : null}
-                  {pinnedTabs.map((tab) => {
+                  {pinnedTabs.map((tab, index) => {
                     const note = notes.find((entry) => entry.id === tab.noteId)
                     const label = note?.assignedId != null
                       ? `$${note.assignedId}`
@@ -249,6 +256,10 @@ export function SectionTabBar({
                       <div
                         key={tab.noteId}
                         className={`tag-pill note-tab-pill${isActive ? ' active' : ''}${isGhost ? ' ghost' : ''}${isPrimed ? ' unpin-primed' : ''}`}
+                        draggable
+                        onDragStart={(event) => handleTabDragStart(event, index)}
+                        onDragEnd={handleTabDragEnd}
+                        onDrop={(event) => handleTabDrop(event, index)}
                         onClick={() => handleTabClick(tab.noteId)}
                         onContextMenu={(event) => handleTabContextMenu(event, tab.noteId)}
                         onMouseLeave={() => handleTabMouseLeave(tab.noteId)}
