@@ -108,6 +108,11 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   canCreateSection: boolean
   onCreateSection: () => void
   onCloseSection: () => void
+
+  sectionName: string | null
+  onRenameSection: (name: string | null) => void
+  onFetchSwapCandidates: () => Promise<{ id: string; name: string }[]>
+  onSwapSection: (incomingSectionId: string) => void
 }
 
 /**
@@ -173,12 +178,65 @@ export function EditorSection({
   canCreateSection,
   onCreateSection,
   onCloseSection,
+  sectionName,
+  onRenameSection,
+  onFetchSwapCandidates,
+  onSwapSection,
 }: EditorSectionProps) {
   // Local, not a prop: the scrollbar-slot DOM node lives entirely within
   // this section's own SectionEditorArea render, so each section needs its
   // own -- sharing one across instances would have every section but the
   // last-mounted one's custom scrollbar pointing at the wrong DOM node.
   const [scrollbarHostEl, setScrollbarHostEl] = useState<HTMLDivElement | null>(null)
+
+  // Identity-tab UI state: renaming this section, and the right-click
+  // "swap in a named section" dropdown. Purely transient chrome, not
+  // section content -- stays local rather than round-tripping to App.tsx.
+  const [isEditingSectionName, setIsEditingSectionName] = useState(false)
+  const [sectionNameDraft, setSectionNameDraft] = useState('')
+  const [isSwapMenuOpen, setIsSwapMenuOpen] = useState(false)
+  const [swapCandidates, setSwapCandidates] = useState<{ id: string; name: string }[]>([])
+
+  const startRenamingSection = useCallback(() => {
+    setSectionNameDraft(sectionName ?? '')
+    setIsEditingSectionName(true)
+  }, [sectionName])
+
+  const commitSectionRename = useCallback(() => {
+    setIsEditingSectionName(false)
+    const trimmed = sectionNameDraft.trim()
+    if (trimmed === (sectionName ?? '')) return
+    onRenameSection(trimmed.length > 0 ? trimmed : null)
+  }, [onRenameSection, sectionName, sectionNameDraft])
+
+  const cancelSectionRename = useCallback(() => {
+    setIsEditingSectionName(false)
+  }, [])
+
+  const openSwapMenu = useCallback(async () => {
+    const candidates = await onFetchSwapCandidates()
+    setSwapCandidates(candidates)
+    setIsSwapMenuOpen(true)
+  }, [onFetchSwapCandidates])
+
+  const closeSwapMenu = useCallback(() => {
+    setIsSwapMenuOpen(false)
+  }, [])
+
+  // Dismiss the swap dropdown on any click outside it -- a standard
+  // click-away pattern, scoped to only run while the menu is actually open.
+  useEffect(() => {
+    if (!isSwapMenuOpen) return
+    const handleWindowMouseDown = (event: globalThis.MouseEvent) => {
+      const target = event.target
+      if (target instanceof HTMLElement && target.closest('.section-swap-menu, .section-identity-tab')) {
+        return
+      }
+      setIsSwapMenuOpen(false)
+    }
+    window.addEventListener('mousedown', handleWindowMouseDown)
+    return () => window.removeEventListener('mousedown', handleWindowMouseDown)
+  }, [isSwapMenuOpen])
   const { isPreviewMode, setIsPreviewMode } = useDisplayedNoteRenderMode(sectionId)
   const { activeNoteId, setActiveNoteId } = useActiveNoteId(sectionId)
   const {
@@ -764,7 +822,10 @@ export function EditorSection({
   })
 
   return (
-    <div className="editor-section-column">
+    <div
+      className="editor-section-column"
+      style={sectionId === activeSectionId ? { outline: '2px solid #ff0000', outlineOffset: '-2px' } : undefined}
+    >
       <SectionTabBar
         tabs={{
           tagInputRef,
@@ -815,6 +876,20 @@ export function EditorSection({
         canCreateSection={canCreateSection}
         onCreateSection={onCreateSection}
         onCloseSection={onCloseSection}
+        sectionName={sectionName}
+        isEditingSectionName={isEditingSectionName}
+        sectionNameDraft={sectionNameDraft}
+        setSectionNameDraft={setSectionNameDraft}
+        onStartRenamingSection={startRenamingSection}
+        onCommitSectionRename={commitSectionRename}
+        onCancelSectionRename={cancelSectionRename}
+        isSwapMenuOpen={isSwapMenuOpen}
+        swapCandidates={swapCandidates}
+        onOpenSwapMenu={openSwapMenu}
+        onSwapSection={(incomingSectionId) => {
+          closeSwapMenu()
+          onSwapSection(incomingSectionId)
+        }}
       />
 
       <SectionEditorArea

@@ -188,6 +188,70 @@
   -webkit-app-region: no-drag;
 }
 
+/* Identity tab: this section's own name (or "···" until named). Left-click
+   renames in place; right-click opens the swap-in-a-named-section menu. */
+.section-identity-tab-shell {
+  position:     relative;
+  flex:         0 0 auto;
+  height:       100%;
+  margin-right: 4px;
+}
+
+.section-identity-tab {
+  max-width: 96px;
+  cursor:    pointer;
+}
+
+.section-identity-input {
+  max-width:     96px;
+  height:        100%;
+  box-sizing:    border-box;
+  border:        1px solid var(--btn-border-default);
+  border-radius: var(--border-radius-small);
+  background:    var(--btn-bg-default);
+  font-size:     11px;
+  color:         var(--color-text-80);
+  padding:       0 4px;
+  -webkit-app-region: no-drag;
+}
+
+.section-swap-menu {
+  position:      absolute;
+  top:           100%;
+  left:          0;
+  margin-top:    4px;
+  z-index:       10;
+  display:       flex;
+  flex-direction: column;
+  min-width:     140px;
+  border:        1px solid var(--btn-border-default);
+  border-radius: var(--border-radius-small);
+  background:    var(--btn-bg-default);
+  box-shadow:    var(--box-shadow-inverted);
+  overflow:      hidden;
+  -webkit-app-region: no-drag;
+}
+
+.section-swap-menu-item {
+  text-align: left;
+  padding:    6px 8px;
+  font-size:  11px;
+  color:      var(--color-text-80);
+  background: transparent;
+  border:     none;
+  cursor:     pointer;
+}
+
+.section-swap-menu-item:hover {
+  background: var(--btn-bg-hover, var(--btn-bg-default));
+}
+
+.section-swap-menu-empty {
+  padding:    6px 8px;
+  font-size:  11px;
+  color:      var(--color-text-60);
+}
+
 /* Tab mode: pinned note pills fill the whole bar */
 .tab-mode-shell.tabs-mode {
   padding: 4px;

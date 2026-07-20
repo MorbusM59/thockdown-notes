@@ -21,6 +21,19 @@ export interface SectionTabBarProps {
   onCreateSection: () => void
   /** Closes this section's slot (only ever called for non-leftmost sections). */
   onCloseSection: () => void
+
+  /** This section's own name -- null until the user names it via the identity tab. */
+  sectionName: string | null
+  isEditingSectionName: boolean
+  sectionNameDraft: string
+  setSectionNameDraft: (value: string) => void
+  onStartRenamingSection: () => void
+  onCommitSectionRename: () => void
+  onCancelSectionRename: () => void
+  isSwapMenuOpen: boolean
+  swapCandidates: { id: string; name: string }[]
+  onOpenSwapMenu: () => void
+  onSwapSection: (incomingSectionId: string) => void
 }
 
 /**
@@ -42,6 +55,17 @@ export function SectionTabBar({
   canCreateSection,
   onCreateSection,
   onCloseSection,
+  sectionName,
+  isEditingSectionName,
+  sectionNameDraft,
+  setSectionNameDraft,
+  onStartRenamingSection,
+  onCommitSectionRename,
+  onCancelSectionRename,
+  isSwapMenuOpen,
+  swapCandidates,
+  onOpenSwapMenu,
+  onSwapSection,
 }: SectionTabBarProps) {
   const {
     tagInputRef,
@@ -114,6 +138,60 @@ export function SectionTabBar({
       >
         <span className={`fa-solid ${tabBarMode === 'tags' ? 'fa-tags' : 'fa-table-cells-large'}`} aria-hidden="true" />
       </button>
+
+      <div className="section-identity-tab-shell">
+        {isEditingSectionName ? (
+          <input
+            className="tag-pill section-identity-input"
+            value={sectionNameDraft}
+            autoFocus
+            onChange={(event) => setSectionNameDraft(event.target.value)}
+            onBlur={onCommitSectionRename}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                onCommitSectionRename()
+              } else if (event.key === 'Escape') {
+                event.preventDefault()
+                onCancelSectionRename()
+              }
+            }}
+            aria-label="Section name"
+          />
+        ) : (
+          <button
+            type="button"
+            className="tag-pill section-identity-tab"
+            onClick={onStartRenamingSection}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              onOpenSwapMenu()
+            }}
+            title={sectionName ? `Section: ${sectionName} -- click to rename, right-click to swap in another named section` : 'Unnamed section -- click to name it, right-click to swap in a named section'}
+          >
+            <span className="tag-pill-label">{sectionName ?? '···'}</span>
+          </button>
+        )}
+        {isSwapMenuOpen ? (
+          <div className="section-swap-menu" role="menu">
+            {swapCandidates.length === 0 ? (
+              <div className="section-swap-menu-empty">No named sections to swap in</div>
+            ) : (
+              swapCandidates.map((candidate) => (
+                <button
+                  key={candidate.id}
+                  type="button"
+                  role="menuitem"
+                  className="section-swap-menu-item"
+                  onClick={() => onSwapSection(candidate.id)}
+                >
+                  {candidate.name}
+                </button>
+              ))
+            )}
+          </div>
+        ) : null}
+      </div>
 
       {tabBarMode === 'tabs' ? (
         <div className="tab-mode-shell tabs-mode" role="group" aria-label="Note tabs">

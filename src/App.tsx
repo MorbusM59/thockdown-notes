@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent } from 'react'
@@ -4520,6 +4520,105 @@ ${markdownHtml}
     setActiveSectionId((previous) => (previous === sectionId ? nextSections[0].id : previous))
   }, [applyResolvedSections])
 
+  const handleRenameSection = useCallback(async (sectionId: string, name: string | null) => {
+    const sectionsApi = window.thockdownSections
+    if (!sectionsApi) return
+    const updated = await sectionsApi.renameSection(sectionId, name)
+    applyResolvedSections(updated)
+  }, [applyResolvedSections])
+
+  // Fetched fresh each time the identity tab's right-click menu opens,
+  // rather than kept as ongoing state -- named-but-parked sections (not in
+  // editorSections, which only holds placed ones) only matter at the
+  // moment the menu is actually open.
+  const handleFetchSwapCandidates = useCallback(async (sectionId: string) => {
+    const sectionsApi = window.thockdownSections
+    if (!sectionsApi) return []
+    const all = await sectionsApi.listSections()
+    return all
+      .filter((entry): entry is EditorSectionEntry & { name: string } => entry.name !== null && entry.id !== sectionId)
+      .map((entry) => ({ id: entry.id, name: entry.name }))
+  }, [])
+
+  const handleSwapSection = useCallback(async (outgoingSectionId: string, incomingSectionId: string) => {
+    const sectionsApi = window.thockdownSections
+    if (!sectionsApi) return
+    const updated = await sectionsApi.swapIntoSlot(outgoingSectionId, incomingSectionId)
+    sectionRegistryRef.current.delete(outgoingSectionId)
+    const incomingEntry = updated.find((entry) => entry.id === incomingSectionId)
+    if (incomingEntry?.lastActiveNoteId && notesRef.current.some((note) => note.id === incomingEntry.lastActiveNoteId)) {
+      initialNoteIdBySectionIdRef.current.set(incomingSectionId, incomingEntry.lastActiveNoteId)
+    }
+    applyResolvedSections(updated)
+    setActiveSectionId((previous) => (previous === outgoingSectionId ? incomingSectionId : previous))
+  }, [applyResolvedSections])
+
+  const editorSectionsRowRef = useRef<HTMLDivElement | null>(null)
+  const sectionSlotElByIdRef = useRef<Map<string, HTMLDivElement>>(new Map())
+
+  // Drag-resizes exactly the two sections on either side of the divider that
+  // was grabbed. Slots normally size via flex-grow weights (proportional,
+  // so the row's fixed-width dividers are automatically excluded from the
+  // split) -- during a drag every slot is pinned to its current pixel width
+  // via a literal flex-basis instead, so only the two dragged neighbors
+  // reflow as the mouse moves, not the whole row. Not routed through React
+  // state per mousemove (kept as direct DOM writes) so dragging stays
+  // smooth; final widths are measured and persisted as fractions on release.
+  const handleDividerMouseDown = useCallback((leftSectionId: string, rightSectionId: string) => (
+    event: MouseEvent<HTMLDivElement>,
+  ) => {
+    event.preventDefault()
+    const leftEl = sectionSlotElByIdRef.current.get(leftSectionId)
+    const rightEl = sectionSlotElByIdRef.current.get(rightSectionId)
+    if (!leftEl || !rightEl) return
+
+    const pinnedWidthsPx = editorSections.map((entry) => {
+      const el = sectionSlotElByIdRef.current.get(entry.id)
+      return { entry, el, widthPx: el ? el.getBoundingClientRect().width : 0 }
+    })
+    pinnedWidthsPx.forEach(({ el, widthPx }) => {
+      if (el) {
+        el.style.flexGrow = '0'
+        el.style.flexShrink = '0'
+        el.style.flexBasis = `${widthPx}px`
+      }
+    })
+
+    const startLeftWidthPx = leftEl.getBoundingClientRect().width
+    const startRightWidthPx = rightEl.getBoundingClientRect().width
+    const combinedWidthPx = startLeftWidthPx + startRightWidthPx
+    const startClientX = event.clientX
+
+    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+      const deltaX = moveEvent.clientX - startClientX
+      const nextLeftWidthPx = clamp(startLeftWidthPx + deltaX, SECTION_MIN_WIDTH_PX, combinedWidthPx - SECTION_MIN_WIDTH_PX)
+      const nextRightWidthPx = combinedWidthPx - nextLeftWidthPx
+      leftEl.style.flexBasis = `${nextLeftWidthPx}px`
+      rightEl.style.flexBasis = `${nextRightWidthPx}px`
+    }
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+
+      const finalWidthsPx = pinnedWidthsPx.map(({ entry, el }) => ({
+        id: entry.id,
+        widthPx: el ? el.getBoundingClientRect().width : 0,
+      }))
+      const totalWidthPx = finalWidthsPx.reduce((sum, { widthPx }) => sum + widthPx, 0) || 1
+      const widths = finalWidthsPx.map(({ id, widthPx }) => ({
+        id,
+        widthFraction: widthPx / totalWidthPx,
+      }))
+      void window.thockdownSections?.updateSectionWidths(widths).then((updated) => {
+        applyResolvedSections(updated)
+      })
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+  }, [applyResolvedSections, editorSections])
+
   useEffect(() => {
     void typingSoundManager.load()
   }, [])
@@ -6332,15 +6431,36 @@ ${markdownHtml}
               insertHorizontalRule={activeSection?.insertHorizontalRule ?? noop}
             />
 
-            <div className="editor-sections-row">
+            <div className="editor-sections-row" ref={editorSectionsRowRef}>
               {editorSections.map((entry, index) => (
+              <Fragment key={entry.id}>
+                {index > 0 ? (
+                  <div
+                    className="editor-section-divider"
+                    onMouseDown={handleDividerMouseDown(editorSections[index - 1].id, entry.id)}
+                  />
+                ) : null}
+                <div
+                  className="editor-section-slot"
+                  style={{ flexGrow: entry.widthFraction ?? (1 / editorSections.length), flexShrink: 1, flexBasis: 0 }}
+                  ref={(el) => {
+                    if (el) {
+                      sectionSlotElByIdRef.current.set(entry.id, el)
+                    } else {
+                      sectionSlotElByIdRef.current.delete(entry.id)
+                    }
+                  }}
+                >
                 <EditorSection
-                  key={entry.id}
                   sectionId={entry.id}
                   isLeftmostSection={index === 0}
                   canCreateSection={canCreateSection}
                   onCreateSection={() => void handleCreateSection(entry.position ?? index)}
                   onCloseSection={() => void handleCloseSection(entry.id)}
+                  sectionName={entry.name}
+                  onRenameSection={(name) => void handleRenameSection(entry.id, name)}
+                  onFetchSwapCandidates={() => handleFetchSwapCandidates(entry.id)}
+                  onSwapSection={(incomingSectionId) => void handleSwapSection(entry.id, incomingSectionId)}
                   markSectionActive={markSectionActive}
                   isSidebarVisible={isSidebarVisible}
                   toggleSidebarVisible={toggleSidebarVisible}
@@ -6387,6 +6507,8 @@ ${markdownHtml}
                   spellCheckRenderEnabled={spellCheckRenderEnabled}
                   highlightSearchColor={highlightColors.search}
                 />
+                </div>
+              </Fragment>
               ))}
             </div>
           </div>
