@@ -1512,6 +1512,11 @@ function App() {
   // each section's registry entry appears. Not app state: this is one-shot
   // bootstrap wiring, not something that should trigger a re-render itself.
   const initialNoteIdBySectionIdRef = useRef<Map<string, string>>(new Map())
+  // Same one-shot hand-off pattern, for forcing a section's bar mode right
+  // after it mounts -- used so a section swapped in via the tab-bar-mode
+  // picker doesn't revert to its own fresh default of 'tags'. Drained by
+  // the effect below once each named section has registered.
+  const pendingTabBarModeBySectionIdRef = useRef<Map<string, 'tags' | 'tabs'>>(new Map())
   // Which section last received a caret placement, click, or keystroke.
   // Interactions that target "the current note" without a section of their
   // own -- Find & Replace today, drag-a-note-onto-a-section later -- read
@@ -4528,6 +4533,18 @@ ${markdownHtml}
     }
   }, [editorSections])
 
+  // Same drain pattern as above, for pendingTabBarModeBySectionIdRef.
+  useEffect(() => {
+    for (const entry of editorSections) {
+      const pendingMode = pendingTabBarModeBySectionIdRef.current.get(entry.id)
+      if (!pendingMode) continue
+      const handle = getActiveSectionHandle(sectionRegistryRef, entry.id)
+      if (!handle) continue
+      pendingTabBarModeBySectionIdRef.current.delete(entry.id)
+      handle.setTabBarMode(pendingMode)
+    }
+  }, [editorSections])
+
   const applyResolvedSections = useCallback((resolved: EditorSectionEntry[]) => {
     const placed = resolved
       .filter((entry) => entry.position !== null)
@@ -4674,10 +4691,31 @@ ${markdownHtml}
 
     updated = await sectionsApi.updateSectionWidths(widthFixups)
 
+    // swapIntoSlot only ever reassigns the *destination* slot's position to
+    // incomingSectionId -- it never renumbers incoming's own old position,
+    // so when incoming was already placed elsewhere, that old slot is left
+    // as a gap (e.g. positions land on 0, 1, 3 instead of 0, 1, 2). The
+    // createSection backfill above expects contiguous positions to shift
+    // into place correctly, so a pre-existing gap makes it shift the wrong
+    // rows too far, corrupting positions further down the row. Re-deriving
+    // the visible order from the (still correctly *ordered*, just not
+    // necessarily *contiguous*) positions and renumbering through
+    // reorderSections cleans that up without changing what's visually
+    // where.
+    const visibleOrderedIds = updated
+      .filter((entry) => entry.position !== null)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+      .map((entry) => entry.id)
+    updated = await sectionsApi.reorderSections(visibleOrderedIds)
+
     const incomingEntry = updated.find((entry) => entry.id === incomingSectionId)
     if (incomingEntry?.lastActiveNoteId && notesRef.current.some((note) => note.id === incomingEntry.lastActiveNoteId)) {
       initialNoteIdBySectionIdRef.current.set(incomingSectionId, incomingEntry.lastActiveNoteId)
     }
+    // Swapping is only reachable via the tab-bar-mode section picker, so the
+    // incoming section should keep showing the tab bar too, rather than its
+    // own fresh EditorSection instance defaulting back to 'tags'.
+    pendingTabBarModeBySectionIdRef.current.set(incomingSectionId, 'tabs')
     applyResolvedSections(updated)
     setActiveSectionId((previous) => (previous === outgoingSectionId ? incomingSectionId : previous))
   }, [applyResolvedSections, editorSections])

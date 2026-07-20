@@ -54,6 +54,8 @@ export interface UseSectionTabsResult {
   // ── Tab bar ──
   tabBarMode: 'tags' | 'tabs'
   toggleTabBarMode: () => void
+  /** Imperative escape hatch for callers outside this section (App.tsx, post-swap) to force a specific bar mode -- e.g. so a section swapped in from a tab-bar-mode picker doesn't revert to its own fresh default of 'tags'. */
+  setTabBarMode: Dispatch<SetStateAction<'tags' | 'tabs'>>
   pinnedTabs: NoteTabEntry[]
   unpinPrimedTabNoteId: string | null
   activeNoteIsPinned: boolean
@@ -744,6 +746,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
 
     tabBarMode,
     toggleTabBarMode,
+    setTabBarMode,
     pinnedTabs,
     unpinPrimedTabNoteId,
     activeNoteIsPinned,
