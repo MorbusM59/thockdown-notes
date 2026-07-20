@@ -278,8 +278,8 @@ export function SectionTabBar({
             value={tagInputValue}
             placeholder={
               !activeNoteId
-                ? (notes.length > 0 ? 'Select a note...' : 'Create a note...')
-                : (renamingTagName ? 'Rename tag...' : '···')
+                ? (notes.length > 0 ? '...' : '...')
+                : (renamingTagName ? 'Edit...' : '···')
             }
             onChange={(event) => setTagInputValue(event.target.value)}
             onKeyDown={handleTagInputKeyDown}
@@ -301,7 +301,7 @@ export function SectionTabBar({
           onDrop={handleTagContainerDrop}
         >
           {!activeNoteId ? (
-            <span className="tabbar-tag-hint">Drag to order, click to remove.</span>
+            <span className="tabbar-tag-hint"></span>
           ) : orderedActiveTags.length === 0 ? (
             <span className="tabbar-tag-hint"></span>
           ) : (

@@ -90,6 +90,14 @@
   font-style: italic;
   opacity: 75%;
   height:      100%;
+  container-name: suggestedTags;
+  container-type: size;
+}
+
+@container suggestedTags (width < 50px) {
+  .tabbar-suggested-tags .tag-pill.suggested {
+    display: none;
+  }
 }
 
 .tabbar-tag-hint {
