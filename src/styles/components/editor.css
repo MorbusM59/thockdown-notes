@@ -191,7 +191,7 @@
 }
 
 .editor-section-column.is-active .editor-shell {
-  outline: 2px solid var(--color-border-light-50);
+  outline: 2px solid var(--color-border-light-20);
 }
 
 .editor-section-column.is-active .editor-shell::after {
