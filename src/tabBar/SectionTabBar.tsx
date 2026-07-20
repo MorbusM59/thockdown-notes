@@ -70,7 +70,7 @@ export function SectionTabBar({
   } = tabs
 
   return (
-    <section className="tabbar-grid" style={{ gridArea: 'tabbar' }} aria-label="Tab bar">
+    <section className="tabbar-grid" style={{ flex: '0 0 36px' }} aria-label="Tab bar">
       <button
         type="button"
         className="btn-icon sidebar-toggle"

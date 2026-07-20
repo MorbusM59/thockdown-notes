@@ -7,6 +7,7 @@ interface Window {
 	thockdownTextures?: import('./shared/textures').TextureCacheApi;
 	thockdownLoadouts?: import('./shared/loadouts').UiLoadoutApi;
 	thockdownFileSync?: import('./shared/fileSync').FileSyncApi;
+	thockdownSections?: import('./shared/sections').EditorSectionsApi;
 	thockdownExport?: {
 		selectExportFolder: () => Promise<string | null>;
 		exportPdf: (folderPath: string, fileName: string, htmlContent?: string) => Promise<{ ok: boolean; path?: string; error?: string }>;

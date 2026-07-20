@@ -54,7 +54,8 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'previewScrollbarTrackRef' | 'handlePreviewTrackMouseDown' | 'previewScrollbarThumbRef' | 'isDraggingPreviewScrollThumb'
   | 'isPreviewScrollThumbActive' | 'handlePreviewThumbMouseDown' | 'activeNoteDocumentStats' | 'noteSnapshots'
   | 'handleNavigateSnapshot' | 'handleBranchOpened' | 'handleBranchError' | 'timelineCurveConstant' | 'setTimelineCurveConstant'
-  | 'setTimelineTrackLengthPx' | 'handleCreateManualSnapshot' | 'handleReturnToPresent' | 'handleMergeAdjacentSnapshots'> {
+  | 'setTimelineTrackLengthPx' | 'handleCreateManualSnapshot' | 'handleReturnToPresent' | 'handleMergeAdjacentSnapshots'
+  | 'scrollbarHostEl' | 'setScrollbarHostEl'> {
   sectionId: string
   markSectionActive: (sectionId: string) => void
   isSidebarVisible: boolean
@@ -112,9 +113,9 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
  * `activateNote` itself -- all called once per <EditorSection> instance,
  * self-registering into the section registry so chrome (EditorToolbar, the
  * sidebar, export, etc.) can read/act on "the active section" without
- * knowing how many sections exist. Still hardcoded to exactly one instance
- * (DEFAULT_EDITOR_SECTION_ID) in App.tsx today; mounting N of these is
- * Phase 4c's job.
+ * knowing how many sections exist. App.tsx mounts one of these per entry
+ * in window.thockdownSections.listSections() (Phase 4c), side by side in
+ * a plain flex row -- no divider/drag/create/close UI yet (Phase 6).
  */
 export function EditorSection({
   sectionId,
@@ -158,14 +159,17 @@ export function EditorSection({
   viewFontSize,
   viewSpacing,
   editorStageRef,
-  scrollbarHostEl,
-  setScrollbarHostEl,
   editorFontFamily,
   editorFontLoadVersion,
   spellCheckEditEnabled,
   spellCheckRenderEnabled,
   highlightSearchColor,
 }: EditorSectionProps) {
+  // Local, not a prop: the scrollbar-slot DOM node lives entirely within
+  // this section's own SectionEditorArea render, so each section needs its
+  // own -- sharing one across instances would have every section but the
+  // last-mounted one's custom scrollbar pointing at the wrong DOM node.
+  const [scrollbarHostEl, setScrollbarHostEl] = useState<HTMLDivElement | null>(null)
   const { isPreviewMode, setIsPreviewMode } = useDisplayedNoteRenderMode(sectionId)
   const { activeNoteId, setActiveNoteId } = useActiveNoteId(sectionId)
   const {
@@ -336,12 +340,14 @@ export function EditorSection({
     setActiveNoteText(hydratedText)
     pendingViewportRestoreRef.current = null
     await saveSelectedNoteState(loaded.id)
+    void window.thockdownSections?.setActiveNote(sectionId, loaded.id)
   }, [
     activeNoteId,
     editorRuntimeMetrics.lineHeightPx,
     persistEditUiPayloadForNote,
     persistenceReady,
     saveSelectedNoteState,
+    sectionId,
     updateEditModeSnapshotCache,
     activeNoteExternalPathRef,
     editModeSnapshotByNoteIdRef,
@@ -749,7 +755,7 @@ export function EditorSection({
   })
 
   return (
-    <>
+    <div className="editor-section-column">
       <SectionTabBar
         tabs={{
           tagInputRef,
@@ -845,6 +851,6 @@ export function EditorSection({
         handleReturnToPresent={handleReturnToPresent}
         handleMergeAdjacentSnapshots={handleMergeAdjacentSnapshots}
       />
-    </>
+    </div>
   )
 }

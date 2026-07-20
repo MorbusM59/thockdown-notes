@@ -17,12 +17,10 @@ import type { UseSectionTabsResult } from '../tabBar/useSectionTabs'
  * hook state directly; it goes through this handle, resolved via whichever
  * section is currently active (see `activeSectionId`/`markSectionActive`).
  *
- * Phase 4b of the split-view effort: the section-scoped hooks still all
- * live in App.tsx today, hardcoded to one section, but that single call
- * site now publishes its results here so chrome can be repointed through
- * the registry ahead of the hooks themselves moving into a real per-section
- * component (Phase 4c). At N=1 this is pure indirection with no behavior
- * change -- there's only ever one entry, matching what chrome already saw.
+ * The section-scoped hooks live inside `<EditorSection>` (Phase 4a); App.tsx
+ * mounts one instance per entry in `listSections()` (Phase 4c), each
+ * registering its own handle here. Chrome resolves "the active section"
+ * through this map rather than assuming there's only one.
  */
 export interface SectionHandle extends
   UseMarkdownFormattingToolbarResult,

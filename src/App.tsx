@@ -46,7 +46,7 @@ import { BORDER_RADIUS_REGULAR_MIN_PX, BORDER_RADIUS_REGULAR_MAX_PX } from './sh
 import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName } from './shared/tags'
 import { EditorSection } from './editorSection/EditorSection'
 import { EditorToolbar } from './toolbar/EditorToolbar'
-import { DEFAULT_EDITOR_SECTION_ID } from './shared/sections'
+import { DEFAULT_EDITOR_SECTION_ID, type EditorSectionEntry } from './shared/sections'
 import type { TextureCacheRequest } from './shared/textures'
 import {
   DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
@@ -1470,7 +1470,6 @@ function App() {
   const [archiveFocusRequestKey, setArchiveFocusRequestKey] = useState(0)
   const [itemsPerPage, setItemsPerPage] = useState(20)
   const [showPagination, setShowPagination] = useState(false)
-  const [scrollbarHostEl, setScrollbarHostEl] = useState<HTMLDivElement | null>(null)
   const [sidebarTreeScrollerEl, setSidebarTreeScrollerEl] = useState<HTMLDivElement | null>(null)
   // Set when the startup bootstrap (loading the note list / database) fails
   // repeatedly. Surfaced as a visible banner -- previously a failure here
@@ -1483,6 +1482,19 @@ function App() {
   const [persistenceReady, setPersistenceReady] = useState(false)
   const [appShellWidthPx, setAppShellWidthPx] = useState(APP_SHELL_MIN_WIDTH_PX)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
+  // The sections actually occupying a slot right now, sorted left-to-right --
+  // resolved from window.thockdownSections.listSections() during bootstrap
+  // (see the bootstrap effect below), filtered to position !== null. Starts
+  // as a single unnamed default section so there's always something to
+  // render before that async round-trip completes.
+  const [editorSections, setEditorSections] = useState<EditorSectionEntry[]>(() => [
+    { id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, lastActiveNoteId: null },
+  ])
+  // Which note each section should activate once it first mounts and
+  // registers -- populated by bootstrap, drained by the effect below as
+  // each section's registry entry appears. Not app state: this is one-shot
+  // bootstrap wiring, not something that should trigger a re-render itself.
+  const initialNoteIdBySectionIdRef = useRef<Map<string, string>>(new Map())
   // Which section last received a caret placement, click, or keystroke.
   // Interactions that target "the current note" without a section of their
   // own -- Find & Replace today, drag-a-note-onto-a-section later -- read
@@ -1525,6 +1537,10 @@ function App() {
     lastReportedSectionHandleRef.current = handle
     setActiveSectionSnapshot(handle)
   }, [activeSectionId])
+  useEffect(() => {
+    window.windowControls?.setSectionCount?.(editorSections.length)
+  }, [editorSections.length])
+
   const toggleSidebarVisible = useCallback(() => {
     setIsSidebarVisible((previous) => {
       const next = !previous
@@ -4371,10 +4387,36 @@ ${markdownHtml}
           if (disposed) return
 
           setNotes((previous) => mergeNoteSummaries(previous, listed))
-          // Note loading/activation itself now goes through the section's
-          // own activateNote -- same path every ordinary note switch uses --
-          // rather than duplicating load/hydrate/viewport-restore logic here.
-          await getActiveSection()?.activateNote(selectedSummary.id)
+
+          // Resolve which sections actually occupy a slot right now (sorted
+          // left-to-right); fall back to the single default section if the
+          // bridge isn't available or nothing is placed yet, so there's
+          // never a moment with zero sections rendered.
+          const rawSections = (await window.thockdownSections?.listSections()) ?? []
+          const placedSections = rawSections
+            .filter((entry) => entry.position !== null)
+            .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+          const resolvedSections = placedSections.length > 0
+            ? placedSections
+            : [{ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, lastActiveNoteId: null }]
+          if (disposed) return
+
+          // Each section resolves its own initial note from its own
+          // lastActiveNoteId; the leftmost section falls back to the
+          // legacy app-wide selectedNoteId (pre-split-view installs, or a
+          // fresh one, have no per-section memory yet), every other section
+          // falls back to the first note in the list.
+          resolvedSections.forEach((entry, index) => {
+            const persistedNoteId = (
+              entry.lastActiveNoteId && listed.some((note) => note.id === entry.lastActiveNoteId)
+            ) ? entry.lastActiveNoteId : null
+            const fallbackNoteId = index === 0 ? selectedSummary.id : listed[0].id
+            initialNoteIdBySectionIdRef.current.set(entry.id, persistedNoteId ?? fallbackNoteId)
+          })
+          setEditorSections(resolvedSections)
+          setActiveSectionId((previous) => (
+            resolvedSections.some((entry) => entry.id === previous) ? previous : resolvedSections[0].id
+          ))
 
           setPersistenceReady(true)
           setBootstrapError(null)
@@ -4409,6 +4451,25 @@ ${markdownHtml}
       }
     }
   }, [])
+
+  // Drains initialNoteIdBySectionIdRef (populated by the bootstrap effect
+  // above) once each section it names has actually mounted and registered
+  // -- registerSectionHandle runs synchronously during a section's own
+  // render, so by the time this effect fires after that commit, a
+  // newly-listed section is already in the registry. Re-checks whenever
+  // editorSections changes, so it naturally covers a section created later
+  // (Phase 6's "+" button) the same way it covers bootstrap's initial list.
+  useEffect(() => {
+    for (const entry of editorSections) {
+      const pendingNoteId = initialNoteIdBySectionIdRef.current.get(entry.id)
+      if (!pendingNoteId) continue
+      const handle = getActiveSectionHandle(sectionRegistryRef, entry.id)
+      if (!handle) continue
+      initialNoteIdBySectionIdRef.current.delete(entry.id)
+      if (handle.activeNoteId !== null) continue
+      void handle.activateNote(pendingNoteId)
+    }
+  }, [editorSections])
 
   useEffect(() => {
     void typingSoundManager.load()
@@ -6222,56 +6283,59 @@ ${markdownHtml}
               insertHorizontalRule={activeSection?.insertHorizontalRule ?? noop}
             />
 
-            <EditorSection
-              sectionId={DEFAULT_EDITOR_SECTION_ID}
-              markSectionActive={markSectionActive}
-              isSidebarVisible={isSidebarVisible}
-              toggleSidebarVisible={toggleSidebarVisible}
-              persistenceReady={persistenceReady}
-              notes={notes}
-              setNotes={setNotes}
-              notesRef={notesRef}
-              activeSectionId={activeSectionId}
-              registerSectionHandle={registerSectionHandle}
-              reportSectionHandle={reportSectionHandle}
-              isApplyingInitialViewportRef={isApplyingInitialViewportRef}
-              pendingViewportRestoreRef={pendingViewportRestoreRef}
-              externalNoteOriginalTextByIdRef={externalNoteOriginalTextByIdRef}
-              externalNoteOriginalHashByIdRef={externalNoteOriginalHashByIdRef}
-              activeNoteExternalPathRef={activeNoteExternalPathRef}
-              currentExternalNoteHash={currentExternalNoteHash}
-              setCurrentExternalNoteHash={setCurrentExternalNoteHash}
-              queueAppStateSaveStable={queueAppStateSaveStable}
-              updateActiveNoteTitlePreviewStable={updateActiveNoteTitlePreviewStable}
-              revealNoteInMenuStable={revealNoteInMenuStable}
-              writeDebugEntryStable={writeDebugEntryStable}
-              activeNoteHasDebugTagRef={activeNoteHasDebugTagRef}
-              saveSelectedNoteState={saveSelectedNoteState}
-              refreshNotes={refreshNotes}
-              noteTransitionLockRef={noteTransitionLockRef}
-              updateNoteAssignedId={updateNoteAssignedId}
-              restoredTabBarMode={restoredTabBarMode}
-              tabBarModeRef={tabBarModeRef}
-              sidebarMode={sidebarMode}
-              dateFilteredNotesRef={dateFilteredNotesRef}
-              trashFilteredNotesRef={trashFilteredNotesRef}
-              categoryTreeRef={categoryTreeRef}
-              archiveTreeRef={archiveTreeRef}
-              restoredDocumentFindCaseSensitive={restoredDocumentFindCaseSensitive}
-              documentFindCaseSensitiveRef={documentFindCaseSensitiveRef}
-              editorRuntimeMetrics={editorRuntimeMetrics}
-              viewStyle={viewStyle}
-              viewFontSize={viewFontSize}
-              viewSpacing={viewSpacing}
-              editorStageRef={editorStageRef}
-              scrollbarHostEl={scrollbarHostEl}
-              setScrollbarHostEl={setScrollbarHostEl}
-              editorFontFamily={editorFontFamily}
-              editorFontLoadVersion={editorFontLoadVersion}
-              spellCheckEditEnabled={spellCheckEditEnabled}
-              spellCheckRenderEnabled={spellCheckRenderEnabled}
-              highlightSearchColor={highlightColors.search}
-            />
+            <div className="editor-sections-row">
+              {editorSections.map((entry) => (
+                <EditorSection
+                  key={entry.id}
+                  sectionId={entry.id}
+                  markSectionActive={markSectionActive}
+                  isSidebarVisible={isSidebarVisible}
+                  toggleSidebarVisible={toggleSidebarVisible}
+                  persistenceReady={persistenceReady}
+                  notes={notes}
+                  setNotes={setNotes}
+                  notesRef={notesRef}
+                  activeSectionId={activeSectionId}
+                  registerSectionHandle={registerSectionHandle}
+                  reportSectionHandle={reportSectionHandle}
+                  isApplyingInitialViewportRef={isApplyingInitialViewportRef}
+                  pendingViewportRestoreRef={pendingViewportRestoreRef}
+                  externalNoteOriginalTextByIdRef={externalNoteOriginalTextByIdRef}
+                  externalNoteOriginalHashByIdRef={externalNoteOriginalHashByIdRef}
+                  activeNoteExternalPathRef={activeNoteExternalPathRef}
+                  currentExternalNoteHash={currentExternalNoteHash}
+                  setCurrentExternalNoteHash={setCurrentExternalNoteHash}
+                  queueAppStateSaveStable={queueAppStateSaveStable}
+                  updateActiveNoteTitlePreviewStable={updateActiveNoteTitlePreviewStable}
+                  revealNoteInMenuStable={revealNoteInMenuStable}
+                  writeDebugEntryStable={writeDebugEntryStable}
+                  activeNoteHasDebugTagRef={activeNoteHasDebugTagRef}
+                  saveSelectedNoteState={saveSelectedNoteState}
+                  refreshNotes={refreshNotes}
+                  noteTransitionLockRef={noteTransitionLockRef}
+                  updateNoteAssignedId={updateNoteAssignedId}
+                  restoredTabBarMode={restoredTabBarMode}
+                  tabBarModeRef={tabBarModeRef}
+                  sidebarMode={sidebarMode}
+                  dateFilteredNotesRef={dateFilteredNotesRef}
+                  trashFilteredNotesRef={trashFilteredNotesRef}
+                  categoryTreeRef={categoryTreeRef}
+                  archiveTreeRef={archiveTreeRef}
+                  restoredDocumentFindCaseSensitive={restoredDocumentFindCaseSensitive}
+                  documentFindCaseSensitiveRef={documentFindCaseSensitiveRef}
+                  editorRuntimeMetrics={editorRuntimeMetrics}
+                  viewStyle={viewStyle}
+                  viewFontSize={viewFontSize}
+                  viewSpacing={viewSpacing}
+                  editorStageRef={editorStageRef}
+                  editorFontFamily={editorFontFamily}
+                  editorFontLoadVersion={editorFontLoadVersion}
+                  spellCheckEditEnabled={spellCheckEditEnabled}
+                  spellCheckRenderEnabled={spellCheckRenderEnabled}
+                  highlightSearchColor={highlightColors.search}
+                />
+              ))}
+            </div>
           </div>
         </div>
         {filterColorize > 0 && (

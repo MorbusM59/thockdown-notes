@@ -111,7 +111,7 @@ export function SectionEditorArea({
   return (
     <div
       className="editor-viewer-frame"
-      style={{ gridArea: 'viewer' }}
+      style={{ flex: '1 1 0' }}
       onFocusCapture={() => markSectionActive(sectionId)}
       onMouseDownCapture={() => markSectionActive(sectionId)}
       onKeyDownCapture={() => markSectionActive(sectionId)}
