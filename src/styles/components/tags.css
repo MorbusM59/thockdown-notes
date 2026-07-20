@@ -70,9 +70,22 @@
   align-items: center;
   gap:         2px;
   height:      100%;
-  flex:        0 0 auto;
   overflow:    hidden;
   -webkit-app-region: no-drag;
+}
+
+.tabbar-assigned-id-display {
+  flex: 0 0 auto;
+}
+
+/* Flex items default to min-width: auto, which floors their shrink at their
+ * content's natural width -- that's what let this overflow past the tab bar
+ * even with overflow: hidden set. flex-shrink alone isn't enough; min-width
+ * has to be zeroed out too before the browser will actually shrink the box
+ * (and let overflow: hidden clip the tag pills that no longer fit). */
+.tabbar-tags-display {
+  flex:      1 1 auto;
+  min-width: 0;
 }
 
 .tabbar-suggested-tags {

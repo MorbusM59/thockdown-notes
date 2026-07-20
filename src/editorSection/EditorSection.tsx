@@ -823,8 +823,7 @@ export function EditorSection({
 
   return (
     <div
-      className="editor-section-column"
-      style={sectionId === activeSectionId ? { outline: '2px solid #ff0000', outlineOffset: '-2px' } : undefined}
+      className={`editor-section-column${sectionId === activeSectionId ? ' is-active' : ''}`}
     >
       <SectionTabBar
         tabs={{

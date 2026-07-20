@@ -186,8 +186,16 @@
   inset:          0;
   border-radius:  inherit;
   pointer-events: none;
-  box-shadow:     var(--box-shadow-inverted);
+  box-shadow:     var(--box-shadow-inverted-light);
   z-index:        4;
+}
+
+.editor-section-column.is-active .editor-shell {
+  outline: 2px solid var(--color-border-light-50);
+}
+
+.editor-section-column.is-active .editor-shell::after {
+  box-shadow: var(--box-shadow-inverted);
 }
 
 .editor-scrollbar-slot {
