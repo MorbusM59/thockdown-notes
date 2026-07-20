@@ -1628,12 +1628,14 @@ function App() {
   const markSectionActive = useCallback((sectionId: string) => {
     setActiveSectionId((previous) => (previous === sectionId ? previous : sectionId))
   }, [])
-  // Scaffolding for the split-view effort's hook-relocation step -- see
-  // src/editorSection/sectionRegistry.ts. Nothing publishes into this yet;
-  // it exists so the next step (moving hooks into a real <EditorSection>
-  // component) has somewhere to report state to, instead of "chrome" (tag
-  // handlers, export, sidebar actions, etc.) reaching into section-owned
-  // state directly.
+  // Section registry (Phase 4b) -- see src/editorSection/sectionRegistry.ts.
+  // The section-scoped hooks still all live here in App.tsx today, hardcoded
+  // to one section, but that single call site publishes its results here
+  // (see the registerSectionHandle call after the hook block below) so
+  // chrome (tag handlers, export, sidebar actions, the global toolbar, etc.)
+  // can read through the registry instead of closing over section-owned
+  // state directly -- ahead of the hooks themselves moving into a real
+  // per-section component.
   const sectionRegistryRef = useRef<Map<string, SectionHandle>>(new Map())
   const registerSectionHandle = useCallback((sectionId: string, handle: SectionHandle) => {
     sectionRegistryRef.current.set(sectionId, handle)
@@ -1641,11 +1643,8 @@ function App() {
   const getActiveSection = useCallback((): SectionHandle | undefined => (
     getActiveSectionHandle(sectionRegistryRef, activeSectionId)
   ), [activeSectionId])
-  // Not called yet -- both become real once <EditorSection> exists to
-  // register itself and chrome starts reading through this instead of
-  // closing over section-owned state directly. Same "declared ahead of its
-  // consumer" pattern as useActiveNoteId's own `sectionId` parameter.
-  void registerSectionHandle
+  // Not read yet -- becomes real as each chrome consumer is repointed
+  // through the registry in the following patches.
   void getActiveSection
   const originalConsoleMethodsRef = useRef<Partial<Record<ConsoleMethodName, (...args: any[]) => void>>>({})
   const isWritingDebugEntryRef = useRef(false)
@@ -5398,6 +5397,43 @@ ${markdownHtml}
     buildToggleCurrentLineHeadingTransformRef,
     buildToggleBulletedListTransformRef,
     buildToggleNumberedListTransformRef,
+  })
+
+  // Publishes this section's state into the registry every render, plain
+  // assignment (not an effect) so chrome reads through `getActiveSection()`
+  // always see the current render's values, same as the ref-proxy pattern
+  // used elsewhere in this component.
+  registerSectionHandle(DEFAULT_EDITOR_SECTION_ID, {
+    sectionId: DEFAULT_EDITOR_SECTION_ID,
+    activeNoteId,
+    activeNoteText,
+    currentEditorText,
+    latestEditorTextRef,
+    activeNoteSummary,
+    editorSelection,
+    previewedSnapshotId,
+    isPreviewMode,
+    activateNote,
+    toggleRenderViewMode,
+    activeDecorationFormats,
+    activeHeadingLevel,
+    isChecklistActive,
+    isBulletedListActive,
+    isNumberedListActive,
+    isBlockquoteActive,
+    isCodeBlockActive,
+    isInlineCodeActive,
+    applyTextDecoration,
+    applyHeading,
+    toggleCurrentLineHeading,
+    toggleBulletedList,
+    toggleNumberedList,
+    toggleChecklistList,
+    toggleBlockquote,
+    applyLink,
+    applyInlineCode,
+    applyCodeBlock,
+    insertHorizontalRule,
   })
 
   const handleFindViewButtonContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
