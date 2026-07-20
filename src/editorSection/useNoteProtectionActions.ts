@@ -743,3 +743,5 @@ export function useNoteProtectionActions({
     handleTrashViewButtonContextMenu,
   }
 }
+
+export type UseNoteProtectionActionsResult = ReturnType<typeof useNoteProtectionActions>

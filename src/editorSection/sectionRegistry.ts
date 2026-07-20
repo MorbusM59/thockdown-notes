@@ -1,7 +1,13 @@
-import type { MutableRefObject } from 'react'
+import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { EditorSelectionState } from '../editor/EditorContract'
 import type { UseMarkdownFormattingToolbarResult } from './useMarkdownFormattingToolbar'
+import type { UseNoteProtectionActionsResult } from './useNoteProtectionActions'
+import type { UseDocumentFindResult } from '../find/useDocumentFind'
+import type { UseDocumentFindNavigationResult } from './useDocumentFindNavigation'
+import type { UseEditorSectionMountResult } from './useEditorSectionMount'
+import type { UseNoteSaveQueueResult } from './useNoteSaveQueue'
+import type { UseSectionTabsResult } from '../tabBar/useSectionTabs'
 
 /**
  * What one `<EditorSection>` instance publishes about itself for "chrome"
@@ -18,7 +24,14 @@ import type { UseMarkdownFormattingToolbarResult } from './useMarkdownFormatting
  * component (Phase 4c). At N=1 this is pure indirection with no behavior
  * change -- there's only ever one entry, matching what chrome already saw.
  */
-export interface SectionHandle extends UseMarkdownFormattingToolbarResult {
+export interface SectionHandle extends
+  UseMarkdownFormattingToolbarResult,
+  UseNoteProtectionActionsResult,
+  UseDocumentFindResult,
+  UseDocumentFindNavigationResult,
+  UseEditorSectionMountResult,
+  UseNoteSaveQueueResult,
+  UseSectionTabsResult {
   sectionId: string
   activeNoteId: string | null
   activeNoteText: string
@@ -28,9 +41,10 @@ export interface SectionHandle extends UseMarkdownFormattingToolbarResult {
   editorSelection: EditorSelectionState
   previewedSnapshotId: number | null
   isPreviewMode: boolean
+  setIsPreviewMode: Dispatch<SetStateAction<boolean>>
+  setActiveNoteId: Dispatch<SetStateAction<string | null>>
   /** Switches which note this section shows -- the section's own, not a shared/parameterized one (see the handover doc's design decision). */
   activateNote: (noteId: string, overrideCursorPos?: number) => Promise<void>
-  toggleRenderViewMode: () => Promise<void>
 }
 
 export type SectionRegistry = MutableRefObject<Map<string, SectionHandle>>

@@ -7,9 +7,6 @@ import { SidebarOptionsPanel } from './sidebar/SidebarOptionsPanel'
 import { AudioControls } from './components/AudioControls'
 import './App.css'
 import { buildExportCss, type ExportViewStyle, type ExportFontSize, type ExportSpacing } from './exportStyles'
-import type {
-  EditorSelectionState,
-} from './editor/EditorContract'
 import {
   DEFAULT_TYPING_SOUND_SET,
   typingSoundManager,
@@ -47,11 +44,9 @@ import {
 import type { HighlightColorKey, HighlightColors } from './shared/highlightColors'
 import { BORDER_RADIUS_REGULAR_MIN_PX, BORDER_RADIUS_REGULAR_MAX_PX } from './shared/uiBounds'
 import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName } from './shared/tags'
-import { useSectionTabs } from './tabBar/useSectionTabs'
 import { EditorSection } from './editorSection/EditorSection'
 import { EditorToolbar } from './toolbar/EditorToolbar'
 import { DEFAULT_EDITOR_SECTION_ID } from './shared/sections'
-import { assertSectionIdsConsistent } from './shared/assertSectionIdsConsistent'
 import type { TextureCacheRequest } from './shared/textures'
 import {
   DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
@@ -66,22 +61,8 @@ import {
   type EditorSpacingKey,
   type EditorStyleKey,
 } from './editor/EditorTypography'
-import { useDocumentFind } from './find/useDocumentFind'
-import { useSnapshotFreeze } from './editorSection/useSnapshotFreeze'
-import { useActiveNoteId } from './editorSection/useActiveNoteId'
-import { useDisplayedNoteText } from './editorSection/useDisplayedNoteText'
-import { useDisplayedNoteSelection } from './editorSection/useDisplayedNoteSelection'
-import { useDisplayedNoteRenderMode } from './editorSection/useDisplayedNoteRenderMode'
-import { useEditorSectionMount } from './editorSection/useEditorSectionMount'
-import { usePreviewedSnapshot } from './editorSection/usePreviewedSnapshot'
-import { useNoteSaveQueue } from './editorSection/useNoteSaveQueue'
 import { getActiveSectionHandle, type SectionHandle } from './editorSection/sectionRegistry'
-import { useMarkdownFormattingToolbar, type TextDecorationFormat } from './editorSection/useMarkdownFormattingToolbar'
-import { usePreviewMarkdownRendering } from './editorSection/usePreviewMarkdownRendering'
-import { useDocumentFindNavigation } from './editorSection/useDocumentFindNavigation'
-import { useNoteSnapshotTimeline } from './editorSection/useNoteSnapshotTimeline'
-import { usePreviewScrollbar } from './editorSection/usePreviewScrollbar'
-import { useNoteProtectionActions } from './editorSection/useNoteProtectionActions'
+import { type TextDecorationFormat } from './editorSection/useMarkdownFormattingToolbar'
 import {
   createPreviewNoteAnchorMarkerRehypePlugin,
   createPreviewMarkdownComponents,
@@ -90,10 +71,6 @@ import {
 } from './editor/PreviewMarkdown'
 import { normalizeInternalText } from './editor/TextPolicy'
 import { isNoteSearchQueryActive, matchesNoteSearchQuery } from './shared/noteSearch'
-import {
-  scrollTopLinesToPx,
-  buildEditRestoreSnapshotFromUiState,
-} from './editor/EditRestoreMath'
 import {
   getRenderScrollDynamic,
   getRenderScrollResponsiveness,
@@ -135,6 +112,10 @@ const WINDOW_CONTROLS_COLLAPSED_WIDTH_PX = 210
 const APP_WINDOW_MIN_WIDTH_PX = 840
 const TOOLBAR_MIN_WIDTH_PX = APP_WINDOW_MIN_WIDTH_PX - SIDEBAR_WIDTH_PX - GRID_DIVIDER_PX - WINDOW_CONTROLS_WIDTH_PX
 const APP_SHELL_MIN_WIDTH_PX = SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX + TOOLBAR_MIN_WIDTH_PX + WINDOW_CONTROLS_WIDTH_PX
+// Stable fallback for when no section has registered yet (e.g. the very first
+// render, before <EditorSection> has mounted) -- a fresh Map() each render
+// would break memo'd children comparing this prop by identity.
+const EMPTY_MAP = new Map<string, NotePrimedAction>()
 const DEFAULT_BORDER_RADIUS_REGULAR_PX = 6
 const TEXTURE_PREVIEW_SURFACE: TextureSurfaceKey = 'appGrid'
 const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28
@@ -1454,8 +1435,6 @@ function App() {
   // as tabBarModeRef.
   const documentFindCaseSensitiveRef = useRef(false)
   const [restoredDocumentFindCaseSensitive, setRestoredDocumentFindCaseSensitive] = useState<boolean | null>(null)
-  // Terminology convention: false = edit mode, true = render view.
-  const { isPreviewMode, setIsPreviewMode } = useDisplayedNoteRenderMode(DEFAULT_EDITOR_SECTION_ID)
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [isExportingMd, setIsExportingMd] = useState(false)
   const [exportFolder, setExportFolder] = useState<string | null>(null)
@@ -1475,7 +1454,6 @@ function App() {
   const [editorGlyphPaddingPx, setEditorGlyphPaddingPx] = useState<number>(DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX)
   const [borderRadiusRegularPx, setBorderRadiusRegularPx] = useState<number>(DEFAULT_BORDER_RADIUS_REGULAR_PX)
   const [editorFontLoadVersion, setEditorFontLoadVersion] = useState(0)
-  const [isCaretSuspended, setIsCaretSuspended] = useState(false)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('date')
   const [lastSidebarModeBeforeOptions, setLastSidebarModeBeforeOptions] = useState<Exclude<SidebarMode, 'options'>>('date')
   const [sidebarViewStateByMode, setSidebarViewStateByMode] = useState<SidebarViewStateByMode>(() => createDefaultSidebarViewStateByMode())
@@ -1494,29 +1472,59 @@ function App() {
   const [showPagination, setShowPagination] = useState(false)
   const [scrollbarHostEl, setScrollbarHostEl] = useState<HTMLDivElement | null>(null)
   const [sidebarTreeScrollerEl, setSidebarTreeScrollerEl] = useState<HTMLDivElement | null>(null)
-  const { activeNoteId, setActiveNoteId } = useActiveNoteId(DEFAULT_EDITOR_SECTION_ID)
-  const {
-    activeNoteText,
-    setActiveNoteText,
-    editorTextVersion,
-    setEditorTextVersion,
-    latestEditorTextRef,
-  } = useDisplayedNoteText(DEFAULT_EDITOR_SECTION_ID)
   // Set when the startup bootstrap (loading the note list / database) fails
   // repeatedly. Surfaced as a visible banner -- previously a failure here
   // just retried silently forever with only a console.error, leaving the
   // app looking "half broken" (no active note, so word count/timeline/tag
   // input all stayed empty) with no indication anything was wrong.
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
-  // null = viewing/editing the live note; a snapshot id = read-only preview
-  // of that point in the note's history (see SnapshotTimelineSlider).
-  const { previewedSnapshotId, setPreviewedSnapshotId } = usePreviewedSnapshot(DEFAULT_EDITOR_SECTION_ID)
   const activeNoteExternalPathRef = useRef<string | null>(null)
   const [currentExternalNoteHash, setCurrentExternalNoteHash] = useState<string | null>(null)
-  const { editorSelection, setEditorSelection, latestEditorSelectionRef } = useDisplayedNoteSelection(DEFAULT_EDITOR_SECTION_ID)
   const [persistenceReady, setPersistenceReady] = useState(false)
   const [appShellWidthPx, setAppShellWidthPx] = useState(APP_SHELL_MIN_WIDTH_PX)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
+  // Which section last received a caret placement, click, or keystroke.
+  // Interactions that target "the current note" without a section of their
+  // own -- Find & Replace today, drag-a-note-onto-a-section later -- read
+  // this rather than assuming there's only one section. With a single
+  // section it's always DEFAULT_EDITOR_SECTION_ID; the split-view work is
+  // what gives it real values to switch between.
+  const [activeSectionId, setActiveSectionId] = useState<string>(DEFAULT_EDITOR_SECTION_ID)
+  const markSectionActive = useCallback((sectionId: string) => {
+    setActiveSectionId((previous) => (previous === sectionId ? previous : sectionId))
+  }, [])
+  // Section registry (Phase 4b) -- see src/editorSection/sectionRegistry.ts.
+  // The section-scoped hooks still all live inside <EditorSection> today,
+  // hardcoded to one section, but that single instance publishes its results
+  // here (see the registerSectionHandle call inside EditorSection) so chrome
+  // (tag handlers, export, sidebar actions, the global toolbar, etc.) can
+  // read through the registry instead of closing over section-owned state
+  // directly.
+  const sectionRegistryRef = useRef<Map<string, SectionHandle>>(new Map())
+  const registerSectionHandle = useCallback((sectionId: string, handle: SectionHandle) => {
+    sectionRegistryRef.current.set(sectionId, handle)
+  }, [])
+  const getActiveSection = useCallback((): SectionHandle | undefined => (
+    getActiveSectionHandle(sectionRegistryRef, activeSectionId)
+  ), [activeSectionId])
+  // Reactive counterpart to the plain registry above: each <EditorSection>
+  // instance calls this from its own effect every render (see its
+  // reportSectionHandle prop). A plain Map read during the parent's render
+  // body only works when the hooks producing the data live in the same
+  // component; once they live in a child, the parent can only learn about a
+  // change via an effect -- a shallow-equality guard here (not a dependency
+  // array) is what keeps that from looping forever.
+  const [activeSectionSnapshot, setActiveSectionSnapshot] = useState<SectionHandle | undefined>(undefined)
+  const lastReportedSectionHandleRef = useRef<SectionHandle | undefined>(undefined)
+  const reportSectionHandle = useCallback((sectionId: string, handle: SectionHandle) => {
+    if (sectionId !== activeSectionId) return
+    const previous = lastReportedSectionHandleRef.current
+    const changed = !previous || (Object.keys(handle) as (keyof SectionHandle)[])
+      .some((key) => previous[key] !== handle[key])
+    if (!changed) return
+    lastReportedSectionHandleRef.current = handle
+    setActiveSectionSnapshot(handle)
+  }, [activeSectionId])
   const toggleSidebarVisible = useCallback(() => {
     setIsSidebarVisible((previous) => {
       const next = !previous
@@ -1547,16 +1555,17 @@ function App() {
       // Persist app state menu snapshot with updated sidebar visibility
       if (window.thockdownState && persistenceReady) {
         const snapshot = buildMenuStateSnapshot({ isSidebarVisible: next })
+        const section = getActiveSection()
         void window.thockdownState.saveAppState({
-          selectedNoteId: activeNoteId,
-          viewport: latestViewportRef.current ?? undefined,
+          selectedNoteId: section?.activeNoteId ?? null,
+          viewport: section?.latestViewportRef.current ?? undefined,
           menu: snapshot,
         })
       }
 
       return next
     })
-  }, [activeNoteId, persistenceReady, sidebarMode])
+  }, [getActiveSection, persistenceReady, sidebarMode])
   const [renderScrollDynamic, setRenderScrollDynamic] = useState(() => getRenderScrollDynamic())
   const [renderScrollResponsiveness, setRenderScrollResponsiveness] = useState(() => getRenderScrollResponsiveness())
   const [renderScrollTotalTimeSec, setRenderScrollTotalTimeSec] = useState(() => getRenderScrollTotalTimeSec())
@@ -1626,41 +1635,6 @@ function App() {
   const tabBarModeRef = useRef<'tags' | 'tabs'>('tags')
   const [restoredTabBarMode, setRestoredTabBarMode] = useState<'tags' | 'tabs' | null>(null)
 
-  // Which section last received a caret placement, click, or keystroke.
-  // Interactions that target "the current note" without a section of their
-  // own -- Find & Replace today, drag-a-note-onto-a-section later -- read
-  // this rather than assuming there's only one section. With a single
-  // section it's always DEFAULT_EDITOR_SECTION_ID; the split-view work is
-  // what gives it real values to switch between.
-  const [activeSectionId, setActiveSectionId] = useState<string>(DEFAULT_EDITOR_SECTION_ID)
-  const markSectionActive = useCallback((sectionId: string) => {
-    setActiveSectionId((previous) => (previous === sectionId ? previous : sectionId))
-  }, [])
-  // Section registry (Phase 4b) -- see src/editorSection/sectionRegistry.ts.
-  // The section-scoped hooks still all live here in App.tsx today, hardcoded
-  // to one section, but that single call site publishes its results here
-  // (see the registerSectionHandle call after the hook block below) so
-  // chrome (tag handlers, export, sidebar actions, the global toolbar, etc.)
-  // can read through the registry instead of closing over section-owned
-  // state directly -- ahead of the hooks themselves moving into a real
-  // per-section component.
-  const sectionRegistryRef = useRef<Map<string, SectionHandle>>(new Map())
-  const registerSectionHandle = useCallback((sectionId: string, handle: SectionHandle) => {
-    sectionRegistryRef.current.set(sectionId, handle)
-  }, [])
-  const getActiveSection = useCallback((): SectionHandle | undefined => (
-    getActiveSectionHandle(sectionRegistryRef, activeSectionId)
-  ), [activeSectionId])
-  // Reserved for future imperative, non-reactive lookups (e.g. a one-off
-  // click handler reading another section's current state without needing
-  // to re-render). No caller needs it yet -- everything today reads through
-  // the reactive activeSectionSnapshot below instead.
-  void getActiveSection
-  // Reactive counterpart to the plain registry above -- see the reporting
-  // effect further down (right after the active section publishes itself)
-  // for why this needs to be real state rather than another ref read.
-  const [activeSectionSnapshot, setActiveSectionSnapshot] = useState<SectionHandle | undefined>(undefined)
-  const lastReportedSectionHandleRef = useRef<SectionHandle | undefined>(undefined)
   const originalConsoleMethodsRef = useRef<Partial<Record<ConsoleMethodName, (...args: any[]) => void>>>({})
   const isWritingDebugEntryRef = useRef(false)
   const debugNoteCreationPromiseRef = useRef<Promise<string | null> | null>(null)
@@ -2787,88 +2761,23 @@ function App() {
     }
   }, [activeEntryForCurrentMode, currentUiLoadoutSignature, uiMode, capturedUiLayoutLoadout])
 
-  const { queueSave, flushPendingSaveNow, cancelPendingSave } = useNoteSaveQueue({
-    activeNoteId,
-    persistenceReady,
-    notesRef,
-    latestEditorTextRef,
-    setActiveNoteText,
-    setNotes,
-  })
-
   // The following are all defined later in this component than
-  // useEditorSectionMount is called (each has its own dependencies that in
-  // turn need to be defined even later), so the hook receives stable
-  // ref-wrapped proxies instead of the live values directly. Each ref is
-  // synced with a plain assignment right after the real function's own
-  // definition, further down -- not a useEffect, since refs don't need one
-  // and this keeps them current within the same render rather than one
-  // render behind.
+  // <EditorSection> is rendered, so it receives stable ref-wrapped proxies
+  // instead of the live values directly (EditorSection forwards them into
+  // its own internal useEditorSectionMount call). Each ref is synced with a
+  // plain assignment right after the real function's own definition,
+  // further down -- not a useEffect, since refs don't need one and this
+  // keeps them current within the same render rather than one render behind.
   const queueAppStateSaveRef = useRef<(selectedNoteId: string | null) => void>(() => {})
   const updateActiveNoteTitlePreviewRef = useRef<(nextText: string) => void>(() => {})
   const revealNoteInMenuRef = useRef<() => void>(() => {})
   const writeDebugEntryRef = useRef<(functionName: string, lines: string[]) => Promise<void>>(async () => {})
   const activeNoteHasDebugTagRef = useRef(false)
-  const buildTextDecorationTransformRef = useRef<(text: string, selection: EditorSelectionState, format: 'bold' | 'italic' | 'strikethrough') => { text: string; selection: EditorSelectionState } | null>(() => null)
-  const buildToggleCurrentLineHeadingTransformRef = useRef<(text: string, selection: EditorSelectionState) => { text: string; selection: EditorSelectionState } | null>(() => null)
-  const buildToggleBulletedListTransformRef = useRef<(text: string, selection: EditorSelectionState) => { text: string; selection: EditorSelectionState } | null>(() => null)
-  const buildToggleNumberedListTransformRef = useRef<(text: string, selection: EditorSelectionState) => { text: string; selection: EditorSelectionState } | null>(() => null)
 
   const queueAppStateSaveStable = useCallback((selectedNoteId: string | null) => queueAppStateSaveRef.current(selectedNoteId), [])
   const updateActiveNoteTitlePreviewStable = useCallback((nextText: string) => updateActiveNoteTitlePreviewRef.current(nextText), [])
   const revealNoteInMenuStable = useCallback(() => revealNoteInMenuRef.current(), [])
   const writeDebugEntryStable = useCallback((functionName: string, lines: string[]) => writeDebugEntryRef.current(functionName, lines), [])
-
-  const {
-    adapterRef,
-    previewScrollRef,
-    editModeSnapshotByNoteIdRef,
-    pendingEditRestoreSnapshotRef,
-    latestViewportRef,
-    latestEditViewportRef,
-    readCurrentEditUiPayload,
-    updateEditModeSnapshotCache,
-    captureEditModeSnapshotFromEditor,
-    persistEditUiPayloadForNote,
-    persistRenderViewStateForNoteNow,
-    scheduleFocusEditorInEditMode,
-    cancelPendingEditUiStatePersist,
-    persistActiveNoteEditModeStateNow,
-    applyEditRestoreSnapshot,
-    bindings,
-    toggleRenderViewMode,
-    applyProgrammaticEditorText,
-    seedInitialViewport,
-  } = useEditorSectionMount({
-    activeNoteId,
-    activeNoteText,
-    setActiveNoteText,
-    setEditorTextVersion,
-    editorSelection,
-    setEditorSelection,
-    isPreviewMode,
-    setIsPreviewMode,
-    previewedSnapshotId,
-    persistenceReady,
-    lineHeightPx: editorRuntimeMetrics.lineHeightPx,
-    latestEditorTextRef,
-    latestEditorSelectionRef,
-    isApplyingInitialViewportRef,
-    pendingViewportRestoreRef,
-    notes,
-    setNotes,
-    activeNoteHasDebugTagRef,
-    setIsCaretSuspended,
-    externalNoteOriginalTextByIdRef,
-    queueSave,
-    queueAppStateSave: queueAppStateSaveStable,
-    updateActiveNoteTitlePreview: updateActiveNoteTitlePreviewStable,
-    writeDebugEntry: writeDebugEntryStable,
-    buildTextDecorationTransformRef,
-    buildToggleCurrentLineHeadingTransformRef,
-    buildToggleBulletedListTransformRef,
-    buildToggleNumberedListTransformRef,
-  })
 
   const persistedMenuStateRef = useRef<PersistedMenuState | null>(null)
 
@@ -2886,7 +2795,7 @@ function App() {
       searchQuery,
       searchQueryCaseSensitive: isSearchQueryCaseSensitive,
       documentFindCaseSensitive: documentFindCaseSensitiveRef.current,
-      isPreviewMode,
+      isPreviewMode: getActiveSection()?.isPreviewMode,
       viewStyle,
       viewFontSize,
       viewSpacing,
@@ -2983,7 +2892,7 @@ function App() {
     editorSpacing,
     editorStyle,
     exportFolder,
-    isPreviewMode,
+    getActiveSection,
     renderScrollDynamic,
     renderScrollResponsiveness,
     renderScrollMaxSpeedPxPerSec,
@@ -3106,12 +3015,13 @@ function App() {
 
     persistedMenuStateRef.current = snapshot
 
+    const section = getActiveSection()
     await window.thockdownState.saveAppState({
-      selectedNoteId: activeNoteId,
-      viewport: latestViewportRef.current ?? undefined,
+      selectedNoteId: section?.activeNoteId ?? null,
+      viewport: section?.latestViewportRef.current ?? undefined,
       menu: snapshot,
     })
-  }, [activeNoteId, buildMenuStateSnapshot, persistenceReady])
+  }, [buildMenuStateSnapshot, getActiveSection, persistenceReady])
 
   const persistMenuStateOnUnload = useCallback(() => {
     if (!window.thockdownState || !persistenceReady) return
@@ -3129,21 +3039,23 @@ function App() {
 
     persistedMenuStateRef.current = snapshot
 
+    const section = getActiveSection()
     void window.thockdownState.saveAppState({
-      selectedNoteId: activeNoteId,
-      viewport: latestViewportRef.current ?? undefined,
+      selectedNoteId: section?.activeNoteId ?? null,
+      viewport: section?.latestViewportRef.current ?? undefined,
       menu: snapshot,
     })
   }, [
-    activeNoteId,
     buildMenuStateSnapshot,
     captureSidebarModeState,
+    getActiveSection,
     persistenceReady,
     sidebarMode,
     sidebarViewStateByMode,
   ])
 
   const focusActiveNoteInSidebarMode = useCallback((mode: SidebarMode): boolean => {
+    const activeNoteId = getActiveSection()?.activeNoteId
     if (!activeNoteId) {
       return false
     }
@@ -3195,7 +3107,7 @@ function App() {
     }
 
     return false
-  }, [activeNoteId])
+  }, [getActiveSection])
 
   function runSidebarMenuTransition(nextMode: SidebarMode) {
     if (nextMode === sidebarMode) {
@@ -3243,16 +3155,17 @@ function App() {
     // Persist the menu state with sidebar visible.
     if (window.thockdownState && persistenceReady) {
       const snapshot = buildMenuStateSnapshot({ isSidebarVisible: true })
+      const section = getActiveSection()
       void window.thockdownState.saveAppState({
-        selectedNoteId: activeNoteId,
-        viewport: latestViewportRef.current ?? undefined,
+        selectedNoteId: section?.activeNoteId ?? null,
+        viewport: section?.latestViewportRef.current ?? undefined,
         menu: snapshot,
       })
     }
 
     setLastSidebarModeBeforeOptions(sidebarMode)
     runSidebarMenuTransition('options')
-  }, [lastSidebarModeBeforeOptions, runSidebarMenuTransition, sidebarMode])
+  }, [buildMenuStateSnapshot, getActiveSection, lastSidebarModeBeforeOptions, persistenceReady, runSidebarMenuTransition, sidebarMode])
 
   const handleWindowMinimize = useCallback(() => {
     ;(window as any).windowControls?.minimize?.()
@@ -3409,7 +3322,7 @@ function App() {
     return () => {
       observer.disconnect()
     }
-  }, [isPreviewMode])
+  }, [activeSectionSnapshot?.isPreviewMode])
 
   const layout = useMemo(() => {
     const toolbarWidthPx = Math.max(
@@ -3436,7 +3349,7 @@ function App() {
       '--color-grid-outline': highlightColors.gridOutline,
       '--color-grid-bg': highlightColors.grid,
       '--color-caret': highlightColors.caret,
-      '--color-selection': isPreviewMode ? highlightColors.selectionRender : highlightColors.selectionEdit,
+      '--color-selection': activeSectionSnapshot?.isPreviewMode ? highlightColors.selectionRender : highlightColors.selectionEdit,
       '--color-input-backdrop': highlightColors.inputFields,
       '--canonical-scroll-track-bg': highlightColors.inputFields,
       '--btn-bg-default': highlightColors.appButtons,
@@ -3486,7 +3399,7 @@ function App() {
     editorRenderTextTextureCss,
     editorRenderTextureTintCss,
     highlightColors,
-    isPreviewMode,
+    activeSectionSnapshot?.isPreviewMode,
     editorEditTextColorCss,
     editorRenderTextColorCss,
     layout.gridTemplateColumns,
@@ -3819,14 +3732,14 @@ function App() {
 
     appStateSaveTimerRef.current = window.setTimeout(() => {
       appStateSaveTimerRef.current = null
-      const viewport = latestViewportRef.current
+      const viewport = getActiveSection()?.latestViewportRef.current
       void window.thockdownState?.saveAppState({
         selectedNoteId,
         viewport: viewport ?? undefined,
         menu: persistedMenuStateRef.current ?? buildMenuStateSnapshot(),
       })
     }, 150)
-  }, [buildMenuStateSnapshot, persistenceReady, writeDebugEntry])
+  }, [buildMenuStateSnapshot, getActiveSection, persistenceReady])
   queueAppStateSaveRef.current = queueAppStateSave
 
   const chooseExportFolder = useCallback(async () => {
@@ -3845,12 +3758,13 @@ function App() {
       exportFolder: folderPath,
     }
     persistedMenuStateRef.current = nextMenuState
-    queueAppStateSave(activeNoteId)
+    queueAppStateSave(getActiveSection()?.activeNoteId ?? null)
     return folderPath
-  }, [activeNoteId, buildMenuStateSnapshot, queueAppStateSave])
+  }, [buildMenuStateSnapshot, getActiveSection, queueAppStateSave])
 
   const buildExportHtmlContent = useCallback(async () => {
-    const currentEditorText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+    const section = getActiveSection()
+    const currentEditorText = normalizeInternalText(section?.latestEditorTextRef.current || section?.activeNoteText || '')
     const exportCss = await buildExportCss(viewStyle as ExportViewStyle, viewFontSize as ExportFontSize, viewSpacing as ExportSpacing)
 
     const markdownHtml = renderToStaticMarkup(
@@ -3871,7 +3785,7 @@ function App() {
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>${deriveNoteTitleFromText(activeNoteText || '')}</title>
+<title>${deriveNoteTitleFromText(section?.activeNoteText || '')}</title>
 <base href="${document.location.href}">
 <style>${exportCss}</style>
 </head>
@@ -3879,120 +3793,16 @@ function App() {
 ${markdownHtml}
 </body>
 </html>`
-  }, [activeNoteText, viewFontSize, viewSpacing, viewStyle])
+  }, [getActiveSection, viewFontSize, viewSpacing, viewStyle])
 
   const saveSelectedNoteState = useCallback(async (selectedNoteId: string | null) => {
     if (!window.thockdownState) return
     await window.thockdownState.saveAppState({
       selectedNoteId,
-      viewport: latestViewportRef.current ?? undefined,
+      viewport: getActiveSection()?.latestViewportRef.current ?? undefined,
       menu: persistedMenuStateRef.current ?? buildMenuStateSnapshot(),
     })
-  }, [buildMenuStateSnapshot])
-
-  const getActiveNoteLiveText = useCallback(() => (
-    latestEditorTextRef.current || activeNoteText
-  ), [activeNoteText])
-
-  // Today this section is always the active one (there's only one), so this
-  // is correct-but-inert -- it starts doing real work the moment a second
-  // section can take focus away from it.
-  useSnapshotFreeze({
-    sectionId: DEFAULT_EDITOR_SECTION_ID,
-    activeSectionId,
-    noteId: activeNoteId,
-    previewedSnapshotId,
-    setPreviewedSnapshotId,
-    getLiveText: getActiveNoteLiveText,
-    flushPendingSaveNow,
-  })
-
-  const activateNote = useCallback(async (noteId: string, overrideCursorPos?: number) => {
-    if (!window.thockdownNotes) return
-
-    setIsCaretSuspended(true)
-    const previousNoteId = activeNoteId
-    if (persistenceReady && previousNoteId && previousNoteId !== noteId) {
-      const previousPayload = readCurrentEditUiPayload()
-      const previousSnapshot = editModeSnapshotByNoteIdRef.current.get(previousNoteId)
-      const snapshotPayload = previousPayload ?? (previousSnapshot ? {
-        progressEdit: previousSnapshot.viewport.scrollTopLines,
-        cursorPos: previousSnapshot.fullSelection.end,
-        scrollTop: scrollTopLinesToPx(previousSnapshot.viewport.scrollTopLines, editorRuntimeMetrics.lineHeightPx),
-        sourceAnchorLine: Math.max(0, previousSnapshot.viewport.scrollTopLines + previousSnapshot.viewport.topBoundaryLines),
-        sourceAnchorText: null,
-      } : null)
-
-      if (snapshotPayload) {
-        await persistEditUiPayloadForNote(previousNoteId, snapshotPayload)
-      }
-    }
-
-    const [loaded, nextUiState] = await Promise.all([
-      window.thockdownNotes.loadNote({ id: noteId }),
-      window.thockdownNotes?.getNoteUiState({ id: noteId }) ?? Promise.resolve(null),
-    ])
-    const hydratedText = normalizeInternalText(loaded.text)
-    const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
-    const preloadedSnapshot = buildEditRestoreSnapshotFromUiState({
-      noteId,
-      text: hydratedText,
-      uiState: nextUiState,
-      fallbackViewport,
-      lineHeightPx: editorRuntimeMetrics.lineHeightPx,
-      overrideCursorPos,
-    })
-    updateEditModeSnapshotCache(preloadedSnapshot)
-
-    let originalText: string | null = null
-    let originalHash: string | null = null
-
-    if (isExternalNote(loaded)) {
-      const snapshotRows = await window.thockdownNotes?.getNoteSnapshots({ id: loaded.id }) ?? []
-      const originalSnapshotRow = snapshotRows.find((row) => !row.isManual) ?? snapshotRows[0]
-
-      originalText = originalSnapshotRow
-        ? normalizeInternalText(originalSnapshotRow.content)
-        : hydratedText
-
-      console.warn('[external-note] activating external note', {
-        noteId: loaded.id,
-        snapshotCount: snapshotRows.length,
-        hasOriginalSnapshot: !!originalSnapshotRow,
-        hydratedLength: hydratedText.length,
-        externalPath: loaded.externalPath,
-      })
-
-      if (!snapshotRows.some((row) => !row.isManual)) {
-        await window.thockdownNotes?.saveNoteSnapshot({ id: loaded.id, content: hydratedText, isManual: false })
-        console.warn('[external-note] created initial original snapshot for external note', { noteId: loaded.id, textLength: hydratedText.length })
-      }
-
-      externalNoteOriginalTextByIdRef.current.set(loaded.id, originalText)
-      originalHash = await hashNormalizedText(originalText)
-      externalNoteOriginalHashByIdRef.current.set(loaded.id, originalHash)
-      activeNoteExternalPathRef.current = loaded.externalPath ?? null
-      console.warn('[external-note] stored original hash for external note', {
-        noteId: loaded.id,
-        originalHash,
-        externalPath: loaded.externalPath,
-      })
-    }
-
-    latestEditorTextRef.current = hydratedText
-    pendingEditRestoreSnapshotRef.current = preloadedSnapshot
-    setActiveNoteId(loaded.id)
-    setActiveNoteText(hydratedText)
-    pendingViewportRestoreRef.current = null
-    await saveSelectedNoteState(loaded.id)
-  }, [
-    activeNoteId,
-    editorRuntimeMetrics.lineHeightPx,
-    persistEditUiPayloadForNote,
-    persistenceReady,
-    saveSelectedNoteState,
-    updateEditModeSnapshotCache,
-  ])
+  }, [buildMenuStateSnapshot, getActiveSection])
 
   const refreshNotes = useCallback(async (preferredId?: string | null) => {
     if (!window.thockdownNotes) return null
@@ -4050,31 +3860,28 @@ ${markdownHtml}
   const selectNote = useCallback(async (noteId: string, options?: { forceReload?: boolean }) => {
     if (!window.thockdownNotes) return
     if (!persistenceReady) return
+    const section = getActiveSection()
+    const activeNoteId = section?.activeNoteId ?? null
     if (noteId === activeNoteId && !options?.forceReload) return
     if (noteTransitionLockRef.current) return
 
     noteTransitionLockRef.current = true
     try {
-      if (!isPreviewMode && activeNoteId && noteId !== activeNoteId) {
-        captureEditModeSnapshotFromEditor(activeNoteId)
+      if (section && !section.isPreviewMode && activeNoteId && noteId !== activeNoteId) {
+        section.captureEditModeSnapshotFromEditor(activeNoteId)
       }
-      if (isPreviewMode && activeNoteId && noteId !== activeNoteId) {
-        await persistRenderViewStateForNoteNow(activeNoteId)
+      if (section && section.isPreviewMode && activeNoteId && noteId !== activeNoteId) {
+        await section.persistRenderViewStateForNoteNow(activeNoteId)
       }
-      await flushPendingSaveNow()
-      await activateNote(noteId)
+      await section?.flushPendingSaveNow()
+      await section?.activateNote(noteId)
     } catch (error) {
       console.error('Failed to select note', error)
     } finally {
       noteTransitionLockRef.current = false
     }
   }, [
-    activeNoteId,
-    activateNote,
-    captureEditModeSnapshotFromEditor,
-    flushPendingSaveNow,
-    isPreviewMode,
-    persistRenderViewStateForNoteNow,
+    getActiveSection,
     persistenceReady,
   ])
 
@@ -4092,7 +3899,7 @@ ${markdownHtml}
 
     if (
       target === sidebarSearchInputRef.current ||
-      target === tagInputRef.current ||
+      target === getActiveSection()?.tagInputRef.current ||
       target === pageJumpInputRef.current ||
       target === textureSeedInputRef.current ||
       target === glazeLinearSeedInputRef.current ||
@@ -4118,9 +3925,10 @@ ${markdownHtml}
     }
 
     return false
-  }, [])
+  }, [getActiveSection])
 
   const updateActiveNoteTitlePreview = useCallback((nextText: string) => {
+    const activeNoteId = getActiveSection()?.activeNoteId
     if (!activeNoteId) return
 
     const nextTitle = deriveNoteTitleFromText(nextText)
@@ -4140,7 +3948,7 @@ ${markdownHtml}
       }
       return next
     })
-  }, [activeNoteId])
+  }, [getActiveSection])
   updateActiveNoteTitlePreviewRef.current = updateActiveNoteTitlePreview
 
   const createNote = useCallback(async (initialText = NEW_NOTE_TEMPLATE) => {
@@ -4148,23 +3956,24 @@ ${markdownHtml}
     if (!persistenceReady) return
     if (noteTransitionLockRef.current) return
 
-    if (isPreviewMode) {
-      toggleRenderViewMode()
+    const section = getActiveSection()
+    if (section?.isPreviewMode) {
+      section.toggleRenderViewMode()
     }
 
     noteTransitionLockRef.current = true
     try {
-      await flushPendingSaveNow()
+      await section?.flushPendingSaveNow()
       const created = await window.thockdownNotes.createNote({ initialText })
       await refreshNotes(created.id)
-      await activateNote(created.id, initialText.length)
+      await getActiveSection()?.activateNote(created.id, initialText.length)
       setSidebarMode('date')
     } catch (error) {
       console.error('Failed to create note', error)
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [activateNote, flushPendingSaveNow, persistenceReady, refreshNotes])
+  }, [getActiveSection, persistenceReady, refreshNotes])
 
   const createNoteFromClipboardTitle = useCallback(async () => {
     let title = FALLBACK_NEW_NOTE_TITLE
@@ -4191,13 +4000,13 @@ ${markdownHtml}
 
     noteTransitionLockRef.current = true
     try {
-      await flushPendingSaveNow()
+      await getActiveSection()?.flushPendingSaveNow()
 
       const existingTempId = await notesApi.getNoteIdByExternalPath({ externalPath: filePath })
       if (existingTempId) {
         console.debug('[external-note] external file already tracked, activating existing temp note', { filePath, noteId: existingTempId })
         await refreshNotes(existingTempId)
-        await activateNote(existingTempId)
+        await getActiveSection()?.activateNote(existingTempId)
         setSidebarMode('date')
         return
       }
@@ -4224,14 +4033,14 @@ ${markdownHtml}
       await notesApi.updateExternalNoteState({ id: noteId, hasUnsavedChanges: false, syncMode: true })
       console.debug('[external-note] updated temp note sync state for imported external file', { noteId, hasUnsavedChanges: false, syncMode: true })
       await refreshNotes(noteId)
-      await activateNote(noteId)
+      await getActiveSection()?.activateNote(noteId)
       setSidebarMode('date')
     } catch (error) {
       console.error('Failed to import external file', error)
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [activateNote, flushPendingSaveNow, persistenceReady, refreshNotes])
+  }, [getActiveSection, persistenceReady, refreshNotes])
 
   const enqueueExternalFileImport = useCallback((filePath: string) => {
     const normalizedPath = filePath.trim()
@@ -4284,19 +4093,9 @@ ${markdownHtml}
     enqueueExternalFileImport(file.path)
   }, [enqueueExternalFileImport])
 
-  const activeNoteSummary = useMemo(() => {
-    if (!activeNoteId) return null
-    return notes.find((note) => note.id === activeNoteId) ?? null
-  }, [activeNoteId, notes])
-
-  const activeNoteHasDebugTag = useMemo(() => {
-    return activeNoteSummary?.tags.some((tag) => normalizeTagName(tag) === DEBUG_TAG_NAME) ?? false
-  }, [activeNoteSummary])
-  activeNoteHasDebugTagRef.current = activeNoteHasDebugTag
-
   const getCurrentExternalNoteModifiedState = useCallback((note: NoteSummary, currentHash: string | null = currentExternalNoteHash): boolean => {
     if (!isExternalNote(note)) return false
-    if (note.id !== activeNoteId) {
+    if (note.id !== activeSectionSnapshot?.activeNoteId) {
       return Boolean(note.hasUnsavedChanges)
     }
 
@@ -4308,9 +4107,11 @@ ${markdownHtml}
       currentHash !== null
       && currentHash !== externalNoteOriginalHashByIdRef.current.get(note.id)
     )
-  }, [activeNoteId, currentExternalNoteHash])
+  }, [activeSectionSnapshot?.activeNoteId, currentExternalNoteHash])
 
   useEffect(() => {
+    const activeNoteId = activeSectionSnapshot?.activeNoteId
+    const activeNoteSummary = activeSectionSnapshot?.activeNoteSummary
     if (!activeNoteId || !activeNoteSummary || !isExternalNote(activeNoteSummary)) {
       setCurrentExternalNoteHash(null)
       return
@@ -4318,7 +4119,7 @@ ${markdownHtml}
 
     let disposed = false
     void (async () => {
-      const currentText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+      const currentText = normalizeInternalText(activeSectionSnapshot?.latestEditorTextRef.current || activeSectionSnapshot?.activeNoteText || '')
       const hash = await hashNormalizedText(currentText)
       if (disposed) return
 
@@ -4339,116 +4140,17 @@ ${markdownHtml}
     return () => {
       disposed = true
     }
-  }, [activeNoteId, activeNoteSummary, activeNoteText, editorTextVersion, getCurrentExternalNoteModifiedState])
+  }, [activeSectionSnapshot, getCurrentExternalNoteModifiedState])
 
   const updateNoteAssignedId = useCallback((noteId: string, assignedId: string) => {
     setNotes((previous) => previous.map((note) => (note.id === noteId ? { ...note, assignedId } : note)))
   }, [])
 
-  const {
-    tagInputRef,
-    tagInputValue,
-    setTagInputValue,
-    orderedActiveTags,
-    suggestedTags,
-    deletePrimedTagName,
-    renamingTagName,
-    isTagMutationPending,
-    activeNoteIsExternal,
-    handleTagInputKeyDown,
-    handleAddSuggestedTag,
-    handleTagChipClick,
-    handleTagChipMouseLeave,
-    handleTagDragStart,
-    handleTagDragEnd,
-    handleTagDrop,
-    handleTagContainerDragOver,
-    handleTagContainerDrop,
-    handleTagContextMenu,
-    tabBarMode,
-    toggleTabBarMode,
-    pinnedTabs,
-    unpinPrimedTabNoteId,
-    activeNoteIsPinned,
-    tempTabNoteId,
-    pinArmingTabNoteId,
-    tabsScrollerRef,
-    tabsCanScrollLeft,
-    tabsCanScrollRight,
-    handleAddCurrentNoteToTabs,
-    handleTabContextMenu,
-    handleTabMouseLeave,
-    handleTabClick,
-    handleTempTabMouseDown,
-    clearTempTabHoldTimer,
-    updateTabsScrollEdges,
-    handleTabsWheel,
-  } = useSectionTabs({
-    sectionId: DEFAULT_EDITOR_SECTION_ID,
-    activeNoteId,
-    notes,
-    persistenceReady,
-    activateNote,
-    revealNoteInMenu: revealNoteInMenuStable,
-    flushPendingSaveNow,
-    refreshNotes,
-    noteTransitionLockRef,
-    scheduleFocusEditorInEditMode,
-    updateNoteAssignedId,
-    initialTabBarMode: restoredTabBarMode,
-  })
-
-  useEffect(() => {
-    tabBarModeRef.current = tabBarMode
-  }, [tabBarMode])
-
-  const {
-    primedNoteActionById,
-    isTrashViewDeletePrimed,
-    setIsTrashViewDeletePrimed,
-    clearTrashButtonArmTimer,
-    handleNoteRightPressStart,
-    handleNoteRightPressEnd,
-    handleNoteMouseLeave,
-    handlePrimedNoteLeftClick,
-    handleSaveButtonClick,
-    handleCloseButtonClick,
-    handleArchiveClick,
-    handleTrashClick,
-    purgeDeletedNotesPermanently,
-    handleTrashViewButtonMouseDown,
-    handleTrashViewButtonMouseUp,
-    handleTrashViewButtonContextMenu,
-  } = useNoteProtectionActions({
-    notes,
-    activeNoteId,
-    activeNoteText,
-    latestEditorTextRef,
-    setNotes,
-    setActiveNoteId,
-    setActiveNoteText,
-    activateNote,
-    flushPendingSaveNow,
-    cancelPendingSave,
-    persistenceReady,
-    refreshNotes,
-    noteTransitionLockRef,
-    sidebarMode,
-    dateFilteredNotesRef,
-    trashFilteredNotesRef,
-    categoryTreeRef,
-    archiveTreeRef,
-    activeNoteExternalPathRef,
-    externalNoteOriginalTextByIdRef,
-    externalNoteOriginalHashByIdRef,
-    currentExternalNoteHash,
-    setCurrentExternalNoteHash,
-  })
-
   const handleViewModeButtonClick = useCallback((mode: SidebarMode) => {
-    if (mode === 'trash' && isTrashViewDeletePrimed) {
-      setIsTrashViewDeletePrimed(false)
-      void purgeDeletedNotesPermanently()
+    const section = getActiveSection()
+    if (mode === 'trash' && section?.isTrashViewDeletePrimed) {
+      section.setIsTrashViewDeletePrimed(false)
+      void section.purgeDeletedNotesPermanently()
       runSidebarMenuTransition('trash')
       return
     }
@@ -4464,8 +4166,8 @@ ${markdownHtml}
     }
 
     if (mode === 'find') {
-      setIsTrashViewDeletePrimed(false)
-      clearTrashButtonArmTimer()
+      section?.setIsTrashViewDeletePrimed(false)
+      section?.clearTrashButtonArmTimer()
       runSidebarMenuTransition('find')
       requestAnimationFrame(() => {
         sidebarSearchInputRef.current?.focus()
@@ -4474,14 +4176,12 @@ ${markdownHtml}
       return
     }
 
-    setIsTrashViewDeletePrimed(false)
-    clearTrashButtonArmTimer()
+    section?.setIsTrashViewDeletePrimed(false)
+    section?.clearTrashButtonArmTimer()
     runSidebarMenuTransition(mode)
   }, [
-    clearTrashButtonArmTimer,
     focusActiveNoteInSidebarMode,
-    isTrashViewDeletePrimed,
-    purgeDeletedNotesPermanently,
+    getActiveSection,
     runSidebarMenuTransition,
     sidebarMode,
   ])
@@ -4535,7 +4235,7 @@ ${markdownHtml}
             setSearchQuery(appState.menu.searchQuery)
             setIsSearchQueryCaseSensitive(appState.menu.searchQueryCaseSensitive ?? false)
             setRestoredDocumentFindCaseSensitive(appState.menu.documentFindCaseSensitive ?? false)
-            setIsPreviewMode(appState.menu.isPreviewMode ?? false)
+            getActiveSection()?.setIsPreviewMode(appState.menu.isPreviewMode ?? false)
             setViewStyle(appState.menu.viewStyle ?? 'modern')
             setViewFontSize(appState.menu.viewFontSize ?? 'm')
             setViewSpacing(appState.menu.viewSpacing ?? 'cozy')
@@ -4668,58 +4368,14 @@ ${markdownHtml}
               : undefined
           ) ?? listed[0]
 
-          const [loaded, initialUiState] = await Promise.all([
-            thockdownNotes.loadNote({ id: selectedSummary.id }),
-            thockdownNotes.getNoteUiState({ id: selectedSummary.id }),
-          ])
           if (disposed) return
 
           setNotes((previous) => mergeNoteSummaries(previous, listed))
-          setActiveNoteId(loaded.id)
+          // Note loading/activation itself now goes through the section's
+          // own activateNote -- same path every ordinary note switch uses --
+          // rather than duplicating load/hydrate/viewport-restore logic here.
+          await getActiveSection()?.activateNote(selectedSummary.id)
 
-          const hydratedText = normalizeInternalText(loaded.text)
-          latestEditorTextRef.current = hydratedText
-          setActiveNoteText(hydratedText)
-
-          // App-level "last known viewport shape" -- used only as a fallback
-          // below, for a note with no saved UI state of its own yet (a brand
-          // new note, or the very first note ever created). Whenever the
-          // note *does* have its own saved state, that takes priority, the
-          // same as every other note switch via activateNote.
-          const fallbackViewport: PersistedViewportState = appState.viewport
-            ? {
-                // Line counts are stored as-is, with no clamping at load
-                // time. Display values are derived continuously inside
-                // Editor.tsx via clampBoundaryLines once the container is
-                // measured.
-                topBoundaryLines: appState.viewport.topBoundaryLines,
-                bottomBoundaryLines: appState.viewport.bottomBoundaryLines,
-                scrollTopLines: appState.viewport.scrollTopLines,
-              }
-            : (
-                // Per spec: default to 0 lines for both boundaries (and
-                // scroll) when nothing is stored.
-                { topBoundaryLines: 0, bottomBoundaryLines: 0, scrollTopLines: 0 }
-              )
-
-          const initialRestoreSnapshot = buildEditRestoreSnapshotFromUiState({
-            noteId: loaded.id,
-            text: hydratedText,
-            uiState: initialUiState,
-            fallbackViewport,
-            lineHeightPx: editorRuntimeMetrics.lineHeightPx,
-          })
-          updateEditModeSnapshotCache(initialRestoreSnapshot)
-
-          if (window.thockdownState) {
-            await window.thockdownState.saveAppState({
-              selectedNoteId: loaded.id,
-              viewport: initialRestoreSnapshot.viewport,
-              menu: persistedMenuStateRef.current ?? undefined,
-            })
-          }
-
-          seedInitialViewport(initialRestoreSnapshot)
           setPersistenceReady(true)
           setBootstrapError(null)
           return
@@ -4744,8 +4400,9 @@ ${markdownHtml}
 
     return () => {
       disposed = true
-      cancelPendingEditUiStatePersist()
-      cancelPendingSave()
+      const section = getActiveSection()
+      section?.cancelPendingEditUiStatePersist()
+      section?.cancelPendingSave()
       if (appStateSaveTimerRef.current !== null) {
         window.clearTimeout(appStateSaveTimerRef.current)
         appStateSaveTimerRef.current = null
@@ -4794,6 +4451,7 @@ ${markdownHtml}
   }, [audioTrebleVolume])
 
   const handleExportPdf = useCallback(async () => {
+    const activeNoteId = getActiveSection()?.activeNoteId
     if (!activeNoteId || isExportingPdf) return
     setIsExportingPdf(true)
 
@@ -4806,7 +4464,7 @@ ${markdownHtml}
       const folderPath = exportFolder ?? await chooseExportFolder()
       if (!folderPath) return
 
-      const fileName = `${deriveNoteTitleFromText(activeNoteText || '')}.pdf`
+      const fileName = `${deriveNoteTitleFromText(getActiveSection()?.activeNoteText || '')}.pdf`
       const htmlContent = await buildExportHtmlContent()
       const result = await exportPdf(folderPath, fileName, htmlContent)
 
@@ -4818,9 +4476,10 @@ ${markdownHtml}
     } finally {
       setIsExportingPdf(false)
     }
-  }, [activeNoteId, activeNoteText, exportFolder, isExportingPdf, chooseExportFolder, buildExportHtmlContent])
+  }, [getActiveSection, exportFolder, isExportingPdf, chooseExportFolder, buildExportHtmlContent])
 
   const handleExportMd = useCallback(async (forceChooseFolder = false) => {
+    const activeNoteId = getActiveSection()?.activeNoteId
     if (!activeNoteId || isExportingMd) return
     setIsExportingMd(true)
 
@@ -4830,7 +4489,7 @@ ${markdownHtml}
         : exportFolder
       if (!folderPath) return
 
-      const fileName = `${deriveNoteTitleFromText(activeNoteText || '')}.md`
+      const fileName = `${deriveNoteTitleFromText(getActiveSection()?.activeNoteText || '')}.md`
       const result = await window.ipcRenderer?.invoke('export-md', activeNoteId, folderPath, fileName)
 
       if (!result?.ok) {
@@ -4841,12 +4500,13 @@ ${markdownHtml}
     } finally {
       setIsExportingMd(false)
     }
-  }, [activeNoteId, activeNoteText, exportFolder, isExportingMd, chooseExportFolder])
+  }, [getActiveSection, exportFolder, isExportingMd, chooseExportFolder])
 
   useEffect(() => {
+    const activeNoteId = activeSectionSnapshot?.activeNoteId
     if (!window.thockdownState || !activeNoteId) return
     queueAppStateSave(activeNoteId)
-  }, [activeNoteId, queueAppStateSave])
+  }, [activeSectionSnapshot?.activeNoteId, queueAppStateSave])
 
   useEffect(() => {
     if (!persistenceReady) return
@@ -4917,98 +4577,6 @@ ${markdownHtml}
   }, [isSearchQueryCaseSensitive, searchQuery, sortedNotes])
 
   const isFindMode = sidebarMode === 'find'
-  const currentEditorText = useMemo(() => {
-    return normalizeInternalText(latestEditorTextRef.current || activeNoteText)
-  }, [activeNoteText, editorTextVersion])
-
-  const {
-    noteSnapshots,
-    timelineCurveConstant,
-    setTimelineCurveConstant,
-    setTimelineTrackLengthPx,
-    isPreviewingSnapshot,
-    editorDisplayText,
-    renderedDisplayText,
-    handleNavigateSnapshot,
-    handleCreateManualSnapshot,
-    handleMergeAdjacentSnapshots,
-    handleReturnToPresent,
-    handleBranchOpened,
-    handleBranchError,
-  } = useNoteSnapshotTimeline({
-    activeNoteId,
-    activeNoteText,
-    currentEditorText,
-    latestEditorTextRef,
-    previewedSnapshotId,
-    setPreviewedSnapshotId,
-    captureEditModeSnapshotFromEditor,
-    flushPendingSaveNow,
-    applyEditRestoreSnapshot,
-    editModeSnapshotByNoteIdRef,
-    refreshNotes,
-    activateNote,
-  })
-
-  const activeNoteDocumentStats = useMemo(() => {
-    const hasSelection = !editorSelection.isCollapsed && editorSelection.end > editorSelection.start
-    const selectionStart = Math.max(0, Math.min(currentEditorText.length, editorSelection.start))
-    const selectionEnd = Math.max(selectionStart, Math.min(currentEditorText.length, editorSelection.end))
-    const text = hasSelection
-      ? currentEditorText.slice(selectionStart, selectionEnd)
-      : currentEditorText
-    const characterCount = text.length
-    const trimmed = text.trim()
-    const wordCount = trimmed.length === 0 ? 0 : trimmed.split(/\s+/u).length
-
-    return {
-      wordCount,
-      characterCount,
-    }
-  }, [currentEditorText, editorSelection.end, editorSelection.isCollapsed, editorSelection.start])
-
-  const {
-    documentFindQuery,
-    setDocumentFindQuery,
-    isDocumentFindCaseSensitive,
-    setIsDocumentFindCaseSensitive,
-    documentFindDirective,
-    documentFindHits,
-  } = useDocumentFind({
-    sectionId: DEFAULT_EDITOR_SECTION_ID,
-    sourceText: currentEditorText,
-    initialCaseSensitive: restoredDocumentFindCaseSensitive,
-  })
-
-  useEffect(() => {
-    documentFindCaseSensitiveRef.current = isDocumentFindCaseSensitive
-  }, [isDocumentFindCaseSensitive])
-
-  // Dev-only tripwire: every section-scoped hook above is handed the same
-  // DEFAULT_EDITOR_SECTION_ID today. If a future second-section wiring pass
-  // updates some call sites but misses one, most of these hooks wouldn't
-  // notice on their own (sectionId isn't read internally yet by all of
-  // them) -- this catches the drift instead of letting it fail silently.
-  useEffect(() => {
-    assertSectionIdsConsistent({
-      useSectionTabs: DEFAULT_EDITOR_SECTION_ID,
-      useDocumentFind: DEFAULT_EDITOR_SECTION_ID,
-      useNoteSnapshots: DEFAULT_EDITOR_SECTION_ID,
-    })
-  }, [])
-
-  const { previewMarkdownElement } = usePreviewMarkdownRendering({
-    notes,
-    activeNoteId,
-    activeNoteText,
-    latestEditorTextRef,
-    activateNote,
-    previewScrollRef,
-    documentFindDirective,
-    isDocumentFindCaseSensitive,
-    renderedDisplayText,
-  })
-
   const hasMonthFilter = selectedMonths.size > 0
   const hasYearFilter = selectedYears.size > 0
   const hasDateFilter = hasMonthFilter || hasYearFilter
@@ -5129,6 +4697,9 @@ ${markdownHtml}
   // exactly what this reveals (the note the section that triggered this was
   // already showing).
   const revealNoteInMenu = useCallback(() => {
+    const section = getActiveSection()
+    const activeNoteId = section?.activeNoteId
+    const activeNoteSummary = section?.activeNoteSummary
     if (!activeNoteId || !activeNoteSummary) return
 
     // Clear only whichever filter is actually hiding the note -- never one
@@ -5207,7 +4778,7 @@ ${markdownHtml}
         }
       }
     })
-  }, [activeNoteId, activeNoteSummary, focusActiveNoteInSidebarMode, hasDateFilter, isSearchQueryCaseSensitive, isSidebarSearchActive, matchesSelectedDateFilter, runSidebarMenuTransition, searchQuery, sidebarMode])
+  }, [getActiveSection, focusActiveNoteInSidebarMode, hasDateFilter, isSearchQueryCaseSensitive, isSidebarSearchActive, matchesSelectedDateFilter, runSidebarMenuTransition, searchQuery, sidebarMode])
   revealNoteInMenuRef.current = revealNoteInMenu
 
   const totalPages = Math.max(1, Math.ceil(totalPagedNotes / Math.max(1, itemsPerPage)))
@@ -5215,27 +4786,6 @@ ${markdownHtml}
   const isSidebarTreeMode = sidebarMode === 'category' || sidebarMode === 'archive'
   const isSidebarCustomScrollbarMode = isSidebarTreeMode || isFindMode
   const isSidebarScrollbarMode = isSidebarCustomScrollbarMode || sidebarMode === 'options'
-
-  const {
-    previewTextureRef,
-    previewScrollbarTrackRef,
-    previewScrollbarThumbRef,
-    isPreviewScrollThumbActive,
-    isDraggingPreviewScrollThumb,
-    syncPreviewCustomScrollbar,
-    handlePreviewTrackMouseDown,
-    handlePreviewThumbMouseDown,
-    handlePreviewScroll,
-    blockPreviewEditMutation,
-  } = usePreviewScrollbar({
-    isPreviewMode,
-    previewScrollRef,
-    activeNoteId,
-    currentEditorText,
-    viewStyle,
-    viewFontSize,
-    viewSpacing,
-  })
 
   // Direct-DOM helpers: per-frame scroll events would otherwise trigger React
   // state updates that re-render the entire App component (heavy for long
@@ -5355,141 +4905,20 @@ ${markdownHtml}
   }, [
     archiveTree,
     categoryTree,
-    documentFindHits.length,
+    activeSectionSnapshot?.documentFindHits.length,
     getSidebarScrollerForMode,
     pagedVisibleNotes.length,
     sidebarMode,
     syncSidebarCustomScrollbar,
   ])
 
-  const {
-    handleJumpToDocumentFindHit,
-    replaceDocumentFindHit,
-    replaceAllDocumentFindHits,
-  } = useDocumentFindNavigation({
-    previewScrollRef,
-    documentFindDirective,
-    documentFindHits,
-    isDocumentFindCaseSensitive,
-    currentEditorText,
-    syncPreviewCustomScrollbar,
-    isPreviewMode,
-    adapterRef,
-    latestEditorTextRef,
-    activeNoteText,
-    documentFindQuery,
-    applyProgrammaticEditorText,
-  })
-
-  const {
-    activeDecorationFormats,
-    activeHeadingLevel,
-    isChecklistActive,
-    isBulletedListActive,
-    isNumberedListActive,
-    isBlockquoteActive,
-    isCodeBlockActive,
-    isInlineCodeActive,
-    applyTextDecoration,
-    applyHeading,
-    toggleCurrentLineHeading,
-    toggleBulletedList,
-    toggleNumberedList,
-    toggleChecklistList,
-    toggleBlockquote,
-    applyLink,
-    applyInlineCode,
-    applyCodeBlock,
-    insertHorizontalRule,
-  } = useMarkdownFormattingToolbar({
-    activeNoteId,
-    currentEditorText,
-    editorSelection,
-    latestEditorTextRef,
-    latestEditorSelectionRef,
-    applyProgrammaticEditorText,
-    buildTextDecorationTransformRef,
-    buildToggleCurrentLineHeadingTransformRef,
-    buildToggleBulletedListTransformRef,
-    buildToggleNumberedListTransformRef,
-  })
-
-  const currentSectionHandle: SectionHandle = {
-    sectionId: DEFAULT_EDITOR_SECTION_ID,
-    activeNoteId,
-    activeNoteText,
-    currentEditorText,
-    latestEditorTextRef,
-    activeNoteSummary,
-    editorSelection,
-    previewedSnapshotId,
-    isPreviewMode,
-    activateNote,
-    toggleRenderViewMode,
-    activeDecorationFormats,
-    activeHeadingLevel,
-    isChecklistActive,
-    isBulletedListActive,
-    isNumberedListActive,
-    isBlockquoteActive,
-    isCodeBlockActive,
-    isInlineCodeActive,
-    applyTextDecoration,
-    applyHeading,
-    toggleCurrentLineHeading,
-    toggleBulletedList,
-    toggleNumberedList,
-    toggleChecklistList,
-    toggleBlockquote,
-    applyLink,
-    applyInlineCode,
-    applyCodeBlock,
-    insertHorizontalRule,
-  }
-
-  // Publishes this section's state into the registry every render, plain
-  // assignment (not an effect) -- safe here because it's a ref mutation, not
-  // a state update. Imperative, non-reactive lookups (getActiveSection())
-  // can keep reading this directly.
-  registerSectionHandle(DEFAULT_EDITOR_SECTION_ID, currentSectionHandle)
-
-  // Reactive channel for chrome that needs to re-render when the active
-  // section's data changes (EditorToolbar, the keyboard/mousedown/
-  // beforeunload effects below). A plain `Map` read during render (like
-  // `getActiveSection()` above) works only because the hooks that produce
-  // this data still live in this same component today -- once they move
-  // into a real per-instance <EditorSection>, App.tsx will only learn about
-  // a child's state change via an effect, never synchronously during its
-  // own render. Building that reporting path now (even though everything
-  // is still local) so the shape carries over unchanged when the hooks
-  // actually move.
-  // Deliberately no dependency array -- this must run after every render so
-  // it can never miss a field, but the shallow-equality guard below (not a
-  // dependency array) is what actually prevents the infinite-update loop
-  // the exhaustive-deps rule is warning about: setActiveSectionSnapshot only
-  // fires when something in the handle actually changed, at which point the
-  // effect naturally has nothing left to change on its own next run.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    const previous = lastReportedSectionHandleRef.current
-    const changed = !previous || (Object.keys(currentSectionHandle) as (keyof SectionHandle)[])
-      .some((key) => previous[key] !== currentSectionHandle[key])
-    if (!changed) return
-    lastReportedSectionHandleRef.current = currentSectionHandle
-    setActiveSectionSnapshot(currentSectionHandle)
-  })
-
-  // Resolved once per render from the reactive snapshot (not the plain
-  // registry lookup) -- every chrome consumer below (keyboard shortcuts,
-  // the mousedown refocus guard, beforeunload persistence, EditorToolbar)
-  // reads through this rather than closing over section state directly.
   const activeSection = activeSectionSnapshot
 
   const handleFindViewButtonContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
     event.stopPropagation()
-    replaceAllDocumentFindHits()
-  }, [replaceAllDocumentFindHits])
+    getActiveSection()?.replaceAllDocumentFindHits()
+  }, [getActiveSection])
 
   const handleMonthToggle = useCallback((month: number, event: MouseEvent<HTMLButtonElement>) => {
     handleMultiSelect(month, event, selectedMonths, FILTER_MONTHS, setSelectedMonths)
@@ -5607,7 +5036,7 @@ ${markdownHtml}
   useEffect(() => {
     if (!isSidebarScrollbarMode) return
     syncSidebarCustomScrollbar()
-  }, [isSidebarScrollbarMode, syncSidebarCustomScrollbar, sidebarMode, categoryTree, archiveTree, documentFindHits])
+  }, [isSidebarScrollbarMode, syncSidebarCustomScrollbar, sidebarMode, categoryTree, archiveTree, activeSection?.documentFindHits])
 
   useEffect(() => {
     if (!isSidebarScrollbarMode) return
@@ -5934,7 +5363,7 @@ ${markdownHtml}
       const target = event.target instanceof HTMLElement ? event.target : null
       const isEditorTarget = Boolean(target?.closest('.editor-stage'))
       const isSearchField = target === sidebarSearchInputRef.current
-      const isTagField = target === tagInputRef.current
+      const isTagField = target === activeSection?.tagInputRef.current
       const isPageJumpField = target === pageJumpInputRef.current
       const isTextureSeedField = target === textureSeedInputRef.current
       const isGlazeLinearSeedField = target === glazeLinearSeedInputRef.current
@@ -5944,13 +5373,13 @@ ${markdownHtml}
       if (isEditorControlField && ['Escape', 'Enter', 'Tab'].includes(event.key)) {
         event.preventDefault()
         event.stopImmediatePropagation()
-        scheduleFocusEditorInEditMode()
+        activeSection?.scheduleFocusEditorInEditMode()
         return
       }
 
       if (isFindMode && event.ctrlKey && !event.shiftKey && event.key === 'Enter') {
         event.preventDefault()
-        replaceAllDocumentFindHits()
+        activeSection?.replaceAllDocumentFindHits()
         return
       }
 
@@ -5972,7 +5401,7 @@ ${markdownHtml}
 
       if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 't') {
         event.preventDefault()
-        void handleAddCurrentNoteToTabs()
+        void activeSection?.handleAddCurrentNoteToTabs()
         return
       }
 
@@ -6045,18 +5474,11 @@ ${markdownHtml}
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [
-    activeSection?.activeNoteId,
-    activeSection?.applyTextDecoration,
-    activeSection?.toggleCurrentLineHeading,
-    activeSection?.toggleNumberedList,
-    activeSection?.toggleBulletedList,
-    activeSection?.toggleRenderViewMode,
-    handleAddCurrentNoteToTabs,
+    activeSection,
     createNote,
     createNoteFromClipboardTitle,
     isFindMode,
     runSidebarMenuTransition,
-    replaceAllDocumentFindHits,
   ])
 
   useEffect(() => {
@@ -6075,12 +5497,12 @@ ${markdownHtml}
       }
 
       event.preventDefault()
-      scheduleFocusEditorInEditMode()
+      activeSection?.scheduleFocusEditorInEditMode()
     }
 
     window.addEventListener('mousedown', onMouseDownCapture, true)
     return () => window.removeEventListener('mousedown', onMouseDownCapture, true)
-  }, [activeSection?.activeNoteId, activeSection?.isPreviewMode, isAllowedNonEditorFocusTarget, scheduleFocusEditorInEditMode])
+  }, [activeSection, isAllowedNonEditorFocusTarget])
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -6091,7 +5513,7 @@ ${markdownHtml}
       if (appStateSaveTimerRef.current !== null) {
         window.clearTimeout(appStateSaveTimerRef.current)
         appStateSaveTimerRef.current = null
-        const viewport = latestViewportRef.current
+        const viewport = activeSection?.latestViewportRef.current
         void window.thockdownState?.saveAppState({
           selectedNoteId: activeSection?.activeNoteId ?? null,
           viewport: viewport ?? undefined,
@@ -6099,16 +5521,16 @@ ${markdownHtml}
         })
       }
 
-      persistActiveNoteEditModeStateNow()
+      activeSection?.persistActiveNoteEditModeStateNow()
       if (activeSection?.isPreviewMode && activeSection.activeNoteId) {
-        void persistRenderViewStateForNoteNow(activeSection.activeNoteId)
+        void activeSection.persistRenderViewStateForNoteNow(activeSection.activeNoteId)
       }
       persistMenuStateOnUnload()
     }
 
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [activeSection?.activeNoteId, activeSection?.isPreviewMode, buildMenuStateSnapshot, persistActiveNoteEditModeStateNow, persistMenuStateOnUnload, persistRenderViewStateForNoteNow, writeDebugEntry])
+  }, [activeSection, buildMenuStateSnapshot, persistMenuStateOnUnload])
 
   const syncSidebarTexture = useCallback(() => {
     const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
@@ -6191,11 +5613,11 @@ ${markdownHtml}
                   ref={sidebarSearchInputRef}
                   type="text"
                   placeholder={isFindMode ? 'Find in current note...' : 'Search for content or #tag...'}
-                  value={isFindMode ? documentFindQuery : searchQuery}
+                  value={isFindMode ? (activeSection?.documentFindQuery ?? '') : searchQuery}
                   onChange={(event) => {
                     const value = event.target.value
                     if (isFindMode) {
-                      setDocumentFindQuery(value)
+                      getActiveSection()?.setDocumentFindQuery(value)
                     } else {
                       setSearchQuery(value)
                     }
@@ -6203,20 +5625,20 @@ ${markdownHtml}
                   onBlur={() => {
                     window.setTimeout(() => {
                       if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
-                        scheduleFocusEditorInEditMode()
+                        getActiveSection()?.scheduleFocusEditorInEditMode()
                       }
                     }, 0)
                   }}
                 />
                 <button
                   type="button"
-                  className={`btn-icon search-input-case-toggle${(isFindMode ? isDocumentFindCaseSensitive : isSearchQueryCaseSensitive) ? ' is-active' : ''}`}
-                  aria-pressed={isFindMode ? isDocumentFindCaseSensitive : isSearchQueryCaseSensitive}
+                  className={`btn-icon search-input-case-toggle${(isFindMode ? activeSection?.isDocumentFindCaseSensitive : isSearchQueryCaseSensitive) ? ' is-active' : ''}`}
+                  aria-pressed={isFindMode ? activeSection?.isDocumentFindCaseSensitive : isSearchQueryCaseSensitive}
                   title="Match letter case"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
                     if (isFindMode) {
-                      setIsDocumentFindCaseSensitive((previous) => !previous)
+                      getActiveSection()?.setIsDocumentFindCaseSensitive((previous: boolean) => !previous)
                     } else {
                       setIsSearchQueryCaseSensitive((previous) => !previous)
                     }
@@ -6241,7 +5663,7 @@ ${markdownHtml}
                   return (
                     <button
                       key={mode}
-                      className={`toggle-btn notes-mode-button icon-btn ${iconClassByMode[mode]}${isActive ? ' is-active' : ''}${mode === 'trash' && isTrashViewDeletePrimed ? ' is-primed-for-deletion' : ''}`}
+                      className={`toggle-btn notes-mode-button icon-btn ${iconClassByMode[mode]}${isActive ? ' is-active' : ''}${mode === 'trash' && activeSection?.isTrashViewDeletePrimed ? ' is-primed-for-deletion' : ''}`}
                       type="button"
                       role="tab"
                       aria-selected={isActive}
@@ -6250,16 +5672,16 @@ ${markdownHtml}
                       onClick={() => handleViewModeButtonClick(mode)}
                       onContextMenu={
                         mode === 'trash'
-                          ? handleTrashViewButtonContextMenu
+                          ? activeSection?.handleTrashViewButtonContextMenu
                           : mode === 'find'
                             ? handleFindViewButtonContextMenu
                             : undefined
                       }
-                      onMouseDown={mode === 'trash' ? handleTrashViewButtonMouseDown : undefined}
-                      onMouseUp={mode === 'trash' ? handleTrashViewButtonMouseUp : undefined}
+                      onMouseDown={mode === 'trash' ? activeSection?.handleTrashViewButtonMouseDown : undefined}
+                      onMouseUp={mode === 'trash' ? activeSection?.handleTrashViewButtonMouseUp : undefined}
                       onMouseLeave={mode === 'trash' ? () => {
-                        clearTrashButtonArmTimer()
-                        setIsTrashViewDeletePrimed(false)
+                        activeSection?.clearTrashButtonArmTimer()
+                        activeSection?.setIsTrashViewDeletePrimed(false)
                       } : undefined}
                     >
                       {mode === 'find' ? (
@@ -6287,7 +5709,7 @@ ${markdownHtml}
                         aria-label="Note list"
                       >
                         {pagedVisibleNotes.map((note) => {
-                          const isActive = note.id === activeNoteId
+                          const isActive = note.id === activeSection?.activeNoteId
                           const isModified = isExternalNote(note) && getCurrentExternalNoteModifiedState(note)
                           return (
                             <NoteListItem
@@ -6296,16 +5718,16 @@ ${markdownHtml}
                               isActive={isActive}
                               isModified={isModified}
                               onSelect={handleSelectNote}
-                              onPrimedLeftClick={handlePrimedNoteLeftClick}
-                              onSaveClick={handleSaveButtonClick}
-                              onCloseClick={handleCloseButtonClick}
-                              onArchiveClick={handleArchiveClick}
-                              onTrashClick={handleTrashClick}
+                              onPrimedLeftClick={(noteId) => getActiveSection()?.handlePrimedNoteLeftClick(noteId)}
+                              onSaveClick={activeSection?.handleSaveButtonClick}
+                              onCloseClick={activeSection?.handleCloseButtonClick}
+                              onArchiveClick={activeSection?.handleArchiveClick}
+                              onTrashClick={activeSection?.handleTrashClick}
                               isTrashMode={sidebarMode === 'trash'}
-                              primedAction={primedNoteActionById.get(note.id) ?? null}
-                              onRightPressStart={handleNoteRightPressStart}
-                              onRightPressEnd={handleNoteRightPressEnd}
-                              onMouseLeave={handleNoteMouseLeave}
+                              primedAction={activeSection?.primedNoteActionById.get(note.id) ?? null}
+                              onRightPressStart={(noteId, event) => getActiveSection()?.handleNoteRightPressStart(noteId, event)}
+                              onRightPressEnd={(noteId, event) => getActiveSection()?.handleNoteRightPressEnd(noteId, event)}
+                              onMouseLeave={activeSection?.handleNoteMouseLeave}
                             />
                           )
                         })}
@@ -6322,15 +5744,15 @@ ${markdownHtml}
                         className="notes-list find-view thockdown-custom-scrollbar"
                         ref={setSidebarTreeScrollerEl}
                       >
-                        {documentFindHits.map((hit, index) => (
+                        {(activeSection?.documentFindHits ?? []).map((hit, index) => (
                           <button
                             key={hit.id}
                             type="button"
                             className="find-hit-item"
-                            onClick={() => handleJumpToDocumentFindHit(hit)}
+                            onClick={() => getActiveSection()?.handleJumpToDocumentFindHit(hit)}
                             onContextMenu={(event) => {
                               event.preventDefault()
-                              replaceDocumentFindHit(hit)
+                              getActiveSection()?.replaceDocumentFindHit(hit)
                             }}
                             title={`Jump to occurrence ${index + 1}`}
                           >
@@ -6343,9 +5765,9 @@ ${markdownHtml}
                             </span>
                           </button>
                         ))}
-                        {documentFindHits.length === 0 ? (
+                        {(activeSection?.documentFindHits.length ?? 0) === 0 ? (
                           <div className="notes-empty-state">
-                            {documentFindQuery.trim()
+                            {(activeSection?.documentFindQuery ?? '').trim()
                               ? 'No matches in the current note.'
                               : 'Type in the search field to find text in the current note.'}
                           </div>
@@ -6353,7 +5775,7 @@ ${markdownHtml}
                       </div>
                     ) : sidebarMode === 'options' ? (
                       <SidebarOptionsPanel
-                        isPreviewMode={isPreviewMode}
+                        isPreviewMode={activeSection?.isPreviewMode ?? false}
                         uiMode={uiMode}
                         optionsContentRef={optionsContentRef}
                         viewStyle={viewStyle}
@@ -6368,7 +5790,7 @@ ${markdownHtml}
                         setEditorFontSize={setEditorFontSize}
                         editorSpacing={editorSpacing}
                         setEditorSpacing={setEditorSpacing}
-                        scheduleFocusEditorInEditMode={scheduleFocusEditorInEditMode}
+                        scheduleFocusEditorInEditMode={() => getActiveSection()?.scheduleFocusEditorInEditMode()}
                         factoryPresetEntriesForCurrentMode={factoryPresetEntriesForCurrentMode}
                         activeEntryForCurrentMode={activeEntryForCurrentMode}
                         selectLoadoutPreset={selectLoadoutPreset}
@@ -6507,7 +5929,7 @@ ${markdownHtml}
                         setDebuggingEnabled={setDebuggingEnabled}
                         debugNoteIdRef={debugNoteIdRef}
                         queueAppStateSave={queueAppStateSave}
-                        activeNoteId={activeNoteId}
+                        activeNoteId={activeSection?.activeNoteId ?? null}
                       />
                     ) : (
                       <div
@@ -6516,17 +5938,17 @@ ${markdownHtml}
                       >
                         <CategoryTreeView
                           groups={sidebarMode === 'category' ? categoryTree : archiveTree}
-                          activeNoteId={activeNoteId}
+                          activeNoteId={activeSection?.activeNoteId ?? null}
                           persistedCollapsedPrimary={sidebarMode === 'category' ? categoryCollapsedPrimary : archiveCollapsedPrimary}
                           persistedCollapsedSecondary={sidebarMode === 'category' ? categoryCollapsedSecondary : archiveCollapsedSecondary}
                           focusNoteRequestKey={sidebarMode === 'category' ? categoryFocusRequestKey : archiveFocusRequestKey}
                           onCollapseChange={sidebarMode === 'category' ? handleCategoryCollapseChange : handleArchiveCollapseChange}
                           onSelect={handleSelectNote}
-                          onPrimedLeftClick={handlePrimedNoteLeftClick}
-                          primedNoteActionById={primedNoteActionById}
-                          onNoteRightPressStart={handleNoteRightPressStart}
-                          onNoteRightPressEnd={handleNoteRightPressEnd}
-                          onNoteMouseLeave={handleNoteMouseLeave}
+                          onPrimedLeftClick={(noteId) => getActiveSection()?.handlePrimedNoteLeftClick(noteId)}
+                          primedNoteActionById={activeSection?.primedNoteActionById ?? EMPTY_MAP}
+                          onNoteRightPressStart={(noteId, event) => getActiveSection()?.handleNoteRightPressStart(noteId, event)}
+                          onNoteRightPressEnd={(noteId, event) => getActiveSection()?.handleNoteRightPressEnd(noteId, event)}
+                          onNoteMouseLeave={activeSection?.handleNoteMouseLeave}
                         />
                       </div>
                     )}
@@ -6582,20 +6004,20 @@ ${markdownHtml}
                           if (event.key === 'Enter') {
                             event.preventDefault()
                             commitPageJump()
-                            scheduleFocusEditorInEditMode()
+                            getActiveSection()?.scheduleFocusEditorInEditMode()
                             return
                           }
 
                           if (event.key === 'Escape' || event.key === 'Tab') {
                             event.preventDefault()
                             cancelPageJumpEdit()
-                            scheduleFocusEditorInEditMode()
+                            getActiveSection()?.scheduleFocusEditorInEditMode()
                           }
                         }}
                         onBlur={() => {
                           window.setTimeout(() => {
                             if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
-                              scheduleFocusEditorInEditMode()
+                              getActiveSection()?.scheduleFocusEditorInEditMode()
                             }
                           }, 0)
                         }}
@@ -6803,91 +6225,52 @@ ${markdownHtml}
             <EditorSection
               sectionId={DEFAULT_EDITOR_SECTION_ID}
               markSectionActive={markSectionActive}
-              activeNoteId={activeNoteId}
               isSidebarVisible={isSidebarVisible}
               toggleSidebarVisible={toggleSidebarVisible}
               persistenceReady={persistenceReady}
               notes={notes}
-              activeNoteSummary={activeNoteSummary}
-              isPreviewMode={isPreviewMode}
-              spellCheckEditEnabled={spellCheckEditEnabled}
-              spellCheckRenderEnabled={spellCheckRenderEnabled}
-              tagInputRef={tagInputRef}
-              tagInputValue={tagInputValue}
-              setTagInputValue={setTagInputValue}
-              orderedActiveTags={orderedActiveTags}
-              suggestedTags={suggestedTags}
-              deletePrimedTagName={deletePrimedTagName}
-              renamingTagName={renamingTagName}
-              isTagMutationPending={isTagMutationPending}
-              activeNoteIsExternal={activeNoteIsExternal}
-              handleTagInputKeyDown={handleTagInputKeyDown}
-              handleAddSuggestedTag={handleAddSuggestedTag}
-              handleTagChipClick={handleTagChipClick}
-              handleTagChipMouseLeave={handleTagChipMouseLeave}
-              handleTagDragStart={handleTagDragStart}
-              handleTagDragEnd={handleTagDragEnd}
-              handleTagDrop={handleTagDrop}
-              handleTagContainerDragOver={handleTagContainerDragOver}
-              handleTagContainerDrop={handleTagContainerDrop}
-              handleTagContextMenu={handleTagContextMenu}
-              tabBarMode={tabBarMode}
-              toggleTabBarMode={toggleTabBarMode}
-              pinnedTabs={pinnedTabs}
-              unpinPrimedTabNoteId={unpinPrimedTabNoteId}
-              activeNoteIsPinned={activeNoteIsPinned}
-              tempTabNoteId={tempTabNoteId}
-              pinArmingTabNoteId={pinArmingTabNoteId}
-              tabsScrollerRef={tabsScrollerRef}
-              tabsCanScrollLeft={tabsCanScrollLeft}
-              tabsCanScrollRight={tabsCanScrollRight}
-              handleAddCurrentNoteToTabs={handleAddCurrentNoteToTabs}
-              handleTabContextMenu={handleTabContextMenu}
-              handleTabMouseLeave={handleTabMouseLeave}
-              handleTabClick={handleTabClick}
-              handleTempTabMouseDown={handleTempTabMouseDown}
-              clearTempTabHoldTimer={clearTempTabHoldTimer}
-              updateTabsScrollEdges={updateTabsScrollEdges}
-              handleTabsWheel={handleTabsWheel}
-              editorStageRef={editorStageRef}
-              previewedSnapshotId={previewedSnapshotId}
-              bindings={bindings}
-              adapterRef={adapterRef}
-              editorDisplayText={editorDisplayText}
-              scrollbarHostEl={scrollbarHostEl}
-              setScrollbarHostEl={setScrollbarHostEl}
-              editorFontFamily={editorFontFamily}
+              setNotes={setNotes}
+              notesRef={notesRef}
+              activeSectionId={activeSectionId}
+              registerSectionHandle={registerSectionHandle}
+              reportSectionHandle={reportSectionHandle}
+              isApplyingInitialViewportRef={isApplyingInitialViewportRef}
+              pendingViewportRestoreRef={pendingViewportRestoreRef}
+              externalNoteOriginalTextByIdRef={externalNoteOriginalTextByIdRef}
+              externalNoteOriginalHashByIdRef={externalNoteOriginalHashByIdRef}
+              activeNoteExternalPathRef={activeNoteExternalPathRef}
+              currentExternalNoteHash={currentExternalNoteHash}
+              setCurrentExternalNoteHash={setCurrentExternalNoteHash}
+              queueAppStateSaveStable={queueAppStateSaveStable}
+              updateActiveNoteTitlePreviewStable={updateActiveNoteTitlePreviewStable}
+              revealNoteInMenuStable={revealNoteInMenuStable}
+              writeDebugEntryStable={writeDebugEntryStable}
+              activeNoteHasDebugTagRef={activeNoteHasDebugTagRef}
+              saveSelectedNoteState={saveSelectedNoteState}
+              refreshNotes={refreshNotes}
+              noteTransitionLockRef={noteTransitionLockRef}
+              updateNoteAssignedId={updateNoteAssignedId}
+              restoredTabBarMode={restoredTabBarMode}
+              tabBarModeRef={tabBarModeRef}
+              sidebarMode={sidebarMode}
+              dateFilteredNotesRef={dateFilteredNotesRef}
+              trashFilteredNotesRef={trashFilteredNotesRef}
+              categoryTreeRef={categoryTreeRef}
+              archiveTreeRef={archiveTreeRef}
+              restoredDocumentFindCaseSensitive={restoredDocumentFindCaseSensitive}
+              documentFindCaseSensitiveRef={documentFindCaseSensitiveRef}
               editorRuntimeMetrics={editorRuntimeMetrics}
-              editorFontLoadVersion={editorFontLoadVersion}
-              activeNoteHasDebugTag={activeNoteHasDebugTag}
-              isPreviewingSnapshot={isPreviewingSnapshot}
-              isCaretSuspended={isCaretSuspended}
-              previewTextureRef={previewTextureRef}
-              previewScrollRef={previewScrollRef}
-              handlePreviewScroll={handlePreviewScroll}
               viewStyle={viewStyle}
               viewFontSize={viewFontSize}
               viewSpacing={viewSpacing}
+              editorStageRef={editorStageRef}
+              scrollbarHostEl={scrollbarHostEl}
+              setScrollbarHostEl={setScrollbarHostEl}
+              editorFontFamily={editorFontFamily}
+              editorFontLoadVersion={editorFontLoadVersion}
+              spellCheckEditEnabled={spellCheckEditEnabled}
+              spellCheckRenderEnabled={spellCheckRenderEnabled}
               highlightSearchColor={highlightColors.search}
-              blockPreviewEditMutation={blockPreviewEditMutation}
-              previewMarkdownElement={previewMarkdownElement}
-              previewScrollbarTrackRef={previewScrollbarTrackRef}
-              handlePreviewTrackMouseDown={handlePreviewTrackMouseDown}
-              previewScrollbarThumbRef={previewScrollbarThumbRef}
-              isDraggingPreviewScrollThumb={isDraggingPreviewScrollThumb}
-              isPreviewScrollThumbActive={isPreviewScrollThumbActive}
-              handlePreviewThumbMouseDown={handlePreviewThumbMouseDown}
-              activeNoteDocumentStats={activeNoteDocumentStats}
-              noteSnapshots={noteSnapshots}
-              handleNavigateSnapshot={handleNavigateSnapshot}
-              handleBranchOpened={handleBranchOpened}
-              handleBranchError={handleBranchError}
-              timelineCurveConstant={timelineCurveConstant}
-              setTimelineCurveConstant={setTimelineCurveConstant}
-              setTimelineTrackLengthPx={setTimelineTrackLengthPx}
-              handleCreateManualSnapshot={handleCreateManualSnapshot}
-              handleReturnToPresent={handleReturnToPresent}
-              handleMergeAdjacentSnapshots={handleMergeAdjacentSnapshots}
             />
           </div>
         </div>
