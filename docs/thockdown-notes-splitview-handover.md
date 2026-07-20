@@ -584,3 +584,94 @@ no compile or test failure to catch it. **Always re-pull and grep for the exact 
 field/type names you're about to reference before extracting** — don't trust names from
 earlier in this document, or from memory of earlier patches, without checking the live tree
 first.
+
+## Update: split-view is now fully built and working (handed off for bug-hunting)
+
+Everything above describes the *plan*. As of commit `8761a85`, the plan is done — every phase
+shipped, `tsc`/tests/lint clean at every step, and the core flows (create, close, drag-resize,
+rename, swap) have been live-verified in `npm run dev:browser`. This section is a fresh
+conversation's entry point: what exists, how it's wired, and the specific rough edges worth
+hunting for next, rather than more phases to build.
+
+**Commit sequence** (oldest to newest, all on `main`): `9063b7e` (all 16 section-scoped hooks +
+`activateNote` moved into `EditorSection.tsx`, the single highest-risk step) → `32d0051`/`21f4ef5`/
+`6cc8ebb`/`8057c3b` (chrome repointed through the section registry) → `7b9eae7` (bootstrap reads
+`listSections()`, mounts one `<EditorSection>` per entry, CSS grid restructured into a flex row of
+per-section columns) → `2fde9a2` (+/close buttons) → `cb741ab` (active-section red outline, draggable
+dividers, identity tab with rename + swap-in-a-named-section) → `070145e` (fix: swapping a
+*placed* section into a different slot now backfills its old slot instead of the pane count
+silently shrinking) → `8761a85` (the width-resize policy rewrite below). Read commit messages in
+order for the full reasoning behind each step; they're deliberately detailed.
+
+**Where things live:**
+- `src/editorSection/EditorSection.tsx` — one instance per section. Owns all 16 section-scoped
+  hooks, `activateNote`, the identity-tab rename/swap-menu UI state, and self-registers into the
+  registry (`sectionRegistryRef` in `App.tsx`) so chrome can resolve "the active section" without
+  knowing how many exist.
+- `src/editorSection/sectionRegistry.ts` — `SectionHandle` (extends every hook's result type) +
+  `getActiveSectionHandle`. Chrome reads through `getActiveSection()` (imperative, ref-based) or
+  `activeSection`/`activeSectionSnapshot` (reactive, for render-time reads) — never closes over
+  section-owned state directly.
+- `App.tsx` — `editorSections` state (the placed-section list from `listSections()`),
+  `handleCreateSection`/`handleCloseSection`/`handleRenameSection`/`handleFetchSwapCandidates`/
+  `handleSwapSection`/`handleDividerMouseDown`, and the `.editor-sections-row` JSX (a flex row of
+  `.editor-section-slot` wrappers + `.editor-section-divider` elements, per `entry.id`).
+- `src/shared/sectionWidths.ts` (+ `.test.ts`) — the pure, tested width-computation functions
+  (`computeSectionWidthsForNewSection`, `computeSectionWidthsForClose`) implementing the resize
+  policy below. Swap doesn't use these at all (see policy).
+- `src/tabBar/SectionTabBar.tsx` — per-section tab bar: sidebar-toggle (leftmost only) /
+  close-button (everyone else), tab/tag-mode toggle, identity tab (rename in place, right-click
+  swap dropdown), "+" button (hidden via `canCreateSection` when there's no room for another
+  300px section).
+- `src/styles/layout.css` — `.editor-sections-row`/`.editor-section-slot`/`.editor-section-divider`/
+  `.editor-section-column`. The old separate `tabbar`/`viewer` grid areas were merged into one
+  `editor` area spanning both rows; each section is internally a flex column (tab bar fixed-height,
+  editor/preview filling the rest), and N of those sit side by side in the row.
+
+**The width/resize policy** (`src/shared/sectionWidths.ts`, confirmed correct by Joe against a
+hand-worked example, unit-tested): sections size via `widthFraction` (persisted in
+`editor_sections.widthFraction`) turned into a `flex-grow` weight with `flex-basis: 0`, so the
+row's fixed-width 8px dividers never distort the split. On **create**, the new section (plus the
+one new divider it introduces) is funded from its immediate left neighbor first, only cascading
+proportionally to the *other* sections — capped at each one's own 300px minimum, re-running
+against the remaining pool if a capped section's specific shortfall needs to come from elsewhere
+— if the neighbor alone can't cover it; rounding overshoot grows the new section rather than
+shorting anyone (total width is always exactly conserved). On **close**, the closed section's
+entire width goes to its immediate left neighbor, nobody else changes. On **swap**: "dimensions
+belong to the slot, not whichever section is showing in it" — swapping never creates or removes
+a slot, so *no width math happens at all*; the incoming section just inherits the destination
+slot's existing `widthFraction`, and a backfilled vacated slot inherits whatever width that slot
+already had. Both create and close measure real DOM pixel widths via `sectionSlotElByIdRef`
+(the same ref map the divider-drag handler already used) and persist the result through
+`updateSectionWidths` as part of the same action — never left to CSS flex-grow to "just reflow."
+
+**Known rough edges, not yet fixed** (flagged when built, still true):
+- `editorStageRef` (App.tsx) is one shared ref across all sections, read only by a background-
+  texture-sizing `ResizeObserver`. Harmless to editing/note independence, but the texture-sizing
+  effect only ever tracks whichever section's stage DOM node mounted/updated last.
+- `pendingViewportRestoreRef`/`isApplyingInitialViewportRef` are likewise still shared across
+  sections (read by the now-largely-vestigial app-global `queueAppStateSave`), so one section's
+  viewport-restore-in-progress window can transiently suppress another's save. Not a functional
+  break, just an accepted simplification.
+- In `npm run dev:browser` specifically, `appShellWidthPx` (the ResizeObserver-measured shell
+  width driving the whole grid, including `canCreateSection`'s room check) was once observed
+  stuck at a stale, too-narrow value after a sequence of interactions, hiding the "+" button
+  even with plenty of actual room. Resizing the viewport by 1px didn't fix it; a full reload did.
+  Never root-caused — worth a look if the "+" button vanishes unexpectedly, but may be a
+  browser-mock-only artifact (no real Electron window resize events in that mode) rather than
+  something that reproduces in the real app.
+- Hibernation rendering (built earlier, Phase 3) has still never been exercised with real N>1
+  typing load — worth confirming inactive sections actually stop wiring live-typing listeners
+  now that N>1 is real, not just mechanism-in-place-but-inert.
+- Cold-start restore has only been verified via full page reloads in the browser mock, not an
+  actual Electron app restart with 2+ sections open.
+
+**Verification discipline so far**: every commit is `tsc --noEmit` clean, `npm run test -- --run`
+at the standing baseline (91/96 passing as of `8761a85` — 5 pre-existing failures in
+`SnapshotTimelineCurve.test.ts`/`ContractBridgePlugin.test.ts`, unrelated to this effort, never
+grown), and `npx eslint` on touched files shows no new problems beyond the pre-existing baseline
+count. Every structural change (create/close/drag/rename/swap) has been live-clicked through in
+`npm run dev:browser`, checking rendered DOM measurements and `localStorage`'s mock-store state
+directly via `javascript_tool`, not just visual inspection — worth continuing that habit, since
+this is exactly the class of bug (real layout/timing behavior) that doesn't show up in a
+type-checker or a unit test.
