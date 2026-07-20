@@ -1545,6 +1545,29 @@ function App() {
   const unpinNoteFromSection = useCallback((sectionId: string, noteId: string) => {
     void sectionRegistryRef.current.get(sectionId)?.unpinNoteTab(noteId)
   }, [])
+
+  // Purely cosmetic: while dragging a tab or a sidebar note, the browser
+  // shows its native no-drop cursor over any area that hasn't had
+  // preventDefault called on its dragover -- which is most of the app's
+  // chrome (toolbar, sidebar padding, dividers between sections, etc.),
+  // since only section columns actually handle a drop. That's an accurate
+  // cursor, but an ugly one: nowhere the user might pass over mid-drag
+  // needs to look "rejected" when only the eventual drop target matters.
+  // A single window-level capture listener -- capture so it runs before
+  // any nested handler could stopPropagation and before target-phase
+  // handling -- accepts the dragover unconditionally for this drag type,
+  // everywhere, regardless of whether that specific spot would do
+  // anything on an actual drop. The real drop handlers are untouched and
+  // still only act where they always did.
+  useEffect(() => {
+    const handleWindowDragOver = (event: globalThis.DragEvent) => {
+      if (!event.dataTransfer?.types.includes(NOTE_DRAG_MIME_TYPE)) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'move'
+    }
+    window.addEventListener('dragover', handleWindowDragOver, true)
+    return () => window.removeEventListener('dragover', handleWindowDragOver, true)
+  }, [])
   // Reactive counterpart to the plain registry above: each <EditorSection>
   // instance calls this from its own effect every render (see its
   // reportSectionHandle prop). A plain Map read during the parent's render

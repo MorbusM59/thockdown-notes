@@ -828,23 +828,33 @@ export function EditorSection({
 
   // Section-wide drop target: a tab dragged in from another section, or a
   // note dragged from the sidebar, lands anywhere on this section (not just
-  // its tab bar) and becomes its new rightmost tab. Individual drag-capable
-  // children (pinned tab pills, the tag bar's own reorder drop zones) only
-  // preventDefault/stopPropagation for their own in-bar drag; anything else
-  // bubbles up here unhandled.
-  const handleSectionDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (!event.dataTransfer.types.includes(NOTE_DRAG_MIME_TYPE)) return
-    event.preventDefault()
-    event.dataTransfer.dropEffect = 'move'
-  }, [])
-
-  const handleSectionDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
+  // its tab bar) and becomes its new rightmost tab.
+  //
+  // Runs in the *capture* phase (top-down, before the event reaches
+  // whatever's actually under the pointer) rather than the usual bubble
+  // phase. The editor content is a contentEditable region (CodeMirror
+  // internally, or the render-mode preview), and contentEditable elements
+  // get their own native/library drag-and-drop handling for text -- which,
+  // for a payload type it doesn't recognize, may swallow the drop outright
+  // before it can bubble back up here. Capturing lets us claim the event on
+  // the way down, before any of that runs. (dragover acceptance/cursor is
+  // handled separately, globally, in App.tsx -- purely cosmetic and not
+  // tied to any one section.)
+  //
+  // An in-bar reorder (same sectionId as the drag's source) needs to reach
+  // the more specific, index-aware pill/container bubble handlers in
+  // useSectionTabs instead, so this only claims (and stops) drops that are
+  // actually headed somewhere else -- a different section's tab, or a
+  // sidebar note.
+  const handleSectionDropCapture = useCallback((event: DragEvent<HTMLDivElement>) => {
     const raw = event.dataTransfer.getData(NOTE_DRAG_MIME_TYPE)
     if (!raw) return
     const payload = parseNoteDragPayload(raw)
     if (!payload) return
+    if (payload.sourceSectionId === sectionId) return
 
     event.preventDefault()
+    event.stopPropagation()
 
     // A sidebar-origin drop also loads the note into this section's editor
     // -- unlike a tab dragged in from another section, there's no tab to
@@ -861,9 +871,7 @@ export function EditorSection({
     }
 
     void pinNoteAsRightmostTab(payload.noteId)
-    if (payload.sourceSectionId !== sectionId) {
-      unpinNoteFromSection(payload.sourceSectionId, payload.noteId)
-    }
+    unpinNoteFromSection(payload.sourceSectionId, payload.noteId)
   }, [activateNote, pinNoteAsRightmostTab, pinnedTabs, sectionId, unpinNoteFromSection])
 
   // Plain assignment (not an effect) -- safe, it's just a ref mutation. Powers
@@ -883,8 +891,7 @@ export function EditorSection({
   return (
     <div
       className={`editor-section-column${sectionId === activeSectionId ? ' is-active' : ''}`}
-      onDragOver={handleSectionDragOver}
-      onDrop={handleSectionDrop}
+      onDropCapture={handleSectionDropCapture}
     >
       <SectionTabBar
         tabs={{
