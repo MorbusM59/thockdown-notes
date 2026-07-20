@@ -47,6 +47,7 @@ import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName } from './shared/tags'
 import { EditorSection } from './editorSection/EditorSection'
 import { EditorToolbar } from './toolbar/EditorToolbar'
 import { DEFAULT_EDITOR_SECTION_ID, type EditorSectionEntry } from './shared/sections'
+import { computeSectionWidthsForClose, computeSectionWidthsForNewSection, type SectionWidthPx } from './shared/sectionWidths'
 import type { TextureCacheRequest } from './shared/textures'
 import {
   DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
@@ -4495,30 +4496,80 @@ ${markdownHtml}
     return nextSections
   }, [])
 
+  const measureSectionWidthsPx = useCallback((): SectionWidthPx[] => (
+    editorSections.map((entry) => {
+      const el = sectionSlotElByIdRef.current.get(entry.id)
+      return { id: entry.id, widthPx: el ? el.getBoundingClientRect().width : 0 }
+    })
+  ), [editorSections])
+
+  const persistSectionWidthsPx = useCallback(async (widthsPx: SectionWidthPx[]) => {
+    const sectionsApi = window.thockdownSections
+    if (!sectionsApi) return null
+    const totalWidthPx = widthsPx.reduce((sum, entry) => sum + entry.widthPx, 0)
+    const widths = widthsPx.map((entry) => ({
+      id: entry.id,
+      widthFraction: totalWidthPx > 0 ? entry.widthPx / totalWidthPx : null,
+    }))
+    return sectionsApi.updateSectionWidths(widths)
+  }, [])
+
   // Always creates a new section immediately to the right of the one the
   // "+" button was clicked on, per the handover doc's split-view design.
-  const handleCreateSection = useCallback(async (afterPosition: number) => {
+  // Sizing policy: fund the new section (plus the one new divider it
+  // introduces) from its immediate left neighbor first, only spilling over
+  // to the other sections -- proportionally, capped at each one's own
+  // minimum -- if the neighbor alone can't cover it. See sectionWidths.ts.
+  const handleCreateSection = useCallback(async (afterPosition: number, sourceSectionId: string) => {
     const sectionsApi = window.thockdownSections
     if (!sectionsApi) return
+
+    const currentWidthsPx = measureSectionWidthsPx()
+    const { updatedWidths, newSectionWidthPx } = computeSectionWidthsForNewSection(
+      currentWidthsPx,
+      sourceSectionId,
+      SECTION_MIN_WIDTH_PX,
+      GRID_DIVIDER_PX,
+    )
+
     const updated = await sectionsApi.createSection(null, afterPosition)
     const nextSections = applyResolvedSections(updated)
     const created = nextSections.find((entry) => entry.position === afterPosition + 1)
     if (created) {
       markSectionActive(created.id)
     }
-  }, [applyResolvedSections, markSectionActive])
+
+    const finalized = await persistSectionWidthsPx([
+      ...updatedWidths,
+      ...(created ? [{ id: created.id, widthPx: newSectionWidthPx }] : []),
+    ])
+    if (finalized) {
+      applyResolvedSections(finalized)
+    }
+  }, [applyResolvedSections, markSectionActive, measureSectionWidthsPx, persistSectionWidthsPx])
 
   // Closes a section's slot -- deletes it outright if unnamed (the only
   // kind the "+" button creates today), parks it if named. Reassigns
   // activeSectionId to a sane neighbor if the closed section was active.
+  // Sizing policy: the closed section's entire width goes to its immediate
+  // left neighbor; every other section stays exactly the size it was.
   const handleCloseSection = useCallback(async (sectionId: string) => {
     const sectionsApi = window.thockdownSections
     if (!sectionsApi) return
+
+    const currentWidthsPx = measureSectionWidthsPx()
+    const updatedWidths = computeSectionWidthsForClose(currentWidthsPx, sectionId)
+
     const updated = await sectionsApi.closeSlot(sectionId)
     sectionRegistryRef.current.delete(sectionId)
     const nextSections = applyResolvedSections(updated)
     setActiveSectionId((previous) => (previous === sectionId ? nextSections[0].id : previous))
-  }, [applyResolvedSections])
+
+    const finalized = await persistSectionWidthsPx(updatedWidths)
+    if (finalized) {
+      applyResolvedSections(finalized)
+    }
+  }, [applyResolvedSections, measureSectionWidthsPx, persistSectionWidthsPx])
 
   const handleRenameSection = useCallback(async (sectionId: string, name: string | null) => {
     const sectionsApi = window.thockdownSections
@@ -4540,6 +4591,11 @@ ${markdownHtml}
       .map((entry) => ({ id: entry.id, name: entry.name }))
   }, [])
 
+  // Sizing policy for swap: dimensions belong to the *slot*, not whichever
+  // section happens to be showing in it. Swapping never creates or removes
+  // a slot -- it only ever changes what's on screen -- so no width
+  // recalculation happens here at all, just reassigning each slot's
+  // existing widthFraction to whatever now occupies it.
   const handleSwapSection = useCallback(async (outgoingSectionId: string, incomingSectionId: string) => {
     const sectionsApi = window.thockdownSections
     if (!sectionsApi) return
@@ -4547,18 +4603,31 @@ ${markdownHtml}
     // If the incoming section was already occupying a different slot, that
     // slot is about to be silently vacated -- swapIntoSlot only fills the
     // *destination* (outgoing's) slot, it has no notion of "what incoming
-    // left behind." Capture that beforehand so it can be backfilled with a
-    // fresh blank section afterward, rather than the pane count quietly
-    // shrinking by one.
-    const incomingPreviousPosition = editorSections.find((entry) => entry.id === incomingSectionId)?.position ?? null
-    const outgoingPosition = editorSections.find((entry) => entry.id === outgoingSectionId)?.position ?? null
+    // left behind." Capture both slots' identities and widths beforehand so
+    // the vacated one can be backfilled with a fresh section afterward
+    // (inheriting its width), rather than the pane count quietly shrinking.
+    const incomingEntryBefore = editorSections.find((entry) => entry.id === incomingSectionId)
+    const outgoingEntryBefore = editorSections.find((entry) => entry.id === outgoingSectionId)
+    const incomingPreviousPosition = incomingEntryBefore?.position ?? null
+    const incomingPreviousWidthFraction = incomingEntryBefore?.widthFraction ?? null
+    const outgoingWidthFraction = outgoingEntryBefore?.widthFraction ?? null
 
     let updated = await sectionsApi.swapIntoSlot(outgoingSectionId, incomingSectionId)
     sectionRegistryRef.current.delete(outgoingSectionId)
 
-    if (incomingPreviousPosition !== null && incomingPreviousPosition !== outgoingPosition) {
+    const widthFixups: { id: string; widthFraction: number | null }[] = [
+      { id: incomingSectionId, widthFraction: outgoingWidthFraction },
+    ]
+
+    if (incomingPreviousPosition !== null && incomingPreviousPosition !== outgoingEntryBefore?.position) {
       updated = await sectionsApi.createSection(null, incomingPreviousPosition - 1)
+      const backfilled = updated.find((entry) => entry.position === incomingPreviousPosition)
+      if (backfilled) {
+        widthFixups.push({ id: backfilled.id, widthFraction: incomingPreviousWidthFraction })
+      }
     }
+
+    updated = await sectionsApi.updateSectionWidths(widthFixups)
 
     const incomingEntry = updated.find((entry) => entry.id === incomingSectionId)
     if (incomingEntry?.lastActiveNoteId && notesRef.current.some((note) => note.id === incomingEntry.lastActiveNoteId)) {
@@ -6470,7 +6539,7 @@ ${markdownHtml}
                   sectionId={entry.id}
                   isLeftmostSection={index === 0}
                   canCreateSection={canCreateSection}
-                  onCreateSection={() => void handleCreateSection(entry.position ?? index)}
+                  onCreateSection={() => void handleCreateSection(entry.position ?? index, entry.id)}
                   onCloseSection={() => void handleCloseSection(entry.id)}
                   sectionName={entry.name}
                   onRenameSection={(name) => void handleRenameSection(entry.id, name)}
