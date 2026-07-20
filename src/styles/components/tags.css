@@ -30,7 +30,7 @@
   display:    block;
   padding: 0;
   height:      100%;
-  width:      60px;
+  width:      40px;
   overflow:    hidden;
   -webkit-app-region: no-drag;
 }
@@ -107,9 +107,10 @@
   container-type: size;
 }
 
-@container suggestedTags (width < 50px) {
+@container suggestedTags (width < 30px) {
   .tabbar-suggested-tags .tag-pill.suggested {
     display: none;
+    padding-left: 0px;
   }
 }
 
