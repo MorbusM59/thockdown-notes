@@ -1651,6 +1651,16 @@ function App() {
   const getActiveSection = useCallback((): SectionHandle | undefined => (
     getActiveSectionHandle(sectionRegistryRef, activeSectionId)
   ), [activeSectionId])
+  // Reserved for future imperative, non-reactive lookups (e.g. a one-off
+  // click handler reading another section's current state without needing
+  // to re-render). No caller needs it yet -- everything today reads through
+  // the reactive activeSectionSnapshot below instead.
+  void getActiveSection
+  // Reactive counterpart to the plain registry above -- see the reporting
+  // effect further down (right after the active section publishes itself)
+  // for why this needs to be real state rather than another ref read.
+  const [activeSectionSnapshot, setActiveSectionSnapshot] = useState<SectionHandle | undefined>(undefined)
+  const lastReportedSectionHandleRef = useRef<SectionHandle | undefined>(undefined)
   const originalConsoleMethodsRef = useRef<Partial<Record<ConsoleMethodName, (...args: any[]) => void>>>({})
   const isWritingDebugEntryRef = useRef(false)
   const debugNoteCreationPromiseRef = useRef<Promise<string | null> | null>(null)
@@ -5404,11 +5414,7 @@ ${markdownHtml}
     buildToggleNumberedListTransformRef,
   })
 
-  // Publishes this section's state into the registry every render, plain
-  // assignment (not an effect) so chrome reads through `getActiveSection()`
-  // always see the current render's values, same as the ref-proxy pattern
-  // used elsewhere in this component.
-  registerSectionHandle(DEFAULT_EDITOR_SECTION_ID, {
+  const currentSectionHandle: SectionHandle = {
     sectionId: DEFAULT_EDITOR_SECTION_ID,
     activeNoteId,
     activeNoteText,
@@ -5439,14 +5445,45 @@ ${markdownHtml}
     applyInlineCode,
     applyCodeBlock,
     insertHorizontalRule,
+  }
+
+  // Publishes this section's state into the registry every render, plain
+  // assignment (not an effect) -- safe here because it's a ref mutation, not
+  // a state update. Imperative, non-reactive lookups (getActiveSection())
+  // can keep reading this directly.
+  registerSectionHandle(DEFAULT_EDITOR_SECTION_ID, currentSectionHandle)
+
+  // Reactive channel for chrome that needs to re-render when the active
+  // section's data changes (EditorToolbar, the keyboard/mousedown/
+  // beforeunload effects below). A plain `Map` read during render (like
+  // `getActiveSection()` above) works only because the hooks that produce
+  // this data still live in this same component today -- once they move
+  // into a real per-instance <EditorSection>, App.tsx will only learn about
+  // a child's state change via an effect, never synchronously during its
+  // own render. Building that reporting path now (even though everything
+  // is still local) so the shape carries over unchanged when the hooks
+  // actually move.
+  // Deliberately no dependency array -- this must run after every render so
+  // it can never miss a field, but the shallow-equality guard below (not a
+  // dependency array) is what actually prevents the infinite-update loop
+  // the exhaustive-deps rule is warning about: setActiveSectionSnapshot only
+  // fires when something in the handle actually changed, at which point the
+  // effect naturally has nothing left to change on its own next run.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const previous = lastReportedSectionHandleRef.current
+    const changed = !previous || (Object.keys(currentSectionHandle) as (keyof SectionHandle)[])
+      .some((key) => previous[key] !== currentSectionHandle[key])
+    if (!changed) return
+    lastReportedSectionHandleRef.current = currentSectionHandle
+    setActiveSectionSnapshot(currentSectionHandle)
   })
 
-  // Resolved once per render, right after this section published itself
-  // above -- every chrome consumer below (keyboard shortcuts, the
-  // mousedown refocus guard, beforeunload persistence, EditorToolbar) reads
-  // through this single lookup rather than closing over section state
-  // directly.
-  const activeSection = getActiveSection()
+  // Resolved once per render from the reactive snapshot (not the plain
+  // registry lookup) -- every chrome consumer below (keyboard shortcuts,
+  // the mousedown refocus guard, beforeunload persistence, EditorToolbar)
+  // reads through this rather than closing over section state directly.
+  const activeSection = activeSectionSnapshot
 
   const handleFindViewButtonContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
