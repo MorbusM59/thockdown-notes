@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Dispatch, DragEvent, MutableRefObject, SetStateAction } from 'react'
+import type { Dispatch, DragEvent, MouseEvent, MutableRefObject, SetStateAction } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import { isExternalNote } from '../shared/noteLifecycle'
 import type { PersistedViewportState } from '../shared/appState'
@@ -194,12 +194,15 @@ export function EditorSection({
   // last-mounted one's custom scrollbar pointing at the wrong DOM node.
   const [scrollbarHostEl, setScrollbarHostEl] = useState<HTMLDivElement | null>(null)
 
-  // Identity-tab UI state: renaming this section, and the right-click
-  // "swap in a named section" dropdown. Purely transient chrome, not
-  // section content -- stays local rather than round-tripping to App.tsx.
+  // Identity-tab UI state: renaming this section, editing the active note's
+  // assigned id, and the right-click section-picker that takes over the tab
+  // bar's pill area to offer a swap. Purely transient chrome, not section
+  // content -- stays local rather than round-tripping to App.tsx.
   const [isEditingSectionName, setIsEditingSectionName] = useState(false)
   const [sectionNameDraft, setSectionNameDraft] = useState('')
-  const [isSwapMenuOpen, setIsSwapMenuOpen] = useState(false)
+  const [isEditingNoteId, setIsEditingNoteId] = useState(false)
+  const [noteIdDraft, setNoteIdDraft] = useState('')
+  const [isSectionPickerOpen, setIsSectionPickerOpen] = useState(false)
   const [swapCandidates, setSwapCandidates] = useState<{ id: string; name: string }[]>([])
 
   const startRenamingSection = useCallback(() => {
@@ -218,30 +221,33 @@ export function EditorSection({
     setIsEditingSectionName(false)
   }, [])
 
-  const openSwapMenu = useCallback(async () => {
+  const openSectionPicker = useCallback(async () => {
     const candidates = await onFetchSwapCandidates()
     setSwapCandidates(candidates)
-    setIsSwapMenuOpen(true)
+    setIsSectionPickerOpen(true)
   }, [onFetchSwapCandidates])
 
-  const closeSwapMenu = useCallback(() => {
-    setIsSwapMenuOpen(false)
+  const closeSectionPicker = useCallback(() => {
+    setIsSectionPickerOpen(false)
   }, [])
 
-  // Dismiss the swap dropdown on any click outside it -- a standard
-  // click-away pattern, scoped to only run while the menu is actually open.
+  // Dismiss the section picker on any click outside it -- a standard
+  // click-away pattern, scoped to only run while it's actually open. The
+  // picker itself lives inside the tab bar's own pill area now (not a
+  // floating dropdown), so its own pills are excluded the same way the
+  // identity button already is.
   useEffect(() => {
-    if (!isSwapMenuOpen) return
+    if (!isSectionPickerOpen) return
     const handleWindowMouseDown = (event: globalThis.MouseEvent) => {
       const target = event.target
-      if (target instanceof HTMLElement && target.closest('.section-swap-menu, .section-identity-tab')) {
+      if (target instanceof HTMLElement && target.closest('.tabbar-section-picker, .section-identity-tab')) {
         return
       }
-      setIsSwapMenuOpen(false)
+      setIsSectionPickerOpen(false)
     }
     window.addEventListener('mousedown', handleWindowMouseDown)
     return () => window.removeEventListener('mousedown', handleWindowMouseDown)
-  }, [isSwapMenuOpen])
+  }, [isSectionPickerOpen])
   const { isPreviewMode, setIsPreviewMode } = useDisplayedNoteRenderMode(sectionId)
   const { activeNoteId, setActiveNoteId } = useActiveNoteId(sectionId)
   const {
@@ -888,6 +894,71 @@ export function EditorSection({
     reportSectionHandle(sectionId, currentSectionHandle)
   })
 
+  // The identity button now doubles as the tag/tab bar mode toggle (left-
+  // click) -- replacing the standalone mode-toggle button -- and its
+  // right-click behavior depends on which bar is currently showing: assign
+  // the active note's id in tag-bar mode, or open the section-picker (this
+  // slot's swap target list, rendered into the tab bar's own pill area) in
+  // tab-bar mode.
+  const startEditingNoteId = useCallback(() => {
+    setNoteIdDraft(activeNoteSummary?.assignedId ?? '')
+    setIsEditingNoteId(true)
+  }, [activeNoteSummary])
+
+  const commitNoteIdEdit = useCallback(() => {
+    setIsEditingNoteId(false)
+    const trimmed = noteIdDraft.trim()
+    if (!activeNoteId || !window.thockdownNotes) return
+    if (trimmed === (activeNoteSummary?.assignedId ?? '')) return
+    const noteId = activeNoteId
+    void (async () => {
+      try {
+        const updated = await window.thockdownNotes!.setNoteAssignedId({ id: noteId, requestedId: trimmed })
+        if (updated?.assignedId) {
+          updateNoteAssignedId(noteId, updated.assignedId)
+        }
+      } catch (error) {
+        console.error('Failed to set note internal ID', error)
+      }
+    })()
+  }, [activeNoteId, activeNoteSummary, noteIdDraft, updateNoteAssignedId])
+
+  const cancelNoteIdEdit = useCallback(() => {
+    setIsEditingNoteId(false)
+  }, [])
+
+  const handleIdentityClick = useCallback(() => {
+    if (isSectionPickerOpen) {
+      closeSectionPicker()
+      return
+    }
+    toggleTabBarMode()
+  }, [isSectionPickerOpen, closeSectionPicker, toggleTabBarMode])
+
+  const handleIdentityContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    if (tabBarMode === 'tabs') {
+      void openSectionPicker()
+    } else {
+      startEditingNoteId()
+    }
+  }, [tabBarMode, openSectionPicker, startEditingNoteId])
+
+  // The section-picker's own first entry is always this section itself
+  // (renamed rather than swapped) -- clicking it with either mouse button
+  // starts the same rename flow the identity button used to trigger
+  // directly, and closes the picker either way.
+  const handleSectionPickerSelfClick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    closeSectionPicker()
+    startRenamingSection()
+  }, [closeSectionPicker, startRenamingSection])
+
+  const handleSectionPickerCandidateClick = useCallback((candidateId: string) => {
+    closeSectionPicker()
+    onSwapSection(candidateId)
+  }, [closeSectionPicker, onSwapSection])
+
   return (
     <div
       className={`editor-section-column${sectionId === activeSectionId ? ' is-active' : ''}`}
@@ -954,16 +1025,19 @@ export function EditorSection({
         isEditingSectionName={isEditingSectionName}
         sectionNameDraft={sectionNameDraft}
         setSectionNameDraft={setSectionNameDraft}
-        onStartRenamingSection={startRenamingSection}
         onCommitSectionRename={commitSectionRename}
         onCancelSectionRename={cancelSectionRename}
-        isSwapMenuOpen={isSwapMenuOpen}
+        isEditingNoteId={isEditingNoteId}
+        noteIdDraft={noteIdDraft}
+        setNoteIdDraft={setNoteIdDraft}
+        onCommitNoteIdEdit={commitNoteIdEdit}
+        onCancelNoteIdEdit={cancelNoteIdEdit}
+        onIdentityClick={handleIdentityClick}
+        onIdentityContextMenu={handleIdentityContextMenu}
+        isSectionPickerOpen={isSectionPickerOpen}
         swapCandidates={swapCandidates}
-        onOpenSwapMenu={openSwapMenu}
-        onSwapSection={(incomingSectionId) => {
-          closeSwapMenu()
-          onSwapSection(incomingSectionId)
-        }}
+        onSectionPickerSelfClick={handleSectionPickerSelfClick}
+        onSectionPickerCandidateClick={handleSectionPickerCandidateClick}
       />
 
       <SectionEditorArea

@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import type { CSSProperties, MouseEvent } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import { isArchivedNote, isDeletedNote } from '../shared/noteLifecycle'
 import { normalizeTagName, isProtectedTagName } from '../shared/tags'
@@ -27,13 +27,25 @@ export interface SectionTabBarProps {
   isEditingSectionName: boolean
   sectionNameDraft: string
   setSectionNameDraft: (value: string) => void
-  onStartRenamingSection: () => void
   onCommitSectionRename: () => void
   onCancelSectionRename: () => void
-  isSwapMenuOpen: boolean
+
+  /** The active note's assigned id, mid-edit via the identity tab's tag-bar-mode right-click. */
+  isEditingNoteId: boolean
+  noteIdDraft: string
+  setNoteIdDraft: (value: string) => void
+  onCommitNoteIdEdit: () => void
+  onCancelNoteIdEdit: () => void
+
+  /** Left-click: toggle tag/tab bar (or close the section picker, if open). Right-click: assign a note id (tag bar) or open the section picker (tab bar). */
+  onIdentityClick: () => void
+  onIdentityContextMenu: (event: MouseEvent<HTMLButtonElement>) => void
+
+  /** Tab-bar-mode right-click on the identity tab takes over the tab bar's own pill area with this slot's swap targets -- this section itself first (to rename), then every other named section (to swap in). */
+  isSectionPickerOpen: boolean
   swapCandidates: { id: string; name: string }[]
-  onOpenSwapMenu: () => void
-  onSwapSection: (incomingSectionId: string) => void
+  onSectionPickerSelfClick: (event: MouseEvent<HTMLButtonElement>) => void
+  onSectionPickerCandidateClick: (candidateId: string) => void
 }
 
 /**
@@ -59,13 +71,19 @@ export function SectionTabBar({
   isEditingSectionName,
   sectionNameDraft,
   setSectionNameDraft,
-  onStartRenamingSection,
   onCommitSectionRename,
   onCancelSectionRename,
-  isSwapMenuOpen,
+  isEditingNoteId,
+  noteIdDraft,
+  setNoteIdDraft,
+  onCommitNoteIdEdit,
+  onCancelNoteIdEdit,
+  onIdentityClick,
+  onIdentityContextMenu,
+  isSectionPickerOpen,
   swapCandidates,
-  onOpenSwapMenu,
-  onSwapSection,
+  onSectionPickerSelfClick,
+  onSectionPickerCandidateClick,
 }: SectionTabBarProps) {
   const {
     tagInputRef,
@@ -88,7 +106,6 @@ export function SectionTabBar({
     handleTagContainerDrop,
     handleTagContextMenu,
     tabBarMode,
-    toggleTabBarMode,
     pinnedTabs,
     unpinPrimedTabNoteId,
     tempTabNoteId,
@@ -134,16 +151,6 @@ export function SectionTabBar({
         </button>
       )}
 
-      <button
-        type="button"
-        className="btn-icon tabbar-mode-toggle"
-        title={tabBarMode === 'tags' ? 'Switch to tab bar' : 'Switch to tag bar'}
-        aria-label={tabBarMode === 'tags' ? 'Switch to tab bar' : 'Switch to tag bar'}
-        onClick={toggleTabBarMode}
-      >
-        <span className={`fa-solid ${tabBarMode === 'tags' ? 'fa-tags' : 'fa-table-cells-large'}`} aria-hidden="true" />
-      </button>
-
       <div className="section-identity-tab-shell">
         {isEditingSectionName ? (
           <input
@@ -163,39 +170,41 @@ export function SectionTabBar({
             }}
             aria-label="Section name"
           />
+        ) : isEditingNoteId ? (
+          <input
+            className="tag-pill section-identity-input"
+            value={noteIdDraft}
+            autoFocus
+            onChange={(event) => setNoteIdDraft(event.target.value)}
+            onBlur={onCommitNoteIdEdit}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                onCommitNoteIdEdit()
+              } else if (event.key === 'Escape') {
+                event.preventDefault()
+                onCancelNoteIdEdit()
+              }
+            }}
+            aria-label="Note id"
+          />
         ) : (
           <button
             type="button"
-            className="tag-pill section-identity-tab"
-            onClick={onStartRenamingSection}
-            onContextMenu={(event) => {
-              event.preventDefault()
-              onOpenSwapMenu()
-            }}
-            title={sectionName ? `Section: ${sectionName} -- click to rename, right-click to swap in another named section` : 'Unnamed section -- click to name it, right-click to swap in a named section'}
+            className={`tag-pill section-identity-tab${isSectionPickerOpen ? ' active' : ''}`}
+            onClick={onIdentityClick}
+            onContextMenu={onIdentityContextMenu}
+            title={
+              tabBarMode === 'tabs'
+                ? (sectionName ? `Section: ${sectionName} -- click to switch to the tag bar, right-click to swap in another named section` : 'Unnamed section -- click to switch to the tag bar, right-click to swap in a named section')
+                : 'Click to switch to the tab bar, right-click to assign this note\'s id'
+            }
           >
-            <span className="tag-pill-label">{sectionName ?? '···'}</span>
+            <span className="tag-pill-label">
+              {tabBarMode === 'tabs' ? (sectionName ?? '···') : `$${activeNoteSummary?.assignedId ?? '···'}`}
+            </span>
           </button>
         )}
-        {isSwapMenuOpen ? (
-          <div className="section-swap-menu" role="menu">
-            {swapCandidates.length === 0 ? (
-              <div className="section-swap-menu-empty">No named sections to swap in</div>
-            ) : (
-              swapCandidates.map((candidate) => (
-                <button
-                  key={candidate.id}
-                  type="button"
-                  role="menuitem"
-                  className="section-swap-menu-item"
-                  onClick={() => onSwapSection(candidate.id)}
-                >
-                  {candidate.name}
-                </button>
-              ))
-            )}
-          </div>
-        ) : null}
       </div>
 
       {tabBarMode === 'tabs' ? (
@@ -211,7 +220,30 @@ export function SectionTabBar({
               onDragOver={handleTabsContainerDragOver}
               onDrop={handleTabsContainerDrop}
             >
-              {pinnedTabs.length === 0 && !tempTabNoteId ? (
+              {isSectionPickerOpen ? (
+                <div className="tabbar-section-picker" aria-live="polite">
+                  <button
+                    type="button"
+                    className="tag-pill section-picker-item is-self"
+                    onClick={onSectionPickerSelfClick}
+                    onContextMenu={onSectionPickerSelfClick}
+                    title={sectionName ? `Rename "${sectionName}"` : 'Name this section'}
+                  >
+                    <span className="tag-pill-label">{sectionName ?? '···'}</span>
+                  </button>
+                  {swapCandidates.map((candidate) => (
+                    <button
+                      key={candidate.id}
+                      type="button"
+                      className="tag-pill section-picker-item"
+                      onClick={() => onSectionPickerCandidateClick(candidate.id)}
+                      title={`Swap in "${candidate.name}"`}
+                    >
+                      <span className="tag-pill-label">{candidate.name}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : pinnedTabs.length === 0 && !tempTabNoteId ? (
                 <span className="tabbar-tag-hint">Open a note to preview it here.</span>
               ) : (
                 <>
@@ -298,13 +330,6 @@ export function SectionTabBar({
             aria-label="Tag input"
           />
         </div>
-        {activeNoteSummary?.assignedId ? (
-          <div className="tabbar-assigned-id-display">
-            <div className="tag-pill">
-              <span className="tag-pill-label">${activeNoteSummary.assignedId}</span>
-            </div>
-          </div>
-        ) : null}
         <div
           className="tabbar-tags-display"
           aria-live="polite"
