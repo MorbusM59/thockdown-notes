@@ -6,13 +6,21 @@ import { TEMP_TAB_PIN_HOLD_MS, type UseSectionTabsResult } from './useSectionTab
 
 export interface SectionTabBarProps {
   tabs: UseSectionTabsResult
-  /** Only the leftmost section shows this button at all; every other section shows a close button here instead (not built yet). */
+  /** Only the leftmost section shows this button at all; every other section shows a close button here instead. */
   isSidebarVisible: boolean
   toggleSidebarVisible: () => void
   persistenceReady: boolean
   activeNoteId: string | null
   notes: NoteSummary[]
   activeNoteSummary: NoteSummary | null
+  /** The leftmost section keeps the sidebar toggle at the left edge; every other section shows a close button there instead. */
+  isLeftmostSection: boolean
+  /** Whether there's room for one more 300px-minimum section -- hides the "+" button when there isn't. */
+  canCreateSection: boolean
+  /** Creates a new section immediately to the right of this one. */
+  onCreateSection: () => void
+  /** Closes this section's slot (only ever called for non-leftmost sections). */
+  onCloseSection: () => void
 }
 
 /**
@@ -30,6 +38,10 @@ export function SectionTabBar({
   activeNoteId,
   notes,
   activeNoteSummary,
+  isLeftmostSection,
+  canCreateSection,
+  onCreateSection,
+  onCloseSection,
 }: SectionTabBarProps) {
   const {
     tagInputRef,
@@ -71,15 +83,27 @@ export function SectionTabBar({
 
   return (
     <section className="tabbar-grid" style={{ flex: '0 0 36px' }} aria-label="Tab bar">
-      <button
-        type="button"
-        className="btn-icon sidebar-toggle"
-        title={isSidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
-        aria-label={isSidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
-        onClick={toggleSidebarVisible}
-      >
-        <span className="fa-solid fa-bars" aria-hidden="true" />
-      </button>
+      {isLeftmostSection ? (
+        <button
+          type="button"
+          className="btn-icon sidebar-toggle"
+          title={isSidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
+          aria-label={isSidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
+          onClick={toggleSidebarVisible}
+        >
+          <span className="fa-solid fa-bars" aria-hidden="true" />
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="btn-icon section-close-toggle"
+          title="Close this section"
+          aria-label="Close this section"
+          onClick={onCloseSection}
+        >
+          <span className="fa-solid fa-chevron-left" aria-hidden="true" />
+        </button>
+      )}
 
       <button
         type="button"
@@ -248,6 +272,18 @@ export function SectionTabBar({
         </div>
       </div>
       )}
+
+      {canCreateSection ? (
+        <button
+          type="button"
+          className="btn-icon section-create-toggle"
+          title="Add a section"
+          aria-label="Add a section"
+          onClick={onCreateSection}
+        >
+          <span className="fa-solid fa-plus" aria-hidden="true" />
+        </button>
+      ) : null}
     </section>
   )
 }

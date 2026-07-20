@@ -103,6 +103,11 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   viewStyle: ViewStyleKey
   viewFontSize: ViewSizeKey
   viewSpacing: ViewSpacingKey
+
+  isLeftmostSection: boolean
+  canCreateSection: boolean
+  onCreateSection: () => void
+  onCloseSection: () => void
 }
 
 /**
@@ -164,6 +169,10 @@ export function EditorSection({
   spellCheckEditEnabled,
   spellCheckRenderEnabled,
   highlightSearchColor,
+  isLeftmostSection,
+  canCreateSection,
+  onCreateSection,
+  onCloseSection,
 }: EditorSectionProps) {
   // Local, not a prop: the scrollbar-slot DOM node lives entirely within
   // this section's own SectionEditorArea render, so each section needs its
@@ -802,6 +811,10 @@ export function EditorSection({
         activeNoteId={activeNoteId}
         notes={notes}
         activeNoteSummary={activeNoteSummary}
+        isLeftmostSection={isLeftmostSection}
+        canCreateSection={canCreateSection}
+        onCreateSection={onCreateSection}
+        onCloseSection={onCloseSection}
       />
 
       <SectionEditorArea

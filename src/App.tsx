@@ -112,6 +112,11 @@ const WINDOW_CONTROLS_COLLAPSED_WIDTH_PX = 210
 const APP_WINDOW_MIN_WIDTH_PX = 840
 const TOOLBAR_MIN_WIDTH_PX = APP_WINDOW_MIN_WIDTH_PX - SIDEBAR_WIDTH_PX - GRID_DIVIDER_PX - WINDOW_CONTROLS_WIDTH_PX
 const APP_SHELL_MIN_WIDTH_PX = SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX + TOOLBAR_MIN_WIDTH_PX + WINDOW_CONTROLS_WIDTH_PX
+// Soft minimum, enforced only at section-creation time -- the "+" button
+// disappearing when there isn't room for one more is the enforcement (see
+// the handover doc's split-view design). Matches the same 300px figure the
+// main-process window-minimum-size IPC (Phase 1) uses per extra section.
+const SECTION_MIN_WIDTH_PX = 300
 // Stable fallback for when no section has registered yet (e.g. the very first
 // render, before <EditorSection> has mounted) -- a fresh Map() each render
 // would break memo'd children comparing this prop by identity.
@@ -3352,6 +3357,14 @@ function App() {
     }
   }, [appShellWidthPx, isSidebarVisible])
 
+  // The combined 'editor' grid area (tab bar + viewer) spans the same two
+  // columns the old 'toolbar'/'window_control' areas did -- its actual
+  // pixel width is toolbarWidthPx's column plus the window-controls column.
+  const editorSectionsRowWidthPx = Math.round(layout.toolbarWidthPx) + WINDOW_CONTROLS_WIDTH_PX
+  const canCreateSection = editorSectionsRowWidthPx >= (
+    (editorSections.length + 1) * SECTION_MIN_WIDTH_PX + editorSections.length * GRID_DIVIDER_PX
+  )
+
   const appShellStyle = useMemo(() => {
     const borderRadiusRegularPxCss = `${borderRadiusRegularPx}px`
     const borderRadiusSmallPxCss = `${Math.max(0, borderRadiusRegularPx / 2)}px`
@@ -4458,7 +4471,7 @@ ${markdownHtml}
   // render, so by the time this effect fires after that commit, a
   // newly-listed section is already in the registry. Re-checks whenever
   // editorSections changes, so it naturally covers a section created later
-  // (Phase 6's "+" button) the same way it covers bootstrap's initial list.
+  // (the "+" button) the same way it covers bootstrap's initial list.
   useEffect(() => {
     for (const entry of editorSections) {
       const pendingNoteId = initialNoteIdBySectionIdRef.current.get(entry.id)
@@ -4470,6 +4483,42 @@ ${markdownHtml}
       void handle.activateNote(pendingNoteId)
     }
   }, [editorSections])
+
+  const applyResolvedSections = useCallback((resolved: EditorSectionEntry[]) => {
+    const placed = resolved
+      .filter((entry) => entry.position !== null)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+    const nextSections = placed.length > 0
+      ? placed
+      : [{ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, lastActiveNoteId: null }]
+    setEditorSections(nextSections)
+    return nextSections
+  }, [])
+
+  // Always creates a new section immediately to the right of the one the
+  // "+" button was clicked on, per the handover doc's split-view design.
+  const handleCreateSection = useCallback(async (afterPosition: number) => {
+    const sectionsApi = window.thockdownSections
+    if (!sectionsApi) return
+    const updated = await sectionsApi.createSection(null, afterPosition)
+    const nextSections = applyResolvedSections(updated)
+    const created = nextSections.find((entry) => entry.position === afterPosition + 1)
+    if (created) {
+      markSectionActive(created.id)
+    }
+  }, [applyResolvedSections, markSectionActive])
+
+  // Closes a section's slot -- deletes it outright if unnamed (the only
+  // kind the "+" button creates today), parks it if named. Reassigns
+  // activeSectionId to a sane neighbor if the closed section was active.
+  const handleCloseSection = useCallback(async (sectionId: string) => {
+    const sectionsApi = window.thockdownSections
+    if (!sectionsApi) return
+    const updated = await sectionsApi.closeSlot(sectionId)
+    sectionRegistryRef.current.delete(sectionId)
+    const nextSections = applyResolvedSections(updated)
+    setActiveSectionId((previous) => (previous === sectionId ? nextSections[0].id : previous))
+  }, [applyResolvedSections])
 
   useEffect(() => {
     void typingSoundManager.load()
@@ -6284,10 +6333,14 @@ ${markdownHtml}
             />
 
             <div className="editor-sections-row">
-              {editorSections.map((entry) => (
+              {editorSections.map((entry, index) => (
                 <EditorSection
                   key={entry.id}
                   sectionId={entry.id}
+                  isLeftmostSection={index === 0}
+                  canCreateSection={canCreateSection}
+                  onCreateSection={() => void handleCreateSection(entry.position ?? index)}
+                  onCloseSection={() => void handleCloseSection(entry.id)}
                   markSectionActive={markSectionActive}
                   isSidebarVisible={isSidebarVisible}
                   toggleSidebarVisible={toggleSidebarVisible}

@@ -168,11 +168,23 @@
 
 /* Tag bar / tab bar mode toggle */
 .tabbar-mode-toggle,
-.sidebar-toggle {
+.sidebar-toggle,
+.section-close-toggle {
   display: block;
   height:     100%;
   aspect-ratio: 1;
   margin-right: 4px;
+  -webkit-app-region: no-drag;
+}
+
+/* "+" button at the tab bar's right edge -- creates a new section to the
+   right of this one. Mirrors the left-edge toggles' sizing, just on the
+   opposite side. */
+.section-create-toggle {
+  display: block;
+  height:     100%;
+  aspect-ratio: 1;
+  margin-left: 4px;
   -webkit-app-region: no-drag;
 }
 
