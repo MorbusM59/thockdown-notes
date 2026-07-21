@@ -11,6 +11,8 @@ export interface UseSnapshotFreezeOptions {
   /** Reads the note's current live text at the moment of freezing -- a ref read, not reactive state. */
   getLiveText: () => string
   flushPendingSaveNow: () => Promise<void>
+  /** Whether some *other* section currently has `noteId` open -- the only situation where this note could change out from under an inactive section. */
+  isNoteOpenInOtherSection: (sectionId: string, noteId: string) => boolean
 }
 
 /**
@@ -25,6 +27,13 @@ export interface UseSnapshotFreezeOptions {
  * browsing Time Machine) stays exactly where it was. This is deliberate:
  * comparing or copying from an older version of a note stays stable even
  * while another section keeps editing the same note live.
+ *
+ * Skipped entirely when no other section has this note open: nothing could
+ * change out from under an inactive section showing a note that's not open
+ * anywhere else, so there's nothing to freeze -- and skipping avoids an
+ * unnecessary snapshot + Editor remount (the synthetic `key` on <Editor> in
+ * SectionEditorArea is keyed on previewedSnapshotId) on every section
+ * switch in the overwhelmingly common case of one note per section.
  */
 export function useSnapshotFreeze(options: UseSnapshotFreezeOptions): void {
   const {
@@ -35,6 +44,7 @@ export function useSnapshotFreeze(options: UseSnapshotFreezeOptions): void {
     setPreviewedSnapshotId,
     getLiveText,
     flushPendingSaveNow,
+    isNoteOpenInOtherSection,
   } = options
 
   const isActiveSection = sectionId === activeSectionId
@@ -56,6 +66,7 @@ export function useSnapshotFreeze(options: UseSnapshotFreezeOptions): void {
 
       wasLiveWhenLastActiveRef.current = true
       if (!noteId || !window.thockdownNotes) return
+      if (!isNoteOpenInOtherSection(sectionId, noteId)) return
 
       const hibernatingNoteId = noteId
       void (async () => {
@@ -85,5 +96,5 @@ export function useSnapshotFreeze(options: UseSnapshotFreezeOptions): void {
         setPreviewedSnapshotId(null)
       }
     }
-  }, [isActiveSection, noteId, previewedSnapshotId, setPreviewedSnapshotId, getLiveText, flushPendingSaveNow])
+  }, [isActiveSection, noteId, previewedSnapshotId, setPreviewedSnapshotId, getLiveText, flushPendingSaveNow, isNoteOpenInOtherSection, sectionId])
 }

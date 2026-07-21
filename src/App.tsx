@@ -1551,6 +1551,17 @@ function App() {
     void sectionRegistryRef.current.get(sectionId)?.unpinNoteTab(noteId)
   }, [])
 
+  // Whether some section *other* than `sectionId` currently has `noteId`
+  // open -- used by useSnapshotFreeze to skip freezing an inactive section
+  // when nothing could actually change its note out from under it.
+  const isNoteOpenInOtherSection = useCallback((sectionId: string, noteId: string): boolean => {
+    for (const [otherSectionId, handle] of sectionRegistryRef.current) {
+      if (otherSectionId === sectionId) continue
+      if (handle.activeNoteId === noteId) return true
+    }
+    return false
+  }, [])
+
   // Purely cosmetic: while dragging a tab or a sidebar note, the browser
   // shows its native no-drop cursor over any area that hasn't had
   // preventDefault called on its dragover -- which is most of the app's
@@ -6826,6 +6837,7 @@ ${markdownHtml}
                   onFetchSwapCandidates={() => handleFetchSwapCandidates(entry.id)}
                   onSwapSection={(incomingSectionId) => void handleSwapSection(entry.id, incomingSectionId)}
                   unpinNoteFromSection={unpinNoteFromSection}
+                  isNoteOpenInOtherSection={isNoteOpenInOtherSection}
                   markSectionActive={markSectionActive}
                   isSidebarVisible={isSidebarVisible}
                   toggleSidebarVisible={toggleSidebarVisible}

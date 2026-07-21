@@ -117,6 +117,8 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
 
   /** Unpins a note's tab from a *different* section -- called when this section claims a tab dragged in from elsewhere. */
   unpinNoteFromSection: (sectionId: string, noteId: string) => void
+  /** Whether some *other* section currently has the given note open -- see useSnapshotFreeze. */
+  isNoteOpenInOtherSection: (sectionId: string, noteId: string) => boolean
 }
 
 /**
@@ -187,6 +189,7 @@ export function EditorSection({
   onFetchSwapCandidates,
   onSwapSection,
   unpinNoteFromSection,
+  isNoteOpenInOtherSection,
 }: EditorSectionProps) {
   // Local, not a prop: the scrollbar-slot DOM node lives entirely within
   // this section's own SectionEditorArea render, so each section needs its
@@ -337,9 +340,6 @@ export function EditorSection({
     latestEditorTextRef.current || activeNoteText
   ), [activeNoteText, latestEditorTextRef])
 
-  // Today this section is always the active one (there's only one), so this
-  // is correct-but-inert -- it starts doing real work the moment a second
-  // section can take focus away from it.
   useSnapshotFreeze({
     sectionId,
     activeSectionId,
@@ -348,6 +348,7 @@ export function EditorSection({
     setPreviewedSnapshotId,
     getLiveText: getActiveNoteLiveText,
     flushPendingSaveNow,
+    isNoteOpenInOtherSection,
   })
 
   const activateNote = useCallback(async (noteId: string, overrideCursorPos?: number) => {
