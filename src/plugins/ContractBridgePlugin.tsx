@@ -631,6 +631,21 @@ const isPairAwareRewrap = (
   return currentSelection.start === secondary.start && currentSelection.end === secondary.end;
 };
 
+// True when `range` sits immediately inside an enclosing pair (the
+// characters right outside its edges are a matching opener/closer).
+const isBoundedByEnclosingPair = (
+  text: string,
+  range: { start: number; end: number },
+) => {
+  if (range.start <= 0 || range.end >= text.length) {
+    return false;
+  }
+  const opener = text[range.start - 1];
+  const closer = text[range.end];
+  const expectedCloser = PAIR_OPENERS[opener];
+  return Boolean(expectedCloser) && expectedCloser === closer;
+};
+
 export const resolveScopeRange = (
   scope: SelectionScope,
   text: string,
@@ -638,10 +653,31 @@ export const resolveScopeRange = (
   currentSelection: EditorSelectionState | null,
 ) => {
   let regularRange;
+  // The window resolvePairAwareRange gets to search in for a nested bracket
+  // pair -- normally the same as regularRange, except for 'sentence' (see
+  // below), where it needs to be wider than regularRange itself.
+  let pairSearchWindow;
   if (scope === 'word') {
     regularRange = resolveWordRange(text, offset, currentSelection ?? undefined);
+    pairSearchWindow = regularRange;
   } else if (scope === 'sentence') {
     regularRange = resolveSentenceRange(text, offset, currentSelection ?? undefined);
+
+    // resolveSentenceRange's own guard only ever tracks the single nearest
+    // enclosing bracket pair relative to `offset` -- it has no notion of "the
+    // next pair out," so once currentSelection already spans the guard's own
+    // outer wrap (walked out via a previous click), regularRange collapses
+    // right back to the same inner range with nothing new to offer. Widening
+    // the *pair-awareness search window* to the natural, bracket-ignorant
+    // sentence boundary -- the same ceiling 'line' scope computes below --
+    // gives resolvePairAwareRange's own nested-bracket search loop (already
+    // depth-agnostic; it's what powers 'word' and 'line' scope's walk-out)
+    // room to find the next pair out, so repeated clicks keep progressing
+    // through arbitrarily nested brackets instead of getting stuck after the
+    // first layer. regularRange itself stays exactly as before -- this only
+    // widens what pairAware is allowed to search, not the baseline answer
+    // used when there's no useful selection to react to (e.g. a bare click).
+    pairSearchWindow = resolvePureSentenceRange(text, offset);
   } else if (scope === 'line') {
     regularRange = resolveLineRange(text, offset);
 
@@ -660,15 +696,56 @@ export const resolveScopeRange = (
         end: Math.min(regularRange.end, sentenceCeiling.end),
       };
     }
+    pairSearchWindow = regularRange;
   } else {
     regularRange = resolveBlockRange(text, offset);
+    pairSearchWindow = regularRange;
   }
 
-  const pairAware = resolvePairAwareRange(text, regularRange, currentSelection ?? undefined);
-  const range = pairAware ?? regularRange;
-  const isPairAwareAdjustment = pairAware !== null && (
+  const pairAware = resolvePairAwareRange(text, pairSearchWindow, currentSelection ?? undefined);
+  let range = pairAware ?? regularRange;
+
+  // resolveSentenceRange's own guard only ever "sees" the single nearest
+  // bracket relative to `offset`, so once currentSelection has already
+  // walked further out than that (a wider pair discovered earlier via
+  // pairSearchWindow's own multi-level search), regularRange regresses back
+  // to that single narrow guard's answer instead of reflecting where the
+  // selection actually is. If pairSearchWindow's search also comes up empty
+  // (no *further* pair to walk out to), falling back to regularRange would
+  // visibly shrink the selection -- keep currentSelection unchanged instead,
+  // matching "nothing left for this scope to add" (isPairAwareAdjustment
+  // false below lets the caller advance to the next scope, e.g. 'line').
+  if (
+    scope === 'sentence' &&
+    pairAware === null &&
+    currentSelection !== null &&
+    !currentSelection.isCollapsed &&
+    (currentSelection.start < regularRange.start || currentSelection.end > regularRange.end)
+  ) {
+    range = { start: currentSelection.start, end: currentSelection.end };
+  }
+
+  // For 'sentence' scope specifically, resolvePairAwareRange's own diff
+  // against regularRange can coincidentally agree with it (both independently
+  // landed on the same bracket-clamped answer via their own, different
+  // guard/search logic), which would hide a genuine bracket-driven adjustment.
+  // Detect that case directly: currentSelection sitting strictly inside a
+  // regularRange that's itself immediately bounded by an enclosing pair means
+  // this is a *fresh* landing on that clamp (not a currentSelection that
+  // already walked out past it, which is what "not a subset" catches --
+  // guarding against retrying the same single-level guard forever once it's
+  // already been fully walked once).
+  const isFreshSentenceGuardClamp = scope === 'sentence'
+    && currentSelection !== null
+    && !currentSelection.isCollapsed
+    && currentSelection.start >= regularRange.start
+    && currentSelection.end <= regularRange.end
+    && !isSameRange(currentSelection, regularRange)
+    && isBoundedByEnclosingPair(text, regularRange);
+
+  const isPairAwareAdjustment = (pairAware !== null && (
     !isSameRange(pairAware, regularRange) || isPairAwareRewrap(text, regularRange, currentSelection)
-  );
+  )) || isFreshSentenceGuardClamp;
   return { range, isPairAwareAdjustment };
 };
 
