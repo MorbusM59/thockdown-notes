@@ -273,7 +273,7 @@ export function SectionTabBar({
                             : `${note?.title ?? 'Open note'} — hold to pin`
                         }
                       >
-                        <span className="tag-pill-label">{label}</span>
+                        <span className="tag-pill-label">${label}</span>
                       </div>
                     )
                   })() : null}
