@@ -33,6 +33,19 @@ process.on('uncaughtException', (error) => {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+// Note titles (used as export filenames) come from a note's first line, which
+// can be arbitrarily long pasted text. Cap the base name so the result stays
+// well under filesystem path-length limits even after a de-dup suffix is added.
+const MAX_EXPORT_FILENAME_BASE_LENGTH = 80
+
+function sanitizeExportFileName(input: string): string {
+  const cleaned = input.replace(/[<>:"/\\|?*]+/g, '_')
+  const ext = path.extname(cleaned)
+  const nameOnly = cleaned.slice(0, cleaned.length - ext.length)
+  const truncated = nameOnly.slice(0, MAX_EXPORT_FILENAME_BASE_LENGTH).trim()
+  return `${truncated || 'Untitled'}${ext}`
+}
+
 // The built directory structure
 //
 // ├─┬─┬ dist
@@ -604,8 +617,7 @@ function registerIpcHandlers() {
       }
       await fsPromises.mkdir(folderPath, { recursive: true })
 
-      const sanitize = (input: string) => input.replace(/[<>:"/\\|?*]+/g, '_')
-      const base = sanitize(fileName)
+      const base = sanitizeExportFileName(fileName)
       let outPath = path.join(folderPath, base)
       const exists = await fsPromises.stat(outPath).then(() => true).catch(() => false)
       if (exists) {
@@ -658,8 +670,7 @@ function registerIpcHandlers() {
         return { ok: false, error: 'Source note file not found' }
       }
       await fsPromises.mkdir(folderPath, { recursive: true })
-      const sanitize = (input: string) => input.replace(/[<>:"/\\|?*]+/g, '_')
-      const outPath = path.join(folderPath, sanitize(fileName))
+      const outPath = path.join(folderPath, sanitizeExportFileName(fileName))
       await fsPromises.copyFile(sourcePath, outPath)
       return { ok: true, path: outPath }
     } catch (error: any) {

@@ -72,6 +72,7 @@ import {
   PREVIEW_MARKDOWN_NOOP_NAVIGATE,
 } from './editor/PreviewMarkdown'
 import { normalizeInternalText } from './editor/TextPolicy'
+import { truncateTitle } from './shared/textSanitization'
 import { isNoteSearchQueryActive, matchesNoteSearchQuery } from './shared/noteSearch'
 import {
   getRenderScrollDynamic,
@@ -390,7 +391,7 @@ function deriveNoteTitleFromText(text: string): string {
   const lines = normalizeInternalText(text).split('\n')
   const heading = lines.find((line) => line.startsWith('# ') && line.trim().length > 2)
   if (heading) {
-    return heading.slice(2).trim()
+    return truncateTitle(heading.slice(2).trim())
   }
 
   const firstContent = lines.find((line) => {
@@ -398,7 +399,7 @@ function deriveNoteTitleFromText(text: string): string {
     return trimmed.length > 0 && trimmed !== '#'
   })
 
-  return firstContent?.trim() ?? 'Untitled'
+  return truncateTitle(firstContent?.trim() ?? 'Untitled')
 }
 
 function sanitizeClipboardTitle(raw: string): string {
@@ -407,7 +408,7 @@ function sanitizeClipboardTitle(raw: string): string {
   if (!firstLine) return FALLBACK_NEW_NOTE_TITLE
 
   const withoutHeadingPrefix = firstLine.replace(/^#+\s*/, '').trim()
-  return withoutHeadingPrefix || FALLBACK_NEW_NOTE_TITLE
+  return truncateTitle(withoutHeadingPrefix) || FALLBACK_NEW_NOTE_TITLE
 }
 
 type DerivedPaletteColors = {

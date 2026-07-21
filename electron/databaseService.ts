@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, promises as fs } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { sanitizeDocumentText } from '../src/shared/textSanitization';
+import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
 import { ensureHelpNote } from './help/helpNote';
 import type { TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../src/shared/textures';
 import type {
@@ -258,14 +258,14 @@ function checksumText(text: string): string {
 function titleFromText(text: string): string {
   const lines = normalizeText(text).split('\n');
   const heading = lines.find((line) => line.startsWith('# ') && line.trim().length > 2);
-  if (heading) return heading.slice(2).trim();
+  if (heading) return truncateTitle(heading.slice(2).trim());
 
   const firstContent = lines.find((line) => {
     const trimmed = line.trim();
     return trimmed.length > 0 && trimmed !== '#';
   });
 
-  return firstContent?.trim() ?? 'Untitled';
+  return truncateTitle(firstContent?.trim() ?? 'Untitled');
 }
 
 function parseIsoToMs(value: string): number {

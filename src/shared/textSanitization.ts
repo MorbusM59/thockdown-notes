@@ -116,3 +116,13 @@ export function sanitizeDocumentTextExtended(input: string): string {
     ),
   );
 }
+
+/** Titles are derived from a note's first line, which can be arbitrarily long (e.g. pasted text). */
+export const MAX_NOTE_TITLE_LENGTH = 80;
+
+export function truncateTitle(input: string, maxLength: number = MAX_NOTE_TITLE_LENGTH): string {
+  if (input.length <= maxLength) {
+    return input;
+  }
+  return input.slice(0, maxLength).trimEnd();
+}
