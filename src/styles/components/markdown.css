@@ -254,6 +254,43 @@
   font-synthesis: style weight;
 }
 
+.markdown-preview.style-calibrilight {
+  font-family:         'Carlito', 'Calibri Light', 'Segoe UI', sans-serif;
+  --preview-code-font: 'Share Tech Mono', 'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
+  font-weight:         300;
+}
+
+.markdown-preview.style-opensans {
+  font-family:         'Open Sans', 'Segoe UI', sans-serif;
+  --preview-code-font: 'Share Tech Mono', 'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
+}
+
+.markdown-preview.style-notoserif {
+  font-family:         'Noto Serif', Georgia, serif;
+  --preview-code-font: 'Share Tech Mono', 'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
+}
+
+.markdown-preview.style-neuton {
+  font-family:         'Neuton', Georgia, serif;
+  --preview-code-font: 'Share Tech Mono', 'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
+}
+
+.markdown-preview.style-faunaone {
+  font-family:         'Fauna One', Georgia, serif;
+  --preview-code-font: 'Share Tech Mono', 'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
+}
+
+.markdown-preview.style-fredericka {
+  font-family:         'Fredericka the Great', 'Comic Sans MS', cursive;
+  --preview-code-font: 'Share Tech Mono', 'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
+  font-synthesis: style weight;
+}
+
+.markdown-preview.style-bubblerone {
+  font-family:         'Bubbler One', 'Segoe UI', sans-serif;
+  --preview-code-font: 'Share Tech Mono', 'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
+}
+
 /* 11d. Size variants */
 .markdown-preview.size-xs { font-size: 12px; }
 .markdown-preview.size-s  { font-size: 14px; }

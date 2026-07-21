@@ -170,7 +170,19 @@ const DEFAULT_EDITOR_TEXT_COLORS: Record<EditorTextColorTargetKey, string> = {
 
 type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find' | 'options'
 type NotePrimedAction = 'archive' | 'deletion'
-type ViewStyleKey = 'modern' | 'narrow' | 'cute' | 'xkcd' | 'print'
+type ViewStyleKey =
+  | 'modern'
+  | 'narrow'
+  | 'cute'
+  | 'xkcd'
+  | 'print'
+  | 'calibrilight'
+  | 'opensans'
+  | 'notoserif'
+  | 'neuton'
+  | 'faunaone'
+  | 'fredericka'
+  | 'bubblerone'
 type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
 type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
 

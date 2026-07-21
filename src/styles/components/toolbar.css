@@ -300,7 +300,7 @@
 .typography-grid {
   display: grid;
   grid-template-columns: repeat(6, var(--loadout-cell-size, 32px));
-  grid-template-rows: var(--loadout-cell-size, 32px) var(--canonical-scroll-thickness);
+  grid-auto-rows: var(--loadout-cell-size, 32px);
   gap: var(--toolbar-options-gap);
   width: fit-content;
 }
@@ -333,9 +333,16 @@
   pointer-events: none;
 }
 
+.typography-sliders {
+  display: flex;
+  gap: var(--toolbar-options-gap);
+  width: 100%;
+  margin-top: var(--toolbar-options-gap);
+  height: var(--canonical-scroll-thickness);
+}
+
 .typography-slider {
-  grid-column: span 3;
-  grid-row: 2;
+  flex: 1 1 0;
   min-width: 0;
 }
 

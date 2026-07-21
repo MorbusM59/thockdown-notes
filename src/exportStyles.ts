@@ -1,4 +1,16 @@
-export type ExportViewStyle = 'modern' | 'narrow' | 'cute' | 'xkcd' | 'print'
+export type ExportViewStyle =
+  | 'modern'
+  | 'narrow'
+  | 'cute'
+  | 'xkcd'
+  | 'print'
+  | 'calibrilight'
+  | 'opensans'
+  | 'notoserif'
+  | 'neuton'
+  | 'faunaone'
+  | 'fredericka'
+  | 'bubblerone'
 export type ExportFontSize = 'xs' | 's' | 'm' | 'l' | 'xl'
 export type ExportSpacing = 'tight' | 'compact' | 'cozy' | 'wide'
 
@@ -210,6 +222,22 @@ async function buildExportFontFaceCss(): Promise<string> {
     bigShoulders,
     xkcd,
     shareTechMono,
+    vt323,
+    victorMono,
+    bytesized,
+    iosevkaCharonMono,
+    kodeMono,
+    xanhMono,
+    lekton,
+    novaMono,
+    courierPrime,
+    openSans,
+    notoSerif,
+    neuton,
+    faunaOne,
+    fredericka,
+    bubblerOne,
+    carlito,
   ] = await Promise.all([
     fetchFontAsDataUri(new URL('./fonts/SyneMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/RedHatMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
@@ -226,6 +254,22 @@ async function buildExportFontFaceCss(): Promise<string> {
     fetchFontAsDataUri(new URL('./fonts/BigShoulders-ExtraLight.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/xkcd.otf', import.meta.url).href, 'font/otf'),
     fetchFontAsDataUri(new URL('./fonts/ShareTechMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/VT323-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/VictorMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/Bytesized-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/IosevkaCharonMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/KodeMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/XanhMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/Lekton-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/NovaMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/CourierPrime-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/OpenSans-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/NotoSerif-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/Neuton-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/FaunaOne-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/FrederickaTheGreat-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/BubblerOne-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(new URL('./fonts/Carlito-Regular.woff2', import.meta.url).href, 'font/woff2'),
   ])
 
   return `
@@ -330,6 +374,118 @@ async function buildExportFontFaceCss(): Promise<string> {
 @font-face {
   font-family: 'Share Tech Mono';
   src: url('${shareTechMono}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'VT323';
+  src: url('${vt323}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Victor Mono';
+  src: url('${victorMono}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Bytesized';
+  src: url('${bytesized}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Iosevka Charon Mono';
+  src: url('${iosevkaCharonMono}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Kode Mono';
+  src: url('${kodeMono}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Xanh Mono';
+  src: url('${xanhMono}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Lekton';
+  src: url('${lekton}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Nova Mono';
+  src: url('${novaMono}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Courier Prime';
+  src: url('${courierPrime}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Open Sans';
+  src: url('${openSans}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Noto Serif';
+  src: url('${notoSerif}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Neuton';
+  src: url('${neuton}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Fauna One';
+  src: url('${faunaOne}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Fredericka the Great';
+  src: url('${fredericka}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Bubbler One';
+  src: url('${bubblerOne}') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Carlito';
+  src: url('${carlito}') format('woff2');
   font-weight: 400;
   font-style: normal;
 }

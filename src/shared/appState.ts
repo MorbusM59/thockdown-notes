@@ -25,10 +25,34 @@ export interface PersistedMenuState {
   searchQueryCaseSensitive?: boolean;
   documentFindCaseSensitive?: boolean;
   isPreviewMode?: boolean;
-  viewStyle?: 'modern' | 'narrow' | 'cute' | 'xkcd' | 'print';
+  viewStyle?:
+    | 'modern'
+    | 'narrow'
+    | 'cute'
+    | 'xkcd'
+    | 'print'
+    | 'calibrilight'
+    | 'opensans'
+    | 'notoserif'
+    | 'neuton'
+    | 'faunaone'
+    | 'fredericka'
+    | 'bubblerone';
   viewFontSize?: 'xs' | 's' | 'm' | 'l' | 'xl';
   viewSpacing?: 'tight' | 'compact' | 'cozy' | 'wide';
-  editorStyle?: 'syne' | 'redhat';
+  editorStyle?:
+    | 'syne'
+    | 'redhat'
+    | 'vt323'
+    | 'victormono'
+    | 'bytesized'
+    | 'iosevkacharon'
+    | 'kodemono'
+    | 'xanhmono'
+    | 'lekton'
+    | 'novamono'
+    | 'sharetech'
+    | 'courierprime';
   editorFontSize?: 'xs' | 's' | 'm' | 'l' | 'xl';
   editorSpacing?: 'tight' | 'compact' | 'cozy' | 'wide';
   editorGlyphPaddingPx?: number;

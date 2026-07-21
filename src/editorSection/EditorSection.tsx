@@ -44,7 +44,19 @@ type NoteTreeGroup = {
   }>
 }
 
-type ViewStyleKey = 'modern' | 'narrow' | 'cute' | 'xkcd' | 'print'
+type ViewStyleKey =
+  | 'modern'
+  | 'narrow'
+  | 'cute'
+  | 'xkcd'
+  | 'print'
+  | 'calibrilight'
+  | 'opensans'
+  | 'notoserif'
+  | 'neuton'
+  | 'faunaone'
+  | 'fredericka'
+  | 'bubblerone'
 type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
 type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
 

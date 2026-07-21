@@ -119,6 +119,118 @@
   font-style: normal;
 }
 
+@font-face {
+  font-family: 'VT323';
+  src: url('./fonts/VT323-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Victor Mono';
+  src: url('./fonts/VictorMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Bytesized';
+  src: url('./fonts/Bytesized-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Iosevka Charon Mono';
+  src: url('./fonts/IosevkaCharonMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Kode Mono';
+  src: url('./fonts/KodeMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Xanh Mono';
+  src: url('./fonts/XanhMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Lekton';
+  src: url('./fonts/Lekton-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Nova Mono';
+  src: url('./fonts/NovaMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Courier Prime';
+  src: url('./fonts/CourierPrime-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Open Sans';
+  src: url('./fonts/OpenSans-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Noto Serif';
+  src: url('./fonts/NotoSerif-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Neuton';
+  src: url('./fonts/Neuton-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Fauna One';
+  src: url('./fonts/FaunaOne-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Fredericka the Great';
+  src: url('./fonts/FrederickaTheGreat-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Bubbler One';
+  src: url('./fonts/BubblerOne-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Carlito';
+  src: url('./fonts/Carlito-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
 :root {
   /* Core Editor Variables */
   --editor-font: 'Syne Mono', monospace;

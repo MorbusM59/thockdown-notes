@@ -44,7 +44,19 @@ function clamp(value: number, min: number, max: number): number {
 // App.tsx, to avoid a circular module dependency (App.tsx renders this
 // component). Keep in sync with the equivalents in App.tsx if either changes.
 
-type ViewStyleKey = 'modern' | 'narrow' | 'cute' | 'xkcd' | 'print'
+type ViewStyleKey =
+  | 'modern'
+  | 'narrow'
+  | 'cute'
+  | 'xkcd'
+  | 'print'
+  | 'calibrilight'
+  | 'opensans'
+  | 'notoserif'
+  | 'neuton'
+  | 'faunaone'
+  | 'fredericka'
+  | 'bubblerone'
 type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
 type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
 type EditorTextColorTargetKey = 'editorEditText' | 'editorRenderText'
@@ -86,6 +98,13 @@ const VIEW_STYLE_OPTIONS: Array<{ key: ViewStyleKey; label: string; family: stri
   { key: 'cute', label: 'Cute', family: "'Sour Gummy', 'Quicksand', 'Segoe UI', sans-serif" },
   { key: 'xkcd', label: 'xkcd', family: "'xkcd', 'Comic Sans MS', 'Chalkboard SE', cursive" },
   { key: 'print', label: 'Print', family: "'Big Shoulders', 'Times New Roman', Georgia, serif" },
+  { key: 'calibrilight', label: 'Calibri Light (Carlito)', family: "'Carlito', 'Calibri Light', 'Segoe UI', sans-serif" },
+  { key: 'opensans', label: 'Open Sans', family: "'Open Sans', 'Segoe UI', sans-serif" },
+  { key: 'notoserif', label: 'Noto Serif', family: "'Noto Serif', Georgia, serif" },
+  { key: 'neuton', label: 'Neuton', family: "'Neuton', Georgia, serif" },
+  { key: 'faunaone', label: 'Fauna One', family: "'Fauna One', Georgia, serif" },
+  { key: 'fredericka', label: 'Fredericka', family: "'Fredericka the Great', 'Comic Sans MS', cursive" },
+  { key: 'bubblerone', label: 'Bubbler One', family: "'Bubbler One', 'Segoe UI', sans-serif" },
 ]
 
 const VIEW_FONT_SIZE_OPTIONS: Array<{ key: ViewSizeKey; label: string }> = [
@@ -661,6 +680,10 @@ export function SidebarOptionsPanel({
                 <span className="typography-font-glyph" style={{ fontFamily: option.family }} aria-hidden="true">Aa</span>
               </button>
             ))}
+          </div>
+        ) : null}
+        {isPreviewMode ? (
+          <div className="typography-sliders">
             <div className="typography-slider">
               <CompactScrollbarSlider
                 id="typography-font-size"
@@ -692,7 +715,8 @@ export function SidebarOptionsPanel({
               />
             </div>
           </div>
-        ) : (
+        ) : null}
+        {!isPreviewMode ? (
           <div className="typography-grid" role="group" aria-label="Editor typography">
             {EDITOR_STYLE_OPTIONS.map((option) => (
               <button
@@ -710,6 +734,10 @@ export function SidebarOptionsPanel({
                 <span className="typography-font-glyph" style={{ fontFamily: option.family }} aria-hidden="true">Aa</span>
               </button>
             ))}
+          </div>
+        ) : null}
+        {!isPreviewMode ? (
+          <div className="typography-sliders">
             <div className="typography-slider">
               <CompactScrollbarSlider
                 id="typography-font-size"
@@ -743,7 +771,7 @@ export function SidebarOptionsPanel({
               />
             </div>
           </div>
-        )}
+        ) : null}
       </div>
       <div className="preset-section">
         <div className="options-loadout-grid" role="group" aria-label="UI mode presets">

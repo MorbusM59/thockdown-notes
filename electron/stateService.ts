@@ -88,9 +88,24 @@ function sanitizeSidebarMode(input: unknown): SidebarMode {
   return 'date';
 }
 
-function sanitizeEditorStyle(input: unknown): 'syne' | 'redhat' {
-  if (input === 'syne' || input === 'redhat') {
-    return input;
+const VALID_EDITOR_STYLES = [
+  'syne',
+  'redhat',
+  'vt323',
+  'victormono',
+  'bytesized',
+  'iosevkacharon',
+  'kodemono',
+  'xanhmono',
+  'lekton',
+  'novamono',
+  'sharetech',
+  'courierprime',
+] as const;
+
+function sanitizeEditorStyle(input: unknown): (typeof VALID_EDITOR_STYLES)[number] {
+  if ((VALID_EDITOR_STYLES as readonly unknown[]).includes(input)) {
+    return input as (typeof VALID_EDITOR_STYLES)[number];
   }
   return DEFAULT_APP_STATE.menu!.editorStyle ?? 'syne';
 }
@@ -102,9 +117,24 @@ function sanitizeUiMode(input: unknown): 'light' | 'dark' {
   return DEFAULT_APP_STATE.menu!.uiMode ?? 'light';
 }
 
-function sanitizeViewStyle(input: unknown): 'modern' | 'narrow' | 'cute' | 'xkcd' | 'print' {
-  if (input === 'modern' || input === 'narrow' || input === 'cute' || input === 'xkcd' || input === 'print') {
-    return input;
+const VALID_VIEW_STYLES = [
+  'modern',
+  'narrow',
+  'cute',
+  'xkcd',
+  'print',
+  'calibrilight',
+  'opensans',
+  'notoserif',
+  'neuton',
+  'faunaone',
+  'fredericka',
+  'bubblerone',
+] as const;
+
+function sanitizeViewStyle(input: unknown): (typeof VALID_VIEW_STYLES)[number] {
+  if ((VALID_VIEW_STYLES as readonly unknown[]).includes(input)) {
+    return input as (typeof VALID_VIEW_STYLES)[number];
   }
   return DEFAULT_APP_STATE.menu!.viewStyle ?? 'modern';
 }

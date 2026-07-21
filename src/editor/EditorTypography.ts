@@ -1,4 +1,16 @@
-export type EditorStyleKey = 'syne' | 'redhat';
+export type EditorStyleKey =
+  | 'syne'
+  | 'redhat'
+  | 'vt323'
+  | 'victormono'
+  | 'bytesized'
+  | 'iosevkacharon'
+  | 'kodemono'
+  | 'xanhmono'
+  | 'lekton'
+  | 'novamono'
+  | 'sharetech'
+  | 'courierprime';
 export type EditorFontSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl';
 export type EditorSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide';
 
@@ -16,6 +28,16 @@ export const DEFAULT_EDITOR_SPACING: EditorSpacingKey = 'cozy';
 export const EDITOR_STYLE_OPTIONS: Array<{ key: EditorStyleKey; label: string; family: string }> = [
   { key: 'syne', label: 'Syne', family: "'Syne Mono', 'Menlo', 'Monaco', monospace" },
   { key: 'redhat', label: 'Red Hat', family: "'Red Hat Mono', 'Menlo', 'Monaco', monospace" },
+  { key: 'vt323', label: 'VT323', family: "'VT323', 'Menlo', 'Monaco', monospace" },
+  { key: 'victormono', label: 'Victor Mono', family: "'Victor Mono', 'Menlo', 'Monaco', monospace" },
+  { key: 'bytesized', label: 'Bytesized', family: "'Bytesized', 'Menlo', 'Monaco', monospace" },
+  { key: 'iosevkacharon', label: 'Iosevka Charon', family: "'Iosevka Charon Mono', 'Menlo', 'Monaco', monospace" },
+  { key: 'kodemono', label: 'Kode Mono', family: "'Kode Mono', 'Menlo', 'Monaco', monospace" },
+  { key: 'xanhmono', label: 'Xanh Mono', family: "'Xanh Mono', 'Menlo', 'Monaco', monospace" },
+  { key: 'lekton', label: 'Lekton', family: "'Lekton', 'Menlo', 'Monaco', monospace" },
+  { key: 'novamono', label: 'Nova Mono', family: "'Nova Mono', 'Menlo', 'Monaco', monospace" },
+  { key: 'sharetech', label: 'Share Tech', family: "'Share Tech Mono', 'Menlo', 'Monaco', monospace" },
+  { key: 'courierprime', label: 'Courier Prime', family: "'Courier Prime', 'Menlo', 'Monaco', monospace" },
 ];
 
 export const EDITOR_FONT_SIZE_OPTIONS: Array<{ key: EditorFontSizeKey; label: string; px: number }> = [
@@ -65,6 +87,16 @@ const FALLBACK_CELL_WIDTH_PX_BY_SIZE: Record<EditorFontSizeKey, number> = {
 const FONT_FAMILY_BY_STYLE: Record<EditorStyleKey, string> = {
   syne: "'Syne Mono', 'Menlo', 'Monaco', monospace",
   redhat: "'Red Hat Mono', 'Menlo', 'Monaco', monospace",
+  vt323: "'VT323', 'Menlo', 'Monaco', monospace",
+  victormono: "'Victor Mono', 'Menlo', 'Monaco', monospace",
+  bytesized: "'Bytesized', 'Menlo', 'Monaco', monospace",
+  iosevkacharon: "'Iosevka Charon Mono', 'Menlo', 'Monaco', monospace",
+  kodemono: "'Kode Mono', 'Menlo', 'Monaco', monospace",
+  xanhmono: "'Xanh Mono', 'Menlo', 'Monaco', monospace",
+  lekton: "'Lekton', 'Menlo', 'Monaco', monospace",
+  novamono: "'Nova Mono', 'Menlo', 'Monaco', monospace",
+  sharetech: "'Share Tech Mono', 'Menlo', 'Monaco', monospace",
+  courierprime: "'Courier Prime', 'Menlo', 'Monaco', monospace",
 };
 
 export function resolveEditorFontFamily(style: EditorStyleKey): string {
