@@ -262,6 +262,7 @@
   justify-content: center;
   text-align: center;
   align-items: center;
+  outline: none;
   -webkit-app-region: no-drag;
 }
 
