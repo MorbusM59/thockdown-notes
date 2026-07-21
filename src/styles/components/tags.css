@@ -263,7 +263,7 @@
   text-align: center;
   align-items: center;
   outline: none;
-  padding: 0 0 1px 0;
+  padding-bottom: 1px;
   -webkit-app-region: no-drag;
 }
 
