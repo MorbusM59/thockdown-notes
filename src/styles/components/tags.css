@@ -251,7 +251,7 @@
 .section-identity-input {
   min-width: 80px;
   max-width: 80px;
-  letter-spacing: 0.05em;
+  letter-spacing: 0em;
   height:        100%;
   box-sizing:    border-box;
   border:        1px solid var(--btn-border-default);
@@ -263,6 +263,7 @@
   text-align: center;
   align-items: center;
   outline: none;
+  padding: 0 0 1px 0;
   -webkit-app-region: no-drag;
 }
 
