@@ -26,8 +26,11 @@ export type PlacedSnapshot = SnapshotLike & {
 
 export type TimelineCurveOptions = {
   /**
-   * A larger constant makes the curve compress faster. 10 is the current
-   * default. The user will be able to configure this value.
+   * Doubles as the log2 cutoff: ages beyond 2^curveConstant minutes decay to
+   * ratio 0. A larger constant pushes that cutoff further into the past, so
+   * a given age lands *closer* to 1 (zoomed out) rather than more
+   * compressed -- this is what SnapshotTimelineSlider's scroll-to-zoom
+   * adjusts (clamped to [6, 25]). 16 is the current default.
    */
   curveConstant?: number
 }
@@ -55,10 +58,12 @@ function clamp01(value: number): number {
 }
 
 /**
- * Places every snapshot on the 0..1 rail relative to `now`. Span is derived
- * from the oldest snapshot present, not assumed -- callers get a rail that
- * always uses its full width for whatever history actually survived
- * retention, whether that's three hours or three years.
+ * Places every snapshot on the 0..1 rail relative to `now`, independently --
+ * each snapshot's ratio comes straight from `ageToRatio` on its own age, not
+ * normalized against the oldest/newest snapshot in this particular set. The
+ * rail's effective span is instead controlled by `options.curveConstant`
+ * (see TimelineCurveOptions), which the timeline slider's scroll-to-zoom
+ * adjusts interactively.
  */
 export function computeSnapshotPlacements(
   snapshots: SnapshotLike[],

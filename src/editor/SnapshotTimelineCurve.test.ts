@@ -19,8 +19,11 @@ describe('ageToRatio', () => {
     expect(ageToRatio(ONE_MINUTE_MS)).toBeLessThan(1)
   })
 
-  it('maps very old ages to 0', () => {
-    expect(ageToRatio(ONE_DAY_MS * 10)).toBe(0)
+  it('maps ages past the curveConstant cutoff (2^c minutes) to 0', () => {
+    // Default curveConstant is 16, i.e. a ~45.5 day cutoff (2^16 - 1
+    // minutes) -- 10 days doesn't clear that, so exercise it with an
+    // explicit small curveConstant instead of relying on the default.
+    expect(ageToRatio(ONE_DAY_MS * 10, { curveConstant: 5 })).toBe(0)
   })
 
   it('spreads recent ages further apart than older ages (log-like curvature)', () => {
@@ -48,10 +51,10 @@ describe('ageToRatio', () => {
     }
   })
 
-  it('reduces the ratio when curve constant increases', () => {
+  it('increases the ratio when curve constant increases (extends the cutoff, i.e. zooms out)', () => {
     const low = ageToRatio(ONE_HOUR_MS, { curveConstant: 5 })
     const high = ageToRatio(ONE_HOUR_MS, { curveConstant: 20 })
-    expect(high).toBeLessThan(low)
+    expect(high).toBeGreaterThan(low)
   })
 })
 
@@ -62,7 +65,7 @@ describe('computeSnapshotPlacements', () => {
     expect(computeSnapshotPlacements([], now)).toEqual([])
   })
 
-  it('places the newest snapshot at ratio 1 and the oldest at ratio 0', () => {
+  it('computes each ratio independently via ageToRatio, not normalized against the rest of the set', () => {
     const snapshots = [
       { id: 1, timestamp: new Date(now - 10 * ONE_DAY_MS).toISOString(), isManual: false },
       { id: 2, timestamp: new Date(now - ONE_MINUTE_MS).toISOString(), isManual: false },
@@ -70,25 +73,31 @@ describe('computeSnapshotPlacements', () => {
     const placed = computeSnapshotPlacements(snapshots, now)
     const newest = placed.find((p) => p.id === 2)!
     const oldest = placed.find((p) => p.id === 1)!
-    expect(newest.ratio).toBe(1)
-    expect(oldest.ratio).toBe(0)
+    expect(newest.ratio).toBe(ageToRatio(ONE_MINUTE_MS))
+    expect(oldest.ratio).toBe(ageToRatio(10 * ONE_DAY_MS))
+    expect(newest.ratio).toBeGreaterThan(oldest.ratio)
   })
 
-  it('derives the span from the oldest snapshot rather than a hardcoded cap', () => {
-    // A note far older than v1's hardcoded 1-year ceiling should still get
-    // a full 0..1 spread instead of everything piling up at 0.
+  it('keeps snapshots past the cutoff finite and pinned at 0, with newer ones still ranking above them', () => {
+    // A note far older than v1's hardcoded 1-year ceiling should still
+    // produce a finite ratio instead of NaN/Infinity, and a snapshot within
+    // the cutoff should still clearly outrank one beyond it.
     const snapshots = [
       { id: 1, timestamp: new Date(now - 500 * ONE_DAY_MS).toISOString(), isManual: true },
       { id: 2, timestamp: new Date(now - 250 * ONE_DAY_MS).toISOString(), isManual: false },
       { id: 3, timestamp: new Date(now - ONE_MINUTE_MS).toISOString(), isManual: false },
     ]
     const placed = computeSnapshotPlacements(snapshots, now)
-    const ratios = placed.map((p) => p.ratio).sort((a, b) => a - b)
-    expect(ratios[0]).toBe(0)
-    expect(ratios[ratios.length - 1]).toBe(1)
-    // the middle one should land strictly between, not collapse onto either end
-    expect(ratios[1]).toBeGreaterThan(0)
-    expect(ratios[1]).toBeLessThan(1)
+    const byId = new Map(placed.map((p) => [p.id, p.ratio]))
+    for (const ratio of byId.values()) {
+      expect(Number.isFinite(ratio)).toBe(true)
+    }
+    // Both 500d and 250d are well past the default curveConstant=16 cutoff
+    // (~45.5 days), so both clamp to 0 -- that's the intentional behavior,
+    // not a bug (see the "maps ages past the cutoff to 0" test above).
+    expect(byId.get(1)).toBe(0)
+    expect(byId.get(2)).toBe(0)
+    expect(byId.get(3)!).toBeGreaterThan(0)
   })
 })
 
