@@ -370,7 +370,7 @@
 /* Temp/preview tab for the current unpinned note — italic to read as
    provisional, plus a fill bar while being held down for promotion. */
 .note-tab-pill.temp {
-  font-style: italic;
+  opacity: 70%;
 }
 
 .note-tab-pill.temp::after {
