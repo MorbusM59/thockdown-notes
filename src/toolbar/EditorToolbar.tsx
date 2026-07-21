@@ -202,7 +202,7 @@ export function EditorToolbar({
               <button type="button" className="btn-icon" title="Link" onClick={applyLink} disabled={!activeNoteId}>🔗</button>
             </div>
           </div>
-        ) : null}
+        ) : <div className="markdown-toolbar" aria-label="Markdown toolbar"/>}
       </div>
     </section>
   )
