@@ -114,86 +114,63 @@ export function computeSectionWidthsForNewSection(
 export interface SectionWidthWeight {
   id: string
   widthFraction: number | null
+  /**
+   * Set when the user has "pinned" this section by shrinking it via a divider
+   * drag: the section holds exactly this width while the row can afford it,
+   * and window resizes are absorbed by the flexible (non-fixed) sections.
+   */
+  fixedWidthPx?: number | null
 }
 
 /**
- * Deterministically resolves each section slot's exact pixel width for the
- * current row width. This is the single sizing authority: slots render with
- * `flex: 0 0 <px>` from this result instead of letting the flex container
- * improvise, so structural changes (create/close/drag) and window resizes
- * all reduce to "recompute this pure function."
- *
- * Policy:
- * - `widthFraction` entries are proportional weights (they need not sum to 1;
- *   they're normalized). Missing (`null`) weights get the average of the known
- *   ones, or an even share when none are known.
- * - Every section is kept at or above `minWidthPx` for as long as the row can
- *   afford it: sections whose proportional share would fall below the minimum
- *   are pinned to `minWidthPx` and the remaining space is redistributed across
- *   the rest — so as a window shrinks, the smallest sections bottom out first
- *   and the larger ones keep absorbing the shrink.
- * - Once the row cannot fit `count * minWidthPx`, all sections share the row
- *   equally (below minimum) rather than ever overflowing/clipping the row.
- * - Widths are returned as exact floats that sum to the available width
- *   (row width minus the fixed dividers); no pixel is invented or lost.
+ * Proportionally distributes `availablePx` across `items` by weight, pinning
+ * any item whose share would fall below `minWidthPx` to the minimum and
+ * redistributing the rest. Returns exact floats summing to `availablePx`.
  */
-export function computeSlotWidthsPx(
-  weights: SectionWidthWeight[],
-  rowWidthPx: number,
-  dividerWidthPx: number,
+function distributeProportionallyWithMinimum(
+  items: { id: string; weight: number }[],
+  availablePx: number,
   minWidthPx: number,
 ): Map<string, number> {
   const result = new Map<string, number>()
-  const count = weights.length
+  const count = items.length
   if (count === 0) return result
-
-  const availablePx = Math.max(0, rowWidthPx - (count - 1) * dividerWidthPx)
 
   if (availablePx <= count * minWidthPx) {
     const equalPx = availablePx / count
-    for (const entry of weights) {
-      result.set(entry.id, equalPx)
+    for (const item of items) {
+      result.set(item.id, equalPx)
     }
     return result
   }
 
-  const known = weights.filter((entry) => entry.widthFraction !== null && entry.widthFraction! > 0)
-  const fallbackWeight = known.length > 0
-    ? known.reduce((sum, entry) => sum + (entry.widthFraction ?? 0), 0) / known.length
-    : 1
-  const weightById = new Map(weights.map((entry) => [
-    entry.id,
-    entry.widthFraction !== null && entry.widthFraction > 0 ? entry.widthFraction : fallbackWeight,
-  ]))
-
-  let unpinnedIds = new Set(weights.map((entry) => entry.id))
+  let unpinnedIds = new Set(items.map((item) => item.id))
   let remainingPx = availablePx
 
-  // Iteratively pin below-minimum sections to the minimum and redistribute the
-  // rest proportionally. Terminates in <= count passes; because
-  // availablePx > count * minWidthPx, the unpinned pool always has more than
-  // minWidthPx per member available, so the loop can't pin everyone.
+  // Terminates in <= count passes; because availablePx > count * minWidthPx,
+  // the unpinned pool always has more than minWidthPx per member available,
+  // so the loop can't pin everyone.
   for (let pass = 0; pass < count; pass += 1) {
-    const unpinned = weights.filter((entry) => unpinnedIds.has(entry.id))
-    const weightSum = unpinned.reduce((sum, entry) => sum + (weightById.get(entry.id) ?? 0), 0)
+    const unpinned = items.filter((item) => unpinnedIds.has(item.id))
+    const weightSum = unpinned.reduce((sum, item) => sum + item.weight, 0)
     if (weightSum <= 0) {
       const equalPx = remainingPx / unpinned.length
-      for (const entry of unpinned) {
-        result.set(entry.id, equalPx)
+      for (const item of unpinned) {
+        result.set(item.id, equalPx)
       }
       return result
     }
 
     const nextUnpinnedIds = new Set<string>()
     let pinnedThisPassPx = 0
-    for (const entry of unpinned) {
-      const sharePx = ((weightById.get(entry.id) ?? 0) / weightSum) * remainingPx
+    for (const item of unpinned) {
+      const sharePx = (item.weight / weightSum) * remainingPx
       if (sharePx < minWidthPx) {
-        result.set(entry.id, minWidthPx)
+        result.set(item.id, minWidthPx)
         pinnedThisPassPx += minWidthPx
       } else {
-        result.set(entry.id, sharePx)
-        nextUnpinnedIds.add(entry.id)
+        result.set(item.id, sharePx)
+        nextUnpinnedIds.add(item.id)
       }
     }
 
@@ -206,6 +183,276 @@ export function computeSlotWidthsPx(
   }
 
   return result
+}
+
+/** Normalized proportional weights for a set of sections, from their persisted fractions. */
+function resolveFractionWeights(entries: SectionWidthWeight[]): { id: string; weight: number }[] {
+  const known = entries.filter((entry) => entry.widthFraction !== null && entry.widthFraction! > 0)
+  const fallbackWeight = known.length > 0
+    ? known.reduce((sum, entry) => sum + (entry.widthFraction ?? 0), 0) / known.length
+    : 1
+  return entries.map((entry) => ({
+    id: entry.id,
+    weight: entry.widthFraction !== null && (entry.widthFraction ?? 0) > 0 ? entry.widthFraction! : fallbackWeight,
+  }))
+}
+
+/**
+ * Deterministically resolves each section slot's exact pixel width for the
+ * current row width. This is the single sizing authority: slots render with
+ * `flex: 0 0 <px>` from this result instead of letting the flex container
+ * improvise, so structural changes (create/close/drag) and window resizes
+ * all reduce to "recompute this pure function."
+ *
+ * Policy, in priority order:
+ * - Once the row cannot fit `count * minWidthPx`, all sections share the row
+ *   equally (below minimum) rather than ever overflowing/clipping the row.
+ * - Fixed sections (`fixedWidthPx` set) hold exactly their fixed width while
+ *   the flexible sections can still cover the rest of the row at or above
+ *   `minWidthPx`. Window resizes are therefore absorbed by the flexible
+ *   sections only.
+ * - Flexible sections share the leftover proportionally by `widthFraction`
+ *   (weights need not sum to 1; they're normalized, and missing weights get
+ *   the average of the known ones). Any flexible section whose share would
+ *   fall below `minWidthPx` pins there while the rest keep absorbing.
+ * - When every flexible section has bottomed out at the minimum, the fixed
+ *   sections give up their pins and shrink proportionally to their fixed
+ *   widths (still respecting `minWidthPx`). Their `fixedWidthPx` is state
+ *   owned by the caller and is deliberately not mutated here, so growing the
+ *   row again restores them to exactly their fixed widths.
+ * - Widths are returned as exact floats that sum to the available width
+ *   (row width minus the fixed dividers); no pixel is invented or lost.
+ */
+export function computeSlotWidthsPx(
+  weights: SectionWidthWeight[],
+  rowWidthPx: number,
+  dividerWidthPx: number,
+  minWidthPx: number,
+): Map<string, number> {
+  const count = weights.length
+  if (count === 0) return new Map<string, number>()
+
+  const availablePx = Math.max(0, rowWidthPx - (count - 1) * dividerWidthPx)
+
+  if (availablePx <= count * minWidthPx) {
+    const result = new Map<string, number>()
+    const equalPx = availablePx / count
+    for (const entry of weights) {
+      result.set(entry.id, equalPx)
+    }
+    return result
+  }
+
+  const fixed = weights.filter((entry) => typeof entry.fixedWidthPx === 'number')
+  const flexible = weights.filter((entry) => typeof entry.fixedWidthPx !== 'number')
+
+  // Everything fixed: nothing is left to absorb resizes, so scale the fixed
+  // widths proportionally (at the row width they were pinned at, this yields
+  // exactly the pinned widths).
+  if (flexible.length === 0) {
+    return distributeProportionallyWithMinimum(
+      fixed.map((entry) => ({ id: entry.id, weight: Math.max(1, entry.fixedWidthPx ?? minWidthPx) })),
+      availablePx,
+      minWidthPx,
+    )
+  }
+
+  const fixedDesired = fixed.map((entry) => ({
+    id: entry.id,
+    widthPx: Math.max(minWidthPx, entry.fixedWidthPx ?? minWidthPx),
+  }))
+  const fixedDesiredSumPx = fixedDesired.reduce((sum, entry) => sum + entry.widthPx, 0)
+  const flexibleAvailablePx = availablePx - fixedDesiredSumPx
+
+  if (flexibleAvailablePx >= flexible.length * minWidthPx) {
+    const result = distributeProportionallyWithMinimum(
+      resolveFractionWeights(flexible),
+      flexibleAvailablePx,
+      minWidthPx,
+    )
+    for (const entry of fixedDesired) {
+      result.set(entry.id, entry.widthPx)
+    }
+    return result
+  }
+
+  // Flexible sections have all bottomed out: they sit at the minimum and the
+  // fixed sections absorb the remaining shrink relative to their fixed
+  // widths. (availablePx > count * minWidthPx guarantees the fixed pool still
+  // has more than minWidthPx per member here.)
+  const result = distributeProportionallyWithMinimum(
+    fixedDesired.map((entry) => ({ id: entry.id, weight: entry.widthPx })),
+    availablePx - flexible.length * minWidthPx,
+    minWidthPx,
+  )
+  for (const entry of flexible) {
+    result.set(entry.id, minWidthPx)
+  }
+  return result
+}
+
+/**
+ * Extracts `amountPx` from `pool` in equal parts per member, capping each
+ * member's contribution so it never drops below `minWidthPx`; whatever a
+ * capped member couldn't cover is re-split equally across the rest. Callers
+ * are expected to have checked the pool's total capacity covers the amount.
+ */
+function extractEqualPartsWithMinimum(
+  pool: SectionWidthPx[],
+  amountPx: number,
+  minWidthPx: number,
+): Map<string, number> {
+  const giveById = new Map<string, number>()
+  let remainingPx = amountPx
+  let activeIds = new Set(pool.map((entry) => entry.id))
+
+  while (remainingPx > 0.5 && activeIds.size > 0) {
+    const active = pool.filter((entry) => activeIds.has(entry.id))
+    const sharePx = remainingPx / active.length
+    const nextActiveIds = new Set<string>()
+    let extractedPx = 0
+
+    for (const entry of active) {
+      const alreadyGivenPx = giveById.get(entry.id) ?? 0
+      const capacityLeftPx = Math.max(0, entry.widthPx - minWidthPx - alreadyGivenPx)
+      const givePx = Math.min(sharePx, capacityLeftPx)
+      giveById.set(entry.id, alreadyGivenPx + givePx)
+      extractedPx += givePx
+      if (givePx < capacityLeftPx) {
+        nextActiveIds.add(entry.id)
+      }
+    }
+
+    if (extractedPx <= 0) break
+    remainingPx -= extractedPx
+    activeIds = nextActiveIds
+  }
+
+  return giveById
+}
+
+/**
+ * Flex-aware variant of `computeSectionWidthsForNewSection`: funding for the
+ * new slot deliberately spares fixed (user-pinned) sections.
+ *
+ * Policy, in priority order:
+ * 1. Halve the flexible section adjacent to the new slot -- the source
+ *    section (immediately left) first, then the source's old right neighbor
+ *    -- when it's large enough to split and stay above `minWidthPx`.
+ * 2. Otherwise consume space in equal parts from all flexible sections,
+ *    wherever they sit: the new section targets `flexibleTotal / (k + 1)`
+ *    (joining the flexible pool as an equal member -- with a single flexible
+ *    section this degenerates to halving it), capped by what the pool can
+ *    give without any member dropping below `minWidthPx`.
+ * 3. If there are no flexible sections at all, or the pool can't fund even a
+ *    minimum-width section, fall back to the legacy proportional split
+ *    across ALL sections -- fixed ones included; the caller is responsible
+ *    for updating any fixed widths it finds changed in the result.
+ *
+ * `currentWidthsPx` must be in visual left-to-right order.
+ */
+export function computeSectionWidthsForNewSectionFlexAware(
+  currentWidthsPx: SectionWidthPx[],
+  sourceSectionId: string,
+  fixedSectionIds: ReadonlySet<string>,
+  minWidthPx: number,
+  dividerWidthPx: number,
+): { updatedWidths: SectionWidthPx[]; newSectionWidthPx: number } {
+  const sourceIndex = currentWidthsPx.findIndex((entry) => entry.id === sourceSectionId)
+  if (sourceIndex < 0) {
+    return { updatedWidths: currentWidthsPx, newSectionWidthPx: minWidthPx }
+  }
+
+  const canHalve = (entry: SectionWidthPx) => entry.widthPx >= 2 * minWidthPx + dividerWidthPx
+  const source = currentWidthsPx[sourceIndex]
+  const rightNeighbor = currentWidthsPx[sourceIndex + 1] ?? null
+
+  const halveTarget =
+    (!fixedSectionIds.has(source.id) && canHalve(source)) ? source
+    : (rightNeighbor !== null && !fixedSectionIds.has(rightNeighbor.id) && canHalve(rightNeighbor)) ? rightNeighbor
+    : null
+
+  if (halveTarget !== null) {
+    const splittableInnerPx = halveTarget.widthPx - dividerWidthPx
+    const newSectionWidthPx = Math.floor(splittableInnerPx / 2)
+    const targetNewWidthPx = splittableInnerPx - newSectionWidthPx
+
+    const updatedWidths = currentWidthsPx.map((entry) => (
+      entry.id === halveTarget.id ? { id: entry.id, widthPx: targetNewWidthPx } : entry
+    ))
+    return { updatedWidths, newSectionWidthPx }
+  }
+
+  const flexible = currentWidthsPx.filter((entry) => !fixedSectionIds.has(entry.id))
+  if (flexible.length > 0) {
+    const flexibleTotalPx = flexible.reduce((sum, entry) => sum + entry.widthPx, 0)
+    const capacityPx = flexible.reduce((sum, entry) => sum + Math.max(0, entry.widthPx - minWidthPx), 0)
+    const desiredNewWidthPx = Math.max(minWidthPx, Math.floor(flexibleTotalPx / (flexible.length + 1)))
+    const affordablePx = Math.min(desiredNewWidthPx + dividerWidthPx, capacityPx)
+
+    if (affordablePx - dividerWidthPx >= minWidthPx) {
+      const giveById = extractEqualPartsWithMinimum(flexible, affordablePx, minWidthPx)
+      const totalGivenPx = [...giveById.values()].reduce((sum, value) => sum + value, 0)
+
+      const updatedWidths = currentWidthsPx.map((entry) => {
+        const givenPx = giveById.get(entry.id) ?? 0
+        return givenPx > 0 ? { id: entry.id, widthPx: entry.widthPx - givenPx } : entry
+      })
+      return { updatedWidths, newSectionWidthPx: totalGivenPx - dividerWidthPx }
+    }
+  }
+
+  return computeSectionWidthsForNewSection(currentWidthsPx, sourceSectionId, minWidthPx, dividerWidthPx)
+}
+
+/**
+ * Flex-aware variant of `computeSectionWidthsForClose`: the freed width goes
+ * to an adjacent flexible section (left neighbor first, then right); when
+ * neither neighbor is flexible it's split equally across all flexible
+ * sections; when everything is fixed it falls back to the immediate left
+ * (or right, for the leftmost slot) neighbor -- the caller is responsible
+ * for updating that fixed neighbor's remembered width.
+ *
+ * `currentWidthsPx` must be in visual left-to-right order.
+ */
+export function computeSectionWidthsForCloseFlexAware(
+  currentWidthsPx: SectionWidthPx[],
+  closingSectionId: string,
+  fixedSectionIds: ReadonlySet<string>,
+): SectionWidthPx[] {
+  const index = currentWidthsPx.findIndex((entry) => entry.id === closingSectionId)
+  if (index < 0) return currentWidthsPx
+
+  const closing = currentWidthsPx[index]
+  const remaining = currentWidthsPx.filter((entry) => entry.id !== closingSectionId)
+  if (remaining.length === 0) return remaining
+
+  const leftNeighbor = index > 0 ? currentWidthsPx[index - 1] : null
+  const rightNeighbor = index + 1 < currentWidthsPx.length ? currentWidthsPx[index + 1] : null
+
+  const recipientId =
+    (leftNeighbor !== null && !fixedSectionIds.has(leftNeighbor.id)) ? leftNeighbor.id
+    : (rightNeighbor !== null && !fixedSectionIds.has(rightNeighbor.id)) ? rightNeighbor.id
+    : null
+
+  if (recipientId !== null) {
+    return remaining.map((entry) => (
+      entry.id === recipientId ? { id: entry.id, widthPx: entry.widthPx + closing.widthPx } : entry
+    ))
+  }
+
+  const flexibleIds = new Set(remaining.filter((entry) => !fixedSectionIds.has(entry.id)).map((entry) => entry.id))
+  if (flexibleIds.size > 0) {
+    const sharePx = closing.widthPx / flexibleIds.size
+    return remaining.map((entry) => (
+      flexibleIds.has(entry.id) ? { id: entry.id, widthPx: entry.widthPx + sharePx } : entry
+    ))
+  }
+
+  const fallbackId = (leftNeighbor ?? rightNeighbor)?.id ?? null
+  return remaining.map((entry) => (
+    entry.id === fallbackId ? { id: entry.id, widthPx: entry.widthPx + closing.widthPx } : entry
+  ))
 }
 
 /**

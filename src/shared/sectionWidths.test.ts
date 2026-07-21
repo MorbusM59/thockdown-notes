@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { computeSectionWidthsForClose, computeSectionWidthsForNewSection, computeSlotWidthsPx } from './sectionWidths'
+import {
+  computeSectionWidthsForClose,
+  computeSectionWidthsForCloseFlexAware,
+  computeSectionWidthsForNewSection,
+  computeSectionWidthsForNewSectionFlexAware,
+  computeSlotWidthsPx,
+} from './sectionWidths'
 
 describe('computeSectionWidthsForNewSection', () => {
   it('splits the source section in half when it is larger than twice the minimum', () => {
@@ -197,5 +203,172 @@ describe('computeSlotWidthsPx', () => {
       )
       expect(sum(widths)).toBeCloseTo(rowWidthPx - 16)
     }
+  })
+
+  describe('fixed sections', () => {
+    const entries = [
+      { id: 'a', widthFraction: 0.5, fixedWidthPx: 400 },
+      { id: 'b', widthFraction: 0.25, fixedWidthPx: null },
+      { id: 'c', widthFraction: 0.25, fixedWidthPx: null },
+    ]
+
+    it('holds a fixed section at its pinned width while flexible sections absorb the resize', () => {
+      const wide = computeSlotWidthsPx(entries, 1616, 8, 300)
+      expect(wide.get('a')).toBe(400)
+      expect(wide.get('b')).toBeCloseTo(600)
+      expect(wide.get('c')).toBeCloseTo(600)
+
+      const narrower = computeSlotWidthsPx(entries, 1016, 8, 300)
+      expect(narrower.get('a')).toBe(400)
+      expect(narrower.get('b')).toBeCloseTo(300)
+      expect(narrower.get('c')).toBeCloseTo(300)
+    })
+
+    it('lets fixed sections shrink relative to their pinned widths once every flexible section is at minimum', () => {
+      const widths = computeSlotWidthsPx(entries, 916, 8, 300)
+      expect(widths.get('b')).toBe(300)
+      expect(widths.get('c')).toBe(300)
+      expect(widths.get('a')).toBeCloseTo(300)
+      expect(sum(widths)).toBeCloseTo(900)
+    })
+
+    it('restores the pinned width when the row grows back (pure function of inputs)', () => {
+      const shrunk = computeSlotWidthsPx(entries, 916, 8, 300)
+      expect(shrunk.get('a')).toBeLessThan(400)
+      const restored = computeSlotWidthsPx(entries, 1216, 8, 300)
+      expect(restored.get('a')).toBe(400)
+    })
+
+    it('scales all-fixed rows proportionally to their pinned widths', () => {
+      const allFixed = [
+        { id: 'a', widthFraction: 0.6, fixedWidthPx: 600 },
+        { id: 'b', widthFraction: 0.4, fixedWidthPx: 300 },
+      ]
+      const atPinned = computeSlotWidthsPx(allFixed, 908, 8, 300)
+      expect(atPinned.get('a')).toBeCloseTo(600)
+      expect(atPinned.get('b')).toBeCloseTo(300)
+
+      const shrunk = computeSlotWidthsPx(allFixed, 758, 8, 300)
+      expect(shrunk.get('b')).toBe(300)
+      expect(shrunk.get('a')).toBeCloseTo(450)
+    })
+  })
+})
+
+describe('computeSectionWidthsForNewSectionFlexAware', () => {
+  it('halves a flexible source section exactly like the legacy split', () => {
+    const { updatedWidths, newSectionWidthPx } = computeSectionWidthsForNewSectionFlexAware(
+      [{ id: 'a', widthPx: 700 }, { id: 'b', widthPx: 500 }],
+      'a',
+      new Set(),
+      300,
+      8,
+    )
+    expect(updatedWidths).toEqual([{ id: 'a', widthPx: 346 }, { id: 'b', widthPx: 500 }])
+    expect(newSectionWidthPx).toBe(346)
+  })
+
+  it('halves the right neighbor when the source is fixed but the right neighbor is flexible', () => {
+    const { updatedWidths, newSectionWidthPx } = computeSectionWidthsForNewSectionFlexAware(
+      [{ id: 'a', widthPx: 700 }, { id: 'b', widthPx: 700 }],
+      'a',
+      new Set(['a']),
+      300,
+      8,
+    )
+    expect(updatedWidths).toEqual([{ id: 'a', widthPx: 700 }, { id: 'b', widthPx: 346 }])
+    expect(newSectionWidthPx).toBe(346)
+  })
+
+  it('consumes equal parts from all flexible sections when no adjacent section is flexible', () => {
+    const { updatedWidths, newSectionWidthPx } = computeSectionWidthsForNewSectionFlexAware(
+      [
+        { id: 'flexLeft', widthPx: 700 },
+        { id: 'fixedSource', widthPx: 400 },
+        { id: 'fixedRight', widthPx: 400 },
+        { id: 'flexRight', widthPx: 700 },
+      ],
+      'fixedSource',
+      new Set(['fixedSource', 'fixedRight']),
+      300,
+      8,
+    )
+    const byId = Object.fromEntries(updatedWidths.map((entry) => [entry.id, entry.widthPx]))
+    // Fixed sections are untouched; the two flexible sections give equally.
+    expect(byId.fixedSource).toBe(400)
+    expect(byId.fixedRight).toBe(400)
+    expect(byId.flexLeft).toBeCloseTo(byId.flexRight)
+    // New section joins the flexible pool as an equal member: 1400 / 3.
+    expect(newSectionWidthPx).toBeCloseTo(466, 0)
+    const totalBefore = 700 + 400 + 400 + 700
+    expect(byId.flexLeft + byId.fixedSource + byId.fixedRight + byId.flexRight + newSectionWidthPx + 8)
+      .toBeCloseTo(totalBefore)
+  })
+
+  it('falls back to the legacy proportional split when everything is fixed', () => {
+    const widthsPx = [{ id: 'a', widthPx: 700 }, { id: 'b', widthPx: 500 }]
+    const flexAware = computeSectionWidthsForNewSectionFlexAware(widthsPx, 'a', new Set(['a', 'b']), 300, 8)
+    const legacy = computeSectionWidthsForNewSection(widthsPx, 'a', 300, 8)
+    expect(flexAware).toEqual(legacy)
+  })
+
+  it('never drops a flexible donor below the minimum width', () => {
+    const { updatedWidths } = computeSectionWidthsForNewSectionFlexAware(
+      [
+        { id: 'small', widthPx: 320 },
+        { id: 'fixedSource', widthPx: 400 },
+        { id: 'fixedRight', widthPx: 400 },
+        { id: 'large', widthPx: 900 },
+      ],
+      'fixedSource',
+      new Set(['fixedSource', 'fixedRight']),
+      300,
+      8,
+    )
+    const byId = Object.fromEntries(updatedWidths.map((entry) => [entry.id, entry.widthPx]))
+    expect(byId.small).toBeGreaterThanOrEqual(300)
+    expect(byId.large).toBeGreaterThanOrEqual(300)
+  })
+})
+
+describe('computeSectionWidthsForCloseFlexAware', () => {
+  const widthsPx = [
+    { id: 'a', widthPx: 400 },
+    { id: 'b', widthPx: 300 },
+    { id: 'c', widthPx: 500 },
+  ]
+
+  it('gives the freed width to a flexible left neighbor', () => {
+    const result = computeSectionWidthsForCloseFlexAware(widthsPx, 'b', new Set())
+    expect(result).toEqual([{ id: 'a', widthPx: 700 }, { id: 'c', widthPx: 500 }])
+  })
+
+  it('gives the freed width to the right neighbor when the left one is fixed', () => {
+    const result = computeSectionWidthsForCloseFlexAware(widthsPx, 'b', new Set(['a']))
+    expect(result).toEqual([{ id: 'a', widthPx: 400 }, { id: 'c', widthPx: 800 }])
+  })
+
+  it('splits the freed width equally across all flexible sections when both neighbors are fixed', () => {
+    const result = computeSectionWidthsForCloseFlexAware(
+      [
+        { id: 'flex1', widthPx: 400 },
+        { id: 'fixedLeft', widthPx: 400 },
+        { id: 'closing', widthPx: 300 },
+        { id: 'fixedRight', widthPx: 400 },
+        { id: 'flex2', widthPx: 500 },
+      ],
+      'closing',
+      new Set(['fixedLeft', 'fixedRight']),
+    )
+    const byId = Object.fromEntries(result.map((entry) => [entry.id, entry.widthPx]))
+    expect(byId.fixedLeft).toBe(400)
+    expect(byId.fixedRight).toBe(400)
+    expect(byId.flex1).toBeCloseTo(550)
+    expect(byId.flex2).toBeCloseTo(650)
+  })
+
+  it('falls back to the left neighbor when every remaining section is fixed', () => {
+    const result = computeSectionWidthsForCloseFlexAware(widthsPx, 'b', new Set(['a', 'c']))
+    expect(result).toEqual([{ id: 'a', widthPx: 700 }, { id: 'c', widthPx: 500 }])
   })
 })

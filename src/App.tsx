@@ -48,7 +48,7 @@ import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName } from './shared/tags'
 import { EditorSection } from './editorSection/EditorSection'
 import { EditorToolbar } from './toolbar/EditorToolbar'
 import { DEFAULT_EDITOR_SECTION_ID, type EditorSectionEntry } from './shared/sections'
-import { computeSectionWidthsForClose, computeSectionWidthsForNewSection, computeSlotWidthsPx, type SectionWidthPx } from './shared/sectionWidths'
+import { computeSectionWidthsForCloseFlexAware, computeSectionWidthsForNewSectionFlexAware, computeSlotWidthsPx, type SectionWidthPx } from './shared/sectionWidths'
 import type { TextureCacheRequest } from './shared/textures'
 import {
   DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
@@ -1505,7 +1505,7 @@ function App() {
   // as a single unnamed default section so there's always something to
   // render before that async round-trip completes.
   const [editorSections, setEditorSections] = useState<EditorSectionEntry[]>(() => [
-    { id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, lastActiveNoteId: null },
+    { id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, fixedWidthPx: null, lastActiveNoteId: null },
   ])
   // Which note each section should activate once it first mounts and
   // registers -- populated by bootstrap, drained by the effect below as
@@ -4460,7 +4460,7 @@ ${markdownHtml}
             .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
           const resolvedSections = placedSections.length > 0
             ? placedSections
-            : [{ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, lastActiveNoteId: null }]
+            : [{ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, fixedWidthPx: null, lastActiveNoteId: null }]
           if (disposed) return
 
           // Each section resolves its own initial note from its own
@@ -4479,6 +4479,20 @@ ${markdownHtml}
           setActiveSectionId((previous) => (
             resolvedSections.some((entry) => entry.id === previous) ? previous : resolvedSections[0].id
           ))
+
+          // Restore the fixed/flexible pin state persisted for the placed
+          // sections. Marking hydration complete (even when nothing is
+          // pinned) is what arms the persist-on-change effect below.
+          const restoredFixedWidths = new Map<string, number>()
+          for (const entry of resolvedSections) {
+            if (typeof entry.fixedWidthPx === 'number' && entry.fixedWidthPx > 0) {
+              restoredFixedWidths.set(entry.id, entry.fixedWidthPx)
+            }
+          }
+          if (restoredFixedWidths.size > 0) {
+            setFixedWidthPxBySectionId(restoredFixedWidths)
+          }
+          fixedWidthsHydratedRef.current = true
 
           setPersistenceReady(true)
           setBootstrapError(null)
@@ -4551,9 +4565,56 @@ ${markdownHtml}
       .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
     const nextSections = placed.length > 0
       ? placed
-      : [{ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, lastActiveNoteId: null }]
+      : [{ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, fixedWidthPx: null, lastActiveNoteId: null }]
     setEditorSections(nextSections)
     return nextSections
+  }, [])
+
+  // Sections the user has "pinned" by shrinking them via a divider drag:
+  // id -> the pixel width they were pinned at. Fixed sections hold that width
+  // while flexible ones absorb window resizes; growing a fixed section via a
+  // divider drag makes it flexible again (removed from this map). The map is
+  // kept even while a shrunken window forces fixed sections below their
+  // pinned width (computeSlotWidthsPx handles that), so re-growing the
+  // window restores the pins exactly. Hydrated from the sections table
+  // during bootstrap and re-persisted whenever it changes (effect below).
+  const [fixedWidthPxBySectionId, setFixedWidthPxBySectionId] = useState<ReadonlyMap<string, number>>(new Map())
+  // Blocks the persist effect from writing (and clobbering the stored pins
+  // with the empty pre-bootstrap map) before hydration has happened.
+  const fixedWidthsHydratedRef = useRef(false)
+
+  useEffect(() => {
+    if (!fixedWidthsHydratedRef.current) return
+    const sectionsApi = window.thockdownSections
+    if (!sectionsApi?.updateSectionFixedWidths) return
+    // Explicit nulls for unpinned sections so clearing a pin (growing the
+    // section back via a divider drag) also clears it in the store.
+    void sectionsApi.updateSectionFixedWidths(editorSections.map((entry) => ({
+      id: entry.id,
+      fixedWidthPx: fixedWidthPxBySectionId.get(entry.id) ?? null,
+    }))).catch((error) => {
+      console.error('Failed to persist section fixed widths', error)
+    })
+  }, [fixedWidthPxBySectionId, editorSections])
+
+  // After a structural change (create/close), any fixed section whose width
+  // the recomputation moved keeps its fixed status at the new width.
+  const syncFixedWidthsToComputed = useCallback((widths: SectionWidthPx[], removedIds: string[] = []) => {
+    setFixedWidthPxBySectionId((previous) => {
+      let changed = false
+      const next = new Map(previous)
+      for (const id of removedIds) {
+        if (next.delete(id)) changed = true
+      }
+      for (const { id, widthPx } of widths) {
+        const pinnedPx = next.get(id)
+        if (pinnedPx !== undefined && Math.abs(pinnedPx - widthPx) > 0.5) {
+          next.set(id, widthPx)
+          changed = true
+        }
+      }
+      return changed ? next : previous
+    })
   }, [])
 
   const measureSectionWidthsPx = useCallback((): SectionWidthPx[] => (
@@ -4576,23 +4637,25 @@ ${markdownHtml}
 
   // Always creates a new section immediately to the right of the one the
   // "+" button was clicked on, per the handover doc's split-view design.
-  // Sizing policy: split the immediate left neighbor in half if it's large
-  // enough to give up half its width and stay above the minimum; otherwise
-  // fund the new section (plus the one new divider it introduces) from that
-  // neighbor first, only spilling over to the other sections -- proportionally,
-  // capped at each one's own minimum -- if the neighbor alone can't cover it.
-  // See sectionWidths.ts.
+  // Sizing policy: halve the flexible section adjacent to the new slot
+  // (source first, then the source's old right neighbor); when neither
+  // adjacent section is flexible, fund the new slot in equal parts from all
+  // flexible sections wherever they sit; only when nothing flexible can fund
+  // it do fixed sections get raided (legacy proportional split, and their
+  // pinned widths are updated to match). See sectionWidths.ts.
   const handleCreateSection = useCallback(async (afterPosition: number, sourceSectionId: string) => {
     const sectionsApi = window.thockdownSections
     if (!sectionsApi) return
 
     const currentWidthsPx = measureSectionWidthsPx()
-    const { updatedWidths, newSectionWidthPx } = computeSectionWidthsForNewSection(
+    const { updatedWidths, newSectionWidthPx } = computeSectionWidthsForNewSectionFlexAware(
       currentWidthsPx,
       sourceSectionId,
+      new Set(fixedWidthPxBySectionId.keys()),
       SECTION_MIN_WIDTH_PX,
       GRID_DIVIDER_PX,
     )
+    syncFixedWidthsToComputed(updatedWidths)
 
     const updated = await sectionsApi.createSection(null, afterPosition)
     const createdEntry = updated.find((entry) => entry.position === afterPosition + 1)
@@ -4622,19 +4685,26 @@ ${markdownHtml}
     if (finalized) {
       applyResolvedSections(finalized)
     }
-  }, [applyResolvedSections, markSectionActive, measureSectionWidthsPx, persistSectionWidthsPx])
+  }, [applyResolvedSections, fixedWidthPxBySectionId, markSectionActive, measureSectionWidthsPx, persistSectionWidthsPx, syncFixedWidthsToComputed])
 
   // Closes a section's slot -- deletes it outright if unnamed (the only
   // kind the "+" button creates today), parks it if named. Reassigns
   // activeSectionId to a sane neighbor if the closed section was active.
-  // Sizing policy: the closed section's entire width goes to its immediate
-  // left neighbor; every other section stays exactly the size it was.
+  // Sizing policy: the freed width goes to an adjacent flexible section
+  // (left first, then right); if neither neighbor is flexible it's split
+  // equally across all flexible sections; only when everything is fixed does
+  // a fixed neighbor absorb it (and its pinned width is updated to match).
   const handleCloseSection = useCallback(async (sectionId: string) => {
     const sectionsApi = window.thockdownSections
     if (!sectionsApi) return
 
     const currentWidthsPx = measureSectionWidthsPx()
-    const updatedWidths = computeSectionWidthsForClose(currentWidthsPx, sectionId)
+    const updatedWidths = computeSectionWidthsForCloseFlexAware(
+      currentWidthsPx,
+      sectionId,
+      new Set(fixedWidthPxBySectionId.keys()),
+    )
+    syncFixedWidthsToComputed(updatedWidths, [sectionId])
 
     const updated = await sectionsApi.closeSlot(sectionId)
     sectionRegistryRef.current.delete(sectionId)
@@ -4657,7 +4727,7 @@ ${markdownHtml}
     if (finalized) {
       applyResolvedSections(finalized)
     }
-  }, [applyResolvedSections, measureSectionWidthsPx, persistSectionWidthsPx])
+  }, [applyResolvedSections, fixedWidthPxBySectionId, measureSectionWidthsPx, persistSectionWidthsPx, syncFixedWidthsToComputed])
 
   const handleRenameSection = useCallback(async (sectionId: string, name: string | null) => {
     const sectionsApi = window.thockdownSections
@@ -4707,13 +4777,36 @@ ${markdownHtml}
       { id: incomingSectionId, widthFraction: outgoingWidthFraction },
     ]
 
+    let backfilledSectionId: string | null = null
     if (incomingPreviousPosition !== null && incomingPreviousPosition !== outgoingEntryBefore?.position) {
       updated = await sectionsApi.createSection(null, incomingPreviousPosition - 1)
       const backfilled = updated.find((entry) => entry.position === incomingPreviousPosition)
       if (backfilled) {
+        backfilledSectionId = backfilled.id
         widthFixups.push({ id: backfilled.id, widthFraction: incomingPreviousWidthFraction })
       }
     }
+
+    // Fixed pins belong to the *slot* just like widthFraction does: the
+    // destination slot's pin carries over to whichever section now occupies
+    // it, and the vacated slot's pin transfers to its backfilled section.
+    setFixedWidthPxBySectionId((previous) => {
+      if (previous.size === 0) return previous
+      const outgoingPinPx = previous.get(outgoingSectionId)
+      const incomingPinPx = previous.get(incomingSectionId)
+      if (outgoingPinPx === undefined && incomingPinPx === undefined) return previous
+
+      const next = new Map(previous)
+      next.delete(outgoingSectionId)
+      next.delete(incomingSectionId)
+      if (outgoingPinPx !== undefined) {
+        next.set(incomingSectionId, outgoingPinPx)
+      }
+      if (incomingPinPx !== undefined && backfilledSectionId !== null) {
+        next.set(backfilledSectionId, incomingPinPx)
+      }
+      return next
+    })
 
     updated = await sectionsApi.updateSectionWidths(widthFixups)
 
@@ -4780,12 +4873,16 @@ ${markdownHtml}
   const sectionSlotWidthsPx = useMemo(() => {
     if (sectionsRowWidthPx === null || sectionsRowWidthPx <= 0) return null
     return computeSlotWidthsPx(
-      editorSections.map((entry) => ({ id: entry.id, widthFraction: entry.widthFraction })),
+      editorSections.map((entry) => ({
+        id: entry.id,
+        widthFraction: entry.widthFraction,
+        fixedWidthPx: fixedWidthPxBySectionId.get(entry.id) ?? null,
+      })),
       sectionsRowWidthPx,
       GRID_DIVIDER_PX,
       SECTION_MIN_WIDTH_PX,
     )
-  }, [editorSections, sectionsRowWidthPx])
+  }, [editorSections, sectionsRowWidthPx, fixedWidthPxBySectionId])
 
   // Drag-resizes exactly the two sections on either side of the divider that
   // was grabbed. Slots render with an exact pixel flex-basis (grow/shrink 0,
@@ -4795,7 +4892,9 @@ ${markdownHtml}
   // survive the drag. Not routed through React state per mousemove (kept as
   // direct DOM writes) so dragging stays smooth; on release the final widths
   // are committed to React state synchronously (so the very next render
-  // reproduces them exactly) and persisted as fractions.
+  // reproduces them exactly) and persisted as fractions. Releasing also
+  // updates the fixed/flexible model: the shrunken side pins at its dragged
+  // width, the grown side (re)joins the flexible pool.
   const handleDividerMouseDown = useCallback((leftSectionId: string, rightSectionId: string) => (
     event: MouseEvent<HTMLDivElement>,
   ) => {
@@ -4842,6 +4941,27 @@ ${markdownHtml}
         id,
         widthFraction: widthPx / totalWidthPx,
       }))
+
+      // The drag transfers width between exactly two sections: the one the
+      // user shrank becomes "fixed" at its new width (window resizes leave it
+      // alone), the one that grew becomes flexible again. An unchanged drag
+      // (released where it started) alters neither.
+      const finalWidthById = new Map(finalWidthsPx.map(({ id, widthPx }) => [id, widthPx]))
+      setFixedWidthPxBySectionId((previous) => {
+        const next = new Map(previous)
+        const classify = (id: string, startPx: number) => {
+          const finalPx = finalWidthById.get(id)
+          if (finalPx === undefined) return
+          if (finalPx < startPx - 0.5) {
+            next.set(id, finalPx)
+          } else if (finalPx > startPx + 0.5) {
+            next.delete(id)
+          }
+        }
+        classify(leftSectionId, startLeftWidthPx)
+        classify(rightSectionId, startRightWidthPx)
+        return next
+      })
 
       // Commit the dragged fractions to state immediately: any re-render
       // between mouseup and the async persist resolving must reproduce the

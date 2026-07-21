@@ -210,6 +210,7 @@ const editorSectionsApi: EditorSectionsApi = {
   removeSection:       (id) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.remove, id),
   reorderSections:     (orderedSectionIds) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.reorder, orderedSectionIds),
   updateSectionWidths: (widths) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.updateWidths, widths),
+  updateSectionFixedWidths: (entries) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.updateFixedWidths, entries),
   setActiveNote:       (sectionId, noteId) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.setActiveNote, sectionId, noteId),
   closeSlot:           (sectionId) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.closeSlot, sectionId),
   swapIntoSlot:        (outgoingSectionId, incomingSectionId) => ipcRenderer.invoke(EDITOR_SECTIONS_CHANNELS.swapIntoSlot, outgoingSectionId, incomingSectionId),

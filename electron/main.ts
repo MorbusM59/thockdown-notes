@@ -108,10 +108,10 @@ const APP_WINDOW_MIN_HEIGHT_PX = 525;
 // Mirror renderer constants for sidebar sizing so main can compute effective minima
 const SIDEBAR_WIDTH_PX = 288;
 const GRID_DIVIDER_PX = 8;
-// Mirrors the renderer's per-section minimum width (src/App.tsx) -- each
-// editor section beyond the first raises the window's own minimum width by
-// this much (+ one divider), so a section can never be forced narrower than
-// it's allowed to be just by resizing the window.
+// Mirrors the renderer's per-section minimum width (src/App.tsx) -- the
+// window's minimum width grows just enough that every open section can sit
+// at this width (see computeAppWindowMinWidthPx), so a section can never be
+// forced narrower than it's allowed to be just by resizing the window.
 const EDITOR_SECTION_MIN_WIDTH_PX = 300;
 
 // Tracked here (not just derived per-call) because the sidebar-visibility and
@@ -122,11 +122,24 @@ let currentSidebarVisible = true;
 let currentSectionCount = 1;
 
 function computeAppWindowMinWidthPx(sidebarVisible: boolean, sectionCount: number): number {
-  const sidebarAdjustedMinWidth = sidebarVisible
+  // Two independent constraints; the window minimum is whichever is larger:
+  // 1. The chrome floor -- the base minimum the toolbar/window-controls row
+  //    needs (minus the sidebar columns when it's hidden).
+  // 2. The sections row -- sidebar columns plus every section at its minimum
+  //    width plus the dividers between them.
+  // At the chrome floor the sections row is already wider than one minimum
+  // section (the chrome, not the section, dictates the base), so extra
+  // sections consume that slack before the minimum needs to grow at all.
+  // Naively adding (min + divider) per extra section on top of the base would
+  // carry that slack forever, leaving a constant buffer that stops the user
+  // from ever shrinking all sections down to their minimum.
+  const chromeMinWidth = sidebarVisible
     ? APP_WINDOW_MIN_WIDTH_PX
     : Math.max(200, APP_WINDOW_MIN_WIDTH_PX - (SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX));
-  const extraSections = Math.max(0, sectionCount - 1);
-  return sidebarAdjustedMinWidth + extraSections * (EDITOR_SECTION_MIN_WIDTH_PX + GRID_DIVIDER_PX);
+  const sections = Math.max(1, sectionCount);
+  const sidebarColumnsPx = sidebarVisible ? SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX : 0;
+  const sectionsRowMinWidthPx = sections * EDITOR_SECTION_MIN_WIDTH_PX + (sections - 1) * GRID_DIVIDER_PX;
+  return Math.max(chromeMinWidth, sidebarColumnsPx + sectionsRowMinWidthPx);
 }
 
 /** Grows the window's current bounds if they're now narrower than `minWidth` -- never shrinks it. */
@@ -490,9 +503,10 @@ function registerIpcHandlers() {
   })
 
   // Adjust minimum size / bounds when the renderer reports how many editor
-  // sections are currently open -- each section beyond the first raises the
-  // window's own minimum width, so a section can never be squeezed narrower
-  // than its own minimum just by resizing the window.
+  // sections are currently open -- the minimum width tracks whatever the
+  // open sections need to all sit at their own minimum (or the chrome floor
+  // if that's larger), so a section can never be squeezed narrower than its
+  // own minimum just by resizing the window.
   ipcMain.on('window-control:section-count', (_event, sectionCount: unknown) => {
     try {
       if (!win || win.isDestroyed()) return
@@ -824,6 +838,10 @@ function registerIpcHandlers() {
 
   ipcMain.handle(EDITOR_SECTIONS_CHANNELS.reorder, async (_event, orderedSectionIds: string[]) => {
     return databaseService!.reorderEditorSections(orderedSectionIds);
+  });
+
+  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.updateFixedWidths, async (_event, entries: Array<{ id: string; fixedWidthPx: number | null }>) => {
+    return databaseService!.updateEditorSectionFixedWidths(entries);
   });
 
   ipcMain.handle(EDITOR_SECTIONS_CHANNELS.updateWidths, async (_event, widths: Array<{ id: string; widthFraction: number | null }>) => {

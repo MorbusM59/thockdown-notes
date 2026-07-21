@@ -173,6 +173,8 @@ export type EditorSectionEntry = {
   name: string | null;
   position: number | null;
   widthFraction: number | null;
+  /** User-pinned exact pixel width (null = flexible); see the renderer's fixed/flexible split-view sizing. */
+  fixedWidthPx: number | null;
   lastActiveNoteId: string | null;
 };
 
@@ -1084,7 +1086,7 @@ export class DatabaseService {
     const db = this.requireDb();
     // Parked (position IS NULL) sections sort after every visible one, rather
     // than SQLite's NULLS-first default scrambling the visible layout's order.
-    return db.prepare('SELECT id, name, position, widthFraction, lastActiveNoteId FROM editor_sections ORDER BY position IS NULL, position ASC').all() as EditorSectionEntry[];
+    return db.prepare('SELECT id, name, position, widthFraction, fixedWidthPx, lastActiveNoteId FROM editor_sections ORDER BY position IS NULL, position ASC').all() as EditorSectionEntry[];
   }
 
   createEditorSection(name: string | null = null, afterPosition?: number): EditorSectionEntry[] {
@@ -1135,6 +1137,18 @@ export class DatabaseService {
     const tx = db.transaction(() => {
       widths.forEach(({ id, widthFraction }) => {
         db.prepare('UPDATE editor_sections SET widthFraction = ? WHERE id = ?').run(widthFraction, id);
+      });
+    });
+    tx();
+    return this.listEditorSections();
+  }
+
+  /** Persists the fixed/flexible pin state (fixedWidthPx; null = flexible) whenever the renderer's pin map changes. */
+  updateEditorSectionFixedWidths(entries: Array<{ id: string; fixedWidthPx: number | null }>): EditorSectionEntry[] {
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      entries.forEach(({ id, fixedWidthPx }) => {
+        db.prepare('UPDATE editor_sections SET fixedWidthPx = ? WHERE id = ?').run(fixedWidthPx, id);
       });
     });
     tx();
@@ -2690,6 +2704,7 @@ export class DatabaseService {
         name             TEXT,
         position         INTEGER,
         widthFraction    REAL,
+        fixedWidthPx     REAL,
         lastActiveNoteId TEXT REFERENCES notes(id) ON DELETE SET NULL
       );
 
@@ -2725,6 +2740,7 @@ export class DatabaseService {
     this.ensureNotesColumn('contentChecksum', 'TEXT');
     this.ensureNotesColumn('assignedId', 'TEXT');
     this.ensureEditorSectionsColumn('lastActiveNoteId', 'TEXT REFERENCES notes(id) ON DELETE SET NULL');
+    this.ensureEditorSectionsColumn('fixedWidthPx', 'REAL');
 
     this.requireDb().exec(`
       CREATE INDEX IF NOT EXISTS idx_notes_internal_id ON notes(assignedId);

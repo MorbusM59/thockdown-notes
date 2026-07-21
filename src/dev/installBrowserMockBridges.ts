@@ -110,7 +110,7 @@ function toSummary(note: NoteDocument): NoteSummary {
 
 /** A fresh install always starts with exactly one (default, unnamed) section. */
 function createDefaultEditorSections(): EditorSectionEntry[] {
-  return [{ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, lastActiveNoteId: null }]
+  return [{ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, fixedWidthPx: null, lastActiveNoteId: null }]
 }
 
 function sortNotesDesc(notes: NoteDocument[]): NoteDocument[] {
@@ -298,6 +298,7 @@ function loadStore(): BrowserMockStore {
               // into a visible slot on every reload.
               position: entry.position === null ? null : (Number.isFinite(entry.position) ? entry.position : index),
               widthFraction: Number.isFinite(entry.widthFraction) ? entry.widthFraction : null,
+              fixedWidthPx: Number.isFinite(entry.fixedWidthPx) ? entry.fixedWidthPx : null,
               lastActiveNoteId: typeof entry.lastActiveNoteId === 'string' ? entry.lastActiveNoteId : null,
             }))
         : createDefaultEditorSections(),
@@ -942,7 +943,7 @@ function buildSectionsBridge(storeRef: { current: BrowserMockStore }): EditorSec
         store.editorSections = store.editorSections.map((section) => (
           section.position !== null && section.position >= insertAt ? { ...section, position: section.position + 1 } : section
         ))
-        store.editorSections.push({ id, name: name ?? null, position: insertAt, widthFraction: null, lastActiveNoteId: null })
+        store.editorSections.push({ id, name: name ?? null, position: insertAt, widthFraction: null, fixedWidthPx: null, lastActiveNoteId: null })
         return sorted(store)
       })
     },
@@ -981,6 +982,16 @@ function buildSectionsBridge(storeRef: { current: BrowserMockStore }): EditorSec
         const widthById = new Map(widths.map((entry) => [entry.id, entry.widthFraction]))
         store.editorSections = store.editorSections.map((section) => (
           widthById.has(section.id) ? { ...section, widthFraction: widthById.get(section.id) ?? null } : section
+        ))
+        return sorted(store)
+      })
+    },
+
+    async updateSectionFixedWidths(entries): Promise<EditorSectionEntry[]> {
+      return mutate((store) => {
+        const fixedById = new Map(entries.map((entry) => [entry.id, entry.fixedWidthPx]))
+        store.editorSections = store.editorSections.map((section) => (
+          fixedById.has(section.id) ? { ...section, fixedWidthPx: fixedById.get(section.id) ?? null } : section
         ))
         return sorted(store)
       })

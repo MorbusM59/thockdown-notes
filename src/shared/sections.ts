@@ -5,6 +5,7 @@ export const EDITOR_SECTIONS_CHANNELS = {
   remove: 'sections:remove',
   reorder: 'sections:reorder',
   updateWidths: 'sections:update-widths',
+  updateFixedWidths: 'sections:update-fixed-widths',
   setActiveNote: 'sections:set-active-note',
   closeSlot: 'sections:close-slot',
   swapIntoSlot: 'sections:swap-into-slot',
@@ -32,12 +33,23 @@ export interface EditorSectionEntry {
   name: string | null;
   position: number | null;
   widthFraction: number | null;
+  /**
+   * Set when the user has pinned this section by shrinking it via a divider
+   * drag: the pane holds exactly this pixel width while flexible siblings
+   * absorb window resizes (see computeSlotWidthsPx). Null = flexible.
+   */
+  fixedWidthPx: number | null;
   lastActiveNoteId: string | null;
 }
 
 export interface EditorSectionWidthUpdate {
   id: string;
   widthFraction: number | null;
+}
+
+export interface EditorSectionFixedWidthUpdate {
+  id: string;
+  fixedWidthPx: number | null;
 }
 
 export interface EditorSectionsApi {
@@ -50,6 +62,8 @@ export interface EditorSectionsApi {
   reorderSections(orderedSectionIds: string[]): Promise<EditorSectionEntry[]>;
   /** Persists the divider layout once a drag settles. */
   updateSectionWidths(widths: EditorSectionWidthUpdate[]): Promise<EditorSectionEntry[]>;
+  /** Persists the fixed/flexible pin state (see EditorSectionEntry.fixedWidthPx). */
+  updateSectionFixedWidths(entries: EditorSectionFixedWidthUpdate[]): Promise<EditorSectionEntry[]>;
   /** Records which note this section last showed -- independent of pinning. */
   setActiveNote(sectionId: string, noteId: string | null): Promise<EditorSectionEntry[]>;
   /**
