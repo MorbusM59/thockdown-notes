@@ -1,0 +1,50 @@
+// Portable Windows build: a .zip of the unpacked app that keeps all data,
+// settings, and session state inside its own folder instead of %APPDATA%.
+// See electron-builder.json5 for the regular installer build -- keep the
+// shared fields (files/asarUnpack/icon/appId) in sync between the two.
+// @see - https://www.electron.build/configuration/configuration
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.morbusm59.measlynotes",
+  "asar": true,
+  "productName": "Thockdown Notes",
+  "icon": "assets/icon",
+  "directories": {
+    "output": "release/${version}"
+  },
+  "files": [
+    "dist",
+    "dist-electron",
+    "assets/icon.ico",
+    "assets/icon.icns",
+    "assets/icon.png",
+    "assets/md.ico",
+    "assets/txt.ico",
+    "node_modules/**/*",
+    "package.json"
+  ],
+  // Native addons (.node binaries) can't be dlopen'd from inside an asar
+  // archive -- they need to live as real files on disk. See electron-builder.json5.
+  "asarUnpack": [
+    "node_modules/better-sqlite3/**/*"
+  ],
+  // Presence of this file (checked via process.resourcesPath in electron/main.ts)
+  // is how the app tells a portable build apart from an installed one at runtime.
+  "extraResources": [
+    {
+      "from": "assets/portable.flag",
+      "to": "portable.flag"
+    }
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "zip",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "artifactName": "${productName}-Windows-${version}-Portable.${ext}"
+  }
+}

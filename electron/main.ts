@@ -163,6 +163,26 @@ let currentRootBackgroundColorHex = DEFAULT_ROOT_BACKGROUND_COLOR_HEX;
 
 const OPENABLE_EXTENSIONS = new Set(['.md', '.txt']);
 
+// A portable build ships with an extra `portable.flag` resource (see
+// electron-builder.portable.json5) that an installed build never has --
+// its presence is the only thing distinguishing the two at runtime, since
+// they're otherwise identical app bundles.
+const isPortableBuild = app.isPackaged && existsSync(path.join(process.resourcesPath, 'portable.flag'));
+
+if (isPortableBuild) {
+  // Redirect every persistent Electron path (settings, cookies, local
+  // storage, GPU/disk cache, etc.) into the folder next to the executable
+  // *before* app 'ready' fires, so nothing gets written to %APPDATA% before
+  // we get a chance to move it. Everything lives under a single top-level
+  // "data" folder so the whole unpacked directory can be zipped or deleted
+  // with no trace left on the host system.
+  const portableDataDir = path.join(path.dirname(app.getPath('exe')), 'data');
+  const portableElectronDir = path.join(portableDataDir, 'electron');
+  app.setPath('userData', portableElectronDir);
+  app.setPath('sessionData', portableElectronDir);
+  app.setPath('cache', path.join(portableElectronDir, 'Cache'));
+}
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
@@ -261,6 +281,9 @@ function flushPendingExternalPathsToRenderer(): void {
 }
 
 function resolveDataRoot(): string {
+  if (isPortableBuild) {
+    return path.join(path.dirname(app.getPath('exe')), 'data', 'app');
+  }
   if (app.isPackaged) {
     return path.join(app.getPath('userData'), 'data');
   }

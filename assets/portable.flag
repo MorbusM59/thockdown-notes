@@ -1,0 +1,3 @@
+This file marks a portable build. Its presence next to the app tells
+Thockdown Notes to keep all data, settings, and session state inside the
+"data" folder next to the executable instead of writing to %APPDATA%.

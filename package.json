@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:browser": "vite --mode browser",
-    "build": "tsc && vite build && electron-builder",
+    "build": "tsc && vite build && electron-builder && electron-builder --config electron-builder.portable.json5",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "test": "vitest run"
