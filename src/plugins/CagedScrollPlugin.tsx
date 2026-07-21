@@ -34,7 +34,7 @@ interface CagedScrollPluginProps {
   lineHeightPx: number;
 }
 
-type ViewportIntent = 'none' | 'refocus-caged' | 'ensure-visible';
+type ViewportIntent = 'none' | 'refocus-caged' | 'ensure-visible' | 'preserve-caret-line';
 
 type ResolveIntentResult = {
   targetScrollTopPx: number | null;
@@ -113,7 +113,22 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         lineHeightPx,
       });
 
-      if (intent === 'refocus-caged' || intent === 'ensure-visible') {
+      if (intent === 'preserve-caret-line' && pasteCaretViewportOffsetPx !== null) {
+        // Keep the caret on the same screen-relative line it occupied before the
+        // paste: new scrollTop = new caret top - preserved viewport offset.
+        const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        let targetScrollTopPx = caretTopInScroll - pasteCaretViewportOffsetPx;
+        targetScrollTopPx = Math.round(targetScrollTopPx / lineHeightPx) * lineHeightPx;
+        targetScrollTopPx = Math.max(0, Math.min(maxScrollTopPx, targetScrollTopPx));
+
+        return {
+          targetScrollTopPx,
+          reason: 'ok',
+          caretTopInScrollPx: caretTopInScroll,
+        } satisfies ResolveIntentResult;
+      }
+
+      if (intent === 'refocus-caged' || intent === 'ensure-visible' || intent === 'preserve-caret-line') {
         const { targetScrollTopPx } = resolveCagedScrollTarget({
           caretTopInScrollPx: caretTopInScroll,
           scrollerScrollTopPx: scroller.scrollTop,
@@ -172,13 +187,15 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         // Keep active for sustained key-repeat; cleared on keyup.
       }
 
-      if (intent === 'ensure-visible') {
+      if (intent === 'ensure-visible' || intent === 'preserve-caret-line') {
+        pasteCaretViewportOffsetPx = null;
         scheduleRefocusTransactionDeactivation(scroller);
       }
 
       return true;
     };
 
+    let pasteCaretViewportOffsetPx: number | null = null;
     let pendingIntent: ViewportIntent = 'none';
     let isRefocusReconcileQueued = false;
     let refocusRetryFrameId: number | null = null;
@@ -208,11 +225,12 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       shouldSuppressInitialNativeJump = false;
       deterministicEnterBoundaryScrollTopPx = null;
       clampNextEnterReconcileToSingleRow = false;
+      pasteCaretViewportOffsetPx = null;
       if (refocusRetryFrameId !== null) {
         cancelAnimationFrame(refocusRetryFrameId);
         refocusRetryFrameId = null;
       }
-      if (pendingIntent === 'refocus-caged') {
+      if (pendingIntent === 'refocus-caged' || pendingIntent === 'preserve-caret-line') {
         pendingIntent = 'none';
       }
       deactivateRefocusTransaction(scroller);
@@ -702,12 +720,38 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     };
 
     const handlePaste = () => {
+      // Runs in the capture phase so this executes BEFORE Lexical's own paste
+      // handling on the editor root rebuilds the document — the pre-paste caret
+      // geometry must be measured while it still exists.
       clearCagedRefocusState();
       if (scroller) {
         // Use guarded transaction so paste reconcile cannot flash a pre-cage frame.
         activateRefocusTransaction(scroller);
+
+        const domSelection = window.getSelection();
+        const caretRect = domSelection ? readSelectionRect(domSelection, lineHeightPx) : null;
+        if (domSelection && caretRect) {
+          let rawText = '';
+          editor.getEditorState().read(() => {
+            rawText = $getRoot().getTextContent();
+          });
+
+          const scrollerRect = scroller.getBoundingClientRect();
+          const caretTopInScroll = resolveCaretTopInScroll({
+            caretRect,
+            scrollerRectTop: scrollerRect.top,
+            scrollerScrollTop: scroller.scrollTop,
+            rootEl: editor.getRootElement(),
+            domSelection,
+            rawText,
+            lineHeightPx,
+          });
+          pasteCaretViewportOffsetPx = caretTopInScroll - scroller.scrollTop;
+        }
       }
-      pendingIntent = 'ensure-visible';
+      // Falls back to the caged ensure-visible math inside the reconcile when
+      // no pre-paste caret geometry could be measured.
+      pendingIntent = 'preserve-caret-line';
     };
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -814,7 +858,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
 
     scroller?.addEventListener('keydown', handleKeyDown, { capture: true });
     scroller?.addEventListener('keyup', handleKeyUp, { capture: true });
-    scroller?.addEventListener('paste', handlePaste);
+    scroller?.addEventListener('paste', handlePaste, { capture: true });
     scroller?.addEventListener('wheel', handleWheel, { passive: false });
     scroller?.addEventListener('scroll', handleInitialRefocusNativeJumpSuppression, { passive: true });
     document.addEventListener('pointerdown', handlePointerDown, { capture: true, passive: true });
@@ -840,7 +884,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       }
       scroller?.removeEventListener('keydown', handleKeyDown, true);
       scroller?.removeEventListener('keyup', handleKeyUp, true);
-      scroller?.removeEventListener('paste', handlePaste);
+      scroller?.removeEventListener('paste', handlePaste, true);
       scroller?.removeEventListener('wheel', handleWheel);
       scroller?.removeEventListener('scroll', handleInitialRefocusNativeJumpSuppression);
       document.removeEventListener('pointerdown', handlePointerDown, true);

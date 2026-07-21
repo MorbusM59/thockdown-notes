@@ -9,7 +9,7 @@ import {
   SKIP_SELECTION_FOCUS_TAG,
 } from 'lexical';
 import { canonicalizeParagraphSegments, normalizeInternalText } from '../editor/TextPolicy';
-import { sanitizeDocumentText } from '../shared/textSanitization';
+import { sanitizeTextFragment } from '../shared/textSanitization';
 
 interface NoteTextHydrationPluginProps {
   noteId?: string | null;
@@ -63,7 +63,12 @@ export function NoteTextHydrationPlugin({ noteId, text, scrollerRef }: NoteTextH
   const lastAppliedNoteIdRef = useRef<string | null>(null);
 
   useLayoutEffect(() => {
-    const normalizedIncomingText = normalizeInternalText(sanitizeDocumentText(text));
+    // Must match the editor's own steady-state invariant (TextSanitizationPlugin
+    // runs sanitizeTextFragment on every text node). Using a stricter sanitizer
+    // here (e.g. HTML-tag stripping) makes the equality check below permanently
+    // false for legitimate typed content like "a < b and c > d", which forces a
+    // full rebuild on every keystroke and throws the caret to document start.
+    const normalizedIncomingText = normalizeInternalText(sanitizeTextFragment(text));
     const currentNoteId = noteId ?? '';
     let shouldHydrate = false;
 

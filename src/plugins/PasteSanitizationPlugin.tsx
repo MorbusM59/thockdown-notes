@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import {
+  $addUpdateTag,
   $createParagraphNode,
   $createTextNode,
   $getRoot,
@@ -10,6 +11,8 @@ import {
   COMMAND_PRIORITY_LOW,
   KEY_DOWN_COMMAND,
   PASTE_COMMAND,
+  SKIP_SCROLL_INTO_VIEW_TAG,
+  SKIP_SELECTION_FOCUS_TAG,
 } from 'lexical';
 import {
   sanitizeDocumentText,
@@ -129,6 +132,11 @@ export function PasteSanitizationPlugin() {
             return;
           }
 
+          // Viewport positioning after paste is owned by CagedScrollPlugin's
+          // preserve-caret-line reconcile; Lexical's native scroll-into-view
+          // would race it with a competing scrollTop write.
+          $addUpdateTag(SKIP_SCROLL_INTO_VIEW_TAG);
+          $addUpdateTag(SKIP_SELECTION_FOCUS_TAG);
           replaceEditorTextFromCanonical(nextText);
         }, {
           onUpdate: () => {

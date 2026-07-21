@@ -48,7 +48,7 @@ import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName } from './shared/tags'
 import { EditorSection } from './editorSection/EditorSection'
 import { EditorToolbar } from './toolbar/EditorToolbar'
 import { DEFAULT_EDITOR_SECTION_ID, type EditorSectionEntry } from './shared/sections'
-import { computeSectionWidthsForClose, computeSectionWidthsForNewSection, type SectionWidthPx } from './shared/sectionWidths'
+import { computeSectionWidthsForClose, computeSectionWidthsForNewSection, computeSlotWidthsPx, type SectionWidthPx } from './shared/sectionWidths'
 import type { TextureCacheRequest } from './shared/textures'
 import {
   DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
@@ -4595,16 +4595,30 @@ ${markdownHtml}
     )
 
     const updated = await sectionsApi.createSection(null, afterPosition)
-    const nextSections = applyResolvedSections(updated)
+    const createdEntry = updated.find((entry) => entry.position === afterPosition + 1)
+    const widthsWithNew = createdEntry
+      ? [...updatedWidths, { id: createdEntry.id, widthPx: newSectionWidthPx }]
+      : updatedWidths
+
+    // Overlay the computed fractions synchronously so the very first render
+    // of the new slot already has its exact width -- waiting for the persist
+    // round-trip would flash a frame where the new slot has no fraction at all.
+    const totalWidthPx = widthsWithNew.reduce((sum, entry) => sum + entry.widthPx, 0)
+    const fractionById = new Map(widthsWithNew.map((entry) => [
+      entry.id,
+      totalWidthPx > 0 ? entry.widthPx / totalWidthPx : null,
+    ]))
+    const nextSections = applyResolvedSections(updated.map((entry) => (
+      fractionById.has(entry.id)
+        ? { ...entry, widthFraction: fractionById.get(entry.id) ?? entry.widthFraction }
+        : entry
+    )))
     const created = nextSections.find((entry) => entry.position === afterPosition + 1)
     if (created) {
       markSectionActive(created.id)
     }
 
-    const finalized = await persistSectionWidthsPx([
-      ...updatedWidths,
-      ...(created ? [{ id: created.id, widthPx: newSectionWidthPx }] : []),
-    ])
+    const finalized = await persistSectionWidthsPx(widthsWithNew)
     if (finalized) {
       applyResolvedSections(finalized)
     }
@@ -4624,7 +4638,19 @@ ${markdownHtml}
 
     const updated = await sectionsApi.closeSlot(sectionId)
     sectionRegistryRef.current.delete(sectionId)
-    const nextSections = applyResolvedSections(updated)
+
+    // Same synchronous overlay as creation: the left neighbor inherits the
+    // closed slot's width on the very first post-close render.
+    const totalWidthPx = updatedWidths.reduce((sum, entry) => sum + entry.widthPx, 0)
+    const fractionById = new Map(updatedWidths.map((entry) => [
+      entry.id,
+      totalWidthPx > 0 ? entry.widthPx / totalWidthPx : null,
+    ]))
+    const nextSections = applyResolvedSections(updated.map((entry) => (
+      fractionById.has(entry.id)
+        ? { ...entry, widthFraction: fractionById.get(entry.id) ?? entry.widthFraction }
+        : entry
+    )))
     setActiveSectionId((previous) => (previous === sectionId ? nextSections[0].id : previous))
 
     const finalized = await persistSectionWidthsPx(updatedWidths)
@@ -4723,14 +4749,53 @@ ${markdownHtml}
   const editorSectionsRowRef = useRef<HTMLDivElement | null>(null)
   const sectionSlotElByIdRef = useRef<Map<string, HTMLDivElement>>(new Map())
 
+  // Deterministic slot sizing: the row's live width is observed and each
+  // slot's exact pixel width is derived from it (see computeSlotWidthsPx),
+  // rather than letting flex-grow weights improvise. This is what makes
+  // window shrinks reflow sections (down to their minimum, never clipping)
+  // and makes create/close/drag arithmetic land exactly as computed.
+  const [sectionsRowWidthPx, setSectionsRowWidthPx] = useState<number | null>(null)
+
+  useLayoutEffect(() => {
+    const rowEl = editorSectionsRowRef.current
+    if (!rowEl) return
+
+    const applyMeasuredWidth = (widthPx: number) => {
+      setSectionsRowWidthPx((previous) => (
+        previous !== null && Math.abs(previous - widthPx) < 0.5 ? previous : widthPx
+      ))
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        applyMeasuredWidth(entry.contentRect.width)
+      }
+    })
+    observer.observe(rowEl)
+    applyMeasuredWidth(rowEl.getBoundingClientRect().width)
+
+    return () => observer.disconnect()
+  }, [])
+
+  const sectionSlotWidthsPx = useMemo(() => {
+    if (sectionsRowWidthPx === null || sectionsRowWidthPx <= 0) return null
+    return computeSlotWidthsPx(
+      editorSections.map((entry) => ({ id: entry.id, widthFraction: entry.widthFraction })),
+      sectionsRowWidthPx,
+      GRID_DIVIDER_PX,
+      SECTION_MIN_WIDTH_PX,
+    )
+  }, [editorSections, sectionsRowWidthPx])
+
   // Drag-resizes exactly the two sections on either side of the divider that
-  // was grabbed. Slots normally size via flex-grow weights (proportional,
-  // so the row's fixed-width dividers are automatically excluded from the
-  // split) -- during a drag every slot is pinned to its current pixel width
-  // via a literal flex-basis instead, so only the two dragged neighbors
-  // reflow as the mouse moves, not the whole row. Not routed through React
-  // state per mousemove (kept as direct DOM writes) so dragging stays
-  // smooth; final widths are measured and persisted as fractions on release.
+  // was grabbed. Slots render with an exact pixel flex-basis (grow/shrink 0,
+  // derived from computeSlotWidthsPx), so during a drag only the two dragged
+  // neighbors' bases need direct DOM writes as the mouse moves -- the same
+  // style properties React itself renders, so no React/DOM style desync can
+  // survive the drag. Not routed through React state per mousemove (kept as
+  // direct DOM writes) so dragging stays smooth; on release the final widths
+  // are committed to React state synchronously (so the very next render
+  // reproduces them exactly) and persisted as fractions.
   const handleDividerMouseDown = useCallback((leftSectionId: string, rightSectionId: string) => (
     event: MouseEvent<HTMLDivElement>,
   ) => {
@@ -4777,6 +4842,17 @@ ${markdownHtml}
         id,
         widthFraction: widthPx / totalWidthPx,
       }))
+
+      // Commit the dragged fractions to state immediately: any re-render
+      // between mouseup and the async persist resolving must reproduce the
+      // dragged widths, not snap back to the pre-drag fractions.
+      const fractionById = new Map(widths.map(({ id, widthFraction }) => [id, widthFraction]))
+      setEditorSections((previous) => previous.map((entry) => (
+        fractionById.has(entry.id)
+          ? { ...entry, widthFraction: fractionById.get(entry.id) ?? entry.widthFraction }
+          : entry
+      )))
+
       void window.thockdownSections?.updateSectionWidths(widths).then((updated) => {
         applyResolvedSections(updated)
       })
@@ -6608,7 +6684,9 @@ ${markdownHtml}
                 ) : null}
                 <div
                   className="editor-section-slot"
-                  style={{ flexGrow: entry.widthFraction ?? (1 / editorSections.length), flexShrink: 1, flexBasis: 0 }}
+                  style={sectionSlotWidthsPx?.has(entry.id)
+                    ? { flexGrow: 0, flexShrink: 0, flexBasis: `${sectionSlotWidthsPx.get(entry.id)}px` }
+                    : { flexGrow: entry.widthFraction ?? (1 / editorSections.length), flexShrink: 1, flexBasis: 0 }}
                   ref={(el) => {
                     if (el) {
                       sectionSlotElByIdRef.current.set(entry.id, el)

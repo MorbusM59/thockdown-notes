@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeSectionWidthsForClose, computeSectionWidthsForNewSection } from './sectionWidths'
+import { computeSectionWidthsForClose, computeSectionWidthsForNewSection, computeSlotWidthsPx } from './sectionWidths'
 
 describe('computeSectionWidthsForNewSection', () => {
   it('splits the source section in half when it is larger than twice the minimum', () => {
@@ -88,5 +88,114 @@ describe('computeSectionWidthsForClose', () => {
       'c',
     )
     expect(result).toEqual([{ id: 'a', widthPx: 400 }, { id: 'b', widthPx: 800 }])
+  })
+})
+
+describe('computeSlotWidthsPx', () => {
+  const sum = (widths: Map<string, number>) => [...widths.values()].reduce((total, value) => total + value, 0)
+
+  it('splits proportionally by fraction, excluding fixed divider width from the pool', () => {
+    const widths = computeSlotWidthsPx(
+      [{ id: 'a', widthFraction: 0.75 }, { id: 'b', widthFraction: 0.25 }],
+      1208,
+      8,
+      300,
+    )
+    expect(widths.get('a')).toBeCloseTo(900)
+    expect(widths.get('b')).toBeCloseTo(300)
+    expect(sum(widths)).toBeCloseTo(1200)
+  })
+
+  it('normalizes weights that do not sum to 1', () => {
+    const widths = computeSlotWidthsPx(
+      [{ id: 'a', widthFraction: 3 }, { id: 'b', widthFraction: 1 }],
+      2008,
+      8,
+      300,
+    )
+    expect(widths.get('a')).toBeCloseTo(1500)
+    expect(widths.get('b')).toBeCloseTo(500)
+  })
+
+  it('gives sections without a fraction the average of the known weights', () => {
+    const widths = computeSlotWidthsPx(
+      [{ id: 'a', widthFraction: 0.5 }, { id: 'b', widthFraction: 0.5 }, { id: 'c', widthFraction: null }],
+      3016,
+      8,
+      300,
+    )
+    expect(widths.get('a')).toBeCloseTo(1000)
+    expect(widths.get('b')).toBeCloseTo(1000)
+    expect(widths.get('c')).toBeCloseTo(1000)
+  })
+
+  it('splits evenly when no section has a fraction', () => {
+    const widths = computeSlotWidthsPx(
+      [{ id: 'a', widthFraction: null }, { id: 'b', widthFraction: null }],
+      1008,
+      8,
+      300,
+    )
+    expect(widths.get('a')).toBeCloseTo(500)
+    expect(widths.get('b')).toBeCloseTo(500)
+  })
+
+  it('pins a section at the minimum and lets larger sections absorb the shrink', () => {
+    // Proportional shares would be 175/525 -- 'a' bottoms out at 300 and 'b'
+    // absorbs the rest, so nothing overflows the row.
+    const widths = computeSlotWidthsPx(
+      [{ id: 'a', widthFraction: 0.25 }, { id: 'b', widthFraction: 0.75 }],
+      708,
+      8,
+      300,
+    )
+    expect(widths.get('a')).toBe(300)
+    expect(widths.get('b')).toBeCloseTo(400)
+    expect(sum(widths)).toBeCloseTo(700)
+  })
+
+  it('cascades pinning across passes as the row keeps shrinking', () => {
+    const widths = computeSlotWidthsPx(
+      [
+        { id: 'a', widthFraction: 0.1 },
+        { id: 'b', widthFraction: 0.2 },
+        { id: 'c', widthFraction: 0.7 },
+      ],
+      966,
+      8,
+      300,
+    )
+    expect(widths.get('a')).toBe(300)
+    expect(widths.get('b')).toBe(300)
+    expect(widths.get('c')).toBeCloseTo(350)
+    expect(sum(widths)).toBeCloseTo(950)
+  })
+
+  it('falls back to an equal below-minimum split instead of overflowing the row', () => {
+    const widths = computeSlotWidthsPx(
+      [{ id: 'a', widthFraction: 0.9 }, { id: 'b', widthFraction: 0.1 }],
+      508,
+      8,
+      300,
+    )
+    expect(widths.get('a')).toBeCloseTo(250)
+    expect(widths.get('b')).toBeCloseTo(250)
+    expect(sum(widths)).toBeCloseTo(500)
+  })
+
+  it('always conserves the available width exactly', () => {
+    for (const rowWidthPx of [508, 708, 966, 1208, 3016]) {
+      const widths = computeSlotWidthsPx(
+        [
+          { id: 'a', widthFraction: 0.15 },
+          { id: 'b', widthFraction: null },
+          { id: 'c', widthFraction: 0.55 },
+        ],
+        rowWidthPx,
+        8,
+        300,
+      )
+      expect(sum(widths)).toBeCloseTo(rowWidthPx - 16)
+    }
   })
 })

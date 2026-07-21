@@ -111,6 +111,103 @@ export function computeSectionWidthsForNewSection(
   return { updatedWidths, newSectionWidthPx }
 }
 
+export interface SectionWidthWeight {
+  id: string
+  widthFraction: number | null
+}
+
+/**
+ * Deterministically resolves each section slot's exact pixel width for the
+ * current row width. This is the single sizing authority: slots render with
+ * `flex: 0 0 <px>` from this result instead of letting the flex container
+ * improvise, so structural changes (create/close/drag) and window resizes
+ * all reduce to "recompute this pure function."
+ *
+ * Policy:
+ * - `widthFraction` entries are proportional weights (they need not sum to 1;
+ *   they're normalized). Missing (`null`) weights get the average of the known
+ *   ones, or an even share when none are known.
+ * - Every section is kept at or above `minWidthPx` for as long as the row can
+ *   afford it: sections whose proportional share would fall below the minimum
+ *   are pinned to `minWidthPx` and the remaining space is redistributed across
+ *   the rest — so as a window shrinks, the smallest sections bottom out first
+ *   and the larger ones keep absorbing the shrink.
+ * - Once the row cannot fit `count * minWidthPx`, all sections share the row
+ *   equally (below minimum) rather than ever overflowing/clipping the row.
+ * - Widths are returned as exact floats that sum to the available width
+ *   (row width minus the fixed dividers); no pixel is invented or lost.
+ */
+export function computeSlotWidthsPx(
+  weights: SectionWidthWeight[],
+  rowWidthPx: number,
+  dividerWidthPx: number,
+  minWidthPx: number,
+): Map<string, number> {
+  const result = new Map<string, number>()
+  const count = weights.length
+  if (count === 0) return result
+
+  const availablePx = Math.max(0, rowWidthPx - (count - 1) * dividerWidthPx)
+
+  if (availablePx <= count * minWidthPx) {
+    const equalPx = availablePx / count
+    for (const entry of weights) {
+      result.set(entry.id, equalPx)
+    }
+    return result
+  }
+
+  const known = weights.filter((entry) => entry.widthFraction !== null && entry.widthFraction! > 0)
+  const fallbackWeight = known.length > 0
+    ? known.reduce((sum, entry) => sum + (entry.widthFraction ?? 0), 0) / known.length
+    : 1
+  const weightById = new Map(weights.map((entry) => [
+    entry.id,
+    entry.widthFraction !== null && entry.widthFraction > 0 ? entry.widthFraction : fallbackWeight,
+  ]))
+
+  let unpinnedIds = new Set(weights.map((entry) => entry.id))
+  let remainingPx = availablePx
+
+  // Iteratively pin below-minimum sections to the minimum and redistribute the
+  // rest proportionally. Terminates in <= count passes; because
+  // availablePx > count * minWidthPx, the unpinned pool always has more than
+  // minWidthPx per member available, so the loop can't pin everyone.
+  for (let pass = 0; pass < count; pass += 1) {
+    const unpinned = weights.filter((entry) => unpinnedIds.has(entry.id))
+    const weightSum = unpinned.reduce((sum, entry) => sum + (weightById.get(entry.id) ?? 0), 0)
+    if (weightSum <= 0) {
+      const equalPx = remainingPx / unpinned.length
+      for (const entry of unpinned) {
+        result.set(entry.id, equalPx)
+      }
+      return result
+    }
+
+    const nextUnpinnedIds = new Set<string>()
+    let pinnedThisPassPx = 0
+    for (const entry of unpinned) {
+      const sharePx = ((weightById.get(entry.id) ?? 0) / weightSum) * remainingPx
+      if (sharePx < minWidthPx) {
+        result.set(entry.id, minWidthPx)
+        pinnedThisPassPx += minWidthPx
+      } else {
+        result.set(entry.id, sharePx)
+        nextUnpinnedIds.add(entry.id)
+      }
+    }
+
+    if (nextUnpinnedIds.size === unpinned.length) {
+      return result
+    }
+
+    remainingPx -= pinnedThisPassPx
+    unpinnedIds = nextUnpinnedIds
+  }
+
+  return result
+}
+
 /**
  * Computes new widths for closing `closingSectionId`'s slot: its entire
  * width is handed to its immediate left neighbor, unchanged for everyone

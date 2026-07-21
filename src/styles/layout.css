@@ -27,14 +27,15 @@
   min-height: 0;
 }
 
-/* Sized via inline flex-grow (a weight derived from widthFraction, or an
- * even split) with flex-basis 0 -- flexbox naturally excludes the row's
- * fixed-width dividers from the split this way. App.tsx owns this box
- * directly (a ref per section): during a divider drag every slot is
- * temporarily pinned to a literal pixel flex-basis so only the two
- * dragged neighbors reflow, then restored to grow-weight sizing on release. */
+/* Sized via an inline exact pixel flex-basis (grow/shrink 0), derived in
+ * App.tsx from widthFraction weights and the observed row width -- see
+ * computeSlotWidthsPx in sectionWidths.ts. That function, not flexbox, owns
+ * min-width enforcement and window-shrink reflow, so no CSS min-width here.
+ * During a divider drag the two dragged neighbors' bases are written
+ * directly to the DOM per mousemove, then committed back to React state on
+ * release. */
 .editor-section-slot {
-  flex-shrink: 1;
+  flex-shrink: 0;
   min-width:   0;
   min-height:  0;
 }
