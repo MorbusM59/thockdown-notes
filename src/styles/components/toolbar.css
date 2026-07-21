@@ -11,6 +11,7 @@
   border-radius:    0 0 var(--border-radius-regular) var(--border-radius-regular);
   border-top: none;
   border:      1px solid var(--color-border-light-70);
+  border-top: none;
   box-shadow:       var(--box-shadow-inverted);
   background:       var(--color-input-backdrop);
   padding: 5px;
@@ -106,8 +107,8 @@
   height:          100%;
   max-height: calc(2 * var(--markdown-toolbar-button-height) + var(--markdown-toolbar-gap) + 2 * var(--markdown-toolbar-padding) + 2px);
   border-radius:    0 0 var(--border-radius-regular) var(--border-radius-regular);
-  border-top: none;
   border:      1px solid var(--color-border-light-70);
+  border-top: none;
   box-shadow:       var(--box-shadow-inverted);
   background:       var(--color-input-backdrop);
   padding: var(--markdown-toolbar-padding);
