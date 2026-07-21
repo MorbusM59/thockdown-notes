@@ -18,7 +18,7 @@ import { useDisplayedNoteSelection } from './useDisplayedNoteSelection'
 import { useNoteSaveQueue } from './useNoteSaveQueue'
 import { useEditorSectionMount } from './useEditorSectionMount'
 import { useSnapshotFreeze } from './useSnapshotFreeze'
-import { useSectionTabs } from '../tabBar/useSectionTabs'
+import { useSectionTabs, TEMP_TAB_PIN_HOLD_MS } from '../tabBar/useSectionTabs'
 import { useNoteProtectionActions } from './useNoteProtectionActions'
 import { useNoteSnapshotTimeline } from './useNoteSnapshotTimeline'
 import { useDocumentFind } from '../find/useDocumentFind'
@@ -204,6 +204,16 @@ export function EditorSection({
   const [noteIdDraft, setNoteIdDraft] = useState('')
   const [isSectionPickerOpen, setIsSectionPickerOpen] = useState(false)
   const [swapCandidates, setSwapCandidates] = useState<{ id: string; name: string }[]>([])
+
+  // Hold-to-open-picker: a left-mouse-down hold on the identity tab (tab-bar
+  // mode only), same duration/visual language as the temp-tab pin hold,
+  // opens the section picker. `pickerHoldTriggeredRef` survives past the
+  // timeout into the click handler so the click that always follows a
+  // mouseup doesn't immediately toggle the bar (or close the picker it just
+  // opened).
+  const [isPickerArming, setIsPickerArming] = useState(false)
+  const pickerHoldTimerRef = useRef<number | null>(null)
+  const pickerHoldTriggeredRef = useRef(false)
 
   const startRenamingSection = useCallback(() => {
     setSectionNameDraft(sectionName ?? '')
@@ -896,12 +906,13 @@ export function EditorSection({
     reportSectionHandle(sectionId, currentSectionHandle)
   })
 
-  // The identity button now doubles as the tag/tab bar mode toggle (left-
-  // click) -- replacing the standalone mode-toggle button -- and its
-  // right-click behavior depends on which bar is currently showing: assign
-  // the active note's id in tag-bar mode, or open the section-picker (this
-  // slot's swap target list, rendered into the tab bar's own pill area) in
-  // tab-bar mode.
+  // The identity button doubles as the tag/tab bar mode toggle (left-click)
+  // -- replacing the standalone mode-toggle button -- and its right-click
+  // behavior depends on which bar is currently showing: assign the active
+  // note's id in tag-bar mode, or rename this section directly in tab-bar
+  // mode. Holding the left button (tab-bar mode only) instead opens the
+  // section-picker (this slot's swap targets, rendered into the tab bar's
+  // own pill area) -- mirroring the temp-tab pin hold.
   const startEditingNoteId = useCallback(() => {
     setNoteIdDraft(activeNoteSummary?.assignedId ?? '')
     setIsEditingNoteId(true)
@@ -929,7 +940,34 @@ export function EditorSection({
     setIsEditingNoteId(false)
   }, [])
 
+  const clearIdentityHoldTimer = useCallback(() => {
+    if (pickerHoldTimerRef.current !== null) {
+      window.clearTimeout(pickerHoldTimerRef.current)
+      pickerHoldTimerRef.current = null
+    }
+    setIsPickerArming(false)
+  }, [])
+
+  const handleIdentityMouseDown = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return
+    if (tabBarMode !== 'tabs') return
+    clearIdentityHoldTimer()
+    setIsPickerArming(true)
+    pickerHoldTimerRef.current = window.setTimeout(() => {
+      pickerHoldTimerRef.current = null
+      setIsPickerArming(false)
+      pickerHoldTriggeredRef.current = true
+      void openSectionPicker()
+    }, TEMP_TAB_PIN_HOLD_MS)
+  }, [tabBarMode, clearIdentityHoldTimer, openSectionPicker])
+
+  useEffect(() => () => clearIdentityHoldTimer(), [clearIdentityHoldTimer])
+
   const handleIdentityClick = useCallback(() => {
+    if (pickerHoldTriggeredRef.current) {
+      pickerHoldTriggeredRef.current = false
+      return
+    }
     if (isSectionPickerOpen) {
       closeSectionPicker()
       return
@@ -939,22 +977,13 @@ export function EditorSection({
 
   const handleIdentityContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
+    clearIdentityHoldTimer()
     if (tabBarMode === 'tabs') {
-      void openSectionPicker()
+      startRenamingSection()
     } else {
       startEditingNoteId()
     }
-  }, [tabBarMode, openSectionPicker, startEditingNoteId])
-
-  // The section-picker's own first entry is always this section itself
-  // (renamed rather than swapped) -- clicking it with either mouse button
-  // starts the same rename flow the identity button used to trigger
-  // directly, and closes the picker either way.
-  const handleSectionPickerSelfClick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    closeSectionPicker()
-    startRenamingSection()
-  }, [closeSectionPicker, startRenamingSection])
+  }, [tabBarMode, clearIdentityHoldTimer, startRenamingSection, startEditingNoteId])
 
   const handleSectionPickerCandidateClick = useCallback((candidateId: string) => {
     closeSectionPicker()
@@ -1037,9 +1066,12 @@ export function EditorSection({
         onCancelNoteIdEdit={cancelNoteIdEdit}
         onIdentityClick={handleIdentityClick}
         onIdentityContextMenu={handleIdentityContextMenu}
+        onIdentityMouseDown={handleIdentityMouseDown}
+        onIdentityMouseUp={clearIdentityHoldTimer}
+        onIdentityMouseLeave={clearIdentityHoldTimer}
+        isPickerArming={isPickerArming}
         isSectionPickerOpen={isSectionPickerOpen}
         swapCandidates={swapCandidates}
-        onSectionPickerSelfClick={handleSectionPickerSelfClick}
         onSectionPickerCandidateClick={handleSectionPickerCandidateClick}
       />
 

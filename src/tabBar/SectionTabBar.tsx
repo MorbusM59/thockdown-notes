@@ -37,14 +37,18 @@ export interface SectionTabBarProps {
   onCommitNoteIdEdit: () => void
   onCancelNoteIdEdit: () => void
 
-  /** Left-click: toggle tag/tab bar (or close the section picker, if open). Right-click: assign a note id (tag bar) or open the section picker (tab bar). */
+  /** Left-click: toggle tag/tab bar (or close the section picker, if open). Right-click: assign a note id (tag bar) or rename this section (tab bar). Holding left-click (tab bar only) opens the section picker instead. */
   onIdentityClick: () => void
   onIdentityContextMenu: (event: MouseEvent<HTMLButtonElement>) => void
+  onIdentityMouseDown: (event: MouseEvent<HTMLButtonElement>) => void
+  onIdentityMouseUp: () => void
+  onIdentityMouseLeave: () => void
+  /** Whether the identity tab is currently mid-hold, arming toward opening the section picker -- drives the fill-bar visual, same language as the temp-tab pin hold. */
+  isPickerArming: boolean
 
-  /** Tab-bar-mode right-click on the identity tab takes over the tab bar's own pill area with this slot's swap targets -- this section itself first (to rename), then every other named section (to swap in). */
+  /** A held left-click on the identity tab (tab-bar mode only) takes over the tab bar's own pill area with this slot's swap targets -- every other named section, offered to swap in. */
   isSectionPickerOpen: boolean
   swapCandidates: { id: string; name: string }[]
-  onSectionPickerSelfClick: (event: MouseEvent<HTMLButtonElement>) => void
   onSectionPickerCandidateClick: (candidateId: string) => void
 }
 
@@ -80,9 +84,12 @@ export function SectionTabBar({
   onCancelNoteIdEdit,
   onIdentityClick,
   onIdentityContextMenu,
+  onIdentityMouseDown,
+  onIdentityMouseUp,
+  onIdentityMouseLeave,
+  isPickerArming,
   isSectionPickerOpen,
   swapCandidates,
-  onSectionPickerSelfClick,
   onSectionPickerCandidateClick,
 }: SectionTabBarProps) {
   const {
@@ -191,12 +198,15 @@ export function SectionTabBar({
         ) : (
           <button
             type="button"
-            className={`tag-pill section-identity-tab${isSectionPickerOpen ? ' active' : ''}`}
+            className={`tag-pill section-identity-tab${isSectionPickerOpen ? ' active' : ''}${isPickerArming ? ' picker-arming' : ''}`}
             onClick={onIdentityClick}
             onContextMenu={onIdentityContextMenu}
+            onMouseDown={onIdentityMouseDown}
+            onMouseUp={onIdentityMouseUp}
+            onMouseLeave={onIdentityMouseLeave}
             title={
               tabBarMode === 'tabs'
-                ? (sectionName ? `Section: ${sectionName} -- click to switch to the tag bar, right-click to swap in another named section` : 'Unnamed section -- click to switch to the tag bar, right-click to swap in a named section')
+                ? (sectionName ? `Section: ${sectionName} -- click to switch to the tag bar, hold to swap in another named section, right-click to rename` : 'Unnamed section -- click to switch to the tag bar, hold to swap in a named section, right-click to name this section')
                 : 'Click to switch to the tab bar, right-click to assign this note\'s id'
             }
           >
@@ -222,15 +232,6 @@ export function SectionTabBar({
             >
               {isSectionPickerOpen ? (
                 <div className="tabbar-section-picker" aria-live="polite">
-                  <button
-                    type="button"
-                    className="tag-pill section-picker-item is-self"
-                    onClick={onSectionPickerSelfClick}
-                    onContextMenu={onSectionPickerSelfClick}
-                    title={sectionName ? `Rename "${sectionName}"` : 'Name this section'}
-                  >
-                    <span className="tag-pill-label">{sectionName ?? '···'}</span>
-                  </button>
                   {swapCandidates.map((candidate) => (
                     <button
                       key={candidate.id}

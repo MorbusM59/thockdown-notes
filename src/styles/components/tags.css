@@ -9,14 +9,14 @@
 }
 
 .tab-mode-shell {
-  border:        1px solid hsla(0, 0%, 100%, 0.533);
+  border:        1px solid var(--color-border-light-70);
   box-shadow:    var(--box-shadow-inverted);
   border-radius: var(--border-radius-regular);
   display:        flex;
   flex-direction: row;
   align-items:    center;
   gap:            2px;
-  padding: 4px;
+  padding:        4px;
   flex:           1 1 auto;
   width:          auto;
   height: auto;
@@ -206,8 +206,9 @@
 /* Identity tab: doubles as the tag/tab bar mode toggle (left-click) and
    shows either this section's own name (tab bar) or the active note's
    assigned id (tag bar). Right-click assigns a note id in tag-bar mode, or
-   opens the section picker (below) in tab-bar mode -- "active" while that
-   picker is open. */
+   renames this section directly in tab-bar mode. Holding left-click in
+   tab-bar mode instead opens the section picker (below) -- "active" while
+   that picker is open, "picker-arming" while the hold is in progress. */
 .section-identity-tab-shell {
   position:     relative;
   flex:         0 0 auto;
@@ -216,7 +217,12 @@
 }
 
 .section-identity-tab {
-  max-width: 96px;
+  position:  relative;
+  min-width: 80px;
+  max-width: 80px;
+  overflow:  hidden;
+  justify-content: center;
+  letter-spacing: 0.05em;
 }
 
 .section-identity-tab.active {
@@ -224,8 +230,28 @@
   box-shadow: var(--box-shadow-inverted-harsh);
 }
 
+/* Hold-to-open-picker fill bar -- same visual language as the temp-tab pin
+   hold (note-tab-pill.temp.pin-arming below). */
+.section-identity-tab::after {
+  content:    '';
+  position:   absolute;
+  left:       0;
+  bottom:     0;
+  height:     2px;
+  width:      0%;
+  background: var(--color-archive);
+  transition: width 0s linear;
+}
+
+.section-identity-tab.picker-arming::after {
+  width:      100%;
+  transition: width var(--temp-tab-pin-hold-ms, 500ms) linear;
+}
+
 .section-identity-input {
-  max-width:     96px;
+  min-width: 80px;
+  max-width: 80px;
+  letter-spacing: 0.05em;
   height:        100%;
   box-sizing:    border-box;
   border:        1px solid var(--btn-border-default);
@@ -233,14 +259,15 @@
   background:    var(--btn-bg-default);
   font-size:     11px;
   color:         var(--color-text-80);
-  padding:       0 4px;
+  justify-content: center;
+  text-align: center;
+  align-items: center;
   -webkit-app-region: no-drag;
 }
 
 /* Section picker: takes over the tab bar's own pill area (in place of the
-   pinned tabs) after a tab-bar-mode right-click on the identity tab. First
-   pill is always this section itself (renamed rather than swapped in);
-   the rest are other named sections offered as swap targets. */
+   pinned tabs) after a tab-bar-mode hold on the identity tab -- every other
+   named section, offered as a swap target. */
 .tabbar-section-picker {
   display:     flex;
   flex-wrap:   nowrap;
@@ -251,10 +278,6 @@
 
 .section-picker-item {
   max-width: 120px;
-}
-
-.section-picker-item.is-self {
-  font-style: italic;
 }
 
 /* Tab mode: pinned note pills fill the whole bar */
