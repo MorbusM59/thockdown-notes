@@ -461,23 +461,10 @@ export function Editor({
       case 'ArrowDown':
         void typingSoundManager.playRandomClick({ keyId, detune: 1200, gain: 0.3 });
         break;
-      case 'Tab':
-        if (event.shiftKey) {
-          void typingSoundManager.playRandomClick({
-            keyId,
-            reverse: true,
-            gain: 0.7,
-            echo: { count: 2, delayMs: 80, decay: 0.4 },
-            detune: 600,
-          });
-        } else {
-          void typingSoundManager.playRandomClick({
-            keyId,
-            gain: 0.7,
-            echo: { count: 2, delayMs: 80, decay: 0.4 },
-          });
-        }
-        break;
+      // Tab/Shift+Tab's keystroke sound plays from ContractBridgePlugin's
+      // KEY_TAB_COMMAND handler instead: Lexical intercepts and
+      // stopPropagation()s real Tab/Shift+Tab before they ever reach this
+      // handler, so this case only ever matched the unbound Ctrl+Tab.
       case 'z':
         if (event.ctrlKey || event.metaKey) {
           void typingSoundManager.playRandomClick({

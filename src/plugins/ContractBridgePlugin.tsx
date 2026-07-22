@@ -22,6 +22,7 @@ import type {
   EditorTextChangeEvent,
 } from '../editor/EditorContract';
 import { canonicalizeParagraphSegments } from '../editor/TextPolicy';
+import { typingSoundManager } from '../sound/TypingSoundManager';
 import {
   applySelectionStateToDom,
   EMPTY_SELECTION,
@@ -1186,6 +1187,23 @@ export function ContractBridgePlugin({
         // Never allow Tab/Shift+Tab to escape the editor and trigger focus/menu navigation.
         event.preventDefault();
         event.stopPropagation();
+
+        const tabKeyId = event.shiftKey ? 'key:Shift:Tab' : 'key:Tab';
+        if (event.shiftKey) {
+          void typingSoundManager.playRandomClick({
+            keyId: tabKeyId,
+            reverse: true,
+            gain: 0.7,
+            echo: { count: 2, delayMs: 80, decay: 0.4 },
+            detune: 600,
+          });
+        } else {
+          void typingSoundManager.playRandomClick({
+            keyId: tabKeyId,
+            gain: 0.7,
+            echo: { count: 2, delayMs: 80, decay: 0.4 },
+          });
+        }
 
         const transformCallback = onTabIndentTransformRef.current;
         if (transformCallback) {
