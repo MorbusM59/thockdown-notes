@@ -243,13 +243,14 @@
   margin-right: 4px;
 }
 
-.section-identity-tab {
+.tag-pill.section-identity-tab {
   position:  relative;
   min-width: 80px;
   max-width: 80px;
   overflow:  hidden;
   justify-content: center;
   letter-spacing: 0.05em;
+  border-radius: var(--border-radius-regular);
 }
 
 .section-identity-tab.active {
@@ -264,7 +265,6 @@
   height:        100%;
   box-sizing:    border-box;
   border:        1px solid var(--btn-border-default);
-  border-radius: var(--border-radius-small);
   background:    var(--btn-bg-default);
   font-size:     11px;
   color:         var(--color-text-80);

@@ -1,4 +1,4 @@
-import type { CSSProperties, MouseEvent } from 'react'
+import type { CSSProperties, MouseEvent, RefObject } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import { isArchivedNote, isDeletedNote } from '../shared/noteLifecycle'
 import { normalizeTagName, isProtectedTagName } from '../shared/tags'
@@ -6,6 +6,8 @@ import { TEMP_TAB_PIN_HOLD_MS, type UseSectionTabsResult } from './useSectionTab
 
 export interface SectionTabBarProps {
   tabs: UseSectionTabsResult
+  /** This section's own tab-bar strip element -- scopes the "click outside drops the tag bar back to the tab bar" listener to this section only. */
+  tabbarGridRef: RefObject<HTMLElement>
   /** Only the leftmost section shows this button at all; every other section shows a close button here instead. */
   isSidebarVisible: boolean
   toggleSidebarVisible: () => void
@@ -58,6 +60,7 @@ export interface SectionTabBarProps {
  */
 export function SectionTabBar({
   tabs,
+  tabbarGridRef,
   isSidebarVisible,
   toggleSidebarVisible,
   persistenceReady,
@@ -136,7 +139,7 @@ export function SectionTabBar({
   } = tabs
 
   return (
-    <section className="tabbar-grid" style={{ flex: '0 0 36px' }} aria-label="Tab bar">
+    <section ref={tabbarGridRef} className="tabbar-grid" style={{ flex: '0 0 36px' }} aria-label="Tab bar">
       {isLeftmostSection ? (
         <button
           type="button"

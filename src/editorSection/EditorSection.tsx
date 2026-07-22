@@ -290,6 +290,7 @@ export function EditorSection({
   const buildToggleBulletedListTransformRef = useRef<(text: string, selection: import('../editor/EditorContract').EditorSelectionState) => { text: string; selection: import('../editor/EditorContract').EditorSelectionState } | null>(() => null)
   const buildToggleNumberedListTransformRef = useRef<(text: string, selection: import('../editor/EditorContract').EditorSelectionState) => { text: string; selection: import('../editor/EditorContract').EditorSelectionState } | null>(() => null)
   const sectionContainerRef = useRef<HTMLDivElement | null>(null)
+  const tabbarGridRef = useRef<HTMLElement | null>(null)
 
   const {
     adapterRef,
@@ -578,6 +579,24 @@ export function EditorSection({
   useEffect(() => {
     tabBarModeRef.current = tabBarMode
   }, [tabBarMode, tabBarModeRef])
+
+  // The tag bar is transient chrome, not a sticky preference -- any click
+  // outside this section's own tab-bar strip (typing in the editor,
+  // clicking the sidebar, clicking a *different* section) drops it back to
+  // the tab bar. Scoped to this section's own tabbarGridRef so a click
+  // inside a neighboring section's tag bar doesn't collapse this one too.
+  useEffect(() => {
+    if (tabBarMode !== 'tags') return
+    const handleWindowMouseDown = (event: globalThis.MouseEvent) => {
+      const target = event.target
+      if (target instanceof Node && tabbarGridRef.current?.contains(target)) {
+        return
+      }
+      setTabBarMode('tabs')
+    }
+    window.addEventListener('mousedown', handleWindowMouseDown)
+    return () => window.removeEventListener('mousedown', handleWindowMouseDown)
+  }, [tabBarMode, setTabBarMode])
 
   // Full reset to the same blank state a freshly created section starts in:
   // no active note, no pinned tabs, no name. Unpins every tab first (while a
@@ -1065,6 +1084,7 @@ export function EditorSection({
       onDropCapture={handleSectionDropCapture}
     >
       <SectionTabBar
+        tabbarGridRef={tabbarGridRef}
         tabs={{
           tagInputRef,
           tagInputValue,
