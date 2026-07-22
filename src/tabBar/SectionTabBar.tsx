@@ -46,7 +46,12 @@ export interface SectionTabBarProps {
   /** A held left-click on the identity tab (tab-bar mode only) takes over the tab bar's own pill area with this slot's swap targets -- every other named section, offered to swap in. */
   isSectionPickerOpen: boolean
   swapCandidates: { id: string; name: string }[]
+  /** Left-click swaps the candidate in, unless it's the currently deletion-primed one -- see deletionPrimedSectionId. */
   onSectionPickerCandidateClick: (candidateId: string) => void
+  /** Which candidate pill (if any) is armed for permanent deletion via right-click. */
+  deletionPrimedSectionId: string | null
+  onSectionPickerCandidateContextMenu: (event: MouseEvent<HTMLButtonElement>, candidateId: string) => void
+  onSectionPickerCandidateMouseLeave: (candidateId: string) => void
   /** Leading pill in the open picker -- resets this slot back to its blank, freshly-created state: no active note, no pinned tabs, no name. Hidden when the slot is already empty. */
   onSectionPickerClearClick: () => void
 }
@@ -87,6 +92,9 @@ export function SectionTabBar({
   isSectionPickerOpen,
   swapCandidates,
   onSectionPickerCandidateClick,
+  deletionPrimedSectionId,
+  onSectionPickerCandidateContextMenu,
+  onSectionPickerCandidateMouseLeave,
   onSectionPickerClearClick,
 }: SectionTabBarProps) {
   const {
@@ -253,17 +261,22 @@ export function SectionTabBar({
                       <span className="tag-pill-label">···</span>
                     </button>
                   ) : null}
-                  {swapCandidates.map((candidate) => (
-                    <button
-                      key={candidate.id}
-                      type="button"
-                      className="tag-pill section-picker-item"
-                      onClick={() => onSectionPickerCandidateClick(candidate.id)}
-                      title={`Swap in "${candidate.name}"`}
-                    >
-                      <span className="tag-pill-label">{candidate.name}</span>
-                    </button>
-                  ))}
+                  {swapCandidates.map((candidate) => {
+                    const isDeletionPrimed = deletionPrimedSectionId === candidate.id
+                    return (
+                      <button
+                        key={candidate.id}
+                        type="button"
+                        className={`tag-pill section-picker-item${isDeletionPrimed ? ' deletion-primed' : ''}`}
+                        onClick={() => onSectionPickerCandidateClick(candidate.id)}
+                        onContextMenu={(event) => onSectionPickerCandidateContextMenu(event, candidate.id)}
+                        onMouseLeave={() => onSectionPickerCandidateMouseLeave(candidate.id)}
+                        title={isDeletionPrimed ? `Click again to permanently delete "${candidate.name}"` : `Swap in "${candidate.name}" -- right-click to delete`}
+                      >
+                        <span className="tag-pill-label">{candidate.name}</span>
+                      </button>
+                    )
+                  })}
                 </div>
               ) : pinnedTabs.length === 0 && !tempTabNoteId ? (
                 <span className="tabbar-tag-hint">Open a note to preview it here.</span>

@@ -16,6 +16,8 @@ export interface UseSectionTabsOptions {
   persistenceReady: boolean
   /** Switches which note this section is showing. Will become section-scoped itself once sections can diverge; passed straight through for now. */
   activateNote: (noteId: string) => Promise<void>
+  /** Unloads this section's active note back to its blank, no-note-loaded state -- used whenever the active note's tab closes, instead of auto-selecting a neighboring tab. */
+  clearActiveNote: () => Promise<void>
   /** Locates this section's active note in the (deliberately stable, non-chasing) menu -- triggered by clicking a tab that's already selected. */
   revealNoteInMenu: () => void
   flushPendingSaveNow: () => Promise<void>
@@ -106,6 +108,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     notes,
     persistenceReady,
     activateNote,
+    clearActiveNote,
     revealNoteInMenu,
     flushPendingSaveNow,
     refreshNotes,
@@ -523,28 +526,22 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   }, [sectionId, updateNoteAssignedId])
 
   // Removes a note's pinned tab. If that tab belonged to the currently
-  // active note, activation moves to whichever tab slides into its old
-  // position (i.e. the tab that was to its right) — falling back to the
-  // new rightmost tab if it was the last one, or staying put if no tabs
-  // remain.
+  // active note, the editor blanks out rather than jumping to a neighboring
+  // tab -- notes only ever get loaded by an explicit user action now, never
+  // as an automatic fallback when one closes.
   const unpinNoteTab = useCallback(async (noteId: string) => {
     if (!window.thockdownTabs) return
 
     const wasActiveTab = noteId === activeNoteId
-    const removedIndex = pinnedTabs.findIndex((tab) => tab.noteId === noteId)
 
     const allUpdatedTabs = await window.thockdownTabs.removeTab(sectionId, noteId).catch(() => null)
     if (!allUpdatedTabs) return
-    const updatedTabs = allUpdatedTabs.filter((tab) => tab.sectionId === sectionId)
-    setPinnedTabs(updatedTabs)
+    setPinnedTabs(allUpdatedTabs.filter((tab) => tab.sectionId === sectionId))
 
-    if (wasActiveTab && removedIndex !== -1) {
-      const nextTab = updatedTabs[removedIndex] ?? updatedTabs[removedIndex - 1]
-      if (nextTab) {
-        void activateNote(nextTab.noteId)
-      }
+    if (wasActiveTab) {
+      await clearActiveNote()
     }
-  }, [activeNoteId, pinnedTabs, activateNote, sectionId])
+  }, [activeNoteId, sectionId, clearActiveNote])
 
   // Pins `noteId` to this section if it isn't already, then moves it to the
   // rightmost slot -- idempotent either way, so it's safe to call whether
@@ -578,17 +575,12 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   }, [sectionId, updateNoteAssignedId])
 
   // Dismissing the temp tab has nothing to persist-remove (it was never a
-  // real note_tabs row) — it just hands activation over to the leftmost
-  // pinned tab, same as closing the leftmost real tab would. If there are
-  // no pinned tabs left to fall back to, there's nowhere else to go, so it
-  // stays put.
+  // real note_tabs row) -- just blanks the editor, same as unpinning the
+  // active pinned tab does.
   const dismissTempTab = useCallback((noteId: string) => {
     if (noteId !== activeNoteId) return
-    const nextTab = pinnedTabs[0]
-    if (nextTab) {
-      void activateNote(nextTab.noteId)
-    }
-  }, [activeNoteId, pinnedTabs, activateNote])
+    void clearActiveNote()
+  }, [activeNoteId, clearActiveNote])
 
   const handleAddCurrentNoteToTabs = useCallback(async () => {
     if (!activeNoteId || !persistenceReady) return

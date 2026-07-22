@@ -36,14 +36,6 @@ async function hashNormalizedText(text: string): Promise<string> {
   return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
-type NoteTreeGroup = {
-  secondary: Array<{
-    tertiary: Array<{
-      notes: NoteSummary[]
-    }>
-  }>
-}
-
 type ViewStyleKey =
   | 'modern'
   | 'narrow'
@@ -104,10 +96,6 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   tabBarModeRef: MutableRefObject<'tags' | 'tabs'>
 
   sidebarMode: 'date' | 'category' | 'archive' | 'trash' | 'find' | 'options'
-  dateFilteredNotesRef: MutableRefObject<NoteSummary[]>
-  trashFilteredNotesRef: MutableRefObject<NoteSummary[]>
-  categoryTreeRef: MutableRefObject<NoteTreeGroup[]>
-  archiveTreeRef: MutableRefObject<NoteTreeGroup[]>
 
   restoredDocumentFindCaseSensitive: boolean | null
   documentFindCaseSensitiveRef: MutableRefObject<boolean>
@@ -126,6 +114,8 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   onRenameSection: (name: string | null) => void
   onFetchSwapCandidates: () => Promise<{ id: string; name: string }[]>
   onSwapSection: (incomingSectionId: string) => void
+  /** Permanently deletes a named section -- the section picker's right-click-then-left-click confirm gesture on one of its candidate pills. */
+  onDeleteSection: (sectionId: string) => void
 
   /** Unpins a note's tab from a *different* section -- called when this section claims a tab dragged in from elsewhere. */
   unpinNoteFromSection: (sectionId: string, noteId: string) => void
@@ -176,10 +166,6 @@ export function EditorSection({
   restoredTabBarMode,
   tabBarModeRef,
   sidebarMode,
-  dateFilteredNotesRef,
-  trashFilteredNotesRef,
-  categoryTreeRef,
-  archiveTreeRef,
   restoredDocumentFindCaseSensitive,
   documentFindCaseSensitiveRef,
   editorRuntimeMetrics,
@@ -200,6 +186,7 @@ export function EditorSection({
   onRenameSection,
   onFetchSwapCandidates,
   onSwapSection,
+  onDeleteSection,
   unpinNoteFromSection,
   isNoteOpenInOtherSection,
 }: EditorSectionProps) {
@@ -219,6 +206,8 @@ export function EditorSection({
   const [noteIdDraft, setNoteIdDraft] = useState('')
   const [isSectionPickerOpen, setIsSectionPickerOpen] = useState(false)
   const [swapCandidates, setSwapCandidates] = useState<{ id: string; name: string }[]>([])
+  /** Right-click on a picker candidate pill arms it for deletion; a left-click while armed confirms. Anything else (mouse leaving, picking a different candidate) disarms it. */
+  const [deletionPrimedSectionId, setDeletionPrimedSectionId] = useState<string | null>(null)
 
   const startRenamingSection = useCallback(() => {
     setSectionNameDraft(sectionName ?? '')
@@ -244,6 +233,16 @@ export function EditorSection({
 
   const closeSectionPicker = useCallback(() => {
     setIsSectionPickerOpen(false)
+    setDeletionPrimedSectionId(null)
+  }, [])
+
+  const handleSectionPickerCandidateContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>, candidateId: string) => {
+    event.preventDefault()
+    setDeletionPrimedSectionId(candidateId)
+  }, [])
+
+  const handleSectionPickerCandidateMouseLeave = useCallback((candidateId: string) => {
+    setDeletionPrimedSectionId((previous) => (previous === candidateId ? null : previous))
   }, [])
 
   // Dismiss the section picker on any click outside it -- a standard
@@ -567,6 +566,7 @@ export function EditorSection({
     notes,
     persistenceReady,
     activateNote,
+    clearActiveNote,
     revealNoteInMenu: revealNoteInMenuStable,
     flushPendingSaveNow,
     refreshNotes,
@@ -646,10 +646,6 @@ export function EditorSection({
     refreshNotes,
     noteTransitionLockRef,
     sidebarMode,
-    dateFilteredNotesRef,
-    trashFilteredNotesRef,
-    categoryTreeRef,
-    archiveTreeRef,
     activeNoteExternalPathRef,
     externalNoteOriginalTextByIdRef,
     externalNoteOriginalHashByIdRef,
@@ -1069,9 +1065,14 @@ export function EditorSection({
   }, [tabBarMode, startRenamingSection, startEditingNoteId])
 
   const handleSectionPickerCandidateClick = useCallback((candidateId: string) => {
+    if (deletionPrimedSectionId === candidateId) {
+      closeSectionPicker()
+      onDeleteSection(candidateId)
+      return
+    }
     closeSectionPicker()
     onSwapSection(candidateId)
-  }, [closeSectionPicker, onSwapSection])
+  }, [deletionPrimedSectionId, closeSectionPicker, onDeleteSection, onSwapSection])
 
   const handleSectionPickerClearClick = useCallback(() => {
     closeSectionPicker()
@@ -1165,6 +1166,9 @@ export function EditorSection({
         isSectionPickerOpen={isSectionPickerOpen}
         swapCandidates={swapCandidates}
         onSectionPickerCandidateClick={handleSectionPickerCandidateClick}
+        deletionPrimedSectionId={deletionPrimedSectionId}
+        onSectionPickerCandidateContextMenu={handleSectionPickerCandidateContextMenu}
+        onSectionPickerCandidateMouseLeave={handleSectionPickerCandidateMouseLeave}
         onSectionPickerClearClick={handleSectionPickerClearClick}
       />
 

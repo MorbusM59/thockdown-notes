@@ -277,8 +277,9 @@
 }
 
 /* Section picker: takes over the tab bar's own pill area (in place of the
-   pinned tabs) after a tab-bar-mode hold on the identity tab -- every other
-   named section, offered as a swap target. */
+   pinned tabs) after a tab-bar-mode click on the identity tab -- every other
+   named section, offered as a swap target. Right-click arms a candidate for
+   permanent deletion instead; a left-click while armed confirms it. */
 .tabbar-section-picker {
   display:     flex;
   flex-wrap:   nowrap;
@@ -289,6 +290,10 @@
 
 .section-picker-item {
   max-width: 120px;
+}
+
+.section-picker-item.deletion-primed {
+  filter: var(--filter-primed-delete);
 }
 
 /* Tab mode: pinned note pills fill the whole bar */

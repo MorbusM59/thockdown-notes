@@ -4770,6 +4770,48 @@ ${markdownHtml}
     applyResolvedSections(updated)
   }, [applyResolvedSections])
 
+  // Permanently deletes a named section -- its row and any pinned tabs --
+  // triggered by the section picker's right-click-then-left-click confirm
+  // gesture. Unlike closeSlot (which only parks a named section so it can be
+  // swapped back in later), this actually removes it for good. Reuses the
+  // same close-time width redistribution as handleCloseSection for the
+  // uncommon case where the deleted section happens to be occupying a
+  // visible slot right now; computeSectionWidthsForCloseFlexAware is a
+  // no-op when the id isn't currently placed, which covers the common case
+  // (deleting a parked section straight out of the picker).
+  const handleDeleteSection = useCallback(async (sectionId: string) => {
+    const sectionsApi = window.thockdownSections
+    if (!sectionsApi) return
+
+    const currentWidthsPx = measureSectionWidthsPx()
+    const updatedWidths = computeSectionWidthsForCloseFlexAware(
+      currentWidthsPx,
+      sectionId,
+      new Set(fixedWidthPxBySectionId.keys()),
+    )
+    syncFixedWidthsToComputed(updatedWidths, [sectionId])
+
+    const updated = await sectionsApi.removeSection(sectionId)
+    sectionRegistryRef.current.delete(sectionId)
+
+    const totalWidthPx = updatedWidths.reduce((sum, entry) => sum + entry.widthPx, 0)
+    const fractionById = new Map(updatedWidths.map((entry) => [
+      entry.id,
+      totalWidthPx > 0 ? entry.widthPx / totalWidthPx : null,
+    ]))
+    const nextSections = applyResolvedSections(updated.map((entry) => (
+      fractionById.has(entry.id)
+        ? { ...entry, widthFraction: fractionById.get(entry.id) ?? entry.widthFraction }
+        : entry
+    )))
+    setActiveSectionId((previous) => (previous === sectionId ? nextSections[0].id : previous))
+
+    const finalized = await persistSectionWidthsPx(updatedWidths)
+    if (finalized) {
+      applyResolvedSections(finalized)
+    }
+  }, [applyResolvedSections, fixedWidthPxBySectionId, measureSectionWidthsPx, persistSectionWidthsPx, syncFixedWidthsToComputed])
+
   // Fetched fresh each time the identity tab's right-click menu opens,
   // rather than kept as ongoing state -- named-but-parked sections (not in
   // editorSections, which only holds placed ones) only matter at the
@@ -6899,6 +6941,7 @@ ${markdownHtml}
                   onRenameSection={(name) => void handleRenameSection(entry.id, name)}
                   onFetchSwapCandidates={() => handleFetchSwapCandidates(entry.id)}
                   onSwapSection={(incomingSectionId) => void handleSwapSection(entry.id, incomingSectionId)}
+                  onDeleteSection={(id) => void handleDeleteSection(id)}
                   unpinNoteFromSection={unpinNoteFromSection}
                   isNoteOpenInOtherSection={isNoteOpenInOtherSection}
                   markSectionActive={markSectionActive}
@@ -6930,10 +6973,6 @@ ${markdownHtml}
                   restoredTabBarMode={restoredTabBarMode}
                   tabBarModeRef={tabBarModeRef}
                   sidebarMode={sidebarMode}
-                  dateFilteredNotesRef={dateFilteredNotesRef}
-                  trashFilteredNotesRef={trashFilteredNotesRef}
-                  categoryTreeRef={categoryTreeRef}
-                  archiveTreeRef={archiveTreeRef}
                   restoredDocumentFindCaseSensitive={restoredDocumentFindCaseSensitive}
                   documentFindCaseSensitiveRef={documentFindCaseSensitiveRef}
                   editorRuntimeMetrics={editorRuntimeMetrics}

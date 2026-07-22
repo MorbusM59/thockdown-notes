@@ -11,14 +11,6 @@ type NotePrimedAction = 'archive' | 'deletion'
 type ProtectedQuickReleaseAction = 'remove-archived' | 'remove-deleted' | null
 type SidebarModeForRemoval = 'date' | 'trash' | 'category' | 'archive' | 'find' | 'options'
 
-type NoteTreeGroup = {
-  secondary: Array<{
-    tertiary: Array<{
-      notes: NoteSummary[]
-    }>
-  }>
-}
-
 async function hashNormalizedText(text: string): Promise<string> {
   const normalized = normalizeInternalText(text)
   const encoder = new TextEncoder()
@@ -42,10 +34,6 @@ export interface UseNoteProtectionActionsOptions {
   refreshNotes: (preferredId?: string | null) => Promise<string | null>
   noteTransitionLockRef: MutableRefObject<boolean>
   sidebarMode: SidebarModeForRemoval
-  dateFilteredNotesRef: MutableRefObject<NoteSummary[]>
-  trashFilteredNotesRef: MutableRefObject<NoteSummary[]>
-  categoryTreeRef: MutableRefObject<NoteTreeGroup[]>
-  archiveTreeRef: MutableRefObject<NoteTreeGroup[]>
   activeNoteExternalPathRef: MutableRefObject<string | null>
   externalNoteOriginalTextByIdRef: MutableRefObject<Map<string, string>>
   externalNoteOriginalHashByIdRef: MutableRefObject<Map<string, string>>
@@ -75,10 +63,6 @@ export function useNoteProtectionActions({
   refreshNotes,
   noteTransitionLockRef,
   sidebarMode,
-  dateFilteredNotesRef,
-  trashFilteredNotesRef,
-  categoryTreeRef,
-  archiveTreeRef,
   activeNoteExternalPathRef,
   externalNoteOriginalTextByIdRef,
   externalNoteOriginalHashByIdRef,
@@ -315,48 +299,6 @@ export function useNoteProtectionActions({
     }
   }, [activeNoteId, activeNoteText, notes])
 
-  const getNextActiveNoteIdAfterRemoval = useCallback((removedNoteId: string): string | null => {
-    if (sidebarMode === 'date') {
-      return dateFilteredNotesRef.current.find((note) => note.id !== removedNoteId)?.id ?? null
-    }
-
-    if (sidebarMode === 'trash') {
-      return trashFilteredNotesRef.current.find((note) => note.id !== removedNoteId)?.id ?? null
-    }
-
-    if (sidebarMode === 'category') {
-      for (const primary of categoryTreeRef.current) {
-        for (const secondary of primary.secondary) {
-          for (const tertiary of secondary.tertiary) {
-            for (const note of tertiary.notes) {
-              if (note.id !== removedNoteId) {
-                return note.id
-              }
-            }
-          }
-        }
-      }
-      return null
-    }
-
-    if (sidebarMode === 'archive') {
-      for (const primary of archiveTreeRef.current) {
-        for (const secondary of primary.secondary) {
-          for (const tertiary of secondary.tertiary) {
-            for (const note of tertiary.notes) {
-              if (note.id !== removedNoteId) {
-                return note.id
-              }
-            }
-          }
-        }
-      }
-      return null
-    }
-
-    return null
-  }, [sidebarMode, dateFilteredNotesRef, trashFilteredNotesRef, categoryTreeRef, archiveTreeRef])
-
   const executePrimedNoteAction = useCallback(async (noteId: string, action: NotePrimedAction) => {
     if (!window.thockdownNotes) return
     if (!persistenceReady) return
@@ -374,13 +316,8 @@ export function useNoteProtectionActions({
         await refreshNotes(activeNoteId === noteId ? null : activeNoteId)
 
         if (activeNoteId === noteId) {
-          const nextActiveId = getNextActiveNoteIdAfterRemoval(noteId)
-          if (nextActiveId) {
-            await activateNote(nextActiveId)
-          } else {
-            setActiveNoteId(null)
-            setActiveNoteText('')
-          }
+          setActiveNoteId(null)
+          setActiveNoteText('')
         }
 
         return
@@ -394,24 +331,15 @@ export function useNoteProtectionActions({
 
       await refreshNotes(activeNoteId ?? noteId)
       if (activeNoteId === noteId) {
-        if (action === 'archive' || action === 'deletion') {
-          const nextActiveId = getNextActiveNoteIdAfterRemoval(noteId)
-          if (nextActiveId) {
-            await activateNote(nextActiveId)
-          } else {
-            setActiveNoteId(null)
-            setActiveNoteText('')
-          }
-        } else {
-          await activateNote(noteId)
-        }
+        setActiveNoteId(null)
+        setActiveNoteText('')
       }
     } catch (error) {
       console.error('Failed to apply note action', error)
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [activateNote, activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes, saveExternalNoteToFile, getNextActiveNoteIdAfterRemoval, noteTransitionLockRef, setActiveNoteId, setActiveNoteText])
+  }, [activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, setActiveNoteText])
 
   const applyQuickProtectedRightClickAction = useCallback(async (noteId: string, action: Exclude<ProtectedQuickReleaseAction, null>) => {
     if (!window.thockdownNotes) return
@@ -445,7 +373,6 @@ export function useNoteProtectionActions({
     cancelPendingSave()
 
     clearNoteArmTimer()
-    const nextActiveId = activeNoteId === noteId ? getNextActiveNoteIdAfterRemoval(noteId) : null
 
     externalNoteOriginalTextByIdRef.current.delete(noteId)
     externalNoteOriginalHashByIdRef.current.delete(noteId)
@@ -456,17 +383,13 @@ export function useNoteProtectionActions({
       setNotes((previous) => previous.filter((note) => note.id !== noteId))
 
       if (activeNoteId === noteId) {
-        if (nextActiveId) {
-          await activateNote(nextActiveId)
-        } else {
-          setActiveNoteId(null)
-          setActiveNoteText('')
-        }
+        setActiveNoteId(null)
+        setActiveNoteText('')
       }
     } catch (error) {
       console.error('Failed to delete external temp note', error)
     }
-  }, [activeNoteId, activateNote, cancelPendingSave, clearNoteArmTimer, getNextActiveNoteIdAfterRemoval, externalNoteOriginalTextByIdRef, externalNoteOriginalHashByIdRef, setCurrentExternalNoteHash, setNotes, setActiveNoteId, setActiveNoteText])
+  }, [activeNoteId, cancelPendingSave, clearNoteArmTimer, externalNoteOriginalTextByIdRef, externalNoteOriginalHashByIdRef, setCurrentExternalNoteHash, setNotes, setActiveNoteId, setActiveNoteText])
 
   const handleNoteRightPressStart = useCallback((noteId: string, event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -583,20 +506,15 @@ export function useNoteProtectionActions({
       await applyProtectedNoteDestination(noteId, 'archived')
       await refreshNotes(activeNoteId ?? noteId)
       if (activeNoteId === noteId) {
-        const nextActiveId = getNextActiveNoteIdAfterRemoval(noteId)
-        if (nextActiveId) {
-          await activateNote(nextActiveId)
-        } else {
-          setActiveNoteId(null)
-          setActiveNoteText('')
-        }
+        setActiveNoteId(null)
+        setActiveNoteText('')
       }
     } catch (error) {
       console.error('Failed to archive note', error)
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [activeNoteId, activateNote, applyProtectedNoteDestination, flushPendingSaveNow, persistenceReady, refreshNotes, noteTransitionLockRef, getNextActiveNoteIdAfterRemoval, setActiveNoteId, setActiveNoteText])
+  }, [activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, setActiveNoteText])
 
   const handleTrashClick = useCallback(async (noteId: string) => {
     if (!window.thockdownNotes || !persistenceReady) return
@@ -617,20 +535,15 @@ export function useNoteProtectionActions({
 
       await refreshNotes(activeNoteId ?? noteId)
       if (activeNoteId === noteId) {
-        const nextActiveId = getNextActiveNoteIdAfterRemoval(noteId)
-        if (nextActiveId) {
-          await activateNote(nextActiveId)
-        } else {
-          setActiveNoteId(null)
-          setActiveNoteText('')
-        }
+        setActiveNoteId(null)
+        setActiveNoteText('')
       }
     } catch (error) {
       console.error('Failed to trash note', error)
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [activeNoteId, activateNote, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, getNextActiveNoteIdAfterRemoval, setActiveNoteId, setActiveNoteText])
+  }, [activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, setActiveNoteText])
 
   const purgeDeletedNotesPermanently = useCallback(async () => {
     if (!window.thockdownNotes) return
@@ -656,21 +569,16 @@ export function useNoteProtectionActions({
       const activeDeleted = activeNoteId ? deletedNoteIds.includes(activeNoteId) : false
       await refreshNotes(activeDeleted ? null : activeNoteId)
 
-      if (activeDeleted && activeNoteId) {
-        const nextActiveId = getNextActiveNoteIdAfterRemoval(activeNoteId)
-        if (nextActiveId) {
-          await activateNote(nextActiveId)
-        } else {
-          setActiveNoteId(null)
-          setActiveNoteText('')
-        }
+      if (activeDeleted) {
+        setActiveNoteId(null)
+        setActiveNoteText('')
       }
     } catch (error) {
       console.error('Failed to permanently purge deleted notes', error)
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [activateNote, activeNoteId, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, getNextActiveNoteIdAfterRemoval, setActiveNoteId, setActiveNoteText])
+  }, [activeNoteId, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, setActiveNoteText])
 
   const handleTrashViewButtonMouseDown = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     if (event.button !== 2) return
