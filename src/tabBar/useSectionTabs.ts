@@ -50,6 +50,14 @@ export interface UseSectionTabsResult {
   handleTagContainerDragOver: (event: DragEvent<HTMLDivElement>) => void
   handleTagContainerDrop: (event: DragEvent<HTMLDivElement>) => void
   handleTagContextMenu: (event: MouseEvent<HTMLDivElement>, tagName: string) => void
+  /** Whether the suggested-tags row is occupying the whole tag bar (hiding the tag input and currently-assigned tags) -- toggled by clicking the identity tab while it's showing the assigned id. */
+  isSuggestedTagsExpanded: boolean
+  toggleSuggestedTagsExpanded: () => void
+  suggestedTagsScrollerRef: RefObject<HTMLDivElement>
+  suggestedTagsCanScrollLeft: boolean
+  suggestedTagsCanScrollRight: boolean
+  updateSuggestedTagsScrollEdges: () => void
+  handleSuggestedTagsWheel: (event: ReactWheelEvent<HTMLDivElement>) => void
 
   // ── Tab bar ──
   tabBarMode: 'tags' | 'tabs'
@@ -443,6 +451,51 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     setUnpinPrimedTabNoteId(null)
   }, [])
 
+  // ── Suggested tags, expanded to fill the whole bar ──────────────────────
+  // Toggled by clicking the identity tab while it's showing the assigned id
+  // (tag-bar mode); hides the tag input and currently-assigned tags so the
+  // full suggestion list gets the whole width, wheel-scrollable exactly like
+  // the tab bar's own horizontal scroll below.
+
+  const [isSuggestedTagsExpanded, setIsSuggestedTagsExpanded] = useState(false)
+
+  const toggleSuggestedTagsExpanded = useCallback(() => {
+    setIsSuggestedTagsExpanded((previous) => !previous)
+  }, [])
+
+  // Leaving tag-bar mode (or switching notes) collapses it back -- it's
+  // transient chrome for the note currently showing, not a sticky preference.
+  useEffect(() => {
+    setIsSuggestedTagsExpanded(false)
+  }, [tabBarMode, activeNoteId])
+
+  const suggestedTagsScrollerRef = useRef<HTMLDivElement | null>(null)
+  const [suggestedTagsCanScrollLeft, setSuggestedTagsCanScrollLeft] = useState(false)
+  const [suggestedTagsCanScrollRight, setSuggestedTagsCanScrollRight] = useState(false)
+
+  const updateSuggestedTagsScrollEdges = useCallback(() => {
+    const el = suggestedTagsScrollerRef.current
+    if (!el) return
+    setSuggestedTagsCanScrollLeft(el.scrollLeft > 1)
+    setSuggestedTagsCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1)
+  }, [])
+
+  useEffect(() => {
+    updateSuggestedTagsScrollEdges()
+  }, [suggestedTags, isSuggestedTagsExpanded, updateSuggestedTagsScrollEdges])
+
+  useEffect(() => {
+    if (!isSuggestedTagsExpanded) return
+    window.addEventListener('resize', updateSuggestedTagsScrollEdges)
+    return () => window.removeEventListener('resize', updateSuggestedTagsScrollEdges)
+  }, [isSuggestedTagsExpanded, updateSuggestedTagsScrollEdges])
+
+  const handleSuggestedTagsWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+    if (event.deltaY === 0) return
+    event.preventDefault()
+    event.currentTarget.scrollLeft += event.deltaY
+  }, [])
+
   // The currently open note gets a temporary, unsaved "preview" tab at the
   // leftmost position whenever it isn't already pinned. It tracks whichever
   // unpinned note is active — it isn't a real entry in note_tabs until the
@@ -743,6 +796,13 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     handleTagContainerDragOver,
     handleTagContainerDrop,
     handleTagContextMenu,
+    isSuggestedTagsExpanded,
+    toggleSuggestedTagsExpanded,
+    suggestedTagsScrollerRef,
+    suggestedTagsCanScrollLeft,
+    suggestedTagsCanScrollRight,
+    updateSuggestedTagsScrollEdges,
+    handleSuggestedTagsWheel,
 
     tabBarMode,
     toggleTabBarMode,

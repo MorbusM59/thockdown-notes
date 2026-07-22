@@ -37,14 +37,9 @@ export interface SectionTabBarProps {
   onCommitNoteIdEdit: () => void
   onCancelNoteIdEdit: () => void
 
-  /** Left-click: toggle tag/tab bar (or close the section picker, if open). Right-click: assign a note id (tag bar) or rename this section (tab bar). Holding left-click (tab bar only) opens the section picker instead. */
+  /** Left-click: in tab-bar mode, opens (or closes) the section picker; in tag-bar mode, toggles the suggested-tags-expanded view. Right-click: assign a note id (tag bar) or rename this section (tab bar). */
   onIdentityClick: () => void
   onIdentityContextMenu: (event: MouseEvent<HTMLButtonElement>) => void
-  onIdentityMouseDown: (event: MouseEvent<HTMLButtonElement>) => void
-  onIdentityMouseUp: () => void
-  onIdentityMouseLeave: () => void
-  /** Whether the identity tab is currently mid-hold, arming toward opening the section picker -- drives the fill-bar visual, same language as the temp-tab pin hold. */
-  isPickerArming: boolean
 
   /** A held left-click on the identity tab (tab-bar mode only) takes over the tab bar's own pill area with this slot's swap targets -- every other named section, offered to swap in. */
   isSectionPickerOpen: boolean
@@ -86,10 +81,6 @@ export function SectionTabBar({
   onCancelNoteIdEdit,
   onIdentityClick,
   onIdentityContextMenu,
-  onIdentityMouseDown,
-  onIdentityMouseUp,
-  onIdentityMouseLeave,
-  isPickerArming,
   isSectionPickerOpen,
   swapCandidates,
   onSectionPickerCandidateClick,
@@ -115,7 +106,14 @@ export function SectionTabBar({
     handleTagContainerDragOver,
     handleTagContainerDrop,
     handleTagContextMenu,
+    isSuggestedTagsExpanded,
+    suggestedTagsScrollerRef,
+    suggestedTagsCanScrollLeft,
+    suggestedTagsCanScrollRight,
+    updateSuggestedTagsScrollEdges,
+    handleSuggestedTagsWheel,
     tabBarMode,
+    toggleTabBarMode,
     pinnedTabs,
     unpinPrimedTabNoteId,
     tempTabNoteId,
@@ -161,6 +159,16 @@ export function SectionTabBar({
         </button>
       )}
 
+      <button
+        type="button"
+        className={`btn-icon tagbar-toggle${tabBarMode === 'tags' ? ' active' : ''}`}
+        title={tabBarMode === 'tags' ? 'Show tabs' : 'Show tags'}
+        aria-label={tabBarMode === 'tags' ? 'Show tabs' : 'Show tags'}
+        onClick={toggleTabBarMode}
+      >
+        <span className="fa-solid fa-tags" aria-hidden="true" />
+      </button>
+
       <div className="section-identity-tab-shell">
         {isEditingSectionName ? (
           <input
@@ -201,16 +209,13 @@ export function SectionTabBar({
         ) : (
           <button
             type="button"
-            className={`tag-pill section-identity-tab${isSectionPickerOpen ? ' active' : ''}${isPickerArming ? ' picker-arming' : ''}`}
+            className={`tag-pill section-identity-tab${(isSectionPickerOpen || isSuggestedTagsExpanded) ? ' active' : ''}`}
             onClick={onIdentityClick}
             onContextMenu={onIdentityContextMenu}
-            onMouseDown={onIdentityMouseDown}
-            onMouseUp={onIdentityMouseUp}
-            onMouseLeave={onIdentityMouseLeave}
             title={
               tabBarMode === 'tabs'
-                ? (sectionName ? `Section: ${sectionName} -- click to switch to the tag bar, hold to swap in another named section, right-click to rename` : 'Unnamed section -- click to switch to the tag bar, hold to swap in a named section, right-click to name this section')
-                : 'Click to switch to the tab bar, right-click to assign this note\'s id'
+                ? (sectionName ? `Section: ${sectionName} -- click to swap in another named section, right-click to rename` : 'Unnamed section -- click to swap in a named section, right-click to name this section')
+                : 'Click to show suggested tags, right-click to assign this note\'s id'
             }
           >
             <span className="tag-pill-label">
@@ -327,77 +332,109 @@ export function SectionTabBar({
         </div>
       ) : (
       <div className="tab-mode-shell" role="group" aria-label="Tag manager">
-        <div className="tabbar-tag-input">
-          <input
-            ref={tagInputRef}
-            className="tabbar-tag-input-field"
-            type="text"
-            value={tagInputValue}
-            placeholder={
-              !activeNoteId
-                ? (notes.length > 0 ? '...' : '...')
-                : (renamingTagName ? 'Edit...' : '···')
-            }
-            onChange={(event) => setTagInputValue(event.target.value)}
-            onKeyDown={handleTagInputKeyDown}
-            disabled={!persistenceReady || !activeNoteId || isTagMutationPending || activeNoteIsExternal}
-            aria-label="Tag input"
-          />
-        </div>
-        <div
-          className="tabbar-tags-display"
-          aria-live="polite"
-          onDragOver={handleTagContainerDragOver}
-          onDrop={handleTagContainerDrop}
-        >
-          {!activeNoteId ? (
-            <span className="tabbar-tag-hint"></span>
-          ) : orderedActiveTags.length === 0 ? (
-            <span className="tabbar-tag-hint"></span>
-          ) : (
-            orderedActiveTags.map((tagName, index) => {
-              const normalized = normalizeTagName(tagName)
-              const isProtected = isProtectedTagName(tagName)
-              return (
+        {isSuggestedTagsExpanded ? (
+          <div className="tabbar-tabs-scroll-shell">
+            <div className={`tabbar-tabs-edge-fade left${suggestedTagsCanScrollLeft ? ' visible' : ''}`} aria-hidden="true" />
+            <div
+              className="tabbar-suggested-tags-expanded"
+              aria-live="polite"
+              ref={suggestedTagsScrollerRef}
+              onScroll={updateSuggestedTagsScrollEdges}
+              onWheel={handleSuggestedTagsWheel}
+            >
+              {suggestedTags.length === 0 ? (
+                <span className="tabbar-tag-hint">Suggested tags appear here.</span>
+              ) : (
+                suggestedTags.map((tagName) => (
+                  <div
+                    key={tagName}
+                    className="tag-pill suggested"
+                    onClick={() => handleAddSuggestedTag(tagName)}
+                    title={`Add ${tagName}`}
+                    aria-disabled={!activeNoteId || isTagMutationPending || activeNoteIsExternal}
+                  >
+                    {tagName}
+                  </div>
+                ))
+              )}
+            </div>
+            <div className={`tabbar-tabs-edge-fade right${suggestedTagsCanScrollRight ? ' visible' : ''}`} aria-hidden="true" />
+          </div>
+        ) : (
+          <>
+            <div className="tabbar-tag-input">
+              <input
+                ref={tagInputRef}
+                className="tabbar-tag-input-field"
+                type="text"
+                value={tagInputValue}
+                placeholder={
+                  !activeNoteId
+                    ? (notes.length > 0 ? '...' : '...')
+                    : (renamingTagName ? 'Edit...' : '···')
+                }
+                onChange={(event) => setTagInputValue(event.target.value)}
+                onKeyDown={handleTagInputKeyDown}
+                disabled={!persistenceReady || !activeNoteId || isTagMutationPending || activeNoteIsExternal}
+                aria-label="Tag input"
+              />
+            </div>
+            <div
+              className="tabbar-tags-display"
+              aria-live="polite"
+              onDragOver={handleTagContainerDragOver}
+              onDrop={handleTagContainerDrop}
+            >
+              {!activeNoteId ? (
+                <span className="tabbar-tag-hint"></span>
+              ) : orderedActiveTags.length === 0 ? (
+                <span className="tabbar-tag-hint"></span>
+              ) : (
+                orderedActiveTags.map((tagName, index) => {
+                  const normalized = normalizeTagName(tagName)
+                  const isProtected = isProtectedTagName(tagName)
+                  return (
+                    <div
+                      key={tagName}
+                      className={`tag-pill active${deletePrimedTagName === tagName ? ' primed' : ''}${isProtected ? ` protected ${normalized}` : ''}`}
+                      draggable={!isProtected}
+                      onDragStart={(event) => handleTagDragStart(event, index)}
+                      onDragEnd={handleTagDragEnd}
+                      onDragOver={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        event.dataTransfer.dropEffect = 'move'
+                      }}
+                      onDrop={(event) => handleTagDrop(event, index)}
+                      onClick={() => handleTagChipClick(tagName)}
+                      onContextMenu={(event) => handleTagContextMenu(event, tagName)}
+                      onMouseLeave={() => handleTagChipMouseLeave(tagName)}
+                      title={deletePrimedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion'}
+                    >
+                      <span className="tag-pill-label">{tagName}</span>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+            <div className="tabbar-suggested-tags" aria-hidden={suggestedTags.length === 0}>
+              {suggestedTags.map((tagName) => (
                 <div
                   key={tagName}
-                  className={`tag-pill active${deletePrimedTagName === tagName ? ' primed' : ''}${isProtected ? ` protected ${normalized}` : ''}`}
-                  draggable={!isProtected}
-                  onDragStart={(event) => handleTagDragStart(event, index)}
-                  onDragEnd={handleTagDragEnd}
-                  onDragOver={(event) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    event.dataTransfer.dropEffect = 'move'
-                  }}
-                  onDrop={(event) => handleTagDrop(event, index)}
-                  onClick={() => handleTagChipClick(tagName)}
-                  onContextMenu={(event) => handleTagContextMenu(event, tagName)}
-                  onMouseLeave={() => handleTagChipMouseLeave(tagName)}
-                  title={deletePrimedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion'}
+                  className="tag-pill suggested"
+                  onClick={() => handleAddSuggestedTag(tagName)}
+                  title={`Add ${tagName}`}
+                  aria-disabled={!activeNoteId || isTagMutationPending || activeNoteIsExternal}
                 >
-                  <span className="tag-pill-label">{tagName}</span>
+                  {tagName}
                 </div>
-              )
-            })
-          )}
-        </div>
-        <div className="tabbar-suggested-tags" aria-hidden={suggestedTags.length === 0}>
-          {suggestedTags.map((tagName) => (
-            <div
-              key={tagName}
-              className="tag-pill suggested"
-              onClick={() => handleAddSuggestedTag(tagName)}
-              title={`Add ${tagName}`}
-              aria-disabled={!activeNoteId || isTagMutationPending || activeNoteIsExternal}
-            >
-              {tagName}
+              ))}
+              {suggestedTags.length === 0 ? (
+                <span className="tabbar-tag-hint">Suggested tags appear here.</span>
+              ) : null}
             </div>
-          ))}
-          {suggestedTags.length === 0 ? (
-            <span className="tabbar-tag-hint">Suggested tags appear here.</span>
-          ) : null}
-        </div>
+          </>
+        )}
       </div>
       )}
 
