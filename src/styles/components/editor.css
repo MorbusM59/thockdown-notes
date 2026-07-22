@@ -257,12 +257,6 @@
   z-index: 2;
 }
 
-/* No note loaded -- suppress the writable-grid texture entirely so an empty
-   slot reads as inert, not as a ready-to-type blank note. */
-.editor-stage.is-empty::before {
-  display: none;
-}
-
 :root {
   --circle-diameter: 220px;
 }
