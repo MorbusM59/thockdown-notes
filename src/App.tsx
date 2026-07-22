@@ -6007,6 +6007,43 @@ ${markdownHtml}
         return
       }
 
+      if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && !isEditorControlField
+        && (event.key === 'Tab' || event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        const activeIndex = editorSections.findIndex((entry) => entry.id === activeSectionId)
+        if (activeIndex !== -1) {
+          const sectionCount = editorSections.length
+          const targetIndex = event.key === 'Tab'
+            ? (activeIndex + 1) % sectionCount
+            : event.key === 'ArrowLeft'
+              ? Math.max(0, activeIndex - 1)
+              : Math.min(sectionCount - 1, activeIndex + 1)
+
+          event.preventDefault()
+          const targetSectionId = editorSections[targetIndex].id
+          markSectionActive(targetSectionId)
+          sectionRegistryRef.current.get(targetSectionId)?.scheduleFocusEditorInEditMode()
+          return
+        }
+      }
+
+      if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && !isEditorControlField
+        && !activeSection?.isPreviewMode && activeSection?.activeNoteId
+        && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+        event.preventDefault()
+        const adapter = activeSection.adapterRef.current
+        const targetOffset = event.key === 'ArrowUp' ? 0 : activeSection.currentEditorText.length
+        adapter?.applySnapshot({
+          selection: {
+            anchor: targetOffset,
+            focus: targetOffset,
+            start: targetOffset,
+            end: targetOffset,
+            isCollapsed: true,
+          },
+        })
+        return
+      }
+
       if (isEditorTarget && activeSection?.activeNoteId && event.ctrlKey && !event.altKey && !event.metaKey) {
         const key = event.key.toLowerCase()
 
@@ -6071,9 +6108,12 @@ ${markdownHtml}
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [
     activeSection,
+    activeSectionId,
     createNote,
     createNoteFromClipboardTitle,
+    editorSections,
     isFindMode,
+    markSectionActive,
     runSidebarMenuTransition,
   ])
 
