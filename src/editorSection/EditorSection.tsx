@@ -61,7 +61,7 @@ type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
 type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
 
 export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
-  'sectionId' | 'markSectionActive' | 'activeNoteId' | 'isPreviewMode' | 'previewedSnapshotId' | 'bindings' | 'adapterRef'
+  'sectionId' | 'markSectionActive' | 'activeNoteId' | 'isPreviewMode' | 'previewedSnapshotId' | 'bindings' | 'adapterRef' | 'sectionContainerRef'
   | 'editorDisplayText' | 'activeNoteHasDebugTag' | 'isPreviewingSnapshot' | 'isCaretSuspended' | 'previewTextureRef'
   | 'previewScrollRef' | 'handlePreviewScroll' | 'blockPreviewEditMutation' | 'previewMarkdownElement'
   | 'previewScrollbarTrackRef' | 'handlePreviewTrackMouseDown' | 'previewScrollbarThumbRef' | 'isDraggingPreviewScrollThumb'
@@ -299,6 +299,7 @@ export function EditorSection({
   const buildToggleCurrentLineHeadingTransformRef = useRef<(text: string, selection: import('../editor/EditorContract').EditorSelectionState) => { text: string; selection: import('../editor/EditorContract').EditorSelectionState } | null>(() => null)
   const buildToggleBulletedListTransformRef = useRef<(text: string, selection: import('../editor/EditorContract').EditorSelectionState) => { text: string; selection: import('../editor/EditorContract').EditorSelectionState } | null>(() => null)
   const buildToggleNumberedListTransformRef = useRef<(text: string, selection: import('../editor/EditorContract').EditorSelectionState) => { text: string; selection: import('../editor/EditorContract').EditorSelectionState } | null>(() => null)
+  const sectionContainerRef = useRef<HTMLDivElement | null>(null)
 
   const {
     adapterRef,
@@ -346,6 +347,7 @@ export function EditorSection({
     buildToggleCurrentLineHeadingTransformRef,
     buildToggleBulletedListTransformRef,
     buildToggleNumberedListTransformRef,
+    sectionContainerRef,
   })
 
   const getActiveNoteLiveText = useCallback(() => (
@@ -1093,6 +1095,7 @@ export function EditorSection({
         markSectionActive={markSectionActive}
         isPreviewMode={isPreviewMode}
         editorStageRef={editorStageRef}
+        sectionContainerRef={sectionContainerRef}
         previewedSnapshotId={previewedSnapshotId}
         bindings={bindings}
         adapterRef={adapterRef}

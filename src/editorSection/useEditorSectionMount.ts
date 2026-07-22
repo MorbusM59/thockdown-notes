@@ -78,6 +78,8 @@ export interface UseEditorSectionMountOptions {
   buildToggleCurrentLineHeadingTransformRef: MutableRefObject<(text: string, selection: EditorSelectionState) => { text: string; selection: EditorSelectionState } | null>
   buildToggleBulletedListTransformRef: MutableRefObject<(text: string, selection: EditorSelectionState) => { text: string; selection: EditorSelectionState } | null>
   buildToggleNumberedListTransformRef: MutableRefObject<(text: string, selection: EditorSelectionState) => { text: string; selection: EditorSelectionState } | null>
+  /** Scopes the editor/scrollbar DOM lookups below to this section's own stage -- other sections render the same class names, so an unscoped document.querySelector would grab whichever section's stage happens to be first in the DOM. */
+  sectionContainerRef: MutableRefObject<HTMLDivElement | null>
 }
 
 export interface UseEditorSectionMountResult {
@@ -180,6 +182,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     buildToggleCurrentLineHeadingTransformRef,
     buildToggleBulletedListTransformRef,
     buildToggleNumberedListTransformRef,
+    sectionContainerRef,
   } = options
 
   const adapterRef = useRef<EditorAdapter | null>(null)
@@ -399,7 +402,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   const focusEditorInEditMode = useCallback((options?: { restoreSelection?: boolean }) => {
     if (isPreviewMode || !activeNoteId) return
 
-    const editorRoot = document.querySelector<HTMLElement>('.editor-stage .editor-text[contenteditable="true"]')
+    const editorRoot = sectionContainerRef.current?.querySelector<HTMLElement>('.editor-text[contenteditable="true"]')
     if (!editorRoot) return
     if (document.activeElement === editorRoot) return
 
@@ -407,14 +410,14 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       restoreEditorSelection()
     }
     editorRoot.focus({ preventScroll: true })
-  }, [activeNoteId, isPreviewMode, restoreEditorSelection])
+  }, [activeNoteId, isPreviewMode, restoreEditorSelection, sectionContainerRef])
 
   const scheduleFocusEditorInEditMode = useCallback((options?: { restoreSelection?: boolean }) => {
     const attemptFocus = () => {
       if (isPreviewMode || !activeNoteId) return
 
       const adapter = adapterRef.current
-      const editorRoot = document.querySelector<HTMLElement>('.editor-stage .editor-text[contenteditable="true"]')
+      const editorRoot = sectionContainerRef.current?.querySelector<HTMLElement>('.editor-text[contenteditable="true"]')
       if (!adapter || !editorRoot) {
         requestAnimationFrame(attemptFocus)
         return
@@ -426,7 +429,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     window.setTimeout(() => {
       requestAnimationFrame(attemptFocus)
     }, 0)
-  }, [activeNoteId, focusEditorInEditMode, isPreviewMode])
+  }, [activeNoteId, focusEditorInEditMode, isPreviewMode, sectionContainerRef])
 
   const persistEditUiState = useCallback((noteId: string, options?: { immediate?: boolean }) => {
     const notesApi = window.thockdownNotes
@@ -553,8 +556,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         return
       }
 
-      const scroller = document.querySelector<HTMLElement>('.editor-stage .thockdown-custom-scrollbar')
-      const editorRoot = document.querySelector<HTMLElement>('.editor-stage .editor-text[contenteditable="true"]')
+      const scroller = sectionContainerRef.current?.querySelector<HTMLElement>('.thockdown-custom-scrollbar')
+      const editorRoot = sectionContainerRef.current?.querySelector<HTMLElement>('.editor-text[contenteditable="true"]')
       if (!scroller || !editorRoot) {
         return
       }
@@ -632,7 +635,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     return () => {
       cancelled = true
     }
-  }, [lineHeightPx, focusEditorInEditMode])
+  }, [lineHeightPx, focusEditorInEditMode, sectionContainerRef])
 
   const captureEditModeSnapshotForRenderView = useCallback((noteId: string, activeText: string) => {
     const snapshot = captureEditModeSnapshotFromEditor(noteId)

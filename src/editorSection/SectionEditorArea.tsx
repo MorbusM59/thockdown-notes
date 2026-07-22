@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import type { CSSProperties, MutableRefObject, ReactNode, RefObject } from 'react'
 import { Editor } from '../components/Editor'
 import { SnapshotTimelineSlider } from '../editor/SnapshotTimelineSlider'
@@ -11,6 +12,7 @@ export interface SectionEditorAreaProps {
   markSectionActive: (sectionId: string) => void
   isPreviewMode: boolean
   editorStageRef: RefObject<HTMLDivElement>
+  sectionContainerRef: MutableRefObject<HTMLDivElement | null>
   previewedSnapshotId: number | null
   bindings: EditorBindings
   adapterRef: MutableRefObject<EditorAdapter | null>
@@ -66,6 +68,7 @@ export function SectionEditorArea({
   markSectionActive,
   isPreviewMode,
   editorStageRef,
+  sectionContainerRef,
   previewedSnapshotId,
   bindings,
   adapterRef,
@@ -108,6 +111,11 @@ export function SectionEditorArea({
   handleReturnToPresent,
   handleMergeAdjacentSnapshots,
 }: SectionEditorAreaProps) {
+  const setStageEl = useCallback((el: HTMLDivElement | null) => {
+    ;(editorStageRef as MutableRefObject<HTMLDivElement | null>).current = el
+    sectionContainerRef.current = el
+  }, [editorStageRef, sectionContainerRef])
+
   return (
     <div
       className="editor-viewer-frame"
@@ -118,7 +126,7 @@ export function SectionEditorArea({
     >
       <main className="editor-shell">
         <div className="editor-background">
-          <div ref={editorStageRef} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
+          <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
             <div className="edit-container" style={{ display: isPreviewMode ? 'none' : undefined }}>
               <Editor
                 key={previewedSnapshotId ?? 'present'}
