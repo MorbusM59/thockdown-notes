@@ -126,44 +126,53 @@ export function SectionEditorArea({
     >
       <main className="editor-shell">
         <div className="editor-background">
-          <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}`}>
-            <div className="edit-container" style={{ display: isPreviewMode ? 'none' : undefined }}>
-              <Editor
-                key={previewedSnapshotId ?? 'present'}
-                bindings={bindings}
-                adapterRef={adapterRef}
-                noteId={activeNoteId}
-                initialText={editorDisplayText}
-                scrollbarHost={scrollbarHostEl}
-                fontFamily={editorFontFamily}
-                fontSizePx={editorRuntimeMetrics.fontSizePx}
-                lineHeightPx={editorRuntimeMetrics.lineHeightPx}
-                glyphWidthPx={editorRuntimeMetrics.glyphWidthPx}
-                cellWidthPx={editorRuntimeMetrics.cellWidthPx}
-                fontReady={editorFontLoadVersion > 0}
-                editorReadOnly={activeNoteHasDebugTag || isPreviewingSnapshot}
-                caretSuspended={isCaretSuspended}
-                spellCheckEnabled={spellCheckEditEnabled}
-              />
-            </div>
-            <div className="render-container" style={{ display: isPreviewMode ? undefined : 'none' }} aria-hidden={!isPreviewMode}>
-              <div ref={previewTextureRef} className="markdown-preview-texture" />
-              <div
-                ref={previewScrollRef}
-                onScroll={handlePreviewScroll}
-                className={`markdown-preview thockdown-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
-                style={{ '--search-hit-color': highlightSearchColor } as CSSProperties}
-                contentEditable={spellCheckRenderEnabled}
-                suppressContentEditableWarning={spellCheckRenderEnabled}
-                spellCheck={spellCheckRenderEnabled}
-                onBeforeInput={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
-                onPaste={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
-                onCut={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
-                onDrop={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
-              >
-                {previewMarkdownElement}
+          <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}`}>
+            {activeNoteId ? (
+              <>
+                <div className="edit-container" style={{ display: isPreviewMode ? 'none' : undefined }}>
+                  <Editor
+                    key={previewedSnapshotId ?? 'present'}
+                    bindings={bindings}
+                    adapterRef={adapterRef}
+                    noteId={activeNoteId}
+                    initialText={editorDisplayText}
+                    scrollbarHost={scrollbarHostEl}
+                    fontFamily={editorFontFamily}
+                    fontSizePx={editorRuntimeMetrics.fontSizePx}
+                    lineHeightPx={editorRuntimeMetrics.lineHeightPx}
+                    glyphWidthPx={editorRuntimeMetrics.glyphWidthPx}
+                    cellWidthPx={editorRuntimeMetrics.cellWidthPx}
+                    fontReady={editorFontLoadVersion > 0}
+                    editorReadOnly={activeNoteHasDebugTag || isPreviewingSnapshot}
+                    caretSuspended={isCaretSuspended}
+                    spellCheckEnabled={spellCheckEditEnabled}
+                  />
+                </div>
+                <div className="render-container" style={{ display: isPreviewMode ? undefined : 'none' }} aria-hidden={!isPreviewMode}>
+                  <div ref={previewTextureRef} className="markdown-preview-texture" />
+                  <div
+                    ref={previewScrollRef}
+                    onScroll={handlePreviewScroll}
+                    className={`markdown-preview thockdown-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
+                    style={{ '--search-hit-color': highlightSearchColor } as CSSProperties}
+                    contentEditable={spellCheckRenderEnabled}
+                    suppressContentEditableWarning={spellCheckRenderEnabled}
+                    spellCheck={spellCheckRenderEnabled}
+                    onBeforeInput={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
+                    onPaste={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
+                    onCut={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
+                    onDrop={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
+                  >
+                    {previewMarkdownElement}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="editor-empty-state">
+                <p className="editor-empty-state-title">No note loaded</p>
+                <p className="editor-empty-state-hint">Create a note, or select one from the sidebar.</p>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </main>

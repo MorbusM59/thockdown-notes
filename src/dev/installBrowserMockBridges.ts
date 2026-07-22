@@ -110,7 +110,7 @@ function toSummary(note: NoteDocument): NoteSummary {
 
 /** A fresh install always starts with exactly one (default, unnamed) section. */
 function createDefaultEditorSections(): EditorSectionEntry[] {
-  return [{ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, fixedWidthPx: null, lastActiveNoteId: null }]
+  return [{ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, fixedWidthPx: null, lastActiveNoteId: null, noteSlotInitialized: false }]
 }
 
 function sortNotesDesc(notes: NoteDocument[]): NoteDocument[] {
@@ -300,6 +300,7 @@ function loadStore(): BrowserMockStore {
               widthFraction: Number.isFinite(entry.widthFraction) ? entry.widthFraction : null,
               fixedWidthPx: Number.isFinite(entry.fixedWidthPx) ? entry.fixedWidthPx : null,
               lastActiveNoteId: typeof entry.lastActiveNoteId === 'string' ? entry.lastActiveNoteId : null,
+              noteSlotInitialized: entry.noteSlotInitialized === true,
             }))
         : createDefaultEditorSections(),
     }
@@ -943,7 +944,7 @@ function buildSectionsBridge(storeRef: { current: BrowserMockStore }): EditorSec
         store.editorSections = store.editorSections.map((section) => (
           section.position !== null && section.position >= insertAt ? { ...section, position: section.position + 1 } : section
         ))
-        store.editorSections.push({ id, name: name ?? null, position: insertAt, widthFraction: null, fixedWidthPx: null, lastActiveNoteId: null })
+        store.editorSections.push({ id, name: name ?? null, position: insertAt, widthFraction: null, fixedWidthPx: null, lastActiveNoteId: null, noteSlotInitialized: false })
         return sorted(store)
       })
     },
@@ -1000,7 +1001,7 @@ function buildSectionsBridge(storeRef: { current: BrowserMockStore }): EditorSec
     async setActiveNote(sectionId: string, noteId: string | null): Promise<EditorSectionEntry[]> {
       return mutate((store) => {
         store.editorSections = store.editorSections.map((section) => (
-          section.id === sectionId ? { ...section, lastActiveNoteId: noteId } : section
+          section.id === sectionId ? { ...section, lastActiveNoteId: noteId, noteSlotInitialized: true } : section
         ))
         return sorted(store)
       })

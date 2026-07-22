@@ -257,6 +257,57 @@
   z-index: 2;
 }
 
+/* No note loaded -- suppress the writable-grid texture entirely so an empty
+   slot reads as inert, not as a ready-to-type blank note. */
+.editor-stage.is-empty::before {
+  display: none;
+}
+
+:root {
+  --circle-diameter: 220px;
+}
+
+.editor-stage.is-empty {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items:    center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+}
+
+.editor-empty-state {
+  height: var(--circle-diameter);
+  width: var(--circle-diameter);
+  flex: 0 0 var(--circle-diameter);
+  display: flex;
+  flex-direction: column;
+  align-items:    center;
+  justify-content: center;
+  gap:            4px;
+  text-align:     center;
+  pointer-events: none;
+  border-radius: calc(var(--border-radius-regular) *6);
+  box-shadow: var(--box-shadow-inverted-filtered);
+  filter: var(--filter-primed-archive);
+  background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.05) 0, rgba(0, 0, 0, 0.05) 2px, transparent 3px, transparent 4px);
+  padding: 20px;
+  font-family: 'Fredericka the Great';
+}
+
+.editor-empty-state-title {
+  margin:    0;
+  font-size: 24px;
+  color:     var(--color-text-80);
+}
+
+.editor-empty-state-hint {
+  margin:    0;
+  font-size: 15px;
+  color:     var(--color-text-80);
+}
+
 /* Preview mode edge fades */
 .editor-stage.is-preview-mode::before,
 .editor-stage.is-preview-mode::after {

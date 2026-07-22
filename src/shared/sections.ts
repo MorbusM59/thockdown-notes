@@ -40,6 +40,8 @@ export interface EditorSectionEntry {
    */
   fixedWidthPx: number | null;
   lastActiveNoteId: string | null;
+  /** Whether `setActiveNote` has ever been called for this section -- distinguishes "never had a note assigned" (bootstrap falls back to some note) from "user explicitly cleared it" (bootstrap respects the empty state), since both otherwise look like `lastActiveNoteId: null`. */
+  noteSlotInitialized: boolean;
 }
 
 export interface EditorSectionWidthUpdate {

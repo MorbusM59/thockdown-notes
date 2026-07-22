@@ -466,6 +466,57 @@ export function EditorSection({
     setActiveNoteText,
   ])
 
+  // Unloads this section back to its brand-new-section empty state -- same
+  // "no note loaded" state a freshly created section starts in, just applied
+  // in place rather than by creating a new slot. Persists the outgoing
+  // note's edit-ui state the same way activateNote does when switching notes.
+  const clearActiveNote = useCallback(async () => {
+    const previousNoteId = activeNoteId
+    if (!previousNoteId) return
+
+    setIsCaretSuspended(true)
+    await flushPendingSaveNow()
+
+    if (persistenceReady) {
+      const previousPayload = readCurrentEditUiPayload()
+      const previousSnapshot = editModeSnapshotByNoteIdRef.current.get(previousNoteId)
+      const snapshotPayload = previousPayload ?? (previousSnapshot ? {
+        progressEdit: previousSnapshot.viewport.scrollTopLines,
+        cursorPos: previousSnapshot.fullSelection.end,
+        scrollTop: scrollTopLinesToPx(previousSnapshot.viewport.scrollTopLines, editorRuntimeMetrics.lineHeightPx),
+        sourceAnchorLine: Math.max(0, previousSnapshot.viewport.scrollTopLines + previousSnapshot.viewport.topBoundaryLines),
+        sourceAnchorText: null,
+      } : null)
+
+      if (snapshotPayload) {
+        await persistEditUiPayloadForNote(previousNoteId, snapshotPayload)
+      }
+    }
+
+    latestEditorTextRef.current = ''
+    pendingEditRestoreSnapshotRef.current = null
+    setActiveNoteId(null)
+    setActiveNoteText('')
+    pendingViewportRestoreRef.current = null
+    await saveSelectedNoteState(null)
+    void window.thockdownSections?.setActiveNote(sectionId, null)
+  }, [
+    activeNoteId,
+    editorRuntimeMetrics.lineHeightPx,
+    flushPendingSaveNow,
+    persistEditUiPayloadForNote,
+    persistenceReady,
+    saveSelectedNoteState,
+    sectionId,
+    editModeSnapshotByNoteIdRef,
+    latestEditorTextRef,
+    pendingEditRestoreSnapshotRef,
+    pendingViewportRestoreRef,
+    readCurrentEditUiPayload,
+    setActiveNoteId,
+    setActiveNoteText,
+  ])
+
   const {
     tagInputRef,
     tagInputValue,
@@ -530,6 +581,22 @@ export function EditorSection({
   useEffect(() => {
     tabBarModeRef.current = tabBarMode
   }, [tabBarMode, tabBarModeRef])
+
+  // Full reset to the same blank state a freshly created section starts in:
+  // no active note, no pinned tabs, no name. Unpins every tab first (while a
+  // note may still be active, so unpinNoteTab's own "reactivate the
+  // neighboring tab" side effect is free to fire harmlessly) and clears the
+  // active note last, so the end state is deterministic regardless of what
+  // that side effect did along the way.
+  const resetSectionToEmpty = useCallback(async () => {
+    for (const tab of pinnedTabs) {
+      await unpinNoteTab(tab.noteId)
+    }
+    await clearActiveNote()
+    if (sectionName !== null) {
+      onRenameSection(null)
+    }
+  }, [pinnedTabs, unpinNoteTab, clearActiveNote, sectionName, onRenameSection])
 
   const {
     primedNoteActionById,
@@ -1005,6 +1072,11 @@ export function EditorSection({
     onSwapSection(candidateId)
   }, [closeSectionPicker, onSwapSection])
 
+  const handleSectionPickerClearClick = useCallback(() => {
+    closeSectionPicker()
+    void resetSectionToEmpty()
+  }, [closeSectionPicker, resetSectionToEmpty])
+
   return (
     <div
       className={`editor-section-column${sectionId === activeSectionId ? ' is-active' : ''}`}
@@ -1088,6 +1160,7 @@ export function EditorSection({
         isSectionPickerOpen={isSectionPickerOpen}
         swapCandidates={swapCandidates}
         onSectionPickerCandidateClick={handleSectionPickerCandidateClick}
+        onSectionPickerClearClick={handleSectionPickerClearClick}
       />
 
       <SectionEditorArea

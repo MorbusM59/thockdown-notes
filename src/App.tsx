@@ -1518,7 +1518,7 @@ function App() {
   // as a single unnamed default section so there's always something to
   // render before that async round-trip completes.
   const [editorSections, setEditorSections] = useState<EditorSectionEntry[]>(() => [
-    { id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, fixedWidthPx: null, lastActiveNoteId: null },
+    { id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, fixedWidthPx: null, lastActiveNoteId: null, noteSlotInitialized: false },
   ])
   // Which note each section should activate once it first mounts and
   // registers -- populated by bootstrap, drained by the effect below as
@@ -4484,20 +4484,30 @@ ${markdownHtml}
             .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
           const resolvedSections = placedSections.length > 0
             ? placedSections
-            : [{ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, fixedWidthPx: null, lastActiveNoteId: null }]
+            : [{ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, fixedWidthPx: null, lastActiveNoteId: null, noteSlotInitialized: false }]
           if (disposed) return
 
           // Each section resolves its own initial note from its own
           // lastActiveNoteId; the leftmost section falls back to the
           // legacy app-wide selectedNoteId (pre-split-view installs, or a
           // fresh one, have no per-section memory yet), every other section
-          // falls back to the first note in the list.
+          // falls back to the first note in the list. That fallback only
+          // applies to a section that's never had setActiveNote called on it
+          // at all (noteSlotInitialized false) -- a section whose note was
+          // explicitly cleared (e.g. via the section picker's "load empty"
+          // option) has lastActiveNoteId: null too, but must stay empty
+          // rather than being silently refilled on every restart.
           resolvedSections.forEach((entry, index) => {
             const persistedNoteId = (
               entry.lastActiveNoteId && listed.some((note) => note.id === entry.lastActiveNoteId)
             ) ? entry.lastActiveNoteId : null
+            if (persistedNoteId) {
+              initialNoteIdBySectionIdRef.current.set(entry.id, persistedNoteId)
+              return
+            }
+            if (entry.noteSlotInitialized) return
             const fallbackNoteId = index === 0 ? selectedSummary.id : listed[0].id
-            initialNoteIdBySectionIdRef.current.set(entry.id, persistedNoteId ?? fallbackNoteId)
+            initialNoteIdBySectionIdRef.current.set(entry.id, fallbackNoteId)
           })
           setEditorSections(resolvedSections)
           setActiveSectionId((previous) => (
@@ -4589,7 +4599,7 @@ ${markdownHtml}
       .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
     const nextSections = placed.length > 0
       ? placed
-      : [{ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, fixedWidthPx: null, lastActiveNoteId: null }]
+      : [{ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0, widthFraction: null, fixedWidthPx: null, lastActiveNoteId: null, noteSlotInitialized: false }]
     setEditorSections(nextSections)
     return nextSections
   }, [])

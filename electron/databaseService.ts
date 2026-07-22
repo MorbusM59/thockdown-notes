@@ -176,6 +176,8 @@ export type EditorSectionEntry = {
   /** User-pinned exact pixel width (null = flexible); see the renderer's fixed/flexible split-view sizing. */
   fixedWidthPx: number | null;
   lastActiveNoteId: string | null;
+  /** Whether `setEditorSectionActiveNote` has ever been called for this section -- distinguishes "never had a note assigned" (bootstrap should fall back to some note) from "user explicitly cleared it" (bootstrap should respect the empty state), since both look like `lastActiveNoteId: null` otherwise. */
+  noteSlotInitialized: boolean;
 };
 
 /** The sole section that exists on a fresh install — also where sidebar note clicks always land. */
@@ -1086,7 +1088,9 @@ export class DatabaseService {
     const db = this.requireDb();
     // Parked (position IS NULL) sections sort after every visible one, rather
     // than SQLite's NULLS-first default scrambling the visible layout's order.
-    return db.prepare('SELECT id, name, position, widthFraction, fixedWidthPx, lastActiveNoteId FROM editor_sections ORDER BY position IS NULL, position ASC').all() as EditorSectionEntry[];
+    const rows = db.prepare('SELECT id, name, position, widthFraction, fixedWidthPx, lastActiveNoteId, noteSlotInitialized FROM editor_sections ORDER BY position IS NULL, position ASC')
+      .all() as Array<Omit<EditorSectionEntry, 'noteSlotInitialized'> & { noteSlotInitialized: number }>;
+    return rows.map((row) => ({ ...row, noteSlotInitialized: row.noteSlotInitialized === 1 }));
   }
 
   createEditorSection(name: string | null = null, afterPosition?: number): EditorSectionEntry[] {
@@ -1158,7 +1162,7 @@ export class DatabaseService {
   /** Records which note a section last showed -- independent of whether that note is pinned to its tab bar. */
   setEditorSectionActiveNote(sectionId: string, noteId: string | null): EditorSectionEntry[] {
     const db = this.requireDb();
-    db.prepare('UPDATE editor_sections SET lastActiveNoteId = ? WHERE id = ?').run(noteId, sectionId);
+    db.prepare('UPDATE editor_sections SET lastActiveNoteId = ?, noteSlotInitialized = 1 WHERE id = ?').run(noteId, sectionId);
     return this.listEditorSections();
   }
 
@@ -2705,7 +2709,8 @@ export class DatabaseService {
         position         INTEGER,
         widthFraction    REAL,
         fixedWidthPx     REAL,
-        lastActiveNoteId TEXT REFERENCES notes(id) ON DELETE SET NULL
+        lastActiveNoteId TEXT REFERENCES notes(id) ON DELETE SET NULL,
+        noteSlotInitialized INTEGER NOT NULL DEFAULT 0
       );
 
       CREATE INDEX IF NOT EXISTS idx_editor_sections_position ON editor_sections(position);
@@ -2741,6 +2746,7 @@ export class DatabaseService {
     this.ensureNotesColumn('assignedId', 'TEXT');
     this.ensureEditorSectionsColumn('lastActiveNoteId', 'TEXT REFERENCES notes(id) ON DELETE SET NULL');
     this.ensureEditorSectionsColumn('fixedWidthPx', 'REAL');
+    this.ensureEditorSectionsColumn('noteSlotInitialized', 'INTEGER NOT NULL DEFAULT 0');
 
     this.requireDb().exec(`
       CREATE INDEX IF NOT EXISTS idx_notes_internal_id ON notes(assignedId);

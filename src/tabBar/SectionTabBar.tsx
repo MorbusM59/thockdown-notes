@@ -50,6 +50,8 @@ export interface SectionTabBarProps {
   isSectionPickerOpen: boolean
   swapCandidates: { id: string; name: string }[]
   onSectionPickerCandidateClick: (candidateId: string) => void
+  /** Leading pill in the open picker -- resets this slot back to its blank, freshly-created state: no active note, no pinned tabs, no name. Hidden when the slot is already empty. */
+  onSectionPickerClearClick: () => void
 }
 
 /**
@@ -91,6 +93,7 @@ export function SectionTabBar({
   isSectionPickerOpen,
   swapCandidates,
   onSectionPickerCandidateClick,
+  onSectionPickerClearClick,
 }: SectionTabBarProps) {
   const {
     tagInputRef,
@@ -232,6 +235,16 @@ export function SectionTabBar({
             >
               {isSectionPickerOpen ? (
                 <div className="tabbar-section-picker" aria-live="polite">
+                  {activeNoteId || sectionName !== null || pinnedTabs.length > 0 ? (
+                    <button
+                      type="button"
+                      className="tag-pill section-picker-item section-picker-create"
+                      onClick={onSectionPickerClearClick}
+                      title="Clear this section (no note, no tabs, no name)"
+                    >
+                      <span className="tag-pill-label">···</span>
+                    </button>
+                  ) : null}
                   {swapCandidates.map((candidate) => (
                     <button
                       key={candidate.id}
