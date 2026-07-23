@@ -261,19 +261,6 @@
   --circle-diameter: 220px;
 }
 
-/* Self-centering rather than depending on a flex parent -- .edit-container
-   and .markdown-preview keep rendering their normal (non-flex) layout even
-   when empty, so the background stack underneath (grid texture / render
-   texture + preview chrome) stays exactly the same as a populated note.
-   Positions relative to the nearest positioned ancestor: .markdown-preview
-   itself in render mode, or .editor-stage in edit mode (.edit-container has
-   no position of its own, so the search continues up to it) -- either way
-   that ancestor spans the same footprint .edit-container would fill.
-   Selector is three classes deep (rather than the plain .editor-empty-state
-   below) specifically to outrank markdown.css's
-   ".markdown-preview > *:not(.markdown-preview-texture) { position: relative }",
-   which would otherwise win (equal specificity, declared later) and pin this
-   to the top-left corner instead of centering it. */
 .editor-stage .edit-container .editor-empty-state,
 .editor-stage .render-container .editor-empty-state {
   position: absolute;
@@ -294,18 +281,23 @@
   background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.05) 0, rgba(0, 0, 0, 0.05) 2px, transparent 3px, transparent 4px);
   padding: 20px;
   font-family: 'Fredericka the Great';
+  z-index: 2;
+}
+
+.editor-empty-state-title,
+.editor-empty-state-hint {
+  margin:    0 !important;
+  color:     var(--color-text-80);
+  text-shadow: var(--text-shadow-empty-note);
 }
 
 .editor-empty-state-title {
-  margin:    0;
   font-size: 24px;
-  color:     var(--color-text-80);
 }
 
+
 .editor-empty-state-hint {
-  margin:    0;
   font-size: 15px;
-  color:     var(--color-text-80);
 }
 
 /* Preview mode edge fades */
