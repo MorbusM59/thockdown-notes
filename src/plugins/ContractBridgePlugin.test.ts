@@ -31,11 +31,11 @@ describe('resolveWordRange pair-aware expansion', () => {
     expect(range).toEqual({ start: 0, end: 4 });
   });
 
-  it('selects text inside single quotes when the regular expansion includes the pair', () => {
+  it('does not treat single quotes as a pair, since it collides with contractions', () => {
     const text = "'bar'";
     const range = resolveWordRange(text, 2);
 
-    expect(range).toEqual({ start: 1, end: 4 });
+    expect(range).toEqual({ start: 0, end: 5 });
   });
 
   it('selects the word an inside parentheses without jumping directly to sentence', () => {

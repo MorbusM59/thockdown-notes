@@ -139,7 +139,6 @@ const PAIR_OPENERS: Record<string, string> = {
   '{': '}',
   '<': '>',
   '"': '"',
-  "'": "'",
 };
 
 const findMatchingCloser = (
