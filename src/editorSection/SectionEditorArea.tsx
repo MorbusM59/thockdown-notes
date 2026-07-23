@@ -1,8 +1,9 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import type { CSSProperties, MutableRefObject, ReactNode, RefObject } from 'react'
 import { Editor } from '../components/Editor'
 import { SnapshotTimelineSlider } from '../editor/SnapshotTimelineSlider'
 import { PresentStateCircle } from '../editor/PresentStateCircle'
+import { getEmptyStateSceneMaskUrl } from '../editor/EmptyStateScene'
 import type { EditorAdapter, EditorBindings } from '../editor/EditorContract'
 import type { EditorRuntimeMetrics } from '../editor/EditorTypography'
 import type { UseNoteSnapshotsResult } from '../editor/useNoteSnapshots'
@@ -116,10 +117,11 @@ export function SectionEditorArea({
     sectionContainerRef.current = el
   }, [editorStageRef, sectionContainerRef])
 
+  const emptyStateSceneMaskUrl = useMemo(() => getEmptyStateSceneMaskUrl(sectionId), [sectionId])
+
   const emptyState = (
-    <div className="editor-empty-state">
-      <p className="editor-empty-state-title">No note loaded</p>
-      <p className="editor-empty-state-hint">Create a note, or select one from the sidebar.</p>
+    <div className="editor-empty-state" style={{ '--empty-state-scene-mask': emptyStateSceneMaskUrl } as CSSProperties}>
+      <p className="editor-empty-state-title">Thockdown Notes</p>
     </div>
   )
 
