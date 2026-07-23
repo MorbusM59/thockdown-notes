@@ -18,9 +18,13 @@
   --palette-parchment-dark:     #ece8e4;   /* app-grid / sidebar bg     */
   --palette-parchment-input:    #ffffff;   /* input backdrop            */
 
-  --palette-shadow-white-lo:    #fcf9f677;
-  --palette-shadow-white-mid:   #fcf9f6bb;
-  --palette-shadow-white-hi:    #fcf9f6ee;
+  --palette-shadow-white-lo:    #ffffff66;
+  --palette-shadow-white-mid:   #ffffffaa;
+  --palette-shadow-white-hi:    #ffffffee;
+
+  --palette-shadow-black-lo:    #00000066;
+  --palette-shadow-black-mid:   #000000aa;
+  --palette-shadow-black-hi:    #000000ee;
 
   /* Semantic color tokens */
   --color-background-light:     var(--palette-parchment-lightest);
