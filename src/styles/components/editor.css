@@ -274,7 +274,10 @@
   justify-content: flex-end;
   gap:            4px;
   text-align:     center;
-  pointer-events: none;
+  /* Clickable (rerolls the scene -- see SectionEditorArea.tsx) but
+     intentionally styled like inert decoration: no cursor/hover change,
+     since it's an undiscoverable-on-purpose easter egg, not a button. */
+  pointer-events: auto;
   border-radius: calc(var(--border-radius-regular) *6);
   box-shadow: var(--box-shadow-inverted-filtered);
   filter: var(--filter-primed-archive);
@@ -283,15 +286,22 @@
   z-index: 2;
 }
 
-/* The randomly generated retro-synthwave silhouette (sun/ridge/palms -- see
-   src/editor/EmptyStateScene.ts) is a mask shape, not an image: this layer
-   still paints the same faint needle-stripe texture the card always had,
-   just clipped to the scene's silhouette instead of covering the whole
-   card. `--empty-state-scene-mask` is set inline per section (stable per
-   section id, so the scene doesn't reshuffle on every re-render). Negative
-   z-index keeps it behind the title/hint text, which are z-index:auto
-   in-flow children of the same (position:absolute, so stacking-context-
-   establishing) .editor-empty-state box. */
+/* The generated rotating Platonic solid (see src/editor/EmptyStateScene.ts)
+   is a mask shape, not an image: this layer still paints the same faint
+   needle-stripe texture the card always had, just clipped to the solid's
+   silhouette instead of covering the whole card. `--empty-state-scene-mask`
+   is set inline per section (stable per section id, so the animation's
+   shape/axis/speed don't reshuffle on every re-render). Negative z-index
+   keeps it behind the title/hint text, which are z-index:auto in-flow
+   children of the same (position:absolute, so stacking-context-
+   establishing) .editor-empty-state box.
+
+   Mask is inverted: a second, fully-opaque layer (the solid gradient) is
+   XORed against the shape layer, flipping which side is "ink" -- so the
+   texture fills the whole circle and the tumbling solid reads as a clean
+   cutout tracing through it (edges as crisp fully-transparent seams, faces
+   as softer partial cutouts per their own random opacity), instead of the
+   shape itself being the only textured part. */
 .editor-empty-state::before {
   content:        '';
   position:       absolute;
@@ -299,26 +309,18 @@
   z-index:        -1;
   pointer-events: none;
   background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.05) 0, rgba(0, 0, 0, 0.05) 2px, transparent 3px, transparent 4px);
-  -webkit-mask-image:    var(--empty-state-scene-mask);
-  -webkit-mask-repeat:   no-repeat;
-  -webkit-mask-position: center;
-  -webkit-mask-size:     contain;
-  mask-image:    var(--empty-state-scene-mask);
+  -webkit-mask-image:     linear-gradient(#000, #000), var(--empty-state-scene-mask);
+  -webkit-mask-repeat:    no-repeat;
+  -webkit-mask-position:  center;
+  -webkit-mask-size:      contain;
+  -webkit-mask-composite: xor;
+  mask-image:    linear-gradient(#000, #000), var(--empty-state-scene-mask);
   mask-repeat:   no-repeat;
   mask-position: center;
   mask-size:     contain;
+  mask-composite: exclude;
   border-radius: calc(var(--border-radius-regular) *6);
 }
-
-.editor-empty-state-title {
-  margin:    0 !important;
-  color:     var(--color-text-80);
-  text-shadow: var(--text-shadow-empty-note);
-  font-size: 18px;
-  line-height: 18px;
-  opacity: 70%;
-}
-
 
 /* Preview mode edge fades */
 .editor-stage.is-preview-mode::before,

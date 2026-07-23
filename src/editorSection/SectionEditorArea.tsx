@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { CSSProperties, MutableRefObject, ReactNode, RefObject } from 'react'
 import { Editor } from '../components/Editor'
 import { SnapshotTimelineSlider } from '../editor/SnapshotTimelineSlider'
@@ -117,11 +117,22 @@ export function SectionEditorArea({
     sectionContainerRef.current = el
   }, [editorStageRef, sectionContainerRef])
 
-  const emptyStateSceneMaskUrl = useMemo(() => getEmptyStateSceneMaskUrl(sectionId), [sectionId])
+  // Bumped on click to reroll the scene below -- an undocumented easter egg,
+  // so it deliberately carries no hover/cursor affordance (see .editor-empty-state
+  // in editor.css). Local state (not persisted) is enough since it only needs
+  // to survive re-renders while this section stays mounted, not reloads.
+  const [sceneRerollNonce, setSceneRerollNonce] = useState(0)
+  const emptyStateSceneMaskUrl = useMemo(
+    () => getEmptyStateSceneMaskUrl(`${sectionId}:${sceneRerollNonce}`),
+    [sectionId, sceneRerollNonce],
+  )
 
   const emptyState = (
-    <div className="editor-empty-state" style={{ '--empty-state-scene-mask': emptyStateSceneMaskUrl } as CSSProperties}>
-      <div className="editor-empty-state-title">Thockdown</div><div className="editor-empty-state-title">Notes</div>
+    <div
+      className="editor-empty-state"
+      style={{ '--empty-state-scene-mask': emptyStateSceneMaskUrl } as CSSProperties}
+      onClick={() => setSceneRerollNonce((n) => n + 1)}
+    >
     </div>
   )
 
