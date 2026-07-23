@@ -1726,7 +1726,7 @@ function App() {
   // Mirrors useSectionTabs' tabBarMode so buildMenuStateSnapshot (defined
   // earlier than the hook call, since it depends on things the hook itself
   // depends on) can read the latest value without a definition-order cycle.
-  const tabBarModeRef = useRef<'tags' | 'tabs'>('tags')
+  const tabBarModeRef = useRef<'tags' | 'tabs'>('tabs')
   const [restoredTabBarMode, setRestoredTabBarMode] = useState<'tags' | 'tabs' | null>(null)
 
   const originalConsoleMethodsRef = useRef<Partial<Record<ConsoleMethodName, (...args: any[]) => void>>>({})
@@ -4438,7 +4438,7 @@ ${markdownHtml}
             setDebuggingEnabled(appState.menu.debuggingEnabled ?? false)
             setSpellCheckEditEnabled(appState.menu.spellCheckEditEnabled ?? false)
             setSpellCheckRenderEnabled(appState.menu.spellCheckRenderEnabled ?? false)
-            setRestoredTabBarMode(appState.menu.tabBarMode ?? 'tags')
+            setRestoredTabBarMode(appState.menu.tabBarMode ?? 'tabs')
 
             // Restore persisted sidebar visibility
             setIsSidebarVisible(appState.menu.isSidebarVisible ?? true)
@@ -4913,6 +4913,61 @@ ${markdownHtml}
     pendingTabBarModeBySectionIdRef.current.set(incomingSectionId, 'tabs')
     applyResolvedSections(updated)
     setActiveSectionId((previous) => (previous === outgoingSectionId ? incomingSectionId : previous))
+  }, [applyResolvedSections, editorSections])
+
+  // "Clear this section" from the section picker's leading pill. This must
+  // NOT touch the section's own data (name, pinned tabs, last-active note) --
+  // those belong to the section, not the slot, and clearing is meant to be
+  // reversible via the picker later. So instead of resetting the section's
+  // content, this closes its slot exactly like handleCloseSection (parks it
+  // if named, deletes it if unnamed) and immediately backfills the vacated
+  // slot with a brand-new blank section, inheriting the outgoing section's
+  // widthFraction/pin so the slot's size never visibly changes -- same
+  // backfill trick handleSwapSection uses for a slot an incoming section
+  // vacates, just applied to the outgoing slot instead of skipping resize
+  // entirely like a normal close does.
+  const handleClearSection = useCallback(async (sectionId: string) => {
+    const sectionsApi = window.thockdownSections
+    if (!sectionsApi) return
+
+    const outgoingEntryBefore = editorSections.find((entry) => entry.id === sectionId)
+    const outgoingPosition = outgoingEntryBefore?.position ?? null
+    const outgoingWidthFraction = outgoingEntryBefore?.widthFraction ?? null
+
+    let updated = await sectionsApi.closeSlot(sectionId)
+    sectionRegistryRef.current.delete(sectionId)
+
+    updated = await sectionsApi.createSection(null, (outgoingPosition ?? 1) - 1)
+    const created = updated.find((entry) => entry.position === outgoingPosition)
+
+    if (created) {
+      updated = await sectionsApi.updateSectionWidths([
+        { id: created.id, widthFraction: outgoingWidthFraction },
+      ])
+    }
+
+    setFixedWidthPxBySectionId((previous) => {
+      const outgoingPinPx = previous.get(sectionId)
+      if (outgoingPinPx === undefined) return previous
+      const next = new Map(previous)
+      next.delete(sectionId)
+      if (created) {
+        next.set(created.id, outgoingPinPx)
+      }
+      return next
+    })
+
+    // Clearing is only reachable via the tab-bar-mode section picker, so the
+    // backfilled section should keep showing the tab bar too, rather than
+    // its own fresh EditorSection instance defaulting back to 'tags'.
+    if (created) {
+      pendingTabBarModeBySectionIdRef.current.set(created.id, 'tabs')
+    }
+
+    applyResolvedSections(updated)
+    if (created) {
+      setActiveSectionId((previous) => (previous === sectionId ? created.id : previous))
+    }
   }, [applyResolvedSections, editorSections])
 
   const editorSectionsRowRef = useRef<HTMLDivElement | null>(null)
@@ -6937,6 +6992,7 @@ ${markdownHtml}
                   canCreateSection={canCreateSection}
                   onCreateSection={() => void handleCreateSection(entry.position ?? index, entry.id)}
                   onCloseSection={() => void handleCloseSection(entry.id)}
+                  onClearSection={() => void handleClearSection(entry.id)}
                   sectionName={entry.name}
                   onRenameSection={(name) => void handleRenameSection(entry.id, name)}
                   onFetchSwapCandidates={() => handleFetchSwapCandidates(entry.id)}

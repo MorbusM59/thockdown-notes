@@ -109,6 +109,8 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   canCreateSection: boolean
   onCreateSection: () => void
   onCloseSection: () => void
+  /** "Clear this section" from the section picker's leading pill: vacates this slot (parking/deleting the section per the usual close rules) and backfills it with a fresh blank section, without touching this section's own name/tabs/note. */
+  onClearSection: () => void
 
   sectionName: string | null
   onRenameSection: (name: string | null) => void
@@ -182,6 +184,7 @@ export function EditorSection({
   canCreateSection,
   onCreateSection,
   onCloseSection,
+  onClearSection,
   sectionName,
   onRenameSection,
   onFetchSwapCandidates,
@@ -597,22 +600,6 @@ export function EditorSection({
     window.addEventListener('mousedown', handleWindowMouseDown)
     return () => window.removeEventListener('mousedown', handleWindowMouseDown)
   }, [tabBarMode, setTabBarMode])
-
-  // Full reset to the same blank state a freshly created section starts in:
-  // no active note, no pinned tabs, no name. Unpins every tab first (while a
-  // note may still be active, so unpinNoteTab's own "reactivate the
-  // neighboring tab" side effect is free to fire harmlessly) and clears the
-  // active note last, so the end state is deterministic regardless of what
-  // that side effect did along the way.
-  const resetSectionToEmpty = useCallback(async () => {
-    for (const tab of pinnedTabs) {
-      await unpinNoteTab(tab.noteId)
-    }
-    await clearActiveNote()
-    if (sectionName !== null) {
-      onRenameSection(null)
-    }
-  }, [pinnedTabs, unpinNoteTab, clearActiveNote, sectionName, onRenameSection])
 
   const {
     primedNoteActionById,
@@ -1076,8 +1063,8 @@ export function EditorSection({
 
   const handleSectionPickerClearClick = useCallback(() => {
     closeSectionPicker()
-    void resetSectionToEmpty()
-  }, [closeSectionPicker, resetSectionToEmpty])
+    onClearSection()
+  }, [closeSectionPicker, onClearSection])
 
   return (
     <div

@@ -423,7 +423,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
 
   // ── Tab bar state ──────────────────────────────────────────────────────
 
-  const [tabBarMode, setTabBarMode] = useState<'tags' | 'tabs'>('tags')
+  const [tabBarMode, setTabBarMode] = useState<'tags' | 'tabs'>('tabs')
 
   useEffect(() => {
     if (initialTabBarMode) setTabBarMode(initialTabBarMode)
