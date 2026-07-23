@@ -68,6 +68,10 @@
   --color-shadow-white:         var(--palette-shadow-white-mid);
   --color-shadow-white-harsh:   var(--palette-shadow-white-hi);
 
+  --color-shadow-black-light:   var(--palette-shadow-black-lo);
+  --color-shadow-black:         var(--palette-shadow-black-mid);
+  --color-shadow-black-harsh:   var(--palette-shadow-black-hi);
+
   /* Text colors */
   --color-text-base:      #000000DD;
   --color-text-90:        #000000C7;
@@ -120,7 +124,7 @@
     0 0 2px var(--color-shadow-white-light);
 
   --box-shadow-regular:
-    0 0 2px rgba(26, 15, 15, 0.5),
+    0 0 2px rgba(0, 0, 0, 0.5),
     0 0 6px rgba(0, 0, 0, 0.2),
     inset 0 0 2px var(--color-shadow-white);
 
@@ -149,21 +153,47 @@
     inset 0 0 6px rgba(0, 0, 0, 0.2),
     0 0 2px var(--color-shadow-white-harsh);
 
-  --box-shadow-regular-light-original: var(--box-shadow-regular-light);
+  /* Flip variants: swap black for white and white for black, direction unchanged. */
 
-  --box-shadow-inverted-light-original: var(--box-shadow-inverted-light);
+  --box-shadow-regular-light-flip:
+    0 0 2px rgba(255, 255, 255, 0.3),
+    0 0 6px rgba(255, 255, 255, 0.1),
+    inset 0 0 2px var(--color-shadow-black-light);
 
-  --box-shadow-regular-original: var(--box-shadow-regular);
+  --box-shadow-inverted-light-flip:
+    inset 0 0 2px rgba(255, 255, 255, 0.3),
+    inset 0 0 6px rgba(255, 255, 255, 0.1),
+    0 0 2px var(--color-shadow-black-light);
 
-  --box-shadow-inverted-original: var(--box-shadow-inverted);
+  --box-shadow-regular-flip:
+    0 0 2px rgba(255, 255, 255, 0.5),
+    0 0 6px rgba(255, 255, 255, 0.2),
+    inset 0 0 2px var(--color-shadow-black);
 
-  --box-shadow-regular-harsh-original: var(--box-shadow-regular-harsh);
+  --box-shadow-inverted-flip:
+    inset 0 0 2px rgba(255, 255, 255, 0.5),
+    inset 0 0 6px rgba(255, 255, 255, 0.2),
+    0 0 2px var(--color-shadow-black);
 
-  --box-shadow-inverted-harsh-original: var(--box-shadow-inverted-harsh);
+  --box-shadow-regular-harsh-flip:
+    0 0 2px rgba(255, 255, 255, 1),
+    0 0 6px rgba(255, 255, 255, 0.5),
+    inset 0 0 2px var(--color-shadow-black-harsh);
 
-  --box-shadow-regular-filtered-original: var(--box-shadow-regular-filtered);
+  --box-shadow-inverted-harsh-flip:
+    inset 0 0 2px rgba(255, 255, 255, 1),
+    inset 0 0 6px rgba(255, 255, 255, 0.5),
+    0 0 2px var(--color-shadow-black-harsh);
 
-  --box-shadow-inverted-filtered-original: var(--box-shadow-inverted-filtered);
+  --box-shadow-regular-filtered-flip:
+    0 0 2px rgba(255, 255, 255, 1),
+    0 0 6px rgba(255, 255, 255, 0.2),
+    inset 0 0 2px var(--color-shadow-black-harsh);
+
+  --box-shadow-inverted-filtered-flip:
+    inset 0 0 2px rgba(255, 255, 255, 1),
+    inset 0 0 6px rgba(255, 255, 255, 0.2),
+    0 0 2px var(--color-shadow-black-harsh);
 
   --color-border-dark-05-original:  var(--color-border-dark-05);
   --color-border-dark-10-original:  var(--color-border-dark-10);
@@ -343,12 +373,14 @@
 --------------------------------------------------------------------------- */
 
 .app-shell.shadow-flip {
-  --box-shadow-regular-light: var(--box-shadow-inverted-light-original);
-  --box-shadow-inverted-light: var(--box-shadow-regular-light-original);
-  --box-shadow-regular: var(--box-shadow-inverted-original);
-  --box-shadow-inverted: var(--box-shadow-regular-original);
-  --box-shadow-regular-harsh: var(--box-shadow-inverted-original);
-  --box-shadow-inverted-harsh: var(--box-shadow-regular-harsh-original);
+  --box-shadow-regular-light: var(--box-shadow-regular-light-flip);
+  --box-shadow-inverted-light: var(--box-shadow-inverted-light-flip);
+  --box-shadow-regular: var(--box-shadow-regular-flip);
+  --box-shadow-inverted: var(--box-shadow-inverted-flip);
+  --box-shadow-regular-harsh: var(--box-shadow-regular-harsh-flip);
+  --box-shadow-inverted-harsh: var(--box-shadow-inverted-harsh-flip);
+  --box-shadow-regular-filtered: var(--box-shadow-regular-filtered-flip);
+  --box-shadow-inverted-filtered: var(--box-shadow-inverted-filtered-flip);
 
   --color-border-dark-05:  var(--color-border-light-10-original);
   --color-border-dark-10:  var(--color-border-light-20-original);
