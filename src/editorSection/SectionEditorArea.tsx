@@ -121,7 +121,7 @@ export function SectionEditorArea({
 
   const emptyState = (
     <div className="editor-empty-state" style={{ '--empty-state-scene-mask': emptyStateSceneMaskUrl } as CSSProperties}>
-      <p className="editor-empty-state-title">Thockdown Notes</p>
+      <div className="editor-empty-state-title">Thockdown</div><div className="editor-empty-state-title">Notes</div>
     </div>
   )
 

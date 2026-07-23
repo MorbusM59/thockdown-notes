@@ -278,7 +278,7 @@
   border-radius: calc(var(--border-radius-regular) *6);
   box-shadow: var(--box-shadow-inverted-filtered);
   filter: var(--filter-primed-archive);
-  padding: 8px;
+  padding: 16px;
   font-family: 'Fredericka the Great';
   z-index: 2;
 }
@@ -310,12 +310,13 @@
   border-radius: calc(var(--border-radius-regular) *6);
 }
 
-.editor-empty-state-title,
-.editor-empty-state-hint {
+.editor-empty-state-title {
   margin:    0 !important;
   color:     var(--color-text-80);
   text-shadow: var(--text-shadow-empty-note);
   font-size: 18px;
+  line-height: 18px;
+  opacity: 70%;
 }
 
 
