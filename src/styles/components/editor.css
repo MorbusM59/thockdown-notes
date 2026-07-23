@@ -261,20 +261,26 @@
   --circle-diameter: 220px;
 }
 
-.editor-stage.is-empty {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items:    center;
-  justify-content: center;
-  height: 100%;
-  width: 100%;
-}
-
-.editor-empty-state {
+/* Self-centering rather than depending on a flex parent -- .edit-container
+   and .markdown-preview keep rendering their normal (non-flex) layout even
+   when empty, so the background stack underneath (grid texture / render
+   texture + preview chrome) stays exactly the same as a populated note.
+   Positions relative to the nearest positioned ancestor: .markdown-preview
+   itself in render mode, or .editor-stage in edit mode (.edit-container has
+   no position of its own, so the search continues up to it) -- either way
+   that ancestor spans the same footprint .edit-container would fill.
+   Selector is three classes deep (rather than the plain .editor-empty-state
+   below) specifically to outrank markdown.css's
+   ".markdown-preview > *:not(.markdown-preview-texture) { position: relative }",
+   which would otherwise win (equal specificity, declared later) and pin this
+   to the top-left corner instead of centering it. */
+.editor-stage .edit-container .editor-empty-state,
+.editor-stage .render-container .editor-empty-state {
+  position: absolute;
+  inset:    0;
+  margin:   auto;
   height: var(--circle-diameter);
   width: var(--circle-diameter);
-  flex: 0 0 var(--circle-diameter);
   display: flex;
   flex-direction: column;
   align-items:    center;
