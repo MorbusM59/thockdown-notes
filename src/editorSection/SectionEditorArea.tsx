@@ -192,7 +192,15 @@ export function SectionEditorArea({
       <aside className="editor-scrollbar-slot">
         <div className="editor-scrollbar-slot-inner" aria-hidden="true">
           {!isPreviewMode ? (
-            <div ref={setScrollbarHostEl} className="editor-scrollbar-slot-inner" />
+            activeNoteId ? (
+              <div ref={setScrollbarHostEl} className="editor-scrollbar-slot-inner" />
+            ) : (
+              <div className="thockdown-scroll-rail">
+                <div className="thockdown-scroll-track">
+                  <div className="thockdown-scroll-thumb is-inactive" style={{ top: 3, bottom: 3 }} />
+                </div>
+              </div>
+            )
           ) : (
             <div className="thockdown-scroll-rail">
               <div
@@ -211,11 +219,11 @@ export function SectionEditorArea({
         </div>
       </aside>
       <div className="editor-document-stats" aria-live="polite">
-      {activeNoteId && (
         <div className="wordcount-panel" aria-live="polite">
-          <span><b>{activeNoteDocumentStats.wordCount.toLocaleString()}</b> ({activeNoteDocumentStats.characterCount.toLocaleString()})</span>
+          {activeNoteId && (
+            <span><b>{activeNoteDocumentStats.wordCount.toLocaleString()}</b> ({activeNoteDocumentStats.characterCount.toLocaleString()})</span>
+          )}
         </div>
-      )}
         <div className="timeline-panel">
         {activeNoteId ? (
           <SnapshotTimelineSlider
@@ -232,19 +240,20 @@ export function SectionEditorArea({
             onTrackLengthChange={setTimelineTrackLengthPx}
           />
         ) : (
-          <span>0 words</span>
+          <div className="utility-setting-scrollbar-shell snapshot-timeline-shell" aria-hidden="true">
+            <div className="utility-setting-scrollbar-rail snapshot-timeline-rail" />
+          </div>
         )}
         </div>
         <div className="manual-snapshot-panel">
-        {activeNoteId && (
           <PresentStateCircle
-            hasPendingManualChanges={noteSnapshots.hasPendingManualChanges}
+            hasPendingManualChanges={activeNoteId ? noteSnapshots.hasPendingManualChanges : false}
             onCreateManualSnapshot={() => { void handleCreateManualSnapshot() }}
-            onGoToPresent={handleReturnToPresent}
-            onMergeAdjacentSnapshots={handleMergeAdjacentSnapshots}
+            onGoToPresent={activeNoteId ? handleReturnToPresent : undefined}
+            onMergeAdjacentSnapshots={activeNoteId ? handleMergeAdjacentSnapshots : undefined}
             isPresent={previewedSnapshotId === null}
+            disabled={!activeNoteId}
           />
-        )}
         </div>
       </div>
     </div>

@@ -279,7 +279,7 @@ export function SectionTabBar({
                   })}
                 </div>
               ) : pinnedTabs.length === 0 && !tempTabNoteId ? (
-                <span className="tabbar-tag-hint">Open a note to preview it here.</span>
+                <span className="tabbar-tag-hint"></span>
               ) : (
                 <>
                   {tempTabNoteId ? (() => {
