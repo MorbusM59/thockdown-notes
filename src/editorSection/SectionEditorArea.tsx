@@ -15,6 +15,17 @@ export interface SectionEditorAreaProps {
   editorStageRef: RefObject<HTMLDivElement>
   sectionContainerRef: MutableRefObject<HTMLDivElement | null>
   previewedSnapshotId: number | null
+  /**
+   * React `key` for the mounted <Editor> instance. Distinct from
+   * previewedSnapshotId: while browsing a genuine historical Time Machine
+   * snapshot this tracks previewedSnapshotId so the editor remounts fresh
+   * per snapshot, but while a section is merely hibernated (frozen because
+   * the same note is live in another section) it stays pinned to the same
+   * value the live editor uses -- remounting on every focus-driven
+   * freeze/thaw round trip is what caused the flicker/scroll-reset this
+   * exists to avoid. See EditorSection's isFrozenSectionPreviewRef.
+   */
+  editorMountKey: number | string
   bindings: EditorBindings
   adapterRef: MutableRefObject<EditorAdapter | null>
   activeNoteId: string | null
@@ -71,6 +82,7 @@ export function SectionEditorArea({
   editorStageRef,
   sectionContainerRef,
   previewedSnapshotId,
+  editorMountKey,
   bindings,
   adapterRef,
   activeNoteId,
@@ -150,7 +162,7 @@ export function SectionEditorArea({
             <div className="edit-container" style={{ display: isPreviewMode ? 'none' : undefined }}>
               {activeNoteId ? (
                 <Editor
-                  key={previewedSnapshotId ?? 'present'}
+                  key={editorMountKey}
                   bindings={bindings}
                   adapterRef={adapterRef}
                   noteId={activeNoteId}
