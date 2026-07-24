@@ -54,6 +54,8 @@
   box-sizing:  border-box;
   overflow:    hidden;
   -webkit-app-region: drag;
+  container-name: toolbarGrid;
+  container-type: size;
 }
 
 .toolbar-grid button,
@@ -84,18 +86,22 @@
 .toolbar-container {
   width: 100%;
   height: 100%;
-  container-name: markdownToolbar;
-  container-type: size;
   margin: 0 8px;
+  border-radius:    0 0 var(--border-radius-regular) var(--border-radius-regular);
+  border:      1px solid var(--color-border-light-70);
+  border-top: none;
+  box-shadow:       var(--box-shadow-inverted);
+  background:       var(--color-input-backdrop);
 }
 
-@container markdownToolbar (width < 124px) {
-  .toolbar-container .markdown-toolbar {
+@container toolbarGrid (width < 321px) {
+  .toolbar-grid > .toolbar-container {
     display: none;
   }
 }
 
 .markdown-toolbar {
+  margin-top: 2px;
   display:     flex;
   align-items: flex-start;
   flex-direction: row;
@@ -106,11 +112,6 @@
   max-width:           100%;
   height:          100%;
   max-height: calc(2 * var(--markdown-toolbar-button-height) + var(--markdown-toolbar-gap) + 2 * var(--markdown-toolbar-padding) - 2px);
-  border-radius:    0 0 var(--border-radius-regular) var(--border-radius-regular);
-  border:      1px solid var(--color-border-light-70);
-  border-top: none;
-  box-shadow:       var(--box-shadow-inverted);
-  background:       var(--color-input-backdrop);
   padding: var(--markdown-toolbar-padding);
   gap: var(--markdown-toolbar-gap);
   transition: ease-in opacity 150ms;
