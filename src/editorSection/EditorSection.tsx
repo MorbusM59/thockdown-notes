@@ -275,6 +275,8 @@ export function EditorSection({
     latestEditorTextRef,
   } = useDisplayedNoteText(sectionId)
   const { previewedSnapshotId, setPreviewedSnapshotId } = usePreviewedSnapshot(sectionId)
+  /** See useEditorSectionMount's doc comment on this ref: distinguishes a hibernated live section from a genuine Time Machine browse, both of which drive previewedSnapshotId. */
+  const isFrozenSectionPreviewRef = useRef(false)
   const { editorSelection, setEditorSelection, latestEditorSelectionRef } = useDisplayedNoteSelection(sectionId)
   const [isCaretSuspended, setIsCaretSuspended] = useState(false)
 
@@ -341,6 +343,7 @@ export function EditorSection({
     buildToggleBulletedListTransformRef,
     buildToggleNumberedListTransformRef,
     sectionContainerRef,
+    isFrozenSectionPreviewRef,
   })
 
   const getActiveNoteLiveText = useCallback(() => (
@@ -356,6 +359,8 @@ export function EditorSection({
     getLiveText: getActiveNoteLiveText,
     flushPendingSaveNow,
     isNoteOpenInOtherSection,
+    captureEditModeSnapshotFromEditor: (id) => { captureEditModeSnapshotFromEditor(id) },
+    isFrozenSectionPreviewRef,
   })
 
   const activateNote = useCallback(async (noteId: string, overrideCursorPos?: number) => {
@@ -681,6 +686,7 @@ export function EditorSection({
     editModeSnapshotByNoteIdRef,
     refreshNotes,
     activateNote,
+    isFrozenSectionPreviewRef,
   })
 
   const activeNoteDocumentStats = useMemo(() => {

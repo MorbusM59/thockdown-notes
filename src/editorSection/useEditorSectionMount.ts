@@ -80,6 +80,19 @@ export interface UseEditorSectionMountOptions {
   buildToggleNumberedListTransformRef: MutableRefObject<(text: string, selection: EditorSelectionState) => { text: string; selection: EditorSelectionState } | null>
   /** Scopes the editor/scrollbar DOM lookups below to this section's own stage -- other sections render the same class names, so an unscoped document.querySelector would grab whichever section's stage happens to be first in the DOM. */
   sectionContainerRef: MutableRefObject<HTMLDivElement | null>
+  /**
+   * True while `previewedSnapshotId` is non-null *because useSnapshotFreeze
+   * hibernated this section* (same note open live in another section),
+   * false while it's non-null because the user is genuinely browsing Time
+   * Machine history. Both cases render read-only "preview" content through
+   * the same `previewedSnapshotId` mechanism, but they need different
+   * restore targets: a frozen section has a real scroll/caret position
+   * worth preserving (wherever the user was when it hibernated); an
+   * arbitrary historical snapshot doesn't, so it starts at the top. Owned
+   * by EditorSection and written by useSnapshotFreeze/useNoteSnapshotTimeline
+   * -- read-only from here.
+   */
+  isFrozenSectionPreviewRef: MutableRefObject<boolean>
 }
 
 export interface UseEditorSectionMountResult {
@@ -183,6 +196,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     buildToggleBulletedListTransformRef,
     buildToggleNumberedListTransformRef,
     sectionContainerRef,
+    isFrozenSectionPreviewRef,
   } = options
 
   const adapterRef = useRef<EditorAdapter | null>(null)
@@ -1472,6 +1486,19 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     const isPreviewingSnapshot = previewedSnapshotId !== null
 
     if (isPreviewingSnapshot) {
+      if (isFrozenSectionPreviewRef.current) {
+        // This "preview" is actually a hibernated section showing the same
+        // live note open elsewhere, frozen read-only -- not the user
+        // browsing history. It has a real scroll/caret position worth
+        // keeping (captured right before freezing), unlike an arbitrary
+        // historical snapshot -- restore that instead of snapping to top.
+        const cachedAtFreeze = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
+        if (cachedAtFreeze) {
+          applyEditRestoreSnapshot(cachedAtFreeze, { restoreFullSelection: true, focusAfterApply: false })
+          return
+        }
+      }
+
       // A historical snapshot has no saved scroll/cursor position of its
       // own -- just show it from the top, read-only.
       applyEditRestoreSnapshot({

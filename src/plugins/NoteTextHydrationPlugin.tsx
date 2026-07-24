@@ -61,6 +61,7 @@ function readCanonicalRootText(): string {
 export function NoteTextHydrationPlugin({ noteId, text, scrollerRef }: NoteTextHydrationPluginProps) {
   const [editor] = useLexicalComposerContext();
   const lastAppliedNoteIdRef = useRef<string | null>(null);
+  const hasHydratedRef = useRef(false);
 
   useLayoutEffect(() => {
     // Must match the editor's own steady-state invariant (TextSanitizationPlugin
@@ -81,7 +82,19 @@ export function NoteTextHydrationPlugin({ noteId, text, scrollerRef }: NoteTextH
     }
 
     const isNoteSwitch = lastAppliedNoteIdRef.current !== currentNoteId;
+    // On this plugin instance's very first hydration (including every
+    // remount -- e.g. the same-note-in-two-sections freeze/thaw cycle,
+    // which remounts the whole Editor via a key change) there is no prior
+    // on-screen scroll position to preserve: scrollerRef points at a
+    // brand-new DOM node whose scrollTop is always 0. Blindly "preserving"
+    // that 0 here would stomp whatever real position a restore mechanism
+    // (e.g. applyEditRestoreSnapshot, driven by this section's own cached
+    // snapshot) is about to apply. Only genuine note switches on an
+    // already-mounted instance -- where scrollerEl truly still shows the
+    // previous note's content -- need this pixel-preservation trick.
+    const isFreshMount = !hasHydratedRef.current;
     lastAppliedNoteIdRef.current = currentNoteId;
+    hasHydratedRef.current = true;
 
     const scrollerEl = (scrollerRef?.current ?? null);
     const preservedScrollTop = scrollerEl ? scrollerEl.scrollTop : null;
@@ -89,7 +102,7 @@ export function NoteTextHydrationPlugin({ noteId, text, scrollerRef }: NoteTextH
     const restoreScroll = () => {
       // Only restore scroll on note switches — typing in the same note must not
       // override CagedScrollPlugin's deterministic boundary scroll step.
-      if (!isNoteSwitch) return;
+      if (!isNoteSwitch || isFreshMount) return;
       if (!scrollerEl || preservedScrollTop === null) return;
       scrollerEl.scrollTop = preservedScrollTop;
       requestAnimationFrame(() => {

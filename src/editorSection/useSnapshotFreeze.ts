@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import type { Dispatch, SetStateAction } from 'react'
+import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
 export interface UseSnapshotFreezeOptions {
   sectionId: string
@@ -13,6 +13,21 @@ export interface UseSnapshotFreezeOptions {
   flushPendingSaveNow: () => Promise<void>
   /** Whether some *other* section currently has `noteId` open -- the only situation where this note could change out from under an inactive section. */
   isNoteOpenInOtherSection: (sectionId: string, noteId: string) => boolean
+  /**
+   * Captures this section's own scroll/caret position from the still-live
+   * editor and writes it into this section's edit-mode snapshot cache --
+   * called right before freezing so the position the section thaws back
+   * into is whatever the user was just looking at, not whatever the last
+   * debounced autosave (up to 280ms stale) happened to catch.
+   */
+  captureEditModeSnapshotFromEditor: (noteId: string) => void
+  /**
+   * Set to true right before freezing, so the restore effect in
+   * useEditorSectionMount knows this "preview" is a hibernated live section
+   * (restore its real scroll/caret) rather than the user genuinely browsing
+   * Time Machine (start from the top). See that ref's own doc comment.
+   */
+  isFrozenSectionPreviewRef: MutableRefObject<boolean>
 }
 
 /**
@@ -45,6 +60,8 @@ export function useSnapshotFreeze(options: UseSnapshotFreezeOptions): void {
     getLiveText,
     flushPendingSaveNow,
     isNoteOpenInOtherSection,
+    captureEditModeSnapshotFromEditor,
+    isFrozenSectionPreviewRef,
   } = options
 
   const isActiveSection = sectionId === activeSectionId
@@ -68,6 +85,11 @@ export function useSnapshotFreeze(options: UseSnapshotFreezeOptions): void {
       if (!noteId || !window.thockdownNotes) return
       if (!isNoteOpenInOtherSection(sectionId, noteId)) return
 
+      // Capture this section's own position now, while the editor is still
+      // live -- this is what gets restored on thaw, so it must reflect
+      // exactly where the user was, not a stale debounced value.
+      captureEditModeSnapshotFromEditor(noteId)
+
       const hibernatingNoteId = noteId
       void (async () => {
         await flushPendingSaveNow()
@@ -82,6 +104,7 @@ export function useSnapshotFreeze(options: UseSnapshotFreezeOptions): void {
           // written, there's nothing left to freeze -- the live view already
           // won.
           if (wasActiveRef.current) return
+          isFrozenSectionPreviewRef.current = true
           setPreviewedSnapshotId(snapshotId)
         } catch (error) {
           console.error('Failed to freeze section on hibernate', error)
@@ -96,5 +119,5 @@ export function useSnapshotFreeze(options: UseSnapshotFreezeOptions): void {
         setPreviewedSnapshotId(null)
       }
     }
-  }, [isActiveSection, noteId, previewedSnapshotId, setPreviewedSnapshotId, getLiveText, flushPendingSaveNow, isNoteOpenInOtherSection, sectionId])
+  }, [isActiveSection, noteId, previewedSnapshotId, setPreviewedSnapshotId, getLiveText, flushPendingSaveNow, isNoteOpenInOtherSection, captureEditModeSnapshotFromEditor, isFrozenSectionPreviewRef, sectionId])
 }

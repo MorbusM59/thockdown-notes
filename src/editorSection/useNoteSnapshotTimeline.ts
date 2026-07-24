@@ -89,6 +89,8 @@ export interface UseNoteSnapshotTimelineOptions {
   editModeSnapshotByNoteIdRef: MutableRefObject<Map<string, EditRestoreSnapshot>>
   refreshNotes: (preferredId?: string | null) => Promise<string | null>
   activateNote: (noteId: string, overrideCursorPos?: number) => Promise<void>
+  /** See useEditorSectionMount's doc comment -- cleared here since this is a genuine user-driven history browse, not useSnapshotFreeze hibernating the section. */
+  isFrozenSectionPreviewRef: MutableRefObject<boolean>
 }
 
 /**
@@ -108,6 +110,7 @@ export function useNoteSnapshotTimeline({
   editModeSnapshotByNoteIdRef,
   refreshNotes,
   activateNote,
+  isFrozenSectionPreviewRef,
 }: UseNoteSnapshotTimelineOptions) {
   const [timelineCurveConstant, setTimelineCurveConstant] = useState(10)
   const [timelineTrackLengthPx, setTimelineTrackLengthPx] = useState(0)
@@ -155,9 +158,10 @@ export function useNoteSnapshotTimeline({
     // under the user -- scrubbing history should never silently drop an
     // unsaved edit to the live document.
     void flushPendingSaveNow().then(() => {
+      isFrozenSectionPreviewRef.current = false
       setPreviewedSnapshotId(snapshotId)
     })
-  }, [flushPendingSaveNow, previewedSnapshotId, activeNoteId, captureEditModeSnapshotFromEditor, setPreviewedSnapshotId])
+  }, [flushPendingSaveNow, previewedSnapshotId, activeNoteId, captureEditModeSnapshotFromEditor, setPreviewedSnapshotId, isFrozenSectionPreviewRef])
 
   const compactAutomaticSnapshots = useCallback(async () => {
     if (!activeNoteId || timelineTrackLengthPx <= 0 || noteSnapshots.placements.length < 2 || !window.thockdownNotes) return
