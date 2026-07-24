@@ -161,7 +161,7 @@
   gap:     6px;
 }
 
-.search-replace-row > .search-input-field,
+.search-replace-row > .search-replace-find-shell,
 .search-replace-row > .search-replace-replace-shell {
   flex:     1 1 0;
   min-width: 0;

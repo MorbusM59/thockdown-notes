@@ -6367,11 +6367,30 @@ ${markdownHtml}
             <aside className="notes-sidebar" style={{ gridArea: 'sidebar' }}>
               <div className="search-box" aria-label="Search panel">
                 <div className={`search-input-shell${isReplaceMode ? ' search-replace-row' : ''}`}>
+                {isReplaceMode ? (
+                  <div className="search-input-shell search-replace-find-shell">
+                    <input
+                      className="search-input-field"
+                      ref={sidebarSearchInputRef}
+                      type="text"
+                      placeholder="Find..."
+                      value={activeSection?.documentFindQuery ?? ''}
+                      onChange={(event) => getActiveSection()?.setDocumentFindQuery(event.target.value)}
+                      onBlur={() => {
+                        window.setTimeout(() => {
+                          if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
+                            getActiveSection()?.scheduleFocusEditorInEditMode()
+                          }
+                        }, 0)
+                      }}
+                    />
+                  </div>
+                ) : (
                 <input
-                  className={`search-input-field${isReplaceMode ? '' : ' has-case-toggle'}`}
+                  className="search-input-field has-case-toggle"
                   ref={sidebarSearchInputRef}
                   type="text"
-                  placeholder={isReplaceMode ? 'Find...' : isFindMode ? 'Find in current note...' : 'Search for content or #tag...'}
+                  placeholder={isFindMode ? 'Find in current note...' : 'Search for content or #tag...'}
                   value={isFindMode ? (activeSection?.documentFindQuery ?? '') : searchQuery}
                   onChange={(event) => {
                     const value = event.target.value
@@ -6389,6 +6408,7 @@ ${markdownHtml}
                     }, 0)
                   }}
                 />
+                )}
                 {isReplaceMode ? (
                   <div className="search-input-shell search-replace-replace-shell">
                     <input
