@@ -1530,11 +1530,11 @@ export class DatabaseService {
   }
 
   getNoteUiState(noteId: string): {
-    progressPreview: number | null;
-    progressEdit: number | null;
-    cursorPos: number | null;
-    scrollTop: number | null;
-    sourceAnchorLine: number | null;
+    progressPreview: number;
+    progressEdit: number;
+    cursorPos: number;
+    scrollTop: number;
+    sourceAnchorLine: number;
     sourceAnchorText: string | null;
   } {
     const db = this.requireDb();
@@ -1552,12 +1552,18 @@ export class DatabaseService {
       sourceAnchorText?: string | null;
     } | undefined;
 
+    // A note row can sit with these columns at SQL NULL from creation until
+    // the first debounced UI-state save fires (see saveNoteUiState) -- if the
+    // app closes or the note is switched away from before that, NULL
+    // persists indefinitely. Every caller expects real numbers, so this is
+    // the one place that turns "never saved yet" into the same default
+    // (start of document, no scroll, no anchor) a fresh note should have.
     return {
-      progressPreview: row?.progressPreview ?? null,
-      progressEdit: row?.progressEdit ?? null,
-      cursorPos: row?.cursorPos ?? null,
-      scrollTop: row?.scrollTop ?? null,
-      sourceAnchorLine: row?.sourceAnchorLine ?? null,
+      progressPreview: row?.progressPreview ?? 0,
+      progressEdit: row?.progressEdit ?? 0,
+      cursorPos: row?.cursorPos ?? 0,
+      scrollTop: row?.scrollTop ?? 0,
+      sourceAnchorLine: row?.sourceAnchorLine ?? 0,
       sourceAnchorText: row?.sourceAnchorText ?? null,
     };
   }
@@ -2744,6 +2750,19 @@ export class DatabaseService {
     this.ensureNotesColumn('sourceAnchorText', 'TEXT');
     this.ensureNotesColumn('contentChecksum', 'TEXT');
     this.ensureNotesColumn('assignedId', 'TEXT');
+
+    // Notes are inserted (both on creation and on filesystem-sync upsert)
+    // without ever setting cursorPos/scrollTop/sourceAnchorLine/progress*,
+    // so they start at SQL NULL until the first UI-state save. getNoteUiState
+    // now defaults NULL to 0 on read, but backfill any rows already sitting
+    // on a stale NULL so direct SQL access elsewhere sees the same default.
+    db.exec(`
+      UPDATE notes SET progressPreview = 0 WHERE progressPreview IS NULL;
+      UPDATE notes SET progressEdit = 0 WHERE progressEdit IS NULL;
+      UPDATE notes SET cursorPos = 0 WHERE cursorPos IS NULL;
+      UPDATE notes SET scrollTop = 0 WHERE scrollTop IS NULL;
+      UPDATE notes SET sourceAnchorLine = 0 WHERE sourceAnchorLine IS NULL;
+    `);
     this.ensureEditorSectionsColumn('lastActiveNoteId', 'TEXT REFERENCES notes(id) ON DELETE SET NULL');
     this.ensureEditorSectionsColumn('fixedWidthPx', 'REAL');
     this.ensureEditorSectionsColumn('noteSlotInitialized', 'INTEGER NOT NULL DEFAULT 0');

@@ -115,11 +115,11 @@ export type NoteUiStatePayload = {
 };
 
 export type NoteUiState = {
-  progressPreview: number | null;
-  progressEdit: number | null;
-  cursorPos: number | null;
-  scrollTop: number | null;
-  sourceAnchorLine: number | null;
+  progressPreview: number;
+  progressEdit: number;
+  cursorPos: number;
+  scrollTop: number;
+  sourceAnchorLine: number;
   sourceAnchorText: string | null;
 };
 

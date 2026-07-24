@@ -237,11 +237,11 @@ function loadStore(): BrowserMockStore {
       ? Object.fromEntries(
           Object.entries(parsed.noteUiStates as Record<string, NoteUiState>)
             .map(([key, value]) => [key, {
-              progressPreview: value?.progressPreview ?? null,
-              progressEdit: value?.progressEdit ?? null,
-              cursorPos: value?.cursorPos ?? null,
-              scrollTop: value?.scrollTop ?? null,
-              sourceAnchorLine: value?.sourceAnchorLine ?? null,
+              progressPreview: value?.progressPreview ?? 0,
+              progressEdit: value?.progressEdit ?? 0,
+              cursorPos: value?.cursorPos ?? 0,
+              scrollTop: value?.scrollTop ?? 0,
+              sourceAnchorLine: value?.sourceAnchorLine ?? 0,
               sourceAnchorText: value?.sourceAnchorText ?? null,
             }]),
         )
@@ -383,21 +383,21 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
     async saveNoteUiState(input: { id: string; payload: NoteUiStatePayload }): Promise<void> {
       return mutate((store) => {
         const previousState = store.noteUiStates[input.id] ?? {
-          progressPreview: null,
-          progressEdit: null,
-          cursorPos: null,
-          scrollTop: null,
-          sourceAnchorLine: null,
+          progressPreview: 0,
+          progressEdit: 0,
+          cursorPos: 0,
+          scrollTop: 0,
+          sourceAnchorLine: 0,
           sourceAnchorText: null,
         }
 
         const nextState: NoteUiState = {
           ...previousState,
-          progressPreview: Object.prototype.hasOwnProperty.call(input.payload, 'progressPreview') ? input.payload.progressPreview ?? null : previousState.progressPreview,
-          progressEdit: Object.prototype.hasOwnProperty.call(input.payload, 'progressEdit') ? input.payload.progressEdit ?? null : previousState.progressEdit,
-          cursorPos: Object.prototype.hasOwnProperty.call(input.payload, 'cursorPos') ? input.payload.cursorPos ?? null : previousState.cursorPos,
-          scrollTop: Object.prototype.hasOwnProperty.call(input.payload, 'scrollTop') ? input.payload.scrollTop ?? null : previousState.scrollTop,
-          sourceAnchorLine: Object.prototype.hasOwnProperty.call(input.payload, 'sourceAnchorLine') ? input.payload.sourceAnchorLine ?? null : previousState.sourceAnchorLine,
+          progressPreview: Object.prototype.hasOwnProperty.call(input.payload, 'progressPreview') ? input.payload.progressPreview ?? 0 : previousState.progressPreview,
+          progressEdit: Object.prototype.hasOwnProperty.call(input.payload, 'progressEdit') ? input.payload.progressEdit ?? 0 : previousState.progressEdit,
+          cursorPos: Object.prototype.hasOwnProperty.call(input.payload, 'cursorPos') ? input.payload.cursorPos ?? 0 : previousState.cursorPos,
+          scrollTop: Object.prototype.hasOwnProperty.call(input.payload, 'scrollTop') ? input.payload.scrollTop ?? 0 : previousState.scrollTop,
+          sourceAnchorLine: Object.prototype.hasOwnProperty.call(input.payload, 'sourceAnchorLine') ? input.payload.sourceAnchorLine ?? 0 : previousState.sourceAnchorLine,
           sourceAnchorText: Object.prototype.hasOwnProperty.call(input.payload, 'sourceAnchorText') ? input.payload.sourceAnchorText ?? null : previousState.sourceAnchorText,
         }
 
@@ -407,11 +407,11 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
 
     async getNoteUiState(input: LoadNoteInput): Promise<NoteUiState> {
       return storeRef.current.noteUiStates[input.id] ?? {
-        progressPreview: null,
-        progressEdit: null,
-        cursorPos: null,
-        scrollTop: null,
-        sourceAnchorLine: null,
+        progressPreview: 0,
+        progressEdit: 0,
+        cursorPos: 0,
+        scrollTop: 0,
+        sourceAnchorLine: 0,
         sourceAnchorText: null,
       }
     },
