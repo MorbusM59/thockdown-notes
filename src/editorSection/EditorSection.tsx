@@ -703,8 +703,14 @@ export function EditorSection({
   const {
     documentFindQuery,
     setDocumentFindQuery,
+    documentReplaceQuery,
+    setDocumentReplaceQuery,
+    isDocumentReplaceMode,
+    setIsDocumentReplaceMode,
     isDocumentFindCaseSensitive,
     setIsDocumentFindCaseSensitive,
+    effectiveCaseSensitive,
+    preserveCase,
     documentFindDirective,
     documentFindHits,
   } = useDocumentFind({
@@ -725,7 +731,7 @@ export function EditorSection({
     activateNote,
     previewScrollRef,
     documentFindDirective,
-    isDocumentFindCaseSensitive,
+    isDocumentFindCaseSensitive: effectiveCaseSensitive,
     renderedDisplayText,
   })
 
@@ -758,7 +764,8 @@ export function EditorSection({
     previewScrollRef,
     documentFindDirective,
     documentFindHits,
-    isDocumentFindCaseSensitive,
+    effectiveCaseSensitive,
+    preserveCase,
     currentEditorText,
     syncPreviewCustomScrollbar,
     isPreviewMode,
@@ -766,6 +773,8 @@ export function EditorSection({
     latestEditorTextRef,
     activeNoteText,
     documentFindQuery,
+    documentReplaceQuery,
+    isDocumentReplaceMode,
     applyProgrammaticEditorText,
   })
 
@@ -923,8 +932,14 @@ export function EditorSection({
     handleTrashViewButtonContextMenu,
     documentFindQuery,
     setDocumentFindQuery,
+    documentReplaceQuery,
+    setDocumentReplaceQuery,
+    isDocumentReplaceMode,
+    setIsDocumentReplaceMode,
     isDocumentFindCaseSensitive,
     setIsDocumentFindCaseSensitive,
+    effectiveCaseSensitive,
+    preserveCase,
     documentFindDirective,
     documentFindHits,
     handleJumpToDocumentFindHit,

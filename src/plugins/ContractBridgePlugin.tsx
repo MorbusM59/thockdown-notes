@@ -1311,7 +1311,7 @@ export function ContractBridgePlugin({
           shortcut = 'italic';
         } else if (!event.shiftKey && key === 'j') {
           shortcut = 'strikethrough';
-        } else if (!event.shiftKey && key === 'h') {
+        } else if (!event.shiftKey && key === 't') {
           shortcut = 'heading-toggle';
         } else if (!event.shiftKey && event.key === '-') {
           shortcut = 'unordered-list';

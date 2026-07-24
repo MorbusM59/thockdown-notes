@@ -5,6 +5,7 @@ import { normalizeInternalText } from '../editor/TextPolicy'
 import {
   resolveDocumentFindDirective,
   buildDocumentFindHits,
+  applyPreserveCase,
   type DocumentFindDirective,
   type DocumentFindHit,
 } from '../editor/FindReplaceEngine'
@@ -18,7 +19,8 @@ export interface UseDocumentFindNavigationOptions {
   previewScrollRef: MutableRefObject<HTMLDivElement | null>
   documentFindDirective: DocumentFindDirective
   documentFindHits: DocumentFindHit[]
-  isDocumentFindCaseSensitive: boolean
+  effectiveCaseSensitive: boolean
+  preserveCase: boolean
   currentEditorText: string
   syncPreviewCustomScrollbar: () => void
   isPreviewMode: boolean
@@ -26,6 +28,8 @@ export interface UseDocumentFindNavigationOptions {
   latestEditorTextRef: MutableRefObject<string>
   activeNoteText: string
   documentFindQuery: string
+  documentReplaceQuery: string
+  isDocumentReplaceMode: boolean
   applyProgrammaticEditorText: (nextText: string, selectionStart: number, selectionEnd: number) => void
 }
 
@@ -44,7 +48,8 @@ export function useDocumentFindNavigation({
   previewScrollRef,
   documentFindDirective,
   documentFindHits,
-  isDocumentFindCaseSensitive,
+  effectiveCaseSensitive,
+  preserveCase,
   currentEditorText,
   syncPreviewCustomScrollbar,
   isPreviewMode,
@@ -52,6 +57,8 @@ export function useDocumentFindNavigation({
   latestEditorTextRef,
   activeNoteText,
   documentFindQuery,
+  documentReplaceQuery,
+  isDocumentReplaceMode,
   applyProgrammaticEditorText,
 }: UseDocumentFindNavigationOptions): UseDocumentFindNavigationResult {
   const jumpToPreviewDocumentFindHit = useCallback((hit: DocumentFindHit) => {
@@ -62,7 +69,7 @@ export function useDocumentFindNavigation({
     if (!normalizedNeedle) return
 
     const hitOrdinal = documentFindHits.findIndex((candidate) => candidate.id === hit.id)
-    const compareNeedle = isDocumentFindCaseSensitive ? normalizedNeedle : normalizedNeedle.toLocaleLowerCase()
+    const compareNeedle = effectiveCaseSensitive ? normalizedNeedle : normalizedNeedle.toLocaleLowerCase()
 
     type TextSegment = {
       node: Text
@@ -88,7 +95,7 @@ export function useDocumentFindNavigation({
       node = walker.nextNode()
     }
 
-    const haystack = isDocumentFindCaseSensitive ? aggregateText : aggregateText.toLocaleLowerCase()
+    const haystack = effectiveCaseSensitive ? aggregateText : aggregateText.toLocaleLowerCase()
     const resolvedOrdinal = hitOrdinal >= 0 ? hitOrdinal : 0
 
     let occurrence = -1
@@ -156,7 +163,7 @@ export function useDocumentFindNavigation({
     currentEditorText.length,
     documentFindDirective.findText,
     documentFindHits,
-    isDocumentFindCaseSensitive,
+    effectiveCaseSensitive,
     syncPreviewCustomScrollbar,
   ])
 
@@ -182,7 +189,7 @@ export function useDocumentFindNavigation({
 
   const replaceDocumentFindHit = useCallback((hit: DocumentFindHit) => {
     const sourceText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
-    const directive = resolveDocumentFindDirective(documentFindQuery, sourceText, isDocumentFindCaseSensitive)
+    const directive = resolveDocumentFindDirective(documentFindQuery, documentReplaceQuery, isDocumentReplaceMode)
 
     // Right-click should still behave like a normal jump when replace mode is not active.
     if (!directive.isReplaceMode || !directive.findText) {
@@ -191,44 +198,51 @@ export function useDocumentFindNavigation({
     }
 
     const selectedText = sourceText.slice(hit.index, hit.index + hit.matchLength)
-    const selectedComparable = isDocumentFindCaseSensitive ? selectedText : selectedText.toLowerCase()
-    const findComparable = isDocumentFindCaseSensitive ? directive.findText : directive.findText.toLowerCase()
+    const selectedComparable = effectiveCaseSensitive ? selectedText : selectedText.toLowerCase()
+    const findComparable = effectiveCaseSensitive ? directive.findText : directive.findText.toLowerCase()
     if (selectedComparable !== findComparable) {
       // If content shifted since hit computation, just jump to keep behavior predictable.
       handleJumpToDocumentFindHit(hit)
       return
     }
 
-    const nextText = `${sourceText.slice(0, hit.index)}${directive.replaceText}${sourceText.slice(hit.index + hit.matchLength)}`
-    const replacementEnd = hit.index + directive.replaceText.length
+    const replacementText = preserveCase ? applyPreserveCase(selectedText, directive.replaceText) : directive.replaceText
+    const nextText = `${sourceText.slice(0, hit.index)}${replacementText}${sourceText.slice(hit.index + hit.matchLength)}`
+    const replacementEnd = hit.index + replacementText.length
     applyProgrammaticEditorText(nextText, hit.index, replacementEnd)
-  }, [activeNoteText, applyProgrammaticEditorText, documentFindQuery, handleJumpToDocumentFindHit, isDocumentFindCaseSensitive])
+  }, [activeNoteText, applyProgrammaticEditorText, documentFindQuery, documentReplaceQuery, effectiveCaseSensitive, handleJumpToDocumentFindHit, isDocumentReplaceMode, preserveCase])
 
   const replaceAllDocumentFindHits = useCallback(() => {
     const sourceText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
-    const directive = resolveDocumentFindDirective(documentFindQuery, sourceText, isDocumentFindCaseSensitive)
+    const directive = resolveDocumentFindDirective(documentFindQuery, documentReplaceQuery, isDocumentReplaceMode)
     if (!directive.isReplaceMode || !directive.findText) {
       return
     }
 
-    const hits = buildDocumentFindHits(sourceText, directive.findText, isDocumentFindCaseSensitive)
+    const hits = buildDocumentFindHits(sourceText, directive.findText, effectiveCaseSensitive)
     if (hits.length === 0) {
       return
     }
 
     let cursor = 0
     let nextText = ''
-    for (const hit of hits) {
+    let firstReplacementLength = directive.replaceText.length
+    hits.forEach((hit, hitIndex) => {
       nextText += sourceText.slice(cursor, hit.index)
-      nextText += directive.replaceText
+      const matchedText = sourceText.slice(hit.index, hit.index + hit.matchLength)
+      const replacementText = preserveCase ? applyPreserveCase(matchedText, directive.replaceText) : directive.replaceText
+      if (hitIndex === 0) {
+        firstReplacementLength = replacementText.length
+      }
+      nextText += replacementText
       cursor = hit.index + hit.matchLength
-    }
+    })
     nextText += sourceText.slice(cursor)
 
     const firstHitStart = hits[0]?.index ?? 0
-    const firstHitEnd = firstHitStart + directive.replaceText.length
+    const firstHitEnd = firstHitStart + firstReplacementLength
     applyProgrammaticEditorText(nextText, firstHitStart, firstHitEnd)
-  }, [activeNoteText, applyProgrammaticEditorText, documentFindQuery, isDocumentFindCaseSensitive])
+  }, [activeNoteText, applyProgrammaticEditorText, documentFindQuery, documentReplaceQuery, effectiveCaseSensitive, isDocumentReplaceMode, preserveCase])
 
   return { handleJumpToDocumentFindHit, replaceDocumentFindHit, replaceAllDocumentFindHits }
 }

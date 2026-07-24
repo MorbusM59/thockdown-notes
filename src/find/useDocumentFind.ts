@@ -28,8 +28,18 @@ export interface UseDocumentFindOptions {
 export interface UseDocumentFindResult {
   documentFindQuery: string
   setDocumentFindQuery: Dispatch<SetStateAction<string>>
+  documentReplaceQuery: string
+  setDocumentReplaceQuery: Dispatch<SetStateAction<string>>
+  isDocumentReplaceMode: boolean
+  setIsDocumentReplaceMode: Dispatch<SetStateAction<boolean>>
+  /** Raw state behind the "Aa" toggle button -- means "case sensitive" in
+   * plain find mode, but "keep case" (case-insensitive search + preserve-case
+   * replace) once replace mode is active. Use `effectiveCaseSensitive` /
+   * `preserveCase` below to read its meaning for the current mode. */
   isDocumentFindCaseSensitive: boolean
   setIsDocumentFindCaseSensitive: Dispatch<SetStateAction<boolean>>
+  effectiveCaseSensitive: boolean
+  preserveCase: boolean
   documentFindDirective: DocumentFindDirective
   documentFindHits: DocumentFindHit[]
 }
@@ -47,6 +57,8 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
   void sectionId
 
   const [documentFindQuery, setDocumentFindQuery] = useState('')
+  const [documentReplaceQuery, setDocumentReplaceQuery] = useState('')
+  const [isDocumentReplaceMode, setIsDocumentReplaceMode] = useState(false)
   const [isDocumentFindCaseSensitive, setIsDocumentFindCaseSensitive] = useState(false)
 
   useEffect(() => {
@@ -59,19 +71,31 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialCaseSensitive])
 
+  // In replace mode the same toggle is repurposed as "keep case" (VSCode's
+  // preserve-case): off means case-sensitive find + literal replace, on
+  // means case-insensitive find + recase the replacement per match.
+  const effectiveCaseSensitive = isDocumentReplaceMode ? !isDocumentFindCaseSensitive : isDocumentFindCaseSensitive
+  const preserveCase = isDocumentReplaceMode && isDocumentFindCaseSensitive
+
   const documentFindDirective = useMemo<DocumentFindDirective>(() => {
-    return resolveDocumentFindDirective(documentFindQuery, sourceText, isDocumentFindCaseSensitive)
-  }, [documentFindQuery, sourceText, isDocumentFindCaseSensitive])
+    return resolveDocumentFindDirective(documentFindQuery, documentReplaceQuery, isDocumentReplaceMode)
+  }, [documentFindQuery, documentReplaceQuery, isDocumentReplaceMode])
 
   const documentFindHits = useMemo<DocumentFindHit[]>(() => {
-    return buildDocumentFindHits(sourceText, documentFindDirective.findText, isDocumentFindCaseSensitive)
-  }, [sourceText, documentFindDirective.findText, isDocumentFindCaseSensitive])
+    return buildDocumentFindHits(sourceText, documentFindDirective.findText, effectiveCaseSensitive)
+  }, [sourceText, documentFindDirective.findText, effectiveCaseSensitive])
 
   return {
     documentFindQuery,
     setDocumentFindQuery,
+    documentReplaceQuery,
+    setDocumentReplaceQuery,
+    isDocumentReplaceMode,
+    setIsDocumentReplaceMode,
     isDocumentFindCaseSensitive,
     setIsDocumentFindCaseSensitive,
+    effectiveCaseSensitive,
+    preserveCase,
     documentFindDirective,
     documentFindHits,
   }

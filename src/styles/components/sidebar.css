@@ -156,6 +156,17 @@
   border-radius: var(--border-radius-small);
 }
 
+.search-input-shell.search-replace-row {
+  display: flex;
+  gap:     6px;
+}
+
+.search-replace-row > .search-input-field,
+.search-replace-row > .search-replace-replace-shell {
+  flex:     1 1 0;
+  min-width: 0;
+}
+
 /* View toggle & icon buttons */
 .view-toggle {
   display:         flex;

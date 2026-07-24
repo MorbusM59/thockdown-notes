@@ -147,6 +147,15 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx,
     const removeUpdateListener = editor.registerUpdateListener(() => scheduleCaretUpdate());
     window.addEventListener('resize', scheduleCaretUpdate);
 
+    // Neither editor.registerUpdateListener nor the scroll/resize listeners
+    // fire when THIS editor loses or gains DOM focus (e.g. clicking into a
+    // different split-view section) -- updateCaret's own focus check only
+    // gets re-evaluated as a side effect of state/scroll changes. Without
+    // this, switching sections leaves the previously-focused editor's caret
+    // frozen on screen instead of disappearing.
+    document.addEventListener('focusin', scheduleCaretUpdate, true);
+    document.addEventListener('focusout', scheduleCaretUpdate, true);
+
     const scroller = scrollerRef.current;
     if (scroller) {
       scroller.addEventListener('scroll', scheduleCaretUpdate);
@@ -161,6 +170,8 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx,
       }
       removeUpdateListener();
       window.removeEventListener('resize', scheduleCaretUpdate);
+      document.removeEventListener('focusin', scheduleCaretUpdate, true);
+      document.removeEventListener('focusout', scheduleCaretUpdate, true);
       if (scroller) {
         scroller.removeEventListener('scroll', scheduleCaretUpdate);
       }

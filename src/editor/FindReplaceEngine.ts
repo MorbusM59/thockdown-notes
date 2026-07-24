@@ -28,57 +28,47 @@ export type DocumentFindHit = {
 };
 
 export function resolveDocumentFindDirective(
-  rawInput: string,
-  sourceText: string,
-  caseSensitive: boolean,
+  findQuery: string,
+  replaceQuery: string,
+  isReplaceMode: boolean,
 ): DocumentFindDirective {
-  const input = normalizeInternalText(rawInput).trim();
-  const normalizedSourceText = normalizeInternalText(sourceText);
-  if (!input) {
-    return {
-      findText: '',
-      replaceText: '',
-      isReplaceMode: false,
-    };
-  }
-
-  const separatorPositions: number[] = [];
-  for (let index = 0; index < input.length; index += 1) {
-    if (input[index] === '>') {
-      separatorPositions.push(index);
-    }
-  }
-
-  if (separatorPositions.length === 0) {
-    return {
-      findText: input,
-      replaceText: '',
-      isReplaceMode: false,
-    };
-  }
-
-  let separatorIndex: number | null = null;
-  for (const position of separatorPositions) {
-    const candidateWithSeparator = input.slice(0, position + 1);
-    if (!containsDocumentMatch(normalizedSourceText, candidateWithSeparator, caseSensitive)) {
-      separatorIndex = position;
-      break;
-    }
-  }
-
-  if (separatorIndex === null) {
-    return {
-      findText: input,
-      replaceText: '',
-      isReplaceMode: false,
-    };
-  }
-
   return {
-    findText: input.slice(0, separatorIndex),
-    replaceText: input.slice(separatorIndex + 1),
-    isReplaceMode: true,
+    findText: normalizeInternalText(findQuery).trim(),
+    replaceText: isReplaceMode ? normalizeInternalText(replaceQuery) : '',
+    isReplaceMode,
   };
+}
+
+/**
+ * VSCode-style "preserve case": the replacement text is re-cased to match
+ * the casing pattern of whichever text it's replacing -- all-lower and
+ * all-upper matches recase the whole replacement, a single Capitalized
+ * word recases just its first letter, anything else (mixed case) is left
+ * as the literal replacement text.
+ */
+export function applyPreserveCase(matchedText: string, replacementText: string): string {
+  if (!/[a-zA-Z]/.test(matchedText)) {
+    return replacementText;
+  }
+
+  const hasLower = /[a-z]/.test(matchedText);
+  const hasUpper = /[A-Z]/.test(matchedText);
+
+  if (hasUpper && !hasLower) {
+    return replacementText.toUpperCase();
+  }
+
+  if (hasLower && !hasUpper) {
+    return replacementText.toLowerCase();
+  }
+
+  const firstIsUpper = /[A-Z]/.test(matchedText[0]);
+  const restIsLower = !/[A-Z]/.test(matchedText.slice(1));
+  if (firstIsUpper && restIsLower) {
+    return replacementText.charAt(0).toUpperCase() + replacementText.slice(1).toLowerCase();
+  }
+
+  return replacementText;
 }
 
 export function buildDocumentFindHits(
@@ -130,18 +120,6 @@ function buildSnippet(text: string, index: number, matchLength: number, snippetR
     hasSnippetPrefixEllipsis: snippetStart > 0,
     hasSnippetSuffixEllipsis: snippetEnd < text.length,
   };
-}
-
-function containsDocumentMatch(sourceText: string, query: string, caseSensitive: boolean): boolean {
-  if (!query) {
-    return false;
-  }
-
-  if (caseSensitive) {
-    return sourceText.includes(query);
-  }
-
-  return sourceText.toLocaleLowerCase().includes(query.toLocaleLowerCase());
 }
 
 function normalizeSnippetText(value: string): string {

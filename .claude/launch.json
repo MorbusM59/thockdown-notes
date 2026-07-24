@@ -5,7 +5,8 @@
       "name": "measly-notes-browser-dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev:browser"],
-      "port": 5173
+      "port": 5173,
+      "autoPort": true
     }
   ]
 }

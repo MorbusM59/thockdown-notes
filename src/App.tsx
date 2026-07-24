@@ -1447,6 +1447,7 @@ function App() {
   const optionsContentRef = useRef<HTMLDivElement | null>(null)
   const editorStageRef = useRef<HTMLDivElement | null>(null)
   const sidebarSearchInputRef = useRef<HTMLInputElement | null>(null)
+  const documentReplaceInputRef = useRef<HTMLInputElement | null>(null)
   const pageJumpInputRef = useRef<HTMLInputElement | null>(null)
   const textureSeedInputRef = useRef<HTMLInputElement | null>(null)
   const glazeLinearSeedInputRef = useRef<HTMLInputElement | null>(null)
@@ -4001,6 +4002,7 @@ ${markdownHtml}
 
     if (
       target === sidebarSearchInputRef.current ||
+      target === documentReplaceInputRef.current ||
       target === getActiveSection()?.tagInputRef.current ||
       target === pageJumpInputRef.current ||
       target === textureSeedInputRef.current ||
@@ -5280,6 +5282,7 @@ ${markdownHtml}
   }, [isSearchQueryCaseSensitive, searchQuery, sortedNotes])
 
   const isFindMode = sidebarMode === 'find'
+  const isReplaceMode = isFindMode && Boolean(activeSectionSnapshot?.isDocumentReplaceMode)
   const hasMonthFilter = selectedMonths.size > 0
   const hasYearFilter = selectedYears.size > 0
   const hasDateFilter = hasMonthFilter || hasYearFilter
@@ -6066,14 +6069,20 @@ ${markdownHtml}
       const target = event.target instanceof HTMLElement ? event.target : null
       const isEditorTarget = Boolean(target?.closest('.editor-stage'))
       const isSearchField = target === sidebarSearchInputRef.current
+      const isReplaceField = target === documentReplaceInputRef.current
       const isTagField = target === activeSection?.tagInputRef.current
       const isPageJumpField = target === pageJumpInputRef.current
       const isTextureSeedField = target === textureSeedInputRef.current
       const isGlazeLinearSeedField = target === glazeLinearSeedInputRef.current
       const isGlazeRadialSeedField = target === glazeRadialSeedInputRef.current
-      const isEditorControlField = isSearchField || isTagField || isPageJumpField || isTextureSeedField || isGlazeLinearSeedField || isGlazeRadialSeedField
+      const isEditorControlField = isSearchField || isReplaceField || isTagField || isPageJumpField || isTextureSeedField || isGlazeLinearSeedField || isGlazeRadialSeedField
 
-      if (isEditorControlField && ['Escape', 'Enter', 'Tab'].includes(event.key)) {
+      // In find-and-replace mode, an un-shifted Tab in the find field should
+      // move focus to the sibling replace field rather than jump to the
+      // editor -- only the last field in the pair still does that.
+      const shouldPassThroughToReplaceField = isReplaceMode && isSearchField && event.key === 'Tab' && !event.shiftKey
+
+      if (isEditorControlField && ['Escape', 'Enter', 'Tab'].includes(event.key) && !shouldPassThroughToReplaceField) {
         event.preventDefault()
         event.stopImmediatePropagation()
         activeSection?.scheduleFocusEditorInEditMode()
@@ -6088,6 +6097,18 @@ ${markdownHtml}
 
       if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'f') {
         event.preventDefault()
+        getActiveSection()?.setIsDocumentReplaceMode(false)
+        runSidebarMenuTransition('find')
+        requestAnimationFrame(() => {
+          sidebarSearchInputRef.current?.focus()
+          sidebarSearchInputRef.current?.select()
+        })
+        return
+      }
+
+      if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'h') {
+        event.preventDefault()
+        getActiveSection()?.setIsDocumentReplaceMode(true)
         runSidebarMenuTransition('find')
         requestAnimationFrame(() => {
           sidebarSearchInputRef.current?.focus()
@@ -6099,12 +6120,6 @@ ${markdownHtml}
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'n') {
         event.preventDefault()
         void createNoteFromClipboardTitle()
-        return
-      }
-
-      if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 't') {
-        event.preventDefault()
-        void activeSection?.handleAddCurrentNoteToTabs()
         return
       }
 
@@ -6172,7 +6187,7 @@ ${markdownHtml}
           return
         }
 
-        if (!event.shiftKey && key === 'h') {
+        if (!event.shiftKey && key === 't') {
           event.preventDefault()
           activeSection.toggleCurrentLineHeading()
           return
@@ -6219,7 +6234,9 @@ ${markdownHtml}
     createNote,
     createNoteFromClipboardTitle,
     editorSections,
+    getActiveSection,
     isFindMode,
+    isReplaceMode,
     markSectionActive,
     runSidebarMenuTransition,
   ])
@@ -6349,12 +6366,12 @@ ${markdownHtml}
             {isSidebarVisible ? (
             <aside className="notes-sidebar" style={{ gridArea: 'sidebar' }}>
               <div className="search-box" aria-label="Search panel">
-                <div className="search-input-shell">
+                <div className={`search-input-shell${isReplaceMode ? ' search-replace-row' : ''}`}>
                 <input
-                  className="search-input-field has-case-toggle"
+                  className={`search-input-field${isReplaceMode ? '' : ' has-case-toggle'}`}
                   ref={sidebarSearchInputRef}
                   type="text"
-                  placeholder={isFindMode ? 'Find in current note...' : 'Search for content or #tag...'}
+                  placeholder={isReplaceMode ? 'Find...' : isFindMode ? 'Find in current note...' : 'Search for content or #tag...'}
                   value={isFindMode ? (activeSection?.documentFindQuery ?? '') : searchQuery}
                   onChange={(event) => {
                     const value = event.target.value
@@ -6372,22 +6389,52 @@ ${markdownHtml}
                     }, 0)
                   }}
                 />
-                <button
-                  type="button"
-                  className={`btn-icon search-input-case-toggle${(isFindMode ? activeSection?.isDocumentFindCaseSensitive : isSearchQueryCaseSensitive) ? ' is-active' : ''}`}
-                  aria-pressed={isFindMode ? activeSection?.isDocumentFindCaseSensitive : isSearchQueryCaseSensitive}
-                  title="Match letter case"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    if (isFindMode) {
-                      getActiveSection()?.setIsDocumentFindCaseSensitive((previous: boolean) => !previous)
-                    } else {
-                      setIsSearchQueryCaseSensitive((previous) => !previous)
-                    }
-                  }}
-                >
-                  Aa
-                </button>
+                {isReplaceMode ? (
+                  <div className="search-input-shell search-replace-replace-shell">
+                    <input
+                      className="search-input-field has-case-toggle"
+                      ref={documentReplaceInputRef}
+                      type="text"
+                      placeholder="Replace..."
+                      value={activeSection?.documentReplaceQuery ?? ''}
+                      onChange={(event) => getActiveSection()?.setDocumentReplaceQuery(event.target.value)}
+                      onBlur={() => {
+                        window.setTimeout(() => {
+                          if (!isAllowedNonEditorFocusTarget(document.activeElement)) {
+                            getActiveSection()?.scheduleFocusEditorInEditMode()
+                          }
+                        }, 0)
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className={`btn-icon search-input-case-toggle${activeSection?.isDocumentFindCaseSensitive ? ' is-active' : ''}`}
+                      aria-pressed={activeSection?.isDocumentFindCaseSensitive}
+                      title="Keep case"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => getActiveSection()?.setIsDocumentFindCaseSensitive((previous: boolean) => !previous)}
+                    >
+                      Aa
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className={`btn-icon search-input-case-toggle${(isFindMode ? activeSection?.isDocumentFindCaseSensitive : isSearchQueryCaseSensitive) ? ' is-active' : ''}`}
+                    aria-pressed={isFindMode ? activeSection?.isDocumentFindCaseSensitive : isSearchQueryCaseSensitive}
+                    title="Match letter case"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      if (isFindMode) {
+                        getActiveSection()?.setIsDocumentFindCaseSensitive((previous: boolean) => !previous)
+                      } else {
+                        setIsSearchQueryCaseSensitive((previous) => !previous)
+                      }
+                    }}
+                  >
+                    Aa
+                  </button>
+                )}
                 </div>
               </div>
 
