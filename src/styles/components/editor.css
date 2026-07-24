@@ -191,11 +191,11 @@
 }
 
 .editor-section-column.is-active .editor-shell {
-  outline: 2px solid var(--color-border-light-20);
+  border-color: var(--color-border-light-90);
 }
 
 .editor-section-column.is-active .editor-shell::after {
-  box-shadow: var(--box-shadow-inverted);
+  box-shadow: var(--box-shadow-inverted-active);
 }
 
 .editor-scrollbar-slot {
