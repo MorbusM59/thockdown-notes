@@ -122,6 +122,16 @@ function resolveListMeta(lineText: string): {
   }
 }
 
+const LIST_CONTINUATION_ARTIFACT_PATTERN = /^[ \t]*(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?/
+
+function stripListContinuationArtifacts(remainder: string): string {
+  let result = remainder
+  while (LIST_CONTINUATION_ARTIFACT_PATTERN.test(result)) {
+    result = result.replace(LIST_CONTINUATION_ARTIFACT_PATTERN, '')
+  }
+  return result.replace(/^[ \t]+/, '')
+}
+
 function readDelimiterRun(text: string, from: number, charCode: number): number {
   let index = from
   while (index < text.length && text.charCodeAt(index) === charCode) {
@@ -503,17 +513,20 @@ export function applyMarkdownEnter(
   }
 
   let inserted = '\n'
+  let isListContinuation = false
 
   if (lineStructure.listKind === 'unordered') {
     const marker = lineStructure.unorderedMarker ?? '-'
     const checklistPrefix = lineStructure.checklistPrefix !== null ? '[ ] ' : ''
     inserted = `\n${basePrefix}${marker} ${checklistPrefix}`
+    isListContinuation = true
   } else if (
     lineStructure.listKind === 'ordered' &&
     lineStructure.listNumber !== null &&
     lineStructure.listDelimiter !== null
   ) {
     inserted = `\n${basePrefix}${lineStructure.listNumber + 1}${lineStructure.listDelimiter} `
+    isListContinuation = true
   } else if (lineStructure.quotePrefix.length > 0) {
     inserted = `\n${basePrefix}`
   } else if (lineStructure.leadingSpaces.length > 0) {
@@ -534,7 +547,10 @@ export function applyMarkdownEnter(
   // caret sits at column 0 of the following line, and native Enter re-creates the empty
   // line with the caret on it instead of keeping the caret on the content line.
 
-  const nextText = `${sourceText.slice(0, caretOffset)}${inserted}${sourceText.slice(caretOffset)}`
+  const restOfLine = sourceText.slice(caretOffset, context.line.lineEndExclusive)
+  const sanitizedRestOfLine = isListContinuation ? stripListContinuationArtifacts(restOfLine) : restOfLine
+
+  const nextText = `${sourceText.slice(0, caretOffset)}${inserted}${sanitizedRestOfLine}${sourceText.slice(context.line.lineEndExclusive)}`
   const nextCaret = caretOffset + inserted.length
 
   return {

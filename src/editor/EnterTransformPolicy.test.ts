@@ -77,6 +77,36 @@ describe('resolveMarkdownEnterTransform', () => {
     expect(result?.selection.focus).toBe(result?.text.length)
   })
 
+  it('strips a duplicate bullet marker left over from a manually-wrapped list line', () => {
+    const text = '- list item - list item'
+    const selection = collapsedSelection('- list item'.length)
+
+    const result = resolveMarkdownEnterTransform(buildEvent(text, selection))
+
+    expect(result).not.toBeNull()
+    expect(result?.text).toBe('- list item\n- list item')
+  })
+
+  it('strips excess whitespace along with the duplicate bullet marker', () => {
+    const text = '- list item   -    list item'
+    const selection = collapsedSelection('- list item'.length)
+
+    const result = resolveMarkdownEnterTransform(buildEvent(text, selection))
+
+    expect(result).not.toBeNull()
+    expect(result?.text).toBe('- list item\n- list item')
+  })
+
+  it('strips a duplicate ordered marker left over from a manually-wrapped list line', () => {
+    const text = '1. list item 2. list item'
+    const selection = collapsedSelection('1. list item'.length)
+
+    const result = resolveMarkdownEnterTransform(buildEvent(text, selection))
+
+    expect(result).not.toBeNull()
+    expect(result?.text).toBe('1. list item\n2. list item')
+  })
+
   it('continues leading indentation on plain indented lines', () => {
     const text = '   indented line'
     const selection = collapsedSelection(text.length)
