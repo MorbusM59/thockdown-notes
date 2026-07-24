@@ -1942,6 +1942,15 @@ export function SidebarOptionsPanel({
           >
             <span className="fa-solid fa-bug" aria-hidden="true" />
           </button>
+          <button
+            type="button"
+            className="btn-icon options-color-swatch options-loadout-btn"
+            onClick={() => window.windowControls?.toggleDevTools()}
+            title="Open DevTools (detached window)"
+            aria-label="Open DevTools (detached window)"
+          >
+            <span className="fa-solid fa-code" aria-hidden="true" />
+          </button>
         </div>
       </AccordionSection>
       </AccordionGroup>

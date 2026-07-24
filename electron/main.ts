@@ -491,6 +491,13 @@ function registerIpcHandlers() {
       case 'close':
         win.close()
         break
+      case 'toggle-devtools':
+        if (win.webContents.isDevToolsOpened()) {
+          win.webContents.closeDevTools()
+        } else {
+          win.webContents.openDevTools({ mode: 'detach' })
+        }
+        break
       default:
         break
     }
@@ -1058,6 +1065,25 @@ async function createWindow() {
   configureSpellChecker(win.webContents.session)
 
   win.setMenuBarVisibility(false)
+
+  // Frameless + no application menu means Electron's usual F12/Ctrl+Shift+I
+  // devtools accelerators (which come from the default menu template) never
+  // get registered. Catch them directly at the native input level instead --
+  // this fires before the renderer's own keydown handling, so it can't be
+  // swallowed by the app's global shortcut interception either.
+  win.webContents.on('before-input-event', (_event, input) => {
+    if (input.type !== 'keyDown') return
+    const isDevToolsShortcut = input.key === 'F12'
+      || (input.control && input.shift && input.key.toLowerCase() === 'i')
+    if (!isDevToolsShortcut) return
+    if (!win || win.isDestroyed()) return
+
+    if (win.webContents.isDevToolsOpened()) {
+      win.webContents.closeDevTools()
+    } else {
+      win.webContents.openDevTools({ mode: 'detach' })
+    }
+  })
 
   if (savedWindowState.isMaximized) {
     win.maximize();

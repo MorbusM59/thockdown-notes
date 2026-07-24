@@ -92,6 +92,7 @@ const windowControls = {
   minimize: () => ipcRenderer.send('window-control', 'minimize'),
   toggleMaximize: () => ipcRenderer.send('window-control', 'toggle-maximize'),
   close: () => ipcRenderer.send('window-control', 'close'),
+  toggleDevTools: () => ipcRenderer.send('window-control', 'toggle-devtools'),
   toggleUtilityCollapse: (size: { width: number; height: number }) =>
     ipcRenderer.invoke('window-control:toggle-utility-collapse', size),
   reportBackgroundColor: (hex: string) =>

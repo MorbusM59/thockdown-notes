@@ -102,7 +102,14 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx,
         }
       }
 
-      const quantizedRowTopInScroll = Math.floor(caretTopInScroll / lineHeightPx) * lineHeightPx;
+      // Math.round, not Math.floor: the real DOM caret rect lands within a
+      // few px of each row's exact multiple of lineHeightPx, but which side
+      // of the boundary it lands on depends on the active font's baseline/
+      // hinting (e.g. Lekton measured ~1px *above* a row's clean multiple,
+      // 311px against a 312px boundary, where Math.floor(311/26)=11 instead
+      // of the intended 12). Flooring assumed that jitter only ever
+      // overshoots the boundary; rounding tolerates it in either direction.
+      const quantizedRowTopInScroll = Math.round(caretTopInScroll / lineHeightPx) * lineHeightPx;
       const topInViewport = quantizedRowTopInScroll - scroller.scrollTop;
 
       if (topInViewport < 0 || topInViewport > scroller.clientHeight - lineHeightPx) {
@@ -181,7 +188,7 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx,
   if (!caretStyle) return null;
 
   return (
-    <div 
+    <div
       className="thockdown-block-caret"
       style={{
         position: 'absolute',

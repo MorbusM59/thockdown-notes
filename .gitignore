@@ -31,3 +31,4 @@ data/**
 /dist-electron
 dist-electron/main.js
 dist-electron/preload.mjs
+data-backups/
