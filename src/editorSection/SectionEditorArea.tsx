@@ -15,17 +15,6 @@ export interface SectionEditorAreaProps {
   editorStageRef: RefObject<HTMLDivElement>
   sectionContainerRef: MutableRefObject<HTMLDivElement | null>
   previewedSnapshotId: number | null
-  /**
-   * React `key` for the mounted <Editor> instance. Distinct from
-   * previewedSnapshotId: while browsing a genuine historical Time Machine
-   * snapshot this tracks previewedSnapshotId so the editor remounts fresh
-   * per snapshot, but while a section is merely hibernated (frozen because
-   * the same note is live in another section) it stays pinned to the same
-   * value the live editor uses -- remounting on every focus-driven
-   * freeze/thaw round trip is what caused the flicker/scroll-reset this
-   * exists to avoid. See EditorSection's isFrozenSectionPreviewRef.
-   */
-  editorMountKey: number | string
   bindings: EditorBindings
   adapterRef: MutableRefObject<EditorAdapter | null>
   activeNoteId: string | null
@@ -82,7 +71,6 @@ export function SectionEditorArea({
   editorStageRef,
   sectionContainerRef,
   previewedSnapshotId,
-  editorMountKey,
   bindings,
   adapterRef,
   activeNoteId,
@@ -162,7 +150,16 @@ export function SectionEditorArea({
             <div className="edit-container" style={{ display: isPreviewMode ? 'none' : undefined }}>
               {activeNoteId ? (
                 <Editor
-                  key={editorMountKey}
+                  // Deliberately no `key` tied to noteId/previewedSnapshotId:
+                  // this Editor instance stays mounted across note switches,
+                  // Time Machine scrubbing, and same-note hibernate/thaw
+                  // alike. All of those are content changes, not identity
+                  // changes, so the surrounding chrome (grid/scrollbar/
+                  // toolbar/caret overlay) never needs to re-render, and
+                  // NoteTextHydrationPlugin patches only the paragraph lines
+                  // that actually changed rather than rebuilding the DOM.
+                  // Forcing a remount here previously caused a visible
+                  // flicker on every one of those transitions for no benefit.
                   bindings={bindings}
                   adapterRef={adapterRef}
                   noteId={activeNoteId}

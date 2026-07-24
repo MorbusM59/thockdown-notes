@@ -53,7 +53,7 @@ type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
 type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
 
 export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
-  'sectionId' | 'markSectionActive' | 'activeNoteId' | 'isPreviewMode' | 'previewedSnapshotId' | 'editorMountKey' | 'bindings' | 'adapterRef' | 'sectionContainerRef'
+  'sectionId' | 'markSectionActive' | 'activeNoteId' | 'isPreviewMode' | 'previewedSnapshotId' | 'bindings' | 'adapterRef' | 'sectionContainerRef'
   | 'editorDisplayText' | 'activeNoteHasDebugTag' | 'isPreviewingSnapshot' | 'isCaretSuspended' | 'previewTextureRef'
   | 'previewScrollRef' | 'handlePreviewScroll' | 'blockPreviewEditMutation' | 'previewMarkdownElement'
   | 'previewScrollbarTrackRef' | 'handlePreviewTrackMouseDown' | 'previewScrollbarThumbRef' | 'isDraggingPreviewScrollThumb'
@@ -1187,7 +1187,6 @@ export function EditorSection({
         editorStageRef={editorStageRef}
         sectionContainerRef={sectionContainerRef}
         previewedSnapshotId={previewedSnapshotId}
-        editorMountKey={isFrozenSectionPreviewRef.current ? 'present' : (previewedSnapshotId ?? 'present')}
         bindings={bindings}
         adapterRef={adapterRef}
         activeNoteId={activeNoteId}
