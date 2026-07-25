@@ -829,6 +829,25 @@
   opacity:              0.75;
 }
 
+.note-list-modified {
+  display:     inline-flex;
+  align-items: center;
+  gap:         4px;
+}
+
+.note-list-modified-icon {
+  font-size: inherit;
+  color:     inherit;
+}
+
+.note-list-modified-value {
+  font-weight: 800;
+}
+
+.note-list-modified-suffix {
+  font-weight: 400;
+}
+
 /* Category tree */
 .category-tree-root {
   display:        flex;

@@ -862,14 +862,63 @@ function formatCreatedDate(timestampMs: number): string {
   return `${day} ${month} ${year2}`
 }
 
-function formatModifiedDate(timestampMs: number): string {
+function monthsBetween(from: Date, to: Date): number {
+  let months = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth())
+  if (to.getDate() < from.getDate()) {
+    months -= 1
+  }
+  return Math.max(0, months)
+}
+
+type ModifiedDateInfo =
+  | { kind: 'time'; text: string }
+  | { kind: 'relative'; text: string }
+  | { kind: 'year'; text: string }
+
+function getModifiedDateInfo(timestampMs: number, nowMs: number = Date.now()): ModifiedDateInfo {
   const date = new Date(timestampMs)
-  const year = date.getFullYear()
-  const month = pad2(date.getMonth() + 1)
-  const day = pad2(date.getDate())
-  const hours = pad2(date.getHours())
-  const minutes = pad2(date.getMinutes())
-  return `[ ${year}/${month}/${day} | ${hours}:${minutes} ]`
+  const now = new Date(nowMs)
+
+  const isSameDay = date.getFullYear() === now.getFullYear()
+    && date.getMonth() === now.getMonth()
+    && date.getDate() === now.getDate()
+
+  if (isSameDay) {
+    const hours = pad2(date.getHours())
+    const minutes = pad2(date.getMinutes())
+    return { kind: 'time', text: `${hours}:${minutes}` }
+  }
+
+  const diffMs = now.getTime() - date.getTime()
+  const hoursPassed = diffMs / (60 * 60 * 1000)
+  if (hoursPassed <= 48) {
+    return { kind: 'relative', text: `${Math.floor(hoursPassed)}h` }
+  }
+
+  const daysPassed = diffMs / (24 * 60 * 60 * 1000)
+  if (daysPassed <= 45) {
+    return { kind: 'relative', text: `${Math.floor(daysPassed)}d` }
+  }
+
+  const monthsPassed = monthsBetween(date, now)
+  const isSameYear = date.getFullYear() === now.getFullYear()
+  if (monthsPassed > 6 && !isSameYear) {
+    return { kind: 'year', text: `${date.getFullYear()}` }
+  }
+
+  return { kind: 'relative', text: `${monthsPassed}m` }
+}
+
+function ModifiedDateLabel({ timestampMs }: { timestampMs: number }) {
+  const info = getModifiedDateInfo(timestampMs)
+  return (
+    <span className="note-list-modified">
+      <span className="fa-solid fa-pen-to-square note-list-modified-icon" aria-hidden="true" />
+      {info.kind === 'year' ? <span className="note-list-modified-suffix">in</span> : null}
+      <span className="note-list-modified-value">{info.text}</span>
+      {info.kind === 'relative' ? <span className="note-list-modified-suffix">ago</span> : null}
+    </span>
+  )
 }
 
 async function waitForNotesBridge(shouldStop: () => boolean): Promise<boolean> {
@@ -1031,7 +1080,7 @@ const NoteListItem = memo(function NoteListItem({
               <div className="note-list-title">{displayTitle || 'Untitled'}</div>
               <div className="note-list-meta-row">
                 <span className="note-list-meta-left">{createdDate}</span>
-                <span className="note-list-meta-right">{formatModifiedDate(note.updatedAtMs)}</span>
+                <span className="note-list-meta-right"><ModifiedDateLabel timestampMs={note.updatedAtMs} /></span>
               </div>
             </div>
           </div>
@@ -1106,7 +1155,7 @@ const NoteListItem = memo(function NoteListItem({
           {isTreeVariant ? null : (
             <div className="note-list-meta-row">
               <span className="note-list-meta-left">{createdDate}</span>
-              <span className="note-list-meta-right">{formatModifiedDate(note.updatedAtMs)}</span>
+              <span className="note-list-meta-right"><ModifiedDateLabel timestampMs={note.updatedAtMs} /></span>
             </div>
           )}
         </div>

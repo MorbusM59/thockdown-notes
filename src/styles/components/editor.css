@@ -178,7 +178,7 @@
   border-radius: var(--border-radius-regular);
   background:    var(--color-background-light);
   overflow:      hidden;
-  transition: all 350ms ease-out;
+  transition: box-shadow 350ms ease-out;
 }
 
 .editor-shell::after {
