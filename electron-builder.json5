@@ -54,6 +54,8 @@
     "target": [
       "AppImage"
     ],
+    "icon": "assets/icon.png",
+    "category": "Utility",
     "artifactName": "${productName}-Linux-${version}.${ext}"
   },
   "fileAssociations": [

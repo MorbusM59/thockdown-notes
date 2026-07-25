@@ -46,5 +46,13 @@
       }
     ],
     "artifactName": "${productName}-Windows-${version}-Portable.${ext}"
+  },
+  "linux": {
+    "target": [
+      "AppImage"
+    ],
+    "icon": "assets/icon.png",
+    "category": "Utility",
+    "artifactName": "${productName}-Linux-${version}-Portable.${ext}"
   }
 }
