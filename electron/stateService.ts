@@ -285,7 +285,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     editorGlyphPaddingPx: sanitizeIntegerInRange(
       input?.editorGlyphPaddingPx,
       0,
-      1,
+      16,
       DEFAULT_APP_STATE.menu!.editorGlyphPaddingPx ?? 1,
     ),
     borderRadiusRegularPx: sanitizeIntegerInRange(

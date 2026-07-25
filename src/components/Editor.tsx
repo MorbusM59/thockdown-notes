@@ -10,6 +10,7 @@ import { cancelQuantizedSmoothScroll, scrollToQuantizedSmooth } from '../editor/
 import { CagedScrollPlugin } from '../plugins/CagedScrollPlugin';
 import { SyntaxHighlightPlugin } from '../plugins/SyntaxHighlightPlugin';
 import { BlockCaretPlugin } from '../plugins/BlockCaretPlugin';
+import { BlockSelectionPlugin } from '../plugins/BlockSelectionPlugin';
 import { ThockdownTokenNode } from '../nodes/ThockdownTokenNode';
 import { ContractBridgePlugin } from '../plugins/ContractBridgePlugin';
 import { NoteTextHydrationPlugin } from '../plugins/NoteTextHydrationPlugin';
@@ -1297,6 +1298,17 @@ export function Editor({
                 scrollerRef={scrollerRef}
                 topBoundaryPx={topBoundary}
                 bottomBoundaryPx={bottomBoundary}
+                lineHeightPx={lineHeightPx}
+                cellWidthPx={cellWidthPx}
+              />
+            )}
+
+            {/* Custom selection highlight, grid-aligned -- native ::selection
+                is suppressed in index.css because it can't stay aligned with
+                the grid once padding grows past ~1px. */}
+            {hasViewportLines && fontReady && !caretHidden && (
+              <BlockSelectionPlugin
+                scrollerRef={scrollerRef}
                 lineHeightPx={lineHeightPx}
                 cellWidthPx={cellWidthPx}
               />

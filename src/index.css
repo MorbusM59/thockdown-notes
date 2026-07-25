@@ -364,6 +364,12 @@ body {
   animation: thockdown-blink 1.2s infinite cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Custom selection highlight -- see BlockSelectionPlugin for why native
+   ::selection is suppressed instead of used directly. */
+.thockdown-block-selection {
+  background-color: var(--color-selection);
+}
+
 @keyframes thockdown-blink {
   /* Restore the beloved ff-caret-heartbeat rhythm! */
   0%       { opacity: 0.6; }
@@ -404,8 +410,17 @@ body {
   padding: 0;
 }
 
+/* Native ::selection can't align with the grid at arbitrary padding: its
+   per-character box always starts at the glyph's own (centered, inset)
+   position, never at the ideal box edge, so highlighting drifts by exactly
+   half the letter-spacing gap at both ends of a selection -- invisible at
+   1px, glaring beyond it. BlockSelectionPlugin draws the real highlight
+   instead, snapped to the grid; this just hides the native one underneath. */
 .editor-text::selection,
-.editor-text *::selection,
+.editor-text *::selection {
+  background-color: transparent;
+}
+
 .markdown-preview::selection,
 .markdown-preview *::selection {
   background: var(--color-selection);

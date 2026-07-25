@@ -430,7 +430,7 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
   const legacyTextEmboss = sanitizeString((highlights as Record<string, unknown>).textEmboss, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.textEmbossUi);
 
   return {
-    editorGlyphPaddingPx: clampInteger(source.editorGlyphPaddingPx, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.editorGlyphPaddingPx),
+    editorGlyphPaddingPx: clampInteger(source.editorGlyphPaddingPx, 0, 16, DEFAULT_UI_LAYOUT_LOADOUT.editorGlyphPaddingPx),
     borderRadiusRegularPx: clampInteger(source.borderRadiusRegularPx, 0, 20, DEFAULT_UI_LAYOUT_LOADOUT.borderRadiusRegularPx),
     spacingRegularPx: clampInteger(source.spacingRegularPx, 1, 8, DEFAULT_UI_LAYOUT_LOADOUT.spacingRegularPx),
     borderAlphaPercent: clampInteger(source.borderAlphaPercent, 0, 200, DEFAULT_UI_LAYOUT_LOADOUT.borderAlphaPercent),
