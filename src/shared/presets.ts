@@ -79,7 +79,7 @@ function buildPreset(overrides: UiLayoutLoadoutOverrides): UiLayoutLoadout {
 export const NEUTRAL_BASE: UiLayoutLoadout = {
   editorGlyphPaddingPx: 1,
   borderRadiusRegularPx: 6,
-  spacingSmallPx: 4,
+  spacingRegularPx: 4,
   audioKeyVolume: 0.5,
   audioBassVolume: 0,
   audioTrebleVolume: 0,

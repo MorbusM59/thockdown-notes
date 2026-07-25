@@ -3,7 +3,7 @@
    ============================================================================= */
 
 .tabbar-grid {
-  padding: var(--spacing-small) var(--spacing-regular);
+  padding: var(--spacing-regular) var(--spacing-large);
   height: 100%;
   box-sizing: border-box;
 }
@@ -16,8 +16,8 @@
   display:        flex;
   flex-direction: row;
   align-items:    center;
-  gap:            calc(var(--spacing-small) / 2);
-  padding:        var(--spacing-small);
+  gap:            var(--spacing-small);
+  padding:        var(--spacing-regular);
   flex:           1 1 auto;
   width:          auto;
   height: auto;
@@ -52,7 +52,7 @@
   overflow:         hidden;
   outline: none;
   text-align: center;
-  padding: 0 var(--spacing-small);
+  padding: 0 var(--spacing-regular);
 }
 
 .tabbar-tag-input-field:focus {
@@ -67,7 +67,7 @@
   display:     flex;
   flex-wrap:   nowrap;
   align-items: center;
-  gap:         calc(var(--spacing-small) / 2);
+  gap:         var(--spacing-small);
   height:      100%;
   overflow:    hidden;
   -webkit-app-region: no-drag;
@@ -91,7 +91,7 @@
   align-items: center;
   padding: 0;
   padding-left: 30px;
-  gap:         calc(var(--spacing-small) / 2);
+  gap:         var(--spacing-small);
   flex:        1 1 auto;
   min-width:   0;
   overflow:    hidden;
@@ -118,7 +118,7 @@
   flex-wrap:   nowrap;
   align-items: center;
   padding: 0;
-  gap:         calc(var(--spacing-small) / 2);
+  gap:         var(--spacing-small);
   width:       100%;
   height:      100%;
   overflow-x:  auto;
@@ -155,7 +155,7 @@
   transition:       all 0.2s;
   white-space:      nowrap;
   overflow:         hidden;
-  padding:          0 var(--spacing-small);
+  padding:          0 var(--spacing-regular);
   -webkit-app-region: no-drag;
   flex: 0 0 auto;
   height: 100%;
@@ -205,7 +205,7 @@
 .suggested-empty {
   font-size: 11px;
   color:     var(--color-text-60);
-  padding:   var(--spacing-regular) 0;
+  padding:   var(--spacing-large) 0;
 }
 
 /* Tag bar / tab bar mode toggle */
@@ -215,7 +215,7 @@
   display: block;
   height:     100%;
   aspect-ratio: 1;
-  margin-right: var(--spacing-small);
+  margin-right: var(--spacing-regular);
   -webkit-app-region: no-drag;
 }
 
@@ -226,7 +226,7 @@
   display: block;
   height:     100%;
   aspect-ratio: 1;
-  margin-left: var(--spacing-small);
+  margin-left: var(--spacing-regular);
   -webkit-app-region: no-drag;
 }
 
@@ -241,7 +241,7 @@
   position:     relative;
   flex:         0 0 auto;
   height:       100%;
-  margin-right: var(--spacing-small);
+  margin-right: var(--spacing-regular);
 }
 
 .tag-pill.section-identity-tab {
@@ -285,7 +285,7 @@
   display:     flex;
   flex-wrap:   nowrap;
   align-items: center;
-  gap:         calc(var(--spacing-small) / 2);
+  gap:         var(--spacing-small);
   height:      100%;
 }
 
@@ -301,7 +301,7 @@
 
 /* Tab mode: pinned note pills fill the whole bar */
 .tab-mode-shell.tabs-mode {
-  padding: var(--spacing-small);
+  padding: var(--spacing-regular);
   overflow: hidden;
 }
 
@@ -318,7 +318,7 @@
   flex-wrap:   nowrap;
   align-items: center;
   padding: 0;
-  gap:         calc(var(--spacing-small) / 2);
+  gap:         var(--spacing-small);
   width:       100%;
   height:      100%;
   overflow-x:  auto;

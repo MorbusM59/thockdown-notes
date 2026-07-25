@@ -283,8 +283,9 @@
      1d. Spacing
   --------------------------------------------------------------------------- */
 
-  --spacing-small:   4px;
-  --spacing-regular: calc(var(--spacing-small) * 2);
+  --spacing-regular: 4px;
+  --spacing-large:   calc(var(--spacing-regular) * 2);
+  --spacing-small:   calc(var(--spacing-regular) / 2);
 
   /* ---------------------------------------------------------------------------
      1e. Border & Radius
@@ -366,9 +367,9 @@
   --------------------------------------------------------------------------- */
 
   --sidebar-view-button-size:  var(--btn-square-larger-size);
-  --sidebar-view-gap-min:      var(--spacing-regular);
-  --sidebar-view-padding-left: var(--spacing-regular);
-  --sidebar-padding-right:     var(--spacing-regular);
+  --sidebar-view-gap-min:      var(--spacing-large);
+  --sidebar-view-padding-left: var(--spacing-large);
+  --sidebar-padding-right:     var(--spacing-large);
 
   --sidebar-min-width: 288px;
 
@@ -376,27 +377,27 @@
      1j. Flyout / Toolbar Tokens
   --------------------------------------------------------------------------- */
 
-  --toolbar-options-gap: var(--spacing-small);
+  --toolbar-options-gap: var(--spacing-regular);
   --color-grid-gap:      var(--toolbar-options-gap);
   --color-grid-cell:     32px;
 
   /* Additional Editor tokens found later in file */
-  /* These bars/rows have padding derived from --spacing-small (the fine
+  /* These bars/rows have padding derived from --spacing-regular (the fine
    * control the user can crank up to 8px), but the *content* they wrap --
    * text, a scrollbar-thickness slider, a row of square buttons -- has its
    * own fixed size unrelated to that setting. So each bar's total size is
-   * content + padding, not a flat constant: otherwise a larger spacing-small
+   * content + padding, not a flat constant: otherwise a larger spacing-regular
    * would eat into the fixed total and squeeze the content instead of
    * growing the bar to fit it (the bar is a row/column of elements, and its
    * cross-axis size has to grow opposite the direction those elements are
-   * laid out in, same as everywhere else this two-var system reaches). */
+   * laid out in, same as everywhere else this spacing system reaches). */
   --bottom-utility-bar-content-height: 16px;
-  --bottom-utility-bar-height: calc(var(--bottom-utility-bar-content-height) + var(--spacing-small) + var(--spacing-regular));
+  --bottom-utility-bar-height: calc(var(--bottom-utility-bar-content-height) + var(--spacing-regular) + var(--spacing-large));
   /* The tab bar row nests two nested paddings on the way down to the actual
-   * tab/tag pills: .tabbar-grid's own (top+bottom = 2 * spacing-small), then
+   * tab/tag pills: .tabbar-grid's own (top+bottom = 2 * spacing-regular), then
    * .tab-mode-shell's own pill "well" padding inside it (also top+bottom =
-   * 2 * spacing-small). Both have to be added back on top of the pill
-   * content height, or the pills shrink as spacing-small grows even though
+   * 2 * spacing-regular). Both have to be added back on top of the pill
+   * content height, or the pills shrink as spacing-regular grows even though
    * the outer bar itself is now sized correctly. */
   --tab-bar-content-height: 20px;
   --note-list-row-content-height: var(--btn-square-regular-size);

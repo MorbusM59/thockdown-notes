@@ -53,17 +53,17 @@
 
 .utility-settings-panel {
   justify-content: flex-start;
-  gap:             var(--spacing-regular);
+  gap:             var(--spacing-large);
 }
 
 .utility-setting-row {
   display:        flex;
   flex-direction: column;
-  gap:            var(--spacing-small);
+  gap:            var(--spacing-regular);
 }
 
 .utility-setting-row-range {
-  gap: var(--spacing-small);
+  gap: var(--spacing-regular);
 }
 
 .utility-setting-row input {
@@ -74,26 +74,26 @@
   background:    var(--color-input-backdrop);
   color:         var(--color-text-base);
   font-size:     11px;
-  padding:       var(--spacing-small);
+  padding:       var(--spacing-regular);
 }
 
 .utility-setting-stack {
   display:        flex;
   flex-direction: column;
-  gap:            var(--spacing-small);
+  gap:            var(--spacing-regular);
 }
 
 .utility-setting-button-row {
   display:        flex;
   flex-direction: row;
-  gap:            var(--spacing-small);
+  gap:            var(--spacing-regular);
   align-items:    center;
 }
 
 .utility-setting-slider-stack {
   display:        flex;
   flex-direction: column;
-  gap:            var(--spacing-small);
+  gap:            var(--spacing-regular);
 }
 
 /* Custom slider / scrollbar shell */
@@ -159,8 +159,8 @@
 
 .window-controls {
   display:          flex;
-  padding:          var(--spacing-small);
-  gap:              var(--spacing-small);
+  padding:          var(--spacing-regular);
+  gap:              var(--spacing-regular);
   align-items:      center;
   margin-bottom:    auto;
   margin-left:      auto;
@@ -173,7 +173,7 @@
   min-height: var(--btn-square-large-size);
   display: inline-flex;
   flex-direction: column;
-  gap: calc(var(--spacing-small) / 2);
+  gap: var(--spacing-small);
   -webkit-app-region: no-drag;
 }
 
@@ -194,7 +194,7 @@
 
 .window-minimize-split-btn.minimize {
   border-radius: var(--border-radius-small) var(--border-radius-small) var(--border-radius-regular) var(--border-radius-regular);
-  padding: 0 0 calc(var(--spacing-small) / 2) 0;
+  padding: 0 0 var(--spacing-small) 0;
 }
 
 .window-control-btn {

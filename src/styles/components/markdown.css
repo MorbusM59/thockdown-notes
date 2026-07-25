@@ -65,7 +65,7 @@
   color:            inherit;
   border-radius:    8px;
   outline:          1px solid #00000022;
-  padding:          var(--spacing-small);
+  padding:          var(--spacing-regular);
 }
 
 /* Anchor markers ([~name] / [~name#uid]) render as plain, indistinguishable
@@ -132,7 +132,7 @@
   background:    var(--btn-bg-default);
   border:        1px solid var(--btn-border-default);
   border-radius: var(--border-radius-regular);
-  padding:       calc(var(--spacing-small) * 3);
+  padding:       calc(var(--spacing-regular) * 3);
   overflow-x:    auto;
 }
 
@@ -145,7 +145,7 @@
 
 .markdown-preview blockquote {
   border-left:    3px solid var(--color-border-blockquote);
-  padding-left:   var(--spacing-regular);
+  padding-left:   var(--spacing-large);
   letter-spacing: 0.1em;
   font-size:      80%;
   color:          var(--color-text-80);
@@ -213,7 +213,7 @@
 .markdown-preview th,
 .markdown-preview td {
   border:     1px solid var(--color-border-dark-20);
-  padding:    var(--spacing-small) var(--spacing-regular);
+  padding:    var(--spacing-regular) var(--spacing-large);
   text-align: left;
 }
 

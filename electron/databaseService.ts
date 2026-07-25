@@ -56,7 +56,7 @@ const TEXTURE_CACHE_DEFAULT_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 14;
 const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   editorGlyphPaddingPx: 1,
   borderRadiusRegularPx: 6,
-  spacingSmallPx: 4,
+  spacingRegularPx: 4,
   audioKeyVolume: 1,
   audioKeyVariance: 0,
   audioPitch: 0,
@@ -430,7 +430,7 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
   return {
     editorGlyphPaddingPx: clampInteger(source.editorGlyphPaddingPx, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.editorGlyphPaddingPx),
     borderRadiusRegularPx: clampInteger(source.borderRadiusRegularPx, 0, 20, DEFAULT_UI_LAYOUT_LOADOUT.borderRadiusRegularPx),
-    spacingSmallPx: clampInteger(source.spacingSmallPx, 1, 8, DEFAULT_UI_LAYOUT_LOADOUT.spacingSmallPx),
+    spacingRegularPx: clampInteger(source.spacingRegularPx, 1, 8, DEFAULT_UI_LAYOUT_LOADOUT.spacingRegularPx),
     audioKeyVolume: clampNumber(source.audioKeyVolume, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.audioKeyVolume),
     audioKeyVariance: clampNumber(source.audioKeyVariance, 0, 0.5, DEFAULT_UI_LAYOUT_LOADOUT.audioKeyVariance),
     audioPitch: clampNumber(source.audioPitch, -100, 100, DEFAULT_UI_LAYOUT_LOADOUT.audioPitch),

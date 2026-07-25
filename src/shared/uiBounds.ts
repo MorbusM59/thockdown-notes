@@ -1,5 +1,5 @@
 export const BORDER_RADIUS_REGULAR_MIN_PX = 0;
 export const BORDER_RADIUS_REGULAR_MAX_PX = 20;
 
-export const SPACING_SMALL_MIN_PX = 1;
-export const SPACING_SMALL_MAX_PX = 8;
+export const SPACING_REGULAR_MIN_PX = 1;
+export const SPACING_REGULAR_MAX_PX = 8;

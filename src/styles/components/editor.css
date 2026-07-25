@@ -10,7 +10,7 @@
   min-width:   0;
   min-height:  0;
   position:    relative;
-  padding: 0 var(--spacing-small) 0 0;
+  padding: 0 var(--spacing-regular) 0 0;
 }
 
 .editor-document-stats {
@@ -19,8 +19,8 @@
   height:         var(--bottom-utility-bar-height);
   display:        flex;
   align-items:    center;
-  gap:            var(--spacing-small);
-  padding:        var(--spacing-small) var(--spacing-regular) var(--spacing-regular) var(--spacing-regular);
+  gap:            var(--spacing-regular);
+  padding:        var(--spacing-regular) var(--spacing-large) var(--spacing-large) var(--spacing-large);
   box-sizing:     border-box;
   font-size:      9px;
   letter-spacing: 0.02em;
@@ -35,7 +35,7 @@
   min-width:      var(--wordcount-panel-width);
   height:         var(--canonical-scroll-thickness);
   box-sizing:     border-box;
-  padding:        0 var(--spacing-regular);
+  padding:        0 var(--spacing-large);
   border:         1px solid var(--canonical-scroll-track-border);
   border-radius:  999px;
   box-shadow:     var(--box-shadow-inverted-light);
@@ -168,7 +168,7 @@
 }
 
 .editor-shell {
-  margin:        0 0 var(--bottom-utility-bar-height) var(--spacing-regular);
+  margin:        0 0 var(--bottom-utility-bar-height) var(--spacing-large);
   flex:          1 1 auto;
   min-width:     0;
   position:      relative;
@@ -274,7 +274,7 @@
   flex-direction: column;
   align-items:    center;
   justify-content: flex-end;
-  gap:            var(--spacing-small);
+  gap:            var(--spacing-regular);
   text-align:     center;
   /* Clickable (rerolls the scene -- see SectionEditorArea.tsx) but
      intentionally styled like inert decoration: no cursor/hover change,
@@ -283,7 +283,7 @@
   border-radius: calc(var(--border-radius-regular) *6);
   box-shadow: var(--box-shadow-inverted-filtered);
   filter: var(--filter-primed-archive);
-  padding: calc(var(--spacing-regular) * 2);
+  padding: calc(var(--spacing-large) * 2);
   font-family: 'Fredericka the Great';
   z-index: 2;
 }

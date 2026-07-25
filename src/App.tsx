@@ -43,7 +43,7 @@ import {
   hsvaToRgba,
 } from './shared/colorMath'
 import type { HighlightColorKey, HighlightColors } from './shared/highlightColors'
-import { BORDER_RADIUS_REGULAR_MIN_PX, BORDER_RADIUS_REGULAR_MAX_PX, SPACING_SMALL_MIN_PX, SPACING_SMALL_MAX_PX } from './shared/uiBounds'
+import { BORDER_RADIUS_REGULAR_MIN_PX, BORDER_RADIUS_REGULAR_MAX_PX, SPACING_REGULAR_MIN_PX, SPACING_REGULAR_MAX_PX } from './shared/uiBounds'
 import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName } from './shared/tags'
 import { EditorSection } from './editorSection/EditorSection'
 import { EditorToolbar } from './toolbar/EditorToolbar'
@@ -125,7 +125,7 @@ const SECTION_MIN_WIDTH_PX = 300
 // would break memo'd children comparing this prop by identity.
 const EMPTY_MAP = new Map<string, NotePrimedAction>()
 const DEFAULT_BORDER_RADIUS_REGULAR_PX = 6
-const DEFAULT_SPACING_SMALL_PX = 4
+const DEFAULT_SPACING_REGULAR_PX = 4
 const TEXTURE_PREVIEW_SURFACE: TextureSurfaceKey = 'appGrid'
 const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28
 const SCROLL_TRACK_EDGE_GAP_PX = 3
@@ -774,10 +774,10 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
       BORDER_RADIUS_REGULAR_MIN_PX,
       BORDER_RADIUS_REGULAR_MAX_PX,
     ),
-    spacingSmallPx: clamp(
-      Math.round(toFiniteNumber(source.spacingSmallPx, DEFAULT_SPACING_SMALL_PX)),
-      SPACING_SMALL_MIN_PX,
-      SPACING_SMALL_MAX_PX,
+    spacingRegularPx: clamp(
+      Math.round(toFiniteNumber(source.spacingRegularPx, DEFAULT_SPACING_REGULAR_PX)),
+      SPACING_REGULAR_MIN_PX,
+      SPACING_REGULAR_MAX_PX,
     ),
     renderScrollDynamic: roundForSignature(clamp(toFiniteNumber(source.renderScrollDynamic, getRenderScrollDynamic()), 0.1, 5)),
     renderScrollResponsiveness: roundForSignature(clamp(toFiniteNumber(source.renderScrollResponsiveness, getRenderScrollResponsiveness()), 0.1, 5)),
@@ -1490,7 +1490,7 @@ function App() {
   const [editorSpacing, setEditorSpacing] = useState<EditorSpacingKey>(DEFAULT_EDITOR_SPACING)
   const [editorGlyphPaddingPx, setEditorGlyphPaddingPx] = useState<number>(DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX)
   const [borderRadiusRegularPx, setBorderRadiusRegularPx] = useState<number>(DEFAULT_BORDER_RADIUS_REGULAR_PX)
-  const [spacingSmallPx, setSpacingSmallPx] = useState<number>(DEFAULT_SPACING_SMALL_PX)
+  const [spacingRegularPx, setSpacingRegularPx] = useState<number>(DEFAULT_SPACING_REGULAR_PX)
   const [editorFontLoadVersion, setEditorFontLoadVersion] = useState(0)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('date')
   const [lastSidebarModeBeforeOptions, setLastSidebarModeBeforeOptions] = useState<Exclude<SidebarMode, 'options'>>('date')
@@ -2028,7 +2028,7 @@ function App() {
     return {
       editorGlyphPaddingPx,
       borderRadiusRegularPx,
-      spacingSmallPx,
+      spacingRegularPx,
       audioKeyVolume,
       audioKeyVariance,
       audioPitch,
@@ -2085,7 +2085,7 @@ function App() {
   }, [
     editorGlyphPaddingPx,
     borderRadiusRegularPx,
-    spacingSmallPx,
+    spacingRegularPx,
     glazeSettings,
     darkMode,
     filterInvert,
@@ -2130,11 +2130,11 @@ function App() {
         BORDER_RADIUS_REGULAR_MAX_PX,
       ),
     )
-    setSpacingSmallPx(
+    setSpacingRegularPx(
       clamp(
-        Math.round(loadout.spacingSmallPx),
-        SPACING_SMALL_MIN_PX,
-        SPACING_SMALL_MAX_PX,
+        Math.round(loadout.spacingRegularPx),
+        SPACING_REGULAR_MIN_PX,
+        SPACING_REGULAR_MAX_PX,
       ),
     )
     setRenderScrollDynamic(clamp(loadout.renderScrollDynamic, 0.1, 5))
@@ -2915,7 +2915,7 @@ function App() {
       editorSpacing,
       editorGlyphPaddingPx,
       borderRadiusRegularPx,
-      spacingSmallPx,
+      spacingRegularPx,
 
       exportFolder: exportFolder ?? undefined,
       renderScrollDynamic,
@@ -3001,7 +3001,7 @@ function App() {
     editorFontSize,
     editorGlyphPaddingPx,
     borderRadiusRegularPx,
-    spacingSmallPx,
+    spacingRegularPx,
     editorSpacing,
     editorStyle,
     exportFolder,
@@ -3460,12 +3460,12 @@ function App() {
   const appShellStyle = useMemo(() => {
     const borderRadiusRegularPxCss = `${borderRadiusRegularPx}px`
     const borderRadiusSmallPxCss = `${Math.max(0, borderRadiusRegularPx / 2)}px`
-    const spacingSmallPxCss = `${spacingSmallPx}px`
+    const spacingRegularPxCss = `${spacingRegularPx}px`
     const style: CSSProperties & Record<string, string> = {
       gridTemplateColumns: layout.gridTemplateColumns,
       '--border-radius-regular': borderRadiusRegularPxCss,
       '--border-radius-small': borderRadiusSmallPxCss,
-      '--spacing-small': spacingSmallPxCss,
+      '--spacing-regular': spacingRegularPxCss,
       '--color-bg-regular': highlightColors.background,
       '--color-bg-leading': highlightColors.topBackground,
       '--color-bg-trailing': highlightColors.bottomBackground,
@@ -3517,7 +3517,7 @@ function App() {
     appGridTextureCss,
     appGridTextureTintCss,
     borderRadiusRegularPx,
-    spacingSmallPx,
+    spacingRegularPx,
     editorEditTextTextureCss,
     editorEditTextureTintCss,
     editorRenderTextTextureCss,
@@ -3595,11 +3595,11 @@ function App() {
   const appRootStyle = useMemo(() => {
     const borderRadiusRegularPxCss = `${borderRadiusRegularPx}px`
     const borderRadiusSmallPxCss = `${Math.max(0, borderRadiusRegularPx / 2)}px`
-    const spacingSmallPxCss = `${spacingSmallPx}px`
+    const spacingRegularPxCss = `${spacingRegularPx}px`
     return {
       '--border-radius-regular': borderRadiusRegularPxCss,
       '--border-radius-small': borderRadiusSmallPxCss,
-      '--spacing-small': spacingSmallPxCss,
+      '--spacing-regular': spacingRegularPxCss,
       '--glaze-linear-background-image': glazeLinearBackgroundImage,
       '--glaze-radial-background-image': glazeRadialBackgroundImage,
       '--glaze-gloom-background-image': glazeGloomBackgroundImage,
@@ -3634,7 +3634,7 @@ function App() {
   }, [
     derivedPaletteColors,
     borderRadiusRegularPx,
-    spacingSmallPx,
+    spacingRegularPx,
     glazeLinearBackgroundImage,
     glazeRadialBackgroundImage,
     glazeGloomBackgroundImage,
@@ -3664,8 +3664,8 @@ function App() {
   }, [borderRadiusRegularPx])
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--spacing-small', `${spacingSmallPx}px`)
-  }, [spacingSmallPx])
+    document.documentElement.style.setProperty('--spacing-regular', `${spacingRegularPx}px`)
+  }, [spacingRegularPx])
 
   // Writes a structured debug entry to a session-scoped debug note (tagged
   // "debug"). No-ops when debuggingEnabled is false. Safe to call from any
@@ -4388,11 +4388,11 @@ ${markdownHtml}
                 BORDER_RADIUS_REGULAR_MAX_PX,
               ),
             )
-            setSpacingSmallPx(
+            setSpacingRegularPx(
               clamp(
-                Math.round(appState.menu.spacingSmallPx ?? DEFAULT_SPACING_SMALL_PX),
-                SPACING_SMALL_MIN_PX,
-                SPACING_SMALL_MAX_PX,
+                Math.round(appState.menu.spacingRegularPx ?? DEFAULT_SPACING_REGULAR_PX),
+                SPACING_REGULAR_MIN_PX,
+                SPACING_REGULAR_MAX_PX,
               ),
             )
             setRenderScrollDynamic(appState.menu.renderScrollDynamic ?? appState.menu.renderScrollEaseMultiplier ?? getRenderScrollDynamic())
@@ -6763,8 +6763,8 @@ ${markdownHtml}
                         setMusicReverbRoom={setMusicReverbRoom}
                         borderRadiusRegularPx={borderRadiusRegularPx}
                         setBorderRadiusRegularPx={setBorderRadiusRegularPx}
-                        spacingSmallPx={spacingSmallPx}
-                        setSpacingSmallPx={setSpacingSmallPx}
+                        spacingRegularPx={spacingRegularPx}
+                        setSpacingRegularPx={setSpacingRegularPx}
                         editorGlyphPaddingPx={editorGlyphPaddingPx}
                         setEditorGlyphPaddingPx={setEditorGlyphPaddingPx}
                         syncExistingNotes={syncExistingNotes}
