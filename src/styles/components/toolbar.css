@@ -234,6 +234,7 @@
 }
 
 .sidebar-options-accordion {
+  box-sizing: border-box;
   width: 100%;
   border: 1px solid var(--color-border-dark-20);
   padding: 0 var(--toolbar-options-gap);
@@ -287,7 +288,7 @@
   margin:         auto;
   display:        block;
   padding: var(--toolbar-options-gap);
-  width: calc(var(--btn-square-regular-size) * 6 + 7 * var(--toolbar-options-gap)) + 2px;
+  width: var(--sidebar-options-content-width);
   background:#FFFFFF66;
   box-shadow: var(--box-shadow-regular-light);
   border: 1px solid var(--color-border-dark-20);
@@ -349,11 +350,15 @@
 
 .options-section {
   box-sizing:     border-box;
-  margin:         0 calc(var(--toolbar-options-gap) + var(--spacing-regular));
+  /* Horizontally auto-centered, same as .preset-section/.typography-section
+   * -- with a fixed side margin here instead, this section's own width
+   * formula (matching theirs exactly) would push it wider than the
+   * available flyout content width and misalign it from the rest. */
+  margin:         0 auto;
   display:        flex;
   flex-direction: column;
   gap:            var(--toolbar-options-gap);
-  width: calc(var(--btn-square-regular-size) * 6 + 7 * var(--toolbar-options-gap)) + 2px;
+  width: var(--sidebar-options-content-width);
 }
 
 .options-section:first-child {

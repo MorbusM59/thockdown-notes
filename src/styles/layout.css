@@ -8,7 +8,7 @@
   background-repeat:    no-repeat;
   background-size:      100% 100%;
   background-position:  0 0;
-  grid-template-columns: 288px 8px minmax(415px, 1fr) 129px;
+  grid-template-columns: var(--sidebar-min-width) 8px minmax(415px, 1fr) 129px;
   grid-template-rows:   auto minmax(0, 1fr);
   grid-template-areas:
     'sidebar d-sidebar toolbar  window_control'

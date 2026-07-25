@@ -41,8 +41,9 @@
   min-height: 0;
   min-width:  0;
   overflow-y: auto;
+  box-sizing: border-box;
   margin:     0;
-  padding:    0;
+  padding:    0 var(--spacing-regular);
   border:          1px solid var(--color-border-light-70);
   border-left:     none;
   border-radius:   0 9px 9px 0;
@@ -50,9 +51,20 @@
   background-color: var(--palette-parchment-lightest);
 }
 
+/* Only ever matches .sidebar-options-content (the options panel is the one
+ * sidebar view that sets is-scrollbar-mode without also being tree-mode,
+ * and its root div is always sidebar-content's 2nd child, after the texture
+ * layer). Taking it out of flow this way means its own `width: 100%` no
+ * longer resolves against sidebar-content's content box but its padding
+ * box (the containing block for an absolutely positioned box) -- so left
+ * and right have to redo that inset explicitly, or the panel overflows
+ * past sidebar-content's padding on the right by exactly that padding. */
 .sidebar-content.is-scrollbar-mode > div:nth-child(2) {
   position: absolute;
-  top: 0;
+  top:   0;
+  left:  var(--spacing-regular);
+  right: var(--spacing-regular);
+  width: auto;
   z-index: 1;
 }
 
@@ -168,12 +180,16 @@
 }
 
 /* View toggle & icon buttons */
+/* The 5 buttons keep their own fixed size (--sidebar-view-button-size,
+ * untouched by the spacing setting); the space between them is purely
+ * what justify-content: space-between leaves over, not a fixed gap -- so
+ * it grows and shrinks with the sidebar's own (spacing-driven) width
+ * instead of the row overflowing. */
 .view-toggle {
   display:         flex;
   justify-content: space-between;
   align-items:     start;
   padding: var(--spacing-regular) 0 var(--spacing-regular) var(--sidebar-view-padding-left);
-  gap:     var(--sidebar-view-gap-min);
   margin:  0;
 }
 
@@ -273,10 +289,10 @@
 
 /* Sidebar scrollbar slot */
 .sidebar-scrollbar-slot {
-  flex:      0 0 20px;
-  width:     20px;
-  min-width: 20px;
-  max-width: 20px;
+  flex:      0 0 var(--sidebar-scrollbar-slot-width);
+  width:     var(--sidebar-scrollbar-slot-width);
+  min-width: var(--sidebar-scrollbar-slot-width);
+  max-width: var(--sidebar-scrollbar-slot-width);
   position:  relative;
 }
 
@@ -287,7 +303,12 @@
 
 .sidebar-scrollbar-slot .sidebar-thockdown-scroll-rail {
   z-index:         4;
-  padding:         0 0 0 var(--spacing-regular);
+  /* Static, not spacing-driven: the slot itself is a fixed 20px
+   * (--sidebar-scrollbar-slot-width), so this has to stay just wide enough
+   * to leave the full --canonical-scroll-thickness track un-shrunk (20px -
+   * 4px = 16px) regardless of the user's spacing setting -- growing it
+   * with --spacing-regular squeezes the track/thumb down as spacing rises. */
+  padding:         0 0 0 4px;
   justify-content: flex-end;
 }
 

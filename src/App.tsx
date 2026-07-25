@@ -109,12 +109,19 @@ import { TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE, useTextureSurface 
 const NEW_NOTE_TEMPLATE = '# '
 const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
 const GRID_DIVIDER_PX = 8
-const SIDEBAR_WIDTH_PX = 288
 const WINDOW_CONTROLS_WIDTH_PX = 380
 const WINDOW_CONTROLS_COLLAPSED_WIDTH_PX = 210
 const APP_WINDOW_MIN_WIDTH_PX = 840
-const TOOLBAR_MIN_WIDTH_PX = APP_WINDOW_MIN_WIDTH_PX - SIDEBAR_WIDTH_PX - GRID_DIVIDER_PX - WINDOW_CONTROLS_WIDTH_PX
-const APP_SHELL_MIN_WIDTH_PX = SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX + TOOLBAR_MIN_WIDTH_PX + WINDOW_CONTROLS_WIDTH_PX
+// Sidebar width is derived (see sidebarWidthPx below), not a flat constant --
+// it has to fit the options panel's always-visible top section (font
+// settings + preset buttons), which is a 6-column grid of
+// --btn-square-regular-size buttons whose gaps scale with the user's spacing
+// setting. These three mirror the CSS tokens of the same shape
+// (--btn-square-regular-size, --sidebar-scrollbar-slot-width, and
+// .sidebar-content's own border) so the two stay in sync.
+const BTN_SQUARE_REGULAR_SIZE_PX = 32
+const SIDEBAR_SCROLLBAR_SLOT_WIDTH_PX = 20
+const SIDEBAR_CONTENT_BORDER_PX = 1
 // Soft minimum, enforced only at section-creation time -- the "+" button
 // disappearing when there isn't room for one more is the enforcement (see
 // the handover doc's split-view design). Matches the same 300px figure the
@@ -1491,6 +1498,36 @@ function App() {
   const [editorGlyphPaddingPx, setEditorGlyphPaddingPx] = useState<number>(DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX)
   const [borderRadiusRegularPx, setBorderRadiusRegularPx] = useState<number>(DEFAULT_BORDER_RADIUS_REGULAR_PX)
   const [spacingRegularPx, setSpacingRegularPx] = useState<number>(DEFAULT_SPACING_REGULAR_PX)
+
+  // Mirrors --sidebar-min-width in tokens.css: the sidebar has to be wide
+  // enough for the options panel's always-visible top section (font
+  // settings + preset buttons, a 6-column grid of square buttons) plus a
+  // spacing-regular gutter on each side inside .sidebar-content, its own
+  // border, the custom scrollbar slot beside it, and the sidebar's own
+  // right-hand padding (--sidebar-padding-right, i.e. spacing-large). Kept
+  // in JS too because this value also drives the app-grid's inline
+  // gridTemplateColumns below, which overrides the CSS column width.
+  const sidebarWidthPx = useMemo(() => {
+    const sidebarOptionsContentWidthPx = BTN_SQUARE_REGULAR_SIZE_PX * 6 + 7 * spacingRegularPx + 2
+    const sidebarPaddingRightPx = spacingRegularPx * 2 // mirrors --spacing-large
+    return Math.round(
+      sidebarOptionsContentWidthPx
+      + spacingRegularPx * 2
+      + SIDEBAR_CONTENT_BORDER_PX
+      + SIDEBAR_SCROLLBAR_SLOT_WIDTH_PX
+      + sidebarPaddingRightPx,
+    )
+  }, [spacingRegularPx])
+
+  const toolbarMinWidthPx = useMemo(
+    () => APP_WINDOW_MIN_WIDTH_PX - sidebarWidthPx - GRID_DIVIDER_PX - WINDOW_CONTROLS_WIDTH_PX,
+    [sidebarWidthPx],
+  )
+
+  const appShellMinWidthPx = useMemo(
+    () => sidebarWidthPx + GRID_DIVIDER_PX + toolbarMinWidthPx + WINDOW_CONTROLS_WIDTH_PX,
+    [sidebarWidthPx, toolbarMinWidthPx],
+  )
   const [editorFontLoadVersion, setEditorFontLoadVersion] = useState(0)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('date')
   const [lastSidebarModeBeforeOptions, setLastSidebarModeBeforeOptions] = useState<Exclude<SidebarMode, 'options'>>('date')
@@ -1518,7 +1555,7 @@ function App() {
   const activeNoteExternalPathRef = useRef<string | null>(null)
   const [currentExternalNoteHash, setCurrentExternalNoteHash] = useState<string | null>(null)
   const [persistenceReady, setPersistenceReady] = useState(false)
-  const [appShellWidthPx, setAppShellWidthPx] = useState(APP_SHELL_MIN_WIDTH_PX)
+  const [appShellWidthPx, setAppShellWidthPx] = useState(APP_WINDOW_MIN_WIDTH_PX)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
   // The sections actually occupying a slot right now, sorted left-to-right --
   // resolved from window.thockdownSections.listSections() during bootstrap
@@ -3439,15 +3476,15 @@ function App() {
 
   const layout = useMemo(() => {
     const toolbarWidthPx = Math.max(
-      TOOLBAR_MIN_WIDTH_PX,
-      appShellWidthPx - (isSidebarVisible ? (SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX) : 0) - WINDOW_CONTROLS_WIDTH_PX,
+      toolbarMinWidthPx,
+      appShellWidthPx - (isSidebarVisible ? (sidebarWidthPx + GRID_DIVIDER_PX) : 0) - WINDOW_CONTROLS_WIDTH_PX,
     )
 
     return {
       toolbarWidthPx,
-      gridTemplateColumns: `${isSidebarVisible ? `${SIDEBAR_WIDTH_PX}px ${GRID_DIVIDER_PX}px` : '0px 0px'} ${Math.round(toolbarWidthPx)}px ${WINDOW_CONTROLS_WIDTH_PX}px`,
+      gridTemplateColumns: `${isSidebarVisible ? `${sidebarWidthPx}px ${GRID_DIVIDER_PX}px` : '0px 0px'} ${Math.round(toolbarWidthPx)}px ${WINDOW_CONTROLS_WIDTH_PX}px`,
     }
-  }, [appShellWidthPx, isSidebarVisible])
+  }, [appShellWidthPx, isSidebarVisible, sidebarWidthPx, toolbarMinWidthPx])
 
   // The combined 'editor' grid area (tab bar + viewer) spans the same two
   // columns the old 'toolbar'/'window_control' areas did -- its actual
@@ -5281,7 +5318,7 @@ ${markdownHtml}
     const shellElement = appShellRef.current
     if (!shellElement) return
 
-    const effectiveMin = isSidebarVisible ? APP_SHELL_MIN_WIDTH_PX : (APP_SHELL_MIN_WIDTH_PX - (SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX))
+    const effectiveMin = isSidebarVisible ? appShellMinWidthPx : (appShellMinWidthPx - (sidebarWidthPx + GRID_DIVIDER_PX))
 
     const updateShellWidth = () => {
       setAppShellWidthPx(Math.max(effectiveMin, Math.round(shellElement.clientWidth)))
@@ -5297,7 +5334,7 @@ ${markdownHtml}
 
     observer.observe(shellElement)
     return () => observer.disconnect()
-  }, [isSidebarVisible])
+  }, [isSidebarVisible, appShellMinWidthPx, sidebarWidthPx])
 
   const sortedNotes = useMemo(() => {
     return [...notes].sort((a, b) => b.updatedAtMs - a.updatedAtMs)

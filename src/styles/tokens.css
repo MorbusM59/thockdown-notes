@@ -367,11 +367,29 @@
   --------------------------------------------------------------------------- */
 
   --sidebar-view-button-size:  var(--btn-square-larger-size);
-  --sidebar-view-gap-min:      var(--spacing-large);
   --sidebar-view-padding-left: var(--spacing-large);
   --sidebar-padding-right:     var(--spacing-large);
 
-  --sidebar-min-width: 288px;
+  /* The sidebar has to be wide enough for the options panel's
+   * always-visible top section (font settings + preset buttons), which is
+   * a 6-column grid of --btn-square-regular-size buttons -- the same
+   * dimensions .preset-section/.typography-section/.options-section use.
+   * --sidebar-min-width then wraps that in a spacing-regular gutter on each
+   * side inside .sidebar-content, its border, the custom scrollbar slot
+   * beside it, and the sidebar's own right-hand padding, so growing the
+   * spacing setting grows the sidebar to match instead of clipping the
+   * panel. (App.tsx mirrors this formula in JS -- see sidebarWidthPx --
+   * since the app-grid's actual column width is set via an inline style
+   * that overrides this token.) */
+  --sidebar-scrollbar-slot-width: 20px;
+  --sidebar-options-content-width: calc(var(--btn-square-regular-size) * 6 + 7 * var(--toolbar-options-gap) + 2px);
+  --sidebar-min-width: calc(
+    var(--sidebar-options-content-width)
+    + var(--spacing-regular) * 2
+    + 1px
+    + var(--sidebar-scrollbar-slot-width)
+    + var(--sidebar-padding-right)
+  );
 
   /* ---------------------------------------------------------------------------
      1j. Flyout / Toolbar Tokens
