@@ -1200,8 +1200,13 @@ export function Editor({
                 pitch and redraws once font metrics settle. */}
             {hasViewportLines && fontReady && (
               <>
-                <div className="absolute pointer-events-none thockdown-grid-outline-lines" style={{ inset: 'var(--editor-frame-padding) var(--editor-frame-padding) calc(var(--editor-frame-padding) - 1px) var(--editor-frame-padding)', zIndex: 29 }} />
-                <div className="absolute pointer-events-none thockdown-grid-lines" style={{ inset: 'var(--editor-frame-padding) var(--editor-frame-padding) calc(var(--editor-frame-padding) - 1px) var(--editor-frame-padding)', zIndex: 30 }} />
+                {/* Below the scroller (z-10) so the text paints over the grid
+                    instead of the grid's box-border lines clipping into
+                    glyph ink at narrow cell widths. Still above the caret
+                    and selection highlight so a cell's own border stays
+                    visible over those fills, matching the previous look. */}
+                <div className="absolute pointer-events-none thockdown-grid-outline-lines" style={{ inset: 'var(--editor-frame-padding) var(--editor-frame-padding) calc(var(--editor-frame-padding) - 1px) var(--editor-frame-padding)', zIndex: 6 }} />
+                <div className="absolute pointer-events-none thockdown-grid-lines" style={{ inset: 'var(--editor-frame-padding) var(--editor-frame-padding) calc(var(--editor-frame-padding) - 1px) var(--editor-frame-padding)', zIndex: 7 }} />
               </>
             )}
 
