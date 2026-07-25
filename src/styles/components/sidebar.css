@@ -151,6 +151,8 @@
   transition:     border-color 0.2s;
   color:           var(--color-text-base);
   box-sizing:     border-box;
+  min-height: calc(var(--btn-square-regular-size) + var(--spacing-regular) * 2);
+  max-height: calc(var(--btn-square-regular-size) + var(--spacing-regular) * 2);
 }
 
 .search-box .search-input-field:focus    { border-color: var(--color-border-light-30); }
@@ -158,14 +160,6 @@
 
 .search-box .search-input-field.has-case-toggle {
   padding-right: calc(var(--btn-square-regular-size) + var(--spacing-regular) * 2);
-  /* The case-toggle button sits on top at a fixed size and inset (see
-   * .search-input-case-toggle below), independent of the spacing setting --
-   * but the input's own height comes purely from its (spacing-driven)
-   * padding plus line-height, with no awareness of that overlaid button.
-   * Guarantee room for it directly, or a small spacing value clips the
-   * button below the input's bottom edge. */
-  min-height: calc(var(--btn-square-regular-size) + var(--spacing-regular) * 2);
-  max-height: calc(var(--btn-square-regular-size) + var(--spacing-regular) * 2);
 }
 
 .search-input-case-toggle {
