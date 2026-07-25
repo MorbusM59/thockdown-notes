@@ -20,6 +20,7 @@ type CompactScrollbarSliderProps = {
   trackLabel: string
   ariaLabel: string
   reverseScale?: boolean
+  defaultValue?: number
   onCommit: (value: number) => void
 }
 
@@ -32,6 +33,7 @@ export function CompactScrollbarSlider({
   trackLabel,
   ariaLabel,
   reverseScale = false,
+  defaultValue,
   onCommit,
 }: CompactScrollbarSliderProps) {
   const railRef = useRef<HTMLDivElement | null>(null)
@@ -137,6 +139,10 @@ export function CompactScrollbarSlider({
         setIsDragging(false)
       }}
       onPointerCancel={() => setIsDragging(false)}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        if (defaultValue !== undefined) onCommit(snapValue(defaultValue))
+      }}
     >
       <div className="utility-setting-scrollbar-rail" ref={railRef} aria-hidden="true">
         <span className="utility-setting-scrollbar-track-label">{trackLabel}</span>

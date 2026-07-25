@@ -1996,11 +1996,11 @@ export class DatabaseService {
         insertStmt.run(id, isActive ? 1 : 0, stableStringify(normalized), JSON.stringify(normalized), timestamp);
       };
 
-      LIGHT_FACTORY_PRESETS.forEach((preset, index) => seedRow(index + 1, preset, false));
-      DARK_FACTORY_PRESETS.forEach((preset, index) => seedRow(-(index + 1), preset, false));
+      LIGHT_FACTORY_PRESETS.forEach((preset, index) => seedRow(index + 1, preset, index === 0));
+      DARK_FACTORY_PRESETS.forEach((preset, index) => seedRow(-(index + 1), preset, index === 0));
 
-      seedRow(LOADOUT_DEFAULT_CUSTOM_ID_ABS, DEFAULT_CUSTOM_LIGHT, true);
-      seedRow(-LOADOUT_DEFAULT_CUSTOM_ID_ABS, DEFAULT_CUSTOM_DARK, true);
+      seedRow(LOADOUT_DEFAULT_CUSTOM_ID_ABS, DEFAULT_CUSTOM_LIGHT, false);
+      seedRow(-LOADOUT_DEFAULT_CUSTOM_ID_ABS, DEFAULT_CUSTOM_DARK, false);
 
       // Pending rows start as inert copies of the default-custom rows.
       seedRow(LOADOUT_PENDING_ID_ABS, DEFAULT_CUSTOM_LIGHT, false);

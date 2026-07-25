@@ -21,7 +21,7 @@ export type EditorRuntimeMetrics = {
   cellWidthPx: number;
 };
 
-export const DEFAULT_EDITOR_STYLE: EditorStyleKey = 'syne';
+export const DEFAULT_EDITOR_STYLE: EditorStyleKey = 'sharetech';
 export const DEFAULT_EDITOR_FONT_SIZE: EditorFontSizeKey = 'm';
 export const DEFAULT_EDITOR_SPACING: EditorSpacingKey = 'cozy';
 

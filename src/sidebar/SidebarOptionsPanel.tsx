@@ -7,12 +7,16 @@ import type { HighlightColorKey, HighlightColors } from '../shared/highlightColo
 import {
   BORDER_RADIUS_REGULAR_MIN_PX,
   BORDER_RADIUS_REGULAR_MAX_PX,
+  BORDER_RADIUS_REGULAR_DEFAULT_PX,
   SPACING_REGULAR_MIN_PX,
   SPACING_REGULAR_MAX_PX,
+  SPACING_REGULAR_DEFAULT_PX,
   BORDER_ALPHA_PERCENT_MIN,
   BORDER_ALPHA_PERCENT_MAX,
+  BORDER_ALPHA_PERCENT_DEFAULT,
   BOX_SHADOW_ALPHA_PERCENT_MIN,
   BOX_SHADOW_ALPHA_PERCENT_MAX,
+  BOX_SHADOW_ALPHA_PERCENT_DEFAULT,
 } from '../shared/uiBounds'
 import {
   TEXTURE_GRANULARITY_MIN,
@@ -26,6 +30,9 @@ import {
 import {
   EDITOR_GLYPH_PADDING_MIN_PX,
   EDITOR_GLYPH_PADDING_MAX_PX,
+  DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
+  DEFAULT_EDITOR_FONT_SIZE,
+  DEFAULT_EDITOR_SPACING,
   EDITOR_STYLE_OPTIONS,
   EDITOR_FONT_SIZE_OPTIONS,
   EDITOR_SPACING_OPTIONS,
@@ -39,6 +46,7 @@ import {
   GLAZE_LINEAR_OPACITY_MAX,
   GLAZE_RADIAL_OPACITY_MAX,
   GLAZE_SHEEN_OPACITY_MAX,
+  DEFAULT_GLAZE_SETTINGS,
   type GlazeSettings,
 } from '../shared/glaze'
 import { LOADOUT_FACTORY_PRESET_COUNT, type UiLoadoutEntry } from '../shared/loadouts'
@@ -714,6 +722,7 @@ export function SidebarOptionsPanel({
                 value={VIEW_FONT_SIZE_OPTIONS.findIndex((option) => option.key === viewFontSize)}
                 trackLabel="size"
                 ariaLabel="Render font size"
+                defaultValue={VIEW_FONT_SIZE_OPTIONS.findIndex((option) => option.key === 'm')}
                 onCommit={(value) => {
                   const index = Math.max(0, Math.min(VIEW_FONT_SIZE_OPTIONS.length - 1, Math.round(value)))
                   setViewFontSize(VIEW_FONT_SIZE_OPTIONS[index]!.key)
@@ -729,6 +738,7 @@ export function SidebarOptionsPanel({
                 value={VIEW_SPACING_OPTIONS.findIndex((option) => option.key === viewSpacing)}
                 trackLabel="spacing"
                 ariaLabel="Render spacing"
+                defaultValue={VIEW_SPACING_OPTIONS.findIndex((option) => option.key === 'cozy')}
                 onCommit={(value) => {
                   const index = Math.max(0, Math.min(VIEW_SPACING_OPTIONS.length - 1, Math.round(value)))
                   setViewSpacing(VIEW_SPACING_OPTIONS[index]!.key)
@@ -768,6 +778,7 @@ export function SidebarOptionsPanel({
                 value={EDITOR_FONT_SIZE_OPTIONS.findIndex((option) => option.key === editorFontSize)}
                 trackLabel="size"
                 ariaLabel="Editor font size"
+                defaultValue={EDITOR_FONT_SIZE_OPTIONS.findIndex((option) => option.key === DEFAULT_EDITOR_FONT_SIZE)}
                 onCommit={(value) => {
                   const index = Math.max(0, Math.min(EDITOR_FONT_SIZE_OPTIONS.length - 1, Math.round(value)))
                   setEditorFontSize(EDITOR_FONT_SIZE_OPTIONS[index]!.key)
@@ -784,6 +795,7 @@ export function SidebarOptionsPanel({
                 value={EDITOR_SPACING_OPTIONS.findIndex((option) => option.key === editorSpacing)}
                 trackLabel="spacing"
                 ariaLabel="Editor spacing"
+                defaultValue={EDITOR_SPACING_OPTIONS.findIndex((option) => option.key === DEFAULT_EDITOR_SPACING)}
                 onCommit={(value) => {
                   const index = Math.max(0, Math.min(EDITOR_SPACING_OPTIONS.length - 1, Math.round(value)))
                   setEditorSpacing(EDITOR_SPACING_OPTIONS[index]!.key)
@@ -1319,6 +1331,7 @@ export function SidebarOptionsPanel({
             value={borderRadiusRegularPx}
             trackLabel="radius"
             ariaLabel="UI border radius in pixels"
+            defaultValue={BORDER_RADIUS_REGULAR_DEFAULT_PX}
             onCommit={(value) => setBorderRadiusRegularPx(
               clamp(
                 Math.round(value),
@@ -1335,6 +1348,7 @@ export function SidebarOptionsPanel({
             value={spacingRegularPx}
             trackLabel="spacing"
             ariaLabel="UI spacing in pixels"
+            defaultValue={SPACING_REGULAR_DEFAULT_PX}
             onCommit={(value) => setSpacingRegularPx(
               clamp(
                 Math.round(value),
@@ -1351,6 +1365,7 @@ export function SidebarOptionsPanel({
             value={editorGlyphPaddingPx}
             trackLabel="padding"
             ariaLabel="Editor glyph side padding in pixels"
+            defaultValue={DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX}
             onCommit={(value) => setEditorGlyphPaddingPx(
               clamp(
                 Math.round(value),
@@ -1367,6 +1382,7 @@ export function SidebarOptionsPanel({
             value={borderAlphaPercent}
             trackLabel="border α"
             ariaLabel="Border alpha adjustment, percent"
+            defaultValue={BORDER_ALPHA_PERCENT_DEFAULT}
             onCommit={(value) => setBorderAlphaPercent(
               clamp(
                 Math.round(value),
@@ -1383,6 +1399,7 @@ export function SidebarOptionsPanel({
             value={boxShadowAlphaPercent}
             trackLabel="shadow α"
             ariaLabel="Box shadow alpha adjustment, percent"
+            defaultValue={BOX_SHADOW_ALPHA_PERCENT_DEFAULT}
             onCommit={(value) => setBoxShadowAlphaPercent(
               clamp(
                 Math.round(value),
@@ -1539,6 +1556,7 @@ export function SidebarOptionsPanel({
               value={glazeSettings.linearStackCount}
               trackLabel="stacks"
               ariaLabel="Number of linear glaze stacks"
+              defaultValue={DEFAULT_GLAZE_SETTINGS.linearStackCount}
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
                   ...current,
@@ -1556,6 +1574,7 @@ export function SidebarOptionsPanel({
               value={glazeSettings.radialCount}
               trackLabel="sources"
               ariaLabel="Number of radial corner gradients"
+              defaultValue={DEFAULT_GLAZE_SETTINGS.radialCount}
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
                   ...current,
@@ -1574,6 +1593,7 @@ export function SidebarOptionsPanel({
               value={glazeSettings.linearOpacity}
               trackLabel="glare"
               ariaLabel="Linear gradient stack opacity"
+              defaultValue={DEFAULT_GLAZE_SETTINGS.linearOpacity}
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
                   ...current,
@@ -1591,6 +1611,7 @@ export function SidebarOptionsPanel({
               value={glazeSettings.radialOpacity}
               trackLabel="flair"
               ariaLabel="Radial gradient stack opacity"
+              defaultValue={DEFAULT_GLAZE_SETTINGS.radialOpacity}
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
                   ...current,
@@ -1609,6 +1630,7 @@ export function SidebarOptionsPanel({
               value={glazeSettings.gloomPosition}
               trackLabel="position"
               ariaLabel="Black gradient gloom vertical position"
+              defaultValue={DEFAULT_GLAZE_SETTINGS.gloomPosition}
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
                   ...current,
@@ -1626,6 +1648,7 @@ export function SidebarOptionsPanel({
               value={glazeSettings.gloomShape}
               trackLabel="shape"
               ariaLabel="Black gradient gloom edge shape"
+              defaultValue={DEFAULT_GLAZE_SETTINGS.gloomShape}
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
                   ...current,
@@ -1643,6 +1666,7 @@ export function SidebarOptionsPanel({
               value={glazeSettings.gloomOpacity}
               trackLabel="gloom"
               ariaLabel="Black gradient gloom opacity"
+              defaultValue={DEFAULT_GLAZE_SETTINGS.gloomOpacity}
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
                   ...current,
@@ -1661,6 +1685,7 @@ export function SidebarOptionsPanel({
               value={glazeSettings.sheenPosition}
               trackLabel="position"
               ariaLabel="White gradient sheen vertical position"
+              defaultValue={DEFAULT_GLAZE_SETTINGS.sheenPosition}
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
                   ...current,
@@ -1678,6 +1703,7 @@ export function SidebarOptionsPanel({
               value={glazeSettings.sheenShape}
               trackLabel="shape"
               ariaLabel="White gradient sheen edge shape"
+              defaultValue={DEFAULT_GLAZE_SETTINGS.sheenShape}
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
                   ...current,
@@ -1695,6 +1721,7 @@ export function SidebarOptionsPanel({
               value={glazeSettings.sheenOpacity}
               trackLabel="sheen"
               ariaLabel="White gradient sheen opacity"
+              defaultValue={DEFAULT_GLAZE_SETTINGS.sheenOpacity}
               onCommit={(value) => {
                 setGlazeSettings((current) => ({
                   ...current,
@@ -1711,13 +1738,13 @@ export function SidebarOptionsPanel({
         heading="Filters"
       >
 <div className="utility-setting-slider-stack" aria-label="CSS filter controls">
-          <CompactScrollbarSlider id="filter-invert" min={0} max={1} step={0.01} value={filterInvert} trackLabel="invert" ariaLabel="Invert" onCommit={setFilterInvert} />
-          <CompactScrollbarSlider id="filter-sepia" min={0} max={1} step={0.01} value={filterSepia} trackLabel="sepia" ariaLabel="Sepia" onCommit={setFilterSepia} />
-          <CompactScrollbarSlider id="filter-hue-rotate" min={0} max={360} step={1} value={filterHueRotate} trackLabel="hue-rotate" ariaLabel="Hue rotate (degrees)" onCommit={setFilterHueRotate} />
-          <CompactScrollbarSlider id="filter-brightness" min={0} max={2} step={0.01} value={filterBrightness} trackLabel="brightness" ariaLabel="Brightness" onCommit={setFilterBrightness} />
-          <CompactScrollbarSlider id="filter-contrast" min={0} max={2} step={0.01} value={filterContrast} trackLabel="contrast" ariaLabel="Contrast" onCommit={setFilterContrast} />
-          <CompactScrollbarSlider id="filter-saturate" min={0} max={1} step={0.001} value={filterSaturate} trackLabel="saturate" ariaLabel="Saturate" onCommit={setFilterSaturate} />
-          <CompactScrollbarSlider id="filter-colorize" min={0} max={1} step={0.01} value={filterColorize} trackLabel="colorize" ariaLabel="Colorize opacity" onCommit={setFilterColorize} />
+          <CompactScrollbarSlider id="filter-invert" min={0} max={1} step={0.01} value={filterInvert} trackLabel="invert" ariaLabel="Invert" defaultValue={0} onCommit={setFilterInvert} />
+          <CompactScrollbarSlider id="filter-sepia" min={0} max={1} step={0.01} value={filterSepia} trackLabel="sepia" ariaLabel="Sepia" defaultValue={0} onCommit={setFilterSepia} />
+          <CompactScrollbarSlider id="filter-hue-rotate" min={0} max={360} step={1} value={filterHueRotate} trackLabel="hue-rotate" ariaLabel="Hue rotate (degrees)" defaultValue={0} onCommit={setFilterHueRotate} />
+          <CompactScrollbarSlider id="filter-brightness" min={0} max={2} step={0.01} value={filterBrightness} trackLabel="brightness" ariaLabel="Brightness" defaultValue={1} onCommit={setFilterBrightness} />
+          <CompactScrollbarSlider id="filter-contrast" min={0} max={2} step={0.01} value={filterContrast} trackLabel="contrast" ariaLabel="Contrast" defaultValue={1} onCommit={setFilterContrast} />
+          <CompactScrollbarSlider id="filter-saturate" min={0} max={1} step={0.001} value={filterSaturate} trackLabel="saturate" ariaLabel="Saturate" defaultValue={0.5} onCommit={setFilterSaturate} />
+          <CompactScrollbarSlider id="filter-colorize" min={0} max={1} step={0.01} value={filterColorize} trackLabel="colorize" ariaLabel="Colorize opacity" defaultValue={0} onCommit={setFilterColorize} />
         </div>
       </AccordionSection>
 
@@ -1735,6 +1762,7 @@ export function SidebarOptionsPanel({
             value={renderScrollDynamic}
             trackLabel="ramp"
             ariaLabel="Curve dynamic parameter a"
+            defaultValue={4}
             onCommit={(value) => setRenderScrollDynamic(clamp(value, 0.1, 5))}
           />
           <CompactScrollbarSlider
@@ -1745,6 +1773,7 @@ export function SidebarOptionsPanel({
             value={renderScrollResponsiveness}
             trackLabel="response"
             ariaLabel="Curve responsiveness parameter b"
+            defaultValue={0.6}
             onCommit={(value) => setRenderScrollResponsiveness(clamp(value, 0.1, 5))}
           />
           <CompactScrollbarSlider
@@ -1756,6 +1785,7 @@ export function SidebarOptionsPanel({
             trackLabel="speed"
             ariaLabel="Total time parameter t in seconds"
             reverseScale
+            defaultValue={0.4}
             onCommit={(value) => setRenderScrollTotalTimeSec(clamp(value, 0, 2))}
           />
           <CompactScrollbarSlider
@@ -1766,6 +1796,7 @@ export function SidebarOptionsPanel({
             value={renderScrollMaxSpeedPxPerSec}
             trackLabel="max speed"
             ariaLabel="Maximum scroll speed in pixels per second"
+            defaultValue={30000}
             onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(clamp(value, 1000, 100000))}
           />
           <CompactScrollbarSlider
@@ -1776,6 +1807,7 @@ export function SidebarOptionsPanel({
             value={renderScrollSkew}
             trackLabel="shape"
             ariaLabel="Curve skew (apex bias)"
+            defaultValue={0.5}
             onCommit={(value) => setRenderScrollSkew(
               Math.max(RENDER_SCROLL_SKEW_MIN, Math.min(RENDER_SCROLL_SKEW_MAX, value)),
             )}
@@ -1828,6 +1860,7 @@ export function SidebarOptionsPanel({
             value={audioKeyVolume}
             trackLabel="key"
             ariaLabel="Key volume"
+            defaultValue={0.5}
             onCommit={(value) => setAudioKeyVolume(clamp(value, 0, 1))}
           />
           <CompactScrollbarSlider
@@ -1838,6 +1871,7 @@ export function SidebarOptionsPanel({
             value={audioKeyVariance}
             trackLabel="variance"
             ariaLabel="Key sound variance"
+            defaultValue={0}
             onCommit={(value) => {
               const nextValue = clamp(value, 0, 0.5)
               setAudioKeyVariance(nextValue)
@@ -1852,6 +1886,7 @@ export function SidebarOptionsPanel({
             value={audioPitch}
             trackLabel="pitch"
             ariaLabel="Global pitch"
+            defaultValue={0}
             onCommit={(value) => {
               const nextValue = clamp(value, -100, 100)
               setAudioPitch(nextValue)
@@ -1866,6 +1901,7 @@ export function SidebarOptionsPanel({
             value={audioBassVolume}
             trackLabel="bass"
             ariaLabel="Bass volume"
+            defaultValue={0}
             onCommit={(value) => setAudioBassVolume(clamp(value, 0, 1))}
           />
           <CompactScrollbarSlider
@@ -1876,6 +1912,7 @@ export function SidebarOptionsPanel({
             value={audioTrebleVolume}
             trackLabel="treble"
             ariaLabel="Treble volume"
+            defaultValue={0}
             onCommit={(value) => setAudioTrebleVolume(clamp(value, 0, 1))}
           />
           <CompactScrollbarSlider
@@ -1886,6 +1923,7 @@ export function SidebarOptionsPanel({
             value={audioReverbStrength}
             trackLabel="reverb"
             ariaLabel="Reverb strength"
+            defaultValue={0}
             onCommit={(value) => setAudioReverbStrength(clamp(value, 0, 1))}
           />
           <CompactScrollbarSlider
@@ -1896,6 +1934,7 @@ export function SidebarOptionsPanel({
             value={audioReverbSpace}
             trackLabel="room"
             ariaLabel="Reverb space"
+            defaultValue={0}
             onCommit={(value) => setAudioReverbSpace(clamp(value, 0, 1))}
           />
         </div>
@@ -1916,6 +1955,7 @@ export function SidebarOptionsPanel({
             value={musicVolume}
             trackLabel="volume"
             ariaLabel="Music volume"
+            defaultValue={0.8}
             onCommit={(value) => setMusicVolume(clamp(value, 0, 1))}
           />
           <CompactScrollbarSlider
@@ -1926,6 +1966,7 @@ export function SidebarOptionsPanel({
             value={musicReverbAmount}
             trackLabel="reverb"
             ariaLabel="Music reverb amount"
+            defaultValue={0}
             onCommit={(value) => setMusicReverbAmount(clamp(value, 0, 1))}
           />
           <CompactScrollbarSlider
@@ -1936,6 +1977,7 @@ export function SidebarOptionsPanel({
             value={musicReverbRoom}
             trackLabel="room"
             ariaLabel="Music reverb room size"
+            defaultValue={0.3}
             onCommit={(value) => setMusicReverbRoom(clamp(value, 0, 1))}
           />
         </div>
