@@ -6493,6 +6493,13 @@ ${markdownHtml}
         return
       }
 
+      // Read-only editor text (debug-tagged notes, snapshot previews) is
+      // never focused into edit mode, but clicks inside it should still be
+      // allowed to start a native text selection so users can select/copy.
+      if (target.closest('.editor-stage .editor-text[contenteditable="false"]')) {
+        return
+      }
+
       if (isAllowedNonEditorFocusTarget(target)) {
         return
       }
