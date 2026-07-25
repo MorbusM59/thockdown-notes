@@ -158,6 +158,13 @@
 
 .search-box .search-input-field.has-case-toggle {
   padding-right: 40px;
+  /* The case-toggle button sits on top at a fixed size and inset (see
+   * .search-input-case-toggle below), independent of the spacing setting --
+   * but the input's own height comes purely from its (spacing-driven)
+   * padding plus line-height, with no awareness of that overlaid button.
+   * Guarantee room for it directly, or a small spacing value clips the
+   * button below the input's bottom edge. */
+  min-height: calc(var(--btn-square-regular-size) + 5px * 2);
 }
 
 .search-input-case-toggle {
