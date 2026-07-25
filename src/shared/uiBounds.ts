@@ -3,3 +3,9 @@ export const BORDER_RADIUS_REGULAR_MAX_PX = 20;
 
 export const SPACING_REGULAR_MIN_PX = 2;
 export const SPACING_REGULAR_MAX_PX = 8;
+
+export const BORDER_ALPHA_PERCENT_MIN = 0;
+export const BORDER_ALPHA_PERCENT_MAX = 200;
+
+export const BOX_SHADOW_ALPHA_PERCENT_MIN = 0;
+export const BOX_SHADOW_ALPHA_PERCENT_MAX = 200;

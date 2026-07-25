@@ -4,7 +4,16 @@ import { AccordionGroup, AccordionSection } from '../components/AccordionSection
 import { CompactScrollbarSlider } from '../components/CompactScrollbarSlider'
 import { type RgbaColor, type HsvaColor, rgbaToCssColor, hsvaToRgba } from '../shared/colorMath'
 import type { HighlightColorKey, HighlightColors } from '../shared/highlightColors'
-import { BORDER_RADIUS_REGULAR_MIN_PX, BORDER_RADIUS_REGULAR_MAX_PX, SPACING_REGULAR_MIN_PX, SPACING_REGULAR_MAX_PX } from '../shared/uiBounds'
+import {
+  BORDER_RADIUS_REGULAR_MIN_PX,
+  BORDER_RADIUS_REGULAR_MAX_PX,
+  SPACING_REGULAR_MIN_PX,
+  SPACING_REGULAR_MAX_PX,
+  BORDER_ALPHA_PERCENT_MIN,
+  BORDER_ALPHA_PERCENT_MAX,
+  BOX_SHADOW_ALPHA_PERCENT_MIN,
+  BOX_SHADOW_ALPHA_PERCENT_MAX,
+} from '../shared/uiBounds'
 import {
   TEXTURE_GRANULARITY_MIN,
   TEXTURE_GRANULARITY_MAX,
@@ -387,6 +396,10 @@ export interface SidebarOptionsPanelProps {
   setBorderRadiusRegularPx: (value: number) => void
   spacingRegularPx: number
   setSpacingRegularPx: (value: number) => void
+  borderAlphaPercent: number
+  setBorderAlphaPercent: (value: number) => void
+  boxShadowAlphaPercent: number
+  setBoxShadowAlphaPercent: (value: number) => void
   editorGlyphPaddingPx: number
   setEditorGlyphPaddingPx: (value: number) => void
 
@@ -555,6 +568,10 @@ export function SidebarOptionsPanel({
   setBorderRadiusRegularPx,
   spacingRegularPx,
   setSpacingRegularPx,
+  borderAlphaPercent,
+  setBorderAlphaPercent,
+  boxShadowAlphaPercent,
+  setBoxShadowAlphaPercent,
   editorGlyphPaddingPx,
   setEditorGlyphPaddingPx,
   syncExistingNotes,
@@ -1289,6 +1306,95 @@ export function SidebarOptionsPanel({
       </AccordionSection>
 
       <AccordionSection
+        className="sidebar-options-section-misc"
+        ariaLabel="Borders & Spacing"
+        heading="Borders & Spacing"
+      >
+<div className="utility-setting-slider-stack" aria-label="Borders and spacing controls">
+          <CompactScrollbarSlider
+            id="ui-border-radius"
+            min={BORDER_RADIUS_REGULAR_MIN_PX}
+            max={BORDER_RADIUS_REGULAR_MAX_PX}
+            step={1}
+            value={borderRadiusRegularPx}
+            trackLabel="radius"
+            ariaLabel="UI border radius in pixels"
+            onCommit={(value) => setBorderRadiusRegularPx(
+              clamp(
+                Math.round(value),
+                BORDER_RADIUS_REGULAR_MIN_PX,
+                BORDER_RADIUS_REGULAR_MAX_PX,
+              ),
+            )}
+          />
+          <CompactScrollbarSlider
+            id="ui-spacing-regular"
+            min={SPACING_REGULAR_MIN_PX}
+            max={SPACING_REGULAR_MAX_PX}
+            step={1}
+            value={spacingRegularPx}
+            trackLabel="spacing"
+            ariaLabel="UI spacing in pixels"
+            onCommit={(value) => setSpacingRegularPx(
+              clamp(
+                Math.round(value),
+                SPACING_REGULAR_MIN_PX,
+                SPACING_REGULAR_MAX_PX,
+              ),
+            )}
+          />
+          <CompactScrollbarSlider
+            id="editor-glyph-padding"
+            min={EDITOR_GLYPH_PADDING_MIN_PX}
+            max={EDITOR_GLYPH_PADDING_MAX_PX}
+            step={1}
+            value={editorGlyphPaddingPx}
+            trackLabel="padding"
+            ariaLabel="Editor glyph side padding in pixels"
+            onCommit={(value) => setEditorGlyphPaddingPx(
+              clamp(
+                Math.round(value),
+                EDITOR_GLYPH_PADDING_MIN_PX,
+                EDITOR_GLYPH_PADDING_MAX_PX,
+              ),
+            )}
+          />
+          <CompactScrollbarSlider
+            id="ui-border-alpha"
+            min={BORDER_ALPHA_PERCENT_MIN}
+            max={BORDER_ALPHA_PERCENT_MAX}
+            step={1}
+            value={borderAlphaPercent}
+            trackLabel="border α"
+            ariaLabel="Border alpha adjustment, percent"
+            onCommit={(value) => setBorderAlphaPercent(
+              clamp(
+                Math.round(value),
+                BORDER_ALPHA_PERCENT_MIN,
+                BORDER_ALPHA_PERCENT_MAX,
+              ),
+            )}
+          />
+          <CompactScrollbarSlider
+            id="ui-box-shadow-alpha"
+            min={BOX_SHADOW_ALPHA_PERCENT_MIN}
+            max={BOX_SHADOW_ALPHA_PERCENT_MAX}
+            step={1}
+            value={boxShadowAlphaPercent}
+            trackLabel="shadow α"
+            ariaLabel="Box shadow alpha adjustment, percent"
+            onCommit={(value) => setBoxShadowAlphaPercent(
+              clamp(
+                Math.round(value),
+                BOX_SHADOW_ALPHA_PERCENT_MIN,
+                BOX_SHADOW_ALPHA_PERCENT_MAX,
+              ),
+            )}
+          />
+        </div>
+      </AccordionSection>
+
+      <AccordionSection
         ariaLabel="Glaze"
         heading="Glaze"
       >
@@ -1831,63 +1937,6 @@ export function SidebarOptionsPanel({
             trackLabel="room"
             ariaLabel="Music reverb room size"
             onCommit={(value) => setMusicReverbRoom(clamp(value, 0, 1))}
-          />
-        </div>
-      </AccordionSection>
-
-      <AccordionSection
-        className="sidebar-options-section-misc"
-        ariaLabel="Miscellaneous Settings"
-        heading="Miscellaneous Settings"
-      >
-<div className="utility-setting-slider-stack" aria-label="Miscellaneous settings controls">
-          <CompactScrollbarSlider
-            id="ui-border-radius"
-            min={BORDER_RADIUS_REGULAR_MIN_PX}
-            max={BORDER_RADIUS_REGULAR_MAX_PX}
-            step={1}
-            value={borderRadiusRegularPx}
-            trackLabel="radius"
-            ariaLabel="UI border radius in pixels"
-            onCommit={(value) => setBorderRadiusRegularPx(
-              clamp(
-                Math.round(value),
-                BORDER_RADIUS_REGULAR_MIN_PX,
-                BORDER_RADIUS_REGULAR_MAX_PX,
-              ),
-            )}
-          />
-          <CompactScrollbarSlider
-            id="ui-spacing-regular"
-            min={SPACING_REGULAR_MIN_PX}
-            max={SPACING_REGULAR_MAX_PX}
-            step={1}
-            value={spacingRegularPx}
-            trackLabel="spacing"
-            ariaLabel="UI spacing in pixels"
-            onCommit={(value) => setSpacingRegularPx(
-              clamp(
-                Math.round(value),
-                SPACING_REGULAR_MIN_PX,
-                SPACING_REGULAR_MAX_PX,
-              ),
-            )}
-          />
-          <CompactScrollbarSlider
-            id="editor-glyph-padding"
-            min={EDITOR_GLYPH_PADDING_MIN_PX}
-            max={EDITOR_GLYPH_PADDING_MAX_PX}
-            step={1}
-            value={editorGlyphPaddingPx}
-            trackLabel="padding"
-            ariaLabel="Editor glyph side padding in pixels"
-            onCommit={(value) => setEditorGlyphPaddingPx(
-              clamp(
-                Math.round(value),
-                EDITOR_GLYPH_PADDING_MIN_PX,
-                EDITOR_GLYPH_PADDING_MAX_PX,
-              ),
-            )}
           />
         </div>
       </AccordionSection>

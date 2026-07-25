@@ -17,6 +17,8 @@ export type UiLayoutLoadout = {
   editorGlyphPaddingPx: number;
   borderRadiusRegularPx: number;
   spacingRegularPx: number;
+  borderAlphaPercent: number;
+  boxShadowAlphaPercent: number;
   audioKeyVolume: number;
   audioBassVolume: number;
   audioTrebleVolume: number;

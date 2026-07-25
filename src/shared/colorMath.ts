@@ -76,6 +76,23 @@ export function rgbaToHex(color: RgbaColor): string {
   return `#${r}${g}${b}${a}`
 }
 
+const CSS_COLOR_LITERAL_PATTERN = /#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/g
+
+/**
+ * Scales the alpha channel of every hex/rgb(a) color literal found in a CSS
+ * value (e.g. a `box-shadow` value with multiple comma-separated layers) by
+ * `factor`, capping each result at fully opaque. Non-color text (lengths,
+ * keywords, unresolved `var(...)` references) is left untouched.
+ */
+export function scaleAlphaInCssValue(value: string, factor: number): string {
+  return value.replace(CSS_COLOR_LITERAL_PATTERN, (match) => {
+    const rgba = parseCssColorToRgba(match)
+    if (!rgba) return match
+    const scaled: RgbaColor = { ...rgba, a: clampAlphaChannel(rgba.a * factor) }
+    return match.startsWith('#') ? rgbaToHex(scaled) : rgbaToCssColor(scaled)
+  })
+}
+
 export function invertRgbaColor(color: RgbaColor, alphaScale = 1): RgbaColor {
   return {
     r: 255 - clampColorChannel(color.r),

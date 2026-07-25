@@ -41,9 +41,20 @@ import {
   invertRgbaColor,
   rgbaToHsva,
   hsvaToRgba,
+  scaleAlphaInCssValue,
 } from './shared/colorMath'
 import type { HighlightColorKey, HighlightColors } from './shared/highlightColors'
-import { BORDER_RADIUS_REGULAR_MIN_PX, BORDER_RADIUS_REGULAR_MAX_PX, SPACING_REGULAR_MIN_PX, SPACING_REGULAR_MAX_PX } from './shared/uiBounds'
+import {
+  BORDER_RADIUS_REGULAR_MIN_PX,
+  BORDER_RADIUS_REGULAR_MAX_PX,
+  SPACING_REGULAR_MIN_PX,
+  SPACING_REGULAR_MAX_PX,
+  BORDER_ALPHA_PERCENT_MIN,
+  BORDER_ALPHA_PERCENT_MAX,
+  BOX_SHADOW_ALPHA_PERCENT_MIN,
+  BOX_SHADOW_ALPHA_PERCENT_MAX,
+} from './shared/uiBounds'
+import { BORDER_ALPHA_TOKENS, BOX_SHADOW_ALPHA_TOKENS } from './shared/borderShadowAlphaTokens'
 import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName } from './shared/tags'
 import { EditorSection } from './editorSection/EditorSection'
 import { EditorToolbar } from './toolbar/EditorToolbar'
@@ -132,6 +143,8 @@ const SECTION_MIN_WIDTH_PX = 300
 const EMPTY_MAP = new Map<string, NotePrimedAction>()
 const DEFAULT_BORDER_RADIUS_REGULAR_PX = 6
 const DEFAULT_SPACING_REGULAR_PX = 4
+const DEFAULT_BORDER_ALPHA_PERCENT = 100
+const DEFAULT_BOX_SHADOW_ALPHA_PERCENT = 100
 const TEXTURE_PREVIEW_SURFACE: TextureSurfaceKey = 'appGrid'
 const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28
 const SCROLL_TRACK_EDGE_GAP_PX = 3
@@ -510,6 +523,22 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 
+// Border/box-shadow tokens can reference other custom properties (e.g.
+// `--btn-shadow-active` embeds `var(--color-shadow-white)`), and
+// getComputedStyle().getPropertyValue() returns custom properties verbatim,
+// unresolved. Inline every var() reference (recursively, since palette
+// tokens can chain) so scaleAlphaInCssValue sees the literal colors.
+function resolveCssVarValueDeep(rawValue: string, rootStyle: CSSStyleDeclaration, depth = 0): string {
+  if (depth > 6) return rawValue
+  let sawVar = false
+  const resolved = rawValue.replace(/var\(\s*(--[a-zA-Z0-9-]+)\s*(?:,\s*([^)]+))?\)/g, (_match, name: string, fallback?: string) => {
+    sawVar = true
+    const resolvedValue = rootStyle.getPropertyValue(name).trim()
+    return resolvedValue || (fallback ? fallback.trim() : '')
+  })
+  return sawVar ? resolveCssVarValueDeep(resolved, rootStyle, depth + 1) : resolved
+}
+
 function mulberry32(seed: number): () => number {
   let state = (seed >>> 0) + 0x6d2b79f5
   return () => {
@@ -784,6 +813,16 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
       Math.round(toFiniteNumber(source.spacingRegularPx, DEFAULT_SPACING_REGULAR_PX)),
       SPACING_REGULAR_MIN_PX,
       SPACING_REGULAR_MAX_PX,
+    ),
+    borderAlphaPercent: clamp(
+      Math.round(toFiniteNumber(source.borderAlphaPercent, DEFAULT_BORDER_ALPHA_PERCENT)),
+      BORDER_ALPHA_PERCENT_MIN,
+      BORDER_ALPHA_PERCENT_MAX,
+    ),
+    boxShadowAlphaPercent: clamp(
+      Math.round(toFiniteNumber(source.boxShadowAlphaPercent, DEFAULT_BOX_SHADOW_ALPHA_PERCENT)),
+      BOX_SHADOW_ALPHA_PERCENT_MIN,
+      BOX_SHADOW_ALPHA_PERCENT_MAX,
     ),
     renderScrollDynamic: roundForSignature(clamp(toFiniteNumber(source.renderScrollDynamic, getRenderScrollDynamic()), 0.1, 5)),
     renderScrollResponsiveness: roundForSignature(clamp(toFiniteNumber(source.renderScrollResponsiveness, getRenderScrollResponsiveness()), 0.1, 5)),
@@ -1546,6 +1585,9 @@ function App() {
   const [editorGlyphPaddingPx, setEditorGlyphPaddingPx] = useState<number>(DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX)
   const [borderRadiusRegularPx, setBorderRadiusRegularPx] = useState<number>(DEFAULT_BORDER_RADIUS_REGULAR_PX)
   const [spacingRegularPx, setSpacingRegularPx] = useState<number>(DEFAULT_SPACING_REGULAR_PX)
+  const [borderAlphaPercent, setBorderAlphaPercent] = useState<number>(DEFAULT_BORDER_ALPHA_PERCENT)
+  const [boxShadowAlphaPercent, setBoxShadowAlphaPercent] = useState<number>(DEFAULT_BOX_SHADOW_ALPHA_PERCENT)
+  const borderShadowAlphaBaseValuesRef = useRef<Map<string, string>>(new Map())
 
   const windowControlsWidthPx = useMemo(
     () => 7 * spacingRegularPx + 320,
@@ -2125,6 +2167,8 @@ function App() {
       editorGlyphPaddingPx,
       borderRadiusRegularPx,
       spacingRegularPx,
+      borderAlphaPercent,
+      boxShadowAlphaPercent,
       audioKeyVolume,
       audioKeyVariance,
       audioPitch,
@@ -2182,6 +2226,8 @@ function App() {
     editorGlyphPaddingPx,
     borderRadiusRegularPx,
     spacingRegularPx,
+    borderAlphaPercent,
+    boxShadowAlphaPercent,
     glazeSettings,
     darkMode,
     filterInvert,
@@ -2231,6 +2277,20 @@ function App() {
         Math.round(loadout.spacingRegularPx),
         SPACING_REGULAR_MIN_PX,
         SPACING_REGULAR_MAX_PX,
+      ),
+    )
+    setBorderAlphaPercent(
+      clamp(
+        Math.round(loadout.borderAlphaPercent),
+        BORDER_ALPHA_PERCENT_MIN,
+        BORDER_ALPHA_PERCENT_MAX,
+      ),
+    )
+    setBoxShadowAlphaPercent(
+      clamp(
+        Math.round(loadout.boxShadowAlphaPercent),
+        BOX_SHADOW_ALPHA_PERCENT_MIN,
+        BOX_SHADOW_ALPHA_PERCENT_MAX,
       ),
     )
     setRenderScrollDynamic(clamp(loadout.renderScrollDynamic, 0.1, 5))
@@ -3012,6 +3072,8 @@ function App() {
       editorGlyphPaddingPx,
       borderRadiusRegularPx,
       spacingRegularPx,
+      borderAlphaPercent,
+      boxShadowAlphaPercent,
 
       exportFolder: exportFolder ?? undefined,
       renderScrollDynamic,
@@ -3098,6 +3160,8 @@ function App() {
     editorGlyphPaddingPx,
     borderRadiusRegularPx,
     spacingRegularPx,
+    borderAlphaPercent,
+    boxShadowAlphaPercent,
     editorSpacing,
     editorStyle,
     exportFolder,
@@ -3762,6 +3826,38 @@ function App() {
   useEffect(() => {
     document.documentElement.style.setProperty('--spacing-regular', `${spacingRegularPx}px`)
   }, [spacingRegularPx])
+
+  // Base (un-scaled) value of each border/box-shadow token, captured the
+  // first time it's read -- i.e. from tokens.css, before this effect ever
+  // overrides it -- so repeated slider moves always scale from the original
+  // design value instead of compounding on the previous override.
+  useEffect(() => {
+    const root = document.documentElement
+    const computed = getComputedStyle(root)
+    const factor = borderAlphaPercent / 100
+    BORDER_ALPHA_TOKENS.forEach((token) => {
+      let base = borderShadowAlphaBaseValuesRef.current.get(token)
+      if (base === undefined) {
+        base = resolveCssVarValueDeep(computed.getPropertyValue(token).trim(), computed)
+        borderShadowAlphaBaseValuesRef.current.set(token, base)
+      }
+      root.style.setProperty(token, scaleAlphaInCssValue(base, factor))
+    })
+  }, [borderAlphaPercent])
+
+  useEffect(() => {
+    const root = document.documentElement
+    const computed = getComputedStyle(root)
+    const factor = boxShadowAlphaPercent / 100
+    BOX_SHADOW_ALPHA_TOKENS.forEach((token) => {
+      let base = borderShadowAlphaBaseValuesRef.current.get(token)
+      if (base === undefined) {
+        base = resolveCssVarValueDeep(computed.getPropertyValue(token).trim(), computed)
+        borderShadowAlphaBaseValuesRef.current.set(token, base)
+      }
+      root.style.setProperty(token, scaleAlphaInCssValue(base, factor))
+    })
+  }, [boxShadowAlphaPercent])
 
   // Writes a structured debug entry to a session-scoped debug note (tagged
   // "debug"). No-ops when debuggingEnabled is false. Safe to call from any
@@ -4489,6 +4585,20 @@ ${markdownHtml}
                 Math.round(appState.menu.spacingRegularPx ?? DEFAULT_SPACING_REGULAR_PX),
                 SPACING_REGULAR_MIN_PX,
                 SPACING_REGULAR_MAX_PX,
+              ),
+            )
+            setBorderAlphaPercent(
+              clamp(
+                Math.round(appState.menu.borderAlphaPercent ?? DEFAULT_BORDER_ALPHA_PERCENT),
+                BORDER_ALPHA_PERCENT_MIN,
+                BORDER_ALPHA_PERCENT_MAX,
+              ),
+            )
+            setBoxShadowAlphaPercent(
+              clamp(
+                Math.round(appState.menu.boxShadowAlphaPercent ?? DEFAULT_BOX_SHADOW_ALPHA_PERCENT),
+                BOX_SHADOW_ALPHA_PERCENT_MIN,
+                BOX_SHADOW_ALPHA_PERCENT_MAX,
               ),
             )
             setRenderScrollDynamic(appState.menu.renderScrollDynamic ?? appState.menu.renderScrollEaseMultiplier ?? getRenderScrollDynamic())
@@ -6857,6 +6967,10 @@ ${markdownHtml}
                         setBorderRadiusRegularPx={setBorderRadiusRegularPx}
                         spacingRegularPx={spacingRegularPx}
                         setSpacingRegularPx={setSpacingRegularPx}
+                        borderAlphaPercent={borderAlphaPercent}
+                        setBorderAlphaPercent={setBorderAlphaPercent}
+                        boxShadowAlphaPercent={boxShadowAlphaPercent}
+                        setBoxShadowAlphaPercent={setBoxShadowAlphaPercent}
                         editorGlyphPaddingPx={editorGlyphPaddingPx}
                         setEditorGlyphPaddingPx={setEditorGlyphPaddingPx}
                         syncExistingNotes={syncExistingNotes}

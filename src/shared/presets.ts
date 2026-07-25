@@ -80,6 +80,8 @@ export const NEUTRAL_BASE: UiLayoutLoadout = {
   editorGlyphPaddingPx: 1,
   borderRadiusRegularPx: 6,
   spacingRegularPx: 4,
+  borderAlphaPercent: 100,
+  boxShadowAlphaPercent: 100,
   audioKeyVolume: 0.5,
   audioBassVolume: 0,
   audioTrebleVolume: 0,
