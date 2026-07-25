@@ -114,11 +114,12 @@ const APP_WINDOW_MIN_WIDTH_PX = 840
 // it has to fit the options panel's always-visible top section (font
 // settings + preset buttons), which is a 6-column grid of
 // --btn-square-regular-size buttons whose gaps scale with the user's spacing
-// setting. These three mirror the CSS tokens of the same shape
-// (--btn-square-regular-size, --sidebar-scrollbar-slot-width, and
-// .sidebar-content's own border) so the two stay in sync.
+// setting. These mirror the CSS tokens of the same shape
+// (--btn-square-regular-size, --canonical-scroll-thickness feeding
+// --sidebar-scrollbar-slot-width, and .sidebar-content's own border) so the
+// two stay in sync.
 const BTN_SQUARE_REGULAR_SIZE_PX = 32
-const SIDEBAR_SCROLLBAR_SLOT_WIDTH_PX = 20
+const CANONICAL_SCROLL_THICKNESS_PX = 16
 const SIDEBAR_CONTENT_BORDER_PX = 1
 // Soft minimum, enforced only at section-creation time -- the "+" button
 // disappearing when there isn't room for one more is the enforcement (see
@@ -1567,11 +1568,12 @@ function App() {
   const sidebarWidthPx = useMemo(() => {
     const sidebarOptionsContentWidthPx = BTN_SQUARE_REGULAR_SIZE_PX * 6 + 7 * spacingRegularPx + 2
     const sidebarPaddingRightPx = spacingRegularPx * 2 // mirrors --spacing-large
+    const sidebarScrollbarSlotWidthPx = spacingRegularPx + CANONICAL_SCROLL_THICKNESS_PX // mirrors --sidebar-scrollbar-slot-width
     return Math.round(
       sidebarOptionsContentWidthPx
       + spacingRegularPx * 2
       + SIDEBAR_CONTENT_BORDER_PX
-      + SIDEBAR_SCROLLBAR_SLOT_WIDTH_PX
+      + sidebarScrollbarSlotWidthPx
       + sidebarPaddingRightPx,
     )
   }, [spacingRegularPx])

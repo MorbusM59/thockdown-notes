@@ -201,10 +201,10 @@
 }
 
 .editor-scrollbar-slot {
-  flex:      0 0 24px;
-  width:     24px;
-  min-width: 24px;
-  max-width: 24px;
+  flex:      0 0 var(--editor-scrollbar-slot-width);
+  width:     var(--editor-scrollbar-slot-width);
+  min-width: var(--editor-scrollbar-slot-width);
+  max-width: var(--editor-scrollbar-slot-width);
   margin:    0 0 var(--bottom-utility-bar-height);
   position:  relative;
 }

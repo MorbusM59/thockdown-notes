@@ -303,12 +303,12 @@
 
 .sidebar-scrollbar-slot .sidebar-thockdown-scroll-rail {
   z-index:         4;
-  /* Static, not spacing-driven: the slot itself is a fixed 20px
-   * (--sidebar-scrollbar-slot-width), so this has to stay just wide enough
-   * to leave the full --canonical-scroll-thickness track un-shrunk (20px -
-   * 4px = 16px) regardless of the user's spacing setting -- growing it
-   * with --spacing-regular squeezes the track/thumb down as spacing rises. */
-  padding:         0 0 0 4px;
+  /* Left padding is the gap to .sidebar-content, driven by --spacing-regular
+   * so it grows/shrinks with the user's spacing setting like the rest of the
+   * app. The slot itself (--sidebar-scrollbar-slot-width) grows by the same
+   * amount, so the track/thumb always keep their full --canonical-scroll-
+   * thickness width regardless of spacing. */
+  padding:         0 0 0 var(--spacing-regular);
   justify-content: flex-end;
 }
 

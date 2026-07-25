@@ -381,7 +381,8 @@
    * panel. (App.tsx mirrors this formula in JS -- see sidebarWidthPx --
    * since the app-grid's actual column width is set via an inline style
    * that overrides this token.) */
-  --sidebar-scrollbar-slot-width: 20px;
+  --sidebar-scrollbar-slot-width: calc(var(--spacing-regular) + var(--canonical-scroll-thickness));
+  --editor-scrollbar-slot-width:  calc(var(--spacing-regular) + var(--canonical-scroll-thickness));
   --sidebar-options-content-width: calc(var(--btn-square-regular-size) * 6 + 7 * var(--toolbar-options-gap) + 2px);
   --sidebar-min-width: calc(
     var(--sidebar-options-content-width)
