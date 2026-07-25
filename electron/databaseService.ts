@@ -364,6 +364,16 @@ function clampInteger(value: unknown, min: number, max: number, fallback: number
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
+// Editor glyph padding steps in 0.5px increments (0.5 widens the box by 1px
+// total -- 0.5px added to each side of the glyph).
+function clampHalfStep(value: unknown, min: number, max: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fallback;
+  }
+  const clamped = Math.max(min, Math.min(max, value));
+  return Math.round(clamped * 2) / 2;
+}
+
 function roundForSignature(value: number, decimals = 4): number {
   if (!Number.isFinite(value)) return 0;
   const factor = 10 ** decimals;
@@ -430,7 +440,7 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
   const legacyTextEmboss = sanitizeString((highlights as Record<string, unknown>).textEmboss, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.textEmbossUi);
 
   return {
-    editorGlyphPaddingPx: clampInteger(source.editorGlyphPaddingPx, 0, 16, DEFAULT_UI_LAYOUT_LOADOUT.editorGlyphPaddingPx),
+    editorGlyphPaddingPx: clampHalfStep(source.editorGlyphPaddingPx, 0, 12, DEFAULT_UI_LAYOUT_LOADOUT.editorGlyphPaddingPx),
     borderRadiusRegularPx: clampInteger(source.borderRadiusRegularPx, 0, 20, DEFAULT_UI_LAYOUT_LOADOUT.borderRadiusRegularPx),
     spacingRegularPx: clampInteger(source.spacingRegularPx, 1, 8, DEFAULT_UI_LAYOUT_LOADOUT.spacingRegularPx),
     borderAlphaPercent: clampInteger(source.borderAlphaPercent, 0, 200, DEFAULT_UI_LAYOUT_LOADOUT.borderAlphaPercent),

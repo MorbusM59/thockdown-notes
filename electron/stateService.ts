@@ -177,6 +177,17 @@ function sanitizeIntegerInRange(input: unknown, min: number, max: number, fallba
   return Math.max(min, Math.min(max, rounded));
 }
 
+// Editor glyph padding steps in 0.5px increments (0.5 widens the box by 1px
+// total -- 0.5px added to each side of the glyph).
+function sanitizeHalfStepInRange(input: unknown, min: number, max: number, fallback: number): number {
+  if (typeof input !== 'number' || !Number.isFinite(input)) {
+    return fallback;
+  }
+
+  const clamped = Math.max(min, Math.min(max, input));
+  return Math.round(clamped * 2) / 2;
+}
+
 function sanitizeTextureSurface(input: unknown): TextureSurfaceKey {
   if (input === 'appGrid' || input === 'sidebarContent' || input === 'editorEditText' || input === 'editorRenderText') {
     return input;
@@ -282,10 +293,10 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     editorStyle: sanitizeEditorStyle(input?.editorStyle),
     editorFontSize: sanitizeEditorFontSize(input?.editorFontSize),
     editorSpacing: sanitizeEditorSpacing(input?.editorSpacing),
-    editorGlyphPaddingPx: sanitizeIntegerInRange(
+    editorGlyphPaddingPx: sanitizeHalfStepInRange(
       input?.editorGlyphPaddingPx,
       0,
-      16,
+      12,
       DEFAULT_APP_STATE.menu!.editorGlyphPaddingPx ?? 1,
     ),
     borderRadiusRegularPx: sanitizeIntegerInRange(

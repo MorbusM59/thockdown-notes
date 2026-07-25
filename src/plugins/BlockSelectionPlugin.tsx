@@ -1,7 +1,40 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { $getSelection, $isRangeSelection } from 'lexical';
+import { $getSelection, $isRangeSelection, $isElementNode, type LexicalEditor, type LexicalNode, type RangeSelection } from 'lexical';
 import { readSelectionLineRects } from '../editor/SelectionRects';
+
+const EMPTY_LINE_TOP_TOLERANCE_PX = 2;
+
+/**
+ * Top (viewport) coordinates of every empty paragraph spanned by the
+ * selection, start to end inclusive. A Range crossing an empty line still
+ * yields a full-width client rect for it (there's no glyph content to bound
+ * it to), which would otherwise paint a stray full-row highlight on a line
+ * with nothing selected -- these are filtered out by top-position match.
+ */
+function collectEmptyLineTops(editor: LexicalEditor, selection: RangeSelection): number[] {
+  const points = selection.getStartEndPoints();
+  if (!points) return [];
+
+  const [startPoint, endPoint] = points;
+  const startTop = startPoint.getNode().getTopLevelElementOrThrow();
+  const endTop = endPoint.getNode().getTopLevelElementOrThrow();
+
+  const tops: number[] = [];
+  let node: LexicalNode | null = startTop;
+  while (node) {
+    if ($isElementNode(node) && node.getTextContentSize() === 0) {
+      const el = editor.getElementByKey(node.getKey());
+      if (el) {
+        tops.push(el.getBoundingClientRect().top);
+      }
+    }
+    if (node.getKey() === endTop.getKey()) break;
+    node = node.getNextSibling<LexicalNode>();
+  }
+
+  return tops;
+}
 
 interface BlockSelectionPluginProps {
   scrollerRef: React.RefObject<HTMLElement>;
@@ -69,6 +102,8 @@ export function BlockSelectionPlugin({ scrollerRef, lineHeightPx, cellWidthPx }:
         return;
       }
 
+      const emptyLineTops = collectEmptyLineTops(editor, selection);
+
       const scrollerRect = scroller.getBoundingClientRect();
       const layerRect = highlightLayerEl.getBoundingClientRect();
       const scrollerLeftInLayer = scrollerRect.left - layerRect.left;
@@ -76,17 +111,23 @@ export function BlockSelectionPlugin({ scrollerRef, lineHeightPx, cellWidthPx }:
       const runtimeCellWidthPx = resolveRuntimeCellWidthPx(editor.getRootElement(), cellWidthPx);
       const scrollerWidth = scroller.clientWidth;
 
-      const nextRects: HighlightRect[] = [];
+      // A heading or bold span can make Chromium report the same visual
+      // row as two separate rect-groups (a full-width one plus a narrower
+      // one scoped to just that span, a few px apart in raw top -- outside
+      // readSelectionLineRects's per-row merge tolerance since it only
+      // looks at raw pixels). Left unmerged, both get rendered and their
+      // overlap gets double-painted. Quantized row position is the actual
+      // grid these live on, so merge on that instead of raw proximity.
+      const rowsByQuantizedTop = new Map<number, { left: number; right: number }>();
 
       for (const lineRect of lineRects) {
+        const isEmptyLine = emptyLineTops.some(
+          (top) => Math.abs(top - lineRect.top) < EMPTY_LINE_TOP_TOLERANCE_PX,
+        );
+        if (isEmptyLine) continue;
+
         const topInScroll = (lineRect.top - scrollerRect.top) + scroller.scrollTop;
         const quantizedRowTopInScroll = Math.round(topInScroll / lineHeightPx) * lineHeightPx;
-        const topInViewport = quantizedRowTopInScroll - scroller.scrollTop;
-
-        const visibleTop = Math.max(0, topInViewport);
-        const visibleBottom = Math.min(scroller.clientHeight, topInViewport + lineHeightPx);
-        const visibleHeight = visibleBottom - visibleTop;
-        if (visibleHeight <= 0) continue;
 
         // Native selection rects are anchored to each glyph's own visual
         // position, which the centering transform insets from the "ideal"
@@ -99,8 +140,27 @@ export function BlockSelectionPlugin({ scrollerRef, lineHeightPx, cellWidthPx }:
         const quantizedLeft = Math.round(rawLeft / runtimeCellWidthPx) * runtimeCellWidthPx;
         const quantizedRight = Math.round(rawRight / runtimeCellWidthPx) * runtimeCellWidthPx;
 
-        const clippedLeft = Math.max(0, quantizedLeft);
-        const clippedRight = Math.min(scrollerWidth, quantizedRight);
+        const existingRow = rowsByQuantizedTop.get(quantizedRowTopInScroll);
+        if (existingRow) {
+          existingRow.left = Math.min(existingRow.left, quantizedLeft);
+          existingRow.right = Math.max(existingRow.right, quantizedRight);
+        } else {
+          rowsByQuantizedTop.set(quantizedRowTopInScroll, { left: quantizedLeft, right: quantizedRight });
+        }
+      }
+
+      const nextRects: HighlightRect[] = [];
+
+      for (const [quantizedRowTopInScroll, row] of rowsByQuantizedTop) {
+        const topInViewport = quantizedRowTopInScroll - scroller.scrollTop;
+
+        const visibleTop = Math.max(0, topInViewport);
+        const visibleBottom = Math.min(scroller.clientHeight, topInViewport + lineHeightPx);
+        const visibleHeight = visibleBottom - visibleTop;
+        if (visibleHeight <= 0) continue;
+
+        const clippedLeft = Math.max(0, row.left);
+        const clippedRight = Math.min(scrollerWidth, row.right);
         const width = clippedRight - clippedLeft;
         if (width <= 0) continue;
 

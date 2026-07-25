@@ -30,6 +30,8 @@ import {
 import {
   EDITOR_GLYPH_PADDING_MIN_PX,
   EDITOR_GLYPH_PADDING_MAX_PX,
+  EDITOR_GLYPH_PADDING_STEP_PX,
+  roundEditorGlyphPaddingPx,
   DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
   DEFAULT_EDITOR_FONT_SIZE,
   DEFAULT_EDITOR_SPACING,
@@ -1361,14 +1363,14 @@ export function SidebarOptionsPanel({
             id="editor-glyph-padding"
             min={EDITOR_GLYPH_PADDING_MIN_PX}
             max={EDITOR_GLYPH_PADDING_MAX_PX}
-            step={1}
+            step={EDITOR_GLYPH_PADDING_STEP_PX}
             value={editorGlyphPaddingPx}
             trackLabel="padding"
             ariaLabel="Editor glyph side padding in pixels"
             defaultValue={DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX}
             onCommit={(value) => setEditorGlyphPaddingPx(
               clamp(
-                Math.round(value),
+                roundEditorGlyphPaddingPx(value),
                 EDITOR_GLYPH_PADDING_MIN_PX,
                 EDITOR_GLYPH_PADDING_MAX_PX,
               ),

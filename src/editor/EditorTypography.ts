@@ -57,9 +57,16 @@ export const EDITOR_SPACING_OPTIONS: Array<{ key: EditorSpacingKey; label: strin
 
 export const DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX = 1;
 export const EDITOR_GLYPH_PADDING_MIN_PX = 0;
-export const EDITOR_GLYPH_PADDING_MAX_PX = 16;
+export const EDITOR_GLYPH_PADDING_MAX_PX = 12;
+export const EDITOR_GLYPH_PADDING_STEP_PX = 0.5;
 const MIN_EDITOR_GLYPH_SIDE_GAP_PX = 0;
-const MAX_EDITOR_GLYPH_SIDE_GAP_PX = 16;
+const MAX_EDITOR_GLYPH_SIDE_GAP_PX = 12;
+
+// Padding steps in 0.5px increments: 0.5 widens the box by 1px total
+// (0.5px added to each side of the glyph).
+export function roundEditorGlyphPaddingPx(value: number): number {
+  return Math.round(value * 2) / 2;
+}
 
 const FONT_SIZE_PX_BY_KEY: Record<EditorFontSizeKey, number> = {
   xs: 12,
@@ -144,7 +151,7 @@ export function resolveEditorRuntimeMetrics(
   const lineHeightPx = Math.max(1, Math.round(fontSizePx * spacingMultiplier));
   const safeGlyphSideGapPx = Math.max(
     MIN_EDITOR_GLYPH_SIDE_GAP_PX,
-    Math.min(MAX_EDITOR_GLYPH_SIDE_GAP_PX, Math.round(glyphSideGapPx)),
+    Math.min(MAX_EDITOR_GLYPH_SIDE_GAP_PX, roundEditorGlyphPaddingPx(glyphSideGapPx)),
   );
   const fallbackCellWidthPx =
     FALLBACK_CELL_WIDTH_PX_BY_SIZE[fontSize] ?? FALLBACK_CELL_WIDTH_PX_BY_SIZE[DEFAULT_EDITOR_FONT_SIZE];

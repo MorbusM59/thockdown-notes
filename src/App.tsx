@@ -68,6 +68,7 @@ import {
   DEFAULT_EDITOR_STYLE,
   EDITOR_GLYPH_PADDING_MIN_PX,
   EDITOR_GLYPH_PADDING_MAX_PX,
+  roundEditorGlyphPaddingPx,
   resolveEditorFontFamily,
   resolveEditorRuntimeMetrics,
   type EditorFontSizeKey,
@@ -800,7 +801,7 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
 
   return {
     editorGlyphPaddingPx: clamp(
-      Math.round(toFiniteNumber(source.editorGlyphPaddingPx, DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX)),
+      roundEditorGlyphPaddingPx(toFiniteNumber(source.editorGlyphPaddingPx, DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX)),
       EDITOR_GLYPH_PADDING_MIN_PX,
       EDITOR_GLYPH_PADDING_MAX_PX,
     ),
@@ -2260,7 +2261,7 @@ function App() {
     const loadout = normalizeUiLoadoutForSignature(loadoutInput)
     setEditorGlyphPaddingPx(
       clamp(
-        Math.round(loadout.editorGlyphPaddingPx),
+        roundEditorGlyphPaddingPx(loadout.editorGlyphPaddingPx),
         EDITOR_GLYPH_PADDING_MIN_PX,
         EDITOR_GLYPH_PADDING_MAX_PX,
       ),
@@ -4568,7 +4569,7 @@ ${markdownHtml}
             setEditorSpacing(appState.menu.editorSpacing ?? DEFAULT_EDITOR_SPACING)
             setEditorGlyphPaddingPx(
               clamp(
-                Math.round(appState.menu.editorGlyphPaddingPx ?? DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX),
+                roundEditorGlyphPaddingPx(appState.menu.editorGlyphPaddingPx ?? DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX),
                 EDITOR_GLYPH_PADDING_MIN_PX,
                 EDITOR_GLYPH_PADDING_MAX_PX,
               ),
