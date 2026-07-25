@@ -504,6 +504,7 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
 const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
   'editorGlyphPaddingPx',
   'borderRadiusRegularPx',
+  'spacingRegularPx', 'borderAlphaPercent', 'boxShadowAlphaPercent',
   'audioKeyVolume', 'audioKeyVariance', 'audioPitch', 'audioBassVolume', 'audioTrebleVolume', 'audioReverbStrength', 'audioReverbSpace',
   'typingSoundEnabled', 'typingSoundSet',
   'renderScrollDynamic', 'renderScrollResponsiveness', 'renderScrollTotalTimeSec',
