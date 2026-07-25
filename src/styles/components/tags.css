@@ -211,33 +211,36 @@
 /* Tag bar / tab bar mode toggle */
 .sidebar-toggle,
 .section-close-toggle,
+.tagbar-toggle,
+.section-create-toggle
+ {
+  display: block;
+  height:       100%;
+  aspect-ratio: 1;
+  -webkit-app-region: no-drag;
+}
+
+.sidebar-toggle .fa-solid,
+.section-close-toggle .fa-solid,
+.tagbar-toggle .fa-solid,
+.section-create-toggle .fa-solid
+ {
+  display: block;
+  margin: auto;
+}
+
+.sidebar-toggle,
+.section-close-toggle,
 .tagbar-toggle {
-  display: block;
-  height:     100%;
-  aspect-ratio: 1;
   margin-right: var(--spacing-regular);
-  -webkit-app-region: no-drag;
 }
 
-/* "+" button at the tab bar's right edge -- creates a new section to the
-   right of this one. Mirrors the left-edge toggles' sizing, just on the
-   opposite side. */
 .section-create-toggle {
-  display: block;
-  height:     100%;
-  aspect-ratio: 1;
   margin-left: var(--spacing-regular);
-  -webkit-app-region: no-drag;
 }
 
-/* Identity tab: shows either this section's own name (tab bar) or the
-   active note's assigned id (tag bar). Left-click opens the section picker
-   (tab-bar mode) or expands the suggested-tags view (tag-bar mode) --
-   "active" while either is showing. Right-click assigns a note id in
-   tag-bar mode, or renames this section directly in tab-bar mode. The
-   tag/tab bar mode switch itself lives on the dedicated tags-toggle button
-   to its left. */
 .section-identity-tab-shell {
+  display: flex;
   position:     relative;
   flex:         0 0 auto;
   height:       100%;
