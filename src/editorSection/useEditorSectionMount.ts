@@ -1382,6 +1382,20 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       const previousScrollBehavior = container.style.scrollBehavior
       container.style.scrollBehavior = 'auto'
 
+      // A source line of 0 means edit mode was scrolled to the very top of
+      // the note. scrollIntoView on the first anchor would align that
+      // element's own top edge with the viewport, ignoring any container
+      // margin/padding above it, so the render view ends up scrolled down
+      // slightly instead of sitting at true scrollTop 0.
+      if (sourceLine <= 0) {
+        requestAnimationFrame(() => {
+          if (!container) return
+          container.scrollTop = 0
+          container.style.scrollBehavior = previousScrollBehavior
+        })
+        return
+      }
+
       const target = findPreviewSourceAnchorElement(container, sourceLine)
       if (!target) {
         container.style.scrollBehavior = previousScrollBehavior
