@@ -326,7 +326,7 @@
   padding:        var(--spacing-large);
   display:        flex;
   flex-direction: column;
-  gap:            var(--spacing-large);
+  gap:            var(--spacing-regular);
 }
 
 .notes-list > * {
