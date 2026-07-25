@@ -500,6 +500,17 @@
   background: var(--options-swatch-color, transparent);
 }
 
+/* The pressed/active box-shadow lives on the button itself, but the swatch
+   color layers above (::before/::after) paint on top of it and hide it.
+   Re-apply the shadow on ::after, the topmost of the two layers, so it
+   remains visible over the swatch color. */
+.options-element-grid .options-color-swatch.active::after,
+.options-element-grid .options-color-swatch:active::after,
+.options-texture-grid .options-color-swatch.active::after,
+.options-texture-grid .options-color-swatch:active::after {
+  box-shadow: var(--box-shadow-inverted-harsh);
+}
+
 .options-element-grid .options-color-swatch > *,
 .options-texture-grid .options-color-swatch > * {
   position: relative;
