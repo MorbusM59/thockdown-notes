@@ -174,7 +174,7 @@
   top:      0;
   right:    0;
   font-weight: 600;
-  border-radius: var(--border-radius-small);
+  border-radius: var(--border-radius-regular);
 }
 
 .search-input-shell.search-replace-row {

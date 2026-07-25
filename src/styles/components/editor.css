@@ -189,7 +189,7 @@
   pointer-events: none;
   box-shadow:     var(--box-shadow-inverted-light);
   z-index:        4;
-  transition: all 350ms ease-out;
+  transition: box-shadow 350ms ease-out;
 }
 
 .editor-section-column.is-active .editor-shell {
