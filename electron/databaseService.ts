@@ -2301,6 +2301,8 @@ export class DatabaseService {
     const defaultCustomId = LOADOUT_DEFAULT_CUSTOM_ID_ABS * sign;
     const timestamp = Date.now();
 
+    const targetAbs = Math.abs(targetId);
+
     const tx = db.transaction(() => {
       db.prepare(`DELETE FROM ui_loadout_entries WHERE id = ?`).run(targetId);
 
@@ -2309,10 +2311,25 @@ export class DatabaseService {
         db.prepare(`UPDATE ui_loadout_entries SET isActive = 1, updatedAt = ? WHERE id = ?`).run(timestamp, defaultCustomId);
       }
 
-      const lastCustomId = this.readLoadoutMeta(`lastCustomId:${mode}`, defaultCustomId);
-      if (lastCustomId === targetId) {
-        this.writeLoadoutMeta(`lastCustomId:${mode}`, defaultCustomId);
+      // Close the gap: every remaining custom slot with a higher number in
+      // this mode shifts down by one so the numbering stays contiguous.
+      const shiftRows = (db.prepare(`
+        SELECT id FROM ui_loadout_entries
+        WHERE id * ? > 0 AND ABS(id) > ? AND ABS(id) >= ?
+        ORDER BY ABS(id) ASC
+      `).all(sign, targetAbs, LOADOUT_FIRST_CUSTOM_ID_ABS) as { id: number }[]);
+
+      for (const row of shiftRows) {
+        db.prepare(`UPDATE ui_loadout_entries SET id = ? WHERE id = ?`).run(row.id - sign, row.id);
       }
+
+      let lastCustomId = this.readLoadoutMeta(`lastCustomId:${mode}`, defaultCustomId);
+      if (lastCustomId === targetId) {
+        lastCustomId = defaultCustomId;
+      } else if (Math.abs(lastCustomId) > targetAbs) {
+        lastCustomId -= sign;
+      }
+      this.writeLoadoutMeta(`lastCustomId:${mode}`, lastCustomId);
     });
 
     tx();
