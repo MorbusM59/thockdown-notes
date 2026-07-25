@@ -68,8 +68,14 @@
   z-index: 1;
 }
 
+/* position: sticky sizes to the normal-flow (content-box) width rather than
+ * stretching via inset like position: absolute does, so it has to be
+ * widened explicitly to still reach under the parent's left/right padding. */
 .sidebar-content.is-scrollbar-mode > .sidebar-content-texture {
-  position:         sticky;
+  position:     sticky;
+  width:        calc(100% + 2 * var(--spacing-regular));
+  margin-left:  calc(-1 * var(--spacing-regular));
+  margin-right: calc(-1 * var(--spacing-regular));
 }
 
 .sidebar-content:not(.is-scrollbar-mode) > .sidebar-content-texture {
