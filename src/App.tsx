@@ -109,7 +109,6 @@ import { TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE, useTextureSurface 
 const NEW_NOTE_TEMPLATE = '# '
 const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
 const GRID_DIVIDER_PX = 8
-const WINDOW_CONTROLS_WIDTH_PX = 380
 const WINDOW_CONTROLS_COLLAPSED_WIDTH_PX = 210
 const APP_WINDOW_MIN_WIDTH_PX = 840
 // Sidebar width is derived (see sidebarWidthPx below), not a flat constant --
@@ -1499,6 +1498,11 @@ function App() {
   const [borderRadiusRegularPx, setBorderRadiusRegularPx] = useState<number>(DEFAULT_BORDER_RADIUS_REGULAR_PX)
   const [spacingRegularPx, setSpacingRegularPx] = useState<number>(DEFAULT_SPACING_REGULAR_PX)
 
+  const windowControlsWidthPx = useMemo(
+    () => 7 * spacingRegularPx + 320,
+    [spacingRegularPx],
+  )
+
   // Mirrors --sidebar-min-width in tokens.css: the sidebar has to be wide
   // enough for the options panel's always-visible top section (font
   // settings + preset buttons, a 6-column grid of square buttons) plus a
@@ -1520,13 +1524,13 @@ function App() {
   }, [spacingRegularPx])
 
   const toolbarMinWidthPx = useMemo(
-    () => APP_WINDOW_MIN_WIDTH_PX - sidebarWidthPx - GRID_DIVIDER_PX - WINDOW_CONTROLS_WIDTH_PX,
-    [sidebarWidthPx],
+    () => APP_WINDOW_MIN_WIDTH_PX - sidebarWidthPx - GRID_DIVIDER_PX - windowControlsWidthPx,
+    [sidebarWidthPx, windowControlsWidthPx],
   )
 
   const appShellMinWidthPx = useMemo(
-    () => sidebarWidthPx + GRID_DIVIDER_PX + toolbarMinWidthPx + WINDOW_CONTROLS_WIDTH_PX,
-    [sidebarWidthPx, toolbarMinWidthPx],
+    () => sidebarWidthPx + GRID_DIVIDER_PX + toolbarMinWidthPx + windowControlsWidthPx,
+    [sidebarWidthPx, toolbarMinWidthPx, windowControlsWidthPx],
   )
   const [editorFontLoadVersion, setEditorFontLoadVersion] = useState(0)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('date')
@@ -3477,19 +3481,19 @@ function App() {
   const layout = useMemo(() => {
     const toolbarWidthPx = Math.max(
       toolbarMinWidthPx,
-      appShellWidthPx - (isSidebarVisible ? (sidebarWidthPx + GRID_DIVIDER_PX) : 0) - WINDOW_CONTROLS_WIDTH_PX,
+      appShellWidthPx - (isSidebarVisible ? (sidebarWidthPx + GRID_DIVIDER_PX) : 0) - windowControlsWidthPx,
     )
 
     return {
       toolbarWidthPx,
-      gridTemplateColumns: `${isSidebarVisible ? `${sidebarWidthPx}px ${GRID_DIVIDER_PX}px` : '0px 0px'} ${Math.round(toolbarWidthPx)}px ${WINDOW_CONTROLS_WIDTH_PX}px`,
+      gridTemplateColumns: `${isSidebarVisible ? `${sidebarWidthPx}px ${GRID_DIVIDER_PX}px` : '0px 0px'} ${Math.round(toolbarWidthPx)}px ${windowControlsWidthPx}px`,
     }
-  }, [appShellWidthPx, isSidebarVisible, sidebarWidthPx, toolbarMinWidthPx])
+  }, [appShellWidthPx, isSidebarVisible, sidebarWidthPx, toolbarMinWidthPx, windowControlsWidthPx])
 
   // The combined 'editor' grid area (tab bar + viewer) spans the same two
   // columns the old 'toolbar'/'window_control' areas did -- its actual
   // pixel width is toolbarWidthPx's column plus the window-controls column.
-  const editorSectionsRowWidthPx = Math.round(layout.toolbarWidthPx) + WINDOW_CONTROLS_WIDTH_PX
+  const editorSectionsRowWidthPx = Math.round(layout.toolbarWidthPx) + windowControlsWidthPx
   const canCreateSection = editorSectionsRowWidthPx >= (
     (editorSections.length + 1) * SECTION_MIN_WIDTH_PX + editorSections.length * GRID_DIVIDER_PX
   )
