@@ -37,7 +37,7 @@
   box-sizing:     border-box;
   padding:        0 var(--spacing-large);
   border:         1px solid var(--canonical-scroll-track-border);
-  border-radius:  999px;
+  border-radius:  var(--border-radius-regular);
   box-shadow:     var(--box-shadow-inverted-light);
   background:     var(--canonical-scroll-track-bg);
   color:          var(--color-text-80);
@@ -67,7 +67,7 @@
   position:      absolute;
   inset:         0;
   border:        1px solid var(--canonical-scroll-track-border);
-  border-radius: 999px;
+  border-radius: var(--border-radius-regular);
   background:    var(--canonical-scroll-track-bg);
   box-shadow:    var(--box-shadow-inverted-light);
 }
@@ -78,7 +78,7 @@
   width:          8px;
   height:         8px;
   margin-left:    -4px;
-  border-radius:  50%;
+  border-radius:  var(--border-radius-small);
   transform:      translateY(-50%);
   background:     transparent;
   pointer-events: auto;
@@ -141,7 +141,7 @@
   justify-content: center;
   padding:         0;
   border: 1px solid var(--canonical-scroll-track-border);
-  border-radius: 999px;
+  border-radius: var(--border-radius-regular);
   box-shadow: var(--box-shadow-inverted-light);
   background: var(--canonical-scroll-track-bg);
 }
@@ -154,7 +154,7 @@
 .manual-snapshot-circle-dot {
   width:         8px;
   height:        8px;
-  border-radius: 50%;
+  border-radius: var(--border-radius-small);
   border: 1px solid var(--canonical-scroll-track-bg);
   background-color: var(--color-text-60);
 }
@@ -233,7 +233,7 @@
   width:         100%;
   height:        100%;
   box-sizing:    border-box;
-  border-radius: 6px;
+  border-radius: var(--border-radius-regular);
   overflow:      hidden;
   z-index:       1;
 }

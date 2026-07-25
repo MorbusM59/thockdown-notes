@@ -53,14 +53,14 @@
 
 .app-shell *::-webkit-scrollbar-track {
   border:        1px solid var(--canonical-scroll-track-border);
-  border-radius: 999px;
+  border-radius: var(--border-radius-regular);
   background:    var(--canonical-scroll-track-bg);
   box-shadow:    var(--box-shadow-inverted);
 }
 
 .app-shell *::-webkit-scrollbar-thumb {
   border:        1px solid var(--canonical-handle-border);
-  border-radius: 999px;
+  border-radius: var(--border-radius-small);
   background:    var(--canonical-handle-bg);
   box-shadow:    var(--box-shadow-regular);
 }

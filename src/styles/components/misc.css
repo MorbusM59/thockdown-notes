@@ -81,7 +81,7 @@
 /* Empty states */
 .notes-empty-state {
   border:        1px dashed #ccbfb2;
-  border-radius: 8px;
+  border-radius: var(--border-radius-regular);
   background:    rgba(255, 255, 255, 0.45);
   color:         var(--color-text-60);
   font-size:     12px;

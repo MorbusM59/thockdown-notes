@@ -31,7 +31,7 @@
   position:         relative;
   display:     flex;
   background-color: var(--background-color-root);
-  border-radius:   0 9px 9px 0;
+  border-radius:   0 var(--border-radius-regular) var(--border-radius-regular) 0;
 }
 
 .sidebar-content {
@@ -46,7 +46,7 @@
   padding:    0 var(--spacing-regular);
   border:          1px solid var(--color-border-light-70);
   border-left:     none;
-  border-radius:   0 9px 9px 0;
+  border-radius:   0 var(--border-radius-regular) var(--border-radius-regular) 0;
   box-shadow:      var(--box-shadow-inverted);
   background-color: var(--palette-parchment-lightest);
 }
@@ -339,7 +339,7 @@
   right: 4px;
   width: 12px;
   height: 12px;
-  border-radius: 50%;
+  border-radius: var(--border-radius-small);
   border: 1px solid var(--color-border-light-70);
   box-shadow: var(--box-shadow-inverted-filtered);
   opacity: 1;
@@ -357,7 +357,7 @@
   right: 3px;
   width: 12px;
   height: 12px;
-  border-radius: 50%;
+  border-radius: var(--border-radius-small);
   border: 1px solid var(--color-border-light-70);
   box-shadow: var(--box-shadow-inverted-filtered);
   opacity: 1;
@@ -390,7 +390,7 @@
   width: 100%;
   display: block;
   padding: var(--spacing-large);
-  border-radius: 8px;
+  border-radius: var(--border-radius-regular);
   border: 1px solid #d2cec9;
   background: #ffffff9e;
   color: var(--color-text-base);
@@ -857,7 +857,7 @@
 
 .category-primary-summary {
   border:         1px solid #d2cec9;
-  border-radius:  8px;
+  border-radius:  var(--border-radius-regular);
   background:     rgba(255, 255, 255, 0.6);
   list-style:     none;
   cursor:         default;

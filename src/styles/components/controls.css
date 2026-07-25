@@ -109,14 +109,14 @@
 
 .utility-setting-scrollbar-shell:focus-visible {
   outline:       1px solid #8f7f70;
-  border-radius: 999px;
+  border-radius: var(--border-radius-regular);
 }
 
 .utility-setting-scrollbar-rail {
   position:      absolute;
   inset:         0;
   border:        1px solid var(--canonical-scroll-track-border);
-  border-radius: 999px;
+  border-radius: var(--border-radius-regular);
   background:    var(--canonical-scroll-track-bg);
   box-shadow:    var(--box-shadow-inverted-light);
 }
@@ -141,7 +141,7 @@
   width:         calc(var(--canonical-scroll-handle-thickness) + 2px);
   height:        calc(var(--canonical-scroll-handle-thickness) + 2px);
   border:        1px solid var(--canonical-handle-border);
-  border-radius: 999px;
+  border-radius: var(--border-radius-small);
   box-sizing:    border-box;
   background:    var(--canonical-handle-bg);
   box-shadow:    var(--box-shadow-regular-light);

@@ -327,7 +327,7 @@ body {
   width: var(--canonical-scroll-thickness);
   height: 100%;
   border: 1px solid var(--canonical-scroll-track-border);
-  border-radius: 999px;
+  border-radius: var(--border-radius-regular);
   box-shadow: var(--box-shadow-inverted-light);
   background: var(--canonical-scroll-track-bg);
   box-sizing: border-box;
@@ -338,7 +338,7 @@ body {
   left: var(--canonical-scroll-handle-gap);
   right: var(--canonical-scroll-handle-gap);
   border: 1px solid var(--canonical-handle-border);
-  border-radius: 999px;
+  border-radius: var(--border-radius-small);
   box-sizing: border-box;
   background: var(--canonical-handle-bg);
   box-shadow: var(--box-shadow-regular-light);
