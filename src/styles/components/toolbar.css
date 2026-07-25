@@ -218,9 +218,8 @@
   flex-direction: column;
   overflow-x:     hidden;
   overflow-y:     visible;
-  width:          100%;
   z-index:        1;
-  padding-bottom: var(--toolbar-options-gap);
+  padding:        var(--spacing-large);
 }
 
 .options-content.mode-view .options-section.display-in-edit:not(.display-in-view) { display: none; }
@@ -294,10 +293,6 @@
   box-shadow: var(--box-shadow-regular-light);
   border: 1px solid var(--color-border-dark-20);
   border-radius: var(--border-radius-small);
-}
-
-.typography-section {
-  margin-top: var(--spacing-regular);
 }
 
 .typography-grid {

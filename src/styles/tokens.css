@@ -374,7 +374,7 @@
    * always-visible top section (font settings + preset buttons), which is
    * a 6-column grid of --btn-square-regular-size buttons -- the same
    * dimensions .preset-section/.typography-section/.options-section use.
-   * --sidebar-min-width then wraps that in a spacing-regular gutter on each
+   * --sidebar-min-width then wraps that in a spacing-large gutter on each
    * side inside .sidebar-content, its border, the custom scrollbar slot
    * beside it, and the sidebar's own right-hand padding, so growing the
    * spacing setting grows the sidebar to match instead of clipping the
@@ -386,7 +386,7 @@
   --sidebar-options-content-width: calc(var(--btn-square-regular-size) * 6 + 7 * var(--toolbar-options-gap) + 2px);
   --sidebar-min-width: calc(
     var(--sidebar-options-content-width)
-    + var(--spacing-regular) * 2
+    + var(--spacing-large) * 2
     + 1px
     + var(--sidebar-scrollbar-slot-width)
     + var(--sidebar-padding-right)

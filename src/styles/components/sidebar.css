@@ -43,7 +43,7 @@
   overflow-y: auto;
   box-sizing: border-box;
   margin:     0;
-  padding:    0 var(--spacing-regular);
+  padding:    0;
   border:          1px solid var(--color-border-light-70);
   border-left:     none;
   border-radius:   0 var(--border-radius-regular) var(--border-radius-regular) 0;
@@ -54,28 +54,21 @@
 /* Only ever matches .sidebar-options-content (the options panel is the one
  * sidebar view that sets is-scrollbar-mode without also being tree-mode,
  * and its root div is always sidebar-content's 2nd child, after the texture
- * layer). Taking it out of flow this way means its own `width: 100%` no
- * longer resolves against sidebar-content's content box but its padding
- * box (the containing block for an absolutely positioned box) -- so left
- * and right have to redo that inset explicitly, or the panel overflows
- * past sidebar-content's padding on the right by exactly that padding. */
+ * layer). sidebar-content itself carries no padding -- the gutter comes
+ * from .sidebar-options-content's own margin -- so taking it out of flow
+ * here can just inset to 0 and let that margin produce the same gap it
+ * would in normal flow. */
 .sidebar-content.is-scrollbar-mode > div:nth-child(2) {
   position: absolute;
   top:   0;
-  left:  var(--spacing-regular);
-  right: var(--spacing-regular);
+  left:  0;
+  right: 0;
   width: auto;
   z-index: 1;
 }
 
-/* position: sticky sizes to the normal-flow (content-box) width rather than
- * stretching via inset like position: absolute does, so it has to be
- * widened explicitly to still reach under the parent's left/right padding. */
 .sidebar-content.is-scrollbar-mode > .sidebar-content-texture {
-  position:     sticky;
-  width:        calc(100% + 2 * var(--spacing-regular));
-  margin-left:  calc(-1 * var(--spacing-regular));
-  margin-right: calc(-1 * var(--spacing-regular));
+  position: sticky;
 }
 
 .sidebar-content:not(.is-scrollbar-mode) > .sidebar-content-texture {

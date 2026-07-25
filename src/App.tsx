@@ -1602,7 +1602,7 @@ function App() {
   // Mirrors --sidebar-min-width in tokens.css: the sidebar has to be wide
   // enough for the options panel's always-visible top section (font
   // settings + preset buttons, a 6-column grid of square buttons) plus a
-  // spacing-regular gutter on each side inside .sidebar-content, its own
+  // spacing-large gutter on each side inside .sidebar-content, its own
   // border, the custom scrollbar slot beside it, and the sidebar's own
   // right-hand padding (--sidebar-padding-right, i.e. spacing-large). Kept
   // in JS too because this value also drives the app-grid's inline
@@ -1613,7 +1613,7 @@ function App() {
     const sidebarScrollbarSlotWidthPx = spacingRegularPx + CANONICAL_SCROLL_THICKNESS_PX // mirrors --sidebar-scrollbar-slot-width
     return Math.round(
       sidebarOptionsContentWidthPx
-      + spacingRegularPx * 2
+      + spacingRegularPx * 4 // mirrors --spacing-large * 2
       + SIDEBAR_CONTENT_BORDER_PX
       + sidebarScrollbarSlotWidthPx
       + sidebarPaddingRightPx,
