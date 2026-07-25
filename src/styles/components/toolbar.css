@@ -296,7 +296,7 @@
 }
 
 .typography-section {
-  margin-top: calc(var(--toolbar-options-gap) + var(--spacing-regular));
+  margin-top: var(--spacing-regular);
 }
 
 .typography-grid {
