@@ -280,7 +280,14 @@
   --text-info-size:  12px;
 
   /* ---------------------------------------------------------------------------
-     1d. Border & Radius
+     1d. Spacing
+  --------------------------------------------------------------------------- */
+
+  --spacing-small:   4px;
+  --spacing-regular: calc(var(--spacing-small) * 2);
+
+  /* ---------------------------------------------------------------------------
+     1e. Border & Radius
   --------------------------------------------------------------------------- */
 
   --border-radius-regular: 6px;
@@ -290,7 +297,7 @@
   --tab-width: 80px;
 
   /* ---------------------------------------------------------------------------
-     1e. Texture System
+     1f. Texture System
      All texture slots default to none / transparent.
      JS sets these at runtime from user-selected blobs.
   --------------------------------------------------------------------------- */
@@ -306,7 +313,7 @@
   --texture-editor-render-tint:    rgba(0, 0, 0, 0);
 
   /* ---------------------------------------------------------------------------
-     1f. Button Tokens
+     1g. Button Tokens
   --------------------------------------------------------------------------- */
 
   --btn-square-micro-size:   12px;
@@ -334,7 +341,7 @@
   --btn-large-icon-size: 24px;
 
   /* ---------------------------------------------------------------------------
-     1g. Scrollbar Tokens
+     1h. Scrollbar Tokens
      Shared by both native WebKit scrollbars and the custom JS scrollbar widget.
   --------------------------------------------------------------------------- */
 
@@ -355,26 +362,38 @@
     0 0 1px rgba(0, 0, 0, 0.25);
 
   /* ---------------------------------------------------------------------------
-     1h. Sidebar Layout Tokens
+     1i. Sidebar Layout Tokens
   --------------------------------------------------------------------------- */
 
   --sidebar-view-button-size:  var(--btn-square-larger-size);
-  --sidebar-view-gap-min:      8px;
-  --sidebar-view-padding-left: 8px;
-  --sidebar-padding-right:     8px;
+  --sidebar-view-gap-min:      var(--spacing-regular);
+  --sidebar-view-padding-left: var(--spacing-regular);
+  --sidebar-padding-right:     var(--spacing-regular);
 
   --sidebar-min-width: 288px;
 
   /* ---------------------------------------------------------------------------
-     1i. Flyout / Toolbar Tokens
+     1j. Flyout / Toolbar Tokens
   --------------------------------------------------------------------------- */
 
-  --toolbar-options-gap: 6px;
+  --toolbar-options-gap: var(--spacing-small);
   --color-grid-gap:      var(--toolbar-options-gap);
   --color-grid-cell:     32px;
 
   /* Additional Editor tokens found later in file */
-  --bottom-utility-bar-height: 28px;
+  /* These bars/rows have padding derived from --spacing-small (the fine
+   * control the user can crank up to 8px), but the *content* they wrap --
+   * text, a scrollbar-thickness slider, a row of square buttons -- has its
+   * own fixed size unrelated to that setting. So each bar's total size is
+   * content + padding, not a flat constant: otherwise a larger spacing-small
+   * would eat into the fixed total and squeeze the content instead of
+   * growing the bar to fit it (the bar is a row/column of elements, and its
+   * cross-axis size has to grow opposite the direction those elements are
+   * laid out in, same as everywhere else this two-var system reaches). */
+  --bottom-utility-bar-content-height: 16px;
+  --bottom-utility-bar-height: calc(var(--bottom-utility-bar-content-height) + var(--spacing-small) + var(--spacing-regular));
+  --tab-bar-content-height: 28px;
+  --note-list-row-content-height: var(--btn-square-regular-size);
   --wordcount-panel-width: 80px;
 }
 

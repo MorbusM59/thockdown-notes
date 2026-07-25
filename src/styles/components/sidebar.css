@@ -8,8 +8,8 @@
   flex-direction: column;
   height:         100%;
   box-sizing:     border-box;
-  gap:            4px;
-  padding: 4px var(--sidebar-padding-right) 4px 0;
+  gap:            var(--spacing-small);
+  padding: var(--spacing-small) var(--sidebar-padding-right) var(--spacing-small) 0;
 }
 
 .sidebar-scroll-frame {
@@ -109,7 +109,7 @@
 }
 
 .notes-action-button {
-  padding:     6px 16px;
+  padding:     var(--spacing-small) calc(var(--spacing-regular) * 2);
   font-weight: 600;
 }
 
@@ -120,7 +120,7 @@
 /* Search box */
 .search-box {
   margin:  0;
-  padding: 4px 0 0 8px;
+  padding: var(--spacing-small) 0 0 var(--spacing-regular);
 }
 
 .search-input-shell {
@@ -129,7 +129,7 @@
 
 .search-box .search-input-field {
   width:          100%;
-  padding:        10px;
+  padding:        var(--spacing-regular);
   border:         1px solid var(--color-border-light-70);
   border-radius:  var(--border-radius-regular);
   box-shadow:     var(--box-shadow-inverted);
@@ -158,7 +158,7 @@
 
 .search-input-shell.search-replace-row {
   display: flex;
-  gap:     6px;
+  gap:     var(--spacing-small);
 }
 
 .search-replace-row > .search-replace-find-shell,
@@ -172,7 +172,7 @@
   display:         flex;
   justify-content: space-between;
   align-items:     start;
-  padding: 4px 0 4px var(--sidebar-view-padding-left);
+  padding: var(--spacing-small) 0 var(--spacing-small) var(--sidebar-view-padding-left);
   gap:     var(--sidebar-view-gap-min);
   margin:  0;
 }
@@ -183,7 +183,7 @@
   min-width:  var(--sidebar-view-button-size);
   min-height: var(--sidebar-view-button-size);
   flex:       0 0 var(--sidebar-view-button-size);
-  padding:    4px;
+  padding:    var(--spacing-small);
   margin:     0;
   display:         inline-flex;
   align-items:     center;
@@ -287,7 +287,7 @@
 
 .sidebar-scrollbar-slot .sidebar-thockdown-scroll-rail {
   z-index:         4;
-  padding:         0 0 0 4px;
+  padding:         0 0 0 var(--spacing-small);
   justify-content: flex-end;
 }
 
@@ -296,10 +296,10 @@
   flex:           1 1 auto;
   min-height:     0;
   overflow-y:     auto;
-  padding:        10px;
+  padding:        var(--spacing-regular);
   display:        flex;
   flex-direction: column;
-  gap:            8px;
+  gap:            var(--spacing-regular);
 }
 
 .notes-list > * {
@@ -363,12 +363,12 @@
 
 .notes-list.date-view  { overflow-y: hidden; }
 .notes-list.tree-view  { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-.notes-list.find-view  { flex: 1 1 auto; min-height: 0; overflow-y: auto; gap: 6px; }
+.notes-list.find-view  { flex: 1 1 auto; min-height: 0; overflow-y: auto; gap: var(--spacing-small); }
 
 .find-hit-item {
   width: 100%;
   display: block;
-  padding: 8px 10px;
+  padding: var(--spacing-regular);
   border-radius: 8px;
   border: 1px solid #d2cec9;
   background: #ffffff9e;
@@ -398,7 +398,7 @@
   display:         flex;
   align-items:     center;
   justify-content: center;
-  gap:             10px;
+  gap:             var(--spacing-regular);
   padding:         0;
   margin:          0;
   background:      transparent;
@@ -409,7 +409,7 @@
   width:         auto;
   min-width:     20px;
   height:        20px;
-  padding:       0 6px;
+  padding:       0 var(--spacing-small);
   border-radius: var(--border-radius-small);
   font-size:     10px;
   font-weight:   500;
@@ -424,7 +424,7 @@
 .sidebar-page-number-btn {
   min-width:       52px;
   height:          20px;
-  padding:         0 6px;
+  padding:         0 var(--spacing-small);
   border:          1px solid var(--btn-border-default);
   border-radius:   var(--border-radius-small);
   background:      var(--btn-bg-default);
@@ -479,7 +479,7 @@
 
 /* Date filter */
 .date-filter-rail {
-  padding:        0 0 4px 8px;
+  padding:        0 0 var(--spacing-small) var(--spacing-regular);
   display:        flex;
   flex-direction: column;
   gap:            0;
@@ -494,8 +494,8 @@
 .date-filter-line {
   display:       flex;
   width:         100%;
-  gap:           3px;
-  margin-bottom: 3px;
+  gap:           var(--spacing-small);
+  margin-bottom: var(--spacing-small);
 }
 
 .date-filter-line:last-child {
@@ -506,21 +506,21 @@
 .notes-mode-bar {
   display:     grid;
   grid-template-columns: 1fr 1fr;
-  gap:         6px;
-  padding:     10px;
+  gap:         var(--spacing-small);
+  padding:     var(--spacing-regular);
   border-bottom: 1px solid #d2cec9;
 }
 
 .notes-quick-actions {
   display:       flex;
-  gap:           6px;
-  padding:       8px 10px;
+  gap:           var(--spacing-small);
+  padding:       var(--spacing-regular);
   border-bottom: 1px solid #d2cec9;
 }
 
 .notes-mini-action {
   flex:         1;
-  padding:      8px 2px;
+  padding:      var(--spacing-regular) calc(var(--spacing-small) / 2);
   background:   var(--color-toggle-default);
   border:       1px solid var(--color-border-dark-20);
   border-radius: var(--border-radius-regular);
@@ -533,13 +533,13 @@
 /* Notes mode button */
 .notes-mode-button {
   flex:    1;
-  padding: 6px 16px;
+  padding: var(--spacing-small) calc(var(--spacing-regular) * 2);
 }
 
 .view-toggle .notes-mode-button {
   width:           100%;
   min-height:      36px;
-  padding: 6px 12px;
+  padding: var(--spacing-small) calc(var(--spacing-small) * 3);
   display:         flex;
   align-items:     center;
   justify-content: space-between;
@@ -570,7 +570,7 @@
 .note-list-columns {
   display: flex;
   align-items: stretch;
-  gap: 4px;
+  gap: var(--spacing-small);
   width: 100%;
   height: 100%;
 }
@@ -583,7 +583,7 @@
   background: var(--bg-menu-card);
   box-shadow: var(--box-shadow-regular);
   border-radius: var(--border-radius-regular);
-  padding: 8px;
+  padding: var(--spacing-regular);
 }
 
 .note-list-column:hover,
@@ -704,7 +704,7 @@
 }
 
 .note-list-item .note-list-meta-row {
-  margin-top: 3px;
+  margin-top: var(--spacing-small);
 }
 
 /* Primed states */
@@ -727,8 +727,8 @@
 }
 
 .note-list-item.is-tree-card {
-  padding:          2px 8px;
-  margin:           2px 4px;
+  padding:          calc(var(--spacing-small) / 2) var(--spacing-regular);
+  margin:           calc(var(--spacing-small) / 2) var(--spacing-small);
   background-color: rgba(255, 255, 255, 0.3);
   background-color: transparent;
   border:           1px solid var(--color-border-dark-20);
@@ -753,7 +753,7 @@
 .is-tree-card.is-active .note-list-title { font-weight: 600; }
 
 .date-view .note-list-item {
-  height:     var(--btn-square-larger-size);
+  height:     calc(var(--note-list-row-content-height) + var(--spacing-regular) * 2);
   box-sizing: border-box;
 }
 
@@ -761,7 +761,7 @@
   display:        flex;
   flex:           1 1 auto;
   flex-direction: column;
-  gap:            4px;
+  gap:            var(--spacing-small);
   width:          100%;
   min-width:      0;
 }
@@ -781,7 +781,7 @@
   min-width:       0;
   align-items:     center;
   justify-content: space-between;
-  gap:             8px;
+  gap:             var(--spacing-regular);
   font-size:       10px;
   color:           var(--color-text-60);
   font-weight:     800;
@@ -812,7 +812,7 @@
 .category-tree-root {
   display:        flex;
   flex-direction: column;
-  gap:            10px;
+  gap:            var(--spacing-regular);
 }
 
 .category-primary-summary {
@@ -821,7 +821,7 @@
   background:     rgba(255, 255, 255, 0.6);
   list-style:     none;
   cursor:         default;
-  padding:        4px;
+  padding:        var(--spacing-small);
   color:          var(--color-text-60);
   font-size:      10px;
   font-weight:    900;
@@ -835,7 +835,7 @@
   list-style:       none;
   cursor:           default;
   margin:           0;
-  padding:          2px 4px;
+  padding:          calc(var(--spacing-small) / 2) var(--spacing-small);
   color:            var(--color-text-60);
   font-size:        10px;
   font-weight:      700;
@@ -854,7 +854,7 @@
 .category-secondary {
   border:           1px solid #999999;
   border-radius:    var(--border-radius-regular);
-  margin:           8px 0;
+  margin:           var(--spacing-regular) 0;
   background-color: rgba(255, 255, 255, 0.4);
 }
 
@@ -867,7 +867,7 @@
   display:        flex;
   flex-direction: column;
   gap:            0;
-  padding:        2px 0;
+  padding:        calc(var(--spacing-small) / 2) 0;
 }
 
 .category-tertiary-heading {

@@ -3,11 +3,11 @@
    ============================================================================= */
 
 :root {
-  --audio-control-gap: 2px;
+  --audio-control-gap: calc(var(--spacing-small) / 2);
 }
 
 .audio-controls {
-  padding:          5px;
+  padding:          var(--spacing-small);
 }
 
 .audio-micro-grid {
@@ -22,8 +22,8 @@
   display:            inline-flex;
   align-items:        center;
   justify-content:    center;
-  gap:                4px;
-  padding:            0 4px;
+  gap:                var(--spacing-small);
+  padding:            0 var(--spacing-small);
   height:             calc((var(--btn-square-large-size) - var(--audio-control-gap))/2);
   min-height:         calc((var(--btn-square-large-size) - var(--audio-control-gap))/2);
   border:             1px solid var(--btn-border-default);

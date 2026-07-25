@@ -16,6 +16,7 @@ export const LOADOUT_CHANNELS = {
 export type UiLayoutLoadout = {
   editorGlyphPaddingPx: number;
   borderRadiusRegularPx: number;
+  spacingSmallPx: number;
   audioKeyVolume: number;
   audioBassVolume: number;
   audioTrebleVolume: number;

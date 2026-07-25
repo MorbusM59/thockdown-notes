@@ -147,7 +147,12 @@ export function SectionTabBar({
   } = tabs
 
   return (
-    <section ref={tabbarGridRef} className="tabbar-grid" style={{ flex: '0 0 36px' }} aria-label="Tab bar">
+    <section
+      ref={tabbarGridRef}
+      className="tabbar-grid"
+      style={{ flex: '0 0 calc(var(--tab-bar-content-height) + var(--spacing-small) * 2)' }}
+      aria-label="Tab bar"
+    >
       {isLeftmostSection ? (
         <button
           type="button"

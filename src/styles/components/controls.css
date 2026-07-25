@@ -53,17 +53,17 @@
 
 .utility-settings-panel {
   justify-content: flex-start;
-  gap:             8px;
+  gap:             var(--spacing-regular);
 }
 
 .utility-setting-row {
   display:        flex;
   flex-direction: column;
-  gap:            4px;
+  gap:            var(--spacing-small);
 }
 
 .utility-setting-row-range {
-  gap: 3px;
+  gap: var(--spacing-small);
 }
 
 .utility-setting-row input {
@@ -74,26 +74,26 @@
   background:    var(--color-input-backdrop);
   color:         var(--color-text-base);
   font-size:     11px;
-  padding:       4px 6px;
+  padding:       var(--spacing-small);
 }
 
 .utility-setting-stack {
   display:        flex;
   flex-direction: column;
-  gap:            4px;
+  gap:            var(--spacing-small);
 }
 
 .utility-setting-button-row {
   display:        flex;
   flex-direction: row;
-  gap:            6px;
+  gap:            var(--spacing-small);
   align-items:    center;
 }
 
 .utility-setting-slider-stack {
   display:        flex;
   flex-direction: column;
-  gap:            6px;
+  gap:            var(--spacing-small);
 }
 
 /* Custom slider / scrollbar shell */
@@ -159,8 +159,8 @@
 
 .window-controls {
   display:          flex;
-  padding:          5px;
-  gap:              3px;
+  padding:          var(--spacing-small);
+  gap:              var(--spacing-small);
   align-items:      center;
   margin-bottom:    auto;
   margin-left:      auto;
@@ -173,7 +173,7 @@
   min-height: var(--btn-square-large-size);
   display: inline-flex;
   flex-direction: column;
-  gap: 2px;
+  gap: calc(var(--spacing-small) / 2);
   -webkit-app-region: no-drag;
 }
 
@@ -194,7 +194,7 @@
 
 .window-minimize-split-btn.minimize {
   border-radius: var(--border-radius-small) var(--border-radius-small) var(--border-radius-regular) var(--border-radius-regular);
-  padding: 0 0 2px 0;
+  padding: 0 0 calc(var(--spacing-small) / 2) 0;
 }
 
 .window-control-btn {

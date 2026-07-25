@@ -57,6 +57,7 @@ export interface PersistedMenuState {
   editorSpacing?: 'tight' | 'compact' | 'cozy' | 'wide';
   editorGlyphPaddingPx?: number;
   borderRadiusRegularPx?: number;
+  spacingSmallPx?: number;
   glaze?: GlazeSettings;
   darkMode?: 'none' | 'mono' | 'red' | 'dusk' | 'neon' | 'matrix';
   uiMode?: 'light' | 'dark';

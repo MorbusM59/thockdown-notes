@@ -4,7 +4,7 @@ import { AccordionGroup, AccordionSection } from '../components/AccordionSection
 import { CompactScrollbarSlider } from '../components/CompactScrollbarSlider'
 import { type RgbaColor, type HsvaColor, rgbaToCssColor, hsvaToRgba } from '../shared/colorMath'
 import type { HighlightColorKey, HighlightColors } from '../shared/highlightColors'
-import { BORDER_RADIUS_REGULAR_MIN_PX, BORDER_RADIUS_REGULAR_MAX_PX } from '../shared/uiBounds'
+import { BORDER_RADIUS_REGULAR_MIN_PX, BORDER_RADIUS_REGULAR_MAX_PX, SPACING_SMALL_MIN_PX, SPACING_SMALL_MAX_PX } from '../shared/uiBounds'
 import {
   TEXTURE_GRANULARITY_MIN,
   TEXTURE_GRANULARITY_MAX,
@@ -385,6 +385,8 @@ export interface SidebarOptionsPanelProps {
 
   borderRadiusRegularPx: number
   setBorderRadiusRegularPx: (value: number) => void
+  spacingSmallPx: number
+  setSpacingSmallPx: (value: number) => void
   editorGlyphPaddingPx: number
   setEditorGlyphPaddingPx: (value: number) => void
 
@@ -551,6 +553,8 @@ export function SidebarOptionsPanel({
   setMusicReverbRoom,
   borderRadiusRegularPx,
   setBorderRadiusRegularPx,
+  spacingSmallPx,
+  setSpacingSmallPx,
   editorGlyphPaddingPx,
   setEditorGlyphPaddingPx,
   syncExistingNotes,
@@ -1850,6 +1854,22 @@ export function SidebarOptionsPanel({
                 Math.round(value),
                 BORDER_RADIUS_REGULAR_MIN_PX,
                 BORDER_RADIUS_REGULAR_MAX_PX,
+              ),
+            )}
+          />
+          <CompactScrollbarSlider
+            id="ui-spacing-small"
+            min={SPACING_SMALL_MIN_PX}
+            max={SPACING_SMALL_MAX_PX}
+            step={1}
+            value={spacingSmallPx}
+            trackLabel="spacing"
+            ariaLabel="UI spacing in pixels"
+            onCommit={(value) => setSpacingSmallPx(
+              clamp(
+                Math.round(value),
+                SPACING_SMALL_MIN_PX,
+                SPACING_SMALL_MAX_PX,
               ),
             )}
           />

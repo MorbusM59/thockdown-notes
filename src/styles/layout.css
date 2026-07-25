@@ -50,7 +50,7 @@
   border: 1px solid var(--color-border-light-30);
   border-radius: 999px;
   box-shadow: var(--box-shadow-inverted);
-  margin: 8px 0;
+  margin: var(--spacing-regular) 0;
 }
 
 .editor-section-column {
@@ -135,79 +135,11 @@
    Window Controls
    ============================================================================= */
 
-.window-controls {
-  display:          flex;
-  padding:          8px 8px 8px 8px;
-  gap:              8px;
-  align-items:      center;
-  margin-bottom:    auto;
-  margin-left:      auto;
-}
-
-.window-minimize-split {
-  width: var(--btn-square-regular-size);
-  height: var(--btn-square-regular-size);
-  min-width: var(--btn-square-regular-size);
-  min-height: var(--btn-square-regular-size);
-  display: inline-flex;
-  flex-direction: column;
-  gap: 2px;
-  -webkit-app-region: no-drag;
-}
-
-.window-minimize-split-btn {
-  width: 100%;
-  min-width: 0;
-  height: calc((var(--btn-square-regular-size) - 2px) / 2);
-  min-height: 0;
-  aspect-ratio: auto;
-  border-radius: var(--border-radius-small);
-}
-
-.window-minimize-split-btn.mini-mode {
-  border-radius: var(--border-radius-regular) var(--border-radius-regular) var(--border-radius-small) var(--border-radius-small);
-  padding: 0;
-}
-
-.window-minimize-split-btn.minimize {
-  border-radius: var(--border-radius-small) var(--border-radius-small) var(--border-radius-regular) var(--border-radius-regular);
-  padding: 0 0 2px 0;
-}
-
-.window-control-btn {
-  -webkit-app-region: no-drag;
-  width:           var(--btn-square-regular-size);
-  height:          var(--btn-square-regular-size);
-  min-width:       var(--btn-square-regular-size);
-  min-height:      var(--btn-square-regular-size);
-  padding:         0;
-  margin:          0;
-  display:         inline-flex;
-  align-items:     center;
-  justify-content: center;
-  border:          1px solid var(--btn-border-default);
-  border-radius:   var(--border-radius-regular);
-  background:      var(--btn-bg-default);
-  color:           var(--color-text-60);
-  transition:      background 0.2s, border-color 0.2s, color 0.2s;
-}
-
-.window-control-btn:hover {
-  background:   var(--btn-bg-hover);
-  border-color: var(--btn-border-hover);
-}
-
-.window-control-close       { color: var(--color-danger); }
-.window-control-close:hover { background: var(--color-danger-bg); }
-
-.window-control-glyph {
-  display:     block;
-  font-size:   18px;
-  color:      var(--color-text-80);
-  text-shadow:  var(--text-shadow-icon);
-  line-height: 1;
-}
-
+/* .window-controls, .window-minimize-split(-btn), .window-control-btn, and
+ * .window-control-glyph are fully defined (and take effect) in controls.css,
+ * which @imports after this file at the same selector specificity. Only the
+ * glyph's fa-turn-down variant survives here, since it's not redefined
+ * there and wins on its own higher specificity regardless of import order. */
 .window-control-glyph.fa-turn-down {
   font-size:   15px;
   padding-left: 1px;
@@ -224,7 +156,7 @@
 
 /* Date filter */
 .date-filter-rail {
-  padding:        0 0 4px 8px;
+  padding:        0 0 var(--spacing-small) var(--spacing-regular);
   display:        flex;
   flex-direction: column;
   gap:            0;
@@ -233,8 +165,8 @@
 .date-filter-line {
   display:       flex;
   width:         100%;
-  gap:           3px;
-  margin-bottom: 3px;
+  gap:           var(--spacing-small);
+  margin-bottom: var(--spacing-small);
 }
 
 .date-filter-line:last-child {
