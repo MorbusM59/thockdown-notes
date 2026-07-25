@@ -109,7 +109,6 @@ import { TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE, useTextureSurface 
 const NEW_NOTE_TEMPLATE = '# '
 const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
 const GRID_DIVIDER_PX = 8
-const WINDOW_CONTROLS_COLLAPSED_WIDTH_PX = 210
 const APP_WINDOW_MIN_WIDTH_PX = 840
 // Sidebar width is derived (see sidebarWidthPx below), not a flat constant --
 // it has to fit the options panel's always-visible top section (font
@@ -1500,6 +1499,11 @@ function App() {
 
   const windowControlsWidthPx = useMemo(
     () => 7 * spacingRegularPx + 320,
+    [spacingRegularPx],
+  )
+
+  const windowControlsCollapsedWidthPx = useMemo(
+    () => 4 * spacingRegularPx + 160,
     [spacingRegularPx],
   )
 
@@ -3338,8 +3342,8 @@ function App() {
     const probeRect = probe.getBoundingClientRect()
     probe.remove()
 
-    const targetWidth = Math.max(96, WINDOW_CONTROLS_COLLAPSED_WIDTH_PX)
-    const targetHeight = Math.max(52, Math.ceil(probeRect.height || 160))
+    const targetWidth = Math.max(96, windowControlsCollapsedWidthPx)
+    const targetHeight = Math.max(40, Math.ceil(probeRect.height || 160))
 
     // Ensure overlay is committed in the same event turn before native resize.
     flushSync(() => {
@@ -3356,7 +3360,7 @@ function App() {
     }
 
     void toggleAfterOverlayFrame()
-  }, [])
+  }, [windowControlsCollapsedWidthPx])
 
   const handleWindowToggleMaximize = useCallback(() => {
     ;(window as any).windowControls?.toggleMaximize?.()

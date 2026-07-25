@@ -115,7 +115,7 @@ let utilityCollapseRestoreState: WindowState | null = null;
 let alwaysOnTopBeforeUtilityCollapse: boolean | null = null;
 
 const UTILITY_COLLAPSE_MIN_WIDTH_PX = 96;
-const UTILITY_COLLAPSE_MIN_HEIGHT_PX = 52;
+const UTILITY_COLLAPSE_MIN_HEIGHT_PX = 40;
 const APP_WINDOW_MIN_WIDTH_PX = 873;
 const APP_WINDOW_MIN_HEIGHT_PX = 525;
 // Mirror renderer constants for sidebar sizing so main can compute effective minima
