@@ -218,7 +218,8 @@
 .notes-sidebar .view-toggle .icon-btn.btn-date,
 .notes-sidebar .view-toggle .icon-btn.btn-category,
 .notes-sidebar .view-toggle .icon-btn.btn-archived,
-.notes-sidebar .view-toggle .icon-btn.btn-deleted {
+.notes-sidebar .view-toggle .icon-btn.btn-deleted,
+.notes-sidebar .view-toggle .icon-btn.btn-find {
   background-image: none;
 }
 
@@ -229,7 +230,8 @@
 .notes-sidebar .view-toggle .icon-btn.btn-date::before,
 .notes-sidebar .view-toggle .icon-btn.btn-category::before,
 .notes-sidebar .view-toggle .icon-btn.btn-archived::before,
-.notes-sidebar .view-toggle .icon-btn.btn-deleted::before {
+.notes-sidebar .view-toggle .icon-btn.btn-deleted::before,
+.notes-sidebar .view-toggle .icon-btn.btn-find::before {
   content: '';
   position: absolute;
   inset: 6px;
@@ -263,21 +265,16 @@
   mask-image: url('/assets/buttons/deleted.png');
 }
 
-.notes-sidebar .view-toggle .icon-btn.btn-find,
+.notes-sidebar .view-toggle .icon-btn.btn-find::before {
+  -webkit-mask-image: url('/assets/buttons/find.png');
+  mask-image: url('/assets/buttons/find.png');
+}
+
 .notes-sidebar .view-toggle .icon-btn.btn-options {
   background-image: none;
   color:  var(--color-text-80);
 }
 
-.find-mode-glyph {
-  width:           80%;
-  height:          80%;
-  display:         inline-flex;
-  align-items:     center;
-  justify-content: center;
-  font-size:       30px;
-  line-height:     1;
-}
 
 .icon-btn.btn-deleted.is-primed-for-deletion,
 .icon-btn.btn-deleted.is-primed-for-deletion:hover,

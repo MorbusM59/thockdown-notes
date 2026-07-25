@@ -6565,11 +6565,7 @@ ${markdownHtml}
                         activeSection?.setIsTrashViewDeletePrimed(false)
                       } : undefined}
                     >
-                      {mode === 'find' ? (
-                        <span className="find-mode-glyph fa-solid fa-magnifying-glass" aria-hidden="true" />
-                      ) : (
-                        <span className="sr-only-mode-label">{label}</span>
-                      )}
+                      <span className="sr-only-mode-label">{label}</span>
                     </button>
                   )
                 })}
