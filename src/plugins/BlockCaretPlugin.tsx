@@ -67,7 +67,7 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx,
         return;
       }
 
-      const caretRect = readSelectionRect(domSelection, lineHeightPx);
+      const caretRect = readSelectionRect(domSelection, lineHeightPx, editor.getRootElement());
       if (!caretRect) {
         setCaretStyle(null);
         return;

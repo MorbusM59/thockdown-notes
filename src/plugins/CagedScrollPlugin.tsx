@@ -93,7 +93,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       }
 
       const scrollerRect = scroller.getBoundingClientRect();
-      const caretRect = readSelectionRect(domSelection, lineHeightPx);
+      const caretRect = readSelectionRect(domSelection, lineHeightPx, editor.getRootElement());
       if (!caretRect) {
         return { targetScrollTopPx: null, reason: 'no-caret-rect' } satisfies ResolveIntentResult;
       }
@@ -604,9 +604,11 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         }
         if (event.key === 'Enter') {
           const domSelection = window.getSelection();
-          const caretRect = domSelection ? readSelectionRect(domSelection, lineHeightPx) : null;
+          const caretRect = domSelection ? readSelectionRect(domSelection, lineHeightPx, editor.getRootElement()) : null;
           if (domSelection && caretRect) {
-            const isAuthoritativeRect = caretRect.source === 'primary' || caretRect.source === 'client-rect';
+            const isAuthoritativeRect = caretRect.source === 'primary'
+              || caretRect.source === 'client-rect'
+              || caretRect.source === 'wrap-boundary-downstream';
             if (!isAuthoritativeRect) {
               // Adjacent/anchor fallback can point at neighboring rows around empty trailing lines.
               // Skip deterministic arming in that case to avoid false boundary promotion.
@@ -748,7 +750,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
         activateRefocusTransaction(scroller);
 
         const domSelection = window.getSelection();
-        const caretRect = domSelection ? readSelectionRect(domSelection, lineHeightPx) : null;
+        const caretRect = domSelection ? readSelectionRect(domSelection, lineHeightPx, editor.getRootElement()) : null;
         if (domSelection && caretRect) {
           let rawText = '';
           editor.getEditorState().read(() => {
