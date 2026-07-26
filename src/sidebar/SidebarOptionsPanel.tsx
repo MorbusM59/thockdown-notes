@@ -1768,26 +1768,6 @@ export function SidebarOptionsPanel({
         heading="Filters"
       >
 <div className="utility-setting-slider-stack" aria-label="CSS filter controls">
-          <div className="utility-setting-button-row" role="group" aria-label="Performance controls">
-            <button
-              type="button"
-              className={`btn-icon${reduceVisualEffects ? ' is-active' : ''}`}
-              onClick={() => setReduceVisualEffects(!reduceVisualEffects)}
-              aria-pressed={reduceVisualEffects}
-              title="Reduce visual effects (forces glaze/filter/colorize off without losing your slider positions)"
-            >
-              <span className="fa-solid fa-leaf" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className={`btn-icon${reducedCaretAnimation ? ' is-active' : ''}`}
-              onClick={() => setReducedCaretAnimation(!reducedCaretAnimation)}
-              aria-pressed={reducedCaretAnimation}
-              title="Reduce caret animation (stops the idle blink from keeping the compositor busy)"
-            >
-              <span className="fa-solid fa-i-cursor" aria-hidden="true" />
-            </button>
-          </div>
           <CompactScrollbarSlider id="filter-invert" min={0} max={1} step={0.01} value={filterInvert} trackLabel="invert" ariaLabel="Invert" defaultValue={0} onCommit={setFilterInvert} />
           <CompactScrollbarSlider id="filter-sepia" min={0} max={1} step={0.01} value={filterSepia} trackLabel="sepia" ariaLabel="Sepia" defaultValue={0} onCommit={setFilterSepia} />
           <CompactScrollbarSlider id="filter-hue-rotate" min={0} max={360} step={1} value={filterHueRotate} trackLabel="hue-rotate" ariaLabel="Hue rotate (degrees)" defaultValue={0} onCommit={setFilterHueRotate} />
@@ -2089,6 +2069,41 @@ export function SidebarOptionsPanel({
             aria-label="Import layouts from a .tdl file"
           >
             <span className="fa-solid fa-file-arrow-up" aria-hidden="true" />
+          </button>
+        </div>
+      </AccordionSection>
+
+      <AccordionSection
+        className="sidebar-options-section-performance"
+        ariaLabel="Performance"
+        heading="Performance"
+      >
+<div className="utility-setting-button-row" role="group" aria-label="Performance controls">
+          <button
+            type="button"
+            className={`btn-icon${reduceVisualEffects ? ' is-active' : ''}`}
+            onClick={() => {
+              const next = !reduceVisualEffects
+              setReduceVisualEffects(next)
+              queueAppStateSave(activeNoteId)
+            }}
+            aria-pressed={reduceVisualEffects}
+            title="Reduce visual effects (forces glaze/filter/colorize off without losing your slider positions; invert stays on for dark layouts)"
+          >
+            <span className="fa-solid fa-spray-can-sparkles" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={`btn-icon${reducedCaretAnimation ? ' is-active' : ''}`}
+            onClick={() => {
+              const next = !reducedCaretAnimation
+              setReducedCaretAnimation(next)
+              queueAppStateSave(activeNoteId)
+            }}
+            aria-pressed={reducedCaretAnimation}
+            title="Reduce caret animation (stops the idle blink from keeping the compositor busy)"
+          >
+            <span className="fa-solid fa-computer-mouse" aria-hidden="true" />
           </button>
         </div>
       </AccordionSection>

@@ -872,8 +872,6 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     audioReverbStrength: clamp(toFiniteNumber(source.audioReverbStrength ?? source.audioReverbAmount, 0), 0, 1),
     audioReverbSpace: clamp(toFiniteNumber(source.audioReverbSpace, 0), 0, 1),
     pitchJitterAmount: clamp(toFiniteNumber(source.pitchJitterAmount, 0), 0, 0.05),
-    reduceVisualEffects: source.reduceVisualEffects === true,
-    reducedCaretAnimation: source.reducedCaretAnimation === true,
     typingSoundEnabled: source.typingSoundEnabled === true,
     typingSoundSet: source.typingSoundSet === 'A' || source.typingSoundSet === 'B' || source.typingSoundSet === 'C'
       ? source.typingSoundSet
@@ -2218,8 +2216,6 @@ function App() {
       audioReverbStrength,
       audioReverbSpace,
       pitchJitterAmount,
-      reduceVisualEffects,
-      reducedCaretAnimation,
       typingSoundEnabled,
       typingSoundSet,
       renderScrollDynamic,
@@ -2293,8 +2289,6 @@ function App() {
     audioReverbStrength,
     audioReverbSpace,
     pitchJitterAmount,
-    reduceVisualEffects,
-    reducedCaretAnimation,
     typingSoundEnabled,
     typingSoundSet,
     textureMaterials,
@@ -2345,8 +2339,6 @@ function App() {
     setAudioReverbStrength(clamp(loadout.audioReverbStrength, 0, 1))
     setAudioReverbSpace(clamp(loadout.audioReverbSpace, 0, 1))
     setPitchJitterAmount(clamp(loadout.pitchJitterAmount, 0, 0.05))
-    setReduceVisualEffects(loadout.reduceVisualEffects)
-    setReducedCaretAnimation(loadout.reducedCaretAnimation)
     setTypingSoundEnabled(loadout.typingSoundEnabled)
     setTypingSoundSet(loadout.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
     setGlazeSettings(sanitizeGlazeSettings(loadout.glaze, DEFAULT_GLAZE_SETTINGS))
@@ -3190,6 +3182,11 @@ function App() {
       spellCheckRenderEnabled,
       tabBarMode: tabBarModeRef.current,
       isSidebarVisible: overrides?.isSidebarVisible ?? isSidebarVisible,
+      // Machine-level performance prefs, deliberately NOT part of
+      // UiLayoutLoadout -- these must survive switching between layouts
+      // rather than being reset to whatever each layout last had stored.
+      reduceVisualEffects,
+      reducedCaretAnimation,
     }
   }, [
     archiveCollapsedPrimary,
@@ -3199,6 +3196,8 @@ function App() {
     debuggingEnabled,
     spellCheckEditEnabled,
     spellCheckRenderEnabled,
+    reduceVisualEffects,
+    reducedCaretAnimation,
     editorFontSize,
     editorGlyphPaddingPx,
     borderRadiusRegularPx,
@@ -3749,33 +3748,61 @@ function App() {
 
   // Apply all filter sliders at one wrapper level so the full composited scene
   // (base backdrop + glaze + sheen + app-shell + colorize) is filtered as one.
-  const appOuterStyle = useMemo(() => {
+  //
+  // Invert is treated as a real binary (filterInvert > 0.5, same threshold
+  // already used elsewhere -- gloom/sheen color choice, shadow-flip) rather
+  // than folded into the same continuous filter chain as the purely
+  // decorative sliders: it's the app's core dark/light theming primitive
+  // (every dark preset sets it), not an optional tint. When it's the ONLY
+  // active visual effect -- which is exactly what "reduce visual effects +
+  // dark mode" is -- it skips `filter` entirely and applies via a
+  // mix-blend-mode overlay instead (see the invertViaBlendMode render
+  // below), which is materially cheaper: filter forces re-rasterization of
+  // this whole subtree on every repaint underneath it (see C2), while a
+  // blend-mode overlay just changes how an already-current frame composites,
+  // at the cost every frame pays anyway.
+  //
+  // This can ONLY be done risk-free when nothing else in the chain is
+  // active: invert doesn't commute with sepia/brightness/contrast (unlike
+  // hue-rotate, which is a pure hue-domain rotation and does commute with
+  // invert) -- reordering invert relative to those would visibly change
+  // every existing dark preset's tuned appearance (mono/dusk/neon/matrix all
+  // pair invert with sepia/brightness/contrast). So whenever any of those
+  // are also active, invert stays in the filter chain, in its original
+  // first position, exactly as before -- zero behavior change for the
+  // shipped presets.
+  const { appOuterStyle, invertViaBlendMode } = useMemo(() => {
+    const nonInvertFilterParts: string[] = []
+    // Low-power toggle: a `filter` on this wrapper forces re-rasterization
+    // of everything under it on every repaint (see C2) -- force the
+    // decorative sliders off here rather than making the user reset every
+    // one to get that back. Invert is handled separately below since it's
+    // functional, not decorative.
+    if (!reduceVisualEffects) {
+      if (filterSepia > 0) nonInvertFilterParts.push(`sepia(${filterSepia})`)
+      if (filterHueRotate !== 0) nonInvertFilterParts.push(`hue-rotate(${filterHueRotate}deg)`)
+      if (filterBrightness !== 1) nonInvertFilterParts.push(`brightness(${filterBrightness})`)
+      if (filterContrast !== 1) nonInvertFilterParts.push(`contrast(${filterContrast})`)
+
+      const saturateCssValue = saturatePosToValue(filterSaturate)
+      if (Math.abs(saturateCssValue - 1) > 0.001) {
+        nonInvertFilterParts.push(`saturate(${saturateCssValue.toFixed(4)})`)
+      }
+    }
+
+    const invertActive = filterInvert > 0.5
+    const cheapInvert = invertActive && nonInvertFilterParts.length === 0
+
     const style: CSSProperties = {
       backgroundColor: 'var(--palette-parchment-lightest)',
     }
-    // Low-power toggle: a `filter` on this wrapper forces re-rasterization
-    // of everything under it on every repaint (see C2) -- force it off here
-    // rather than making the user reset every slider to get that back.
-    if (reduceVisualEffects) {
-      return style
-    }
-
-    const filterParts: string[] = []
-    if (filterInvert > 0) filterParts.push(`invert(${filterInvert})`)
-    if (filterSepia > 0) filterParts.push(`sepia(${filterSepia})`)
-    if (filterHueRotate !== 0) filterParts.push(`hue-rotate(${filterHueRotate}deg)`)
-    if (filterBrightness !== 1) filterParts.push(`brightness(${filterBrightness})`)
-    if (filterContrast !== 1) filterParts.push(`contrast(${filterContrast})`)
-
-    const saturateCssValue = saturatePosToValue(filterSaturate)
-    if (Math.abs(saturateCssValue - 1) > 0.001) {
-      filterParts.push(`saturate(${saturateCssValue.toFixed(4)})`)
-    }
-
+    const filterParts = cheapInvert
+      ? nonInvertFilterParts
+      : (filterInvert > 0 ? [`invert(${filterInvert})`, ...nonInvertFilterParts] : nonInvertFilterParts)
     if (filterParts.length > 0) {
       style.filter = filterParts.join(' ')
     }
-    return style
+    return { appOuterStyle: style, invertViaBlendMode: cheapInvert }
   }, [
     filterBrightness,
     filterContrast,
@@ -7472,6 +7499,24 @@ ${markdownHtml}
             </div>
           </div>
         </div>
+        {invertViaBlendMode && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: '#fff',
+              // 'difference' against a solid white top layer is an exact
+              // per-channel invert (|255 - c| = 255 - c) -- unlike the
+              // filter: invert() this replaces, this is a genuinely cheap
+              // compositor blend rather than a re-rasterize-on-every-repaint
+              // filter effect (see the appOuterStyle comment above).
+              mixBlendMode: 'difference',
+              pointerEvents: 'none',
+              zIndex: 9998,
+            }}
+            aria-hidden="true"
+          />
+        )}
         {filterColorize > 0 && !reduceVisualEffects && (
           <div
             style={{

@@ -89,8 +89,6 @@ export const NEUTRAL_BASE: UiLayoutLoadout = {
   audioReverbStrength: 0,
   audioReverbSpace: 0,
   pitchJitterAmount: 0,
-  reduceVisualEffects: false,
-  reducedCaretAnimation: false,
   typingSoundEnabled: false,
   typingSoundSet: 'A',
   renderScrollDynamic: 4,
