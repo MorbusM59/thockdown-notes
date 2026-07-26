@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { $getRoot, $getSelection, $isRangeSelection } from 'lexical';
+import { $getRoot, $getSelection, $isRangeSelection, COMMAND_PRIORITY_LOW, KEY_DOWN_COMMAND } from 'lexical';
 import { readSelectionRect } from '../editor/CaretRect';
 import { resolveCaretTopInScroll } from '../editor/CaretVisualPosition';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
@@ -41,6 +41,11 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx,
   // the ~4 forced synchronous layout reads paid on every keystroke.
   const scrollerRectRef = useRef<DOMRect | null>(null);
   const caretLayerRectRef = useRef<DOMRect | null>(null);
+  // One-shot signal: set on an End/Shift+End keydown, consumed (and cleared)
+  // by the very next updateCaret run. End's intent is "stay on this line,"
+  // the opposite of the general downstream-at-a-wrap-join default -- see
+  // readSelectionRect's forceUpstreamAffinity param.
+  const forceUpstreamAffinityRef = useRef(false);
 
   const invalidateRectCache = useCallback(() => {
     scrollerRectRef.current = null;
@@ -67,7 +72,10 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx,
         return;
       }
 
-      const caretRect = readSelectionRect(domSelection, lineHeightPx, editor.getRootElement());
+      const forceUpstreamAffinity = forceUpstreamAffinityRef.current;
+      forceUpstreamAffinityRef.current = false;
+
+      const caretRect = readSelectionRect(domSelection, lineHeightPx, editor.getRootElement(), forceUpstreamAffinity);
       if (!caretRect) {
         setCaretStyle(null);
         return;
@@ -176,6 +184,17 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx,
 
   useEffect(() => {
     const removeUpdateListener = editor.registerUpdateListener(() => scheduleCaretUpdate());
+    // Every keydown updates the flag (true only for End) rather than just
+    // setting it on End, so a stale request can't survive past whatever key
+    // the user actually presses next.
+    const removeKeyDownListener = editor.registerCommand(
+      KEY_DOWN_COMMAND,
+      (event: KeyboardEvent) => {
+        forceUpstreamAffinityRef.current = event.key === 'End';
+        return false;
+      },
+      COMMAND_PRIORITY_LOW,
+    );
     window.addEventListener('resize', scheduleCaretUpdateAfterResize);
 
     // Neither editor.registerUpdateListener nor the scroll/resize listeners
@@ -214,6 +233,7 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx,
         animationFrameRef.current = null;
       }
       removeUpdateListener();
+      removeKeyDownListener();
       window.removeEventListener('resize', scheduleCaretUpdateAfterResize);
       document.removeEventListener('focusin', scheduleCaretUpdate, true);
       document.removeEventListener('focusout', scheduleCaretUpdate, true);

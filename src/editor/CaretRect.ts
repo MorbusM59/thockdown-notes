@@ -231,6 +231,13 @@ export function readSelectionRect(
   selection: Selection,
   fallbackLineHeightPx: number,
   rootEl?: HTMLElement | null,
+  // Set when the caller knows the current selection was just produced by an
+  // explicit "go to the end of this line" action (End / Shift+End), whose
+  // intent is the opposite of the general downstream-at-a-wrap-join default:
+  // it should always render upstream, on the line the user was already on.
+  // Skips the wrap-boundary override entirely and trusts the native rect,
+  // which Chromium already resolves correctly for this specific action.
+  forceUpstreamAffinity?: boolean,
 ): SelectionRect | null {
   if (selection.rangeCount === 0) return null;
 
@@ -239,7 +246,7 @@ export function readSelectionRect(
   const range = selection.getRangeAt(0);
   const primary = rectFromDomRect(range.getBoundingClientRect(), 'primary');
   if (isUsableRect(primary)) {
-    if (range.collapsed) {
+    if (range.collapsed && !forceUpstreamAffinity) {
       return resolveCollapsedCaretRect(range, rootEl, primary, fallbackLineHeightPx);
     }
     return primary;

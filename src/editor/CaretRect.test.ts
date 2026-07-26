@@ -66,6 +66,31 @@ describe('readSelectionRect: soft-wrap boundary affinity', () => {
     expect(rect?.top).toBe(20)
   })
 
+  it('forceUpstreamAffinity skips the override, e.g. for End/Shift+End', () => {
+    const rootEl = document.createElement('div')
+    const p = document.createElement('p')
+    const textNode = document.createTextNode('abcdef')
+    p.appendChild(textNode)
+    rootEl.appendChild(p)
+    document.body.appendChild(rootEl)
+
+    // Same ambiguous setup as the override test above -- the next character
+    // renders on a different row -- but End's intent is "stay on this line,"
+    // so the override must not fire.
+    stubRangeTopPx((range) => {
+      if (range.collapsed) return 0
+      if (range.startOffset === 3 && range.endOffset === 4) return 20
+      if (range.startOffset === 2 && range.endOffset === 3) return 0
+      return 0
+    })
+
+    const selection = collapseCaretAt(textNode, 3)
+    const rect = readSelectionRect(selection, 20, rootEl, true)
+
+    expect(rect?.source).toBe('primary')
+    expect(rect?.top).toBe(0)
+  })
+
   it('leaves an unambiguous mid-line caret untouched', () => {
     const rootEl = document.createElement('div')
     const p = document.createElement('p')
