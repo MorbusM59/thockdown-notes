@@ -291,18 +291,9 @@
   --preview-code-font: 'Share Tech Mono', 'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
 }
 
-/* 11d. Size variants */
-.markdown-preview.size-xs { font-size: 12px; }
-.markdown-preview.size-s  { font-size: 14px; }
-.markdown-preview.size-m  { font-size: 16px; }
-.markdown-preview.size-l  { font-size: 18px; }
-.markdown-preview.size-xl { font-size: 20px; }
-
-/* 11e. Spacing variants */
-.markdown-preview.spacing-tight   { line-height: 1.2; --preview-edge-padding: 9px;  }
-.markdown-preview.spacing-compact { line-height: 1.4; --preview-edge-padding: 12px; }
-.markdown-preview.spacing-cozy    { line-height: 1.6; --preview-edge-padding: 18px; }
-.markdown-preview.spacing-wide    { line-height: 1.8; --preview-edge-padding: 24px; }
+/* 11d/11e. Size and spacing are continuous now -- set directly as inline
+   style (font-size / line-height / --preview-edge-padding) by the render
+   call sites instead of these size-X/spacing-Y classes. */
 
 body.pdf-exporting > *:not(.pdf-exporter-root) {
   display: none !important;

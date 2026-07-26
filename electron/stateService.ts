@@ -25,11 +25,11 @@ const DEFAULT_APP_STATE: AppState = {
     searchQueryCaseSensitive: false,
     isPreviewMode: false,
     viewStyle: 'modern',
-    viewFontSize: 'm',
-    viewSpacing: 'cozy',
+    viewFontSize: 16,
+    viewSpacing: 1.6,
     editorStyle: 'syne',
-    editorFontSize: 'm',
-    editorSpacing: 'cozy',
+    editorFontSize: 16,
+    editorSpacing: 1.6,
     editorGlyphPaddingPx: 1,
     borderRadiusRegularPx: 6,
     highlightGridOutlineColor: '#00000022',
@@ -139,18 +139,36 @@ function sanitizeViewStyle(input: unknown): (typeof VALID_VIEW_STYLES)[number] {
   return DEFAULT_APP_STATE.menu!.viewStyle ?? 'modern';
 }
 
-function sanitizeEditorFontSize(input: unknown): 'xs' | 's' | 'm' | 'l' | 'xl' {
-  if (input === 'xs' || input === 's' || input === 'm' || input === 'l' || input === 'xl') {
-    return input;
+// Font size / line-height used to be discrete keys ('xs'..'xl',
+// 'tight'..'wide'); app-state files saved before the continuous sliders may
+// still have those strings, so a legacy key still resolves to its old
+// numeric equivalent instead of silently falling back to the default.
+const LEGACY_FONT_SIZE_PX_BY_KEY: Record<string, number> = { xs: 12, s: 14, m: 16, l: 18, xl: 20 };
+const LEGACY_LINE_HEIGHT_MULTIPLIER_BY_KEY: Record<string, number> = { tight: 1.2, compact: 1.4, cozy: 1.6, wide: 1.8 };
+
+const EDITOR_FONT_SIZE_MIN_PX = 6;
+const EDITOR_FONT_SIZE_MAX_PX = 24;
+const EDITOR_LINE_HEIGHT_MULTIPLIER_MIN = 0.8;
+const EDITOR_LINE_HEIGHT_MULTIPLIER_MAX = 2;
+
+function sanitizeFontSizePx(input: unknown): number {
+  if (typeof input === 'number' && Number.isFinite(input)) {
+    return Math.max(EDITOR_FONT_SIZE_MIN_PX, Math.min(EDITOR_FONT_SIZE_MAX_PX, Math.round(input * 2) / 2));
   }
-  return DEFAULT_APP_STATE.menu!.editorFontSize ?? 'm';
+  if (typeof input === 'string' && input in LEGACY_FONT_SIZE_PX_BY_KEY) {
+    return LEGACY_FONT_SIZE_PX_BY_KEY[input]!;
+  }
+  return DEFAULT_APP_STATE.menu!.editorFontSize ?? 16;
 }
 
-function sanitizeEditorSpacing(input: unknown): 'tight' | 'compact' | 'cozy' | 'wide' {
-  if (input === 'tight' || input === 'compact' || input === 'cozy' || input === 'wide') {
-    return input;
+function sanitizeLineHeightMultiplier(input: unknown): number {
+  if (typeof input === 'number' && Number.isFinite(input)) {
+    return Math.max(EDITOR_LINE_HEIGHT_MULTIPLIER_MIN, Math.min(EDITOR_LINE_HEIGHT_MULTIPLIER_MAX, Math.round(input * 20) / 20));
   }
-  return DEFAULT_APP_STATE.menu!.editorSpacing ?? 'cozy';
+  if (typeof input === 'string' && input in LEGACY_LINE_HEIGHT_MULTIPLIER_BY_KEY) {
+    return LEGACY_LINE_HEIGHT_MULTIPLIER_BY_KEY[input]!;
+  }
+  return DEFAULT_APP_STATE.menu!.editorSpacing ?? 1.6;
 }
 
 function sanitizeRatio(input: unknown, fallback: number): number {
@@ -288,11 +306,11 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     documentFindCaseSensitive: Boolean(input?.documentFindCaseSensitive),
     isPreviewMode: Boolean(input?.isPreviewMode),
     viewStyle: sanitizeViewStyle(input?.viewStyle),
-    viewFontSize: sanitizeEditorFontSize(input?.viewFontSize),
-    viewSpacing: sanitizeEditorSpacing(input?.viewSpacing),
+    viewFontSize: sanitizeFontSizePx(input?.viewFontSize),
+    viewSpacing: sanitizeLineHeightMultiplier(input?.viewSpacing),
     editorStyle: sanitizeEditorStyle(input?.editorStyle),
-    editorFontSize: sanitizeEditorFontSize(input?.editorFontSize),
-    editorSpacing: sanitizeEditorSpacing(input?.editorSpacing),
+    editorFontSize: sanitizeFontSizePx(input?.editorFontSize),
+    editorSpacing: sanitizeLineHeightMultiplier(input?.editorSpacing),
     editorGlyphPaddingPx: sanitizeHalfStepInRange(
       input?.editorGlyphPaddingPx,
       0,

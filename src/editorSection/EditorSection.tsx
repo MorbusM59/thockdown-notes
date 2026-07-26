@@ -49,9 +49,6 @@ type ViewStyleKey =
   | 'faunaone'
   | 'fredericka'
   | 'bubblerone'
-type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
-type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
-
 export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   'sectionId' | 'markSectionActive' | 'activeNoteId' | 'isPreviewMode' | 'previewedSnapshotId' | 'bindings' | 'adapterRef' | 'sectionContainerRef'
   | 'editorDisplayText' | 'activeNoteHasDebugTag' | 'isPreviewingSnapshot' | 'isCaretSuspended' | 'previewTextureRef'
@@ -102,8 +99,8 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
 
   editorRuntimeMetrics: EditorRuntimeMetrics
   viewStyle: ViewStyleKey
-  viewFontSize: ViewSizeKey
-  viewSpacing: ViewSpacingKey
+  viewFontSize: number
+  viewSpacing: number
 
   isLeftmostSection: boolean
   canCreateSection: boolean

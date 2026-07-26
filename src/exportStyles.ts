@@ -11,8 +11,18 @@ export type ExportViewStyle =
   | 'faunaone'
   | 'fredericka'
   | 'bubblerone'
-export type ExportFontSize = 'xs' | 's' | 'm' | 'l' | 'xl'
-export type ExportSpacing = 'tight' | 'compact' | 'cozy' | 'wide'
+export type ExportFontSize = number
+export type ExportSpacing = number
+
+// Edge padding around the preview scales with line-height looseness.
+// Anchored at the old "cozy" default (1.6 multiplier -> 18px) since that's
+// the value most existing notes were tuned against; --preview-edge-padding
+// used to jump between four hand-picked values (9/12/18/24px for
+// tight/compact/cozy/wide) that didn't fit a clean formula, so this is a
+// smooth approximation rather than a reproduction of those exact steps.
+export function resolvePreviewEdgePaddingPx(lineHeightMultiplier: number): number {
+  return 11.25 * lineHeightMultiplier
+}
 
 interface ExportStyleTokens {
   bodyBackground: string
@@ -494,12 +504,15 @@ async function buildExportFontFaceCss(): Promise<string> {
 
 function createPreviewMeasurementNode(viewStyle: ExportViewStyle, viewFontSize: ExportFontSize, viewSpacing: ExportSpacing): HTMLElement {
   const node = document.createElement('div')
-  node.className = `markdown-preview style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`
+  node.className = `markdown-preview style-${viewStyle}`
   node.style.position = 'absolute'
   node.style.visibility = 'hidden'
   node.style.left = '-99999px'
   node.style.top = '-99999px'
   node.style.pointerEvents = 'none'
+  node.style.fontSize = `${viewFontSize}px`
+  node.style.lineHeight = `${viewSpacing}`
+  node.style.setProperty('--preview-edge-padding', `${resolvePreviewEdgePaddingPx(viewSpacing)}px`)
   node.innerHTML = `
     <h1>preview</h1>
     <h2>preview</h2>

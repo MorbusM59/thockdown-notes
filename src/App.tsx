@@ -6,7 +6,7 @@ import ReactMarkdown from 'react-markdown'
 import { SidebarOptionsPanel } from './sidebar/SidebarOptionsPanel'
 import { AudioControls } from './components/AudioControls'
 import './App.css'
-import { buildExportCss, type ExportViewStyle, type ExportFontSize, type ExportSpacing } from './exportStyles'
+import { buildExportCss, type ExportViewStyle } from './exportStyles'
 import {
   DEFAULT_TYPING_SOUND_SET,
   typingSoundManager,
@@ -63,16 +63,20 @@ import { computeSectionWidthsForCloseFlexAware, computeSectionWidthsForNewSectio
 import type { TextureCacheRequest } from './shared/textures'
 import {
   DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
-  DEFAULT_EDITOR_FONT_SIZE,
-  DEFAULT_EDITOR_SPACING,
+  DEFAULT_EDITOR_FONT_SIZE_PX,
+  DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER,
   DEFAULT_EDITOR_STYLE,
   EDITOR_GLYPH_PADDING_MIN_PX,
   EDITOR_GLYPH_PADDING_MAX_PX,
+  EDITOR_FONT_SIZE_MIN_PX,
+  EDITOR_FONT_SIZE_MAX_PX,
+  EDITOR_LINE_HEIGHT_MULTIPLIER_MIN,
+  EDITOR_LINE_HEIGHT_MULTIPLIER_MAX,
   roundEditorGlyphPaddingPx,
+  roundEditorFontSizePx,
+  roundLineHeightMultiplier,
   resolveEditorFontFamily,
   resolveEditorRuntimeMetrics,
-  type EditorFontSizeKey,
-  type EditorSpacingKey,
   type EditorStyleKey,
 } from './editor/EditorTypography'
 import { getActiveSectionHandle, type SectionHandle } from './editorSection/sectionRegistry'
@@ -205,9 +209,6 @@ type ViewStyleKey =
   | 'faunaone'
   | 'fredericka'
   | 'bubblerone'
-type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
-type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
-
 type EditorTextColorTargetKey = 'editorEditText' | 'editorRenderText'
 
 type HsvaControlKey = 'h' | 's' | 'v' | 'a'
@@ -522,6 +523,33 @@ function mergeNoteSummaries(previous: NoteSummary[], next: NoteSummary[]): NoteS
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
+}
+
+// Font size/line-height used to be discrete keys ('xs'..'xl',
+// 'tight'..'wide'); persisted app-state files from before the continuous
+// sliders may still have those strings. Map them to their old numeric
+// equivalent so a settings file saved yesterday doesn't silently reset.
+const LEGACY_FONT_SIZE_PX_BY_KEY: Record<string, number> = { xs: 12, s: 14, m: 16, l: 18, xl: 20 }
+const LEGACY_LINE_HEIGHT_MULTIPLIER_BY_KEY: Record<string, number> = { tight: 1.2, compact: 1.4, cozy: 1.6, wide: 1.8 }
+
+function resolvePersistedFontSizePx(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX)
+  }
+  if (typeof value === 'string' && value in LEGACY_FONT_SIZE_PX_BY_KEY) {
+    return LEGACY_FONT_SIZE_PX_BY_KEY[value]!
+  }
+  return fallback
+}
+
+function resolvePersistedLineHeightMultiplier(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return clamp(roundLineHeightMultiplier(value), EDITOR_LINE_HEIGHT_MULTIPLIER_MIN, EDITOR_LINE_HEIGHT_MULTIPLIER_MAX)
+  }
+  if (typeof value === 'string' && value in LEGACY_LINE_HEIGHT_MULTIPLIER_BY_KEY) {
+    return LEGACY_LINE_HEIGHT_MULTIPLIER_BY_KEY[value]!
+  }
+  return fallback
 }
 
 // Border/box-shadow tokens can reference other custom properties (e.g.
@@ -1578,11 +1606,11 @@ function App() {
   const [windowIsCollapsed, setWindowIsCollapsed] = useState(false)
   const [windowModeTransitionOverlayNonce, setWindowModeTransitionOverlayNonce] = useState(0)
   const [viewStyle, setViewStyle] = useState<ViewStyleKey>('calibrilight')
-  const [viewFontSize, setViewFontSize] = useState<ViewSizeKey>('m')
-  const [viewSpacing, setViewSpacing] = useState<ViewSpacingKey>('cozy')
+  const [viewFontSize, setViewFontSize] = useState<number>(DEFAULT_EDITOR_FONT_SIZE_PX)
+  const [viewSpacing, setViewSpacing] = useState<number>(DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER)
   const [editorStyle, setEditorStyle] = useState<EditorStyleKey>(DEFAULT_EDITOR_STYLE)
-  const [editorFontSize, setEditorFontSize] = useState<EditorFontSizeKey>(DEFAULT_EDITOR_FONT_SIZE)
-  const [editorSpacing, setEditorSpacing] = useState<EditorSpacingKey>(DEFAULT_EDITOR_SPACING)
+  const [editorFontSize, setEditorFontSize] = useState<number>(DEFAULT_EDITOR_FONT_SIZE_PX)
+  const [editorSpacing, setEditorSpacing] = useState<number>(DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER)
   const [editorGlyphPaddingPx, setEditorGlyphPaddingPx] = useState<number>(DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX)
   const [borderRadiusRegularPx, setBorderRadiusRegularPx] = useState<number>(DEFAULT_BORDER_RADIUS_REGULAR_PX)
   const [spacingRegularPx, setSpacingRegularPx] = useState<number>(DEFAULT_SPACING_REGULAR_PX)
@@ -4089,11 +4117,11 @@ function App() {
   const buildExportHtmlContent = useCallback(async () => {
     const section = getActiveSection()
     const currentEditorText = normalizeInternalText(section?.latestEditorTextRef.current || section?.activeNoteText || '')
-    const exportCss = await buildExportCss(viewStyle as ExportViewStyle, viewFontSize as ExportFontSize, viewSpacing as ExportSpacing)
+    const exportCss = await buildExportCss(viewStyle as ExportViewStyle, viewFontSize, viewSpacing)
 
     const markdownHtml = renderToStaticMarkup(
       <div className="pdf-exporter-page">
-        <div className={`pdf-exporter-markdown-preview markdown-preview style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}>
+        <div className={`pdf-exporter-markdown-preview markdown-preview style-${viewStyle}`}>
           <ReactMarkdown
             remarkPlugins={PREVIEW_MARKDOWN_REMARK_PLUGINS}
             rehypePlugins={[createPreviewNoteAnchorMarkerRehypePlugin()]}
@@ -4562,11 +4590,11 @@ ${markdownHtml}
             setRestoredDocumentFindCaseSensitive(appState.menu.documentFindCaseSensitive ?? false)
             getActiveSection()?.setIsPreviewMode(appState.menu.isPreviewMode ?? false)
             setViewStyle(appState.menu.viewStyle ?? 'calibrilight')
-            setViewFontSize(appState.menu.viewFontSize ?? 'm')
-            setViewSpacing(appState.menu.viewSpacing ?? 'cozy')
+            setViewFontSize(resolvePersistedFontSizePx(appState.menu.viewFontSize, DEFAULT_EDITOR_FONT_SIZE_PX))
+            setViewSpacing(resolvePersistedLineHeightMultiplier(appState.menu.viewSpacing, DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER))
             setEditorStyle(appState.menu.editorStyle ?? DEFAULT_EDITOR_STYLE)
-            setEditorFontSize(appState.menu.editorFontSize ?? DEFAULT_EDITOR_FONT_SIZE)
-            setEditorSpacing(appState.menu.editorSpacing ?? DEFAULT_EDITOR_SPACING)
+            setEditorFontSize(resolvePersistedFontSizePx(appState.menu.editorFontSize, DEFAULT_EDITOR_FONT_SIZE_PX))
+            setEditorSpacing(resolvePersistedLineHeightMultiplier(appState.menu.editorSpacing, DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER))
             setEditorGlyphPaddingPx(
               clamp(
                 roundEditorGlyphPaddingPx(appState.menu.editorGlyphPaddingPx ?? DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX),

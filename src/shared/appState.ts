@@ -38,8 +38,8 @@ export interface PersistedMenuState {
     | 'faunaone'
     | 'fredericka'
     | 'bubblerone';
-  viewFontSize?: 'xs' | 's' | 'm' | 'l' | 'xl';
-  viewSpacing?: 'tight' | 'compact' | 'cozy' | 'wide';
+  viewFontSize?: number;
+  viewSpacing?: number;
   editorStyle?:
     | 'syne'
     | 'redhat'
@@ -53,8 +53,8 @@ export interface PersistedMenuState {
     | 'novamono'
     | 'sharetech'
     | 'courierprime';
-  editorFontSize?: 'xs' | 's' | 'm' | 'l' | 'xl';
-  editorSpacing?: 'tight' | 'compact' | 'cozy' | 'wide';
+  editorFontSize?: number;
+  editorSpacing?: number;
   editorGlyphPaddingPx?: number;
   borderRadiusRegularPx?: number;
   spacingRegularPx?: number;

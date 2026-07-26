@@ -23,9 +23,6 @@ type ViewStyleKey =
   | 'faunaone'
   | 'fredericka'
   | 'bubblerone'
-type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
-type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
-
 const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28
 const SCROLL_TRACK_EDGE_GAP_PX = 3
 const PREVIEW_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER
@@ -45,8 +42,8 @@ export interface UsePreviewScrollbarOptions {
   activeNoteId: string | null
   currentEditorText: string
   viewStyle: ViewStyleKey
-  viewFontSize: ViewSizeKey
-  viewSpacing: ViewSpacingKey
+  viewFontSize: number
+  viewSpacing: number
 }
 
 /**

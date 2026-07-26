@@ -33,14 +33,18 @@ import {
   EDITOR_GLYPH_PADDING_STEP_PX,
   roundEditorGlyphPaddingPx,
   DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
-  DEFAULT_EDITOR_FONT_SIZE,
-  DEFAULT_EDITOR_SPACING,
+  EDITOR_FONT_SIZE_MIN_PX,
+  EDITOR_FONT_SIZE_MAX_PX,
+  EDITOR_FONT_SIZE_STEP_PX,
+  DEFAULT_EDITOR_FONT_SIZE_PX,
+  EDITOR_LINE_HEIGHT_MULTIPLIER_MIN,
+  EDITOR_LINE_HEIGHT_MULTIPLIER_MAX,
+  EDITOR_LINE_HEIGHT_MULTIPLIER_STEP,
+  DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER,
+  roundEditorFontSizePx,
+  roundLineHeightMultiplier,
   EDITOR_STYLE_OPTIONS,
-  EDITOR_FONT_SIZE_OPTIONS,
-  EDITOR_SPACING_OPTIONS,
   type EditorStyleKey,
-  type EditorFontSizeKey,
-  type EditorSpacingKey,
 } from '../editor/EditorTypography'
 import { RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX } from '../editor/NonQuantizedSmoothScroll'
 import {
@@ -76,8 +80,6 @@ type ViewStyleKey =
   | 'faunaone'
   | 'fredericka'
   | 'bubblerone'
-type ViewSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl'
-type ViewSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide'
 type EditorTextColorTargetKey = 'editorEditText' | 'editorRenderText'
 type HsvaControlKey = 'h' | 's' | 'v' | 'a'
 type TextureControlKey = 'granularity' | 'smoothness'
@@ -124,21 +126,6 @@ const VIEW_STYLE_OPTIONS: Array<{ key: ViewStyleKey; label: string; family: stri
   { key: 'faunaone', label: 'Fauna One', family: "'Fauna One', Georgia, serif" },
   { key: 'fredericka', label: 'Fredericka', family: "'Fredericka the Great', 'Comic Sans MS', cursive" },
   { key: 'bubblerone', label: 'Bubbler One', family: "'Bubbler One', 'Segoe UI', sans-serif" },
-]
-
-const VIEW_FONT_SIZE_OPTIONS: Array<{ key: ViewSizeKey; label: string }> = [
-  { key: 'xs', label: 'XS' },
-  { key: 's', label: 'S' },
-  { key: 'm', label: 'M' },
-  { key: 'l', label: 'L' },
-  { key: 'xl', label: 'XL' },
-]
-
-const VIEW_SPACING_OPTIONS: Array<{ key: ViewSpacingKey; label: string }> = [
-  { key: 'tight', label: 'Tight' },
-  { key: 'compact', label: 'Compact' },
-  { key: 'cozy', label: 'Cozy' },
-  { key: 'wide', label: 'Wide' },
 ]
 
 const BOX_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['background', 'grid', 'gridOutline', 'topBackground', 'bottomBackground']
@@ -256,16 +243,16 @@ export interface SidebarOptionsPanelProps {
 
   viewStyle: ViewStyleKey
   setViewStyle: (key: ViewStyleKey) => void
-  viewFontSize: ViewSizeKey
-  setViewFontSize: (key: ViewSizeKey) => void
-  viewSpacing: ViewSpacingKey
-  setViewSpacing: (key: ViewSpacingKey) => void
+  viewFontSize: number
+  setViewFontSize: (px: number) => void
+  viewSpacing: number
+  setViewSpacing: (multiplier: number) => void
   editorStyle: EditorStyleKey
   setEditorStyle: (key: EditorStyleKey) => void
-  editorFontSize: EditorFontSizeKey
-  setEditorFontSize: (key: EditorFontSizeKey) => void
-  editorSpacing: EditorSpacingKey
-  setEditorSpacing: (key: EditorSpacingKey) => void
+  editorFontSize: number
+  setEditorFontSize: (px: number) => void
+  editorSpacing: number
+  setEditorSpacing: (multiplier: number) => void
   scheduleFocusEditorInEditMode: () => void
 
   factoryPresetEntriesForCurrentMode: UiLoadoutEntry[]
@@ -718,33 +705,31 @@ export function SidebarOptionsPanel({
             <div className="typography-slider">
               <CompactScrollbarSlider
                 id="typography-font-size"
-                min={0}
-                max={VIEW_FONT_SIZE_OPTIONS.length - 1}
-                step={1}
-                value={VIEW_FONT_SIZE_OPTIONS.findIndex((option) => option.key === viewFontSize)}
+                min={EDITOR_FONT_SIZE_MIN_PX}
+                max={EDITOR_FONT_SIZE_MAX_PX}
+                step={EDITOR_FONT_SIZE_STEP_PX}
+                value={viewFontSize}
                 trackLabel="size"
                 ariaLabel="Render font size"
-                defaultValue={VIEW_FONT_SIZE_OPTIONS.findIndex((option) => option.key === 'm')}
-                onCommit={(value) => {
-                  const index = Math.max(0, Math.min(VIEW_FONT_SIZE_OPTIONS.length - 1, Math.round(value)))
-                  setViewFontSize(VIEW_FONT_SIZE_OPTIONS[index]!.key)
-                }}
+                defaultValue={DEFAULT_EDITOR_FONT_SIZE_PX}
+                onCommit={(value) => setViewFontSize(
+                  clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX),
+                )}
               />
             </div>
             <div className="typography-slider">
               <CompactScrollbarSlider
                 id="typography-spacing"
-                min={0}
-                max={VIEW_SPACING_OPTIONS.length - 1}
-                step={1}
-                value={VIEW_SPACING_OPTIONS.findIndex((option) => option.key === viewSpacing)}
-                trackLabel="spacing"
-                ariaLabel="Render spacing"
-                defaultValue={VIEW_SPACING_OPTIONS.findIndex((option) => option.key === 'cozy')}
-                onCommit={(value) => {
-                  const index = Math.max(0, Math.min(VIEW_SPACING_OPTIONS.length - 1, Math.round(value)))
-                  setViewSpacing(VIEW_SPACING_OPTIONS[index]!.key)
-                }}
+                min={EDITOR_LINE_HEIGHT_MULTIPLIER_MIN}
+                max={EDITOR_LINE_HEIGHT_MULTIPLIER_MAX}
+                step={EDITOR_LINE_HEIGHT_MULTIPLIER_STEP}
+                value={viewSpacing}
+                trackLabel="line-height"
+                ariaLabel="Render line height"
+                defaultValue={DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER}
+                onCommit={(value) => setViewSpacing(
+                  clamp(roundLineHeightMultiplier(value), EDITOR_LINE_HEIGHT_MULTIPLIER_MIN, EDITOR_LINE_HEIGHT_MULTIPLIER_MAX),
+                )}
               />
             </div>
           </div>
@@ -774,16 +759,39 @@ export function SidebarOptionsPanel({
             <div className="typography-slider">
               <CompactScrollbarSlider
                 id="typography-font-size"
-                min={0}
-                max={EDITOR_FONT_SIZE_OPTIONS.length - 1}
-                step={1}
-                value={EDITOR_FONT_SIZE_OPTIONS.findIndex((option) => option.key === editorFontSize)}
+                min={EDITOR_FONT_SIZE_MIN_PX}
+                max={EDITOR_FONT_SIZE_MAX_PX}
+                step={EDITOR_FONT_SIZE_STEP_PX}
+                value={editorFontSize}
                 trackLabel="size"
                 ariaLabel="Editor font size"
-                defaultValue={EDITOR_FONT_SIZE_OPTIONS.findIndex((option) => option.key === DEFAULT_EDITOR_FONT_SIZE)}
+                defaultValue={DEFAULT_EDITOR_FONT_SIZE_PX}
                 onCommit={(value) => {
-                  const index = Math.max(0, Math.min(EDITOR_FONT_SIZE_OPTIONS.length - 1, Math.round(value)))
-                  setEditorFontSize(EDITOR_FONT_SIZE_OPTIONS[index]!.key)
+                  setEditorFontSize(
+                    clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX),
+                  )
+                  scheduleFocusEditorInEditMode()
+                }}
+              />
+            </div>
+            <div className="typography-slider">
+              <CompactScrollbarSlider
+                id="editor-glyph-padding"
+                min={EDITOR_GLYPH_PADDING_MIN_PX}
+                max={EDITOR_GLYPH_PADDING_MAX_PX}
+                step={EDITOR_GLYPH_PADDING_STEP_PX}
+                value={editorGlyphPaddingPx}
+                trackLabel="x-box"
+                ariaLabel="Editor glyph box horizontal padding in pixels"
+                defaultValue={DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX}
+                onCommit={(value) => {
+                  setEditorGlyphPaddingPx(
+                    clamp(
+                      roundEditorGlyphPaddingPx(value),
+                      EDITOR_GLYPH_PADDING_MIN_PX,
+                      EDITOR_GLYPH_PADDING_MAX_PX,
+                    ),
+                  )
                   scheduleFocusEditorInEditMode()
                 }}
               />
@@ -791,16 +799,17 @@ export function SidebarOptionsPanel({
             <div className="typography-slider">
               <CompactScrollbarSlider
                 id="typography-spacing"
-                min={0}
-                max={EDITOR_SPACING_OPTIONS.length - 1}
-                step={1}
-                value={EDITOR_SPACING_OPTIONS.findIndex((option) => option.key === editorSpacing)}
-                trackLabel="spacing"
+                min={EDITOR_LINE_HEIGHT_MULTIPLIER_MIN}
+                max={EDITOR_LINE_HEIGHT_MULTIPLIER_MAX}
+                step={EDITOR_LINE_HEIGHT_MULTIPLIER_STEP}
+                value={editorSpacing}
+                trackLabel="y-box"
                 ariaLabel="Editor spacing"
-                defaultValue={EDITOR_SPACING_OPTIONS.findIndex((option) => option.key === DEFAULT_EDITOR_SPACING)}
+                defaultValue={DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER}
                 onCommit={(value) => {
-                  const index = Math.max(0, Math.min(EDITOR_SPACING_OPTIONS.length - 1, Math.round(value)))
-                  setEditorSpacing(EDITOR_SPACING_OPTIONS[index]!.key)
+                  setEditorSpacing(
+                    clamp(roundLineHeightMultiplier(value), EDITOR_LINE_HEIGHT_MULTIPLIER_MIN, EDITOR_LINE_HEIGHT_MULTIPLIER_MAX),
+                  )
                   scheduleFocusEditorInEditMode()
                 }}
               />
@@ -1356,23 +1365,6 @@ export function SidebarOptionsPanel({
                 Math.round(value),
                 SPACING_REGULAR_MIN_PX,
                 SPACING_REGULAR_MAX_PX,
-              ),
-            )}
-          />
-          <CompactScrollbarSlider
-            id="editor-glyph-padding"
-            min={EDITOR_GLYPH_PADDING_MIN_PX}
-            max={EDITOR_GLYPH_PADDING_MAX_PX}
-            step={EDITOR_GLYPH_PADDING_STEP_PX}
-            value={editorGlyphPaddingPx}
-            trackLabel="padding"
-            ariaLabel="Editor glyph side padding in pixels"
-            defaultValue={DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX}
-            onCommit={(value) => setEditorGlyphPaddingPx(
-              clamp(
-                roundEditorGlyphPaddingPx(value),
-                EDITOR_GLYPH_PADDING_MIN_PX,
-                EDITOR_GLYPH_PADDING_MAX_PX,
               ),
             )}
           />

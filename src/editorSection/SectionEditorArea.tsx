@@ -7,6 +7,7 @@ import { getEmptyStateSceneMaskUrl } from '../editor/EmptyStateScene'
 import type { EditorAdapter, EditorBindings } from '../editor/EditorContract'
 import type { EditorRuntimeMetrics } from '../editor/EditorTypography'
 import type { UseNoteSnapshotsResult } from '../editor/useNoteSnapshots'
+import { resolvePreviewEdgePaddingPx } from '../exportStyles'
 
 export interface SectionEditorAreaProps {
   sectionId: string
@@ -32,8 +33,8 @@ export interface SectionEditorAreaProps {
   previewScrollRef: RefObject<HTMLDivElement>
   handlePreviewScroll: () => void
   viewStyle: string
-  viewFontSize: string
-  viewSpacing: string
+  viewFontSize: number
+  viewSpacing: number
   highlightSearchColor: string
   spellCheckRenderEnabled: boolean
   blockPreviewEditMutation: (event: { preventDefault: () => void }) => void
@@ -182,8 +183,13 @@ export function SectionEditorArea({
               <div
                 ref={previewScrollRef}
                 onScroll={handlePreviewScroll}
-                className={`markdown-preview thockdown-custom-scrollbar style-${viewStyle} size-${viewFontSize} spacing-${viewSpacing}`}
-                style={{ '--search-hit-color': highlightSearchColor } as CSSProperties}
+                className={`markdown-preview thockdown-custom-scrollbar style-${viewStyle}`}
+                style={{
+                  '--search-hit-color': highlightSearchColor,
+                  '--preview-edge-padding': `${resolvePreviewEdgePaddingPx(viewSpacing)}px`,
+                  fontSize: viewFontSize,
+                  lineHeight: viewSpacing,
+                } as CSSProperties}
                 contentEditable={spellCheckRenderEnabled}
                 suppressContentEditableWarning={spellCheckRenderEnabled}
                 spellCheck={spellCheckRenderEnabled}

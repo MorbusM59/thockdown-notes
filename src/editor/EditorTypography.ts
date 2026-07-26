@@ -11,8 +11,6 @@ export type EditorStyleKey =
   | 'novamono'
   | 'sharetech'
   | 'courierprime';
-export type EditorFontSizeKey = 'xs' | 's' | 'm' | 'l' | 'xl';
-export type EditorSpacingKey = 'tight' | 'compact' | 'cozy' | 'wide';
 
 export type EditorRuntimeMetrics = {
   fontSizePx: number;
@@ -22,8 +20,6 @@ export type EditorRuntimeMetrics = {
 };
 
 export const DEFAULT_EDITOR_STYLE: EditorStyleKey = 'sharetech';
-export const DEFAULT_EDITOR_FONT_SIZE: EditorFontSizeKey = 'm';
-export const DEFAULT_EDITOR_SPACING: EditorSpacingKey = 'cozy';
 
 export const EDITOR_STYLE_OPTIONS: Array<{ key: EditorStyleKey; label: string; family: string }> = [
   { key: 'syne', label: 'Syne', family: "'Syne Mono', 'Menlo', 'Monaco', monospace" },
@@ -40,20 +36,28 @@ export const EDITOR_STYLE_OPTIONS: Array<{ key: EditorStyleKey; label: string; f
   { key: 'courierprime', label: 'Courier Prime', family: "'Courier Prime', 'Menlo', 'Monaco', monospace" },
 ];
 
-export const EDITOR_FONT_SIZE_OPTIONS: Array<{ key: EditorFontSizeKey; label: string; px: number }> = [
-  { key: 'xs', label: 'XS', px: 12 },
-  { key: 's', label: 'S', px: 14 },
-  { key: 'm', label: 'M', px: 16 },
-  { key: 'l', label: 'L', px: 18 },
-  { key: 'xl', label: 'XL', px: 20 },
-];
+export const EDITOR_FONT_SIZE_MIN_PX = 6;
+export const EDITOR_FONT_SIZE_MAX_PX = 24;
+export const EDITOR_FONT_SIZE_STEP_PX = 0.5;
+export const DEFAULT_EDITOR_FONT_SIZE_PX = 16;
 
-export const EDITOR_SPACING_OPTIONS: Array<{ key: EditorSpacingKey; label: string; multiplier: number }> = [
-  { key: 'tight', label: 'Tight', multiplier: 1.2 },
-  { key: 'compact', label: 'Compact', multiplier: 1.4 },
-  { key: 'cozy', label: 'Cozy', multiplier: 1.6 },
-  { key: 'wide', label: 'Wide', multiplier: 1.8 },
-];
+export const EDITOR_LINE_HEIGHT_MULTIPLIER_MIN = 0.8;
+export const EDITOR_LINE_HEIGHT_MULTIPLIER_MAX = 2;
+export const EDITOR_LINE_HEIGHT_MULTIPLIER_STEP = 0.05;
+export const DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER = 1.6;
+
+export function roundEditorFontSizePx(value: number): number {
+  // *2/2 rather than dividing by the 0.5 step: both are exact powers of two
+  // in IEEE754, but this mirrors roundLineHeightMultiplier's shape.
+  return Math.round(value * 2) / 2;
+}
+
+export function roundLineHeightMultiplier(value: number): number {
+  // 1/0.05 = 20: multiplying by the clean integer first (rather than
+  // dividing by 0.05, which isn't exactly representable) keeps this from
+  // accumulating float noise like 1.6000000000000001.
+  return Math.round(value * 20) / 20;
+}
 
 export const DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX = 1;
 export const EDITOR_GLYPH_PADDING_MIN_PX = 0;
@@ -68,28 +72,11 @@ export function roundEditorGlyphPaddingPx(value: number): number {
   return Math.round(value * 2) / 2;
 }
 
-const FONT_SIZE_PX_BY_KEY: Record<EditorFontSizeKey, number> = {
-  xs: 12,
-  s: 14,
-  m: 16,
-  l: 18,
-  xl: 20,
-};
-
-const SPACING_MULTIPLIER_BY_KEY: Record<EditorSpacingKey, number> = {
-  tight: 1.2,
-  compact: 1.4,
-  cozy: 1.6,
-  wide: 1.8,
-};
-
-const FALLBACK_CELL_WIDTH_PX_BY_SIZE: Record<EditorFontSizeKey, number> = {
-  xs: 8,
-  s: 9,
-  m: 10,
-  l: 11,
-  xl: 13,
-};
+// Ratio of a monospace glyph's advance width to its font size, e.g. 10px
+// glyph width at 16px font size. Only used as a fallback when the canvas
+// measurement below is unavailable -- close enough across the font list
+// that a single ratio (rather than a per-size table) is fine here.
+const FALLBACK_GLYPH_WIDTH_RATIO = 0.625;
 
 const FONT_FAMILY_BY_STYLE: Record<EditorStyleKey, string> = {
   syne: "'Syne Mono', 'Menlo', 'Monaco', monospace",
@@ -142,20 +129,24 @@ function measureMonospaceGlyphWidthPx(fontFamily: string, fontSizePx: number): n
 
 export function resolveEditorRuntimeMetrics(
   style: EditorStyleKey,
-  fontSize: EditorFontSizeKey,
-  spacing: EditorSpacingKey,
+  fontSizePxInput: number = DEFAULT_EDITOR_FONT_SIZE_PX,
+  lineHeightMultiplierInput: number = DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER,
   glyphSideGapPx: number = DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
 ): EditorRuntimeMetrics {
-  const fontSizePx = FONT_SIZE_PX_BY_KEY[fontSize] ?? FONT_SIZE_PX_BY_KEY[DEFAULT_EDITOR_FONT_SIZE];
-  const spacingMultiplier = SPACING_MULTIPLIER_BY_KEY[spacing] ?? SPACING_MULTIPLIER_BY_KEY[DEFAULT_EDITOR_SPACING];
+  const fontSizePx = Math.max(
+    EDITOR_FONT_SIZE_MIN_PX,
+    Math.min(EDITOR_FONT_SIZE_MAX_PX, roundEditorFontSizePx(fontSizePxInput)),
+  );
+  const spacingMultiplier = Math.max(
+    EDITOR_LINE_HEIGHT_MULTIPLIER_MIN,
+    Math.min(EDITOR_LINE_HEIGHT_MULTIPLIER_MAX, roundLineHeightMultiplier(lineHeightMultiplierInput)),
+  );
   const lineHeightPx = Math.max(1, Math.round(fontSizePx * spacingMultiplier));
   const safeGlyphSideGapPx = Math.max(
     MIN_EDITOR_GLYPH_SIDE_GAP_PX,
     Math.min(MAX_EDITOR_GLYPH_SIDE_GAP_PX, roundEditorGlyphPaddingPx(glyphSideGapPx)),
   );
-  const fallbackCellWidthPx =
-    FALLBACK_CELL_WIDTH_PX_BY_SIZE[fontSize] ?? FALLBACK_CELL_WIDTH_PX_BY_SIZE[DEFAULT_EDITOR_FONT_SIZE];
-  const fallbackGlyphWidthPx = Math.max(1, fallbackCellWidthPx - (safeGlyphSideGapPx * 2));
+  const fallbackGlyphWidthPx = Math.max(1, fontSizePx * FALLBACK_GLYPH_WIDTH_RATIO);
   const fontFamily = resolveEditorFontFamily(style);
   const measuredGlyphWidthPx = measureMonospaceGlyphWidthPx(fontFamily, fontSizePx);
   const glyphWidthPx = Math.max(1, measuredGlyphWidthPx ?? fallbackGlyphWidthPx);
