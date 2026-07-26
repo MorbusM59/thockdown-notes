@@ -6,6 +6,36 @@
   position: relative;
   width:    100%;
   height:   100%;
+  /* True alpha fade at the scroll edges: masking the container itself
+     (rather than the individual texture/text layers inside it) fades
+     whatever is actually painted there -- code block backgrounds, table
+     fills, images, the tiled texture -- down to real transparency, so the
+     flat editor background always shows through correctly underneath. A
+     painted-on gradient bar matching a single background color (the old
+     approach) breaks the instant any of those layers don't match that
+     color. The mask is anchored to this element's own box, not to the
+     scrolled content of .markdown-preview inside it, so the fade stays
+     pinned to the visible top/bottom edges regardless of scroll position. */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--preview-edge-fade-size),
+    #000 calc(100% - var(--preview-edge-fade-size)),
+    transparent 100%
+  );
+  -webkit-mask-repeat:   no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size:     100% 100%;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--preview-edge-fade-size),
+    #000 calc(100% - var(--preview-edge-fade-size)),
+    transparent 100%
+  );
+  mask-repeat:   no-repeat;
+  mask-position: center;
+  mask-size:     100% 100%;
 }
 
 .markdown-preview-texture {
@@ -43,6 +73,7 @@
   /* Local tokens scoped to the render container */
   --preview-edge-padding:        18px;
   --preview-edge-fade-color:     var(--color-background-light);
+  --preview-edge-fade-size:      4px;
   --preview-code-font:           'Red Hat Mono', 'Syne Mono', 'Menlo', 'Monaco', monospace;
   --preview-inline-code-size:    0.95em;
   --preview-inline-code-padding: 0.08em 0.35em;

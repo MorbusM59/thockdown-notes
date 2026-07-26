@@ -324,24 +324,6 @@
   border-radius: calc(var(--border-radius-regular) *6);
 }
 
-/* Preview mode edge fades */
-.editor-stage.is-preview-mode::before,
-.editor-stage.is-preview-mode::after {
-  content:        '';
-  position:       absolute;
-  left:           1px;
-  right:          1px;
-  height:         4px;
-  pointer-events: none;
-  z-index:        3;
-}
-
-.editor-stage.is-preview-mode::before {
-  top:        0;
-  background: linear-gradient(to bottom, var(--preview-edge-fade-color, var(--color-background-light)), transparent);
-}
-
-.editor-stage.is-preview-mode::after {
-  bottom:     0;
-  background: linear-gradient(to top, var(--preview-edge-fade-color, var(--color-background-light)), transparent);
-}
+/* Preview mode edge fades: see .render-container's mask-image in
+   markdown.css for the true-alpha replacement of this old color-matched
+   overlay. */
