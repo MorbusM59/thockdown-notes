@@ -40,6 +40,7 @@ export interface PersistedMenuState {
     | 'bubblerone';
   viewFontSize?: number;
   viewSpacing?: number;
+  viewLetterSpacingEm?: number;
   editorStyle?:
     | 'syne'
     | 'redhat'

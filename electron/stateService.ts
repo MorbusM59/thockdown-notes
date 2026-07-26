@@ -27,6 +27,7 @@ const DEFAULT_APP_STATE: AppState = {
     viewStyle: 'modern',
     viewFontSize: 16,
     viewSpacing: 1.6,
+    viewLetterSpacingEm: 0,
     editorStyle: 'syne',
     editorFontSize: 16,
     editorSpacing: 1.6,
@@ -149,7 +150,7 @@ const LEGACY_LINE_HEIGHT_MULTIPLIER_BY_KEY: Record<string, number> = { tight: 1.
 const EDITOR_FONT_SIZE_MIN_PX = 6;
 const EDITOR_FONT_SIZE_MAX_PX = 24;
 const EDITOR_LINE_HEIGHT_MULTIPLIER_MIN = 0.8;
-const EDITOR_LINE_HEIGHT_MULTIPLIER_MAX = 2;
+const EDITOR_LINE_HEIGHT_MULTIPLIER_MAX = 3;
 
 function sanitizeFontSizePx(input: unknown): number {
   if (typeof input === 'number' && Number.isFinite(input)) {
@@ -169,6 +170,16 @@ function sanitizeLineHeightMultiplier(input: unknown): number {
     return LEGACY_LINE_HEIGHT_MULTIPLIER_BY_KEY[input]!;
   }
   return DEFAULT_APP_STATE.menu!.editorSpacing ?? 1.6;
+}
+
+const VIEW_LETTER_SPACING_MIN_EM = 0;
+const VIEW_LETTER_SPACING_MAX_EM = 0.5;
+
+function sanitizeViewLetterSpacingEm(input: unknown): number {
+  if (typeof input === 'number' && Number.isFinite(input)) {
+    return Math.max(VIEW_LETTER_SPACING_MIN_EM, Math.min(VIEW_LETTER_SPACING_MAX_EM, Math.round(input * 100) / 100));
+  }
+  return DEFAULT_APP_STATE.menu!.viewLetterSpacingEm ?? 0;
 }
 
 function sanitizeRatio(input: unknown, fallback: number): number {
@@ -308,13 +319,14 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     viewStyle: sanitizeViewStyle(input?.viewStyle),
     viewFontSize: sanitizeFontSizePx(input?.viewFontSize),
     viewSpacing: sanitizeLineHeightMultiplier(input?.viewSpacing),
+    viewLetterSpacingEm: sanitizeViewLetterSpacingEm(input?.viewLetterSpacingEm),
     editorStyle: sanitizeEditorStyle(input?.editorStyle),
     editorFontSize: sanitizeFontSizePx(input?.editorFontSize),
     editorSpacing: sanitizeLineHeightMultiplier(input?.editorSpacing),
     editorGlyphPaddingPx: sanitizeHalfStepInRange(
       input?.editorGlyphPaddingPx,
       0,
-      12,
+      4,
       DEFAULT_APP_STATE.menu!.editorGlyphPaddingPx ?? 1,
     ),
     borderRadiusRegularPx: sanitizeIntegerInRange(

@@ -35,6 +35,7 @@ export interface SectionEditorAreaProps {
   viewStyle: string
   viewFontSize: number
   viewSpacing: number
+  viewLetterSpacingEm: number
   highlightSearchColor: string
   spellCheckRenderEnabled: boolean
   blockPreviewEditMutation: (event: { preventDefault: () => void }) => void
@@ -91,6 +92,7 @@ export function SectionEditorArea({
   viewStyle,
   viewFontSize,
   viewSpacing,
+  viewLetterSpacingEm,
   highlightSearchColor,
   spellCheckRenderEnabled,
   blockPreviewEditMutation,
@@ -189,6 +191,7 @@ export function SectionEditorArea({
                   '--preview-edge-padding': `${resolvePreviewEdgePaddingPx(viewSpacing)}px`,
                   fontSize: viewFontSize,
                   lineHeight: viewSpacing,
+                  letterSpacing: `${viewLetterSpacingEm}em`,
                 } as CSSProperties}
                 contentEditable={spellCheckRenderEnabled}
                 suppressContentEditableWarning={spellCheckRenderEnabled}

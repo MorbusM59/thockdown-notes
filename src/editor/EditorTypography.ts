@@ -42,7 +42,7 @@ export const EDITOR_FONT_SIZE_STEP_PX = 0.5;
 export const DEFAULT_EDITOR_FONT_SIZE_PX = 16;
 
 export const EDITOR_LINE_HEIGHT_MULTIPLIER_MIN = 0.8;
-export const EDITOR_LINE_HEIGHT_MULTIPLIER_MAX = 2;
+export const EDITOR_LINE_HEIGHT_MULTIPLIER_MAX = 3;
 export const EDITOR_LINE_HEIGHT_MULTIPLIER_STEP = 0.05;
 export const DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER = 1.6;
 
@@ -61,15 +61,28 @@ export function roundLineHeightMultiplier(value: number): number {
 
 export const DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX = 1;
 export const EDITOR_GLYPH_PADDING_MIN_PX = 0;
-export const EDITOR_GLYPH_PADDING_MAX_PX = 12;
+export const EDITOR_GLYPH_PADDING_MAX_PX = 4;
 export const EDITOR_GLYPH_PADDING_STEP_PX = 0.5;
 const MIN_EDITOR_GLYPH_SIDE_GAP_PX = 0;
-const MAX_EDITOR_GLYPH_SIDE_GAP_PX = 12;
+const MAX_EDITOR_GLYPH_SIDE_GAP_PX = 4;
 
 // Padding steps in 0.5px increments: 0.5 widens the box by 1px total
 // (0.5px added to each side of the glyph).
 export function roundEditorGlyphPaddingPx(value: number): number {
   return Math.round(value * 2) / 2;
+}
+
+// View/preview mode only -- plain CSS letter-spacing, no box-grid concept
+// involved (unlike the editor's x-box padding).
+export const VIEW_LETTER_SPACING_MIN_EM = 0;
+export const VIEW_LETTER_SPACING_MAX_EM = 0.5;
+export const VIEW_LETTER_SPACING_STEP_EM = 0.01;
+export const DEFAULT_VIEW_LETTER_SPACING_EM = 0;
+
+export function roundViewLetterSpacingEm(value: number): number {
+  // 1/0.01 = 100: see roundLineHeightMultiplier's comment on why the clean
+  // integer multiply comes first.
+  return Math.round(value * 100) / 100;
 }
 
 // Ratio of a monospace glyph's advance width to its font size, e.g. 10px

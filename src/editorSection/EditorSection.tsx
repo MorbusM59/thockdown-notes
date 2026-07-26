@@ -101,6 +101,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   viewStyle: ViewStyleKey
   viewFontSize: number
   viewSpacing: number
+  viewLetterSpacingEm: number
 
   isLeftmostSection: boolean
   canCreateSection: boolean
@@ -171,6 +172,7 @@ export function EditorSection({
   viewStyle,
   viewFontSize,
   viewSpacing,
+  viewLetterSpacingEm,
   editorStageRef,
   editorFontFamily,
   editorFontLoadVersion,
@@ -757,6 +759,7 @@ export function EditorSection({
     viewStyle,
     viewFontSize,
     viewSpacing,
+    viewLetterSpacingEm,
   })
 
   const {
@@ -1203,6 +1206,7 @@ export function EditorSection({
         viewStyle={viewStyle}
         viewFontSize={viewFontSize}
         viewSpacing={viewSpacing}
+        viewLetterSpacingEm={viewLetterSpacingEm}
         highlightSearchColor={highlightSearchColor}
         spellCheckRenderEnabled={spellCheckRenderEnabled}
         blockPreviewEditMutation={blockPreviewEditMutation}

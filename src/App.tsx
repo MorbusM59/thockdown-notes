@@ -72,9 +72,13 @@ import {
   EDITOR_FONT_SIZE_MAX_PX,
   EDITOR_LINE_HEIGHT_MULTIPLIER_MIN,
   EDITOR_LINE_HEIGHT_MULTIPLIER_MAX,
+  VIEW_LETTER_SPACING_MIN_EM,
+  VIEW_LETTER_SPACING_MAX_EM,
+  DEFAULT_VIEW_LETTER_SPACING_EM,
   roundEditorGlyphPaddingPx,
   roundEditorFontSizePx,
   roundLineHeightMultiplier,
+  roundViewLetterSpacingEm,
   resolveEditorFontFamily,
   resolveEditorRuntimeMetrics,
   type EditorStyleKey,
@@ -552,6 +556,13 @@ function resolvePersistedLineHeightMultiplier(value: unknown, fallback: number):
   return fallback
 }
 
+function resolvePersistedViewLetterSpacingEm(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return clamp(roundViewLetterSpacingEm(value), VIEW_LETTER_SPACING_MIN_EM, VIEW_LETTER_SPACING_MAX_EM)
+  }
+  return fallback
+}
+
 // Border/box-shadow tokens can reference other custom properties (e.g.
 // `--btn-shadow-active` embeds `var(--color-shadow-white)`), and
 // getComputedStyle().getPropertyValue() returns custom properties verbatim,
@@ -828,11 +839,6 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     : 'none'
 
   return {
-    editorGlyphPaddingPx: clamp(
-      roundEditorGlyphPaddingPx(toFiniteNumber(source.editorGlyphPaddingPx, DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX)),
-      EDITOR_GLYPH_PADDING_MIN_PX,
-      EDITOR_GLYPH_PADDING_MAX_PX,
-    ),
     borderRadiusRegularPx: clamp(
       Math.round(toFiniteNumber(source.borderRadiusRegularPx, DEFAULT_BORDER_RADIUS_REGULAR_PX)),
       BORDER_RADIUS_REGULAR_MIN_PX,
@@ -1608,6 +1614,7 @@ function App() {
   const [viewStyle, setViewStyle] = useState<ViewStyleKey>('calibrilight')
   const [viewFontSize, setViewFontSize] = useState<number>(DEFAULT_EDITOR_FONT_SIZE_PX)
   const [viewSpacing, setViewSpacing] = useState<number>(DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER)
+  const [viewLetterSpacingEm, setViewLetterSpacingEm] = useState<number>(DEFAULT_VIEW_LETTER_SPACING_EM)
   const [editorStyle, setEditorStyle] = useState<EditorStyleKey>(DEFAULT_EDITOR_STYLE)
   const [editorFontSize, setEditorFontSize] = useState<number>(DEFAULT_EDITOR_FONT_SIZE_PX)
   const [editorSpacing, setEditorSpacing] = useState<number>(DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER)
@@ -2193,7 +2200,6 @@ function App() {
 
   const captureUiLayoutLoadout = useCallback((): UiLayoutLoadout => {
     return {
-      editorGlyphPaddingPx,
       borderRadiusRegularPx,
       spacingRegularPx,
       borderAlphaPercent,
@@ -2252,7 +2258,6 @@ function App() {
       textureMaterials: cloneTextureMaterials(textureMaterials),
     }
   }, [
-    editorGlyphPaddingPx,
     borderRadiusRegularPx,
     spacingRegularPx,
     borderAlphaPercent,
@@ -2287,13 +2292,6 @@ function App() {
 
   const applyUiLayoutLoadout = useCallback((loadoutInput: unknown) => {
     const loadout = normalizeUiLoadoutForSignature(loadoutInput)
-    setEditorGlyphPaddingPx(
-      clamp(
-        roundEditorGlyphPaddingPx(loadout.editorGlyphPaddingPx),
-        EDITOR_GLYPH_PADDING_MIN_PX,
-        EDITOR_GLYPH_PADDING_MAX_PX,
-      ),
-    )
     setBorderRadiusRegularPx(
       clamp(
         Math.round(loadout.borderRadiusRegularPx),
@@ -3095,6 +3093,7 @@ function App() {
       viewStyle,
       viewFontSize,
       viewSpacing,
+      viewLetterSpacingEm,
       editorStyle,
       editorFontSize,
       editorSpacing,
@@ -3229,6 +3228,7 @@ function App() {
     isSidebarVisible,
     viewFontSize,
     viewSpacing,
+    viewLetterSpacingEm,
     viewStyle,
   ])
 
@@ -4117,7 +4117,7 @@ function App() {
   const buildExportHtmlContent = useCallback(async () => {
     const section = getActiveSection()
     const currentEditorText = normalizeInternalText(section?.latestEditorTextRef.current || section?.activeNoteText || '')
-    const exportCss = await buildExportCss(viewStyle as ExportViewStyle, viewFontSize, viewSpacing)
+    const exportCss = await buildExportCss(viewStyle as ExportViewStyle, viewFontSize, viewSpacing, viewLetterSpacingEm)
 
     const markdownHtml = renderToStaticMarkup(
       <div className="pdf-exporter-page">
@@ -4145,7 +4145,7 @@ function App() {
 ${markdownHtml}
 </body>
 </html>`
-  }, [getActiveSection, viewFontSize, viewSpacing, viewStyle])
+  }, [getActiveSection, viewFontSize, viewSpacing, viewLetterSpacingEm, viewStyle])
 
   const saveSelectedNoteState = useCallback(async (selectedNoteId: string | null) => {
     if (!window.thockdownState) return
@@ -4592,6 +4592,7 @@ ${markdownHtml}
             setViewStyle(appState.menu.viewStyle ?? 'calibrilight')
             setViewFontSize(resolvePersistedFontSizePx(appState.menu.viewFontSize, DEFAULT_EDITOR_FONT_SIZE_PX))
             setViewSpacing(resolvePersistedLineHeightMultiplier(appState.menu.viewSpacing, DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER))
+            setViewLetterSpacingEm(resolvePersistedViewLetterSpacingEm(appState.menu.viewLetterSpacingEm, DEFAULT_VIEW_LETTER_SPACING_EM))
             setEditorStyle(appState.menu.editorStyle ?? DEFAULT_EDITOR_STYLE)
             setEditorFontSize(resolvePersistedFontSizePx(appState.menu.editorFontSize, DEFAULT_EDITOR_FONT_SIZE_PX))
             setEditorSpacing(resolvePersistedLineHeightMultiplier(appState.menu.editorSpacing, DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER))
@@ -6866,6 +6867,8 @@ ${markdownHtml}
                         setViewFontSize={setViewFontSize}
                         viewSpacing={viewSpacing}
                         setViewSpacing={setViewSpacing}
+                        viewLetterSpacingEm={viewLetterSpacingEm}
+                        setViewLetterSpacingEm={setViewLetterSpacingEm}
                         editorStyle={editorStyle}
                         setEditorStyle={setEditorStyle}
                         editorFontSize={editorFontSize}
@@ -7381,6 +7384,7 @@ ${markdownHtml}
                   viewStyle={viewStyle}
                   viewFontSize={viewFontSize}
                   viewSpacing={viewSpacing}
+                  viewLetterSpacingEm={viewLetterSpacingEm}
                   editorStageRef={editorStageRef}
                   editorFontFamily={editorFontFamily}
                   editorFontLoadVersion={editorFontLoadVersion}

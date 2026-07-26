@@ -44,6 +44,7 @@ export interface UsePreviewScrollbarOptions {
   viewStyle: ViewStyleKey
   viewFontSize: number
   viewSpacing: number
+  viewLetterSpacingEm: number
 }
 
 /**
@@ -61,6 +62,7 @@ export function usePreviewScrollbar({
   viewStyle,
   viewFontSize,
   viewSpacing,
+  viewLetterSpacingEm,
 }: UsePreviewScrollbarOptions) {
   const previewTextureRef = useRef<HTMLDivElement>(null)
   const previewScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
@@ -160,7 +162,7 @@ export function usePreviewScrollbar({
   useEffect(() => {
     if (!isPreviewMode) return
     syncPreviewCustomScrollbar()
-  }, [isPreviewMode, syncPreviewCustomScrollbar, activeNoteId, currentEditorText, viewStyle, viewFontSize, viewSpacing])
+  }, [isPreviewMode, syncPreviewCustomScrollbar, activeNoteId, currentEditorText, viewStyle, viewFontSize, viewSpacing, viewLetterSpacingEm])
 
   useEffect(() => {
     if (!isPreviewMode) return

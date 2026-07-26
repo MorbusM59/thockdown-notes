@@ -77,7 +77,6 @@ function buildPreset(overrides: UiLayoutLoadoutOverrides): UiLayoutLoadout {
 // A neutral, untextured, unfiltered baseline shared by both default-custom
 // loadouts. Dark mode's default-custom is this base with filterInvert = 1.
 export const NEUTRAL_BASE: UiLayoutLoadout = {
-  editorGlyphPaddingPx: 1,
   borderRadiusRegularPx: 6,
   spacingRegularPx: 4,
   borderAlphaPercent: 100,

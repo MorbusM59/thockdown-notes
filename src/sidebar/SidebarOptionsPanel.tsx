@@ -43,6 +43,11 @@ import {
   DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER,
   roundEditorFontSizePx,
   roundLineHeightMultiplier,
+  VIEW_LETTER_SPACING_MIN_EM,
+  VIEW_LETTER_SPACING_MAX_EM,
+  VIEW_LETTER_SPACING_STEP_EM,
+  DEFAULT_VIEW_LETTER_SPACING_EM,
+  roundViewLetterSpacingEm,
   EDITOR_STYLE_OPTIONS,
   type EditorStyleKey,
 } from '../editor/EditorTypography'
@@ -247,6 +252,8 @@ export interface SidebarOptionsPanelProps {
   setViewFontSize: (px: number) => void
   viewSpacing: number
   setViewSpacing: (multiplier: number) => void
+  viewLetterSpacingEm: number
+  setViewLetterSpacingEm: (em: number) => void
   editorStyle: EditorStyleKey
   setEditorStyle: (key: EditorStyleKey) => void
   editorFontSize: number
@@ -428,6 +435,8 @@ export function SidebarOptionsPanel({
   setViewFontSize,
   viewSpacing,
   setViewSpacing,
+  viewLetterSpacingEm,
+  setViewLetterSpacingEm,
   editorStyle,
   setEditorStyle,
   editorFontSize,
@@ -714,6 +723,21 @@ export function SidebarOptionsPanel({
                 defaultValue={DEFAULT_EDITOR_FONT_SIZE_PX}
                 onCommit={(value) => setViewFontSize(
                   clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX),
+                )}
+              />
+            </div>
+            <div className="typography-slider">
+              <CompactScrollbarSlider
+                id="view-letter-spacing"
+                min={VIEW_LETTER_SPACING_MIN_EM}
+                max={VIEW_LETTER_SPACING_MAX_EM}
+                step={VIEW_LETTER_SPACING_STEP_EM}
+                value={viewLetterSpacingEm}
+                trackLabel="letter-spacing"
+                ariaLabel="Render letter spacing in em"
+                defaultValue={DEFAULT_VIEW_LETTER_SPACING_EM}
+                onCommit={(value) => setViewLetterSpacingEm(
+                  clamp(roundViewLetterSpacingEm(value), VIEW_LETTER_SPACING_MIN_EM, VIEW_LETTER_SPACING_MAX_EM),
                 )}
               />
             </div>

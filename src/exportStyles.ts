@@ -502,7 +502,12 @@ async function buildExportFontFaceCss(): Promise<string> {
 `
 }
 
-function createPreviewMeasurementNode(viewStyle: ExportViewStyle, viewFontSize: ExportFontSize, viewSpacing: ExportSpacing): HTMLElement {
+function createPreviewMeasurementNode(
+  viewStyle: ExportViewStyle,
+  viewFontSize: ExportFontSize,
+  viewSpacing: ExportSpacing,
+  viewLetterSpacingEm: number,
+): HTMLElement {
   const node = document.createElement('div')
   node.className = `markdown-preview style-${viewStyle}`
   node.style.position = 'absolute'
@@ -512,6 +517,7 @@ function createPreviewMeasurementNode(viewStyle: ExportViewStyle, viewFontSize: 
   node.style.pointerEvents = 'none'
   node.style.fontSize = `${viewFontSize}px`
   node.style.lineHeight = `${viewSpacing}`
+  node.style.letterSpacing = `${viewLetterSpacingEm}em`
   node.style.setProperty('--preview-edge-padding', `${resolvePreviewEdgePaddingPx(viewSpacing)}px`)
   node.innerHTML = `
     <h1>preview</h1>
@@ -530,8 +536,9 @@ function resolveExportTokens(
   viewStyle: ExportViewStyle,
   viewFontSize: ExportFontSize,
   viewSpacing: ExportSpacing,
+  viewLetterSpacingEm: number,
 ): ExportStyleTokens {
-  const previewNode = createPreviewMeasurementNode(viewStyle, viewFontSize, viewSpacing)
+  const previewNode = createPreviewMeasurementNode(viewStyle, viewFontSize, viewSpacing, viewLetterSpacingEm)
   const computed = getComputedStyle(previewNode)
   const h1 = getComputedStyle(previewNode.querySelector('h1')!)
   const h2 = getComputedStyle(previewNode.querySelector('h2')!)
@@ -662,9 +669,10 @@ export async function buildExportCss(
   viewStyle: ExportViewStyle,
   viewFontSize: ExportFontSize,
   viewSpacing: ExportSpacing,
+  viewLetterSpacingEm: number,
 ): Promise<string> {
   const [tokens, fontFaceCss] = await Promise.all([
-    Promise.resolve(resolveExportTokens(viewStyle, viewFontSize, viewSpacing)),
+    Promise.resolve(resolveExportTokens(viewStyle, viewFontSize, viewSpacing, viewLetterSpacingEm)),
     buildExportFontFaceCss(),
   ])
 

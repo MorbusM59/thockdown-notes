@@ -14,7 +14,6 @@ export const LOADOUT_CHANNELS = {
 } as const;
 
 export type UiLayoutLoadout = {
-  editorGlyphPaddingPx: number;
   borderRadiusRegularPx: number;
   spacingRegularPx: number;
   borderAlphaPercent: number;
