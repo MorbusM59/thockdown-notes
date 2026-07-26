@@ -797,10 +797,10 @@ export function Editor({
           const h = Math.max(0, scrollerRef.current?.clientHeight ?? 0);
           const quantizedViewportHeight = quantizeViewportHeightToGrid(h, lineHeightPx);
 
-          let nextTopBoundary = typeof nextViewport.topBoundaryPx === 'number'
+          const nextTopBoundary = typeof nextViewport.topBoundaryPx === 'number'
           ? Math.max(0, Math.round(nextViewport.topBoundaryPx / lineHeightPx) * lineHeightPx)
           : topBoundary;
-        let nextBottomBoundary = typeof nextViewport.bottomBoundaryPx === 'number'
+        const nextBottomBoundary = typeof nextViewport.bottomBoundaryPx === 'number'
           ? Math.min(Math.max(0, Math.round(nextViewport.bottomBoundaryPx / lineHeightPx) * lineHeightPx), quantizedViewportHeight)
           : bottomBoundary;
 
@@ -889,7 +889,7 @@ export function Editor({
         adapterRef.current = null;
       }
     };
-  }, [adapterRef, buildViewport, buildViewportLines, topBoundary, bottomBoundary, topBoundaryLines, bottomBoundaryLines, lineHeightPx]);
+  }, [adapterRef, buildViewport, buildViewportLines, topBoundary, bottomBoundary, topBoundaryLines, bottomBoundaryLines, lineHeightPx, syncCustomScrollbar]);
 
   useLayoutEffect(() => {
     const updateSize = () => {
@@ -1000,6 +1000,14 @@ export function Editor({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
+    // Deliberately re-binds only on drag start/stop, not on every intra-drag
+    // boundary/bindings update -- those change on every mousemove via the
+    // setState calls above, and re-running this effect per pixel would tear
+    // down and re-attach the window listeners at 60fps. topBoundaryLines /
+    // bottomBoundaryLines / emitUserViewportChange are read fresh at the
+    // start of each drag gesture, which is accurate for the whole gesture
+    // since the untouched boundary and bindings don't change mid-drag.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDraggingTop, isDraggingBottom, lineHeightPx]);
 
   useEffect(() => {
@@ -1278,7 +1286,7 @@ export function Editor({
                       const selection = window.getSelection();
                       if (selection && !selection.isCollapsed) {
                         const range = selection.getRangeAt(0);
-                        const target = (document as any).caretRangeFromPoint?.(e.clientX, e.clientY);
+                        const target = document.caretRangeFromPoint?.(e.clientX, e.clientY);
                         if (target && range.isPointInRange(target.startContainer, target.startOffset)) {
                           selection.removeAllRanges();
                         }

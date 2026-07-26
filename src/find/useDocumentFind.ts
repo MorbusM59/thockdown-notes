@@ -68,7 +68,6 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
     // Deliberately only reacting to the restored value arriving, not every
     // render -- this is a one-time hand-off from persisted app state, not a
     // controlled prop.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialCaseSensitive])
 
   // In replace mode the same toggle is repurposed as "keep case" (VSCode's

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { resolveWordRange, resolvePairAwareRange, resolveScopeRange, isSameRange } from './ContractBridgePlugin';
-import type { SelectionScope } from './ContractBridgePlugin';
+import { resolveWordRange, resolvePairAwareRange, resolveScopeRange, isSameRange } from './ContractBridgeRangeUtils';
+import type { SelectionScope } from './ContractBridgeRangeUtils';
 
 describe('resolveWordRange pair-aware expansion', () => {
   it('selects text inside brackets when the regular word expansion includes the pair', () => {

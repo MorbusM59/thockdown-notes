@@ -97,7 +97,7 @@ export function usePreviewMarkdownRendering({
     } else {
       reset()
     }
-  }, [])
+  }, [previewScrollRef])
 
   // Resolves and follows a `$id`, `~anchor[#uid]`, or `$id~anchor[#uid]`
   // preview link. Broken destinations (unknown note ID, missing anchor) are
@@ -135,7 +135,7 @@ export function usePreviewMarkdownRendering({
     const currentText = latestEditorTextRef.current || activeNoteText
     if (!noteContainsAnchorDefinition(currentText, target.anchorName, target.anchorUid)) return
     scrollToAnchorInPreview(target.anchorName, target.anchorUid, false)
-  }, [notes, activeNoteId, activateNote, activeNoteText, scrollToAnchorInPreview, scrollPreviewToTop])
+  }, [notes, activeNoteId, activateNote, activeNoteText, scrollToAnchorInPreview, scrollPreviewToTop, latestEditorTextRef])
 
   const previewMarkdownComponents = useMemo(
     () => createPreviewMarkdownComponents(navigateToInternalPreviewLink),

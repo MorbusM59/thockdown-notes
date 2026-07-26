@@ -76,7 +76,6 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   externalNoteOriginalTextByIdRef: MutableRefObject<Map<string, string>>
   externalNoteOriginalHashByIdRef: MutableRefObject<Map<string, string>>
   activeNoteExternalPathRef: MutableRefObject<string | null>
-  currentExternalNoteHash: string | null
   setCurrentExternalNoteHash: Dispatch<SetStateAction<string | null>>
 
   queueAppStateSaveStable: (selectedNoteId: string | null) => void
@@ -152,7 +151,6 @@ export function EditorSection({
   externalNoteOriginalTextByIdRef,
   externalNoteOriginalHashByIdRef,
   activeNoteExternalPathRef,
-  currentExternalNoteHash,
   setCurrentExternalNoteHash,
   queueAppStateSaveStable,
   updateActiveNoteTitlePreviewStable,
@@ -640,7 +638,6 @@ export function EditorSection({
     activeNoteExternalPathRef,
     externalNoteOriginalTextByIdRef,
     externalNoteOriginalHashByIdRef,
-    currentExternalNoteHash,
     setCurrentExternalNoteHash,
   })
 
@@ -656,6 +653,10 @@ export function EditorSection({
 
   const currentEditorText = useMemo(() => {
     return normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+    // editorTextVersion isn't read here -- it's a version counter bumped
+    // alongside every latestEditorTextRef mutation, the only signal that
+    // tells this memo to recompute (ref writes aren't reactive on their own).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeNoteText, editorTextVersion, latestEditorTextRef])
 
   const {
@@ -1010,7 +1011,6 @@ export function EditorSection({
   // automatically re-render its parent (or the parent's other children,
   // like the global EditorToolbar). See App.tsx's reportSectionHandle for
   // the shallow-equality guard that keeps this from looping.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     reportSectionHandle(sectionId, currentSectionHandle)
   })

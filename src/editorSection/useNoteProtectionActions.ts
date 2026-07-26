@@ -37,7 +37,6 @@ export interface UseNoteProtectionActionsOptions {
   activeNoteExternalPathRef: MutableRefObject<string | null>
   externalNoteOriginalTextByIdRef: MutableRefObject<Map<string, string>>
   externalNoteOriginalHashByIdRef: MutableRefObject<Map<string, string>>
-  currentExternalNoteHash: string | null
   setCurrentExternalNoteHash: (updater: string | null | ((current: string | null) => string | null)) => void
 }
 
@@ -66,7 +65,6 @@ export function useNoteProtectionActions({
   activeNoteExternalPathRef,
   externalNoteOriginalTextByIdRef,
   externalNoteOriginalHashByIdRef,
-  currentExternalNoteHash,
   setCurrentExternalNoteHash,
 }: UseNoteProtectionActionsOptions) {
   const [primedNoteActionState, setPrimedNoteActionState] = useState<{ noteId: string; action: NotePrimedAction } | null>(null)
@@ -297,7 +295,18 @@ export function useNoteProtectionActions({
     } catch (error) {
       console.error('[external-note] failed to persist external note snapshots', { noteId, error })
     }
-  }, [activeNoteId, activeNoteText, notes])
+  }, [
+    activeNoteId,
+    activeNoteText,
+    notes,
+    activeNoteExternalPathRef,
+    externalNoteOriginalHashByIdRef,
+    externalNoteOriginalTextByIdRef,
+    latestEditorTextRef,
+    setActiveNoteText,
+    setCurrentExternalNoteHash,
+    setNotes,
+  ])
 
   const executePrimedNoteAction = useCallback(async (noteId: string, action: NotePrimedAction) => {
     if (!window.thockdownNotes) return
@@ -442,7 +451,7 @@ export function useNoteProtectionActions({
     }
 
     noteArmTimerRef.current = { noteId, button: 2, timeoutId, quickReleaseAction }
-  }, [activeNoteId, primedNoteActionState, clearNoteArmTimer, closeExternalNoteWithoutSaving, currentExternalNoteHash, notes, sidebarMode])
+  }, [clearNoteArmTimer, notes, sidebarMode])
 
 
   const handleNoteRightPressEnd = useCallback((noteId: string, event: MouseEvent<HTMLDivElement>) => {

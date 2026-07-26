@@ -116,7 +116,7 @@ export function SectionEditorArea({
   handleMergeAdjacentSnapshots,
 }: SectionEditorAreaProps) {
   const setStageEl = useCallback((el: HTMLDivElement | null) => {
-    ;(editorStageRef as MutableRefObject<HTMLDivElement | null>).current = el
+    (editorStageRef as MutableRefObject<HTMLDivElement | null>).current = el
     sectionContainerRef.current = el
   }, [editorStageRef, sectionContainerRef])
 

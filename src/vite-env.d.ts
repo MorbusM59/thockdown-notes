@@ -14,7 +14,7 @@ interface Window {
 		exportPdf: (folderPath: string, fileName: string, htmlContent?: string) => Promise<{ ok: boolean; path?: string; error?: string }>;
 	};
 	ipcRenderer?: {
-		invoke: <T = any>(channel: string, ...args: unknown[]) => Promise<T>;
+		invoke: <T = unknown>(channel: string, ...args: unknown[]) => Promise<T>;
 	};
 	windowControls?: {
 		minimize: () => void;

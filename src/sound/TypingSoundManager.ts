@@ -964,7 +964,8 @@ export class TypingSoundManager {
 
   private createAudioContext(): AudioContext {
     if (this.audioContext) return this.audioContext
-    const AudioContextConstructor = window.AudioContext || (window as any).webkitAudioContext
+    const AudioContextConstructor =
+      window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
     return new AudioContextConstructor()
   }
 

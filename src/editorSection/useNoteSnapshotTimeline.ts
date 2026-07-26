@@ -233,7 +233,7 @@ export function useNoteSnapshotTimeline({
     return () => {
       window.clearInterval(intervalId)
     }
-  }, [activeNoteId, activeNoteText, latestSnapshotContent, noteSnapshots.placements.length, refreshSnapshots, isPreviewingSnapshot, timelineTrackLengthPx])
+  }, [activeNoteId, activeNoteText, latestSnapshotContent, noteSnapshots.placements, refreshSnapshots, isPreviewingSnapshot, timelineTrackLengthPx, latestEditorTextRef])
 
   const handleReturnToPresent = useCallback(() => {
     if (previewedSnapshotId !== null) {

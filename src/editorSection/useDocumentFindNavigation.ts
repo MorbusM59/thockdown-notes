@@ -165,6 +165,7 @@ export function useDocumentFindNavigation({
     documentFindHits,
     effectiveCaseSensitive,
     syncPreviewCustomScrollbar,
+    previewScrollRef,
   ])
 
   const handleJumpToDocumentFindHit = useCallback((hit: DocumentFindHit) => {
@@ -185,7 +186,7 @@ export function useDocumentFindNavigation({
         isCollapsed: false,
       },
     })
-  }, [isPreviewMode, jumpToPreviewDocumentFindHit])
+  }, [isPreviewMode, jumpToPreviewDocumentFindHit, adapterRef])
 
   const replaceDocumentFindHit = useCallback((hit: DocumentFindHit) => {
     const sourceText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
@@ -210,7 +211,7 @@ export function useDocumentFindNavigation({
     const nextText = `${sourceText.slice(0, hit.index)}${replacementText}${sourceText.slice(hit.index + hit.matchLength)}`
     const replacementEnd = hit.index + replacementText.length
     applyProgrammaticEditorText(nextText, hit.index, replacementEnd)
-  }, [activeNoteText, applyProgrammaticEditorText, documentFindQuery, documentReplaceQuery, effectiveCaseSensitive, handleJumpToDocumentFindHit, isDocumentReplaceMode, preserveCase])
+  }, [activeNoteText, applyProgrammaticEditorText, documentFindQuery, documentReplaceQuery, effectiveCaseSensitive, handleJumpToDocumentFindHit, isDocumentReplaceMode, preserveCase, latestEditorTextRef])
 
   const replaceAllDocumentFindHits = useCallback(() => {
     const sourceText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
@@ -242,7 +243,7 @@ export function useDocumentFindNavigation({
     const firstHitStart = hits[0]?.index ?? 0
     const firstHitEnd = firstHitStart + firstReplacementLength
     applyProgrammaticEditorText(nextText, firstHitStart, firstHitEnd)
-  }, [activeNoteText, applyProgrammaticEditorText, documentFindQuery, documentReplaceQuery, effectiveCaseSensitive, isDocumentReplaceMode, preserveCase])
+  }, [activeNoteText, applyProgrammaticEditorText, documentFindQuery, documentReplaceQuery, effectiveCaseSensitive, isDocumentReplaceMode, preserveCase, latestEditorTextRef])
 
   return { handleJumpToDocumentFindHit, replaceDocumentFindHit, replaceAllDocumentFindHits }
 }

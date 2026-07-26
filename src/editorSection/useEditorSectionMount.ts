@@ -190,7 +190,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     queueSave,
     queueAppStateSave,
     updateActiveNoteTitlePreview,
-    writeDebugEntry,
     buildTextDecorationTransformRef,
     buildToggleCurrentLineHeadingTransformRef,
     buildToggleBulletedListTransformRef,
@@ -209,6 +208,14 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   const latestEditViewportTelemetryRef = useRef<EditViewportTelemetry | null>(null)
   const editUiStateSaveTimerRef = useRef<number | null>(null)
   const lastPersistedEditUiStateRef = useRef<{ noteId: string; progressEdit: number; cursorPos: number; scrollTop: number; sourceAnchorLine: number; sourceAnchorText: string | null } | null>(null)
+  // Mirrors `notes` for onTextChange's external-note bookkeeping (inside the
+  // `bindings` useMemo below), so a stale notes array can't be read between
+  // memo recreations without forcing bindings -- and the editor's lifecycle
+  // effects that key off its identity -- to rebuild on every notes update.
+  const notesRef = useRef<NoteSummary[]>(notes)
+  useEffect(() => {
+    notesRef.current = notes
+  }, [notes])
 
   const readCurrentEditUiPayload = useCallback((): { progressEdit: number; cursorPos: number; scrollTop: number; sourceAnchorLine: number; sourceAnchorText: string | null } | null => {
     const selection = latestEditorSelectionRef.current
@@ -260,7 +267,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       sourceAnchorLine,
       sourceAnchorText,
     }
-  }, [activeNoteText, lineHeightPx])
+  }, [activeNoteText, lineHeightPx, latestEditorSelectionRef, latestEditorTextRef])
 
   const updateEditModeSnapshotCache = useCallback((snapshot: EditRestoreSnapshot) => {
     editModeSnapshotByNoteIdRef.current.set(snapshot.noteId, snapshot)
@@ -312,7 +319,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     pendingEditRestoreSnapshotRef.current = snapshot
     updateEditModeSnapshotCache(snapshot)
     return snapshot
-  }, [updateEditModeSnapshotCache])
+  }, [updateEditModeSnapshotCache, latestEditorSelectionRef])
 
   const persistEditUiPayloadForNote = useCallback(async (
     noteId: string,
@@ -411,7 +418,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         selection,
       })
     })
-  }, [])
+  }, [latestEditorSelectionRef])
 
   const focusEditorInEditMode = useCallback((options?: { restoreSelection?: boolean }) => {
     if (isPreviewMode || !activeNoteId) return
@@ -557,6 +564,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     lineHeightPx,
     isPreviewMode,
     persistEditUiPayloadForNote,
+    readCurrentEditUiPayload,
   ])
 
   const applyEditRestoreSnapshot = useCallback((snapshot: EditRestoreSnapshot, options?: { restoreFullSelection?: boolean; focusAfterApply?: boolean; onComplete?: () => void }) => {
@@ -758,7 +766,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
 
       if (!activeNoteId || !persistenceReady || activeNoteHasDebugTagRef.current) return
 
-      const noteSummary = notes.find((note) => note.id === activeNoteId)
+      const noteSummary = notesRef.current.find((note) => note.id === activeNoteId)
       const isExternal = noteSummary ? isExternalNote(noteSummary) : false
       const isUserEditableSource =
         event.source === 'user-input' || event.source === 'history-undo' || event.source === 'history-redo'
@@ -1086,12 +1094,28 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     queueAppStateSave,
     updateActiveNoteTitlePreview,
     updateEditModeSnapshotCache,
-    writeDebugEntry,
+    activeNoteHasDebugTagRef,
+    buildTextDecorationTransformRef,
+    buildToggleBulletedListTransformRef,
+    buildToggleCurrentLineHeadingTransformRef,
+    buildToggleNumberedListTransformRef,
+    deriveTypingSoundKeyId,
+    externalNoteOriginalTextByIdRef,
+    isApplyingInitialViewportRef,
+    latestEditorSelectionRef,
+    latestEditorTextRef,
+    pendingViewportRestoreRef,
+    setActiveNoteText,
+    setEditorSelection,
+    setEditorTextVersion,
+    setNotes,
+    shouldPlayReverseTypingSound,
+    shouldPlayTypingSound,
   ])
 
   useEffect(() => {
     latestEditorSelectionRef.current = editorSelection
-  }, [editorSelection])
+  }, [editorSelection, latestEditorSelectionRef])
 
   useEffect(() => {
     if (!hasPreviewModeBaselineRef.current) {
@@ -1221,6 +1245,9 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     persistEditUiState,
     persistenceReady,
     updateEditModeSnapshotCache,
+    latestEditorSelectionRef,
+    latestEditorTextRef,
+    setIsCaretSuspended,
   ])
 
   const toggleRenderViewMode = useCallback(async () => {
@@ -1256,7 +1283,18 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       }
       return !previous
     })
-  }, [activeNoteId, activeNoteText, captureEditModeSnapshotForRenderView, lineHeightPx, isPreviewMode, persistRenderViewStateForNoteNow, updateEditModeSnapshotCache])
+  }, [
+    activeNoteId,
+    activeNoteText,
+    captureEditModeSnapshotForRenderView,
+    lineHeightPx,
+    isPreviewMode,
+    persistRenderViewStateForNoteNow,
+    updateEditModeSnapshotCache,
+    latestEditorTextRef,
+    setActiveNoteText,
+    setIsPreviewMode,
+  ])
 
   useEffect(() => {
     if (!persistenceReady || !activeNoteId) return
@@ -1288,7 +1326,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     return () => {
       cancelled = true
     }
-  }, [activeNoteId, activeNoteText, lineHeightPx, persistenceReady, updateEditModeSnapshotCache])
+  }, [activeNoteId, activeNoteText, lineHeightPx, persistenceReady, updateEditModeSnapshotCache, latestEditorTextRef])
 
   useEffect(() => {
     if (isPreviewMode) return
@@ -1371,6 +1409,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     isPreviewMode,
     persistenceReady,
     updateEditModeSnapshotCache,
+    latestEditorTextRef,
+    setIsCaretSuspended,
   ])
 
   useLayoutEffect(() => {
@@ -1487,7 +1527,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         previewScrollSaveTimerRef.current = null
       }
     }
-  }, [activeNoteId, isPreviewMode])
+  }, [activeNoteId, isPreviewMode, resolvePreviewSourceAnchorFromContainer])
   // The Editor only makes its content visible once something calls
   // adapter.applySnapshot({ viewportLines: ... }) on it (see Editor.tsx's
   // hasViewportLines gate). Normally that happens via the note-activation
@@ -1547,7 +1587,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       },
       { restoreFullSelection: Boolean(cached), focusAfterApply: false },
     )
-  }, [activeNoteId, applyEditRestoreSnapshot, previewedSnapshotId])
+  }, [activeNoteId, applyEditRestoreSnapshot, previewedSnapshotId, isFrozenSectionPreviewRef])
   const applyProgrammaticEditorText = useCallback((nextText: string, selectionStart?: number, selectionEnd?: number) => {
     if (activeNoteHasDebugTagRef.current) return
 
@@ -1581,7 +1621,16 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         })
       })
     }
-  }, [queueSave, updateActiveNoteTitlePreview])
+  }, [
+    queueSave,
+    updateActiveNoteTitlePreview,
+    activeNoteHasDebugTagRef,
+    latestEditorSelectionRef,
+    latestEditorTextRef,
+    setActiveNoteText,
+    setEditorSelection,
+    setEditorTextVersion,
+  ])
 
 
   const seedInitialViewport = useCallback((snapshot: EditRestoreSnapshot) => {
@@ -1625,7 +1674,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     }
 
     requestAnimationFrame(applyViewport)
-  }, [])
+  }, [isApplyingInitialViewportRef, pendingViewportRestoreRef])
 
   return {
     adapterRef,

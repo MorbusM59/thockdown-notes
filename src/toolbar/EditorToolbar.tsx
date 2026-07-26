@@ -12,7 +12,7 @@ export interface EditorToolbarProps extends UseMarkdownFormattingToolbarResult {
   setSpellCheckEditEnabled: (updater: (previous: boolean) => boolean) => void
   queueAppStateSave: (selectedNoteId: string | null) => void
   handleExportPdf: () => void | Promise<void>
-  chooseExportFolder: () => Promise<void>
+  chooseExportFolder: () => Promise<string | null>
   isExportingPdf: boolean
   handleExportMd: (forceChooseFolder?: boolean) => Promise<void>
   isExportingMd: boolean

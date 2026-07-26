@@ -430,7 +430,6 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     // Deliberately only reacting to the restored value arriving, not every
     // render -- this is a one-time hand-off from persisted app state, not a
     // controlled prop.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialTabBarMode])
 
   const [pinnedTabs, setPinnedTabs] = useState<NoteTabEntry[]>([])

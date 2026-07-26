@@ -8,7 +8,7 @@ type SerializedThockdownTokenNode = SerializedTextNode & {
   tokenData?: TokenData;
 };
 
-const sanitizeDataKey = (key: string) => key.replace(/[^a-zA-Z0-9_\-]/g, '');
+const sanitizeDataKey = (key: string) => key.replace(/[^a-zA-Z0-9_-]/g, '');
 
 const resolveTokenClassList = (tokenType: string, tokenClasses: string[]) => {
   if (tokenClasses.length > 0) {

@@ -1,6 +1,24 @@
+/* eslint-disable react-refresh/only-export-components -- this module exports
+   pure preview-markdown primitives (rehype plugins, link parsing, the
+   ReactMarkdown component-renderer factory) shared with the PDF/MD export
+   path; none of the top-level exports is itself a component, so there's
+   nothing here for Fast Refresh to preserve state across. */
 import type { ReactNode } from 'react'
+import type { Root } from 'hast'
 import { visit } from 'unist-util-visit'
 import remarkGfm from 'remark-gfm'
+
+// The rehype plugins below walk/splice hast trees generically across
+// root/element/text nodes without narrowing to hast's discriminated union,
+// so they share this loose structural shape instead of `any`.
+interface RehypeAstNode {
+  type: string
+  value?: string
+  tagName?: string
+  properties?: Record<string, unknown>
+  children?: RehypeAstNode[]
+  position?: { start?: { line?: number }; end?: { line?: number } }
+}
 
 function isSafePreviewHref(href: string | undefined): boolean {
   if (!href) return false
@@ -87,13 +105,13 @@ export function noteContainsAnchorDefinition(contentText: string, name: string, 
 // run first so search highlighting operates on the already-cleaned text.
 export function createPreviewNoteAnchorMarkerRehypePlugin() {
   return () => {
-    return (tree: any) => {
-      const transformNode = (node: any, parent: any, index: number | null) => {
+    return (tree: RehypeAstNode) => {
+      const transformNode = (node: RehypeAstNode, parent: RehypeAstNode | null, index: number | null) => {
         if (!node || typeof node !== 'object') return
 
         if (node.type === 'text' && typeof node.value === 'string' && node.value.includes('[~')) {
           const textValue = node.value
-          const replacements: any[] = []
+          const replacements: RehypeAstNode[] = []
           let cursor = 0
           NOTE_ANCHOR_DEFINITION_PATTERN.lastIndex = 0
           let match = NOTE_ANCHOR_DEFINITION_PATTERN.exec(textValue)
@@ -231,8 +249,8 @@ export function createPreviewSearchHighlightRehypePlugin(needle: string, isCaseS
   }
 
   return () => {
-    return (tree: any) => {
-      const transformNode = (node: any, parent: any, index: number | null) => {
+    return (tree: RehypeAstNode) => {
+      const transformNode = (node: RehypeAstNode, parent: RehypeAstNode | null, index: number | null) => {
         if (!node || typeof node !== 'object') return
 
         if (node.type === 'element') {
@@ -249,7 +267,7 @@ export function createPreviewSearchHighlightRehypePlugin(needle: string, isCaseS
           const needleLength = normalizedNeedle.length
 
           let cursor = 0
-          const replacements: any[] = []
+          const replacements: RehypeAstNode[] = []
           let matchIndex = haystack.indexOf(normalizedNeedle, cursor)
           while (matchIndex >= 0) {
             if (matchIndex > cursor) {
@@ -290,13 +308,13 @@ export function createPreviewSearchHighlightRehypePlugin(needle: string, isCaseS
 
 export function createPreviewSourceAnchorRehypePlugin() {
   return () => {
-    return (tree: any) => {
+    return (tree: Root) => {
       const sourceAnchorTags = new Set([
         'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
         'p', 'blockquote', 'pre', 'table', 'hr', 'li',
       ])
 
-      visit(tree, 'element', (node: any) => {
+      visit(tree, 'element', (node) => {
         if (typeof node.tagName !== 'string') return
         if (!sourceAnchorTags.has(node.tagName)) return
         const startLine = node.position?.start?.line

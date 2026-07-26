@@ -1,5 +1,5 @@
 import { app, BrowserWindow, Menu, ipcMain, dialog, protocol, shell } from 'electron'
-import type { Session } from 'electron'
+import type { Session, PrintToPDFOptions } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { existsSync, promises as fsPromises, readFileSync, writeFileSync } from 'node:fs'
@@ -648,7 +648,7 @@ function registerIpcHandlers() {
 
       exportWindow = await createHiddenExportWindow(htmlContent)
 
-      const pdfOpts: any = {
+      const pdfOpts: PrintToPDFOptions = {
         printBackground: true,
         pageSize: 'A4',
       }
@@ -657,9 +657,9 @@ function registerIpcHandlers() {
       await fsPromises.writeFile(outPath, data)
 
       return { ok: true, path: outPath }
-    } catch (error: any) {
+    } catch (error) {
       console.warn('[main] export-pdf failed', error)
-      return { ok: false, error: error?.message ?? String(error) }
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
     } finally {
       if (exportWindow && !exportWindow.isDestroyed()) {
         exportWindow.destroy()
@@ -681,9 +681,9 @@ function registerIpcHandlers() {
       const outPath = path.join(folderPath, sanitizeExportFileName(fileName))
       await fsPromises.copyFile(sourcePath, outPath)
       return { ok: true, path: outPath }
-    } catch (error: any) {
+    } catch (error) {
       console.warn('[main] export-md failed', error)
-      return { ok: false, error: error?.message ?? String(error) }
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
   })
 
@@ -1043,7 +1043,7 @@ async function createWindow() {
   }
   const savedWindowState = await stateService.loadWindowState();
   // Load persisted app state so we can set an appropriate initial minimum width
-  const savedAppState = await stateService.loadAppState().catch(() => ({} as any));
+  const savedAppState = await stateService.loadAppState().catch(() => null);
   const initialSidebarVisible = savedAppState?.menu?.isSidebarVisible ?? true;
   // Section count isn't known yet at this point -- the DB hasn't loaded in the
   // renderer -- so this starts at the default of 1 and the renderer corrects

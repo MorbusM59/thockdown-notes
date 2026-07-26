@@ -475,8 +475,13 @@ export function usePreviewScrollbar({
   }, [isPreviewMode, runPreviewContinuousScroll, previewScrollRef])
 
   useEffect(() => {
+    // Captured once per effect run -- previewPageKeysHeldRef.current is
+    // mutated in place (add/delete/clear), never reassigned, so this is the
+    // same Set instance the cleanup below still needs.
+    const pageKeysHeld = previewPageKeysHeldRef.current
+
     if (!isPreviewMode) {
-      previewPageKeysHeldRef.current.clear()
+      pageKeysHeld.clear()
       clearPreviewContinuousHandoff()
       stopPreviewContinuousScroll()
       return
@@ -499,7 +504,7 @@ export function usePreviewScrollbar({
 
       event.preventDefault()
       const direction: -1 | 1 = event.key === 'PageDown' ? 1 : -1
-      previewPageKeysHeldRef.current.add(event.key)
+      pageKeysHeld.add(event.key)
 
       if (event.repeat) {
         if (previewContinuousHandoffTimeoutRef.current === null) {
@@ -532,7 +537,7 @@ export function usePreviewScrollbar({
         previewContinuousHandoffTimeoutRef.current = window.setTimeout(() => {
           previewContinuousHandoffTimeoutRef.current = null
           if (!isPreviewMode) return
-          if (!previewPageKeysHeldRef.current.has(event.key)) return
+          if (!pageKeysHeld.has(event.key)) return
           startPreviewContinuousScroll(direction)
         }, delayMs)
       }
@@ -540,9 +545,9 @@ export function usePreviewScrollbar({
 
     const onWindowKeyUp = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'PageDown' || event.key === 'PageUp') {
-        previewPageKeysHeldRef.current.delete(event.key)
+        pageKeysHeld.delete(event.key)
         clearPreviewContinuousHandoff()
-        if (previewPageKeysHeldRef.current.size === 0) {
+        if (pageKeysHeld.size === 0) {
           const activeDirection = previewContinuousScrollDirectionRef.current
           if (activeDirection !== 0) {
             startPreviewReleaseRampDown(activeDirection)
@@ -554,7 +559,7 @@ export function usePreviewScrollbar({
     }
 
     const onWindowBlur = () => {
-      previewPageKeysHeldRef.current.clear()
+      pageKeysHeld.clear()
       clearPreviewContinuousHandoff()
       stopPreviewContinuousScroll()
     }
@@ -566,7 +571,7 @@ export function usePreviewScrollbar({
       window.removeEventListener('keydown', onWindowKeyDown)
       window.removeEventListener('keyup', onWindowKeyUp)
       window.removeEventListener('blur', onWindowBlur)
-      previewPageKeysHeldRef.current.clear()
+      pageKeysHeld.clear()
       clearPreviewContinuousHandoff()
       stopPreviewContinuousScroll()
     }

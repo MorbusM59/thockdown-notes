@@ -1842,7 +1842,15 @@ function App() {
 
       return next
     })
-  }, [getActiveSection, persistenceReady, sidebarMode])
+    // buildMenuStateSnapshot and runSidebarMenuTransition are declared later
+    // in this component (both via useCallback further down), so listing them
+    // here would throw a TDZ ReferenceError the moment this dependency array
+    // is evaluated during render -- referencing them inside the callback
+    // *body* is fine (that only runs on click/timeout, well after the
+    // component has finished its render pass and both are initialized), but
+    // the array itself is evaluated eagerly, before those consts exist.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [getActiveSection, persistenceReady, sidebarMode, lastSidebarModeBeforeOptions])
   const [renderScrollDynamic, setRenderScrollDynamic] = useState(() => getRenderScrollDynamic())
   const [renderScrollResponsiveness, setRenderScrollResponsiveness] = useState(() => getRenderScrollResponsiveness())
   const [renderScrollTotalTimeSec, setRenderScrollTotalTimeSec] = useState(() => getRenderScrollTotalTimeSec())
@@ -1915,7 +1923,7 @@ function App() {
   const tabBarModeRef = useRef<'tags' | 'tabs'>('tabs')
   const [restoredTabBarMode, setRestoredTabBarMode] = useState<'tags' | 'tabs' | null>(null)
 
-  const originalConsoleMethodsRef = useRef<Partial<Record<ConsoleMethodName, (...args: any[]) => void>>>({})
+  const originalConsoleMethodsRef = useRef<Partial<Record<ConsoleMethodName, (...args: unknown[]) => void>>>({})
   const isWritingDebugEntryRef = useRef(false)
   const debugNoteCreationPromiseRef = useRef<Promise<string | null> | null>(null)
   const externalNoteOriginalTextByIdRef = useRef<Map<string, string>>(new Map())
@@ -1945,6 +1953,10 @@ function App() {
 
   const editorRuntimeMetrics = useMemo(
     () => resolveEditorRuntimeMetrics(editorStyle, editorFontSize, editorSpacing, editorGlyphPaddingPx),
+    // editorFontLoadVersion isn't read here -- it's a counter bumped once a
+    // custom font finishes loading, the only signal that font metrics may
+    // have changed even though the style/size/spacing inputs above haven't.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [editorStyle, editorFontSize, editorSpacing, editorGlyphPaddingPx, editorFontLoadVersion],
   )
 
@@ -2385,7 +2397,7 @@ function App() {
       editorRenderText: loadout.editorTextColors.editorRenderText,
     })
     setTextureMaterials(cloneTextureMaterials(loadout.textureMaterials))
-  }, [])
+  }, [applyDarkModePreset])
 
   const capturedUiLayoutLoadout = useMemo(
     () => captureUiLayoutLoadout(),
@@ -3214,6 +3226,8 @@ function App() {
     renderScrollSkew,
     renderScrollTotalTimeSec,
     audioKeyVolume,
+    audioKeyVariance,
+    audioPitch,
     audioBassVolume,
     audioTrebleVolume,
     textureEnabled,
@@ -3230,6 +3244,8 @@ function App() {
     filterBrightness,
     filterContrast,
     filterSaturate,
+    filterColorize,
+    typingSoundSet,
     textureMaterials,
     highlightColors,
     editorTextColors,
@@ -3425,7 +3441,7 @@ function App() {
     return false
   }, [getActiveSection])
 
-  function runSidebarMenuTransition(nextMode: SidebarMode) {
+  const runSidebarMenuTransition = useCallback((nextMode: SidebarMode) => {
     if (nextMode === sidebarMode) {
       return
     }
@@ -3451,7 +3467,14 @@ function App() {
     requestAnimationFrame(() => {
       focusActiveNoteInSidebarMode(nextMode)
     })
-  }
+  }, [
+    sidebarMode,
+    captureSidebarModeState,
+    sidebarViewStateByMode,
+    restoreSidebarModeStateFrom,
+    persistMenuStateOnce,
+    focusActiveNoteInSidebarMode,
+  ])
 
   const toggleSidebarOptionsMenu = useCallback(() => {
     if (sidebarMode === 'options') {
@@ -3484,7 +3507,7 @@ function App() {
   }, [buildMenuStateSnapshot, getActiveSection, lastSidebarModeBeforeOptions, persistenceReady, runSidebarMenuTransition, sidebarMode])
 
   const handleWindowMinimize = useCallback(() => {
-    ;(window as any).windowControls?.minimize?.()
+    window.windowControls?.minimize?.()
   }, [])
 
   const handleWindowUtilityCollapseToggle = useCallback((event: MouseEvent<HTMLButtonElement>) => {
@@ -3521,11 +3544,11 @@ function App() {
   }, [windowControlsCollapsedWidthPx])
 
   const handleWindowToggleMaximize = useCallback(() => {
-    ;(window as any).windowControls?.toggleMaximize?.()
+    window.windowControls?.toggleMaximize?.()
   }, [])
 
   const handleWindowClose = useCallback(() => {
-    ;(window as any).windowControls?.close?.()
+    window.windowControls?.close?.()
   }, [])
 
   useEffect(() => {
@@ -3971,7 +3994,7 @@ function App() {
       console.error('Failed to create debug note', error)
       return null
     }
-  }, [persistenceReady])
+  }, [])
 
   const findExistingDebugNoteId = useCallback(async (): Promise<string | null> => {
     if (!window.thockdownNotes) return null
@@ -4087,7 +4110,7 @@ function App() {
         consoleMethods.forEach((method) => {
           const original = originalConsoleMethodsRef.current[method]
           if (original) {
-            console[method] = original as any
+            console[method] = original
           }
         })
         originalConsoleMethodsRef.current = {}
@@ -4099,7 +4122,7 @@ function App() {
       if (!originalConsoleMethodsRef.current[method]) {
         originalConsoleMethodsRef.current[method] = console[method].bind(console)
       }
-      console[method] = ((...args: any[]) => {
+      console[method] = (...args: unknown[]) => {
         const original = originalConsoleMethodsRef.current[method]
         if (original) {
           original(...args)
@@ -4117,14 +4140,14 @@ function App() {
           }
         })
         void writeDebugEntry(`console.${method}`, stringified)
-      }) as any
+      }
     })
 
     return () => {
       consoleMethods.forEach((method) => {
         const original = originalConsoleMethodsRef.current[method]
         if (original) {
-          console[method] = original as any
+          console[method] = original
         }
       })
       originalConsoleMethodsRef.current = {}
@@ -4156,7 +4179,7 @@ function App() {
     const exportApi = window.thockdownExport
     const selectExportFolder = exportApi
       ? exportApi.selectExportFolder
-      : () => window.ipcRenderer?.invoke('select-export-folder')
+      : () => window.ipcRenderer?.invoke<string | null>('select-export-folder')
 
     const folderPath = await selectExportFolder()
     if (!folderPath) return null
@@ -4510,7 +4533,7 @@ ${markdownHtml}
       return Boolean(note.hasUnsavedChanges)
     }
 
-    if (Boolean(note.hasUnsavedChanges)) {
+    if (note.hasUnsavedChanges) {
       return true
     }
 
@@ -4894,6 +4917,14 @@ ${markdownHtml}
         appStateSaveTimerRef.current = null
       }
     }
+    // Deliberately mount-once: this bootstraps the app exactly one time.
+    // getActiveSection changes identity on every active-section switch (it
+    // depends on activeSectionId) -- adding it here would re-run the entire
+    // bootstrap (re-fetch notes, re-init sections, etc.) on every note
+    // switch. applyDarkModePreset is only called from within bootstrap()
+    // itself using the freshly-loaded appState, not a value that needs to
+    // stay in sync with later renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Drains initialNoteIdBySectionIdRef (populated by the bootstrap effect
@@ -5526,7 +5557,7 @@ ${markdownHtml}
       const exportApi = window.thockdownExport
       const exportPdf = exportApi
         ? exportApi.exportPdf
-        : (folderPath: string, fileName: string, htmlContent?: string) => window.ipcRenderer?.invoke('export-pdf', folderPath, fileName, htmlContent)
+        : (folderPath: string, fileName: string, htmlContent?: string) => window.ipcRenderer?.invoke<{ ok: boolean; path?: string; error?: string }>('export-pdf', folderPath, fileName, htmlContent)
 
       const folderPath = exportFolder ?? await chooseExportFolder()
       if (!folderPath) return
@@ -5557,7 +5588,7 @@ ${markdownHtml}
       if (!folderPath) return
 
       const fileName = `${deriveNoteTitleFromText(getActiveSection()?.activeNoteText || '')}.md`
-      const result = await window.ipcRenderer?.invoke('export-md', activeNoteId, folderPath, fileName)
+      const result = await window.ipcRenderer?.invoke<{ ok: boolean; error?: string }>('export-md', activeNoteId, folderPath, fileName)
 
       if (!result?.ok) {
         console.error('Export MD failed', result?.error)
@@ -7465,7 +7496,6 @@ ${markdownHtml}
                   externalNoteOriginalTextByIdRef={externalNoteOriginalTextByIdRef}
                   externalNoteOriginalHashByIdRef={externalNoteOriginalHashByIdRef}
                   activeNoteExternalPathRef={activeNoteExternalPathRef}
-                  currentExternalNoteHash={currentExternalNoteHash}
                   setCurrentExternalNoteHash={setCurrentExternalNoteHash}
                   queueAppStateSaveStable={queueAppStateSaveStable}
                   updateActiveNoteTitlePreviewStable={updateActiveNoteTitlePreviewStable}

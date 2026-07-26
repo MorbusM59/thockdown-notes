@@ -1,3 +1,4 @@
+// eslint-disable-next-line no-control-regex -- these control characters are the intentional strip target, not a mistake
 const CONTROL_AND_INVISIBLE_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B-\u200F\u2060\uFEFF]/g;
 const VARIATION_SELECTORS = /[\uFE0E\uFE0F]/g;
 const EMOJI_PICTOGRAPHICS = /\p{Extended_Pictographic}/gu;

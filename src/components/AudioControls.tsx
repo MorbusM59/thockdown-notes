@@ -168,7 +168,7 @@ export const AudioControls = memo(function AudioControls({
         await advanceToNextSong()
       }
     }
-  }, [isPlaying, currentSong, advanceToNextSong, refreshCounts])
+  }, [isPlaying, currentSong, advanceToNextSong])
 
   // ---------------------------------------------------------------- favorability button
 

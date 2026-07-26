@@ -32,7 +32,7 @@ const isMarkdownSetextUnderline = (line: string) => /^\s{0,3}(?:=+|-+)\s*$/.test
 const isMarkdownThematicBreak = (line: string) => {
   const trimmed = line.trim();
   if (trimmed.length < 3) return false;
-  return /^([*_\-])(?:\s*\1){2,}$/.test(trimmed);
+  return /^([*_-])(?:\s*\1){2,}$/.test(trimmed);
 };
 
 const isMarkdownFence = (line: string) => /^\s{0,3}(?:`{3,}|~{3,})/.test(line);
