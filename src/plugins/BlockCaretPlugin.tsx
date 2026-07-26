@@ -35,6 +35,17 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx,
   const [caretStyle, setCaretStyle] = useState<React.CSSProperties | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const scheduleCaretUpdateRef = useRef<() => void>(() => {});
+  // scrollerRect/caretLayerRect don't change on a plain text keystroke --
+  // only the selection Range rect does. Cache them across updateCaret calls
+  // and only re-measure when a resize invalidates the cache, cutting 2 of
+  // the ~4 forced synchronous layout reads paid on every keystroke.
+  const scrollerRectRef = useRef<DOMRect | null>(null);
+  const caretLayerRectRef = useRef<DOMRect | null>(null);
+
+  const invalidateRectCache = useCallback(() => {
+    scrollerRectRef.current = null;
+    caretLayerRectRef.current = null;
+  }, []);
 
   const updateCaret = useCallback(() => {
     editor.getEditorState().read(() => {
@@ -70,8 +81,14 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx,
         return;
       }
 
-      const scrollerRect = scroller.getBoundingClientRect();
-      const caretLayerRect = caretLayerEl.getBoundingClientRect();
+      if (!scrollerRectRef.current) {
+        scrollerRectRef.current = scroller.getBoundingClientRect();
+      }
+      if (!caretLayerRectRef.current) {
+        caretLayerRectRef.current = caretLayerEl.getBoundingClientRect();
+      }
+      const scrollerRect = scrollerRectRef.current;
+      const caretLayerRect = caretLayerRectRef.current;
 
       const caretTopInScroll = resolveCaretTopInScroll({
         caretRect,
@@ -127,9 +144,11 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx,
       const caretWidthPx = Math.max(1, runtimeCellWidthPx - CARET_INSET_PX);
       const caretHeightPx = Math.max(1, lineHeightPx - CARET_INSET_PX);
 
+      // Positioned via transform instead of top/left so caret movement is a
+      // compositor-only operation (no layout/paint of the surrounding
+      // stacking context on every keystroke).
       setCaretStyle({
-        top: scrollerTopInLayer + topInViewport + CARET_INSET_PX,
-        left: scrollerLeftInLayer + absoluteLeft + CARET_INSET_PX,
+        transform: `translate3d(${scrollerLeftInLayer + absoluteLeft + CARET_INSET_PX}px, ${scrollerTopInLayer + topInViewport + CARET_INSET_PX}px, 0)`,
         width: caretWidthPx,
         height: caretHeightPx,
       });
@@ -150,9 +169,14 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx,
 
   scheduleCaretUpdateRef.current = scheduleCaretUpdate;
 
+  const scheduleCaretUpdateAfterResize = useCallback(() => {
+    invalidateRectCache();
+    scheduleCaretUpdate();
+  }, [invalidateRectCache, scheduleCaretUpdate]);
+
   useEffect(() => {
     const removeUpdateListener = editor.registerUpdateListener(() => scheduleCaretUpdate());
-    window.addEventListener('resize', scheduleCaretUpdate);
+    window.addEventListener('resize', scheduleCaretUpdateAfterResize);
 
     // Neither editor.registerUpdateListener nor the scroll/resize listeners
     // fire when THIS editor loses or gains DOM focus (e.g. clicking into a
@@ -168,6 +192,20 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx,
       scroller.addEventListener('scroll', scheduleCaretUpdate);
     }
 
+    // Covers layout shifts that don't fire a window resize event (sidebar
+    // toggle, split-view pane resize, font-size change) -- anything that
+    // moves or resizes the scroller/caret-layer needs to invalidate the
+    // cached rects from B1, not just window-level resizes.
+    let resizeObserver: ResizeObserver | null = null;
+    const caretLayerEl = scroller?.parentElement;
+    if (typeof ResizeObserver !== 'undefined' && scroller) {
+      resizeObserver = new ResizeObserver(() => scheduleCaretUpdateAfterResize());
+      resizeObserver.observe(scroller);
+      if (caretLayerEl instanceof HTMLElement && caretLayerEl !== scroller) {
+        resizeObserver.observe(caretLayerEl);
+      }
+    }
+
     scheduleCaretUpdate();
 
     return () => {
@@ -176,14 +214,15 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx,
         animationFrameRef.current = null;
       }
       removeUpdateListener();
-      window.removeEventListener('resize', scheduleCaretUpdate);
+      window.removeEventListener('resize', scheduleCaretUpdateAfterResize);
       document.removeEventListener('focusin', scheduleCaretUpdate, true);
       document.removeEventListener('focusout', scheduleCaretUpdate, true);
       if (scroller) {
         scroller.removeEventListener('scroll', scheduleCaretUpdate);
       }
+      resizeObserver?.disconnect();
     };
-  }, [editor, scheduleCaretUpdate, scrollerRef]);
+  }, [editor, scheduleCaretUpdate, scheduleCaretUpdateAfterResize, scrollerRef]);
 
   if (!caretStyle) return null;
 
@@ -194,6 +233,9 @@ export function BlockCaretPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx,
         position: 'absolute',
         pointerEvents: 'none',
         zIndex: 5,
+        top: 0,
+        left: 0,
+        willChange: 'transform',
         ...caretStyle
       }}
     />

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
 import { ensureHelpNote } from './help/helpNote';
 import type { TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../src/shared/textures';
+import type { AudioBounceCacheHit, AudioBounceCacheRequest } from '../src/shared/audioBounceCache';
 import type {
   UiLayoutLoadout,
   UiLoadoutEntry,
@@ -52,6 +53,11 @@ const META_PREFIX = '<!-- thockdown-meta:';
 const META_SUFFIX = '-->';
 const TEXTURE_CACHE_DEFAULT_MAX_ENTRIES = 96;
 const TEXTURE_CACHE_DEFAULT_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 14;
+// A handful of settings signatures' worth of the ~90-key plain-typing
+// charset (see PREWARM_CHAR_KEY_IDS) -- bounded so repeatedly tweaking
+// reverb/volume sliders doesn't grow this table without limit.
+const AUDIO_BOUNCE_CACHE_DEFAULT_MAX_ENTRIES = 400;
+const AUDIO_BOUNCE_CACHE_DEFAULT_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 14;
 
 const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   borderRadiusRegularPx: 6,
@@ -65,6 +71,9 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   audioTrebleVolume: 0,
   audioReverbStrength: 0,
   audioReverbSpace: 0,
+  pitchJitterAmount: 0,
+  reduceVisualEffects: false,
+  reducedCaretAnimation: false,
   typingSoundEnabled: false,
   typingSoundSet: 'A',
   renderScrollDynamic: 1.5,
@@ -440,6 +449,9 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     audioTrebleVolume: clampNumber(source.audioTrebleVolume, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.audioTrebleVolume),
     audioReverbStrength: clampNumber(source.audioReverbStrength, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.audioReverbStrength),
     audioReverbSpace: clampNumber(source.audioReverbSpace, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.audioReverbSpace),
+    pitchJitterAmount: clampNumber(source.pitchJitterAmount, 0, 0.05, DEFAULT_UI_LAYOUT_LOADOUT.pitchJitterAmount),
+    reduceVisualEffects: typeof source.reduceVisualEffects === 'boolean' ? source.reduceVisualEffects : DEFAULT_UI_LAYOUT_LOADOUT.reduceVisualEffects,
+    reducedCaretAnimation: typeof source.reducedCaretAnimation === 'boolean' ? source.reducedCaretAnimation : DEFAULT_UI_LAYOUT_LOADOUT.reducedCaretAnimation,
     typingSoundEnabled: typeof source.typingSoundEnabled === 'boolean' ? source.typingSoundEnabled : DEFAULT_UI_LAYOUT_LOADOUT.typingSoundEnabled,
     renderScrollDynamic: roundForSignature(clampNumber(source.renderScrollDynamic, 0.1, 5, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollDynamic)),
     renderScrollResponsiveness: roundForSignature(clampNumber(source.renderScrollResponsiveness, 0.1, 5, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollResponsiveness)),
@@ -502,7 +514,8 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
 const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
   'borderRadiusRegularPx',
   'spacingRegularPx', 'borderAlphaPercent', 'boxShadowAlphaPercent',
-  'audioKeyVolume', 'audioKeyVariance', 'audioPitch', 'audioBassVolume', 'audioTrebleVolume', 'audioReverbStrength', 'audioReverbSpace',
+  'audioKeyVolume', 'audioKeyVariance', 'audioPitch', 'audioBassVolume', 'audioTrebleVolume', 'audioReverbStrength', 'audioReverbSpace', 'pitchJitterAmount',
+  'reduceVisualEffects', 'reducedCaretAnimation',
   'typingSoundEnabled', 'typingSoundSet',
   'renderScrollDynamic', 'renderScrollResponsiveness', 'renderScrollTotalTimeSec',
   'renderScrollMaxSpeedPxPerSec', 'renderScrollSkew',
@@ -1969,6 +1982,87 @@ export class DatabaseService {
   }
 
   // -------------------------------------------------------------------------
+  // Audio bounce cache — per-key OfflineAudioContext-rendered typing sounds,
+  // see TypingSoundManager's E1/E4. Mirrors the texture cache above: render
+  // once, cache to disk keyed by (keyId, settingsSignature), skip the render
+  // on the next launch.
+  // -------------------------------------------------------------------------
+
+  getAudioBounceCache(request: AudioBounceCacheRequest): AudioBounceCacheHit | null {
+    const db = this.requireDb();
+
+    const row = db.prepare(`
+      SELECT data, sampleRate, numberOfChannels, length
+      FROM audio_bounce_cache
+      WHERE keyId = ? AND settingsSignature = ?
+      LIMIT 1
+    `).get(request.keyId, request.settingsSignature) as
+      { data: Buffer; sampleRate: number; numberOfChannels: number; length: number } | undefined;
+
+    if (!row) {
+      return null;
+    }
+
+    db.prepare(`
+      UPDATE audio_bounce_cache SET createdAt = ? WHERE keyId = ? AND settingsSignature = ?
+    `).run(Date.now(), request.keyId, request.settingsSignature);
+
+    return {
+      data: new Uint8Array(row.data),
+      sampleRate: row.sampleRate,
+      numberOfChannels: row.numberOfChannels,
+      length: row.length,
+    };
+  }
+
+  saveAudioBounceCache(request: AudioBounceCacheRequest, payload: AudioBounceCacheHit): void {
+    const db = this.requireDb();
+
+    db.prepare(`
+      INSERT OR REPLACE INTO audio_bounce_cache (
+        keyId, settingsSignature, sampleRate, numberOfChannels, length, data, createdAt
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      request.keyId,
+      request.settingsSignature,
+      payload.sampleRate,
+      payload.numberOfChannels,
+      payload.length,
+      Buffer.from(payload.data),
+      Date.now(),
+    );
+
+    this.purgeAudioBounceCache();
+  }
+
+  private purgeAudioBounceCache(): void {
+    const db = this.requireDb();
+    const cutoffMs = Date.now() - AUDIO_BOUNCE_CACHE_DEFAULT_MAX_AGE_MS;
+
+    const rows = db.prepare(`
+      SELECT rowid, createdAt FROM audio_bounce_cache ORDER BY createdAt DESC
+    `).all() as Array<{ rowid: number; createdAt: number }>;
+
+    const deleteStmt = db.prepare('DELETE FROM audio_bounce_cache WHERE rowid = ?');
+    let retainedCount = 0;
+
+    const tx = db.transaction(() => {
+      for (const row of rows) {
+        const isExpired = row.createdAt < cutoffMs;
+        const exceedsCap = retainedCount >= AUDIO_BOUNCE_CACHE_DEFAULT_MAX_ENTRIES;
+        if (isExpired || exceedsCap) {
+          deleteStmt.run(row.rowid);
+          continue;
+        }
+        retainedCount += 1;
+      }
+    });
+
+    tx();
+  }
+
+  // -------------------------------------------------------------------------
   // UI Loadouts — see src/shared/loadouts.ts for the id/mode/kind scheme.
   // -------------------------------------------------------------------------
 
@@ -2700,6 +2794,19 @@ export class DatabaseService {
       );
 
       CREATE INDEX IF NOT EXISTS idx_texture_pattern_cache_created_at ON texture_pattern_cache(createdAt DESC);
+
+      CREATE TABLE IF NOT EXISTS audio_bounce_cache (
+        keyId TEXT NOT NULL,
+        settingsSignature TEXT NOT NULL,
+        sampleRate INTEGER NOT NULL,
+        numberOfChannels INTEGER NOT NULL,
+        length INTEGER NOT NULL,
+        data BLOB NOT NULL,
+        createdAt INTEGER NOT NULL,
+        PRIMARY KEY (keyId, settingsSignature)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_audio_bounce_cache_created_at ON audio_bounce_cache(createdAt DESC);
 
       CREATE TABLE IF NOT EXISTS ui_loadout_entries (
         id INTEGER PRIMARY KEY,

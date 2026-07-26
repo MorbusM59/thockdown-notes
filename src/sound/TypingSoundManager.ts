@@ -1,4 +1,29 @@
 import { BASS_TYPING_SOUND_ASSET, DEFAULT_TYPING_SOUND_SET, TREBLE_TYPING_SOUND_ASSET, TYPING_SOUND_ASSETS, TYPING_SOUND_SET_IDS, TypingSoundSetId } from './typingSounds'
+import type { AudioBounceCacheHit } from '../shared/audioBounceCache'
+
+// The plain-typing character set reachable via deriveTypingSoundKeyId
+// (useEditorSectionMount.ts) -- every character that produces a `key:${c}`
+// id through ordinary single-character insertion, called with no extra
+// options. See maybeStartPrewarm's doc comment for why prewarming is scoped
+// to exactly this set and not the whole keyboard.
+const PREWARM_CHARSET = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,!?;:\'"-_()[]{}/\\@#$%^&*+=<>~`|'
+const PREWARM_CHAR_KEY_IDS: string[] = Array.from(new Set(PREWARM_CHARSET.split(''))).map((char) => `key:${char}`)
+
+type IdleRequestWindow = Window & {
+  requestIdleCallback?: (callback: (deadline: { didTimeout: boolean; timeRemaining: () => number }) => void, options?: { timeout: number }) => number
+}
+
+// Runs work during idle time, chunked so it never competes with input
+// handling -- falls back to a short setTimeout on browsers/contexts without
+// requestIdleCallback (e.g. older Safari-based WebViews).
+function scheduleIdleWork(callback: () => void): void {
+  const idleWindow = window as IdleRequestWindow
+  if (typeof idleWindow.requestIdleCallback === 'function') {
+    idleWindow.requestIdleCallback(() => callback(), { timeout: 500 })
+  } else {
+    window.setTimeout(callback, 32)
+  }
+}
 
 export interface TypingSoundLayerConfig {
   enabled: boolean
@@ -76,7 +101,19 @@ export class TypingSoundManager {
   private enabled = true
   private keyVariance = 0
   private pitch = 0
+  private pitchJitterAmount = 0
   private recentKeySoundHistory: TypingSoundHistoryEntry[] = []
+  // Per-key bounced (OfflineAudioContext-rendered) buffers -- see E1 in the
+  // performance review. Keyed by keyId; a hit turns playback into a single
+  // source.start() instead of rebuilding the full layer/convolver graph.
+  // Only ever populated for keyIds whose call site always passes the same
+  // fixed override options (see bounceKeySound's doc comment) -- invalidated
+  // in lockstep with recentKeySoundHistory any time a setting that affects
+  // the bounce changes.
+  private boundKeyBuffers: Map<string, AudioBuffer> = new Map()
+  private pendingBounces: Set<string> = new Set()
+  private prewarmStarted = false
+  private prewarmGeneration = 0
   private loaded = false
   private loadingPromise: Promise<void> | null = null
   private layers: Record<string, TypingSoundLayerConfig> = {
@@ -183,16 +220,24 @@ export class TypingSoundManager {
       }
 
       this.loaded = true
+      this.maybeStartPrewarm()
     })()
 
     return this.loadingPromise
+  }
+
+  // Resumes the (already-created) AudioContext ahead of the first keystroke,
+  // so the one-time hardware spin-up cost lands on an earlier user gesture
+  // (window focus, first click) instead of stalling the first typing sound.
+  primeAudioContext(): void {
+    void this.ensureContextRunning()
   }
 
   setLayerEnabled(layerId: string, enabled: boolean): void {
     const layer = this.layers[layerId]
     if (layer && layer.enabled !== enabled) {
       layer.enabled = enabled
-      this.recentKeySoundHistory = []
+      this.invalidateKeySoundCaches()
     }
   }
 
@@ -200,8 +245,26 @@ export class TypingSoundManager {
     const layer = this.layers[layerId]
     if (layer && layer.gain !== gain) {
       layer.gain = gain
-      this.recentKeySoundHistory = []
+      this.invalidateKeySoundCaches()
     }
+  }
+
+  // recentKeySoundHistory (per-key attributes) and boundKeyBuffers (per-key
+  // bounced audio, see E1) must always invalidate together -- a bounce is
+  // only correct for the attributes/settings it was rendered from.
+  private invalidateKeySoundCaches(): void {
+    this.recentKeySoundHistory = []
+    this.boundKeyBuffers.clear()
+    this.pendingBounces.clear()
+    // Settings that invalidate the cache (reverb, layer gains, key set...)
+    // are exactly the settings a bounce depends on -- rebuild the common
+    // charset in the background again rather than waiting for each key to
+    // be pressed once more before it's fast again. Bumping the generation
+    // makes any in-flight sweep from before this change stop at its next
+    // step instead of racing the new one.
+    this.prewarmGeneration += 1
+    this.prewarmStarted = false
+    this.maybeStartPrewarm()
   }
 
   private getSoundAttributes(options?: TypingSoundPlayOptions) {
@@ -282,6 +345,11 @@ export class TypingSoundManager {
   async playRandomClick(options?: TypingSoundPlayOptions): Promise<void> {
     if (!this.enabled) return
 
+    const keyId = options?.keyId
+    if (keyId && (await this.tryPlayBoundBuffer(keyId))) {
+      return
+    }
+
     const soundAttributes = this.getSoundAttributes(options)
 
     await this.playLayer('click', {
@@ -316,28 +384,45 @@ export class TypingSoundManager {
       frequencyScale: soundAttributes.frequencyScale,
       flipChannels: soundAttributes.flipChannels.treble,
     })
+
+    // First press of this key this "generation" -- bounce it in the
+    // background so every later press (the ones that matter for sustained
+    // key-repeat) hits the fast single-buffer path instead.
+    if (keyId) {
+      this.scheduleBounce(keyId)
+    }
   }
 
   setTypingSoundEnabled(enabled: boolean): void {
     if (this.enabled !== enabled) {
       this.enabled = enabled
-      this.recentKeySoundHistory = []
+      // invalidateKeySoundCaches() also (re)starts prewarming when enabled
+      // is now true, since maybeStartPrewarm() checks this.enabled.
+      this.invalidateKeySoundCaches()
     }
   }
 
   setTypingSoundVariance(amount: number): void {
     this.keyVariance = Math.max(0, Math.min(0.5, amount))
-    this.recentKeySoundHistory = []
+    this.invalidateKeySoundCaches()
   }
 
   setTypingSoundPitch(amount: number): void {
     this.pitch = Math.max(-100, Math.min(100, amount))
-    this.recentKeySoundHistory = []
+    this.invalidateKeySoundCaches()
+  }
+
+  // Unlike the other setters, this doesn't clear recentKeySoundHistory:
+  // jitter must vary per press even for a key that's been pressed before,
+  // so it's never baked into the cached per-key attributes -- it's applied
+  // live in playLayer instead.
+  setPitchJitterAmount(amount: number): void {
+    this.pitchJitterAmount = Math.max(0, Math.min(0.05, amount))
   }
 
   setTypingSoundSet(setId: TypingSoundSetId): void {
     if (this.activeKeySet !== setId) {
-      this.recentKeySoundHistory = []
+      this.invalidateKeySoundCaches()
       this.activeKeySet = setId
     }
   }
@@ -346,7 +431,7 @@ export class TypingSoundManager {
     const next = Math.max(0, Math.min(1, amount))
     if (this.reverbStrength !== next) {
       this.reverbStrength = next
-      this.recentKeySoundHistory = []
+      this.invalidateKeySoundCaches()
       if (this.reverbDryGain && this.reverbWetGain) {
         this.reverbDryGain.gain.value = 1 - this.reverbStrength
         this.reverbWetGain.gain.value = this.reverbStrength
@@ -359,7 +444,7 @@ export class TypingSoundManager {
     const next = Math.max(0, Math.min(1, amount))
     if (this.reverbSpace !== next) {
       this.reverbSpace = next
-      this.recentKeySoundHistory = []
+      this.invalidateKeySoundCaches()
       if (this.reverbFilter) {
         const minFreq = 2000
         const maxFreq = 12000
@@ -398,10 +483,19 @@ export class TypingSoundManager {
     if (!selectedBuffer) return
     source.buffer = selectedBuffer
 
-    if (options?.frequencyScale !== undefined) {
-      source.playbackRate.value = (options?.playbackRate ?? 1) * options.frequencyScale
-    } else if (options?.playbackRate !== undefined) {
-      source.playbackRate.value = options.playbackRate
+    // A fresh multiplier per press (not baked into the per-key attributes,
+    // unlike frequencyScale) -- see setPitchJitterAmount. Skipped entirely
+    // at the default 0 so there's no Math.random() call or playbackRate
+    // write when the feature is off.
+    const jitterMultiplier = this.pitchJitterAmount > 0
+      ? 1 + (Math.random() * 2 - 1) * this.pitchJitterAmount
+      : 1
+
+    const basePlaybackRate = options?.frequencyScale !== undefined
+      ? (options?.playbackRate ?? 1) * options.frequencyScale
+      : options?.playbackRate
+    if (basePlaybackRate !== undefined || jitterMultiplier !== 1) {
+      source.playbackRate.value = (basePlaybackRate ?? 1) * jitterMultiplier
     }
     if (options?.detune !== undefined) {
       source.detune.value = options.detune
@@ -419,6 +513,11 @@ export class TypingSoundManager {
       gainNode.connect(this.masterGain)
     }
 
+    source.onended = () => {
+      this.safeDisconnect(source)
+      this.safeDisconnect(gainNode)
+    }
+
     const echoSources: Array<{ source: AudioBufferSourceNode; gainNode: GainNode; delayMs: number }> = []
     if (options?.echo && this.masterGain) {
       const { count, delayMs, decay } = options.echo
@@ -428,7 +527,7 @@ export class TypingSoundManager {
         const echoPlaybackRate = options?.frequencyScale !== undefined
           ? (options?.playbackRate ?? 1) * options.frequencyScale
           : options?.playbackRate ?? 1
-        echoSource.playbackRate.value = echoPlaybackRate
+        echoSource.playbackRate.value = echoPlaybackRate * jitterMultiplier
         if (options?.detune !== undefined) {
           echoSource.detune.value = options.detune
         }
@@ -442,47 +541,27 @@ export class TypingSoundManager {
         } else {
           echoSource.connect(echoGainNode).connect(this.masterGain)
         }
+        echoSource.onended = () => {
+          this.safeDisconnect(echoSource)
+          this.safeDisconnect(echoGainNode)
+        }
         echoSources.push({ source: echoSource, gainNode: echoGainNode, delayMs: delayMs * i })
       }
     }
 
-    const playbackRate = options?.frequencyScale !== undefined
-      ? (options?.playbackRate ?? 1) * options.frequencyScale
-      : options?.playbackRate ?? 1
     source.start()
     for (let i = 0; i < echoSources.length; i += 1) {
       const echo = echoSources[i]
       echo.source.start(this.audioContext.currentTime + (options?.echo!.delayMs ?? 0) * (i + 1) / 1000)
     }
+  }
 
-    const directDurationMs = (buffer.duration / playbackRate) * 1000
-    const echoDelayMs = options?.echo ? options.echo.delayMs * options.echo.count : 0
-    const cleanupDelayMs = directDurationMs + echoDelayMs + 100
-
-    window.setTimeout(() => {
-      try {
-        source.disconnect()
-      } catch {
-        // best effort cleanup
-      }
-      try {
-        gainNode.disconnect()
-      } catch {
-        // best effort cleanup
-      }
-      for (const echo of echoSources) {
-        try {
-          echo.source.disconnect()
-        } catch {
-          // best effort cleanup
-        }
-        try {
-          echo.gainNode.disconnect()
-        } catch {
-          // best effort cleanup
-        }
-      }
-    }, cleanupDelayMs)
+  private safeDisconnect(node: AudioNode): void {
+    try {
+      node.disconnect()
+    } catch {
+      // best effort cleanup
+    }
   }
 
   private getReversedBuffer(layerId: string, assetIndex: number): AudioBuffer | null {
@@ -542,6 +621,304 @@ export class TypingSoundManager {
       return this.getFlippedBuffer(layerId, assetIndex)
     }
     return baseLayer[assetIndex]
+  }
+
+  // Plays a previously-bounced (OfflineAudioContext-rendered) buffer for
+  // this key, if one exists -- a single source.start() instead of rebuilding
+  // the full layer/gain/convolver graph. Returns false (no-op) on a cache
+  // miss so the caller can fall back to live synthesis.
+  private async tryPlayBoundBuffer(keyId: string): Promise<boolean> {
+    const buffer = this.boundKeyBuffers.get(keyId)
+    if (!buffer || !this.audioContext || !this.masterGain) return false
+
+    await this.ensureContextRunning()
+
+    const source = this.audioContext.createBufferSource()
+    source.buffer = buffer
+
+    // Jitter is never baked into the bounce (see setPitchJitterAmount) --
+    // applied live here instead, same as the live-synthesis path.
+    if (this.pitchJitterAmount > 0) {
+      source.playbackRate.value = 1 + (Math.random() * 2 - 1) * this.pitchJitterAmount
+    }
+
+    source.connect(this.masterGain)
+    source.onended = () => this.safeDisconnect(source)
+    source.start()
+    return true
+  }
+
+  // Idle-schedules a background bounce for a key that was just played live,
+  // so the NEXT press of that key (the ones that matter for sustained
+  // key-repeat) hits tryPlayBoundBuffer instead. No-op if already cached or
+  // already in flight.
+  private scheduleBounce(keyId: string): void {
+    if (this.boundKeyBuffers.has(keyId) || this.pendingBounces.has(keyId)) return
+    this.pendingBounces.add(keyId)
+    scheduleIdleWork(() => {
+      void this.bounceKeySound(keyId).finally(() => {
+        this.pendingBounces.delete(keyId)
+      })
+    })
+  }
+
+  // Only meant to run once per "generation" (see invalidateKeySoundCaches):
+  // idle-prewarms the plain typing charset (the keys reachable via
+  // playRandomClick({ keyId }) with no other options -- see
+  // deriveTypingSoundKeyId) so the FIRST press of an ordinary character
+  // already hits the fast path, not just the second. Keys whose call site
+  // always passes extra fixed options (arrows, backspace, tab, undo/redo --
+  // see bounceKeySound) are intentionally excluded: prewarming them would
+  // mean guessing those options, and guessing wrong would bake a wrong
+  // detune/gain/echo into the cached bounce. Those still get bounced
+  // reactively via scheduleBounce after their own first real press.
+  private maybeStartPrewarm(): void {
+    if (this.prewarmStarted || !this.loaded || !this.enabled) return
+    this.prewarmStarted = true
+    this.schedulePrewarm(this.prewarmGeneration)
+  }
+
+  private schedulePrewarm(generation: number): void {
+    const keyIds = PREWARM_CHAR_KEY_IDS
+    let index = 0
+
+    const step = () => {
+      if (generation !== this.prewarmGeneration) return
+      if (index >= keyIds.length) return
+      const keyId = keyIds[index]
+      index += 1
+
+      if (this.boundKeyBuffers.has(keyId) || this.pendingBounces.has(keyId)) {
+        scheduleIdleWork(step)
+        return
+      }
+
+      this.pendingBounces.add(keyId)
+      // Seeds attributes exactly as a real plain-typing press would
+      // (playRandomClick({ keyId }), no other options) so the bounce
+      // matches what that press will actually sound like.
+      this.getSoundAttributes({ keyId })
+      void this.bounceKeySound(keyId).finally(() => {
+        this.pendingBounces.delete(keyId)
+        scheduleIdleWork(step)
+      })
+    }
+
+    scheduleIdleWork(step)
+  }
+
+  // Renders one key's full sound (click + bass/treble layers, reverb, and
+  // (for the few keyIds that use it) echo) to a single AudioBuffer via
+  // OfflineAudioContext, using the attributes already assigned to that key
+  // in recentKeySoundHistory. This is only correct because every call site
+  // that passes a given keyId always passes the exact same detune/reverse/
+  // gain/echo overrides for that keyId (verified against every
+  // playRandomClick call site in the app) -- getSoundAttributes' override
+  // merge means the cached attributes already reflect those fixed overrides
+  // after the first real press, so re-reading them here is equivalent to
+  // replaying that press.
+  private async bounceKeySound(keyId: string): Promise<void> {
+    if (!this.audioContext) return
+
+    // E4: a disk hit for this exact (keyId, settingsSignature) skips the
+    // OfflineAudioContext render entirely -- this is what makes a relaunch
+    // (not just the rest of one session) skip the render, mirroring
+    // useTextureSurface's persistent cache pattern.
+    const signature = this.computeAudioBounceSignature()
+    const diskBuffer = await this.tryLoadDiskBounce(keyId, signature)
+    if (diskBuffer) {
+      this.boundKeyBuffers.set(keyId, diskBuffer)
+      return
+    }
+
+    const entry = this.recentKeySoundHistory.find((historyEntry) => historyEntry.keyId === keyId)
+    if (!entry) return
+    const attrs = entry.attributes
+
+    type LayerBouncePlan = { buffer: AudioBuffer; detune: number; gainMultiplier: number }
+    const layerPlans: LayerBouncePlan[] = []
+
+    if (this.layers.click.enabled && this.layers.click.gain > 0) {
+      const buffer = this.getLayerBuffer('click', attrs.assetIndex, attrs.reverse, attrs.flipChannels.click)
+      if (buffer) layerPlans.push({ buffer, detune: attrs.detune, gainMultiplier: this.layers.click.gain })
+    }
+    // E3: mirrors A3's "skip zero-gain layers" guard, moved from the live
+    // path (where it no longer applies -- see E1) to render time.
+    if (this.layers.bass.enabled && this.layers.bass.gain > 0) {
+      const buffer = this.getLayerBuffer('bass', 0, attrs.reverse, attrs.flipChannels.bass)
+      if (buffer) layerPlans.push({ buffer, detune: attrs.bassDetune, gainMultiplier: this.layers.bass.gain })
+    }
+    if (this.layers.treble.enabled && this.layers.treble.gain > 0) {
+      const buffer = this.getLayerBuffer('treble', 0, attrs.reverse, attrs.flipChannels.treble)
+      if (buffer) layerPlans.push({ buffer, detune: attrs.trebleDetune, gainMultiplier: this.layers.treble.gain })
+    }
+    if (layerPlans.length === 0) return
+
+    const effectiveRate = Math.max(0.01, attrs.playbackRate * attrs.frequencyScale)
+    const echo = attrs.echo
+    const echoTailSec = echo ? (echo.delayMs * echo.count) / 1000 : 0
+    const reverbTailSec = this.reverbStrength > 0 ? 0.8 + this.reverbStrength * 1.7 : 0
+    const maxRawDurationSec = Math.max(...layerPlans.map((plan) => plan.buffer.duration))
+    const totalDurationSec = maxRawDurationSec / effectiveRate + echoTailSec + reverbTailSec + 0.1
+    const sampleRate = this.audioContext.sampleRate
+    const length = Math.max(1, Math.ceil(totalDurationSec * sampleRate))
+
+    let offlineContext: OfflineAudioContext
+    try {
+      offlineContext = new OfflineAudioContext(2, length, sampleRate)
+    } catch {
+      return
+    }
+
+    const offlineMasterGain = offlineContext.createGain()
+    offlineMasterGain.gain.value = 1
+    offlineMasterGain.connect(offlineContext.destination)
+
+    // E3: mirrors A2's "skip the convolver at zero reverb" guard.
+    let offlineDryGain: GainNode | null = null
+    let offlineReverbNode: ConvolverNode | null = null
+    if (this.reverbStrength > 0 && this.reverbNode?.buffer) {
+      offlineDryGain = offlineContext.createGain()
+      const offlineWetGain = offlineContext.createGain()
+      offlineReverbNode = offlineContext.createConvolver()
+      const offlineReverbFilter = offlineContext.createBiquadFilter()
+      offlineDryGain.gain.value = 1 - this.reverbStrength
+      offlineWetGain.gain.value = this.reverbStrength
+      offlineReverbFilter.type = 'lowpass'
+      offlineReverbFilter.frequency.value = this.reverbFilter?.frequency.value ?? 12000
+      offlineReverbFilter.Q.value = this.reverbFilter?.Q.value ?? 0.7
+      // AudioBuffers aren't tied to the context that created them -- reusing
+      // the live reverb tail avoids recomputing the same noise buffer here.
+      offlineReverbNode.buffer = this.reverbNode.buffer
+      offlineDryGain.connect(offlineMasterGain)
+      offlineReverbNode.connect(offlineReverbFilter).connect(offlineWetGain).connect(offlineMasterGain)
+    }
+
+    const connectToDestination = (gainNode: GainNode) => {
+      if (offlineDryGain && offlineReverbNode) {
+        gainNode.connect(offlineDryGain)
+        gainNode.connect(offlineReverbNode)
+      } else {
+        gainNode.connect(offlineMasterGain)
+      }
+    }
+
+    const scheduleLayerSources = (startTimeSec: number, decayMultiplier: number) => {
+      for (const plan of layerPlans) {
+        const source = offlineContext.createBufferSource()
+        source.buffer = plan.buffer
+        source.playbackRate.value = effectiveRate
+        source.detune.value = plan.detune
+        const gainNode = offlineContext.createGain()
+        gainNode.gain.value = (attrs.gain ?? 1) * plan.gainMultiplier * decayMultiplier
+        source.connect(gainNode)
+        connectToDestination(gainNode)
+        source.start(startTimeSec)
+      }
+    }
+
+    scheduleLayerSources(0, 1)
+    if (echo) {
+      for (let i = 1; i <= echo.count; i += 1) {
+        scheduleLayerSources((echo.delayMs * i) / 1000, Math.pow(echo.decay, i))
+      }
+    }
+
+    try {
+      const renderedBuffer = await offlineContext.startRendering()
+      this.boundKeyBuffers.set(keyId, renderedBuffer)
+      this.saveDiskBounce(keyId, signature, renderedBuffer)
+    } catch {
+      // Offline render failed -- leave this key uncached; the live-synthesis
+      // fallback in playRandomClick keeps working on every future press,
+      // and scheduleBounce will simply be tried again next press.
+    }
+  }
+
+  // Everything that affects a bounce's rendered PCM -- a disk-cached entry
+  // is only valid for the exact signature it was rendered under. Per-key
+  // randomized attributes (frequencyScale, detune, flipChannels...) are
+  // deliberately NOT part of this: once a key has been bounced (this
+  // session or a previous one), its sound stays whatever it first rolled
+  // until a signature-affecting setting changes -- the same "deterministic
+  // per key" contract recentKeySoundHistory already has in-session,
+  // extended across relaunches.
+  private computeAudioBounceSignature(): string {
+    return [
+      this.activeKeySet,
+      this.reverbStrength.toFixed(3),
+      this.reverbSpace.toFixed(3),
+      this.layers.click.enabled ? 1 : 0,
+      this.layers.click.gain.toFixed(3),
+      this.layers.bass.enabled ? 1 : 0,
+      this.layers.bass.gain.toFixed(3),
+      this.layers.treble.enabled ? 1 : 0,
+      this.layers.treble.gain.toFixed(3),
+      this.keyVariance.toFixed(3),
+      this.pitch.toFixed(3),
+    ].join('|')
+  }
+
+  // window.thockdownAudioBounces only exists in the packaged Electron app
+  // (see electron/preload.ts) -- absent in plain browser-dev mode, where E4
+  // simply degrades to E1's in-memory-only, per-session cache.
+  private async tryLoadDiskBounce(keyId: string, signature: string): Promise<AudioBuffer | null> {
+    const api = window.thockdownAudioBounces
+    if (!api) return null
+    try {
+      const hit = await api.getCachedBounce({ keyId, settingsSignature: signature })
+      if (!hit) return null
+      return this.deserializeAudioBuffer(hit)
+    } catch {
+      return null
+    }
+  }
+
+  private saveDiskBounce(keyId: string, signature: string, buffer: AudioBuffer): void {
+    const api = window.thockdownAudioBounces
+    if (!api) return
+    try {
+      void api.saveCachedBounce({ keyId, settingsSignature: signature }, this.serializeAudioBuffer(buffer))
+    } catch {
+      // Best effort -- the in-memory cache (already populated by the
+      // caller) keeps this session fast regardless of disk persistence.
+    }
+  }
+
+  private serializeAudioBuffer(buffer: AudioBuffer): AudioBounceCacheHit {
+    const numberOfChannels = buffer.numberOfChannels
+    const length = buffer.length
+    const combined = new Float32Array(numberOfChannels * length)
+    for (let channel = 0; channel < numberOfChannels; channel += 1) {
+      combined.set(buffer.getChannelData(channel), channel * length)
+    }
+    return {
+      data: new Uint8Array(combined.buffer, combined.byteOffset, combined.byteLength),
+      sampleRate: buffer.sampleRate,
+      numberOfChannels,
+      length,
+    }
+  }
+
+  private deserializeAudioBuffer(hit: AudioBounceCacheHit): AudioBuffer | null {
+    if (hit.numberOfChannels <= 0 || hit.length <= 0) return null
+    if (hit.data.byteLength !== hit.numberOfChannels * hit.length * Float32Array.BYTES_PER_ELEMENT) return null
+
+    const buffer = new AudioBuffer({
+      numberOfChannels: hit.numberOfChannels,
+      length: hit.length,
+      sampleRate: hit.sampleRate,
+    })
+    // Rebuilt into a fresh, guaranteed-ArrayBuffer-backed Float32Array
+    // rather than viewing hit.data.buffer directly -- that buffer's type is
+    // the broader ArrayBufferLike (it could in principle be a
+    // SharedArrayBuffer), which copyToChannel's stricter typing rejects.
+    const floatView = new Float32Array(hit.numberOfChannels * hit.length)
+    new Uint8Array(floatView.buffer).set(hit.data)
+    for (let channel = 0; channel < hit.numberOfChannels; channel += 1) {
+      buffer.copyToChannel(floatView.subarray(channel * hit.length, (channel + 1) * hit.length), channel)
+    }
+    return buffer
   }
 
   private createFlippedBuffer(buffer: AudioBuffer, context: AudioContext): AudioBuffer {

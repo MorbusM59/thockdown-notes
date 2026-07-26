@@ -11,6 +11,7 @@ import { StateService } from './stateService'
 import { DatabaseService } from './databaseService'
 import { EXTERNAL_FILE_CHANNELS } from '../src/shared/externalFiles'
 import { TEXTURE_CHANNELS } from '../src/shared/textures'
+import { AUDIO_BOUNCE_CHANNELS } from '../src/shared/audioBounceCache'
 import { LOADOUT_CHANNELS } from '../src/shared/loadouts'
 import { AUDIO_PLAYER_CHANNELS, AUDIO_EXTENSIONS } from '../src/shared/audioPlayer'
 import type { PlaylistSlot } from '../src/shared/audioPlayer'
@@ -696,6 +697,14 @@ function registerIpcHandlers() {
 
   ipcMain.handle(TEXTURE_CHANNELS.purgeCached, async (_event, request) => {
     return databaseService!.purgeTextureCache(request);
+  });
+
+  ipcMain.handle(AUDIO_BOUNCE_CHANNELS.getCached, async (_event, request) => {
+    return databaseService!.getAudioBounceCache(request);
+  });
+
+  ipcMain.handle(AUDIO_BOUNCE_CHANNELS.saveCached, async (_event, request, payload) => {
+    databaseService!.saveAudioBounceCache(request, payload);
   });
 
   ipcMain.handle(LOADOUT_CHANNELS.list, async () => {

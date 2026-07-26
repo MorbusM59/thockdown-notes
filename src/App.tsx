@@ -871,6 +871,9 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     audioTrebleVolume: clamp(toFiniteNumber(source.audioTrebleVolume, 0), 0, 1),
     audioReverbStrength: clamp(toFiniteNumber(source.audioReverbStrength ?? source.audioReverbAmount, 0), 0, 1),
     audioReverbSpace: clamp(toFiniteNumber(source.audioReverbSpace, 0), 0, 1),
+    pitchJitterAmount: clamp(toFiniteNumber(source.pitchJitterAmount, 0), 0, 0.05),
+    reduceVisualEffects: source.reduceVisualEffects === true,
+    reducedCaretAnimation: source.reducedCaretAnimation === true,
     typingSoundEnabled: source.typingSoundEnabled === true,
     typingSoundSet: source.typingSoundSet === 'A' || source.typingSoundSet === 'B' || source.typingSoundSet === 'C'
       ? source.typingSoundSet
@@ -1883,6 +1886,9 @@ function App() {
   const [audioTrebleVolume, setAudioTrebleVolume] = useState(0)
   const [audioReverbStrength, setAudioReverbStrength] = useState(0)
   const [audioReverbSpace, setAudioReverbSpace] = useState(0)
+  const [pitchJitterAmount, setPitchJitterAmount] = useState(0)
+  const [reduceVisualEffects, setReduceVisualEffects] = useState(false)
+  const [reducedCaretAnimation, setReducedCaretAnimation] = useState(false)
   const [typingSoundEnabled, setTypingSoundEnabled] = useState(false)
   const [typingSoundSet, setTypingSoundSet] = useState<'A' | 'B' | 'C'>(DEFAULT_TYPING_SOUND_SET)
   const [musicVolume, setMusicVolume] = useState(0.8)
@@ -2211,6 +2217,9 @@ function App() {
       audioTrebleVolume,
       audioReverbStrength,
       audioReverbSpace,
+      pitchJitterAmount,
+      reduceVisualEffects,
+      reducedCaretAnimation,
       typingSoundEnabled,
       typingSoundSet,
       renderScrollDynamic,
@@ -2283,6 +2292,9 @@ function App() {
     audioTrebleVolume,
     audioReverbStrength,
     audioReverbSpace,
+    pitchJitterAmount,
+    reduceVisualEffects,
+    reducedCaretAnimation,
     typingSoundEnabled,
     typingSoundSet,
     textureMaterials,
@@ -2332,6 +2344,9 @@ function App() {
     setAudioTrebleVolume(clamp(loadout.audioTrebleVolume, 0, 1))
     setAudioReverbStrength(clamp(loadout.audioReverbStrength, 0, 1))
     setAudioReverbSpace(clamp(loadout.audioReverbSpace, 0, 1))
+    setPitchJitterAmount(clamp(loadout.pitchJitterAmount, 0, 0.05))
+    setReduceVisualEffects(loadout.reduceVisualEffects)
+    setReducedCaretAnimation(loadout.reducedCaretAnimation)
     setTypingSoundEnabled(loadout.typingSoundEnabled)
     setTypingSoundSet(loadout.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
     setGlazeSettings(sanitizeGlazeSettings(loadout.glaze, DEFAULT_GLAZE_SETTINGS))
@@ -3735,6 +3750,16 @@ function App() {
   // Apply all filter sliders at one wrapper level so the full composited scene
   // (base backdrop + glaze + sheen + app-shell + colorize) is filtered as one.
   const appOuterStyle = useMemo(() => {
+    const style: CSSProperties = {
+      backgroundColor: 'var(--palette-parchment-lightest)',
+    }
+    // Low-power toggle: a `filter` on this wrapper forces re-rasterization
+    // of everything under it on every repaint (see C2) -- force it off here
+    // rather than making the user reset every slider to get that back.
+    if (reduceVisualEffects) {
+      return style
+    }
+
     const filterParts: string[] = []
     if (filterInvert > 0) filterParts.push(`invert(${filterInvert})`)
     if (filterSepia > 0) filterParts.push(`sepia(${filterSepia})`)
@@ -3747,9 +3772,6 @@ function App() {
       filterParts.push(`saturate(${saturateCssValue.toFixed(4)})`)
     }
 
-    const style: CSSProperties = {
-      backgroundColor: 'var(--palette-parchment-lightest)',
-    }
     if (filterParts.length > 0) {
       style.filter = filterParts.join(' ')
     }
@@ -3761,25 +3783,34 @@ function App() {
     filterInvert,
     filterSepia,
     filterSaturate,
+    reduceVisualEffects,
   ])
 
+  // Low-power toggle: forces every glaze layer's background-image to 'none'
+  // regardless of individual slider positions -- combined with C1's
+  // conditional mounting, this means the glaze-overlay-layer divs (and
+  // their per-repaint mix-blend-mode cost) simply don't mount at all.
   const glazeLinearBackgroundImage = useMemo(() => {
+    if (reduceVisualEffects) return 'none'
     const linearLayers = buildLinearGlazeLayers(glazeSettings)
     return linearLayers.length > 0 ? linearLayers.join(', ') : 'none'
-  }, [glazeSettings])
+  }, [glazeSettings, reduceVisualEffects])
 
   const glazeRadialBackgroundImage = useMemo(() => {
+    if (reduceVisualEffects) return 'none'
     const radialLayers = buildRadialGlazeLayers(glazeSettings)
     return radialLayers.length > 0 ? radialLayers.join(', ') : 'none'
-  }, [glazeSettings])
+  }, [glazeSettings, reduceVisualEffects])
 
   const glazeGloomBackgroundImage = useMemo(() => {
+    if (reduceVisualEffects) return 'none'
     return buildGloomGlazeLayer(glazeSettings, filterInvert > 0.5)
-  }, [glazeSettings, filterInvert])
+  }, [glazeSettings, filterInvert, reduceVisualEffects])
 
   const glazeSheenBackgroundImage = useMemo(() => {
+    if (reduceVisualEffects) return 'none'
     return buildSheenGlazeLayer(glazeSettings, filterInvert > 0.5)
-  }, [glazeSettings, filterInvert])
+  }, [glazeSettings, filterInvert, reduceVisualEffects])
 
   const appRootStyle = useMemo(() => {
     const borderRadiusRegularPxCss = `${borderRadiusRegularPx}px`
@@ -4653,6 +4684,9 @@ ${markdownHtml}
             setAudioTrebleVolume(appState.menu.audioTrebleVolume ?? 0)
             setAudioReverbStrength(appState.menu.audioReverbStrength ?? appState.menu.audioReverbAmount ?? 0)
             setAudioReverbSpace(appState.menu.audioReverbSpace ?? 0)
+            setPitchJitterAmount(appState.menu.pitchJitterAmount ?? 0)
+            setReduceVisualEffects(appState.menu.reduceVisualEffects ?? false)
+            setReducedCaretAnimation(appState.menu.reducedCaretAnimation ?? false)
             setTypingSoundEnabled(appState.menu.typingSoundEnabled ?? false)
             setTypingSoundSet(appState.menu.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
             if (typeof appState.menu.musicVolume === 'number') setMusicVolume(appState.menu.musicVolume)
@@ -5391,6 +5425,22 @@ ${markdownHtml}
   }, [])
 
   useEffect(() => {
+    // Resume the AudioContext on the earliest real user gesture (window
+    // focus, first pointer press) rather than waiting for the first
+    // keystroke, so the ~100-300ms hardware spin-up doesn't land on the
+    // user's first typing sound.
+    const primeAudio = () => {
+      typingSoundManager.primeAudioContext()
+    }
+    window.addEventListener('pointerdown', primeAudio, { once: true })
+    window.addEventListener('focus', primeAudio, { once: true })
+    return () => {
+      window.removeEventListener('pointerdown', primeAudio)
+      window.removeEventListener('focus', primeAudio)
+    }
+  }, [])
+
+  useEffect(() => {
     typingSoundManager.setLayerGain('click', audioKeyVolume)
   }, [audioKeyVolume])
 
@@ -5421,6 +5471,20 @@ ${markdownHtml}
   useEffect(() => {
     typingSoundManager.setReverbSpace(audioReverbSpace)
   }, [audioReverbSpace])
+
+  useEffect(() => {
+    typingSoundManager.setPitchJitterAmount(pitchJitterAmount)
+  }, [pitchJitterAmount])
+
+  useEffect(() => {
+    // The blink animation keeps the compositor busy indefinitely while the
+    // caret is idle, not just while typing -- toggled via a body class
+    // rather than threading a prop through BlockCaretPlugin/Editor.tsx.
+    document.body.classList.toggle('thockdown-reduced-caret-animation', reducedCaretAnimation)
+    return () => {
+      document.body.classList.remove('thockdown-reduced-caret-animation')
+    }
+  }, [reducedCaretAnimation])
 
   useEffect(() => {
     typingSoundManager.setLayerGain('treble', audioTrebleVolume)
@@ -6628,9 +6692,13 @@ ${markdownHtml}
       ) : null}
       <div className="app-saturate-wrapper" style={{ ...appOuterStyle, position: 'fixed', inset: 0 }}>
         <div className={`glaze-overlay-stack${glazeSettings.radialAboveLinear ? ' radial-above-linear' : ''}`} aria-hidden="true">
-          <div className="glaze-overlay-layer glaze-overlay-layer-linear" />
-          <div className="glaze-overlay-layer glaze-overlay-layer-radial" />
-          <div className="glaze-overlay-layer glaze-overlay-layer-gloom" />
+          {/* mix-blend-mode forces the browser to blend against every repaint
+              underneath it (i.e. every keystroke's repaint of the editor),
+              not just paint once -- only mount a layer when its glaze
+              setting is actually active. */}
+          {glazeLinearBackgroundImage !== 'none' && <div className="glaze-overlay-layer glaze-overlay-layer-linear" />}
+          {glazeRadialBackgroundImage !== 'none' && <div className="glaze-overlay-layer glaze-overlay-layer-radial" />}
+          {glazeGloomBackgroundImage !== 'none' && <div className="glaze-overlay-layer glaze-overlay-layer-gloom" />}
         </div>
         {windowModeTransitionOverlayNonce > 0 ? (
           <div key={windowModeTransitionOverlayNonce} className="window-mode-transition-overlay" aria-hidden="true" />
@@ -6995,6 +7063,12 @@ ${markdownHtml}
                         setAudioReverbStrength={setAudioReverbStrength}
                         audioReverbSpace={audioReverbSpace}
                         setAudioReverbSpace={setAudioReverbSpace}
+                        pitchJitterAmount={pitchJitterAmount}
+                        setPitchJitterAmount={setPitchJitterAmount}
+                        reduceVisualEffects={reduceVisualEffects}
+                        setReduceVisualEffects={setReduceVisualEffects}
+                        reducedCaretAnimation={reducedCaretAnimation}
+                        setReducedCaretAnimation={setReducedCaretAnimation}
                         musicAccordionNonce={musicAccordionNonce}
                         musicVolume={musicVolume}
                         setMusicVolume={setMusicVolume}
@@ -7398,7 +7472,7 @@ ${markdownHtml}
             </div>
           </div>
         </div>
-        {filterColorize > 0 && (
+        {filterColorize > 0 && !reduceVisualEffects && (
           <div
             style={{
               position: 'fixed',

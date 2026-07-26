@@ -387,6 +387,12 @@ export interface SidebarOptionsPanelProps {
   setAudioReverbStrength: (value: number) => void
   audioReverbSpace: number
   setAudioReverbSpace: (value: number) => void
+  pitchJitterAmount: number
+  setPitchJitterAmount: (value: number) => void
+  reduceVisualEffects: boolean
+  setReduceVisualEffects: (value: boolean) => void
+  reducedCaretAnimation: boolean
+  setReducedCaretAnimation: (value: boolean) => void
 
   musicAccordionNonce: number
   musicVolume: number
@@ -563,6 +569,12 @@ export function SidebarOptionsPanel({
   setAudioReverbStrength,
   audioReverbSpace,
   setAudioReverbSpace,
+  pitchJitterAmount,
+  setPitchJitterAmount,
+  reduceVisualEffects,
+  setReduceVisualEffects,
+  reducedCaretAnimation,
+  setReducedCaretAnimation,
   musicAccordionNonce,
   musicVolume,
   setMusicVolume,
@@ -733,7 +745,7 @@ export function SidebarOptionsPanel({
                 max={VIEW_LETTER_SPACING_MAX_EM}
                 step={VIEW_LETTER_SPACING_STEP_EM}
                 value={viewLetterSpacingEm}
-                trackLabel="letter-spacing"
+                trackLabel="spacing"
                 ariaLabel="Render letter spacing in em"
                 defaultValue={DEFAULT_VIEW_LETTER_SPACING_EM}
                 onCommit={(value) => setViewLetterSpacingEm(
@@ -748,7 +760,7 @@ export function SidebarOptionsPanel({
                 max={EDITOR_LINE_HEIGHT_MULTIPLIER_MAX}
                 step={EDITOR_LINE_HEIGHT_MULTIPLIER_STEP}
                 value={viewSpacing}
-                trackLabel="line-height"
+                trackLabel="height"
                 ariaLabel="Render line height"
                 defaultValue={DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER}
                 onCommit={(value) => setViewSpacing(
@@ -1756,6 +1768,26 @@ export function SidebarOptionsPanel({
         heading="Filters"
       >
 <div className="utility-setting-slider-stack" aria-label="CSS filter controls">
+          <div className="utility-setting-button-row" role="group" aria-label="Performance controls">
+            <button
+              type="button"
+              className={`btn-icon${reduceVisualEffects ? ' is-active' : ''}`}
+              onClick={() => setReduceVisualEffects(!reduceVisualEffects)}
+              aria-pressed={reduceVisualEffects}
+              title="Reduce visual effects (forces glaze/filter/colorize off without losing your slider positions)"
+            >
+              <span className="fa-solid fa-leaf" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={`btn-icon${reducedCaretAnimation ? ' is-active' : ''}`}
+              onClick={() => setReducedCaretAnimation(!reducedCaretAnimation)}
+              aria-pressed={reducedCaretAnimation}
+              title="Reduce caret animation (stops the idle blink from keeping the compositor busy)"
+            >
+              <span className="fa-solid fa-i-cursor" aria-hidden="true" />
+            </button>
+          </div>
           <CompactScrollbarSlider id="filter-invert" min={0} max={1} step={0.01} value={filterInvert} trackLabel="invert" ariaLabel="Invert" defaultValue={0} onCommit={setFilterInvert} />
           <CompactScrollbarSlider id="filter-sepia" min={0} max={1} step={0.01} value={filterSepia} trackLabel="sepia" ariaLabel="Sepia" defaultValue={0} onCommit={setFilterSepia} />
           <CompactScrollbarSlider id="filter-hue-rotate" min={0} max={360} step={1} value={filterHueRotate} trackLabel="hue-rotate" ariaLabel="Hue rotate (degrees)" defaultValue={0} onCommit={setFilterHueRotate} />
@@ -1954,6 +1986,21 @@ export function SidebarOptionsPanel({
             ariaLabel="Reverb space"
             defaultValue={0}
             onCommit={(value) => setAudioReverbSpace(clamp(value, 0, 1))}
+          />
+          <CompactScrollbarSlider
+            id="audio-pitch-jitter"
+            min={0}
+            max={0.05}
+            step={0.001}
+            value={pitchJitterAmount}
+            trackLabel="jitter"
+            ariaLabel="Pitch jitter"
+            defaultValue={0}
+            onCommit={(value) => {
+              const nextValue = clamp(value, 0, 0.05)
+              setPitchJitterAmount(nextValue)
+              typingSoundManager.setPitchJitterAmount(nextValue)
+            }}
           />
         </div>
       </AccordionSection>

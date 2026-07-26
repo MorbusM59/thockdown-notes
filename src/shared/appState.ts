@@ -118,6 +118,9 @@ export interface PersistedMenuState {
   audioReverbStrength?: number;
   audioReverbSpace?: number;
   audioReverbAmount?: number;
+  pitchJitterAmount?: number;
+  reduceVisualEffects?: boolean;
+  reducedCaretAnimation?: boolean;
   typingSoundEnabled?: boolean;
   typingSoundSet?: 'A' | 'B' | 'C';
   musicVolume?: number;

@@ -18,6 +18,8 @@ import type { ExternalFilesApi } from '../src/shared/externalFiles'
 import { EXTERNAL_FILE_CHANNELS } from '../src/shared/externalFiles'
 import type { TextureCacheApi } from '../src/shared/textures'
 import { TEXTURE_CHANNELS } from '../src/shared/textures'
+import type { AudioBounceCacheApi } from '../src/shared/audioBounceCache'
+import { AUDIO_BOUNCE_CHANNELS } from '../src/shared/audioBounceCache'
 import type { UiLoadoutApi } from '../src/shared/loadouts'
 import { LOADOUT_CHANNELS } from '../src/shared/loadouts'
 import type { FileSyncApi } from '../src/shared/fileSync'
@@ -155,6 +157,13 @@ const textureCacheApi: TextureCacheApi = {
 }
 
 contextBridge.exposeInMainWorld('thockdownTextures', textureCacheApi)
+
+const audioBounceCacheApi: AudioBounceCacheApi = {
+  getCachedBounce: (request) => ipcRenderer.invoke(AUDIO_BOUNCE_CHANNELS.getCached, request),
+  saveCachedBounce: (request, payload) => ipcRenderer.invoke(AUDIO_BOUNCE_CHANNELS.saveCached, request, payload),
+}
+
+contextBridge.exposeInMainWorld('thockdownAudioBounces', audioBounceCacheApi)
 
 const uiLoadoutApi: UiLoadoutApi = {
   list: () => ipcRenderer.invoke(LOADOUT_CHANNELS.list),
