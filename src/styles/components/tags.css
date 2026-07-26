@@ -2,6 +2,21 @@
    Tag System
    ============================================================================= */
 
+/* Registered as lengths so transitioning them smoothly animates the mask
+   gradient in .tabbar-tabs-scroll-shell below (plain custom properties
+   don't interpolate -- they'd just jump). */
+@property --tab-fade-left-w {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --tab-fade-right-w {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
 .tabbar-grid {
   padding: var(--spacing-regular) var(--spacing-large);
   height: 100%;
@@ -111,8 +126,8 @@
 
 /* Suggested tags, expanded to occupy the whole tag bar (identity tab click
    while showing the assigned id) -- same horizontal wheel-scroll affordance
-   as the tab bar's own tab strip, via the shared .tabbar-tabs-scroll-shell /
-   .tabbar-tabs-edge-fade classes. */
+   as the tab bar's own tab strip, via the shared .tabbar-tabs-scroll-shell
+   fade-mask classes. */
 .tabbar-suggested-tags-expanded {
   display:     flex;
   flex-wrap:   nowrap;
@@ -308,12 +323,48 @@
   overflow: hidden;
 }
 
+/* True alpha fade at the scroll edges, masking the shell itself rather than
+   painting a color-matched gradient overlay on top -- see .render-container
+   in markdown.css for the original version of this technique. Unlike the
+   preview's fade (always on), this one is conditional: the fade widths are
+   registered custom properties (see @property below) so they can transition
+   smoothly between 0 (no hidden tabs off that edge) and full width (edge
+   scrolled away from), driven by the .fade-left / .fade-right modifiers. */
 .tabbar-tabs-scroll-shell {
   position:  relative;
   flex:      1 1 auto;
   min-width: 0;
   height:    100%;
   overflow:  hidden;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--tab-fade-left-w),
+    #000 calc(100% - var(--tab-fade-right-w)),
+    transparent 100%
+  );
+  -webkit-mask-repeat:   no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size:     100% 100%;
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--tab-fade-left-w),
+    #000 calc(100% - var(--tab-fade-right-w)),
+    transparent 100%
+  );
+  mask-repeat:   no-repeat;
+  mask-position: center;
+  mask-size:     100% 100%;
+  transition: --tab-fade-left-w 0.15s ease, --tab-fade-right-w 0.15s ease;
+}
+
+.tabbar-tabs-scroll-shell.fade-left {
+  --tab-fade-left-w: 14px;
+}
+
+.tabbar-tabs-scroll-shell.fade-right {
+  --tab-fade-right-w: 14px;
 }
 
 .tabbar-tabs-display {
@@ -333,33 +384,6 @@
 
 .tabbar-tabs-display::-webkit-scrollbar {
   display: none;               /* Chromium / Electron */
-}
-
-/* Subtle fade indicating hidden tabs off either edge; only shown while the
-   bar is actually scrolled away from that edge. */
-.tabbar-tabs-edge-fade {
-  position:       absolute;
-  top:            0;
-  bottom:         0;
-  width:          14px;
-  pointer-events: none;
-  opacity:        0;
-  transition:     opacity 0.15s ease;
-  z-index:        2;
-}
-
-.tabbar-tabs-edge-fade.left {
-  left:       0;
-  background: linear-gradient(to right, var(--color-border-light-30), transparent);
-}
-
-.tabbar-tabs-edge-fade.right {
-  right:      0;
-  background: linear-gradient(to left, var(--color-border-light-30), transparent);
-}
-
-.tabbar-tabs-edge-fade.visible {
-  opacity: 1;
 }
 
 .note-tab-pill {

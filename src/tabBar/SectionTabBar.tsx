@@ -243,8 +243,7 @@ export function SectionTabBar({
 
       {tabBarMode === 'tabs' ? (
         <div className="tab-mode-shell tabs-mode" role="group" aria-label="Note tabs">
-          <div className="tabbar-tabs-scroll-shell">
-            <div className={`tabbar-tabs-edge-fade left${tabsCanScrollLeft ? ' visible' : ''}`} aria-hidden="true" />
+          <div className={`tabbar-tabs-scroll-shell${tabsCanScrollLeft ? ' fade-left' : ''}${tabsCanScrollRight ? ' fade-right' : ''}`}>
             <div
               className="tabbar-tabs-display"
               aria-live="polite"
@@ -348,14 +347,12 @@ export function SectionTabBar({
                 </>
               )}
             </div>
-            <div className={`tabbar-tabs-edge-fade right${tabsCanScrollRight ? ' visible' : ''}`} aria-hidden="true" />
           </div>
         </div>
       ) : (
       <div className="tab-mode-shell" role="group" aria-label="Tag manager">
         {isSuggestedTagsExpanded ? (
-          <div className="tabbar-tabs-scroll-shell">
-            <div className={`tabbar-tabs-edge-fade left${suggestedTagsCanScrollLeft ? ' visible' : ''}`} aria-hidden="true" />
+          <div className={`tabbar-tabs-scroll-shell${suggestedTagsCanScrollLeft ? ' fade-left' : ''}${suggestedTagsCanScrollRight ? ' fade-right' : ''}`}>
             <div
               className="tabbar-suggested-tags-expanded"
               aria-live="polite"
@@ -379,7 +376,6 @@ export function SectionTabBar({
                 ))
               )}
             </div>
-            <div className={`tabbar-tabs-edge-fade right${suggestedTagsCanScrollRight ? ' visible' : ''}`} aria-hidden="true" />
           </div>
         ) : (
           <>
