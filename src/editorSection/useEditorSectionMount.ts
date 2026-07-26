@@ -699,8 +699,18 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   const shouldPlayReverseTypingSound = useCallback((event: EditorTextChangeEvent) => {
     if (event.source !== 'user-input') return false
     const delta = event.text.length - event.previousText.length
-    return delta < 0 && delta >= -8
-  }, [])
+    if (delta >= 0) return false
+    // latestEditorSelectionRef still holds the pre-edit selection here --
+    // it's only reassigned to event.selection after this check runs (below,
+    // in bindings.onTextChange). A non-collapsed selection means the delete
+    // was a single Backspace/Delete keystroke wiping out an arbitrary range,
+    // which should always click regardless of how many characters that was
+    // -- the 8-char cap below exists only to filter out bulk deletes that
+    // didn't originate from one visible keystroke (e.g. a collapsed-caret
+    // delta this large shouldn't normally occur from real typing).
+    if (!latestEditorSelectionRef.current.isCollapsed) return true
+    return delta >= -8
+  }, [latestEditorSelectionRef])
 
   const deriveTypingSoundKeyId = useCallback((event: EditorTextChangeEvent): string | undefined => {
     if (event.source !== 'user-input') return undefined
