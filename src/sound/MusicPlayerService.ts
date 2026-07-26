@@ -20,14 +20,22 @@ export interface MusicPlayerConfig {
  * Electron registers this scheme as a privileged protocol that proxies
  * requests to file:// in the main process, bypassing the cross-origin block
  * that prevents http://localhost (dev mode) from loading file:// media.
+ *
+ * A fixed "local" authority is used (rather than an empty host with
+ * thockdown-music:///path) because Chromium's GURL parser for custom
+ * "standard" schemes doesn't reliably treat a host-less triple-slash URL as
+ * empty-host-plus-absolute-path: on Linux it was observed swallowing the
+ * leading path segment (e.g. "/home/...") as if it were the hostname,
+ * truncating every absolute path and making every file 404.
  */
 function toMusicUrl(filePath: string): string {
   if (filePath.startsWith('thockdown-music://')) return filePath;
-  // Normalise backslashes, then encode special characters (spaces etc.) in
-  // the path while preserving slashes and the Windows drive-letter colon.
+  // Normalise backslashes, then encode special characters (spaces, #, ? etc.)
+  // in the path while preserving slashes and the Windows drive-letter colon.
   const posix = filePath.replace(/\\/g, '/');
-  const encoded = encodeURI(posix);
-  return encoded.startsWith('/') ? `thockdown-music://${encoded}` : `thockdown-music:///${encoded}`;
+  const encoded = encodeURI(posix).replace(/#/g, '%23').replace(/\?/g, '%3F');
+  const withLeadingSlash = encoded.startsWith('/') ? encoded : `/${encoded}`;
+  return `thockdown-music://local${withLeadingSlash}`;
 }
 
 /**
