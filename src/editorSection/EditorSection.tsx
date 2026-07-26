@@ -585,19 +585,20 @@ export function EditorSection({
     tabBarModeRef.current = tabBarMode
   }, [tabBarMode, tabBarModeRef])
 
-  // The tag bar is transient chrome, not a sticky preference -- any click
-  // outside this section's own tab-bar strip (typing in the editor,
-  // clicking the sidebar, clicking a *different* section) drops it back to
-  // the tab bar. Scoped to this section's own tabbarGridRef so a click
-  // inside a neighboring section's tag bar doesn't collapse this one too.
+  // The tag bar is transient chrome, not a sticky preference -- but it must
+  // survive clicks that pick a different note to tag (sidebar, a *different*
+  // section's tab bar) so bulk-assigning a tag across several notes doesn't
+  // require re-opening tag mode after every click. Only clicking into an
+  // editor's own text -- i.e. actually going back to writing -- should drop
+  // it back to the tab bar.
   useEffect(() => {
     if (tabBarMode !== 'tags') return
     const handleWindowMouseDown = (event: globalThis.MouseEvent) => {
       const target = event.target
-      if (target instanceof Node && tabbarGridRef.current?.contains(target)) {
-        return
+      if (!(target instanceof Node)) return
+      if (target instanceof HTMLElement && target.closest('.editor-stage')) {
+        setTabBarMode('tabs')
       }
-      setTabBarMode('tabs')
     }
     window.addEventListener('mousedown', handleWindowMouseDown)
     return () => window.removeEventListener('mousedown', handleWindowMouseDown)

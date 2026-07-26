@@ -371,10 +371,9 @@ function hierarchyFromTags(tags: string[]): { primary: string; secondary: string
 }
 
 function buildHierarchyGroups(notes: NoteSummary[]): PrimaryGroup[] {
-  const sortedNotes = [...notes].sort((a, b) => b.updatedAtMs - a.updatedAtMs)
   const primaryMap = new Map<string, Map<string, Map<string, NoteSummary[]>>>()
 
-  for (const note of sortedNotes) {
+  for (const note of notes) {
     const { primary, secondary, tertiary } = hierarchyFromTags(note.tags)
 
     if (!primaryMap.has(primary)) {
@@ -407,7 +406,7 @@ function buildHierarchyGroups(notes: NoteSummary[]): PrimaryGroup[] {
             .sort(([a], [b]) => compareLabel(a, b))
             .map(([tertiaryName, groupedNotes]) => ({
               name: tertiaryName,
-              notes: groupedNotes,
+              notes: [...groupedNotes].sort((a, b) => compareLabel(a.title, b.title)),
             })),
         })),
     }))
@@ -1902,6 +1901,18 @@ function App() {
   const [musicReverbRoom, setMusicReverbRoom] = useState(0.3)
   const [musicActiveSlots, setMusicActiveSlots] = useState<import('./shared/audioPlayer').PlaylistSlot[]>([])
   const [musicAccordionNonce, setMusicAccordionNonce] = useState(0)
+  // Last-played song/position/playing-state restored from the previous session,
+  // handed to AudioControls once as its "initial*" props (see below).
+  const [musicRestoreSongId, setMusicRestoreSongId] = useState<number | null>(null)
+  const [musicRestorePositionSec, setMusicRestorePositionSec] = useState(0)
+  const [musicRestoreWasPlaying, setMusicRestoreWasPlaying] = useState(false)
+  // Kept fresh by AudioControls; read by buildMenuStateSnapshot so the latest
+  // song/position/playing-state is captured whenever app state is saved.
+  const musicPlaybackRef = useRef<import('./components/AudioControls').MusicPlaybackSnapshot>({
+    songId: null,
+    positionSec: 0,
+    wasPlaying: false,
+  })
   const [appGridTextureSize, setAppGridTextureSize] = useState({ width: 1280, height: 720 })
   const [sidebarTextureSize, setSidebarTextureSize] = useState({ width: 512, height: 720 })
   const [editorStageTextureSize, setEditorStageTextureSize] = useState({ width: 1280, height: 720 })
@@ -3148,6 +3159,9 @@ function App() {
       musicReverbAmount,
       musicReverbRoom,
       musicActiveSlots,
+      musicLastSongId: musicPlaybackRef.current.songId ?? undefined,
+      musicLastPositionSec: musicPlaybackRef.current.positionSec,
+      musicWasPlaying: musicPlaybackRef.current.wasPlaying,
       highlightCaretColor: highlightColors.caret,
       highlightSearchColor: highlightColors.search,
       highlightSelectionColor: highlightColors.selectionEdit,
@@ -4746,6 +4760,16 @@ ${markdownHtml}
               setMusicActiveSlots(
                 (appState.menu.musicActiveSlots as number[]).filter((s) => s >= 1 && s <= 5) as import('./shared/audioPlayer').PlaylistSlot[]
               )
+            }
+            if (typeof appState.menu.musicLastSongId === 'number') {
+              const positionSec = appState.menu.musicLastPositionSec ?? 0
+              const wasPlaying = appState.menu.musicWasPlaying ?? false
+              setMusicRestoreSongId(appState.menu.musicLastSongId)
+              setMusicRestorePositionSec(positionSec)
+              setMusicRestoreWasPlaying(wasPlaying)
+              // Prime the ref immediately so a save triggered before AudioControls
+              // mounts/restores doesn't clobber the persisted values with defaults.
+              musicPlaybackRef.current = { songId: appState.menu.musicLastSongId, positionSec, wasPlaying }
             }
             setHighlightColors({
               caret: appState.menu.highlightCaretColor ?? DEFAULT_HIGHLIGHT_COLORS.caret,
@@ -7353,6 +7377,10 @@ ${markdownHtml}
                 reverbRoom={musicReverbRoom}
                 activeSlots={musicActiveSlots}
                 onActiveSlotsChange={setMusicActiveSlots}
+                initialSongId={musicRestoreSongId}
+                initialPositionSec={musicRestorePositionSec}
+                initialWasPlaying={musicRestoreWasPlaying}
+                playbackStateRef={musicPlaybackRef}
                 isOptionsOpen={sidebarMode === 'options'}
                 isMiniMode={windowIsCollapsed}
                 onOpenMusicOptions={() => {

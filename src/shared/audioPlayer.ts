@@ -14,6 +14,7 @@ export const AUDIO_PLAYER_CHANNELS = {
   skipSong:             'audio-player:skip-song',
   purgeSong:            'audio-player:purge-song',
   getPlaylistCounts:    'audio-player:get-playlist-counts',
+  getSongById:          'audio-player:get-song-by-id',
 } as const;
 
 /** One slot out of the 5 playlist buttons (1-indexed). */
@@ -78,6 +79,8 @@ export type AudioPlayerApi = {
   purgeSong(id: number): Promise<void>;
   /** Return the total song count for each of the 5 playlist slots. */
   getPlaylistCounts(): Promise<PlaylistCountsResult>;
+  /** Look up a single song by its DB id (used to restore the last-played song across sessions). */
+  getSongById(id: number): Promise<MusicSongEntry | null>;
 };
 
 /** Supported audio file extensions that can be added to playlists. */

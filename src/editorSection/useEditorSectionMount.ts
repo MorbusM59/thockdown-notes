@@ -253,6 +253,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       lineHeightPx: lineHeightPx,
       telemetry: latestEditViewportTelemetryRef.current ?? undefined,
       viewport,
+      container: sectionContainerRef.current,
     })
 
     const scrollTopLines = Math.max(0, Math.round(viewport.scrollTopLines))
@@ -267,7 +268,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       sourceAnchorLine,
       sourceAnchorText,
     }
-  }, [activeNoteText, lineHeightPx, latestEditorSelectionRef, latestEditorTextRef])
+  }, [activeNoteText, lineHeightPx, latestEditorSelectionRef, latestEditorTextRef, sectionContainerRef])
 
   const updateEditModeSnapshotCache = useCallback((snapshot: EditRestoreSnapshot) => {
     editModeSnapshotByNoteIdRef.current.set(snapshot.noteId, snapshot)
@@ -673,10 +674,11 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       lineHeightPx: lineHeightPx,
       telemetry: latestEditViewportTelemetryRef.current ?? undefined,
       viewport,
+      container: sectionContainerRef.current,
     })
 
     pendingRenderViewSourceAnchorRef.current = anchor
-  }, [captureEditModeSnapshotFromEditor, lineHeightPx])
+  }, [captureEditModeSnapshotFromEditor, lineHeightPx, sectionContainerRef])
 
   const previousActiveNoteIdForEditRestoreRef = useRef<string | null>(null)
   const previousPreviewModeRef = useRef(false)

@@ -2593,6 +2593,12 @@ export class DatabaseService {
     return rows.map((r) => this.rowToSongEntry(r));
   }
 
+  getMusicSongById(id: number): MusicSongEntry | null {
+    const db = this.requireDb();
+    const row = db.prepare('SELECT * FROM music_songs WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+    return row ? this.rowToSongEntry(row) : null;
+  }
+
   addMusicSongs(slot: PlaylistSlot, filePaths: string[]): MusicSongEntry[] {
     const db = this.requireDb();
     const insert = db.prepare(`

@@ -661,6 +661,25 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       shouldSuppressInitialNativeJump = false;
     };
 
+    // The editor never scrolls horizontally -- text wraps (white-space:
+    // pre-wrap) and there is no horizontal caging math, unlike the vertical
+    // scrollTop this plugin caged above. But a collapsed caret sitting
+    // exactly on the last cell of a full-width line, right before the
+    // native ArrowRight move to the next line's start, can make the browser
+    // nudge the (invisible, caret-color: transparent) native caret into
+    // view with a 1px scrollLeft on the scroller -- an overflow-x: hidden
+    // element is still a real scroll container as far as that native
+    // behavior is concerned. That shifts every character in the caret's own
+    // rect measurement by that same 1px, which is enough to knock
+    // BlockCaretPlugin's cell-quantized x position out of the visible cage
+    // for a frame. Since scrollLeft has no legitimate use here, just pin it.
+    const handleHorizontalScrollGuard = () => {
+      if (!scroller) return;
+      if (scroller.scrollLeft !== 0) {
+        scroller.scrollLeft = 0;
+      }
+    };
+
     const handleKeyUp = (event: KeyboardEvent) => {
       if (event.key === 'PageUp' || event.key === 'PageDown') {
         pageKeysHeld.delete(event.key);
@@ -861,6 +880,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     scroller?.addEventListener('paste', handlePaste, { capture: true });
     scroller?.addEventListener('wheel', handleWheel, { passive: false });
     scroller?.addEventListener('scroll', handleInitialRefocusNativeJumpSuppression, { passive: true });
+    scroller?.addEventListener('scroll', handleHorizontalScrollGuard, { passive: true });
     document.addEventListener('pointerdown', handlePointerDown, { capture: true, passive: true });
     document.addEventListener('mousedown', handleMouseDown, { capture: true, passive: true });
     scroller?.addEventListener('scroll', handleSelectionDragScrollQuantization, { passive: true });
@@ -887,6 +907,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       scroller?.removeEventListener('paste', handlePaste, true);
       scroller?.removeEventListener('wheel', handleWheel);
       scroller?.removeEventListener('scroll', handleInitialRefocusNativeJumpSuppression);
+      scroller?.removeEventListener('scroll', handleHorizontalScrollGuard);
       document.removeEventListener('pointerdown', handlePointerDown, true);
       document.removeEventListener('mousedown', handleMouseDown, true);
       scroller?.removeEventListener('scroll', handleSelectionDragScrollQuantization);

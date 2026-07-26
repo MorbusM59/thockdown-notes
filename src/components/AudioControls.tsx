@@ -10,6 +10,13 @@ const HOLD_THRESHOLD_MS = 700
 
 const SLOTS: PlaylistSlot[] = [1, 2, 3, 4, 5]
 
+/** Latest playback snapshot, kept fresh by AudioControls for the parent to read on save. */
+export interface MusicPlaybackSnapshot {
+  songId: number | null
+  positionSec: number
+  wasPlaying: boolean
+}
+
 export interface AudioControlsProps {
   /** 0–1 volume for the music player. */
   volume: number
@@ -30,6 +37,18 @@ export interface AudioControlsProps {
   onAdjustMusicRoom?: (delta: number) => void
   /** When true, audio options clicks should be disabled (e.g. mini mode). */
   isMiniMode?: boolean
+  /** DB id of the song that was last active in the previous session, if any. */
+  initialSongId?: number | null
+  /** Playback position (seconds) to resume the initial song at. */
+  initialPositionSec?: number
+  /** Whether the initial song was playing when the previous session ended. */
+  initialWasPlaying?: boolean
+  /**
+   * Ref kept up to date with the current song id / position / playing state so
+   * the parent can read a fresh snapshot whenever it persists app state,
+   * without triggering a re-render on every position tick.
+   */
+  playbackStateRef?: React.MutableRefObject<MusicPlaybackSnapshot>
 }
 
 export const AudioControls = memo(function AudioControls({
@@ -44,12 +63,18 @@ export const AudioControls = memo(function AudioControls({
   onAdjustMusicReverb,
   onAdjustMusicRoom,
   isMiniMode,
+  initialSongId,
+  initialPositionSec,
+  initialWasPlaying,
+  playbackStateRef,
 }: AudioControlsProps) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentSong, setCurrentSong] = useState<MusicSongEntry | null>(null)
   const [counts, setCounts] = useState<PlaylistCountsResult>({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 })
   // Slot button that is currently "primed" for clearing (held right-click)
   const [primedSlot, setPrimedSlot] = useState<PlaylistSlot | null>(null)
+  // Position to seek to once the restored song's first playback begins.
+  const pendingSeekSecRef = useRef<number | null>(null)
 
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const seekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -140,6 +165,56 @@ export const AudioControls = memo(function AudioControls({
     await refreshCountsRef.current()
   }, [])
 
+  // ---------------------------------------------------------------- restore last session
+
+  // Restore the last-played song (paused, cued at its saved position) once the
+  // parent finishes loading app state and supplies a real id. initialSongId
+  // only ever transitions from null/undefined to a number once, so this runs
+  // a single time per app launch.
+  useEffect(() => {
+    if (initialSongId == null) return
+    let cancelled = false
+    void (async () => {
+      const song = await window.thockdownAudioPlayer?.getSongById(initialSongId)
+      if (cancelled || !song) return
+      pendingSeekSecRef.current = initialPositionSec ?? 0
+      setCurrentSong(song)
+      if (initialWasPlaying) {
+        try {
+          await musicPlayerService.play(song.filePath)
+          if (pendingSeekSecRef.current) musicPlayerService.setCurrentTime(pendingSeekSecRef.current)
+          pendingSeekSecRef.current = null
+          setIsPlaying(true)
+        } catch {
+          // Playback may be refused this early (no user gesture yet). Leave
+          // the song cued up and paused rather than treating it as missing.
+          musicPlayerService.stop()
+        }
+      }
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSongId])
+
+  // Keep the parent-owned snapshot fresh so it can be persisted at any time
+  // (e.g. on the debounced app-state save, or on quit).
+  useEffect(() => {
+    if (!playbackStateRef) return
+    playbackStateRef.current.songId = currentSong?.id ?? null
+    playbackStateRef.current.wasPlaying = isPlaying
+    playbackStateRef.current.positionSec = musicPlayerService.currentTime
+  }, [playbackStateRef, currentSong, isPlaying])
+
+  // While playing, periodically refresh the saved position. Position isn't
+  // reactive state — polling avoids a re-render on every audio frame.
+  useEffect(() => {
+    if (!playbackStateRef || !isPlaying) return
+    const id = setInterval(() => {
+      playbackStateRef.current.positionSec = musicPlayerService.currentTime
+    }, 3000)
+    return () => clearInterval(id)
+  }, [playbackStateRef, isPlaying])
+
   // ---------------------------------------------------------------- play / stop
 
   const handlePlayToggle = useCallback(async () => {
@@ -151,6 +226,10 @@ export const AudioControls = memo(function AudioControls({
         try {
           // Resume the current song.
           await musicPlayerService.play(currentSong.filePath)
+          if (pendingSeekSecRef.current != null) {
+            musicPlayerService.setCurrentTime(pendingSeekSecRef.current)
+            pendingSeekSecRef.current = null
+          }
           setIsPlaying(true)
         } catch (err) {
           if (err instanceof MissingFileError) {

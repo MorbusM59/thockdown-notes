@@ -33,13 +33,22 @@ export function resolveSourceAnchorFromEditState(params: {
   lineHeightPx: number
   telemetry?: EditViewportTelemetry | null
   viewport?: PersistedViewportState | null
+  /**
+   * Scopes the editor-stage lookup below to one section's own container.
+   * Every section renders the same `.editor-stage` class name, so an
+   * unscoped document-wide query would always resolve to whichever section
+   * happens to be first in the DOM -- falling back to `document` here is
+   * only correct for a single-section layout.
+   */
+  container?: ParentNode | null
 }): { sourceAnchorLine: number; sourceAnchorText: string | null } {
-  const { text, lineHeightPx, telemetry, viewport } = params
+  const { text, lineHeightPx, telemetry, viewport, container } = params
   const lines = text.split('\n')
   const safeLineHeight = Math.max(1, lineHeightPx)
 
-  const editorScroller = document.querySelector<HTMLElement>('.editor-stage .thockdown-custom-scrollbar')
-  const editorRoot = document.querySelector<HTMLElement>('.editor-stage .editor-text[contenteditable="true"]')
+  const searchRoot = container ?? document
+  const editorScroller = searchRoot.querySelector<HTMLElement>('.editor-stage .thockdown-custom-scrollbar')
+  const editorRoot = searchRoot.querySelector<HTMLElement>('.editor-stage .editor-text[contenteditable="true"]')
 
   if (editorScroller && editorRoot && document.body.contains(editorRoot)) {
     const scrollerRect = editorScroller.getBoundingClientRect()

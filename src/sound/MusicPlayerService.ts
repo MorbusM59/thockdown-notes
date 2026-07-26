@@ -87,6 +87,15 @@ export class MusicPlayerService {
   get isPlaying(): boolean { return this._isPlaying; }
   get filePath(): string | null { return this.currentFilePath; }
   get duration(): number { return this.currentDuration; }
+  get currentTime(): number { return this.element?.currentTime ?? 0; }
+
+  /** Jump to an absolute position (seconds). Used to restore a saved playback position. */
+  setCurrentTime(seconds: number): void {
+    if (!this.element) return;
+    const duration = this.element.duration;
+    const max = Number.isFinite(duration) && duration > 0 ? duration - 0.05 : seconds;
+    this.element.currentTime = Math.max(0, Math.min(max, seconds));
+  }
 
   // ── Audio graph ────────────────────────────────────────────────────────────
 

@@ -127,6 +127,10 @@ export interface PersistedMenuState {
   musicReverbAmount?: number;
   musicReverbRoom?: number;
   musicActiveSlots?: number[];
+  /** Last-played song's DB id, its playback position, and whether it was playing — restored on next launch. */
+  musicLastSongId?: number;
+  musicLastPositionSec?: number;
+  musicWasPlaying?: boolean;
   // Legacy render smooth-scroll keys (pre curve-model / pre maxSpeed migration).
   renderScrollSmoothnessSec?: number;
   renderScrollEaseMultiplier?: number;

@@ -854,6 +854,10 @@ function registerIpcHandlers() {
     return databaseService!.getMusicPlaylistCounts();
   });
 
+  ipcMain.handle(AUDIO_PLAYER_CHANNELS.getSongById, async (_event, id: number) => {
+    return databaseService!.getMusicSongById(id);
+  });
+
   ipcMain.handle(NOTE_TABS_CHANNELS.list, async () => {
     return databaseService!.listNoteTabs();
   });

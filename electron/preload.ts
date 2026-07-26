@@ -200,6 +200,7 @@ const audioPlayerApi: AudioPlayerApi = {
   skipSong:           (id) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.skipSong, id),
   purgeSong:          (id) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.purgeSong, id),
   getPlaylistCounts:  () => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.getPlaylistCounts),
+  getSongById:        (id) => ipcRenderer.invoke(AUDIO_PLAYER_CHANNELS.getSongById, id),
 }
 
 contextBridge.exposeInMainWorld('thockdownAudioPlayer', audioPlayerApi)
