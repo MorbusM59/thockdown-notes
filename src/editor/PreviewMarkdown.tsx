@@ -44,12 +44,19 @@ function isSafePreviewImageSrc(src: string | undefined): boolean {
 
 // ── Internal note/anchor links ────────────────────────────────────────────
 //
-// Link destinations of the form `$NOTE-ID`, `~anchorname`, `~anchorname#uid`,
-// or `$NOTE-ID~anchorname[#uid]` are handled entirely in-app instead of being
-// treated as external URLs. `$` selects another note by its user-assignable
-// internal ID (see setNoteAssignedId); `~` jumps to an anchor marked with
-// `[~anchorname]` (or `[~anchorname#uid]` to disambiguate repeated names)
-// somewhere in the document, current or target.
+// Link destinations of the form `#anchor-id`, `$#anchor-id`, `$NOTE-ID`, or
+// `$NOTE-ID#anchor-id` are handled entirely in-app instead of being treated
+// as external URLs. A bare `#anchor-id` (no leading `$`) is never a link —
+// it's how `[Anchor Text](#anchor-id)` DEFINES an anchor at that spot,
+// rendered inert. Every destination that actually navigates starts with
+// `$`: `$` alone selects "this note" (an empty note-id slot can never
+// collide with a real one, since assigned IDs are never empty — see
+// setNoteAssignedId), or `$NOTE-ID` selects another note by its
+// user-assignable internal ID. An optional trailing `#anchor-id` on either
+// form jumps to the matching `[Anchor Text](#anchor-id)` definition once
+// the target note is open. Because both forms are ordinary Markdown links
+// — not a separate text-scanning syntax — an example shown inside a code
+// span is never mistaken for a live one.
 
 function escapeRegExpLiteral(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -60,101 +67,43 @@ export function normalizeInternalIdForLookup(raw: string): string {
   return raw.trim().toUpperCase().replace(/\s+/g, '-')
 }
 
-/** Matches every `[~name]` / `[~name#uid]` anchor marker in a block of text. Free-text name/uid, only `]` and `#` are excluded so the grammar stays unambiguous. */
-const NOTE_ANCHOR_DEFINITION_PATTERN = /\[~([^\]#]+)(?:#([^\]]+))?\]/g
+/** A `[Anchor Text](#anchor-id)` definition — rendered inert, never clickable. */
+export interface ParsedAnchorDefinition {
+  kind: 'anchor-definition'
+  anchorId: string
+}
 
+/** A `$` / `$#anchor-id` / `$NOTE-ID` / `$NOTE-ID#anchor-id` navigable link. `noteIdRaw === null` means "this note." */
 export interface ParsedInternalPreviewLink {
+  kind: 'internal-link'
   noteIdRaw: string | null
-  anchorName: string | null
-  anchorUid: string | null
+  anchorId: string | null
 }
 
-/** Parses a preview link href into its `$id` / `~anchor[#uid]` parts, or null if it isn't one of ours. */
-export function parseInternalPreviewHref(href: string): ParsedInternalPreviewLink | null {
-  const match = /^(?:\$([^~]+))?(?:~(.+))?$/.exec(href)
-  if (!match) return null
+export type ParsedPreviewHref = ParsedAnchorDefinition | ParsedInternalPreviewLink
 
-  const noteIdRaw = match[1] ?? null
-  const anchorRaw = match[2] ?? null
-  if (noteIdRaw === null && anchorRaw === null) return null
-
-  if (anchorRaw === null) {
-    return { noteIdRaw, anchorName: null, anchorUid: null }
+/** Parses a preview link href into an anchor definition or a navigable internal link, or null if it isn't one of ours. */
+export function parseInternalPreviewHref(href: string): ParsedPreviewHref | null {
+  const definitionMatch = /^#([^#]+)$/.exec(href)
+  if (definitionMatch) {
+    return { kind: 'anchor-definition', anchorId: definitionMatch[1] }
   }
 
-  const hashIndex = anchorRaw.indexOf('#')
-  const anchorName = hashIndex === -1 ? anchorRaw : anchorRaw.slice(0, hashIndex)
-  const anchorUid = hashIndex === -1 ? null : anchorRaw.slice(hashIndex + 1)
-  if (!anchorName) return null
+  const linkMatch = /^\$([^#]*)(?:#([^#]+))?$/.exec(href)
+  if (linkMatch) {
+    const noteIdRaw = linkMatch[1].length > 0 ? linkMatch[1] : null
+    const anchorId = linkMatch[2] ?? null
+    if (noteIdRaw === null && anchorId === null) return null
+    return { kind: 'internal-link', noteIdRaw, anchorId }
+  }
 
-  return { noteIdRaw, anchorName, anchorUid }
+  return null
 }
 
-/** Exact match only — a bare `~name` link resolves only a bare `[~name]` marker; disambiguated markers need the matching `#uid`. */
-export function noteContainsAnchorDefinition(contentText: string, name: string, uid: string | null): boolean {
-  const namePattern = escapeRegExpLiteral(name)
-  const pattern = uid !== null
-    ? new RegExp(`\\[~${namePattern}#${escapeRegExpLiteral(uid)}\\]`)
-    : new RegExp(`\\[~${namePattern}\\]`)
+/** Exact match only — a link to `#anchor-id` resolves only a `](#anchor-id)` definition with that exact id. */
+export function noteContainsAnchorDefinition(contentText: string, anchorId: string): boolean {
+  const pattern = new RegExp(`\\]\\(#${escapeRegExpLiteral(anchorId)}\\)`)
   return pattern.test(contentText)
-}
-
-// Replaces `[~name]` / `[~name#uid]` occurrences in rendered text with a
-// plain span carrying the anchor as data attributes — same manual
-// text-node-splice technique as createPreviewSearchHighlightRehypePlugin,
-// run first so search highlighting operates on the already-cleaned text.
-export function createPreviewNoteAnchorMarkerRehypePlugin() {
-  return () => {
-    return (tree: RehypeAstNode) => {
-      const transformNode = (node: RehypeAstNode, parent: RehypeAstNode | null, index: number | null) => {
-        if (!node || typeof node !== 'object') return
-
-        if (node.type === 'text' && typeof node.value === 'string' && node.value.includes('[~')) {
-          const textValue = node.value
-          const replacements: RehypeAstNode[] = []
-          let cursor = 0
-          NOTE_ANCHOR_DEFINITION_PATTERN.lastIndex = 0
-          let match = NOTE_ANCHOR_DEFINITION_PATTERN.exec(textValue)
-          while (match) {
-            const [fullMatch, name, uid] = match
-            if (match.index > cursor) {
-              replacements.push({ type: 'text', value: textValue.slice(cursor, match.index) })
-            }
-            replacements.push({
-              type: 'element',
-              tagName: 'span',
-              properties: {
-                className: ['note-anchor-marker'],
-                'data-note-anchor-name': name,
-                'data-note-anchor-uid': uid ?? '',
-              },
-              children: [{ type: 'text', value: name }],
-            })
-            cursor = match.index + fullMatch.length
-            match = NOTE_ANCHOR_DEFINITION_PATTERN.exec(textValue)
-          }
-
-          if (replacements.length > 0) {
-            if (cursor < textValue.length) {
-              replacements.push({ type: 'text', value: textValue.slice(cursor) })
-            }
-            if (parent && Array.isArray(parent.children) && typeof index === 'number') {
-              parent.children.splice(index, 1, ...replacements)
-            }
-            return
-          }
-        }
-
-        if (Array.isArray(node.children)) {
-          for (let childIndex = 0; childIndex < node.children.length; childIndex += 1) {
-            transformNode(node.children[childIndex], node, childIndex)
-          }
-        }
-      }
-
-      transformNode(tree, null, null)
-    }
-  }
 }
 
 // Stable references for ReactMarkdown so per-frame App re-renders (e.g. from
@@ -169,12 +118,25 @@ export function createPreviewMarkdownComponents(navigateToInternalLink: (target:
   return {
     a: ({ children, href }: { children?: ReactNode; href?: string }) => {
       const normalizedHref = typeof href === 'string' ? href : undefined
+      const parsedHref = normalizedHref ? parseInternalPreviewHref(normalizedHref) : null
+
+      // `[Anchor Text](#anchor-id)` — a definition, never clickable. Rendered
+      // as a plain span carrying the id as a data attribute, the same shape
+      // scrollToAnchorInPreview looks for.
+      if (parsedHref?.kind === 'anchor-definition') {
+        return (
+          <span className="note-anchor-marker" data-anchor-id={parsedHref.anchorId}>
+            {children}
+          </span>
+        )
+      }
+
       const isLiteralHrefChild =
         normalizedHref !== undefined &&
         typeof children === 'string' &&
         children.trim() === normalizedHref.trim()
 
-      const internalTarget = normalizedHref ? parseInternalPreviewHref(normalizedHref) : null
+      const internalTarget = parsedHref?.kind === 'internal-link' ? parsedHref : null
 
       const handleExternalLinkClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
         event.preventDefault()

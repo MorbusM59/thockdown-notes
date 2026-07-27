@@ -99,8 +99,9 @@
   padding:          var(--spacing-regular);
 }
 
-/* Anchor markers ([~name] / [~name#uid]) render as plain, indistinguishable
-   text — the only feedback is a brief highlight fade when scrolled to. */
+/* Anchor definitions ([Anchor Text](#anchor-id)) render as plain,
+   indistinguishable text — the only feedback is a brief highlight fade
+   when scrolled to. */
 .markdown-preview .note-anchor-marker {
   cursor:        default;
   border-radius: var(--border-radius-small);

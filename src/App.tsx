@@ -86,7 +86,6 @@ import {
 import { getActiveSectionHandle, type SectionHandle } from './editorSection/sectionRegistry'
 import { type TextDecorationFormat } from './editorSection/useMarkdownFormattingToolbar'
 import {
-  createPreviewNoteAnchorMarkerRehypePlugin,
   createPreviewMarkdownComponents,
   PREVIEW_MARKDOWN_REMARK_PLUGINS,
   PREVIEW_MARKDOWN_NOOP_NAVIGATE,
@@ -4219,7 +4218,6 @@ function App() {
         <div className={`pdf-exporter-markdown-preview markdown-preview style-${viewStyle}`}>
           <ReactMarkdown
             remarkPlugins={PREVIEW_MARKDOWN_REMARK_PLUGINS}
-            rehypePlugins={[createPreviewNoteAnchorMarkerRehypePlugin()]}
             components={createPreviewMarkdownComponents(PREVIEW_MARKDOWN_NOOP_NAVIGATE)}
           >
             {currentEditorText}

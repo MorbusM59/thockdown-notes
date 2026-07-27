@@ -7,7 +7,6 @@ import {
   type ParsedInternalPreviewLink,
   normalizeInternalIdForLookup,
   noteContainsAnchorDefinition,
-  createPreviewNoteAnchorMarkerRehypePlugin,
   createPreviewMarkdownComponents,
   createPreviewSearchHighlightRehypePlugin,
   createPreviewSourceAnchorRehypePlugin,
@@ -32,11 +31,11 @@ export interface UsePreviewMarkdownRenderingResult {
 
 /**
  * Renders the current note's markdown into the preview pane -- anchor
- * markers, search-hit highlighting, source-line anchors for scroll sync,
- * and `$id`/`~anchor` internal link navigation -- extracted verbatim from
- * App.tsx with zero behavior change. Depends on the pure preview-markdown
- * primitives in src/editor/PreviewMarkdown.tsx (extracted just before this),
- * which are also shared with the PDF/MD export path.
+ * definitions, search-hit highlighting, source-line anchors for scroll sync,
+ * and `$`/`$NOTE-ID`/`#anchor-id` internal link navigation -- extracted
+ * verbatim from App.tsx with zero behavior change. Depends on the pure
+ * preview-markdown primitives in src/editor/PreviewMarkdown.tsx (extracted
+ * just before this), which are also shared with the PDF/MD export path.
  */
 export function usePreviewMarkdownRendering({
   notes,
@@ -49,21 +48,15 @@ export function usePreviewMarkdownRendering({
   isDocumentFindCaseSensitive,
   renderedDisplayText,
 }: UsePreviewMarkdownRenderingOptions): UsePreviewMarkdownRenderingResult {
-  const previewNoteAnchorMarkerPlugin = useMemo(
-    () => createPreviewNoteAnchorMarkerRehypePlugin(),
-    [],
-  )
-
-  // Scrolls the currently rendered preview to a `[~name]`/`[~name#uid]`
-  // marker, if present. `waitForNoteSwitch` retries across a few animation
-  // frames since switching notes re-renders ReactMarkdown asynchronously —
-  // the target span may not exist in the DOM yet on the frame this fires.
-  const scrollToAnchorInPreview = useCallback((name: string, uid: string | null, waitForNoteSwitch: boolean) => {
+  // Scrolls the currently rendered preview to a `[Anchor Text](#anchor-id)`
+  // definition, if present. `waitForNoteSwitch` retries across a few
+  // animation frames since switching notes re-renders ReactMarkdown
+  // asynchronously -- the target span may not exist in the DOM yet on the
+  // frame this fires.
+  const scrollToAnchorInPreview = useCallback((anchorId: string, waitForNoteSwitch: boolean) => {
     const attemptScroll = (attemptsLeft: number) => {
       const candidates = Array.from(document.querySelectorAll<HTMLElement>('.note-anchor-marker'))
-      const target = candidates.find((el) => (
-        el.dataset.noteAnchorName === name && (el.dataset.noteAnchorUid ?? '') === (uid ?? '')
-      ))
+      const target = candidates.find((el) => el.dataset.anchorId === anchorId)
 
       if (target) {
         target.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -84,7 +77,7 @@ export function usePreviewMarkdownRendering({
   }, [])
 
   // Scrolls the preview pane to the top of the document. Used for cross-note
-  // links with no `~anchor` — deferred a couple of frames past the note
+  // links with no `#anchor-id` — deferred a couple of frames past the note
   // switch so it wins over whatever scroll position the new note's own
   // render-view restore might otherwise land on.
   const scrollPreviewToTop = useCallback((waitForNoteSwitch: boolean) => {
@@ -99,23 +92,23 @@ export function usePreviewMarkdownRendering({
     }
   }, [previewScrollRef])
 
-  // Resolves and follows a `$id`, `~anchor[#uid]`, or `$id~anchor[#uid]`
-  // preview link. Broken destinations (unknown note ID, missing anchor) are
-  // silently ignored rather than partially navigating.
+  // Resolves and follows a `$`, `$#anchor-id`, `$NOTE-ID`, or
+  // `$NOTE-ID#anchor-id` preview link. Broken destinations (unknown note ID,
+  // missing anchor) are silently ignored rather than partially navigating.
   const navigateToInternalPreviewLink = useCallback((target: ParsedInternalPreviewLink) => {
     if (target.noteIdRaw !== null) {
       const normalizedTarget = normalizeInternalIdForLookup(target.noteIdRaw)
       const targetNote = notes.find((note) => note.assignedId && normalizeInternalIdForLookup(note.assignedId) === normalizedTarget)
       if (!targetNote) return
 
-      if (target.anchorName !== null && !noteContainsAnchorDefinition(targetNote.contentText ?? '', target.anchorName, target.anchorUid)) {
+      if (target.anchorId !== null && !noteContainsAnchorDefinition(targetNote.contentText ?? '', target.anchorId)) {
         return
       }
 
       const isAlreadyActive = targetNote.id === activeNoteId
       const followUp = () => {
-        if (target.anchorName !== null) {
-          scrollToAnchorInPreview(target.anchorName, target.anchorUid, !isAlreadyActive)
+        if (target.anchorId !== null) {
+          scrollToAnchorInPreview(target.anchorId, !isAlreadyActive)
         } else if (!isAlreadyActive) {
           // Already-active notes stay wherever the reader currently is —
           // only a genuine note switch resets to the top.
@@ -131,10 +124,11 @@ export function usePreviewMarkdownRendering({
       return
     }
 
-    if (target.anchorName === null || !activeNoteId) return
+    // No noteIdRaw means "this note" (a bare `$` or `$#anchor-id`).
+    if (target.anchorId === null || !activeNoteId) return
     const currentText = latestEditorTextRef.current || activeNoteText
-    if (!noteContainsAnchorDefinition(currentText, target.anchorName, target.anchorUid)) return
-    scrollToAnchorInPreview(target.anchorName, target.anchorUid, false)
+    if (!noteContainsAnchorDefinition(currentText, target.anchorId)) return
+    scrollToAnchorInPreview(target.anchorId, false)
   }, [notes, activeNoteId, activateNote, activeNoteText, scrollToAnchorInPreview, scrollPreviewToTop, latestEditorTextRef])
 
   const previewMarkdownComponents = useMemo(
@@ -158,12 +152,12 @@ export function usePreviewMarkdownRendering({
   const previewMarkdownElement = useMemo(() => (
     <ReactMarkdown
       remarkPlugins={PREVIEW_MARKDOWN_REMARK_PLUGINS}
-      rehypePlugins={[previewNoteAnchorMarkerPlugin, previewSearchHighlightPlugin, previewSourceAnchorPlugin]}
+      rehypePlugins={[previewSearchHighlightPlugin, previewSourceAnchorPlugin]}
       components={previewMarkdownComponents}
     >
       {renderedDisplayText}
     </ReactMarkdown>
-  ), [renderedDisplayText, previewNoteAnchorMarkerPlugin, previewSearchHighlightPlugin, previewSourceAnchorPlugin, previewMarkdownComponents])
+  ), [renderedDisplayText, previewSearchHighlightPlugin, previewSourceAnchorPlugin, previewMarkdownComponents])
 
   return { previewMarkdownElement }
 }
