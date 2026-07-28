@@ -136,11 +136,21 @@ plain keystroke dropped from up to 4-6 full-document `normalizeInternalText` pas
 essentially 1); and initial mount of an uncached large note — previously the single largest
 remaining number against this contract (~9-12s wall-clock on a 12,000-line note) — has been
 fixed by virtualizing the preview pane (`@tanstack/react-virtual`), so only blocks near the
-viewport mount real DOM regardless of document size. Re-measurement of that last fix is still
-owed (no browser-automation environment available in the session that implemented it); see
-`docs/large-document-performance-handover.md`'s "what's still open" for the up-to-date number
-once it lands. A now-diffuse residual per-keystroke cost (no longer dominated by one function)
-is also open and lower priority; see that same doc for specifics.
+viewport mount real DOM regardless of document size, re-measured at ~1.6-2s on a synthetic
+1.5M-character note (dev-mode browser environment, not yet the packaged Electron app — see the
+handover doc).
+
+**The diffuse per-keystroke residual is no longer a deprioritized nice-to-have — it is the
+active priority.** A user session recalibrated this: even the ~85-170ms/keystroke measured
+against the contract's own "must feel instant" bar is already roughly two orders of magnitude
+too slow, regardless of whether it reaches the more dramatic multi-second numbers reported on
+real hardware/the real Electron app. Treat any non-negligible synchronous per-keystroke cost on
+a huge document as the defect this document's "core principle" section already says it is, not
+as an acceptable residual to defer. See `docs/large-document-performance-handover.md`'s "what's
+still open" for the current profiling data and the concrete next step (incremental caching for
+`normalizeInternalText`/`canonicalizeParagraphSegments` and `resolveMarkdownSelectionContext`,
+mirroring the `ParagraphOffsetIndex`/`PreviewBlockSplit` pattern already proven twice in this
+effort).
 
 ## Review checklist
 

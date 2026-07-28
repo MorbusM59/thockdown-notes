@@ -223,15 +223,20 @@ being re-targeted mid-flight) for deliberate navigation like anchor clicks — l
 react-virtual's own estimate-correction pass (`reconcileScroll`, fires once a virtualized-out
 target's real height is measured) re-plan the animation smoothly instead of jumping.
 
-**Re-measurement not yet done.** This session had no Playwright/Chromium available in its
-environment (unlike whatever environment produced the wall-clock numbers above — this was a
-plain Windows dev machine with neither installed, and installing a browser binary solely for a
-one-off measurement wasn't judged worth the footprint given this project's standing preference
-for manual over automated browser verification). `npx tsc --noEmit`, the full test suite
-(184/184, up from 174 — 10 new tests for `resolvePreviewBlockIndexForSourceLine` and the new
-`findAnchorDefinitionLine` helper), and lint all pass, but the actual initial-mount wall-clock
-improvement on a genuinely large note has not been re-measured against the ~9.8–12s baseline
-above. Whoever verifies this manually should also note the new number here.
+**Re-measured, one session later, once Playwright was actually set up (see "Environment notes"
+below).** Synthetic 1.5M-character note (far larger than the 12,000-line note the ~9.8-12s
+baseline above was measured on), `npm run dev:browser` + real Chromium via Playwright, note
+freshly created then the page reloaded so the app boots straight into it: edit-mode DOM
+populated with the full document in **~1.6-2.1s wall-clock**, roughly an order of magnitude
+better than the old baseline despite the much bigger document. Caveat this needs to be
+carried forward: this was measured in `npm run dev:browser` (Vite serving the renderer as a
+plain web page, the mock IPC bridges in `src/dev/installBrowserMockBridges.ts` standing in for
+Electron's real preload/IPC/SQLite path), not the packaged/real Electron app — a user report of
+an actual Ulysses-sized (~1.5M character) note taking **~8s** to switch to in the real app has
+not been reconciled with this ~2s browser-mode number. Next session should profile the real
+Electron app directly (Playwright has first-class support for this via its `_electron` module —
+launch the built/dev main process instead of a browser tab) before assuming the gap is fully
+explained by Electron/real-IPC overhead rather than something this measurement missed.
 
 **`normalizeInternalText`/`canonicalizeParagraphSegments`'s 180ms/159ms — fixed, and it was
 NOT irreducible as this doc previously guessed.** A follow-up session traced every call in the
@@ -250,33 +255,66 @@ read current tree state to detect *whether* anything changed), not 4-6. Verified
 `npx tsc --noEmit`, `npm run lint`, full suite (174/174, no regressions) — not yet
 re-profiled live; see the note at the end of this section.
 
-**The remaining per-keystroke cost is now diffuse, not dominated by one function, and one line
-reference below needs re-verification before being trusted.** Post caret-offset fix (prior to
-the `normalizeInternalText` fix above), the CPU profile's top entries were: an uninstrumented
-native/`(program)` bucket (2.6s of the 5.5s total — likely DOM APIs, event dispatch, GC
-bookkeeping, not straightforwardly actionable); an anonymous function attributed to
-`EditorSection.tsx:547` (313ms) — **re-checked this round: line 547 in current source is a
-bare destructured identifier (`setTabBarMode`), not a function; the profiler's blamed location
-has drifted, most likely a dev-server source-map offset from the profiling build, not a stale
-doc. Don't plan a fix against that line number as given — re-profile fresh first.** The
-closest legitimate candidate nearby if picking up this specific thread:
-`activeNoteDocumentStats` (`EditorSection.tsx:696-711`) — a genuine O(document length)
-`.trim()`/`.split(/\s+/u)` word-count over the entire document on every keystroke, for the
-always-visible status bar, with no coalescing during a rapid held-key burst (unlike its
-sibling preview commit, which already has `deferPreviewOnRapidInput`). Also still open:
-Lexical-internal `cloneEditorState`/`getModernOffsetsFromPoints` (220ms/205ms — framework
-cost, not this codebase's own); `computeInlineStateAtOffset`/`resolveMarkdownSelectionContext`
-in `MarkdownContext.ts` (99ms/82ms — confirmed called exactly once per keystroke, not
-redundant; genuine O(caret-offset) work with no incremental cache, a legitimate future target
-needing a `ParagraphOffsetIndex`-style cache, not a dedup). None of these dominate the way
-`splitMarkdownIntoPreviewBlocks`, `getOffsetWithinRoot`, or the normalize redundancy did;
-picking up this thread means either accepting the current state as a reasonable stopping point
-(per `docs/document-scale-performance-philosophy.md`'s own risk/gain framing) or profiling
-several smaller things rather than chasing one more big win. **This whole section needs a
-fresh CPU profile before further action** — it was last measured before this round's
-normalize-dedup fix, and the `EditorSection.tsx:547` mismatch above means the line-level
-attributions here shouldn't be trusted at face value even where the ms totals are probably
-still roughly right.
+**The remaining per-keystroke cost is diffuse, not dominated by one function — re-profiled
+fresh this round on the actual reported scale, and re-prioritized: this is now the active
+target, not a residual to defer.** A user reported ~3s per keystroke on a real ~1.5M-character
+note (Ulysses-sized) in the real app; re-profiled here on an equivalent synthetic 1.5M-char
+note via `npm run dev:browser` + Playwright (see "Environment notes"). The absolute numbers
+below (~85-170ms/keystroke) don't match the ~3s report, and that gap is *not yet explained*
+(see the initial-mount section above — same open question, likely the same root cause: this
+was dev-mode-browser, not the real Electron app, on different hardware). But per the user's own
+framing, the exact multiplier doesn't matter: even ~85ms against this doc's "must feel instant"
+bar is already roughly two orders of magnitude too slow, so this diffuse cost is the thing to
+fix regardless of whether it's currently manifesting as 85ms here or 3s there.
+
+Two rounds of fresh profiling this session, both confirming the same shape:
+
+1. **CDP JS-sampling profile** (`Profiler.start`/`.stop`, single keystroke, caret at document
+   start *and* separately at document end — both ~168-174ms wall, no meaningful difference by
+   position, and a 30-keystroke sustained burst showed no accumulation, 77-100ms/keystroke
+   throughout). Top entries: an uninstrumented `(program)` bucket (~220ms) and `(idle)`
+   (~51ms — this is profiling-window overhead, not real cost), then named app functions, all
+   individually small: `normalizeInternalText` (8.5ms), `resolveMarkdownSelectionContext`
+   (6.8ms), Lexical-internal `getModernOffsetsFromPoints`/`cloneEditorState` (5.8ms/3.8ms),
+   `normalizeForComparison` (`useNoteSnapshots.ts`, 2.9ms), `sanitizeTextFragment` (1.7ms),
+   `splitMarkdownIntoPreviewBlocksIncremental` (1.1ms — already-optimized residual, fine), an
+   anonymous function at `EditorSection.tsx:549` (9.8ms — **re-check this line number fresh
+   before trusting it**, the exact same source-map-drift issue this doc already flagged once
+   for `:547` in a prior round; don't assume it's stayed put).
+2. **Full CDP category-level trace** (`Tracing.start` with `devtools.timeline` +
+   `disabled-by-default-devtools.timeline` + `v8` categories — a proper breakdown by
+   Layout/Style/Paint/JS, not just a JS call-stack sample) over the same single keystroke, to
+   answer what the `(program)` bucket above actually *is*. **Layout (10.8ms), Paint (7.8ms),
+   Raster (8.5ms), and Commit (17.7ms) are all small — ruled out as the dominant cost.** The
+   big buckets are `EventDispatch` (223ms) wrapping `RunTask` (154ms), `v8.callFunction`
+   (123ms), and `FunctionCall` (70ms) — these overlap/nest (they sum to more than the wall-clock
+   keystroke time), so read them as "the native keydown dispatch runs a long synchronous JS
+   handler chain," not as additive distinct costs. **Conclusion: this is not idle browser
+   overhead, not GC, not layout thrash — it's genuine, legitimate synchronous JS execution
+   spread across many small functions in the handler chain**, matching the JS-sampling profile's
+   shape. Death by a thousand cuts, not one villain.
+
+**One hypothesis tested and refuted, worth recording so it isn't retried:** given the edit-mode
+Lexical editor is *not* virtualized (unlike the preview pane now) and has zero CSS
+`contain`/`content-visibility` anywhere (`src/styles/` — confirmed empty on both), the natural
+guess is that every keystroke forces a layout recalculation across all ~9,000+ unvirtualized
+paragraph DOM nodes. **Tested directly, not just reasoned about**: injected
+`content-visibility: auto` (+ a rough `contain-intrinsic-size`) onto every direct child of
+`.editor-text` via `page.addStyleTag`, no source changes, and re-ran the same keystroke-burst
+timing. **It made things worse** (mean 104.8ms vs. 84.5ms baseline, max 167ms vs. 104ms) — and
+the category trace above independently confirms Layout itself was never the big cost anyway.
+Don't retry CSS containment on the edit-mode editor as a fix for this without new evidence.
+
+**Concrete next step**: build incremental/cached versions of `normalizeInternalText`/
+`canonicalizeParagraphSegments` (`src/editor/TextPolicy.ts`) and `resolveMarkdownSelectionContext`
+(`src/editor/MarkdownContext.ts`), the same pattern already proven twice in this effort
+(`ParagraphOffsetIndex`'s O(log n) treap for caret offsets, `PreviewBlockSplit`'s incremental
+reparse) — reuse prior work for whatever the edit didn't touch instead of a full-document pass
+every keystroke. Also worth a closer look: the Lexical-internal `getModernOffsetsFromPoints`/
+`cloneEditorState` costs are framework internals, not this codebase's own, so there may be
+limited room to move there without a Lexical version change or a different selection-reading
+strategy — don't assume these are fixable the same way as the app's own functions until
+actually investigated.
 
 **Already attempted and reverted (previous round, still applies — don't redo this specific
 approach to `readCanonicalRootText`'s `registerUpdateListener` cost).** The natural-seeming
@@ -311,59 +349,96 @@ sits at 159ms in the latest post-fix profile, which is close to the *irreducible
 producing a document-length string once per edit (see "What's still open" above) rather than
 clearly attributable to redundant work the way the old caret-offset walk was.
 
-**Not investigated at all yet — two candidate paths for genuinely huge notes (initial mount,
-not per-keystroke):**
+**Preview-pane virtualization (previously listed here as candidate #2, "not investigated
+yet") — now done, see the initial-mount section above.** The remaining candidate from that
+original pair:
 
-1. **Move markdown parsing to a Web Worker.** Strongest guarantee (a slow parse literally
-   can't compete with keystroke handling on the main thread), but real integration cost:
-   `src/editorSection/usePreviewScrollbar.ts`'s custom-scrollbar sync, and the source-anchor
-   resolution in `src/editor/EditRestoreMath.ts` / `src/editor/PreviewScrollAnchor.ts`
-   (`resolvePreviewSourceAnchorFromContainer`, `findPreviewSourceAnchorElement`), all assume
-   *synchronous* DOM access to the already-rendered markdown (`querySelectorAll` for
-   `[data-source-line]` elements happening in the same tick as the edit). Moving the parse
-   off-thread turns rendering into an async round trip, and those call sites would need
-   rethinking.
-2. **Virtualize the preview pane** (render only visible blocks + a buffer, à la
-   react-window). Reduces DOM node count and initial-mount cost to O(viewport), not
-   O(document length) — the per-block split from #16 doesn't help here, since it still
-   mounts every block regardless of whether it's on screen. Same complication as above: the
-   source-anchor and scrollbar-sync code currently assumes every block is in the DOM at all
-   times; virtualizing would need those made virtualization-aware. Given the ~9-12s initial
-   mount is mostly *not* the parse (per the measurement above), this is now the more likely
-   of the two to matter for that specific number.
+1. **Move markdown parsing to a Web Worker.** Still not investigated. Strongest guarantee (a
+   slow parse literally can't compete with keystroke handling on the main thread), but real
+   integration cost: `src/editorSection/usePreviewScrollbar.ts`'s custom-scrollbar sync, and
+   the source-anchor resolution in `src/editor/EditRestoreMath.ts` /
+   `src/editor/PreviewScrollAnchor.ts` (`resolvePreviewSourceAnchorFromContainer`,
+   `findPreviewSourceAnchorElement`), all assume *synchronous* DOM access to the
+   already-rendered markdown (`querySelectorAll` for `[data-source-line]` elements happening in
+   the same tick as the edit). Moving the parse off-thread turns rendering into an async round
+   trip, and those call sites would need rethinking. Given the CDP trace above shows the
+   *parse* isn't the dominant per-keystroke cost anymore (the diffuse handler-chain cost is),
+   this is now lower priority than the incremental-caching work described above — revisit only
+   after that's exhausted.
 
 ## Environment notes for the next session
 
 - `node_modules` is not installed by default in a fresh container — run `npm install` (or
   `npm ci`) first.
-- Live-browser verification pattern used throughout: `npm run dev:browser -- --port 5183
-  --strictPort` in the background, then drive it with Playwright using
-  `NODE_PATH=/opt/node22/lib/node_modules node <script>.js`, or `require()` it directly from
-  `/opt/node22/lib/node_modules/playwright` in a `.cjs` script (NODE_PATH is ignored by
-  Node's ESM resolver, so a plain `.mjs` with a bare `import 'playwright'` will fail even with
-  NODE_PATH set — use `.cjs` + `require()`, or `.mjs` + a full path import), and
-  `chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' })`.
-  To seed a large note without fighting the UI: `window.thockdownNotes.createNote({
-  initialText })` then `window.thockdownSections.setActiveNote(sectionId, noteId)` (browser
-  dev mode's mock IPC bridge, `src/dev/installBrowserMockBridges.ts`), then reload — opens
-  straight into it.
-- For attributing a residual/diffuse cost to specific functions (not just "wall clock got
-  slower"), a CDP CPU profile beats bracketing guessed candidates with `performance.mark`: via
-  Playwright, `const client = await page.context().newCDPSession(page); await
-  client.send('Profiler.enable'); await client.send('Profiler.setSamplingInterval', {interval:
-  100}); await client.send('Profiler.start'); /* ...drive the interaction... */ const {profile}
-  = await client.send('Profiler.stop');` — then aggregate `profile.samples`/`.timeDeltas`
-  against `profile.nodes` by `callFrame.functionName`. This is what actually found
-  `getOffsetWithinRoot` as the dominant cost in this round, after `performance.mark` around
-  the two functions this doc had already instrumented showed nothing dominant.
-- Verification bar for any change here: `npx tsc --noEmit`, `npm test` (174/174 passing as of
+- **The embedded Claude Browser pane tool is not reliable for this project — don't fight it,
+  use a real Playwright browser instead.** Confirmed this round: the pane reports
+  `document.visibilityState === 'hidden'` / `document.hidden === true` *permanently*, even
+  after explicitly fronting the tab — Chromium heavily throttles rAF/timers for a page that
+  believes it's backgrounded, which silently breaks anything relying on `requestAnimationFrame`
+  (most of this app's scroll/virtualization code) and makes timing measurements meaningless.
+  Screenshots in that pane also time out ("not compositing frames"). DOM reads via
+  `javascript_tool`/`get_page_text` still work there for quick inspection, but for anything
+  involving scrolling, timing, or virtualization behavior, use the setup below instead.
+- **Real, working setup validated this round (Windows; the previous version of this note
+  described a Linux sandbox with paths like `/opt/node22` that don't apply here — that
+  environment-specific detail is gone, don't chase it)**:
+  1. `npm install -D playwright` (already added as a devDependency — should already be present
+     in a fresh checkout; if not, add it) then `npx playwright install chromium` (~190MB
+     download, one-time per machine, not committed/cached in the repo).
+  2. `npm run dev:browser -- --port 5183 --strictPort`, backgrounded.
+  3. A plain `.cjs` script (not `.mjs` — same ESM/NODE_PATH friction noted before generally
+     applies) placed *inside the project directory* (so `require('playwright')` resolves via
+     the project's own `node_modules` — a script in an external scratch/temp directory will
+     fail to resolve it), run via plain `node script.cjs`. `chromium.launch()` with no
+     `executablePath` override works fine once the browser is installed via step 1.
+  4. To seed a large note without fighting the UI: `window.thockdownNotes.createNote({
+     initialText })` then `window.thockdownSections.setActiveNote(sectionId, noteId)` (browser
+     dev mode's mock IPC bridge, `src/dev/installBrowserMockBridges.ts`) — **then reload the
+     page** (`page.goto` again, or `location.reload()`); this bridge call only updates
+     *persisted* section state, it does not push a live update into the already-running React
+     app. Confirmed working end-to-end this round for documents up to 1.5M characters.
+  5. Verified this genuinely gives a non-backgrounded page (`document.hidden === false`),
+     unlike the embedded pane — `requestAnimationFrame`-based polling and real scroll/timing
+     measurements work correctly here.
+- For attributing a residual/diffuse cost to specific functions, two complementary CDP
+  techniques, both via `const client = await page.context().newCDPSession(page)`:
+  - **JS call-stack sampling** (`Profiler.enable` → `Profiler.setSamplingInterval({interval:
+    100})` → `Profiler.start` → *drive the interaction* → `const {profile} =
+    await client.send('Profiler.stop')`; aggregate `profile.samples`/`.timeDeltas` against
+    `profile.nodes` by `callFrame.functionName`). This is what found `getOffsetWithinRoot` as
+    the dominant cost in an earlier round, and the diffuse handler-chain shape in this round.
+  - **Full category-level tracing** (`Tracing.start({categories: 'devtools.timeline,
+    disabled-by-default-devtools.timeline,blink.user_timing,v8', options:
+    'sampling-frequency=10000', transferMode: 'ReportEvents'})`, collect `Tracing.dataCollected`
+    events, `await new Promise(r => { client.once('Tracing.tracingComplete', r); /* drive the
+    interaction */ client.send('Tracing.end') })`, then aggregate event `dur` (for `ph: 'X'`
+    complete events) or matched `B`/`E` begin/end pairs by `name`). This is what a plain JS
+    profiler *can't* tell you: whether time is going into Layout/Paint/Raster/Commit versus
+    JS execution. New this round — the JS profiler alone couldn't distinguish "uninstrumented
+    native `(program)` bucket" from "the browser is relayouting the whole document" from "this
+    is just event-dispatch overhead wrapping legitimate JS"; the category trace resolved that
+    ambiguity directly (see "what's still open" above) instead of leaving it as a guess.
+  - **A quick CSS-only experiment via `page.addStyleTag` is a cheap way to test a layout/paint
+    hypothesis before touching source at all** — used this round to test (and refute)
+    `content-visibility: auto` on the editor's paragraphs; no source edit needed to get a real
+    answer, just inject the style, re-run the same timing script, compare.
+- Verification bar for any change here: `npx tsc --noEmit`, `npm test` (184/184 passing as of
   this writing, no known pre-existing failures), `npm run lint`, **and** a live-browser check
-  — three times now, a change here has passed its own unit tests while still being wrong (or,
-  in one case, looked wrong live and turned out to be an unrelated pre-existing issue —
-  confirmed by `git stash`-ing the change and reproducing the same live result against
-  unmodified code, which is the reliable way to tell the two apart rather than guessing). Only
-  a live check, or a fuzz test comparing against ground truth across many random inputs (not
-  hand-picked cases), has ever caught the real regressions in this doc's history.
+  — three times now (across earlier rounds), a change here has passed its own unit tests while
+  still being wrong (or, in one case, looked wrong live and turned out to be an unrelated
+  pre-existing issue — confirmed by `git stash`-ing the change and reproducing the same live
+  result against unmodified code, which is the reliable way to tell the two apart rather than
+  guessing). Only a live check, or a fuzz test comparing against ground truth across many
+  random inputs (not hand-picked cases), has ever caught the real regressions in this doc's
+  history. Also true of live-browser checks aimed at *diagnosing* rather than verifying a fix:
+  this round, a live repro of a reported scrolling bug (an unrelated continuous-scroll
+  max-speed-setting regression, not part of this doc's scope — see `TODO.md` — where a quick
+  fix looked numerically correct in an automated test but made the real bug *worse* in live
+  use, and was reverted) initially failed to reproduce with a synthetic first attempt, and a
+  live keystroke-cost repro here didn't match the reported multi-second number at all — both
+  are recorded above as open gaps rather than papered over, since asserting "fixed" or "not a
+  real issue" without matching the original report would repeat exactly the mistake this doc's
+  process discipline exists to prevent.
 - This branch's PRs (#14–#17) were all opened against `main` and merged directly (`merge`
   method, not squash/rebase) once each was independently verified; follow the same pattern
   for any follow-up here rather than stacking onto old branch state.
