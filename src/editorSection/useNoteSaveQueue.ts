@@ -85,7 +85,12 @@ export function useNoteSaveQueue(options: UseNoteSaveQueueOptions): UseNoteSaveQ
 
   const queueSave = useCallback((text: string) => {
     if (!persistenceReady) return
-    pendingSaveTextRef.current = normalizeInternalText(text)
+    // flushSave always re-normalizes pendingSaveTextRef.current right before
+    // it's used (saveNote/saveNoteSnapshot/the isExternal branch all consume
+    // its own normalizedText, never this raw value) -- normalizing here too
+    // is a redundant O(document length) pass on every keystroke regardless of
+    // whether `text` is already canonical.
+    pendingSaveTextRef.current = text
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current)
     }

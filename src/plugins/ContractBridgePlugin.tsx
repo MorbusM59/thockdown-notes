@@ -377,11 +377,16 @@ export function ContractBridgePlugin({
           return;
         }
 
-        const canonicalText = readCanonicalRootText();
+        // previousTextRef is updated synchronously inside registerUpdateListener
+        // before this rAF-deferred callback can run (and any newer commit before
+        // it fires cancels and reschedules it), so it already holds exactly what
+        // a fresh readCanonicalRootText() walk would return -- skips a redundant
+        // O(document length) walk just to read its .length.
+        const canonicalTextLength = previousTextRef.current.length;
         nextSelection = readSelectionStateFromDom(
           rootEl,
           window.getSelection(),
-          canonicalText.length,
+          canonicalTextLength,
           paragraphOffsetSyncRef.current?.resolveParagraph,
         );
       });
@@ -419,12 +424,14 @@ export function ContractBridgePlugin({
         editor.getEditorState().read(() => {
           const rootEl = editor.getRootElement();
           const lexicalSelection = $getSelection();
-          const canonicalText = readCanonicalRootText();
           if (!rootEl || !$isRangeSelection(lexicalSelection)) {
             return;
           }
 
-          nextSelection = readSelectionStateFromDom(rootEl, window.getSelection(), canonicalText.length, paragraphOffsetSyncRef.current?.resolveParagraph);
+          // Same invariant as emitSelectionIfChanged above -- previousTextRef is
+          // already in sync by the time this rAF fires.
+          const canonicalTextLength = previousTextRef.current.length;
+          nextSelection = readSelectionStateFromDom(rootEl, window.getSelection(), canonicalTextLength, paragraphOffsetSyncRef.current?.resolveParagraph);
         });
 
         if (nextSelection.anchor === previousSelectionRef.current.anchor &&

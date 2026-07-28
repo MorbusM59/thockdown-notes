@@ -187,27 +187,59 @@ in this doc so far.** The incremental block split only helps when there's a prev
 cache to diff against, and the paragraph offset index only helps once it's populated; the very
 first render of a note has neither, so both fall straight to their full/slow paths — measured
 unchanged at ~9.8–12s wall-clock for a 12,000-line note, ~3s of which is still the unavoidable
-first full parse. This is a separate problem from the per-keystroke ones fixed above and still
-needs one of the two candidate paths below (most of the ~12s wall-clock isn't even the parse —
-it's unaccounted for by any instrumented function here, most likely the initial mount of every
-block's `ReactMarkdown` output at once, i.e. exactly what "virtualize the preview pane" below
-would fix).
+first full parse. This is a separate problem from the per-keystroke ones fixed above. A
+follow-up session traced the remaining ~7-9s (read-only, not yet re-profiled) to the preview
+pane mounting every markdown block's `ReactMarkdown` output unconditionally on first render,
+regardless of viewport — confirmed no windowing/virtualization library is installed and no
+in-repo pattern exists to mirror. See `docs/preview-virtualization-handover.md` for the full
+scoped plan (mount pipeline file:line references, the three call sites that assume every block
+is already real DOM, and a candidate approach) — not implemented yet, this is a handover for
+whoever picks it up next.
 
-**The remaining per-keystroke cost is now diffuse, not dominated by one function.** Post
-caret-offset fix, the CPU profile's top entries are: an uninstrumented native/`(program)`
-bucket (2.6s of the 5.5s total — likely DOM APIs, event dispatch, GC bookkeeping, not
-straightforwardly actionable); an anonymous function in `EditorSection.tsx:547` (313ms);
+**`normalizeInternalText`/`canonicalizeParagraphSegments`'s 180ms/159ms — fixed, and it was
+NOT irreducible as this doc previously guessed.** A follow-up session traced every call in the
+plain-keystroke path and found this full-document-length pass ran up to 4-6 times per
+keystroke, not once: two calls in `ContractBridgePlugin.tsx` (`emitSelectionIfChanged`,
+`refreshSelectionModelFromDom`) called `readCanonicalRootText()` solely to read `.length` for
+a clamp parameter that never touches string content; three more
+(`useEditorSectionMount.ts`'s `onTextChange` binding, `useNoteSaveQueue.ts`'s `queueSave`,
+`EditorSection.tsx`'s `currentEditorText` memo) re-normalized text that was already canonical
+by construction. All four fixed by reusing already-known values (`previousTextRef.current`,
+`event.text`, a length known to be redundant with what `flushSave` re-derives before actually
+using it) instead of re-deriving from scratch — the same "trust a ref that's synchronously
+kept in sync" pattern this file already used for the pre-commit call sites. A plain keystroke
+now does essentially 1 full-document pass (the one inside `registerUpdateListener` that must
+read current tree state to detect *whether* anything changed), not 4-6. Verified via
+`npx tsc --noEmit`, `npm run lint`, full suite (174/174, no regressions) — not yet
+re-profiled live; see the note at the end of this section.
+
+**The remaining per-keystroke cost is now diffuse, not dominated by one function, and one line
+reference below needs re-verification before being trusted.** Post caret-offset fix (prior to
+the `normalizeInternalText` fix above), the CPU profile's top entries were: an uninstrumented
+native/`(program)` bucket (2.6s of the 5.5s total — likely DOM APIs, event dispatch, GC
+bookkeeping, not straightforwardly actionable); an anonymous function attributed to
+`EditorSection.tsx:547` (313ms) — **re-checked this round: line 547 in current source is a
+bare destructured identifier (`setTabBarMode`), not a function; the profiler's blamed location
+has drifted, most likely a dev-server source-map offset from the profiling build, not a stale
+doc. Don't plan a fix against that line number as given — re-profile fresh first.** The
+closest legitimate candidate nearby if picking up this specific thread:
+`activeNoteDocumentStats` (`EditorSection.tsx:696-711`) — a genuine O(document length)
+`.trim()`/`.split(/\s+/u)` word-count over the entire document on every keystroke, for the
+always-visible status bar, with no coalescing during a rapid held-key burst (unlike its
+sibling preview commit, which already has `deferPreviewOnRapidInput`). Also still open:
 Lexical-internal `cloneEditorState`/`getModernOffsetsFromPoints` (220ms/205ms — framework
-cost, not this codebase's own); `normalizeInternalText`/`canonicalizeParagraphSegments`
-(180ms/159ms — this is `readCanonicalRootText`'s own necessarily-O(document-length) full-text
-production, arguably irreducible without a larger architecture change, since *some* full
-string of that size has to get built once per actual edit); and
-`computeInlineStateAtOffset`/`resolveMarkdownSelectionContext` in `MarkdownContext.ts`
-(99ms/82ms — syntax-highlighting-related, not yet profiled in isolation). None of these
-dominate the way `splitMarkdownIntoPreviewBlocks` or `getOffsetWithinRoot` did; picking up
-this thread means either accepting the current state as a reasonable stopping point (per
-`docs/document-scale-performance-philosophy.md`'s own risk/gain framing) or profiling several
-smaller things rather than chasing one more big win.
+cost, not this codebase's own); `computeInlineStateAtOffset`/`resolveMarkdownSelectionContext`
+in `MarkdownContext.ts` (99ms/82ms — confirmed called exactly once per keystroke, not
+redundant; genuine O(caret-offset) work with no incremental cache, a legitimate future target
+needing a `ParagraphOffsetIndex`-style cache, not a dedup). None of these dominate the way
+`splitMarkdownIntoPreviewBlocks`, `getOffsetWithinRoot`, or the normalize redundancy did;
+picking up this thread means either accepting the current state as a reasonable stopping point
+(per `docs/document-scale-performance-philosophy.md`'s own risk/gain framing) or profiling
+several smaller things rather than chasing one more big win. **This whole section needs a
+fresh CPU profile before further action** — it was last measured before this round's
+normalize-dedup fix, and the `EditorSection.tsx:547` mismatch above means the line-level
+attributions here shouldn't be trusted at face value even where the ms totals are probably
+still roughly right.
 
 **Already attempted and reverted (previous round, still applies — don't redo this specific
 approach to `readCanonicalRootText`'s `registerUpdateListener` cost).** The natural-seeming

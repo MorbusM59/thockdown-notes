@@ -656,7 +656,12 @@ export function EditorSection({
   activeNoteHasDebugTagRef.current = activeNoteHasDebugTag
 
   const currentEditorText = useMemo(() => {
-    return normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+    // latestEditorTextRef, once populated, is always already canonical (it's
+    // set directly from ContractBridgePlugin's canonical event.text) -- only
+    // the activeNoteText fallback (used before the ref is first populated,
+    // e.g. right after a note switch) still needs normalizing here.
+    const latest = latestEditorTextRef.current
+    return latest ? latest : normalizeInternalText(activeNoteText)
     // editorTextVersion isn't read here -- it's a version counter bumped
     // alongside every latestEditorTextRef mutation, the only signal that
     // tells this memo to recompute (ref writes aren't reactive on their own).
