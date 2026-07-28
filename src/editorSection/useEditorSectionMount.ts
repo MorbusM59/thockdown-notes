@@ -791,7 +791,11 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         void typingSoundManager.playRandomClick({ keyId, reverse: true, detune: 600 })
       }
 
-      const normalizedText = normalizeInternalText(event.text)
+      // event.text always originates from ContractBridgePlugin's
+      // readCanonicalRootText() (both the initial-load and regular-commit
+      // producers already canonicalize it) -- re-normalizing here is a
+      // redundant O(document length) pass on already-canonical text.
+      const canonicalText = event.text
 
       if (previewedSnapshotId !== null) {
         // While previewing history, the editor is showing something other than
@@ -800,7 +804,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         return
       }
 
-      latestEditorTextRef.current = normalizedText
+      latestEditorTextRef.current = canonicalText
       latestEditorSelectionRef.current = event.selection
 
       const isDeferredPreviewTick = deferPreviewOnRapidInput && event.source === 'user-input'
@@ -808,7 +812,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         scheduleCoalescedPreviewCommit()
       } else {
         cancelPendingPreviewFrame()
-        setActiveNoteText(normalizedText)
+        setActiveNoteText(canonicalText)
         setEditorTextVersion((previous) => previous + 1)
       }
       setEditorSelection(event.selection)
@@ -823,13 +827,13 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (isExternal && isUserEditableSource) {
         console.warn('[external-note] editor text change detected for external note', {
           noteId: activeNoteId,
-          textLength: normalizedText.length,
+          textLength: canonicalText.length,
           source: event.source,
         })
 
         const originalExternalText = externalNoteOriginalTextByIdRef.current.get(activeNoteId)
         const isCurrentlyModified = originalExternalText !== undefined
-          ? normalizedText !== originalExternalText
+          ? canonicalText !== originalExternalText
           : Boolean(noteSummary && noteSummary.hasUnsavedChanges)
 
         if (noteSummary && noteSummary.hasUnsavedChanges !== isCurrentlyModified) {
@@ -877,9 +881,9 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       // just redo the same O(document length) title derivation twice for
       // no benefit.
       if (!isDeferredPreviewTick) {
-        updateActiveNoteTitlePreview(normalizedText)
+        updateActiveNoteTitlePreview(canonicalText)
       }
-      queueSave(normalizedText)
+      queueSave(canonicalText)
     },
     onSelectionChange: (event: EditorSelectionChangeEvent) => {
       if (previewedSnapshotId !== null) {
@@ -1650,16 +1654,16 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   const applyProgrammaticEditorText = useCallback((nextText: string, selectionStart?: number, selectionEnd?: number) => {
     if (activeNoteHasDebugTagRef.current) return
 
-    const normalizedText = normalizeInternalText(nextText)
-    latestEditorTextRef.current = normalizedText
-    setActiveNoteText(normalizedText)
+    const canonicalText = normalizeInternalText(nextText)
+    latestEditorTextRef.current = canonicalText
+    setActiveNoteText(canonicalText)
     setEditorTextVersion((previous) => previous + 1)
-    updateActiveNoteTitlePreview(normalizedText)
-    queueSave(normalizedText)
+    updateActiveNoteTitlePreview(canonicalText)
+    queueSave(canonicalText)
 
     if (typeof selectionStart === 'number' && typeof selectionEnd === 'number') {
-      const safeSelectionStart = Math.max(0, Math.min(selectionStart, normalizedText.length))
-      const safeSelectionEnd = Math.max(0, Math.min(selectionEnd, normalizedText.length))
+      const safeSelectionStart = Math.max(0, Math.min(selectionStart, canonicalText.length))
+      const safeSelectionEnd = Math.max(0, Math.min(selectionEnd, canonicalText.length))
       const nextSelection: EditorSelectionState = {
         anchor: safeSelectionStart,
         focus: safeSelectionEnd,

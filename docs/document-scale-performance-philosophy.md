@@ -129,14 +129,17 @@ around code fences). The rules below are non-negotiable specifically because of 
 
 Tracked in `docs/large-document-performance-handover.md`, kept current as work lands. As of
 this writing: per-keystroke markdown preview re-parsing has been made incremental (fixed);
-per-keystroke canonical-text re-derivation has been partially reduced (fixed for four of five
-call sites; the fifth is architecturally harder and still open); initial mount of an
-uncached large note is still full-document-scoped (open); and a newly-found, currently
-dominant cost — `getOffsetWithinRoot` in `SelectionOffsets.ts` performing a full linear scan
-over every paragraph in the document to resolve a caret's character offset — is open and is
-the immediate next target under this contract, since caret placement is exactly the kind of
-per-keystroke, viewport-local operation this document says must never scale with document
-length.
+`getOffsetWithinRoot`'s full-document caret-offset scan has been replaced with an O(log n)
+index (fixed); and per-keystroke canonical-text re-derivation, previously reduced for four of
+five pre-commit call sites, has now also had its remaining post-commit redundancy fixed (a
+plain keystroke dropped from up to 4-6 full-document `normalizeInternalText` passes to
+essentially 1). What's left: **initial mount of an uncached large note is still
+full-document-scoped (open)** — the single largest remaining number against this contract
+(~9-12s wall-clock on a 12,000-line note), root-caused to the preview pane mounting every
+markdown block unconditionally regardless of viewport; see
+`docs/preview-virtualization-handover.md` for the scoped plan. A now-diffuse residual
+per-keystroke cost (no longer dominated by one function) is also open and lower priority; see
+`docs/large-document-performance-handover.md`'s "what's still open" for specifics.
 
 ## Review checklist
 
