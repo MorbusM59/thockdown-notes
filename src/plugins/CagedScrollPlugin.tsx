@@ -664,8 +664,8 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     };
 
     // The editor never scrolls horizontally -- text wraps (white-space:
-    // pre-wrap) and there is no horizontal caging math, unlike the vertical
-    // scrollTop this plugin caged above. But a collapsed caret sitting
+    // break-spaces) and there is no horizontal caging math, unlike the
+    // vertical scrollTop this plugin caged above. But a collapsed caret sitting
     // exactly on the last cell of a full-width line, right before the
     // native ArrowRight move to the next line's start, can make the browser
     // nudge the (invisible, caret-color: transparent) native caret into

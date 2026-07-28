@@ -405,9 +405,18 @@ body {
      Zero overhead: performed entirely by the browser renderer on the container. */
     transform: translateX(calc(((var(--editor-cell-width) - var(--editor-glyph-width)) / 2)));
   
-  font-variant-ligatures: none; 
+  font-variant-ligatures: none;
   font-variant-numeric: tabular-nums;
-  white-space: pre-wrap;
+  /* break-spaces (not pre-wrap): pre-wrap lets the browser hang a run of
+     trailing spaces past the line box edge at a wrap point instead of
+     wrapping them, which pushes the caret off screen when typing several
+     spaces in a row. break-spaces preserves whitespace the same way but
+     treats every space in a run as a real wrap point. !important is
+     required here -- Lexical's core imperatively sets
+     rootElement.style.whiteSpace = 'pre-wrap' on the contentEditable DOM
+     node itself (see lexical's setRootElement), and that inline style
+     otherwise beats any plain class rule regardless of source order. */
+  white-space: break-spaces !important;
   tab-size: 4;
 }
 
