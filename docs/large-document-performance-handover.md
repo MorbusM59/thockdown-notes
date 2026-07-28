@@ -164,6 +164,24 @@ per-paragraph normalization on every walk.
 
 ## What's still open
 
+**A pre-existing Enter-key line-count bug, found incidentally while verifying the caret-offset
+fix — not a performance issue, not caused by anything in this doc, not investigated further.**
+Repro: click to place the caret mid-word inside an existing paragraph, type a few characters,
+press Enter once. The document's line count increases by **2**, not 1 (confirmed via
+`document.querySelector('[contenteditable="true"]').innerText.split('\n').length` before/after
+in a live browser). A following Backspace correctly restores the original line count, so
+there's no state corruption — the caret/selection model stays internally consistent, this is
+just an Enter split producing one extra paragraph somewhere it shouldn't. Confirmed to predate
+this document's entire caret-offset-index change: reproduced identically via `git stash` on
+the commit that added `ParagraphOffsetIndex`/`LexicalParagraphOffsetSync`, i.e. it's already
+present in whatever commit merged PR #19 (the block-split fix), and quite possibly further
+back than that — this doc's testing never exercised Enter mid-paragraph before this round.
+Not triaged beyond that single repro; the most likely starting point is
+`applyMarkdownEnter()` in `src/editor/MarkdownContext.ts` (what
+`resolveMarkdownEnterTransform()` in `EnterTransformPolicy.ts` delegates to for the actual
+text/selection transform), but this hasn't been read closely enough yet to say more than
+"look there first."
+
 **Initial mount / note switch for a brand-new (uncached) huge note is NOT improved by any fix
 in this doc so far.** The incremental block split only helps when there's a previous call's
 cache to diff against, and the paragraph offset index only helps once it's populated; the very
