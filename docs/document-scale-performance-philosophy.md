@@ -130,16 +130,17 @@ around code fences). The rules below are non-negotiable specifically because of 
 Tracked in `docs/large-document-performance-handover.md`, kept current as work lands. As of
 this writing: per-keystroke markdown preview re-parsing has been made incremental (fixed);
 `getOffsetWithinRoot`'s full-document caret-offset scan has been replaced with an O(log n)
-index (fixed); and per-keystroke canonical-text re-derivation, previously reduced for four of
+index (fixed); per-keystroke canonical-text re-derivation, previously reduced for four of
 five pre-commit call sites, has now also had its remaining post-commit redundancy fixed (a
 plain keystroke dropped from up to 4-6 full-document `normalizeInternalText` passes to
-essentially 1). What's left: **initial mount of an uncached large note is still
-full-document-scoped (open)** — the single largest remaining number against this contract
-(~9-12s wall-clock on a 12,000-line note), root-caused to the preview pane mounting every
-markdown block unconditionally regardless of viewport; see
-`docs/preview-virtualization-handover.md` for the scoped plan. A now-diffuse residual
-per-keystroke cost (no longer dominated by one function) is also open and lower priority; see
-`docs/large-document-performance-handover.md`'s "what's still open" for specifics.
+essentially 1); and initial mount of an uncached large note — previously the single largest
+remaining number against this contract (~9-12s wall-clock on a 12,000-line note) — has been
+fixed by virtualizing the preview pane (`@tanstack/react-virtual`), so only blocks near the
+viewport mount real DOM regardless of document size. Re-measurement of that last fix is still
+owed (no browser-automation environment available in the session that implemented it); see
+`docs/large-document-performance-handover.md`'s "what's still open" for the up-to-date number
+once it lands. A now-diffuse residual per-keystroke cost (no longer dominated by one function)
+is also open and lower priority; see that same doc for specifics.
 
 ## Review checklist
 

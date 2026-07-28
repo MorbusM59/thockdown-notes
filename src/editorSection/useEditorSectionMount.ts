@@ -31,6 +31,7 @@ import {
 import { resolveMarkdownEnterTransform } from '../editor/EnterTransformPolicy'
 import { resolveMarkdownChecklistTypeoverTransform } from '../editor/ChecklistTypingTransformPolicy'
 import { typingSoundManager } from '../sound/TypingSoundManager'
+import type { PreviewScrollToSourceLineFn } from './usePreviewMarkdownRendering'
 
 export interface UseEditorSectionMountOptions {
   activeNoteId: string | null
@@ -100,6 +101,15 @@ export interface UseEditorSectionMountOptions {
 export interface UseEditorSectionMountResult {
   adapterRef: MutableRefObject<EditorAdapter | null>
   previewScrollRef: MutableRefObject<HTMLDivElement | null>
+  /**
+   * Set by usePreviewMarkdownRendering (mounted later in the same
+   * component, since it needs previewScrollRef from here) to the current
+   * "scroll to the block covering this source line" function backed by its
+   * own preview virtualizer. Read via `.current?.(...)` rather than called
+   * directly since this hook can't depend on that one without a circular
+   * import -- see PreviewScrollToSourceLineFn's own doc comment.
+   */
+  previewScrollToSourceLineRef: MutableRefObject<PreviewScrollToSourceLineFn | null>
   editModeSnapshotByNoteIdRef: MutableRefObject<Map<string, EditRestoreSnapshot>>
   pendingEditRestoreSnapshotRef: MutableRefObject<EditRestoreSnapshot | null>
   pendingRenderViewSourceAnchorRef: MutableRefObject<{ sourceAnchorLine: number; sourceAnchorText: string | null } | null>
@@ -203,6 +213,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
 
   const adapterRef = useRef<EditorAdapter | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
+  const previewScrollToSourceLineRef = useRef<PreviewScrollToSourceLineFn | null>(null)
   const editModeSnapshotByNoteIdRef = useRef<Map<string, EditRestoreSnapshot>>(new Map())
   const pendingEditRestoreSnapshotRef = useRef<EditRestoreSnapshot | null>(null)
   const pendingRenderViewSourceAnchorRef = useRef<{ sourceAnchorLine: number; sourceAnchorText: string | null } | null>(null)
@@ -1501,6 +1512,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       // margin/padding above it, so the render view ends up scrolled down
       // slightly instead of sitting at true scrollTop 0.
       if (sourceLine <= 0) {
+        previewScrollToSourceLineRef.current?.(0, { align: 'start' })
         requestAnimationFrame(() => {
           if (!container) return
           container.scrollTop = 0
@@ -1509,18 +1521,33 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         return
       }
 
-      const target = findPreviewSourceAnchorElement(container, sourceLine)
-      if (!target) {
-        container.style.scrollBehavior = previousScrollBehavior
-        return
-      }
+      // Force the covering block to actually mount before querying for it --
+      // under preview virtualization most of the document isn't real DOM
+      // until scrolled near, so the query below (built when every block was
+      // always real DOM) could otherwise silently resolve to the nearest
+      // already-mounted anchor instead of the true target. The virtualizer's
+      // own mount lands one React commit after this call, so retry the query
+      // across a few frames rather than assuming a single frame is enough.
+      previewScrollToSourceLineRef.current?.(sourceLine, { align: 'start' })
 
-      requestAnimationFrame(() => {
-        if (!container || !document.body.contains(target)) return
+      const attemptFindAndScroll = (attemptsLeft: number) => {
+        if (cancelled || !container) return
+
+        const target = findPreviewSourceAnchorElement(container, sourceLine)
+        if (!target) {
+          if (attemptsLeft <= 0) {
+            container.style.scrollBehavior = previousScrollBehavior
+            return
+          }
+          requestAnimationFrame(() => attemptFindAndScroll(attemptsLeft - 1))
+          return
+        }
 
         target.scrollIntoView({ block: 'start', inline: 'nearest' })
         container.style.scrollBehavior = previousScrollBehavior
-      })
+      }
+
+      requestAnimationFrame(() => attemptFindAndScroll(10))
     }
 
     const pendingSourceAnchor = pendingRenderViewSourceAnchorRef.current
@@ -1742,6 +1769,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   return {
     adapterRef,
     previewScrollRef,
+    previewScrollToSourceLineRef,
     editModeSnapshotByNoteIdRef,
     pendingEditRestoreSnapshotRef,
     pendingRenderViewSourceAnchorRef,

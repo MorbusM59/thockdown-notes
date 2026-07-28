@@ -14,6 +14,7 @@
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.2.0",
     "@lexical/react": "^0.44.0",
+    "@tanstack/react-virtual": "^3.14.8",
     "better-sqlite3": "^11.8.1",
     "lexical": "^0.44.0",
     "react": "^18.2.0",

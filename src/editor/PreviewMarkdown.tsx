@@ -106,6 +106,26 @@ export function noteContainsAnchorDefinition(contentText: string, anchorId: stri
   return pattern.test(contentText)
 }
 
+/**
+ * 0-indexed source line of a `](#anchor-id)` definition, or null if absent --
+ * same exact-match rule as noteContainsAnchorDefinition, and the same
+ * 0-indexed-line convention PreviewBlockSplit.ts uses for `startLine`. Lets
+ * preview-link navigation resolve a target block index before the anchor's
+ * own element is necessarily mounted (see scrollToAnchorInPreview).
+ */
+export function findAnchorDefinitionLine(contentText: string, anchorId: string): number | null {
+  const pattern = new RegExp(`\\]\\(#${escapeRegExpLiteral(anchorId)}\\)`)
+  const match = pattern.exec(contentText)
+  if (!match) return null
+  let line = 0
+  for (let index = 0; index < match.index; index += 1) {
+    if (contentText.charCodeAt(index) === 10 /* \n */) {
+      line += 1
+    }
+  }
+  return line
+}
+
 // Stable references for ReactMarkdown so per-frame App re-renders (e.g. from
 // scroll-driven thumb state updates) don't force a full markdown reconciliation.
 export const PREVIEW_MARKDOWN_REMARK_PLUGINS = [remarkGfm]

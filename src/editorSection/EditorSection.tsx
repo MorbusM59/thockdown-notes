@@ -748,6 +748,7 @@ export function EditorSection({
     documentFindDirective,
     isDocumentFindCaseSensitive: effectiveCaseSensitive,
     renderedDisplayText,
+    previewScrollToSourceLineRef: editorSectionMountRest.previewScrollToSourceLineRef,
   })
 
   const {

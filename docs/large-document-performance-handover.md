@@ -182,19 +182,56 @@ Not triaged beyond that single repro; the most likely starting point is
 text/selection transform), but this hasn't been read closely enough yet to say more than
 "look there first."
 
-**Initial mount / note switch for a brand-new (uncached) huge note is NOT improved by any fix
-in this doc so far.** The incremental block split only helps when there's a previous call's
-cache to diff against, and the paragraph offset index only helps once it's populated; the very
-first render of a note has neither, so both fall straight to their full/slow paths — measured
-unchanged at ~9.8–12s wall-clock for a 12,000-line note, ~3s of which is still the unavoidable
-first full parse. This is a separate problem from the per-keystroke ones fixed above. A
-follow-up session traced the remaining ~7-9s (read-only, not yet re-profiled) to the preview
-pane mounting every markdown block's `ReactMarkdown` output unconditionally on first render,
-regardless of viewport — confirmed no windowing/virtualization library is installed and no
-in-repo pattern exists to mirror. See `docs/preview-virtualization-handover.md` for the full
-scoped plan (mount pipeline file:line references, the three call sites that assume every block
-is already real DOM, and a candidate approach) — not implemented yet, this is a handover for
-whoever picks it up next.
+**Initial mount / note switch for a brand-new (uncached) huge note — preview pane now
+virtualized; re-measurement still owed.** The incremental block split only ever helped once
+there was a previous call's cache to diff against, and the paragraph offset index only once
+populated; the very first render of a note had neither, so both fell straight to their
+full/slow paths — measured at ~9.8–12s wall-clock for a 12,000-line note (~3s of which was the
+unavoidable first full parse). Root-caused (in a since-deleted, now-folded-in handover doc,
+`docs/preview-virtualization-handover.md`) to the preview pane mounting every markdown block's
+`ReactMarkdown` output unconditionally on first render, regardless of viewport.
+
+Fixed by virtualizing the preview pane with `@tanstack/react-virtual` (`useVirtualizer` in
+`src/editorSection/usePreviewMarkdownRendering.tsx`): only blocks near the viewport (plus a
+small overscan buffer) ever mount real `ReactMarkdown` output now, with per-block height
+estimated then corrected via `measureElement`/`ResizeObserver` as each block actually renders.
+`usePreviewScrollbar.ts`'s thumb math needed no changes — the virtualizer's own total-size
+wrapper div is real DOM sized to `getTotalSize()`, so `scroller.scrollHeight` stays accurate
+automatically. Three consumers that used to assume every block was always real DOM were
+updated:
+
+- `applyPreviewSourceAnchor` (`useEditorSectionMount.ts`, edit-mode/note-open scroll restore)
+  and `scrollToAnchorInPreview` (`usePreviewMarkdownRendering.tsx`, `$anchor` link navigation)
+  now resolve the target block's index (`resolvePreviewBlockIndexForSourceLine`, a new binary
+  search in `src/editor/PreviewBlockIndex.ts`, unit-tested) and call
+  `virtualizer.scrollToIndex` to force the target to mount *before* the existing DOM-anchor
+  query runs, retrying that query across a few animation frames rather than assuming one frame
+  is enough.
+- `jumpToPreviewDocumentFindHit` (`useDocumentFindNavigation.ts`) needed no change — its
+  existing proportional-scroll fallback (predates this effort) already handles "couldn't
+  establish an exact DOM position" gracefully, which a virtualized-out match now also falls
+  into.
+- `resolvePreviewSourceAnchorFromContainer` (`useEditorSectionMount.ts`) needed no change either
+  — it only ever cares about whichever block sits at/near the container's top edge, which by
+  construction is always inside the virtualizer's mounted window.
+
+A custom `scrollToFn` was added so react-virtual's own imperative scrolling routes through this
+app's existing scroll engines instead of its native-`scrollTo` default: an instant snap
+(`scroll-behavior: auto` forced, matching the existing restore-on-open convention) for
+restoration, or this app's curve-based `scrollToNonQuantizedSmooth` (which already supports
+being re-targeted mid-flight) for deliberate navigation like anchor clicks — letting
+react-virtual's own estimate-correction pass (`reconcileScroll`, fires once a virtualized-out
+target's real height is measured) re-plan the animation smoothly instead of jumping.
+
+**Re-measurement not yet done.** This session had no Playwright/Chromium available in its
+environment (unlike whatever environment produced the wall-clock numbers above — this was a
+plain Windows dev machine with neither installed, and installing a browser binary solely for a
+one-off measurement wasn't judged worth the footprint given this project's standing preference
+for manual over automated browser verification). `npx tsc --noEmit`, the full test suite
+(184/184, up from 174 — 10 new tests for `resolvePreviewBlockIndexForSourceLine` and the new
+`findAnchorDefinitionLine` helper), and lint all pass, but the actual initial-mount wall-clock
+improvement on a genuinely large note has not been re-measured against the ~9.8–12s baseline
+above. Whoever verifies this manually should also note the new number here.
 
 **`normalizeInternalText`/`canonicalizeParagraphSegments`'s 180ms/159ms — fixed, and it was
 NOT irreducible as this doc previously guessed.** A follow-up session traced every call in the
