@@ -29,6 +29,7 @@ import {
   readSelectionOffsetFromClientPoint,
   readSelectionStateFromDom,
 } from '../editor/SelectionOffsets';
+import { LexicalParagraphOffsetSync } from '../editor/LexicalParagraphOffsetSync';
 import { isSameRange, resolveScopeRange, type SelectionScope } from './ContractBridgeRangeUtils';
 
 interface ContractBridgePluginProps {
@@ -158,6 +159,27 @@ export function ContractBridgePlugin({
   const onCharacterInsertTransformRef = useRef(onCharacterInsertTransform);
   const onEnterTransformRef = useRef(onEnterTransform);
   const hibernatedRef = useRef(hibernated);
+  const paragraphOffsetSyncRef = useRef<LexicalParagraphOffsetSync | null>(null);
+
+  // Keeps an O(log n) paragraph-offset index (see LexicalParagraphOffsetSync's
+  // own doc comment) live-synced to this editor instance, so every
+  // readSelectionStateFromDom/readSelectionOffsetFromClientPoint call below
+  // can resolve a caret position without walking every paragraph in the
+  // document. Declared first so paragraphOffsetSyncRef.current is already
+  // populated before the effects below run their own initial reads (React
+  // runs effects in declaration order on mount). Falls back to null (and in
+  // turn every fast-path call site falls back to the slow O(document
+  // length) walk) for the brief window before this effect runs, and always
+  // for any resolution this sync doesn't confidently know the answer to.
+  useEffect(() => {
+    const sync = new LexicalParagraphOffsetSync(editor);
+    sync.start();
+    paragraphOffsetSyncRef.current = sync;
+    return () => {
+      sync.dispose();
+      paragraphOffsetSyncRef.current = null;
+    };
+  }, [editor]);
 
   useEffect(() => {
     onTextChangeRef.current = onTextChange;
@@ -181,7 +203,7 @@ export function ContractBridgePlugin({
       const rootEl = editor.getRootElement();
       const lexicalSelection = $getSelection();
       if (rootEl && $isRangeSelection(lexicalSelection)) {
-        initialSelection = readSelectionStateFromDom(rootEl, window.getSelection(), normalizedText.length);
+        initialSelection = readSelectionStateFromDom(rootEl, window.getSelection(), normalizedText.length, paragraphOffsetSyncRef.current?.resolveParagraph);
       }
     });
 
@@ -239,6 +261,7 @@ export function ContractBridgePlugin({
           editableRoot,
           window.getSelection(),
           canonicalText.length,
+          paragraphOffsetSyncRef.current?.resolveParagraph,
         );
         const clickOffset = readSelectionOffsetFromClientPoint(
           editableRoot,
@@ -246,6 +269,7 @@ export function ContractBridgePlugin({
           event.clientY,
           canonicalText.length,
           currentSelection.end,
+          paragraphOffsetSyncRef.current?.resolveParagraph,
         );
 
         const priorCycle = rightClickCycleRef.current;
@@ -358,6 +382,7 @@ export function ContractBridgePlugin({
           rootEl,
           window.getSelection(),
           canonicalText.length,
+          paragraphOffsetSyncRef.current?.resolveParagraph,
         );
       });
 
@@ -399,7 +424,7 @@ export function ContractBridgePlugin({
             return;
           }
 
-          nextSelection = readSelectionStateFromDom(rootEl, window.getSelection(), canonicalText.length);
+          nextSelection = readSelectionStateFromDom(rootEl, window.getSelection(), canonicalText.length, paragraphOffsetSyncRef.current?.resolveParagraph);
         });
 
         if (nextSelection.anchor === previousSelectionRef.current.anchor &&
@@ -424,7 +449,7 @@ export function ContractBridgePlugin({
 
         let nextSelection = previousSelectionRef.current;
         if (rootEl && $isRangeSelection(lexicalSelection)) {
-          nextSelection = readSelectionStateFromDom(rootEl, window.getSelection(), normalizedText.length);
+          nextSelection = readSelectionStateFromDom(rootEl, window.getSelection(), normalizedText.length, paragraphOffsetSyncRef.current?.resolveParagraph);
         }
 
         const previousText = previousTextRef.current;
@@ -558,7 +583,7 @@ export function ContractBridgePlugin({
             const rootEl = editor.getRootElement();
             const lexicalSelection = $getSelection();
             if (rootEl && $isRangeSelection(lexicalSelection)) {
-              currentSelection = readSelectionStateFromDom(rootEl, window.getSelection(), canonicalText.length);
+              currentSelection = readSelectionStateFromDom(rootEl, window.getSelection(), canonicalText.length, paragraphOffsetSyncRef.current?.resolveParagraph);
             }
           });
 
@@ -618,7 +643,7 @@ export function ContractBridgePlugin({
             const rootEl = editor.getRootElement();
             const lexicalSelection = $getSelection();
             if (rootEl && $isRangeSelection(lexicalSelection)) {
-              currentSelection = readSelectionStateFromDom(rootEl, window.getSelection(), canonicalText.length);
+              currentSelection = readSelectionStateFromDom(rootEl, window.getSelection(), canonicalText.length, paragraphOffsetSyncRef.current?.resolveParagraph);
             }
           });
 
@@ -680,7 +705,7 @@ export function ContractBridgePlugin({
           const rootEl = editor.getRootElement();
           const lexicalSelection = $getSelection();
           if (rootEl && $isRangeSelection(lexicalSelection)) {
-            currentSelection = readSelectionStateFromDom(rootEl, window.getSelection(), canonicalText.length);
+            currentSelection = readSelectionStateFromDom(rootEl, window.getSelection(), canonicalText.length, paragraphOffsetSyncRef.current?.resolveParagraph);
           }
         });
 
@@ -721,7 +746,7 @@ export function ContractBridgePlugin({
           const rootEl = editor.getRootElement();
           const lexicalSelection = $getSelection();
           if (rootEl && $isRangeSelection(lexicalSelection)) {
-            currentSelection = readSelectionStateFromDom(rootEl, window.getSelection(), canonicalText.length);
+            currentSelection = readSelectionStateFromDom(rootEl, window.getSelection(), canonicalText.length, paragraphOffsetSyncRef.current?.resolveParagraph);
           }
         });
 
