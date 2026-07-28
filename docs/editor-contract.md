@@ -1,7 +1,7 @@
-# V2 Editor Contract
+# Editor Contract
 
 ## Purpose
-This contract isolates app features from editor engine internals. All carryover work from V1 must integrate through this boundary, not through direct plugin internals.
+This contract isolates app features from editor engine internals. Features that depend on editor state must integrate through this boundary, not through direct plugin internals.
 
 ## Source of Truth
 - Contract types: `src/editor/EditorContract.ts`
@@ -85,4 +85,4 @@ const adapterRef = useRef<EditorAdapter | null>(null);
 ```
 
 ## Rule for Future Work
-Before adding a feature that depends on editor state, extend `EditorContract.ts` first, then implement through `Editor.tsx`, then update this document and the parity checklist.
+Before adding a feature that depends on editor state, extend `EditorContract.ts` first, then implement through `Editor.tsx`, then update this document.
