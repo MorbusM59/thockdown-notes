@@ -100,41 +100,96 @@ keystroke's own edit has committed). Cuts the character-insert-transform path's
 unavoidable and untouched — it's the one call site that actually needs to detect *whether*
 anything changed, which requires reading current tree state.
 
+**`getOffsetWithinRoot()`'s O(document length) caret/selection offset walk in
+`SelectionOffsets.ts` — fixed, in a follow-up round after this doc's "residual per-keystroke
+cost" note below sent the investigation here.** A CDP CPU profile (`Profiler.start`/`.stop`
+over a real Playwright session, not just `performance.mark` around guessed candidates) on a
+held-key burst found this function alone at **1926.92ms self-time / 9277 samples** — by far
+the largest attributable cost remaining after the two fixes above, and called from every
+`readSelectionStateFromDom`/`readSelectionOffsetFromClientPoint` site in
+`ContractBridgePlugin.tsx` (i.e. on every keystroke, click, and selection-change tick). It
+walked every paragraph element in the DOM to accumulate "everything before the caret"'s
+length — genuinely O(document length) per call, and per this codebase's own
+`getIndexWithinParent()` (confirmed O(index) by reading Lexical's source), nothing in the
+framework offered a shortcut.
+
+Fixed with a new persistent, incrementally-maintained data structure —
+`src/editor/ParagraphOffsetIndex.ts` — a positional treap (randomized balanced BST) keyed by
+paragraph identity, augmented with subtree length sums, giving O(log n) prefix-offset
+queries and O(log n) insert/remove/update regardless of document size *or where the edit is*
+(unlike a flat prefix-sum array, which would still be O(n) for edits near the start of a huge
+document — this was written specifically against the "page 1 must feel identical to page
+1,000" bar in `docs/document-scale-performance-philosophy.md`, not just against the
+held-key-at-the-end benchmark this whole investigation started from). Kept in sync with a
+live Lexical editor by `src/editor/LexicalParagraphOffsetSync.ts`, via two listener types
+whose exact semantics were derived empirically (see that file's doc comment, and the
+throwaway jsdom spikes in this round's git history) rather than assumed from Lexical's types:
+`registerMutationListener(ParagraphNode)` filtered to `'created'`/`'destroyed'` only
+(`'updated'` also fires for a paragraph's *siblings* on any insert/remove — sibling-pointer
+churn, not a content change) for structural sync, and `registerUpdateListener`'s
+`dirtyElements` for length-change sync (a plain text edit fires *zero* `ParagraphNode`
+mutations, confirmed live — only `dirtyElements` catches it). Wired into
+`SelectionOffsets.ts` as an *optional* `FastParagraphResolver` parameter threaded through
+`getOffsetWithinRoot`/`readSelectionStateFromDom`/`readSelectionOffsetFromClientPoint` — the
+resolver supplies only *inputs* (which paragraph, its prefix offset, its length, whether it
+has a next sibling), and the existing, already-tested boundary-disambiguation logic stays as
+one shared implementation for both the fast and slow paths, so they can't silently drift
+apart. Every resolution step returns `null` on any doubt, which the caller always treats as
+"fall back to the O(document length) walk" — never as a resolved answer.
+
+Verification, in order: `ParagraphOffsetIndex.test.ts` — the treap alone, fuzzed against a
+naive array reference across 5 seeds × 500 steps plus a 10,000-paragraph structural check;
+`LexicalParagraphOffsetSync.test.ts` — the *sync to a real Lexical editor* (the part that
+can't be fuzzed in the abstract), driving actual `editor.update()` calls (text edits,
+Enter-splits, Backspace-merges, multi-paragraph paste, deletes) in jsdom across 3 seeds × 150
+steps, checking the fast path against the slow DOM walk for *every* selectable point in the
+document after *every* step; `npx tsc --noEmit`; `npm run lint`; full suite (174/174 passing,
+up from 153). Then a live-browser check specifically because this touches caret placement —
+the highest-severity surface in this codebase (a wrong offset here doesn't just look wrong,
+it can make a keystroke edit the wrong location): real mouse clicks at document start/middle/
+end on a 5,000-line note, typed markers landing exactly where clicked, Enter/Backspace line
+counts, and undo, with console-error monitoring throughout. One live-browser result looked
+like a regression at first (Enter increased the line count by 2, not 1) — traced by
+`git stash`-ing this round's changes and re-running the *identical* script against the
+pre-fix code, which reproduced the exact same result. **Confirmed pre-existing, unrelated app
+behavior, not a regression** — noted here so it isn't mistaken for one again, but intentionally
+not investigated further as out of scope for this axis of work.
+
+Re-measured post-fix (same CDP CPU profile method, same 12,000-line note, 20-keystroke held-key
+burst): `getOffsetWithinRoot` **no longer appears in the profile's top 30 functions at all**
+(previously #1, 1926.92ms). Total profiled JS self-time for the burst roughly halved:
+**11,083ms → 5,463ms**. `normalizeInternalText`'s total cost also dropped ~5x (939ms → 180ms)
+as a side effect — most of its previous call volume was `getOffsetWithinRoot`'s own
+per-paragraph normalization on every walk.
+
 ## What's still open
 
-**Initial mount / note switch for a brand-new (uncached) huge note is NOT improved by the
-above.** The incremental split only helps when there's a previous call's cache to diff
-against; the very first render of a note has none, so it falls straight to the full-parse
-fallback — measured unchanged at ~9.8–12s wall-clock for a 12,000-line note, ~3s of which is
-still the unavoidable first full parse. This is a separate problem from the per-keystroke one
-and still needs one of the two candidate paths below (most of the ~12s wall-clock isn't even
-the parse — it's unaccounted for by any instrumented function here, most likely the initial
-mount of every block's `ReactMarkdown` output at once, i.e. exactly what "virtualize the
-preview pane" below would fix).
+**Initial mount / note switch for a brand-new (uncached) huge note is NOT improved by any fix
+in this doc so far.** The incremental block split only helps when there's a previous call's
+cache to diff against, and the paragraph offset index only helps once it's populated; the very
+first render of a note has neither, so both fall straight to their full/slow paths — measured
+unchanged at ~9.8–12s wall-clock for a 12,000-line note, ~3s of which is still the unavoidable
+first full parse. This is a separate problem from the per-keystroke ones fixed above and still
+needs one of the two candidate paths below (most of the ~12s wall-clock isn't even the parse —
+it's unaccounted for by any instrumented function here, most likely the initial mount of every
+block's `ReactMarkdown` output at once, i.e. exactly what "virtualize the preview pane" below
+would fix).
 
-**A large residual per-keystroke cost remains even after the parse fix, not yet
-investigated.** Post-fix, the held-key burst still averaged ~425ms/keystroke wall-clock, of
-which only ~17ms/keystroke is accounted for by `splitMarkdownIntoPreviewBlocksIncremental`
-(and `readCanonicalRootText` was independently measured at 10–40ms/call in the *previous*
-round, on the old unoptimized path — likely similar or smaller now, not re-measured this
-round). That leaves ~350-400ms/keystroke unexplained by anything instrumented so far. Prime
-suspects, in rough likelihood order, none confirmed yet:
-- React's own reconciliation/commit cost for whichever `PreviewMarkdownBlock`s actually
-  changed (should be O(1) per #16, but not verified with the React Profiler under this
-  specific large-note condition).
-- Broader App-level re-render cascade on every keystroke when `deferPreviewOnRapidInput` is
-  off (the toggle exists precisely to coalesce this, but this round's measurements all ran
-  with it at its default-off state — re-measure *with* it on before doing anything else here).
-- CDP/Playwright dispatch overhead inflating the wall-clock number itself, separate from any
-  real in-app cost — worth cross-checking against React's Profiler API or `performance`
-  marks bracketing the full React commit, not just Playwright's `Date.now()` deltas.
-
-Recommended next action, following this doc's own now-twice-reinforced rule: **measure before
-touching code.** Re-run the same live-browser measurement harness (see below) with
-`deferPreviewOnRapidInput` toggled on, and with `performance.mark`/`measure` (or the React
-Profiler) bracketing the full commit cycle, not just the two functions already instrumented
-here, before deciding whether this is a React problem, a remaining-architecture problem, or a
-measurement-methodology artifact.
+**The remaining per-keystroke cost is now diffuse, not dominated by one function.** Post
+caret-offset fix, the CPU profile's top entries are: an uninstrumented native/`(program)`
+bucket (2.6s of the 5.5s total — likely DOM APIs, event dispatch, GC bookkeeping, not
+straightforwardly actionable); an anonymous function in `EditorSection.tsx:547` (313ms);
+Lexical-internal `cloneEditorState`/`getModernOffsetsFromPoints` (220ms/205ms — framework
+cost, not this codebase's own); `normalizeInternalText`/`canonicalizeParagraphSegments`
+(180ms/159ms — this is `readCanonicalRootText`'s own necessarily-O(document-length) full-text
+production, arguably irreducible without a larger architecture change, since *some* full
+string of that size has to get built once per actual edit); and
+`computeInlineStateAtOffset`/`resolveMarkdownSelectionContext` in `MarkdownContext.ts`
+(99ms/82ms — syntax-highlighting-related, not yet profiled in isolation). None of these
+dominate the way `splitMarkdownIntoPreviewBlocks` or `getOffsetWithinRoot` did; picking up
+this thread means either accepting the current state as a reasonable stopping point (per
+`docs/document-scale-performance-philosophy.md`'s own risk/gain framing) or profiling several
+smaller things rather than chasing one more big win.
 
 **Already attempted and reverted (previous round, still applies — don't redo this specific
 approach to `readCanonicalRootText`'s `registerUpdateListener` cost).** The natural-seeming
@@ -158,11 +213,16 @@ this codebase's parsing internals needs empirical verification, not just careful
 
 The *correct* signal for a `registerUpdateListener`-based incremental fix here is Lexical's
 own `dirtyElements`/`dirtyLeaves` (from `registerUpdateListener`'s payload — confirmed present
-in `LexicalEditor.d.ts`, not a private API), which does reliably reflect "something in this
-subtree changed" regardless of object identity. Not attempted this round — the
-`previousTextRef.current` fix above already captured the cheap, zero-risk half of this, and
-measurement showed the parse fix mattered far more; revisit only if the "residual
-per-keystroke cost" investigation above points back here.
+in `LexicalEditor.d.ts`, not a private API, and now also confirmed *live* via
+`LexicalParagraphOffsetSync`'s own use of it, see above), which does reliably reflect
+"something in this subtree changed" regardless of object identity. Still not attempted for
+`readCanonicalRootText()`'s own `registerUpdateListener` walk specifically — the follow-up
+investigation this note asked for happened, but the CPU profile pointed at
+`getOffsetWithinRoot` as the dominant cost instead (now fixed, see above), not this. Revisit
+only if a future profile shows this specific walk mattering again; `canonicalizeParagraphSegments`
+sits at 159ms in the latest post-fix profile, which is close to the *irreducible* cost of
+producing a document-length string once per edit (see "What's still open" above) rather than
+clearly attributable to redundant work the way the old caret-offset walk was.
 
 **Not investigated at all yet — two candidate paths for genuinely huge notes (initial mount,
 not per-keystroke):**
@@ -200,11 +260,23 @@ not per-keystroke):**
   initialText })` then `window.thockdownSections.setActiveNote(sectionId, noteId)` (browser
   dev mode's mock IPC bridge, `src/dev/installBrowserMockBridges.ts`), then reload — opens
   straight into it.
-- Verification bar for any change here: `npx tsc --noEmit`, `npm test` (153/153 passing as of
+- For attributing a residual/diffuse cost to specific functions (not just "wall clock got
+  slower"), a CDP CPU profile beats bracketing guessed candidates with `performance.mark`: via
+  Playwright, `const client = await page.context().newCDPSession(page); await
+  client.send('Profiler.enable'); await client.send('Profiler.setSamplingInterval', {interval:
+  100}); await client.send('Profiler.start'); /* ...drive the interaction... */ const {profile}
+  = await client.send('Profiler.stop');` — then aggregate `profile.samples`/`.timeDeltas`
+  against `profile.nodes` by `callFrame.functionName`. This is what actually found
+  `getOffsetWithinRoot` as the dominant cost in this round, after `performance.mark` around
+  the two functions this doc had already instrumented showed nothing dominant.
+- Verification bar for any change here: `npx tsc --noEmit`, `npm test` (174/174 passing as of
   this writing, no known pre-existing failures), `npm run lint`, **and** a live-browser check
-  — twice now, a change here has passed its own unit tests while still being wrong; only a
-  live check (or, better, a fuzz test comparing against ground truth across many random
-  inputs, not just hand-picked cases) has caught it either time.
+  — three times now, a change here has passed its own unit tests while still being wrong (or,
+  in one case, looked wrong live and turned out to be an unrelated pre-existing issue —
+  confirmed by `git stash`-ing the change and reproducing the same live result against
+  unmodified code, which is the reliable way to tell the two apart rather than guessing). Only
+  a live check, or a fuzz test comparing against ground truth across many random inputs (not
+  hand-picked cases), has ever caught the real regressions in this doc's history.
 - This branch's PRs (#14–#17) were all opened against `main` and merged directly (`merge`
   method, not squash/rebase) once each was independently verified; follow the same pattern
   for any follow-up here rather than stacking onto old branch state.

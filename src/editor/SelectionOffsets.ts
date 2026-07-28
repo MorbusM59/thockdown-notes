@@ -82,7 +82,7 @@ function getOffsetWithinContainer(container: Node, node: Node, offset: number): 
   return accumulated;
 }
 
-function getOffsetWithinParagraph(paragraphEl: HTMLElement, node: Node, offset: number): number {
+export function getOffsetWithinParagraph(paragraphEl: HTMLElement, node: Node, offset: number): number {
   const paragraphText = normalizePlainText(paragraphEl.textContent ?? '');
   if (paragraphText.length === 0) {
     return 0;
@@ -121,7 +121,74 @@ function getOffsetWithinParagraph(paragraphEl: HTMLElement, node: Node, offset: 
   return accumulated;
 }
 
-function getOffsetWithinRoot(rootEl: HTMLElement, node: Node, offset: number): number {
+/**
+ * What a fast (O(log n) or better) paragraph resolver must supply for
+ * getOffsetWithinRoot's boundary-disambiguation logic below to produce an
+ * identical result to the O(document length) scan it replaces. Deliberately
+ * carries only *inputs* (which paragraph, its prefix offset, its own
+ * length, whether a next paragraph exists) -- the actual decision logic
+ * (the tricky end-of-paragraph-vs-start-of-next-paragraph disambiguation)
+ * stays as one shared implementation below, used by both the fast and slow
+ * paths, so they cannot silently drift apart from each other.
+ */
+export interface FastParagraphResolution {
+  paragraphEl: HTMLElement;
+  /** Canonical offset of this paragraph's own first character. */
+  prefixOffset: number;
+  /** This paragraph's own canonical text length (normalizePlainText'd), not including any separator. */
+  paragraphTextLength: number;
+  hasNextParagraph: boolean;
+}
+
+export type FastParagraphResolver = (rootEl: HTMLElement, node: Node, offset: number) => FastParagraphResolution | null;
+
+function resolveOffsetFromParagraphInfo(
+  paragraphEl: HTMLElement,
+  node: Node,
+  offset: number,
+  prefixOffset: number,
+  paraTextLength: number,
+  hasNextParagraph: boolean,
+): number {
+  const innerOffset = getOffsetWithinParagraph(paragraphEl, node, offset);
+
+  // Disambiguate the inter-paragraph boundary: when the anchor/focus node is the
+  // paragraph element itself (not a text node inside it) and its DOM offset points
+  // past its last child, Lexical places the cursor at the "end of this paragraph".
+  // Visually that position is indistinguishable from "start of next paragraph", but
+  // after a delete/merge operation Lexical consistently produces this form.
+  // Treating it as end-of-line means the caret appears on the wrong logical line,
+  // so Enter re-inserts the removed blank line instead of splitting the next one.
+  // The canonical offset for this position is start-of-next-paragraph, i.e.
+  // prefixOffset + paraTextLength + 1 (the LF separator). We only apply this when
+  // the paragraph actually has text (empty paragraphs represent blank lines and
+  // their past-end position is genuinely on that blank line, not the next one).
+  const nodeIsElement = !(node instanceof Text);
+  if (nodeIsElement && hasNextParagraph && paraTextLength > 0 && innerOffset >= paraTextLength) {
+    return prefixOffset + paraTextLength + 1;
+  }
+
+  return prefixOffset + innerOffset;
+}
+
+function getOffsetWithinRoot(rootEl: HTMLElement, node: Node, offset: number, fastResolver?: FastParagraphResolver): number {
+  // The fast resolver never covers the rare element-type point directly on
+  // the root editable (offset is a child index into rootEl, not a position
+  // within one paragraph) -- the slow path below already handles it.
+  if (fastResolver && node !== rootEl) {
+    const resolved = fastResolver(rootEl, node, offset);
+    if (resolved) {
+      return resolveOffsetFromParagraphInfo(
+        resolved.paragraphEl,
+        node,
+        offset,
+        resolved.prefixOffset,
+        resolved.paragraphTextLength,
+        resolved.hasNextParagraph,
+      );
+    }
+  }
+
   const paragraphs = Array.from(rootEl.children).filter((child): child is HTMLElement => child instanceof HTMLElement);
   if (paragraphs.length === 0) {
     return getOffsetWithinContainer(rootEl, node, offset);
@@ -145,27 +212,9 @@ function getOffsetWithinRoot(rootEl: HTMLElement, node: Node, offset: number): n
   for (let index = 0; index < paragraphs.length; index += 1) {
     const paragraph = paragraphs[index];
     if (paragraph.contains(node) || paragraph === node) {
-      const innerOffset = getOffsetWithinParagraph(paragraph, node, offset);
       const paraTextLength = normalizePlainText(paragraph.textContent ?? '').length;
       const hasNextParagraph = index < paragraphs.length - 1;
-
-      // Disambiguate the inter-paragraph boundary: when the anchor/focus node is the
-      // paragraph element itself (not a text node inside it) and its DOM offset points
-      // past its last child, Lexical places the cursor at the "end of this paragraph".
-      // Visually that position is indistinguishable from "start of next paragraph", but
-      // after a delete/merge operation Lexical consistently produces this form.
-      // Treating it as end-of-line means the caret appears on the wrong logical line,
-      // so Enter re-inserts the removed blank line instead of splitting the next one.
-      // The canonical offset for this position is start-of-next-paragraph, i.e.
-      // accumulated + paraTextLength + 1 (the LF separator). We only apply this when
-      // the paragraph actually has text (empty paragraphs represent blank lines and
-      // their past-end position is genuinely on that blank line, not the next one).
-      const nodeIsElement = !(node instanceof Text);
-      if (nodeIsElement && hasNextParagraph && paraTextLength > 0 && innerOffset >= paraTextLength) {
-        return accumulated + paraTextLength + 1;
-      }
-
-      return accumulated + innerOffset;
+      return resolveOffsetFromParagraphInfo(paragraph, node, offset, accumulated, paraTextLength, hasNextParagraph);
     }
 
     accumulated += normalizePlainText(paragraph.textContent ?? '').length;
@@ -184,13 +233,14 @@ export function readSelectionOffsetFromDomPoint(
   node: Node,
   offset: number,
   textLength: number,
+  fastResolver?: FastParagraphResolver,
 ): number {
   const safeTextLength = Math.max(0, textLength);
   if (!rootEl.contains(node) && node !== rootEl) {
     return 0;
   }
 
-  const rawOffset = getOffsetWithinRoot(rootEl, node, offset);
+  const rawOffset = getOffsetWithinRoot(rootEl, node, offset, fastResolver);
   return clamp(rawOffset, 0, safeTextLength);
 }
 
@@ -200,6 +250,7 @@ export function readSelectionOffsetFromClientPoint(
   clientY: number,
   textLength: number,
   fallbackOffset: number,
+  fastResolver?: FastParagraphResolver,
 ): number {
   const safeTextLength = Math.max(0, textLength);
   const safeFallback = clamp(fallbackOffset, 0, safeTextLength);
@@ -217,6 +268,7 @@ export function readSelectionOffsetFromClientPoint(
         caretPosition.offsetNode,
         caretPosition.offset,
         safeTextLength,
+        fastResolver,
       );
     }
   }
@@ -229,6 +281,7 @@ export function readSelectionOffsetFromClientPoint(
         caretRange.startContainer,
         caretRange.startOffset,
         safeTextLength,
+        fastResolver,
       );
     }
   }
@@ -395,6 +448,7 @@ export function readSelectionStateFromDom(
   rootEl: HTMLElement,
   domSelection: Selection | null,
   textLength: number,
+  fastResolver?: FastParagraphResolver,
 ): EditorSelectionState {
   if (!domSelection || domSelection.rangeCount === 0) return EMPTY_SELECTION;
 
@@ -405,8 +459,8 @@ export function readSelectionStateFromDom(
   if (!rootEl.contains(anchorNode) || !rootEl.contains(focusNode)) return EMPTY_SELECTION;
 
   const safeTextLength = Math.max(0, textLength);
-  const anchorRaw = getOffsetWithinRoot(rootEl, anchorNode, domSelection.anchorOffset);
-  const focusRaw = getOffsetWithinRoot(rootEl, focusNode, domSelection.focusOffset);
+  const anchorRaw = getOffsetWithinRoot(rootEl, anchorNode, domSelection.anchorOffset, fastResolver);
+  const focusRaw = getOffsetWithinRoot(rootEl, focusNode, domSelection.focusOffset, fastResolver);
   const anchor = clamp(anchorRaw, 0, safeTextLength);
   const focus = clamp(focusRaw, 0, safeTextLength);
   const start = Math.min(anchor, focus);
