@@ -545,11 +545,16 @@ export function ContractBridgePlugin({
 
         const transformCallback = onTabIndentTransformRef.current;
         if (transformCallback) {
-          let canonicalText = '';
+          // Pre-commit read: the tree hasn't changed since the last
+          // registerUpdateListener commit yet (this handler runs before any
+          // edit from *this* keystroke lands), so previousTextRef already
+          // holds exactly what a fresh readCanonicalRootText() walk would
+          // return here -- skips a redundant O(document length) walk on
+          // every plain keystroke.
+          const canonicalText = previousTextRef.current;
           let currentSelection = previousSelectionRef.current;
 
           editor.getEditorState().read(() => {
-            canonicalText = readCanonicalRootText();
             const rootEl = editor.getRootElement();
             const lexicalSelection = $getSelection();
             if (rootEl && $isRangeSelection(lexicalSelection)) {
@@ -600,11 +605,16 @@ export function ContractBridgePlugin({
           event.key.length === 1;
 
         if (isPlainCharacterInsert) {
-          let canonicalText = '';
+          // Pre-commit read: the tree hasn't changed since the last
+          // registerUpdateListener commit yet (this handler runs before any
+          // edit from *this* keystroke lands), so previousTextRef already
+          // holds exactly what a fresh readCanonicalRootText() walk would
+          // return here -- skips a redundant O(document length) walk on
+          // every plain keystroke.
+          const canonicalText = previousTextRef.current;
           let currentSelection = previousSelectionRef.current;
 
           editor.getEditorState().read(() => {
-            canonicalText = readCanonicalRootText();
             const rootEl = editor.getRootElement();
             const lexicalSelection = $getSelection();
             if (rootEl && $isRangeSelection(lexicalSelection)) {
@@ -660,11 +670,13 @@ export function ContractBridgePlugin({
 
         if (!shortcut) return false;
 
-        let canonicalText = '';
+        // See the tab/character-insert transform handlers above for why
+        // previousTextRef.current is equivalent to a fresh
+        // readCanonicalRootText() read at this point.
+        const canonicalText = previousTextRef.current;
         let currentSelection = previousSelectionRef.current;
 
         editor.getEditorState().read(() => {
-          canonicalText = readCanonicalRootText();
           const rootEl = editor.getRootElement();
           const lexicalSelection = $getSelection();
           if (rootEl && $isRangeSelection(lexicalSelection)) {
@@ -699,11 +711,13 @@ export function ContractBridgePlugin({
         const callback = onEnterTransformRef.current;
         if (!callback) return false;
 
-        let canonicalText = '';
+        // See the tab/character-insert transform handlers above for why
+        // previousTextRef.current is equivalent to a fresh
+        // readCanonicalRootText() read at this point.
+        const canonicalText = previousTextRef.current;
         let currentSelection = previousSelectionRef.current;
 
         editor.getEditorState().read(() => {
-          canonicalText = readCanonicalRootText();
           const rootEl = editor.getRootElement();
           const lexicalSelection = $getSelection();
           if (rootEl && $isRangeSelection(lexicalSelection)) {

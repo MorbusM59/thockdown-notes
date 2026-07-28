@@ -3,7 +3,7 @@
    component memoized for the preview pane's per-block rendering (see its
    own comment below); it isn't part of this module's public API, so
    there's nothing here for Fast Refresh to preserve identity of. */
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { MutableRefObject, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import type { NoteSummary } from '../shared/noteLifecycle'
@@ -17,7 +17,7 @@ import {
   createPreviewSourceAnchorRehypePlugin,
   PREVIEW_MARKDOWN_REMARK_PLUGINS,
 } from '../editor/PreviewMarkdown'
-import { splitMarkdownIntoPreviewBlocks } from '../editor/PreviewBlockSplit'
+import { splitMarkdownIntoPreviewBlocksIncremental, type PreviewBlockSplitCache } from '../editor/PreviewBlockSplit'
 
 export interface UsePreviewMarkdownRenderingOptions {
   notes: NoteSummary[]
@@ -219,15 +219,30 @@ export function usePreviewMarkdownRendering({
     [documentFindDirective.findText, isDocumentFindCaseSensitive],
   )
 
-  // Recomputed on every renderedDisplayText change -- cheap (a parse-only
-  // pass, no rehype/react work, see PreviewBlockSplit.ts) -- to learn the
-  // current block boundaries. The actual, expensive ReactMarkdown
-  // parse+render per block is gated by PreviewMarkdownBlock's own memo, not
-  // by this.
-  const previewBlocks = useMemo(
-    () => splitMarkdownIntoPreviewBlocks(renderedDisplayText),
+  // Recomputed on every renderedDisplayText change to learn the current
+  // block boundaries. The actual, expensive ReactMarkdown parse+render per
+  // block is gated by PreviewMarkdownBlock's own memo, not by this -- but
+  // the boundary recompute itself is a full remark parse of the whole
+  // document if done naively, which is *not* cheap on a large note
+  // (measured: seconds per keystroke on a ~12,000-line note). The
+  // incremental split reuses the previous call's boundaries for whatever
+  // span of the document the edit didn't touch, keyed on this hook's own
+  // instance via splitCacheRef so concurrent panes/sections never share
+  // state. See PreviewBlockSplit.ts for the reuse strategy and its safety
+  // argument.
+  const splitCacheRef = useRef<PreviewBlockSplitCache | null>(null)
+  const splitResult = useMemo(
+    () => splitMarkdownIntoPreviewBlocksIncremental(renderedDisplayText, splitCacheRef.current),
     [renderedDisplayText],
   )
+  // Committed in an effect, not during the useMemo above, so this cache
+  // update never happens during a render React might discard (Strict Mode's
+  // double-invoke, an interrupted concurrent render) -- only once this
+  // result has actually become what's on screen.
+  useLayoutEffect(() => {
+    splitCacheRef.current = splitResult
+  }, [splitResult])
+  const previewBlocks = splitResult.blocks
 
   // Memoized so per-frame App re-renders (scroll thumb state, etc.) do not
   // even walk the block list. That heavy reconciliation was stalling the
