@@ -97,6 +97,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   documentFindCaseSensitiveRef: MutableRefObject<boolean>
 
   editorRuntimeMetrics: EditorRuntimeMetrics
+  deferPreviewOnRapidInput: boolean
   viewStyle: ViewStyleKey
   viewFontSize: number
   viewSpacing: number
@@ -167,6 +168,7 @@ export function EditorSection({
   restoredDocumentFindCaseSensitive,
   documentFindCaseSensitiveRef,
   editorRuntimeMetrics,
+  deferPreviewOnRapidInput,
   viewStyle,
   viewFontSize,
   viewSpacing,
@@ -322,6 +324,7 @@ export function EditorSection({
     previewedSnapshotId,
     persistenceReady,
     lineHeightPx: editorRuntimeMetrics.lineHeightPx,
+    deferPreviewOnRapidInput,
     latestEditorTextRef,
     latestEditorSelectionRef,
     isApplyingInitialViewportRef,

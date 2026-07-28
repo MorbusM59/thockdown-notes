@@ -121,6 +121,7 @@ export interface PersistedMenuState {
   pitchJitterAmount?: number;
   reduceVisualEffects?: boolean;
   reducedCaretAnimation?: boolean;
+  deferPreviewOnRapidInput?: boolean;
   typingSoundEnabled?: boolean;
   typingSoundSet?: 'A' | 'B' | 'C';
   musicVolume?: number;

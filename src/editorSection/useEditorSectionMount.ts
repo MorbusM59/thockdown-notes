@@ -44,6 +44,8 @@ export interface UseEditorSectionMountOptions {
   previewedSnapshotId: number | null
   persistenceReady: boolean
   lineHeightPx: number
+  /** Opt-in perf toggle: coalesces the preview-driving setActiveNoteText/setEditorTextVersion commit onto a single requestAnimationFrame per user-input burst instead of firing once per keystroke, so fast key-repeat (e.g. held Backspace) doesn't queue a full ReactMarkdown reparse per tick. Undo/redo/programmatic sources always stay synchronous. */
+  deferPreviewOnRapidInput: boolean
   latestEditorTextRef: MutableRefObject<string>
   latestEditorSelectionRef: MutableRefObject<EditorSelectionState>
   /** Owned in App.tsx, not here -- queueAppStateSave and activateNote (both staying in App.tsx) also read/write these. */
@@ -178,6 +180,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     previewedSnapshotId,
     persistenceReady,
     lineHeightPx,
+    deferPreviewOnRapidInput,
     latestEditorTextRef,
     latestEditorSelectionRef,
     isApplyingInitialViewportRef,
@@ -208,6 +211,9 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   const latestEditViewportTelemetryRef = useRef<EditViewportTelemetry | null>(null)
   const editUiStateSaveTimerRef = useRef<number | null>(null)
   const lastPersistedEditUiStateRef = useRef<{ noteId: string; progressEdit: number; cursorPos: number; scrollTop: number; sourceAnchorLine: number; sourceAnchorText: string | null } | null>(null)
+  // Coalesces the preview-driving setActiveNoteText/setEditorTextVersion
+  // commit under deferPreviewOnRapidInput -- see scheduleCoalescedPreviewCommit.
+  const pendingPreviewFrameRef = useRef<number | null>(null)
   // Mirrors `notes` for onTextChange's external-note bookkeeping (inside the
   // `bindings` useMemo below), so a stale notes array can't be read between
   // memo recreations without forcing bindings -- and the editor's lifecycle
@@ -216,6 +222,34 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   useEffect(() => {
     notesRef.current = notes
   }, [notes])
+
+  // Cancels a still-pending coalesced preview commit without flushing it --
+  // used both when a synchronous update supersedes it and on unmount.
+  const cancelPendingPreviewFrame = useCallback(() => {
+    if (pendingPreviewFrameRef.current !== null) {
+      cancelAnimationFrame(pendingPreviewFrameRef.current)
+      pendingPreviewFrameRef.current = null
+    }
+  }, [])
+
+  // Coalesces repeated onTextChange ticks (e.g. autorepeat-driven Backspace)
+  // onto a single rAF: latestEditorTextRef is already up to date on every
+  // tick, so the frame just needs to commit whatever it holds when it fires
+  // rather than react to every intermediate value.
+  const scheduleCoalescedPreviewCommit = useCallback(() => {
+    if (pendingPreviewFrameRef.current !== null) return
+    pendingPreviewFrameRef.current = requestAnimationFrame(() => {
+      pendingPreviewFrameRef.current = null
+      setActiveNoteText(latestEditorTextRef.current)
+      setEditorTextVersion((previous) => previous + 1)
+    })
+  }, [latestEditorTextRef, setActiveNoteText, setEditorTextVersion])
+
+  useEffect(() => {
+    return () => {
+      cancelPendingPreviewFrame()
+    }
+  }, [cancelPendingPreviewFrame])
 
   const readCurrentEditUiPayload = useCallback((): { progressEdit: number; cursorPos: number; scrollTop: number; sourceAnchorLine: number; sourceAnchorText: string | null } | null => {
     const selection = latestEditorSelectionRef.current
@@ -762,9 +796,15 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
 
       latestEditorTextRef.current = normalizedText
       latestEditorSelectionRef.current = event.selection
-      setActiveNoteText(normalizedText)
+
+      if (deferPreviewOnRapidInput && event.source === 'user-input') {
+        scheduleCoalescedPreviewCommit()
+      } else {
+        cancelPendingPreviewFrame()
+        setActiveNoteText(normalizedText)
+        setEditorTextVersion((previous) => previous + 1)
+      }
       setEditorSelection(event.selection)
-      setEditorTextVersion((previous) => previous + 1)
 
       if (!activeNoteId || !persistenceReady || activeNoteHasDebugTagRef.current) return
 
@@ -1092,6 +1132,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     isPreviewMode,
     persistenceReady,
     previewedSnapshotId,
+    deferPreviewOnRapidInput,
     queueSave,
     queueAppStateSave,
     updateActiveNoteTitlePreview,
@@ -1101,6 +1142,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     buildToggleBulletedListTransformRef,
     buildToggleCurrentLineHeadingTransformRef,
     buildToggleNumberedListTransformRef,
+    cancelPendingPreviewFrame,
+    scheduleCoalescedPreviewCommit,
     deriveTypingSoundKeyId,
     externalNoteOriginalTextByIdRef,
     isApplyingInitialViewportRef,

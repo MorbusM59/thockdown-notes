@@ -1893,6 +1893,7 @@ function App() {
   const [pitchJitterAmount, setPitchJitterAmount] = useState(0)
   const [reduceVisualEffects, setReduceVisualEffects] = useState(false)
   const [reducedCaretAnimation, setReducedCaretAnimation] = useState(false)
+  const [deferPreviewOnRapidInput, setDeferPreviewOnRapidInput] = useState(false)
   const [typingSoundEnabled, setTypingSoundEnabled] = useState(false)
   const [typingSoundSet, setTypingSoundSet] = useState<'A' | 'B' | 'C'>(DEFAULT_TYPING_SOUND_SET)
   const [musicVolume, setMusicVolume] = useState(0.8)
@@ -3212,6 +3213,7 @@ function App() {
       // rather than being reset to whatever each layout last had stored.
       reduceVisualEffects,
       reducedCaretAnimation,
+      deferPreviewOnRapidInput,
     }
   }, [
     archiveCollapsedPrimary,
@@ -3223,6 +3225,7 @@ function App() {
     spellCheckRenderEnabled,
     reduceVisualEffects,
     reducedCaretAnimation,
+    deferPreviewOnRapidInput,
     editorFontSize,
     editorGlyphPaddingPx,
     borderRadiusRegularPx,
@@ -4749,6 +4752,7 @@ ${markdownHtml}
             setPitchJitterAmount(appState.menu.pitchJitterAmount ?? 0)
             setReduceVisualEffects(appState.menu.reduceVisualEffects ?? false)
             setReducedCaretAnimation(appState.menu.reducedCaretAnimation ?? false)
+            setDeferPreviewOnRapidInput(appState.menu.deferPreviewOnRapidInput ?? false)
             setTypingSoundEnabled(appState.menu.typingSoundEnabled ?? false)
             setTypingSoundSet(appState.menu.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
             if (typeof appState.menu.musicVolume === 'number') setMusicVolume(appState.menu.musicVolume)
@@ -7149,6 +7153,8 @@ ${markdownHtml}
                         setReduceVisualEffects={setReduceVisualEffects}
                         reducedCaretAnimation={reducedCaretAnimation}
                         setReducedCaretAnimation={setReducedCaretAnimation}
+                        deferPreviewOnRapidInput={deferPreviewOnRapidInput}
+                        setDeferPreviewOnRapidInput={setDeferPreviewOnRapidInput}
                         musicAccordionNonce={musicAccordionNonce}
                         musicVolume={musicVolume}
                         setMusicVolume={setMusicVolume}
@@ -7538,6 +7544,7 @@ ${markdownHtml}
                   restoredDocumentFindCaseSensitive={restoredDocumentFindCaseSensitive}
                   documentFindCaseSensitiveRef={documentFindCaseSensitiveRef}
                   editorRuntimeMetrics={editorRuntimeMetrics}
+                  deferPreviewOnRapidInput={deferPreviewOnRapidInput}
                   viewStyle={viewStyle}
                   viewFontSize={viewFontSize}
                   viewSpacing={viewSpacing}
