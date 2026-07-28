@@ -1,4 +1,9 @@
-import { useCallback, useMemo } from 'react'
+/* eslint-disable react-refresh/only-export-components -- this hook module
+   also defines PreviewMarkdownBlock, a small internal presentational
+   component memoized for the preview pane's per-block rendering (see its
+   own comment below); it isn't part of this module's public API, so
+   there's nothing here for Fast Refresh to preserve identity of. */
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 import type { MutableRefObject, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import type { NoteSummary } from '../shared/noteLifecycle'
@@ -12,6 +17,7 @@ import {
   createPreviewSourceAnchorRehypePlugin,
   PREVIEW_MARKDOWN_REMARK_PLUGINS,
 } from '../editor/PreviewMarkdown'
+import { splitMarkdownIntoPreviewBlocks } from '../editor/PreviewBlockSplit'
 
 export interface UsePreviewMarkdownRenderingOptions {
   notes: NoteSummary[]
@@ -28,6 +34,46 @@ export interface UsePreviewMarkdownRenderingOptions {
 export interface UsePreviewMarkdownRenderingResult {
   previewMarkdownElement: ReactNode
 }
+
+interface PreviewMarkdownBlockProps {
+  text: string
+  lineOffset: number
+  searchHighlightPlugin: ReturnType<typeof createPreviewSearchHighlightRehypePlugin>
+  components: ReturnType<typeof createPreviewMarkdownComponents>
+}
+
+// Memoized on (text, lineOffset, searchHighlightPlugin, components) -- all
+// either primitives or stable-until-actually-different references -- so a
+// block whose own source text and position are unchanged skips
+// ReactMarkdown's parse + hast-to-react conversion entirely, even though
+// the parent recomputes the full block list on every keystroke. This is
+// the actual perf win: editing inside one paragraph no longer reparses/
+// reconciles the whole note. See PreviewBlockSplit.ts for the split itself.
+const PreviewMarkdownBlock = memo(function PreviewMarkdownBlock({
+  text,
+  lineOffset,
+  searchHighlightPlugin,
+  components,
+}: PreviewMarkdownBlockProps) {
+  const sourceAnchorPlugin = useMemo(
+    () => createPreviewSourceAnchorRehypePlugin(lineOffset),
+    [lineOffset],
+  )
+  const rehypePlugins = useMemo(
+    () => [searchHighlightPlugin, sourceAnchorPlugin],
+    [searchHighlightPlugin, sourceAnchorPlugin],
+  )
+
+  return (
+    <ReactMarkdown
+      remarkPlugins={PREVIEW_MARKDOWN_REMARK_PLUGINS}
+      rehypePlugins={rehypePlugins}
+      components={components}
+    >
+      {text}
+    </ReactMarkdown>
+  )
+})
 
 /**
  * Renders the current note's markdown into the preview pane -- anchor
@@ -48,6 +94,24 @@ export function usePreviewMarkdownRendering({
   isDocumentFindCaseSensitive,
   renderedDisplayText,
 }: UsePreviewMarkdownRenderingOptions): UsePreviewMarkdownRenderingResult {
+  // Mirrors `notes`/`activeNoteText` for navigateToInternalPreviewLink's
+  // call-time-only reads below, so that callback's identity -- and in turn
+  // previewMarkdownComponents' -- stays stable across every keystroke. Both
+  // props otherwise change on every keystroke (title-preview and
+  // save-queue bookkeeping touch `notes`; typing itself touches
+  // `activeNoteText`), which would force every PreviewMarkdownBlock to
+  // treat `components` as "changed" and re-render, defeating the whole
+  // point of splitting the preview into independently memoized blocks.
+  const notesRef = useRef(notes)
+  useEffect(() => {
+    notesRef.current = notes
+  }, [notes])
+
+  const activeNoteTextRef = useRef(activeNoteText)
+  useEffect(() => {
+    activeNoteTextRef.current = activeNoteText
+  }, [activeNoteText])
+
   // Scrolls the currently rendered preview to a `[Anchor Text](#anchor-id)`
   // definition, if present. `waitForNoteSwitch` retries across a few
   // animation frames since switching notes re-renders ReactMarkdown
@@ -98,7 +162,7 @@ export function usePreviewMarkdownRendering({
   const navigateToInternalPreviewLink = useCallback((target: ParsedInternalPreviewLink) => {
     if (target.noteIdRaw !== null) {
       const normalizedTarget = normalizeInternalIdForLookup(target.noteIdRaw)
-      const targetNote = notes.find((note) => note.assignedId && normalizeInternalIdForLookup(note.assignedId) === normalizedTarget)
+      const targetNote = notesRef.current.find((note) => note.assignedId && normalizeInternalIdForLookup(note.assignedId) === normalizedTarget)
       if (!targetNote) return
 
       if (target.anchorId !== null && !noteContainsAnchorDefinition(targetNote.contentText ?? '', target.anchorId)) {
@@ -126,14 +190,28 @@ export function usePreviewMarkdownRendering({
 
     // No noteIdRaw means "this note" (a bare `$` or `$#anchor-id`).
     if (target.anchorId === null || !activeNoteId) return
-    const currentText = latestEditorTextRef.current || activeNoteText
+    const currentText = latestEditorTextRef.current || activeNoteTextRef.current
     if (!noteContainsAnchorDefinition(currentText, target.anchorId)) return
     scrollToAnchorInPreview(target.anchorId, false)
-  }, [notes, activeNoteId, activateNote, activeNoteText, scrollToAnchorInPreview, scrollPreviewToTop, latestEditorTextRef])
+  }, [activeNoteId, activateNote, scrollToAnchorInPreview, scrollPreviewToTop, latestEditorTextRef])
+
+  // navigateToInternalPreviewLink itself still isn't fully keystroke-stable
+  // -- it depends (transitively, via `activateNote`) on other callbacks
+  // elsewhere in the section that legitimately need the latest
+  // activeNoteText for THEIR OWN purposes (persisting edit-UI state on
+  // note switch) and so recreate on every keystroke regardless of anything
+  // this hook does. Forwarding through a ref, and building `components`
+  // exactly once, fully decouples its identity from that upstream churn --
+  // clicks still always run the latest navigation logic, since the
+  // forwarding wrapper reads the ref at call time, not at creation time.
+  const navigateToInternalPreviewLinkRef = useRef(navigateToInternalPreviewLink)
+  useEffect(() => {
+    navigateToInternalPreviewLinkRef.current = navigateToInternalPreviewLink
+  }, [navigateToInternalPreviewLink])
 
   const previewMarkdownComponents = useMemo(
-    () => createPreviewMarkdownComponents(navigateToInternalPreviewLink),
-    [navigateToInternalPreviewLink],
+    () => createPreviewMarkdownComponents((target) => navigateToInternalPreviewLinkRef.current(target)),
+    [],
   )
 
   const previewSearchHighlightPlugin = useMemo(
@@ -141,23 +219,32 @@ export function usePreviewMarkdownRendering({
     [documentFindDirective.findText, isDocumentFindCaseSensitive],
   )
 
-  const previewSourceAnchorPlugin = useMemo(
-    () => createPreviewSourceAnchorRehypePlugin(),
-    [],
+  // Recomputed on every renderedDisplayText change -- cheap (a parse-only
+  // pass, no rehype/react work, see PreviewBlockSplit.ts) -- to learn the
+  // current block boundaries. The actual, expensive ReactMarkdown
+  // parse+render per block is gated by PreviewMarkdownBlock's own memo, not
+  // by this.
+  const previewBlocks = useMemo(
+    () => splitMarkdownIntoPreviewBlocks(renderedDisplayText),
+    [renderedDisplayText],
   )
 
   // Memoized so per-frame App re-renders (scroll thumb state, etc.) do not
-  // trigger a full ReactMarkdown reconciliation of long notes. That heavy
-  // reconciliation was stalling the main thread and freezing rAF mid-scroll.
+  // even walk the block list. That heavy reconciliation was stalling the
+  // main thread and freezing rAF mid-scroll.
   const previewMarkdownElement = useMemo(() => (
-    <ReactMarkdown
-      remarkPlugins={PREVIEW_MARKDOWN_REMARK_PLUGINS}
-      rehypePlugins={[previewSearchHighlightPlugin, previewSourceAnchorPlugin]}
-      components={previewMarkdownComponents}
-    >
-      {renderedDisplayText}
-    </ReactMarkdown>
-  ), [renderedDisplayText, previewSearchHighlightPlugin, previewSourceAnchorPlugin, previewMarkdownComponents])
+    <>
+      {previewBlocks.map((block, index) => (
+        <PreviewMarkdownBlock
+          key={index}
+          text={block.text}
+          lineOffset={block.startLine}
+          searchHighlightPlugin={previewSearchHighlightPlugin}
+          components={previewMarkdownComponents}
+        />
+      ))}
+    </>
+  ), [previewBlocks, previewSearchHighlightPlugin, previewMarkdownComponents])
 
   return { previewMarkdownElement }
 }
