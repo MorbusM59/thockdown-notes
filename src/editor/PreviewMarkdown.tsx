@@ -268,7 +268,14 @@ export function createPreviewSearchHighlightRehypePlugin(needle: string, isCaseS
   }
 }
 
-export function createPreviewSourceAnchorRehypePlugin() {
+/**
+ * `lineOffset` shifts every reported line by a fixed amount -- used when
+ * this runs over a single block sliced out of a larger document (see
+ * PreviewBlockSplit.ts), where remark's own line numbers are relative to
+ * that slice, not the full document. Defaults to 0 for a whole-document
+ * parse.
+ */
+export function createPreviewSourceAnchorRehypePlugin(lineOffset: number = 0) {
   return () => {
     return (tree: Root) => {
       const sourceAnchorTags = new Set([
@@ -283,9 +290,9 @@ export function createPreviewSourceAnchorRehypePlugin() {
         const endLine = node.position?.end?.line
         if (typeof startLine !== 'number' || Number.isNaN(startLine)) return
 
-        const normalizedStartLine = Math.max(0, Math.round(startLine - 1))
+        const normalizedStartLine = Math.max(0, Math.round(startLine - 1) + lineOffset)
         const normalizedEndLine = typeof endLine === 'number' && !Number.isNaN(endLine)
-          ? Math.max(normalizedStartLine, Math.round(endLine - 1))
+          ? Math.max(normalizedStartLine, Math.round(endLine - 1) + lineOffset)
           : normalizedStartLine
 
         node.properties = node.properties ?? {}
