@@ -235,15 +235,21 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   // Coalesces repeated onTextChange ticks (e.g. autorepeat-driven Backspace)
   // onto a single rAF: latestEditorTextRef is already up to date on every
   // tick, so the frame just needs to commit whatever it holds when it fires
-  // rather than react to every intermediate value.
+  // rather than react to every intermediate value. Bundles the title-preview
+  // update in with the same frame -- deriveNoteTitleFromText is its own
+  // O(document length) scan (split + two finds), and un-gating it here would
+  // leave it running on every tick even with this toggle on, defeating the
+  // point for a large note under rapid input.
   const scheduleCoalescedPreviewCommit = useCallback(() => {
     if (pendingPreviewFrameRef.current !== null) return
     pendingPreviewFrameRef.current = requestAnimationFrame(() => {
       pendingPreviewFrameRef.current = null
-      setActiveNoteText(latestEditorTextRef.current)
+      const latestText = latestEditorTextRef.current
+      setActiveNoteText(latestText)
       setEditorTextVersion((previous) => previous + 1)
+      updateActiveNoteTitlePreview(latestText)
     })
-  }, [latestEditorTextRef, setActiveNoteText, setEditorTextVersion])
+  }, [latestEditorTextRef, setActiveNoteText, setEditorTextVersion, updateActiveNoteTitlePreview])
 
   useEffect(() => {
     return () => {
@@ -797,7 +803,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       latestEditorTextRef.current = normalizedText
       latestEditorSelectionRef.current = event.selection
 
-      if (deferPreviewOnRapidInput && event.source === 'user-input') {
+      const isDeferredPreviewTick = deferPreviewOnRapidInput && event.source === 'user-input'
+      if (isDeferredPreviewTick) {
         scheduleCoalescedPreviewCommit()
       } else {
         cancelPendingPreviewFrame()
@@ -864,7 +871,14 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         return
       }
 
-      updateActiveNoteTitlePreview(normalizedText)
+      // Deferred already covers this: scheduleCoalescedPreviewCommit calls
+      // updateActiveNoteTitlePreview itself once the frame fires, using
+      // whatever text is latest by then -- calling it again here would
+      // just redo the same O(document length) title derivation twice for
+      // no benefit.
+      if (!isDeferredPreviewTick) {
+        updateActiveNoteTitlePreview(normalizedText)
+      }
       queueSave(normalizedText)
     },
     onSelectionChange: (event: EditorSelectionChangeEvent) => {
