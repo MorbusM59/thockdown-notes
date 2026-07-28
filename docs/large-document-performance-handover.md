@@ -5,6 +5,11 @@ project's own `docs/V*` ledger (that's a different, earlier rewrite-phase sequen
 is scoped specifically to editor/preview performance under large notes, and can be deleted
 once that's addressed and folded into whatever the project's normal docs become.
 
+**Read `docs/document-scale-performance-philosophy.md` first.** That document is the standing
+contract this working log is tracked against — the benchmark, the solution hierarchy, and the
+process discipline (measure-first, fuzz-verify incrementality, live-browser-check) all live
+there and apply to everything below, not just the specific items already found.
+
 ## Where this came from
 
 A prior session fixed input lag from **held-key autorepeat** (Backspace/Delete, or any held
