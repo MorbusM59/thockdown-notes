@@ -393,6 +393,8 @@ export interface SidebarOptionsPanelProps {
   setReduceVisualEffects: (value: boolean) => void
   reducedCaretAnimation: boolean
   setReducedCaretAnimation: (value: boolean) => void
+  deferPreviewOnRapidInput: boolean
+  setDeferPreviewOnRapidInput: (value: boolean) => void
 
   musicAccordionNonce: number
   musicVolume: number
@@ -575,6 +577,8 @@ export function SidebarOptionsPanel({
   setReduceVisualEffects,
   reducedCaretAnimation,
   setReducedCaretAnimation,
+  deferPreviewOnRapidInput,
+  setDeferPreviewOnRapidInput,
   musicAccordionNonce,
   musicVolume,
   setMusicVolume,
@@ -2104,6 +2108,19 @@ export function SidebarOptionsPanel({
             title="Reduce caret animation (stops the idle blink from keeping the compositor busy)"
           >
             <span className="fa-solid fa-computer-mouse" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={`btn-icon${deferPreviewOnRapidInput ? ' is-active' : ''}`}
+            onClick={() => {
+              const next = !deferPreviewOnRapidInput
+              setDeferPreviewOnRapidInput(next)
+              queueAppStateSave(activeNoteId)
+            }}
+            aria-pressed={deferPreviewOnRapidInput}
+            title="Defer preview on rapid input (coalesces the preview update onto one frame during fast key-repeat, e.g. held Backspace)"
+          >
+            <span className="fa-solid fa-gauge-high" aria-hidden="true" />
           </button>
         </div>
       </AccordionSection>
