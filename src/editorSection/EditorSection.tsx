@@ -53,7 +53,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   'sectionId' | 'markSectionActive' | 'activeNoteId' | 'isPreviewMode' | 'previewedSnapshotId' | 'bindings' | 'adapterRef' | 'sectionContainerRef'
   | 'editorDisplayText' | 'activeNoteHasDebugTag' | 'isPreviewingSnapshot' | 'isCaretSuspended' | 'previewTextureRef'
   | 'previewScrollRef' | 'handlePreviewScroll' | 'blockPreviewEditMutation' | 'previewMarkdownElement'
-  | 'previewScrollbarTrackRef' | 'handlePreviewTrackMouseDown' | 'previewScrollbarThumbRef' | 'isDraggingPreviewScrollThumb'
+  | 'previewScrollbarTrackRef' | 'handlePreviewTrackMouseDown' | 'handlePreviewTrackContextMenu' | 'previewScrollbarThumbRef' | 'isDraggingPreviewScrollThumb'
   | 'isPreviewScrollThumbActive' | 'handlePreviewThumbMouseDown' | 'activeNoteDocumentStats' | 'noteSnapshots'
   | 'handleNavigateSnapshot' | 'handleBranchOpened' | 'handleBranchError' | 'timelineCurveConstant' | 'setTimelineCurveConstant'
   | 'setTimelineTrackLengthPx' | 'handleCreateManualSnapshot' | 'handleReturnToPresent' | 'handleMergeAdjacentSnapshots'
@@ -758,6 +758,7 @@ export function EditorSection({
     isDraggingPreviewScrollThumb,
     syncPreviewCustomScrollbar,
     handlePreviewTrackMouseDown,
+    handlePreviewTrackContextMenu,
     handlePreviewThumbMouseDown,
     handlePreviewScroll,
     blockPreviewEditMutation,
@@ -1222,6 +1223,7 @@ export function EditorSection({
         previewMarkdownElement={previewMarkdownElement}
         previewScrollbarTrackRef={previewScrollbarTrackRef}
         handlePreviewTrackMouseDown={handlePreviewTrackMouseDown}
+        handlePreviewTrackContextMenu={handlePreviewTrackContextMenu}
         previewScrollbarThumbRef={previewScrollbarThumbRef}
         isDraggingPreviewScrollThumb={isDraggingPreviewScrollThumb}
         isPreviewScrollThumbActive={isPreviewScrollThumbActive}

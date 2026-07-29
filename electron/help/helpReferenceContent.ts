@@ -30,6 +30,7 @@ Every heading below is also a jump target: \`[Anchor Text](#anchor-id)\` defines
 - \`Ctrl+N\` creates a new note; \`Ctrl+Shift+N\` creates one titled from your clipboard.
 - The first line of a note (starting with \`# \`) is its title. Everything else is content.
 - Notes save automatically as you type. \`Esc\` toggles between the Markdown editor and the rendered preview.
+- Left-click the scrollbar track to jump straight to that spot. Right-click above/below the thumb to page up/down once; hold the right click to keep paging until you release it or the thumb reaches your cursor.
 
 ### Organizing
 
@@ -127,6 +128,17 @@ Every feature in the app, described individually: where to find it, what it does
 
 - Preview renders GitHub-Flavored Markdown: headings, bold/italic/strikethrough, lists (including task checklists with ☐/☑), tables, blockquotes, syntax-highlighted code blocks, horizontal rules, images, and links.
 - \`Esc\` also blurs a focused field (like search) before it starts toggling modes, so it's safe to hit repeatedly.
+
+### [Scrollbar Navigation](#scrollbar-navigation)
+
+> **Where?**
+> The scrollbar track alongside the editor, in both edit and preview mode.
+
+*Left-click jumps straight to a spot; right-click pages up or down, one screen at a time.*
+
+- Left-click anywhere on the track to jump directly to that position.
+- Right-click above or below the thumb to page up/down once, the same as pressing \`Page Up\`/\`Page Down\`. Right-clicking on the thumb itself does nothing.
+- Hold the right click down to keep paging continuously, just like holding \`Page Up\`/\`Page Down\` on the keyboard. It stops when you release the button, or as soon as the thumb reaches your cursor.
 
 ### [Word and Character Count](#word-and-character-count)
 
