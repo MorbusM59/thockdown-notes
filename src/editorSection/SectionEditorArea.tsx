@@ -42,6 +42,7 @@ export interface SectionEditorAreaProps {
   previewMarkdownElement: ReactNode
   previewScrollbarTrackRef: RefObject<HTMLDivElement>
   handlePreviewTrackMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void
+  handlePreviewTrackContextMenu: (event: React.MouseEvent<HTMLDivElement>) => void
   previewScrollbarThumbRef: RefObject<HTMLDivElement>
   isDraggingPreviewScrollThumb: boolean
   isPreviewScrollThumbActive: boolean
@@ -99,6 +100,7 @@ export function SectionEditorArea({
   previewMarkdownElement,
   previewScrollbarTrackRef,
   handlePreviewTrackMouseDown,
+  handlePreviewTrackContextMenu,
   previewScrollbarThumbRef,
   isDraggingPreviewScrollThumb,
   isPreviewScrollThumbActive,
@@ -225,6 +227,7 @@ export function SectionEditorArea({
                 ref={previewScrollbarTrackRef}
                 className="thockdown-scroll-track"
                 onMouseDown={handlePreviewTrackMouseDown}
+                onContextMenu={handlePreviewTrackContextMenu}
               >
                 <div
                   ref={previewScrollbarThumbRef}

@@ -78,6 +78,12 @@ export function usePreviewScrollbar({
   const previewContinuousPreviousScrollBehaviorRef = useRef<string | null>(null)
   const previewPageKeysHeldRef = useRef(new Set<string>())
   const previewContinuousHandoffTimeoutRef = useRef<number | null>(null)
+  const previewScrollbarRightHoldRef = useRef<{
+    key: 'PageUp' | 'PageDown'
+    direction: 1 | -1
+    cursorYPx: number
+    rafId: number | null
+  } | null>(null)
   const [isPreviewScrollThumbActive, setIsPreviewScrollThumbActive] = useState(false)
   const [isDraggingPreviewScrollThumb, setIsDraggingPreviewScrollThumb] = useState(false)
 
@@ -256,7 +262,97 @@ export function usePreviewScrollbar({
     }
   }, [isDraggingPreviewScrollThumb, previewScrollRef])
 
+  // Right-click-and-hold on the track pages in the clicked direction for as
+  // long as the button is held, exactly like holding PageUp/PageDown -- it's
+  // dispatched as a real synthetic KeyboardEvent on window so it reuses the
+  // one-shot jump, continuous-hold, and release-ramp logic below verbatim
+  // instead of duplicating that curve/timing math here.
+  const stopPreviewScrollbarRightHold = useCallback(() => {
+    const hold = previewScrollbarRightHoldRef.current
+    if (!hold) return
+    if (hold.rafId !== null) {
+      cancelAnimationFrame(hold.rafId)
+    }
+    previewScrollbarRightHoldRef.current = null
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: hold.key, code: hold.key, bubbles: true, cancelable: true }))
+  }, [])
+
+  useEffect(() => {
+    const handleWindowMouseUp = (event: globalThis.MouseEvent) => {
+      if (event.button === 2) stopPreviewScrollbarRightHold()
+    }
+    const handleWindowMouseMove = (event: globalThis.MouseEvent) => {
+      const hold = previewScrollbarRightHoldRef.current
+      const track = previewScrollbarTrackRef.current
+      if (!hold || !track) return
+      hold.cursorYPx = event.clientY - track.getBoundingClientRect().top
+    }
+    window.addEventListener('mouseup', handleWindowMouseUp)
+    window.addEventListener('mousemove', handleWindowMouseMove)
+    return () => {
+      window.removeEventListener('mouseup', handleWindowMouseUp)
+      window.removeEventListener('mousemove', handleWindowMouseMove)
+    }
+  }, [stopPreviewScrollbarRightHold])
+
+  useEffect(() => stopPreviewScrollbarRightHold, [stopPreviewScrollbarRightHold])
+
+  const handlePreviewTrackRightMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    const track = previewScrollbarTrackRef.current
+    if (!track) return
+
+    stopPreviewScrollbarRightHold()
+
+    const clickY = event.clientY - track.getBoundingClientRect().top
+    const thumbTop = previewScrollThumbTopRef.current
+    const thumbBottom = thumbTop + previewScrollThumbHeightRef.current
+    if (clickY >= thumbTop && clickY <= thumbBottom) return
+
+    const direction: 1 | -1 = clickY > thumbBottom ? 1 : -1
+    const key: 'PageUp' | 'PageDown' = direction === 1 ? 'PageDown' : 'PageUp'
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key, code: key, bubbles: true, cancelable: true, repeat: false }))
+
+    previewScrollbarRightHoldRef.current = { key, direction, cursorYPx: clickY, rafId: null }
+
+    const watchThumbReachesCursor = () => {
+      const hold = previewScrollbarRightHoldRef.current
+      if (!hold) return
+      const currentTrack = previewScrollbarTrackRef.current
+      const scroller = previewScrollRef.current
+      if (currentTrack && scroller) {
+        const trackHeight = currentTrack.clientHeight
+        const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
+        const thumbHeightPx = previewScrollThumbHeightRef.current
+        const maxThumbTravel = Math.max(0, usableTrackHeight - thumbHeightPx)
+        const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+        const scrollRatio = maxScrollTop > 0 ? scroller.scrollTop / maxScrollTop : 0
+        const currentThumbTop = SCROLL_TRACK_EDGE_GAP_PX + (maxThumbTravel * scrollRatio)
+        const currentThumbBottom = currentThumbTop + thumbHeightPx
+        const reachedCursor = hold.direction === 1
+          ? currentThumbBottom >= hold.cursorYPx
+          : currentThumbTop <= hold.cursorYPx
+        if (reachedCursor) {
+          stopPreviewScrollbarRightHold()
+          return
+        }
+      }
+      hold.rafId = requestAnimationFrame(watchThumbReachesCursor)
+    }
+    previewScrollbarRightHoldRef.current.rafId = requestAnimationFrame(watchThumbReachesCursor)
+  }, [previewScrollRef, stopPreviewScrollbarRightHold])
+
+  const handlePreviewTrackContextMenu = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    event.preventDefault()
+  }, [])
+
   const handlePreviewTrackMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if (event.button === 2) {
+      handlePreviewTrackRightMouseDown(event)
+      return
+    }
+    if (event.button !== 0) return
+
     const track = previewScrollbarTrackRef.current
     const scroller = previewScrollRef.current
     if (!track || !scroller) return
@@ -277,9 +373,10 @@ export function usePreviewScrollbar({
     const targetScrollTop = ratio * maxScrollTop
 
     scrollToNonQuantizedSmooth(scroller, targetScrollTop)
-  }, [previewScrollRef])
+  }, [previewScrollRef, handlePreviewTrackRightMouseDown])
 
   const handlePreviewThumbMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
     event.preventDefault()
     event.stopPropagation()
     const scroller = previewScrollRef.current
@@ -610,6 +707,7 @@ export function usePreviewScrollbar({
     isDraggingPreviewScrollThumb,
     syncPreviewCustomScrollbar,
     handlePreviewTrackMouseDown,
+    handlePreviewTrackContextMenu,
     handlePreviewThumbMouseDown,
     handlePreviewScroll,
     blockPreviewEditMutation,

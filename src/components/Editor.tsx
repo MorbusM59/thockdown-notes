@@ -405,6 +405,12 @@ export function Editor({
   const [isScrollThumbActive, setIsScrollThumbActive] = useState(false);
   const [isDraggingScrollThumb, setIsDraggingScrollThumb] = useState(false);
   const scrollThumbDragOriginRef = useRef<{ pointerY: number; thumbTopPx: number } | null>(null);
+  const scrollbarRightHoldRef = useRef<{
+    key: 'PageUp' | 'PageDown';
+    direction: 1 | -1;
+    cursorYPx: number;
+    rafId: number | null;
+  } | null>(null);
 
   useEffect(() => {
     return () => {
@@ -1034,7 +1040,94 @@ export function Editor({
     };
   }, [isDraggingScrollThumb, scrollFromThumbTop, syncCustomScrollbar]);
 
+  // Right-click-and-hold on the track pages in the clicked direction for as
+  // long as the button is held, exactly like holding PageUp/PageDown -- it's
+  // dispatched as a real synthetic KeyboardEvent at the scroller so it reuses
+  // CagedScrollPlugin's one-shot jump, continuous-hold, and release-ramp
+  // logic verbatim rather than duplicating that curve/timing math here.
+  const stopScrollbarRightHold = useCallback(() => {
+    const hold = scrollbarRightHoldRef.current;
+    if (!hold) return;
+    if (hold.rafId !== null) {
+      cancelAnimationFrame(hold.rafId);
+    }
+    scrollbarRightHoldRef.current = null;
+    scrollerRef.current?.dispatchEvent(
+      new KeyboardEvent('keyup', { key: hold.key, code: hold.key, bubbles: true, cancelable: true }),
+    );
+  }, []);
+
+  useEffect(() => {
+    const handleWindowMouseUp = (event: MouseEvent) => {
+      if (event.button === 2) stopScrollbarRightHold();
+    };
+    const handleWindowMouseMove = (event: MouseEvent) => {
+      const hold = scrollbarRightHoldRef.current;
+      const track = scrollbarTrackRef.current;
+      if (!hold || !track) return;
+      hold.cursorYPx = event.clientY - track.getBoundingClientRect().top;
+    };
+    window.addEventListener('mouseup', handleWindowMouseUp);
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    return () => {
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+    };
+  }, [stopScrollbarRightHold]);
+
+  useEffect(() => stopScrollbarRightHold, [stopScrollbarRightHold]);
+
+  const handleTrackRightMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    const track = scrollbarTrackRef.current;
+    const scroller = scrollerRef.current;
+    if (!track || !scroller) return;
+
+    stopScrollbarRightHold();
+
+    const clickY = event.clientY - track.getBoundingClientRect().top;
+    const thumbTop = scrollThumbTopPx;
+    const thumbBottom = scrollThumbTopPx + scrollThumbHeightPx;
+    if (clickY >= thumbTop && clickY <= thumbBottom) return;
+
+    const direction: 1 | -1 = clickY > thumbBottom ? 1 : -1;
+    const key: 'PageUp' | 'PageDown' = direction === 1 ? 'PageDown' : 'PageUp';
+
+    scroller.dispatchEvent(
+      new KeyboardEvent('keydown', { key, code: key, bubbles: true, cancelable: true, repeat: false }),
+    );
+
+    scrollbarRightHoldRef.current = { key, direction, cursorYPx: clickY, rafId: null };
+
+    const watchThumbReachesCursor = () => {
+      const hold = scrollbarRightHoldRef.current;
+      if (!hold) return;
+      const geometry = readScrollbarGeometry();
+      if (geometry && scrollerRef.current) {
+        const scrollRatio = geometry.maxScrollTopPx > 0
+          ? scrollerRef.current.scrollTop / geometry.maxScrollTopPx
+          : 0;
+        const currentThumbTop = SCROLL_TRACK_EDGE_GAP_PX + (geometry.maxThumbTravelPx * scrollRatio);
+        const currentThumbBottom = currentThumbTop + geometry.thumbHeightPx;
+        const reachedCursor = hold.direction === 1
+          ? currentThumbBottom >= hold.cursorYPx
+          : currentThumbTop <= hold.cursorYPx;
+        if (reachedCursor) {
+          stopScrollbarRightHold();
+          return;
+        }
+      }
+      hold.rafId = requestAnimationFrame(watchThumbReachesCursor);
+    };
+    scrollbarRightHoldRef.current.rafId = requestAnimationFrame(watchThumbReachesCursor);
+  };
+
   const handleTrackMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.button === 2) {
+      handleTrackRightMouseDown(event);
+      return;
+    }
+    if (event.button !== 0) return;
+
     const track = scrollbarTrackRef.current;
     const scroller = scrollerRef.current;
     if (!track || !scroller) return;
@@ -1059,7 +1152,12 @@ export function Editor({
     });
   };
 
+  const handleTrackContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+  };
+
   const handleThumbMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
     const scroller = scrollerRef.current;
@@ -1114,6 +1212,7 @@ export function Editor({
         ref={scrollbarTrackRef}
         className="thockdown-scroll-track"
         onMouseDown={handleTrackMouseDown}
+        onContextMenu={handleTrackContextMenu}
       >
         <div
           className={`thockdown-scroll-thumb${isDraggingScrollThumb ? ' is-dragging' : ''}${isScrollThumbActive ? '' : ' is-inactive'}`}
