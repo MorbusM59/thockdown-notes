@@ -164,4 +164,23 @@ describe('resolveMarkdownEnterTransform', () => {
     expect(result?.selection.anchor).toBe(result?.text.length)
     expect(result?.selection.focus).toBe(result?.text.length)
   })
+
+  it('splits a plain line into exactly one additional line when Enter lands mid-word', () => {
+    // Regression guard for a repro that looked like a "line count jumps by 2"
+    // bug when measured via a contenteditable's innerText (which inserts its
+    // own extra blank line between adjacent <p> block elements) -- the
+    // canonical text model here must only ever gain exactly one '\n' per
+    // Enter, regardless of caret position within the line.
+    const text = 'The quick brown fox jumps over the lazy dog.'
+    const caretOffset = 'The qu'.length
+    const selection = collapsedSelection(caretOffset)
+
+    const result = resolveMarkdownEnterTransform(buildEvent(text, selection))
+
+    expect(result).not.toBeNull()
+    expect(result?.text).toBe('The qu\nick brown fox jumps over the lazy dog.')
+    expect(result?.text.split('\n').length).toBe(text.split('\n').length + 1)
+    expect(result?.selection.anchor).toBe(caretOffset + 1)
+    expect(result?.selection.focus).toBe(caretOffset + 1)
+  })
 })

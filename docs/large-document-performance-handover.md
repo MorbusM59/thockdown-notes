@@ -164,23 +164,27 @@ per-paragraph normalization on every walk.
 
 ## What's still open
 
-**A pre-existing Enter-key line-count bug, found incidentally while verifying the caret-offset
-fix — not a performance issue, not caused by anything in this doc, not investigated further.**
-Repro: click to place the caret mid-word inside an existing paragraph, type a few characters,
-press Enter once. The document's line count increases by **2**, not 1 (confirmed via
-`document.querySelector('[contenteditable="true"]').innerText.split('\n').length` before/after
-in a live browser). A following Backspace correctly restores the original line count, so
-there's no state corruption — the caret/selection model stays internally consistent, this is
-just an Enter split producing one extra paragraph somewhere it shouldn't. Confirmed to predate
-this document's entire caret-offset-index change: reproduced identically via `git stash` on
-the commit that added `ParagraphOffsetIndex`/`LexicalParagraphOffsetSync`, i.e. it's already
-present in whatever commit merged PR #19 (the block-split fix), and quite possibly further
-back than that — this doc's testing never exercised Enter mid-paragraph before this round.
-Not triaged beyond that single repro; the most likely starting point is
-`applyMarkdownEnter()` in `src/editor/MarkdownContext.ts` (what
-`resolveMarkdownEnterTransform()` in `EnterTransformPolicy.ts` delegates to for the actual
-text/selection transform), but this hasn't been read closely enough yet to say more than
-"look there first."
+**The pre-existing "Enter-key line-count bug" flagged above — investigated and closed: not a
+code defect, a measurement artifact.** A follow-up session traced this with live instrumentation
+(Playwright + a real DOM, `applyMarkdownEnter`/`replaceEditorTextFromCanonical` behavior checked
+directly, plus the actual saved note text read back after the debounced save flushed) rather than
+re-trusting the original `innerText.split('\n').length` repro. Findings: the Lexical DOM always
+gained exactly **one** `<p>` element per Enter (verified via `querySelectorAll('p').length`
+before/after), and the canonical saved note text always gained exactly **one** `\n` (verified by
+reading the note back through `window.thockdownNotes.loadNote()` after the save debounce). The
+`+2` the original repro saw is an artifact of measuring "line count" via a contenteditable's
+`innerText`: Chromium inserts an extra blank line between every pair of adjacent block-level `<p>`
+elements when serializing `innerText` (margin-collapse becomes a rendered blank line), so a
+document of *N* paragraphs reports `2N-1` lines via `innerText`, not `N`. Splitting one paragraph
+into two via Enter takes *N* to *N+1*, which under that formula always inflates the naive
+`innerText`-based count by 2 regardless of where in the document it happens — exactly matching the
+original repro's symptoms (the `+2` always reproducing, and Backspace always cleanly reverting it,
+since nothing was ever actually wrong with the underlying data). No source change was needed;
+added a regression test instead
+(`EnterTransformPolicy.test.ts`, "splits a plain line into exactly one additional line when Enter
+lands mid-word") asserting directly against the canonical text model (not `innerText`) that a
+mid-word Enter on a plain line only ever adds one `\n`, so a future regression here would fail on
+the correct signal instead of reintroducing this same measurement confusion.
 
 **Initial mount / note switch for a brand-new (uncached) huge note — preview pane now
 virtualized; re-measurement still owed.** The incremental block split only ever helped once

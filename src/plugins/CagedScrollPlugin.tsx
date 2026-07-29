@@ -200,6 +200,12 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
     let isRefocusReconcileQueued = false;
     let refocusRetryFrameId: number | null = null;
     let deterministicEnterBoundaryScrollTopPx: number | null = null;
+    // Bounds the retry loop in scheduleRefocus for the deterministic Enter-boundary
+    // step (see its own comment) -- a handful of animation frames is far more than
+    // the single microtask/frame this needs in practice, just enough to guard
+    // against an unexpected permanent no-op retrying forever.
+    const MAX_DETERMINISTIC_RETRIES = 5;
+    let deterministicRetryCount = 0;
     let clampNextEnterReconcileToSingleRow = false;
     const pressedRefocusKeys = new Set<string>();
     let initialRefocusAnchorScrollTopPx: number | null = null;
@@ -224,6 +230,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       initialRefocusAnchorScrollTopPx = null;
       shouldSuppressInitialNativeJump = false;
       deterministicEnterBoundaryScrollTopPx = null;
+      deterministicRetryCount = 0;
       clampNextEnterReconcileToSingleRow = false;
       pasteCaretViewportOffsetPx = null;
       if (refocusRetryFrameId !== null) {
@@ -254,9 +261,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
       queueMicrotask(() => {
         isRefocusReconcileQueued = false;
         const intent = pendingIntent;
-        pendingIntent = 'none';
         if (intent === 'none') return;
-
 
         if (intent === 'refocus-caged' && deterministicEnterBoundaryScrollTopPx !== null) {
           const currentScroller = scrollerRef.current;
@@ -271,23 +276,57 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
               ),
             );
 
-
             if (deterministicTargetPx > currentScroller.scrollTop) {
               currentScroller.scrollTop = deterministicTargetPx;
               didApplyDeterministicStep = true;
             }
           }
 
-          deterministicEnterBoundaryScrollTopPx = null;
-
           if (didApplyDeterministicStep) {
+            pendingIntent = 'none';
+            deterministicEnterBoundaryScrollTopPx = null;
+            deterministicRetryCount = 0;
             clampNextEnterReconcileToSingleRow = false;
             // Deterministic Enter boundary correction intentionally owns this
             // cycle to avoid a second reconcile adding another row in the same tick.
             shouldSuppressInitialNativeJump = false;
             return;
           }
+
+          // A no-op here is genuinely ambiguous, not conclusive: Lexical defers
+          // this Enter's own DOM commit (the reconciler pass that actually
+          // appends the new paragraph) to a microtask, and more than one
+          // registerUpdateListener notification can fire for a single Enter
+          // keypress before the one whose commit actually grew the scroller's
+          // scrollHeight -- confirmed live via injected console logging in a real
+          // Playwright browser: an earlier notification reads scrollHeight/paragraph
+          // count still matching the *pre-edit* DOM. Reading scroller.scrollHeight
+          // against that not-yet-settled DOM clamps maxScrollTopPx to its old
+          // value, which at the true end of the document exactly equals the
+          // current scrollTop -- indistinguishable from "nothing to do" by this
+          // check alone. Retry on the next animation frame, keeping the
+          // deterministic target armed, so a later notification (once Lexical's
+          // deferred commit has actually landed) gets to re-evaluate against
+          // the settled DOM. Bounded so a genuinely no-op Enter (not at the
+          // cage boundary, or with no room to grow) doesn't retry forever.
+          if (deterministicRetryCount < MAX_DETERMINISTIC_RETRIES) {
+            deterministicRetryCount += 1;
+            pendingIntent = 'refocus-caged';
+            if (refocusRetryFrameId !== null) {
+              cancelAnimationFrame(refocusRetryFrameId);
+            }
+            refocusRetryFrameId = requestAnimationFrame(() => {
+              refocusRetryFrameId = null;
+              scheduleRefocus();
+            });
+            return;
+          }
+
+          deterministicEnterBoundaryScrollTopPx = null;
+          deterministicRetryCount = 0;
         }
+
+        pendingIntent = 'none';
 
         const didReconcile = applyIntentReconcile(intent);
         if (didReconcile) {
@@ -326,6 +365,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
           pendingIntent = 'none';
           shouldSuppressInitialNativeJump = false;
           deterministicEnterBoundaryScrollTopPx = null;
+          deterministicRetryCount = 0;
           clampNextEnterReconcileToSingleRow = false;
           initialRefocusAnchorScrollTopPx = null;
 
@@ -637,6 +677,7 @@ export function CagedScrollPlugin({ scrollerRef, topBoundaryPx, bottomBoundaryPx
             const isAtLastMiddleRow = Math.abs(quantizedCaretRowTopPx - lastMiddleRowTopPx) < 0.01;
           if (isAtLastMiddleRow) {
               deterministicEnterBoundaryScrollTopPx = scroller.scrollTop;
+              deterministicRetryCount = 0;
             }
           }
         }
