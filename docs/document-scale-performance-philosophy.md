@@ -146,11 +146,26 @@ against the contract's own "must feel instant" bar is already roughly two orders
 too slow, regardless of whether it reaches the more dramatic multi-second numbers reported on
 real hardware/the real Electron app. Treat any non-negligible synchronous per-keystroke cost on
 a huge document as the defect this document's "core principle" section already says it is, not
-as an acceptable residual to defer. See `docs/large-document-performance-handover.md`'s "what's
-still open" for the current profiling data and the concrete next step (incremental caching for
+as an acceptable residual to defer.
+
+The concrete next step this section used to point at — incremental caching for
 `normalizeInternalText`/`canonicalizeParagraphSegments` and `resolveMarkdownSelectionContext`,
-mirroring the `ParagraphOffsetIndex`/`PreviewBlockSplit` pattern already proven twice in this
-effort).
+mirroring the `ParagraphOffsetIndex`/`PreviewBlockSplit` pattern — is now done (both confirmed
+position-dependent O(document length) costs are gone from profiling; see the handover doc for
+the fuzz/live-browser verification and exact before/after numbers). A committed, reusable
+measurement harness (`npm run perf:input-lag`, `scripts/perf/`) now exists for this work, per a
+user request that this effort have a proper test setup rather than reconstructing throwaway
+scripts every session.
+
+**Total per-keystroke wall-clock time barely moved despite that fix landing real, measured wins
+— this is the headline finding to carry forward, not a footnote.** Two specific,
+position-dependent O(document) defects are provably gone, but the total cost on the same
+synthetic document only dropped ~3% (burst wall-clock), because — confirmed, not guessed — the
+remaining cost is genuinely diffuse across many small contributors (Lexical-internal
+`cloneEditorState`/`getModernOffsetsFromPoints`, `normalizeForComparison`, `sanitizeTextFragment`,
+and one likely-misattributed dev-bundle entry still needing verification), none individually
+dominant. See `docs/large-document-performance-handover.md`'s newest section for the exact
+numbers and the ranked list of what's next.
 
 ## Review checklist
 

@@ -370,6 +370,148 @@ original pair:
    this is now lower priority than the incremental-caching work described above — revisit only
    after that's exhausted.
 
+## This round: committed perf harness, and the two functions this doc's "concrete next step" named
+
+Per this doc's own prior "concrete next step" (incremental caching for `normalizeInternalText`/
+`canonicalizeParagraphSegments` and `resolveMarkdownSelectionContext`, mirroring
+`ParagraphOffsetIndex`/`PreviewBlockSplit`), both are now done. A user session explicitly asked
+for structural work to be prioritized first, but per the philosophy doc's solution hierarchy
+(incrementality before structural chunking, and chunking only after 1–4 are exhausted) the actual
+next-in-line item was this incremental-caching work, not pagination or windowing the edit-mode
+Lexical tree — confirmed with the user before starting rather than assumed.
+
+**A committed, reusable measurement harness now exists** — `scripts/perf/perfHarness.mjs` +
+`scripts/perf/measureInputLag.mjs`, run via `npm run perf:input-lag -- [flags]`. This replaces the
+"reconstruct a throwaway Playwright script every session" workflow the Environment notes below
+used to describe. It automates: starting `dev:browser`, generating a synthetic markdown document
+of a requested character count, seeding it via the dev-mode mock IPC bridge and reloading,
+placing the caret at `start`/`middle`/`end`, and measuring in one of three modes —
+`burst` (real dispatched-keystroke wall-clock timing), `profile` (CDP JS call-stack sampling
+aggregated by function name), or `trace` (CDP category-level trace for Layout/Paint/JS
+attribution) — cleaning up the dev server and browser afterward regardless of outcome. Example:
+`npm run perf:input-lag -- --mode=profile --chars=1500000 --keystrokes=30 --position=end`. Had to
+work around two environment-specific snags not previously documented: (1) this environment's
+pinned Playwright version expects a `chrome-headless-shell` build that doesn't match the
+pre-installed `chromium-*` build under `PLAYWRIGHT_BROWSERS_PATH` — the harness resolves the
+actual installed binary directly rather than running `playwright install`; (2) `npm run
+dev:browser` spawns vite as a grandchild process, so the harness spawns it `detached: true` and
+kills the whole process group (negative PID) on cleanup — a plain SIGTERM to the `npm` process
+left the dev server (and its port) running after the script exited.
+
+**`resolveMarkdownSelectionContext`'s inline-state/line-index scan — fixed.** Confirmed via a
+fresh CDP profile (this harness, synthetic 1.5M-character note, 20-keystroke burst) as the
+dominant remaining O(document length) cost: `computeInlineStateAtOffset` (188.6ms) and
+`countLineIndex` (104.1ms) across the burst with the caret at the document end, both *absent*
+from the same profile with the caret at the document start — direct confirmation of the
+position-dependent signature the philosophy doc's benchmark forbids. Root cause: this function is
+recomputed on *every* keystroke regardless of which transform fired, via
+`useMarkdownFormattingToolbar.ts`'s `useMemo(() => resolveMarkdownSelectionContext(...), [currentEditorText, editorSelection])`
+— it drives the toolbar's bold/italic/heading/list/code active-state highlighting, not just the
+rarer Tab/Enter paths this doc previously assumed were the main callers.
+
+Fixed with `resolveMarkdownSelectionContextIncremental` in `MarkdownContext.ts`, following the
+same "one shared implementation, two starting points" discipline as `SelectionOffsets.ts`'s
+`FastParagraphResolver`: the original per-character scan (`computeInlineStateAtOffset`) was
+generalized into `scanInlineStateFrom(text, startCursor, initialState, offset)`, so the exact same
+code path handles both the O(document) ground truth (`startCursor=0`) and the fast path (starting
+partway through the document with a cached `initialState`) — they cannot silently drift apart the
+way two independent implementations could. A new `InlineStateLineCache` (held in a `useRef`,
+committed in a `useLayoutEffect` after render — not during the `useMemo` itself, matching
+`usePreviewMarkdownRendering.tsx`'s established Strict-Mode-safe pattern) tracks, per line, the
+scan state *entering* that line and its character offset. On each edit: common-prefix/suffix line
+diffing (same technique as `PreviewBlockSplit.ts`) finds the unaffected head/tail, and recomputes
+forward from the edit only until a line's freshly-computed entering state matches what it was
+cached as before — the CodeMirror/incremental-tokenizer stabilization trick, since (unlike
+`PreviewBlockSplit`'s block boundaries) this scan has no backward hazard but does have the same
+forward-*unbounded* hazard class: opening or closing a fence/inline-code run changes state for
+every following line, however far away the real terminator is. Line offsets need no such
+stabilization (pure arithmetic, no toggle coupling) so the untouched tail's offsets are
+unconditionally correct to shift-and-copy regardless of whether state has stabilized yet.
+
+Verified: a seeded fuzz test (`MarkdownContext.test.ts`, 3 seeds × 200 steps, checked at ~7
+different caret positions per step against `resolveMarkdownSelectionContext`'s full-scan ground
+truth) specifically targeting fence/backtick/asterisk perturbations and unmatched delimiters;
+`npx tsc --noEmit`; `npm run lint`; full suite (205/205, up from 185); and a live-browser check
+(real Playwright Chromium, not the embedded pane) confirming the toolbar's Bold/Code-block
+buttons correctly activate/deactivate at several caret positions in a small note, **and** — the
+strongest test of the forward-propagation logic — a ~19,000-line synthetic note with an unclosed
+` ``` ` fence two lines in and never closed: the "Code block" toolbar button correctly showed
+active after moving the caret all the way to the document end, with the canonical saved text
+(read back through the real save pipeline, not just the DOM) confirmed byte-correct after typing
+there. Zero console errors throughout.
+
+Re-measured (same harness, same 1.5M-char note): `computeInlineStateAtOffset` and `countLineIndex`
+no longer appear in the profile's top 25 functions at all (previously 188.6ms/104.1ms combined
+per 20-keystroke burst). Burst wall-clock at document start and end are now statistically
+indistinguishable (~121–122ms mean either way) — confirming the position-dependence itself is
+gone, which is the specific defect this fix targeted, per "page 1 must feel identical to page
+1,000."
+
+**`canonicalizeParagraphSegments`/`normalizeInternalText`'s per-keystroke full-document
+re-normalization — fixed, with a smaller residual than hoped, worth flagging precisely.** Two
+call sites hit this on every keystroke: `ContractBridgePlugin.tsx`'s `registerUpdateListener`
+(previously the only one this doc tracked) and, newly confirmed this round,
+`NoteTextHydrationPlugin.tsx`'s hydration-check effect (keyed on the `text` prop, which changes
+every keystroke) — both re-ran `normalizeInternalText` across *every* paragraph's text regardless
+of which one actually changed. Fixed with `canonicalizeParagraphSegmentsIncremental` in
+`TextPolicy.ts`: unlike the two functions above, there's no cross-segment coupling here at all
+(`normalizeInternalText` is a pure per-segment transform), so plain prefix/suffix common-segment
+reuse is exact — no stabilization probe needed. A shared `CanonicalizeParagraphSegmentsCache`
+(threaded through as an optional parameter, same shape as the `FastParagraphResolver` pattern) is
+reused across all three call sites in `ContractBridgePlugin.tsx` (mount, context-menu,
+`registerUpdateListener`) plus `NoteTextHydrationPlugin.tsx`'s own — safe to share since the
+diffing only ever compares "current raw segments" against "whatever was cached last," never
+caring which call site produced that cache.
+
+Verified: a seeded fuzz test (new `TextPolicy.test.ts`, 3 seeds × 200 steps, comparing against
+`canonicalizeParagraphSegments`'s full recompute) covering insertion/deletion/edit of segments
+including tabs, CRLF, and empty segments; `npx tsc --noEmit`; `npm run lint`; full suite; live
+save-pipeline readback (above) confirming no data corruption.
+
+Re-measured: `normalizeInternalText`'s own cost dropped from 163.4ms to 21.3ms per 20-keystroke
+burst (~7.7x) — the actual regex-heavy normalization work is now skipped for unchanged
+paragraphs, as intended. But `canonicalizeParagraphSegmentsIncremental` itself still costs
+~100.6ms per 20-keystroke burst (~5ms/keystroke) on the 1.5M-character note — **a real residual,
+not fully eliminated, and worth naming precisely rather than claiming this is done**. Root cause:
+with the caret at the document end, only the *last* segment changed, so the prefix-diff loop
+(`oldSegments[i] === newSegments[i]`) must compare ~20,000 segment pairs before finding the
+mismatch — each comparison is a full string content compare (`===` on two separately-constructed,
+not-reference-equal strings from `child.getTextContent()`), which is cheap native `memcmp`-bound
+work, not the expensive regex-driven cost this fix actually removed, but it still touches every
+paragraph once per keystroke and so is still, technically, O(document length) — just with a far
+smaller constant. This is the same class of residual `PreviewBlockSplit.ts`'s own incremental
+split already carries (its `oldLines`/`newLines` diff has the identical shape) and was previously
+judged acceptable there for the same reason; recorded here rather than silently accepted, per this
+doc's own rule that every fix states what remains. **Concrete next step for this specific
+residual**: key the diff off Lexical's own `dirtyElements`/mutation-listener signal (the same
+signal `LexicalParagraphOffsetSync` already uses) instead of raw content comparison, so only the
+paragraphs Lexical itself marked dirty are ever touched — true O(edit locality) instead of
+O(document length) via cheap ops. Not attempted this round; the string-diffing approach was
+chosen first because it needed no Lexical-identity plumbing into either call site, and the
+resulting win (session's stated priority: eliminate O(document)-scaling defects) was captured
+either way.
+
+**Total per-keystroke wall-clock barely moved despite both fixes landing real, measured,
+function-level wins — recorded plainly rather than glossed over.** Burst wall-clock mean on the
+1.5M-character note: 125.22ms/keystroke before this round, 121.28ms/keystroke after (caret at
+document end) — about a 3% change, not proportional to the ~31% drop in total sampled JS time
+(3599.7ms → 2490.6ms per 20-keystroke burst) or to either fixed function's near-total
+disappearance from the profile. This is consistent with, not a contradiction of, the "what's still
+open" section above: the remaining per-keystroke cost was already characterized as diffuse
+("death by a thousand cuts, not one villain") before this round, and this round's fixes correctly
+addressed two specific, real, position-dependent O(document) defects without being the dominant
+contributor to the total. Per this doc's own review checklist ("every fix... should state
+explicitly what remains, not just the one just fixed"): the next largest attributable entries in
+the post-fix profile are `(anonymous) @ EditorSection.tsx:549` (339.9ms/20 keystrokes — **treat
+this line number with the same suspicion this doc has flagged twice before for different line
+numbers in this same file; it's very likely dev-bundle source-map drift, not a real 340ms
+function, and needs verification against a production-adjacent build before anyone spends time on
+it**), Lexical-internal `cloneEditorState`/`getModernOffsetsFromPoints` (132.6ms/100.3ms — per
+this doc's existing note, may not be fixable without a Lexical version change), and
+`normalizeForComparison` (`useNoteSnapshots.ts`, 54.2ms) / `sanitizeTextFragment`
+(`textSanitization.ts`, 53.4ms) — both untouched this round, both flagged as residual candidates
+in an earlier profile too, still not investigated.
+
 ## Environment notes for the next session
 
 - `node_modules` is not installed by default in a fresh container — run `npm install` (or
@@ -383,24 +525,40 @@ original pair:
   Screenshots in that pane also time out ("not compositing frames"). DOM reads via
   `javascript_tool`/`get_page_text` still work there for quick inspection, but for anything
   involving scrolling, timing, or virtualization behavior, use the setup below instead.
-- **Real, working setup validated this round (Windows; the previous version of this note
-  described a Linux sandbox with paths like `/opt/node22` that don't apply here — that
+- **A committed, reusable harness now exists for the common case — `npm run perf:input-lag --
+  [flags]` (see `scripts/perf/perfHarness.mjs`/`measureInputLag.mjs`).** It automates everything
+  in the manual recipe below (start `dev:browser`, generate a synthetic document, seed + reload,
+  place the caret, drive a keystroke burst, clean up) in one of three modes — `burst` (wall-clock),
+  `profile` (CDP JS sampling), `trace` (CDP category trace). Reach for this first; only fall back
+  to a bespoke throwaway script for something the flags don't cover (a specific edit sequence, a
+  non-keystroke interaction, etc.), and prefer extending the harness over writing another one-off
+  if the need looks reusable. Two environment-specific gotchas the harness already works around,
+  worth knowing if writing a bespoke script instead: (1) this environment's pinned Playwright
+  version can expect a different browser build (`chrome-headless-shell`) than what's actually
+  pre-installed under `PLAYWRIGHT_BROWSERS_PATH` (a `chromium-*` build) — resolve and pass
+  `executablePath` explicitly rather than running `playwright install` (off-limits per this
+  environment's setup) or trusting Playwright's own default resolution; (2) `npm run dev:browser`
+  spawns vite as a grandchild process, so a plain SIGTERM to the `npm` process on cleanup can
+  leave the dev server (and its port) running — spawn detached and kill the process group
+  (negative PID) instead.
+- **Manual recipe, for anything the harness doesn't cover (Windows; the previous version of this
+  note described a Linux sandbox with paths like `/opt/node22` that don't apply here — that
   environment-specific detail is gone, don't chase it)**:
   1. `npm install -D playwright` (already added as a devDependency — should already be present
      in a fresh checkout; if not, add it) then `npx playwright install chromium` (~190MB
-     download, one-time per machine, not committed/cached in the repo).
+     download, one-time per machine, not committed/cached in the repo) — or resolve the
+     pre-installed binary directly per the gotcha above, if `playwright install` isn't available.
   2. `npm run dev:browser -- --port 5183 --strictPort`, backgrounded.
   3. A plain `.cjs` script (not `.mjs` — same ESM/NODE_PATH friction noted before generally
      applies) placed *inside the project directory* (so `require('playwright')` resolves via
      the project's own `node_modules` — a script in an external scratch/temp directory will
-     fail to resolve it), run via plain `node script.cjs`. `chromium.launch()` with no
-     `executablePath` override works fine once the browser is installed via step 1.
+     fail to resolve it), run via plain `node script.cjs`.
   4. To seed a large note without fighting the UI: `window.thockdownNotes.createNote({
      initialText })` then `window.thockdownSections.setActiveNote(sectionId, noteId)` (browser
      dev mode's mock IPC bridge, `src/dev/installBrowserMockBridges.ts`) — **then reload the
      page** (`page.goto` again, or `location.reload()`); this bridge call only updates
      *persisted* section state, it does not push a live update into the already-running React
-     app. Confirmed working end-to-end this round for documents up to 1.5M characters.
+     app. Confirmed working end-to-end across rounds for documents up to 1.5M characters.
   5. Verified this genuinely gives a non-backgrounded page (`document.hidden === false`),
      unlike the embedded pane — `requestAnimationFrame`-based polling and real scroll/timing
      measurements work correctly here.
@@ -426,7 +584,7 @@ original pair:
     hypothesis before touching source at all** — used this round to test (and refute)
     `content-visibility: auto` on the editor's paragraphs; no source edit needed to get a real
     answer, just inject the style, re-run the same timing script, compare.
-- Verification bar for any change here: `npx tsc --noEmit`, `npm test` (184/184 passing as of
+- Verification bar for any change here: `npx tsc --noEmit`, `npm test` (205/205 passing as of
   this writing, no known pre-existing failures), `npm run lint`, **and** a live-browser check
   — three times now (across earlier rounds), a change here has passed its own unit tests while
   still being wrong (or, in one case, looked wrong live and turned out to be an unrelated
