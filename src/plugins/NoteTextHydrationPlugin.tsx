@@ -9,7 +9,7 @@ import {
   SKIP_SCROLL_INTO_VIEW_TAG,
   SKIP_SELECTION_FOCUS_TAG,
 } from 'lexical';
-import { canonicalizeParagraphSegmentsIncremental, normalizeInternalText, type CanonicalizeParagraphSegmentsCache } from '../editor/TextPolicy';
+import { canonicalizeParagraphSegmentsIncremental, type CanonicalizeParagraphSegmentsCache } from '../editor/TextPolicy';
 import { sanitizeTextFragment } from '../shared/textSanitization';
 
 interface NoteTextHydrationPluginProps {
@@ -148,7 +148,16 @@ export function NoteTextHydrationPlugin({ noteId, text, scrollerRef }: NoteTextH
     // here (e.g. HTML-tag stripping) makes the equality check below permanently
     // false for legitimate typed content like "a < b and c > d", which forces a
     // full rebuild on every keystroke and throws the caret to document start.
-    const normalizedIncomingText = normalizeInternalText(sanitizeTextFragment(text));
+    //
+    // No normalizeInternalText wrapper here (unlike most other call sites) --
+    // sanitizeTextFragment's own normalizeLineSeparators + tab-replace already
+    // cover everything normalizeInternalText checks for (BOM, \r/\r\n/U+2028/
+    // U+2029, tabs), so its output already satisfies normalizeInternalText's
+    // own postcondition: calling it again on top is a proven no-op, just
+    // another full-document regex pass on the hot per-keystroke path (this
+    // effect re-runs on every edit, keyed on `text`). Removing it doesn't
+    // change what shouldHydrate below ever evaluates to.
+    const normalizedIncomingText = sanitizeTextFragment(text);
     const currentNoteId = noteId ?? '';
     let shouldHydrate = false;
 

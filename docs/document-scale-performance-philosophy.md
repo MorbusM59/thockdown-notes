@@ -164,8 +164,24 @@ synthetic document only dropped ~3% (burst wall-clock), because — confirmed, n
 remaining cost is genuinely diffuse across many small contributors (Lexical-internal
 `cloneEditorState`/`getModernOffsetsFromPoints`, `normalizeForComparison`, `sanitizeTextFragment`,
 and one likely-misattributed dev-bundle entry still needing verification), none individually
-dominant. See `docs/large-document-performance-handover.md`'s newest section for the exact
-numbers and the ranked list of what's next.
+dominant.
+
+**Three more O(document)-per-keystroke defects were found and fixed in a follow-up round**
+(`deriveNoteTitleFromText`, the redundant `normalizeInternalText` wrapper inside
+`NoteTextHydrationPlugin`'s hydration check, and `useNoteSnapshots.ts`'s
+O(document length × snapshot count) comparison) — all real, all now incremental or reduced, none
+alone a large enough win to change the overall picture. What changed the picture instead: **the
+real packaged Electron app was measured for the first time** (a committed harness now exists,
+`npm run perf:input-lag:electron`), closing a gap this document has carried since its first
+draft. The result reframes the open question rather than closing it — the real app is not
+faster than the `dev:browser` numbers this whole effort has been tracking, if anything slightly
+worse, which rules out "dev-tooling overhead" as an explanation for any of the numbers in this
+document. It also surfaced a new, currently unresolved discrepancy between two measurement
+methods on the real app specifically (wall-clock timing shows a strong caret-position effect;
+CDP JS-sampling on the same runs doesn't corroborate it as strongly) that needs to be resolved
+before trusting either number as the full picture there. See
+`docs/large-document-performance-handover.md`'s newest section for the exact numbers, what's
+confirmed, and what's still an open question rather than a guess.
 
 ## Review checklist
 
