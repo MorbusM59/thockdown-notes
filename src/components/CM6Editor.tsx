@@ -12,6 +12,7 @@ import type {
   EditorSnapshot,
   EditorSnapshotApplyRequest,
   EditorTextChangeEvent,
+  EditorViewportState,
 } from '../editor/EditorContract';
 
 /**
@@ -23,13 +24,12 @@ import type {
  * it -- exactly what EditorContract.ts's "implementations may be partial
  * while the rewrite is in flight" rule exists for.
  *
- * Deliberately scoped to slice 1 only: mount, initial-text hydration, plain
- * typing -> onTextChange, selection -> onSelectionChange, and
- * getSnapshot/applySnapshot for text + selection. NOT yet implemented:
- * viewport/boundary events, Tab/Enter/markdown-shortcut transforms, the
- * custom block-caret/selection overlay, typing sounds, the custom
- * scrollbar. Those are later slices per the migration plan, each needing
- * their own verification before being added here.
+ * Slices so far: mount, initial-text hydration, typing/selection tracking,
+ * Tab/Enter/markdown-shortcut transforms, typing sounds, and (this slice)
+ * scroll/viewport reporting + restore. topBoundaryPx/bottomBoundaryPx are
+ * still hardcoded to 0 -- the fixed-focus caging system's boundary UI
+ * (padding zones, drag handles) and BlockCaretPlugin/BlockSelectionPlugin's
+ * pixel-matched grid caret are the remaining, larger slices.
  */
 export interface CM6EditorProps {
   bindings?: EditorBindings;
@@ -39,6 +39,7 @@ export interface CM6EditorProps {
   fontFamily: string;
   fontSizePx: number;
   lineHeightPx: number;
+  cellWidthPx?: number;
   editorReadOnly?: boolean;
   spellCheckEnabled?: boolean;
 }
@@ -100,6 +101,7 @@ export function CM6Editor({
   fontFamily,
   fontSizePx,
   lineHeightPx,
+  cellWidthPx = 0,
   editorReadOnly = false,
   spellCheckEnabled = false,
 }: CM6EditorProps) {
@@ -109,10 +111,30 @@ export function CM6Editor({
   const previousTextRef = useRef('');
   const previousSelectionRef = useRef<EditorSelectionState>({ anchor: 0, focus: 0, start: 0, end: 0, isCollapsed: true });
   const lastHydratedNoteIdRef = useRef<string | null>(null);
+  const lineHeightPxRef = useRef(lineHeightPx);
+  const cellWidthPxRef = useRef(cellWidthPx);
 
   useEffect(() => {
     bindingsRef.current = bindings;
   }, [bindings]);
+
+  useEffect(() => {
+    lineHeightPxRef.current = lineHeightPx;
+    cellWidthPxRef.current = cellWidthPx;
+  }, [lineHeightPx, cellWidthPx]);
+
+  // topBoundaryPx/bottomBoundaryPx are hardcoded 0 here -- the boundary UI
+  // itself (padding zones, drag handles) is a later slice. Every other
+  // field is real, matching Editor.tsx's own buildViewport shape.
+  const buildViewport = (view: EditorView): EditorViewportState => ({
+    topBoundaryPx: 0,
+    bottomBoundaryPx: 0,
+    scrollTopPx: view.scrollDOM.scrollTop,
+    lineHeightPx: lineHeightPxRef.current,
+    cellWidthPx: cellWidthPxRef.current,
+    scrollHeightPx: view.scrollDOM.scrollHeight,
+    clientHeightPx: view.scrollDOM.clientHeight,
+  });
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -362,8 +384,27 @@ export function CM6Editor({
       selection: initialSelection,
     });
     bindingsRef.current?.onSelectionChange?.({ source: 'initial-load', selection: initialSelection });
+    bindingsRef.current?.onViewportChange?.({
+      source: 'programmatic',
+      origin: 'programmatic',
+      viewport: buildViewport(view),
+    });
+
+    // Scroll reporting -- mirrors Editor.tsx's own scroller 'scroll'
+    // listener + buildViewport. isProgrammaticScrollRef-style origin
+    // disambiguation (drag vs. real user scroll) isn't needed yet since
+    // there's no drag-handle UI here to originate a 'viewport-drag' event.
+    const handleScroll = () => {
+      bindingsRef.current?.onViewportChange?.({
+        source: 'user-input',
+        origin: 'scroll',
+        viewport: buildViewport(view),
+      });
+    };
+    view.scrollDOM.addEventListener('scroll', handleScroll, { passive: true });
 
     return () => {
+      view.scrollDOM.removeEventListener('scroll', handleScroll);
       bindingsRef.current?.onLifecycle?.({ phase: 'destroyed' });
       view.destroy();
       viewRef.current = null;
@@ -400,12 +441,16 @@ export function CM6Editor({
         return {
           textEvents: true,
           selectionEvents: true,
-          viewportEvents: false,
+          viewportEvents: true,
           snapshotRead: true,
+          // Not `true`: topBoundaryPx/bottomBoundaryPx aren't real yet (the
+          // boundary UI is a later slice), so a full round-trip snapshot
+          // write can't be claimed -- only the granular flags below that are
+          // genuinely implemented.
           snapshotWrite: false,
           snapshotWriteText: false,
           snapshotWriteSelection: true,
-          snapshotWriteViewport: false,
+          snapshotWriteViewport: true,
         };
       },
       getSnapshot(): EditorSnapshot | null {
@@ -414,18 +459,23 @@ export function CM6Editor({
         return {
           text: view.state.doc.toString(),
           selection: toSelectionState(view.state.selection.main),
-          viewport: {
-            topBoundaryPx: 0,
-            bottomBoundaryPx: 0,
-            scrollTopPx: view.scrollDOM.scrollTop,
-            lineHeightPx,
-            cellWidthPx: 0,
-          },
+          viewport: buildViewport(view),
         };
       },
       applySnapshot(snapshot: EditorSnapshotApplyRequest) {
         const view = viewRef.current;
         if (!view) return;
+
+        // Line-count-based restore is the preferred path (see
+        // EditorViewportLines's own doc comment in EditorContract.ts) --
+        // topBoundaryLines/bottomBoundaryLines are ignored here (0 until the
+        // boundary UI lands), only scrollTopLines is applied.
+        if (snapshot.viewportLines) {
+          view.scrollDOM.scrollTo({ top: Math.max(0, Math.round(snapshot.viewportLines.scrollTopLines) * lineHeightPxRef.current), behavior: 'auto' });
+        } else if (snapshot.viewport && typeof snapshot.viewport.scrollTopPx === 'number') {
+          view.scrollDOM.scrollTo({ top: Math.max(0, snapshot.viewport.scrollTopPx), behavior: 'auto' });
+        }
+
         if (snapshot.selection) {
           const docLength = view.state.doc.length;
           const anchor = Math.max(0, Math.min(docLength, snapshot.selection.anchor));
@@ -440,7 +490,9 @@ export function CM6Editor({
         adapterRef.current = null;
       }
     };
-  }, [adapterRef, lineHeightPx]);
+    // lineHeightPx/cellWidthPx read via refs (kept current by the effect
+    // above), not closed over directly, so they're deliberately not deps.
+  }, [adapterRef]);
 
   return (
     <div

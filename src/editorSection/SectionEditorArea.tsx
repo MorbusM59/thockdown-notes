@@ -177,6 +177,7 @@ export function SectionEditorArea({
                     fontFamily={editorFontFamily}
                     fontSizePx={editorRuntimeMetrics.fontSizePx}
                     lineHeightPx={editorRuntimeMetrics.lineHeightPx}
+                    cellWidthPx={editorRuntimeMetrics.cellWidthPx}
                     editorReadOnly={activeNoteHasDebugTag || isPreviewingSnapshot}
                     spellCheckEnabled={spellCheckEditEnabled}
                   />
