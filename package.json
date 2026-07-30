@@ -10,7 +10,8 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "test": "vitest run",
-    "perf:input-lag": "node scripts/perf/measureInputLag.mjs"
+    "perf:input-lag": "node scripts/perf/measureInputLag.mjs",
+    "perf:input-lag:electron": "xvfb-run -a node scripts/perf/measureInputLagElectron.mjs"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.2.0",

@@ -106,25 +106,52 @@ export function useNoteSnapshots(sectionId: string, noteId: string | null, liveT
     return manualOnes[0].content
   }, [snapshots])
 
+  // Snapshot content is immutable once fetched -- normalizing it only
+  // depends on `snapshots`, never on `liveText`. Without this, every
+  // snapshot's content was re-normalized from scratch on every keystroke
+  // (liveText changes every edit), an O(document length x snapshot count)
+  // cost for work whose actual result never changes between keystrokes.
+  // This useMemo is still keyed on `snapshots` itself, so a fresh fetch
+  // (even one returning identical records) still recomputes the whole map
+  // once -- the win is specifically eliminating the *per-keystroke*
+  // re-normalization, not caching across refetches. Keyed by id internally
+  // so snapshotIdsMatchingPresent's own lookup below is O(1) per snapshot.
+  const normalizedSnapshotContentById = useMemo(() => {
+    const map = new Map<number, string>()
+    for (const snapshot of snapshots) {
+      map.set(snapshot.id, normalizeForComparison(snapshot.content))
+    }
+    return map
+  }, [snapshots])
+
+  // Also shared between snapshotIdsMatchingPresent and
+  // hasPendingManualChanges below so liveText -- the one input that
+  // genuinely changes every keystroke -- is only normalized once per
+  // render, not twice.
+  const normalizedLiveText = useMemo(() => normalizeForComparison(liveText), [liveText])
+
   const snapshotIdsMatchingPresent = useMemo(() => {
-    const normalizedLive = normalizeForComparison(liveText)
     const result = new Set<number>()
     for (const snapshot of snapshots) {
-      if (normalizeForComparison(snapshot.content) === normalizedLive) {
+      if (normalizedSnapshotContentById.get(snapshot.id) === normalizedLiveText) {
         result.add(snapshot.id)
       }
     }
     return result
-  }, [liveText, snapshots])
+  }, [snapshots, normalizedSnapshotContentById, normalizedLiveText])
 
   const latestSnapshotContent = useMemo(() => {
     return snapshots.length > 0 ? snapshots[0].content : null
   }, [snapshots])
 
+  const normalizedLatestManualContent = useMemo(() => {
+    return latestManualContent !== null ? normalizeForComparison(latestManualContent) : null
+  }, [latestManualContent])
+
   const hasPendingManualChanges = useMemo(() => {
-    if (latestManualContent === null) return true // nothing to be "on" yet
-    return normalizeForComparison(liveText) !== normalizeForComparison(latestManualContent)
-  }, [latestManualContent, liveText])
+    if (normalizedLatestManualContent === null) return true // nothing to be "on" yet
+    return normalizedLiveText !== normalizedLatestManualContent
+  }, [normalizedLatestManualContent, normalizedLiveText])
 
   const createManualSnapshot = useCallback(async () => {
     if (!noteId || !window.thockdownNotes) return

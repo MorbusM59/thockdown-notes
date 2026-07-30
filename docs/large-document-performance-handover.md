@@ -432,6 +432,9 @@ Verified: a seeded fuzz test (`MarkdownContext.test.ts`, 3 seeds × 200 steps, c
 different caret positions per step against `resolveMarkdownSelectionContext`'s full-scan ground
 truth) specifically targeting fence/backtick/asterisk perturbations and unmatched delimiters;
 `npx tsc --noEmit`; `npm run lint`; full suite (205/205, up from 185); and a live-browser check
+(this count climbed further to 224/224 later in the same session with the noteTitle.ts and
+textSanitization equivalence tests added below -- noted once here rather than chasing every
+intermediate count through this doc)
 (real Playwright Chromium, not the embedded pane) confirming the toolbar's Bold/Code-block
 buttons correctly activate/deactivate at several caret positions in a small note, **and** — the
 strongest test of the forward-propagation logic — a ~19,000-line synthetic note with an unclosed
@@ -512,6 +515,41 @@ this doc's existing note, may not be fixable without a Lexical version change), 
 (`textSanitization.ts`, 53.4ms) — both untouched this round, both flagged as residual candidates
 in an earlier profile too, still not investigated.
 
+## This round: three more O(document) residuals fixed, and the dev-mode-vs-production gap is now measured (not closed)
+
+Following up on the previous round's "state what remains" list (`canonicalizeParagraphSegmentsIncremental`'s own memcmp-bound residual, the Lexical-internal floor, and the still-diffuse majority of per-keystroke cost), a user session asked specifically: what's the path to sub-2ms input response regardless of document length, and what O(n) calls are actually left? Investigating that question surfaced three more real per-keystroke O(document length) call sites this doc hadn't caught yet, all now fixed, plus — the more consequential outcome — the first real measurement of the actual packaged Electron app, which this doc has flagged as an open gap twice before and never closed until now.
+
+**`deriveNoteTitleFromText` (App.tsx → moved to `src/shared/noteTitle.ts`) — fixed.** Called on every keystroke via `updateActiveNoteTitlePreview` (every character/Enter/Tab/markdown-shortcut transform calls it with the new full text) to keep the note's displayed title live. Its own semantics are more expensive than they look: `.find()` for a `# heading`-shaped line searches the *whole document*, not just near the top, and for the common case of a plain-prose note with no heading, that search fails all the way to the end before falling back to the first content line — meaning this was already effectively O(document length) even for completely ordinary notes, not just a pathological case.
+
+Fixed with `deriveNoteTitleIncremental`, keyed per-note (`Map<noteId, NoteTitleCache>` in App.tsx, since split-view sections editing different notes can call the same shared callback). The incremental scheme is a "first match anywhere" cache with a real asymmetry worth naming: the region *before* a known match is a reusable invariant (nothing there can match, or an earlier line would already be the answer), but the region *after* a known match was never actually scanned — `.find` stops at the first hit — so there's no cached information about it at all. That makes most edits O(1) (an edit anywhere after the title-determining line doesn't touch the cache), but editing away the line that currently determines the title falls back to an O(suffix length) rescan — always correct, just not fast for that one specific edit (which is rare). Verified: a fuzz test (`noteTitle.test.ts`, 3 seeds × 300 steps, specifically targeting "edit away the heading" as the hazard case) against `deriveNoteTitleFromText`'s full-scan ground truth; `tsc`/`lint`/full suite; and a live-browser check that specifically exercised the hazard case (removed a heading from a 5,000-line note) and confirmed the displayed title actually updated rather than staying stale — the highest-value thing to check live, since a stale-cache bug here would be silent and easy to miss in isolation.
+
+**`sanitizeTextFragment` inside `NoteTextHydrationPlugin.tsx`'s hydration-check effect — partially fixed.** This effect reruns on every keystroke (keyed on the `text` prop). It called `normalizeInternalText(sanitizeTextFragment(text))` — provably redundant: `sanitizeTextFragment`'s own `normalizeLineSeparators` + tab-replace already cover everything `normalizeInternalText` checks for (BOM, `\r`/`\r\n`/U+2028/U+2029, tabs), so its output already satisfies `normalizeInternalText`'s postcondition and calling it again is a no-op — same bug shape as last round's `readCanonicalRootText` redundancy, missed the first time because it's a different function pair. Removed the redundant wrapper (roughly halves this line's cost) and locked in the equivalence with a dedicated test (`textSanitization.test.ts`) so a future change to either function can't silently reintroduce a real difference without the test catching it. `sanitizeTextFragment` itself is still a full-document call every keystroke — not made incremental this round (its multi-regex chain, including a Unicode property-escape emoji matcher, would need real care to diff safely at anything other than line granularity, and even line-granularity diffing here would only be safe *after* `normalizeLineSeparators` establishes real `\n` boundaries, since the raw input can't be trusted to already be `\n`-delimited the way this doc's other line-diffing fixes could assume). Flagged as a smaller remaining residual, not fully closed.
+
+**`useNoteSnapshots.ts`'s `normalizeForComparison` — fixed, and this one actually was worse than plain O(document).** `snapshotIdsMatchingPresent` re-normalized *every saved snapshot's content* against the live text on every keystroke (`[liveText, snapshots]` deps, and `liveText` changes every edit) — O(document length × snapshot count), not just O(document length). Snapshot content is immutable once fetched, so there was no reason to ever re-normalize it more than once per fetch. Fixed by memoizing each snapshot's normalized content keyed on the `snapshots` array (a plain `useMemo`, no custom incremental logic needed — snapshots have no cross-record coupling to reason about), and hoisting the one unavoidable `normalizeForComparison(liveText)` call so it's shared between `snapshotIdsMatchingPresent` and `hasPendingManualChanges` instead of computed twice. Straightforward memoization restructuring, not a new caching algorithm with a hazard class to fuzz-test — verified via `tsc`/`lint`/full suite and a live-browser check of the present-state-circle UI element. That live check surfaced something worth recording precisely: the circle didn't visibly toggle after creating a manual snapshot in this test setup — confirmed via `git stash` (same technique this doc has used before) that the *identical* behavior reproduces against the unmodified pre-fix code, so this is a pre-existing characteristic of the test setup or app, not a regression from this change. Not investigated further — out of scope for this round.
+
+**A committed harness for the real packaged Electron app now exists** — `npm run perf:input-lag:electron -- [flags]` (`scripts/perf/measureInputLagElectron.mjs`, reusing most of `perfHarness.mjs`'s shared functions). This closes a real capability gap: every measurement in this doc before this round was `npm run dev:browser` (Vite serving the renderer as a plain web page with mock IPC bridges), never the actual Electron app a user runs. Getting this working in this environment required solving three problems, all worth keeping for the next session:
+
+1. **Chromium's sandbox refuses to run as root** (`Running as root without --no-sandbox is not supported`) — this container runs as root, so both the harness and any manual Electron launch need `--no-sandbox`.
+2. **No real display** — this environment has none; `xvfb-run -a` (available, confirmed) provides a virtual one. The npm script wraps this automatically; a bare `node scripts/perf/measureInputLagElectron.mjs` will hang waiting for a window that never opens.
+3. **`better-sqlite3`'s prebuilt native binary is compiled against the host Node's ABI, not Electron's bundled Node's ABI** (`NODE_MODULE_VERSION` mismatch) — Electron's main process crashed on `new Database(...)` before ever opening a window, silently as far as Playwright's `_electron.launch()` is concerned (`firstWindow()` just times out with no indication why; the real error only appeared by launching Electron directly and capturing its own stdout/stderr). Fixed with `npx electron-rebuild -f -w better-sqlite3` — not committed as a dependency change, since it rebuilds a native binary in `node_modules` rather than touching anything tracked; re-run it (or `npx @electron/rebuild`, the current package name) whenever `npm install` has refreshed `node_modules` since the last Electron measurement.
+
+The harness also discovered, by reading `electron/main.ts`'s `resolveDataRoot()` rather than assuming: this app's SQLite data root is `<repo>/data` whenever `app.isPackaged` is false (true for this unpackaged `electron dist-electron/main.js` launch style, not a real electron-builder package) — `--user-data-dir` does *not* redirect it, only Electron's own internal cache paths. The harness clears `<repo>/data`'s contents before and after each run for a fresh DB, deliberately preserving the git-tracked `data/.gitkeep` placeholder rather than removing the whole directory (an earlier version of this cleanup did exactly that and had to be caught and reverted via `git status`/`git checkout` mid-session — worth remembering as a reason to always diff-check after any script that does its own filesystem cleanup, not just after edits made through normal tools).
+
+**What the real measurement actually found — this reconciles part of the doc's long-standing open question, but opens a new one.** Same synthetic 1.5M-character note, same harness, both `dev:browser` and the real Electron app, all post-fix:
+
+| | dev:browser, caret at end | Electron, caret at end | Electron, caret at start |
+|---|---|---|---|
+| Burst wall-clock mean/keystroke | ~113ms | ~142ms | ~16ms |
+| Profile: total sampled JS / 30 keystrokes | ~3467ms | ~4731ms | ~3921ms |
+
+Two things, read together, don't fully resolve into one clean story:
+
+- **The real app is not faster than dev:browser — if anything, slightly worse.** This refutes the hypothesis (carried in this doc since the very first round) that a meaningful fraction of the measured per-keystroke cost was dev-tooling/HMR-runtime noise that a production build would strip out. It doesn't; the diffuse "thousand cuts" cost (`EventDispatch`/`RunTask`/`v8.callFunction`/`FunctionCall` dominating a full category-level trace, same shape as every prior round's finding, now independently reconfirmed on the real app) is real application cost, not dev-mode artifact. Function-level attribution on the real app is far less useful than on `dev:browser` — production JS is minified (`kD`, `M5`, `cv`, single/double-letter identifiers), and this build doesn't currently emit source maps, so a CDP JS-sampling profile is only useful category-by-category here, not function-by-function, until that's set up.
+- **But burst wall-clock and profiled sampled-JS-time disagree with each other about how much caret position matters on the real app specifically.** Burst timing shows a stark ~8.8x difference between caret-at-start (~16ms) and caret-at-end (~142ms) — a much starker position signature than `dev:browser` shows post-fix (~121ms either position, i.e. this doc's fixes *did* remove the position-dependence there). But the *profiled* sampled-JS-time for the same two positions on Electron is much closer (~3921ms vs ~4731ms, ~17%) — nowhere near an 8.8x gap. These two signals, from the same app, measuring the same thing, don't agree, and this session did not resolve why before running out of scope for this round. Recorded as an open finding rather than guessed at, per this doc's own process discipline — candidate explanations *not yet checked*: CDP's `Profiler.start()` session itself may add real overhead that changes relative timings under profiling vs. unprofiled execution (a known general caveat for sampling profilers, not confirmed here specifically); GC pressure accumulating differently over the course of a burst depending on position (the category trace's `MinorGC`/`V8.GCScavenger` entries were a meaningfully larger fraction of total time on Electron than in earlier `dev:browser` traces, consistent with — but not proof of — this); or a one-time scroll/render settling cost from `placeCaretAt`'s own scroll-to-end step bleeding into the first several keystrokes of the burst window specifically for the "end" position (the per-keystroke burst numbers don't show the front-loaded pattern this would predict, which argues against it, but wasn't conclusively ruled out either).
+- **The user's originally-reported multi-second-per-keystroke lag on a real Ulysses-sized note remains unreconciled even now.** The worst single keystroke measured this round, on the real packaged app, in this environment, was ~212ms — genuinely bad against this doc's "must feel instant" bar, but still roughly 15-40x faster than a multi-second report. This environment's Xvfb + software-rendered (SwiftShader) GPU path, and the fact that this is an unpackaged dev-style Electron launch rather than a true `electron-builder` output (asar-packed, code-signed, run on real user hardware), are both plausible remaining gaps — neither has been tested.
+
+**Concrete next steps, in priority order**: (1) resolve the burst-vs-profile disagreement on Electron specifically — repeat the category-level trace (not just JS sampling) at both caret positions, since that measurement doesn't carry the same profiler-overhead caveat, and see whether Layout/GC/EventDispatch shift with position the way burst timing suggests; (2) get source maps into the production build (`build.sourcemap: true` in `vite.config.ts`, or point the CDP profiler at the dev-mode build's source-mapped bundle instead) so function-level attribution is possible on Electron, not just category-level; (3) if feasible, test against a true `electron-builder`-packaged build, not just the unpacked `electron dist-electron/main.js` launch style this harness uses today.
+
 ## Environment notes for the next session
 
 - `node_modules` is not installed by default in a fresh container — run `npm install` (or
@@ -541,6 +579,35 @@ in an earlier profile too, still not investigated.
   spawns vite as a grandchild process, so a plain SIGTERM to the `npm` process on cleanup can
   leave the dev server (and its port) running — spawn detached and kill the process group
   (negative PID) instead.
+- **A second harness measures the real packaged Electron app — `npm run
+  perf:input-lag:electron -- [flags]`** (`scripts/perf/measureInputLagElectron.mjs`, same flags
+  as the browser harness). This is the ONLY way to get a number that isn't `dev:browser`'s mock-
+  IPC/HMR-runtime environment, and per this round's own finding, the two do NOT agree, so don't
+  treat `dev:browser` numbers as a stand-in for the real app without also spot-checking here.
+  Requires, all confirmed necessary this round (see "This round" above for how each was found):
+  1. `xvfb-run -a` wrapping the whole command (this environment has no real display; the npm
+     script does this automatically, a bare `node .../measureInputLagElectron.mjs` will hang).
+  2. `--no-sandbox` (Electron/Chromium refuse to run sandboxed as root, and this container runs
+     as root) — the harness passes this itself when launching.
+  3. `npx electron-rebuild -f -w better-sqlite3` (or `npx @electron/rebuild`, current package
+     name) run at least once per `node_modules` refresh — the prebuilt `better-sqlite3` binary
+     `npm install` fetches targets the host Node's ABI, not Electron's bundled Node's ABI, and
+     without this the main process crashes on its first `new Database(...)` call *before opening
+     a window*, which Playwright's `_electron.launch()`/`firstWindow()` only reports as a bare
+     30-second timeout with no indication why. If this harness ever mysteriously times out on
+     `firstWindow()` again, launch Electron directly
+     (`xvfb-run -a node_modules/.bin/electron --no-sandbox dist-electron/main.js`, piping
+     stdout/stderr) before assuming anything else — that's how this specific failure was found.
+  4. A `vite build` first (the harness runs this itself unless `--skip-build` is passed) — this
+     produces `dist/` (renderer) and `dist-electron/main.js`/`preload.mjs` in one invocation (the
+     electron plugin runs three separate vite builds back to back). Don't run the full `npm run
+     build` for this — that also invokes `electron-builder` to produce real installers, which is
+     slow and unnecessary for measurement, and may not have the platform tooling this container
+     needs for nsis/dmg packaging anyway.
+  Function-level CDP profiling is much less useful against this production build than against
+  `dev:browser` — the bundle is minified with no source maps configured, so profiled function
+  names are meaningless single/double-letter identifiers. The category-level trace mode doesn't
+  have this problem (it doesn't need names) and is the more reliable mode to reach for here.
 - **Manual recipe, for anything the harness doesn't cover (Windows; the previous version of this
   note described a Linux sandbox with paths like `/opt/node22` that don't apply here — that
   environment-specific detail is gone, don't chase it)**:
@@ -584,7 +651,7 @@ in an earlier profile too, still not investigated.
     hypothesis before touching source at all** — used this round to test (and refute)
     `content-visibility: auto` on the editor's paragraphs; no source edit needed to get a real
     answer, just inject the style, re-run the same timing script, compare.
-- Verification bar for any change here: `npx tsc --noEmit`, `npm test` (205/205 passing as of
+- Verification bar for any change here: `npx tsc --noEmit`, `npm test` (224/224 passing as of
   this writing, no known pre-existing failures), `npm run lint`, **and** a live-browser check
   — three times now (across earlier rounds), a change here has passed its own unit tests while
   still being wrong (or, in one case, looked wrong live and turned out to be an unrelated
