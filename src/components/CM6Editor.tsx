@@ -18,6 +18,7 @@ import {
 } from '../editor/NonQuantizedSmoothScroll';
 import { cancelQuantizedSmoothScroll, scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
+import { sanitizeDocumentText, sanitizeDocumentTextExtended } from '../shared/textSanitization';
 import type {
   EditorAdapter,
   EditorBindings,
@@ -40,13 +41,14 @@ import type {
  * Slices so far: mount, initial-text hydration, typing/selection tracking,
  * Tab/Enter/markdown-shortcut transforms, typing sounds, scroll/viewport
  * reporting + restore, the block-grid caret and multi-line selection
- * overlays, cage-quantized wheel scroll + PageUp/PageDown paging, and (this
- * slice) the keyboard caret-refocus caging intent itself (arrows/typing/
- * Enter/Backspace/Delete keep the caret scrolled into a line-grid-quantized
- * position inside the cage). topBoundaryPx/bottomBoundaryPx are still
- * hardcoded to 0 -- the fixed-focus caging system's boundary UI (padding
- * zones, drag handles), paste caret-preservation, and drag-selection scroll
- * quantization are the remaining slices.
+ * overlays, cage-quantized wheel scroll + PageUp/PageDown paging, the
+ * keyboard caret-refocus caging intent, and (this slice) paste sanitization
+ * (HTML/emoji/control-char stripping, paragraph reconstruction, bullet
+ * normalization, the Ctrl+Shift+V plain-paste escape hatch, and
+ * preserve-caret-line scroll positioning). topBoundaryPx/bottomBoundaryPx
+ * are still hardcoded to 0 -- the fixed-focus caging system's boundary UI
+ * (padding zones, drag handles) and drag-selection scroll quantization are
+ * the remaining slices.
  */
 export interface CM6EditorProps {
   bindings?: EditorBindings;
@@ -686,6 +688,53 @@ export function CM6Editor({
       }
     };
 
+    // Paste sanitization -- ported from PasteSanitizationPlugin.tsx's own
+    // PASTE_COMMAND/KEY_DOWN_COMMAND handlers. Strips rich clipboard content
+    // down to sanitized plain text (control/invisible chars, emoji, raw HTML
+    // tags; the "extended" path additionally reconstructs wrapped-paragraph
+    // line breaks and normalizes bullet markers -- see textSanitization.ts).
+    // Ctrl+Shift+V requests the non-extended (plain) sanitization, matching
+    // the original's own "power paste" escape hatch.
+    let plainPasteRequested = false;
+    // Set by the paste handler right before it mutates the document, read
+    // (and cleared) by the updateListener's own reconcile below -- CM6's
+    // synchronous transaction commit means this doesn't need Lexical's
+    // onUpdate-callback indirection, just a same-tick handoff.
+    let pendingPasteViewportOffsetPx: number | null = null;
+
+    const reconcilePasteScroll = (view: EditorView, viewportOffsetPx: number) => {
+      const scroller = view.scrollDOM;
+      const domSelection = window.getSelection();
+      if (!domSelection || domSelection.rangeCount === 0) return;
+
+      const lineHeightPxNow = lineHeightPxRef.current;
+      const scrollerRect = scroller.getBoundingClientRect();
+      const caretRect = readSelectionRect(domSelection, lineHeightPxNow, view.contentDOM);
+      if (!caretRect) return;
+
+      const caretTopInScroll = resolveCaretTopInScroll({
+        caretRect,
+        scrollerRectTop: scrollerRect.top,
+        scrollerScrollTop: scroller.scrollTop,
+        rootEl: view.contentDOM,
+        domSelection,
+        rawText: view.state.doc.toString(),
+        lineHeightPx: lineHeightPxNow,
+      });
+
+      // Keep the caret on the same screen-relative line it occupied before
+      // the paste, rather than clamping it to the cage's top/bottom row like
+      // a normal refocus reconcile would.
+      const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      let targetScrollTopPx = caretTopInScroll - viewportOffsetPx;
+      targetScrollTopPx = Math.round(targetScrollTopPx / lineHeightPxNow) * lineHeightPxNow;
+      targetScrollTopPx = Math.max(0, Math.min(maxScrollTopPx, targetScrollTopPx));
+
+      if (Math.abs(targetScrollTopPx - scroller.scrollTop) > 0.01) {
+        scroller.scrollTop = targetScrollTopPx;
+      }
+    };
+
     const extensions: Extension[] = [
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
@@ -749,6 +798,10 @@ export function CM6Editor({
       // convention, since that's a deliberate product choice, not a bug.
       Prec.highest(keymap.of([{
         any: (view, event) => {
+          if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'v') {
+            plainPasteRequested = true;
+          }
+
           if (isRefocusKey(event)) {
             pendingCageIntent = true;
           }
@@ -959,6 +1012,70 @@ export function CM6Editor({
         applyTransformResult(view, next);
         return true;
       }),
+      EditorView.domEventHandlers({
+        paste: (event, view) => {
+          if (!event.clipboardData) {
+            plainPasteRequested = false;
+            return false;
+          }
+          const plainText = event.clipboardData.getData('text/plain');
+          if (typeof plainText !== 'string') {
+            plainPasteRequested = false;
+            return false;
+          }
+
+          event.preventDefault();
+
+          const usePlainSanitization = plainPasteRequested;
+          plainPasteRequested = false;
+
+          const sanitized = usePlainSanitization
+            ? sanitizeDocumentText(plainText)
+            : sanitizeDocumentTextExtended(plainText);
+
+          const currentText = view.state.doc.toString();
+          const selection = view.state.selection.main;
+
+          // Preserve the caret's on-screen line before the paste mutates the
+          // document -- ported from CagedScrollPlugin.tsx's own
+          // preserve-caret-line handlePaste logic. Consumed by the
+          // updateListener below instead of the normal cage-clamp reconcile.
+          const domSelection = window.getSelection();
+          const scroller = view.scrollDOM;
+          if (domSelection && domSelection.rangeCount > 0) {
+            const caretRect = readSelectionRect(domSelection, lineHeightPxRef.current, view.contentDOM);
+            if (caretRect) {
+              const scrollerRect = scroller.getBoundingClientRect();
+              const caretTopInScroll = resolveCaretTopInScroll({
+                caretRect,
+                scrollerRectTop: scrollerRect.top,
+                scrollerScrollTop: scroller.scrollTop,
+                rootEl: view.contentDOM,
+                domSelection,
+                rawText: currentText,
+                lineHeightPx: lineHeightPxRef.current,
+              });
+              pendingPasteViewportOffsetPx = caretTopInScroll - scroller.scrollTop;
+            }
+          }
+
+          const nextText = `${currentText.slice(0, selection.from)}${sanitized}${currentText.slice(selection.to)}`;
+          const nextCursor = Math.max(0, Math.min(nextText.length, selection.from + sanitized.length));
+
+          // Ensures a reconcile happens even when no pre-paste caret geometry
+          // could be measured above: the updateListener prefers the
+          // preserve-offset reconcile when pendingPasteViewportOffsetPx is
+          // set, falling back to the normal cage-clamp reconcile otherwise --
+          // matching CagedScrollPlugin.tsx's own fallback for this case.
+          pendingCageIntent = true;
+          view.dispatch({
+            changes: { from: 0, to: view.state.doc.length, insert: nextText },
+            selection: EditorSelection.cursor(nextCursor),
+          });
+
+          return true;
+        },
+      }),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           const nextText = update.state.doc.toString();
@@ -991,7 +1108,12 @@ export function CM6Editor({
           scheduleCaretUpdate();
           scheduleSelectionHighlightUpdate();
         }
-        if (pendingCageIntent && (update.docChanged || update.selectionSet)) {
+        if (pendingPasteViewportOffsetPx !== null && update.docChanged) {
+          const offset = pendingPasteViewportOffsetPx;
+          pendingPasteViewportOffsetPx = null;
+          pendingCageIntent = false;
+          reconcilePasteScroll(update.view, offset);
+        } else if (pendingCageIntent && (update.docChanged || update.selectionSet)) {
           pendingCageIntent = false;
           reconcileCagedScroll(update.view);
         }
