@@ -4,6 +4,7 @@ import type { Extension } from '@codemirror/state';
 import { EditorView, Decoration, ViewPlugin, drawSelection, keymap, type DecorationSet } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
+import { typingSoundManager } from '../sound/TypingSoundManager';
 import type {
   EditorAdapter,
   EditorBindings,
@@ -166,6 +167,27 @@ export function CM6Editor({
       Prec.highest(keymap.of([{
         any: (view, event) => {
           if (event.key === 'Tab') {
+            // Same click sound/echo as ContractBridgePlugin.tsx's own
+            // KEY_TAB_COMMAND handler -- played unconditionally like the
+            // original, not gated on the transform actually changing
+            // anything.
+            const tabKeyId = event.shiftKey ? 'key:Shift:Tab' : 'key:Tab';
+            if (event.shiftKey) {
+              void typingSoundManager.playRandomClick({
+                keyId: tabKeyId,
+                reverse: true,
+                gain: 0.7,
+                echo: { count: 2, delayMs: 80, decay: 0.4 },
+                detune: 600,
+              });
+            } else {
+              void typingSoundManager.playRandomClick({
+                keyId: tabKeyId,
+                gain: 0.7,
+                echo: { count: 2, delayMs: 80, decay: 0.4 },
+              });
+            }
+
             const text = view.state.doc.toString();
             const selection = toSelectionState(view.state.selection.main);
             const transformCallback = bindingsRef.current?.onTabIndentTransform;
@@ -230,6 +252,47 @@ export function CM6Editor({
           return false;
         },
       }])),
+      // Arrow-key/undo/redo click sounds -- ported verbatim from
+      // Editor.tsx's handleEditorKeyDown. A domEventObservers registration
+      // (not domEventHandlers) deliberately, since this is a pure side
+      // effect that must always fire and never claim the event or affect
+      // precedence -- exactly matching the original, which was a plain
+      // React onKeyDown prop with no preventDefault. Plain typing/backspace
+      // and Enter sounds need no separate wiring here: those already live
+      // inside the EditorBindings themselves (onTextChange's text-length-
+      // delta detection, onEnterTransform's own unconditional click), which
+      // CM6Editor already calls -- so they work automatically.
+      EditorView.domEventObservers({
+        keydown: (event) => {
+          const modifiers = [
+            event.shiftKey ? 'Shift' : null,
+            event.ctrlKey ? 'Control' : null,
+            event.altKey ? 'Alt' : null,
+            event.metaKey ? 'Meta' : null,
+          ].filter(Boolean).join('+');
+          const keyId = modifiers ? `key:${modifiers}:${event.key}` : `key:${event.key}`;
+          switch (event.key) {
+            case 'ArrowLeft':
+            case 'ArrowRight':
+            case 'ArrowUp':
+            case 'ArrowDown':
+              void typingSoundManager.playRandomClick({ keyId, detune: 1200, gain: 0.3 });
+              break;
+            case 'z':
+              if (event.ctrlKey || event.metaKey) {
+                void typingSoundManager.playRandomClick({ keyId, reverse: true, detune: -1200, gain: 0.7 });
+              }
+              break;
+            case 'y':
+              if (event.ctrlKey || event.metaKey) {
+                void typingSoundManager.playRandomClick({ keyId, detune: -1200, gain: 0.7 });
+              }
+              break;
+            default:
+              break;
+          }
+        },
+      }),
       // Character-insert transform (e.g. checklist typeover) -- uses CM6's
       // inputHandler rather than keydown so this only ever fires for a
       // genuine committed single-character insertion (matches Lexical's own
