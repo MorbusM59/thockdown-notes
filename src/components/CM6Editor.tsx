@@ -1,10 +1,12 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { EditorState, EditorSelection, Prec, RangeSetBuilder } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView, Decoration, ViewPlugin, drawSelection, keymap, type DecorationSet } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import { typingSoundManager } from '../sound/TypingSoundManager';
+import { readSelectionRect } from '../editor/CaretRect';
+import { resolveCaretTopInScroll } from '../editor/CaretVisualPosition';
 import type {
   EditorAdapter,
   EditorBindings,
@@ -64,6 +66,8 @@ function applyTransformResult(view: EditorView, next: { text: string; selection:
   });
 }
 
+const CARET_INSET_PX = 1;
+
 const lineTokenPlugin = ViewPlugin.fromClass(class {
   decorations: DecorationSet;
   constructor(view: EditorView) {
@@ -105,6 +109,7 @@ export function CM6Editor({
   editorReadOnly = false,
   spellCheckEnabled = false,
 }: CM6EditorProps) {
+  const layerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const bindingsRef = useRef(bindings);
@@ -113,6 +118,15 @@ export function CM6Editor({
   const lastHydratedNoteIdRef = useRef<string | null>(null);
   const lineHeightPxRef = useRef(lineHeightPx);
   const cellWidthPxRef = useRef(cellWidthPx);
+  const [caretStyle, setCaretStyle] = useState<React.CSSProperties | null>(null);
+  const caretAnimationFrameRef = useRef<number | null>(null);
+  // scrollerRect/layerRect don't change on a plain text keystroke -- only
+  // the selection Range rect does. Cached across updateCaret calls and only
+  // re-measured when a resize invalidates the cache -- same optimization
+  // BlockCaretPlugin.tsx uses ("cutting 2 of the ~4 forced synchronous
+  // layout reads paid on every keystroke").
+  const scrollerRectRef = useRef<DOMRect | null>(null);
+  const caretLayerRectRef = useRef<DOMRect | null>(null);
 
   useEffect(() => {
     bindingsRef.current = bindings;
@@ -136,6 +150,117 @@ export function CM6Editor({
     clientHeightPx: view.scrollDOM.clientHeight,
   });
 
+  const invalidateCaretRectCache = useCallback(() => {
+    scrollerRectRef.current = null;
+    caretLayerRectRef.current = null;
+  }, []);
+
+  /**
+   * Ported from BlockCaretPlugin.tsx's own updateCaret -- same algorithm,
+   * same pure geometry functions (readSelectionRect, resolveCaretTopInScroll,
+   * both already engine-agnostic: they read window.getSelection()/
+   * getBoundingClientRect() directly, not any Lexical-specific API), sourced
+   * from the CM6 EditorView instead of Lexical's editor state. Two
+   * deliberate differences from the original, both noted rather than
+   * silently carried over or silently dropped:
+   * - No isRefocusTransactionActive/caged-scroll-settling guard yet -- the
+   *   fixed-focus caging system (CagedScrollPlugin's own state machine)
+   *   isn't ported here, so there's nothing to wait on yet. Revisit once it
+   *   is.
+   * - resolveRuntimeCellWidthPx's CSS-custom-property runtime lookup is
+   *   skipped -- CM6Editor doesn't set --editor-cell-width on its DOM the
+   *   way Editor.tsx does, so this uses the cellWidthPx prop directly. Worth
+   *   adding if runtime font-metric drift from the prop ever actually
+   *   matters here; not assumed to.
+   */
+  const updateCaret = useCallback(() => {
+    const view = viewRef.current;
+    const layerEl = layerRef.current;
+    if (!view || !layerEl) return;
+
+    const selectionRange = view.state.selection.main;
+    if (!selectionRange.empty) {
+      setCaretStyle(null);
+      return;
+    }
+
+    const domSelection = window.getSelection();
+    if (!domSelection || domSelection.rangeCount === 0) {
+      setCaretStyle(null);
+      return;
+    }
+
+    if (document.activeElement !== view.contentDOM) {
+      setCaretStyle(null);
+      return;
+    }
+
+    const caretRect = readSelectionRect(domSelection, lineHeightPxRef.current, view.contentDOM);
+    if (!caretRect) {
+      setCaretStyle(null);
+      return;
+    }
+
+    const scroller = view.scrollDOM;
+    if (!scrollerRectRef.current) {
+      scrollerRectRef.current = scroller.getBoundingClientRect();
+    }
+    if (!caretLayerRectRef.current) {
+      caretLayerRectRef.current = layerEl.getBoundingClientRect();
+    }
+    const scrollerRect = scrollerRectRef.current;
+    const caretLayerRect = caretLayerRectRef.current;
+
+    const caretTopInScroll = resolveCaretTopInScroll({
+      caretRect,
+      scrollerRectTop: scrollerRect.top,
+      scrollerScrollTop: scroller.scrollTop,
+      rootEl: view.contentDOM,
+      domSelection,
+      rawText: view.state.doc.toString(),
+      lineHeightPx: lineHeightPxRef.current,
+    });
+
+    const lineHeightPxNow = lineHeightPxRef.current;
+    const quantizedRowTopInScroll = Math.round(caretTopInScroll / lineHeightPxNow) * lineHeightPxNow;
+    const topInViewport = quantizedRowTopInScroll - scroller.scrollTop;
+
+    if (topInViewport < 0 || topInViewport > scroller.clientHeight - lineHeightPxNow) {
+      setCaretStyle(null);
+      return;
+    }
+
+    const runtimeCellWidthPx = Math.max(1, cellWidthPxRef.current);
+    const scrollerLeftInLayer = scrollerRect.left - caretLayerRect.left;
+    const scrollerTopInLayer = scrollerRect.top - caretLayerRect.top;
+    let absoluteLeft = caretRect.left - scrollerRect.left;
+    absoluteLeft = Math.round(absoluteLeft / runtimeCellWidthPx) * runtimeCellWidthPx;
+
+    const caretWidthPx = Math.max(1, runtimeCellWidthPx - CARET_INSET_PX);
+    const caretHeightPx = Math.max(1, lineHeightPxNow - CARET_INSET_PX);
+
+    setCaretStyle({
+      transform: `translate3d(${scrollerLeftInLayer + absoluteLeft + CARET_INSET_PX}px, ${scrollerTopInLayer + topInViewport + CARET_INSET_PX}px, 0)`,
+      width: caretWidthPx,
+      height: caretHeightPx,
+    });
+  }, []);
+
+  const scheduleCaretUpdate = useCallback(() => {
+    if (caretAnimationFrameRef.current !== null) {
+      cancelAnimationFrame(caretAnimationFrameRef.current);
+    }
+    caretAnimationFrameRef.current = requestAnimationFrame(() => {
+      caretAnimationFrameRef.current = null;
+      updateCaret();
+    });
+  }, [updateCaret]);
+
+  const scheduleCaretUpdateAfterResize = useCallback(() => {
+    invalidateCaretRectCache();
+    scheduleCaretUpdate();
+  }, [invalidateCaretRectCache, scheduleCaretUpdate]);
+
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -145,15 +270,10 @@ export function CM6Editor({
       lineTokenPlugin,
       EditorView.lineWrapping,
       EditorView.editable.of(!editorReadOnly),
-      // The app's own CSS sets `caret-color: transparent` on `.editor-text`
-      // (index.css, "Hide the native OS caret") so BlockCaretPlugin's custom
-      // grid-aligned overlay can render instead -- but that overlay depends
-      // on the viewport/boundary system (topBoundaryPx/lineHeightPx/
-      // cellWidthPx), not yet ported here. drawSelection() renders CM6's own
-      // cursor via decorations rather than the native caret, so it stays
-      // visible despite inheriting that CSS rule -- a real interim fix, not
-      // the final pixel-matched block-grid caret (a later slice, once the
-      // viewport system lands).
+      // drawSelection() still owns the non-collapsed *selection* background
+      // rendering (no CM6BlockSelection overlay exists yet -- that's a
+      // separate slice) but its own cursor is hidden via CSS below now that
+      // the block-grid caret overlay below renders the real one.
       drawSelection(),
       // `editor-text` matches the class app-level code outside this
       // component (e.g. App.tsx's "click anywhere near the editor refocuses
@@ -377,6 +497,9 @@ export function CM6Editor({
             bindingsRef.current?.onSelectionChange?.({ source: 'user-input', selection: nextSelection });
           }
         }
+        if (update.docChanged || update.selectionSet || update.viewportChanged) {
+          scheduleCaretUpdate();
+        }
       }),
     ];
 
@@ -416,10 +539,34 @@ export function CM6Editor({
         origin: 'scroll',
         viewport: buildViewport(view),
       });
+      scheduleCaretUpdate();
     };
     view.scrollDOM.addEventListener('scroll', handleScroll, { passive: true });
 
+    // Neither the updateListener nor the scroll listener fire when THIS
+    // editor loses/gains DOM focus (e.g. clicking into a different
+    // split-view section) -- same gap BlockCaretPlugin.tsx's own comment
+    // documents. Without this, switching away leaves the caret frozen on
+    // screen instead of disappearing.
+    document.addEventListener('focusin', scheduleCaretUpdate, true);
+    document.addEventListener('focusout', scheduleCaretUpdate, true);
+
+    // Covers layout shifts that don't fire a window resize event (sidebar
+    // toggle, split-view pane resize, font-size change).
+    const resizeObserver = new ResizeObserver(() => scheduleCaretUpdateAfterResize());
+    resizeObserver.observe(view.scrollDOM);
+    if (layerRef.current) resizeObserver.observe(layerRef.current);
+
+    scheduleCaretUpdate();
+
     return () => {
+      if (caretAnimationFrameRef.current !== null) {
+        cancelAnimationFrame(caretAnimationFrameRef.current);
+        caretAnimationFrameRef.current = null;
+      }
+      resizeObserver.disconnect();
+      document.removeEventListener('focusin', scheduleCaretUpdate, true);
+      document.removeEventListener('focusout', scheduleCaretUpdate, true);
       view.scrollDOM.removeEventListener('scroll', handleScroll);
       bindingsRef.current?.onLifecycle?.({ phase: 'destroyed' });
       view.destroy();
@@ -511,24 +658,44 @@ export function CM6Editor({
   }, [adapterRef]);
 
   return (
-    <div
-      ref={containerRef}
-      className="cm6-editor-root"
-      style={{
-        position: 'absolute',
-        inset: 0,
-        // No overflow of its own -- the EditorView.theme() above makes
-        // .cm-editor fill this container, so .cm-scroller (a child of
-        // .cm-editor) is the one real scrolling element, per CM6's own
-        // integration contract. This container previously had its own
-        // `overflow: auto`, which was silently doing the real scrolling
-        // instead of CM6's own scroller ever since slice 1 -- see the
-        // EditorView.theme() comment above for how this was found.
-        overflow: 'hidden',
-        fontFamily,
-        fontSize: fontSizePx,
-        lineHeight: `${lineHeightPx}px`,
-      }}
-    />
+    // layerRef is the non-scrolling reference frame the block caret is
+    // positioned against -- matching Editor.tsx's own structure, where
+    // BlockCaretPlugin renders as a sibling of the scroller inside a shared
+    // non-scrolling parent, not inside the scrolling element itself.
+    <div ref={layerRef} style={{ position: 'absolute', inset: 0 }}>
+      <div
+        ref={containerRef}
+        className="cm6-editor-root"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          // No overflow of its own -- the EditorView.theme() above makes
+          // .cm-editor fill this container, so .cm-scroller (a child of
+          // .cm-editor) is the one real scrolling element, per CM6's own
+          // integration contract. This container previously had its own
+          // `overflow: auto`, which was silently doing the real scrolling
+          // instead of CM6's own scroller ever since slice 1 -- see the
+          // EditorView.theme() comment above for how this was found.
+          overflow: 'hidden',
+          fontFamily,
+          fontSize: fontSizePx,
+          lineHeight: `${lineHeightPx}px`,
+        }}
+      />
+      {caretStyle && (
+        <div
+          className="thockdown-block-caret"
+          style={{
+            position: 'absolute',
+            pointerEvents: 'none',
+            zIndex: 5,
+            top: 0,
+            left: 0,
+            willChange: 'transform',
+            ...caretStyle,
+          }}
+        />
+      )}
+    </div>
   );
 }
