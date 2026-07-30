@@ -710,6 +710,28 @@ Per this doc's own long-queued candidate ("a true `electron-builder`-packaged bu
 
 Verified: `tsc --noEmit`, `npm run lint`, full suite (241/241, unchanged — this round only touched `scripts/perf/` tooling and `package.json`'s scripts block, no `src/` changes). No live-browser functional check needed beyond what the harness itself already does (drives real typing through a real window) — this round is pure measurement/tooling, not an app-behavior change.
 
+## This round: Phase B measured before being built — deprioritized, not attempted, based on real numbers
+
+Per this doc's own "confirm scope before starting" precedent for Phase B (extending `EditorContract.ts`, migrating `PreviewBlockSplit`/`MarkdownContext` to consume precise rope edit-ranges instead of full-string diffing), the user greenlit a full push. Before writing the contract change, per this doc's own non-negotiable "measure before diagnosing" rule, profiled both target functions' *current* cost fresh (post this session's other fixes) — the scoping round's own analysis of these two functions was architecture-reasoning, not a fresh measurement of their actual current cost, and that turned out to matter.
+
+**Fresh profile (unpacked harness, same 1.5M-character note, 20-keystroke burst, both caret positions):**
+
+| | caret at end | caret at start |
+|---|---|---|
+| Total sampled JS | 2356.2ms | 2580.5ms |
+| `splitMarkdownIntoPreviewBlocksIncremental` (`PreviewBlockSplit.ts`) | 24.45ms (~1.2ms/keystroke) | 31.42ms (~1.6ms/keystroke) |
+| `resolveMarkdownSelectionContextIncremental` (`MarkdownContext.ts`) | 1.13ms (~0.06ms/keystroke) | 4.79ms (~0.24ms/keystroke) |
+
+**Two findings that changed the decision:**
+- `resolveMarkdownSelectionContextIncremental` (the toolbar bold/italic/heading-active-state path) is already essentially free — under a quarter-millisecond per keystroke at either position. There is no meaningful win available here; migrating it to rope edit-ranges would be pure risk for unmeasurable benefit.
+- `splitMarkdownIntoPreviewBlocksIncremental`'s own diffing overhead (the `.split('\n')` + prefix/suffix line-compare loops Phase B would have eliminated) is real but small — ~1-1.6ms/keystroke, roughly 1% of the ~118-129ms/keystroke total on this note. The start-vs-end gap (1.2ms vs 1.6ms) is well inside this environment's normal run-to-run noise band, not the severe multi-x position blowup that flagged a genuine defect in earlier rounds (`getOffsetWithinRoot`'s old 1926ms self-time, `computeInlineStateAtOffset`/`countLineIndex`'s old position-only-present-at-one-caret-position signature) — so this doesn't read as a "page 1 must feel identical to page 1,000" violation at any alarming severity, just a small flat residual.
+
+**Decision: don't build it, given a ~1% ceiling against the risk profile.** The contract extension this would have required (threading a precise edit-range through `EditorContract.ts`, plus new plumbing in `LexicalRopeSync` to accumulate a coalesced range across possibly-multiple Lexical listener firings within one update tick — a genuinely new mechanism with unverified cross-listener ordering assumptions) is exactly the shape of change two other functions in this same doc already went through: built, fuzz-tested, integrated, measured, and reverted (`canonicalizeParagraphSegmentsByKeyIncremental`/`sanitizeTextFragmentIncremental`, "This round: source maps landed" section above) because the real cost driver turned out not to be what the identity/dirty-tracking fix targeted. Spending a multi-round effort touching the render/toolbar-active-state contract for a measured ~1% ceiling, with a risk shape that already has one documented failure of the same pattern in this exact codebase, isn't a good trade — confirmed with the user before standing down rather than either silently dropping the greenlit task or building it anyway against the evidence.
+
+**What this leaves as the actual state of the effort**: every remaining item this doc tracks is now either a confirmed accepted floor (Phase C: word count, open find, snapshot-diff, export-title/hash), an untestable-in-this-environment candidate (real display/GPU hardware vs. this container's Xvfb+SwiftShader), or a framework-internal cost with no clear lever (`cloneEditorState`/`getModernOffsetsFromPoints`). Phase B stays scoped in this doc (see the round above) as a documented, deliberately-not-taken option rather than a live next step — revisit only if a future fresh measurement shows a materially larger residual than the ~1% found here, e.g. if `PreviewBlockSplit`'s own algorithm changes in a way that makes its diffing step more expensive, or if a much larger document size than 1.5M characters is ever the real target scale.
+
+No code changes this round — measurement only, so no new verification needed beyond confirming the existing suite still passes (241/241, unchanged).
+
 ## Environment notes for the next session
 
 - `node_modules` is not installed by default in a fresh container — run `npm install` (or
