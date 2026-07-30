@@ -52,6 +52,16 @@ function toSelectionState(range: { anchor: number; head: number; from: number; t
   };
 }
 
+/** Replaces the whole document with `next.text` and sets the selection to `next.selection` in one transaction -- the CM6 equivalent of ContractBridgePlugin.tsx's replaceEditorTextFromCanonical + scheduleTransformSelectionReplay, collapsed into a single atomic dispatch since CM6 (unlike Lexical) applies a change and its selection together without a deferred-DOM-commit race to work around. */
+function applyTransformResult(view: EditorView, next: { text: string; selection: EditorSelectionState }): void {
+  const anchor = Math.max(0, Math.min(next.text.length, next.selection.anchor));
+  const focus = Math.max(0, Math.min(next.text.length, next.selection.focus));
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: next.text },
+    selection: EditorSelection.single(anchor, focus),
+  });
+}
+
 const lineTokenPlugin = ViewPlugin.fromClass(class {
   decorations: DecorationSet;
   constructor(view: EditorView) {
@@ -121,6 +131,101 @@ export function CM6Editor({
       // target class going forward, not a workaround -- this element really
       // is "the editor text surface" other app code should find.
       EditorView.contentAttributes.of({ class: 'editor-text', spellcheck: String(spellCheckEnabled) }),
+      // Tab/Enter/markdown-shortcut transforms -- ported verbatim from
+      // ContractBridgePlugin.tsx's KEY_TAB_COMMAND/KEY_DOWN_COMMAND/
+      // KEY_ENTER_COMMAND handlers (same conditional logic, same pure
+      // transform callbacks from EditorBindings), re-hosted on
+      // domEventHandlers.keydown instead of Lexical's command registry.
+      // Deliberately Ctrl (not Cmd/Mod) for the markdown shortcuts, matching
+      // the original exactly: `!event.ctrlKey || event.metaKey` rejects the
+      // shortcut, so Ctrl+B (not Cmd+B) is what this app has always bound,
+      // even on Mac -- preserved rather than "corrected" to platform
+      // convention, since that's a deliberate product choice, not a bug.
+      EditorView.domEventHandlers({
+        keydown: (event, view) => {
+          if (event.key === 'Tab') {
+            const text = view.state.doc.toString();
+            const selection = toSelectionState(view.state.selection.main);
+            const transformCallback = bindingsRef.current?.onTabIndentTransform;
+            if (transformCallback) {
+              const next = transformCallback({ shiftKey: event.shiftKey, text, selection });
+              if (next) {
+                event.preventDefault();
+                applyTransformResult(view, next);
+                return true;
+              }
+            }
+            bindingsRef.current?.onTabIndent?.({ shiftKey: event.shiftKey });
+            // Never let Tab escape the editor to focus/menu navigation,
+            // matching ContractBridgePlugin's own unconditional
+            // preventDefault/stopPropagation for this key.
+            event.preventDefault();
+            return true;
+          }
+
+          if (event.key === 'Enter') {
+            const callback = bindingsRef.current?.onEnterTransform;
+            if (!callback) return false;
+            const text = view.state.doc.toString();
+            const selection = toSelectionState(view.state.selection.main);
+            const next = callback({
+              shiftKey: event.shiftKey,
+              altKey: event.altKey,
+              ctrlKey: event.ctrlKey,
+              metaKey: event.metaKey,
+              text,
+              selection,
+            });
+            if (!next) return false;
+            event.preventDefault();
+            applyTransformResult(view, next);
+            return true;
+          }
+
+          const shortcutCallback = bindingsRef.current?.onMarkdownShortcutTransform;
+          if (shortcutCallback && event.ctrlKey && !event.metaKey && !event.altKey) {
+            let shortcut: 'bold' | 'italic' | 'strikethrough' | 'heading-toggle' | 'unordered-list' | 'ordered-list' | null = null;
+            const key = event.key.toLowerCase();
+            if (!event.shiftKey && key === 'b') shortcut = 'bold';
+            else if (!event.shiftKey && key === 'i') shortcut = 'italic';
+            else if (!event.shiftKey && key === 'j') shortcut = 'strikethrough';
+            else if (!event.shiftKey && key === 't') shortcut = 'heading-toggle';
+            else if (!event.shiftKey && event.key === '-') shortcut = 'unordered-list';
+            else if ((event.shiftKey && event.key === '3') || event.key === '#') shortcut = 'ordered-list';
+
+            if (shortcut) {
+              const text = view.state.doc.toString();
+              const selection = toSelectionState(view.state.selection.main);
+              const next = shortcutCallback({ shortcut, text, selection });
+              if (next) {
+                event.preventDefault();
+                applyTransformResult(view, next);
+                return true;
+              }
+            }
+          }
+
+          return false;
+        },
+      }),
+      // Character-insert transform (e.g. checklist typeover) -- uses CM6's
+      // inputHandler rather than keydown so this only ever fires for a
+      // genuine committed single-character insertion (matches Lexical's own
+      // `event.key.length === 1 && !event.isComposing` gate without needing
+      // to reimplement IME-composition detection by hand).
+      EditorView.inputHandler.of((view, from, to, insertedText) => {
+        const callback = bindingsRef.current?.onCharacterInsertTransform;
+        if (!callback) return false;
+        if (insertedText.length !== 1 || from !== to) return false;
+
+        const text = view.state.doc.toString();
+        const selection = toSelectionState(view.state.selection.main);
+        const next = callback({ char: insertedText, text, selection });
+        if (!next) return false;
+
+        applyTransformResult(view, next);
+        return true;
+      }),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           const nextText = update.state.doc.toString();
