@@ -164,6 +164,22 @@ export function CM6Editor({
       // target class going forward, not a workaround -- this element really
       // is "the editor text surface" other app code should find.
       EditorView.contentAttributes.of({ class: 'editor-text', spellcheck: String(spellCheckEnabled) }),
+      // CM6's own base theme sets `.cm-scroller { height: 100% }`, which
+      // resolves against `.cm-editor`'s height -- and `.cm-editor` itself
+      // has no explicit height in that base theme, so by default it just
+      // grows to fit its content instead of filling this component's
+      // container. Found live, not assumed: without this, `.cm-scroller`
+      // (view.scrollDOM, what every viewport/scroll/caret computation in
+      // this file targets) never actually overflows -- confirmed via
+      // scrollHeight === clientHeight on a 50,000-character note -- and the
+      // container div ends up doing the real scrolling "by accident" via
+      // its own overflow, which view.scrollDOM never sees. This theme
+      // constrains `.cm-editor` to 100% of the container so `.cm-scroller`
+      // becomes the genuine scrolling element, matching CM6's own intended
+      // integration contract.
+      EditorView.theme({
+        '&': { height: '100%' },
+      }),
       // Tab/Enter/markdown-shortcut transforms -- ported verbatim from
       // ContractBridgePlugin.tsx's KEY_TAB_COMMAND/KEY_DOWN_COMMAND/
       // KEY_ENTER_COMMAND handlers (same conditional logic, same pure
@@ -501,7 +517,14 @@ export function CM6Editor({
       style={{
         position: 'absolute',
         inset: 0,
-        overflow: 'auto',
+        // No overflow of its own -- the EditorView.theme() above makes
+        // .cm-editor fill this container, so .cm-scroller (a child of
+        // .cm-editor) is the one real scrolling element, per CM6's own
+        // integration contract. This container previously had its own
+        // `overflow: auto`, which was silently doing the real scrolling
+        // instead of CM6's own scroller ever since slice 1 -- see the
+        // EditorView.theme() comment above for how this was found.
+        overflow: 'hidden',
         fontFamily,
         fontSize: fontSizePx,
         lineHeight: `${lineHeightPx}px`,

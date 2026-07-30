@@ -43,13 +43,21 @@ async function main() {
     await page.waitForSelector('.cm6-editor-root .cm-content', { timeout: 15000 })
     await page.waitForTimeout(300)
 
-    // Scroll down in note A.
+    // Scroll down in note A. `.cm-scroller` is the real scrolling element
+    // (view.scrollDOM) -- NOT the `.cm6-editor-root` container, which has
+    // no overflow of its own (see CM6Editor.tsx's EditorView.theme()
+    // comment for why: CM6's own base theme makes `.cm-scroller`
+    // `height: 100%` of `.cm-editor`, which needs an explicit height from
+    // the host to constrain it, or it just grows to content height and
+    // never overflows internally at all -- a real bug this round's own
+    // testing caught, since the container's `overflow: auto` was silently
+    // doing the real scrolling instead until this was found and fixed).
     const targetScrollTop = await page.evaluate(() => {
-      const root = document.querySelector('.cm6-editor-root')
-      root.scrollTop = 2000
-      return root.scrollTop
+      const scroller = document.querySelector('.cm6-editor-root .cm-scroller')
+      scroller.scrollTop = 2000
+      return scroller.scrollTop
     })
-    if (targetScrollTop < 500) throw new Error(`FAIL: scroll did not actually move the editor (scrollTop=${targetScrollTop}); document may be too short`)
+    if (targetScrollTop < 500) throw new Error(`FAIL: scroll did not actually move the editor (scrollTop=${targetScrollTop}); document may be too short, or .cm-scroller isn't the real scrolling element`)
     await page.waitForTimeout(500) // let any debounced viewport-save settle
 
     // Switch to note B, then back to note A.
@@ -58,14 +66,13 @@ async function main() {
     await page.evaluate(async (id) => { await window.thockdownSections.setActiveNote('default', id) }, noteAId)
     await page.waitForTimeout(500)
 
-    const restoredScrollTop = await page.evaluate(() => document.querySelector('.cm6-editor-root')?.scrollTop ?? 0)
+    const restoredScrollTop = await page.evaluate(() => document.querySelector('.cm6-editor-root .cm-scroller')?.scrollTop ?? 0)
     console.error(`[verify] scrollTop before switch: ${targetScrollTop}, after switching away and back: ${restoredScrollTop}`)
 
     if (Math.abs(restoredScrollTop - targetScrollTop) > 50) {
-      console.error(`[verify] NOTE: scroll position was NOT restored after switching notes (before=${targetScrollTop}, after=${restoredScrollTop}). This may indicate applySnapshot's viewport path isn't being invoked by the app's own restore flow yet, not necessarily a bug in CM6Editor's own mechanics -- worth investigating further, not silently passed.`)
-    } else {
-      console.error('[verify] scroll position correctly restored after switching notes and back')
+      throw new Error(`FAIL: scroll position was NOT restored after switching notes (before=${targetScrollTop}, after=${restoredScrollTop})`)
     }
+    console.error('[verify] scroll position correctly restored after switching notes and back')
 
     if (consoleErrors.length > 0) {
       console.error('[verify] console errors:')
