@@ -550,6 +550,42 @@ Two things, read together, don't fully resolve into one clean story:
 
 **Concrete next steps, in priority order**: (1) resolve the burst-vs-profile disagreement on Electron specifically — repeat the category-level trace (not just JS sampling) at both caret positions, since that measurement doesn't carry the same profiler-overhead caveat, and see whether Layout/GC/EventDispatch shift with position the way burst timing suggests; (2) get source maps into the production build (`build.sourcemap: true` in `vite.config.ts`, or point the CDP profiler at the dev-mode build's source-mapped bundle instead) so function-level attribution is possible on Electron, not just category-level; (3) if feasible, test against a true `electron-builder`-packaged build, not just the unpacked `electron dist-electron/main.js` launch style this harness uses today.
 
+## This round: the burst-vs-profile disagreement on Electron — resolved, and it was the burst number that lied
+
+Picking up the previous round's #1 concrete next step directly: repeat the category-level trace at both caret positions on the real Electron app (not just JS sampling, since trace mode doesn't carry the profiler-overhead caveat), then decide whether the ~8.8x burst-timing gap is real. Used the existing `measureInputLagElectron.mjs`/`perfHarness.mjs` harness unmodified — no source or script changes were needed to get an answer, just running it more times than the previous round had budget for.
+
+**The category-level trace shows no meaningful position effect, in either direction.** Same 1.5M-character note, 30-keystroke burst, `--mode=trace`:
+
+| category | caret at end | caret at start |
+|---|---|---|
+| EventDispatch | 10990.3ms | 11642.4ms |
+| RunTask | 7589.1ms | 8389.9ms |
+| v8.callFunction | 4991.0ms | 5771.4ms |
+| Layout | 289.6ms | 382.5ms |
+| MinorGC | 595.8ms | 626.3ms |
+
+Every bucket is within about 6-20% of its counterpart, and `start` is if anything slightly *higher* here — the opposite direction from the previous round's burst-timing claim that `end` was the slow one. Layout/Paint/Raster/Commit are all small at both positions, same conclusion as every prior round's trace. Re-running `--mode=profile` at both positions (same note, same burst size) landed in the same small-effect band: 6524.0ms (end) vs 5823.4ms (start) total sampled JS, a ~12% gap in the same direction the previous round's profile found (~17%, end higher) — this direction and rough magnitude *does* reproduce across sessions, unlike anything burst mode produced (below).
+
+**Burst mode itself does not reproduce its own result when simply re-run.** Same harness, same flags, same note, run back-to-back, each invocation a fresh `_electron.launch()` (per the harness's own design — a new process, new DB, new note every time):
+
+| launch order | position | mean ms/keystroke |
+|---|---|---|
+| 1st (this session's very first Electron launch) | end | 17.4 (front-loaded: 53.5, 45.9ms, then settling to ~10-18ms for the rest of the burst) |
+| 2nd | start | 176.0 |
+| 3rd | end | 178.9 |
+| 4th | start | 165.8 |
+| 5th | end | 175.8 |
+| 6th | start | 166.3 |
+| 7th | end | 200.3 |
+
+Five of the seven independent launches — both positions represented — land in a ~165-230ms band with no meaningful position split (end vs. start differ by single-digit percent, matching the trace/profile magnitude, not 8.8x). Only the *very first* Electron launch of the session was qualitatively different, and what made it different wasn't position — it was a front-loaded decay from ~50ms down to a ~10-15ms floor partway through the burst, a pattern that never recurred on any of the other six launches (including five more at `end`/`start` after it). Nothing in the harness or the app distinguishes "first launch this container has ever done" from any other launch — no warm/cold-path branch exists in the code for this — so this reads as a one-off environmental transient (first-ever Xvfb/Chromium/Electron process startup in a fresh container: page cache, dynamic linker resolution, V8 code cache, CPU frequency scaling all cold exactly once), not a reproducible position signature.
+
+**Conclusion: burst wall-clock was the misleading measurement, not the profile.** `measureKeystrokeBurstMs` (`perfHarness.mjs`) times `await page.keyboard.press()` with `performance.now()` in the Playwright/Node driver process — that measures a full CDP round trip (Node driver → Electron main process → renderer → back), not renderer-side execution time directly. A single 30-sample run of that round trip, in this environment (Xvfb virtual display, software-rendered/SwiftShader GPU, a shared/constrained container CPU, a fresh process launch every invocation), is evidently subject to enough scheduling/startup jitter to swing by an order of magnitude between otherwise-identical runs — confirmed directly above, not inferred. The CDP JS-sampling profile and category-level trace instead sample the browser's own call stack/timeline internally at a fixed high frequency over the whole window and aggregate; that structurally averages out the external process-boundary jitter burst timing is fully exposed to, which is exactly why they reproduced consistently (small, single-digit-to-teens-percent effect, same rough magnitude and direction across separate sessions) where burst timing did not (three qualitatively different outcomes for the same code path across seven runs: a large gap one direction, then five runs clustering flat regardless of position). Of the three candidate explanations the previous round listed and didn't check — profiler overhead, GC-by-position, and a `placeCaretAt` settling cost — none of them turned out to be it: burst mode was unstable even with *no* profiler attached, GC's category-trace share doesn't differ meaningfully by position, and the one run that showed front-loaded decay was the first launch of the session at `end`, not a `placeCaretAt`-scroll-to-end artifact that would need to recur every time `end` is measured (it didn't, on the other three `end` runs).
+
+This closes the disagreement this doc has carried as open since the previous round: the two signals don't disagree because there's a real, undiscovered 8.8x position-dependent cost hiding somewhere the profiler can't see — they disagree because a single 30-keystroke burst sample, in this specific containerized/Xvfb Electron setup, isn't a reliable way to resolve a real effect this small (~10-20%) from run-to-run noise. **This doesn't make burst mode worthless in general** — it's what originally caught the 148.8s→17.0s and multi-second-scale regressions earlier in this project's history, where signal dwarfed noise by two-plus orders of magnitude. It specifically isn't trustworthy at the ~10-20%-effect scale on the real Electron app in this environment. For any future comparison at that scale here, prefer `--mode=profile`/`--mode=trace`, or if burst mode must be used, average several independent full-relaunch runs rather than trusting one.
+
+**The user's originally-reported multi-second-per-keystroke lag remains open and is untouched by this finding** — every number in this round, including the anomalous one, is still two-to-three orders of magnitude faster than that report. Nothing here narrows that gap; see the previous round's own list of untested candidates (Xvfb/SwiftShader software rendering, unpackaged vs. `electron-builder`-packaged build) for where to look next.
+
 ## Environment notes for the next session
 
 - `node_modules` is not installed by default in a fresh container — run `npm install` (or
