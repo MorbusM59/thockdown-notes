@@ -16,6 +16,8 @@ import { spawn } from 'node:child_process'
 import { chromium } from 'playwright'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readFileSync, existsSync } from 'node:fs'
+import { TraceMap, originalPositionFor } from '@jridgewell/trace-mapping'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const REPO_ROOT = path.resolve(__dirname, '..', '..')
@@ -216,6 +218,63 @@ export async function startCdpJsProfile(page) {
   }
 }
 
+// url -> TraceMap | null (null once confirmed unavailable/unparseable, so a
+// miss is only ever paid once per URL, not once per sample).
+const traceMapCache = new Map()
+
+/**
+ * Loads the source map for a profiled script's `file://` URL, if one exists
+ * alongside it on disk -- vite's `build.sourcemap: true` (vite.config.ts)
+ * emits an external `<file>.map` next to each built asset. Only handles
+ * `file://` URLs (the packaged Electron app, loading dist/ directly);
+ * `dev:browser`'s http:// dev server already serves unminified source with
+ * real function names, so there's nothing to resolve there.
+ */
+function loadTraceMapForUrl(url) {
+  if (traceMapCache.has(url)) return traceMapCache.get(url)
+
+  let map = null
+  if (url && url.startsWith('file://')) {
+    try {
+      const mapPath = `${fileURLToPath(url)}.map`
+      if (existsSync(mapPath)) {
+        map = new TraceMap(JSON.parse(readFileSync(mapPath, 'utf8')))
+      }
+    } catch {
+      map = null
+    }
+  }
+
+  traceMapCache.set(url, map)
+  return map
+}
+
+/**
+ * Resolves a CDP callFrame to a name, preferring the original (pre-
+ * minification) function name via source map when one's available for its
+ * URL -- otherwise falls back to the raw (possibly minified) name, same as
+ * before this existed.
+ */
+function resolveCallFrameName(callFrame) {
+  const rawName = callFrame?.functionName || '(anonymous)'
+  const url = callFrame?.url
+  if (!url) return { name: rawName, location: '' }
+
+  const map = loadTraceMapForUrl(url)
+  if (map) {
+    const pos = originalPositionFor(map, {
+      line: callFrame.lineNumber + 1,
+      column: callFrame.columnNumber,
+    })
+    if (pos && (pos.name || pos.source)) {
+      const file = pos.source ? pos.source.split('/').pop() : url.split('/').pop()
+      return { name: pos.name || rawName, location: pos.line ? ` @ ${file}:${pos.line}` : ` @ ${file}` }
+    }
+  }
+
+  return { name: rawName, location: ` @ ${url.split('/').pop()}:${callFrame.lineNumber + 1}` }
+}
+
 function aggregateCdpProfile(profile) {
   const nodeById = new Map(profile.nodes.map((n) => [n.id, n]))
   const selfTimeByName = new Map()
@@ -231,9 +290,8 @@ function aggregateCdpProfile(profile) {
     const deltaMs = deltaUs / 1000
     totalMs += deltaMs
     const node = nodeById.get(samples[i])
-    const name = node?.callFrame?.functionName || '(anonymous)'
-    const url = node?.callFrame?.url ? ` @ ${node.callFrame.url.split('/').pop()}:${node.callFrame.lineNumber + 1}` : ''
-    const key = `${name || '(anonymous)'}${url}`
+    const { name, location } = resolveCallFrameName(node?.callFrame)
+    const key = `${name}${location}`
     selfTimeByName.set(key, (selfTimeByName.get(key) ?? 0) + deltaMs)
   }
 

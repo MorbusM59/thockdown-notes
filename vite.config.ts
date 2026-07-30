@@ -9,6 +9,15 @@ export default defineConfig(({ mode }) => {
   const isBrowserOnlyDev = mode === 'browser'
 
   return {
+    build: {
+      // Lets the perf harness (scripts/perf/) resolve real function names
+      // from a CDP JS-sampling profile of the production Electron build --
+      // without this, the profiled bundle is minified with single/double-
+      // letter identifiers, per docs/large-document-performance-handover.md's
+      // own "concrete next steps." See perfHarness.mjs's resolveFunctionName
+      // for the consuming side.
+      sourcemap: true,
+    },
     server: {
       watch: {
         // Packaging artifacts create massive reload noise during dev and can
