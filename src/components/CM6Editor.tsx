@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { EditorState, EditorSelection, RangeSetBuilder } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
-import { EditorView, Decoration, ViewPlugin, keymap, type DecorationSet } from '@codemirror/view';
+import { EditorView, Decoration, ViewPlugin, drawSelection, keymap, type DecorationSet } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import type {
@@ -122,6 +122,16 @@ export function CM6Editor({
       lineTokenPlugin,
       EditorView.lineWrapping,
       EditorView.editable.of(!editorReadOnly),
+      // The app's own CSS sets `caret-color: transparent` on `.editor-text`
+      // (index.css, "Hide the native OS caret") so BlockCaretPlugin's custom
+      // grid-aligned overlay can render instead -- but that overlay depends
+      // on the viewport/boundary system (topBoundaryPx/lineHeightPx/
+      // cellWidthPx), not yet ported here. drawSelection() renders CM6's own
+      // cursor via decorations rather than the native caret, so it stays
+      // visible despite inheriting that CSS rule -- a real interim fix, not
+      // the final pixel-matched block-grid caret (a later slice, once the
+      // viewport system lands).
+      drawSelection(),
       // `editor-text` matches the class app-level code outside this
       // component (e.g. App.tsx's "click anywhere near the editor refocuses
       // the real editable surface" affordance) already queries for -- found
