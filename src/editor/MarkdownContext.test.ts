@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { EditorSelectionState } from './EditorContract'
-import { applyMarkdownEnter, indentSelectionByStep, resolveMarkdownSelectionContext } from './MarkdownContext'
+import {
+  applyMarkdownEnter,
+  indentSelectionByStep,
+  resolveMarkdownSelectionContext,
+  resolveMarkdownSelectionContextIncremental,
+  type InlineStateLineCache,
+} from './MarkdownContext'
 import { normalizeInternalText } from './TextPolicy'
 
 function collapsedSelection(offset: number): EditorSelectionState {
@@ -88,6 +94,152 @@ describe('resolveMarkdownSelectionContext', () => {
     expect(context.line.listKind).toBe('unordered')
     expect(context.line.listIndentLevel).toBe(1)
     expect(context.line.listMarker).toBe('*')
+  })
+})
+
+describe('resolveMarkdownSelectionContextIncremental', () => {
+  // Ground truth is always resolveMarkdownSelectionContext's own full
+  // O(document length) scan -- every assertion here is "the incremental
+  // result must equal what a full scan would say," never a hand-transcribed
+  // expectation, per this codebase's own established discipline for
+  // incremental/caching logic (docs/document-scale-performance-philosophy.md).
+  function expectMatchesFullScan(text: string, offset: number, context: ReturnType<typeof resolveMarkdownSelectionContext>) {
+    const groundTruth = resolveMarkdownSelectionContext(text, collapsedSelection(offset))
+    expect(context).toEqual(groundTruth)
+  }
+
+  it('matches a full scan with no previous cache (first call)', () => {
+    const text = 'before **bold** after'
+    const caret = text.indexOf('bold') + 2
+    const { context } = resolveMarkdownSelectionContextIncremental(text, collapsedSelection(caret), null)
+    expectMatchesFullScan(text, caret, context)
+  })
+
+  it('returns the same cache object, unchanged, when the text is identical', () => {
+    const text = 'alpha\nbravo\ncharlie'
+    const first = resolveMarkdownSelectionContextIncremental(text, collapsedSelection(0), null)
+    const second = resolveMarkdownSelectionContextIncremental(text, collapsedSelection(text.length), first.cache)
+    expect(second.cache).toBe(first.cache)
+  })
+
+  it('matches a full scan for a single-character edit past an open fence, in a document large enough to exercise the reuse path', () => {
+    const lines = Array.from({ length: 12 }, (_, i) => `paragraph number ${i}`)
+    lines.splice(4, 0, '```')
+    const before = lines.join('\n')
+    const beforeResult = resolveMarkdownSelectionContextIncremental(before, collapsedSelection(0), null)
+
+    const after = before.replace('paragraph number 9', 'paragraph NUMBER 9')
+    const caret = after.indexOf('NUMBER')
+    const afterResult = resolveMarkdownSelectionContextIncremental(after, collapsedSelection(caret), beforeResult.cache)
+
+    expectMatchesFullScan(after, caret, afterResult.context)
+    // Caret sits after the unclosed fence opened at line 4 -- confirms the
+    // fast path actually threaded the propagated fence state through,
+    // rather than something that happens to look right by accident.
+    expect(afterResult.context.inline.inFencedCodeBlock).toBe(true)
+  })
+
+  function makeRng(seed: number) {
+    let state = seed
+    return () => {
+      state = (state * 1103515245 + 12345) & 0x7fffffff
+      return state / 0x7fffffff
+    }
+  }
+
+  function buildFuzzCorpus(rng: () => number): string {
+    const lines: string[] = []
+    const kinds = [
+      () => `Plain line ${Math.floor(rng() * 1000)} with some words.`,
+      () => `## Heading ${Math.floor(rng() * 1000)}`,
+      () => '- an unordered item',
+      () => `${1 + Math.floor(rng() * 20)}. an ordered item`,
+      () => '> a blockquote line',
+      () => 'line with **bold** and *italic* and ~~strike~~ and `code`',
+      () => '```',
+      () => '~~~',
+      () => 'a line with an unmatched ` backtick',
+      () => 'a line with an unmatched * star',
+      () => '   indented line',
+    ]
+    const lineCount = 20 + Math.floor(rng() * 15)
+    for (let i = 0; i < lineCount; i += 1) {
+      lines.push(kinds[Math.floor(rng() * kinds.length)]())
+    }
+    return lines.join('\n')
+  }
+
+  function applyFuzzEdit(text: string, rng: () => number): string {
+    const lines = text.split('\n')
+    const idx = Math.floor(rng() * lines.length)
+    const choice = rng()
+
+    if (choice < 0.3) {
+      lines[idx] = `${lines[idx]}x`
+    } else if (choice < 0.45) {
+      lines.splice(idx, 1)
+    } else if (choice < 0.55) {
+      lines.splice(idx, 0, '')
+    } else if (choice < 0.7) {
+      const marker = ['```', '~~~', '`', '*', '**', '~~'][Math.floor(rng() * 6)]
+      lines.splice(idx, 0, marker)
+    } else if (choice < 0.85) {
+      // Directly perturb a fence/delimiter-heavy line if this one has any
+      // backtick/tilde/star content -- the exact class of edit that flips a
+      // persistent open/closed toggle state forward through the document.
+      if (/[`~*]/.test(lines[idx])) {
+        lines[idx] = rng() < 0.5 ? `${lines[idx]}\`` : lines[idx].replace(/[`~*]/, '')
+      } else {
+        lines.splice(idx, 0, '```')
+      }
+    } else {
+      lines.splice(idx, 0, `Inserted line ${Math.floor(rng() * 1000)} with *italic* text`)
+    }
+
+    return lines.join('\n')
+  }
+
+  function runFuzzSequence(seed: number, steps: number) {
+    const rng = makeRng(seed)
+    let text = buildFuzzCorpus(rng)
+    let cache: InlineStateLineCache | null = null
+
+    for (let step = 0; step < steps; step += 1) {
+      text = applyFuzzEdit(text, rng)
+
+      // Exercise several different caret positions per step (start, middle,
+      // end, and a few random ones) -- resolveMarkdownSelectionContextIncremental's
+      // correctness depends on *which* line the caret lands in, not just on
+      // the edit itself, so a single fixed caret position per step wouldn't
+      // exercise the line-index/entering-state lookup nearly as thoroughly.
+      const offsetsToCheck = new Set<number>([0, text.length, Math.floor(text.length / 2)])
+      for (let i = 0; i < 4; i += 1) {
+        offsetsToCheck.add(Math.floor(rng() * (text.length + 1)))
+      }
+
+      for (const offset of offsetsToCheck) {
+        const result = resolveMarkdownSelectionContextIncremental(text, collapsedSelection(offset), cache)
+        cache = result.cache
+        const groundTruth = resolveMarkdownSelectionContext(text, collapsedSelection(offset))
+        expect(
+          result.context,
+          `seed ${seed}: mismatch after fuzz step ${step} at offset ${offset} on text:\n${JSON.stringify(text)}`,
+        ).toEqual(groundTruth)
+      }
+    }
+  }
+
+  // Deterministic seeded fuzz test, run across several independent seeds:
+  // generates a document mixing plain/heading/list/quote lines with bold,
+  // italic, strikethrough, inline code, and both `` ``` `` and `~~~` fences
+  // (including deliberately unmatched delimiters), then applies a long
+  // random sequence of edits -- several specifically chosen to open/close a
+  // fence or leave a delimiter run unmatched, exactly the forward-unbounded
+  // hazard class this cache's doc comment calls out -- checking after every
+  // edit, at several different caret positions, that the incrementally
+  // cached result exactly equals a fresh full scan.
+  it.each([20260730, 1, 424242])('matches a full scan after every step of a long randomized edit sequence (seed %i)', (seed) => {
+    runFuzzSequence(seed, 200)
   })
 })
 

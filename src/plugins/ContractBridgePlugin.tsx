@@ -1,5 +1,5 @@
 ﻿import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type MutableRefObject } from 'react';
 import {
   $addUpdateTag,
   $createParagraphNode,
@@ -21,7 +21,7 @@ import type {
   EditorSelectionState,
   EditorTextChangeEvent,
 } from '../editor/EditorContract';
-import { canonicalizeParagraphSegments } from '../editor/TextPolicy';
+import { canonicalizeParagraphSegmentsIncremental, type CanonicalizeParagraphSegmentsCache } from '../editor/TextPolicy';
 import { typingSoundManager } from '../sound/TypingSoundManager';
 import {
   applySelectionStateToDom,
@@ -96,17 +96,33 @@ function resolveChangeSource(tags: Set<string>): EditorTextChangeEvent['source']
   return 'user-input';
 }
 
-function readCanonicalRootText(): string {
+/**
+ * `cacheRef`, when given, is shared across every call site in this
+ * component (mount, context-menu, and the registerUpdateListener hot path
+ * below) -- canonicalizeParagraphSegmentsIncremental's reuse only depends
+ * on comparing the current raw segments against whatever was cached last,
+ * never on which call site produced that cache, so sharing one ref across
+ * all of them is safe and lets the rare call sites benefit too whenever
+ * they happen to land on an already-cached state.
+ */
+function readCanonicalRootText(cacheRef?: MutableRefObject<CanonicalizeParagraphSegmentsCache | null>): string {
   const root = $getRoot();
   const children = root.getChildren();
   if (children.length === 0) {
+    if (cacheRef) cacheRef.current = null;
     return '';
   }
 
+  const segments = children.map((child) => child.getTextContent());
+
   // Canonical model: one LF separator between logical paragraphs.
-  return canonicalizeParagraphSegments(
-    children.map((child) => child.getTextContent()),
-  );
+  if (!cacheRef) {
+    return canonicalizeParagraphSegmentsIncremental(segments, null).text;
+  }
+
+  const nextCache = canonicalizeParagraphSegmentsIncremental(segments, cacheRef.current);
+  cacheRef.current = nextCache;
+  return nextCache.text;
 }
 
 function replaceEditorTextFromCanonical(nextText: string): void {
@@ -160,6 +176,7 @@ export function ContractBridgePlugin({
   const onEnterTransformRef = useRef(onEnterTransform);
   const hibernatedRef = useRef(hibernated);
   const paragraphOffsetSyncRef = useRef<LexicalParagraphOffsetSync | null>(null);
+  const canonicalizeCacheRef = useRef<CanonicalizeParagraphSegmentsCache | null>(null);
 
   // Keeps an O(log n) paragraph-offset index (see LexicalParagraphOffsetSync's
   // own doc comment) live-synced to this editor instance, so every
@@ -197,7 +214,7 @@ export function ContractBridgePlugin({
     let initialText = '';
     let initialSelection = EMPTY_SELECTION;
     editor.getEditorState().read(() => {
-      const normalizedText = readCanonicalRootText();
+      const normalizedText = readCanonicalRootText(canonicalizeCacheRef);
       initialText = normalizedText;
 
       const rootEl = editor.getRootElement();
@@ -256,7 +273,7 @@ export function ContractBridgePlugin({
           return;
         }
 
-        const canonicalText = readCanonicalRootText();
+        const canonicalText = readCanonicalRootText(canonicalizeCacheRef);
         const currentSelection = readSelectionStateFromDom(
           editableRoot,
           window.getSelection(),
@@ -450,7 +467,7 @@ export function ContractBridgePlugin({
     const removeListener = editor.registerUpdateListener(({ editorState, tags }) => {
       if (hibernatedRef.current) return;
       editorState.read(() => {
-        const normalizedText = readCanonicalRootText();
+        const normalizedText = readCanonicalRootText(canonicalizeCacheRef);
         const rootEl = editor.getRootElement();
         const lexicalSelection = $getSelection();
 

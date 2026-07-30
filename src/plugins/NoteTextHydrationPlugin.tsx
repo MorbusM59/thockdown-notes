@@ -1,5 +1,5 @@
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useRef, type MutableRefObject } from 'react';
 import {
   $addUpdateTag,
   $createParagraphNode,
@@ -9,7 +9,7 @@ import {
   SKIP_SCROLL_INTO_VIEW_TAG,
   SKIP_SELECTION_FOCUS_TAG,
 } from 'lexical';
-import { canonicalizeParagraphSegments, normalizeInternalText } from '../editor/TextPolicy';
+import { canonicalizeParagraphSegmentsIncremental, normalizeInternalText, type CanonicalizeParagraphSegmentsCache } from '../editor/TextPolicy';
 import { sanitizeTextFragment } from '../shared/textSanitization';
 
 interface NoteTextHydrationPluginProps {
@@ -111,20 +111,36 @@ function replaceEditorText(nextText: string): void {
   if (nextText === '# ') placeNewNoteCaret(root);
 }
 
-function readCanonicalRootText(): string {
+/**
+ * `cacheRef` mirrors ContractBridgePlugin.tsx's own readCanonicalRootText:
+ * this hydration check runs on every keystroke (the effect below is keyed
+ * on `text`, which changes every keystroke), so re-normalizing every
+ * paragraph from scratch each time is the same O(document length)
+ * redundancy that fix addresses -- see canonicalizeParagraphSegmentsIncremental's
+ * doc comment in TextPolicy.ts for why per-segment reuse is exact here (no
+ * cross-segment coupling to worry about).
+ */
+function readCanonicalRootText(cacheRef: MutableRefObject<CanonicalizeParagraphSegmentsCache | null>): string {
   const root = $getRoot();
   const children = root.getChildren();
   if (children.length === 0) {
+    cacheRef.current = null;
     return '';
   }
 
-  return canonicalizeParagraphSegments(children.map((child) => child.getTextContent()));
+  const nextCache = canonicalizeParagraphSegmentsIncremental(
+    children.map((child) => child.getTextContent()),
+    cacheRef.current,
+  );
+  cacheRef.current = nextCache;
+  return nextCache.text;
 }
 
 export function NoteTextHydrationPlugin({ noteId, text, scrollerRef }: NoteTextHydrationPluginProps) {
   const [editor] = useLexicalComposerContext();
   const lastAppliedNoteIdRef = useRef<string | null>(null);
   const hasHydratedRef = useRef(false);
+  const canonicalizeCacheRef = useRef<CanonicalizeParagraphSegmentsCache | null>(null);
 
   useLayoutEffect(() => {
     // Must match the editor's own steady-state invariant (TextSanitizationPlugin
@@ -137,7 +153,7 @@ export function NoteTextHydrationPlugin({ noteId, text, scrollerRef }: NoteTextH
     let shouldHydrate = false;
 
     editor.getEditorState().read(() => {
-      shouldHydrate = readCanonicalRootText() !== normalizedIncomingText;
+      shouldHydrate = readCanonicalRootText(canonicalizeCacheRef) !== normalizedIncomingText;
     });
 
     if (!shouldHydrate && lastAppliedNoteIdRef.current === currentNoteId) {

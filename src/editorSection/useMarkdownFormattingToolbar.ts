@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { MutableRefObject } from 'react'
-import { resolveMarkdownSelectionContext } from '../editor/MarkdownContext'
+import { resolveMarkdownSelectionContext, resolveMarkdownSelectionContextIncremental, type InlineStateLineCache } from '../editor/MarkdownContext'
 import { normalizeInternalText } from '../editor/TextPolicy'
 import type { EditorSelectionState } from '../editor/EditorContract'
 
@@ -82,10 +82,27 @@ export function useMarkdownFormattingToolbar({
     )
   }, [])
 
-  const markdownSelectionContext = useMemo(
-    () => resolveMarkdownSelectionContext(currentEditorText, editorSelection),
+  // This memo re-runs on literally every keystroke (currentEditorText
+  // changes each edit) to keep the toolbar's active-format highlighting
+  // live -- resolveMarkdownSelectionContext's inline-state/line-index scan
+  // is O(document length), which made this the confirmed dominant per-
+  // keystroke cost on a huge document (measured via scripts/perf/
+  // measureInputLag.mjs). resolveMarkdownSelectionContextIncremental reuses
+  // this hook's own previous call instead of rescanning from the document
+  // start every time -- see MarkdownContext.ts for the caching strategy.
+  // Cache committed in a layout effect below, not here, so it never updates
+  // during a render React might discard (Strict Mode's double-invoke),
+  // matching usePreviewMarkdownRendering.tsx's identical pattern for its
+  // own incremental cache.
+  const selectionContextCacheRef = useRef<InlineStateLineCache | null>(null)
+  const selectionContextResult = useMemo(
+    () => resolveMarkdownSelectionContextIncremental(currentEditorText, editorSelection, selectionContextCacheRef.current),
     [currentEditorText, editorSelection],
   )
+  useLayoutEffect(() => {
+    selectionContextCacheRef.current = selectionContextResult.cache
+  }, [selectionContextResult])
+  const markdownSelectionContext = selectionContextResult.context
 
   const activeDecorationFormats = useMemo(() => {
     const active = new Set<TextDecorationFormat>()
