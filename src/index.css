@@ -358,20 +358,6 @@ body {
   caret-color: transparent; /* Hide the native OS caret */
 }
 
-/* CM6Editor's own block-caret overlay (src/components/CM6Editor.tsx)
-   replaces CodeMirror's own drawn cursor the same way .thockdown-block-caret
-   replaces Lexical's -- drawSelection() still owns the non-collapsed
-   selection background rendering (cm-selectionBackground), only its cursor
-   elements are hidden here. */
-.cm6-editor-root .cm-cursor {
-  /* !important needed: CM6 injects its own cursor styling dynamically at
-     mount time via StyleModule, which otherwise wins the cascade over a
-     plain rule here regardless of selector specificity -- confirmed live,
-     not assumed (getComputedStyle still showed display: block without
-     this). */
-  display: none !important;
-}
-
 /* Custom Lexical Retro Block Caret */
 .thockdown-block-caret {
   background-color: var(--color-caret);

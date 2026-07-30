@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { EditorState, EditorSelection, Prec, RangeSetBuilder } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
-import { EditorView, Decoration, ViewPlugin, drawSelection, keymap, type DecorationSet } from '@codemirror/view';
+import { EditorView, Decoration, ViewPlugin, keymap, type DecorationSet } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import { typingSoundManager } from '../sound/TypingSoundManager';
 import { readSelectionRect } from '../editor/CaretRect';
 import { resolveCaretTopInScroll } from '../editor/CaretVisualPosition';
+import { readSelectionLineRects } from '../editor/SelectionRects';
 import type {
   EditorAdapter,
   EditorBindings,
@@ -67,6 +68,54 @@ function applyTransformResult(view: EditorView, next: { text: string; selection:
 }
 
 const CARET_INSET_PX = 1;
+const EMPTY_LINE_TOP_TOLERANCE_PX = 2;
+
+interface HighlightRect {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
+/** Ported verbatim from BlockSelectionPlugin.tsx -- walks up from `node` to the .cm-line element that's a direct child of `rootEl` (view.contentDOM), mirroring that file's own "top-level child" notion. */
+function findTopLevelChild(rootEl: HTMLElement, node: Node | null): HTMLElement | null {
+  let current: Node | null = node;
+  while (current && current.parentElement !== rootEl) {
+    current = current.parentElement;
+  }
+  return current instanceof HTMLElement ? current : null;
+}
+
+/**
+ * Ported verbatim from BlockSelectionPlugin.tsx's own collectEmptyLineTops:
+ * top (viewport) coordinates of every empty line spanned by the selection,
+ * start to end inclusive -- a Range crossing an empty line still yields a
+ * full-width client rect for it, which would otherwise paint a stray
+ * full-row highlight on a line with nothing selected.
+ */
+function collectEmptyLineTops(rootEl: HTMLElement, domSelection: Selection): number[] {
+  const startEl = findTopLevelChild(rootEl, domSelection.anchorNode);
+  const endEl = findTopLevelChild(rootEl, domSelection.focusNode);
+  if (!startEl || !endEl) return [];
+
+  const children = Array.from(rootEl.children);
+  const startIndex = children.indexOf(startEl);
+  const endIndex = children.indexOf(endEl);
+  if (startIndex === -1 || endIndex === -1) return [];
+
+  const lo = Math.min(startIndex, endIndex);
+  const hi = Math.max(startIndex, endIndex);
+
+  const tops: number[] = [];
+  for (let i = lo; i <= hi; i++) {
+    const child = children[i];
+    if (child.textContent === '') {
+      tops.push(child.getBoundingClientRect().top);
+    }
+  }
+
+  return tops;
+}
 
 const lineTokenPlugin = ViewPlugin.fromClass(class {
   decorations: DecorationSet;
@@ -127,6 +176,8 @@ export function CM6Editor({
   // layout reads paid on every keystroke").
   const scrollerRectRef = useRef<DOMRect | null>(null);
   const caretLayerRectRef = useRef<DOMRect | null>(null);
+  const [highlightRects, setHighlightRects] = useState<HighlightRect[]>([]);
+  const highlightAnimationFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     bindingsRef.current = bindings;
@@ -261,6 +312,109 @@ export function CM6Editor({
     scheduleCaretUpdate();
   }, [invalidateCaretRectCache, scheduleCaretUpdate]);
 
+  /**
+   * Ported verbatim from BlockSelectionPlugin.tsx's own updateSelection --
+   * same algorithm (readSelectionLineRects, empty-line filtering, quantized
+   * row merging, viewport clipping), sourced from the CM6 EditorView instead
+   * of Lexical's editor state. Doesn't require focus the way updateCaret
+   * does: a read-only note's native text selection still works (and should
+   * still highlight) even though it never becomes document.activeElement.
+   */
+  const updateSelectionHighlight = useCallback(() => {
+    const view = viewRef.current;
+    const layerEl = layerRef.current;
+    if (!view || !layerEl) return;
+
+    const domSelection = window.getSelection();
+    if (!domSelection || domSelection.rangeCount === 0 || domSelection.isCollapsed) {
+      setHighlightRects([]);
+      return;
+    }
+
+    const rootEl = view.contentDOM;
+    if (!rootEl.contains(domSelection.anchorNode) || !rootEl.contains(domSelection.focusNode)) {
+      setHighlightRects([]);
+      return;
+    }
+
+    const scroller = view.scrollDOM;
+    const lineRects = readSelectionLineRects(domSelection.getRangeAt(0));
+    if (lineRects.length === 0) {
+      setHighlightRects([]);
+      return;
+    }
+
+    const emptyLineTops = collectEmptyLineTops(rootEl, domSelection);
+
+    const scrollerRect = scroller.getBoundingClientRect();
+    const layerRect = layerEl.getBoundingClientRect();
+    const scrollerLeftInLayer = scrollerRect.left - layerRect.left;
+    const scrollerTopInLayer = scrollerRect.top - layerRect.top;
+    const runtimeCellWidthPx = Math.max(1, cellWidthPxRef.current);
+    const scrollerWidth = scroller.clientWidth;
+    const lineHeightPxNow = lineHeightPxRef.current;
+
+    const rowsByQuantizedTop = new Map<number, { left: number; right: number }>();
+
+    for (const lineRect of lineRects) {
+      const isEmptyLine = emptyLineTops.some(
+        (top) => Math.abs(top - lineRect.top) < EMPTY_LINE_TOP_TOLERANCE_PX,
+      );
+      if (isEmptyLine) continue;
+
+      const topInScroll = (lineRect.top - scrollerRect.top) + scroller.scrollTop;
+      const quantizedRowTopInScroll = Math.round(topInScroll / lineHeightPxNow) * lineHeightPxNow;
+
+      const rawLeft = lineRect.left - scrollerRect.left;
+      const rawRight = lineRect.right - scrollerRect.left;
+      const quantizedLeft = Math.round(rawLeft / runtimeCellWidthPx) * runtimeCellWidthPx;
+      const quantizedRight = Math.round(rawRight / runtimeCellWidthPx) * runtimeCellWidthPx;
+
+      const existingRow = rowsByQuantizedTop.get(quantizedRowTopInScroll);
+      if (existingRow) {
+        existingRow.left = Math.min(existingRow.left, quantizedLeft);
+        existingRow.right = Math.max(existingRow.right, quantizedRight);
+      } else {
+        rowsByQuantizedTop.set(quantizedRowTopInScroll, { left: quantizedLeft, right: quantizedRight });
+      }
+    }
+
+    const nextRects: HighlightRect[] = [];
+
+    for (const [quantizedRowTopInScroll, row] of rowsByQuantizedTop) {
+      const topInViewport = quantizedRowTopInScroll - scroller.scrollTop;
+
+      const visibleTop = Math.max(0, topInViewport);
+      const visibleBottom = Math.min(scroller.clientHeight, topInViewport + lineHeightPxNow);
+      const visibleHeight = visibleBottom - visibleTop;
+      if (visibleHeight <= 0) continue;
+
+      const clippedLeft = Math.max(0, row.left);
+      const clippedRight = Math.min(scrollerWidth, row.right);
+      const width = clippedRight - clippedLeft;
+      if (width <= 0) continue;
+
+      nextRects.push({
+        top: scrollerTopInLayer + visibleTop,
+        left: scrollerLeftInLayer + clippedLeft,
+        width,
+        height: visibleHeight,
+      });
+    }
+
+    setHighlightRects(nextRects);
+  }, []);
+
+  const scheduleSelectionHighlightUpdate = useCallback(() => {
+    if (highlightAnimationFrameRef.current !== null) {
+      cancelAnimationFrame(highlightAnimationFrameRef.current);
+    }
+    highlightAnimationFrameRef.current = requestAnimationFrame(() => {
+      highlightAnimationFrameRef.current = null;
+      updateSelectionHighlight();
+    });
+  }, [updateSelectionHighlight]);
+
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -270,11 +424,14 @@ export function CM6Editor({
       lineTokenPlugin,
       EditorView.lineWrapping,
       EditorView.editable.of(!editorReadOnly),
-      // drawSelection() still owns the non-collapsed *selection* background
-      // rendering (no CM6BlockSelection overlay exists yet -- that's a
-      // separate slice) but its own cursor is hidden via CSS below now that
-      // the block-grid caret overlay below renders the real one.
-      drawSelection(),
+      // CM6's own drawSelection() extension is deliberately NOT included --
+      // both the cursor (block-grid caret overlay below) and the
+      // non-collapsed selection background (highlightRects overlay below)
+      // are this app's own custom rendering now, matching Lexical's
+      // BlockCaretPlugin/BlockSelectionPlugin split. Native ::selection is
+      // already suppressed for `.editor-text` in index.css (can't stay
+      // grid-aligned once padding grows past ~1px), so leaving CM6's native
+      // selection rendering on would show nothing for a selection at all.
       // `editor-text` matches the class app-level code outside this
       // component (e.g. App.tsx's "click anywhere near the editor refocuses
       // the real editable surface" affordance) already queries for -- found
@@ -499,6 +656,7 @@ export function CM6Editor({
         }
         if (update.docChanged || update.selectionSet || update.viewportChanged) {
           scheduleCaretUpdate();
+          scheduleSelectionHighlightUpdate();
         }
       }),
     ];
@@ -540,6 +698,7 @@ export function CM6Editor({
         viewport: buildViewport(view),
       });
       scheduleCaretUpdate();
+      scheduleSelectionHighlightUpdate();
     };
     view.scrollDOM.addEventListener('scroll', handleScroll, { passive: true });
 
@@ -548,25 +707,45 @@ export function CM6Editor({
     // split-view section) -- same gap BlockCaretPlugin.tsx's own comment
     // documents. Without this, switching away leaves the caret frozen on
     // screen instead of disappearing.
-    document.addEventListener('focusin', scheduleCaretUpdate, true);
-    document.addEventListener('focusout', scheduleCaretUpdate, true);
+    const handleFocusChange = () => {
+      scheduleCaretUpdate();
+      scheduleSelectionHighlightUpdate();
+    };
+    document.addEventListener('focusin', handleFocusChange, true);
+    document.addEventListener('focusout', handleFocusChange, true);
+
+    // Read-only notes (contentEditable=false) still support native text
+    // selection, but CM6's own update cycle isn't guaranteed to react to it
+    // the way it does for editable content -- listen directly so the
+    // highlight still tracks a drag-selection there, matching
+    // BlockSelectionPlugin.tsx's own reasoning.
+    document.addEventListener('selectionchange', scheduleSelectionHighlightUpdate);
 
     // Covers layout shifts that don't fire a window resize event (sidebar
     // toggle, split-view pane resize, font-size change).
-    const resizeObserver = new ResizeObserver(() => scheduleCaretUpdateAfterResize());
+    const resizeObserver = new ResizeObserver(() => {
+      scheduleCaretUpdateAfterResize();
+      scheduleSelectionHighlightUpdate();
+    });
     resizeObserver.observe(view.scrollDOM);
     if (layerRef.current) resizeObserver.observe(layerRef.current);
 
     scheduleCaretUpdate();
+    scheduleSelectionHighlightUpdate();
 
     return () => {
       if (caretAnimationFrameRef.current !== null) {
         cancelAnimationFrame(caretAnimationFrameRef.current);
         caretAnimationFrameRef.current = null;
       }
+      if (highlightAnimationFrameRef.current !== null) {
+        cancelAnimationFrame(highlightAnimationFrameRef.current);
+        highlightAnimationFrameRef.current = null;
+      }
       resizeObserver.disconnect();
-      document.removeEventListener('focusin', scheduleCaretUpdate, true);
-      document.removeEventListener('focusout', scheduleCaretUpdate, true);
+      document.removeEventListener('focusin', handleFocusChange, true);
+      document.removeEventListener('focusout', handleFocusChange, true);
+      document.removeEventListener('selectionchange', scheduleSelectionHighlightUpdate);
       view.scrollDOM.removeEventListener('scroll', handleScroll);
       bindingsRef.current?.onLifecycle?.({ phase: 'destroyed' });
       view.destroy();
@@ -682,6 +861,21 @@ export function CM6Editor({
           lineHeight: `${lineHeightPx}px`,
         }}
       />
+      {highlightRects.map((rect, index) => (
+        <div
+          key={index}
+          className="thockdown-block-selection"
+          style={{
+            position: 'absolute',
+            pointerEvents: 'none',
+            zIndex: 4,
+            top: rect.top,
+            left: rect.left,
+            width: rect.width,
+            height: rect.height,
+          }}
+        />
+      ))}
       {caretStyle && (
         <div
           className="thockdown-block-caret"
