@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "perf:input-lag": "node scripts/perf/measureInputLag.mjs",
-    "perf:input-lag:electron": "xvfb-run -a node scripts/perf/measureInputLagElectron.mjs"
+    "perf:input-lag:electron": "xvfb-run -a node scripts/perf/measureInputLagElectron.mjs",
+    "perf:input-lag:electron:packaged": "xvfb-run -a node scripts/perf/measureInputLagElectronPackaged.mjs"
   },
   "dependencies": {
     "@codemirror/state": "6.7.1",
