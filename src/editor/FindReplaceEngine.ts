@@ -77,11 +77,17 @@ export function buildDocumentFindHits(
   caseSensitive: boolean,
   snippetRadius = DEFAULT_SNIPPET_RADIUS,
 ): DocumentFindHit[] {
-  const normalizedText = normalizeInternalText(text);
+  // Check the (short) query before touching `text` -- this recomputes on
+  // every keystroke via useDocumentFind's useMemo regardless of whether the
+  // find bar is even open, so normalizing the full document here whenever
+  // there's no query to search for was a real, avoidable per-keystroke
+  // O(document length) cost.
   const normalizedQuery = normalizeInternalText(query).trim();
   if (!normalizedQuery) {
     return [];
   }
+
+  const normalizedText = normalizeInternalText(text);
 
   const haystack = caseSensitive ? normalizedText : normalizedText.toLocaleLowerCase();
   const needle = caseSensitive ? normalizedQuery : normalizedQuery.toLocaleLowerCase();
