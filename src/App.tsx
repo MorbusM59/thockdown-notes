@@ -57,6 +57,7 @@ import {
 import { BORDER_ALPHA_TOKENS, BOX_SHADOW_ALPHA_TOKENS } from './shared/borderShadowAlphaTokens'
 import { DEBUG_TAG_NAME, PROTECTED_TAGS, normalizeTagName } from './shared/tags'
 import { EditorSection } from './editorSection/EditorSection'
+import { SAVE_DEBOUNCE_MS } from './editorSection/useNoteSaveQueue'
 import { EditorToolbar } from './toolbar/EditorToolbar'
 import { DEFAULT_EDITOR_SECTION_ID, type EditorSectionEntry } from './shared/sections'
 import { computeSectionWidthsForCloseFlexAware, computeSectionWidthsForNewSectionFlexAware, computeSlotWidthsPx, type SectionWidthPx } from './shared/sectionWidths'
@@ -1676,6 +1677,7 @@ function App() {
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
   const activeNoteExternalPathRef = useRef<string | null>(null)
   const [currentExternalNoteHash, setCurrentExternalNoteHash] = useState<string | null>(null)
+  const externalNoteHashDebounceRef = useRef<number | null>(null)
   const [persistenceReady, setPersistenceReady] = useState(false)
   const [appShellWidthPx, setAppShellWidthPx] = useState(APP_WINDOW_MIN_WIDTH_PX)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
@@ -4560,6 +4562,11 @@ ${markdownHtml}
   }, [activeSectionSnapshot?.activeNoteId, currentExternalNoteHash])
 
   useEffect(() => {
+    if (externalNoteHashDebounceRef.current !== null) {
+      window.clearTimeout(externalNoteHashDebounceRef.current)
+      externalNoteHashDebounceRef.current = null
+    }
+
     const activeNoteId = activeSectionSnapshot?.activeNoteId
     const activeNoteSummary = activeSectionSnapshot?.activeNoteSummary
     if (!activeNoteId || !activeNoteSummary || !isExternalNote(activeNoteSummary)) {
@@ -4568,7 +4575,7 @@ ${markdownHtml}
     }
 
     let disposed = false
-    void (async () => {
+    const computeHash = async () => {
       const currentText = normalizeInternalText(activeSectionSnapshot?.latestEditorTextRef.current || activeSectionSnapshot?.activeNoteText || '')
       const hash = await hashNormalizedText(currentText)
       if (disposed) return
@@ -4585,10 +4592,25 @@ ${markdownHtml}
         next[index] = { ...existing, hasUnsavedChanges: updatedState }
         return next
       })
-    })()
+    }
+
+    // Debounced on the same cadence as the save queue itself
+    // (SAVE_DEBOUNCE_MS): this hash only drives the "unsaved changes"
+    // indicator, not anything needing per-keystroke freshness. Previously
+    // ran a full-document SHA-256 on every keystroke, because
+    // activeSectionSnapshot (activeNoteText/currentEditorText are both
+    // fields on it) gets a new object identity every keystroke.
+    externalNoteHashDebounceRef.current = window.setTimeout(() => {
+      externalNoteHashDebounceRef.current = null
+      void computeHash()
+    }, SAVE_DEBOUNCE_MS)
 
     return () => {
       disposed = true
+      if (externalNoteHashDebounceRef.current !== null) {
+        window.clearTimeout(externalNoteHashDebounceRef.current)
+        externalNoteHashDebounceRef.current = null
+      }
     }
   }, [activeSectionSnapshot, getCurrentExternalNoteModifiedState])
 
