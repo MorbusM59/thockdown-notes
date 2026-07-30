@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { CSSProperties, MutableRefObject, ReactNode, RefObject } from 'react'
 import { Editor } from '../components/Editor'
+import { CM6Editor } from '../components/CM6Editor'
 import { SnapshotTimelineSlider } from '../editor/SnapshotTimelineSlider'
 import { PresentStateCircle } from '../editor/PresentStateCircle'
 import { getEmptyStateSceneMaskUrl } from '../editor/EmptyStateScene'
@@ -59,6 +60,19 @@ export interface SectionEditorAreaProps {
   handleReturnToPresent: () => void
   handleMergeAdjacentSnapshots: () => void
 }
+
+/**
+ * Dev-only opt-in for the Phase 2 CM6 editor-engine spike (see
+ * docs/document-scale-performance-philosophy.md's history and
+ * src/components/CM6Editor.tsx's own doc comment). Gated on import.meta.env.DEV
+ * first so this branch is statically false -- and dead-code-eliminated -- in
+ * any production build regardless of localStorage content; the localStorage
+ * check on top lets a developer opt in per-browser-profile without a rebuild.
+ * Never surfaced as a real user-facing setting.
+ */
+const isCM6EditorSpikeEnabled = import.meta.env.DEV
+  && typeof window !== 'undefined'
+  && window.localStorage?.getItem('thockdown:cm6-editor-spike') === '1';
 
 /**
  * The editor + its scrollbar + the Time Machine timeline/manual-save-dot for
@@ -154,6 +168,19 @@ export function SectionEditorArea({
           <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}`}>
             <div className="edit-container" style={{ display: isPreviewMode ? 'none' : undefined }}>
               {activeNoteId ? (
+                isCM6EditorSpikeEnabled ? (
+                  <CM6Editor
+                    bindings={bindings}
+                    adapterRef={adapterRef}
+                    noteId={activeNoteId}
+                    initialText={editorDisplayText}
+                    fontFamily={editorFontFamily}
+                    fontSizePx={editorRuntimeMetrics.fontSizePx}
+                    lineHeightPx={editorRuntimeMetrics.lineHeightPx}
+                    editorReadOnly={activeNoteHasDebugTag || isPreviewingSnapshot}
+                    spellCheckEnabled={spellCheckEditEnabled}
+                  />
+                ) : (
                 <Editor
                   // Deliberately no `key` tied to noteId/previewedSnapshotId:
                   // this Editor instance stays mounted across note switches,
@@ -180,6 +207,7 @@ export function SectionEditorArea({
                   caretSuspended={isCaretSuspended}
                   spellCheckEnabled={spellCheckEditEnabled}
                 />
+                )
               ) : emptyState}
             </div>
             <div className="render-container" style={{ display: isPreviewMode ? undefined : 'none' }} aria-hidden={!isPreviewMode}>
