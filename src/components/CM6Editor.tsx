@@ -42,13 +42,12 @@ import type {
  * Tab/Enter/markdown-shortcut transforms, typing sounds, scroll/viewport
  * reporting + restore, the block-grid caret and multi-line selection
  * overlays, cage-quantized wheel scroll + PageUp/PageDown paging, the
- * keyboard caret-refocus caging intent, and (this slice) paste sanitization
- * (HTML/emoji/control-char stripping, paragraph reconstruction, bullet
- * normalization, the Ctrl+Shift+V plain-paste escape hatch, and
- * preserve-caret-line scroll positioning). topBoundaryPx/bottomBoundaryPx
- * are still hardcoded to 0 -- the fixed-focus caging system's boundary UI
- * (padding zones, drag handles) and drag-selection scroll quantization are
- * the remaining slices.
+ * keyboard caret-refocus caging intent, paste sanitization, and (this slice)
+ * drag-selection scroll quantization (native drag-to-select auto-scroll
+ * snapped back onto the line-height grid one frame behind the gesture).
+ * topBoundaryPx/bottomBoundaryPx are still hardcoded to 0 -- the fixed-focus
+ * caging system's boundary UI (padding zones, drag handles) is the one
+ * remaining slice.
  */
 export interface CM6EditorProps {
   bindings?: EditorBindings;
@@ -130,6 +129,28 @@ function computeVisibleMiddleRows(
     Math.round(scrollerClientHeightPx) - Math.round(topBoundaryPx) - Math.round(bottomBoundaryPx),
   );
   return Math.max(1, Math.floor(middleHeightPx / lineHeightPx));
+}
+
+/** Ported verbatim from CagedScrollPlugin.tsx. */
+const isAlignedToRowGrid = (valuePx: number, lineHeightPx: number) => Math.abs(valuePx % lineHeightPx) < 0.01;
+
+/** Ported verbatim from CagedScrollPlugin.tsx's own resolveDirectionalQuantizedScrollTop. */
+function resolveDirectionalQuantizedScrollTop(
+  currentScrollTopPx: number,
+  previousScrollTopPx: number,
+  maxScrollTopPx: number,
+  lineHeightPx: number,
+): number {
+  const delta = currentScrollTopPx - previousScrollTopPx;
+  if (Math.abs(delta) < 0.01) {
+    return Math.max(0, Math.min(maxScrollTopPx, Math.round(currentScrollTopPx / lineHeightPx) * lineHeightPx));
+  }
+
+  if (delta > 0) {
+    return Math.max(0, Math.min(maxScrollTopPx, Math.ceil(currentScrollTopPx / lineHeightPx) * lineHeightPx));
+  }
+
+  return Math.max(0, Math.min(maxScrollTopPx, Math.floor(currentScrollTopPx / lineHeightPx) * lineHeightPx));
 }
 
 interface HighlightRect {
@@ -735,6 +756,14 @@ export function CM6Editor({
       }
     };
 
+    // Drag-selection scroll quantization state -- see handlePointerDown/
+    // handleSelectionDragScrollQuantization below (attached after `view`
+    // exists) for the ported CagedScrollPlugin.tsx behavior these back.
+    let isPrimaryPointerDown = false;
+    let lastDragScrollTopPx = 0;
+    let isApplyingDragQuantizedCorrection = false;
+    let dragCorrectionFrame: number | null = null;
+
     const extensions: Extension[] = [
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
@@ -1217,16 +1246,116 @@ export function CM6Editor({
     };
     view.scrollDOM.addEventListener('keyup', handlePageKeyUp, { capture: true });
 
+    // Drag-selection scroll quantization -- ported verbatim from
+    // CagedScrollPlugin.tsx's own handlePointerDown/handleMouseDown/
+    // handleSelectionDragScrollQuantization/endPointerDragSelection. Native
+    // drag-to-select auto-scroll moves scrollTop by sub-pixel amounts each
+    // frame, which (like the native arrow-key scrollIntoView in the caging
+    // slice above) isn't row-grid-quantized -- this snaps it back onto the
+    // grid one frame behind the native scroll, directionally (never
+    // "backwards" against the drag) so it doesn't fight the gesture.
+    const endPointerDragSelection = () => {
+      isPrimaryPointerDown = false;
+      if (dragCorrectionFrame !== null) {
+        cancelAnimationFrame(dragCorrectionFrame);
+        dragCorrectionFrame = null;
+      }
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      isPrimaryPointerDown = true;
+      lastDragScrollTopPx = view.scrollDOM.scrollTop;
+    };
+    const handleMouseDown = (event: MouseEvent) => {
+      if (event.button !== 0) return;
+      isPrimaryPointerDown = true;
+      lastDragScrollTopPx = view.scrollDOM.scrollTop;
+    };
+    const handlePointerUp = () => endPointerDragSelection();
+    const handlePointerCancel = () => endPointerDragSelection();
+
+    const handleSelectionDragScrollQuantization = () => {
+      const scroller = view.scrollDOM;
+      const observedScrollTopPx = scroller.scrollTop;
+
+      if (isApplyingDragQuantizedCorrection) {
+        lastDragScrollTopPx = observedScrollTopPx;
+        return;
+      }
+
+      if (!isPrimaryPointerDown) {
+        lastDragScrollTopPx = observedScrollTopPx;
+        return;
+      }
+
+      const root = view.contentDOM;
+      const domSelection = window.getSelection();
+      if (!domSelection || domSelection.rangeCount === 0 || domSelection.isCollapsed) {
+        lastDragScrollTopPx = observedScrollTopPx;
+        return;
+      }
+
+      const range = domSelection.getRangeAt(0);
+      if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) {
+        lastDragScrollTopPx = observedScrollTopPx;
+        return;
+      }
+
+      if (dragCorrectionFrame !== null) {
+        cancelAnimationFrame(dragCorrectionFrame);
+      }
+
+      dragCorrectionFrame = requestAnimationFrame(() => {
+        dragCorrectionFrame = null;
+        if (!isPrimaryPointerDown) return;
+
+        const currentScrollTopPx = scroller.scrollTop;
+        const lineHeightPxNow = lineHeightPxRef.current;
+        if (isAlignedToRowGrid(currentScrollTopPx, lineHeightPxNow)) {
+          lastDragScrollTopPx = currentScrollTopPx;
+          return;
+        }
+
+        const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        const quantizedTargetPx = resolveDirectionalQuantizedScrollTop(
+          currentScrollTopPx,
+          lastDragScrollTopPx,
+          maxScrollTopPx,
+          lineHeightPxNow,
+        );
+
+        if (Math.abs(quantizedTargetPx - currentScrollTopPx) < 0.01) {
+          lastDragScrollTopPx = currentScrollTopPx;
+          return;
+        }
+
+        isApplyingDragQuantizedCorrection = true;
+        scroller.scrollTop = quantizedTargetPx;
+        isApplyingDragQuantizedCorrection = false;
+        lastDragScrollTopPx = quantizedTargetPx;
+      });
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown, { capture: true, passive: true });
+    document.addEventListener('mousedown', handleMouseDown, { capture: true, passive: true });
+    view.scrollDOM.addEventListener('scroll', handleSelectionDragScrollQuantization, { passive: true });
+    window.addEventListener('pointerup', handlePointerUp, { passive: true });
+    window.addEventListener('mouseup', handlePointerUp, { passive: true });
+    window.addEventListener('pointercancel', handlePointerCancel, { passive: true });
+
     const handleWindowBlur = () => {
       pageKeysHeld.clear();
       clearPageContinuousHandoff();
       stopPageContinuousScroll();
+      endPointerDragSelection();
     };
     const handleVisibilityChange = () => {
       if (document.visibilityState !== 'visible') {
         pageKeysHeld.clear();
         clearPageContinuousHandoff();
         stopPageContinuousScroll();
+        endPointerDragSelection();
       }
     };
     window.addEventListener('blur', handleWindowBlur);
@@ -1279,10 +1408,17 @@ export function CM6Editor({
       view.scrollDOM.removeEventListener('scroll', handleScroll);
       view.scrollDOM.removeEventListener('wheel', handleWheel);
       view.scrollDOM.removeEventListener('keyup', handlePageKeyUp, true);
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('mousedown', handleMouseDown, true);
+      view.scrollDOM.removeEventListener('scroll', handleSelectionDragScrollQuantization);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('mouseup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
       window.removeEventListener('blur', handleWindowBlur);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearPageContinuousHandoff();
       stopPageContinuousScroll();
+      endPointerDragSelection();
       bindingsRef.current?.onLifecycle?.({ phase: 'destroyed' });
       view.destroy();
       viewRef.current = null;
