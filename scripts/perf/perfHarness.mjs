@@ -229,6 +229,23 @@ const traceMapCache = new Map()
  * `file://` URLs (the packaged Electron app, loading dist/ directly);
  * `dev:browser`'s http:// dev server already serves unminified source with
  * real function names, so there's nothing to resolve there.
+ *
+ * A genuinely electron-builder-packaged (asar) build's URL points *inside*
+ * app.asar (e.g. `.../resources/app.asar/dist/assets/index-X.js`) --
+ * app.asar is a single archive file on disk, not a real directory, so a
+ * plain fs read for that path (or `<path>.map`) fails silently even though
+ * the map really is in there (confirmed via `npx asar list app.asar`).
+ * Electron's own main/renderer processes get transparent asar reads via a
+ * patched `fs`, but this script runs as a *separate* plain Node process
+ * outside Electron, which doesn't have that patch. Rather than pull in the
+ * `asar` package just to extract one file, exploit that electron-builder's
+ * `files` config (electron-builder.json5) copies `dist/` into the asar root
+ * preserving its repo-relative structure -- so
+ * `.../app.asar/dist/assets/index-X.js.map` is byte-identical to
+ * `<repo>/dist/assets/index-X.js.map`, which is a real, never-deleted file
+ * (the asar-packing step copies from there, it doesn't move it). Rewriting
+ * any `.../app.asar/<rest>` path to `REPO_ROOT/<rest>` resolves it directly
+ * without ever touching the archive itself.
  */
 function loadTraceMapForUrl(url) {
   if (traceMapCache.has(url)) return traceMapCache.get(url)
@@ -236,7 +253,13 @@ function loadTraceMapForUrl(url) {
   let map = null
   if (url && url.startsWith('file://')) {
     try {
-      const mapPath = `${fileURLToPath(url)}.map`
+      let scriptPath = fileURLToPath(url)
+      const asarMarker = `${path.sep}app.asar${path.sep}`
+      const asarIndex = scriptPath.indexOf(asarMarker)
+      if (asarIndex !== -1) {
+        scriptPath = path.join(REPO_ROOT, scriptPath.slice(asarIndex + asarMarker.length))
+      }
+      const mapPath = `${scriptPath}.map`
       if (existsSync(mapPath)) {
         map = new TraceMap(JSON.parse(readFileSync(mapPath, 'utf8')))
       }
