@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { EditorState, EditorSelection, RangeSetBuilder } from '@codemirror/state';
+import { EditorState, EditorSelection, Prec, RangeSetBuilder } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView, Decoration, ViewPlugin, drawSelection, keymap, type DecorationSet } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
@@ -144,15 +144,27 @@ export function CM6Editor({
       // Tab/Enter/markdown-shortcut transforms -- ported verbatim from
       // ContractBridgePlugin.tsx's KEY_TAB_COMMAND/KEY_DOWN_COMMAND/
       // KEY_ENTER_COMMAND handlers (same conditional logic, same pure
-      // transform callbacks from EditorBindings), re-hosted on
-      // domEventHandlers.keydown instead of Lexical's command registry.
+      // transform callbacks from EditorBindings). Registered as a
+      // Prec.highest keymap using the `any` handler (fires for every key,
+      // gets the raw KeyboardEvent) rather than domEventHandlers.keydown --
+      // found live, not assumed: @codemirror/commands' defaultKeymap binds
+      // Enter to its own insertNewlineAndIndent, and CM6's internal keymap
+      // dispatch runs at higher precedence than a plain domEventHandlers
+      // registration, so Enter (and any other defaultKeymap-bound key) never
+      // reached a domEventHandlers.keydown handler at all -- confirmed by
+      // instrumenting keydown directly: every character logged except
+      // Enter, while a plain (uncontinuing) newline still appeared, proving
+      // CM6's own default binding was silently winning. Prec.highest here
+      // guarantees this layer is checked before defaultKeymap regardless of
+      // registration order.
+      //
       // Deliberately Ctrl (not Cmd/Mod) for the markdown shortcuts, matching
       // the original exactly: `!event.ctrlKey || event.metaKey` rejects the
       // shortcut, so Ctrl+B (not Cmd+B) is what this app has always bound,
       // even on Mac -- preserved rather than "corrected" to platform
       // convention, since that's a deliberate product choice, not a bug.
-      EditorView.domEventHandlers({
-        keydown: (event, view) => {
+      Prec.highest(keymap.of([{
+        any: (view, event) => {
           if (event.key === 'Tab') {
             const text = view.state.doc.toString();
             const selection = toSelectionState(view.state.selection.main);
@@ -217,7 +229,7 @@ export function CM6Editor({
 
           return false;
         },
-      }),
+      }])),
       // Character-insert transform (e.g. checklist typeover) -- uses CM6's
       // inputHandler rather than keydown so this only ever fires for a
       // genuine committed single-character insertion (matches Lexical's own
