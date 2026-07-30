@@ -26,6 +26,7 @@ import type {
   EditorSnapshot,
   EditorSnapshotApplyRequest,
   EditorTextChangeEvent,
+  EditorViewportLines,
   EditorViewportState,
 } from '../editor/EditorContract';
 
@@ -42,12 +43,22 @@ import type {
  * Tab/Enter/markdown-shortcut transforms, typing sounds, scroll/viewport
  * reporting + restore, the block-grid caret and multi-line selection
  * overlays, cage-quantized wheel scroll + PageUp/PageDown paging, the
- * keyboard caret-refocus caging intent, paste sanitization, and (this slice)
- * drag-selection scroll quantization (native drag-to-select auto-scroll
- * snapped back onto the line-height grid one frame behind the gesture).
- * topBoundaryPx/bottomBoundaryPx are still hardcoded to 0 -- the fixed-focus
- * caging system's boundary UI (padding zones, drag handles) is the one
- * remaining slice.
+ * keyboard caret-refocus caging intent, paste sanitization, drag-selection
+ * scroll quantization, and (this slice) the fixed-focus caging boundary UI
+ * itself: draggable top/bottom padding-zone handles, backed by real
+ * topBoundaryPx/bottomBoundaryPx (no longer hardcoded 0) applied as content
+ * padding on view.contentDOM, round-tripped through the viewport-lines
+ * snapshot path. This closes out CagedScrollPlugin.tsx/Editor.tsx's boundary
+ * system in full.
+ *
+ * Deliberately NOT ported: Editor.tsx's custom-rendered scrollbar (a
+ * separate, purely cosmetic feature -- CM6's native browser scrollbar is
+ * left in place) and its background grid lines (thockdown-grid-outline-lines/
+ * thockdown-grid-lines -- decorative, not required for cage functional
+ * parity). Also not ported: the hasViewportLines-style gating that avoids a
+ * "wrong boundary frame, then corrected" flash on first restore -- a real
+ * but minor simplification for this dev-only spike, worth revisiting if this
+ * migration continues past the shadow-adapter stage.
  */
 export interface CM6EditorProps {
   bindings?: EditorBindings;
@@ -151,6 +162,79 @@ function resolveDirectionalQuantizedScrollTop(
   }
 
   return Math.max(0, Math.min(maxScrollTopPx, Math.floor(currentScrollTopPx / lineHeightPx) * lineHeightPx));
+}
+
+/** Ported verbatim from Editor.tsx. */
+const quantizeTopEdge = (valuePx: number, lineHeightPx: number) => Math.max(0, Math.round(valuePx / lineHeightPx) * lineHeightPx);
+
+/** Ported verbatim from Editor.tsx. */
+const quantizeViewportHeightToGrid = (heightPx: number, lineHeightPx: number) => {
+  const h = Math.max(0, Math.round(heightPx));
+  const line = Math.max(1, Math.round(lineHeightPx));
+  return Math.floor(h / line) * line;
+};
+
+/** Ported verbatim from Editor.tsx's own normalizeEditorBoundaryPair. */
+function normalizeEditorBoundaryPair(params: {
+  topBoundaryPx: number;
+  bottomBoundaryPx: number;
+  lineHeightPx: number;
+  viewportHeightPx: number;
+  preserve?: 'top' | 'bottom';
+}) {
+  const lineHeightPx = Math.max(1, Math.round(params.lineHeightPx));
+  const viewportHeightPx = Math.max(0, Math.round(params.viewportHeightPx));
+  const maxSum = Math.max(0, viewportHeightPx - lineHeightPx);
+  const topBoundaryPx = Math.min(
+    Math.max(0, quantizeTopEdge(params.topBoundaryPx, lineHeightPx)),
+    maxSum,
+  );
+  const bottomBoundaryPx = Math.min(
+    Math.max(0, quantizeTopEdge(params.bottomBoundaryPx, lineHeightPx)),
+    maxSum,
+  );
+
+  if (topBoundaryPx + bottomBoundaryPx <= maxSum) {
+    return { topBoundaryPx, bottomBoundaryPx };
+  }
+
+  const overflow = topBoundaryPx + bottomBoundaryPx - maxSum;
+  if (params.preserve === 'bottom') {
+    return {
+      topBoundaryPx: Math.max(0, topBoundaryPx - overflow),
+      bottomBoundaryPx,
+    };
+  }
+
+  return {
+    topBoundaryPx,
+    bottomBoundaryPx: Math.max(0, bottomBoundaryPx - overflow),
+  };
+}
+
+/**
+ * Ported verbatim from Editor.tsx's own clampBoundaryLines: pure derivation
+ * from stored (persisted) boundary line counts to displayed line counts,
+ * given how many lines are currently available in the viewport. Never
+ * mutates the stored values -- clamping is recomputed fresh from
+ * (storedTopLines, storedBottomLines, availableLines) on every render. At
+ * least one line must remain for the middle (text) section; top boundary has
+ * priority for the available budget, bottom boundary gets whatever remains.
+ */
+function clampBoundaryLines(
+  storedTopLines: number,
+  storedBottomLines: number,
+  availableLines: number,
+): { topLines: number; bottomLines: number } {
+  const safeTop = Math.max(0, Math.round(storedTopLines));
+  const safeBottom = Math.max(0, Math.round(storedBottomLines));
+  const safeAvailable = Math.max(0, Math.round(availableLines));
+  const maxCombined = Math.max(0, safeAvailable - 1);
+
+  const topLines = Math.min(safeTop, maxCombined);
+  const bottomLines = Math.min(safeBottom, maxCombined - topLines);
+
+  return { topLines, bottomLines };
 }
 
 interface HighlightRect {
@@ -262,6 +346,31 @@ export function CM6Editor({
   const [highlightRects, setHighlightRects] = useState<HighlightRect[]>([]);
   const highlightAnimationFrameRef = useRef<number | null>(null);
 
+  // Fixed-focus caging boundary state -- ported from Editor.tsx. Stored as
+  // integer line counts (resolution-independent, see EditorViewportLines's
+  // own doc comment), with display pixel values derived fresh on every
+  // render via clampBoundaryLines against the currently measured scroller
+  // height. scrollerClientHeightPx is kept live by the mount effect's
+  // existing ResizeObserver (see scheduleCaretUpdateAfterResize's call site).
+  const [topBoundaryLines, setTopBoundaryLines] = useState(0);
+  const [bottomBoundaryLines, setBottomBoundaryLines] = useState(0);
+  const [isDraggingTop, setIsDraggingTop] = useState(false);
+  const [isDraggingBottom, setIsDraggingBottom] = useState(false);
+  const [scrollerClientHeightPx, setScrollerClientHeightPx] = useState(0);
+  const availableBoundaryLines = Math.max(0, Math.floor(scrollerClientHeightPx / lineHeightPx));
+  const { topLines: displayTopBoundaryLines, bottomLines: displayBottomBoundaryLines } = clampBoundaryLines(
+    topBoundaryLines,
+    bottomBoundaryLines,
+    availableBoundaryLines,
+  );
+  const topBoundaryPxDisplay = displayTopBoundaryLines * lineHeightPx;
+  const bottomBoundaryPxDisplay = displayBottomBoundaryLines * lineHeightPx;
+  // Read by imperative code inside the mount-once effect below (buildViewport,
+  // the caging reconcile, PageUp/PageDown paging math), which can't close
+  // over the state above directly since it's only set up once at mount.
+  const topBoundaryPxRef = useRef(0);
+  const bottomBoundaryPxRef = useRef(0);
+
   useEffect(() => {
     bindingsRef.current = bindings;
   }, [bindings]);
@@ -271,12 +380,25 @@ export function CM6Editor({
     cellWidthPxRef.current = cellWidthPx;
   }, [lineHeightPx, cellWidthPx]);
 
-  // topBoundaryPx/bottomBoundaryPx are hardcoded 0 here -- the boundary UI
-  // itself (padding zones, drag handles) is a later slice. Every other
-  // field is real, matching Editor.tsx's own buildViewport shape.
+  useEffect(() => {
+    topBoundaryPxRef.current = topBoundaryPxDisplay;
+    bottomBoundaryPxRef.current = bottomBoundaryPxDisplay;
+  }, [topBoundaryPxDisplay, bottomBoundaryPxDisplay]);
+
+  // Content padding is how the boundary "cage" actually keeps text out of
+  // the top/bottom zones -- applied directly to view.contentDOM (CM6's own
+  // `.cm-content`) since that DOM node is owned by CM6, not React, matching
+  // Editor.tsx's own ContentEditable paddingTop/paddingBottom.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.contentDOM.style.paddingTop = `${topBoundaryPxDisplay}px`;
+    view.contentDOM.style.paddingBottom = `${bottomBoundaryPxDisplay}px`;
+  }, [topBoundaryPxDisplay, bottomBoundaryPxDisplay]);
+
   const buildViewport = (view: EditorView): EditorViewportState => ({
-    topBoundaryPx: 0,
-    bottomBoundaryPx: 0,
+    topBoundaryPx: topBoundaryPxRef.current,
+    bottomBoundaryPx: bottomBoundaryPxRef.current,
     scrollTopPx: view.scrollDOM.scrollTop,
     lineHeightPx: lineHeightPxRef.current,
     cellWidthPx: cellWidthPxRef.current,
@@ -544,7 +666,7 @@ export function CM6Editor({
     };
 
     const startPageReleaseRampDown = (scroller: HTMLElement, direction: -1 | 1) => {
-      const visibleRows = computeVisibleMiddleRows(scroller.clientHeight, 0, 0, lineHeightPxRef.current);
+      const visibleRows = computeVisibleMiddleRows(scroller.clientHeight, topBoundaryPxRef.current, bottomBoundaryPxRef.current, lineHeightPxRef.current);
       const pageStepDistancePx = visibleRows * lineHeightPxRef.current;
       const releaseSpeedPxPerSec = Math.max(
         1,
@@ -613,7 +735,7 @@ export function CM6Editor({
       if (previousTs !== null) {
         const deltaSec = Math.max(0, (nowMs - previousTs) / 1000);
         const lineHeightPxNow = lineHeightPxRef.current;
-        const visibleRows = computeVisibleMiddleRows(scroller.clientHeight, 0, 0, lineHeightPxNow);
+        const visibleRows = computeVisibleMiddleRows(scroller.clientHeight, topBoundaryPxRef.current, bottomBoundaryPxRef.current, lineHeightPxNow);
         const pageStepDistancePx = visibleRows * lineHeightPxNow;
         const speedPxPerSec = Math.max(
           1,
@@ -699,8 +821,8 @@ export function CM6Editor({
         scrollerScrollTopPx: scroller.scrollTop,
         scrollerClientHeightPx: scroller.clientHeight,
         scrollerScrollHeightPx: scroller.scrollHeight,
-        topBoundaryPx: 0,
-        bottomBoundaryPx: 0,
+        topBoundaryPx: topBoundaryPxRef.current,
+        bottomBoundaryPx: bottomBoundaryPxRef.current,
         lineHeightPx: lineHeightPxNow,
       });
 
@@ -858,7 +980,7 @@ export function CM6Editor({
             stopPageContinuousScroll();
 
             const lineHeightPxNow = lineHeightPxRef.current;
-            const visibleRows = computeVisibleMiddleRows(scroller.clientHeight, 0, 0, lineHeightPxNow);
+            const visibleRows = computeVisibleMiddleRows(scroller.clientHeight, topBoundaryPxRef.current, bottomBoundaryPxRef.current, lineHeightPxNow);
             const delta = direction * visibleRows * lineHeightPxNow;
 
             const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
@@ -1381,14 +1503,18 @@ export function CM6Editor({
     document.addEventListener('selectionchange', scheduleSelectionHighlightUpdate);
 
     // Covers layout shifts that don't fire a window resize event (sidebar
-    // toggle, split-view pane resize, font-size change).
+    // toggle, split-view pane resize, font-size change). Also keeps
+    // scrollerClientHeightPx (the boundary UI's clampBoundaryLines input)
+    // live, matching Editor.tsx's own editorSize.innerHeight tracking.
     const resizeObserver = new ResizeObserver(() => {
       scheduleCaretUpdateAfterResize();
       scheduleSelectionHighlightUpdate();
+      setScrollerClientHeightPx(view.scrollDOM.clientHeight);
     });
     resizeObserver.observe(view.scrollDOM);
     if (layerRef.current) resizeObserver.observe(layerRef.current);
 
+    setScrollerClientHeightPx(view.scrollDOM.clientHeight);
     scheduleCaretUpdate();
     scheduleSelectionHighlightUpdate();
 
@@ -1447,6 +1573,100 @@ export function CM6Editor({
     previousTextRef.current = initialText;
   }, [noteId, initialText]);
 
+  // Boundary drag-handle global listeners -- ported from Editor.tsx's own
+  // "Global Mouse listeners for Dragging" effect. Deliberately re-binds only
+  // on drag start/stop, not on every intra-drag boundary update (those fire
+  // on every mousemove via the setState calls below; re-running this effect
+  // per pixel would tear down and re-attach the window listeners at 60fps).
+  const emitUserViewportChange = useCallback((nextTopBoundaryLines: number, nextBottomBoundaryLines: number) => {
+    const view = viewRef.current;
+    if (!view || !bindingsRef.current) return;
+    const scroller = view.scrollDOM;
+    const viewport: EditorViewportState = {
+      topBoundaryPx: Math.max(0, nextTopBoundaryLines) * lineHeightPxRef.current,
+      bottomBoundaryPx: Math.max(0, nextBottomBoundaryLines) * lineHeightPxRef.current,
+      scrollTopPx: scroller.scrollTop,
+      lineHeightPx: lineHeightPxRef.current,
+      cellWidthPx: cellWidthPxRef.current,
+      scrollHeightPx: scroller.scrollHeight,
+      clientHeightPx: scroller.clientHeight,
+    };
+    bindingsRef.current.onViewportChange?.({ source: 'user-input', origin: 'viewport-drag', viewport });
+  }, []);
+
+  useEffect(() => {
+    if (!isDraggingTop && !isDraggingBottom) return;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const view = viewRef.current;
+      if (!view) return;
+      const rect = view.scrollDOM.getBoundingClientRect();
+      const h = Math.max(0, view.scrollDOM.clientHeight);
+      const relativeY = event.clientY - rect.top;
+      const clampedY = Math.max(0, Math.min(relativeY, h));
+      const dragLines = Math.max(0, Math.round(clampedY / lineHeightPxRef.current));
+
+      if (isDraggingTop) {
+        // The dragged value is the stored value going forward: "the current
+        // distance to the edge becomes the new value" (per spec). Display
+        // clamping (clampBoundaryLines) reconciles this against the bottom
+        // boundary and available space on every render -- no cross-boundary
+        // adjustment is needed here.
+        setTopBoundaryLines(dragLines);
+        emitUserViewportChange(dragLines, bottomBoundaryLines);
+      } else if (isDraggingBottom) {
+        const availableLines = Math.max(0, Math.round(h / lineHeightPxRef.current));
+        const bottomLines = Math.max(0, availableLines - dragLines);
+        setBottomBoundaryLines(bottomLines);
+        emitUserViewportChange(topBoundaryLines, bottomLines);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingTop(false);
+      setIsDraggingBottom(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+    // topBoundaryLines/bottomBoundaryLines/emitUserViewportChange are read
+    // fresh at the start of each drag gesture (accurate for the whole
+    // gesture, since the untouched boundary doesn't change mid-drag) --
+    // deliberately not deps, matching Editor.tsx's own reasoning.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDraggingTop, isDraggingBottom]);
+
+  // Lets the boundary drag-handle strips (which visually sit on top of the
+  // scroller) still scroll the editor on wheel, instead of the wheel event
+  // being swallowed by a pointer-events target with no scroll of its own --
+  // ported verbatim from Editor.tsx's own forwardHandleWheelToScroller.
+  const forwardHandleWheelToScroller = (event: React.WheelEvent<HTMLDivElement>) => {
+    const scroller = viewRef.current?.scrollDOM;
+    if (!scroller) return;
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+    const forwardedWheelEvent = new WheelEvent('wheel', {
+      deltaX: event.deltaX,
+      deltaY: event.deltaY,
+      deltaZ: event.deltaZ,
+      deltaMode: event.deltaMode,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey,
+      bubbles: true,
+      cancelable: true,
+    });
+    scroller.dispatchEvent(forwardedWheelEvent);
+  };
+
   useEffect(() => {
     if (!adapterRef) return;
 
@@ -1457,10 +1677,10 @@ export function CM6Editor({
           selectionEvents: true,
           viewportEvents: true,
           snapshotRead: true,
-          // Not `true`: topBoundaryPx/bottomBoundaryPx aren't real yet (the
-          // boundary UI is a later slice), so a full round-trip snapshot
-          // write can't be claimed -- only the granular flags below that are
-          // genuinely implemented.
+          // Still not `true`: snapshotWriteText is false (text restore is via
+          // the noteId/initialText prop + hydration effect, not applySnapshot,
+          // matching Editor.tsx's own architecture) -- snapshotWrite requires
+          // all three.
           snapshotWrite: false,
           snapshotWriteText: false,
           snapshotWriteSelection: true,
@@ -1470,24 +1690,65 @@ export function CM6Editor({
       getSnapshot(): EditorSnapshot | null {
         const view = viewRef.current;
         if (!view) return null;
+        const viewportLines: EditorViewportLines = {
+          topBoundaryLines,
+          bottomBoundaryLines,
+          scrollTopLines: Math.round(view.scrollDOM.scrollTop / lineHeightPxRef.current),
+        };
         return {
           text: view.state.doc.toString(),
           selection: toSelectionState(view.state.selection.main),
           viewport: buildViewport(view),
+          viewportLines,
         };
       },
       applySnapshot(snapshot: EditorSnapshotApplyRequest) {
         const view = viewRef.current;
         if (!view) return;
 
+        if (snapshot.viewport) {
+          const h = Math.max(0, view.scrollDOM.clientHeight);
+          const quantizedViewportHeight = quantizeViewportHeightToGrid(h, lineHeightPxRef.current);
+          const nextViewport = snapshot.viewport;
+
+          const nextTopBoundary = typeof nextViewport.topBoundaryPx === 'number'
+            ? Math.max(0, Math.round(nextViewport.topBoundaryPx / lineHeightPxRef.current) * lineHeightPxRef.current)
+            : topBoundaryPxRef.current;
+          const nextBottomBoundary = typeof nextViewport.bottomBoundaryPx === 'number'
+            ? Math.min(Math.max(0, Math.round(nextViewport.bottomBoundaryPx / lineHeightPxRef.current) * lineHeightPxRef.current), quantizedViewportHeight)
+            : bottomBoundaryPxRef.current;
+
+          const normalized = normalizeEditorBoundaryPair({
+            topBoundaryPx: nextTopBoundary,
+            bottomBoundaryPx: nextBottomBoundary,
+            lineHeightPx: lineHeightPxRef.current,
+            viewportHeightPx: h,
+            preserve: typeof nextViewport.bottomBoundaryPx === 'number' ? 'bottom' : 'top',
+          });
+
+          if (typeof nextViewport.topBoundaryPx === 'number') {
+            setTopBoundaryLines(Math.round(normalized.topBoundaryPx / lineHeightPxRef.current));
+          }
+          if (typeof nextViewport.bottomBoundaryPx === 'number') {
+            setBottomBoundaryLines(Math.round(normalized.bottomBoundaryPx / lineHeightPxRef.current));
+          }
+          if (typeof nextViewport.scrollTopPx === 'number') {
+            view.scrollDOM.scrollTo({ top: Math.max(0, nextViewport.scrollTopPx), behavior: 'auto' });
+          }
+        }
+
         // Line-count-based restore is the preferred path (see
-        // EditorViewportLines's own doc comment in EditorContract.ts) --
-        // topBoundaryLines/bottomBoundaryLines are ignored here (0 until the
-        // boundary UI lands), only scrollTopLines is applied.
+        // EditorViewportLines's own doc comment in EditorContract.ts): no
+        // clamping against the current container size at apply time, since
+        // display values are derived lazily via clampBoundaryLines on every
+        // render regardless of when this runs.
         if (snapshot.viewportLines) {
-          view.scrollDOM.scrollTo({ top: Math.max(0, Math.round(snapshot.viewportLines.scrollTopLines) * lineHeightPxRef.current), behavior: 'auto' });
-        } else if (snapshot.viewport && typeof snapshot.viewport.scrollTopPx === 'number') {
-          view.scrollDOM.scrollTo({ top: Math.max(0, snapshot.viewport.scrollTopPx), behavior: 'auto' });
+          setTopBoundaryLines(Math.max(0, Math.round(snapshot.viewportLines.topBoundaryLines)));
+          setBottomBoundaryLines(Math.max(0, Math.round(snapshot.viewportLines.bottomBoundaryLines)));
+          view.scrollDOM.scrollTo({
+            top: Math.max(0, Math.round(snapshot.viewportLines.scrollTopLines) * lineHeightPxRef.current),
+            behavior: 'auto',
+          });
         }
 
         if (snapshot.selection) {
@@ -1506,14 +1767,34 @@ export function CM6Editor({
     };
     // lineHeightPx/cellWidthPx read via refs (kept current by the effect
     // above), not closed over directly, so they're deliberately not deps.
-  }, [adapterRef]);
+    // topBoundaryLines/bottomBoundaryLines ARE closed over directly (in
+    // getSnapshot), so they must be deps or getSnapshot would report stale
+    // values after a boundary drag.
+  }, [adapterRef, topBoundaryLines, bottomBoundaryLines]);
+
+  // Drag-handle geometry: a full lineHeightPx-tall strip flush against the
+  // boundary line once one exists, but only a small fixed-height sliver at
+  // the very edge when there's no boundary yet (topBoundaryPxDisplay/
+  // bottomBoundaryPxDisplay < one row). A full-row handle at a 0 boundary
+  // would sit exactly on top of the document's first/last text row --
+  // confirmed live to steal mousedown from ordinary text drag-selection
+  // there (verifyCM6Phase2Slice10.mjs's own drag-select regression-caught
+  // this). Editor.tsx doesn't have this problem: its equivalent handle has
+  // a few pixels of --editor-frame-padding headroom above the text, which
+  // CM6Editor's layer (no such padding) doesn't have -- this sliver is the
+  // substitute.
+  const boundaryHandleSliverPx = Math.min(lineHeightPx, 8);
+  const topHandleTopPx = topBoundaryPxDisplay >= lineHeightPx ? topBoundaryPxDisplay - lineHeightPx : 0;
+  const topHandleHeightPx = topBoundaryPxDisplay >= lineHeightPx ? lineHeightPx : boundaryHandleSliverPx;
+  const bottomHandleBottomPx = bottomBoundaryPxDisplay >= lineHeightPx ? bottomBoundaryPxDisplay - lineHeightPx : 0;
+  const bottomHandleHeightPx = bottomBoundaryPxDisplay >= lineHeightPx ? lineHeightPx : boundaryHandleSliverPx;
 
   return (
     // layerRef is the non-scrolling reference frame the block caret is
     // positioned against -- matching Editor.tsx's own structure, where
     // BlockCaretPlugin renders as a sibling of the scroller inside a shared
     // non-scrolling parent, not inside the scrolling element itself.
-    <div ref={layerRef} style={{ position: 'absolute', inset: 0 }}>
+    <div ref={layerRef} style={{ position: 'absolute', inset: 0, overflow: 'hidden', cursor: (isDraggingTop || isDraggingBottom) ? 'ns-resize' : 'auto' }}>
       <div
         ref={containerRef}
         className="cm6-editor-root"
@@ -1532,6 +1813,42 @@ export function CM6Editor({
           fontSize: fontSizePx,
           lineHeight: `${lineHeightPx}px`,
         }}
+      />
+      {/* Fixed-focus caging boundary zones -- ported from Editor.tsx's own
+          background-zone divs. Adjacent, not overlapping, in the well-behaved
+          case (topBoundary/bottomBoundary are already clamped so they never
+          sum past the available height), so DOM/z-index order doesn't matter
+          in practice -- kept in the same order as the original regardless. */}
+      <div
+        className="absolute pointer-events-none"
+        style={{
+          top: topBoundaryPxDisplay,
+          bottom: bottomBoundaryPxDisplay,
+          left: 0,
+          right: 0,
+          backgroundColor: 'var(--color-bg-regular)',
+          zIndex: 2,
+        }}
+      />
+      <div
+        className="absolute left-0 right-0 pointer-events-none"
+        style={{ top: 0, height: topBoundaryPxDisplay, backgroundColor: 'var(--color-bg-leading)', zIndex: 2 }}
+      />
+      <div
+        className="absolute left-0 right-0 pointer-events-none"
+        style={{ bottom: 0, height: bottomBoundaryPxDisplay, backgroundColor: 'var(--color-bg-trailing)', zIndex: 2 }}
+      />
+      <div
+        className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize"
+        style={{ top: topHandleTopPx, height: topHandleHeightPx }}
+        onWheel={forwardHandleWheelToScroller}
+        onMouseDown={(e) => { e.preventDefault(); setIsDraggingTop(true); }}
+      />
+      <div
+        className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize"
+        style={{ bottom: bottomHandleBottomPx, height: bottomHandleHeightPx }}
+        onWheel={forwardHandleWheelToScroller}
+        onMouseDown={(e) => { e.preventDefault(); setIsDraggingBottom(true); }}
       />
       {highlightRects.map((rect, index) => (
         <div
