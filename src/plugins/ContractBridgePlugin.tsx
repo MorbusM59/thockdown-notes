@@ -30,6 +30,7 @@ import {
   readSelectionStateFromDom,
 } from '../editor/SelectionOffsets';
 import { LexicalParagraphOffsetSync } from '../editor/LexicalParagraphOffsetSync';
+import { LexicalRopeSync } from '../editor/LexicalRopeSync';
 import { isSameRange, resolveScopeRange, type SelectionScope } from './ContractBridgeRangeUtils';
 
 interface ContractBridgePluginProps {
@@ -176,6 +177,7 @@ export function ContractBridgePlugin({
   const onEnterTransformRef = useRef(onEnterTransform);
   const hibernatedRef = useRef(hibernated);
   const paragraphOffsetSyncRef = useRef<LexicalParagraphOffsetSync | null>(null);
+  const ropeSyncRef = useRef<LexicalRopeSync | null>(null);
   const canonicalizeCacheRef = useRef<CanonicalizeParagraphSegmentsCache | null>(null);
 
   // Keeps an O(log n) paragraph-offset index (see LexicalParagraphOffsetSync's
@@ -195,6 +197,25 @@ export function ContractBridgePlugin({
     return () => {
       sync.dispose();
       paragraphOffsetSyncRef.current = null;
+    };
+  }, [editor]);
+
+  // Keeps a rope-backed canonical text (see LexicalRopeSync's own doc
+  // comment) live-synced to this editor instance -- a proof-of-concept
+  // alternative source for registerUpdateListener's own text production
+  // below, per docs/large-document-performance-handover.md's Phase 2
+  // question: is producing the flattened string via a synced rope actually
+  // cheaper than this codebase's existing array-build-and-join approach.
+  // Same lifecycle/fallback discipline as paragraphOffsetSyncRef above --
+  // null (falling back to the existing readCanonicalRootText path) for the
+  // brief window before this effect runs.
+  useEffect(() => {
+    const sync = new LexicalRopeSync(editor);
+    sync.start();
+    ropeSyncRef.current = sync;
+    return () => {
+      sync.dispose();
+      ropeSyncRef.current = null;
     };
   }, [editor]);
 
@@ -467,7 +488,17 @@ export function ContractBridgePlugin({
     const removeListener = editor.registerUpdateListener(({ editorState, tags }) => {
       if (hibernatedRef.current) return;
       editorState.read(() => {
-        const normalizedText = readCanonicalRootText(canonicalizeCacheRef);
+        // Phase 2 proof-of-concept (see docs/large-document-performance-handover.md):
+        // sourced from the synced rope when available -- its own .replace()
+        // already avoids the array-build-and-diff cost readCanonicalRootText
+        // pays every call, so only its .toString() flatten remains. Falls
+        // back to the existing path for the brief window before the rope
+        // sync's own effect has run. Deliberately the only call site this
+        // touches -- mount and the context-menu handler below keep using
+        // readCanonicalRootText/canonicalizeCacheRef exactly as before.
+        const normalizedText = ropeSyncRef.current
+          ? ropeSyncRef.current.snapshot().toString()
+          : readCanonicalRootText(canonicalizeCacheRef);
         const rootEl = editor.getRootElement();
         const lexicalSelection = $getSelection();
 
