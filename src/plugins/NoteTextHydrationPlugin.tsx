@@ -1,5 +1,5 @@
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { useLayoutEffect, useRef, type MutableRefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from 'react';
 import {
   $addUpdateTag,
   $createParagraphNode,
@@ -10,6 +10,7 @@ import {
   SKIP_SELECTION_FOCUS_TAG,
 } from 'lexical';
 import { canonicalizeParagraphSegmentsIncremental, type CanonicalizeParagraphSegmentsCache } from '../editor/TextPolicy';
+import { LexicalRopeSync } from '../editor/LexicalRopeSync';
 import { sanitizeTextFragment } from '../shared/textSanitization';
 
 interface NoteTextHydrationPluginProps {
@@ -141,6 +142,30 @@ export function NoteTextHydrationPlugin({ noteId, text, scrollerRef }: NoteTextH
   const lastAppliedNoteIdRef = useRef<string | null>(null);
   const hasHydratedRef = useRef(false);
   const canonicalizeCacheRef = useRef<CanonicalizeParagraphSegmentsCache | null>(null);
+  const ropeSyncRef = useRef<LexicalRopeSync | null>(null);
+
+  // Mirrors ContractBridgePlugin.tsx's own rope sync (see LexicalRopeSync's
+  // doc comment and docs/large-document-performance-handover.md's "Phase 2"
+  // section for why: a rope's own .replace() avoids the array-build-and-diff
+  // cost readCanonicalRootText pays below, so producing the flattened string
+  // is only its .toString() tree-walk, measured ~2x cheaper). Kept as this
+  // plugin's own independent instance, not shared with ContractBridgePlugin's
+  // -- same "each plugin owns its own copy of whatever sync state it needs"
+  // convention canonicalizeCacheRef above already follows. Runs as a plain
+  // useEffect (not useLayoutEffect, unlike the hydration check below) since
+  // it only needs to exist before the *next* render's hydration check, not
+  // synchronously before paint on this one -- the fallback below covers the
+  // brief window before it's ready, same as paragraphOffsetSyncRef's own
+  // established fallback discipline in ContractBridgePlugin.tsx.
+  useEffect(() => {
+    const sync = new LexicalRopeSync(editor);
+    sync.start();
+    ropeSyncRef.current = sync;
+    return () => {
+      sync.dispose();
+      ropeSyncRef.current = null;
+    };
+  }, [editor]);
 
   useLayoutEffect(() => {
     // Must match the editor's own steady-state invariant (TextSanitizationPlugin
@@ -162,7 +187,10 @@ export function NoteTextHydrationPlugin({ noteId, text, scrollerRef }: NoteTextH
     let shouldHydrate = false;
 
     editor.getEditorState().read(() => {
-      shouldHydrate = readCanonicalRootText(canonicalizeCacheRef) !== normalizedIncomingText;
+      const canonicalText = ropeSyncRef.current
+        ? ropeSyncRef.current.snapshot().toString()
+        : readCanonicalRootText(canonicalizeCacheRef);
+      shouldHydrate = canonicalText !== normalizedIncomingText;
     });
 
     if (!shouldHydrate && lastAppliedNoteIdRef.current === currentNoteId) {
