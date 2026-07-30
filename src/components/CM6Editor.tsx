@@ -8,6 +8,15 @@ import { typingSoundManager } from '../sound/TypingSoundManager';
 import { readSelectionRect } from '../editor/CaretRect';
 import { resolveCaretTopInScroll } from '../editor/CaretVisualPosition';
 import { readSelectionLineRects } from '../editor/SelectionRects';
+import { PIXELS_PER_WHEEL_UNIT } from '../editor/LayoutConstants';
+import {
+  buildReleaseRampDownPlanFromCurrentParams,
+  CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER,
+  resolveApexSpeedPxPerSecFromCurrentParams,
+  resolveRampCrossingTimeSecFromCurrentParams,
+  sampleReleaseRampDownPlan,
+} from '../editor/NonQuantizedSmoothScroll';
+import { cancelQuantizedSmoothScroll, scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
 import type {
   EditorAdapter,
   EditorBindings,
@@ -28,11 +37,14 @@ import type {
  * while the rewrite is in flight" rule exists for.
  *
  * Slices so far: mount, initial-text hydration, typing/selection tracking,
- * Tab/Enter/markdown-shortcut transforms, typing sounds, and (this slice)
- * scroll/viewport reporting + restore. topBoundaryPx/bottomBoundaryPx are
- * still hardcoded to 0 -- the fixed-focus caging system's boundary UI
- * (padding zones, drag handles) and BlockCaretPlugin/BlockSelectionPlugin's
- * pixel-matched grid caret are the remaining, larger slices.
+ * Tab/Enter/markdown-shortcut transforms, typing sounds, scroll/viewport
+ * reporting + restore, the block-grid caret and multi-line selection
+ * overlays, and (this slice) cage-quantized wheel scroll + PageUp/PageDown
+ * paging (continuous hold + release ramp-down). topBoundaryPx/bottomBoundaryPx
+ * are still hardcoded to 0 -- the fixed-focus caging system's boundary UI
+ * (padding zones, drag handles) and the keyboard caret-refocus caging intent
+ * (arrows/Enter keeping the caret pinned inside the cage) are the remaining,
+ * larger slices.
  */
 export interface CM6EditorProps {
   bindings?: EditorBindings;
@@ -69,6 +81,21 @@ function applyTransformResult(view: EditorView, next: { text: string; selection:
 
 const CARET_INSET_PX = 1;
 const EMPTY_LINE_TOP_TOLERANCE_PX = 2;
+const EDITOR_PAGE_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER;
+
+/** Ported verbatim from CagedScrollPlugin.tsx. topBoundaryPx/bottomBoundaryPx are always 0 here (see the file-level doc comment) until the boundary UI slice lands. */
+function computeVisibleMiddleRows(
+  scrollerClientHeightPx: number,
+  topBoundaryPx: number,
+  bottomBoundaryPx: number,
+  lineHeightPx: number,
+): number {
+  const middleHeightPx = Math.max(
+    lineHeightPx,
+    Math.round(scrollerClientHeightPx) - Math.round(topBoundaryPx) - Math.round(bottomBoundaryPx),
+  );
+  return Math.max(1, Math.floor(middleHeightPx / lineHeightPx));
+}
 
 interface HighlightRect {
   top: number;
@@ -418,6 +445,159 @@ export function CM6Editor({
   useEffect(() => {
     if (!containerRef.current) return;
 
+    // Wheel + PageUp/PageDown scroll physics -- ported from
+    // CagedScrollPlugin.tsx's own wheel/page-key handling (same quantized
+    // wheel stepping, same continuous-hold-then-release-ramp curve for a
+    // held PageUp/PageDown, sharing the exact same pure math modules:
+    // ScrollCurvePlan-backed NonQuantizedSmoothScroll/QuantizedSmoothScroll).
+    // Deliberately NOT ported yet in this slice: the keyboard caret-refocus
+    // caging intent (arrows/Enter keeping the caret pinned inside the cage
+    // boundary), paste caret-preservation, and drag-selection scroll
+    // quantization -- CagedScrollPlugin's own state machine for those is
+    // entangled with Lexical's registerUpdateListener/tags timing model in
+    // a way wheel/page scrolling isn't, so it's a separate slice. Because
+    // that reconcile system isn't here yet, clearCagedRefocusState() has
+    // nothing to clear and is correctly omitted from the wheel handler
+    // below (matching what it would be once ported: a no-op today).
+    let pendingWheelPx = 0;
+    const pageKeysHeld = new Set<string>();
+    let pageContinuousDirection: -1 | 0 | 1 = 0;
+    let pageContinuousRafId: number | null = null;
+    let pageContinuousLastTs: number | null = null;
+    let pageContinuousHandoffTimeoutId: number | null = null;
+    let pageReleaseRampDownRafId: number | null = null;
+
+    const clearPageContinuousHandoff = () => {
+      if (pageContinuousHandoffTimeoutId !== null) {
+        window.clearTimeout(pageContinuousHandoffTimeoutId);
+        pageContinuousHandoffTimeoutId = null;
+      }
+    };
+
+    const stopPageContinuousScroll = () => {
+      pageContinuousDirection = 0;
+      pageContinuousLastTs = null;
+      if (pageContinuousRafId !== null) {
+        cancelAnimationFrame(pageContinuousRafId);
+        pageContinuousRafId = null;
+      }
+      if (pageReleaseRampDownRafId !== null) {
+        cancelAnimationFrame(pageReleaseRampDownRafId);
+        pageReleaseRampDownRafId = null;
+      }
+    };
+
+    const startPageReleaseRampDown = (scroller: HTMLElement, direction: -1 | 1) => {
+      const visibleRows = computeVisibleMiddleRows(scroller.clientHeight, 0, 0, lineHeightPxRef.current);
+      const pageStepDistancePx = visibleRows * lineHeightPxRef.current;
+      const releaseSpeedPxPerSec = Math.max(
+        1,
+        resolveApexSpeedPxPerSecFromCurrentParams(pageStepDistancePx)
+          * EDITOR_PAGE_CONTINUOUS_SCROLL_APEX_MULTIPLIER,
+      );
+      const rampDownPlan = buildReleaseRampDownPlanFromCurrentParams(direction, releaseSpeedPxPerSec);
+      if (!rampDownPlan) {
+        stopPageContinuousScroll();
+        return;
+      }
+
+      if (pageContinuousRafId !== null) {
+        cancelAnimationFrame(pageContinuousRafId);
+        pageContinuousRafId = null;
+      }
+      pageContinuousDirection = 0;
+      pageContinuousLastTs = null;
+
+      if (pageReleaseRampDownRafId !== null) {
+        cancelAnimationFrame(pageReleaseRampDownRafId);
+        pageReleaseRampDownRafId = null;
+      }
+
+      const startScrollTop = scroller.scrollTop;
+      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      let startMs: number | null = null;
+
+      const animateRampDown = (nowMs: number) => {
+        if (startMs === null) {
+          startMs = nowMs;
+        }
+
+        const elapsedSec = Math.max(0, (nowMs - startMs) / 1000);
+        const displacement = sampleReleaseRampDownPlan(rampDownPlan, elapsedSec);
+        const lineHeightPxNow = lineHeightPxRef.current;
+        const nextScrollTop = Math.max(0, Math.min(maxScrollTop, startScrollTop + displacement));
+        const quantizedTarget = Math.round(nextScrollTop / lineHeightPxNow) * lineHeightPxNow;
+
+        if (Math.abs(quantizedTarget - scroller.scrollTop) > 0.01) {
+          scroller.scrollTop = quantizedTarget;
+        }
+
+        const hitBoundary = quantizedTarget <= 0.01 || quantizedTarget >= maxScrollTop - 0.01;
+        if (elapsedSec >= rampDownPlan.tailDurationSec || hitBoundary) {
+          pageReleaseRampDownRafId = null;
+          return;
+        }
+
+        pageReleaseRampDownRafId = requestAnimationFrame(animateRampDown);
+      };
+
+      pageReleaseRampDownRafId = requestAnimationFrame(animateRampDown);
+    };
+
+    const runPageContinuousScroll = (scroller: HTMLElement, nowMs: number) => {
+      if (pageContinuousDirection === 0) {
+        pageContinuousRafId = null;
+        pageContinuousLastTs = null;
+        return;
+      }
+
+      const previousTs = pageContinuousLastTs;
+      pageContinuousLastTs = nowMs;
+
+      if (previousTs !== null) {
+        const deltaSec = Math.max(0, (nowMs - previousTs) / 1000);
+        const lineHeightPxNow = lineHeightPxRef.current;
+        const visibleRows = computeVisibleMiddleRows(scroller.clientHeight, 0, 0, lineHeightPxNow);
+        const pageStepDistancePx = visibleRows * lineHeightPxNow;
+        const speedPxPerSec = Math.max(
+          1,
+          resolveApexSpeedPxPerSecFromCurrentParams(pageStepDistancePx)
+            * EDITOR_PAGE_CONTINUOUS_SCROLL_APEX_MULTIPLIER,
+        );
+        const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        const nextScrollTop = Math.max(
+          0,
+          Math.min(maxScrollTop, scroller.scrollTop + pageContinuousDirection * speedPxPerSec * deltaSec),
+        );
+        const quantizedTarget = Math.round(nextScrollTop / lineHeightPxNow) * lineHeightPxNow;
+
+        if (Math.abs(quantizedTarget - scroller.scrollTop) > 0.01) {
+          scroller.scrollTop = quantizedTarget;
+        }
+
+        const hitBoundary = (pageContinuousDirection < 0 && quantizedTarget <= 0.01)
+          || (pageContinuousDirection > 0 && quantizedTarget >= maxScrollTop - 0.01);
+        if (hitBoundary) {
+          stopPageContinuousScroll();
+          return;
+        }
+      }
+
+      pageContinuousRafId = requestAnimationFrame((ts) => runPageContinuousScroll(scroller, ts));
+    };
+
+    const startPageContinuousScroll = (scroller: HTMLElement, direction: -1 | 1) => {
+      cancelQuantizedSmoothScroll(scroller);
+      const previousDirection = pageContinuousDirection;
+      pageContinuousDirection = direction;
+      if (pageContinuousRafId === null || previousDirection !== direction) {
+        pageContinuousLastTs = null;
+      }
+      if (pageContinuousRafId === null) {
+        pageContinuousRafId = requestAnimationFrame((ts) => runPageContinuousScroll(scroller, ts));
+      }
+    };
+
     const extensions: Extension[] = [
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
@@ -481,6 +661,60 @@ export function CM6Editor({
       // convention, since that's a deliberate product choice, not a bug.
       Prec.highest(keymap.of([{
         any: (view, event) => {
+          if (event.key === 'PageUp' || event.key === 'PageDown') {
+            // Ported from CagedScrollPlugin.tsx's own PageUp/PageDown
+            // handling -- claimed here (Prec.highest, same as Tab/Enter
+            // above) rather than left to @codemirror/commands' defaultKeymap,
+            // which binds these to its own cursorPageUp/cursorPageDown
+            // (cursor movement, not the app's own quantized page-scroll feel).
+            event.preventDefault();
+            const direction: -1 | 1 = event.key === 'PageDown' ? 1 : -1;
+            const scroller = view.scrollDOM;
+            pageKeysHeld.add(event.key);
+
+            if (event.repeat) {
+              if (pageContinuousHandoffTimeoutId === null) {
+                startPageContinuousScroll(scroller, direction);
+              }
+              return true;
+            }
+
+            clearPageContinuousHandoff();
+            stopPageContinuousScroll();
+
+            const lineHeightPxNow = lineHeightPxRef.current;
+            const visibleRows = computeVisibleMiddleRows(scroller.clientHeight, 0, 0, lineHeightPxNow);
+            const delta = direction * visibleRows * lineHeightPxNow;
+
+            const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+            const currentAligned = Math.round(scroller.scrollTop / lineHeightPxNow) * lineHeightPxNow;
+            const target = Math.max(0, Math.min(maxScrollTop, currentAligned + delta));
+            const quantizedTarget = Math.round(target / lineHeightPxNow) * lineHeightPxNow;
+
+            scrollToQuantizedSmooth(scroller, quantizedTarget, { lineHeightPx: lineHeightPxNow });
+
+            const targetContinuousSpeedPxPerSec = Math.max(
+              1,
+              resolveApexSpeedPxPerSecFromCurrentParams(quantizedTarget - currentAligned)
+                * EDITOR_PAGE_CONTINUOUS_SCROLL_APEX_MULTIPLIER,
+            );
+            const crossingTimeSec = resolveRampCrossingTimeSecFromCurrentParams(
+              quantizedTarget - currentAligned,
+              targetContinuousSpeedPxPerSec,
+            );
+
+            if (crossingTimeSec !== null) {
+              const delayMs = Math.max(0, Math.round(crossingTimeSec * 1000));
+              const key = event.key;
+              pageContinuousHandoffTimeoutId = window.setTimeout(() => {
+                pageContinuousHandoffTimeoutId = null;
+                if (!pageKeysHeld.has(key)) return;
+                startPageContinuousScroll(scroller, direction);
+              }, delayMs);
+            }
+            return true;
+          }
+
           if (event.key === 'Tab') {
             // Same click sound/echo as ContractBridgePlugin.tsx's own
             // KEY_TAB_COMMAND handler -- played unconditionally like the
@@ -702,6 +936,77 @@ export function CM6Editor({
     };
     view.scrollDOM.addEventListener('scroll', handleScroll, { passive: true });
 
+    // Cage-quantized wheel scroll -- ported verbatim from
+    // CagedScrollPlugin.tsx's own handleWheel.
+    const handleWheel = (event: WheelEvent) => {
+      if (event.deltaY === 0) return;
+      event.preventDefault();
+
+      let units = 0;
+
+      if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+        const lineUnits = Math.trunc(Math.abs(event.deltaY));
+        units = Math.max(1, lineUnits) * (event.deltaY > 0 ? 1 : -1);
+      } else if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+        const pageUnits = Math.trunc(Math.abs(event.deltaY));
+        units = Math.max(1, pageUnits) * (event.deltaY > 0 ? 1 : -1);
+      } else {
+        pendingWheelPx += event.deltaY;
+        const stepSign = pendingWheelPx < 0 ? -1 : 1;
+        const unitCount = Math.floor(Math.abs(pendingWheelPx) / PIXELS_PER_WHEEL_UNIT);
+        if (unitCount === 0) return;
+        units = unitCount * stepSign;
+        pendingWheelPx -= unitCount * PIXELS_PER_WHEEL_UNIT * stepSign;
+      }
+
+      if (units === 0) return;
+
+      const lineHeightPxNow = lineHeightPxRef.current;
+      const scroller = view.scrollDOM;
+      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      const target = Math.max(0, Math.min(maxScrollTop, scroller.scrollTop + units * lineHeightPxNow));
+      scroller.scrollTop = Math.round(target / lineHeightPxNow) * lineHeightPxNow;
+    };
+    view.scrollDOM.addEventListener('wheel', handleWheel, { passive: false });
+
+    // PageUp/PageDown release-ramp: keyup on the scroller (not a keymap
+    // entry -- CM6's keymap system only sees keydown) starts the
+    // deceleration curve once the held key is released, and window
+    // blur/visibility-change guard against a stuck continuous scroll if the
+    // keyup itself never arrives (alt-tab, etc.) -- ported verbatim from
+    // CagedScrollPlugin.tsx's own handleKeyUp/handleWindowBlur/
+    // handleVisibilityChange (page-scroll-relevant parts only; the rest of
+    // those handlers deals with caret-refocus state not yet ported).
+    const handlePageKeyUp = (event: KeyboardEvent) => {
+      if (event.key !== 'PageUp' && event.key !== 'PageDown') return;
+      pageKeysHeld.delete(event.key);
+      clearPageContinuousHandoff();
+      if (pageKeysHeld.size === 0) {
+        const activeDirection = pageContinuousDirection;
+        if (activeDirection !== 0) {
+          startPageReleaseRampDown(view.scrollDOM, activeDirection);
+        } else {
+          stopPageContinuousScroll();
+        }
+      }
+    };
+    view.scrollDOM.addEventListener('keyup', handlePageKeyUp, { capture: true });
+
+    const handleWindowBlur = () => {
+      pageKeysHeld.clear();
+      clearPageContinuousHandoff();
+      stopPageContinuousScroll();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') {
+        pageKeysHeld.clear();
+        clearPageContinuousHandoff();
+        stopPageContinuousScroll();
+      }
+    };
+    window.addEventListener('blur', handleWindowBlur);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     // Neither the updateListener nor the scroll listener fire when THIS
     // editor loses/gains DOM focus (e.g. clicking into a different
     // split-view section) -- same gap BlockCaretPlugin.tsx's own comment
@@ -747,6 +1052,12 @@ export function CM6Editor({
       document.removeEventListener('focusout', handleFocusChange, true);
       document.removeEventListener('selectionchange', scheduleSelectionHighlightUpdate);
       view.scrollDOM.removeEventListener('scroll', handleScroll);
+      view.scrollDOM.removeEventListener('wheel', handleWheel);
+      view.scrollDOM.removeEventListener('keyup', handlePageKeyUp, true);
+      window.removeEventListener('blur', handleWindowBlur);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearPageContinuousHandoff();
+      stopPageContinuousScroll();
       bindingsRef.current?.onLifecycle?.({ phase: 'destroyed' });
       view.destroy();
       viewRef.current = null;
