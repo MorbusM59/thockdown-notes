@@ -17,6 +17,7 @@ import {
   sampleReleaseRampDownPlan,
 } from '../editor/NonQuantizedSmoothScroll';
 import { cancelQuantizedSmoothScroll, scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
+import { resolveCagedScrollTarget } from '../editor/CageMath';
 import type {
   EditorAdapter,
   EditorBindings,
@@ -39,12 +40,13 @@ import type {
  * Slices so far: mount, initial-text hydration, typing/selection tracking,
  * Tab/Enter/markdown-shortcut transforms, typing sounds, scroll/viewport
  * reporting + restore, the block-grid caret and multi-line selection
- * overlays, and (this slice) cage-quantized wheel scroll + PageUp/PageDown
- * paging (continuous hold + release ramp-down). topBoundaryPx/bottomBoundaryPx
- * are still hardcoded to 0 -- the fixed-focus caging system's boundary UI
- * (padding zones, drag handles) and the keyboard caret-refocus caging intent
- * (arrows/Enter keeping the caret pinned inside the cage) are the remaining,
- * larger slices.
+ * overlays, cage-quantized wheel scroll + PageUp/PageDown paging, and (this
+ * slice) the keyboard caret-refocus caging intent itself (arrows/typing/
+ * Enter/Backspace/Delete keep the caret scrolled into a line-grid-quantized
+ * position inside the cage). topBoundaryPx/bottomBoundaryPx are still
+ * hardcoded to 0 -- the fixed-focus caging system's boundary UI (padding
+ * zones, drag handles), paste caret-preservation, and drag-selection scroll
+ * quantization are the remaining slices.
  */
 export interface CM6EditorProps {
   bindings?: EditorBindings;
@@ -82,6 +84,37 @@ function applyTransformResult(view: EditorView, next: { text: string; selection:
 const CARET_INSET_PX = 1;
 const EMPTY_LINE_TOP_TOLERANCE_PX = 2;
 const EDITOR_PAGE_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER;
+
+/**
+ * Ported verbatim from CagedScrollPlugin.tsx's own isRefocusKey: the set of
+ * keys whose resulting caret/document movement should be kept inside the
+ * cage (scrolled into view if it would otherwise land off-screen). Excludes
+ * anything Ctrl/Cmd/Alt-modified (shortcuts, not navigation/typing) and Tab
+ * (never a refocus key in the original either -- Tab's own transform
+ * handler has its own "preserve scroll" semantics, matching
+ * CagedScrollPlugin's shouldBypassRefocusForTransformUpdate bypass for
+ * tab-indent/shortcut-transform/character-transform tags: since none of
+ * those are refocus keys to begin with under this same check, no separate
+ * bypass list is needed here the way the Lexical version needed one --
+ * except character-insert transforms (checklist typeover), which use a
+ * single unmodified printable key and DO match isRefocusKey; that path
+ * clears the intent explicitly before dispatching, see inputHandler below.
+ */
+function isRefocusKey(event: KeyboardEvent): boolean {
+  if (
+    event.key === 'ArrowUp' ||
+    event.key === 'ArrowDown' ||
+    event.key === 'ArrowLeft' ||
+    event.key === 'ArrowRight' ||
+    event.key === 'Home' ||
+    event.key === 'End'
+  ) {
+    return true;
+  }
+  if (event.ctrlKey || event.metaKey || event.altKey) return false;
+  if (event.key.length === 1) return true;
+  return event.key === 'Enter' || event.key === 'Backspace' || event.key === 'Delete';
+}
 
 /** Ported verbatim from CagedScrollPlugin.tsx. topBoundaryPx/bottomBoundaryPx are always 0 here (see the file-level doc comment) until the boundary UI slice lands. */
 function computeVisibleMiddleRows(
@@ -598,6 +631,61 @@ export function CM6Editor({
       }
     };
 
+    // Keyboard caret-refocus caging -- ported from CagedScrollPlugin.tsx's
+    // own refocus-caged intent, substantially simplified: CM6 applies a
+    // transaction's state AND DOM changes synchronously (unlike Lexical,
+    // which defers its own reconciler DOM commit to a microtask -- the
+    // entire reason the original needed a bounded retry loop, tracked
+    // "pressed keys" set, and a deterministic-Enter-boundary special case,
+    // none of which have anything left to work around here). A key that
+    // matches isRefocusKey arms `pendingCageIntent`; the updateListener
+    // below reconciles the scroll position against the post-transaction
+    // caret rect (already settled by the time it runs) and clears the flag.
+    // Confirmed live this is genuinely needed, not just theoretical: CM6's
+    // own native scrollIntoView on arrow-key movement brings the caret
+    // in-bounds but NOT row-grid-quantized, which left the block-caret
+    // overlay's own quantized bounds check rejecting it as still (barely)
+    // off-screen -- e.g. topInViewport 581 against a 605px-tall/26px-row
+    // viewport whose last fully-in-bounds row tops out at 579 -- so the
+    // caret overlay simply vanished on every arrow-key scroll past the fold
+    // before this reconcile existed.
+    let pendingCageIntent = false;
+
+    const reconcileCagedScroll = (view: EditorView) => {
+      const scroller = view.scrollDOM;
+      const domSelection = window.getSelection();
+      if (!domSelection || domSelection.rangeCount === 0) return;
+
+      const lineHeightPxNow = lineHeightPxRef.current;
+      const scrollerRect = scroller.getBoundingClientRect();
+      const caretRect = readSelectionRect(domSelection, lineHeightPxNow, view.contentDOM);
+      if (!caretRect) return;
+
+      const caretTopInScroll = resolveCaretTopInScroll({
+        caretRect,
+        scrollerRectTop: scrollerRect.top,
+        scrollerScrollTop: scroller.scrollTop,
+        rootEl: view.contentDOM,
+        domSelection,
+        rawText: view.state.doc.toString(),
+        lineHeightPx: lineHeightPxNow,
+      });
+
+      const { targetScrollTopPx } = resolveCagedScrollTarget({
+        caretTopInScrollPx: caretTopInScroll,
+        scrollerScrollTopPx: scroller.scrollTop,
+        scrollerClientHeightPx: scroller.clientHeight,
+        scrollerScrollHeightPx: scroller.scrollHeight,
+        topBoundaryPx: 0,
+        bottomBoundaryPx: 0,
+        lineHeightPx: lineHeightPxNow,
+      });
+
+      if (Math.abs(targetScrollTopPx - scroller.scrollTop) > 0.01) {
+        scrollToQuantizedSmooth(scroller, targetScrollTopPx, { lineHeightPx: lineHeightPxNow });
+      }
+    };
+
     const extensions: Extension[] = [
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
@@ -661,12 +749,17 @@ export function CM6Editor({
       // convention, since that's a deliberate product choice, not a bug.
       Prec.highest(keymap.of([{
         any: (view, event) => {
+          if (isRefocusKey(event)) {
+            pendingCageIntent = true;
+          }
+
           if (event.key === 'PageUp' || event.key === 'PageDown') {
             // Ported from CagedScrollPlugin.tsx's own PageUp/PageDown
             // handling -- claimed here (Prec.highest, same as Tab/Enter
             // above) rather than left to @codemirror/commands' defaultKeymap,
             // which binds these to its own cursorPageUp/cursorPageDown
             // (cursor movement, not the app's own quantized page-scroll feel).
+            pendingCageIntent = false;
             event.preventDefault();
             const direction: -1 | 1 = event.key === 'PageDown' ? 1 : -1;
             const scroller = view.scrollDOM;
@@ -857,6 +950,12 @@ export function CM6Editor({
         const next = callback({ char: insertedText, text, selection });
         if (!next) return false;
 
+        // A plain single printable key matches isRefocusKey and already
+        // armed pendingCageIntent above -- this transform (e.g. checklist
+        // typeover) replays selection with its own preserve-scroll
+        // semantics, matching CagedScrollPlugin.tsx's own bypass for the
+        // 'character-transform' tag, so clear it before dispatching.
+        pendingCageIntent = false;
         applyTransformResult(view, next);
         return true;
       }),
@@ -891,6 +990,10 @@ export function CM6Editor({
         if (update.docChanged || update.selectionSet || update.viewportChanged) {
           scheduleCaretUpdate();
           scheduleSelectionHighlightUpdate();
+        }
+        if (pendingCageIntent && (update.docChanged || update.selectionSet)) {
+          pendingCageIntent = false;
+          reconcileCagedScroll(update.view);
         }
       }),
     ];
