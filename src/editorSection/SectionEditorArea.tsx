@@ -174,6 +174,7 @@ export function SectionEditorArea({
                     adapterRef={adapterRef}
                     noteId={activeNoteId}
                     initialText={editorDisplayText}
+                    scrollbarHost={scrollbarHostEl}
                     fontFamily={editorFontFamily}
                     fontSizePx={editorRuntimeMetrics.fontSizePx}
                     lineHeightPx={editorRuntimeMetrics.lineHeightPx}
