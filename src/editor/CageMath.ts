@@ -6,6 +6,25 @@ interface ResolveCagedScrollTargetInput {
   topBoundaryPx: number;
   bottomBoundaryPx: number;
   lineHeightPx: number;
+  // Row 0's absolute-content-Y offset beyond topBoundaryPx -- 0 for
+  // Lexical/Editor.tsx, which has no such offset; CM6Editor.tsx passes
+  // halfLineHeightPx here since its contentDOM padding-top is
+  // topBoundaryPx + halfLineHeightPx (the "infinity grid" edge-breathing-
+  // room shift), so every real row's true position is half a line below
+  // where a phase-0 grid would put it. Used in two places below, NOT
+  // uniformly: quantizing the caret's OWN row (a real, measured DOM
+  // position) always needs it, or rounding lands on the wrong neighboring
+  // row whenever this offset is exactly half a line (real rows then sit
+  // precisely on the phase-0 rounding tie line -- confirmed live as the
+  // "arrow-up back to document start" caret-refocus caging bug, scrollTop
+  // settling on a small nonzero value instead of 0). The cage's OWN
+  // threshold/target positions (cageTopInScrollPx, lastRowTopOffsetPx)
+  // stay phase-0: those are screen-anchored (viewport pixel offsets
+  // converted to absolute-Y via + scrollTop), not content-row positions,
+  // so they don't carry this offset themselves -- confirmed live too:
+  // adding it there over-scrolled by exactly this offset every reconcile,
+  // fighting CM6's own native scroll-into-view every keystroke.
+  rowPhaseOffsetPx?: number;
 }
 
 interface ResolveCagedScrollTargetResult {
@@ -23,6 +42,7 @@ export function resolveCagedScrollTarget(
     topBoundaryPx,
     bottomBoundaryPx,
     lineHeightPx,
+    rowPhaseOffsetPx = 0,
   } = input;
 
   const maxScrollTopPx = Math.max(0, scrollerScrollHeightPx - scrollerClientHeightPx);
@@ -37,7 +57,13 @@ export function resolveCagedScrollTarget(
   // disagree about whether a scroll is needed, and BlockCaretPlugin's
   // "hide caret until the caged scroll settles" guard never sees its target
   // scrollTop match the actual one -- the caret stays hidden indefinitely.
-  const quantizedRowTopPx = Math.round(caretTopInScrollPx / lineHeightPx) * lineHeightPx;
+  //
+  // rowPhaseOffsetPx shifts the rounding reference point to match where
+  // real rows actually sit (see this input's own doc comment) -- without
+  // it, a caller with a half-line offset would round every real row
+  // position to the wrong neighboring row.
+  const quantizedRowTopPx = rowPhaseOffsetPx
+    + Math.round((caretTopInScrollPx - rowPhaseOffsetPx) / lineHeightPx) * lineHeightPx;
 
   const cageTopInScrollPx = scrollerScrollTopPx + topBoundaryPx;
   const lastRowTopOffsetPx = Math.max(
@@ -49,14 +75,37 @@ export function resolveCagedScrollTarget(
   let targetScrollTopPx = scrollerScrollTopPx;
 
   if (quantizedRowTopPx < cageTopInScrollPx) {
-    // Place caret exactly on the first row of the middle section.
-    targetScrollTopPx = quantizedRowTopPx - topBoundaryPx;
+    // Place caret exactly on the first row of the middle section -- at its
+    // natural resting position (topBoundaryPx + rowPhaseOffsetPx below the
+    // viewport top), not flush against topBoundaryPx, so this matches
+    // where the row already sits by construction rather than fighting it.
+    // Always an exact multiple of lineHeightPx already (topBoundaryPx is
+    // one, and quantizedRowTopPx - rowPhaseOffsetPx is one by construction),
+    // so no further rounding needed here.
+    targetScrollTopPx = quantizedRowTopPx - topBoundaryPx - rowPhaseOffsetPx;
   } else if (quantizedRowTopPx > cageLastRowTopInScrollPx) {
-    // Place caret exactly on the last row of the middle section.
-    targetScrollTopPx = quantizedRowTopPx - lastRowTopOffsetPx;
+    // Place caret exactly on the last row of the middle section. No
+    // rowPhaseOffsetPx term here: lastRowTopOffsetPx is a screen-anchored
+    // target position (fit one more full row above the bottom boundary),
+    // not a content-row position -- it was never phase-0 by virtue of
+    // representing an actual row, so it doesn't carry the offset.
+    //
+    // Math.ceil, not round: lastRowTopOffsetPx is derived from
+    // scrollerClientHeightPx, an arbitrary window/pane pixel height with no
+    // reason to be a multiple of lineHeightPx, so the raw target here
+    // essentially never lands on one either. Rounding to the NEAREST
+    // multiple can come up short by as much as half a row, clipping the
+    // very last row this branch exists to keep fully visible -- confirmed
+    // live: CM6's own native scroll-into-view then immediately re-corrects
+    // the clipped row on every subsequent keystroke, which this reconcile
+    // then immediately undoes again, an infinite fight. Rounding up costs
+    // at most a few px of extra clearance above the boundary; rounding
+    // down risked cutting off real text.
+    targetScrollTopPx = Math.ceil((quantizedRowTopPx - lastRowTopOffsetPx) / lineHeightPx) * lineHeightPx;
+  } else {
+    targetScrollTopPx = Math.round(targetScrollTopPx / lineHeightPx) * lineHeightPx;
   }
 
-  targetScrollTopPx = Math.round(targetScrollTopPx / lineHeightPx) * lineHeightPx;
   targetScrollTopPx = Math.max(0, Math.min(maxScrollTopPx, targetScrollTopPx));
 
   return {

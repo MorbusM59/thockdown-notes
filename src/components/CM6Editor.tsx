@@ -91,7 +91,46 @@ import type {
  * content's bottom by (clientHeight mod lineHeightPx), so the DOM's own
  * natural max-scroll already lands on a grid-quantized value; every other
  * scroll-math call site in this file inherits the fix for free since all of
- * them read scrollHeight/clientHeight fresh from the DOM already.
+ * them read scrollHeight/clientHeight fresh from the DOM already. And: at
+ * the user's request, shifted the whole grid + text by half a cell
+ * (halfCellWidthPx, halfLineHeightPx) in the positive x/y direction, so
+ * content no longer starts flush against the container's top-left edge --
+ * still an "infinity grid" conceptually extending past the container, cells
+ * cut off at the far edges still fine/expected. Implemented as
+ * view.contentDOM.style.paddingLeft (new) plus an extra halfLineHeightPx
+ * folded into the existing paddingTop, with the grid overlay divs'
+ * backgroundPosition shifted by the identical amount so the grid's phase
+ * and the content's row/column positions move together and stay aligned.
+ * The bottom max-scroll alignment padding above had to be re-derived to
+ * account for the extra non-grid-quantized halfLineHeightPx now added to
+ * scrollHeight from the top side (see alignmentPaddingBottomPx's own
+ * comment). The shift also broke every place that snaps a real, measured
+ * DOM position (caret, selection highlight, the caged-scroll target in
+ * CageMath.ts) onto the row/column grid via a plain "round to the nearest
+ * multiple of lineHeightPx/cellWidthPx" -- found live as two concrete bugs
+ * (arrow-key caret-refocus caging settling on a small nonzero scrollTop
+ * instead of exactly 0 at document start; the caret rendering inside a
+ * boundary zone instead of stopping above it), both root-caused to the same
+ * thing: real rows/columns now sit at (phase + N*unit), phase = half a
+ * line/cell, not at plain multiples, so naive rounding picked the wrong
+ * neighbor. Fixed with a phase-aware quantizeToPhase() helper (below) used
+ * everywhere a raw DOM position gets snapped to the grid, and a matching
+ * rowPhaseOffsetPx parameter threaded into the shared CageMath.ts (default
+ * 0, so Lexical/Editor.tsx's own calls are untouched). Scroll TARGET values
+ * themselves stay phase-0 by design -- the content's phase offset and the
+ * grid overlay's matching backgroundPosition shift cancel out of that one
+ * invariant -- confirmed by a from-scratch re-derivation, not by assuming
+ * the fix that worked for row/column identification also applied to scroll
+ * targets. Separately, root-caused a live oscillation between this app's
+ * own caged-scroll reconcile and CM6's native scroll-into-view (each
+ * undoing the other every keystroke near the bottom of the cage): the
+ * bottom-clamp branch's final "round to nearest multiple of lineHeightPx"
+ * could round down and clip the very last row it was trying to keep fully
+ * visible, since scrollerClientHeightPx has no reason to be a multiple of
+ * lineHeightPx. Changed to round up (never clip) in that branch only, in
+ * the shared CageMath.ts -- a real, pre-existing latent bug independent of
+ * the half-cell shift, just newly exposed by it in this file's own test
+ * viewport size.
  *
  * Still not ported: the hasViewportLines-style gating that avoids a "wrong
  * boundary frame, then corrected" flash on first restore -- a real but minor
@@ -198,6 +237,24 @@ function computeVisibleMiddleRows(
 
 /** Ported verbatim from CagedScrollPlugin.tsx. */
 const isAlignedToRowGrid = (valuePx: number, lineHeightPx: number) => Math.abs(valuePx % lineHeightPx) < 0.01;
+
+// Rounds `value` to the nearest multiple of `unit`, offset by `phase` --
+// i.e. the nearest value congruent to `phase` (mod unit), not to 0. Needed
+// wherever this file snaps a real, measured DOM position (caret/selection
+// rect) onto the row/column grid: since the half-cell edge-breathing-room
+// shift moved every real row/column's true position from a plain multiple
+// of lineHeightPx/cellWidthPx to (phase + N*unit), naively rounding to the
+// nearest plain multiple would round every real position to the WRONG
+// neighbor whenever phase is exactly half a unit (the real positions then
+// sit precisely ON the phase-0 rounding tie line). Plain scrollTop values
+// are NOT affected by this -- they stay phase-0 regardless (the content's
+// own phase offset and the grid overlay's matching backgroundPosition
+// shift cancel out of that particular invariant, see the alignment-padding
+// comment above) -- only absolute row/column positions read directly off
+// rendered DOM geometry need this.
+const quantizeToPhase = (value: number, unit: number, phase: number) => (
+  phase + Math.round((value - phase) / unit) * unit
+);
 
 /** Ported verbatim from CagedScrollPlugin.tsx's own resolveDirectionalQuantizedScrollTop. */
 function resolveDirectionalQuantizedScrollTop(
@@ -601,7 +658,18 @@ export function CM6Editor({
   // inherits the fix automatically -- no other call site needed to change.
   // The added padding is bounded to under one row, so it reads as an
   // ordinary small margin at the end of the document, not a visible gap.
-  const alignmentPaddingBottomPx = lineHeightPx > 0 ? scrollerClientHeightPx % lineHeightPx : 0;
+  //
+  // The top of the content is ALSO offset by halfLineHeightPx (see the
+  // half-cell edge-breathing-room shift below), which adds a non-grid-
+  // quantized amount to scrollHeight from the top side. That offset has to
+  // be folded into this formula too -- the two offsets don't cancel out on
+  // their own since one lands at the top of scrollHeight and the other at
+  // the bottom -- via proper (always-non-negative) modulo arithmetic.
+  const halfCellWidthPx = cellWidthPx / 2;
+  const halfLineHeightPx = lineHeightPx / 2;
+  const alignmentPaddingBottomPx = lineHeightPx > 0
+    ? (((scrollerClientHeightPx - halfLineHeightPx) % lineHeightPx) + lineHeightPx) % lineHeightPx
+    : 0;
 
   // Content padding is how the boundary "cage" actually keeps text out of
   // the top/bottom zones -- applied directly to view.contentDOM (CM6's own
@@ -610,7 +678,16 @@ export function CM6Editor({
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
-    view.contentDOM.style.paddingTop = `${topBoundaryPxDisplay}px`;
+    // paddingLeft/the extra half-line of paddingTop are the "infinity grid"
+    // edge-breathing-room shift: the whole grid + text moves half a cell in
+    // the positive x/y direction so content doesn't start flush against the
+    // container's top-left edge, while staying a grid that conceptually
+    // extends beyond the container in all directions (cut-off boxes at the
+    // far edges are expected, not a bug -- see the grid overlay's own
+    // backgroundPosition below, which is shifted by the exact same amount
+    // so text and grid move together and stay aligned).
+    view.contentDOM.style.paddingLeft = `${halfCellWidthPx}px`;
+    view.contentDOM.style.paddingTop = `${topBoundaryPxDisplay + halfLineHeightPx}px`;
     view.contentDOM.style.paddingBottom = `${bottomBoundaryPxDisplay + alignmentPaddingBottomPx}px`;
     // Same reasoning as the lineHeightPx/cellWidthPx metrics-change effect
     // further down: an external padding mutation grows/shrinks scrollHeight
@@ -618,7 +695,7 @@ export function CM6Editor({
     // reconciliation across that needs to be forced rather than left to
     // whatever unforced schedule it would otherwise settle on.
     view.requestMeasure();
-  }, [topBoundaryPxDisplay, bottomBoundaryPxDisplay, alignmentPaddingBottomPx]);
+  }, [topBoundaryPxDisplay, bottomBoundaryPxDisplay, alignmentPaddingBottomPx, halfCellWidthPx, halfLineHeightPx]);
 
   // Custom scrollbar sync -- ported from Editor.tsx's own three sync
   // effects. Runs after the portal target (scrollbarHost) or any layout
@@ -759,7 +836,10 @@ export function CM6Editor({
     });
 
     const lineHeightPxNow = lineHeightPxRef.current;
-    const quantizedRowTopInScroll = Math.round(caretTopInScroll / lineHeightPxNow) * lineHeightPxNow;
+    // Phase lineHeightPxNow/2, not 0: real rows sit at (halfLine + N*line)
+    // now, per the half-cell edge-breathing-room shift -- see
+    // quantizeToPhase's own comment.
+    const quantizedRowTopInScroll = quantizeToPhase(caretTopInScroll, lineHeightPxNow, lineHeightPxNow / 2);
     const topInViewport = quantizedRowTopInScroll - scroller.scrollTop;
 
     if (topInViewport < 0 || topInViewport > scroller.clientHeight - lineHeightPxNow) {
@@ -771,7 +851,7 @@ export function CM6Editor({
     const scrollerLeftInLayer = scrollerRect.left - caretLayerRect.left;
     const scrollerTopInLayer = scrollerRect.top - caretLayerRect.top;
     let absoluteLeft = caretRect.left - scrollerRect.left;
-    absoluteLeft = Math.round(absoluteLeft / runtimeCellWidthPx) * runtimeCellWidthPx;
+    absoluteLeft = quantizeToPhase(absoluteLeft, runtimeCellWidthPx, runtimeCellWidthPx / 2);
 
     const caretWidthPx = Math.max(1, runtimeCellWidthPx - CARET_INSET_PX);
     const caretHeightPx = Math.max(1, lineHeightPxNow - CARET_INSET_PX);
@@ -849,12 +929,14 @@ export function CM6Editor({
       if (isEmptyLine) continue;
 
       const topInScroll = (lineRect.top - scrollerRect.top) + scroller.scrollTop;
-      const quantizedRowTopInScroll = Math.round(topInScroll / lineHeightPxNow) * lineHeightPxNow;
+      // Same phase-aware quantization as updateCaret's own -- see
+      // quantizeToPhase's comment.
+      const quantizedRowTopInScroll = quantizeToPhase(topInScroll, lineHeightPxNow, lineHeightPxNow / 2);
 
       const rawLeft = lineRect.left - scrollerRect.left;
       const rawRight = lineRect.right - scrollerRect.left;
-      const quantizedLeft = Math.round(rawLeft / runtimeCellWidthPx) * runtimeCellWidthPx;
-      const quantizedRight = Math.round(rawRight / runtimeCellWidthPx) * runtimeCellWidthPx;
+      const quantizedLeft = quantizeToPhase(rawLeft, runtimeCellWidthPx, runtimeCellWidthPx / 2);
+      const quantizedRight = quantizeToPhase(rawRight, runtimeCellWidthPx, runtimeCellWidthPx / 2);
 
       const existingRow = rowsByQuantizedTop.get(quantizedRowTopInScroll);
       if (existingRow) {
@@ -1134,6 +1216,7 @@ export function CM6Editor({
         topBoundaryPx: topBoundaryPxRef.current,
         bottomBoundaryPx: bottomBoundaryPxRef.current,
         lineHeightPx: lineHeightPxNow,
+        rowPhaseOffsetPx: lineHeightPxNow / 2,
       });
 
       if (Math.abs(targetScrollTopPx - scroller.scrollTop) > 0.01) {
@@ -2403,9 +2486,21 @@ export function CM6Editor({
           style comment), so the equivalent of "inset by frame-padding on
           three sides, frame-padding-1px on the bottom" is simply "inset 0,
           -1px on the bottom" -- the -1px is index.css's own "FLUSH ALIGNMENT"
-          fix so grid lines land exactly on row boundaries, kept unchanged. */}
-      <div className="absolute pointer-events-none thockdown-grid-outline-lines" style={{ inset: '0 0 -1px 0', zIndex: 6 }} />
-      <div className="absolute pointer-events-none thockdown-grid-lines" style={{ inset: '0 0 -1px 0', zIndex: 7 }} />
+          fix so grid lines land exactly on row boundaries, kept unchanged.
+          backgroundPosition overrides index.css's static 0/-1px default to
+          phase-shift the pattern by the same half-cell amount as the text's
+          own paddingLeft/paddingTop above, so the grid moves in lockstep
+          with the content it's meant to line up with -- an "infinity grid"
+          that starts half a cell past the container's top-left edge, cut-off
+          boxes at the far edges expected and fine. */}
+      <div
+        className="absolute pointer-events-none thockdown-grid-outline-lines"
+        style={{ inset: '0 0 -1px 0', zIndex: 6, backgroundPosition: `${halfCellWidthPx - 1}px ${halfLineHeightPx - 1}px` }}
+      />
+      <div
+        className="absolute pointer-events-none thockdown-grid-lines"
+        style={{ inset: '0 0 -1px 0', zIndex: 7, backgroundPosition: `${halfCellWidthPx}px ${halfLineHeightPx}px` }}
+      />
       {/* Fixed-focus caging boundary zones -- ported from Editor.tsx's own
           background-zone divs. Adjacent, not overlapping, in the well-behaved
           case (topBoundary/bottomBoundary are already clamped so they never

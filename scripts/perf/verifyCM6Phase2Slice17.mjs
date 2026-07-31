@@ -38,13 +38,17 @@ async function measureMaxGridLineError(page) {
     const layer = document.querySelector('.cm6-editor-root').parentElement
     const gridLines = layer.querySelector('.thockdown-grid-lines')
     const gridRect = gridLines.getBoundingClientRect()
+    // See slice16's own comment: the grid's vertical phase is
+    // halfLineHeightPx now, not 0, since the "infinity grid" edge-
+    // breathing-room shift.
+    const gridY = parseFloat(getComputedStyle(gridLines).backgroundPosition.split(' ')[1])
     const scroller = document.querySelector('.cm6-editor-root .cm-scroller')
     const cs = getComputedStyle(document.querySelector('.cm6-editor-root .cm-content'))
     const lineHeightVar = parseFloat(cs.getPropertyValue('--editor-line-height'))
     const scrollTop = scroller.scrollTop
     const errors = lines.map((line) => {
       const topInScroll = line.getBoundingClientRect().top - gridRect.top + scrollTop
-      const remainder = topInScroll % lineHeightVar
+      const remainder = ((topInScroll - gridY) % lineHeightVar + lineHeightVar) % lineHeightVar
       return Math.min(remainder, lineHeightVar - remainder)
     })
     return { lineHeightVar, maxErr: Math.max(...errors, 0) }
