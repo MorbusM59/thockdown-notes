@@ -878,3 +878,139 @@ No code changes this round — measurement only, so no new verification needed b
 - This branch's PRs (#14–#17) were all opened against `main` and merged directly (`merge`
   method, not squash/rebase) once each was independently verified; follow the same pattern
   for any follow-up here rather than stacking onto old branch state.
+
+## CodeMirror 6 migration: performance audit (everything above this section is Lexical-era)
+
+Everything above this section predates the CM6 migration and is scoped to `src/components/
+Editor.tsx` (Lexical) — still the editor every real user gets today (see next paragraph).
+This section covers a first performance audit of `src/components/CM6Editor.tsx`, the CM6-backed
+`EditorAdapter` implementation built alongside it (see `EditorContract.ts`'s "implementations
+may be partial while the rewrite is in flight" rule, and CM6Editor.tsx's own file-level doc
+comment for the full slice-by-slice port history).
+
+**Load-bearing fact, not a footnote: CM6Editor does not ship.** It's gated in
+`SectionEditorArea.tsx` behind `import.meta.env.DEV && localStorage.getItem('thockdown:cm6-editor-spike') === '1'`
+— statically false (and dead-code-eliminated) in any production build. Every real user, on the
+packaged Electron app, still gets `Editor.tsx` (Lexical) today, with the full O(document)
+per-keystroke residual already documented above. Any performance win in this section — CM6's
+own ~2x-over-Lexical keystroke latency, or the fixes below — reaches zero real users until this
+gate is removed. That's a product decision (CM6 is explicitly framed as a "spike"/"shadow-
+adapter stage" migration with known-unported pieces, e.g. the `hasViewportLines`-style
+first-restore flash gating), not something this audit round changed unilaterally.
+
+### Method
+
+A dedicated harness, `scripts/perf/measureCM6RealApp.mjs`, was added (reusing `perfHarness.mjs`'s
+primitives, matching `measureInputLag.mjs`'s CLI shape) — it forces the CM6 path on via
+`page.addInitScript` setting the localStorage flag before every navigation, then measures the
+*real app's* `CM6Editor.tsx`, not the standalone `scripts/perf/cm6-spike/` prototype the Phase-0
+spike measurement (`measureCM6Spike.mjs`) used. CM6's real scroll element
+(`.cm-scroller`) and contenteditable (`.cm-content`) differ from Lexical's
+(`.thockdown-custom-scrollbar` / `.editor-text`), so `placeCaretAt` needed a CM6-specific variant
+using CM6's own `Mod-Home`/`Mod-End` default keybindings instead of `perfHarness.mjs`'s
+scroll-then-click approach. A second script, `scripts/perf/verifyCM6PostFix.mjs`, does a
+live-browser functional pass (typing, Tab, Enter, Ctrl+B, paste via a synthetic `ClipboardEvent`,
+undo, and the caret-at-document-end-with-trailing-blank-lines case) with console-error
+monitoring, per this doc's own "live-browser functional check is mandatory" rule for anything
+touching caret/selection/rendering.
+
+### Findings and fixes (all inside CM6Editor.tsx itself)
+
+Despite CM6's own DOM rendering already being viewport-bound (unlike Lexical, which mounts every
+paragraph), several call sites in CM6Editor.tsx were still doing O(document length) work per
+keystroke/transform/paste — all found by direct code reading (grepping for `.doc.toString()` and
+`{from: 0, to: doc.length}`), then confirmed live rather than assumed fixed from reasoning alone:
+
+1. **`view.state.doc.toString()` on every caret update.** `updateCaret` (scheduled via rAF on
+   every `docChanged`/`selectionSet`/`viewportChanged`, i.e. essentially every keystroke, scroll
+   tick, and selection change), `reconcileCagedScroll` (every keyboard-refocus-caging key), and
+   `reconcilePasteScroll` (every paste) all materialized the full document into a string purely to
+   satisfy `CaretVisualPosition.ts`/`CaretTerminalOffset.ts`'s `rawText` parameter — code written
+   for Lexical, where a DOM-derived selection offset genuinely has no cheaper source. That
+   function's actual need is narrow: is the caret at the absolute document end, and if so, how
+   many trailing newlines are there (a rare visual-compensation case for blank lines at doc end,
+   gated on `caretRect.source === 'adjacent-probe' || 'anchor-fallback'`). Fixed with a CM6-local
+   `resolveCM6CaretTopInScroll`, using `view.state.doc.length`/`view.state.selection.main` (both
+   O(1) — CM6's own `EditorState` already carries these, no DOM walk needed) plus a
+   256-character-bounded `Text.sliceString` tail probe for the trailing-newline count, never the
+   whole document. Kept CM6-local rather than changed in the shared Lexical-consumed files, since
+   `BlockCaretPlugin.tsx`/`CagedScrollPlugin.tsx` don't share this defect (different, already-cheap
+   rawText source there).
+2. **`applyTransformResult` always replaced the whole document.** Every Tab/Enter/markdown-
+   shortcut/character-insert-transform (checklist typeover) dispatched
+   `{from: 0, to: doc.length, insert: next.text}`, discarding CM6's own incremental
+   change-tracking for what's almost always a small localized edit, on some of the most common
+   keys there are. Fixed with a common-prefix/common-suffix diff (same technique already proven
+   in `PreviewBlockSplit.ts`/`MarkdownContext.ts`/`canonicalizeParagraphSegmentsIncremental`) that
+   dispatches only the minimal changed range. Provably exact by construction (prefix + insert +
+   suffix reconstructs `next.text` exactly) — not a "trust prior computation" cache with a hazard
+   class, so no fuzz test was needed, just the live-browser functional pass.
+3. **The four pre-commit transform handlers re-derived canonical text from scratch.** Tab/Enter/
+   markdown-shortcut/character-insert transform handlers all called a fresh
+   `view.state.doc.toString()` to build the `text` field passed into the `EditorBindings`
+   callbacks, instead of reusing `previousTextRef.current` — which the `updateListener` and the
+   note-switch hydration effect keep synchronously in sync, and which is guaranteed already
+   correct at the point these pre-commit handlers fire (before this keystroke's own edit
+   commits). Exactly the same pattern already proven for Lexical's `ContractBridgePlugin.tsx` (see
+   `readCanonicalRootText`'s fix, above in this doc) — CM6Editor had simply reintroduced the
+   already-solved problem in its own, separate call sites.
+4. **Paste handler materialized the full document to splice a string by hand.** Read
+   `view.state.doc.toString()`, built `nextText` via `currentText.slice(0, from) + sanitized +
+   currentText.slice(to)`, then dispatched that as another full-document replace. Simplified to a
+   direct targeted `{from: selection.from, to: selection.to, insert: sanitized}` dispatch — CM6
+   already supports replacing just the affected range; no full-document materialization,
+   splicing, or replace needed at all. Also relies on fix #1 for its own pre-paste caret-position
+   read.
+
+### Verification
+
+`npx tsc --noEmit`, `npm run lint`, full unit suite (unchanged, 251/251 — no CM6Editor-specific
+tests existed to update; the fixes are exact-by-construction transformations, not caching
+schemes, per fix #2's own reasoning above), `scripts/perf/verifyCM6PostFix.mjs` (live-browser,
+all checks passed, zero console errors), and an A/B `git stash` comparison isolating fix #2's own
+effect in the most directly-affected case: a 20-keystroke `Enter`-key burst on a synthetic
+1.5M-character note, caret at document end (`node scripts/perf/measureCM6RealApp.mjs
+--mode=burst --keystrokes=20 --position=end --char=Enter`) — **81.6ms/keystroke mean before,
+73.5ms/keystroke after (~10%)**. A plain-character burst (`--char=x`, exercises fixes #1/#3 but
+not #2) showed no significant change (~45ms/keystroke mean, both before and after) — see "what's
+still open" below for why.
+
+### What's still open
+
+**CM6 itself already delivers a real win over Lexical at this scale, independent of this round's
+fixes.** Same synthetic 1.5M-character note, same burst methodology as the Lexical numbers earlier
+in this doc: a 30-keystroke plain-character burst at document end measured **~45ms/keystroke mean**
+against Lexical's documented ~85-170ms at the same scale — roughly 2x, not the Phase-0 spike's
+"30-40x" (that number was the *isolated* CM6 prototype with none of this app's caret-overlay/
+scrollbar/caging/typing-sound wiring around it; the real, fully-integrated number is far more
+modest, see next finding for why).
+
+**The dominant remaining per-keystroke cost on the CM6 path is not inside CM6Editor.tsx.** A CDP
+JS-sampling profile (`--mode=profile`) on the same plain-character burst shows the fixes above
+did shrink CM6Editor.tsx's own footprint (e.g. `stripBom`/multi-hundred-KB `sliceString` calls
+dropped out of the top-30), but total sampled JS time only fell modestly (~7%, 1696ms → 1577ms
+across a 30-keystroke burst) — the large remaining entries are attributed to `EditorSection.tsx`
+and `useEditorSectionMount.ts`, the same shared downstream hook pipeline
+(`useNoteSnapshots`/`normalizeForComparison`, `useDocumentFind`, `usePreviewMarkdownRendering`,
+`useMarkdownFormattingToolbar`, `noteTitle` derivation, `useNoteSaveQueue`) both Lexical and CM6
+route through identically via `currentEditorText`/`onTextChange`, already substantially
+investigated for Lexical earlier in this doc. **Caveat carried forward, not resolved**: this
+round's CDP profiles repeatedly attributed large costs to `(anonymous) @ EditorSection.tsx:549`
+at line numbers that don't correspond to any real function at that location when checked directly
+against the source — the same dev-bundle source-map-drift artifact this doc has flagged twice
+before (`:547` in an earlier round, `:549` again this round pointing at unrelated destructuring
+code). **Do not trust an anonymous-function line number from this environment's CDP profiles
+without re-verifying it against the actual source first** — named-function entries (e.g.
+`normalizeForComparison`, `splitMarkdownIntoPreviewBlocksIncremental`) remain reliable; anonymous
+ones with suspicious/shifting line numbers are not. Next session should either get proper
+source-map resolution working for this profiling setup, or bracket the `EditorSection.tsx`/
+`useEditorSectionMount.ts` hook fan-out directly with `performance.mark`/`measure` (this doc's own
+fallback method when CPU-profile attribution can't be trusted) before attempting a fix there —
+this is shared Lexical+CM6 infrastructure, so any real fix found benefits both editor paths, not
+just CM6's.
+
+**The production gate is the highest-leverage open item, and is a product decision, not an
+engineering one.** Flipping `isCM6EditorSpikeEnabled` in `SectionEditorArea.tsx` to ship CM6 to
+real users needs an explicit decision (not assumed by this audit) given CM6Editor.tsx's own doc
+comment lists at least one deliberately-unported piece (the boundary-restore flash gating) and
+the file is still described as a "shadow-adapter stage" spike, not a completed migration.
