@@ -161,29 +161,94 @@ named gap — only worth touching if a concrete symptom traces back to it specif
 
 ### Bug 3 — caret jumps back to document start (offset 0)
 
-Concrete fallback-to-zero site found, shared by both editors (not CM6-specific):
-`src/editor/EditRestoreMath.ts:165-198`, `buildEditRestoreSnapshotFromUiState()` — line 184
-defaults `persistedCursor` to plain `0` whenever `overrideCursorPos`/`uiState?.cursorPos` isn't a
-finite number (i.e. whenever `window.thockdownNotes.getNoteUiState()` returns
-`null`/`undefined`/malformed — new note, an IPC race, or a caught failure). This function is
-called from five sites — `useEditorSectionMount.ts:1293`, `:1335`, `:1385`, `:1455`, and
-`EditorSection.tsx:393` — i.e. essentially every restore path funnels through this one fallback.
-**Fix direction**: don't silently default to 0 on a missing/malformed UI-state read; distinguish
-"genuinely a brand-new note" (0 is correct) from "failed to read persisted state" (should
-preserve whatever the DOM/editor currently shows, or retry, not silently relocate the user's
-cursor). Needs a decision on which of the 5 call sites can tell those two cases apart today and
-which can't.
+Turned out to be **two genuinely different bugs** the original report conflated (both produce
+"cursor ends up at 0," but from opposite directions — one is live in-memory corruption *during*
+typing, the other is a restore-time gap because a position was never persisted at all). Split
+below; don't re-merge them, the fixes are unrelated.
 
-Two *intentional* zero-resets exist and must not be conflated with the bug above:
-`ZERO_EDITOR_SELECTION` (`EditRestoreMath.ts:21`) used for entering a Time Machine snapshot
-preview (`useEditorSectionMount.ts:1658-1663`, "no saved cursor of its own, show from the top")
-and the fallback when leaving preview back to a note with no cached edit-mode state
-(`:1671-1679`), plus one analogous use in `useNoteSnapshotTimeline.ts:252-253`. These are product
-behavior, not the bug being chased.
+#### 3a — mid-typing corruption: cursor resets to 0 while actively editing, not on restore — FIXED
+
+**This is the one the user flagged as "a different beast... it happens mid typing in an active
+note... document initial and text enters at the wrong place."** Not a restore-time issue at all —
+found and fixed in `CM6Editor.tsx`'s same-note hydration path.
+
+Root cause: the hydration effect (keyed on `[noteId, initialText]`) is *expected* to re-run on
+every keystroke (React's `initialText` prop, sourced from `activeNoteText`, changes every
+keystroke) and is *expected* to almost always no-op via its own guard (`currentText === initialText
+→ return`). But whenever that guard failed for the *same* note — `initialText` transiently
+disagreeing with CM6's own live document, for any reason, not just one specific trigger — the
+previous code unconditionally did a full `{from: 0, to: doc.length, insert: initialText}` replace
+**and an explicit `selection: EditorSelection.cursor(0)`**, for both a genuine note switch *and*
+this same-note case. A genuine note switch legitimately wants that (a separate restore-snapshot
+mechanism repositions the caret correctly afterward); the same-note case has no such follow-up,
+so the reset stuck — the exact reported symptom.
+
+Compared directly against the Lexical reference this was ported from
+(`NoteTextHydrationPlugin.tsx`) and found a real, clean divergence: Lexical's version tags its
+equivalent update with `SKIP_SELECTION_FOCUS_TAG` (never explicitly moves the caret for this
+path) and patches only the differing span via a prefix/suffix line diff (`replaceEditorText`) —
+CM6's port dropped both properties, per its own comment ("Slice-1 simplification... since CM6's
+own `Text.replace()` already avoids that function's entire reason for existing"), which was true
+performance-wise but missed that the diffing *also* did correctness work (giving CM6's own
+selection-through-changes mapping something meaningful to map an existing caret through).
+
+**Fixed** by branching on whether this is a genuine note switch
+(`lastHydratedNoteIdRef.current !== noteId`): only that path still does the full replace + cursor
+reset. The same-note path now dispatches a minimal, common-prefix/suffix-trimmed change (extracted
+to a pure, fuzz-tested function, `computeMinimalTextReplacement` in
+`src/editor/MinimalTextDiff.ts`) with **no explicit `selection` field**, letting CM6's own
+selection-through-changes mapping preserve the caret automatically — confirmed this actually works
+via a direct live check (dispatch a non-overlapping targeted change, confirm the existing caret
+maps to the correct shifted position, not 0).
+
+**What wasn't achieved, stated precisely rather than glossed over**: a full end-to-end live
+reproduction of the *original triggering race* (what exactly makes `initialText` and CM6's live
+doc transiently disagree for the same note) was not obtained. Two specific hypotheses were tested
+and didn't reproduce it: (1) `deferPreviewOnRapidInput`'s coalesced-commit lag — its
+`scheduleCoalescedPreviewCommit` reads `latestEditorTextRef.current` fresh at rAF-fire time, not a
+stale snapshot, so it's more robust than it looks; (2) a 62-character synchronous CM6-dispatch
+burst within a single JS task (to try to outrun React's re-render) — also stayed in sync every
+time. The fix closes the *symptom* (confirmed via direct testing of the actual mechanism it
+relies on) and matches the trusted reference implementation's own defensive shape, so it's shipped
+with high confidence despite this gap — but if the exact trigger ever gets pinned down, record it
+here rather than assuming this doc's hypotheses were it.
+
+Verified: `npx tsc --noEmit`, `npm run lint`, `npm test` (258/258, +7 new fuzz tests for
+`computeMinimalTextReplacement`), full `scripts/perf/verifyCM6*.mjs` suite (22/22), plus live
+checks for both branches — genuine note-switch (content fully replaces, no cross-contamination,
+caret focused) and the selection-mapping mechanism itself (a targeted non-overlapping edit
+correctly shifts rather than resets an existing caret).
+
+#### 3b — restore-time gap: cursor genuinely never persisted, so it reads back as 0 — NOT a bug, reframed as a design gap
+
+**`getNoteUiState`'s 0-default is not a misdiagnosed "malformed read"** — `databaseService.ts:1567-1572`'s
+own comment states it directly: the DB row's `cursorPos` column stays SQL NULL until the first
+*debounced* UI-state save fires; if the app closes (or the note/section is switched away from)
+before that, 0 is genuinely the last successfully-persisted state, not a failure to distinguish
+from anything.
+
+**The real gap, found by tracing every write path**: cursor position is essentially only ever
+persisted at two moments in the whole app — `beforeunload` (`App.tsx:6733`,
+`persistActiveNoteEditModeStateNow()`, but only for `activeSection`, not every open section in
+split view) and the preview↔edit mode toggle (`useEditorSectionMount.ts:1258`, `immediate: true`).
+**The function actually built for incremental/debounced saving during ordinary typing and
+scrolling, `persistEditUiState`'s own 280ms-debounce branch, is never called in debounced mode
+anywhere in the codebase** — confirmed by grepping the whole `src/` tree; its one call site always
+passes `immediate: true`. This is the same shape as Bug 1: real infrastructure that was built but
+never wired up to fire during normal use, not a logic bug in the fallback itself.
+
+**Scope decision from the user, explicit**: this deserves a real, comprehensive fix, not a
+patch on the fallback value. See the new "Cursor/scroll persistence redesign" section below —
+this is being treated as its own tracked effort, not folded into a one-line Bug 3 fix.
+
+Two *intentional* zero-resets exist, unrelated to either bug above, and must not be conflated with
+either: `ZERO_EDITOR_SELECTION` (`EditRestoreMath.ts:21`) used for entering a Time Machine snapshot
+preview (`useEditorSectionMount.ts:1658-1663`, "no saved cursor of its own, show from the top") and
+the fallback when leaving preview back to a note with no cached edit-mode state (`:1671-1679`),
+plus one analogous use in `useNoteSnapshotTimeline.ts:252-253`. These are product behavior.
 
 No "brittle" comment/TODO exists in-repo — that word is the user's own characterization, not a
-quoted source finding. Treat the fallback above as the concrete substance behind it, but stay
-open to more sites turning up once this is exercised live (Phase 4's job, not this one).
+quoted source finding. 3a above is the concrete substance behind it.
 
 ### Bug 4 — Enter key visually produces a double line break
 
@@ -339,14 +404,45 @@ live-browser functional checks for each specific behavior. One A/B check done (B
 `git stash`-verified to still pass its own test either way, since the test doesn't reach the
 fixed branch — recorded honestly above rather than claimed as proof the fix does something).
 
-**Next up, in priority order per the phase list above**:
-- Bug 2's real remaining half: build a live repro that opens two sections (split view) and
-  switches focus between them, and find what actually governs caret visibility there — likely
-  either one of the three `useEditorSectionMount.ts` restore effects (not yet confirmed which, if
-  any, fires for cross-section focus) or the named-but-unported `CagedScrollPlugin.tsx`
-  caret-refocus gap flagged in Bug 2's last bullet.
-- Bug 3 (caret resets to offset 0) and Bug 4 (Enter double line break — needs live reproduction
-  attempt first, static analysis argues against it existing as described) are both still open.
+**Bug 2 — closed per explicit user direction.** Deep live tracing (including swapping in the
+pre-Bug-1 file to test the exact no-handler state) found no internal/native selection desync, with
+or without Bug 1's fix — root cause really was just the missing right-click wiring. Explicit
+decision: don't chase the multi-section-switch angle further, and don't build a general "restore
+the caret if it looks lost" recovery mechanism — a blanket fix for symptoms that might pop up
+isn't appropriate development-time practice; failures should stay visible. See Bug 2's section
+above for the full reasoning, kept verbatim in spirit since it's a standing principle for this
+whole doc, not just this one bug.
+
+**Bug 3 split into two, 3a fixed, 3b re-scoped as its own effort.** 3a (mid-typing corruption —
+the actual "different beast" the user flagged, distinct from any restore-time issue) is fixed:
+CM6's same-note hydration path no longer force-resets the caret to 0, matching the Lexical
+reference implementation's `SKIP_SELECTION_FOCUS_TAG` discipline; the diffing logic was extracted
+to a pure, fuzz-tested function (`src/editor/MinimalTextDiff.ts`) rather than left inline and
+only reachable via a live-browser hook. Verified: `npx tsc --noEmit`, `npm run lint`, `npm test`
+258/258 (+7 new), full `scripts/perf/verifyCM6*.mjs` suite 22/22, plus live checks of both the
+genuine-note-switch path (unaffected) and the selection-mapping mechanism the fix depends on
+(confirmed directly). **Honestly unresolved**: the exact end-to-end trigger for the original
+mismatch was never reproduced despite two targeted attempts — see Bug 3a's section for exactly
+what was tried and why it's still shipped with confidence anyway (matches the trusted reference
+implementation's own defensive shape, and the mechanism it relies on was verified directly).
+
+3b (cursor position genuinely never persisted in various real scenarios, reads back as 0) is
+**not a bug in the fallback logic** — `getNoteUiState`'s 0-default is correct given what's
+actually in the DB. Tracing every write path found the real gap: only two moments in the whole
+app ever persist cursor position (`beforeunload`, but only for the single `activeSection`, not
+every open section in split view; and the preview↔edit toggle) — the function actually built for
+incremental/debounced saving during ordinary typing is never invoked in debounced mode anywhere.
+Also confirmed live by code reading (not yet fixed): **closing a split-view section
+(`handleCloseSection`, `App.tsx:5145`) never flushes that section's cursor position at all** —
+an even more directly reproducible gap than the crash/quit scenario. Per explicit user direction,
+this is being treated as its own real, comprehensive persistence-checkpoint design effort, not a
+patch on the fallback value — see the new "Cursor/scroll persistence redesign" section, next up.
+
+**Next up, in priority order**:
+- The persistence redesign (3b) — a checkpoint list has been drafted from tracing every current
+  write path and every point content can be unloaded/switched; needs finishing and implementing.
+- Bug 4 (Enter double line break — needs live reproduction attempt first, static analysis argues
+  against it existing as described) is still open.
 - Phase 2 (parity inventory) hasn't been started structurally — Bug 1 was the first item found by
   investigation, not by a systematic Editor.tsx-vs-CM6Editor.tsx feature diff; that diff still
   needs doing.
