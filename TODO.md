@@ -24,11 +24,6 @@
       calculation was replaced with the current fixed-curve one, rather than reconstructing it
       from scratch by guessing.
 
-- [ ] CM6Editor (production editor as of 0.5.4) has no empty-note placeholder text ("Jot down a
-      thockdown note...") the way the Lexical editor's `Editor.tsx` does — noticed while porting
-      the fontReady/caretSuspended flash-gating for the production flip, not fixed as part of it
-      since it's an unrelated pre-existing gap in the CM6 port.
-
 ## Split-view rough edges (carried over from split-view handover doc)
 - [ ] `editorStageRef` (App.tsx) is one shared ref across all sections for the background-texture-sizing `ResizeObserver`; it only ever tracks whichever section's stage DOM node mounted/updated last.
 - [ ] `pendingViewportRestoreRef`/`isApplyingInitialViewportRef` are shared across sections, so one section's viewport-restore-in-progress window can transiently suppress another's save.
