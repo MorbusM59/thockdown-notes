@@ -18,8 +18,16 @@ export interface UseNoteSaveQueueOptions {
 }
 
 export interface UseNoteSaveQueueResult {
-  /** Debounces a save of `text` for the active note; repeated calls before the debounce window elapses collapse into one write. */
-  queueSave: (text: string) => void
+  /**
+   * Debounces a save of `text` for the active note; repeated calls before
+   * the debounce window elapses collapse into one write. `cursorPos`/
+   * `scrollTopPx`, when provided, piggyback onto this same write (see
+   * databaseService.ts's upsertNoteContent doc comment) -- always pass the
+   * latest values available at call time; only the values from the call
+   * that actually triggers the flush (the last one before the debounce
+   * timer fires) are used, matching how `text` itself already works here.
+   */
+  queueSave: (text: string, cursorPos?: number | null, scrollTopPx?: number | null) => void
   /** Cancels any pending debounce timer and writes immediately -- used before operations that need the disk state current (tag mutations, note switches, section hibernation). */
   flushPendingSaveNow: () => Promise<void>
   /** Cancels any pending debounce timer and discards the pending text *without* writing it -- used when deliberately abandoning unsaved changes (closing an external note without saving) or tearing down on unmount. */
@@ -39,6 +47,8 @@ export function useNoteSaveQueue(options: UseNoteSaveQueueOptions): UseNoteSaveQ
   const { activeNoteId, persistenceReady, notesRef, latestEditorTextRef, setActiveNoteText, setNotes } = options
 
   const pendingSaveTextRef = useRef<string | null>(null)
+  const pendingSaveCursorPosRef = useRef<number | null>(null)
+  const pendingSaveScrollTopPxRef = useRef<number | null>(null)
   const saveTimerRef = useRef<number | null>(null)
 
   const flushSave = useCallback(async () => {
@@ -46,7 +56,11 @@ export function useNoteSaveQueue(options: UseNoteSaveQueueOptions): UseNoteSaveQ
     const nextText = pendingSaveTextRef.current
     if (nextText === null) return
 
+    const cursorPos = pendingSaveCursorPosRef.current
+    const scrollTop = pendingSaveScrollTopPxRef.current
     pendingSaveTextRef.current = null
+    pendingSaveCursorPosRef.current = null
+    pendingSaveScrollTopPxRef.current = null
     try {
       const noteSummary = notesRef.current.find((note) => note.id === activeNoteId)
       const isExternal = noteSummary ? isExternalNote(noteSummary) : false
@@ -56,7 +70,7 @@ export function useNoteSaveQueue(options: UseNoteSaveQueueOptions): UseNoteSaveQ
       const normalizedText = normalizeInternalText(nextText)
       console.debug('[external-note] flushing note into DB', { noteId: activeNoteId, textLength: normalizedText.length, normalizedText })
 
-      const savedSummary = await window.thockdownNotes.saveNote({ id: activeNoteId, text: normalizedText })
+      const savedSummary = await window.thockdownNotes.saveNote({ id: activeNoteId, text: normalizedText, cursorPos, scrollTop })
 
       if (isExternal) {
         await window.thockdownNotes?.saveNoteSnapshot({ id: activeNoteId, content: normalizedText, isManual: false })
@@ -83,7 +97,7 @@ export function useNoteSaveQueue(options: UseNoteSaveQueueOptions): UseNoteSaveQ
     }
   }, [activeNoteId, notesRef, latestEditorTextRef, setActiveNoteText, setNotes])
 
-  const queueSave = useCallback((text: string) => {
+  const queueSave = useCallback((text: string, cursorPos?: number | null, scrollTopPx?: number | null) => {
     if (!persistenceReady) return
     // flushSave always re-normalizes pendingSaveTextRef.current right before
     // it's used (saveNote/saveNoteSnapshot/the isExternal branch all consume
@@ -91,6 +105,8 @@ export function useNoteSaveQueue(options: UseNoteSaveQueueOptions): UseNoteSaveQ
     // is a redundant O(document length) pass on every keystroke regardless of
     // whether `text` is already canonical.
     pendingSaveTextRef.current = text
+    pendingSaveCursorPosRef.current = cursorPos ?? null
+    pendingSaveScrollTopPxRef.current = scrollTopPx ?? null
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current)
     }

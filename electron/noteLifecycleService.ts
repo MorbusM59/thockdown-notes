@@ -379,6 +379,8 @@ export class NoteLifecycleService {
         isTemp: true,
         hasUnsavedChanges,
         syncMode,
+        cursorPos: input.cursorPos,
+        scrollTop: input.scrollTop,
       });
       this.databaseService.updateTempNoteState(input.id, hasUnsavedChanges, syncMode);
       const summary = await this.readSummary(this.databaseService.getNoteRecord(input.id) ?? {
@@ -414,6 +416,8 @@ export class NoteLifecycleService {
       externalPath: record?.externalPath ?? null,
       hasUnsavedChanges: record?.hasUnsavedChanges ?? false,
       syncMode: record?.syncMode ?? false,
+      cursorPos: input.cursorPos,
+      scrollTop: input.scrollTop,
     });
     const summary = await this.readSummary(this.databaseService.getNoteRecord(input.id) ?? {
       id: input.id,

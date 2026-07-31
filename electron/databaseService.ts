@@ -928,6 +928,17 @@ export class DatabaseService {
     externalPath?: string | null;
     hasUnsavedChanges?: boolean;
     syncMode?: boolean;
+    // Piggybacked onto this same write (no extra query) whenever the caller
+    // already has a fresh cursor/scroll position on hand -- e.g. the
+    // debounced note-text save queue, which already fires ~350ms after
+    // typing pauses regardless. Optional and left null by every other
+    // caller (createNote, external sync, snapshot branching, ...), which
+    // must NOT clobber whatever position is already persisted -- the
+    // ON CONFLICT clause below COALESCEs against the existing row for
+    // exactly that reason. See docs/cm6-parity-hardening-plan.md's
+    // "Cursor/scroll persistence redesign" section.
+    cursorPos?: number | null;
+    scrollTop?: number | null;
   }): void {
     const db = this.requireDb();
     const createdAtIso = new Date(input.createdAtMs).toISOString();
@@ -937,6 +948,8 @@ export class DatabaseService {
     const isTemp = input.isTemp ? 1 : 0;
     const hasUnsavedChanges = input.hasUnsavedChanges ? 1 : 0;
     const syncMode = input.syncMode ? 1 : 0;
+    const cursorPos = Number.isFinite(input.cursorPos) ? Math.max(0, Math.round(input.cursorPos as number)) : null;
+    const scrollTop = Number.isFinite(input.scrollTop) ? Math.max(0, Math.round(input.scrollTop as number)) : null;
 
     db.prepare(`
       INSERT INTO notes (
@@ -950,9 +963,11 @@ export class DatabaseService {
         isTemp,
         externalPath,
         hasUnsavedChanges,
-        syncMode
+        syncMode,
+        cursorPos,
+        scrollTop
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         filePath = excluded.filePath,
@@ -963,7 +978,9 @@ export class DatabaseService {
         isTemp = excluded.isTemp,
         externalPath = excluded.externalPath,
         hasUnsavedChanges = excluded.hasUnsavedChanges,
-        syncMode = excluded.syncMode
+        syncMode = excluded.syncMode,
+        cursorPos = COALESCE(excluded.cursorPos, notes.cursorPos),
+        scrollTop = COALESCE(excluded.scrollTop, notes.scrollTop)
     `).run(
       input.id,
       input.title,
@@ -976,6 +993,8 @@ export class DatabaseService {
       input.externalPath ?? null,
       hasUnsavedChanges,
       syncMode,
+      cursorPos,
+      scrollTop,
     );
 
     db.prepare('DELETE FROM notes_fts WHERE noteId = ?').run(input.id);

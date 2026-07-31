@@ -250,6 +250,76 @@ plus one analogous use in `useNoteSnapshotTimeline.ts:252-253`. These are produc
 No "brittle" comment/TODO exists in-repo — that word is the user's own characterization, not a
 quoted source finding. 3a above is the concrete substance behind it.
 
+## Cursor/scroll persistence redesign
+
+Scoped out of Bug 3 (see 3b above) per explicit user direction: "lacking caret position
+persistence in various cases has plagued the app for a while. we really need to have a fully
+comprehensive but light weight persistence routine." Two parts, both implemented and verified this
+session.
+
+**1. Piggyback the cursor position onto the existing debounced note-text save — no extra
+queries.** `useNoteSaveQueue.ts`'s `queueSave(text)` already fires a debounced
+`saveNote({id, text})` ~350ms after typing pauses, via `upsertNoteContent`'s
+`INSERT ... ON CONFLICT DO UPDATE` on the `notes` table. `cursorPos`/`scrollTop` are real columns
+on that same table (already used by the separate, explicit `saveNoteUiState`/`getNoteUiState`
+path) — so `queueSave` grew two more optional args (`cursorPos`, `scrollTopPx`), threaded through
+`SaveNoteInput` → `noteLifecycleService.saveNote` → `databaseService.upsertNoteContent`, added as
+two more bound params on the *same* prepared statement, no new query. The `ON CONFLICT` clause
+`COALESCE`s against the existing row value (`cursorPos = COALESCE(excluded.cursorPos,
+notes.cursorPos)`), so passing `null`/`undefined` (every other caller: `createNote`, external-file
+sync, snapshot branching) never clobbers a previously-persisted position — matches the existing
+`hasUnsavedChanges`/`syncMode` pattern already used on this same statement. Every call site of
+`queueSave` in `useEditorSectionMount.ts` (7 of them: markdown-shortcut transform, checklist
+typeover, Enter transform, character-insert transform, plain text-change, viewport/programmatic
+sync) now passes `selection.end` and `latestEditViewportTelemetryRef.current?.scrollTopPx` — both
+values it already had on hand at that point, so this really is "free" as asked: no new state, no
+new subscriptions, no new render triggers, just two extra bound params on a write that was already
+happening. The browser mock bridge (`installBrowserMockBridges.ts`) mirrors the same
+COALESCE-if-provided semantics so dev-mode behavior matches production.
+
+**2. Exhaustive-but-minimal explicit checkpoint list for content-unload/editor-switch points.**
+The piggyback above only fires on the *next* debounced text save — genuinely free, but not
+guaranteed to have fired yet at the exact moment a section's editor unloads (e.g. closing a
+section 100ms after the last keystroke, well inside the 350ms window). Traced every point in the
+app where an editor's content stops being the visibly active one, using the already-existing
+`persistActiveNoteEditModeStateNow()` (an explicit, non-debounced `saveNoteUiState` call — this
+one *is* a real extra query, but only at these transition points, not per-keystroke) as the
+checkpoint primitive:
+
+- **Already wired before this session** (confirmed by tracing, no fix needed): `activateNote`
+  (`EditorSection.tsx:371-385`, switching notes within a section) and the preview↔edit toggle
+  (`useEditorSectionMount.ts:1258`, `immediate: true`).
+- **`handleCloseSection`** (`App.tsx`, parks a named section) — was missing entirely; added.
+- **`handleDeleteSection`** (`App.tsx`, permanently removes a section slot) — same gap, same fix;
+  the note itself can outlive the deleted slot, so its position is still worth keeping.
+- **`handleSwapSection`** (`App.tsx`, swaps a different section into `outgoingSectionId`'s slot) —
+  `outgoingSectionId`'s editor unloads its note here too; same fix, applied to the outgoing side.
+- **`handleClearSection`** (`App.tsx`, "clear this section" picker action — closes the slot, then
+  backfills a fresh blank section) — same underlying `closeSlot` call as `handleCloseSection`; same
+  fix.
+- **`beforeunload`** (`App.tsx`) — previously only flushed `activeSection`; now iterates every
+  section in `sectionRegistryRef` so split-view panes other than the active one aren't silently
+  dropped on quit.
+
+**Verified live** (`scripts/perf/verifyCM6CursorPersistenceCheckpoints.mjs`, committed as a
+permanent regression check): (1) typing alone, no explicit `saveNoteUiState` call, and
+`getNoteUiState` reflects the typed-to cursor position after the debounce window — proves the
+piggyback path works end-to-end through the real save queue, not just at the SQL layer; (2) typing
+in a second section and closing it *immediately* (well inside the 350ms debounce window) still
+persists the correct cursor position — proves the explicit checkpoint, not the debounce timer, is
+what's responsible. A/B-verified: temporarily reverting just the `handleCloseSection` checkpoint
+line reproduces the loss (`getNoteUiState` reads back `cursorPos: 0`, `sourceAnchorText: null` —
+i.e. nothing was persisted at all) with the same test, confirming check (2) actually exercises the
+fix rather than passing by coincidence. Also: `npx tsc --noEmit` clean, `npm run lint` clean,
+`npm test` 258/258, full `scripts/perf/verifyCM6*.mjs` suite passing (see Session handover for the
+exact count).
+
+**Deliberately not done, per this doc's standing no-blanket-fix principle**: no generic "recover a
+lost cursor" fallback, no extra query added anywhere except the handful of real, named transition
+points above. The mid-typing corruption bug (3a) already fixed the actual "caret gets lost" defect
+directly at its source — this redesign is purely about not losing a position that was already
+correct.
+
 ### Bug 4 — Enter key visually produces a double line break
 
 **Flagged for live-browser verification before writing a fix — static analysis argues this
@@ -432,15 +502,22 @@ actually in the DB. Tracing every write path found the real gap: only two moment
 app ever persist cursor position (`beforeunload`, but only for the single `activeSection`, not
 every open section in split view; and the preview↔edit toggle) — the function actually built for
 incremental/debounced saving during ordinary typing is never invoked in debounced mode anywhere.
-Also confirmed live by code reading (not yet fixed): **closing a split-view section
-(`handleCloseSection`, `App.tsx:5145`) never flushes that section's cursor position at all** —
-an even more directly reproducible gap than the crash/quit scenario. Per explicit user direction,
-this is being treated as its own real, comprehensive persistence-checkpoint design effort, not a
-patch on the fallback value — see the new "Cursor/scroll persistence redesign" section, next up.
+Per explicit user direction, this was scoped as its own real, comprehensive
+persistence-checkpoint design effort rather than a patch on the fallback value.
+
+**3b — fixed and verified, this session.** See the new "Cursor/scroll persistence redesign"
+section above for the full design and implementation: (1) the cursor position now piggybacks onto
+the existing debounced note-text save at every `queueSave` call site, no extra queries; (2) five
+explicit checkpoints (`handleCloseSection`, `handleDeleteSection`, `handleSwapSection`,
+`handleClearSection`, and a fixed `beforeunload` that now flushes every open section instead of
+just the active one) cover every point an editor's content unloads/switches that the piggyback
+alone can't guarantee has already fired for. Verified: `npx tsc --noEmit` clean, `npm run lint`
+clean, `npm test` 258/258, full `scripts/perf/verifyCM6*.mjs` suite (23/23, one new script:
+`verifyCM6CursorPersistenceCheckpoints.mjs`), live-browser checks of both the piggyback path and
+the close-section checkpoint, and an A/B check proving the close-section checkpoint fix is actually
+load-bearing (reverting it reproduces the loss under the same test).
 
 **Next up, in priority order**:
-- The persistence redesign (3b) — a checkpoint list has been drafted from tracing every current
-  write path and every point content can be unloaded/switched; needs finishing and implementing.
 - Bug 4 (Enter double line break — needs live reproduction attempt first, static analysis argues
   against it existing as described) is still open.
 - Phase 2 (parity inventory) hasn't been started structurally — Bug 1 was the first item found by

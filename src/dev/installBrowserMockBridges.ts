@@ -376,6 +376,26 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
         note.updatedAtMs = Date.now()
         note.sizeBytes = input.text.length
         note.title = deriveTitle(input.text)
+
+        // Mirrors databaseService.ts's upsertNoteContent COALESCE semantics:
+        // piggybacked cursor/scroll position, only written when the caller
+        // actually provided one, never clobbered by callers that don't.
+        if (input.cursorPos != null || input.scrollTop != null) {
+          const previousState = store.noteUiStates[input.id] ?? {
+            progressPreview: 0,
+            progressEdit: 0,
+            cursorPos: 0,
+            scrollTop: 0,
+            sourceAnchorLine: 0,
+            sourceAnchorText: null,
+          }
+          store.noteUiStates[input.id] = {
+            ...previousState,
+            cursorPos: input.cursorPos ?? previousState.cursorPos,
+            scrollTop: input.scrollTop ?? previousState.scrollTop,
+          }
+        }
+
         return clone(toSummary(note))
       })
     },
