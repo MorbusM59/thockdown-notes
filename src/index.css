@@ -279,17 +279,33 @@ body {
   background-image:
     repeating-linear-gradient(to right, var(--color-grid-outline) 0, var(--color-grid-outline) 3px, transparent 3px, transparent var(--editor-cell-width)),
     repeating-linear-gradient(to bottom, var(--color-grid-outline) 0, var(--color-grid-outline) 3px, transparent 3px, transparent var(--editor-line-height));
-  background-size: 100% 100%;
+  /* One tile = exactly one grid cell, NOT 100% 100% (the whole container).
+     Confirmed live: with a 100%-100% tile, background-repeat's wraparound
+     copy of that tile becomes visible the moment background-position is
+     nonzero (the "infinity grid" half-cell shift), showing a sliver of the
+     SAME gradient evaluated near the far edge of a container-sized tile --
+     content that depends on (containerSize mod cellSize), an arbitrary,
+     window-size-dependent residue. Swept container height in 1px steps and
+     found exactly this: a spurious extra horizontal line appears inside
+     the new top margin, sweeps across it, and disappears, once per
+     lineHeightPx of resize -- reproduced and screenshotted before this fix,
+     confirmed gone after it. Sizing the tile to exactly one cycle makes
+     every tile an identical, seamless copy of the same pattern, so no
+     wraparound copy can ever show different content than the primary tile. */
+  background-size: var(--editor-cell-width) var(--editor-line-height);
   background-position: -1px -1px;
 }
 
 .thockdown-grid-lines {
   /* Exactly draw the 1px grid lines across the absolute width/height using the --color-grid-bg paper color to create the "plates" effect. */
-  background-image: 
+  background-image:
     repeating-linear-gradient(to right, var(--color-grid-bg) 0, var(--color-grid-bg) 1px, transparent 1px, transparent var(--editor-cell-width)),
     repeating-linear-gradient(to bottom, var(--color-grid-bg) 0, var(--color-grid-bg) 1px, transparent 1px, transparent var(--editor-line-height));
-  background-size: 100% 100%;
-  
+  /* See thockdown-grid-outline-lines's own comment: one tile = one grid
+     cell, not the whole container, so a shifted background-position can't
+     expose a container-size-dependent wraparound seam. */
+  background-size: var(--editor-cell-width) var(--editor-line-height);
+
   /* FLUSH ALIGNMENT: Start exactly at 0px 0px so grid lines land perfectly on 24px row boundaries */
   background-position: 0px 0px;
 }
