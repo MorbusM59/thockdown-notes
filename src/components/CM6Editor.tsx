@@ -130,7 +130,17 @@ import type {
  * lineHeightPx. Changed to round up (never clip) in that branch only, in
  * the shared CageMath.ts -- a real, pre-existing latent bug independent of
  * the half-cell shift, just newly exposed by it in this file's own test
- * viewport size.
+ * viewport size. And: at the default font settings halfCellWidthPx/
+ * halfLineHeightPx happen to be clean whole pixels, but at other settings
+ * (e.g. any y-box multiplier landing on an odd lineHeightPx) their true
+ * half is fractional -- found live via a before/after screenshot pixel
+ * scan showing the shifted grid line rendering visibly wider/blurrier than
+ * every other line in the same grid, from the fractional pixel forcing the
+ * grid's own hard color-stop edges to sub-pixel blend. Fixed by rounding
+ * both to the nearest whole pixel everywhere they're used (padding, grid
+ * backgroundPosition, every quantizeToPhase call, and the rowPhaseOffsetPx
+ * passed into CageMath.ts) -- the shift only needs to be "about half a
+ * cell" for breathing room, not exactly half, so rounding costs nothing.
  *
  * Still not ported: the hasViewportLines-style gating that avoids a "wrong
  * boundary frame, then corrected" flash on first restore -- a real but minor
@@ -665,8 +675,15 @@ export function CM6Editor({
   // be folded into this formula too -- the two offsets don't cancel out on
   // their own since one lands at the top of scrollHeight and the other at
   // the bottom -- via proper (always-non-negative) modulo arithmetic.
-  const halfCellWidthPx = cellWidthPx / 2;
-  const halfLineHeightPx = lineHeightPx / 2;
+  // Rounded to a whole device pixel, not left fractional: a fractional
+  // background-position/padding value (e.g. 13.5px, whenever lineHeightPx
+  // is odd) forces the grid's own hard color-stop edges to sub-pixel
+  // blend, rendering that one line visibly wider/blurrier than the rest of
+  // the grid -- confirmed live at an odd line-height setting. The shift
+  // only needs to be "about half a cell" for breathing room, not exactly
+  // half, so rounding costs nothing and keeps every grid line equally crisp.
+  const halfCellWidthPx = Math.round(cellWidthPx / 2);
+  const halfLineHeightPx = Math.round(lineHeightPx / 2);
   const alignmentPaddingBottomPx = lineHeightPx > 0
     ? (((scrollerClientHeightPx - halfLineHeightPx) % lineHeightPx) + lineHeightPx) % lineHeightPx
     : 0;
@@ -839,7 +856,7 @@ export function CM6Editor({
     // Phase lineHeightPxNow/2, not 0: real rows sit at (halfLine + N*line)
     // now, per the half-cell edge-breathing-room shift -- see
     // quantizeToPhase's own comment.
-    const quantizedRowTopInScroll = quantizeToPhase(caretTopInScroll, lineHeightPxNow, lineHeightPxNow / 2);
+    const quantizedRowTopInScroll = quantizeToPhase(caretTopInScroll, lineHeightPxNow, Math.round(lineHeightPxNow / 2));
     const topInViewport = quantizedRowTopInScroll - scroller.scrollTop;
 
     if (topInViewport < 0 || topInViewport > scroller.clientHeight - lineHeightPxNow) {
@@ -851,7 +868,7 @@ export function CM6Editor({
     const scrollerLeftInLayer = scrollerRect.left - caretLayerRect.left;
     const scrollerTopInLayer = scrollerRect.top - caretLayerRect.top;
     let absoluteLeft = caretRect.left - scrollerRect.left;
-    absoluteLeft = quantizeToPhase(absoluteLeft, runtimeCellWidthPx, runtimeCellWidthPx / 2);
+    absoluteLeft = quantizeToPhase(absoluteLeft, runtimeCellWidthPx, Math.round(runtimeCellWidthPx / 2));
 
     const caretWidthPx = Math.max(1, runtimeCellWidthPx - CARET_INSET_PX);
     const caretHeightPx = Math.max(1, lineHeightPxNow - CARET_INSET_PX);
@@ -931,12 +948,12 @@ export function CM6Editor({
       const topInScroll = (lineRect.top - scrollerRect.top) + scroller.scrollTop;
       // Same phase-aware quantization as updateCaret's own -- see
       // quantizeToPhase's comment.
-      const quantizedRowTopInScroll = quantizeToPhase(topInScroll, lineHeightPxNow, lineHeightPxNow / 2);
+      const quantizedRowTopInScroll = quantizeToPhase(topInScroll, lineHeightPxNow, Math.round(lineHeightPxNow / 2));
 
       const rawLeft = lineRect.left - scrollerRect.left;
       const rawRight = lineRect.right - scrollerRect.left;
-      const quantizedLeft = quantizeToPhase(rawLeft, runtimeCellWidthPx, runtimeCellWidthPx / 2);
-      const quantizedRight = quantizeToPhase(rawRight, runtimeCellWidthPx, runtimeCellWidthPx / 2);
+      const quantizedLeft = quantizeToPhase(rawLeft, runtimeCellWidthPx, Math.round(runtimeCellWidthPx / 2));
+      const quantizedRight = quantizeToPhase(rawRight, runtimeCellWidthPx, Math.round(runtimeCellWidthPx / 2));
 
       const existingRow = rowsByQuantizedTop.get(quantizedRowTopInScroll);
       if (existingRow) {
@@ -1216,7 +1233,7 @@ export function CM6Editor({
         topBoundaryPx: topBoundaryPxRef.current,
         bottomBoundaryPx: bottomBoundaryPxRef.current,
         lineHeightPx: lineHeightPxNow,
-        rowPhaseOffsetPx: lineHeightPxNow / 2,
+        rowPhaseOffsetPx: Math.round(lineHeightPxNow / 2),
       });
 
       if (Math.abs(targetScrollTopPx - scroller.scrollTop) > 0.01) {
