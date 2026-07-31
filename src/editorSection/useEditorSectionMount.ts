@@ -1463,6 +1463,19 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
         applyEditRestoreSnapshot(restoreSnapshot, {
           restoreFullSelection: false,
+          // Matches its two sibling branches above in this same effect
+          // (cached/memory snapshot restore), both of which already pass
+          // focusAfterApply: true -- this path (persisted-state restore, the
+          // one taken when a note is opened for the first time this
+          // session) was the one case that didn't, leaving
+          // document.activeElement off the editor after a note switch.
+          // Harmless on Lexical (its caret renders regardless of DOM focus)
+          // but CM6's caret overlay is hard-gated on focus
+          // (CM6Editor.tsx's updateCaret), so this omission left the caret
+          // invisible after switching to a not-yet-cached note until the
+          // user clicked in manually. See docs/cm6-parity-hardening-plan.md
+          // Bug 2.
+          focusAfterApply: true,
           onComplete: () => setIsCaretSuspended(false),
         })
       } catch (error) {

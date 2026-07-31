@@ -123,52 +123,51 @@ implementation, two starting points" pattern (used repeatedly elsewhere in this 
 unchanged and writing only a CM6-side apply/dispatch step is very likely the right shape, not a
 from-scratch CM6 reimplementation.
 
-### Bug 2 — caret disappears after the right-click dead-end; not restored by section-switch, only by full note reload
+### Bug 2 — caret disappears after the right-click dead-end; not restored by section-switch, only by full note reload — PARTIALLY RESOLVED, PARTIALLY STILL OPEN
 
-Two distinct mechanisms, confirmed from source, not yet live-verified end-to-end:
+**The right-click-specific half is fixed, confirmed live.** With Bug 1's `contextmenu` handler
+now intercepting right-click (`event.preventDefault()`, no native menu ever appears), focus
+never leaves `.cm-content`. Verified directly: click into the editor, right-click, confirm
+`document.activeElement` is still the editor and there's no console error. The caret overlay
+itself does go away after a right-click, but that's **correct, expected behavior, not a bug** —
+`updateCaret()` (`CM6Editor.tsx:1024-1028`) deliberately hides the blinking-caret overlay
+whenever the selection is a non-collapsed range (`!selectionRange.empty`), same as it would for
+a drag-selection or double-click; `.thockdown-block-selection` (the actual selection highlight)
+renders correctly in its place, confirmed present in the same live check. Don't mistake this for
+a regression if re-checking later — verify against `.thockdown-block-selection`, not
+`.thockdown-block-caret`, when a right-click has just selected a range.
 
-- **CM6's custom caret overlay is hard-gated on native DOM focus.**
-  `CM6Editor.tsx:1008-1080`, `updateCaret()` line 1025:
-  `if (document.activeElement !== view.contentDOM) { setCaretStyle(null); return; }`. Whenever
-  focus isn't literally on `.cm-content`, the caret overlay is invisible — confirmed by contrast
-  with `updateSelectionHighlight`, whose own comment (`CM6Editor.tsx:1097-1103`) explicitly notes
-  it "doesn't require focus the way `updateCaret` does."
-- **Right-click dead-end → focus loss, and nothing recovers it.** Per Bug 1, right-click pops the
-  native context menu (no interception). Depending on how that menu returns focus,
-  `document.activeElement` can end up off `.cm-content` — and `CM6Editor.tsx` never calls
-  `.focus()` on its own content DOM anywhere (`grep -n "\.focus(" src/components/CM6Editor.tsx`
-  → zero hits). Once lost, nothing brings it back except the user manually clicking into the
-  text. **Likely resolves naturally once Bug 1 intercepts right-click properly** (the handler can
-  keep/restore focus explicitly) — but confirm live after the Bug 1 fix rather than assuming.
-- **A real, separate gap in the section-switch restore path.** Selection state itself *is*
-  correctly restored on note switch — `adapter.applySnapshot({ selection, ... })`
-  (`CM6Editor.tsx:2569-2648`) sets `view.state.selection` via `view.dispatch(...)` regardless of
-  which editor is active, through the shared `applyEditRestoreSnapshot`
-  (`useEditorSectionMount.ts:622-712`). But **`restorePersistedEditState`
-  (`useEditorSectionMount.ts:1464-1467`) — the path taken whenever a note is opened for the first
-  time this session — never passes `focusAfterApply: true`**, and `applyEditRestoreSnapshot`
-  defaults that option to `false` (line 623). So nothing calls `.focus()` on the editor on that
-  path, `document.activeElement` stays wherever the user last had it (e.g. a sidebar button), and
-  `updateCaret()` keeps the overlay hidden until a manual click. Contrast: the synchronous
-  "click a different note in the sidebar" path (`EditorSection.tsx:366-465` →
-  `useEditorSectionMount.ts:1425-1433`) *does* pass `focusAfterApply: true` and should work.
-  **Fix**: either pass `focusAfterApply: true` from `restorePersistedEditState` too, or make
-  `applyEditRestoreSnapshot`'s default `true` and opt out the few callers (Time Machine preview,
-  `ZERO_EDITOR_SELECTION` paths) that deliberately don't want focus stolen. Decide which by
-  checking what Lexical's `Editor.tsx` did on the equivalent path before this migration — that's
-  the actual parity bar, not a guess.
-- **Why a full page reload "just works" wasn't confirmed from source** — the cold-boot path
-  (`seedInitialViewport`, `useEditorSectionMount.ts:1726-1767`) also never calls `.focus()`.
-  Working theory, not verified: after reload the user naturally clicks into the note to start
-  typing, which focuses `.cm-content` via ordinary click-to-focus (correctly routed today since
-  CM6's contentDOM carries the shared `editor-text` class, `CM6Editor.tsx:1516` — confirmed
-  already fixed, don't re-flag), whereas a sidebar switch doesn't require any click inside the
-  editor. Confirm this live before writing it into a fix's justification.
-- **Named, acknowledged gap already in the source, independent of the above**:
-  `CM6Editor.tsx:2040-2047`'s own comment states the port of `CagedScrollPlugin.tsx`'s
-  `handleKeyUp`/`handleWindowBlur`/`handleVisibilityChange` only covers page-scroll-relevant
-  parts, explicitly excluding "caret-refocus state not yet ported." Worth checking whether this
-  is actually the same underlying gap as the bullet above before building two fixes for one bug.
+**The section-switch half turned out to be a different, more specific scenario than first
+diagnosed — only partly addressed, and the real repro still needs building.** The originally
+suspected code path, `restorePersistedEditState` (`useEditorSectionMount.ts`, now ~1464-1480),
+was fixed for consistency — it's the one restore branch in its effect that didn't pass
+`focusAfterApply: true` while its two siblings (cached-snapshot, memory-snapshot) already did —
+but **live tracing (temporary debug logging through all three restore branches, removed after)
+could not find any UI flow that actually reaches it**: `setActiveNoteId` (the only thing that
+changes which note is active) has exactly one non-null call site,
+`EditorSection.tsx:440`'s `activateNote`, which *always* pre-seeds `pendingEditRestoreSnapshotRef`
+first — including on cold boot via `setActiveNote` + reload, confirmed live via
+`scripts/perf/verifyCM6ColdBootCaretFocus.mjs` (kept as general coverage, but its own header now
+documents that it hits the cached-snapshot branch, not this one). The fix is still correct and
+harmless (it just makes an already-idempotent, already-guarded focus call consistent across
+sibling branches), but **don't report this as "fixed" for the user's actual complaint** until a
+real reachable trigger is found or the complaint is re-diagnosed.
+
+**Re-reading the original report precisely matters here**: "not restored from switching between
+sections, only when actually loading the note again into a section" — this app has a real
+multi-section split-view feature (`App.tsx`'s `sectionRegistryRef`/`activeSectionId`, multiple
+simultaneous `EditorSection` instances), which is a *different* interaction from switching which
+note is open within one section (everything investigated and fixed so far). **Next session should
+build a live repro that actually opens two sections and switches focus between them** — that's
+the more likely real trigger for this complaint, not yet tested at all. Check whether
+cross-section focus transfer goes through any of the three restore effects in
+`useEditorSectionMount.ts` at all, or a completely separate, not-yet-investigated code path.
+
+**Named, acknowledged gap already in the source, independent of the above, still unexamined**:
+`CM6Editor.tsx:2040-2047`'s own comment states the port of `CagedScrollPlugin.tsx`'s
+`handleKeyUp`/`handleWindowBlur`/`handleVisibilityChange` only covers page-scroll-relevant parts,
+explicitly excluding "caret-refocus state not yet ported." Check whether this is the actual
+mechanism behind the multi-section case before building something new.
 
 ### Bug 3 — caret jumps back to document start (offset 0)
 
@@ -329,19 +328,33 @@ and what's still open — don't let a session end without both.
 
 **This session**: wrote this plan from the user's own five-phase framing, grounded Phase 1's four
 bugs in source (see citations above), identified the concrete Phase 3 loose ends already visible
-from the historical performance sweep. **Bug 1 (right-click selection-scope cycling) fixed and
-verified** — see its section above for the fix shape; verification was `npx tsc --noEmit` clean,
-`npm run lint` clean, `npm test` 251/251, and the full existing `scripts/perf/verifyCM6*.mjs`
-regression suite (21/21 including the new `verifyCM6RightClickSelectionScope.mjs`) all passing
-after the change, plus a fresh live-browser functional check of the new behavior itself.
+from the historical performance sweep.
+
+**Bug 1 (right-click selection-scope cycling) — fixed and verified.** See its section above for
+the fix shape.
+
+**Bug 2 — partially resolved, partially re-scoped.** The right-click-specific focus-loss half is
+confirmed fixed live (a side effect of Bug 1's fix). The `restorePersistedEditState` focus fix
+landed (consistency with sibling branches) but live tracing found it isn't reachable via any known
+UI flow — the real "not restored from switching between sections" complaint is very likely about
+this app's actual multi-section split-view feature, not note-switching within one section, and
+that scenario hasn't been tested at all yet. See Bug 2's section above for the full trace and
+what's still needed.
+
+**Verification for both changes this session**: `npx tsc --noEmit` clean, `npm run lint` clean,
+`npm test` 251/251 (twice, once per change), and the full existing `scripts/perf/verifyCM6*.mjs`
+regression suite run twice — 21/21 after Bug 1, 22/22 after Bug 2's fix (two new scripts added:
+`verifyCM6RightClickSelectionScope.mjs`, `verifyCM6ColdBootCaretFocus.mjs`) — plus fresh
+live-browser functional checks for each specific behavior. One A/B check done (Bug 2's fix
+`git stash`-verified to still pass its own test either way, since the test doesn't reach the
+fixed branch — recorded honestly above rather than claimed as proof the fix does something).
 
 **Next up, in priority order per the phase list above**:
-- Bug 2 (caret disappearing after right-click dead-end / not restored on section-switch) — the
-  right-click-specific half of this may already be resolved as a side effect of Bug 1 (the
-  contextmenu handler now intercepts the event instead of falling through to the native menu),
-  but that's not yet confirmed live — check first before writing new code for it. The
-  section-switch `focusAfterApply` gap in `restorePersistedEditState`
-  (`useEditorSectionMount.ts:1464-1467`) is a separate, still-open fix.
+- Bug 2's real remaining half: build a live repro that opens two sections (split view) and
+  switches focus between them, and find what actually governs caret visibility there — likely
+  either one of the three `useEditorSectionMount.ts` restore effects (not yet confirmed which, if
+  any, fires for cross-section focus) or the named-but-unported `CagedScrollPlugin.tsx`
+  caret-refocus gap flagged in Bug 2's last bullet.
 - Bug 3 (caret resets to offset 0) and Bug 4 (Enter double line break — needs live reproduction
   attempt first, static analysis argues against it existing as described) are both still open.
 - Phase 2 (parity inventory) hasn't been started structurally — Bug 1 was the first item found by
