@@ -77,7 +77,13 @@ import type {
  * showing through despite caret-color: transparent on .editor-text -- CM6's
  * own base theme sets caret-color via a higher-specificity descendant
  * selector (`.ͼN .cm-content`), which was silently winning regardless of
- * source order; forced with !important.
+ * source order; forced with !important. And: changing the y-box (line-
+ * height) slider while scrolled into a large document could leave every
+ * visible line PERSISTENTLY (not just for a frame) off the grid until the
+ * user scrolled -- CM6's own scrollTop/scrollHeight reconciliation across
+ * the reflow wasn't settling on its own in a useful timeframe. Fixed with
+ * view.requestMeasure() in the effect reacting to lineHeightPx/cellWidthPx
+ * changes, forcing that settle to happen immediately.
  *
  * Still not ported: the hasViewportLines-style gating that avoids a "wrong
  * boundary frame, then corrected" flash on first restore -- a real but minor
@@ -855,6 +861,35 @@ export function CM6Editor({
       updateSelectionHighlight();
     });
   }, [updateSelectionHighlight]);
+
+  // Found live: changing the y-box (line-height) slider while scrolled into
+  // a large (virtualized) document could leave every visible line sitting
+  // measurably off the grid -- e.g. 11px off on a 27px line height --
+  // self-correcting a beat later on its own, or immediately on the next
+  // scroll. Root-caused by polling the actual DOM on a tight interval
+  // across a real line-height transition (26px -> 27px): scrollHeight grew
+  // (CM6's own layout reflowed to the new line height) BEFORE scrollTop was
+  // adjusted to preserve the same visual scroll position -- scrollTop was
+  // still observed at its pre-change value up to ~100ms after the CSS
+  // custom property had already updated, during which every rendered line
+  // was positioned according to a scrollTop CM6 hadn't finished
+  // reconciling against the new geometry yet. view.requestMeasure() forces
+  // CM6 to settle that reflow (and whatever scroll-position preservation it
+  // does across one) synchronously in this same effect, rather than
+  // however many frames its own default schedule would otherwise take.
+  //
+  // Separately (still worth keeping): scheduleCaretUpdateAfterResize/
+  // scheduleSelectionHighlightUpdate/syncCustomScrollbar are the exact same
+  // three calls the ResizeObserver path elsewhere in this file already
+  // makes on a real resize -- a metrics change deserves the same re-sync
+  // even though the container's own outer bounding box doesn't move, so
+  // these overlays don't paint from a stale pre-change measurement either.
+  useEffect(() => {
+    viewRef.current?.requestMeasure();
+    scheduleCaretUpdateAfterResize();
+    scheduleSelectionHighlightUpdate();
+    syncCustomScrollbar();
+  }, [lineHeightPx, cellWidthPx, scheduleCaretUpdateAfterResize, scheduleSelectionHighlightUpdate, syncCustomScrollbar]);
 
   useEffect(() => {
     if (!containerRef.current) return;
