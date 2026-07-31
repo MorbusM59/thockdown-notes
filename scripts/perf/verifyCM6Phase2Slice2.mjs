@@ -88,6 +88,36 @@ async function main() {
     }
     console.error('[verify] Enter produced correct two-line content, confirmed via the real save pipeline:', JSON.stringify(savedAfterEnter))
 
+    // --- Enter inside a list item must continue the list marker ---
+    // Regression guard for a real bug this round: @codemirror/commands'
+    // defaultKeymap binds Enter to its own insertNewlineAndIndent, which
+    // runs at higher precedence than a plain domEventHandlers.keydown
+    // registration -- silently winning over this app's own onEnterTransform
+    // callback (a plain, uncontinuing newline still got inserted, so this
+    // looked like "Enter works" in the check above unless list-continuation
+    // specifically was tested). Fixed by moving the interception to a
+    // Prec.highest keymap binding instead. Confirmed against Lexical's own
+    // behavior on the same input as ground truth before trusting this
+    // expected value.
+    await page.keyboard.press('Control+a')
+    await page.keyboard.press('Delete')
+    await page.keyboard.type('- item one')
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('item two')
+    await page.waitForTimeout(500)
+    const savedAfterListEnter = await page.evaluate(async () => {
+      const notes = await window.thockdownNotes.listNotes()
+      const sorted = [...notes].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+      const target = sorted[0]
+      if (!target) return null
+      const loaded = await window.thockdownNotes.loadNote({ id: target.id })
+      return loaded?.text ?? null
+    })
+    if (savedAfterListEnter !== '- item one\n- item two') {
+      throw new Error(`FAIL: Enter inside a list item did not continue the list marker. Got: ${JSON.stringify(savedAfterListEnter)}`)
+    }
+    console.error('[verify] Enter inside a list item correctly continues the marker:', JSON.stringify(savedAfterListEnter))
+
     if (consoleErrors.length > 0) {
       console.error('[verify] console errors:')
       for (const err of consoleErrors) console.error('  ' + err)
