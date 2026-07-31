@@ -163,7 +163,13 @@ export function resolveEditorRuntimeMetrics(
   const fontFamily = resolveEditorFontFamily(style);
   const measuredGlyphWidthPx = measureMonospaceGlyphWidthPx(fontFamily, fontSizePx);
   const glyphWidthPx = Math.max(1, measuredGlyphWidthPx ?? fallbackGlyphWidthPx);
-  const cellWidthPx = Math.max(1, glyphWidthPx + (safeGlyphSideGapPx * 2));
+  // Rounded to a whole px like lineHeightPx above: this is the grid's
+  // horizontal pitch (--editor-cell-width feeds background-size's
+  // x-component), and a fractional tile width makes the repeating grid
+  // pattern drift/shift as it tiles across the width instead of staying
+  // pixel-perfect -- same root cause as the lineHeightPx rounding, just on
+  // the other axis.
+  const cellWidthPx = Math.max(1, Math.round(glyphWidthPx + (safeGlyphSideGapPx * 2)));
 
   return {
     fontSizePx,
