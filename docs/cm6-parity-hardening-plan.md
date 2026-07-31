@@ -123,51 +123,41 @@ implementation, two starting points" pattern (used repeatedly elsewhere in this 
 unchanged and writing only a CM6-side apply/dispatch step is very likely the right shape, not a
 from-scratch CM6 reimplementation.
 
-### Bug 2 — caret disappears after the right-click dead-end; not restored by section-switch, only by full note reload — PARTIALLY RESOLVED, PARTIALLY STILL OPEN
+### Bug 2 — caret disappears after the right-click dead-end; not restored by section-switch, only by full note reload — CLOSED
 
-**The right-click-specific half is fixed, confirmed live.** With Bug 1's `contextmenu` handler
-now intercepting right-click (`event.preventDefault()`, no native menu ever appears), focus
-never leaves `.cm-content`. Verified directly: click into the editor, right-click, confirm
+**Root cause: the right-click handler simply wasn't wired up (Bug 1). Fixed by Bug 1, confirmed
+live, closed — no further recovery/failsafe mechanism wanted.**
+
+The right-click-specific focus loss is fixed: with Bug 1's `contextmenu` handler now intercepting
+right-click (`event.preventDefault()`, no native menu ever appears), focus never leaves
+`.cm-content`. Verified directly: click into the editor, right-click, confirm
 `document.activeElement` is still the editor and there's no console error. The caret overlay
 itself does go away after a right-click, but that's **correct, expected behavior, not a bug** —
 `updateCaret()` (`CM6Editor.tsx:1024-1028`) deliberately hides the blinking-caret overlay
 whenever the selection is a non-collapsed range (`!selectionRange.empty`), same as it would for
 a drag-selection or double-click; `.thockdown-block-selection` (the actual selection highlight)
-renders correctly in its place, confirmed present in the same live check. Don't mistake this for
-a regression if re-checking later — verify against `.thockdown-block-selection`, not
-`.thockdown-block-caret`, when a right-click has just selected a range.
+renders correctly in its place. Don't mistake this for a regression if re-checking later — verify
+against `.thockdown-block-selection`, not `.thockdown-block-caret`, when a right-click has just
+selected a range.
 
-**The section-switch half turned out to be a different, more specific scenario than first
-diagnosed — only partly addressed, and the real repro still needs building.** The originally
-suspected code path, `restorePersistedEditState` (`useEditorSectionMount.ts`, now ~1464-1480),
-was fixed for consistency — it's the one restore branch in its effect that didn't pass
-`focusAfterApply: true` while its two siblings (cached-snapshot, memory-snapshot) already did —
-but **live tracing (temporary debug logging through all three restore branches, removed after)
-could not find any UI flow that actually reaches it**: `setActiveNoteId` (the only thing that
-changes which note is active) has exactly one non-null call site,
-`EditorSection.tsx:440`'s `activateNote`, which *always* pre-seeds `pendingEditRestoreSnapshotRef`
-first — including on cold boot via `setActiveNote` + reload, confirmed live via
-`scripts/perf/verifyCM6ColdBootCaretFocus.mjs` (kept as general coverage, but its own header now
-documents that it hits the cached-snapshot branch, not this one). The fix is still correct and
-harmless (it just makes an already-idempotent, already-guarded focus call consistent across
-sibling branches), but **don't report this as "fixed" for the user's actual complaint** until a
-real reachable trigger is found or the complaint is re-diagnosed.
+A deeper live trace (git-swapping in the pre-Bug-1 file to test the exact "no handler at all"
+state, correcting an initial coordinate-calibration mistake that produced a false lead) confirmed
+CM6 tracks cursor position from native mouse events via its own internal plumbing regardless of
+which button — no internal/native-selection desync exists, with or without the fix. **Decision
+(explicit, from the user): don't chase this further, and don't build a general "restore the
+caret if it looks lost" recovery mechanism even if one had been found.** Stated reasoning, worth
+preserving verbatim in spirit: a blanket recovery mechanism for symptoms that "might pop up" is
+not appropriate development-time practice — if there's a failure, it should be visible, not
+silently patched over by a failsafe. The `restorePersistedEditState` `focusAfterApply` fix from
+the previous round stays (harmless, real consistency fix, unrelated to this decision) but the
+originally-suspected multi-section-switch repro was never built and isn't being chased further —
+re-open only if a new, concrete report narrows it down, not by resuming the general search.
 
-**Re-reading the original report precisely matters here**: "not restored from switching between
-sections, only when actually loading the note again into a section" — this app has a real
-multi-section split-view feature (`App.tsx`'s `sectionRegistryRef`/`activeSectionId`, multiple
-simultaneous `EditorSection` instances), which is a *different* interaction from switching which
-note is open within one section (everything investigated and fixed so far). **Next session should
-build a live repro that actually opens two sections and switches focus between them** — that's
-the more likely real trigger for this complaint, not yet tested at all. Check whether
-cross-section focus transfer goes through any of the three restore effects in
-`useEditorSectionMount.ts` at all, or a completely separate, not-yet-investigated code path.
-
-**Named, acknowledged gap already in the source, independent of the above, still unexamined**:
-`CM6Editor.tsx:2040-2047`'s own comment states the port of `CagedScrollPlugin.tsx`'s
-`handleKeyUp`/`handleWindowBlur`/`handleVisibilityChange` only covers page-scroll-relevant parts,
-explicitly excluding "caret-refocus state not yet ported." Check whether this is the actual
-mechanism behind the multi-section case before building something new.
+**Named, acknowledged gap already in the source, independent of the above, deliberately not
+pursued per the same reasoning**: `CM6Editor.tsx:2040-2047`'s own comment notes the port of
+`CagedScrollPlugin.tsx`'s `handleKeyUp`/`handleWindowBlur`/`handleVisibilityChange` only covers
+page-scroll-relevant parts, excluding "caret-refocus state not yet ported." Leave as a known,
+named gap — only worth touching if a concrete symptom traces back to it specifically.
 
 ### Bug 3 — caret jumps back to document start (offset 0)
 
