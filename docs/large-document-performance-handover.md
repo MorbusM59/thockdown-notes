@@ -1050,3 +1050,134 @@ comment lists at least one deliberately-unported piece (the boundary-restore fla
 the file is still described as a "shadow-adapter stage" spike, not a completed migration. Asked
 explicitly this round — the answer was "not yet, keep auditing/hardening first," which is why this
 section exists as multiple fix-and-reprofile rounds rather than stopping at the first one.
+
+### Diminishing returns confirmed by a further round (after the two debounce fixes merged)
+
+The two fixes above (PR #44, merged into `main`) were re-profiled once more, with the same
+`performance.mark`/`measure` bracketing technique applied to every remaining hot-path call in
+`CM6Editor.tsx`'s `updateListener`/`updateCaret`/`reconcileCagedScroll` and to every step of
+`useEditorSectionMount.ts`'s `onTextChange` binding (typing-sound setup, title-preview
+derivation, `doc.toString()`, the React `setState` calls, `queueSave`). **Conclusion: no further
+single dominant offender remains.** Every bracketed piece measured well under 2ms/keystroke mean
+on the synthetic 1.5M-character note, and most are already the incrementally-optimized versions
+this doc's own history already built (`deriveNoteTitleIncremental`, `updateInlineStateLineCacheIncremental`,
+`splitMarkdownIntoPreviewBlocksIncremental`). The instrumentation was reverted after answering the
+question — this is a diagnostic technique to reach for again, not permanent code (see
+`scripts/perf/measureEditorSectionHooks.mjs` for the reusable harness half of it).
+
+**`(program)` and `(garbage collector)` are now the two largest remaining CDP profile buckets**
+(~38% of total sampled time combined) — not attributable to a specific named function, and the
+best available explanation is downstream of the one remaining full-document string allocation per
+keystroke: `update.state.doc.toString()` in `CM6Editor.tsx`'s `updateListener` (and
+`readCanonicalRootText()`'s equivalent in Lexical's `ContractBridgePlugin.tsx`), required because
+the `EditorBindings` contract (`EditorContract.ts`) hands the *entire* canonical text to
+`onTextChange` on every doc-changing keystroke. The allocation itself is cheap to *create*
+(~0.4ms measured) but happens every single keystroke regardless of document size or how small the
+edit was, and downstream consumers (`useNoteSaveQueue.ts`'s `queueSave`, `noteTitle.ts`'s title
+derivation, `MarkdownContext.ts`'s inline-state scan, `PreviewBlockSplit.ts`) all receive this
+same full string and must at minimum diff it against their own previous copy to find what changed
+— GC pressure from one ~1.5MB string (plus whatever each consumer retains a reference to) every
+keystroke is a plausible, not yet directly measured, explanation for these two buckets. **Not
+confirmed by a direct measurement yet** — see the handout below for what to check first.
+
+**What was NOT pursued further, and why:** typing-sound synchronous overhead
+(`typingSoundManager.playRandomClick`'s pre-await portion, ~1.4ms mean/~10ms max) is real but
+isn't a document-scale defect — its cost doesn't grow with document size at all, it's native Web
+Audio API node-creation overhead — so it's out of scope for *this* effort's contract even though
+it's part of overall keystroke latency. (A separate, narrower fix for it *was* made this round —
+see "Typing-sound bypass fix" below — but reducing it further, or trimming the feature, was
+explicitly ruled out by the user; sound quality is a deliberate product identity, not incidental
+weight to cut.)
+
+### Typing-sound bypass fix (small, separate from the document-scale audit above)
+
+`TypingSoundManager.ts`'s `playLayer` ran the *entire* Web Audio node-creation chain
+(`createBufferSource`, buffer lookup, jitter/playbackRate/detune computation, `createGain`,
+`connect`, echo-layer construction, `.start()`) for every layer (click/bass/treble) on every
+keystroke, even when that layer's own volume slider was at 0 or the layer was toggled off — the
+existing `layer.enabled`/`assetIndexes.length` gate caught the "layer off" case, but nothing
+caught "volume slider at 0" before doing all of the above for zero audible output. Fixed two ways:
+
+1. `playLayer` now computes `effectiveGain` (`options.gain × layer.gain`) immediately after the
+   existing `enabled`/`assetIndexes` check and returns before touching `AudioContext` at all
+   (skips even `ensureContextRunning`'s already-cheap resume check) if `effectiveGain <= 0`.
+2. A new `isAnyLayerAudible()` gate at the very top of `playRandomClick` skips the *entire*
+   pipeline — `tryPlayBoundBuffer`, `getSoundAttributes`, all three `playLayer` calls, and the
+   background bounce scheduling — in one check when every layer is simultaneously silent (e.g.
+   bass/treble volume both 0, or global key volume 0 with bass/treble also silent), rather than
+   discovering that three separate times after doing real work each time.
+
+Verified live (not just by reading the code): `AudioContext.prototype.createBufferSource`/
+`createGain` were monkey-patched via `page.addInitScript` to count real calls, then the actual
+settings UI was driven through Playwright (open options → expand "Keystroke Sounds" → enable set
+A → max all three volume sliders via keyboard `End` → confirmed typing created new
+`AudioBufferSourceNode`s as expected) followed by silencing all three sliders via keyboard `Home`
+and confirming typing created **zero** new nodes of either kind. `npx tsc --noEmit`, `npm run
+lint`, full suite (251/251) all clean. Not merged into a broader document-scale claim — this is a
+correctness-preserving early return (identical behavior whenever `effectiveGain > 0`), verified in
+isolation.
+
+### Handout: exploring the `EditorBindings` full-text-per-keystroke contract (not started)
+
+This is a scoping brief for whoever picks up the architectural option flagged above, not a plan
+already committed to — the user asked for this to be written up for exploration, explicitly
+deferring the actual redesign decision.
+
+**The problem, precisely stated.** `EditorContract.ts`'s `onTextChange` event carries the
+*entire* canonical document text (`event.text: string`) on every keystroke that changes the
+document, for both the Lexical (`Editor.tsx`/`ContractBridgePlugin.tsx`) and CM6
+(`CM6Editor.tsx`) implementations alike. This was a reasonable, simple contract when the app was
+young; at 1.5M characters it means one full-string allocation (`view.state.doc.toString()` /
+`readCanonicalRootText()`) every keystroke, handed to every consumer downstream
+(`useEditorSectionMount.ts`'s `onTextChange` binding, and transitively `useNoteSaveQueue.ts`,
+`noteTitle.ts`, `MarkdownContext.ts`, `PreviewBlockSplit.ts`, `useDocumentFind.ts`,
+`usePreviewScrollbar.ts`, `useMarkdownFormattingToolbar.ts` — see `EditorSection.tsx`'s hook
+fan-out). Every one of those consumers has already been made *internally* incremental (reuse
+prior work, diff against a cached previous string) per this doc's long history — but every single
+one of them still starts from a **fresh, fully-materialized string** each keystroke, because
+that's what the contract hands them. The suspected remaining cost (the `(program)`/
+`(garbage collector)` buckets above) is downstream of *producing* that string, not of any
+consumer's own processing of it.
+
+**Before designing anything: confirm the hypothesis is real, not assumed.** This doc has been
+burned before by trusting a plausible-sounding diagnosis without measuring it (see "The original
+diagnosis in this doc was wrong" near the top). Concretely, before touching `EditorContract.ts`:
+1. Use `--mode=trace` (category-level CDP trace, already in `perfHarness.mjs`) with a
+   `disabled-by-default-v8.gc` or equivalent GC-specific category enabled, or Chrome's own heap
+   allocation instrumentation (`HeapProfiler.startSampling`), to attribute the
+   `(garbage collector)` bucket to specific allocation sites rather than assuming it's this one.
+2. Try a cheap, reversible experiment first: comment out (or short-circuit) every consumer of
+   `event.text` except the minimum needed for `latestEditorTextRef`, re-measure the same
+   1.5M-character burst, and see how much of the `(program)`/GC cost actually goes away. If it's
+   small, this whole redesign isn't worth its cost and something else is the real driver.
+
+**If the hypothesis holds, the shape of a fix (not designed in detail here):** CM6 already has
+the document as a `Text` (rope) object (`view.state.doc`) with O(log n) slicing and no need to
+materialize a flat string for most operations. The redesign direction is threading that (or an
+equivalent incremental-diff payload — old text + change range + inserted text, rather than a full
+new string) further downstream instead of collapsing to a string immediately in the
+`updateListener`. Concretely this likely means: extending `EditorTextChangeEvent` (or adding a
+parallel, richer event) to carry a change description (`{from, to, insert}` or equivalent) instead
+of only `text: string`, and reworking each downstream consumer to accept that incrementally
+instead of assuming a fresh full string every time.
+
+**Why this is a real architectural project, not a quick trim — scope it accordingly:**
+- `EditorContract.ts` is the shared boundary both `Editor.tsx` (Lexical) and `CM6Editor.tsx`
+  implement (`docs/editor-contract.md`) — changing its shape means updating both implementations
+  in lockstep, and Lexical's own change-tracking primitives are different from CM6's `Text`/
+  `ChangeSet` (no native rope-with-diff object the same way), so the two sides may need genuinely
+  different adapters onto whatever the new contract shape is.
+- Every downstream consumer listed above currently assumes `event.text` is the plain, complete,
+  current document — several of them (`queueSave`, title derivation) already keep their own
+  "last known text" state for diffing purposes, so a change-delta-based contract could actually
+  *simplify* some of them (no need to diff old-vs-new when you're handed the diff directly) but
+  each one needs individual review, not a mechanical find-and-replace.
+- This is squarely `docs/document-scale-performance-philosophy.md`'s own "process discipline":
+  measure first, verify any incremental/diffing logic against ground truth with a fuzz test (this
+  codebase has two documented incidents of a plausible incremental scheme shipping a silent
+  correctness bug — see that doc's "Process discipline" section), and a live-browser functional
+  check before trusting anything here touches editor state.
+
+Not started. Left here so the next session (or this one, on request) has the actual problem
+statement, the measurement gap to close first, and the known scope/risk shape, rather than
+starting from a blank page.

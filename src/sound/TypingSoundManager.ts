@@ -249,6 +249,21 @@ export class TypingSoundManager {
     }
   }
 
+  // Whether *any* layer (click/bass/treble) is currently capable of
+  // producing audible output at all, purely from the persistent slider/
+  // toggle settings (layer.enabled, layer.gain) -- never the ephemeral
+  // per-call `options.gain` multiplier passed into playLayer, which this
+  // codebase only ever uses as a shaping factor (0.3-1), never a literal
+  // mute. Used to skip the whole per-keystroke sound pipeline in one check
+  // when the answer is already "no" (bass/treble volume both 0, or the
+  // click layer off with bass/treble also silent) instead of discovering
+  // that three separate times, once per layer, after doing real work.
+  private isAnyLayerAudible(): boolean {
+    return Object.values(this.layers).some(
+      (layer) => layer.enabled && layer.gain > 0 && layer.assetIndexes.length > 0,
+    )
+  }
+
   // recentKeySoundHistory (per-key attributes) and boundKeyBuffers (per-key
   // bounced audio, see E1) must always invalidate together -- a bounce is
   // only correct for the attributes/settings it was rendered from.
@@ -344,6 +359,14 @@ export class TypingSoundManager {
 
   async playRandomClick(options?: TypingSoundPlayOptions): Promise<void> {
     if (!this.enabled) return
+    // Bypasses the entire pipeline -- tryPlayBoundBuffer, getSoundAttributes
+    // (both real per-keystroke synchronous work), all three playLayer calls,
+    // and the background bounce scheduling -- when every layer is either
+    // toggled off or has its volume slider at 0 (e.g. bass/treble volume
+    // both 0, or the global key-click volume 0 with bass/treble also 0):
+    // none of that work can ever produce audible output, so there is
+    // nothing here worth doing on the keystroke's own call stack.
+    if (!this.isAnyLayerAudible()) return
 
     const keyId = options?.keyId
     if (keyId && (await this.tryPlayBoundBuffer(keyId))) {
@@ -462,10 +485,19 @@ export class TypingSoundManager {
   private async playLayer(layerId: string, options?: TypingSoundPlayOptions): Promise<void> {
     if (!this.loaded || !this.audioContext || !this.masterGain) return
 
-    await this.ensureContextRunning()
-
     const layer = this.layers[layerId]
     if (!layer || !layer.enabled || layer.assetIndexes.length === 0) return
+
+    // Skip the entire node-creation/connection/echo chain -- including the
+    // AudioContext resume check below -- when this layer's own volume is 0:
+    // every createBufferSource/createGain/connect/start() call further down
+    // would run for zero audible output. options?.gain is only ever a
+    // shaping multiplier in this codebase (0.3-1), never a literal mute, so
+    // layer.gain alone (the user-controlled slider) is the real signal here.
+    const effectiveGain = (options?.gain !== undefined ? options.gain : 1) * layer.gain
+    if (effectiveGain <= 0) return
+
+    await this.ensureContextRunning()
 
     const buffers = layerId === 'click'
       ? this.clickBuffersBySet[this.activeKeySet]
@@ -501,7 +533,6 @@ export class TypingSoundManager {
       source.detune.value = options.detune
     }
 
-    const effectiveGain = (options?.gain !== undefined ? options.gain : 1) * layer.gain
     const gainNode = this.audioContext.createGain()
     gainNode.gain.value = effectiveGain
     source.connect(gainNode)
