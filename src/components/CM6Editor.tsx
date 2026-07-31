@@ -59,9 +59,21 @@ import type {
  * see the git history for the live-confirmed bug this was), fixed a z-index
  * gap that put the caret/selection above the text instead of behind it,
  * ported the background box-grid lines (thockdown-grid-outline-lines/
- * thockdown-grid-lines), and ported the custom scrollbar in full (rendering
+ * thockdown-grid-lines), ported the custom scrollbar in full (rendering
  * via a portal into scrollbarHost, passive geometry sync, thumb drag, track
- * click-to-jump, and track right-click-hold-to-page).
+ * click-to-jump, and track right-click-hold-to-page), hid CM6's own native
+ * scrollbars (this app draws its own; native ones were pure visual noise),
+ * and fixed two more real CM6-base-theme defaults (.cm-line's 6px left
+ * padding, .cm-content's 4px top/bottom padding) that were silently
+ * shifting rendered glyphs away from the box grid's own origin -- confirmed
+ * live via Range.getBoundingClientRect() on individual characters, not
+ * assumed. Deliberately NOT snapping the editor's rendered size to exact
+ * cell/line multiples the way Editor.tsx's own updateSize does: at the
+ * user's explicit direction, a partially-cut-off cell at the far edge is
+ * fine (an "infinity grid" -- the pattern simply tiles as far as the
+ * container happens to extend); the one real requirement is that whatever
+ * cells DO render land exactly on the real glyph positions, which the fixes
+ * above now guarantee.
  *
  * Still not ported: the hasViewportLines-style gating that avoids a "wrong
  * boundary frame, then corrected" flash on first restore -- a real but minor
@@ -1144,6 +1156,34 @@ export function CM6Editor({
       // integration contract.
       EditorView.theme({
         '&': { height: '100%' },
+        // CM6's own base theme gives .cm-scroller a native OS scrollbar in
+        // both directions. This app draws its own scrollbar (ported in a
+        // later slice) and never scrolls horizontally (line-wrapping is
+        // always on), so both native scrollbars are pure visual noise here.
+        '.cm-scroller': {
+          scrollbarWidth: 'none',
+          overflowX: 'hidden',
+        },
+        '.cm-scroller::-webkit-scrollbar': {
+          width: '0px',
+          height: '0px',
+        },
+        // CM6's own base theme gives .cm-line a 6px left padding and
+        // .cm-content a 4px top/bottom padding -- both invisible until you
+        // go looking for pixel-perfect grid alignment: the box grid overlay
+        // (a sibling div, positioned independently of .cm-content's own box
+        // model) assumes glyphs start exactly at the content origin, but
+        // these defaults shifted the actual rendered glyphs 6px right and
+        // 4px down from it. Confirmed live via Range.getBoundingClientRect()
+        // on individual characters against the grid overlay's own measured
+        // position -- not a rounding artifact, a real, exact 6px/4px offset.
+        // .cm-content's own padding-top/bottom is still further overridden
+        // imperatively for the real boundary values (see the content
+        // padding effect below); zeroed here as the correct base default
+        // rather than relying on that effect alone (see its own comment for
+        // why: it can lose a race with view creation on a fresh 0/0 mount).
+        '.cm-line': { padding: '0' },
+        '.cm-content': { padding: '0' },
       }),
       // Tab/Enter/markdown-shortcut transforms -- ported verbatim from
       // ContractBridgePlugin.tsx's KEY_TAB_COMMAND/KEY_DOWN_COMMAND/
