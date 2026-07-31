@@ -37,6 +37,10 @@ async function measureGridAlignment(page) {
     const layer = document.querySelector('.cm6-editor-root').parentElement
     const gridLines = layer.querySelector('.thockdown-grid-lines')
     const gridRect = gridLines.getBoundingClientRect()
+    // The grid's own vertical phase -- see slice16/slice17's own comments:
+    // halfLineHeightPx now, not 0, since the "infinity grid" edge-
+    // breathing-room shift.
+    const gridY = parseFloat(getComputedStyle(gridLines).backgroundPosition.split(' ')[1])
     const cs = getComputedStyle(document.querySelector('.cm6-editor-root .cm-content'))
     const lineHeightVar = parseFloat(cs.getPropertyValue('--editor-line-height'))
     const lines = Array.from(document.querySelectorAll('.cm6-editor-root .cm-line'))
@@ -44,8 +48,8 @@ async function measureGridAlignment(page) {
       // Fixed (non-scrolling) grid vs. the line's own viewport position --
       // the actual visual alignment check, not a scroll-relative one.
       const viewportRelativeTop = line.getBoundingClientRect().top - gridRect.top
-      const remainder = viewportRelativeTop % lineHeightVar
-      return Math.min(Math.abs(remainder), Math.abs(lineHeightVar - remainder))
+      const remainder = ((viewportRelativeTop - gridY) % lineHeightVar + lineHeightVar) % lineHeightVar
+      return Math.min(remainder, lineHeightVar - remainder)
     })
     return {
       maxScrollTop: scroller.scrollHeight - scroller.clientHeight,
