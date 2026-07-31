@@ -51,14 +51,20 @@ import type {
  * snapshot path. This closes out CagedScrollPlugin.tsx/Editor.tsx's boundary
  * system in full.
  *
- * Deliberately NOT ported: Editor.tsx's custom-rendered scrollbar (a
- * separate, purely cosmetic feature -- CM6's native browser scrollbar is
- * left in place) and its background grid lines (thockdown-grid-outline-lines/
- * thockdown-grid-lines -- decorative, not required for cage functional
- * parity). Also not ported: the hasViewportLines-style gating that avoids a
- * "wrong boundary frame, then corrected" flash on first restore -- a real
- * but minor simplification for this dev-only spike, worth revisiting if this
- * migration continues past the shadow-adapter stage.
+ * Since then (product-identity fidelity pass, at the user's explicit
+ * request): fixed the --editor-font/--editor-font-size/--editor-line-height/
+ * --editor-glyph-width/--editor-cell-width CSS custom property chain (was
+ * silently falling back to :root defaults instead of real runtime metrics --
+ * see the git history for the live-confirmed bug this was), fixed a z-index
+ * gap that put the caret/selection above the text instead of behind it, and
+ * ported the background box-grid lines (thockdown-grid-outline-lines/
+ * thockdown-grid-lines).
+ *
+ * Still not ported: Editor.tsx's custom-rendered scrollbar (next up), and
+ * the hasViewportLines-style gating that avoids a "wrong boundary frame,
+ * then corrected" flash on first restore -- a real but minor simplification
+ * for this dev-only spike, worth revisiting if this migration continues past
+ * the shadow-adapter stage.
  */
 export interface CM6EditorProps {
   bindings?: EditorBindings;
@@ -1843,14 +1849,26 @@ export function CM6Editor({
           // EditorView.theme() comment above for how this was found.
           overflow: 'hidden',
           // Matches Editor.tsx's own scroller (className "z-10"): above the
-          // boundary zones (z2), selection highlight (z4), and caret (z5) --
-          // and, once ported, below the grid lines (z6/z7) so text paints
-          // over the grid instead of the grid's box-border lines clipping
-          // into glyph ink, while grid lines still paint over caret/
-          // selection so a cell's own border stays visible through them.
+          // boundary zones (z2), selection highlight (z4), caret (z5), AND
+          // the grid lines (z6/z7) below -- so text paints over the grid
+          // instead of the grid's box-border lines clipping into glyph ink,
+          // while the grid lines themselves still paint over caret/selection
+          // (z4/z5, both below z6/z7) so a cell's own border stays visible
+          // through those fills.
           zIndex: 10,
         }}
       />
+      {/* The box grid -- ported from Editor.tsx verbatim (same classes, same
+          CSS in index.css, now correctly keyed off the real --editor-cell-
+          width/--editor-line-height vars set on the layer above). inset is
+          '0 0 -1px 0' rather than Editor.tsx's frame-padding-based inset:
+          CM6Editor's layer has no frame-padding gap (see the layer's own
+          style comment), so the equivalent of "inset by frame-padding on
+          three sides, frame-padding-1px on the bottom" is simply "inset 0,
+          -1px on the bottom" -- the -1px is index.css's own "FLUSH ALIGNMENT"
+          fix so grid lines land exactly on row boundaries, kept unchanged. */}
+      <div className="absolute pointer-events-none thockdown-grid-outline-lines" style={{ inset: '0 0 -1px 0', zIndex: 6 }} />
+      <div className="absolute pointer-events-none thockdown-grid-lines" style={{ inset: '0 0 -1px 0', zIndex: 7 }} />
       {/* Fixed-focus caging boundary zones -- ported from Editor.tsx's own
           background-zone divs. Adjacent, not overlapping, in the well-behaved
           case (topBoundary/bottomBoundary are already clamped so they never
