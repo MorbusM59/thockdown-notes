@@ -1440,3 +1440,73 @@ this round's methodology couldn't cleanly attribute to main-thread self-time (se
 GC/compile-category caveat above). Worth a fresh CDP heap/CPU-sampling pass if a future session
 wants to chase this further, now that `--mode=heap` and `--categories=` are committed, reusable
 harness capabilities rather than one-off scripts.
+
+## This round: the two remaining `(program)` candidates from above, tested — one refuted, one narrowed, and the residual reframed as acceptable
+
+Picked up the two candidates the round above left open. Added a `--warmup=N` flag to
+`measureInputLag.mjs` (types `N` characters, untimed/unprofiled, right after placing the caret and
+before the measured burst starts) — a committed, reusable harness capability, not a one-off, for
+exactly this kind of "is this a cold-start artifact" question.
+
+**Candidate 2 (JIT tier-up/deopt churn) — tested directly, largely refuted.** If a meaningful share
+of `(program)` were one-time JIT compilation/tier-up cost paid on the first several keystrokes of a
+burst, pre-warming with real keystrokes first (so the hot functions are already optimized by the
+time the profiler starts) should show a clear drop in the *measured* burst's `(program)` value.
+Same 1.5M-character note, `--mode=profile`, 30-keystroke measured burst, 3 runs each: cold start
+(`--warmup=0`) averaged `(program)` 105.7ms / total 644.9ms; pre-warmed (`--warmup=100`) averaged
+`(program)` 101.2ms / total 587.6ms — a ~4% difference on `(program)` specifically, well inside
+this environment's established profile-mode noise band, not the large, clear effect a real
+warm-up cost would produce. **Also directly checked within a single burst** (`--mode=burst`,
+50 keystrokes, per-keystroke deltas): keystroke #1 alone was a genuine outlier (51.75ms vs. a
+12-27ms steady-state band for the rest), but the "first 10 mean" (20.7ms) vs. "last 10 mean"
+(16.5ms) difference is small and the occasional spikes elsewhere in the burst (#26 at 41ms, #31 at
+48ms) look like periodic GC pauses, not a declining warm-up curve. Conclusion: there's a real but
+tiny one-keystroke setup cost, not an ongoing tier-up tax across the burst — this candidate isn't
+where `(program)`'s bulk lives.
+
+**Candidate 1 (CM6/native framework overhead) — not directly attributed, but narrowed by
+elimination and reframed as likely acceptable.** With the ConsString-flatten fix from the round
+above already landed, re-ran the same document-size comparison this doc's own benchmark cares
+about most ("page 1 must feel identical to page 1,000"): `--mode=profile`, 30-keystroke burst,
+caret at end, a 10,000-character note vs. the usual 1.5M-character one. **`(program)` itself is now
+close to document-size-*independent*** — 89.1ms mean (small note, 2 runs) vs. 105.7ms mean (large
+note, 3 runs, same numbers as the warm-up comparison above) — a ~19% difference, the same order as
+this environment's own run-to-run noise, not the dramatic multi-x-or-more gap this doc's history
+has always found for a genuine O(document length) defect (`getOffsetWithinRoot`'s old 1926ms vs.
+absent-from-profile, `computeInlineStateAtOffset`/`countLineIndex`'s old position-only-present
+signature). This is the sharpest evidence yet that the ConsString-flatten fix removed `(program)`'s
+*entire* document-length-scaling component, leaving behind a small, roughly constant per-keystroke
+floor — consistent with candidate 1 (CM6's own transaction-dispatch/DOM-patch machinery, or
+Chromium's native contenteditable/keydown handling), which by its nature wouldn't scale with
+document size either. Not proven by direct attribution (no tool available in this session isolated
+CM6-internal C++ time specifically), but narrowed to "the only remaining plausible explanation"
+by process of elimination against the two candidates this doc actually had.
+
+**GC still scales with document size, and that's now understood, not mysterious.** Same
+comparison: GC dropped from 39.2ms (large note) to 7.6ms (small note) — a real, clear,
+still-present size-dependence, unlike `(program)`. A fresh heap-sampling run on the large note
+explains why without any new mystery: **the single largest allocator is now `join` (~34MB of the
+burst's total), i.e. this round's own fix** — `doc.toJSON().join('\n')` still has to materialize one
+full flat copy of the document every keystroke, same as `doc.toString()` always did, just done
+once, deliberately, and correctly attributed instead of lazily deferred into whichever consumer
+touched the string first. This is the same "irreducible O(document length) floor" this doc already
+named and deliberately chose not to chase further before the CM6 flip (see "the rope lever, Phase 2
+proof-of-concept" and the "eliminate the flatten entirely" scoping above) — GC's residual
+size-scaling is that same already-accepted floor showing up in a new place, not a new defect this
+round introduced or missed.
+
+**Where this leaves `(program)`, concretely, for whoever picks this up next**: the
+document-length-scaling defect is gone (confirmed by the smaller-note comparison above); what
+remains is a small (~90-110ms per 30-keystroke burst, ~3ms/keystroke), roughly constant floor most
+likely attributable to CM6/Chromium's own native machinery, which this session's tooling can
+narrow by elimination but not directly attribute further. Per this doc's own standing caution
+against open-ended attribution without a fresh lever: don't keep chasing this specific number
+without one. The one lever that *would* attribute it directly — Chrome's Runtime Call Stats
+(`disabled-by-default-v8.runtime_stats`) — was tried again implicitly via the same category flag
+and confirmed (again) not to emit real RCS events in this environment's Chromium build; getting
+real RCS data would need launching Chromium with `--enable-benchmarking`/a build that supports it,
+not just enabling the trace category, and hasn't been attempted.
+
+No `src/` changes this round — `--warmup` is a harness-only addition. Verified: `npx tsc --noEmit`,
+`npm run lint` clean (no test-suite or regression-script re-run needed, per this doc's own
+scoped-effort discipline for a pure measurement/tooling change with zero application-code diff).
