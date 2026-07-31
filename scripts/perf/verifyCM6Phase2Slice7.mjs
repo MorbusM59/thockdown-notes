@@ -43,7 +43,7 @@ async function main() {
 
     const readState = () => {
       const scroller = document.querySelector('.cm6-editor-root .cm-scroller')
-      const container = document.querySelector('.cm6-editor-root')
+      const container = document.querySelector('.cm6-editor-root .cm-content')
       // The scroll-quantization math uses the lineHeightPx prop (set as the
       // container's inline CSS lineHeight), not a rendered line's measured
       // rect -- reading the same source of truth the component itself uses.

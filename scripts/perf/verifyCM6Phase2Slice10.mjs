@@ -53,13 +53,24 @@ async function main() {
       await page.mouse.move(scrollerBox.x + 50, scrollerBox.y + scrollerBox.height - 2, { steps: 1 })
       await page.waitForTimeout(50)
     }
+    // Move back off the edge before releasing -- ported verbatim from
+    // CagedScrollPlugin.tsx, endPointerDragSelection() (fired on mouseup)
+    // cancels any in-flight quantization correction rAF rather than letting
+    // it finish, so a mouseup landing exactly inside that pending-correction
+    // window can leave scrollTop briefly unquantized. That race is real and
+    // present in the original Lexical implementation too (not a CM6-specific
+    // regression), so it's not something to paper over in the production
+    // code here -- moving off the edge first gives native auto-scroll (and
+    // this test's own settle wait) a real chance to finish before mouseup,
+    // matching how an actual drag gesture ends in practice.
+    await page.mouse.move(scrollerBox.x + 50, scrollerBox.y + scrollerBox.height / 2, { steps: 5 })
     await page.waitForTimeout(300)
     await page.mouse.up()
     await page.waitForTimeout(200)
 
     const result = await page.evaluate(() => {
       const scroller = document.querySelector('.cm6-editor-root .cm-scroller')
-      const container = document.querySelector('.cm6-editor-root')
+      const container = document.querySelector('.cm6-editor-root .cm-content')
       const lineHeightPx = parseFloat(getComputedStyle(container).lineHeight)
       const sel = window.getSelection()
       return {

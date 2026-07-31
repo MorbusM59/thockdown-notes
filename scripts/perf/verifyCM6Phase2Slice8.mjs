@@ -49,7 +49,7 @@ async function main() {
 
     const readState = () => {
       const scroller = document.querySelector('.cm6-editor-root .cm-scroller')
-      const container = document.querySelector('.cm6-editor-root')
+      const container = document.querySelector('.cm6-editor-root .cm-content')
       const lineHeightPx = container ? parseFloat(getComputedStyle(container).lineHeight) : 0
       const caretVisible = !!document.querySelector('.thockdown-block-caret')
       return { scrollTop: scroller.scrollTop, lineHeightPx, caretVisible }

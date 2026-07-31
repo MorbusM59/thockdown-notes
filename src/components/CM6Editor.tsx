@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { EditorState, EditorSelection, Prec, RangeSetBuilder } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView, Decoration, ViewPlugin, keymap, type DecorationSet } from '@codemirror/view';
@@ -51,23 +52,32 @@ import type {
  * snapshot path. This closes out CagedScrollPlugin.tsx/Editor.tsx's boundary
  * system in full.
  *
- * Deliberately NOT ported: Editor.tsx's custom-rendered scrollbar (a
- * separate, purely cosmetic feature -- CM6's native browser scrollbar is
- * left in place) and its background grid lines (thockdown-grid-outline-lines/
- * thockdown-grid-lines -- decorative, not required for cage functional
- * parity). Also not ported: the hasViewportLines-style gating that avoids a
- * "wrong boundary frame, then corrected" flash on first restore -- a real
- * but minor simplification for this dev-only spike, worth revisiting if this
- * migration continues past the shadow-adapter stage.
+ * Since then (product-identity fidelity pass, at the user's explicit
+ * request): fixed the --editor-font/--editor-font-size/--editor-line-height/
+ * --editor-glyph-width/--editor-cell-width CSS custom property chain (was
+ * silently falling back to :root defaults instead of real runtime metrics --
+ * see the git history for the live-confirmed bug this was), fixed a z-index
+ * gap that put the caret/selection above the text instead of behind it,
+ * ported the background box-grid lines (thockdown-grid-outline-lines/
+ * thockdown-grid-lines), and ported the custom scrollbar in full (rendering
+ * via a portal into scrollbarHost, passive geometry sync, thumb drag, track
+ * click-to-jump, and track right-click-hold-to-page).
+ *
+ * Still not ported: the hasViewportLines-style gating that avoids a "wrong
+ * boundary frame, then corrected" flash on first restore -- a real but minor
+ * simplification for this dev-only spike, worth revisiting if this migration
+ * continues past the shadow-adapter stage.
  */
 export interface CM6EditorProps {
   bindings?: EditorBindings;
   adapterRef?: React.MutableRefObject<EditorAdapter | null>;
   noteId?: string | null;
   initialText?: string;
+  scrollbarHost?: HTMLElement | null;
   fontFamily: string;
   fontSizePx: number;
   lineHeightPx: number;
+  glyphWidthPx?: number;
   cellWidthPx?: number;
   editorReadOnly?: boolean;
   spellCheckEnabled?: boolean;
@@ -96,6 +106,20 @@ function applyTransformResult(view: EditorView, next: { text: string; selection:
 const CARET_INSET_PX = 1;
 const EMPTY_LINE_TOP_TOLERANCE_PX = 2;
 const EDITOR_PAGE_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER;
+
+/** Ported verbatim from Editor.tsx -- the custom scrollbar's own geometry constants. */
+const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28;
+const SCROLL_TRACK_EDGE_GAP_PX = 3;
+
+type ScrollbarGeometry = {
+  viewportHeight: number;
+  contentHeight: number;
+  trackHeight: number;
+  usableTrackHeight: number;
+  thumbHeightPx: number;
+  maxThumbTravelPx: number;
+  maxScrollTopPx: number;
+};
 
 /**
  * Ported verbatim from CagedScrollPlugin.tsx's own isRefocusKey: the set of
@@ -318,9 +342,11 @@ export function CM6Editor({
   adapterRef,
   noteId,
   initialText = '',
+  scrollbarHost = null,
   fontFamily,
   fontSizePx,
   lineHeightPx,
+  glyphWidthPx = 0,
   cellWidthPx = 0,
   editorReadOnly = false,
   spellCheckEnabled = false,
@@ -371,9 +397,146 @@ export function CM6Editor({
   const topBoundaryPxRef = useRef(0);
   const bottomBoundaryPxRef = useRef(0);
 
+  // Custom scrollbar state -- ported from Editor.tsx. The rail (track +
+  // thumb) renders via a portal into scrollbarHost (a dedicated DOM slot
+  // owned by SectionEditorArea.tsx, outside this component's own tree) --
+  // same portal target Editor.tsx's own scrollbar rail uses, so switching
+  // between the Lexical and CM6 paths doesn't require a different slot.
+  const scrollbarTrackRef = useRef<HTMLDivElement | null>(null);
+  const [scrollThumbTopPx, setScrollThumbTopPx] = useState(0);
+  const [scrollThumbHeightPx, setScrollThumbHeightPx] = useState(0);
+  const [isScrollThumbActive, setIsScrollThumbActive] = useState(false);
+  const [isDraggingScrollThumb, setIsDraggingScrollThumb] = useState(false);
+  // Read inside syncCustomScrollbar instead of closing over the state
+  // value directly -- syncCustomScrollbar is called from the mount-once
+  // effect's long-lived handleScroll/updateListener closures (captured once,
+  // never re-created), so it must have a fully stable identity to avoid
+  // those closures forever seeing a stale isDraggingScrollThumb=false and
+  // fighting an active thumb drag.
+  const isDraggingScrollThumbRef = useRef(false);
+  const scrollThumbDragOriginRef = useRef<{ pointerY: number; thumbTopPx: number } | null>(null);
+  const lastPassiveScrollbarMetricsRef = useRef<{
+    scrollTopPx: number;
+    scrollHeightPx: number;
+    clientHeightPx: number;
+    trackHeightPx: number;
+  } | null>(null);
+  const scrollbarRightHoldRef = useRef<{
+    key: 'PageUp' | 'PageDown';
+    direction: 1 | -1;
+    cursorYPx: number;
+    rafId: number | null;
+  } | null>(null);
+
+  const readScrollbarGeometry = useCallback((): ScrollbarGeometry | null => {
+    const scroller = viewRef.current?.scrollDOM;
+    const track = scrollbarTrackRef.current;
+    if (!scroller || !track) return null;
+
+    const viewportHeight = scroller.clientHeight;
+    const contentHeight = scroller.scrollHeight;
+    const trackHeight = track.clientHeight;
+    const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2));
+    const maxScrollTopPx = Math.max(0, contentHeight - viewportHeight);
+
+    if (viewportHeight <= 0 || contentHeight <= 0 || trackHeight <= 0) {
+      return {
+        viewportHeight,
+        contentHeight,
+        trackHeight,
+        usableTrackHeight,
+        thumbHeightPx: 0,
+        maxThumbTravelPx: 0,
+        maxScrollTopPx,
+      };
+    }
+
+    if (contentHeight <= viewportHeight) {
+      return {
+        viewportHeight,
+        contentHeight,
+        trackHeight,
+        usableTrackHeight,
+        thumbHeightPx: usableTrackHeight,
+        maxThumbTravelPx: 0,
+        maxScrollTopPx,
+      };
+    }
+
+    const visibleRatio = viewportHeight / contentHeight;
+    const thumbHeightPx = Math.max(
+      SCROLL_TRACK_MIN_THUMB_HEIGHT_PX,
+      Math.min(usableTrackHeight, Math.round(usableTrackHeight * visibleRatio)),
+    );
+    const maxThumbTravelPx = Math.max(0, usableTrackHeight - thumbHeightPx);
+
+    return {
+      viewportHeight,
+      contentHeight,
+      trackHeight,
+      usableTrackHeight,
+      thumbHeightPx,
+      maxThumbTravelPx,
+      maxScrollTopPx,
+    };
+  }, []);
+
+  const syncCustomScrollbar = useCallback((options?: { force?: boolean }) => {
+    if (isDraggingScrollThumbRef.current && !options?.force) {
+      return;
+    }
+
+    const scroller = viewRef.current?.scrollDOM;
+    const geometry = readScrollbarGeometry();
+    if (!scroller || !geometry) return;
+
+    if (geometry.viewportHeight <= 0 || geometry.contentHeight <= 0 || geometry.trackHeight <= 0) {
+      setScrollThumbHeightPx(0);
+      setScrollThumbTopPx(0);
+      setIsScrollThumbActive(false);
+      return;
+    }
+
+    if (geometry.contentHeight <= geometry.viewportHeight) {
+      setScrollThumbHeightPx(geometry.usableTrackHeight);
+      setScrollThumbTopPx(SCROLL_TRACK_EDGE_GAP_PX);
+      setIsScrollThumbActive(false);
+      return;
+    }
+
+    const scrollRatio = geometry.maxScrollTopPx > 0 ? scroller.scrollTop / geometry.maxScrollTopPx : 0;
+    const nextThumbTop = SCROLL_TRACK_EDGE_GAP_PX + Math.round(geometry.maxThumbTravelPx * scrollRatio);
+
+    setScrollThumbHeightPx(geometry.thumbHeightPx);
+    setScrollThumbTopPx(nextThumbTop);
+    setIsScrollThumbActive(true);
+  }, [readScrollbarGeometry]);
+
+  const scrollFromThumbTop = useCallback((thumbTopPx: number) => {
+    const scroller = viewRef.current?.scrollDOM;
+    const geometry = readScrollbarGeometry();
+    if (!scroller || !geometry) return;
+
+    const maxThumbTravel = geometry.maxThumbTravelPx;
+    const minThumbTop = SCROLL_TRACK_EDGE_GAP_PX;
+    const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel;
+    const clampedTop = Math.max(minThumbTop, Math.min(thumbTopPx, maxThumbTop));
+    setScrollThumbTopPx(clampedTop);
+
+    const maxScrollTop = geometry.maxScrollTopPx;
+    const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0;
+    const targetScrollTop = ratio * maxScrollTop;
+    const quantizedScrollTop = Math.max(0, Math.min(maxScrollTop, Math.round(targetScrollTop / lineHeightPxRef.current) * lineHeightPxRef.current));
+    scroller.scrollTop = quantizedScrollTop;
+  }, [readScrollbarGeometry]);
+
   useEffect(() => {
     bindingsRef.current = bindings;
   }, [bindings]);
+
+  useEffect(() => {
+    isDraggingScrollThumbRef.current = isDraggingScrollThumb;
+  }, [isDraggingScrollThumb]);
 
   useEffect(() => {
     lineHeightPxRef.current = lineHeightPx;
@@ -395,6 +558,63 @@ export function CM6Editor({
     view.contentDOM.style.paddingTop = `${topBoundaryPxDisplay}px`;
     view.contentDOM.style.paddingBottom = `${bottomBoundaryPxDisplay}px`;
   }, [topBoundaryPxDisplay, bottomBoundaryPxDisplay]);
+
+  // Custom scrollbar sync -- ported from Editor.tsx's own three sync
+  // effects. Runs after the portal target (scrollbarHost) or any layout
+  // input the thumb geometry depends on changes; the mount-once effect's own
+  // scroll/updateListener/resize wiring (below) covers ongoing sync once
+  // mounted, and the passive rAF loop further below catches anything those
+  // miss (e.g. scrollHeight drift from an async font load reflow).
+  useLayoutEffect(() => {
+    syncCustomScrollbar();
+    requestAnimationFrame(() => syncCustomScrollbar());
+  }, [syncCustomScrollbar, scrollbarHost]);
+
+  useEffect(() => {
+    syncCustomScrollbar();
+  }, [syncCustomScrollbar, scrollerClientHeightPx, initialText, topBoundaryPxDisplay, bottomBoundaryPxDisplay]);
+
+  useEffect(() => {
+    let rafId: number | null = null;
+
+    const runPassiveSync = () => {
+      const scroller = viewRef.current?.scrollDOM;
+      const track = scrollbarTrackRef.current;
+
+      if (scroller && track) {
+        const nextMetrics = {
+          scrollTopPx: Math.round(scroller.scrollTop),
+          scrollHeightPx: Math.round(scroller.scrollHeight),
+          clientHeightPx: Math.round(scroller.clientHeight),
+          trackHeightPx: Math.round(track.clientHeight),
+        };
+
+        const previousMetrics = lastPassiveScrollbarMetricsRef.current;
+        const changed =
+          !previousMetrics ||
+          previousMetrics.scrollTopPx !== nextMetrics.scrollTopPx ||
+          previousMetrics.scrollHeightPx !== nextMetrics.scrollHeightPx ||
+          previousMetrics.clientHeightPx !== nextMetrics.clientHeightPx ||
+          previousMetrics.trackHeightPx !== nextMetrics.trackHeightPx;
+
+        if (changed) {
+          lastPassiveScrollbarMetricsRef.current = nextMetrics;
+          syncCustomScrollbar();
+        }
+      }
+
+      rafId = requestAnimationFrame(runPassiveSync);
+    };
+
+    rafId = requestAnimationFrame(runPassiveSync);
+
+    return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      lastPassiveScrollbarMetricsRef.current = null;
+    };
+  }, [syncCustomScrollbar]);
 
   const buildViewport = (view: EditorView): EditorViewportState => ({
     topBoundaryPx: topBoundaryPxRef.current,
@@ -1259,6 +1479,9 @@ export function CM6Editor({
           scheduleCaretUpdate();
           scheduleSelectionHighlightUpdate();
         }
+        if (update.docChanged) {
+          syncCustomScrollbar();
+        }
         if (pendingPasteViewportOffsetPx !== null && update.docChanged) {
           const offset = pendingPasteViewportOffsetPx;
           pendingPasteViewportOffsetPx = null;
@@ -1309,6 +1532,7 @@ export function CM6Editor({
       });
       scheduleCaretUpdate();
       scheduleSelectionHighlightUpdate();
+      syncCustomScrollbar();
     };
     view.scrollDOM.addEventListener('scroll', handleScroll, { passive: true });
 
@@ -1667,6 +1891,172 @@ export function CM6Editor({
     scroller.dispatchEvent(forwardedWheelEvent);
   };
 
+  // Custom scrollbar interactivity -- ported from Editor.tsx's own thumb
+  // drag, track click-to-jump, and track right-click-hold-to-page handlers.
+  useEffect(() => {
+    if (!isDraggingScrollThumb) return;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const origin = scrollThumbDragOriginRef.current;
+      if (!origin) return;
+      const deltaY = event.clientY - origin.pointerY;
+      scrollFromThumbTop(origin.thumbTopPx + deltaY);
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingScrollThumb(false);
+      scrollThumbDragOriginRef.current = null;
+      requestAnimationFrame(() => syncCustomScrollbar({ force: true }));
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingScrollThumb, scrollFromThumbTop, syncCustomScrollbar]);
+
+  // Right-click-and-hold on the track pages in the clicked direction for as
+  // long as the button is held, exactly like holding PageUp/PageDown -- it's
+  // dispatched as a real synthetic KeyboardEvent so it reuses this file's
+  // own PageUp/PageDown paging logic (the Prec.highest keymap above)
+  // verbatim rather than duplicating that curve/timing math here. Dispatched
+  // at view.contentDOM specifically, NOT view.scrollDOM: CM6's own keymap
+  // system attaches its native keydown listener to contentDOM, and a
+  // dispatched event only reaches listeners on its own target element or
+  // ancestors it bubbles to -- contentDOM is a DESCENDANT of scrollDOM, so
+  // dispatching on scrollDOM would never reach it. (Editor.tsx's own
+  // equivalent dispatches on the scroller because CagedScrollPlugin's own
+  // PageUp/PageDown handling is registered directly on that same scroller
+  // element, not on a descendant -- a real, load-bearing difference between
+  // the two editors' DOM/listener shapes, not an inconsistency to "fix".)
+  const stopScrollbarRightHold = useCallback(() => {
+    const hold = scrollbarRightHoldRef.current;
+    if (!hold) return;
+    if (hold.rafId !== null) {
+      cancelAnimationFrame(hold.rafId);
+    }
+    scrollbarRightHoldRef.current = null;
+    viewRef.current?.contentDOM.dispatchEvent(
+      new KeyboardEvent('keyup', { key: hold.key, code: hold.key, bubbles: true, cancelable: true }),
+    );
+  }, []);
+
+  useEffect(() => {
+    const handleWindowMouseUp = (event: MouseEvent) => {
+      if (event.button === 2) stopScrollbarRightHold();
+    };
+    const handleWindowMouseMove = (event: MouseEvent) => {
+      const hold = scrollbarRightHoldRef.current;
+      const track = scrollbarTrackRef.current;
+      if (!hold || !track) return;
+      hold.cursorYPx = event.clientY - track.getBoundingClientRect().top;
+    };
+    window.addEventListener('mouseup', handleWindowMouseUp);
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    return () => {
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+    };
+  }, [stopScrollbarRightHold]);
+
+  useEffect(() => stopScrollbarRightHold, [stopScrollbarRightHold]);
+
+  const handleTrackRightMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    const track = scrollbarTrackRef.current;
+    const view = viewRef.current;
+    if (!track || !view) return;
+
+    stopScrollbarRightHold();
+
+    const clickY = event.clientY - track.getBoundingClientRect().top;
+    const thumbTop = scrollThumbTopPx;
+    const thumbBottom = scrollThumbTopPx + scrollThumbHeightPx;
+    if (clickY >= thumbTop && clickY <= thumbBottom) return;
+
+    const direction: 1 | -1 = clickY > thumbBottom ? 1 : -1;
+    const key: 'PageUp' | 'PageDown' = direction === 1 ? 'PageDown' : 'PageUp';
+
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent('keydown', { key, code: key, bubbles: true, cancelable: true, repeat: false }),
+    );
+
+    scrollbarRightHoldRef.current = { key, direction, cursorYPx: clickY, rafId: null };
+
+    const watchThumbReachesCursor = () => {
+      const hold = scrollbarRightHoldRef.current;
+      if (!hold) return;
+      const geometry = readScrollbarGeometry();
+      if (geometry && viewRef.current) {
+        const scrollRatio = geometry.maxScrollTopPx > 0
+          ? viewRef.current.scrollDOM.scrollTop / geometry.maxScrollTopPx
+          : 0;
+        const currentThumbTop = SCROLL_TRACK_EDGE_GAP_PX + (geometry.maxThumbTravelPx * scrollRatio);
+        const currentThumbBottom = currentThumbTop + geometry.thumbHeightPx;
+        const reachedCursor = hold.direction === 1
+          ? currentThumbBottom >= hold.cursorYPx
+          : currentThumbTop <= hold.cursorYPx;
+        if (reachedCursor) {
+          stopScrollbarRightHold();
+          return;
+        }
+      }
+      hold.rafId = requestAnimationFrame(watchThumbReachesCursor);
+    };
+    scrollbarRightHoldRef.current.rafId = requestAnimationFrame(watchThumbReachesCursor);
+  };
+
+  const handleTrackMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.button === 2) {
+      handleTrackRightMouseDown(event);
+      return;
+    }
+    if (event.button !== 0) return;
+
+    const track = scrollbarTrackRef.current;
+    const view = viewRef.current;
+    if (!track || !view) return;
+
+    const rect = track.getBoundingClientRect();
+    const clickY = event.clientY - rect.top;
+    const geometry = readScrollbarGeometry();
+    if (!geometry) return;
+
+    const targetThumbTop = clickY - (geometry.thumbHeightPx / 2);
+    const maxThumbTravel = geometry.maxThumbTravelPx;
+    const minThumbTop = SCROLL_TRACK_EDGE_GAP_PX;
+    const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel;
+    const clampedTop = Math.max(minThumbTop, Math.min(targetThumbTop, maxThumbTop));
+    const maxScrollTop = geometry.maxScrollTopPx;
+    const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0;
+    const targetScrollTop = ratio * maxScrollTop;
+
+    scrollToQuantizedSmooth(view.scrollDOM, targetScrollTop, {
+      lineHeightPx: lineHeightPxRef.current,
+      onStep: syncCustomScrollbar,
+    });
+  };
+
+  const handleTrackContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+  };
+
+  const handleThumbMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const scroller = viewRef.current?.scrollDOM;
+    if (scroller) {
+      cancelQuantizedSmoothScroll(scroller);
+    }
+    setIsDraggingScrollThumb(true);
+    scrollThumbDragOriginRef.current = {
+      pointerY: event.clientY,
+      thumbTopPx: scrollThumbTopPx,
+    };
+  };
+
   useEffect(() => {
     if (!adapterRef) return;
 
@@ -1789,12 +2179,68 @@ export function CM6Editor({
   const bottomHandleBottomPx = bottomBoundaryPxDisplay >= lineHeightPx ? bottomBoundaryPxDisplay - lineHeightPx : 0;
   const bottomHandleHeightPx = bottomBoundaryPxDisplay >= lineHeightPx ? lineHeightPx : boundaryHandleSliverPx;
 
-  return (
+  // The custom scrollbar rail -- ported from Editor.tsx verbatim (same
+  // classes, same CSS in index.css). Rendered via a portal into
+  // scrollbarHost rather than inline here, matching Editor.tsx exactly: the
+  // rail lives in a dedicated layout slot (--editor-scrollbar-slot-width)
+  // outside the editor pane itself, not inside this component's own tree.
+  const scrollbarRail = (
+    <div className="thockdown-scroll-rail">
+      <div
+        ref={scrollbarTrackRef}
+        className="thockdown-scroll-track"
+        onMouseDown={handleTrackMouseDown}
+        onContextMenu={handleTrackContextMenu}
+      >
+        <div
+          className={`thockdown-scroll-thumb${isDraggingScrollThumb ? ' is-dragging' : ''}${isScrollThumbActive ? '' : ' is-inactive'}`}
+          style={{
+            top: `${scrollThumbTopPx}px`,
+            height: `${Math.max(0, scrollThumbHeightPx)}px`,
+          }}
+          onMouseDown={handleThumbMouseDown}
+        />
+      </div>
+    </div>
+  );
+
+  const editorLayer = (
     // layerRef is the non-scrolling reference frame the block caret is
     // positioned against -- matching Editor.tsx's own structure, where
     // BlockCaretPlugin renders as a sibling of the scroller inside a shared
     // non-scrolling parent, not inside the scrolling element itself.
-    <div ref={layerRef} style={{ position: 'absolute', inset: 0, overflow: 'hidden', cursor: (isDraggingTop || isDraggingBottom) ? 'ns-resize' : 'auto' }}>
+    <div
+      ref={layerRef}
+      style={{
+        position: 'absolute',
+        inset: 0,
+        overflow: 'hidden',
+        cursor: (isDraggingTop || isDraggingBottom) ? 'ns-resize' : 'auto',
+        // The SOURCE OF TRUTH for .editor-text's grid-alignment CSS (the
+        // letter-spacing + translateX trick in index.css that pads/centers
+        // each glyph to exactly cellWidthPx, and the font-family/size/
+        // line-height .editor-text itself reads via var()) -- ported from
+        // Editor.tsx's own "Editor Container Base" div, which sets these
+        // same five custom properties. Found live, not assumed: CM6Editor
+        // previously set fontFamily/fontSize/lineHeight as plain inline
+        // style on the .cm6-editor-root div below, which does nothing for
+        // actual text rendering -- .editor-text's own CSS rule (an
+        // explicit rule on .cm-content itself, not an inherited value from
+        // an ancestor) always wins over inheritance regardless of what the
+        // ancestor sets. Without these vars, .cm-content silently fell back
+        // to :root's hardcoded defaults (10px cell width, 8px glyph width)
+        // instead of the real measured runtime metrics from props --
+        // invisible only by coincidence whenever those happened to match,
+        // and a real text/grid misalignment bug the moment they didn't.
+        ...({
+          '--editor-font': fontFamily,
+          '--editor-font-size': `${fontSizePx}px`,
+          '--editor-line-height': `${lineHeightPx}px`,
+          '--editor-glyph-width': `${glyphWidthPx}px`,
+          '--editor-cell-width': `${cellWidthPx}px`,
+        } as React.CSSProperties),
+      }}
+    >
       <div
         ref={containerRef}
         className="cm6-editor-root"
@@ -1809,11 +2255,27 @@ export function CM6Editor({
           // instead of CM6's own scroller ever since slice 1 -- see the
           // EditorView.theme() comment above for how this was found.
           overflow: 'hidden',
-          fontFamily,
-          fontSize: fontSizePx,
-          lineHeight: `${lineHeightPx}px`,
+          // Matches Editor.tsx's own scroller (className "z-10"): above the
+          // boundary zones (z2), selection highlight (z4), caret (z5), AND
+          // the grid lines (z6/z7) below -- so text paints over the grid
+          // instead of the grid's box-border lines clipping into glyph ink,
+          // while the grid lines themselves still paint over caret/selection
+          // (z4/z5, both below z6/z7) so a cell's own border stays visible
+          // through those fills.
+          zIndex: 10,
         }}
       />
+      {/* The box grid -- ported from Editor.tsx verbatim (same classes, same
+          CSS in index.css, now correctly keyed off the real --editor-cell-
+          width/--editor-line-height vars set on the layer above). inset is
+          '0 0 -1px 0' rather than Editor.tsx's frame-padding-based inset:
+          CM6Editor's layer has no frame-padding gap (see the layer's own
+          style comment), so the equivalent of "inset by frame-padding on
+          three sides, frame-padding-1px on the bottom" is simply "inset 0,
+          -1px on the bottom" -- the -1px is index.css's own "FLUSH ALIGNMENT"
+          fix so grid lines land exactly on row boundaries, kept unchanged. */}
+      <div className="absolute pointer-events-none thockdown-grid-outline-lines" style={{ inset: '0 0 -1px 0', zIndex: 6 }} />
+      <div className="absolute pointer-events-none thockdown-grid-lines" style={{ inset: '0 0 -1px 0', zIndex: 7 }} />
       {/* Fixed-focus caging boundary zones -- ported from Editor.tsx's own
           background-zone divs. Adjacent, not overlapping, in the well-behaved
           case (topBoundary/bottomBoundary are already clamped so they never
@@ -1880,5 +2342,12 @@ export function CM6Editor({
         />
       )}
     </div>
+  );
+
+  return (
+    <>
+      {editorLayer}
+      {scrollbarHost ? createPortal(scrollbarRail, scrollbarHost) : null}
+    </>
   );
 }
