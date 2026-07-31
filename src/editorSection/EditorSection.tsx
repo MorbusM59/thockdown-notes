@@ -366,8 +366,18 @@ export function EditorSection({
   const activateNote = useCallback(async (noteId: string, overrideCursorPos?: number) => {
     if (!window.thockdownNotes) return
 
-    setIsCaretSuspended(true)
     const previousNoteId = activeNoteId
+    // Only an actual note switch needs the caret suspended -- the
+    // note-activation effect (useEditorSectionMount.ts) deliberately skips
+    // re-restoring when noteId hasn't changed ("Avoid re-restoring on plain
+    // edit-mode re-renders or same-note updates"), so nothing would ever
+    // clear the flag again for a same-note reactivation (e.g. tag
+    // add/remove/rename re-calling activateNote(activeNoteId) to refresh
+    // note metadata) -- leaving the caret permanently hidden until a real
+    // note switch happens to clear it.
+    if (previousNoteId !== noteId) {
+      setIsCaretSuspended(true)
+    }
     if (persistenceReady && previousNoteId && previousNoteId !== noteId) {
       const previousPayload = readCurrentEditUiPayload()
       const previousSnapshot = editModeSnapshotByNoteIdRef.current.get(previousNoteId)
