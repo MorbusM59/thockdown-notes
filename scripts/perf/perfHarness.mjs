@@ -131,10 +131,16 @@ export async function seedLargeNoteAndReload(page, text) {
 }
 
 const EDITABLE_SELECTOR = '.editor-text[contenteditable="true"]'
-// Both the edit-mode scroller and the read-only preview scroller carry
-// .thockdown-custom-scrollbar -- scope to the one that actually contains the
-// live contenteditable.
-const SCROLLER_SELECTOR = `.thockdown-custom-scrollbar:has(${EDITABLE_SELECTOR})`
+// The edit-mode scroller and the read-only preview scroller both carry
+// .thockdown-custom-scrollbar under the Lexical editor (Editor.tsx); CM6
+// (CM6Editor.tsx, the production editor as of 0.5.4) uses CodeMirror's own
+// .cm-scroller instead and never gets the thockdown-custom-scrollbar class
+// (found live: this harness's placeCaretAt started timing out immediately
+// after the CM6 production flip, since the old Lexical-only selector never
+// matches CM6's DOM). :has() with either scopes to whichever one actually
+// contains the live contenteditable, so this works against either editor
+// without the caller needing to know which is active.
+const SCROLLER_SELECTOR = `:is(.thockdown-custom-scrollbar, .cm-scroller):has(${EDITABLE_SELECTOR})`
 
 /**
  * Places the caret at an approximate document position by scrolling the
@@ -216,6 +222,56 @@ export async function startCdpJsProfile(page) {
       return aggregateCdpProfile(profile)
     },
   }
+}
+
+/**
+ * Starts a CDP heap allocation sampling profile (HeapProfiler.startSampling)
+ * -- the complement to the JS call-stack sampling profile above, for
+ * attributing self-time buckets a call-stack sampler by construction can't
+ * explain (V8's own "(program)"/"(garbage collector)" native-time buckets)
+ * to the actual JS call site whose allocations are driving them. Reuses
+ * resolveCallFrameName (below) since HeapProfiler's SamplingHeapProfileNode
+ * .callFrame has the same shape as the CPU profiler's Profiler.CallFrame --
+ * this gets source-map resolution (real function names/lines against a
+ * packaged build's emitted .map, see the module doc comment) for free.
+ * `samplingIntervalBytes` defaults to CDP's own suggested 32768 (~32KB) --
+ * denser sampling than that mostly adds noise without changing which sites
+ * dominate at this doc's own established scale (a 1.5M-character note).
+ */
+export async function startHeapSamplingProfile(page, samplingIntervalBytes = 32768) {
+  const client = await page.context().newCDPSession(page)
+  await client.send('HeapProfiler.enable')
+  await client.send('HeapProfiler.startSampling', { samplingInterval: samplingIntervalBytes })
+
+  return {
+    async stop() {
+      const { profile } = await client.send('HeapProfiler.stopSampling')
+      await client.detach().catch(() => {})
+      return aggregateHeapSamplingProfile(profile)
+    },
+  }
+}
+
+function aggregateHeapSamplingProfile(profile) {
+  const selfBytesByName = new Map()
+  let totalBytes = 0
+
+  const walk = (node) => {
+    if (node.selfSize) {
+      const { name, location } = resolveCallFrameName(node.callFrame)
+      const key = `${name}${location}`
+      selfBytesByName.set(key, (selfBytesByName.get(key) ?? 0) + node.selfSize)
+      totalBytes += node.selfSize
+    }
+    for (const child of node.children ?? []) walk(child)
+  }
+  walk(profile.head)
+
+  const entries = [...selfBytesByName.entries()]
+    .map(([name, bytes]) => ({ name, bytes }))
+    .sort((a, b) => b.bytes - a.bytes)
+
+  return { totalBytes, entries }
 }
 
 // url -> TraceMap | null (null once confirmed unavailable/unparseable, so a
@@ -325,8 +381,16 @@ function aggregateCdpProfile(profile) {
   return { totalMs, entries }
 }
 
-/** Full devtools.timeline category trace, for Layout/Paint/Raster/Commit vs. JS attribution -- the complement to the JS sampling profile, per the handover doc's two-technique methodology. */
-export async function withCdpCategoryTrace(page, driveInteraction) {
+/**
+ * Full devtools.timeline category trace, for Layout/Paint/Raster/Commit vs.
+ * JS attribution -- the complement to the JS sampling profile, per the
+ * handover doc's two-technique methodology. `categories` overrides the
+ * default set (e.g. to add `disabled-by-default-v8.gc`/
+ * `disabled-by-default-v8.compile` when attributing the CDP JS-sampling
+ * profile's `(program)` bucket, which by construction can't be resolved by
+ * JS-frame sampling alone).
+ */
+export async function withCdpCategoryTrace(page, driveInteraction, categories = 'devtools.timeline,disabled-by-default-devtools.timeline,blink.user_timing,v8') {
   const client = await page.context().newCDPSession(page)
   const events = []
   client.on('Tracing.dataCollected', (params) => {
@@ -334,7 +398,7 @@ export async function withCdpCategoryTrace(page, driveInteraction) {
   })
 
   await client.send('Tracing.start', {
-    categories: 'devtools.timeline,disabled-by-default-devtools.timeline,blink.user_timing,v8',
+    categories,
     options: 'sampling-frequency=10000',
     transferMode: 'ReportEvents',
   })

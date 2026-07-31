@@ -858,6 +858,21 @@ No code changes this round — measurement only, so no new verification needed b
     hypothesis before touching source at all** — used this round to test (and refute)
     `content-visibility: auto` on the editor's paragraphs; no source edit needed to get a real
     answer, just inject the style, re-run the same timing script, compare.
+  - **Heap allocation sampling** (`HeapProfiler.enable` → `HeapProfiler.startSampling({samplingInterval:
+    32768})` → *drive the interaction* → `const {profile} = await client.send('HeapProfiler.stopSampling')`;
+    walk `profile.head`'s tree by `.selfSize`/`.children`, resolving `.callFrame` the same way as
+    the CPU profiler's — same shape, same `resolveCallFrameName`). Committed as
+    `startHeapSamplingProfile`/`--mode=heap` in `perfHarness.mjs`/`measureInputLag(Electron).mjs`.
+    This is what finally attributed a real share of the `(program)` bucket to a specific defect (a
+    ConsString-flatten pattern in CM6's `doc.toString()`, see "what `(program)` really is" above) —
+    JS call-stack sampling alone can't distinguish "this native time is a string flatten" from any
+    other unattributed native work, but a huge single allocation site pointing at the exact call
+    site that triggered it can. `disabled-by-default-v8.runtime_stats` (Runtime Call Stats, which
+    would give an even finer native-time breakdown) was tried and didn't pan out in this
+    environment's Chromium build — enabling the category produced no RCS-shaped events at all, just
+    the same plain GC/compile events already visible via `disabled-by-default-v8.gc`/
+    `disabled-by-default-v8.compile` (both now also pass-through-able via `withCdpCategoryTrace`'s
+    `categories` parameter / `measureInputLag.mjs`'s `--categories=` flag).
 - Verification bar for any change here: `npx tsc --noEmit`, `npm test` (224/224 passing as of
   this writing, no known pre-existing failures), `npm run lint`, **and** a live-browser check
   — three times now (across earlier rounds), a change here has passed its own unit tests while
@@ -1310,3 +1325,118 @@ dev:browser-only number, per this doc's own repeated caution that the two don't 
 No source changes this round — the short-circuit was a temporary, uncommitted local edit,
 reverted (`git checkout`) immediately after measurement. Verified clean: `git status` shows no
 diff, `npx tsc --noEmit` passes.
+
+## This round: what `(program)` really is, on the now-shipped CM6 editor — found a real allocation-site defect and fixed it
+
+The CM6 production flip (see the CodeMirror section above) landed since the round above, changing
+what "the shipped editor's profile" even means — this round's own investigation had been scoped
+to Lexical, which real users no longer get by default. Re-baselined on CM6 first: same synthetic
+1.5M-character note, `--mode=profile`, 30-keystroke burst, caret at end. CM6's total sampled JS is
+already dramatically smaller than Lexical's own numbers throughout this doc's history — ~600-700ms
+vs. Lexical's ~2000-2400ms, and `(program)` is a much smaller *share* too (~100-127ms, ~15-20% of
+total, vs. Lexical's ~1000-1241ms, ~50-65%) — consistent with CM6 not paying Lexical's own
+reconciliation/node-tree overhead. `(program)` is still the largest or second-largest named bucket
+on CM6, though, so the question carried over.
+
+**A real, immediate casualty of the CM6 flip, found and fixed first**: `npm run perf:input-lag`
+started timing out at `placeCaretAt` immediately after the flip — `perfHarness.mjs`'s
+`SCROLLER_SELECTOR` only ever matched Lexical's `.thockdown-custom-scrollbar` class, which
+`CM6Editor.tsx` never sets (`measureCM6RealApp.mjs` already had its own CM6-specific
+`placeCaretAtCM6` for exactly this reason, back when CM6 was opt-in). Fixed by widening the shared
+selector to `:is(.thockdown-custom-scrollbar, .cm-scroller):has(...)`, so the general-purpose
+harness works against whichever editor is actually active without the caller needing to know which
+one ships today.
+
+**Picked up this doc's own two suggested next steps for attributing `(program)`.** (1) GC/compile
+category tracing: extended `withCdpCategoryTrace` with an optional `categories` override (default
+unchanged) and a matching `--categories=` flag on `measureInputLag.mjs`, then ran with
+`disabled-by-default-v8.gc`/`disabled-by-default-v8.compile` added. Inconclusive on its own: GC
+totaled ~254ms and compile/JIT ~233ms across the burst, but category-trace mode sums across *all*
+threads (including background GC/compiler worker threads), while the JS-sampling profile's
+`(program)` bucket is main-thread-only self-time — the two aren't directly comparable, and
+`disabled-by-default-v8.runtime_stats` (the category that would give a proper Runtime Call Stats
+breakdown) turned out not to emit any actual RCS events in this Chromium build regardless of
+category flags (confirmed by capturing raw trace events directly — only plain GC/compile `X`
+events came through, no counter/object events of the kind RCS needs). This lever is recorded as
+attempted and inconclusive, not silently dropped.
+
+(2) Heap allocation-site attribution (`HeapProfiler.startSampling`) was the one that actually
+answered the question. Added `startHeapSamplingProfile`/a `--mode=heap` flag to both
+`measureInputLag.mjs` and `measureInputLagElectron.mjs`, reusing the existing source-map-aware
+`resolveCallFrameName` (HeapProfiler's `SamplingHeapProfileNode.callFrame` has the same shape as
+the CPU profiler's, so this came for free). First run, on `dev:browser`: **83.5% of all sampled
+allocation** (~38MB of ~46MB across a 30-keystroke burst) attributed to a single site the resolver
+labeled `event @ useEditorSectionMount.ts:776` — a name that turned out to be misleading (see
+below), but the *line* was real, and directly explains a meaningful share of `(program)`.
+
+**Root cause, confirmed mechanistically, not guessed.** `CM6Editor.tsx`'s hot `updateListener`
+produces `event.text` via `update.state.doc.toString()`. CodeMirror's own `Text.toString()` calls
+`sliceString(0)`, which builds the result via **repeated `+=` concatenation across every child**
+(`node_modules/@codemirror/state/dist/index.cjs`'s `TextNode.sliceString`/`TextLeaf.sliceString`)
+— a classic pattern that leaves V8 holding a lazy **ConsString** (a tree of unmerged string
+pieces) rather than a flat buffer. The first thing downstream that touches even a single character
+of that string forces V8 to flatten the *entire* string to service the access — an O(document
+length) copy that shows up as native, unattributed time (`(program)`) and a single huge allocation
+(the flat copy), regardless of how small the actual touch was. In this app, the very first thing
+`bindings.onTextChange` does is `deriveTypingSoundKeyId(event)`
+(`useEditorSectionMount.ts:776`), which reads `event.text[event.selection.start - 1]` — one
+character — triggering a full ~1.5MB flatten on that keystroke. The misleading `event` label came
+from `resolveCallFrameName`'s source-map lookup picking up a parameter-name mapping at that
+generated position rather than the enclosing function's name; confirmed by dumping the *raw*
+(pre-source-map) `callFrame` for the same allocation, which had an empty `functionName` and a
+generated line/column that, read directly out of the built bundle, matched
+`deriveTypingSoundKeyId`'s body exactly (`se=>{if(se.source!=="user-input")return; ... const
+V=se.text[se.selection.start-1] ...`). **Confirmed this wasn't specific to that one function**:
+short-circuiting just `deriveTypingSoundKeyId`'s body didn't shrink the allocation, it *moved* it
+— the next run's heaviest site became a `split`/`join` call elsewhere in the same `onTextChange`
+dispatch chain, same ~46MB total. Short-circuiting *every* consumer of `event.text` (the same
+"handout hypothesis" technique from the round above) dropped total sampled allocation from
+~45-49MB to ~1.5MB (a ~30x drop) — direct proof the cost is a single per-keystroke flatten
+triggered by whichever consumer happens to touch the string first, not a property of any one
+function.
+
+**The fix**: CodeMirror's `Text.toJSON()` is public, documented API — "Convert the document to an
+array of lines (which can be deserialized again via `Text.of`)" — built via direct array pushes
+(`Text.flatten`), not `+=`. `doc.toJSON().join('\n')` produces the identical string (same content,
+same `\n` separator `toString()` itself documents) in one native `Array.join` pass, with no lazy
+ConsString left to flatten later. Applied at both hot call sites: the `updateListener`'s own
+`event.text` production, and a second, smaller instance found by extending the same reasoning
+found here to CM6Editor.tsx's note-switch hydration-check effect (`useEffect` keyed on
+`[noteId, initialText]`, which — like `NoteTextHydrationPlugin.tsx`'s own equivalent effect on the
+Lexical side, already documented earlier in this doc — fires on every keystroke since
+`initialText` changes every keystroke) doing its own `view.state.doc.toString() === initialText`
+comparison, paying the same flatten cost a second time per keystroke.
+
+**Provably exact, no fuzz test needed** — same reasoning this doc has already used for CM6's own
+diff-based `applyTransformResult` fix and `buildDocumentFindHits`'s reorder: this is an alternate,
+equivalent way to materialize the same string, not a caching/reuse scheme with a hazard class to
+adversarially test.
+
+**Verified, in order**: `npx tsc --noEmit`, `npm run lint`, full unit suite (251/251); the full
+existing `verifyCM6Phase2Slice*.mjs` (18 scripts) + `verifyCM6PostFix.mjs` +
+`verifyCM6ProductionGating.mjs` regression suite, twice (once after the first call site, once
+more after the second) — 20/20 clean both times, including the note-switch/scroll-restore and
+save-pipeline round-trip checks most likely to catch a subtle correctness break in text
+production. Measured via a controlled A/B (isolated to just `CM6Editor.tsx`, harness/tooling
+changes held constant, 3 runs each side): total sampled allocation per 30-keystroke burst dropped
+**~45-49MB → ~19MB** (first call site only) **→ ~13.7MB** (both). CDP profile-mode GC time showed a
+clean, non-overlapping ~20% reduction across the 3-vs-3 runs (every fixed run below every baseline
+run) for the first call site; total/`(program)` themselves moved a smaller, noisier amount (~7-9%
+on the first fix) — consistent with allocation volume being the more reliable signal for this
+specific change in this environment's established wall-clock/CPU-sampling noise band, not a
+contradiction of the allocation-based finding.
+
+**What this answers, and what it doesn't, about "what `(program)` really is."** A meaningful,
+now-fixed share of it was this ConsString-flatten pattern — confirmed by the allocation-volume
+drop and the GC-time correlation. But `(program)`'s own value barely moved in the noisier
+wall-clock/CPU-time metrics even after fixing both call sites, meaning **a further floor remains,
+not explained by this round**. Two honest candidates, neither tested here: (1) CM6/CodeMirror's
+own internal transaction-dispatch and DOM-patching machinery (native code with no attributable JS
+frame, unrelated to string materialization) — plausible given `(program)` was already present even
+in the fully-short-circuited "nothing touches `event.text`" experiment from the round above,
+before the CM6 flip; (2) V8 JIT tier-up/deopt churn from a hot loop repeatedly executing
+newly-compiled code, which the category-trace's `V8.Maglev*`/`V8.Turbofan*` entries hint at but
+this round's methodology couldn't cleanly attribute to main-thread self-time (see the
+GC/compile-category caveat above). Worth a fresh CDP heap/CPU-sampling pass if a future session
+wants to chase this further, now that `--mode=heap` and `--categories=` are committed, reusable
+harness capabilities rather than one-off scripts.

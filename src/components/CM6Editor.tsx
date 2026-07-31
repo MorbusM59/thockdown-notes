@@ -1890,7 +1890,27 @@ export function CM6Editor({
       }),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
-          const nextText = update.state.doc.toString();
+          // doc.toJSON() (public, documented CodeMirror API -- collects each
+          // line via direct array pushes, Text.flatten) + one native
+          // .join('\n') call, instead of doc.toString() (equivalent to
+          // sliceString(0), which builds the result via repeated `+=` across
+          // every child/leaf -- a classic V8 ConsString-chain pattern).
+          // Found via HeapProfiler sampling against a 1.5M-char note: a
+          // single character-index access into a toString()-produced string
+          // (deriveTypingSoundKeyId's `event.text[i]`, the first thing
+          // bindings.onTextChange does) triggered a ~38-45MB flatten of the
+          // whole ConsString on that one keystroke -- see the handover doc's
+          // "what (program) really is" section. join('\n') on an
+          // already-flat-per-line array produces the same string in one
+          // pass, no lazy ConsString to flatten later. Provably equivalent
+          // output (CodeMirror's own toJSON() doc comment: the array is
+          // reconstructable via Text.of(), i.e. exactly the '\n'-joined
+          // lines toString() itself returns), so no fuzz test needed --
+          // verified with a live A/B (git-diff-isolated, 3 runs each): total
+          // heap allocation dropped ~2.3x (45MB->19MB per 30-keystroke
+          // burst), GC time in the CDP profile dropped a clean ~20% (every
+          // fixed run below every baseline run, no overlap).
+          const nextText = update.state.doc.toJSON().join('\n');
           const previousText = previousTextRef.current;
           const nextSelection = toSelectionState(update.state.selection.main);
           previousTextRef.current = nextText;
@@ -2228,7 +2248,13 @@ export function CM6Editor({
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
-    if (lastHydratedNoteIdRef.current === (noteId ?? null) && view.state.doc.toString() === initialText) return;
+    // toJSON().join('\n') instead of toString() -- same fix, same reason as
+    // the updateListener's own text production above: this effect is keyed
+    // on `initialText`, which changes every keystroke (mirrors
+    // NoteTextHydrationPlugin.tsx's own hydration-check effect on the
+    // Lexical side), so toString()'s ConsString-then-flatten-on-compare
+    // cost would otherwise be paid here too, every keystroke.
+    if (lastHydratedNoteIdRef.current === (noteId ?? null) && view.state.doc.toJSON().join('\n') === initialText) return;
     lastHydratedNoteIdRef.current = noteId ?? null;
 
     view.dispatch({
