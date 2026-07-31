@@ -55,7 +55,39 @@ project's own "measure/read before diagnosing" rule. Findings below are cited by
 of the investigation session; re-verify line numbers before trusting them if this doc is read
 much later (this file's own sibling doc has twice flagged line-number drift as a recurring trap).
 
-### Bug 1 — right-click selection-extension mechanic is missing from CM6 entirely
+### Bug 1 — right-click selection-extension mechanic is missing from CM6 entirely — FIXED
+
+**Fixed.** Ported into `CM6Editor.tsx`'s `EditorView.domEventHandlers` block: a `contextmenu`
+handler reusing `resolveScopeRange`/`isSameRange` from `ContractBridgeRangeUtils.ts` completely
+unchanged (confirmed framework-agnostic, pure text+offset functions — no CM6-side adapter needed
+beyond reading `view.posAtCoords`/`view.state.selection.main` and dispatching
+`EditorSelection.single(...)`, exactly as anticipated below), plus a `mousedown` handler
+resetting the cycle ref on left-click, mirroring `ContractBridgePlugin.tsx` 1:1. A new
+`rightClickCycleRef` tracks cycle state the same shape as Lexical's. Dispatching a
+selection-only change (no `changes`) is picked up automatically by the existing shared
+`updateListener`'s `update.selectionSet` branch, which already handles `onSelectionChange`
+emission and caret/highlight scheduling — no duplicate wiring needed there.
+
+Verified live (`scripts/perf/verifyCM6RightClickSelectionScope.mjs`, committed as a permanent
+regression check matching this project's other `verifyCM6*.mjs` scripts): repeated right-clicks
+on the same word correctly cycle word → sentence → line → block → (caps at block), an
+intervening left-click correctly resets the next right-click to word scope, zero console errors.
+`npx tsc --noEmit`, `npm run lint`, `npm test` (251/251) all clean; full existing
+`scripts/perf/verifyCM6*.mjs` suite re-run to confirm no regression elsewhere (see this doc's
+session-handover section for the pass/fail count from that run).
+
+One thing worth flagging for whoever verifies this next: an early version of the live check
+appeared to fail (selection reading empty on the "sentence"/"block" steps) — traced to the
+*test's own* synthetic click coordinates landing on a word-boundary character instead of inside
+a word, not a defect in the port. Calibrating the click position via native
+double-click-selects-word first (CM6 doesn't suppress this) and reading its real bounding rect
+resolved it. Documented here since it's exactly the kind of "looks like a regression, is actually
+the test" trap this effort's process discipline warns about repeatedly — don't skip the
+recalibration step if this pattern reappears elsewhere.
+
+---
+
+**Original investigation notes below, kept for context on why the fix took the shape it did:**
 
 **Not a dead-end in a partial port — it was never ported.** Two *different* right-click features
 exist in this codebase; don't conflate them:
@@ -297,4 +329,21 @@ and what's still open — don't let a session end without both.
 
 **This session**: wrote this plan from the user's own five-phase framing, grounded Phase 1's four
 bugs in source (see citations above), identified the concrete Phase 3 loose ends already visible
-from the historical performance sweep. No code changes yet — implementation starts next.
+from the historical performance sweep. **Bug 1 (right-click selection-scope cycling) fixed and
+verified** — see its section above for the fix shape; verification was `npx tsc --noEmit` clean,
+`npm run lint` clean, `npm test` 251/251, and the full existing `scripts/perf/verifyCM6*.mjs`
+regression suite (21/21 including the new `verifyCM6RightClickSelectionScope.mjs`) all passing
+after the change, plus a fresh live-browser functional check of the new behavior itself.
+
+**Next up, in priority order per the phase list above**:
+- Bug 2 (caret disappearing after right-click dead-end / not restored on section-switch) — the
+  right-click-specific half of this may already be resolved as a side effect of Bug 1 (the
+  contextmenu handler now intercepts the event instead of falling through to the native menu),
+  but that's not yet confirmed live — check first before writing new code for it. The
+  section-switch `focusAfterApply` gap in `restorePersistedEditState`
+  (`useEditorSectionMount.ts:1464-1467`) is a separate, still-open fix.
+- Bug 3 (caret resets to offset 0) and Bug 4 (Enter double line break — needs live reproduction
+  attempt first, static analysis argues against it existing as described) are both still open.
+- Phase 2 (parity inventory) hasn't been started structurally — Bug 1 was the first item found by
+  investigation, not by a systematic Editor.tsx-vs-CM6Editor.tsx feature diff; that diff still
+  needs doing.
