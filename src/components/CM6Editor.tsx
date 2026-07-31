@@ -83,7 +83,15 @@ import type {
  * user scrolled -- CM6's own scrollTop/scrollHeight reconciliation across
  * the reflow wasn't settling on its own in a useful timeframe. Fixed with
  * view.requestMeasure() in the effect reacting to lineHeightPx/cellWidthPx
- * changes, forcing that settle to happen immediately.
+ * changes, forcing that settle to happen immediately. And: scrolled all the
+ * way to the end of a note, the grid broke because the DOM's own natural
+ * max scrollTop (scrollHeight - clientHeight) is essentially never itself a
+ * multiple of lineHeightPx -- clientHeight is arbitrary window/pane sizing,
+ * not something under this app's control. Fixed at the root by padding the
+ * content's bottom by (clientHeight mod lineHeightPx), so the DOM's own
+ * natural max-scroll already lands on a grid-quantized value; every other
+ * scroll-math call site in this file inherits the fix for free since all of
+ * them read scrollHeight/clientHeight fresh from the DOM already.
  *
  * Still not ported: the hasViewportLines-style gating that avoids a "wrong
  * boundary frame, then corrected" flash on first restore -- a real but minor
@@ -570,6 +578,31 @@ export function CM6Editor({
     bottomBoundaryPxRef.current = bottomBoundaryPxDisplay;
   }, [topBoundaryPxDisplay, bottomBoundaryPxDisplay]);
 
+  // Found live: scrolled all the way to the end of a note, the last visible
+  // rows sat measurably off the fixed grid overlay (up to lineHeightPx-1 px)
+  // -- e.g. 11px off on a 26px line height. Root cause: the DOM's own
+  // natural max scrollTop is `scrollHeight - clientHeight`, and while
+  // scrollHeight is always an exact multiple of lineHeightPx (every boundary
+  // and every line is), clientHeight is whatever arbitrary pixel height the
+  // window/pane happens to be -- essentially never itself a multiple of
+  // lineHeightPx. So the natural max-scroll lands on a non-grid-aligned
+  // value, and any way of reaching it (dragging the custom scrollbar thumb
+  // to the end, the browser's own resize-triggered scrollTop reclamp when a
+  // window shrinks, etc.) breaks the fixed grid overlay's alignment with
+  // the now off-grid visible rows.
+  //
+  // Fixed at the root rather than patched at each call site: padding the
+  // bottom of the content by exactly (clientHeight mod lineHeightPx) makes
+  // the DOM's OWN natural max-scroll already land on a grid-quantized
+  // value. Every piece of this file's scroll math (the caging reconcile,
+  // wheel/PageDown/drag-quantization clamps, the custom scrollbar's own
+  // geometry) already computes its own max-scroll fresh from
+  // scroller.scrollHeight/clientHeight rather than caching it, so all of it
+  // inherits the fix automatically -- no other call site needed to change.
+  // The added padding is bounded to under one row, so it reads as an
+  // ordinary small margin at the end of the document, not a visible gap.
+  const alignmentPaddingBottomPx = lineHeightPx > 0 ? scrollerClientHeightPx % lineHeightPx : 0;
+
   // Content padding is how the boundary "cage" actually keeps text out of
   // the top/bottom zones -- applied directly to view.contentDOM (CM6's own
   // `.cm-content`) since that DOM node is owned by CM6, not React, matching
@@ -578,8 +611,14 @@ export function CM6Editor({
     const view = viewRef.current;
     if (!view) return;
     view.contentDOM.style.paddingTop = `${topBoundaryPxDisplay}px`;
-    view.contentDOM.style.paddingBottom = `${bottomBoundaryPxDisplay}px`;
-  }, [topBoundaryPxDisplay, bottomBoundaryPxDisplay]);
+    view.contentDOM.style.paddingBottom = `${bottomBoundaryPxDisplay + alignmentPaddingBottomPx}px`;
+    // Same reasoning as the lineHeightPx/cellWidthPx metrics-change effect
+    // further down: an external padding mutation grows/shrinks scrollHeight
+    // outside CM6's own dispatch/transaction system, so its scrollTop
+    // reconciliation across that needs to be forced rather than left to
+    // whatever unforced schedule it would otherwise settle on.
+    view.requestMeasure();
+  }, [topBoundaryPxDisplay, bottomBoundaryPxDisplay, alignmentPaddingBottomPx]);
 
   // Custom scrollbar sync -- ported from Editor.tsx's own three sync
   // effects. Runs after the portal target (scrollbarHost) or any layout
