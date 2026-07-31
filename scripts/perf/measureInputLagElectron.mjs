@@ -29,10 +29,11 @@ import {
   summarizeMs,
   startCdpJsProfile,
   withCdpCategoryTrace,
+  startHeapSamplingProfile,
 } from './perfHarness.mjs'
 
 function parseArgs(argv) {
-  const args = { mode: 'burst', chars: 1_500_000, keystrokes: 30, position: 'end', json: false, skipBuild: false }
+  const args = { mode: 'burst', chars: 1_500_000, keystrokes: 30, position: 'end', json: false, skipBuild: false, categories: undefined }
   for (const raw of argv) {
     const [key, value] = raw.replace(/^--/, '').split('=')
     if (key === 'skip-build') args.skipBuild = true
@@ -41,6 +42,7 @@ function parseArgs(argv) {
     else if (key === 'position') args.position = value
     else if (key === 'chars') args.chars = Number(value)
     else if (key === 'keystrokes') args.keystrokes = Number(value)
+    else if (key === 'categories') args.categories = value
   }
   return args
 }
@@ -110,8 +112,8 @@ async function main() {
   if (!['start', 'middle', 'end'].includes(args.position)) {
     throw new Error(`--position must be start|middle|end, got "${args.position}"`)
   }
-  if (!['burst', 'profile', 'trace'].includes(args.mode)) {
-    throw new Error(`--mode must be burst|profile|trace, got "${args.mode}"`)
+  if (!['burst', 'profile', 'trace', 'heap'].includes(args.mode)) {
+    throw new Error(`--mode must be burst|profile|trace|heap, got "${args.mode}"`)
   }
   if (!process.env.DISPLAY) {
     console.error('[perf] WARNING: $DISPLAY is unset -- this almost certainly needs to run under `xvfb-run -a` (the npm script does this automatically).')
@@ -167,11 +169,16 @@ async function main() {
       await measureKeystrokeBurstMs(page, args.keystrokes)
       const aggregated = await profile.stop()
       result = { mode: 'profile', target: 'electron', chars: args.chars, keystrokes: args.keystrokes, position: args.position, ...aggregated }
-    } else {
+    } else if (args.mode === 'trace') {
       const entries = await withCdpCategoryTrace(page, async () => {
         await measureKeystrokeBurstMs(page, args.keystrokes)
-      })
+      }, args.categories)
       result = { mode: 'trace', target: 'electron', chars: args.chars, keystrokes: args.keystrokes, position: args.position, entries }
+    } else {
+      const heapProfile = await startHeapSamplingProfile(page)
+      await measureKeystrokeBurstMs(page, args.keystrokes)
+      const aggregated = await heapProfile.stop()
+      result = { mode: 'heap', target: 'electron', chars: args.chars, keystrokes: args.keystrokes, position: args.position, ...aggregated }
     }
 
     if (args.json) {
@@ -206,9 +213,18 @@ function printSummary(result) {
     return
   }
 
-  console.log('category/event durations:')
+  if (result.mode === 'trace') {
+    console.log('category/event durations:')
+    for (const entry of result.entries.slice(0, 25)) {
+      console.log(`  ${entry.ms.toFixed(1).padStart(8)}ms  ${entry.name}`)
+    }
+    return
+  }
+
+  console.log(`total sampled allocation: ${(result.totalBytes / 1024).toFixed(1)}KB\n`)
+  console.log('top allocating call sites by self size:')
   for (const entry of result.entries.slice(0, 25)) {
-    console.log(`  ${entry.ms.toFixed(1).padStart(8)}ms  ${entry.name}`)
+    console.log(`  ${(entry.bytes / 1024).toFixed(1).padStart(10)}KB  ${entry.name}`)
   }
 }
 
