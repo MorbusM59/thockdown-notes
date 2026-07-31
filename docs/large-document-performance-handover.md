@@ -985,29 +985,49 @@ against Lexical's documented ~85-170ms at the same scale — roughly 2x, not the
 scrollbar/caging/typing-sound wiring around it; the real, fully-integrated number is far more
 modest, see next finding for why).
 
-**The dominant remaining per-keystroke cost on the CM6 path is not inside CM6Editor.tsx.** A CDP
-JS-sampling profile (`--mode=profile`) on the same plain-character burst shows the fixes above
-did shrink CM6Editor.tsx's own footprint (e.g. `stripBom`/multi-hundred-KB `sliceString` calls
-dropped out of the top-30), but total sampled JS time only fell modestly (~7%, 1696ms → 1577ms
-across a 30-keystroke burst) — the large remaining entries are attributed to `EditorSection.tsx`
-and `useEditorSectionMount.ts`, the same shared downstream hook pipeline
-(`useNoteSnapshots`/`normalizeForComparison`, `useDocumentFind`, `usePreviewMarkdownRendering`,
-`useMarkdownFormattingToolbar`, `noteTitle` derivation, `useNoteSaveQueue`) both Lexical and CM6
-route through identically via `currentEditorText`/`onTextChange`, already substantially
-investigated for Lexical earlier in this doc. **Caveat carried forward, not resolved**: this
-round's CDP profiles repeatedly attributed large costs to `(anonymous) @ EditorSection.tsx:549`
-at line numbers that don't correspond to any real function at that location when checked directly
-against the source — the same dev-bundle source-map-drift artifact this doc has flagged twice
-before (`:547` in an earlier round, `:549` again this round pointing at unrelated destructuring
-code). **Do not trust an anonymous-function line number from this environment's CDP profiles
-without re-verifying it against the actual source first** — named-function entries (e.g.
-`normalizeForComparison`, `splitMarkdownIntoPreviewBlocksIncremental`) remain reliable; anonymous
-ones with suspicious/shifting line numbers are not. Next session should either get proper
-source-map resolution working for this profiling setup, or bracket the `EditorSection.tsx`/
-`useEditorSectionMount.ts` hook fan-out directly with `performance.mark`/`measure` (this doc's own
-fallback method when CPU-profile attribution can't be trusted) before attempting a fix there —
-this is shared Lexical+CM6 infrastructure, so any real fix found benefits both editor paths, not
-just CM6's.
+**The dominant remaining per-keystroke cost was not inside CM6Editor.tsx — found, and fixed, in
+`EditorSection.tsx`.** A CDP JS-sampling profile (`--mode=profile`) on the plain-character burst
+repeatedly attributed a large, dominant cost (~400-530ms across a 30-keystroke burst, by far the
+single biggest bucket) to `(anonymous) @ EditorSection.tsx:549` — a line number that doesn't
+correspond to any real function there when checked directly against the source, the same
+dev-bundle source-map-drift artifact this doc flagged twice before (`:547` in an earlier round).
+**Resolved this time by not trusting the profiler further**: per this doc's own established
+fallback (`performance.mark`/`measure` bracketing real candidate functions), every hook call in
+`EditorSection.tsx` feeding off `currentEditorText` was temporarily bracketed with mark/measure
+pairs and re-measured live. Exact match, immediately conclusive: `activeNoteDocumentStats`'s
+`useMemo` — `.trim().split(/\s+/u)` word-counting the *entire document* on every keystroke,
+purely to feed a footer word/character-count display (`SectionEditorArea.tsx`) — accounted for
+**473.8ms of the 30-keystroke burst (~14.8ms/keystroke mean, up to ~34ms max)**, dwarfing every
+other hook (`usePreviewMarkdownRendering` 96ms, `useNoteSnapshotTimeline` 75ms, everything else
+under 25ms total). This is shared Lexical+CM6 infrastructure — both editor paths route through
+`EditorSection.tsx` identically — so it was never CM6-specific, just masked in earlier Lexical-era
+profiling by other, larger, since-fixed costs.
+
+Fixed by debouncing (200ms) rather than computing synchronously in a `useMemo`: word/character
+counts have no correctness reason to be exact on every keystroke (they only ever feed a passive
+display, never editor state/selection/save logic), so this is squarely "deferred/off-critical-path
+work" per the philosophy doc's solution-hierarchy tier 3 — the O(document length) cost itself
+isn't reduced, it's moved off the keystroke-to-paint path entirely. Verified behaviorally
+equivalent (same computation, just deferred) via a live-browser check comparing the stats display
+before/after typing against a `git stash`-reverted baseline (identical output in both cases, so no
+regression in the counting logic itself, only its timing) — `npx tsc --noEmit`, `npm run lint`,
+full suite unaffected (251/251, no test covered this exact useMemo). Re-measured, full 30-keystroke
+plain-character burst on the 1.5M-character note, caret at end:
+- **CM6 path: 44.96ms → 22.69ms/keystroke mean (~50%), 42ms → 16.7ms median (~60%).**
+- **Lexical path (the editor real users actually get today): 68.5ms/keystroke mean** — this fix
+  benefits the shipping editor directly, independent of the CM6-gate question below.
+
+**Lesson for whoever profiles this next**: the source-map-drift caveat from earlier rounds is now
+confirmed, not just suspected — an anonymous-function CDP profile entry's line number in this
+`dev:browser` environment cannot be trusted at face value. Best working theory: it reports where
+the enclosing anonymous function/closure *starts*, not the currently-sampled statement, so for a
+hook-call argument spanning hundreds of lines that start can land far from the actual hot line.
+Named-function entries (e.g. `normalizeForComparison`, `splitMarkdownIntoPreviewBlocksIncremental`)
+remain reliable. When an anonymous entry dominates a profile, don't guess from the line number —
+bracket candidates directly with `performance.mark`/`measure` (see
+`scripts/perf/measureEditorSectionHooks.mjs`, added this round and left in place as a reusable
+diagnostic for the next time `EditorSection.tsx`'s hook fan-out needs auditing) and let real
+numbers settle it.
 
 **The production gate is the highest-leverage open item, and is a product decision, not an
 engineering one.** Flipping `isCM6EditorSpikeEnabled` in `SectionEditorArea.tsx` to ship CM6 to
