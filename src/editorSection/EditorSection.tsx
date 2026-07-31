@@ -698,21 +698,38 @@ export function EditorSection({
     isFrozenSectionPreviewRef,
   })
 
-  const activeNoteDocumentStats = useMemo(() => {
-    const hasSelection = !editorSelection.isCollapsed && editorSelection.end > editorSelection.start
-    const selectionStart = Math.max(0, Math.min(currentEditorText.length, editorSelection.start))
-    const selectionEnd = Math.max(selectionStart, Math.min(currentEditorText.length, editorSelection.end))
-    const text = hasSelection
-      ? currentEditorText.slice(selectionStart, selectionEnd)
-      : currentEditorText
-    const characterCount = text.length
-    const trimmed = text.trim()
-    const wordCount = trimmed.length === 0 ? 0 : trimmed.split(/\s+/u).length
+  // Debounced rather than a synchronous useMemo: word counting a huge
+  // document (`.trim().split(/\s+/u)`) is a real O(document length)
+  // allocation-heavy pass (found live via performance.mark/measure profiling
+  // on a 1.5M-character note: ~15ms mean, up to ~34ms, on every single
+  // keystroke -- the single largest per-keystroke cost found in this whole
+  // audit, bigger than anything in CM6Editor.tsx itself, and not specific to
+  // either editor engine). This value only ever feeds a footer word/character
+  // count display (SectionEditorArea.tsx), never editor state, selection, or
+  // save logic, so it has no correctness reason to be exact on every
+  // keystroke -- a real editor's word count lagging by one debounce interval
+  // behind furious typing is imperceptible and standard behavior (matches
+  // how virtually every text editor throttles this same display). Per
+  // docs/document-scale-performance-philosophy.md's solution hierarchy,
+  // this is "deferred/off-critical-path work" (tier 3): the work itself
+  // isn't made cheaper, it's moved off the keystroke-to-paint path so it
+  // can't compete with input latency.
+  const [activeNoteDocumentStats, setActiveNoteDocumentStats] = useState({ wordCount: 0, characterCount: 0 })
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      const hasSelection = !editorSelection.isCollapsed && editorSelection.end > editorSelection.start
+      const selectionStart = Math.max(0, Math.min(currentEditorText.length, editorSelection.start))
+      const selectionEnd = Math.max(selectionStart, Math.min(currentEditorText.length, editorSelection.end))
+      const text = hasSelection
+        ? currentEditorText.slice(selectionStart, selectionEnd)
+        : currentEditorText
+      const characterCount = text.length
+      const trimmed = text.trim()
+      const wordCount = trimmed.length === 0 ? 0 : trimmed.split(/\s+/u).length
 
-    return {
-      wordCount,
-      characterCount,
-    }
+      setActiveNoteDocumentStats({ wordCount, characterCount })
+    }, 200)
+    return () => window.clearTimeout(timeoutId)
   }, [currentEditorText, editorSelection.end, editorSelection.isCollapsed, editorSelection.start])
 
   const {

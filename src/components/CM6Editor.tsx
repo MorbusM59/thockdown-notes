@@ -6,8 +6,7 @@ import { EditorView, Decoration, ViewPlugin, keymap, type DecorationSet } from '
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import { typingSoundManager } from '../sound/TypingSoundManager';
-import { readSelectionRect } from '../editor/CaretRect';
-import { resolveCaretTopInScroll } from '../editor/CaretVisualPosition';
+import { readSelectionRect, type SelectionRect } from '../editor/CaretRect';
 import { readSelectionLineRects } from '../editor/SelectionRects';
 import { PIXELS_PER_WHEEL_UNIT } from '../editor/LayoutConstants';
 import {
@@ -146,6 +145,63 @@ import type {
  * boundary frame, then corrected" flash on first restore -- a real but minor
  * simplification for this dev-only spike, worth revisiting if this migration
  * continues past the shadow-adapter stage.
+ *
+ * Performance audit pass (per docs/document-scale-performance-philosophy.md's
+ * "computational scope must track the viewed slice" principle, checked here
+ * against a synthetic 1.5M-character note via scripts/perf/
+ * measureCM6RealApp.mjs -- a variant of the committed perf harness that
+ * forces this dev-only path on in a real app instance, not the standalone
+ * scripts/perf/cm6-spike/ prototype): found and fixed several O(document
+ * length) operations this file was running on every keystroke/transform/
+ * paste, despite CM6's own virtualized rendering already keeping DOM cost
+ * viewport-bound. `view.state.doc.toString()` (a full-document string
+ * allocation) was called on every caret update via updateCaret's rAF
+ * (docChanged/selectionSet/viewportChanged all schedule one), every
+ * keyboard-refocus-caging reconcile, and every paste, purely to feed
+ * CaretVisualPosition.ts/CaretTerminalOffset.ts's rawText parameter -- code
+ * written for Lexical, where that's the cheapest available source. Replaced
+ * with resolveCM6CaretTopInScroll, a CM6-local equivalent using
+ * view.state.doc.length and view.state.selection (both O(1)) plus a
+ * bounded-length Text.sliceString tail probe instead of the whole document.
+ * Separately, applyTransformResult (Tab/Enter/markdown-shortcut/character-
+ * insert transforms) always dispatched `{from: 0, to: doc.length}` -- a
+ * full-document replace on every one of these very common keys regardless of
+ * how small the actual edit was -- now dispatches a minimal
+ * common-prefix/common-suffix-diffed range instead (same technique already
+ * proven in PreviewBlockSplit.ts/MarkdownContext.ts/
+ * canonicalizeParagraphSegmentsIncremental). The four pre-commit transform
+ * handlers (Tab/Enter/shortcut/character-insert) also no longer call
+ * view.state.doc.toString() to build the `text` passed into the
+ * EditorBindings callbacks -- they reuse previousTextRef.current, which the
+ * updateListener below and the hydration effect keep synchronously in sync,
+ * mirroring the exact pattern already proven for Lexical's own
+ * ContractBridgePlugin.tsx (see the handover doc's readCanonicalRootText
+ * fix). And the paste handler no longer materializes the full document to
+ * splice a string by hand -- it dispatches the sanitized clipboard text as a
+ * targeted `{from: selection.from, to: selection.to}` range change directly.
+ * Verified via `npx tsc --noEmit`, `npm run lint`, the full unit suite
+ * (unchanged, 251/251), a live-browser functional pass exercising typing/
+ * Tab/Enter/Ctrl+B/paste/undo plus the caret-at-document-end-with-trailing-
+ * blank-lines case the terminal-offset rewrite specifically targets
+ * (scripts/perf/verifyCM6PostFix.mjs), and an A/B `git stash` burst
+ * comparison isolating applyTransformResult's own effect (Enter-key burst,
+ * 1.5M-char note, caret at end: 81.6ms/keystroke mean before this round's
+ * diff-based replace, 73.5ms/keystroke after).
+ *
+ * What's still open, found by the same audit but out of scope for this pass
+ * (not CM6Editor.tsx's own defect): CM6Editor is gated behind
+ * `import.meta.env.DEV` in SectionEditorArea.tsx and a localStorage opt-in --
+ * none of CM6's own ~2x keystroke-latency win over Lexical on a 1.5M-char
+ * note (measured here: ~45ms/keystroke mean plain-typing burst vs. the
+ * ~85-170ms Lexical baseline in docs/large-document-performance-handover.md)
+ * nor any fix in this pass reaches a real packaged build yet. The remaining
+ * per-keystroke cost on the CM6 path, per this round's profiling, is not
+ * dominated by anything left in this file -- it's diffuse across the same
+ * shared downstream pipeline documented in the handover doc for Lexical
+ * (EditorSection.tsx's hook fan-out off `currentEditorText`: useNoteSnapshots,
+ * useDocumentFind, usePreviewMarkdownRendering, useMarkdownFormattingToolbar,
+ * noteTitle derivation, useNoteSaveQueue), which both editors route through
+ * identically and which this pass didn't touch.
  */
 export interface CM6EditorProps {
   bindings?: EditorBindings;
@@ -172,14 +228,114 @@ function toSelectionState(range: { anchor: number; head: number; from: number; t
   };
 }
 
-/** Replaces the whole document with `next.text` and sets the selection to `next.selection` in one transaction -- the CM6 equivalent of ContractBridgePlugin.tsx's replaceEditorTextFromCanonical + scheduleTransformSelectionReplay, collapsed into a single atomic dispatch since CM6 (unlike Lexical) applies a change and its selection together without a deferred-DOM-commit race to work around. */
-function applyTransformResult(view: EditorView, next: { text: string; selection: EditorSelectionState }): void {
+function commonPrefixLen(a: string, b: string): number {
+  const max = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < max && a.charCodeAt(i) === b.charCodeAt(i)) i += 1;
+  return i;
+}
+
+function commonSuffixLen(a: string, b: string, maxLen: number): number {
+  let i = 0;
+  while (i < maxLen && a.charCodeAt(a.length - 1 - i) === b.charCodeAt(b.length - 1 - i)) i += 1;
+  return i;
+}
+
+/**
+ * Applies a transform's `{text, selection}` result -- the CM6 equivalent of
+ * ContractBridgePlugin.tsx's replaceEditorTextFromCanonical +
+ * scheduleTransformSelectionReplay, collapsed into a single atomic dispatch
+ * since CM6 (unlike Lexical) applies a change and its selection together
+ * without a deferred-DOM-commit race to work around.
+ *
+ * Dispatches only the minimal `{from, to, insert}` range covering where
+ * `oldText` and `next.text` actually differ (common-prefix/common-suffix
+ * diff -- the same technique PreviewBlockSplit.ts/MarkdownContext.ts/
+ * canonicalizeParagraphSegmentsIncremental already use elsewhere in this
+ * codebase), not a blanket `{from: 0, to: doc.length}` replace of the whole
+ * document. The EditorBindings transform contract (onTabIndentTransform/
+ * onEnterTransform/onMarkdownShortcutTransform/onCharacterInsertTransform)
+ * only ever changes a small localized region -- a full-document replace on
+ * every Tab/Enter/formatting-shortcut keystroke forced CM6 to treat the
+ * entire document as changed (undo-history entry size, decoration/measure
+ * invalidation) regardless of how small the actual edit was, on every one of
+ * these very common keys. Provably exact by construction: prefixLen and
+ * suffixLen are literal matching runs of `oldText`/`next.text`, so
+ * `oldText.slice(0, prefixLen) + insert + oldText.slice(oldText.length -
+ * suffixLen)` reconstructs `next.text` exactly -- not a "trust prior
+ * computation" cache with a hazard class to verify, just a minimal-range
+ * encoding of the same already-known target string.
+ */
+function applyTransformResult(view: EditorView, oldText: string, next: { text: string; selection: EditorSelectionState }): void {
   const anchor = Math.max(0, Math.min(next.text.length, next.selection.anchor));
   const focus = Math.max(0, Math.min(next.text.length, next.selection.focus));
+
+  if (oldText === next.text) {
+    view.dispatch({ selection: EditorSelection.single(anchor, focus) });
+    return;
+  }
+
+  const prefixLen = commonPrefixLen(oldText, next.text);
+  const maxSuffixLen = Math.min(oldText.length, next.text.length) - prefixLen;
+  const suffixLen = commonSuffixLen(oldText, next.text, maxSuffixLen);
+
   view.dispatch({
-    changes: { from: 0, to: view.state.doc.length, insert: next.text },
+    changes: {
+      from: prefixLen,
+      to: oldText.length - suffixLen,
+      insert: next.text.slice(prefixLen, next.text.length - suffixLen),
+    },
     selection: EditorSelection.single(anchor, focus),
   });
+}
+
+const TERMINAL_TRAILING_NEWLINE_PROBE_CHARS = 256;
+
+/**
+ * CM6-native replacement for CaretVisualPosition.ts's resolveCaretTopInScroll
+ * + CaretTerminalOffset.ts's getTerminalTrailingVisualOffsetPx (both written
+ * for Lexical, and still used as-is by Editor.tsx/BlockCaretPlugin.tsx/
+ * CagedScrollPlugin.tsx, which have a different, already-cheap rawText
+ * source and don't share this defect -- kept CM6-local rather than changed
+ * in those shared files).
+ *
+ * The Lexical version needs the full canonical text string because Lexical
+ * selection offsets are DOM-derived and the terminal-blank-line check has no
+ * cheaper source there. CM6's own EditorState already carries both facts
+ * that check needs as O(1) values -- total document length
+ * (view.state.doc.length) and whether the caret sits at that length
+ * (view.state.selection.main) -- so this never needs
+ * view.state.doc.toString() (an O(document length) allocation) at all. Only
+ * the trailing-newline COUNT needs to touch real document content, and only
+ * a small bounded tail slice (Text.sliceString), never the whole document --
+ * this was previously the single highest-frequency O(document length) call
+ * in this file, hit on every caret update (i.e. essentially every keystroke,
+ * scroll tick, and selection change via scheduleCaretUpdate's rAF), every
+ * keyboard-refocus-caging reconcile, and every paste.
+ */
+function resolveCM6CaretTopInScroll(
+  view: EditorView,
+  caretRect: SelectionRect,
+  scrollerRectTop: number,
+  scrollerScrollTop: number,
+  lineHeightPx: number,
+): number {
+  let terminalOffsetPx = 0;
+  // Matches getTerminalTrailingVisualOffsetPx's own gate: only fallback
+  // geometry sources need this compensation, primary rects are authoritative.
+  if (caretRect.source === 'adjacent-probe' || caretRect.source === 'anchor-fallback') {
+    const selection = view.state.selection.main;
+    const docLength = view.state.doc.length;
+    if (selection.empty && selection.head === docLength) {
+      const tailStart = Math.max(0, docLength - TERMINAL_TRAILING_NEWLINE_PROBE_CHARS);
+      const tail = view.state.doc.sliceString(tailStart);
+      const trailingNewlines = tail.match(/\n+$/)?.[0].length ?? 0;
+      const trailingExtraRows = Math.max(0, trailingNewlines - 1);
+      terminalOffsetPx = trailingExtraRows * lineHeightPx;
+    }
+  }
+
+  return (caretRect.top - scrollerRectTop) + scrollerScrollTop + terminalOffsetPx;
 }
 
 const CARET_INSET_PX = 1;
@@ -842,15 +998,13 @@ export function CM6Editor({
     const scrollerRect = scrollerRectRef.current;
     const caretLayerRect = caretLayerRectRef.current;
 
-    const caretTopInScroll = resolveCaretTopInScroll({
+    const caretTopInScroll = resolveCM6CaretTopInScroll(
+      view,
       caretRect,
-      scrollerRectTop: scrollerRect.top,
-      scrollerScrollTop: scroller.scrollTop,
-      rootEl: view.contentDOM,
-      domSelection,
-      rawText: view.state.doc.toString(),
-      lineHeightPx: lineHeightPxRef.current,
-    });
+      scrollerRect.top,
+      scroller.scrollTop,
+      lineHeightPxRef.current,
+    );
 
     const lineHeightPxNow = lineHeightPxRef.current;
     // Phase lineHeightPxNow/2, not 0: real rows sit at (halfLine + N*line)
@@ -1215,15 +1369,13 @@ export function CM6Editor({
       const caretRect = readSelectionRect(domSelection, lineHeightPxNow, view.contentDOM);
       if (!caretRect) return;
 
-      const caretTopInScroll = resolveCaretTopInScroll({
+      const caretTopInScroll = resolveCM6CaretTopInScroll(
+        view,
         caretRect,
-        scrollerRectTop: scrollerRect.top,
-        scrollerScrollTop: scroller.scrollTop,
-        rootEl: view.contentDOM,
-        domSelection,
-        rawText: view.state.doc.toString(),
-        lineHeightPx: lineHeightPxNow,
-      });
+        scrollerRect.top,
+        scroller.scrollTop,
+        lineHeightPxNow,
+      );
 
       const { targetScrollTopPx } = resolveCagedScrollTarget({
         caretTopInScrollPx: caretTopInScroll,
@@ -1265,15 +1417,13 @@ export function CM6Editor({
       const caretRect = readSelectionRect(domSelection, lineHeightPxNow, view.contentDOM);
       if (!caretRect) return;
 
-      const caretTopInScroll = resolveCaretTopInScroll({
+      const caretTopInScroll = resolveCM6CaretTopInScroll(
+        view,
         caretRect,
-        scrollerRectTop: scrollerRect.top,
-        scrollerScrollTop: scroller.scrollTop,
-        rootEl: view.contentDOM,
-        domSelection,
-        rawText: view.state.doc.toString(),
-        lineHeightPx: lineHeightPxNow,
-      });
+        scrollerRect.top,
+        scroller.scrollTop,
+        lineHeightPxNow,
+      );
 
       // Keep the caret on the same screen-relative line it occupied before
       // the paste, rather than clamping it to the cage's top/bottom row like
@@ -1484,14 +1634,23 @@ export function CM6Editor({
               });
             }
 
-            const text = view.state.doc.toString();
+            // previousTextRef.current is guaranteed to already equal a fresh
+            // view.state.doc.toString() here: this is a pre-commit handler
+            // (fires before this keystroke's own edit), and the ref is kept
+            // in sync with every committed transaction by the
+            // updateListener below (and by the hydration effect on note
+            // switch) -- the same "reuse a synchronously-kept-in-sync ref
+            // instead of re-deriving" pattern already proven for Lexical's
+            // ContractBridgePlugin.tsx (see docs/large-document-performance-
+            // handover.md's readCanonicalRootText fix).
+            const text = previousTextRef.current;
             const selection = toSelectionState(view.state.selection.main);
             const transformCallback = bindingsRef.current?.onTabIndentTransform;
             if (transformCallback) {
               const next = transformCallback({ shiftKey: event.shiftKey, text, selection });
               if (next) {
                 event.preventDefault();
-                applyTransformResult(view, next);
+                applyTransformResult(view, text, next);
                 return true;
               }
             }
@@ -1506,7 +1665,9 @@ export function CM6Editor({
           if (event.key === 'Enter') {
             const callback = bindingsRef.current?.onEnterTransform;
             if (!callback) return false;
-            const text = view.state.doc.toString();
+            // See the Tab handler above for why previousTextRef.current is
+            // safe to reuse here instead of a fresh view.state.doc.toString().
+            const text = previousTextRef.current;
             const selection = toSelectionState(view.state.selection.main);
             const next = callback({
               shiftKey: event.shiftKey,
@@ -1518,7 +1679,7 @@ export function CM6Editor({
             });
             if (!next) return false;
             event.preventDefault();
-            applyTransformResult(view, next);
+            applyTransformResult(view, text, next);
             return true;
           }
 
@@ -1534,12 +1695,14 @@ export function CM6Editor({
             else if ((event.shiftKey && event.key === '3') || event.key === '#') shortcut = 'ordered-list';
 
             if (shortcut) {
-              const text = view.state.doc.toString();
+              // See the Tab handler above for why previousTextRef.current is
+              // safe to reuse here instead of a fresh view.state.doc.toString().
+              const text = previousTextRef.current;
               const selection = toSelectionState(view.state.selection.main);
               const next = shortcutCallback({ shortcut, text, selection });
               if (next) {
                 event.preventDefault();
-                applyTransformResult(view, next);
+                applyTransformResult(view, text, next);
                 return true;
               }
             }
@@ -1599,7 +1762,11 @@ export function CM6Editor({
         if (!callback) return false;
         if (insertedText.length !== 1 || from !== to) return false;
 
-        const text = view.state.doc.toString();
+        // inputHandler fires pre-commit (CM6 hasn't applied the default
+        // insertion yet, since returning true here preempts it), so
+        // previousTextRef.current is still accurate -- see the Tab handler
+        // above for why reusing it beats a fresh view.state.doc.toString().
+        const text = previousTextRef.current;
         const selection = toSelectionState(view.state.selection.main);
         const next = callback({ char: insertedText, text, selection });
         if (!next) return false;
@@ -1610,7 +1777,7 @@ export function CM6Editor({
         // semantics, matching CagedScrollPlugin.tsx's own bypass for the
         // 'character-transform' tag, so clear it before dispatching.
         pendingCageIntent = false;
-        applyTransformResult(view, next);
+        applyTransformResult(view, text, next);
         return true;
       }),
       EditorView.domEventHandlers({
@@ -1634,7 +1801,6 @@ export function CM6Editor({
             ? sanitizeDocumentText(plainText)
             : sanitizeDocumentTextExtended(plainText);
 
-          const currentText = view.state.doc.toString();
           const selection = view.state.selection.main;
 
           // Preserve the caret's on-screen line before the paste mutates the
@@ -1647,21 +1813,27 @@ export function CM6Editor({
             const caretRect = readSelectionRect(domSelection, lineHeightPxRef.current, view.contentDOM);
             if (caretRect) {
               const scrollerRect = scroller.getBoundingClientRect();
-              const caretTopInScroll = resolveCaretTopInScroll({
+              const caretTopInScroll = resolveCM6CaretTopInScroll(
+                view,
                 caretRect,
-                scrollerRectTop: scrollerRect.top,
-                scrollerScrollTop: scroller.scrollTop,
-                rootEl: view.contentDOM,
-                domSelection,
-                rawText: currentText,
-                lineHeightPx: lineHeightPxRef.current,
-              });
+                scrollerRect.top,
+                scroller.scrollTop,
+                lineHeightPxRef.current,
+              );
               pendingPasteViewportOffsetPx = caretTopInScroll - scroller.scrollTop;
             }
           }
 
-          const nextText = `${currentText.slice(0, selection.from)}${sanitized}${currentText.slice(selection.to)}`;
-          const nextCursor = Math.max(0, Math.min(nextText.length, selection.from + sanitized.length));
+          // Dispatched as a targeted range replace rather than splicing a
+          // full-document string (the previous version materialized
+          // view.state.doc.toString() and built a whole new document string
+          // via slice+concat purely to hand back to CM6, which already
+          // supports replacing just the selected range directly): both the
+          // O(document length) toString() and the O(document length)
+          // string-splice this replaces are gone, and nextCursor is exact by
+          // construction (selection.from + sanitized.length always lands
+          // inside the resulting document, no clamping needed).
+          const nextCursor = selection.from + sanitized.length;
 
           // Ensures a reconcile happens even when no pre-paste caret geometry
           // could be measured above: the updateListener prefers the
@@ -1670,7 +1842,7 @@ export function CM6Editor({
           // matching CagedScrollPlugin.tsx's own fallback for this case.
           pendingCageIntent = true;
           view.dispatch({
-            changes: { from: 0, to: view.state.doc.length, insert: nextText },
+            changes: { from: selection.from, to: selection.to, insert: sanitized },
             selection: EditorSelection.cursor(nextCursor),
           });
 
