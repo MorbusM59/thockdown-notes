@@ -1051,6 +1051,53 @@ the file is still described as a "shadow-adapter stage" spike, not a completed m
 explicitly this round — the answer was "not yet, keep auditing/hardening first," which is why this
 section exists as multiple fix-and-reprofile rounds rather than stopping at the first one.
 
+**Update, a later session: the gate is flipped — CM6 is the production editor as of 0.5.4.** The
+user, building main locally, noticed the "infinity grid" (the box-grid background this whole
+audit ported to CM6) wasn't showing up — a direct symptom of the gate above still defaulting to
+off outside dev+localStorage-opt-in. Asked to flip it for real this time. Before doing so, flagged
+the one still-open item from this audit (the boundary-restore flash gating, still not-ported as of
+the paragraph above) back to the user rather than shipping past a known gap silently; asked to
+close it first rather than ship as-is.
+
+Ported `hasViewportLines`/`isSnapshotRestorePending` into `CM6Editor.tsx`, mirroring
+`Editor.tsx`'s own mechanism exactly: same two pieces of state, the same one-rAF settle window
+bracketing `applySnapshot`, and the same set of gated visuals (grid lines, boundary-zone
+backgrounds, drag handles, the caret overlay, the selection highlight — plus the `.cm6-editor-root`
+container's own `visibility` toggle, CM6's equivalent of Editor.tsx's ContentEditable visibility
+hide). New `fontReady`/`caretSuspended` props on `CM6EditorProps`, both optional and defaulting to
+"already ready"/"not suspended" so the perf harness and the existing `verifyCM6*.mjs` regression
+scripts keep behaving exactly as before without modification; `SectionEditorArea.tsx` wires the
+real values through (`editorFontLoadVersion > 0`, `isCaretSuspended`) the same way it already does
+for the Lexical branch.
+
+Flipped `isCM6EditorSpikeEnabled` → `isCM6EditorEnabled`, CM6 the default with no DEV/localStorage
+opt-in required; kept a low-cost rollback (`localStorage['thockdown:cm6-editor-spike'] = '0'` now
+forces the Lexical editor back on for a given browser profile without a rebuild) given how
+recently this graduated past "shadow-adapter stage" — cheap insurance, not scope creep, since the
+mechanism already existed and only needed inverting.
+
+**The specific regression risk this gating change carries, and why it was checked directly rather
+than trusted from the reasoning alone**: if any real mount/note-switch path ever failed to call
+`adapter.applySnapshot({ viewportLines })`, `hasViewportLines` would stay `false` forever and the
+editor would render permanently blank — no grid, no caret, nothing — exactly the kind of
+caret/selection-adjacent regression this doc's own process discipline treats as the highest-severity
+class of bug. Verified live, not assumed: a new `scripts/perf/verifyCM6ProductionGating.mjs`
+(committed as a regression check, not a one-off) confirms CM6 mounts by default with no
+localStorage flag set, the grid/caret render on first mount, switching to a second note through
+the *real* UI (clicking its sidebar entry, not the mock-bridge shortcut, which doesn't exercise the
+live in-app restore path) leaves both still rendered and the caret un-stuck, the switched-to note's
+text actually loaded, and the `'0'` rollback flag genuinely falls back to the Lexical editor — zero
+console errors throughout. Also ran the existing `verifyCM6PostFix.mjs` (typing, Tab, Enter,
+Ctrl+B, paste, undo on a large note with trailing blank lines) and the full `verifyCM6Phase2Slice*.mjs`
+regression suite (all 18 scripts) against the flipped default, plus `npx tsc --noEmit`, `npm run
+lint`, and the full unit suite.
+
+**What's still open, honestly, after this flip**: CM6Editor has no empty-note placeholder text
+("Jot down a thockdown note...") the way `Editor.tsx` does — noticed while doing this port, real,
+but unrelated to the flash-gating this round closed, and not fixed here (see `TODO.md`). Every
+other gap this audit ever found in `CM6Editor.tsx` was already fixed in an earlier round (see the
+sections above) before this flip was even requested.
+
 ### Diminishing returns confirmed by a further round (after the two debounce fixes merged)
 
 The two fixes above (PR #44, merged into `main`) were re-profiled once more, with the same
