@@ -4440,7 +4440,7 @@ ${markdownHtml}
     await createNote(`# ${title}\n\n`)
   }, [createNote])
 
-  const importExternalFileAsTempNote = useCallback(async (filePath: string) => {
+  const importExternalFileAsTempNote = useCallback(async (filePath: string, targetSectionId?: string) => {
     const externalApi = window.thockdownExternalFiles
     const notesApi = window.thockdownNotes
     if (!externalApi || !notesApi) return
@@ -4452,13 +4452,22 @@ ${markdownHtml}
 
     noteTransitionLockRef.current = true
     try {
-      await getActiveSection()?.flushPendingSaveNow()
+      // Falls back to the active section when the caller has no specific
+      // drop target (opening via OS "Open With" / pending-files-at-launch,
+      // neither of which has a section to target).
+      const targetSection = targetSectionId
+        ? getActiveSectionHandle(sectionRegistryRef, targetSectionId)
+        : getActiveSection()
+      if (targetSectionId) {
+        markSectionActive(targetSectionId)
+      }
+      await targetSection?.flushPendingSaveNow()
 
       const existingTempId = await notesApi.getNoteIdByExternalPath({ externalPath: filePath })
       if (existingTempId) {
         console.debug('[external-note] external file already tracked, activating existing temp note', { filePath, noteId: existingTempId })
         await refreshNotes(existingTempId)
-        await getActiveSection()?.activateNote(existingTempId)
+        await targetSection?.activateNote(existingTempId)
         setSidebarMode('date')
         return
       }
@@ -4485,16 +4494,16 @@ ${markdownHtml}
       await notesApi.updateExternalNoteState({ id: noteId, hasUnsavedChanges: false, syncMode: true })
       console.debug('[external-note] updated temp note sync state for imported external file', { noteId, hasUnsavedChanges: false, syncMode: true })
       await refreshNotes(noteId)
-      await getActiveSection()?.activateNote(noteId)
+      await targetSection?.activateNote(noteId)
       setSidebarMode('date')
     } catch (error) {
       console.error('Failed to import external file', error)
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [getActiveSection, persistenceReady, refreshNotes])
+  }, [getActiveSection, markSectionActive, persistenceReady, refreshNotes])
 
-  const enqueueExternalFileImport = useCallback((filePath: string) => {
+  const enqueueExternalFileImport = useCallback((filePath: string, targetSectionId?: string) => {
     const normalizedPath = filePath.trim()
     if (!normalizedPath) return
     const pending = pendingExternalImportPathsRef.current
@@ -4505,7 +4514,7 @@ ${markdownHtml}
     externalOpenQueueRef.current = queue
       .then(async () => {
         try {
-          await importExternalFileAsTempNote(normalizedPath)
+          await importExternalFileAsTempNote(normalizedPath, targetSectionId)
         } finally {
           pendingExternalImportPathsRef.current.delete(normalizedPath)
         }
@@ -4542,7 +4551,14 @@ ${markdownHtml}
       return
     }
 
-    enqueueExternalFileImport(file.path)
+    // Which section's slot the file was actually dropped over -- this
+    // handler is bound once on the app root (so it still fires when
+    // dropped between/outside slots), so the target has to be resolved
+    // from the DOM rather than assumed to be the active section.
+    const targetSlot = (event.target as HTMLElement | null)?.closest<HTMLElement>('.editor-section-slot[data-section-id]')
+    const targetSectionId = targetSlot?.dataset.sectionId
+
+    enqueueExternalFileImport(file.path, targetSectionId)
   }, [enqueueExternalFileImport])
 
   const getCurrentExternalNoteModifiedState = useCallback((note: NoteSummary, currentHash: string | null = currentExternalNoteHash): boolean => {
@@ -7534,6 +7550,7 @@ ${markdownHtml}
                 ) : null}
                 <div
                   className="editor-section-slot"
+                  data-section-id={entry.id}
                   style={sectionSlotWidthsPx?.has(entry.id)
                     ? { flexGrow: 0, flexShrink: 0, flexBasis: `${sectionSlotWidthsPx.get(entry.id)}px` }
                     : { flexGrow: entry.widthFraction ?? (1 / editorSections.length), flexShrink: 1, flexBasis: 0 }}
