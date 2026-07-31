@@ -5,7 +5,11 @@ This contract isolates app features from editor engine internals. Features that 
 
 ## Source of Truth
 - Contract types: `src/editor/EditorContract.ts`
-- Current implementation: `src/components/Editor.tsx`
+- Current implementation: `src/components/CM6Editor.tsx` (production editor as of 0.5.4;
+  `src/components/SectionEditorArea.tsx`'s `isCM6EditorEnabled` selects it by default, with a
+  `localStorage['thockdown:cm6-editor-spike'] = '0'` rollback to the Lexical-backed
+  `src/components/Editor.tsx`, kept alongside it as a fallback implementation of the same
+  contract).
 
 ## Canonical Semantics
 

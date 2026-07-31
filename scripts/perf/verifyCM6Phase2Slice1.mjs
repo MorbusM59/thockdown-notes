@@ -2,11 +2,13 @@
 // in behind a dev-only flag). Not a committed test -- ad hoc per
 // docs/document-scale-performance-philosophy.md's "live-browser check is
 // mandatory for anything touching editor state" rule. Checks:
-//   1. Default behavior (flag off) is completely unaffected -- Lexical
-//      editor mounts and works exactly as before.
-//   2. With the flag on, CM6Editor mounts instead, typing works, and text
-//      round-trips through the REAL save pipeline (readback via loadNote,
-//      not just in-memory state).
+//   1. (Updated for the 0.5.4 production flip: CM6 is now the default, so
+//      Part 1 now checks the rollback path instead of the old "off by
+//      default" behavior.) With the flag set to '0', the editor falls back
+//      to Lexical -- the rollback path stays intact.
+//   2. With the flag unset (the real default), CM6Editor mounts, typing
+//      works, and text round-trips through the REAL save pipeline (readback
+//      via loadNote, not just in-memory state).
 import { chromium } from 'playwright'
 import { existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
@@ -31,27 +33,27 @@ async function main() {
   try {
     browser = await chromium.launch({ headless: true, executablePath: resolveChromiumExecutablePath() })
 
-    // --- Part 1: flag OFF, default behavior unaffected ---
+    // --- Part 1: flag '0', rollback to Lexical still works ---
     {
       const page = await browser.newPage()
-      page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(`[default] ${msg.text()}`) })
-      page.on('pageerror', (err) => consoleErrors.push(`[default] ${String(err)}`))
+      page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(`[rollback] ${msg.text()}`) })
+      page.on('pageerror', (err) => consoleErrors.push(`[rollback] ${String(err)}`))
+      await page.addInitScript(() => {
+        window.localStorage.setItem('thockdown:cm6-editor-spike', '0')
+      })
       await page.goto(`http://localhost:${PORT}/`)
       await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 15000 })
       const hasCM6Root = await page.evaluate(() => Boolean(document.querySelector('.cm6-editor-root')))
-      if (hasCM6Root) throw new Error('FAIL: CM6 editor mounted even with the flag off')
-      console.error('[verify] Part 1 PASS: default (flag off) still mounts the Lexical editor, no CM6 root present')
+      if (hasCM6Root) throw new Error("FAIL: CM6 editor mounted even with the rollback flag ('0') set")
+      console.error('[verify] Part 1 PASS: rollback flag (\'0\') still falls back to the Lexical editor, no CM6 root present')
       await page.close()
     }
 
-    // --- Part 2: flag ON, CM6Editor mounts and the save round-trip works ---
+    // --- Part 2: default (no flag set), CM6Editor mounts and the save round-trip works ---
     {
       const page = await browser.newPage()
       page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(`[cm6] ${msg.text()}`) })
       page.on('pageerror', (err) => consoleErrors.push(`[cm6] ${String(err)}`))
-      await page.addInitScript(() => {
-        window.localStorage.setItem('thockdown:cm6-editor-spike', '1')
-      })
       await page.goto(`http://localhost:${PORT}/`)
       await page.waitForSelector('.cm6-editor-root', { timeout: 15000 })
       console.error('[verify] CM6 editor root mounted')
