@@ -73,7 +73,11 @@ import type {
  * fine (an "infinity grid" -- the pattern simply tiles as far as the
  * container happens to extend); the one real requirement is that whatever
  * cells DO render land exactly on the real glyph positions, which the fixes
- * above now guarantee.
+ * above now guarantee. Also fixed since: the native OS caret was still
+ * showing through despite caret-color: transparent on .editor-text -- CM6's
+ * own base theme sets caret-color via a higher-specificity descendant
+ * selector (`.ͼN .cm-content`), which was silently winning regardless of
+ * source order; forced with !important.
  *
  * Still not ported: the hasViewportLines-style gating that avoids a "wrong
  * boundary frame, then corrected" flash on first restore -- a real but minor
@@ -1183,7 +1187,19 @@ export function CM6Editor({
         // rather than relying on that effect alone (see its own comment for
         // why: it can lose a race with view creation on a fresh 0/0 mount).
         '.cm-line': { padding: '0' },
-        '.cm-content': { padding: '0' },
+        // caret-color !important: CM6's own base theme sets this via
+        // `.ͼN .cm-content` (its generated theme-scope class + a descendant
+        // combinator, e.g. `.ͼ2 .cm-content { caret-color: black }` /
+        // `.ͼ3 .cm-content { caret-color: white }` for dark mode) --
+        // confirmed live by walking document.styleSheets. That's two
+        // class-level selectors (specificity 0,2,0), which beats
+        // .editor-text's single-class rule (0,1,0) in index.css regardless
+        // of source order, so the "hide the native OS caret, we draw our
+        // own block caret" rule was silently losing and the real native
+        // caret was showing through. !important forces the win outright
+        // rather than trying to out-specificity a selector CM6 controls and
+        // could change the shape of at any point.
+        '.cm-content': { padding: '0', caretColor: 'transparent !important' },
       }),
       // Tab/Enter/markdown-shortcut transforms -- ported verbatim from
       // ContractBridgePlugin.tsx's KEY_TAB_COMMAND/KEY_DOWN_COMMAND/
