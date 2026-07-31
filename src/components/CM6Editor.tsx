@@ -68,6 +68,7 @@ export interface CM6EditorProps {
   fontFamily: string;
   fontSizePx: number;
   lineHeightPx: number;
+  glyphWidthPx?: number;
   cellWidthPx?: number;
   editorReadOnly?: boolean;
   spellCheckEnabled?: boolean;
@@ -321,6 +322,7 @@ export function CM6Editor({
   fontFamily,
   fontSizePx,
   lineHeightPx,
+  glyphWidthPx = 0,
   cellWidthPx = 0,
   editorReadOnly = false,
   spellCheckEnabled = false,
@@ -1794,7 +1796,38 @@ export function CM6Editor({
     // positioned against -- matching Editor.tsx's own structure, where
     // BlockCaretPlugin renders as a sibling of the scroller inside a shared
     // non-scrolling parent, not inside the scrolling element itself.
-    <div ref={layerRef} style={{ position: 'absolute', inset: 0, overflow: 'hidden', cursor: (isDraggingTop || isDraggingBottom) ? 'ns-resize' : 'auto' }}>
+    <div
+      ref={layerRef}
+      style={{
+        position: 'absolute',
+        inset: 0,
+        overflow: 'hidden',
+        cursor: (isDraggingTop || isDraggingBottom) ? 'ns-resize' : 'auto',
+        // The SOURCE OF TRUTH for .editor-text's grid-alignment CSS (the
+        // letter-spacing + translateX trick in index.css that pads/centers
+        // each glyph to exactly cellWidthPx, and the font-family/size/
+        // line-height .editor-text itself reads via var()) -- ported from
+        // Editor.tsx's own "Editor Container Base" div, which sets these
+        // same five custom properties. Found live, not assumed: CM6Editor
+        // previously set fontFamily/fontSize/lineHeight as plain inline
+        // style on the .cm6-editor-root div below, which does nothing for
+        // actual text rendering -- .editor-text's own CSS rule (an
+        // explicit rule on .cm-content itself, not an inherited value from
+        // an ancestor) always wins over inheritance regardless of what the
+        // ancestor sets. Without these vars, .cm-content silently fell back
+        // to :root's hardcoded defaults (10px cell width, 8px glyph width)
+        // instead of the real measured runtime metrics from props --
+        // invisible only by coincidence whenever those happened to match,
+        // and a real text/grid misalignment bug the moment they didn't.
+        ...({
+          '--editor-font': fontFamily,
+          '--editor-font-size': `${fontSizePx}px`,
+          '--editor-line-height': `${lineHeightPx}px`,
+          '--editor-glyph-width': `${glyphWidthPx}px`,
+          '--editor-cell-width': `${cellWidthPx}px`,
+        } as React.CSSProperties),
+      }}
+    >
       <div
         ref={containerRef}
         className="cm6-editor-root"
@@ -1809,9 +1842,13 @@ export function CM6Editor({
           // instead of CM6's own scroller ever since slice 1 -- see the
           // EditorView.theme() comment above for how this was found.
           overflow: 'hidden',
-          fontFamily,
-          fontSize: fontSizePx,
-          lineHeight: `${lineHeightPx}px`,
+          // Matches Editor.tsx's own scroller (className "z-10"): above the
+          // boundary zones (z2), selection highlight (z4), and caret (z5) --
+          // and, once ported, below the grid lines (z6/z7) so text paints
+          // over the grid instead of the grid's box-border lines clipping
+          // into glyph ink, while grid lines still paint over caret/
+          // selection so a cell's own border stays visible through them.
+          zIndex: 10,
         }}
       />
       {/* Fixed-focus caging boundary zones -- ported from Editor.tsx's own
