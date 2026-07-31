@@ -897,6 +897,49 @@ export function CM6Editor({
   // half, so rounding costs nothing and keeps every grid line equally crisp.
   const halfCellWidthPx = Math.round(cellWidthPx / 2);
   const halfLineHeightPx = Math.round(lineHeightPx / 2);
+  // topBoundaryPxDisplay/bottomBoundaryPxDisplay are phase-0 (plain multiples
+  // of lineHeightPx) because that's what the scroll-cage math needs them to
+  // stay as -- see CageMath.ts's own doc comment on why its screen-anchored
+  // threshold positions must NOT carry the half-cell offset. But every
+  // on-screen rendering of a boundary line (the zone shading, the drag
+  // handles, the content padding below) sits on the same "infinity grid" as
+  // the rest of the content, which starts halfLineHeightPx down from the
+  // container edge -- so the VISUAL position of a boundary of N lines is
+  // N*lineHeightPx + halfLineHeightPx, not the raw phase-0 value. These are
+  // that shift, applied once here and reused by every visual call site
+  // instead of each one re-deriving (or forgetting) it.
+  const topBoundaryVisualPx = topBoundaryPxDisplay + halfLineHeightPx;
+  // The half-cell shift alone isn't enough to make the bottom boundary land
+  // an integer number of lineHeightPx below the top one: scrollerClientHeightPx
+  // is an arbitrary pixel height with no reason to be a multiple of
+  // lineHeightPx, so "container height minus both boundaries" (the middle
+  // content region) is essentially never itself a clean multiple either --
+  // leaving a leftover partial row unaccounted for. Folding that leftover
+  // into the bottom boundary's own visual size (rather than the top's, which
+  // stays anchored to the grid from the container's top-left corner by
+  // construction) makes the middle region's height an exact multiple of
+  // lineHeightPx, which is what actually pins the bottom boundary to a whole
+  // number of rows below the top one.
+  const bottomBoundaryVisualBasePx = bottomBoundaryPxDisplay + halfLineHeightPx;
+  const middleRegionRawPx = Math.max(0, scrollerClientHeightPx - topBoundaryVisualPx - bottomBoundaryVisualBasePx);
+  const middleRegionRemainderPx = lineHeightPx > 0 ? middleRegionRawPx % lineHeightPx : 0;
+  const bottomBoundaryVisualPx = bottomBoundaryVisualBasePx + middleRegionRemainderPx;
+  // Quantized so it's an exact multiple of lineHeightPx by construction (see
+  // above) -- used as an explicit height instead of a CSS `bottom: Npx` inset
+  // for the divs below.
+  const middleRegionHeightPx = middleRegionRawPx - middleRegionRemainderPx;
+  // Every boundary-zone/handle div below is positioned via an explicit `top`
+  // computed from this one JS-tracked scrollerClientHeightPx, never via a
+  // CSS `bottom: Npx` inset. `bottom` insets are resolved against the
+  // overlay layer's OWN live layout box, which -- unlike scrollerClientHeightPx
+  // -- can be a fractional CSS pixel height (e.g. flexbox distributing
+  // leftover space) and can be one resize-observer tick stale relative to
+  // the values computed here in the same render. Two positioning systems
+  // that are each individually consistent but drift from each other by a
+  // sub-pixel amount during a continuous window resize is exactly what reads
+  // as jitter; deriving every position from this single integer removes the
+  // second system entirely.
+  const bottomZoneTopPx = Math.max(0, scrollerClientHeightPx - bottomBoundaryVisualPx);
   const alignmentPaddingBottomPx = lineHeightPx > 0
     ? (((scrollerClientHeightPx - halfLineHeightPx) % lineHeightPx) + lineHeightPx) % lineHeightPx
     : 0;
@@ -917,7 +960,7 @@ export function CM6Editor({
     // backgroundPosition below, which is shifted by the exact same amount
     // so text and grid move together and stay aligned).
     view.contentDOM.style.paddingLeft = `${halfCellWidthPx}px`;
-    view.contentDOM.style.paddingTop = `${topBoundaryPxDisplay + halfLineHeightPx}px`;
+    view.contentDOM.style.paddingTop = `${topBoundaryVisualPx}px`;
     view.contentDOM.style.paddingBottom = `${bottomBoundaryPxDisplay + alignmentPaddingBottomPx}px`;
     // Same reasoning as the lineHeightPx/cellWidthPx metrics-change effect
     // further down: an external padding mutation grows/shrinks scrollHeight
@@ -925,7 +968,7 @@ export function CM6Editor({
     // reconciliation across that needs to be forced rather than left to
     // whatever unforced schedule it would otherwise settle on.
     view.requestMeasure();
-  }, [topBoundaryPxDisplay, bottomBoundaryPxDisplay, alignmentPaddingBottomPx, halfCellWidthPx, halfLineHeightPx]);
+  }, [topBoundaryVisualPx, bottomBoundaryPxDisplay, alignmentPaddingBottomPx, halfCellWidthPx]);
 
   // Custom scrollbar sync -- ported from Editor.tsx's own three sync
   // effects. Runs after the portal target (scrollbarHost) or any layout
@@ -2804,10 +2847,15 @@ export function CM6Editor({
   // CM6Editor's layer (no such padding) doesn't have -- this sliver is the
   // substitute.
   const boundaryHandleSliverPx = Math.min(lineHeightPx, 8);
-  const topHandleTopPx = topBoundaryPxDisplay >= lineHeightPx ? topBoundaryPxDisplay - lineHeightPx : 0;
+  const topHandleTopPx = topBoundaryPxDisplay >= lineHeightPx ? topBoundaryVisualPx - lineHeightPx : 0;
   const topHandleHeightPx = topBoundaryPxDisplay >= lineHeightPx ? lineHeightPx : boundaryHandleSliverPx;
-  const bottomHandleBottomPx = bottomBoundaryPxDisplay >= lineHeightPx ? bottomBoundaryPxDisplay - lineHeightPx : 0;
+  const bottomHandleBottomPx = bottomBoundaryPxDisplay >= lineHeightPx ? bottomBoundaryVisualPx - lineHeightPx : 0;
   const bottomHandleHeightPx = bottomBoundaryPxDisplay >= lineHeightPx ? lineHeightPx : boundaryHandleSliverPx;
+  // Same top-anchored positioning as bottomZoneTopPx above, and for the same
+  // reason: a `bottom: Npx` inset here would resolve against the overlay
+  // layer's own live (possibly fractional, possibly one tick stale) box
+  // height instead of this render's own scrollerClientHeightPx.
+  const bottomHandleTopPx = Math.max(0, scrollerClientHeightPx - bottomHandleBottomPx - bottomHandleHeightPx);
 
   // The custom scrollbar rail -- ported from Editor.tsx verbatim (same
   // classes, same CSS in index.css). Rendered via a portal into
@@ -2906,14 +2954,14 @@ export function CM6Editor({
           this automatically based on Lexical's own root-empty check; CM6 has
           no built-in equivalent, so isDocEmpty tracks it explicitly (see its
           own declaration above). Positioned to match the real content's own
-          padding (topBoundaryPxDisplay + halfLineHeightPx, halfCellWidthPx)
-          so the text lines up with the grid exactly like typed text would;
-          zIndex matches the content layer so it paints over the grid/
-          boundary zones the same way real glyphs do. */}
+          padding (topBoundaryVisualPx, halfCellWidthPx) so the text lines up
+          with the grid exactly like typed text would; zIndex matches the
+          content layer so it paints over the grid/boundary zones the same
+          way real glyphs do. */}
       {hasViewportLines && fontReady && isDocEmpty && (
         <div
           className="absolute pointer-events-none select-none editor-text"
-          style={{ top: topBoundaryPxDisplay + halfLineHeightPx, left: halfCellWidthPx, zIndex: 10 }}
+          style={{ top: topBoundaryVisualPx, left: halfCellWidthPx, zIndex: 10 }}
         >
           Jot down a thockdown note...
         </div>
@@ -2961,8 +3009,8 @@ export function CM6Editor({
           <div
             className="absolute pointer-events-none"
             style={{
-              top: topBoundaryPxDisplay,
-              bottom: bottomBoundaryPxDisplay,
+              top: topBoundaryVisualPx,
+              height: middleRegionHeightPx,
               left: 0,
               right: 0,
               backgroundColor: 'var(--color-bg-regular)',
@@ -2971,11 +3019,11 @@ export function CM6Editor({
           />
           <div
             className="absolute left-0 right-0 pointer-events-none"
-            style={{ top: 0, height: topBoundaryPxDisplay, backgroundColor: 'var(--color-bg-leading)', zIndex: 2 }}
+            style={{ top: 0, height: topBoundaryVisualPx, backgroundColor: 'var(--color-bg-leading)', zIndex: 2 }}
           />
           <div
             className="absolute left-0 right-0 pointer-events-none"
-            style={{ bottom: 0, height: bottomBoundaryPxDisplay, backgroundColor: 'var(--color-bg-trailing)', zIndex: 2 }}
+            style={{ top: bottomZoneTopPx, height: bottomBoundaryVisualPx, backgroundColor: 'var(--color-bg-trailing)', zIndex: 2 }}
           />
           <div
             className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize"
@@ -2985,7 +3033,7 @@ export function CM6Editor({
           />
           <div
             className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize"
-            style={{ bottom: bottomHandleBottomPx, height: bottomHandleHeightPx }}
+            style={{ top: bottomHandleTopPx, height: bottomHandleHeightPx }}
             onWheel={forwardHandleWheelToScroller}
             onMouseDown={(e) => { e.preventDefault(); setIsDraggingBottom(true); }}
           />
