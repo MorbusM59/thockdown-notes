@@ -45,7 +45,7 @@ import {
 } from './perfHarness.mjs'
 
 function parseArgs(argv) {
-  const args = { mode: 'burst', chars: 1_500_000, keystrokes: 30, position: 'end', port: 5183, headed: false, json: false, categories: undefined }
+  const args = { mode: 'burst', chars: 1_500_000, keystrokes: 30, position: 'end', port: 5183, headed: false, json: false, categories: undefined, warmup: 0 }
   for (const raw of argv) {
     const [key, value] = raw.replace(/^--/, '').split('=')
     if (key === 'headed') args.headed = true
@@ -59,6 +59,12 @@ function parseArgs(argv) {
     // set, e.g. --categories=devtools.timeline,disabled-by-default-v8.gc to
     // attribute the profile-mode "(program)" bucket to GC specifically.
     else if (key === 'categories') args.categories = value
+    // Types --warmup characters (untimed, unprofiled) after placing the
+    // caret and before the measured burst starts -- for testing whether a
+    // cost is a one-time JIT-tier-up/cold-start artifact rather than a
+    // steady-state per-keystroke cost (compare --warmup=0 vs a nonzero value
+    // at the same --position/--keystrokes).
+    else if (key === 'warmup') args.warmup = Number(value)
   }
   return args
 }
@@ -110,6 +116,11 @@ async function main() {
 
     console.error(`[perf] placing caret at "${args.position}"...`)
     await placeCaretAt(page, args.position)
+
+    if (args.warmup > 0) {
+      console.error(`[perf] typing ${args.warmup} warm-up characters (untimed)...`)
+      await measureKeystrokeBurstMs(page, args.warmup)
+    }
 
     let result
     if (args.mode === 'burst') {
