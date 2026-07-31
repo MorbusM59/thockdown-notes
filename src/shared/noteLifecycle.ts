@@ -56,6 +56,12 @@ export interface CreateNoteInput {
 export interface SaveNoteInput {
   id: string;
   text: string;
+  // Piggybacked onto this same debounced write when the caller already has
+  // a fresh position on hand -- see databaseService.ts's upsertNoteContent
+  // doc comment. Optional; omitting these never clears a previously
+  // persisted position.
+  cursorPos?: number | null;
+  scrollTop?: number | null;
 }
 
 export interface DeleteNoteInput {

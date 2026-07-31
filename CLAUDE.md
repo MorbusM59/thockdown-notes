@@ -9,10 +9,11 @@ This project's documentation is kept deliberately small. These are the load-bear
 - [electron/help/helpNoteContent.ts](electron/help/helpNoteContent.ts) — the welcome note seeded into an empty database.
 - [electron/help/helpReferenceContent.ts](electron/help/helpReferenceContent.ts) — the in-app `$HELP` reference note. This is the canonical user-facing documentation. **Update it whenever a user-facing functional change ships.**
 - [docs/document-scale-performance-philosophy.md](docs/document-scale-performance-philosophy.md) + [docs/large-document-performance-handover.md](docs/large-document-performance-handover.md) — the standing contract and session-to-session handover for the large-document performance effort, currently in progress. Read the handover doc before touching editor/performance code; keep it current when handing off between sessions.
+- [docs/cm6-parity-hardening-plan.md](docs/cm6-parity-hardening-plan.md) — plan and session handover for post-CM6-migration work: correctness bugs, Lexical-parity gaps, an audit of which performance-effort infrastructure actually earned its keep, and further performance exploration. Read before touching CM6/editor-parity/caret-selection code; keep it current when handing off.
 - [TODO.md](TODO.md) — small open-items backlog.
 
 ## Architecture contracts
-- [docs/editor-contract.md](docs/editor-contract.md) — the boundary between app features and Lexical editor internals.
+- [docs/editor-contract.md](docs/editor-contract.md) — the boundary between app features and the editor internals (CM6 is the production `EditorAdapter` implementation as of 0.5.4; Lexical remains as a rollback path — see `docs/cm6-parity-hardening-plan.md`).
 - [docs/interaction-design-philosophy.md](docs/interaction-design-philosophy.md) — rules for input, caret, scroll, and note-activation behavior.
 
 ## Verification rigor: match the size of the change

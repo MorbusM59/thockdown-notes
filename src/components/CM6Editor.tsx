@@ -19,6 +19,8 @@ import {
 import { cancelQuantizedSmoothScroll, scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
 import { sanitizeDocumentText, sanitizeDocumentTextExtended } from '../shared/textSanitization';
+import { resolveScopeRange, isSameRange, type SelectionScope } from '../plugins/ContractBridgeRangeUtils';
+import { computeMinimalTextReplacement } from '../editor/MinimalTextDiff';
 import type {
   EditorAdapter,
   EditorBindings,
@@ -625,6 +627,16 @@ export function CM6Editor({
   const bindingsRef = useRef(bindings);
   const previousTextRef = useRef('');
   const previousSelectionRef = useRef<EditorSelectionState>({ anchor: 0, focus: 0, start: 0, end: 0, isCollapsed: true });
+  // Right-click selection-scope-cycling state -- mirrors ContractBridgePlugin.tsx's
+  // (Lexical) rightClickCycleRef exactly, since resolveScopeRange/isSameRange are
+  // pure text+offset functions with no Lexical dependency and are reused unchanged
+  // here rather than reimplemented. See handleContextMenu below.
+  const rightClickCycleRef = useRef<{
+    scope: SelectionScope;
+    start: number;
+    end: number;
+    retrySameScope: boolean;
+  } | null>(null);
   const lastHydratedNoteIdRef = useRef<string | null>(null);
   const lineHeightPxRef = useRef(lineHeightPx);
   const cellWidthPxRef = useRef(cellWidthPx);
@@ -1491,6 +1503,15 @@ export function CM6Editor({
     let isApplyingDragQuantizedCorrection = false;
     let dragCorrectionFrame: number | null = null;
 
+    // Mirrors ContractBridgePlugin.tsx's (Lexical) resolveNextScope exactly --
+    // see the contextmenu handler below.
+    const resolveNextRightClickScope = (current: SelectionScope): SelectionScope => {
+      if (current === 'word') return 'sentence';
+      if (current === 'sentence') return 'line';
+      if (current === 'line') return 'block';
+      return 'block';
+    };
+
     const extensions: Extension[] = [
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
@@ -1826,6 +1847,89 @@ export function CM6Editor({
         return true;
       }),
       EditorView.domEventHandlers({
+        // Right-click selection-scope cycling (word -> sentence -> line ->
+        // block on repeated right-clicks in the same spot) -- ported from
+        // ContractBridgePlugin.tsx's (Lexical) handleContextMenu. Reuses
+        // resolveScopeRange/isSameRange unchanged (pure text+offset
+        // functions, no Lexical dependency); only the "read current
+        // selection/offset" and "apply the result" steps are CM6-native
+        // (posAtCoords, view.dispatch) instead of Lexical's DOM-Range
+        // plumbing. Dispatching only `selection` (no `changes`) is picked up
+        // by the shared updateListener's `update.selectionSet` branch below,
+        // which already handles emitting onSelectionChange and scheduling
+        // the caret/highlight redraw -- no need to duplicate that here.
+        contextmenu: (event, view) => {
+          event.preventDefault();
+
+          const clickOffset = view.posAtCoords({ x: event.clientX, y: event.clientY });
+          if (clickOffset === null) return true;
+
+          // Full-document string, same as Lexical's readCanonicalRootText
+          // call at this same call site -- resolveScopeRange's text scan
+          // needs it. O(document length), but this only runs on a
+          // user-initiated right-click, not per keystroke, so it doesn't
+          // compete with the hot paths this file otherwise guards closely.
+          const text = view.state.doc.toJSON().join('\n');
+          const currentSelection = toSelectionState(view.state.selection.main);
+
+          const priorCycle = rightClickCycleRef.current;
+          const clickedInsideCurrentSelection = !currentSelection.isCollapsed
+            && clickOffset >= currentSelection.start
+            && clickOffset < currentSelection.end;
+          const canAdvanceScope = priorCycle !== null
+            && clickedInsideCurrentSelection
+            && priorCycle.start === currentSelection.start
+            && priorCycle.end === currentSelection.end;
+
+          const scope: SelectionScope = canAdvanceScope && priorCycle !== null
+            ? (priorCycle.retrySameScope ? priorCycle.scope : resolveNextRightClickScope(priorCycle.scope))
+            : 'word';
+
+          let resolvedScope = scope;
+          let nextRangeResult = resolveScopeRange(resolvedScope, text, clickOffset, currentSelection);
+          let nextRange = nextRangeResult.range;
+          let nextRangeIsPairAwareAdjusted = nextRangeResult.isPairAwareAdjustment;
+
+          // Avoid consuming clicks on no-op intermediate levels, e.g. sentence == line.
+          if (canAdvanceScope) {
+            const currentRange = { start: currentSelection.start, end: currentSelection.end };
+
+            while (isSameRange(nextRange, currentRange) && resolvedScope !== 'block') {
+              if (nextRangeResult.isPairAwareAdjustment) {
+                break;
+              }
+
+              resolvedScope = resolveNextRightClickScope(resolvedScope);
+              nextRangeResult = resolveScopeRange(resolvedScope, text, clickOffset, currentSelection);
+              nextRange = nextRangeResult.range;
+              nextRangeIsPairAwareAdjusted = nextRangeResult.isPairAwareAdjustment;
+            }
+          }
+
+          view.dispatch({ selection: EditorSelection.single(nextRange.start, nextRange.end) });
+
+          rightClickCycleRef.current = {
+            scope: resolvedScope,
+            start: nextRange.start,
+            end: nextRange.end,
+            retrySameScope: nextRangeIsPairAwareAdjusted,
+          };
+
+          return true;
+        },
+        // Left-click resets the scope cycle so the next right-click starts
+        // fresh at 'word' -- mirrors ContractBridgePlugin.tsx's
+        // handleMouseDown. (canAdvanceScope's own currentSelection-match
+        // check above would likely catch most cases on its own since a
+        // plain left-click collapses the selection, but this matches the
+        // Lexical behavior exactly rather than relying on that as an
+        // implicit side effect.)
+        mousedown: (event) => {
+          if (event.button === 0) {
+            rightClickCycleRef.current = null;
+          }
+          return false;
+        },
         paste: (event, view) => {
           if (!event.clipboardData) {
             plainPasteRequested = false;
@@ -2240,6 +2344,7 @@ export function CM6Editor({
       bindingsRef.current?.onLifecycle?.({ phase: 'destroyed' });
       view.destroy();
       viewRef.current = null;
+      rightClickCycleRef.current = null;
     };
     // Deliberately mount-once: noteId/initialText changes are handled by the
     // hydration effect below (matching NoteTextHydrationPlugin's own
@@ -2248,10 +2353,31 @@ export function CM6Editor({
   }, []);
 
   // Note-switch hydration: replace the whole document when noteId changes.
-  // Slice-1 simplification -- NOT yet the prefix/suffix patch
-  // NoteTextHydrationPlugin does, since CM6's own Text.replace() already
-  // avoids that function's entire reason for existing (see the Phase 1
-  // audit: structural sharing means this is cheap without manual diffing).
+  // For a genuine note switch this stays a full replace (Slice-1
+  // simplification -- NOT the prefix/suffix patch NoteTextHydrationPlugin
+  // does, since CM6's own Text.replace() already avoids that function's
+  // entire reason for existing performance-wise; see the Phase 1 audit).
+  //
+  // For the *same* note, this effect can still fire on a transient mismatch
+  // between `initialText` (React's view, sourced from activeNoteText) and
+  // CM6's own live document -- this is expected, not a "the note changed
+  // under us" event, and critically has no restore-snapshot mechanism
+  // running afterward the way a real note switch does. The previous version
+  // unconditionally did a full 0..length replace plus an explicit
+  // `selection: EditorSelection.cursor(0)` for *both* cases, which forced
+  // the caret to document start on every one of these transient mismatches
+  // too -- a live, reported "caret jumps to 0 mid-typing" bug, not just a
+  // cosmetic one, since it also discarded the positional correspondence a
+  // real edit needs. Fixed by branching: only the genuine-note-switch path
+  // resets the caret (matching NoteTextHydrationPlugin.tsx's own
+  // `SKIP_SELECTION_FOCUS_TAG` discipline -- never explicitly move the caret
+  // outside a real note switch) and only it does the O(1)-relative-to-input
+  // full replace; the same-note path computes a minimal prefix/suffix-
+  // trimmed change instead of a full replace, letting CM6's own
+  // selection-through-changes mapping preserve the caret automatically --
+  // a full 0..length replace has no positional correspondence for CM6 to
+  // map an existing selection through, so merely omitting the explicit
+  // `selection` field would not have been enough on its own.
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
@@ -2261,13 +2387,19 @@ export function CM6Editor({
     // NoteTextHydrationPlugin.tsx's own hydration-check effect on the
     // Lexical side), so toString()'s ConsString-then-flatten-on-compare
     // cost would otherwise be paid here too, every keystroke.
-    if (lastHydratedNoteIdRef.current === (noteId ?? null) && view.state.doc.toJSON().join('\n') === initialText) return;
+    const currentText = view.state.doc.toJSON().join('\n');
+    const isNoteSwitch = lastHydratedNoteIdRef.current !== (noteId ?? null);
+    if (!isNoteSwitch && currentText === initialText) return;
     lastHydratedNoteIdRef.current = noteId ?? null;
 
-    view.dispatch({
-      changes: { from: 0, to: view.state.doc.length, insert: initialText },
-      selection: EditorSelection.cursor(0),
-    });
+    if (isNoteSwitch) {
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: initialText },
+        selection: EditorSelection.cursor(0),
+      });
+    } else {
+      view.dispatch({ changes: computeMinimalTextReplacement(currentText, initialText) });
+    }
     previousTextRef.current = initialText;
   }, [noteId, initialText]);
 

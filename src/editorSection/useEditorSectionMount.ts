@@ -61,7 +61,7 @@ export interface UseEditorSectionMountOptions {
   setIsCaretSuspended: Dispatch<SetStateAction<boolean>>
   externalNoteOriginalTextByIdRef: MutableRefObject<Map<string, string>>
 
-  queueSave: (text: string) => void
+  queueSave: (text: string, cursorPos?: number | null, scrollTopPx?: number | null) => void
   queueAppStateSave: (selectedNoteId: string | null) => void
   updateActiveNoteTitlePreview: (nextText: string) => void
   /** Only ever referenced in bindings' own dependency array (matching the original code), never actually called here. */
@@ -894,7 +894,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (!isDeferredPreviewTick) {
         updateActiveNoteTitlePreview(canonicalText)
       }
-      queueSave(canonicalText)
+      queueSave(canonicalText, event.selection.end, latestEditViewportTelemetryRef.current?.scrollTopPx)
     },
     onSelectionChange: (event: EditorSelectionChangeEvent) => {
       if (previewedSnapshotId !== null) {
@@ -971,7 +971,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
             setActiveNoteText(nextText)
             setEditorTextVersion((previous) => previous + 1)
             updateActiveNoteTitlePreview(nextText)
-            queueSave(nextText)
+            queueSave(nextText, nextSelection.end, latestEditViewportTelemetryRef.current?.scrollTopPx)
 
             latestEditorSelectionRef.current = nextSelection
             setEditorSelection(nextSelection)
@@ -996,7 +996,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       setActiveNoteText(next.text)
       setEditorTextVersion((previous) => previous + 1)
       updateActiveNoteTitlePreview(next.text)
-      queueSave(next.text)
+      queueSave(next.text, next.selection.end, latestEditViewportTelemetryRef.current?.scrollTopPx)
 
       latestEditorSelectionRef.current = next.selection
       setEditorSelection(next.selection)
@@ -1027,7 +1027,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       setActiveNoteText(next.text)
       setEditorTextVersion((previous) => previous + 1)
       updateActiveNoteTitlePreview(next.text)
-      queueSave(next.text)
+      queueSave(next.text, next.selection.end, latestEditViewportTelemetryRef.current?.scrollTopPx)
       latestEditorSelectionRef.current = next.selection
       setEditorSelection(next.selection)
       return next
@@ -1052,7 +1052,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       setActiveNoteText(next.text)
       setEditorTextVersion((previous) => previous + 1)
       updateActiveNoteTitlePreview(next.text)
-      queueSave(next.text)
+      queueSave(next.text, next.selection.end, latestEditViewportTelemetryRef.current?.scrollTopPx)
       latestEditorSelectionRef.current = next.selection
       setEditorSelection(next.selection)
       return next
@@ -1072,7 +1072,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       setActiveNoteText(next.text)
       setEditorTextVersion((previous) => previous + 1)
       updateActiveNoteTitlePreview(next.text)
-      queueSave(next.text)
+      queueSave(next.text, next.selection.end, latestEditViewportTelemetryRef.current?.scrollTopPx)
 
       latestEditorSelectionRef.current = next.selection
       setEditorSelection(next.selection)
@@ -1463,6 +1463,19 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
         applyEditRestoreSnapshot(restoreSnapshot, {
           restoreFullSelection: false,
+          // Matches its two sibling branches above in this same effect
+          // (cached/memory snapshot restore), both of which already pass
+          // focusAfterApply: true -- this path (persisted-state restore, the
+          // one taken when a note is opened for the first time this
+          // session) was the one case that didn't, leaving
+          // document.activeElement off the editor after a note switch.
+          // Harmless on Lexical (its caret renders regardless of DOM focus)
+          // but CM6's caret overlay is hard-gated on focus
+          // (CM6Editor.tsx's updateCaret), so this omission left the caret
+          // invisible after switching to a not-yet-cached note until the
+          // user clicked in manually. See docs/cm6-parity-hardening-plan.md
+          // Bug 2.
+          focusAfterApply: true,
           onComplete: () => setIsCaretSuspended(false),
         })
       } catch (error) {
@@ -1686,7 +1699,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     setActiveNoteText(canonicalText)
     setEditorTextVersion((previous) => previous + 1)
     updateActiveNoteTitlePreview(canonicalText)
-    queueSave(canonicalText)
 
     if (typeof selectionStart === 'number' && typeof selectionEnd === 'number') {
       const safeSelectionStart = Math.max(0, Math.min(selectionStart, canonicalText.length))
@@ -1710,6 +1722,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           selection: nextSelection,
         })
       })
+
+      queueSave(canonicalText, nextSelection.end, latestEditViewportTelemetryRef.current?.scrollTopPx)
+    } else {
+      queueSave(canonicalText, latestEditorSelectionRef.current?.end, latestEditViewportTelemetryRef.current?.scrollTopPx)
     }
   }, [
     queueSave,
@@ -1717,6 +1733,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     activeNoteHasDebugTagRef,
     latestEditorSelectionRef,
     latestEditorTextRef,
+    latestEditViewportTelemetryRef,
     setActiveNoteText,
     setEditorSelection,
     setEditorTextVersion,

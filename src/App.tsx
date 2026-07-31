@@ -5146,6 +5146,11 @@ ${markdownHtml}
     const sectionsApi = window.thockdownSections
     if (!sectionsApi) return
 
+    // Closing parks the section's note (its editor content is about to be
+    // unmounted) -- persist its cursor/scroll position now, same checkpoint
+    // as beforeunload, so it survives being swapped back in later.
+    sectionRegistryRef.current.get(sectionId)?.persistActiveNoteEditModeStateNow()
+
     const currentWidthsPx = measureSectionWidthsPx()
     const updatedWidths = computeSectionWidthsForCloseFlexAware(
       currentWidthsPx,
@@ -5196,6 +5201,11 @@ ${markdownHtml}
   const handleDeleteSection = useCallback(async (sectionId: string) => {
     const sectionsApi = window.thockdownSections
     if (!sectionsApi) return
+
+    // Same checkpoint as handleCloseSection: the note itself may live on
+    // (only this section slot is being removed), so its cursor/scroll
+    // position is still worth persisting before the editor unloads.
+    sectionRegistryRef.current.get(sectionId)?.persistActiveNoteEditModeStateNow()
 
     const currentWidthsPx = measureSectionWidthsPx()
     const updatedWidths = computeSectionWidthsForCloseFlexAware(
@@ -5259,6 +5269,10 @@ ${markdownHtml}
     const incomingPreviousPosition = incomingEntryBefore?.position ?? null
     const incomingPreviousWidthFraction = incomingEntryBefore?.widthFraction ?? null
     const outgoingWidthFraction = outgoingEntryBefore?.widthFraction ?? null
+
+    // outgoingSectionId's editor is about to unload its note -- persist its
+    // cursor/scroll position first, same checkpoint as handleCloseSection.
+    sectionRegistryRef.current.get(outgoingSectionId)?.persistActiveNoteEditModeStateNow()
 
     let updated = await sectionsApi.swapIntoSlot(outgoingSectionId, incomingSectionId)
     sectionRegistryRef.current.delete(outgoingSectionId)
@@ -5347,6 +5361,10 @@ ${markdownHtml}
     const outgoingEntryBefore = editorSections.find((entry) => entry.id === sectionId)
     const outgoingPosition = outgoingEntryBefore?.position ?? null
     const outgoingWidthFraction = outgoingEntryBefore?.widthFraction ?? null
+
+    // Same checkpoint as handleCloseSection: this slot's editor is unloading
+    // its note before the fresh blank section backfills it.
+    sectionRegistryRef.current.get(sectionId)?.persistActiveNoteEditModeStateNow()
 
     let updated = await sectionsApi.closeSlot(sectionId)
     sectionRegistryRef.current.delete(sectionId)
@@ -6730,9 +6748,14 @@ ${markdownHtml}
         })
       }
 
-      activeSection?.persistActiveNoteEditModeStateNow()
-      if (activeSection?.isPreviewMode && activeSection.activeNoteId) {
-        void activeSection.persistRenderViewStateForNoteNow(activeSection.activeNoteId)
+      // Flush every open section, not just the active one -- each has its
+      // own note with its own cursor/scroll position that would otherwise
+      // be lost on quit.
+      for (const section of sectionRegistryRef.current.values()) {
+        section.persistActiveNoteEditModeStateNow()
+        if (section.isPreviewMode && section.activeNoteId) {
+          void section.persistRenderViewStateForNoteNow(section.activeNoteId)
+        }
       }
       persistMenuStateOnUnload()
     }
