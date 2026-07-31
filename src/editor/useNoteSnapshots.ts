@@ -124,11 +124,24 @@ export function useNoteSnapshots(sectionId: string, noteId: string | null, liveT
     return map
   }, [snapshots])
 
-  // Also shared between snapshotIdsMatchingPresent and
-  // hasPendingManualChanges below so liveText -- the one input that
-  // genuinely changes every keystroke -- is only normalized once per
-  // render, not twice.
-  const normalizedLiveText = useMemo(() => normalizeForComparison(liveText), [liveText])
+  // Debounced rather than tracking `liveText` directly: normalizeForComparison
+  // is an O(document length) regex-replace pass, and snapshotIdsMatchingPresent/
+  // hasPendingManualChanges below (its only consumers) purely drive the Time
+  // Machine timeline's "present" dot -- a passive display, not editor state or
+  // save logic -- so recomputing it synchronously on every keystroke (measured
+  // live on a 1.5M-character note: ~2.9ms/keystroke mean, real but avoidable)
+  // buys no correctness the debounced value doesn't already provide. Same
+  // "deferred/off-critical-path work" fix as EditorSection.tsx's
+  // activeNoteDocumentStats (see docs/large-document-performance-handover.md).
+  const [debouncedLiveText, setDebouncedLiveText] = useState(liveText)
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setDebouncedLiveText(liveText), 200)
+    return () => window.clearTimeout(timeoutId)
+  }, [liveText])
+
+  // Also shared between snapshotIdsMatchingPresent and hasPendingManualChanges
+  // below so debouncedLiveText is only normalized once per settle, not twice.
+  const normalizedLiveText = useMemo(() => normalizeForComparison(debouncedLiveText), [debouncedLiveText])
 
   const snapshotIdsMatchingPresent = useMemo(() => {
     const result = new Set<number>()

@@ -1029,8 +1029,24 @@ bracket candidates directly with `performance.mark`/`measure` (see
 diagnostic for the next time `EditorSection.tsx`'s hook fan-out needs auditing) and let real
 numbers settle it.
 
+**A second instance of the same pattern, found by re-profiling after the fix above — also
+fixed.** With `EditorSection.tsx:549` gone from the profile, the next-largest named entry was
+`normalizeForComparison @ useNoteSnapshots.ts:98` (~87.5ms/30-keystroke burst, ~2.9ms/keystroke
+mean). Same shape as `activeNoteDocumentStats`: `normalizedLiveText` re-normalized `liveText` (the
+whole document) on every keystroke, feeding `snapshotIdsMatchingPresent`/`hasPendingManualChanges`
+— both purely drive the Time Machine timeline's "present" dot (`PresentStateCircle.tsx`,
+`SnapshotTimelineSlider.tsx`), never editor state or save logic. Fixed the same way: a debounced
+`debouncedLiveText` (200ms) instead of tracking `liveText` directly, leaving the explicit
+`createManualSnapshot` action (a user click, needs the exact current text, not a stale debounced
+one) untouched. Verified via `npx tsc --noEmit`, `npm run lint`, full suite (251/251), and a
+live-browser check confirming the present-state indicator still renders and updates with no
+console errors. Total sampled JS time for the profiled burst: **1696ms → 1119ms (34%) after both
+fixes**, and CM6-path burst wall-clock: **44.96ms → ~23ms/keystroke mean (~50%)**.
+
 **The production gate is the highest-leverage open item, and is a product decision, not an
 engineering one.** Flipping `isCM6EditorSpikeEnabled` in `SectionEditorArea.tsx` to ship CM6 to
 real users needs an explicit decision (not assumed by this audit) given CM6Editor.tsx's own doc
 comment lists at least one deliberately-unported piece (the boundary-restore flash gating) and
-the file is still described as a "shadow-adapter stage" spike, not a completed migration.
+the file is still described as a "shadow-adapter stage" spike, not a completed migration. Asked
+explicitly this round — the answer was "not yet, keep auditing/hardening first," which is why this
+section exists as multiple fix-and-reprofile rounds rather than stopping at the first one.
