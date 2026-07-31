@@ -62,17 +62,17 @@ export interface SectionEditorAreaProps {
 }
 
 /**
- * Dev-only opt-in for the Phase 2 CM6 editor-engine spike (see
- * docs/document-scale-performance-philosophy.md's history and
- * src/components/CM6Editor.tsx's own doc comment). Gated on import.meta.env.DEV
- * first so this branch is statically false -- and dead-code-eliminated -- in
- * any production build regardless of localStorage content; the localStorage
- * check on top lets a developer opt in per-browser-profile without a rebuild.
- * Never surfaced as a real user-facing setting.
+ * The CM6 editor engine (see docs/document-scale-performance-philosophy.md's
+ * history and src/components/CM6Editor.tsx's own doc comment) is the
+ * production editor as of 0.5.4 -- the former dev-only spike gate is now
+ * flipped on by default. `thockdown:cm6-editor-spike` set to '0' in
+ * localStorage force-falls-back to the Lexical-backed Editor.tsx for a given
+ * browser profile without a rebuild -- kept as a low-cost rollback path given
+ * how recently CM6Editor.tsx graduated past "shadow-adapter stage", not
+ * surfaced as a real user-facing setting.
  */
-const isCM6EditorSpikeEnabled = import.meta.env.DEV
-  && typeof window !== 'undefined'
-  && window.localStorage?.getItem('thockdown:cm6-editor-spike') === '1';
+const isCM6EditorEnabled =
+  typeof window === 'undefined' || window.localStorage?.getItem('thockdown:cm6-editor-spike') !== '0';
 
 /**
  * The editor + its scrollbar + the Time Machine timeline/manual-save-dot for
@@ -168,7 +168,7 @@ export function SectionEditorArea({
           <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}`}>
             <div className="edit-container" style={{ display: isPreviewMode ? 'none' : undefined }}>
               {activeNoteId ? (
-                isCM6EditorSpikeEnabled ? (
+                isCM6EditorEnabled ? (
                   <CM6Editor
                     bindings={bindings}
                     adapterRef={adapterRef}
@@ -182,6 +182,8 @@ export function SectionEditorArea({
                     cellWidthPx={editorRuntimeMetrics.cellWidthPx}
                     editorReadOnly={activeNoteHasDebugTag || isPreviewingSnapshot}
                     spellCheckEnabled={spellCheckEditEnabled}
+                    fontReady={editorFontLoadVersion > 0}
+                    caretSuspended={isCaretSuspended}
                   />
                 ) : (
                 <Editor

@@ -141,10 +141,17 @@ import type {
  * passed into CageMath.ts) -- the shift only needs to be "about half a
  * cell" for breathing room, not exactly half, so rounding costs nothing.
  *
- * Still not ported: the hasViewportLines-style gating that avoids a "wrong
- * boundary frame, then corrected" flash on first restore -- a real but minor
- * simplification for this dev-only spike, worth revisiting if this migration
- * continues past the shadow-adapter stage.
+ * Production flip (0.5.4): the hasViewportLines/isSnapshotRestorePending
+ * gating that avoids a "wrong boundary frame, then corrected" flash on first
+ * restore, previously flagged here as not-yet-ported, is now in place --
+ * mirrors Editor.tsx's own mechanism exactly (same two pieces of state, same
+ * one-rAF settle window after applySnapshot, same set of gated visuals: grid
+ * lines, boundary-zone backgrounds, drag handles, the caret overlay, and the
+ * selection highlight). New `fontReady`/`caretSuspended` props (both
+ * optional, defaulting to "already ready"/"not suspended" so every existing
+ * caller -- the perf harness, the verify*.mjs regression scripts -- keeps its
+ * prior always-visible behavior unless it opts in) let the real app wire
+ * these the same way it already does for Editor.tsx.
  *
  * Performance audit pass (per docs/document-scale-performance-philosophy.md's
  * "computational scope must track the viewed slice" principle, checked here
@@ -216,6 +223,12 @@ export interface CM6EditorProps {
   cellWidthPx?: number;
   editorReadOnly?: boolean;
   spellCheckEnabled?: boolean;
+  // True once the editor font has loaded and glyph metrics (cellWidthPx,
+  // glyphWidthPx) have been measured against the real font face -- same
+  // semantics as Editor.tsx's own fontReady prop. Gated content waits for
+  // both this and hasViewportLines (below).
+  fontReady?: boolean;
+  caretSuspended?: boolean;
 }
 
 function toSelectionState(range: { anchor: number; head: number; from: number; to: number; empty: boolean }): EditorSelectionState {
@@ -603,6 +616,8 @@ export function CM6Editor({
   cellWidthPx = 0,
   editorReadOnly = false,
   spellCheckEnabled = false,
+  fontReady = true,
+  caretSuspended = false,
 }: CM6EditorProps) {
   const layerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -633,6 +648,18 @@ export function CM6Editor({
   // existing ResizeObserver (see scheduleCaretUpdateAfterResize's call site).
   const [topBoundaryLines, setTopBoundaryLines] = useState(0);
   const [bottomBoundaryLines, setBottomBoundaryLines] = useState(0);
+  // Ported from Editor.tsx's own hasViewportLines/isSnapshotRestorePending
+  // gating: boundary-dependent visuals (grid, zone backgrounds, drag
+  // handles, caret, selection highlight) render a 0/0 frame that then jumps
+  // to the restored values unless suppressed until a real viewportLines
+  // snapshot has landed and settled. hasViewportLines flips true (and stays
+  // true) the first time applySnapshot receives viewportLines;
+  // isSnapshotRestorePending is true only for the one rAF between an
+  // applySnapshot call and its own settle, same as Editor.tsx.
+  const [hasViewportLines, setHasViewportLines] = useState(false);
+  const [isSnapshotRestorePending, setIsSnapshotRestorePending] = useState(false);
+  const snapshotRestoreRafRef = useRef<number | null>(null);
+  const caretHidden = isSnapshotRestorePending || caretSuspended;
   const [isDraggingTop, setIsDraggingTop] = useState(false);
   const [isDraggingBottom, setIsDraggingBottom] = useState(false);
   const [scrollerClientHeightPx, setScrollerClientHeightPx] = useState(0);
@@ -800,6 +827,18 @@ export function CM6Editor({
     topBoundaryPxRef.current = topBoundaryPxDisplay;
     bottomBoundaryPxRef.current = bottomBoundaryPxDisplay;
   }, [topBoundaryPxDisplay, bottomBoundaryPxDisplay]);
+
+  // Matches Editor.tsx's own cleanup for its snapshotRestoreRafRef -- avoids
+  // a setState-after-unmount if a note switch/section teardown races the
+  // one-rAF settle scheduled inside applySnapshot above.
+  useEffect(() => {
+    return () => {
+      if (snapshotRestoreRafRef.current !== null) {
+        cancelAnimationFrame(snapshotRestoreRafRef.current);
+        snapshotRestoreRafRef.current = null;
+      }
+    };
+  }, []);
 
   // Found live: scrolled all the way to the end of a note, the last visible
   // rows sat measurably off the fixed grid overlay (up to lineHeightPx-1 px)
@@ -2498,6 +2537,19 @@ export function CM6Editor({
         const view = viewRef.current;
         if (!view) return;
 
+        // Same isSnapshotRestorePending bracketing as Editor.tsx's own
+        // applySnapshot: suppress caret/selection-highlight rendering for
+        // the one rAF between this call and its own settle, so a restored
+        // caret never flashes at a stale position before the viewport/
+        // selection below actually lands.
+        const isSnapshotRestore = Boolean(snapshot.viewport || snapshot.viewportLines || snapshot.selection);
+        if (isSnapshotRestore) {
+          if (snapshotRestoreRafRef.current !== null) {
+            cancelAnimationFrame(snapshotRestoreRafRef.current);
+          }
+          setIsSnapshotRestorePending(true);
+        }
+
         if (snapshot.viewport) {
           const h = Math.max(0, view.scrollDOM.clientHeight);
           const quantizedViewportHeight = quantizeViewportHeightToGrid(h, lineHeightPxRef.current);
@@ -2541,6 +2593,7 @@ export function CM6Editor({
             top: Math.max(0, Math.round(snapshot.viewportLines.scrollTopLines) * lineHeightPxRef.current),
             behavior: 'auto',
           });
+          setHasViewportLines(true);
         }
 
         if (snapshot.selection) {
@@ -2548,6 +2601,16 @@ export function CM6Editor({
           const anchor = Math.max(0, Math.min(docLength, snapshot.selection.anchor));
           const focus = Math.max(0, Math.min(docLength, snapshot.selection.focus));
           view.dispatch({ selection: EditorSelection.single(anchor, focus) });
+        }
+
+        if (isSnapshotRestore) {
+          if (snapshotRestoreRafRef.current !== null) {
+            cancelAnimationFrame(snapshotRestoreRafRef.current);
+          }
+          snapshotRestoreRafRef.current = requestAnimationFrame(() => {
+            snapshotRestoreRafRef.current = null;
+            setIsSnapshotRestorePending(false);
+          });
         }
       },
     };
@@ -2665,6 +2728,13 @@ export function CM6Editor({
           // (z4/z5, both below z6/z7) so a cell's own border stays visible
           // through those fills.
           zIndex: 10,
+          // Hide content until the restored line counts have been applied
+          // (hasViewportLines) and the font has finished loading (fontReady)
+          // -- same reasoning as Editor.tsx's own ContentEditable visibility
+          // toggle. The element stays mounted (CM6's EditorView keeps running
+          // underneath) but isn't visible, so there's no "wrong frame, then
+          // corrected" flash.
+          visibility: hasViewportLines && fontReady ? 'visible' : 'hidden',
         }}
       />
       {/* The box grid -- ported from Editor.tsx verbatim (same classes, same
@@ -2681,52 +2751,66 @@ export function CM6Editor({
           own paddingLeft/paddingTop above, so the grid moves in lockstep
           with the content it's meant to line up with -- an "infinity grid"
           that starts half a cell past the container's top-left edge, cut-off
-          boxes at the far edges expected and fine. */}
-      <div
-        className="absolute pointer-events-none thockdown-grid-outline-lines"
-        style={{ inset: '0 0 -1px 0', zIndex: 6, backgroundPosition: `${halfCellWidthPx - 1}px ${halfLineHeightPx - 1}px` }}
-      />
-      <div
-        className="absolute pointer-events-none thockdown-grid-lines"
-        style={{ inset: '0 0 -1px 0', zIndex: 7, backgroundPosition: `${halfCellWidthPx}px ${halfLineHeightPx}px` }}
-      />
+          boxes at the far edges expected and fine. Gated on hasViewportLines/
+          fontReady same as Editor.tsx's own grid lines -- their pitch isn't
+          final until then, and rendering early would show a wrong-pitch grid
+          that then jumps once metrics settle. */}
+      {hasViewportLines && fontReady && (
+        <>
+          <div
+            className="absolute pointer-events-none thockdown-grid-outline-lines"
+            style={{ inset: '0 0 -1px 0', zIndex: 6, backgroundPosition: `${halfCellWidthPx - 1}px ${halfLineHeightPx - 1}px` }}
+          />
+          <div
+            className="absolute pointer-events-none thockdown-grid-lines"
+            style={{ inset: '0 0 -1px 0', zIndex: 7, backgroundPosition: `${halfCellWidthPx}px ${halfLineHeightPx}px` }}
+          />
+        </>
+      )}
       {/* Fixed-focus caging boundary zones -- ported from Editor.tsx's own
           background-zone divs. Adjacent, not overlapping, in the well-behaved
           case (topBoundary/bottomBoundary are already clamped so they never
           sum past the available height), so DOM/z-index order doesn't matter
-          in practice -- kept in the same order as the original regardless. */}
-      <div
-        className="absolute pointer-events-none"
-        style={{
-          top: topBoundaryPxDisplay,
-          bottom: bottomBoundaryPxDisplay,
-          left: 0,
-          right: 0,
-          backgroundColor: 'var(--color-bg-regular)',
-          zIndex: 2,
-        }}
-      />
-      <div
-        className="absolute left-0 right-0 pointer-events-none"
-        style={{ top: 0, height: topBoundaryPxDisplay, backgroundColor: 'var(--color-bg-leading)', zIndex: 2 }}
-      />
-      <div
-        className="absolute left-0 right-0 pointer-events-none"
-        style={{ bottom: 0, height: bottomBoundaryPxDisplay, backgroundColor: 'var(--color-bg-trailing)', zIndex: 2 }}
-      />
-      <div
-        className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize"
-        style={{ top: topHandleTopPx, height: topHandleHeightPx }}
-        onWheel={forwardHandleWheelToScroller}
-        onMouseDown={(e) => { e.preventDefault(); setIsDraggingTop(true); }}
-      />
-      <div
-        className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize"
-        style={{ bottom: bottomHandleBottomPx, height: bottomHandleHeightPx }}
-        onWheel={forwardHandleWheelToScroller}
-        onMouseDown={(e) => { e.preventDefault(); setIsDraggingBottom(true); }}
-      />
-      {highlightRects.map((rect, index) => (
+          in practice -- kept in the same order as the original regardless.
+          Gated the same way Editor.tsx gates its own equivalent divs: these
+          depend on topBoundary/bottomBoundary, which are 0/0 until a real
+          viewportLines snapshot has landed. */}
+      {hasViewportLines && fontReady && (
+        <>
+          <div
+            className="absolute pointer-events-none"
+            style={{
+              top: topBoundaryPxDisplay,
+              bottom: bottomBoundaryPxDisplay,
+              left: 0,
+              right: 0,
+              backgroundColor: 'var(--color-bg-regular)',
+              zIndex: 2,
+            }}
+          />
+          <div
+            className="absolute left-0 right-0 pointer-events-none"
+            style={{ top: 0, height: topBoundaryPxDisplay, backgroundColor: 'var(--color-bg-leading)', zIndex: 2 }}
+          />
+          <div
+            className="absolute left-0 right-0 pointer-events-none"
+            style={{ bottom: 0, height: bottomBoundaryPxDisplay, backgroundColor: 'var(--color-bg-trailing)', zIndex: 2 }}
+          />
+          <div
+            className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize"
+            style={{ top: topHandleTopPx, height: topHandleHeightPx }}
+            onWheel={forwardHandleWheelToScroller}
+            onMouseDown={(e) => { e.preventDefault(); setIsDraggingTop(true); }}
+          />
+          <div
+            className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize"
+            style={{ bottom: bottomHandleBottomPx, height: bottomHandleHeightPx }}
+            onWheel={forwardHandleWheelToScroller}
+            onMouseDown={(e) => { e.preventDefault(); setIsDraggingBottom(true); }}
+          />
+        </>
+      )}
+      {hasViewportLines && fontReady && !caretHidden && highlightRects.map((rect, index) => (
         <div
           key={index}
           className="thockdown-block-selection"
@@ -2741,7 +2825,7 @@ export function CM6Editor({
           }}
         />
       ))}
-      {caretStyle && (
+      {hasViewportLines && fontReady && !caretHidden && caretStyle && (
         <div
           className="thockdown-block-caret"
           style={{

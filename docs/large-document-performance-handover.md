@@ -1051,6 +1051,53 @@ the file is still described as a "shadow-adapter stage" spike, not a completed m
 explicitly this round — the answer was "not yet, keep auditing/hardening first," which is why this
 section exists as multiple fix-and-reprofile rounds rather than stopping at the first one.
 
+**Update, a later session: the gate is flipped — CM6 is the production editor as of 0.5.4.** The
+user, building main locally, noticed the "infinity grid" (the box-grid background this whole
+audit ported to CM6) wasn't showing up — a direct symptom of the gate above still defaulting to
+off outside dev+localStorage-opt-in. Asked to flip it for real this time. Before doing so, flagged
+the one still-open item from this audit (the boundary-restore flash gating, still not-ported as of
+the paragraph above) back to the user rather than shipping past a known gap silently; asked to
+close it first rather than ship as-is.
+
+Ported `hasViewportLines`/`isSnapshotRestorePending` into `CM6Editor.tsx`, mirroring
+`Editor.tsx`'s own mechanism exactly: same two pieces of state, the same one-rAF settle window
+bracketing `applySnapshot`, and the same set of gated visuals (grid lines, boundary-zone
+backgrounds, drag handles, the caret overlay, the selection highlight — plus the `.cm6-editor-root`
+container's own `visibility` toggle, CM6's equivalent of Editor.tsx's ContentEditable visibility
+hide). New `fontReady`/`caretSuspended` props on `CM6EditorProps`, both optional and defaulting to
+"already ready"/"not suspended" so the perf harness and the existing `verifyCM6*.mjs` regression
+scripts keep behaving exactly as before without modification; `SectionEditorArea.tsx` wires the
+real values through (`editorFontLoadVersion > 0`, `isCaretSuspended`) the same way it already does
+for the Lexical branch.
+
+Flipped `isCM6EditorSpikeEnabled` → `isCM6EditorEnabled`, CM6 the default with no DEV/localStorage
+opt-in required; kept a low-cost rollback (`localStorage['thockdown:cm6-editor-spike'] = '0'` now
+forces the Lexical editor back on for a given browser profile without a rebuild) given how
+recently this graduated past "shadow-adapter stage" — cheap insurance, not scope creep, since the
+mechanism already existed and only needed inverting.
+
+**The specific regression risk this gating change carries, and why it was checked directly rather
+than trusted from the reasoning alone**: if any real mount/note-switch path ever failed to call
+`adapter.applySnapshot({ viewportLines })`, `hasViewportLines` would stay `false` forever and the
+editor would render permanently blank — no grid, no caret, nothing — exactly the kind of
+caret/selection-adjacent regression this doc's own process discipline treats as the highest-severity
+class of bug. Verified live, not assumed: a new `scripts/perf/verifyCM6ProductionGating.mjs`
+(committed as a regression check, not a one-off) confirms CM6 mounts by default with no
+localStorage flag set, the grid/caret render on first mount, switching to a second note through
+the *real* UI (clicking its sidebar entry, not the mock-bridge shortcut, which doesn't exercise the
+live in-app restore path) leaves both still rendered and the caret un-stuck, the switched-to note's
+text actually loaded, and the `'0'` rollback flag genuinely falls back to the Lexical editor — zero
+console errors throughout. Also ran the existing `verifyCM6PostFix.mjs` (typing, Tab, Enter,
+Ctrl+B, paste, undo on a large note with trailing blank lines) and the full `verifyCM6Phase2Slice*.mjs`
+regression suite (all 18 scripts) against the flipped default, plus `npx tsc --noEmit`, `npm run
+lint`, and the full unit suite.
+
+**What's still open, honestly, after this flip**: CM6Editor has no empty-note placeholder text
+("Jot down a thockdown note...") the way `Editor.tsx` does — noticed while doing this port, real,
+but unrelated to the flash-gating this round closed, and not fixed here (see `TODO.md`). Every
+other gap this audit ever found in `CM6Editor.tsx` was already fixed in an earlier round (see the
+sections above) before this flip was even requested.
+
 ### Diminishing returns confirmed by a further round (after the two debounce fixes merged)
 
 The two fixes above (PR #44, merged into `main`) were re-profiled once more, with the same
@@ -1181,3 +1228,85 @@ instead of assuming a fresh full string every time.
 Not started. Left here so the next session (or this one, on request) has the actual problem
 statement, the measurement gap to close first, and the known scope/risk shape, rather than
 starting from a blank page.
+
+## This round: the handout's own hypothesis, tested before any redesign was built — refuted
+
+Picked up the handout above at its own explicit first instruction: "before designing anything,
+confirm the hypothesis is real, not assumed." Ran its named step 2 (the cheaper, more direct of
+the two suggested checks): short-circuit every consumer of `event.text` except
+`latestEditorTextRef` and re-measure, to see how much of the `(program)`/`(garbage collector)`
+CDP-profile buckets actually goes away.
+
+**Method.** A temporary, uncommitted one-line early `return` inserted into
+`useEditorSectionMount.ts`'s `bindings.onTextChange`, immediately after
+`latestEditorTextRef.current = canonicalText` — skipping typing-sound playback, the
+deferred/immediate `setActiveNoteText`/`setEditorTextVersion`/`setEditorSelection` commits,
+external-note bookkeeping, title-preview derivation, and `queueSave`, i.e. every real consumer of
+the flattened string this handout names. This is a strictly more aggressive cut than any real
+contract redesign could achieve (a rope-diff-based contract would still have to feed *something*
+to each consumer; this feeds them nothing), making it the correct upper bound on the redesign's
+possible win. `npm run perf:input-lag -- --mode=profile --chars=1500000 --keystrokes=30
+--position=end`, dev:browser, 4 independent runs with the change in place and 4 with it reverted
+(`git checkout` between sets, same session, same note) — per this doc's own established caution
+that a single profile-mode run isn't always enough to separate a real effect from run-to-run
+noise at a modest effect size.
+
+| | baseline (unmodified) | consumers short-circuited |
+|---|---|---|
+| total sampled JS (4 runs) | 2448.6, 1963.1, 2068.2, 2101.5 — mean 2145.4ms | 1608.8, 1536.4, 1702.1, 1424.1 — mean 1567.9ms |
+| `(program)` (4 runs) | 1241.1, 902.1, 983.9, 1002.8 — mean 1032.5ms | 1044.4, 984.4, 1113.7, 877.5 — mean 1005.0ms |
+| `(garbage collector)` (4 runs) | 84.0, 65.1, 88.9, 65.2 — mean 75.8ms | 55.1, 77.3, 38.3, 47.6 — mean 54.6ms |
+
+**Conclusion: the handout's specific hypothesis is refuted, not confirmed.** Total sampled JS did
+drop, a real ~27% (2145.4ms → 1567.9ms mean) — but almost none of that came from the two buckets
+the hypothesis named. `(program)` is statistically flat (1032.5ms → 1005.0ms, a ~2.7% difference
+that's smaller than the run-to-run spread *within* either the 4 baseline or 4 experiment runs
+individually) — eliminating literally every consumer of the flattened string, the most aggressive
+version of the fix the handout proposed, left this bucket untouched. `(garbage collector)` did
+drop proportionally (~28%), but it's a small absolute contributor either way (~76ms → ~55ms out of
+a ~2100ms total) — not close to explaining the dominant cost. The ~577ms of real total reduction
+came almost entirely from named, already-attributed consumer-side work disappearing from the
+profile as expected (`$reconcileRoot`/`$reconcileNode`/`$createChildrenArray` React-triggered
+Lexical reconciliation, `sanitizeTextFragment`, `splitMarkdownIntoPreviewBlocksIncremental`,
+`computeCommonLinePrefixSuffixLen` in both `noteTitle.ts` and `MarkdownContext.ts`,
+`deriveNoteTitleIncremental`, `validateTextInvariants`) plus a partial drop in
+`cloneEditorState`/`getModernOffsetsFromPoints` from fewer React-state-triggered re-renders — i.e.
+exactly the already-incremental, already-optimized consumer costs this doc's history already
+built, now simply confirmed to still be real and to still be there, not a new discovery.
+
+**What this means for the redesign the handout scoped.** The `(program)` bucket — the single
+largest entry in every profile this doc has taken since the CM6 audit — is not, per this direct
+test, downstream of the full-text-per-keystroke contract shape at all. It survives unchanged even
+when nothing downstream of `latestEditorTextRef` runs. Whatever it actually is (V8-internal
+bytecode/IC dispatch overhead, native string/array operations without an attributable JS frame,
+or something else) sits upstream of or parallel to the `EditorBindings` contract — inside
+Lexical's own `registerUpdateListener`/reconciliation cycle, which fires and does its own work
+regardless of what the app's `onTextChange` callback does with the result. **Don't build the
+`EditorContract.ts`/rope-diff redesign on the strength of this hypothesis** — the measured upper
+bound on its win (a strictly more aggressive cut than the real redesign could achieve) is ~27%
+total, concentrated entirely in costs already fixed by this doc's existing incremental work, with
+zero measured effect on the actual dominant bucket. This is the same shape of finding as the
+"Phase B measured before being built — deprioritized" round above (a plausible-sounding structural
+fix, measured before being built, found to have a capped and unimpressive ceiling) — not a new
+technique, the same discipline applied one level up the stack.
+
+**What's still open, honestly.** `(program)`'s own ~1000ms/30-keystroke-burst floor is not
+explained by this round — only shown *not* to be what the handout guessed. Attributing it further
+would need a different diagnostic than CDP JS sampling (which by construction can't attribute time
+it can't tie to a JS call frame) — e.g. Chrome's `disabled-by-default-v8.gc` / `disabled-by-default-v8.compile`
+trace categories (not yet tried; `withCdpCategoryTrace` in `perfHarness.mjs` already accepts a
+categories string, this would need a small script variant rather than a `perfHarness.mjs` change,
+since the standard category set is what every other trace-mode measurement in this doc compares
+against), or Chrome's `HeapProfiler.startSampling` for allocation-site attribution. Given the
+`EditorContract` redesign this was meant to justify is now off the table per this round's own
+finding, digging further into `(program)`'s exact composition is lower-priority than it looked
+before this test — worth doing only if a future session has a fresh, specific lever in mind for
+whatever it turns out to be, not as an open-ended "find out what it is" exercise. This measurement
+was also dev:browser-only, consistent with the rest of this doc's default methodology but not yet
+cross-checked against the packaged Electron app the way several earlier findings in this doc were
+— if `(program)`'s composition is investigated further, spot-check there too before trusting a
+dev:browser-only number, per this doc's own repeated caution that the two don't always agree.
+
+No source changes this round — the short-circuit was a temporary, uncommitted local edit,
+reverted (`git checkout`) immediately after measurement. Verified clean: `git status` shows no
+diff, `npx tsc --noEmit` passes.
