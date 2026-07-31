@@ -108,13 +108,26 @@ const findMatchingOpener = (
   return null;
 };
 
-// Strips a single leading/trailing bounding character that doesn't pair up within
-// [start, end) — e.g. a word range that grabbed an adjacent "[" whose matching "]"
-// lives outside the current range. Matching is checked across the full text: a
-// character with no partner anywhere is left alone (it's not a stray pair edge,
-// just an unbalanced character), only one that closes/opens *outside* the range
-// gets trimmed. This gives us the intersection of the regular expansion and the
-// pair-aware expansion instead of blindly keeping the dangling character.
+// Strips leading/trailing bounding characters that don't pair up within
+// [start, end) — e.g. a word range that grabbed adjacent "(" and "\"" whose
+// matching ")" / "\"" both live outside the current range. Matching is
+// checked across the full text: a character with no partner anywhere is left
+// alone (it's not a stray pair edge, just an unbalanced character), only one
+// that closes/opens *outside* the range gets trimmed. This gives us the
+// intersection of the regular expansion and the pair-aware expansion instead
+// of blindly keeping the dangling character.
+//
+// Loops until a full pass makes no change rather than stopping after one
+// trim per side: adjacent stray delimiters (e.g. "(\"one two\" three)" where
+// clicking "one" overshoots past both "(" and "\"" on the left) need more
+// than one peel to fully clean, and stopping early left a leftover
+// delimiter character in the "word" range that then never got a chance to
+// go away -- resolveScopeRange's own second trim pass papered over it for a
+// single click, but reported that as a fresh isPairAwareAdjustment, which
+// pinned the right-click cycle at 'word' scope forever (found live: right-
+// clicking "one" in `test ("one two" three).` never escalated past
+// selecting "one", while "two" -- only one stray delimiter away from its
+// scan window -- escalated normally).
 const trimStrayBoundingCharacters = (
   text: string,
   start: number,
@@ -123,29 +136,39 @@ const trimStrayBoundingCharacters = (
   let nextStart = start;
   let nextEnd = end;
 
-  if (nextEnd - nextStart > 0) {
-    const firstChar = text[nextStart];
-    const expectedCloser = PAIR_OPENERS[firstChar];
-    if (expectedCloser) {
-      const matchIndex = findMatchingCloser(text, nextStart, expectedCloser);
-      if (matchIndex !== null && matchIndex >= nextEnd) {
-        if (matchIndex !== nextEnd || text[nextEnd] !== expectedCloser) {
-          nextStart += 1;
+  for (;;) {
+    let changed = false;
+
+    if (nextEnd - nextStart > 0) {
+      const firstChar = text[nextStart];
+      const expectedCloser = PAIR_OPENERS[firstChar];
+      if (expectedCloser) {
+        const matchIndex = findMatchingCloser(text, nextStart, expectedCloser);
+        if (matchIndex !== null && matchIndex >= nextEnd) {
+          if (matchIndex !== nextEnd || text[nextEnd] !== expectedCloser) {
+            nextStart += 1;
+            changed = true;
+          }
         }
       }
     }
-  }
 
-  if (nextEnd - nextStart > 0) {
-    const lastChar = text[nextEnd - 1];
-    const expectedOpener = REVERSE_PAIR_OPENERS[lastChar];
-    if (expectedOpener) {
-      const matchIndex = findMatchingOpener(text, nextEnd - 1, expectedOpener);
-      if (matchIndex !== null && matchIndex < nextStart) {
-        if (matchIndex !== nextStart - 1 || text[nextStart - 1] !== expectedOpener) {
-          nextEnd -= 1;
+    if (nextEnd - nextStart > 0) {
+      const lastChar = text[nextEnd - 1];
+      const expectedOpener = REVERSE_PAIR_OPENERS[lastChar];
+      if (expectedOpener) {
+        const matchIndex = findMatchingOpener(text, nextEnd - 1, expectedOpener);
+        if (matchIndex !== null && matchIndex < nextStart) {
+          if (matchIndex !== nextStart - 1 || text[nextStart - 1] !== expectedOpener) {
+            nextEnd -= 1;
+            changed = true;
+          }
         }
       }
+    }
+
+    if (!changed) {
+      break;
     }
   }
 
