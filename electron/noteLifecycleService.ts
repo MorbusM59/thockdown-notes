@@ -380,7 +380,6 @@ export class NoteLifecycleService {
         hasUnsavedChanges,
         syncMode,
         cursorPos: input.cursorPos,
-        scrollTop: input.scrollTop,
       });
       this.databaseService.updateTempNoteState(input.id, hasUnsavedChanges, syncMode);
       const summary = await this.readSummary(this.databaseService.getNoteRecord(input.id) ?? {
@@ -417,7 +416,6 @@ export class NoteLifecycleService {
       hasUnsavedChanges: record?.hasUnsavedChanges ?? false,
       syncMode: record?.syncMode ?? false,
       cursorPos: input.cursorPos,
-      scrollTop: input.scrollTop,
     });
     const summary = await this.readSummary(this.databaseService.getNoteRecord(input.id) ?? {
       id: input.id,
@@ -476,6 +474,14 @@ export class NoteLifecycleService {
 
   async getNoteSnapshots(input: LoadNoteInput): Promise<Array<{ id: number; noteId: string; content: string; timestamp: string; isManual: boolean }>> {
     return this.databaseService.getNoteSnapshots(input.id);
+  }
+
+  async saveSnapshotAnchor(input: { snapshotId: number; anchorBlockIndex: number | null }): Promise<void> {
+    this.databaseService.saveSnapshotAnchor(input.snapshotId, input.anchorBlockIndex);
+  }
+
+  async getSnapshotAnchor(input: { snapshotId: number }): Promise<number> {
+    return this.databaseService.getSnapshotAnchor(input.snapshotId);
   }
 
   async deleteNoteSnapshot(input: DeleteNoteSnapshotInput): Promise<void> {

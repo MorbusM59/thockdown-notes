@@ -33,3 +33,24 @@ export function resolvePreviewBlockIndexForSourceLine(
 
   return result
 }
+
+/**
+ * Restore-side counterpart to resolvePreviewBlockIndexForSourceLine: given a
+ * persisted `anchorBlockIndex` (the canonical mode-agnostic BLOCK -- see
+ * docs/editor-contract.md's Viewport Model section) and the document's
+ * *current* blocks, returns the source line to land on. If the index is out
+ * of range for the current blocks (the document shrank since it was saved,
+ * or nothing was ever saved) or the document has no blocks at all, falls
+ * back to line 0 (top of document) -- deliberately no fuzzy/nearest-block
+ * matching, per this project's own scroll-sync policy.
+ */
+export function resolveSourceLineForAnchorBlockIndex(
+  blocks: Pick<PreviewMarkdownBlock, 'startLine'>[],
+  anchorBlockIndex: number,
+): number {
+  if (!Number.isFinite(anchorBlockIndex) || anchorBlockIndex < 0 || anchorBlockIndex >= blocks.length) {
+    return 0
+  }
+
+  return blocks[anchorBlockIndex].startLine
+}

@@ -20,6 +20,8 @@ export const NOTE_LIFECYCLE_CHANNELS = {
   saveNoteSnapshot: 'notes:save-note-snapshot',
   getNoteSnapshots: 'notes:get-note-snapshots',
   deleteNoteSnapshot: 'notes:delete-note-snapshot',
+  saveSnapshotAnchor: 'notes:save-snapshot-anchor',
+  getSnapshotAnchor: 'notes:get-snapshot-anchor',
   branchNoteFromSnapshot: 'notes:branch-from-snapshot',
   setAssignedId: 'notes:set-internal-id',
   ensureAssignedId: 'notes:ensure-internal-id',
@@ -57,11 +59,12 @@ export interface SaveNoteInput {
   id: string;
   text: string;
   // Piggybacked onto this same debounced write when the caller already has
-  // a fresh position on hand -- see databaseService.ts's upsertNoteContent
-  // doc comment. Optional; omitting these never clears a previously
-  // persisted position.
+  // a fresh cursor position on hand -- see databaseService.ts's
+  // upsertNoteContent doc comment. Optional; omitting this never clears a
+  // previously persisted position. Scroll position (anchorBlockIndex) is
+  // NOT piggybacked here -- it's written only via saveNoteUiState, at the
+  // enumerated leave-editor checkpoints (see docs/editor-contract.md).
   cursorPos?: number | null;
-  scrollTop?: number | null;
 }
 
 export interface DeleteNoteInput {
@@ -112,21 +115,14 @@ export interface TagSummary {
 }
 
 export type NoteUiStatePayload = {
-  progressPreview?: number | null;
-  progressEdit?: number | null;
+  /** The canonical mode-agnostic BLOCK -- an index into the note's current PreviewMarkdownBlock[] array. Never a pixel offset. */
+  anchorBlockIndex?: number | null;
   cursorPos?: number | null;
-  scrollTop?: number | null;
-  sourceAnchorLine?: number | null;
-  sourceAnchorText?: string | null;
 };
 
 export type NoteUiState = {
-  progressPreview: number;
-  progressEdit: number;
+  anchorBlockIndex: number;
   cursorPos: number;
-  scrollTop: number;
-  sourceAnchorLine: number;
-  sourceAnchorText: string | null;
 };
 
 export interface NoteLifecycleApi {
@@ -150,6 +146,9 @@ export interface NoteLifecycleApi {
   saveNoteSnapshot(input: { id: string; content: string; isManual?: boolean }): Promise<number>;
   getNoteSnapshots(input: LoadNoteInput): Promise<Array<{ id: number; noteId: string; content: string; timestamp: string; isManual: boolean }>>;
   deleteNoteSnapshot(input: DeleteNoteSnapshotInput): Promise<void>;
+  /** A Timeline snapshot's own canonical BLOCK, independent of the live note's -- see docs/editor-contract.md's Viewport Model section. */
+  saveSnapshotAnchor(input: { snapshotId: number; anchorBlockIndex: number | null }): Promise<void>;
+  getSnapshotAnchor(input: { snapshotId: number }): Promise<number>;
   branchNoteFromSnapshot(input: BranchNoteFromSnapshotInput): Promise<NoteDocument>;
   /** Explicit `$id` assignment. Overwrites any existing ID; resolves collisions with a "-2", "-3", ... suffix. */
   setNoteAssignedId(input: { id: string; requestedId: string }): Promise<NoteSummary | null>;

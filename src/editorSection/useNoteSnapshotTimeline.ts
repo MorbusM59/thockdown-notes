@@ -81,6 +81,8 @@ export interface UseNoteSnapshotTimelineOptions {
   previewedSnapshotId: number | null
   setPreviewedSnapshotId: (id: number | null) => void
   captureEditModeSnapshotFromEditor: (noteId: string) => EditRestoreSnapshot | null
+  /** Resolves the canonical BLOCK for whichever content is currently on screen -- live note or a previewed snapshot. Used to persist a Timeline snapshot's own position when leaving it (see docs/editor-contract.md's Viewport Model section). */
+  captureCurrentAnchorBlockIndex: () => number | null
   flushPendingSaveNow: () => Promise<void>
   applyEditRestoreSnapshot: (
     snapshot: EditRestoreSnapshot,
@@ -105,6 +107,7 @@ export function useNoteSnapshotTimeline({
   previewedSnapshotId,
   setPreviewedSnapshotId,
   captureEditModeSnapshotFromEditor,
+  captureCurrentAnchorBlockIndex,
   flushPendingSaveNow,
   applyEditRestoreSnapshot,
   editModeSnapshotByNoteIdRef,
@@ -146,12 +149,19 @@ export function useNoteSnapshotTimeline({
   const handleNavigateSnapshot = useCallback((snapshotId: number | null) => {
     // Capture exactly where the user was in the live document before
     // switching away from it -- this is the position "return to present"
-    // restores. Only meaningful when actually leaving live editing; scrubbing
-    // between two historical snapshots has no live position to save, and
-    // would otherwise overwrite a good cached position with a snapshot's
-    // read-only (zeroed) one.
+    // restores. Only meaningful when actually leaving live editing.
     if (previewedSnapshotId === null && activeNoteId) {
       captureEditModeSnapshotFromEditor(activeNoteId)
+    } else if (previewedSnapshotId !== null) {
+      // Leaving a historical snapshot -- whether for another snapshot or
+      // back to present -- persists that snapshot's own canonical BLOCK
+      // first, mirroring the live note's leave-editor persistence (see
+      // docs/editor-contract.md's Viewport Model section). A Timeline
+      // snapshot maintains its position independently of the live note's.
+      const anchorBlockIndex = captureCurrentAnchorBlockIndex()
+      if (anchorBlockIndex !== null) {
+        void window.thockdownNotes?.saveSnapshotAnchor({ snapshotId: previewedSnapshotId, anchorBlockIndex })
+      }
     }
 
     // Flush any in-flight edit before switching the editor's content out from
@@ -161,7 +171,7 @@ export function useNoteSnapshotTimeline({
       isFrozenSectionPreviewRef.current = false
       setPreviewedSnapshotId(snapshotId)
     })
-  }, [flushPendingSaveNow, previewedSnapshotId, activeNoteId, captureEditModeSnapshotFromEditor, setPreviewedSnapshotId, isFrozenSectionPreviewRef])
+  }, [flushPendingSaveNow, previewedSnapshotId, activeNoteId, captureCurrentAnchorBlockIndex, captureEditModeSnapshotFromEditor, setPreviewedSnapshotId, isFrozenSectionPreviewRef])
 
   const compactAutomaticSnapshots = useCallback(async () => {
     if (!activeNoteId || timelineTrackLengthPx <= 0 || noteSnapshots.placements.length < 2 || !window.thockdownNotes) return
@@ -237,6 +247,13 @@ export function useNoteSnapshotTimeline({
 
   const handleReturnToPresent = useCallback(() => {
     if (previewedSnapshotId !== null) {
+      // Leaving this snapshot for the present -- persist its own canonical
+      // BLOCK first, same as handleNavigateSnapshot, so it's restored to
+      // the same spot next time it's opened.
+      const anchorBlockIndex = captureCurrentAnchorBlockIndex()
+      if (anchorBlockIndex !== null) {
+        void window.thockdownNotes?.saveSnapshotAnchor({ snapshotId: previewedSnapshotId, anchorBlockIndex })
+      }
       setPreviewedSnapshotId(null)
     }
 
@@ -256,7 +273,7 @@ export function useNoteSnapshotTimeline({
         { restoreFullSelection: Boolean(cached), focusAfterApply: true },
       )
     }
-  }, [previewedSnapshotId, activeNoteId, applyEditRestoreSnapshot, editModeSnapshotByNoteIdRef, setPreviewedSnapshotId])
+  }, [previewedSnapshotId, activeNoteId, applyEditRestoreSnapshot, captureCurrentAnchorBlockIndex, editModeSnapshotByNoteIdRef, setPreviewedSnapshotId])
 
   const handleBranchOpened = useCallback(async (newNoteId: string) => {
     setPreviewedSnapshotId(null)

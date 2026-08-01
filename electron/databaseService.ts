@@ -993,9 +993,11 @@ export class DatabaseService {
     // must NOT clobber whatever position is already persisted -- the
     // ON CONFLICT clause below COALESCEs against the existing row for
     // exactly that reason. See docs/cm6-parity-hardening-plan.md's
-    // "Cursor/scroll persistence redesign" section.
+    // "Cursor/scroll persistence redesign" section. Scroll position itself
+    // (anchorBlockIndex) is NOT piggybacked here -- per the scroll-sync
+    // rewrite's policy, it's written only at explicit leave-editor
+    // checkpoints (saveNoteUiState), never on every debounced text save.
     cursorPos?: number | null;
-    scrollTop?: number | null;
   }): void {
     const db = this.requireDb();
     const createdAtIso = new Date(input.createdAtMs).toISOString();
@@ -1006,7 +1008,6 @@ export class DatabaseService {
     const hasUnsavedChanges = input.hasUnsavedChanges ? 1 : 0;
     const syncMode = input.syncMode ? 1 : 0;
     const cursorPos = Number.isFinite(input.cursorPos) ? Math.max(0, Math.round(input.cursorPos as number)) : null;
-    const scrollTop = Number.isFinite(input.scrollTop) ? Math.max(0, Math.round(input.scrollTop as number)) : null;
 
     db.prepare(`
       INSERT INTO notes (
@@ -1021,10 +1022,9 @@ export class DatabaseService {
         externalPath,
         hasUnsavedChanges,
         syncMode,
-        cursorPos,
-        scrollTop
+        cursorPos
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         filePath = excluded.filePath,
@@ -1036,8 +1036,7 @@ export class DatabaseService {
         externalPath = excluded.externalPath,
         hasUnsavedChanges = excluded.hasUnsavedChanges,
         syncMode = excluded.syncMode,
-        cursorPos = COALESCE(excluded.cursorPos, notes.cursorPos),
-        scrollTop = COALESCE(excluded.scrollTop, notes.scrollTop)
+        cursorPos = COALESCE(excluded.cursorPos, notes.cursorPos)
     `).run(
       input.id,
       input.title,
@@ -1051,7 +1050,6 @@ export class DatabaseService {
       hasUnsavedChanges,
       syncMode,
       cursorPos,
-      scrollTop,
     );
 
     db.prepare('DELETE FROM notes_fts WHERE noteId = ?').run(input.id);
@@ -1574,85 +1572,61 @@ export class DatabaseService {
     return rows.map((row) => row.id);
   }
 
+  // Per the scroll-sync rewrite's policy, this now persists exactly one
+  // mode-agnostic scroll concept -- anchorBlockIndex, the canonical BLOCK
+  // (an index into the note's current PreviewMarkdownBlock[] array, see
+  // PreviewBlockIndex.ts) -- alongside cursorPos, an unrelated caret-position
+  // concern that stays a first-class field. progressPreview/progressEdit/
+  // scrollTop/sourceAnchorLine/sourceAnchorText remain as dead columns (see
+  // schema init below) rather than being dropped, matching this table's
+  // existing precedent for retiring columns without a drop-column migration.
   saveNoteUiState(noteId: string, payload: {
-    progressPreview?: number | null;
-    progressEdit?: number | null;
+    anchorBlockIndex?: number | null;
     cursorPos?: number | null;
-    scrollTop?: number | null;
-    sourceAnchorLine?: number | null;
-    sourceAnchorText?: string | null;
   }): void {
     const db = this.requireDb();
-    const hasProgressPreview = Object.prototype.hasOwnProperty.call(payload, 'progressPreview');
-    const hasProgressEdit = Object.prototype.hasOwnProperty.call(payload, 'progressEdit');
+    const hasAnchorBlockIndex = Object.prototype.hasOwnProperty.call(payload, 'anchorBlockIndex');
     const hasCursorPos = Object.prototype.hasOwnProperty.call(payload, 'cursorPos');
-    const hasScrollTop = Object.prototype.hasOwnProperty.call(payload, 'scrollTop');
-    const hasSourceAnchorLine = Object.prototype.hasOwnProperty.call(payload, 'sourceAnchorLine');
-    const hasSourceAnchorText = Object.prototype.hasOwnProperty.call(payload, 'sourceAnchorText');
 
     db.prepare(`
       UPDATE notes
       SET
-        progressPreview = CASE WHEN ? THEN ? ELSE progressPreview END,
-        progressEdit = CASE WHEN ? THEN ? ELSE progressEdit END,
-        cursorPos = CASE WHEN ? THEN ? ELSE cursorPos END,
-        scrollTop = CASE WHEN ? THEN ? ELSE scrollTop END,
-        sourceAnchorLine = CASE WHEN ? THEN ? ELSE sourceAnchorLine END,
-        sourceAnchorText = CASE WHEN ? THEN ? ELSE sourceAnchorText END
+        anchorBlockIndex = CASE WHEN ? THEN ? ELSE anchorBlockIndex END,
+        cursorPos = CASE WHEN ? THEN ? ELSE cursorPos END
       WHERE id = ?
     `).run(
-      hasProgressPreview ? 1 : 0,
-      payload.progressPreview ?? null,
-      hasProgressEdit ? 1 : 0,
-      payload.progressEdit ?? null,
+      hasAnchorBlockIndex ? 1 : 0,
+      payload.anchorBlockIndex ?? null,
       hasCursorPos ? 1 : 0,
       payload.cursorPos ?? null,
-      hasScrollTop ? 1 : 0,
-      payload.scrollTop ?? null,
-      hasSourceAnchorLine ? 1 : 0,
-      payload.sourceAnchorLine ?? null,
-      hasSourceAnchorText ? 1 : 0,
-      payload.sourceAnchorText ?? null,
       noteId,
     );
   }
 
   getNoteUiState(noteId: string): {
-    progressPreview: number;
-    progressEdit: number;
+    anchorBlockIndex: number;
     cursorPos: number;
-    scrollTop: number;
-    sourceAnchorLine: number;
-    sourceAnchorText: string | null;
   } {
     const db = this.requireDb();
 
     const row = db.prepare(`
-      SELECT progressPreview, progressEdit, cursorPos, scrollTop, sourceAnchorLine, sourceAnchorText
+      SELECT anchorBlockIndex, cursorPos
       FROM notes
       WHERE id = ?
     `).get(noteId) as {
-      progressPreview?: number | null;
-      progressEdit?: number | null;
+      anchorBlockIndex?: number | null;
       cursorPos?: number | null;
-      scrollTop?: number | null;
-      sourceAnchorLine?: number | null;
-      sourceAnchorText?: string | null;
     } | undefined;
 
     // A note row can sit with these columns at SQL NULL from creation until
-    // the first debounced UI-state save fires (see saveNoteUiState) -- if the
-    // app closes or the note is switched away from before that, NULL
-    // persists indefinitely. Every caller expects real numbers, so this is
-    // the one place that turns "never saved yet" into the same default
-    // (start of document, no scroll, no anchor) a fresh note should have.
+    // the first UI-state save fires (see saveNoteUiState) -- if the app
+    // closes or the note is switched away from before that, NULL persists
+    // indefinitely. Every caller expects real numbers, so this is the one
+    // place that turns "never saved yet" into the same default (start of
+    // document, no scroll) a fresh note should have.
     return {
-      progressPreview: row?.progressPreview ?? 0,
-      progressEdit: row?.progressEdit ?? 0,
+      anchorBlockIndex: row?.anchorBlockIndex ?? 0,
       cursorPos: row?.cursorPos ?? 0,
-      scrollTop: row?.scrollTop ?? 0,
-      sourceAnchorLine: row?.sourceAnchorLine ?? 0,
-      sourceAnchorText: row?.sourceAnchorText ?? null,
     };
   }
 
@@ -1728,6 +1702,21 @@ export class DatabaseService {
   deleteNoteSnapshot(snapshotId: number): void {
     const db = this.requireDb();
     db.prepare('DELETE FROM note_snapshots WHERE id = ?').run(snapshotId);
+  }
+
+  // Per-snapshot counterpart to saveNoteUiState/getNoteUiState -- a Timeline
+  // snapshot tracks its own canonical BLOCK independently once loaded,
+  // written when it's navigated away from (see useNoteSnapshotTimeline.ts's
+  // handleNavigateSnapshot) rather than sharing the live note's position.
+  saveSnapshotAnchor(snapshotId: number, anchorBlockIndex: number | null): void {
+    const db = this.requireDb();
+    db.prepare('UPDATE note_snapshots SET anchorBlockIndex = ? WHERE id = ?').run(anchorBlockIndex, snapshotId);
+  }
+
+  getSnapshotAnchor(snapshotId: number): number {
+    const db = this.requireDb();
+    const row = db.prepare('SELECT anchorBlockIndex FROM note_snapshots WHERE id = ?').get(snapshotId) as { anchorBlockIndex?: number | null } | undefined;
+    return row?.anchorBlockIndex ?? 0;
   }
 
   getSnapshotById(snapshotId: number): {
@@ -2951,22 +2940,32 @@ export class DatabaseService {
         .run(DEFAULT_EDITOR_SECTION_ID);
     }
 
+    // sourceAnchorLine/sourceAnchorText retained as dead columns (superseded
+    // by anchorBlockIndex below, per the scroll-sync rewrite -- see
+    // saveNoteUiState/getNoteUiState) rather than dropped, matching this
+    // table's existing precedent (progressPreview/progressEdit/scrollTop)
+    // for retiring columns without a drop-column migration.
     this.ensureNotesColumn('sourceAnchorLine', 'INTEGER');
     this.ensureNotesColumn('sourceAnchorText', 'TEXT');
     this.ensureNotesColumn('contentChecksum', 'TEXT');
     this.ensureNotesColumn('assignedId', 'TEXT');
+    // The canonical mode-agnostic BLOCK: an index into the note's current
+    // PreviewMarkdownBlock[] array (PreviewBlockIndex.ts), not a pixel
+    // offset or a raw line number. See docs/editor-contract.md's Viewport
+    // Model section.
+    this.ensureNotesColumn('anchorBlockIndex', 'INTEGER');
+    this.ensureNoteSnapshotsColumn('anchorBlockIndex', 'INTEGER');
 
     // Notes are inserted (both on creation and on filesystem-sync upsert)
-    // without ever setting cursorPos/scrollTop/sourceAnchorLine/progress*,
-    // so they start at SQL NULL until the first UI-state save. getNoteUiState
-    // now defaults NULL to 0 on read, but backfill any rows already sitting
-    // on a stale NULL so direct SQL access elsewhere sees the same default.
+    // without ever setting cursorPos/anchorBlockIndex/progress*, so they
+    // start at SQL NULL until the first UI-state save. getNoteUiState now
+    // defaults NULL to 0 on read, but backfill any rows already sitting on a
+    // stale NULL so direct SQL access elsewhere sees the same default.
     db.exec(`
       UPDATE notes SET progressPreview = 0 WHERE progressPreview IS NULL;
       UPDATE notes SET progressEdit = 0 WHERE progressEdit IS NULL;
       UPDATE notes SET cursorPos = 0 WHERE cursorPos IS NULL;
-      UPDATE notes SET scrollTop = 0 WHERE scrollTop IS NULL;
-      UPDATE notes SET sourceAnchorLine = 0 WHERE sourceAnchorLine IS NULL;
+      UPDATE notes SET anchorBlockIndex = 0 WHERE anchorBlockIndex IS NULL;
     `);
     this.ensureEditorSectionsColumn('lastActiveNoteId', 'TEXT REFERENCES notes(id) ON DELETE SET NULL');
     this.ensureEditorSectionsColumn('fixedWidthPx', 'REAL');
@@ -2995,6 +2994,16 @@ export class DatabaseService {
     }
 
     db.exec(`ALTER TABLE editor_sections ADD COLUMN ${columnName} ${columnDefinition}`);
+  }
+
+  private ensureNoteSnapshotsColumn(columnName: string, columnDefinition: string): void {
+    const db = this.requireDb();
+    const columns = db.prepare('PRAGMA table_info(note_snapshots)').all() as Array<{ name: string }>;
+    if (columns.some((column) => column.name === columnName)) {
+      return;
+    }
+
+    db.exec(`ALTER TABLE note_snapshots ADD COLUMN ${columnName} ${columnDefinition}`);
   }
 
   private ensureProtectedTags(): void {

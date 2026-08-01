@@ -42,6 +42,8 @@ const MOCK_STORAGE_KEY = 'thockdown-notes:browser-mock:v1'
 type BrowserMockStore = {
   notes: NoteDocument[]
   noteUiStates: Record<string, NoteUiState>
+  /** Mirrors databaseService.ts's note_snapshots.anchorBlockIndex -- keyed by the synthetic snapshot id saveNoteSnapshot returns (see its own doc comment: the browser mock doesn't persist snapshot history, so this is a best-effort mirror only). */
+  snapshotAnchors: Record<number, number>
   appState: AppState
   windowState: WindowState
   uiLoadoutEntries: UiLoadoutEntry[]
@@ -218,6 +220,7 @@ function loadStore(): BrowserMockStore {
       return {
         notes: [],
         noteUiStates: {},
+        snapshotAnchors: {},
         appState: clone(DEFAULT_APP_STATE),
         windowState: clone(DEFAULT_WINDOW_STATE),
         uiLoadoutEntries: seeded.entries,
@@ -237,19 +240,23 @@ function loadStore(): BrowserMockStore {
       ? Object.fromEntries(
           Object.entries(parsed.noteUiStates as Record<string, NoteUiState>)
             .map(([key, value]) => [key, {
-              progressPreview: value?.progressPreview ?? 0,
-              progressEdit: value?.progressEdit ?? 0,
+              anchorBlockIndex: value?.anchorBlockIndex ?? 0,
               cursorPos: value?.cursorPos ?? 0,
-              scrollTop: value?.scrollTop ?? 0,
-              sourceAnchorLine: value?.sourceAnchorLine ?? 0,
-              sourceAnchorText: value?.sourceAnchorText ?? null,
             }]),
+        )
+      : {}
+
+    const snapshotAnchors = typeof parsed.snapshotAnchors === 'object' && parsed.snapshotAnchors !== null
+      ? Object.fromEntries(
+          Object.entries(parsed.snapshotAnchors as Record<string, number>)
+            .map(([key, value]) => [key, Number.isFinite(value) ? Number(value) : 0]),
         )
       : {}
 
     return {
       notes,
       noteUiStates,
+      snapshotAnchors,
       appState: parsed.appState && typeof parsed.appState === 'object'
         ? clone(parsed.appState as AppState)
         : clone(DEFAULT_APP_STATE),
@@ -309,6 +316,7 @@ function loadStore(): BrowserMockStore {
     return {
       notes: [],
       noteUiStates: {},
+      snapshotAnchors: {},
       appState: clone(DEFAULT_APP_STATE),
       windowState: clone(DEFAULT_WINDOW_STATE),
       uiLoadoutEntries: seeded.entries,
@@ -378,21 +386,18 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
         note.title = deriveTitle(input.text)
 
         // Mirrors databaseService.ts's upsertNoteContent COALESCE semantics:
-        // piggybacked cursor/scroll position, only written when the caller
-        // actually provided one, never clobbered by callers that don't.
-        if (input.cursorPos != null || input.scrollTop != null) {
+        // piggybacked cursor position, only written when the caller actually
+        // provided one, never clobbered by callers that don't. Scroll
+        // position (anchorBlockIndex) is not piggybacked here -- see
+        // saveNoteUiState.
+        if (input.cursorPos != null) {
           const previousState = store.noteUiStates[input.id] ?? {
-            progressPreview: 0,
-            progressEdit: 0,
+            anchorBlockIndex: 0,
             cursorPos: 0,
-            scrollTop: 0,
-            sourceAnchorLine: 0,
-            sourceAnchorText: null,
           }
           store.noteUiStates[input.id] = {
             ...previousState,
             cursorPos: input.cursorPos ?? previousState.cursorPos,
-            scrollTop: input.scrollTop ?? previousState.scrollTop,
           }
         }
 
@@ -403,22 +408,14 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
     async saveNoteUiState(input: { id: string; payload: NoteUiStatePayload }): Promise<void> {
       return mutate((store) => {
         const previousState = store.noteUiStates[input.id] ?? {
-          progressPreview: 0,
-          progressEdit: 0,
+          anchorBlockIndex: 0,
           cursorPos: 0,
-          scrollTop: 0,
-          sourceAnchorLine: 0,
-          sourceAnchorText: null,
         }
 
         const nextState: NoteUiState = {
           ...previousState,
-          progressPreview: Object.prototype.hasOwnProperty.call(input.payload, 'progressPreview') ? input.payload.progressPreview ?? 0 : previousState.progressPreview,
-          progressEdit: Object.prototype.hasOwnProperty.call(input.payload, 'progressEdit') ? input.payload.progressEdit ?? 0 : previousState.progressEdit,
+          anchorBlockIndex: Object.prototype.hasOwnProperty.call(input.payload, 'anchorBlockIndex') ? input.payload.anchorBlockIndex ?? 0 : previousState.anchorBlockIndex,
           cursorPos: Object.prototype.hasOwnProperty.call(input.payload, 'cursorPos') ? input.payload.cursorPos ?? 0 : previousState.cursorPos,
-          scrollTop: Object.prototype.hasOwnProperty.call(input.payload, 'scrollTop') ? input.payload.scrollTop ?? 0 : previousState.scrollTop,
-          sourceAnchorLine: Object.prototype.hasOwnProperty.call(input.payload, 'sourceAnchorLine') ? input.payload.sourceAnchorLine ?? 0 : previousState.sourceAnchorLine,
-          sourceAnchorText: Object.prototype.hasOwnProperty.call(input.payload, 'sourceAnchorText') ? input.payload.sourceAnchorText ?? null : previousState.sourceAnchorText,
         }
 
         store.noteUiStates[input.id] = nextState
@@ -427,12 +424,8 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
 
     async getNoteUiState(input: LoadNoteInput): Promise<NoteUiState> {
       return storeRef.current.noteUiStates[input.id] ?? {
-        progressPreview: 0,
-        progressEdit: 0,
+        anchorBlockIndex: 0,
         cursorPos: 0,
-        scrollTop: 0,
-        sourceAnchorLine: 0,
-        sourceAnchorText: null,
       }
     },
 
@@ -466,6 +459,19 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
     async deleteNoteSnapshot(_input: { snapshotId: number }): Promise<void> {
       // Browser mock does not persist snapshots.
       return
+    },
+
+    async saveSnapshotAnchor(input: { snapshotId: number; anchorBlockIndex: number | null }): Promise<void> {
+      // Browser mock has no real snapshot rows to attach this to (see
+      // saveNoteSnapshot above), but still tracks it in-memory by the
+      // synthetic id so a same-session round trip behaves consistently.
+      return mutate((store) => {
+        store.snapshotAnchors[input.snapshotId] = input.anchorBlockIndex ?? 0
+      })
+    },
+
+    async getSnapshotAnchor(input: { snapshotId: number }): Promise<number> {
+      return storeRef.current.snapshotAnchors[input.snapshotId] ?? 0
     },
 
     async branchNoteFromSnapshot(_input: { sourceNoteId: string; snapshotId: number }): Promise<NoteDocument> {

@@ -30,6 +30,32 @@ This contract isolates app features from editor engine internals. Features that 
 - `topBoundaryPx` and `bottomBoundaryPx` are quantized to line-height increments.
 - `scrollTopPx` is tracked from the editor scroller.
 
+#### Persisted scroll position (scroll-sync rewrite)
+- Exactly one thing is persisted per note, and independently per Timeline
+  snapshot: `anchorBlockIndex` -- the canonical, mode-agnostic BLOCK, an
+  index into the note's current top-level `PreviewMarkdownBlock[]` array
+  (`src/editor/PreviewBlockSplit.ts`), resolved via
+  `PreviewBlockIndex.ts`'s `resolvePreviewBlockIndexForSourceLine`/
+  `resolveSourceLineForAnchorBlockIndex`. No raw pixel offsets, and no
+  separate edit/preview values, are ever persisted.
+- Written only at enumerated "note/snapshot leaves an editor" checkpoints:
+  a note or section-clear/close/swap/quit checkpoint (`saveNoteUiState`),
+  or a Timeline snapshot being navigated away from
+  (`saveSnapshotAnchor`, `useNoteSnapshotTimeline.ts`'s
+  `handleNavigateSnapshot`/`handleReturnToPresent`). If the same note is
+  open in multiple editors, whichever leaves last wins -- no
+  reconciliation, by design.
+- Restored on first load of a note/snapshot into a section, landing one
+  line-height below the top border (`RESTORE_OFFSET_LINES` in
+  `EditRestoreMath.ts`), not flush against it. Falls back to top of
+  document (index 0) if the persisted index is out of range for the
+  document's current blocks -- deliberately no fuzzy/nearest-block
+  matching.
+- The only other legitimate scroll-restore trigger is an edit&#8596;preview
+  mode switch within an already-open section
+  (`sectionRequiresScrollUpdateRef` in `useEditorSectionMount.ts`). No
+  other code path should call a scroll restore.
+
 ### Lifecycle Model
 - `mounted`: component mounted.
 - `ready`: editor surface is ready to receive integration calls.

@@ -6,7 +6,7 @@ import type { PersistedViewportState } from '../shared/appState'
 import { NOTE_DRAG_MIME_TYPE, parseNoteDragPayload } from '../shared/noteDrag'
 import { normalizeInternalText } from '../editor/TextPolicy'
 import { countWords, trackWordCount } from '../editor/WordCount'
-import { buildEditRestoreSnapshotFromUiState, scrollTopLinesToPx } from '../editor/EditRestoreMath'
+import { buildEditRestoreSnapshotFromUiState } from '../editor/EditRestoreMath'
 import type { EditorRuntimeMetrics } from '../editor/EditorTypography'
 import type { UseSectionTabsResult } from '../tabBar/useSectionTabs'
 import { SectionTabBar } from '../tabBar/SectionTabBar'
@@ -295,6 +295,8 @@ export function EditorSection({
   const buildToggleNumberedListTransformRef = useRef<(text: string, selection: import('../editor/EditorContract').EditorSelectionState) => { text: string; selection: import('../editor/EditorContract').EditorSelectionState } | null>(() => null)
   const sectionContainerRef = useRef<HTMLDivElement | null>(null)
   const tabbarGridRef = useRef<HTMLElement | null>(null)
+  /** See useEditorSectionMount's UseEditorSectionMountOptions doc comment -- written below, once useNoteSnapshotTimeline resolves the previewed snapshot's content. */
+  const previewedSnapshotContentRef = useRef<string | null>(null)
 
   const {
     adapterRef,
@@ -306,7 +308,7 @@ export function EditorSection({
     readCurrentEditUiPayload,
     updateEditModeSnapshotCache,
     captureEditModeSnapshotFromEditor,
-    persistEditUiPayloadForNote,
+    captureCurrentAnchorBlockIndex,
     scheduleFocusEditorInEditMode,
     applyEditRestoreSnapshot,
     bindings,
@@ -345,6 +347,7 @@ export function EditorSection({
     buildToggleNumberedListTransformRef,
     sectionContainerRef,
     isFrozenSectionPreviewRef,
+    previewedSnapshotContentRef,
   })
 
   const getActiveNoteLiveText = useCallback(() => (
@@ -380,18 +383,14 @@ export function EditorSection({
       setIsCaretSuspended(true)
     }
     if (persistenceReady && previousNoteId && previousNoteId !== noteId) {
-      const previousPayload = readCurrentEditUiPayload()
-      const previousSnapshot = editModeSnapshotByNoteIdRef.current.get(previousNoteId)
-      const snapshotPayload = previousPayload ?? (previousSnapshot ? {
-        progressEdit: previousSnapshot.viewport.scrollTopLines,
-        cursorPos: previousSnapshot.fullSelection.end,
-        scrollTop: scrollTopLinesToPx(previousSnapshot.viewport.scrollTopLines, editorRuntimeMetrics.lineHeightPx),
-        sourceAnchorLine: Math.max(0, previousSnapshot.viewport.scrollTopLines + previousSnapshot.viewport.topBoundaryLines),
-        sourceAnchorText: null,
-      } : null)
-
-      if (snapshotPayload) {
-        await persistEditUiPayloadForNote(previousNoteId, snapshotPayload)
+      const anchorBlockIndex = captureCurrentAnchorBlockIndex()
+      if (anchorBlockIndex !== null) {
+        const cursorPos = readCurrentEditUiPayload()?.cursorPos
+          ?? editModeSnapshotByNoteIdRef.current.get(previousNoteId)?.fullSelection.end
+        await window.thockdownNotes.saveNoteUiState({
+          id: previousNoteId,
+          payload: cursorPos === undefined ? { anchorBlockIndex } : { anchorBlockIndex, cursorPos },
+        })
       }
     }
 
@@ -406,7 +405,6 @@ export function EditorSection({
       text: hydratedText,
       uiState: nextUiState,
       fallbackViewport,
-      lineHeightPx: editorRuntimeMetrics.lineHeightPx,
       overrideCursorPos,
     })
     updateEditModeSnapshotCache(preloadedSnapshot)
@@ -455,8 +453,7 @@ export function EditorSection({
     void window.thockdownSections?.setActiveNote(sectionId, loaded.id)
   }, [
     activeNoteId,
-    editorRuntimeMetrics.lineHeightPx,
-    persistEditUiPayloadForNote,
+    captureCurrentAnchorBlockIndex,
     persistenceReady,
     saveSelectedNoteState,
     sectionId,
@@ -487,18 +484,14 @@ export function EditorSection({
     await flushPendingSaveNow()
 
     if (persistenceReady) {
-      const previousPayload = readCurrentEditUiPayload()
-      const previousSnapshot = editModeSnapshotByNoteIdRef.current.get(previousNoteId)
-      const snapshotPayload = previousPayload ?? (previousSnapshot ? {
-        progressEdit: previousSnapshot.viewport.scrollTopLines,
-        cursorPos: previousSnapshot.fullSelection.end,
-        scrollTop: scrollTopLinesToPx(previousSnapshot.viewport.scrollTopLines, editorRuntimeMetrics.lineHeightPx),
-        sourceAnchorLine: Math.max(0, previousSnapshot.viewport.scrollTopLines + previousSnapshot.viewport.topBoundaryLines),
-        sourceAnchorText: null,
-      } : null)
-
-      if (snapshotPayload) {
-        await persistEditUiPayloadForNote(previousNoteId, snapshotPayload)
+      const anchorBlockIndex = captureCurrentAnchorBlockIndex()
+      if (anchorBlockIndex !== null) {
+        const cursorPos = readCurrentEditUiPayload()?.cursorPos
+          ?? editModeSnapshotByNoteIdRef.current.get(previousNoteId)?.fullSelection.end
+        await window.thockdownNotes?.saveNoteUiState({
+          id: previousNoteId,
+          payload: cursorPos === undefined ? { anchorBlockIndex } : { anchorBlockIndex, cursorPos },
+        })
       }
     }
 
@@ -511,9 +504,8 @@ export function EditorSection({
     void window.thockdownSections?.setActiveNote(sectionId, null)
   }, [
     activeNoteId,
-    editorRuntimeMetrics.lineHeightPx,
+    captureCurrentAnchorBlockIndex,
     flushPendingSaveNow,
-    persistEditUiPayloadForNote,
     persistenceReady,
     saveSelectedNoteState,
     sectionId,
@@ -701,6 +693,7 @@ export function EditorSection({
     previewedSnapshotId,
     setPreviewedSnapshotId,
     captureEditModeSnapshotFromEditor,
+    captureCurrentAnchorBlockIndex,
     flushPendingSaveNow,
     applyEditRestoreSnapshot,
     editModeSnapshotByNoteIdRef,
@@ -708,6 +701,13 @@ export function EditorSection({
     activateNote,
     isFrozenSectionPreviewRef,
   })
+
+  // See useEditorSectionMount's UseEditorSectionMountOptions doc comment --
+  // a plain render-time ref mutation (not an effect) so this hook's own
+  // effects, which read it lazily when their callbacks fire, always see the
+  // value that matches whatever `previewedSnapshotId` they're reacting to on
+  // this same commit.
+  previewedSnapshotContentRef.current = isPreviewingSnapshot ? editorDisplayText : null
 
   // Word count is now "establish once, track the delta" (WordCount.ts):
   // countWords is the full O(document length) scan, run only when there's
@@ -929,7 +929,7 @@ export function EditorSection({
     readCurrentEditUiPayload,
     updateEditModeSnapshotCache,
     captureEditModeSnapshotFromEditor,
-    persistEditUiPayloadForNote,
+    captureCurrentAnchorBlockIndex,
     scheduleFocusEditorInEditMode,
     applyEditRestoreSnapshot,
     bindings,

@@ -1,6 +1,8 @@
 import type { PersistedViewportState } from '../shared/appState'
 import type { EditorSelectionState } from './EditorContract'
 import { resolvePreviewSourceAnchorEntry } from './PreviewScrollAnchor'
+import { splitMarkdownIntoPreviewBlocks } from './PreviewBlockSplit'
+import { resolveSourceLineForAnchorBlockIndex } from './PreviewBlockIndex'
 
 export type EditRestoreSnapshot = {
   noteId: string
@@ -8,7 +10,6 @@ export type EditRestoreSnapshot = {
   fullSelection: EditorSelectionState
   viewport: PersistedViewportState
   sourceAnchorLine?: number
-  sourceAnchorText?: string | null
   // A correction added on top of resolveHeightForSourceLine(sourceAnchorLine)
   // in applySourceAnchorToEditor -- present when sourceAnchorLine came from a
   // "spoofed" preview->edit signal (editSpoofedSignalRef in
@@ -36,13 +37,6 @@ export type EditViewportTelemetry = {
 export const ZERO_EDITOR_SELECTION: EditorSelectionState = { anchor: 0, focus: 0, start: 0, end: 0, isCollapsed: true }
 export const ZERO_PERSISTED_VIEWPORT: PersistedViewportState = { topBoundaryLines: 0, bottomBoundaryLines: 0, scrollTopLines: 0 }
 
-export function buildSourceAnchorTextSnippet(lines: string[], anchorLine: number): string | null {
-  const startLine = Math.max(0, anchorLine - 12)
-  const endLine = Math.min(lines.length - 1, anchorLine + 12)
-  const snippet = lines.slice(startLine, endLine + 1).join('\n').trim()
-  return snippet.length === 0 ? null : snippet.slice(0, 4096)
-}
-
 export function resolveSourceAnchorFromEditState(params: {
   text: string
   lineHeightPx: number
@@ -59,7 +53,7 @@ export function resolveSourceAnchorFromEditState(params: {
    * its own layout info, not by measuring the live DOM.
    */
   resolveSourceLineAtHeight?: (heightPx: number) => number | null
-}): { sourceAnchorLine: number; sourceAnchorText: string | null } {
+}): { sourceAnchorLine: number } {
   const { text, lineHeightPx, telemetry, viewport, resolveSourceLineAtHeight } = params
   const lines = text.split('\n')
   const safeLineHeight = Math.max(1, lineHeightPx)
@@ -70,10 +64,7 @@ export function resolveSourceAnchorFromEditState(params: {
     const resolvedLine = resolveSourceLineAtHeight(scrollTopPx + topBoundaryPx)
     if (resolvedLine !== null) {
       const clampedLine = Math.min(Math.max(0, resolvedLine), Math.max(0, lines.length - 1))
-      return {
-        sourceAnchorLine: clampedLine,
-        sourceAnchorText: buildSourceAnchorTextSnippet(lines, clampedLine),
-      }
+      return { sourceAnchorLine: clampedLine }
     }
   }
 
@@ -83,25 +74,28 @@ export function resolveSourceAnchorFromEditState(params: {
     (telemetry ? Math.max(0, Math.floor(telemetry.scrollTopPx / safeLineHeight)) : 0)
   const clampedLine = Math.min(Math.max(0, anchorLine), Math.max(0, lines.length - 1))
 
-  const sourceAnchorText = buildSourceAnchorTextSnippet(lines, clampedLine)
-
-  return {
-    sourceAnchorLine: clampedLine,
-    sourceAnchorText,
-  }
+  return { sourceAnchorLine: clampedLine }
 }
 
-export function resolveEditSourceAnchorLineFromUiState(text: string, uiState: { sourceAnchorLine?: unknown; sourceAnchorText?: unknown } | null | undefined): number | null {
-  const totalLines = Math.max(1, text.split('\n').length)
-  const sourceAnchorLine = typeof uiState?.sourceAnchorLine === 'number' && Number.isFinite(uiState.sourceAnchorLine)
-    ? Math.max(0, Math.round(uiState.sourceAnchorLine))
-    : null
-
-  if (sourceAnchorLine !== null) {
-    return Math.min(sourceAnchorLine, totalLines - 1)
+/**
+ * Resolves the source line to land on from a note/snapshot's persisted UI
+ * state (`anchorBlockIndex` -- the canonical mode-agnostic BLOCK, see
+ * docs/editor-contract.md's Viewport Model section) via the block-identity
+ * primitive in PreviewBlockIndex.ts. Mode-agnostic: used for both edit-mode
+ * and preview-mode restore. Returns null only when `uiState` itself carries
+ * no anchor at all (e.g. a failed/mocked IPC call) -- an out-of-range index
+ * still resolves to a real line (0, via resolveSourceLineForAnchorBlockIndex's
+ * own fallback), it just doesn't return null.
+ */
+export function resolveEditSourceAnchorLineFromUiState(text: string, uiState: { anchorBlockIndex?: unknown } | null | undefined): number | null {
+  if (!uiState || typeof uiState.anchorBlockIndex !== 'number' || !Number.isFinite(uiState.anchorBlockIndex)) {
+    return null
   }
 
-  return null
+  const totalLines = Math.max(1, text.split('\n').length)
+  const blocks = splitMarkdownIntoPreviewBlocks(text)
+  const sourceLine = resolveSourceLineForAnchorBlockIndex(blocks, Math.round(uiState.anchorBlockIndex))
+  return Math.min(Math.max(0, sourceLine), totalLines - 1)
 }
 
 export function findPreviewSourceAnchorElement(container: HTMLElement, sourceLine: number): HTMLElement | null {
@@ -163,15 +157,21 @@ export function scrollTopLinesToPx(scrollTopLines: number, lineHeightPx: number)
   return Math.max(0, Math.round(scrollTopLines)) * safeLineHeight
 }
 
+// A first-load/note-switch/snapshot-entry restore lands one line-height
+// below the top border rather than flush against it (offset 0) -- the
+// user-confirmed convention for every "restore from a persisted BLOCK"
+// case, matching the same offset a mode switch uses for the mode being
+// entered (see docs/editor-contract.md's Viewport Model section).
+const RESTORE_OFFSET_LINES = 1
+
 export function buildEditRestoreSnapshotFromUiState(params: {
   noteId: string
   text: string
-  uiState: { scrollTop?: unknown; cursorPos?: unknown; sourceAnchorLine?: unknown; sourceAnchorText?: unknown; sourceAnchorOffsetPx?: unknown } | null | undefined
+  uiState: { cursorPos?: unknown; anchorBlockIndex?: unknown } | null | undefined
   fallbackViewport: PersistedViewportState | null
-  lineHeightPx: number
   overrideCursorPos?: number
 }): EditRestoreSnapshot {
-  const { noteId, text, uiState, fallbackViewport, lineHeightPx, overrideCursorPos } = params
+  const { noteId, text, uiState, fallbackViewport, overrideCursorPos } = params
   // Default to 0 lines for both boundaries when nothing is stored (per spec:
   // a fresh/never-dragged note has no reserved top/bottom zones).
   const fallbackTopBoundaryLines = fallbackViewport?.topBoundaryLines ?? 0
@@ -183,19 +183,11 @@ export function buildEditRestoreSnapshotFromUiState(params: {
       : typeof uiState?.cursorPos === 'number' && Number.isFinite(uiState.cursorPos)
         ? Math.max(0, Math.min(Math.round(uiState.cursorPos), selectionTextLength))
         : 0
-  // Only honor a persisted `sourceAnchorLine` if it was created by a
-  // real preview scroll/resize (marked by `previewChanged`). Otherwise
-  // ignore it to avoid treating layout-driven or synthetic saves as a
-  // user-driven anchor.
-  const anchorLine = uiState && (uiState as any).previewChanged === true
-    ? resolveEditSourceAnchorLineFromUiState(text, uiState)
-    : null
+  const anchorLine = resolveEditSourceAnchorLineFromUiState(text, uiState)
   const storedScrollTopLines =
     anchorLine !== null
-      ? Math.max(0, anchorLine - fallbackTopBoundaryLines)
-      : typeof uiState?.scrollTop === 'number' && Number.isFinite(uiState.scrollTop)
-        ? scrollTopPxToLines(Math.max(0, uiState.scrollTop), lineHeightPx)
-        : Math.max(0, Math.round(fallbackViewport?.scrollTopLines ?? 0))
+      ? Math.max(0, anchorLine - fallbackTopBoundaryLines + RESTORE_OFFSET_LINES)
+      : Math.max(0, Math.round(fallbackViewport?.scrollTopLines ?? 0))
 
   const collapsedSelection: EditorSelectionState = {
     anchor: persistedCursor,
@@ -214,8 +206,6 @@ export function buildEditRestoreSnapshotFromUiState(params: {
       bottomBoundaryLines: fallbackBottomBoundaryLines,
       scrollTopLines: storedScrollTopLines,
     },
-    sourceAnchorText: typeof uiState?.sourceAnchorText === 'string' ? uiState.sourceAnchorText : null,
     ...(anchorLine !== null ? { sourceAnchorLine: anchorLine } : {}),
-    ...(typeof uiState?.sourceAnchorOffsetPx === 'number' && Number.isFinite(uiState.sourceAnchorOffsetPx) ? { sourceAnchorOffsetPx: Math.round(uiState.sourceAnchorOffsetPx) } : {}),
   }
 }
