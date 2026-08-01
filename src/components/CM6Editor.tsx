@@ -19,7 +19,7 @@ import {
 import { cancelQuantizedSmoothScroll, scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
 import { sanitizeDocumentText, sanitizeDocumentTextExtended } from '../shared/textSanitization';
-import { resolveScopeRange, isSameRange, type SelectionScope } from '../plugins/ContractBridgeRangeUtils';
+import { resolveScopeRange, isSameRange, type SelectionScope } from '../editor/ContractBridgeRangeUtils';
 import { computeMinimalTextReplacement } from '../editor/MinimalTextDiff';
 import type {
   EditorAdapter,

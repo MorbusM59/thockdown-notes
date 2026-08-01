@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { CSSProperties, MutableRefObject, ReactNode, RefObject } from 'react'
-import { Editor } from '../components/Editor'
 import { CM6Editor } from '../components/CM6Editor'
 import { SnapshotTimelineSlider } from '../editor/SnapshotTimelineSlider'
 import { PresentStateCircle } from '../editor/PresentStateCircle'
@@ -60,19 +59,6 @@ export interface SectionEditorAreaProps {
   handleReturnToPresent: () => void
   handleMergeAdjacentSnapshots: () => void
 }
-
-/**
- * The CM6 editor engine (see docs/document-scale-performance-philosophy.md's
- * history and src/components/CM6Editor.tsx's own doc comment) is the
- * production editor as of 0.5.4 -- the former dev-only spike gate is now
- * flipped on by default. `thockdown:cm6-editor-spike` set to '0' in
- * localStorage force-falls-back to the Lexical-backed Editor.tsx for a given
- * browser profile without a rebuild -- kept as a low-cost rollback path given
- * how recently CM6Editor.tsx graduated past "shadow-adapter stage", not
- * surfaced as a real user-facing setting.
- */
-const isCM6EditorEnabled =
-  typeof window === 'undefined' || window.localStorage?.getItem('thockdown:cm6-editor-spike') !== '0';
 
 /**
  * The editor + its scrollbar + the Time Machine timeline/manual-save-dot for
@@ -168,35 +154,7 @@ export function SectionEditorArea({
           <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}`}>
             <div className="edit-container" style={{ display: isPreviewMode ? 'none' : undefined }}>
               {activeNoteId ? (
-                isCM6EditorEnabled ? (
-                  <CM6Editor
-                    bindings={bindings}
-                    adapterRef={adapterRef}
-                    noteId={activeNoteId}
-                    initialText={editorDisplayText}
-                    scrollbarHost={scrollbarHostEl}
-                    fontFamily={editorFontFamily}
-                    fontSizePx={editorRuntimeMetrics.fontSizePx}
-                    lineHeightPx={editorRuntimeMetrics.lineHeightPx}
-                    glyphWidthPx={editorRuntimeMetrics.glyphWidthPx}
-                    cellWidthPx={editorRuntimeMetrics.cellWidthPx}
-                    editorReadOnly={activeNoteHasDebugTag || isPreviewingSnapshot}
-                    spellCheckEnabled={spellCheckEditEnabled}
-                    fontReady={editorFontLoadVersion > 0}
-                    caretSuspended={isCaretSuspended}
-                  />
-                ) : (
-                <Editor
-                  // Deliberately no `key` tied to noteId/previewedSnapshotId:
-                  // this Editor instance stays mounted across note switches,
-                  // Time Machine scrubbing, and same-note hibernate/thaw
-                  // alike. All of those are content changes, not identity
-                  // changes, so the surrounding chrome (grid/scrollbar/
-                  // toolbar/caret overlay) never needs to re-render, and
-                  // NoteTextHydrationPlugin patches only the paragraph lines
-                  // that actually changed rather than rebuilding the DOM.
-                  // Forcing a remount here previously caused a visible
-                  // flicker on every one of those transitions for no benefit.
+                <CM6Editor
                   bindings={bindings}
                   adapterRef={adapterRef}
                   noteId={activeNoteId}
@@ -207,12 +165,11 @@ export function SectionEditorArea({
                   lineHeightPx={editorRuntimeMetrics.lineHeightPx}
                   glyphWidthPx={editorRuntimeMetrics.glyphWidthPx}
                   cellWidthPx={editorRuntimeMetrics.cellWidthPx}
-                  fontReady={editorFontLoadVersion > 0}
                   editorReadOnly={activeNoteHasDebugTag || isPreviewingSnapshot}
-                  caretSuspended={isCaretSuspended}
                   spellCheckEnabled={spellCheckEditEnabled}
+                  fontReady={editorFontLoadVersion > 0}
+                  caretSuspended={isCaretSuspended}
                 />
-                )
               ) : emptyState}
             </div>
             <div className="render-container" style={{ display: isPreviewMode ? undefined : 'none' }} aria-hidden={!isPreviewMode}>

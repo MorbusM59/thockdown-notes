@@ -97,14 +97,6 @@ async function main() {
     const bodyText = await page.evaluate(() => document.querySelector('.editor-text')?.textContent ?? '')
     assertTrue(bodyText.includes('Second note content'), 'second note text actually loaded into the editor')
 
-    // And back again, since the opt-out rollback flag is the other real
-    // production path -- confirm it still works to force Lexical back on.
-    await page.evaluate(() => window.localStorage.setItem('thockdown:cm6-editor-spike', '0'))
-    await page.reload()
-    await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 30000 })
-    await page.waitForTimeout(400)
-    assertTrue(await page.evaluate(() => !document.querySelector('.cm6-editor-root')), 'localStorage opt-out ("0") rolls back to the Lexical editor')
-
     assertTrue(consoleErrors.length === 0, `no console errors (saw: ${JSON.stringify(consoleErrors)})`)
 
     console.log('\n[verify] ALL CHECKS PASSED')

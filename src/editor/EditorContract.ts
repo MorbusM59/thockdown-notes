@@ -32,7 +32,7 @@ export interface EditorViewportState {
 // they survive across sessions and font/line-height changes without ever
 // needing to be validated against a live DOM measurement. Display pixel
 // values are derived from these at render time via a pure clamp function
-// (see clampBoundaryLines in Editor.tsx) and are never written back into
+// (see clampBoundaryLines in CM6Editor.tsx) and are never written back into
 // this stored representation except in response to an explicit user drag.
 export interface EditorViewportLines {
   topBoundaryLines: number;
@@ -98,8 +98,14 @@ export interface EditorCapabilityMap {
   snapshotWriteViewport: boolean;
 }
 
-// This is the stable contract app modules integrate against. Implementations
-// may be partial while the rewrite is in flight; capabilities describe what is live.
+// This is the stable contract app modules integrate against. CM6Editor.tsx
+// (src/components/CM6Editor.tsx) is the sole implementation as of 0.5.4's
+// CM6 migration -- the prior Lexical-backed Editor.tsx and its rollback
+// path were removed once CM6 was confirmed production-ready (see
+// docs/document-scale-performance-philosophy.md and
+// docs/cm6-parity-hardening-plan.md). The capability-flag shape stays,
+// since it's still useful as a contract, but there is no second
+// implementation to be partial relative to it anymore.
 export interface EditorAdapter {
   getCapabilities(): EditorCapabilityMap;
   getSnapshot(): EditorSnapshot | null;

@@ -5,6 +5,7 @@
 - [x] Sort date menu by edited
 - [ ] Refine editor input focus behavior
 - [ ] `DatabaseService.sanitizeDatabase()` (startup notes_fts dedupe + conditional VACUUM, see `docs/large-document-performance-handover.md`'s newest session) has only been manually verified once against one real database — watch for its `[db] startup sanitation` log across a few real launches before considering it fully trusted.
+- [ ] Cosmetic only: ~19 of the `scripts/perf/verifyCM6*.mjs`/`measureCM6*.mjs` scripts still set the now-vestigial `localStorage['thockdown:cm6-editor-spike'] = '1'` flag before launching (harmless no-op now that CM6 is the only editor and the flag does nothing — Lexical and its rollback path were fully removed). Not touched during that removal since it's pure cleanup with zero behavior change; strip the lines whenever one of these scripts is next touched for real.
 
 ## Split-view rough edges (carried over from split-view handover doc)
 - [ ] `editorStageRef` (App.tsx) is one shared ref across all sections for the background-texture-sizing `ResizeObserver`; it only ever tracks whichever section's stage DOM node mounted/updated last.

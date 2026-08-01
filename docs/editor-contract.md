@@ -5,18 +5,19 @@ This contract isolates app features from editor engine internals. Features that 
 
 ## Source of Truth
 - Contract types: `src/editor/EditorContract.ts`
-- Current implementation: `src/components/CM6Editor.tsx` (production editor as of 0.5.4;
-  `src/components/SectionEditorArea.tsx`'s `isCM6EditorEnabled` selects it by default, with a
-  `localStorage['thockdown:cm6-editor-spike'] = '0'` rollback to the Lexical-backed
-  `src/components/Editor.tsx`, kept alongside it as a fallback implementation of the same
-  contract).
+- Sole implementation: `src/components/CM6Editor.tsx` (production editor as of 0.5.4's CM6
+  migration). The prior Lexical-backed `src/components/Editor.tsx` and its
+  `localStorage['thockdown:cm6-editor-spike'] = '0'` rollback path were removed once CM6 was
+  confirmed production-ready — see `docs/document-scale-performance-philosophy.md` and
+  `docs/cm6-parity-hardening-plan.md` for that history. There is no fallback implementation
+  anymore; `EditorContract.ts`'s capability-flag shape stays as a contract, not because a second
+  implementation might be partial relative to it.
 
 ## Canonical Semantics
 
 ### Text Model
 - Plain text uses `\n` as the line break representation.
-- Text and title-line semantics are contract-defined but not yet fully implemented in the Lexical bridge.
-- Until text events go live, app modules must not infer content from editor DOM.
+- Text and title-line semantics are contract-defined and fully implemented.
 
 ### Selection Model
 - Selection indices are global document offsets (`anchor`, `focus`, `start`, `end`).
@@ -73,12 +74,12 @@ This contract isolates app features from editor engine internals. Features that 
 ## Usage Example
 ```ts
 import { useRef } from 'react';
-import { Editor } from '../components/Editor';
+import { CM6Editor } from '../components/CM6Editor';
 import type { EditorAdapter } from '../editor/EditorContract';
 
 const adapterRef = useRef<EditorAdapter | null>(null);
 
-<Editor
+<CM6Editor
   adapterRef={adapterRef}
   bindings={{
     onViewportChange: (event) => {
@@ -89,4 +90,4 @@ const adapterRef = useRef<EditorAdapter | null>(null);
 ```
 
 ## Rule for Future Work
-Before adding a feature that depends on editor state, extend `EditorContract.ts` first, then implement through `Editor.tsx`, then update this document.
+Before adding a feature that depends on editor state, extend `EditorContract.ts` first, then implement through `CM6Editor.tsx`, then update this document.

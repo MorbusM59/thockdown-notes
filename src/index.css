@@ -374,7 +374,7 @@ body {
   caret-color: transparent; /* Hide the native OS caret */
 }
 
-/* Custom Lexical Retro Block Caret */
+/* Custom retro block caret overlay (drawn by CM6Editor.tsx, not the browser's native caret) */
 .thockdown-block-caret {
   background-color: var(--color-caret);
   animation: thockdown-blink 1.2s infinite cubic-bezier(0.4, 0, 0.2, 1);
@@ -387,8 +387,9 @@ body {
   opacity: 0.8;
 }
 
-/* Custom selection highlight -- see BlockSelectionPlugin for why native
-   ::selection is suppressed instead of used directly. */
+/* Custom selection highlight overlay (drawn by CM6Editor.tsx) -- see the
+   ::selection suppression rules below for why native ::selection is
+   suppressed instead of used directly. */
 .thockdown-block-selection {
   background-color: var(--color-selection);
 }
@@ -402,9 +403,7 @@ body {
   100%     { opacity: 0.6; }
 }
 
-/* Zone styling removed and flattened into Editor.tsx */
-
-/* Lexical Editor Text Styles */
+/* Editor Text Styles -- shared by CM6Editor.tsx's contentDOM, which carries this same class */
 .editor-text {
   font-family: var(--editor-font);
   font-size: var(--editor-font-size);
@@ -427,11 +426,15 @@ body {
      trailing spaces past the line box edge at a wrap point instead of
      wrapping them, which pushes the caret off screen when typing several
      spaces in a row. break-spaces preserves whitespace the same way but
-     treats every space in a run as a real wrap point. !important is
-     required here -- Lexical's core imperatively sets
-     rootElement.style.whiteSpace = 'pre-wrap' on the contentEditable DOM
-     node itself (see lexical's setRootElement), and that inline style
-     otherwise beats any plain class rule regardless of source order. */
+     treats every space in a run as a real wrap point. The `!important`
+     was originally needed because the Lexical-backed editor's core
+     imperatively set `rootElement.style.whiteSpace = 'pre-wrap'` inline,
+     which otherwise beat any plain class rule regardless of source order --
+     Lexical is gone as of the CM6 migration and CM6Editor.tsx sets no such
+     inline style, so this may no longer be load-bearing. Left as-is
+     (unverified, not touched by this cleanup) rather than removed without
+     a live check, since text-wrapping/caret behavior is exactly the class
+     of thing this codebase requires live-browser verification for. */
   white-space: break-spaces !important;
   tab-size: 4;
 }

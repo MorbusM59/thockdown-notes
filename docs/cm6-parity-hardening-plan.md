@@ -354,40 +354,51 @@ specific symptom shouldn't reproduce in CM6, unlike the (already-resolved, unrel
 
 ## Phase 2 — restore full parity with pre-refactor (Lexical) functionality
 
-Not yet inventoried. Bug 1 above (right-click scope-cycling) is the first confirmed item in this
-bucket — a real Lexical feature with zero CM6 equivalent, not a bug in the usual sense. Before
-starting broader work here: build an actual checklist by diffing `Editor.tsx`'s feature surface
-(every `domEventHandlers`/keymap entry, every plugin it mounts) against `CM6Editor.tsx`'s, the
-same way the Bug 1 investigation did for right-click specifically — rather than waiting for users
-to report gaps one at a time. `EditorContract.ts`'s own doc comment ("implementations may be
-partial while the rewrite is in flight") is the authoritative list of what was *known* incomplete
-at flip time; cross-check against it first since it may already enumerate gaps nobody's hit yet.
+Not yet inventoried, and the original plan for doing so needs adjusting: **`Editor.tsx` and every
+Lexical-only plugin no longer exist in the working tree** — a later session fully removed the
+Lexical fallback (see Phase 3's newest entry) once CM6 was confirmed production-ready. The
+side-by-side "diff `Editor.tsx`'s feature surface against `CM6Editor.tsx`'s" method this section
+originally proposed still works, just needs to read `Editor.tsx` from git history instead of the
+live tree (`git show <pre-removal-commit>:src/components/Editor.tsx`, or `git log --all --
+src/components/Editor.tsx` to find it) rather than assuming it's still sitting there to diff
+against directly. Bug 1 above (right-click scope-cycling) is the one confirmed gap found this way
+before the removal — a real Lexical feature with zero CM6 equivalent at the time, since fixed.
+Whether any *other* gaps like it still exist, silently, is genuinely unknown — this phase was
+never completed, it just lost its live diff target. `EditorContract.ts`'s own doc comment used to
+say "implementations may be partial while the rewrite is in flight"; now that there's only one
+implementation, that framing itself is gone (see the contract's own updated comment), so it's no
+longer a reliable pointer to remaining known gaps either — treat this phase as needing exercised,
+adversarial use of the real app to surface anything still missing, not a document to reread.
 
 ## Phase 3 — performance-effort loose ends (concrete candidates already found)
 
 From the historical sweep (see the conversation this doc was written from, or re-derive via
 `docs/large-document-performance-handover.md`) and the Phase-1 research pass:
 
-- **`LexicalRopeSync` is Lexical-only, and CM6 doesn't need it — confirmed, not assumed.**
-  CM6's own `EditorState.doc` (a `@codemirror/state` `Text`) is already a real tree/rope
-  (`TextLeaf`/`TextNode` classes in `node_modules/@codemirror/state`, structural-sharing
-  `replace`/`slice`/`lineAt`), which is exactly the property `LexicalRopeSync` was built to
-  retrofit onto Lexical, which has no native rope of its own. `LexicalRopeSync` is wired into
-  Lexical's hot path only (`ContractBridgePlugin.tsx:213`/`:499-500`,
-  `NoteTextHydrationPlugin.tsx:161`/`:190-191`) and is never imported by `CM6Editor.tsx` or
-  anything it depends on. **This answers the "does CM6 replace the need for it" question: yes,
-  structurally, for CM6 specifically** — CM6 already has what the rope was for. `LexicalRopeSync`
-  remains real, working infrastructure for the Lexical *rollback path* only. Decide explicitly:
-  keep it as rollback-path insurance (current state), or let it go if/when the Lexical fallback
-  is ever retired — don't leave this as an implicit, undocumented state.
+- **RESOLVED, later session: the Lexical fallback was fully retired, not just deprioritized.**
+  This bullet used to ask "keep `LexicalRopeSync` as rollback-path insurance, or let it go?" —
+  the answer landed on "let it go," executed all the way through: `src/components/Editor.tsx`,
+  every Lexical-only plugin (`ContractBridgePlugin.tsx`, `NoteTextHydrationPlugin.tsx`,
+  `CagedScrollPlugin.tsx`, `BlockCaretPlugin.tsx`, `SyntaxHighlightPlugin.tsx`,
+  `BlockSelectionPlugin.tsx`, `PasteSanitizationPlugin.tsx`, `TextSanitizationPlugin.tsx`),
+  `src/nodes/ThockdownTokenNode.ts`, `LexicalRopeSync.ts`, and `LexicalParagraphOffsetSync.ts`
+  (plus their tests) were all deleted, `SectionEditorArea.tsx`'s
+  `localStorage['thockdown:cm6-editor-spike']` gate and its Lexical-fallback branch were removed
+  (`CM6Editor` is now unconditional, no flag checked at all), and the `lexical`/`@lexical/react`
+  npm packages were uninstalled. `ContractBridgeRangeUtils.ts` (the framework-agnostic
+  scope-resolution logic both editors shared) and its test survived, relocated from
+  `src/plugins/` to `src/editor/` since `src/plugins/` no longer means anything now that there's
+  no Lexical plugin architecture left. This makes the rest of Phase 3's original framing below
+  moot rather than answered differently — there is no rollback path left to insure, measure, or
+  decide about. Kept below anyway as the record of *why* this was a safe call to make (CM6
+  already structurally subsumed what the rope was for), not as still-open guidance.
 - **The rope-wiring commit's own measured 1M-char regression (~8x, see the sweep data) was never
-  actually fixed on the Lexical side — it was sidestepped by the CM6 flip.** If the Lexical
-  rollback (`localStorage['thockdown:cm6-editor-spike'] = '0'`) is ever used in anger — which per
-  the above is the one scenario where `LexicalRopeSync` still matters — that regression is
-  presumably still live today, unmeasured since. Before trusting the rollback path as a safe
-  fallback, re-measure it (the sweep harness at `scripts/perf/measureRepeatedBursts.mjs` +
-  `perfHarness.mjs` already does exactly this, just needs pointing at the Lexical path
-  specifically, e.g. via the existing localStorage flag).
+  actually fixed on the Lexical side — it was sidestepped by the CM6 flip, and per the above is
+  now permanently moot rather than merely unmeasured.** CM6's own `EditorState.doc` (a
+  `@codemirror/state` `Text`) was already a real tree/rope (`TextLeaf`/`TextNode` classes,
+  structural-sharing `replace`/`slice`/`lineAt`) — exactly the property `LexicalRopeSync` existed
+  to retrofit onto Lexical, which had no native rope of its own. That's what made retiring it
+  (rather than porting or re-measuring it) the right call once the Lexical path itself was gone.
 - **Two commits mid-sweep (02–04: incremental block-split, paragraph-offset index,
   dedupe+virtualization) each showed a severe 1M-char sustained-typing regression (218ms → 179ms →
   151ms/keystroke) despite being individually verified as wins at the time** — and the regression
@@ -522,7 +533,8 @@ load-bearing (reverting it reproduces the loss under the same test).
   against it existing as described) is still open.
 - Phase 2 (parity inventory) hasn't been started structurally — Bug 1 was the first item found by
   investigation, not by a systematic Editor.tsx-vs-CM6Editor.tsx feature diff; that diff still
-  needs doing.
+  needs doing, now against `Editor.tsx` in git history rather than the live tree (see Phase 2's
+  updated framing above — the Lexical fallback was fully removed in a later session).
 
 **A later session (unrelated to this doc's own phase work) finally reconciled the long-standing
 real-user-vs-synthetic input-lag gap tracked in `docs/large-document-performance-handover.md` and
@@ -540,9 +552,60 @@ new opt-in `thockdown:debug-input-lag` instrumentation itself was added CM6-side
 (`CM6Editor.tsx`'s `updateListener`) — the Lexical path has no equivalent instrumentation if this
 ever needs retracing there.
 
-**Doesn't change this doc's own Phase-3 finding that `LexicalRopeSync`'s wiring is still
-Lexical-only and its own measured 1M-char regression is still presumably unfixed/unmeasured on
-that path specifically** (see Phase 3 above) — the three bugs above were general defects that
-happened to live in shared code, not anything to do with the rope-sync mechanism itself. If the
-Lexical rollback is ever exercised in anger, re-measure it fresh rather than assuming these fixes
-closed that specific gap too.
+**Superseded by an even later session: this whole question is moot now.** The Lexical fallback
+this paragraph was hedging about was fully removed (see Phase 3 above) — there is no rollback
+path left to exercise "in anger" or re-measure. The three bugs above stay fixed either way, since
+they lived in shared code CM6 also depends on.
+
+## This session: the Lexical fallback fully removed — explicit product decision, executed
+
+Per the user's own framing: the CM6 migration is now considered live and successful, so the
+codebase should fully commit to it rather than keep carrying a parallel implementation and a
+rollback flag nobody expects to actually use. Deleted, not just deprioritized:
+
+- `src/components/Editor.tsx` (the Lexical-backed editor component itself)
+- Every Lexical-only plugin: `src/plugins/ContractBridgePlugin.tsx`,
+  `NoteTextHydrationPlugin.tsx`, `CagedScrollPlugin.tsx`, `BlockCaretPlugin.tsx`,
+  `SyntaxHighlightPlugin.tsx`, `BlockSelectionPlugin.tsx`, `PasteSanitizationPlugin.tsx`,
+  `TextSanitizationPlugin.tsx`
+- `src/nodes/ThockdownTokenNode.ts` (Lexical node class), and the now-empty `src/nodes/`
+  directory
+- `src/editor/LexicalRopeSync.ts` and `LexicalParagraphOffsetSync.ts`, plus their fuzz tests
+- The `lexical` and `@lexical/react` npm packages (34 transitive packages removed)
+
+Kept and relocated: `ContractBridgeRangeUtils.ts` (the framework-agnostic
+word/sentence/line/block scope-resolution logic, pure text+offset functions with no Lexical
+dependency, already confirmed shared and reused unchanged by `CM6Editor.tsx`'s own right-click
+handler — see Bug 1 above) and its test moved from `src/plugins/` to `src/editor/`, since
+`src/plugins/` no longer means anything once there's no Lexical plugin architecture housed there.
+The test was renamed `ContractBridgeRangeUtils.test.ts` to match what it actually tests (it was
+never really testing `ContractBridgePlugin.tsx` itself, just this shared module).
+
+`SectionEditorArea.tsx`'s `isCM6EditorEnabled`/`localStorage['thockdown:cm6-editor-spike']` gate
+and its Lexical-fallback JSX branch are gone — `CM6Editor` renders unconditionally now, no flag
+read at all. `EditorContract.ts`'s doc comment updated to state CM6Editor.tsx is the sole
+implementation rather than "may be partial while the rewrite is in flight." `docs/editor-contract.md`
+updated to match (usage example now imports `CM6Editor`, the "Text Model" section's "not yet fully
+implemented in the Lexical bridge" caveat removed since there's no Lexical bridge left to be
+partial). `scripts/perf/verifyCM6Phase2Slice1.mjs` deleted (its entire purpose was verifying the
+rollback flag still worked — explicitly marked "not a committed test, ad hoc" in its own header,
+so safe to delete outright rather than trim). `scripts/perf/verifyCM6ProductionGating.mjs` kept
+(most of it verifies real, still-relevant CM6 mount/note-switch behavior) with just its
+rollback-specific assertion trimmed out. ~19 other `verifyCM6*`/`measureCM6*` scripts still set
+the now-inert `thockdown:cm6-editor-spike` flag before launching — harmless (the flag does
+nothing now), left as-is rather than touched purely for cosmetic reasons; tracked in `TODO.md` as
+a whenever-convenient cleanup.
+
+**Verified**: `npx tsc --noEmit` clean, `npm run lint` clean, `npx vite build` (renderer + main +
+preload, not just type-checking — confirms nothing in the actual bundle graph broke) clean, full
+`npm test` (273/273, down from 289 — the 16 removed tests were `LexicalRopeSync.test.ts` and
+`LexicalParagraphOffsetSync.test.ts`, both deleted alongside the modules they tested; every other
+test file, including `ContractBridgeRangeUtils.test.ts` at its new path, still passes unchanged).
+No live-browser re-verification of editor behavior this round specifically — this was a pure
+deletion of already-unreachable code plus a mechanical import-path fix, not a behavior change to
+the surviving CM6 path, so the existing `scripts/perf/verifyCM6*.mjs` suite (already passing,
+already covering CM6's own real behavior) stands as the relevant live coverage rather than being
+re-run from scratch for this change specifically.
+
+**What's still open**: Phase 2's parity inventory (see its updated framing above) and Bug 4, both
+already listed. Nothing new from this round beyond the `TODO.md` cosmetic-cleanup note above.
