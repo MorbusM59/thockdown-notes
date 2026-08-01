@@ -420,7 +420,7 @@
    * the outer bar itself is now sized correctly. */
   --tab-bar-content-height: 20px;
   --note-list-row-content-height: var(--btn-square-regular-size);
-  --wordcount-panel-width: 100px;
+  --wordcount-panel-width: 110px;
 }
 
 /* ---------------------------------------------------------------------------
