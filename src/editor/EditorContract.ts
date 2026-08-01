@@ -110,6 +110,20 @@ export interface EditorAdapter {
   getCapabilities(): EditorCapabilityMap;
   getSnapshot(): EditorSnapshot | null;
   applySnapshot(snapshot: EditorSnapshotApplyRequest): void;
+  // Precise edit<->preview scroll-position sync (EditRestoreMath.ts) needs to
+  // convert between "a document-relative vertical pixel offset" (the same
+  // coordinate space as EditorViewportState's scrollTopPx) and "a 0-indexed
+  // line number in the plain source text" -- exact inverses of each other.
+  // These exist as adapter primitives, not DOM queries done by the caller,
+  // because that conversion is fundamentally editor-internal: it depends on
+  // line-wrapping (a "source line" can span many visual rows) and on
+  // whatever layout/virtualization scheme the editor uses, neither of which
+  // any caller outside the adapter can correctly reason about from the DOM
+  // alone. Both return null when the adapter can't currently answer (not
+  // yet mounted, position out of range) -- callers must treat that as "the
+  // sync can't happen right now," never as a resolved answer of 0.
+  resolveSourceLineAtHeight(heightPx: number): number | null;
+  resolveHeightForSourceLine(sourceLine: number): number | null;
 }
 
 export interface EditorBindings {

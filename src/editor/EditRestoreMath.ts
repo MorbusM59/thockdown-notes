@@ -1,6 +1,5 @@
 import type { PersistedViewportState } from '../shared/appState'
 import type { EditorSelectionState } from './EditorContract'
-import { readSelectionOffsetFromClientPoint } from './SelectionOffsets'
 import { resolvePreviewSourceAnchorEntry } from './PreviewScrollAnchor'
 
 export type EditRestoreSnapshot = {
@@ -34,45 +33,31 @@ export function resolveSourceAnchorFromEditState(params: {
   telemetry?: EditViewportTelemetry | null
   viewport?: PersistedViewportState | null
   /**
-   * Scopes the editor-stage lookup below to one section's own container.
-   * Every section renders the same `.editor-stage` class name, so an
-   * unscoped document-wide query would always resolve to whichever section
-   * happens to be first in the DOM -- falling back to `document` here is
-   * only correct for a single-section layout.
+   * Adapter-provided precise line-at-height resolver
+   * (EditorAdapter.resolveSourceLineAtHeight) -- preferred whenever
+   * available. Exact and wrapping-aware: a "source line" is a logical text
+   * line, which under soft-wrapping can span many visual rows, so it is
+   * *not* the same thing as "how many line-heights of pixels are scrolled"
+   * (the crude fallback below). Works regardless of whether the target
+   * line is currently mounted, since the adapter answers analytically from
+   * its own layout info, not by measuring the live DOM.
    */
-  container?: ParentNode | null
+  resolveSourceLineAtHeight?: (heightPx: number) => number | null
 }): { sourceAnchorLine: number; sourceAnchorText: string | null } {
-  const { text, lineHeightPx, telemetry, viewport, container } = params
+  const { text, lineHeightPx, telemetry, viewport, resolveSourceLineAtHeight } = params
   const lines = text.split('\n')
   const safeLineHeight = Math.max(1, lineHeightPx)
 
-  const searchRoot = container ?? document
-  const editorScroller = searchRoot.querySelector<HTMLElement>('.editor-stage .thockdown-custom-scrollbar')
-  const editorRoot = searchRoot.querySelector<HTMLElement>('.editor-stage .editor-text[contenteditable="true"]')
-
-  if (editorScroller && editorRoot && document.body.contains(editorRoot)) {
-    const scrollerRect = editorScroller.getBoundingClientRect()
-    const rootRect = editorRoot.getBoundingClientRect()
-    const topBoundaryPx = Math.max(0, Math.round((viewport?.topBoundaryLines ?? 0) * safeLineHeight))
-    const sampleX = Math.max(scrollerRect.left + 4, rootRect.left + 4)
-    const sampleY = Math.min(
-      scrollerRect.bottom - 1,
-      scrollerRect.top + topBoundaryPx + Math.max(1, Math.round(safeLineHeight / 2)),
-    )
-    const anchorOffset = readSelectionOffsetFromClientPoint(
-      editorRoot,
-      sampleX,
-      sampleY,
-      text.length,
-      0,
-    )
-    const prefix = text.slice(0, Math.max(0, Math.min(text.length, anchorOffset)))
-    const sourceAnchorLine = prefix.length === 0 ? 0 : (prefix.match(/\n/g)?.length ?? 0)
-    const clampedLine = Math.min(Math.max(0, sourceAnchorLine), Math.max(0, lines.length - 1))
-
-    return {
-      sourceAnchorLine: clampedLine,
-      sourceAnchorText: buildSourceAnchorTextSnippet(lines, clampedLine),
+  if (resolveSourceLineAtHeight && viewport) {
+    const topBoundaryPx = Math.max(0, Math.round(viewport.topBoundaryLines * safeLineHeight))
+    const scrollTopPx = Math.max(0, Math.round(viewport.scrollTopLines * safeLineHeight))
+    const resolvedLine = resolveSourceLineAtHeight(scrollTopPx + topBoundaryPx)
+    if (resolvedLine !== null) {
+      const clampedLine = Math.min(Math.max(0, resolvedLine), Math.max(0, lines.length - 1))
+      return {
+        sourceAnchorLine: clampedLine,
+        sourceAnchorText: buildSourceAnchorTextSnippet(lines, clampedLine),
+      }
     }
   }
 

@@ -609,3 +609,64 @@ re-run from scratch for this change specifically.
 
 **What's still open**: Phase 2's parity inventory (see its updated framing above) and Bug 4, both
 already listed. Nothing new from this round beyond the `TODO.md` cosmetic-cleanup note above.
+
+### Bug 5 — edit<->preview scroll-position sync silently broken since the CM6 flip — FIXED
+
+**User report**: switching edit -> preview always resets to scrollTop 0; switching preview -> edit
+"tries to restore" but lands significantly wrong on long documents, and had been getting worse
+"progressively... over several commits."
+
+**Root cause, both directions, both in code shared/adapted from the Lexical era, neither ever
+updated for CM6:**
+
+- **Edit -> preview capture** (`resolveSourceAnchorFromEditState`, `EditRestoreMath.ts`): its
+  precise path queried `.editor-stage .thockdown-custom-scrollbar` to point-sample the DOM at the
+  caret's visual position. CM6 never renders that class (it's Lexical/general custom-scrollbar
+  styling, applied to the sidebar, the preview pane, etc. — never to CM6's own `.cm-scroller`) —
+  confirmed by grep, not assumed — so this path was **always** dead for CM6, silently falling
+  through to a cruder approximation every single time.
+- **Preview -> edit restore** (`applySourceAnchorToEditor`, `useEditorSectionMount.ts`): same dead
+  selector, plus a second, independent problem: it assumed `editorRoot.children` gives one DOM
+  element per logical paragraph (`Array.from(editorRoot.children)[lineIndex]`) — true for Lexical,
+  structurally false for CM6, which (a) renders one `.cm-line` per *visual* row, not per logical
+  line, and (b) only mounts lines near the viewport at all under its own virtualization. With the
+  selector dead, `scroller` was always `null` and the function returned immediately — a **complete
+  no-op**, every time, for as long as CM6 has been the production editor.
+- **The cruder fallback both directions fell back to** (`viewport.scrollTopLines +
+  viewport.topBoundaryLines` used directly as if it were a logical source-text line number) has its
+  own latent bug, independent of the dead selectors: `scrollTopLines` is `scrollTop` expressed in
+  line-*height* pixel units, not a count of logical text lines. Those coincide only when nothing
+  wraps. CM6 has `EditorView.lineWrapping` enabled (confirmed), so any document with long lines —
+  exactly what a real note looks like, and exactly why this got reported as "majorly off on long
+  documents," not on short test notes — makes the two diverge more the more wrapping happened
+  before the target position. This is why "progressively deteriorating over several commits" reads
+  as a real observation rather than imagined: nothing about this bug's *shape* changed recently, but
+  every commit that added more real content to the reporter's own long-lived notes made the
+  wrapping-based error larger.
+
+**Fixed** by giving `EditorAdapter` (`EditorContract.ts`) two new primitives —
+`resolveSourceLineAtHeight(heightPx)` and its exact inverse `resolveHeightForSourceLine(sourceLine)`
+— implemented in `CM6Editor.tsx` via CM6's own `view.lineBlockAtHeight`/`view.lineBlockAt`. These
+are analytical (computed from CM6's own line-layout metadata), not DOM measurements: correct
+regardless of wrapping, and correct regardless of whether the target line is currently mounted,
+which a DOM-based approach structurally cannot be under CM6's own viewport-bound rendering. Per
+this doc's own established pattern for adapter primitives, the *orchestration* (boundary-offset
+math, clamping) stays in the shared `EditRestoreMath.ts`/`useEditorSectionMount.ts` code, which now
+calls these instead of touching the DOM at all.
+
+**Deliberately not touched**: `buildEditRestoreSnapshotFromUiState`'s own naive
+`anchorLine - topBoundaryLines` conversion (used only for the very first, immediate placement
+before the adapter is necessarily mounted) still has the same imprecision — left as-is since the
+fix above runs one frame later as an explicit *correction* pass over exactly that rough guess, by
+existing design (the two-phase "rough placement, then precise correction" structure predates this
+fix and is unrelated to it). Worth revisiting only if the rough-then-correct flash becomes visibly
+distracting in practice.
+
+**Verified**: `npx tsc --noEmit`, `npm run lint`, `npx vite build` (renderer + main + preload), full
+`npm test` (273/273, unchanged — no existing test exercised this path, since it requires a real
+mounted CM6 view; nothing regressed either) all clean. **Not yet live-verified in a real browser
+session** — this is exactly the class of change (`EditorContract.ts` shape change, caret/scroll
+math) this project's own process discipline calls for a live-browser check on before considering it
+done; that verification is the user's own to do, by design, for this session. Treat as
+implemented-and-reasoned-through, not battle-tested, until confirmed live on a real long document
+in both directions.

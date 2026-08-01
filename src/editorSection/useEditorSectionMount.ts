@@ -320,7 +320,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       lineHeightPx: lineHeightPx,
       telemetry: latestEditViewportTelemetryRef.current ?? undefined,
       viewport,
-      container: sectionContainerRef.current,
+      resolveSourceLineAtHeight: (heightPx) => adapterRef.current?.resolveSourceLineAtHeight(heightPx) ?? null,
     })
 
     const scrollTopLines = Math.max(0, Math.round(viewport.scrollTopLines))
@@ -335,7 +335,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       sourceAnchorLine,
       sourceAnchorText,
     }
-  }, [activeNoteText, lineHeightPx, latestEditorSelectionRef, latestEditorTextRef, sectionContainerRef])
+  }, [activeNoteText, lineHeightPx, latestEditorSelectionRef, latestEditorTextRef])
 
   const updateEditModeSnapshotCache = useCallback((snapshot: EditRestoreSnapshot) => {
     editModeSnapshotByNoteIdRef.current.set(snapshot.noteId, snapshot)
@@ -641,41 +641,34 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     const onComplete = options?.onComplete
     let cancelled = false
 
+    // Precisely aligns the edit view to match wherever the preview pane was
+    // showing when the user left it, correcting the rough initial restore
+    // above (viewportLines from the persisted uiState). Uses the adapter's
+    // own line-at-height math (EditorAdapter.resolveHeightForSourceLine),
+    // not DOM measurement -- source lines can span many visual rows under
+    // soft-wrapping, and the target line may not even be mounted yet under
+    // CM6's viewport-bound rendering, neither of which a DOM query handles.
     const applySourceAnchorToEditor = () => {
       if (typeof snapshot.sourceAnchorLine !== 'number' || !Number.isFinite(snapshot.sourceAnchorLine)) {
         return
       }
 
-      const scroller = sectionContainerRef.current?.querySelector<HTMLElement>('.thockdown-custom-scrollbar')
-      const editorRoot = sectionContainerRef.current?.querySelector<HTMLElement>('.editor-text[contenteditable="true"]')
-      if (!scroller || !editorRoot) {
-        return
-      }
+      const adapter = adapterRef.current
+      if (!adapter) return
 
-      const paragraphs = Array.from(editorRoot.children).filter((child): child is HTMLElement => child instanceof HTMLElement)
-      if (paragraphs.length === 0) {
-        return
-      }
+      const lineTopPx = adapter.resolveHeightForSourceLine(snapshot.sourceAnchorLine)
+      if (lineTopPx === null) return
 
-      const targetIndex = Math.max(0, Math.min(paragraphs.length - 1, Math.round(snapshot.sourceAnchorLine)))
-      const targetParagraph = paragraphs[targetIndex]
-      const scrollerRect = scroller.getBoundingClientRect()
-      const paragraphRect = targetParagraph.getBoundingClientRect()
       const topBoundaryPx = Math.max(0, Math.round(snapshot.viewport.topBoundaryLines * lineHeightPx))
-      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
-      const targetScrollTop = Math.max(
-        0,
-        Math.min(
-          maxScrollTop,
-          scroller.scrollTop + (paragraphRect.top - scrollerRect.top) - topBoundaryPx,
-        ),
-      )
+      const targetScrollTopPx = Math.max(0, lineTopPx - topBoundaryPx)
 
-      scroller.scrollTop = targetScrollTop
-      requestAnimationFrame(() => {
-        if (!cancelled) {
-          scroller.scrollTop = targetScrollTop
-        }
+      adapter.applySnapshot({
+        selectionScrollBehavior: 'preserve-scroll',
+        viewportLines: {
+          topBoundaryLines: snapshot.viewport.topBoundaryLines,
+          bottomBoundaryLines: snapshot.viewport.bottomBoundaryLines,
+          scrollTopLines: targetScrollTopPx / lineHeightPx,
+        },
       })
     }
 
@@ -725,7 +718,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     return () => {
       cancelled = true
     }
-  }, [lineHeightPx, focusEditorInEditMode, sectionContainerRef])
+  }, [lineHeightPx, focusEditorInEditMode])
 
   const captureEditModeSnapshotForRenderView = useCallback((noteId: string, activeText: string) => {
     const snapshot = captureEditModeSnapshotFromEditor(noteId)
@@ -741,11 +734,11 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       lineHeightPx: lineHeightPx,
       telemetry: latestEditViewportTelemetryRef.current ?? undefined,
       viewport,
-      container: sectionContainerRef.current,
+      resolveSourceLineAtHeight: (heightPx) => adapterRef.current?.resolveSourceLineAtHeight(heightPx) ?? null,
     })
 
     pendingRenderViewSourceAnchorRef.current = anchor
-  }, [captureEditModeSnapshotFromEditor, lineHeightPx, sectionContainerRef])
+  }, [captureEditModeSnapshotFromEditor, lineHeightPx])
 
   const previousActiveNoteIdForEditRestoreRef = useRef<string | null>(null)
   const previousPreviewModeRef = useRef(false)

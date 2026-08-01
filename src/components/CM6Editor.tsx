@@ -2878,6 +2878,29 @@ export function CM6Editor({
           });
         }
       },
+      // Both use CM6's own line-block layout info (lineBlockAt/
+      // lineBlockAtHeight), which is computed analytically from line-height
+      // metadata rather than measured off the live DOM -- correct
+      // regardless of line-wrapping (a "source line" here is a logical text
+      // line, which under EditorView.lineWrapping can span many visual
+      // rows -- naively treating scrollTop-in-line-heights as a line number
+      // is exactly the bug this replaces, see EditRestoreMath.ts) and
+      // regardless of whether the target line is currently mounted/visible,
+      // since CM6's own edit-mode rendering is viewport-bound.
+      resolveSourceLineAtHeight(heightPx: number): number | null {
+        const view = viewRef.current;
+        if (!view) return null;
+        const clampedHeight = Math.max(0, Math.min(view.contentHeight, heightPx));
+        const block = view.lineBlockAtHeight(clampedHeight);
+        return view.state.doc.lineAt(block.from).number - 1;
+      },
+      resolveHeightForSourceLine(sourceLine: number): number | null {
+        const view = viewRef.current;
+        if (!view) return null;
+        const clampedLine1 = Math.max(1, Math.min(view.state.doc.lines, Math.round(sourceLine) + 1));
+        const pos = view.state.doc.line(clampedLine1).from;
+        return view.lineBlockAt(pos).top;
+      },
     };
 
     return () => {
