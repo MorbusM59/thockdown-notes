@@ -6685,11 +6685,23 @@ ${markdownHtml}
 
       if (event.key === 'Escape') {
         const activeElement = document.activeElement
+        // The main editor's own contentEditable root is deliberately excluded
+        // from the generic "blur an editable field" branch below: that branch
+        // exists for secondary inputs (note title/tab rename, etc.) where
+        // Escape should just defocus the field, not switch modes. The main
+        // editor is not one of those -- Escape from inside it should switch
+        // straight to render view in one press, matching every other
+        // note-activation shortcut in this handler. Without this exclusion,
+        // isEditableField was true for the editor's own contentEditable (CM6's
+        // `.cm-content`), so the first Escape only blurred it (suspending the
+        // caret) and only a second Escape actually toggled the view.
         const isEditableField =
-          activeElement instanceof HTMLInputElement ||
-          activeElement instanceof HTMLTextAreaElement ||
-          activeElement instanceof HTMLSelectElement ||
-          Boolean(activeElement && (activeElement as HTMLElement).isContentEditable)
+          !isEditorTarget && (
+            activeElement instanceof HTMLInputElement ||
+            activeElement instanceof HTMLTextAreaElement ||
+            activeElement instanceof HTMLSelectElement ||
+            Boolean(activeElement && (activeElement as HTMLElement).isContentEditable)
+          )
 
         if (isEditableField && activeElement instanceof HTMLElement) {
           event.preventDefault()
