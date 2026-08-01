@@ -1482,6 +1482,15 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
           fullSelection: selection,
           viewport: nextViewport,
         })
+        // A user scroll in edit mode should also mark the section as
+        // requiring a fresh scroll-offset computation on the next mode
+        // switch. This ensures edit-driven scrolls are observed by the
+        // deferred computation path the same way preview-driven scrolls
+        // are.
+        sectionRequiresScrollUpdateRef.current = true
+        debugLogScrollSync(
+          `sectionRequiresScrollUpdateRef set (onViewportChange - edit scroll): note=${activeNoteId} scrollTopPx=${nextTelemetry.scrollTopPx} topLines=${nextViewport.topBoundaryLines} scrollTopLines=${nextViewport.scrollTopLines}`,
+        )
       }
 
       queueAppStateSave(activeNoteId)
