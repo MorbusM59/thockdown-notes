@@ -338,6 +338,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   // Diagnostic-only call counter, see applyEditRestoreSnapshot's own entry log.
   const applyEditRestoreSnapshotCallCounterRef = useRef(0)
   const restoreInProgressRef = useRef(false)
+  const restoreActiveCallerRef = useRef<string | null>(null)
   const latestViewportRef = useRef<PersistedViewportState | null>(null)
   const latestEditViewportRef = useRef<PersistedViewportState | null>(null)
   const latestEditViewportTelemetryRef = useRef<EditViewportTelemetry | null>(null)
@@ -918,6 +919,10 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (onComplete) {
         onComplete()
       }
+      // Restore completed — clear the in-progress sentinel so future
+      // callers can proceed. Also clear the active-caller diagnostic ref.
+      restoreInProgressRef.current = false
+      restoreActiveCallerRef.current = null
     }
 
     requestAnimationFrame(applyWhenReady)
