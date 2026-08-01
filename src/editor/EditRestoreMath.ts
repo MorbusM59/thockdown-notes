@@ -9,6 +9,19 @@ export type EditRestoreSnapshot = {
   collapsedSelection: EditorSelectionState
   fullSelection: EditorSelectionState
   viewport: PersistedViewportState
+  // The logical source line the canonical BLOCK resolves to, when known.
+  // `viewport.scrollTopLines` is a naive line-COUNT (source line minus
+  // boundary lines) computed without the adapter, which is wrong under
+  // soft-wrapping -- a logical line can span many visual rows, so "line N"
+  // is not the same as "N line-heights of scroll" (this is Bug 5's own
+  // finding, docs/cm6-parity-hardening-plan.md). When present,
+  // applyEditRestoreSnapshot uses this to correct that rough placement to
+  // an analytically exact one via the adapter's own resolveHeightForSourceLine,
+  // one frame later once the adapter is confirmed mounted -- not a raw/cached
+  // pixel value, a fresh deterministic computation from the same block every
+  // time, so it carries none of the round-trip-drift risk the pre-rewrite
+  // sync/spoof caching existed to paper over.
+  sourceAnchorLine?: number
 }
 
 export type EditViewportTelemetry = {
@@ -190,5 +203,6 @@ export function buildEditRestoreSnapshotFromUiState(params: {
       bottomBoundaryLines: fallbackBottomBoundaryLines,
       scrollTopLines: storedScrollTopLines,
     },
+    ...(anchorLine !== null ? { sourceAnchorLine: anchorLine } : {}),
   }
 }

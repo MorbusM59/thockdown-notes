@@ -755,14 +755,18 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     // both applying a restore for the same transition.
     applyEditRestoreSnapshotCallCounterRef.current += 1
 
-    // Restoring from integer line counts is direct and idempotent: no
-    // measurement-dependent clamping happens at apply time (see
-    // EditorViewportLines / clampBoundaryLines), so a single applySnapshot
-    // call is sufficient -- never a raw/translated pixel value (see
-    // docs/editor-contract.md's Viewport Model section: the entered mode
-    // always lands on a fixed one-line-height offset via viewportLines'
-    // own line-quantized scrollTopLines, computed by whichever caller built
-    // this snapshot -- RESTORE_OFFSET_LINES in EditRestoreMath.ts).
+    // Applies the rough placement immediately (safe and idempotent: integer
+    // line counts, no measurement-dependent clamping -- see
+    // EditorViewportLines/clampBoundaryLines). `viewport.scrollTopLines`
+    // there is a naive line-COUNT, though (sourceAnchorLine minus boundary
+    // lines), which is only correct when nothing wraps -- see
+    // EditRestoreSnapshot's own doc comment. If `snapshot.sourceAnchorLine`
+    // is present, correctWrappingOnceReady below fixes that up to an
+    // analytically exact value one frame later, once the adapter is
+    // confirmed mounted -- computed fresh from the same block every time,
+    // not a cached/round-tripped pixel value, so it carries none of the
+    // drift risk the pre-rewrite sync/spoof caching existed to paper over
+    // (docs/cm6-parity-hardening-plan.md's Bug 5 follow-up).
     const applyWhenReady = () => {
       if (cancelled) return
       const adapter = adapterRef.current
@@ -782,6 +786,13 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       latestViewportRef.current = snapshot.viewport
       latestEditViewportRef.current = snapshot.viewport
 
+      if (typeof snapshot.sourceAnchorLine === 'number') {
+        requestAnimationFrame(() => {
+          if (cancelled) return
+          correctWrappingOnceReady(snapshot.sourceAnchorLine!, snapshot.viewport)
+        })
+      }
+
       if (focusAfterApply) {
         requestAnimationFrame(() => {
           focusEditorInEditMode({ restoreSelection: false })
@@ -797,12 +808,35 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       restoreActiveCallerRef.current = null
     }
 
+    const correctWrappingOnceReady = (sourceAnchorLine: number, viewport: PersistedViewportState) => {
+      const adapter = adapterRef.current
+      if (!adapter) return
+
+      const lineTopPx = adapter.resolveHeightForSourceLine(sourceAnchorLine)
+      if (lineTopPx === null) return
+
+      const topBoundaryPx = Math.max(0, Math.round(viewport.topBoundaryLines * lineHeightPx))
+      const correctedScrollTopLines = Math.max(
+        0,
+        Math.round((lineTopPx - topBoundaryPx) / lineHeightPx) + RESTORE_OFFSET_LINES,
+      )
+      const correctedViewport: PersistedViewportState = { ...viewport, scrollTopLines: correctedScrollTopLines }
+
+      adapter.applySnapshot({
+        selectionScrollBehavior: 'preserve-scroll',
+        viewportLines: correctedViewport,
+      })
+
+      latestViewportRef.current = correctedViewport
+      latestEditViewportRef.current = correctedViewport
+    }
+
     requestAnimationFrame(applyWhenReady)
     return () => {
       cancelled = true
       restoreInProgressRef.current = false
     }
-  }, [focusEditorInEditMode])
+  }, [focusEditorInEditMode, lineHeightPx])
 
   const previousActiveNoteIdForEditRestoreRef = useRef<string | null>(null)
   const previousPreviewModeRef = useRef(false)
@@ -1479,8 +1513,13 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         viewport: {
           topBoundaryLines,
           bottomBoundaryLines: fallbackViewport?.bottomBoundaryLines ?? 0,
+          // Rough placement (naive line count -- see EditRestoreSnapshot's
+          // own doc comment); applyEditRestoreSnapshot corrects this to an
+          // analytically exact value via sourceAnchorLine below, one frame
+          // later, once the adapter is confirmed mounted.
           scrollTopLines: Math.max(0, sourceAnchorLine - topBoundaryLines + RESTORE_OFFSET_LINES),
         },
+        sourceAnchorLine,
       }
       pendingEditRestoreSnapshotRef.current = restoreSnapshot
       updateEditModeSnapshotCache(restoreSnapshot)
@@ -1885,6 +1924,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             bottomBoundaryLines: fallbackViewport?.bottomBoundaryLines ?? 0,
             scrollTopLines: Math.max(0, sourceLine - topBoundaryLines + RESTORE_OFFSET_LINES),
           },
+          sourceAnchorLine: sourceLine,
         }, { restoreFullSelection: false, focusAfterApply: false })
       }
 
