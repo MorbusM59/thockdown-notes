@@ -4310,9 +4310,6 @@ ${markdownHtml}
       if (section && !section.isPreviewMode && activeNoteId && noteId !== activeNoteId) {
         section.captureEditModeSnapshotFromEditor(activeNoteId)
       }
-      if (section && section.isPreviewMode && activeNoteId && noteId !== activeNoteId) {
-        await section.persistRenderViewStateForNoteNow(activeNoteId)
-      }
       await section?.flushPendingSaveNow()
       await section?.activateNote(noteId)
     } catch (error) {
@@ -6781,9 +6778,6 @@ ${markdownHtml}
       // be lost on quit.
       for (const section of sectionRegistryRef.current.values()) {
         section.persistActiveNoteEditModeStateNow()
-        if (section.isPreviewMode && section.activeNoteId) {
-          void section.persistRenderViewStateForNoteNow(section.activeNoteId)
-        }
       }
       persistMenuStateOnUnload()
     }

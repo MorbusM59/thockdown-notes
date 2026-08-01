@@ -83,12 +83,6 @@ export interface EditorSnapshotApplyRequest extends Partial<EditorSnapshot> {
   // and continuously via clampBoundaryLines, so applying this is safe at
   // any point, including before the container has been measured.
   viewportLines?: EditorViewportLines;
-  // A raw, unquantized document-relative pixel scroll offset -- bypasses
-  // viewportLines' line-height rounding entirely. Exists specifically for
-  // restoring a scroll position that was captured exactly (not derived from
-  // a source-line anchor), so a round trip through it introduces zero
-  // drift. Boundaries are left untouched; this only ever moves the scroller.
-  exactScrollTopPx?: number;
 }
 
 export interface EditorCapabilityMap {

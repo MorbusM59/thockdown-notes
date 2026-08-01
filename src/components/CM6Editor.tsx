@@ -2861,15 +2861,6 @@ export function CM6Editor({
           setHasViewportLines(true);
         }
 
-        // Raw pixel scroll restore -- no line-height rounding, unlike
-        // viewportLines above. Applied after viewportLines (if both are
-        // somehow present) so it wins, since callers only ever send this
-        // when they have an exact previously-captured position to restore
-        // losslessly (see EditorContract.ts's own doc comment).
-        if (typeof snapshot.exactScrollTopPx === 'number') {
-          view.scrollDOM.scrollTo({ top: Math.max(0, snapshot.exactScrollTopPx), behavior: 'auto' });
-        }
-
         if (snapshot.selection) {
           const docLength = view.state.doc.length;
           const anchor = Math.max(0, Math.min(docLength, snapshot.selection.anchor));

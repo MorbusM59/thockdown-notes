@@ -9,23 +9,6 @@ export type EditRestoreSnapshot = {
   collapsedSelection: EditorSelectionState
   fullSelection: EditorSelectionState
   viewport: PersistedViewportState
-  sourceAnchorLine?: number
-  // A correction added on top of resolveHeightForSourceLine(sourceAnchorLine)
-  // in applySourceAnchorToEditor -- present when sourceAnchorLine came from a
-  // "spoofed" preview->edit signal (editSpoofedSignalRef in
-  // useEditorSectionMount.ts, recorded at the moment edit itself last
-  // genuinely scrolled) rather than a real signal freshly derived from
-  // preview's current position. Reconstructs the exact original edit
-  // position: resolveHeightForSourceLine is stable for an already-visited
-  // line, so re-deriving it and adding this back lands precisely where edit
-  // actually was, without needing preview to have moved at all.
-  sourceAnchorOffsetPx?: number
-  // The preview pane's exact scrollTop this restore was computed from --
-  // only set on an actual preview->edit toggle (not note-switch/persisted
-  // restores). Lets applySourceAnchorToEditor record a fresh synced pair
-  // once it resolves sourceAnchorLine to a real pixel position, so a later
-  // return trip to this same preview position can restore losslessly.
-  originPreviewScrollTopPx?: number
 }
 
 export type EditViewportTelemetry = {
@@ -157,12 +140,13 @@ export function scrollTopLinesToPx(scrollTopLines: number, lineHeightPx: number)
   return Math.max(0, Math.round(scrollTopLines)) * safeLineHeight
 }
 
-// A first-load/note-switch/snapshot-entry restore lands one line-height
-// below the top border rather than flush against it (offset 0) -- the
-// user-confirmed convention for every "restore from a persisted BLOCK"
-// case, matching the same offset a mode switch uses for the mode being
-// entered (see docs/editor-contract.md's Viewport Model section).
-const RESTORE_OFFSET_LINES = 1
+// A first-load/note-switch/snapshot-entry restore, and a mode switch's
+// entered mode, all land one line-height below the top border rather than
+// flush against it (offset 0) -- the single, user-confirmed convention for
+// every "restore from a persisted BLOCK" case (see docs/editor-contract.md's
+// Viewport Model section). Exported so useEditorSectionMount.ts's mode-switch
+// code applies the identical offset, not a second hardcoded copy of it.
+export const RESTORE_OFFSET_LINES = 1
 
 export function buildEditRestoreSnapshotFromUiState(params: {
   noteId: string
@@ -206,6 +190,5 @@ export function buildEditRestoreSnapshotFromUiState(params: {
       bottomBoundaryLines: fallbackBottomBoundaryLines,
       scrollTopLines: storedScrollTopLines,
     },
-    ...(anchorLine !== null ? { sourceAnchorLine: anchorLine } : {}),
   }
 }

@@ -708,3 +708,36 @@ Verified the same way as Bug 5 above (`npx tsc --noEmit`, `npm run lint`, `npx v
 `npm test` 273/273) plus this round's own live debug-log confirmation of the specific failure mode
 being fixed (not just typechecking) — still owed: a full live-browser pass confirming the corrected
 design doesn't have a symmetric problem of its own on the edit side over a longer session.
+
+### Scroll-sync rewrite — Bug 5's round-trip-drift fix superseded by a simpler policy
+
+The asymmetric `exactScrollTopPx`/`lastSyncedScrollPairRef` design shipped above (the "Second
+design" section) worked, but the whole apparatus existed to solve a self-imposed problem: trying to
+restore *exactly* where the user was, pixel-for-pixel, across every mode toggle and note switch.
+That precision was never actually asked for, and it required a real DOM-selector regression, then
+two follow-up scroll-sync designs, then a large surrounding cache/spoof/dedup layer just to make it
+converge instead of drift.
+
+Replaced this session with a much smaller policy: persist exactly one thing per note (and
+independently per Timeline snapshot) — `anchorBlockIndex`, an index into the note's
+`PreviewMarkdownBlock[]` array, mode-agnostic, written only at real "leaves an editor" checkpoints
+(note switch, section close/quit, Timeline snapshot navigated away from). Every restore — first
+load, note switch, or a mode switch with `sectionRequiresScrollUpdateRef` true — lands on that block
+plus a *fixed* one line-height offset, never a raw or translated pixel value. When nothing has
+changed since the two modes were last in sync, a mode toggle now does nothing at all beyond flipping
+CSS visibility, since dual-mount (`SectionEditorArea.tsx`, neither pane ever unmounts) means both
+panes' DOM is already correctly positioned.
+
+This made the following fully dead and removed: `applySourceAnchorToEditor` (the exact-pixel
+correction pass), `lastSyncedScrollPairRef`, `editSpoofedSignalRef`, `sectionUiStateRef` and its
+ephemeral per-mode pixel-offset bookkeeping, `persistRenderViewStateForNoteNow`,
+`captureEditModeSnapshotForRenderView`, and the `exactScrollTopPx` field on
+`EditorSnapshotApplyRequest` (`EditorContract.ts`). `resolveSourceLineAtHeight`/
+`resolveHeightForSourceLine` (this bug's own real fix, above) are still load-bearing and untouched —
+resolving *which block* is under the viewport still has to come from CM6's own analytical layout
+data, never DOM measurement; only the *precision* of what gets restored changed, not how a block is
+found. See `docs/editor-contract.md`'s Viewport Model section for the current persisted shape and
+the two legitimate restore triggers.
+
+**Not yet live-verified in a real browser session** — same standing caveat as the rest of this doc's
+scroll/caret work; live-verified only via `tsc`/`lint`/`npm test`, not yet exercised by hand.
