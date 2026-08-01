@@ -1509,6 +1509,14 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
   useEffect(() => {
     if (!persistenceReady || !activeNoteId) return
+    // activateNote (EditorSection.tsx) already computes and caches a restore
+    // snapshot for the note it's activating, synchronously, before it calls
+    // setActiveNoteId -- by the time this effect runs (activeNoteId change),
+    // that cache entry already exists for the common "note loaded via
+    // activateNote" path. Skip the redundant IPC round trip + parse in that
+    // case; this effect exists only to cover any other path that sets
+    // activeNoteId without pre-populating the cache.
+    if (editModeSnapshotByNoteIdRef.current.has(activeNoteId)) return
 
     let cancelled = false
 
@@ -1518,7 +1526,14 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         if (cancelled) return
 
         const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
-        const activeText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+        // latestEditorTextRef.current alone, not `|| activeNoteText` -- this
+        // effect must not depend on activeNoteText (see below): that state
+        // updates on every keystroke, and re-running this on every keystroke
+        // would mean re-running buildEditRestoreSnapshotFromUiState's
+        // now-real markdown parse (resolveEditSourceAnchorLineFromUiState /
+        // splitMarkdownIntoPreviewBlocks) on every keystroke -- exactly the
+        // input-lag regression this comment is here to prevent reintroducing.
+        const activeText = normalizeInternalText(latestEditorTextRef.current)
         const snapshot = buildEditRestoreSnapshotFromUiState({
           noteId: activeNoteId,
           text: activeText,
@@ -1536,7 +1551,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     return () => {
       cancelled = true
     }
-  }, [activeNoteId, activeNoteText, lineHeightPx, persistenceReady, updateEditModeSnapshotCache, latestEditorTextRef])
+    // Deliberately NOT dependent on activeNoteText -- this preloads the
+    // persisted-position cache once per note activation (activeNoteId
+    // change), not on every edit. See the comment above.
+  }, [activeNoteId, lineHeightPx, persistenceReady, updateEditModeSnapshotCache, latestEditorTextRef])
 
   useEffect(() => {
     if (isPreviewMode) return
