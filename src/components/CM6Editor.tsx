@@ -627,6 +627,18 @@ export function CM6Editor({
   const bindingsRef = useRef(bindings);
   const previousTextRef = useRef('');
   const previousSelectionRef = useRef<EditorSelectionState>({ anchor: 0, focus: 0, start: 0, end: 0, isCollapsed: true });
+  // Real-usage input-lag diagnostics -- opt-in via
+  // localStorage.setItem('thockdown:debug-input-lag', '1') + reload. Logs
+  // wall-clock time from a real physical keydown to the resulting CM6
+  // update commit, and again to the next painted frame, straight to the
+  // console -- for reproducing a lag report live in the actual app instead
+  // of a synthetic harness. Zero cost when the flag is unset (one
+  // localStorage read at mount, no per-keystroke overhead).
+  const debugInputLagEnabled = useRef(
+    typeof window !== 'undefined' && window.localStorage.getItem('thockdown:debug-input-lag') === '1',
+  ).current;
+  const debugLastKeydownAtRef = useRef<number | null>(null);
+  const debugLastKeyRef = useRef<string | null>(null);
   // Right-click selection-scope-cycling state -- mirrors ContractBridgePlugin.tsx's
   // (Lexical) rightClickCycleRef exactly, since resolveScopeRange/isSameRange are
   // pure text+offset functions with no Lexical dependency and are reused unchanged
@@ -1832,6 +1844,10 @@ export function CM6Editor({
       // CM6Editor already calls -- so they work automatically.
       EditorView.domEventObservers({
         keydown: (event) => {
+          if (debugInputLagEnabled) {
+            debugLastKeydownAtRef.current = performance.now();
+            debugLastKeyRef.current = event.key;
+          }
           const modifiers = [
             event.shiftKey ? 'Shift' : null,
             event.ctrlKey ? 'Control' : null,
@@ -2042,6 +2058,31 @@ export function CM6Editor({
         },
       }),
       EditorView.updateListener.of((update) => {
+        let debugKeydownAt: number | null = null;
+        const debugCheckpoint = (label: string) => {
+          if (debugKeydownAt === null) return;
+          console.log(`[input-lag]   +${(performance.now() - debugKeydownAt).toFixed(1)}ms  ${label}`);
+        };
+        if (debugInputLagEnabled && update.docChanged) {
+          const keydownAt = debugLastKeydownAtRef.current;
+          const key = debugLastKeyRef.current;
+          debugLastKeydownAtRef.current = null;
+          if (keydownAt !== null) {
+            debugKeydownAt = keydownAt;
+            const commitMs = performance.now() - keydownAt;
+            const docLen = update.state.doc.length;
+            // Exposed so onTextChange (useEditorSectionMount.ts, called
+            // synchronously below via bindingsRef) can log its own elapsed
+            // time against the same origin timestamp -- bisects where the
+            // gap between commit and paint actually goes.
+            (window as unknown as { __thockdownDebugKeydownAt?: number }).__thockdownDebugKeydownAt = keydownAt;
+            debugCheckpoint(`commit (commitMs=${commitMs.toFixed(1)}, docLen=${docLen})`);
+            requestAnimationFrame(() => {
+              const paintMs = performance.now() - keydownAt;
+              console.log(`[input-lag] key=${JSON.stringify(key)} docLen=${docLen} commitMs=${commitMs.toFixed(1)} paintMs=${paintMs.toFixed(1)}`);
+            });
+          }
+        }
         if (update.docChanged) {
           // doc.toJSON() (public, documented CodeMirror API -- collects each
           // line via direct array pushes, Text.flatten) + one native
@@ -2064,6 +2105,7 @@ export function CM6Editor({
           // burst), GC time in the CDP profile dropped a clean ~20% (every
           // fixed run below every baseline run, no overlap).
           const nextText = update.state.doc.toJSON().join('\n');
+          debugCheckpoint('after doc.toJSON().join');
           const previousText = previousTextRef.current;
           const nextSelection = toSelectionState(update.state.selection.main);
           previousTextRef.current = nextText;
@@ -2076,7 +2118,9 @@ export function CM6Editor({
             previousText,
             selection: nextSelection,
           };
+          debugCheckpoint('before bindings.onTextChange');
           bindingsRef.current?.onTextChange?.(event);
+          debugCheckpoint('after bindings.onTextChange');
         } else if (update.selectionSet) {
           const nextSelection = toSelectionState(update.state.selection.main);
           const previous = previousSelectionRef.current;
@@ -2092,10 +2136,13 @@ export function CM6Editor({
         }
         if (update.docChanged || update.selectionSet || update.viewportChanged) {
           scheduleCaretUpdate();
+          debugCheckpoint('after scheduleCaretUpdate');
           scheduleSelectionHighlightUpdate();
+          debugCheckpoint('after scheduleSelectionHighlightUpdate');
         }
         if (update.docChanged) {
           syncCustomScrollbar();
+          debugCheckpoint('after syncCustomScrollbar');
         }
         if (pendingPasteViewportOffsetPx !== null && update.docChanged) {
           const offset = pendingPasteViewportOffsetPx;
@@ -2106,6 +2153,7 @@ export function CM6Editor({
           pendingCageIntent = false;
           reconcileCagedScroll(update.view);
         }
+        debugCheckpoint('updateListener end (synchronous work done)');
       }),
     ];
 
@@ -2435,6 +2483,8 @@ export function CM6Editor({
     if (!isNoteSwitch && currentText === initialText) return;
     lastHydratedNoteIdRef.current = noteId ?? null;
 
+    const debugSwitchStartedAt = debugInputLagEnabled && isNoteSwitch ? performance.now() : null;
+
     if (isNoteSwitch) {
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: initialText },
@@ -2444,7 +2494,14 @@ export function CM6Editor({
       view.dispatch({ changes: computeMinimalTextReplacement(currentText, initialText) });
     }
     previousTextRef.current = initialText;
-  }, [noteId, initialText]);
+
+    if (debugSwitchStartedAt !== null) {
+      requestAnimationFrame(() => {
+        const paintMs = performance.now() - debugSwitchStartedAt;
+        console.log(`[input-lag] note-switch noteId=${noteId} docLen=${initialText.length} paintMs=${paintMs.toFixed(1)}`);
+      });
+    }
+  }, [noteId, initialText, debugInputLagEnabled]);
 
   // Boundary drag-handle global listeners -- ported from Editor.tsx's own
   // "Global Mouse listeners for Dragging" effect. Deliberately re-binds only

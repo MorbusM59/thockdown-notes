@@ -5,6 +5,7 @@ import { isExternalNote } from '../shared/noteLifecycle'
 import type { PersistedViewportState } from '../shared/appState'
 import { NOTE_DRAG_MIME_TYPE, parseNoteDragPayload } from '../shared/noteDrag'
 import { normalizeInternalText } from '../editor/TextPolicy'
+import { countWords, trackWordCount } from '../editor/WordCount'
 import { buildEditRestoreSnapshotFromUiState, scrollTopLinesToPx } from '../editor/EditRestoreMath'
 import type { EditorRuntimeMetrics } from '../editor/EditorTypography'
 import type { UseSectionTabsResult } from '../tabBar/useSectionTabs'
@@ -708,39 +709,45 @@ export function EditorSection({
     isFrozenSectionPreviewRef,
   })
 
-  // Debounced rather than a synchronous useMemo: word counting a huge
-  // document (`.trim().split(/\s+/u)`) is a real O(document length)
-  // allocation-heavy pass (found live via performance.mark/measure profiling
-  // on a 1.5M-character note: ~15ms mean, up to ~34ms, on every single
-  // keystroke -- the single largest per-keystroke cost found in this whole
-  // audit, bigger than anything in CM6Editor.tsx itself, and not specific to
-  // either editor engine). This value only ever feeds a footer word/character
-  // count display (SectionEditorArea.tsx), never editor state, selection, or
-  // save logic, so it has no correctness reason to be exact on every
-  // keystroke -- a real editor's word count lagging by one debounce interval
-  // behind furious typing is imperceptible and standard behavior (matches
-  // how virtually every text editor throttles this same display). Per
-  // docs/document-scale-performance-philosophy.md's solution hierarchy,
-  // this is "deferred/off-critical-path work" (tier 3): the work itself
-  // isn't made cheaper, it's moved off the keystroke-to-paint path so it
-  // can't compete with input latency.
+  // Word count is now "establish once, track the delta" (WordCount.ts):
+  // countWords is the full O(document length) scan, run only when there's
+  // no usable previous count to track forward from (note switch, or the
+  // very first computation); trackWordCount reuses that baseline and only
+  // rescans the small window actually touched by the edit, regardless of
+  // document size. Character count needs none of this -- `text.length` is
+  // already O(1). This value only ever feeds a footer word/character count
+  // display (SectionEditorArea.tsx), never editor state, selection, or save
+  // logic, so the still-present 200ms debounce (now just pacing the display
+  // refresh, not hiding an expensive computation) is about not thrashing the
+  // footer's re-render during a fast typing burst, not about performance.
   const [activeNoteDocumentStats, setActiveNoteDocumentStats] = useState({ wordCount: 0, characterCount: 0 })
+  const documentWordCountBaselineRef = useRef<{ noteId: string | null; text: string; wordCount: number } | null>(null)
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       const hasSelection = !editorSelection.isCollapsed && editorSelection.end > editorSelection.start
       const selectionStart = Math.max(0, Math.min(currentEditorText.length, editorSelection.start))
       const selectionEnd = Math.max(selectionStart, Math.min(currentEditorText.length, editorSelection.end))
-      const text = hasSelection
-        ? currentEditorText.slice(selectionStart, selectionEnd)
-        : currentEditorText
-      const characterCount = text.length
-      const trimmed = text.trim()
-      const wordCount = trimmed.length === 0 ? 0 : trimmed.split(/\s+/u).length
 
-      setActiveNoteDocumentStats({ wordCount, characterCount })
+      if (hasSelection) {
+        // Bounded by the selection's own size, not the document's -- no
+        // baseline to track against (the selection can jump anywhere), and
+        // a full scan of a user-selected range is never the O(document)
+        // per-keystroke cost this was built to eliminate.
+        const text = currentEditorText.slice(selectionStart, selectionEnd)
+        setActiveNoteDocumentStats({ wordCount: countWords(text), characterCount: text.length })
+        return
+      }
+
+      const baseline = documentWordCountBaselineRef.current
+      const wordCount = baseline && baseline.noteId === activeNoteId
+        ? trackWordCount(baseline.text, baseline.wordCount, currentEditorText)
+        : countWords(currentEditorText)
+      documentWordCountBaselineRef.current = { noteId: activeNoteId, text: currentEditorText, wordCount }
+
+      setActiveNoteDocumentStats({ wordCount, characterCount: currentEditorText.length })
     }, 200)
     return () => window.clearTimeout(timeoutId)
-  }, [currentEditorText, editorSelection.end, editorSelection.isCollapsed, editorSelection.start])
+  }, [activeNoteId, currentEditorText, editorSelection.end, editorSelection.isCollapsed, editorSelection.start])
 
   const {
     documentFindQuery,

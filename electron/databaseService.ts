@@ -811,7 +811,12 @@ export class DatabaseService {
     const findTagStmt = db.prepare('SELECT id FROM tags WHERE name = ?');
     const insertTagStmt = db.prepare('INSERT INTO tags (name) VALUES (?)');
 
-    const upsertFtsStmt = db.prepare('INSERT OR REPLACE INTO notes_fts (noteId, title, content) VALUES (?, ?, ?)');
+    // notes_fts is an FTS5 virtual table with no real unique constraint on
+    // noteId, so "INSERT OR REPLACE" can never detect a conflict -- it always
+    // inserts a fresh row, leaving the previous one in place. Must delete the
+    // old row first, same pattern already used by upsertNoteContent below.
+    const deleteFtsForNoteStmt = db.prepare('DELETE FROM notes_fts WHERE noteId = ?');
+    const insertFtsStmt = db.prepare('INSERT INTO notes_fts (noteId, title, content) VALUES (?, ?, ?)');
     const deleteMissingFtsStmt = db.prepare('DELETE FROM notes_fts WHERE noteId = ?');
 
     const toIso = (timestampMs: number): string => new Date(timestampMs).toISOString();
@@ -872,7 +877,8 @@ export class DatabaseService {
     tx(syncedRows);
 
     for (const row of syncedRows) {
-      upsertFtsStmt.run(row.id, row.title, row.text);
+      deleteFtsForNoteStmt.run(row.id);
+      insertFtsStmt.run(row.id, row.title, row.text);
     }
 
     this.normalizeAllTagPositions();

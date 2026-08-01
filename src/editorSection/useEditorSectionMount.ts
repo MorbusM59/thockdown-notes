@@ -33,6 +33,22 @@ import { resolveMarkdownChecklistTypeoverTransform } from '../editor/ChecklistTy
 import { typingSoundManager } from '../sound/TypingSoundManager'
 import type { PreviewScrollToSourceLineFn } from './usePreviewMarkdownRendering'
 
+/**
+ * Throwaway checkpoint logger for the commit-to-paint input-lag
+ * investigation (see CM6Editor.tsx's debugInputLagEnabled). Reads the
+ * origin timestamp CM6Editor stashed on `window` for this keystroke and
+ * logs elapsed time at each named point in onTextChange, to bisect where a
+ * long gap between CM6's commit and the next painted frame actually goes.
+ * Gated the same way (localStorage flag), effectively free when off.
+ */
+function debugLogCheckpoint(label: string): void {
+  if (typeof window === 'undefined') return
+  if (window.localStorage.getItem('thockdown:debug-input-lag') !== '1') return
+  const keydownAt = (window as unknown as { __thockdownDebugKeydownAt?: number }).__thockdownDebugKeydownAt
+  if (keydownAt === undefined) return
+  console.log(`[input-lag]   +${(performance.now() - keydownAt).toFixed(1)}ms  ${label}`)
+}
+
 export interface UseEditorSectionMountOptions {
   activeNoteId: string | null
   activeNoteText: string
@@ -795,12 +811,15 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
 
   const bindings = useMemo<EditorBindings>(() => ({
     onTextChange: (event: EditorTextChangeEvent) => {
+      debugLogCheckpoint('onTextChange start')
       const keyId = deriveTypingSoundKeyId(event)
+      debugLogCheckpoint('after deriveTypingSoundKeyId')
       if (shouldPlayTypingSound(event)) {
         void typingSoundManager.playRandomClick({ keyId })
       } else if (shouldPlayReverseTypingSound(event)) {
         void typingSoundManager.playRandomClick({ keyId, reverse: true, detune: 600 })
       }
+      debugLogCheckpoint('after typing sound dispatch')
 
       // event.text always originates from ContractBridgePlugin's
       // readCanonicalRootText() (both the initial-load and regular-commit
@@ -826,7 +845,9 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         setActiveNoteText(canonicalText)
         setEditorTextVersion((previous) => previous + 1)
       }
+      debugLogCheckpoint('after setActiveNoteText/scheduleCoalescedPreviewCommit')
       setEditorSelection(event.selection)
+      debugLogCheckpoint('after setEditorSelection')
 
       if (!activeNoteId || !persistenceReady || activeNoteHasDebugTagRef.current) return
 
@@ -843,9 +864,11 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         })
 
         const originalExternalText = externalNoteOriginalTextByIdRef.current.get(activeNoteId)
+        debugLogCheckpoint('before canonicalText !== originalExternalText comparison')
         const isCurrentlyModified = originalExternalText !== undefined
           ? canonicalText !== originalExternalText
           : Boolean(noteSummary && noteSummary.hasUnsavedChanges)
+        debugLogCheckpoint('after canonicalText !== originalExternalText comparison')
 
         if (noteSummary && noteSummary.hasUnsavedChanges !== isCurrentlyModified) {
           setNotes((previous) => {
@@ -880,6 +903,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
           }
         }
       }
+      debugLogCheckpoint('after isExternal block')
 
       if (!isUserEditableSource) {
         // Do not derive save/pause transitions from hydration/programmatic events.
@@ -894,7 +918,9 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (!isDeferredPreviewTick) {
         updateActiveNoteTitlePreview(canonicalText)
       }
+      debugLogCheckpoint('after updateActiveNoteTitlePreview')
       queueSave(canonicalText, event.selection.end, latestEditViewportTelemetryRef.current?.scrollTopPx)
+      debugLogCheckpoint('after queueSave (onTextChange end)')
     },
     onSelectionChange: (event: EditorSelectionChangeEvent) => {
       if (previewedSnapshotId !== null) {

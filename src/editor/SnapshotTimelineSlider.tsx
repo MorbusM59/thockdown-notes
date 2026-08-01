@@ -3,6 +3,7 @@ import type { PlacedSnapshot } from './SnapshotTimelineCurve'
 import { clusterPlacements } from './SnapshotTimelineCurve'
 import { useHoldToBranch } from './useHoldToBranch'
 import type { NoteSnapshotRecord } from './useNoteSnapshots'
+import { countWords } from './WordCount'
 
 // Reuses the same rail visual language as CompactScrollbarSlider (the
 // filter/settings sliders) via the shared .utility-setting-scrollbar-*
@@ -59,12 +60,6 @@ function formatSnapshotTooltip(record: NoteSnapshotRecord): string {
   const wordCount = countWords(record.content)
   const dayPrefix = isSameDay ? '' : `[${days}] `
   return `${dayPrefix}${hours}:${minutes} (${wordCount})`
-}
-
-function countWords(text: string): number {
-  const trimmed = text.trim()
-  if (trimmed.length === 0) return 0
-  return trimmed.split(/\s+/u).length
 }
 
 const MINUTES_PER_HOUR = 60
@@ -292,6 +287,23 @@ function SnapshotMark({
 
   const { isHolding, progress, handlers } = useHoldToBranch(doBranch)
 
+  // formatSnapshotTooltip runs a full regex word-count over the snapshot's
+  // entire content (up to the size of the whole note, e.g. ~1.5MB) -- inlined
+  // directly in the `title` attribute below, it was being recomputed on
+  // every render of this component, not just when a tooltip is actually
+  // shown. Every keystroke re-renders the whole editor tree (setActiveNoteText
+  // et al.), so this mark -- unrelated to the current edit -- was paying that
+  // cost on every single keystroke too. snapshotRecord is a stable object
+  // reference across re-renders unless the underlying snapshots list itself
+  // changes (see useNoteSnapshots.ts's snapshotsById, keyed on the same
+  // `snapshots` array), so memoizing on it is safe and exact -- not a
+  // caching heuristic with a hazard class, just avoiding redundant work on
+  // an unchanged input.
+  const tooltip = useMemo(
+    () => (snapshotRecord ? formatSnapshotTooltip(snapshotRecord) : undefined),
+    [snapshotRecord],
+  )
+
   return (
     <div
       className={[
@@ -307,7 +319,7 @@ function SnapshotMark({
         event.stopPropagation()
         onNavigate(placement.id)
       }}
-      title={snapshotRecord ? formatSnapshotTooltip(snapshotRecord) : undefined}
+      title={tooltip}
       {...handlers}
     >
       {isHolding && (

@@ -47,6 +47,21 @@ interface PreviewBlockRange {
  * the node's own end position -- so trailing blank lines survive verbatim
  * instead of being trimmed by remark's own position tracking; this matches
  * what a plain single-block document round-trips to today.
+ *
+ * Every range's *start* absorbs blank lines between it and the previous
+ * range (previousEndLine1 + 1), so leading blank lines belong to whichever
+ * node comes after them. Nothing symmetric exists for the very last node,
+ * though: trailing blank lines *after* it have no next node to belong to.
+ * Real documents routinely end in a trailing newline (or several), so
+ * without this the last range silently stops short of `lineCount` -- always
+ * true, not an edge case -- which breaks two things: fullSplit's
+ * materialized blocks lose real trailing whitespace, and
+ * splitMarkdownIntoPreviewBlocksIncremental's contiguity invariant
+ * (ranges must tile exactly to `lineCount`) permanently fails for any edit
+ * whose kept tail includes this node, forcing a full reparse on every
+ * single keystroke forever -- found live on a real ~1.5M-character note
+ * ending in "...Yes.\n\n". Force the last range to reach `lineCount`
+ * unconditionally, the same way the single-node case already does above.
  */
 function parseStructuralRanges(text: string, lineCount: number): PreviewBlockRange[] {
   const root = structuralProcessor.parse(text) as MdastAstNode
@@ -60,7 +75,10 @@ function parseStructuralRanges(text: string, lineCount: number): PreviewBlockRan
     const previousEndLine1 = index === 0 ? 0 : (children[index - 1].position?.end?.line ?? 0)
     const ownEndLine1 = node.position?.end?.line ?? previousEndLine1
     const rangeStartLine1 = Math.max(previousEndLine1 + 1, 1)
-    const rangeEndLine1 = Math.max(rangeStartLine1, ownEndLine1)
+    const isLast = index === children.length - 1
+    const rangeEndLine1 = isLast
+      ? Math.max(rangeStartLine1, ownEndLine1, lineCount)
+      : Math.max(rangeStartLine1, ownEndLine1)
     return { type: node.type, rangeStartLine1, rangeEndLine1 }
   })
 }
@@ -215,11 +233,19 @@ function shiftRange(range: PreviewBlockRange, delta: number): PreviewBlockRange 
  * ranges fail the contiguity check (defensive; should never trigger given
  * the above, but a broken splice is worse than a slow one).
  */
+/** Throwaway diagnostic for the incremental-split fallback investigation -- see CM6Editor.tsx's debugInputLagEnabled. */
+function debugLogFallback(reason: string): void {
+  if (typeof window === 'undefined') return
+  if (window.localStorage.getItem('thockdown:debug-input-lag') !== '1') return
+  console.log(`[input-lag] splitMarkdownIntoPreviewBlocksIncremental -> fullSplit (${reason})`)
+}
+
 export function splitMarkdownIntoPreviewBlocksIncremental(
   text: string,
   previous: PreviewBlockSplitCache | null,
 ): PreviewBlockSplitCache {
   if (previous === null) {
+    debugLogFallback('no previous cache')
     return fullSplit(text)
   }
   if (text === previous.text) {
@@ -267,6 +293,7 @@ export function splitMarkdownIntoPreviewBlocksIncremental(
 
   if (headKeepCount === 0 && tailKeepCount === 0) {
     // Nothing safely reusable -- not worth the bookkeeping over a full reparse.
+    debugLogFallback(`headKeepCount=0 tailKeepCount=0 (headRangeCount=${headRangeCount} tailRangeCount=${tailRangeCount} totalRanges=${ranges.length} prefixLen=${prefixLen} suffixLen=${suffixLen})`)
     return fullSplit(text)
   }
 
@@ -286,6 +313,19 @@ export function splitMarkdownIntoPreviewBlocksIncremental(
   // required (asymmetric with the head side) and sufficient (any real
   // instability shows up as soon as *any* further real content is added,
   // regardless of how far away the construct's true resolution lies).
+  //
+  // parseStructuralRanges assigns each node's range as "right after the
+  // previous range ends" through its own true end line -- so blank lines
+  // *before* a node get absorbed backward into that node's range. That
+  // convention only tiles correctly when computed with the real neighboring
+  // context present. A window parsed in isolation has no next node to
+  // absorb its own trailing blank lines into, so those get silently
+  // dropped, breaking contiguity against tailRanges even when the probe
+  // above (which *does* include that context) confirms the boundary is
+  // structurally stable. Reuse the probe's own ranges for the window's
+  // coverage instead of re-deriving it from a context-free parse that
+  // disagrees with the probe by construction, not by chance.
+  let windowRanges: PreviewBlockRange[]
   if (tailRanges.length > 0) {
     const nextTailRange = tailRanges[0]
     const nextTailLines = newLines.slice(nextTailRange.rangeStartLine1 - 1, nextTailRange.rangeEndLine1)
@@ -293,16 +333,41 @@ export function splitMarkdownIntoPreviewBlocksIncremental(
     const probeRanges = parseStructuralRanges(probeLines.join('\n'), probeLines.length)
     const boundaryHolds = probeRanges.some((range) => range.rangeEndLine1 === windowLines.length)
     if (!boundaryHolds) {
+      debugLogFallback(`tail-boundary probe failed (windowLines=${windowLines.length})`)
       return fullSplit(text)
     }
+    windowRanges = probeRanges
+      .filter((range) => range.rangeEndLine1 <= windowLines.length)
+      .map((range) => shiftRange(range, windowStartLine1 - 1))
+  } else {
+    windowRanges = parseStructuralRanges(windowLines.join('\n'), windowLines.length)
+      .map((range) => shiftRange(range, windowStartLine1 - 1))
   }
-
-  const windowRanges = parseStructuralRanges(windowLines.join('\n'), windowLines.length)
-    .map((range) => shiftRange(range, windowStartLine1 - 1))
 
   const nextRanges = [...headRanges, ...windowRanges, ...tailRanges]
 
   if (!rangesAreContiguous(nextRanges, newLines.length)) {
+    debugLogFallback(`ranges not contiguous (windowLines=${windowLines.length} headKeepCount=${headKeepCount} tailKeepCount=${tailKeepCount})`)
+    debugLogFallback(`  headRanges[0]: ${JSON.stringify(headRanges[0])}`)
+    debugLogFallback(`  headRanges tail: ${JSON.stringify(headRanges.slice(-2))}`)
+    debugLogFallback(`  windowRanges: ${JSON.stringify(windowRanges)}`)
+    debugLogFallback(`  tailRanges head: ${JSON.stringify(tailRanges.slice(0, 2))}`)
+    debugLogFallback(`  tailRanges last: ${JSON.stringify(tailRanges[tailRanges.length - 1])}`)
+    debugLogFallback(`  windowStartLine1=${windowStartLine1} windowEndLine1=${windowEndLine1} totalLines=${newLines.length}`)
+    // Pinpoint the exact adjacent pair that breaks tiling, scanning the
+    // assembled array directly rather than guessing from the head/tail/
+    // window pieces in isolation.
+    for (let i = 1; i < nextRanges.length; i += 1) {
+      if (nextRanges[i].rangeStartLine1 !== nextRanges[i - 1].rangeEndLine1 + 1) {
+        debugLogFallback(`  gap/overlap at index ${i}: prev=${JSON.stringify(nextRanges[i - 1])} next=${JSON.stringify(nextRanges[i])}`)
+      }
+    }
+    if (nextRanges[0]?.rangeStartLine1 !== 1) {
+      debugLogFallback(`  first range doesn't start at line 1: ${JSON.stringify(nextRanges[0])}`)
+    }
+    if (nextRanges[nextRanges.length - 1]?.rangeEndLine1 !== newLines.length) {
+      debugLogFallback(`  last range doesn't reach totalLines: ${JSON.stringify(nextRanges[nextRanges.length - 1])}`)
+    }
     return fullSplit(text)
   }
 

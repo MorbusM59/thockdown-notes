@@ -64,17 +64,12 @@ export function useNoteSaveQueue(options: UseNoteSaveQueueOptions): UseNoteSaveQ
     try {
       const noteSummary = notesRef.current.find((note) => note.id === activeNoteId)
       const isExternal = noteSummary ? isExternalNote(noteSummary) : false
-      if (isExternal) {
-        console.warn('[external-note] flushSave triggered for external note', { noteId: activeNoteId, textLength: nextText.length, nextText })
-      }
       const normalizedText = normalizeInternalText(nextText)
-      console.debug('[external-note] flushing note into DB', { noteId: activeNoteId, textLength: normalizedText.length, normalizedText })
 
       const savedSummary = await window.thockdownNotes.saveNote({ id: activeNoteId, text: normalizedText, cursorPos, scrollTop })
 
       if (isExternal) {
         await window.thockdownNotes?.saveNoteSnapshot({ id: activeNoteId, content: normalizedText, isManual: false })
-        console.warn('[external-note] external note current state persisted into DB snapshot', { noteId: activeNoteId, textLength: normalizedText.length })
         latestEditorTextRef.current = normalizedText
         setActiveNoteText(normalizedText)
       }
