@@ -127,61 +127,69 @@ around code fences). The rules below are non-negotiable specifically because of 
 
 ## Current status against this contract
 
-Tracked in `docs/large-document-performance-handover.md`, kept current as work lands. As of
-this writing: per-keystroke markdown preview re-parsing has been made incremental (fixed);
-`getOffsetWithinRoot`'s full-document caret-offset scan has been replaced with an O(log n)
-index (fixed); per-keystroke canonical-text re-derivation, previously reduced for four of
-five pre-commit call sites, has now also had its remaining post-commit redundancy fixed (a
-plain keystroke dropped from up to 4-6 full-document `normalizeInternalText` passes to
-essentially 1); and initial mount of an uncached large note — previously the single largest
-remaining number against this contract (~9-12s wall-clock on a 12,000-line note) — has been
-fixed by virtualizing the preview pane (`@tanstack/react-virtual`), so only blocks near the
-viewport mount real DOM regardless of document size, re-measured at ~1.6-2s on a synthetic
-1.5M-character note (dev-mode browser environment, not yet the packaged Electron app — see the
-handover doc).
+Tracked in `docs/large-document-performance-handover.md`, kept current as work lands.
 
-**The diffuse per-keystroke residual is no longer a deprioritized nice-to-have — it is the
-active priority.** A user session recalibrated this: even the ~85-170ms/keystroke measured
-against the contract's own "must feel instant" bar is already roughly two orders of magnitude
-too slow, regardless of whether it reaches the more dramatic multi-second numbers reported on
-real hardware/the real Electron app. Treat any non-negligible synchronous per-keystroke cost on
-a huge document as the defect this document's "core principle" section already says it is, not
-as an acceptable residual to defer.
+**The real-user-report-vs-synthetic-benchmark gap this document carried for a long time is
+closed.** Every earlier round of this effort measured against synthetic documents (freshly
+generated, uniform short paragraphs, no edit/save history) and kept landing 2-3 orders of
+magnitude faster than an actual user's report of multi-second per-keystroke lag on a real
+~1.5M-character note — and every synthetic re-measurement kept failing to explain why. The
+resolution, once it came, was unglamorous: it was never a deep flaw in anything this document's
+solution hierarchy had already addressed (incrementality, caret-offset indexing, virtualization,
+etc.) — it was three ordinary bugs that only a *real* document with real editing/save history
+happens to trigger, none of which a synthetic benchmark's shape would ever hit:
 
-The concrete next step this section used to point at — incremental caching for
-`normalizeInternalText`/`canonicalizeParagraphSegments` and `resolveMarkdownSelectionContext`,
-mirroring the `ParagraphOffsetIndex`/`PreviewBlockSplit` pattern — is now done (both confirmed
-position-dependent O(document length) costs are gone from profiling; see the handover doc for
-the fuzz/live-browser verification and exact before/after numbers). A committed, reusable
-measurement harness (`npm run perf:input-lag`, `scripts/perf/`) now exists for this work, per a
-user request that this effort have a proper test setup rather than reconstructing throwaway
-scripts every session.
+1. A real correctness defect in the preview's incremental block-boundary logic
+   (`parseStructuralRanges` never assigned trailing blank lines after a document's last block to
+   any range), which for any document ending in a trailing newline — nearly all of them —
+   permanently defeated the incremental reuse this contract's option 1 (algorithmic
+   incrementality) depends on, forcing a full ~2-second reparse on every keystroke, forever.
+2. Debug logging left in a hot path, dumping the entire note's text to the console on every
+   save — not a document-size defect in the usual sense, but one that specifically sabotaged
+   *live investigation* of one (DevTools has to retain and format multi-megabyte string objects
+   on every save while open, which is exactly the condition needed to diagnose a lag report).
+3. A snapshot-timeline tooltip computing a full word-count over historical content on every
+   render of an unrelated component, triggered by the whole editor tree re-rendering on every
+   keystroke.
 
-**Total per-keystroke wall-clock time barely moved despite that fix landing real, measured wins
-— this is the headline finding to carry forward, not a footnote.** Two specific,
-position-dependent O(document) defects are provably gone, but the total cost on the same
-synthetic document only dropped ~3% (burst wall-clock), because — confirmed, not guessed — the
-remaining cost is genuinely diffuse across many small contributors (Lexical-internal
-`cloneEditorState`/`getModernOffsetsFromPoints`, `normalizeForComparison`, `sanitizeTextFragment`,
-and one likely-misattributed dev-bundle entry still needing verification), none individually
-dominant.
+None of these were found by more synthetic profiling. The breakthrough was going back to first
+principles per this document's own process discipline (measure the real thing, not a proxy for
+it) — specifically, a live DevTools Performance-panel capture from the user's own machine while
+reproducing the report themselves, plus a lightweight opt-in instrumentation path
+(`localStorage.setItem('thockdown:debug-input-lag', '1')`) built this round specifically so a
+live report can be traced without reconstructing a synthetic harness each time. **Lesson for
+whoever reads this next: when a synthetic benchmark and a real report disagree by orders of
+magnitude across several rounds, stop trusting the synthetic benchmark's shape.**
 
-**Three more O(document)-per-keystroke defects were found and fixed in a follow-up round**
-(`deriveNoteTitleFromText`, the redundant `normalizeInternalText` wrapper inside
-`NoteTextHydrationPlugin`'s hydration check, and `useNoteSnapshots.ts`'s
-O(document length × snapshot count) comparison) — all real, all now incremental or reduced, none
-alone a large enough win to change the overall picture. What changed the picture instead: **the
-real packaged Electron app was measured for the first time** (a committed harness now exists,
-`npm run perf:input-lag:electron`), closing a gap this document has carried since its first
-draft. The result reframes the open question rather than closing it — the real app is not
-faster than the `dev:browser` numbers this whole effort has been tracking, if anything slightly
-worse, which rules out "dev-tooling overhead" as an explanation for any of the numbers in this
-document. It also surfaced a new, currently unresolved discrepancy between two measurement
-methods on the real app specifically (wall-clock timing shows a strong caret-position effect;
-CDP JS-sampling on the same runs doesn't corroborate it as strongly) that needs to be resolved
-before trusting either number as the full picture there. See
-`docs/large-document-performance-handover.md`'s newest section for the exact numbers, what's
-confirmed, and what's still an open question rather than a guess.
+**Result, same real note, same real app, measured live**: physical-keydown-to-painted-frame time
+went from ~1900-2000ms to ~18.5ms — landing in the same small, roughly-constant,
+document-size-*independent* floor (~3ms/keystroke on a synthetic benchmark, attributed to
+CM6/Chromium native overhead, not this codebase's own JS) that earlier rounds of this document
+already characterized as "the honest remaining answer, not further attributable without a new
+lever." The benchmark this document opens with — page 1 must feel identical to page 1,000 — now
+holds for a real, maximally-adversarial real-world document, not just synthetic ones, on the
+production CM6 editor.
+
+**A follow-on fix, not itself found via profiling but in the same spirit**: the footer
+word/character-count display previously used this document's tier-3 mitigation (defer/debounce
+the expensive work off the keystroke path) rather than tiers 1/2 (make the work itself cheap).
+Rebuilt as an actual "establish once, track the delta" incremental (`src/editor/WordCount.ts`),
+per this document's own solution-hierarchy preference for algorithmic incrementality over
+deferral where incrementality is actually available — and for word count, unlike markdown
+parsing, it turned out to be a strictly simpler incremental problem (a word boundary only ever
+depends on whitespace immediately touching an edit, no forward-unbounded hazard class the way an
+unclosed code fence has).
+
+**What's still open**: nothing new against this document's own core principle — see the
+handover doc's newest section for exact numbers and verification. One adjacent, non-performance
+item from the same investigation is still in an observation window: a real duplicate-row/disk-
+bloat bug was found and fixed in the SQLite layer (`notes_fts`), with an automatic startup
+self-healing pass now shipped but only manually verified once against one real database — not
+yet battle-tested across many real launches. Everything else earlier rounds flagged as
+"currently unresolved" (the caret-position/measurement-method discrepancy on the real Electron
+app, dev-tooling-overhead questions) is superseded by this round's finding: the discrepancy was
+never a measurement artifact, it was these three real bugs, and it no longer reproduces now that
+they're fixed.
 
 ## Review checklist
 

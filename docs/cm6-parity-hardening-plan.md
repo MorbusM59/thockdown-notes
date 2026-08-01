@@ -523,3 +523,26 @@ load-bearing (reverting it reproduces the loss under the same test).
 - Phase 2 (parity inventory) hasn't been started structurally — Bug 1 was the first item found by
   investigation, not by a systematic Editor.tsx-vs-CM6Editor.tsx feature diff; that diff still
   needs doing.
+
+**A later session (unrelated to this doc's own phase work) finally reconciled the long-standing
+real-user-vs-synthetic input-lag gap tracked in `docs/large-document-performance-handover.md` and
+`docs/document-scale-performance-philosophy.md` — three bugs, all fixed. Relevant here specifically
+because two of the three live in shared infrastructure, not `CM6Editor.tsx`:** the
+`parseStructuralRanges`/`splitMarkdownIntoPreviewBlocksIncremental` trailing-blank-line defect
+(`src/editor/PreviewBlockSplit.ts`) and the footer word-count establish/track rebuild
+(`src/editor/WordCount.ts`) both feed `usePreviewMarkdownRendering.tsx`/`EditorSection.tsx`, which
+per this doc's own Phase 3 notes are genuinely shared between the Lexical and CM6 paths (both
+editors route through `EditorSection.tsx` identically). So both fixes benefit the Lexical rollback
+path too, for free, not just CM6 — worth knowing before assuming the rollback path is stuck with
+every performance defect this whole effort has ever found. The third bug (debug logging dumping
+full note text to the console on every save, `useNoteSaveQueue.ts`) is likewise shared. Only the
+new opt-in `thockdown:debug-input-lag` instrumentation itself was added CM6-side
+(`CM6Editor.tsx`'s `updateListener`) — the Lexical path has no equivalent instrumentation if this
+ever needs retracing there.
+
+**Doesn't change this doc's own Phase-3 finding that `LexicalRopeSync`'s wiring is still
+Lexical-only and its own measured 1M-char regression is still presumably unfixed/unmeasured on
+that path specifically** (see Phase 3 above) — the three bugs above were general defects that
+happened to live in shared code, not anything to do with the rope-sync mechanism itself. If the
+Lexical rollback is ever exercised in anger, re-measure it fresh rather than assuming these fixes
+closed that specific gap too.
