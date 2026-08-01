@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
 import { ensureHelpNote } from './help/helpNote';
+import { shouldVacuumForBloat } from './databaseSanitationPolicy';
 import type { TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../src/shared/textures';
 import type { AudioBounceCacheHit, AudioBounceCacheRequest } from '../src/shared/audioBounceCache';
 import type {
@@ -882,6 +883,56 @@ export class DatabaseService {
     }
 
     this.normalizeAllTagPositions();
+  }
+
+  /**
+   * Startup self-healing pass, run once per launch after
+   * bootstrapFromFilesystem() (see main.ts). Two independent fixes, each
+   * safe by construction and unable to lose real user data:
+   *
+   * 1. Dedupe notes_fts: keep only the highest-rowid (most recently
+   *    written) row per noteId, deleting older copies. This guards against
+   *    the "INSERT OR REPLACE never actually replaces on an FTS5 virtual
+   *    table" bug bootstrapFromFilesystem used to have (fixed at the
+   *    source, but any existing installation upgrading to this version
+   *    still carries the accumulated duplicates baked into its own .db
+   *    file -- this is the one-time migration that cleans those up) and
+   *    self-heals any future regression of the same class before it can
+   *    accumulate silently forever. notes_fts is a derived search index,
+   *    never the canonical source of a note's content (that's the `notes`
+   *    table plus the .md files bootstrapFromFilesystem already re-syncs
+   *    from every launch) -- so deleting extra rows here can only ever
+   *    discard stale search-index duplicates, never a user's actual note.
+   * 2. Conditionally VACUUM (see shouldVacuumForBloat's own doc comment for
+   *    the threshold reasoning): SQLite never shrinks its file after
+   *    deletes on its own, so a database that once had this same
+   *    duplicate-row bug can be carrying a large amount of dead space.
+   *    VACUUM doesn't touch any row's content -- it only repacks how the
+   *    existing, already-correct rows are laid out on disk.
+   */
+  sanitizeDatabase(): { dedupedFtsRows: number; vacuumed: boolean; reclaimedBytes: number } {
+    const db = this.requireDb();
+
+    const dedupedFtsRows = db.prepare(`
+      DELETE FROM notes_fts
+      WHERE rowid NOT IN (SELECT MAX(rowid) FROM notes_fts GROUP BY noteId)
+    `).run().changes;
+
+    const pageCount = db.pragma('page_count', { simple: true }) as number;
+    const freelistCount = db.pragma('freelist_count', { simple: true }) as number;
+    const pageSizeBytes = db.pragma('page_size', { simple: true }) as number;
+
+    let vacuumed = false;
+    let reclaimedBytes = 0;
+    if (shouldVacuumForBloat({ pageCount, freelistCount, pageSizeBytes })) {
+      const sizeBeforeBytes = pageCount * pageSizeBytes;
+      db.exec('VACUUM');
+      const pageCountAfter = db.pragma('page_count', { simple: true }) as number;
+      reclaimedBytes = sizeBeforeBytes - pageCountAfter * pageSizeBytes;
+      vacuumed = true;
+    }
+
+    return { dedupedFtsRows, vacuumed, reclaimedBytes };
   }
 
   runSanityChecks(): {

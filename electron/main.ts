@@ -1183,6 +1183,10 @@ app.whenReady().then(async () => {
   }
   await databaseService.initialize()
   await databaseService.bootstrapFromFilesystem()
+  const sanitation = databaseService.sanitizeDatabase()
+  if (sanitation.dedupedFtsRows > 0 || sanitation.vacuumed) {
+    console.log('[db] startup sanitation', sanitation)
+  }
   const sanity = databaseService.runSanityChecks()
   if (sanity.missingNoteFiles.length > 0 || sanity.orphanedTagRows > 0) {
     console.warn('[db] startup sanity issues', sanity)

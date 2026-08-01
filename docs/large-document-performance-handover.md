@@ -1510,3 +1510,145 @@ not just enabling the trace category, and hasn't been attempted.
 No `src/` changes this round — `--warmup` is a harness-only addition. Verified: `npx tsc --noEmit`,
 `npm run lint` clean (no test-suite or regression-script re-run needed, per this doc's own
 scoped-effort discipline for a pure measurement/tooling change with zero application-code diff).
+
+## This round: a real user report finally reconciled — the multi-second gap this doc left open for
+## several rounds was three separate, unrelated bugs, none of them in anything profiled above
+
+A user reported multi-second per-keystroke lag on a real ~1.5M-character note (a Ulysses text
+import) in the actual app — the exact gap this doc has flagged as unreconciled since the
+dev-mode-browser-vs-real-app section far above, and every synthetic measurement in this doc
+(Linux/Xvfb, packaged-Electron, all of it) kept landing 2-3 orders of magnitude faster than the
+report. That gap is now closed, and the answer is unglamorous: it was never one deep, subtle
+defect the synthetic harnesses were failing to reproduce — it was three ordinary bugs that only
+show up on a *real* note with real editing history and real document shape, none of which a
+synthetic 1.5M-character note (uniform short paragraphs, freshly generated, no snapshot/save
+history) would ever trigger. Lesson for whoever reads this next: when a synthetic benchmark and a
+real user report diverge by orders of magnitude for multiple rounds running, stop trusting the
+synthetic benchmark's shape and go get a live trace from the real report instead — this round's
+breakthrough was a real DevTools Performance-panel capture from the user's own machine, not
+another harness run.
+
+**Bug 1 — a real correctness/perf defect in `parseStructuralRanges` (`src/editor/PreviewBlockSplit.ts`),
+predating all of this doc's incremental-caching work.** `parseStructuralRanges` absorbs leading
+blank lines *before* a top-level node into that node's own range (`rangeStartLine1 =
+previousEndLine1 + 1`), but had no equivalent for trailing blank lines *after the very last node* —
+those were never assigned to any range at all. Any document ending in a trailing newline (the
+overwhelming common case) therefore always had a cached range list whose last entry fell short of
+the true line count. Invisible on a full parse (nobody was checking), but fatal to
+`splitMarkdownIntoPreviewBlocksIncremental`'s contiguity invariant: editing anywhere except very
+near the document's end keeps that broken tail entry unchanged in every incremental splice's
+`tailRanges`, so the final `rangesAreContiguous` check (correctly) rejects it and falls back to
+`fullSplit` — a full remark parse, ~2 seconds on this note — on literally every keystroke, forever,
+for the entire lifetime of that document. Root-caused via a live DevTools Performance capture (not
+this doc's usual CDP-scripted profiling) showing `renderRootSync → ... → usePreviewMarkdownRendering
+→ splitMarkdownIntoPreviewBlocksIncremental → fullSplit → remark's fromMarkdown` at ~2000ms, then
+confirmed mechanistically by adding temporary fallback-reason logging directly to the three
+`fullSplit` call sites inside the incremental function and reading the real trigger off the user's
+own console. Fixed by forcing the last node's range to extend to the document's true `lineCount`
+unconditionally, mirroring how the existing 0-or-1-node special case already does. Verified: the
+full existing fuzz suite (3 seeds × 350 edits) still passes; a new targeted regression test (500
+short blocks, edit near the start, document ending in `\n\n`) proves the fast path now actually
+engages via reference-equality on an untouched tail block; two new "dense corpus" fuzz seeds
+(150-250 blocks × 350 edits) added to the permanent suite, and both existing fuzz corpus builders
+now end in a trailing blank line ~70% of the time, so this document shape has ongoing coverage
+rather than only a one-off regression test. `npx tsc --noEmit`, `npm run lint`, full `npm test`
+(263/263 at the time) all clean.
+
+**Bug 2 — pre-existing debug logging dumping the entire note's text into the console on every save,
+un-gated.** `useNoteSaveQueue.ts`'s `flushSave` had `console.debug`/`console.warn` calls that
+included the *full* normalized text (up to the whole document size) in the logged object, firing on
+every debounced save (and, for notes synced to an external file, twice more). With DevTools open —
+exactly the condition needed to investigate a lag report in the first place — Chromium has to
+retain and format a growing pile of multi-megabyte string objects, which measurably delays
+subsequent macrotasks (a 350ms debounce timer was observed firing ~3s late while this was active).
+Fixed by dropping the full-text fields from the logged objects entirely (kept `noteId`/`textLength`
+where useful). Not caught by any existing test since it was a pure logging side effect with no
+behavioral contract to test against.
+
+**Bug 3 — `SnapshotMark`'s tooltip computed unconditionally on every render, unrelated to what
+component actually changed.** `SnapshotTimelineSlider.tsx`'s `formatSnapshotTooltip` runs a full
+regex word-count over a *snapshot's* entire historical content (up to the size of the whole note)
+and was inlined directly into JSX's `title` attribute — recomputed on every render of the
+component, not just when a tooltip is actually shown. Since typing triggers a re-render of the
+whole editor tree (`setActiveNoteText` et al.), every visible history mark on the timeline — wholly
+unrelated to the keystroke just typed — was paying this cost every single keystroke too. A second
+live DevTools Performance capture caught this as the next-largest cost once Bug 1 was fixed
+(~110ms, down from Bug 1's ~2000ms). Fixed with a `useMemo` keyed on the snapshot record itself,
+which is referentially stable across re-renders unless the underlying snapshot list actually
+changes (confirmed via `useNoteSnapshots.ts`'s `snapshotsById`, keyed on the same `snapshots`
+array) — safe by construction, not a caching heuristic with a hazard class, since a snapshot's own
+content is immutable once taken.
+
+**Follow-on, not itself found via profiling but requested once the above closed the loop**: the
+footer word-count display (`EditorSection.tsx`) had the same shape of latent per-keystroke
+O(document length) cost as everything above, previously mitigated only by deferring/debouncing it
+(tier 3 in this doc's own solution hierarchy), not by making the computation itself cheaper (tier
+1/2). Split into `src/editor/WordCount.ts`'s `countWords` (the full "establish" scan) and
+`trackWordCount` (the incremental "track" delta) — genuinely simpler than this doc's markdown-
+parsing incrementals, since a word boundary only ever depends on whitespace immediately touching an
+edit, with no forward-unbounded hazard class the way an unclosed code fence has. Implementation
+reuses `computeMinimalTextReplacement` (already used by CM6's same-note hydration path) to find the
+edited range, then widens outward only to the nearest whitespace on each side. Character count
+needed no equivalent module: `text.length` is already O(1). Verified: a seeded fuzz test (3 seeds ×
+500 edits) against `countWords` as ground truth, all passing on first attempt; `npx tsc --noEmit`,
+`npm run lint`, full `npm test` (283/283) clean.
+
+**Combined live result, same real user, same real note, same real app**: `commitMs` (CM6's own
+transaction-apply cost) was never the problem — consistently 2-5ms throughout this whole
+investigation. `paintMs` (physical keydown to next painted frame, the number that actually matches
+what a user feels) went **~1900-2000ms → ~110ms (Bug 1 fixed) → ~18.5ms (Bug 3 fixed)** on the exact
+same 1.5M-character real note, measured via new lightweight opt-in instrumentation added this round
+specifically for this purpose (see below), not a synthetic harness. 18.5ms lands in the same floor
+this doc's synthetic measurements have called "irreducible, likely CM6/Chromium native overhead"
+since several rounds ago — i.e., this real note now performs the same as the synthetic ones always
+claimed it should, closing the gap this doc left open for a long time.
+
+**New, permanent capability**: opt-in live-usage input-lag logging, gated behind
+`localStorage.setItem('thockdown:debug-input-lag', '1')` (+ reload; zero cost when unset — one
+`localStorage` read at mount, no per-keystroke overhead). Logs real wall-clock checkpoints from a
+physical keydown through CM6's commit, through `onTextChange`'s full call chain
+(`useEditorSectionMount.ts`), to the next painted frame, straight to the console — for reproducing
+a lag report live in the actual app with the user typing themselves, rather than reconstructing a
+synthetic Playwright script and hoping it matches. This is what actually closed the gap this
+round; consider it a first-class tool alongside `scripts/perf/measureInputLag*.mjs`, not a
+throwaway. Left in place deliberately (per explicit user decision this round) rather than stripped
+after use.
+
+**Also this round, unrelated to input lag but found while investigating it live**: the real
+database backing the note had ~4,200 rows in `notes_fts` for ~38 distinct notes — some notes
+carrying 200+ duplicate copies of their own content in the search index, and `PRAGMA
+freelist_count` showing ~71% of the file as reclaimable dead space (a 312MB file for what should
+have been under 100MB of live data). Root cause: `bootstrapFromFilesystem()` (runs on every app
+launch) used `INSERT OR REPLACE INTO notes_fts`, which silently degrades to a plain `INSERT` on an
+FTS5 virtual table (no real unique constraint for "OR REPLACE" to match against) — every launch
+duplicated every note's content into the index again, forever. Fixed at the source (explicit
+delete-then-insert, matching the pattern the regular per-keystroke save path already used
+correctly). Also added a permanent, automatic startup self-healing pass —
+`DatabaseService.sanitizeDatabase()`, called once per launch right after `bootstrapFromFilesystem()`
+— so any installation upgrading from a version with the old bug gets its existing duplicates
+cleaned up automatically (not just prevented going forward), and any future regression of the same
+shape self-heals on the next launch instead of accumulating silently: (1) unconditionally dedupes
+`notes_fts` down to one row per note (keeping the highest rowid — always a syntactically complete,
+valid row, never a partial one, so this can only discard stale index duplicates, never real note
+content, which lives in the `notes` table and the `.md` files, not `notes_fts`); (2) conditionally
+`VACUUM`s, gated behind an actual bloat threshold (`electron/databaseSanitationPolicy.ts`'s
+`shouldVacuumForBloat` — both freelist *ratio* > 30% and reclaimable size > 20MB required, so a
+small or proportionally-tidy database never pays a VACUUM's real cost, which holds an exclusive
+lock and rewrites the whole file). The threshold logic is a pure function deliberately kept free of
+any `better-sqlite3` import (that native module is compiled against Electron's bundled Node ABI,
+confirmed live to fail under vitest's plain-Node ABI with a `NODE_MODULE_VERSION` mismatch), so it
+alone is unit-testable (`electron/databaseSanitationPolicy.test.ts`, 6 cases including exact
+threshold-boundary behavior); the DB-touching dedupe/VACUUM statements themselves were verified
+manually against the real affected database this round (298MB → 80.5MB, 217MB reclaimed) rather
+than via an automated test, since better-sqlite3 can't run under this project's test runner at all.
+**Worth flagging explicitly since the user asked for this to be "tested for a while" before fully
+trusting it on a production install**: the pure decision logic has real unit coverage, but the
+actual SQL execution against a live, real-shaped database has exactly one manual verification (this
+round, this database) — treat `sanitizeDatabase()`'s live behavior as freshly-shipped, not
+battle-tested, until it's been observed across a number of real launches.
+
+**What's still open**: nothing new from this round's own investigation — Bugs 1-3 above are closed
+and verified. The pre-existing ~3ms/keystroke floor this doc already characterized as "likely
+CM6/Chromium native overhead, not further attributable without new tooling" is unchanged and still
+the honest answer for whatever's left. The `sanitizeDatabase()` real-world observation window noted
+directly above is the one open item this round actually added.
