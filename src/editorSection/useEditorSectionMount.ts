@@ -298,6 +298,13 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     // applySourceAnchorToEditor / lastSyncedScrollPairRef).
     originEditScrollTopPx?: number
   } | null>(null)
+  const lastPersistedPreviewPayloadRef = useRef<any | null>(null)
+  // Ephemeral per-section UI state (in-memory only). Sequence increments
+  // on every update so readers can prefer the freshest value without
+  // relying on DB roundtrips.
+  const sectionUiStateRef = useRef<{ sequence: number; anchorBlockId: number; editModeOffsetPx: number; renderViewOffsetPx: number; sourceAnchorText?: string | null } | null>(null)
+  const sectionUiStateSequenceRef = useRef(0)
+  const sectionRequiresScrollUpdateRef = useRef(false)
   // Records the last known exact (edit scrollTop, preview scrollTop) pair
   // that are known to represent the *same* conceptual position -- set
   // whenever a transition resolves a position (either exactly, by reusing
@@ -330,6 +337,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   const editSpoofedSignalRef = useRef<{ noteId: string; sourceAnchorLine: number; offsetPx: number } | null>(null)
   // Diagnostic-only call counter, see applyEditRestoreSnapshot's own entry log.
   const applyEditRestoreSnapshotCallCounterRef = useRef(0)
+  const restoreInProgressRef = useRef(false)
   const latestViewportRef = useRef<PersistedViewportState | null>(null)
   const latestEditViewportRef = useRef<PersistedViewportState | null>(null)
   const latestEditViewportTelemetryRef = useRef<EditViewportTelemetry | null>(null)
@@ -556,12 +564,55 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     const sourceAnchor = resolvePreviewSourceAnchorFromContainer(container)
     if (!sourceAnchor) return
 
-    const payload: { sourceAnchorLine: number; sourceAnchorText: string | null } = {
-      sourceAnchorLine: sourceAnchor.sourceAnchorLine,
-      sourceAnchorText: sourceAnchor.sourceAnchorText,
+    const anchorLine = sourceAnchor.sourceAnchorLine
+    // If no fresh update is required and we already have ephemeral state,
+    // prefer it and avoid recomputing offsets now.
+    if (!sectionRequiresScrollUpdateRef.current && sectionUiStateRef.current) {
+      lastPersistedPreviewPayloadRef.current = sectionUiStateRef.current
+      return
+    }
+    // anchorLine computed above
+
+    // Compute offsets for ephemeral per-section UI state. Prefer any
+    // spoof recorded when edit last scrolled as the edit-mode offset so
+    // edit restores can be exact; otherwise fallback to measured values
+    // where possible.
+    const spoof = editSpoofedSignalRef.current
+    const editModeOffsetPx = spoof && spoof.noteId === noteId ? spoof.offsetPx : 0
+
+    // Derive a line-top from the editor adapter when available so we can
+    // compute a meaningful render-view offset in pixels. If unavailable,
+    // fall back to zero.
+    let renderViewOffsetPx = 0
+    const adapter = adapterRef.current
+    if (adapter) {
+      const lineTopPx = adapter.resolveHeightForSourceLine(anchorLine)
+      if (lineTopPx !== null) {
+        const topBoundaryPx = Math.max(0, Math.round((latestViewportRef.current?.topBoundaryLines ?? 0) * lineHeightPx))
+        const approx = Math.max(0, Math.round(lineTopPx - topBoundaryPx))
+        renderViewOffsetPx = Math.round(container.scrollTop - approx)
+      }
     }
 
-    await window.thockdownNotes?.saveNoteUiState({ id: noteId, payload })
+    // Update ephemeral section UI state (in-memory only). Do NOT persist
+    // pixel offsets to the DB here; DB writes remain reserved for the
+    // canonical block on controlled unload.
+    sectionUiStateSequenceRef.current += 1
+    sectionUiStateRef.current = {
+      sequence: sectionUiStateSequenceRef.current,
+      anchorBlockId: anchorLine,
+      editModeOffsetPx: Math.round(editModeOffsetPx),
+      renderViewOffsetPx: Math.round(renderViewOffsetPx),
+      sourceAnchorText: sourceAnchor.sourceAnchorText,
+    }
+    lastPersistedPreviewPayloadRef.current = sectionUiStateRef.current
+    // We've just refreshed the ephemeral offsets for this section; clear
+    // the requires-scroll-update flag so subsequent toggles don't recompute
+    // unnecessarily. Log the clear for debugging.
+    debugLogScrollSync(
+      `sectionRequiresScrollUpdateRef cleared (persistRenderViewStateForNoteNow): note=${noteId} sequence=${sectionUiStateSequenceRef.current} anchor=${sectionUiStateRef.current.anchorBlockId} editOffset=${sectionUiStateRef.current.editModeOffsetPx} renderOffset=${sectionUiStateRef.current.renderViewOffsetPx}`,
+    )
+    sectionRequiresScrollUpdateRef.current = false
   }, [resolvePreviewSourceAnchorFromContainer])
 
   const restoreEditorSelection = useCallback(() => {
@@ -649,6 +700,11 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
             scrollTopLines: scrollTopPxToLines(scrollTop, lineHeightPx),
           },
         })
+
+        // Mark that a fresh scroll-derived update is required on next
+        // mode switch; do not compute offsets now (deferred until switch).
+        sectionRequiresScrollUpdateRef.current = true
+        debugLogScrollSync(`sectionRequiresScrollUpdateRef set (persistEditUiState): note=${noteId} scrollTop=${scrollTop} sourceAnchorLine=${sourceAnchorLine}`)
       }
 
       const previousPersisted = lastPersistedEditUiStateRef.current
@@ -737,6 +793,14 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     const focusAfterApply = options?.focusAfterApply ?? false
     const onComplete = options?.onComplete
     let cancelled = false
+
+    if (restoreInProgressRef.current) {
+      debugLogScrollSync('applyEditRestoreSnapshot skipped: another restore in progress')
+      return () => {
+        cancelled = true
+      }
+    }
+    restoreInProgressRef.current = true
 
     // Diagnostic: which call site invoked this, and how many times total
     // this render cycle -- pinpoints whether two independent effects are
@@ -857,9 +921,9 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     }
 
     requestAnimationFrame(applyWhenReady)
-
     return () => {
       cancelled = true
+      restoreInProgressRef.current = false
     }
   }, [lineHeightPx, focusEditorInEditMode])
 
@@ -932,6 +996,53 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     }
 
     pendingRenderViewSourceAnchorRef.current = { ...anchor, originEditScrollTopPx: exactEditScrollTopPx ?? undefined }
+
+    // If a scroll/resize/text-edit event previously marked this section
+    // as requiring a fresh scroll update, compute the ephemeral per-section
+    // offsets now (deferred until the actual mode switch) so toggling into
+    // preview has immediate access to them.
+    if (sectionRequiresScrollUpdateRef.current) {
+      try {
+        const adapter = adapterRef.current
+        let editModeOffsetPx = 0
+        if (exactEditScrollTopPx !== null && adapter) {
+          const lineTopPx = adapter.resolveHeightForSourceLine(anchor.sourceAnchorLine)
+          if (lineTopPx !== null) {
+            const topBoundaryPx = Math.max(0, Math.round((viewport.topBoundaryLines ?? 0) * lineHeightPx))
+            const approximateEditScrollTopPx = Math.max(0, Math.round(lineTopPx - topBoundaryPx))
+            editModeOffsetPx = Math.round(exactEditScrollTopPx - approximateEditScrollTopPx)
+          }
+        }
+
+        let renderViewOffsetPx = 0
+        const container = previewScrollRef.current
+        if (adapter && container) {
+          const lineTopPx2 = adapter.resolveHeightForSourceLine(anchor.sourceAnchorLine)
+          if (lineTopPx2 !== null) {
+            const topBoundaryPx2 = Math.max(0, Math.round((viewport.topBoundaryLines ?? 0) * lineHeightPx))
+            const approx2 = Math.max(0, Math.round(lineTopPx2 - topBoundaryPx2))
+            renderViewOffsetPx = Math.round(container.scrollTop - approx2)
+          }
+        }
+
+        sectionUiStateSequenceRef.current += 1
+        sectionUiStateRef.current = {
+          sequence: sectionUiStateSequenceRef.current,
+          anchorBlockId: anchor.sourceAnchorLine,
+          editModeOffsetPx: Math.round(editModeOffsetPx),
+          renderViewOffsetPx: Math.round(renderViewOffsetPx),
+          sourceAnchorText: anchor.sourceAnchorText,
+        }
+        lastPersistedPreviewPayloadRef.current = sectionUiStateRef.current
+      } catch (e) {
+        /* ignore ephemeral update failures */
+        } finally {
+        debugLogScrollSync(
+          `sectionRequiresScrollUpdateRef cleared (deferred compute): note=${noteId ?? 'null'} sequence=${sectionUiStateSequenceRef.current} anchor=${sectionUiStateRef.current?.anchorBlockId ?? 'unknown'}`,
+        )
+        sectionRequiresScrollUpdateRef.current = false
+      }
+    }
   }, [captureEditModeSnapshotFromEditor, lineHeightPx])
 
   const previousActiveNoteIdForEditRestoreRef = useRef<string | null>(null)
@@ -1108,6 +1219,12 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       debugLogCheckpoint('after updateActiveNoteTitlePreview')
       queueSave(canonicalText, event.selection.end, latestEditViewportTelemetryRef.current?.scrollTopPx)
       debugLogCheckpoint('after queueSave (onTextChange end)')
+
+      // Mark that a change occurred that requires recomputing scroll
+      // offsets on the next mode switch. We intentionally do not compute
+      // offsets now; computation is deferred until the actual switch.
+      sectionRequiresScrollUpdateRef.current = true
+      debugLogScrollSync(`sectionRequiresScrollUpdateRef set (onTextChange): note=${activeNoteId ?? 'null'}`)
     },
     onSelectionChange: (event: EditorSelectionChangeEvent) => {
       if (previewedSnapshotId !== null) {
@@ -1545,22 +1662,51 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       const previewScrollTopPxBeforeLeaving = previewScrollRef.current?.scrollTop ?? null
 
       try {
+        // Persist ephemeral per-section state (in-memory) describing the
+        // anchor block and pixel offsets for both modes. DB writes of the
+        // canonical block are handled separately on unload; here we only
+        // prepare the transient data used for an immediate toggle.
         await persistRenderViewStateForNoteNow(activeNoteId)
-        const uiState = await window.thockdownNotes?.getNoteUiState({ id: activeNoteId })
-        if (uiState) {
-          const activeText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
-          const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
-          const restoreSnapshot = buildEditRestoreSnapshotFromUiState({
-            noteId: activeNoteId,
-            text: activeText,
-            uiState,
-            fallbackViewport,
-            lineHeightPx: lineHeightPx,
-          })
 
-          // If preview hasn't scrolled since the last sync, restore edit to
-          // that exact prior position instead of re-deriving an approximate
-          // one -- see lastSyncedScrollPairRef's own doc comment.
+        // Prefer the freshest in-memory per-section state when building
+        // the restore snapshot to avoid any read-after-write DB races.
+        const effectiveState = sectionUiStateRef.current ?? lastPersistedPreviewPayloadRef.current
+        if (effectiveState) {
+          const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
+
+          const fallbackTopBoundaryLines = fallbackViewport?.topBoundaryLines ?? 0
+          const storedScrollTopLines = Math.max(0, Math.round((effectiveState.anchorBlockId - fallbackTopBoundaryLines)))
+
+          const collapsedSelection: EditorSelectionState = {
+            anchor: 0,
+            focus: 0,
+            start: 0,
+            end: 0,
+            isCollapsed: true,
+          }
+
+          const restoreSnapshot: EditRestoreSnapshot = {
+            noteId: activeNoteId,
+            collapsedSelection,
+            fullSelection: collapsedSelection,
+            viewport: {
+              topBoundaryLines: fallbackTopBoundaryLines,
+              bottomBoundaryLines: fallbackViewport?.bottomBoundaryLines ?? 0,
+              scrollTopLines: storedScrollTopLines,
+            },
+            sourceAnchorLine: effectiveState.anchorBlockId,
+            sourceAnchorText: (effectiveState as any).sourceAnchorText ?? null,
+            sourceAnchorOffsetPx: Math.round((effectiveState as any).editModeOffsetPx ?? 0),
+          }
+
+          try {
+            console.debug('[scroll-sync] toggleRenderViewMode built restoreSnapshot (ephemeral):', restoreSnapshot)
+          } catch (e) {}
+
+          // If preview hasn't scrolled since the last sync, and we have a
+          // recorded exact pair, reuse that exact edit position instead
+          // of re-deriving; otherwise, include the origin preview scroll
+          // for later bookkeeping.
           const cachedPair = lastSyncedScrollPairRef.current
           const isUnchangedSinceLastSync =
             previewScrollTopPxBeforeLeaving !== null &&
@@ -1568,26 +1714,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             cachedPair.noteId === activeNoteId &&
             Math.abs(previewScrollTopPxBeforeLeaving - cachedPair.previewScrollTopPx) <= 1
 
-          debugLogScrollSync(
-            `preview->edit sync check: previewScrollTopPxBeforeLeaving=${previewScrollTopPxBeforeLeaving} cachedPair=${JSON.stringify(cachedPair)} isUnchangedSinceLastSync=${isUnchangedSinceLastSync}`,
-          )
-
           if (isUnchangedSinceLastSync) {
-            // Preview hasn't moved, so there is no fresh preview-derived
-            // signal to restore edit from -- use the spoofed one instead
-            // (editSpoofedSignalRef, recorded at the moment edit itself
-            // last genuinely scrolled): the same sourceAnchorLine a real
-            // preview->edit trip would have produced, corrected by the
-            // offset recorded back then. applySourceAnchorToEditor treats
-            // this exactly like a real signal, just with a non-zero
-            // correction term -- no separate code path needed.
             const spoofed = editSpoofedSignalRef.current
             if (spoofed && spoofed.noteId === activeNoteId) {
               restoreSnapshot.sourceAnchorLine = spoofed.sourceAnchorLine
               restoreSnapshot.sourceAnchorOffsetPx = spoofed.offsetPx
               debugLogScrollSync(`preview->edit: using spoofed signal sourceAnchorLine=${spoofed.sourceAnchorLine} offsetPx=${spoofed.offsetPx}`)
-            } else {
-              debugLogScrollSync('preview->edit: isUnchangedSinceLastSync but no spoofed signal available, falling back to rough restore')
             }
           } else if (previewScrollTopPxBeforeLeaving !== null) {
             restoreSnapshot.originPreviewScrollTopPx = previewScrollTopPxBeforeLeaving
@@ -1860,10 +1992,21 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
     const restorePreviewScroll = async () => {
       try {
-        const uiState = await window.thockdownNotes?.getNoteUiState({ id: activeNoteId })
+        // Prefer ephemeral in-memory state when available to avoid relying
+        // on DB readbacks that may have been written by older code paths.
+        const effectiveState = sectionUiStateRef.current ?? (await window.thockdownNotes?.getNoteUiState({ id: activeNoteId }))
+        try {
+          console.debug('[scroll-sync] restorePreviewScroll loaded effectiveState:', effectiveState)
+        } catch (e) {}
         if (cancelled) return
 
-        const sourceAnchorLine = uiState?.sourceAnchorLine
+        let sourceAnchorLine: number | null = null
+        if (effectiveState && Object.prototype.hasOwnProperty.call(effectiveState, 'anchorBlockId')) {
+          // ephemeral section state
+          sourceAnchorLine = (effectiveState as any).anchorBlockId
+        } else if (typeof (effectiveState as any)?.sourceAnchorLine === 'number') {
+          sourceAnchorLine = (effectiveState as any).sourceAnchorLine
+        }
         if (typeof sourceAnchorLine === 'number' && Number.isFinite(sourceAnchorLine)) {
           applyPreviewSourceAnchor(sourceAnchorLine)
           return
@@ -1899,11 +2042,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         previewScrollSaveTimerRef.current = null
         const sourceAnchor = resolvePreviewSourceAnchorFromContainer(container)
         if (!sourceAnchor) return
-        const payload: { sourceAnchorLine: number; sourceAnchorText: string | null } = {
-          sourceAnchorLine: sourceAnchor.sourceAnchorLine,
-          sourceAnchorText: sourceAnchor.sourceAnchorText,
-        }
-        void window.thockdownNotes?.saveNoteUiState({ id: activeNoteId, payload })
+        // Do not persist preview scroll to the DB here. Instead, mark
+        // that this section requires a fresh scroll-offset computation on
+        // the next mode switch. This avoids progressive drift caused by
+        // saving block anchors during preview-settle.
+        sectionRequiresScrollUpdateRef.current = true
+        debugLogScrollSync(`sectionRequiresScrollUpdateRef set (preview scroll): note=${activeNoteId} anchorLine=${sourceAnchor.sourceAnchorLine}`)
       }, 120)
     }
 

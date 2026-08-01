@@ -166,7 +166,7 @@ export function scrollTopLinesToPx(scrollTopLines: number, lineHeightPx: number)
 export function buildEditRestoreSnapshotFromUiState(params: {
   noteId: string
   text: string
-  uiState: { scrollTop?: unknown; cursorPos?: unknown; sourceAnchorLine?: unknown; sourceAnchorText?: unknown } | null | undefined
+  uiState: { scrollTop?: unknown; cursorPos?: unknown; sourceAnchorLine?: unknown; sourceAnchorText?: unknown; sourceAnchorOffsetPx?: unknown } | null | undefined
   fallbackViewport: PersistedViewportState | null
   lineHeightPx: number
   overrideCursorPos?: number
@@ -183,7 +183,13 @@ export function buildEditRestoreSnapshotFromUiState(params: {
       : typeof uiState?.cursorPos === 'number' && Number.isFinite(uiState.cursorPos)
         ? Math.max(0, Math.min(Math.round(uiState.cursorPos), selectionTextLength))
         : 0
-  const anchorLine = resolveEditSourceAnchorLineFromUiState(text, uiState)
+  // Only honor a persisted `sourceAnchorLine` if it was created by a
+  // real preview scroll/resize (marked by `previewChanged`). Otherwise
+  // ignore it to avoid treating layout-driven or synthetic saves as a
+  // user-driven anchor.
+  const anchorLine = uiState && (uiState as any).previewChanged === true
+    ? resolveEditSourceAnchorLineFromUiState(text, uiState)
+    : null
   const storedScrollTopLines =
     anchorLine !== null
       ? Math.max(0, anchorLine - fallbackTopBoundaryLines)
@@ -210,5 +216,6 @@ export function buildEditRestoreSnapshotFromUiState(params: {
     },
     sourceAnchorText: typeof uiState?.sourceAnchorText === 'string' ? uiState.sourceAnchorText : null,
     ...(anchorLine !== null ? { sourceAnchorLine: anchorLine } : {}),
+    ...(typeof uiState?.sourceAnchorOffsetPx === 'number' && Number.isFinite(uiState.sourceAnchorOffsetPx) ? { sourceAnchorOffsetPx: Math.round(uiState.sourceAnchorOffsetPx) } : {}),
   }
 }
