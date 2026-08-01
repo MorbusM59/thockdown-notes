@@ -49,6 +49,53 @@ function debugLogCheckpoint(label: string): void {
   console.log(`[input-lag]   +${(performance.now() - keydownAt).toFixed(1)}ms  ${label}`)
 }
 
+/** Same opt-in flag as debugLogCheckpoint, but not tied to a keydown origin -- for logging mode-toggle scroll-sync diagnostics (see lastSyncedScrollPairRef), which don't happen inside a keydown at all. */
+function debugLogScrollSync(label: string): void {
+  if (typeof window === 'undefined') return
+  if (window.localStorage.getItem('thockdown:debug-input-lag') !== '1') return
+  console.log(`[scroll-sync] ${label}`)
+}
+
+/**
+ * Waits for `container.scrollTop` to stop changing before reporting it as
+ * "settled" -- polls across animation frames rather than assuming any fixed
+ * number of frames is enough. Needed because react-virtual's own
+ * post-restore reconciliation (nearby blocks mounting, their real measured
+ * height replacing the initial estimate, `scrollToFn`'s own doc comment)
+ * can keep nudging scrollTop for a variable number of frames after a
+ * restore -- confirmed live: a fixed 2-frame wait still saw drift up to
+ * ~250px on some restores. Considered settled once the same value is read
+ * on `stableFramesRequired` consecutive checks, or once `maxFrames` is
+ * reached regardless (reports whatever the last read was rather than
+ * waiting forever).
+ */
+function waitForScrollSettle(
+  container: HTMLElement,
+  isCancelled: () => boolean,
+  onSettled: (settledScrollTopPx: number) => void,
+  options?: { maxFrames?: number; stableFramesRequired?: number },
+): void {
+  const maxFrames = options?.maxFrames ?? 30
+  const stableFramesRequired = options?.stableFramesRequired ?? 3
+  let lastValue = container.scrollTop
+  let stableStreak = 0
+
+  const check = (framesLeft: number) => {
+    if (isCancelled()) return
+    const current = container.scrollTop
+    stableStreak = Math.abs(current - lastValue) <= 0.5 ? stableStreak + 1 : 0
+    lastValue = current
+
+    if (stableStreak >= stableFramesRequired || framesLeft <= 0) {
+      onSettled(current)
+      return
+    }
+    requestAnimationFrame(() => check(framesLeft - 1))
+  }
+
+  requestAnimationFrame(() => check(maxFrames))
+}
+
 export interface UseEditorSectionMountOptions {
   activeNoteId: string | null
   activeNoteText: string
@@ -128,7 +175,16 @@ export interface UseEditorSectionMountResult {
   previewScrollToSourceLineRef: MutableRefObject<PreviewScrollToSourceLineFn | null>
   editModeSnapshotByNoteIdRef: MutableRefObject<Map<string, EditRestoreSnapshot>>
   pendingEditRestoreSnapshotRef: MutableRefObject<EditRestoreSnapshot | null>
-  pendingRenderViewSourceAnchorRef: MutableRefObject<{ sourceAnchorLine: number; sourceAnchorText: string | null } | null>
+  pendingRenderViewSourceAnchorRef: MutableRefObject<{
+    sourceAnchorLine: number
+    sourceAnchorText: string | null
+    // The exact edit scrollTop this anchor was computed from -- carried
+    // through so that once preview's own (block-aligned, not raw-pixel)
+    // position settles, a fresh synced pair can be recorded for the
+    // preview->edit direction's own exact-restore (see
+    // applySourceAnchorToEditor / lastSyncedScrollPairRef).
+    originEditScrollTopPx?: number
+  } | null>
   latestViewportRef: MutableRefObject<PersistedViewportState | null>
   latestEditViewportRef: MutableRefObject<PersistedViewportState | null>
   latestEditViewportTelemetryRef: MutableRefObject<EditViewportTelemetry | null>
@@ -232,7 +288,48 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   const previewScrollToSourceLineRef = useRef<PreviewScrollToSourceLineFn | null>(null)
   const editModeSnapshotByNoteIdRef = useRef<Map<string, EditRestoreSnapshot>>(new Map())
   const pendingEditRestoreSnapshotRef = useRef<EditRestoreSnapshot | null>(null)
-  const pendingRenderViewSourceAnchorRef = useRef<{ sourceAnchorLine: number; sourceAnchorText: string | null } | null>(null)
+  const pendingRenderViewSourceAnchorRef = useRef<{
+    sourceAnchorLine: number
+    sourceAnchorText: string | null
+    // The edit-side exact scrollTop this anchor was computed from --
+    // carried through so that once preview's own (block-aligned) position
+    // actually settles, a fresh synced pair can be recorded for the
+    // preview->edit direction's own exact-restore (see
+    // applySourceAnchorToEditor / lastSyncedScrollPairRef).
+    originEditScrollTopPx?: number
+  } | null>(null)
+  // Records the last known exact (edit scrollTop, preview scrollTop) pair
+  // that are known to represent the *same* conceptual position -- set
+  // whenever a transition resolves a position (either exactly, by reusing
+  // this same cache, or approximately via the source-anchor line math).
+  // Checked on every edit<->preview transition: if the mode being *left*
+  // hasn't scrolled since this pair was recorded, the mode being *entered*
+  // is restored to this pair's own exact value instead of round-tripping
+  // through the lossy source-line conversion again -- eliminates the
+  // gradual drift a repeated approximate round-trip would otherwise
+  // accumulate. A real navigation (the left mode's scrollTop no longer
+  // matches) naturally invalidates this and falls back to the approximate
+  // sync, which then re-establishes a fresh pair of its own.
+  const lastSyncedScrollPairRef = useRef<{ noteId: string; editScrollTopPx: number; previewScrollTopPx: number } | null>(null)
+  // The gap lastSyncedScrollPairRef alone can't cover: on the very first
+  // edit->preview trip, no preview->edit signal has ever been derived, so
+  // there is nothing portable to fall back to for restoring edit if the
+  // user then returns without having scrolled in preview at all. Fixed by
+  // computing, at the moment edit *itself* genuinely scrolls, what a normal
+  // preview->edit restore would produce for that same position (running the
+  // exact-same sourceAnchorLine back through resolveHeightForSourceLine --
+  // "spoofing" the signal a preview->edit trip would have created) and
+  // recording the gap between that approximation and the real exact
+  // position. Later, restoring edit from this spoofed signal is exact:
+  // resolveHeightForSourceLine(sourceAnchorLine) is stable for an
+  // already-visited line (CM6 has already measured it -- this is the
+  // *current* edit position, not a hypothetical unvisited one), so
+  // re-deriving it and adding back the recorded offset reconstructs the
+  // original position precisely, without ever needing to trust that the DOM
+  // silently preserved it on its own.
+  const editSpoofedSignalRef = useRef<{ noteId: string; sourceAnchorLine: number; offsetPx: number } | null>(null)
+  // Diagnostic-only call counter, see applyEditRestoreSnapshot's own entry log.
+  const applyEditRestoreSnapshotCallCounterRef = useRef(0)
   const latestViewportRef = useRef<PersistedViewportState | null>(null)
   const latestEditViewportRef = useRef<PersistedViewportState | null>(null)
   const latestEditViewportTelemetryRef = useRef<EditViewportTelemetry | null>(null)
@@ -641,6 +738,15 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     const onComplete = options?.onComplete
     let cancelled = false
 
+    // Diagnostic: which call site invoked this, and how many times total
+    // this render cycle -- pinpoints whether two independent effects are
+    // both applying a restore for the same transition.
+    applyEditRestoreSnapshotCallCounterRef.current += 1
+    const callerLine = new Error().stack?.split('\n')[2]?.trim() ?? 'unknown'
+    debugLogScrollSync(
+      `applyEditRestoreSnapshot call #${applyEditRestoreSnapshotCallCounterRef.current}: noteId=${snapshot.noteId} sourceAnchorLine=${snapshot.sourceAnchorLine} from ${callerLine}`,
+    )
+
     // Precisely aligns the edit view to match wherever the preview pane was
     // showing when the user left it, correcting the rough initial restore
     // above (viewportLines from the persisted uiState). Uses the adapter's
@@ -654,22 +760,57 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       }
 
       const adapter = adapterRef.current
-      if (!adapter) return
+      if (!adapter) {
+        debugLogScrollSync('applySourceAnchorToEditor: no adapter, skipped')
+        return
+      }
 
       const lineTopPx = adapter.resolveHeightForSourceLine(snapshot.sourceAnchorLine)
-      if (lineTopPx === null) return
+      if (lineTopPx === null) {
+        debugLogScrollSync(`applySourceAnchorToEditor: resolveHeightForSourceLine(${snapshot.sourceAnchorLine}) returned null, skipped`)
+        return
+      }
 
       const topBoundaryPx = Math.max(0, Math.round(snapshot.viewport.topBoundaryLines * lineHeightPx))
-      const targetScrollTopPx = Math.max(0, lineTopPx - topBoundaryPx)
+      // sourceAnchorOffsetPx corrects a "spoofed" signal (editSpoofedSignalRef)
+      // back to the exact edit position it was recorded from -- 0 for a
+      // genuinely fresh preview->edit derivation, which has no such
+      // correction available (see EditRestoreSnapshot's own doc comment).
+      const rawTargetScrollTopPx = Math.max(0, lineTopPx - topBoundaryPx + (snapshot.sourceAnchorOffsetPx ?? 0))
+      // Hard invariant: edit's scrollTop must always land on a whole
+      // line-height increment (the grid), never a fractional pixel value --
+      // resolveHeightForSourceLine (CM6's own line-block layout) can return
+      // fractional heights (sub-pixel font metrics), and offsetPx is a
+      // measured difference, so the raw sum has no reason to already be a
+      // multiple of lineHeightPx. Round to the nearest grid line rather than
+      // truncate/floor, so this stays the closest on-grid position to what
+      // was actually requested.
+      const targetScrollTopPx = Math.round(rawTargetScrollTopPx / lineHeightPx) * lineHeightPx
 
+      // exactScrollTopPx, not viewportLines: boundaries were already applied
+      // by applyWhenReady's own call moments earlier (same values, nothing
+      // to redo here), and viewportLines' line-height rounding would throw
+      // away the precision this whole function exists to add. Also records
+      // a fresh synced pair (lastSyncedScrollPairRef) when this resulted
+      // from an actual preview->edit transition (originPreviewScrollTopPx
+      // present) -- future round trips back to this same position can then
+      // restore losslessly instead of re-deriving through this same
+      // approximate line math again.
       adapter.applySnapshot({
         selectionScrollBehavior: 'preserve-scroll',
-        viewportLines: {
-          topBoundaryLines: snapshot.viewport.topBoundaryLines,
-          bottomBoundaryLines: snapshot.viewport.bottomBoundaryLines,
-          scrollTopLines: targetScrollTopPx / lineHeightPx,
-        },
+        exactScrollTopPx: targetScrollTopPx,
       })
+
+      debugLogScrollSync(`applySourceAnchorToEditor settled sourceLine=${snapshot.sourceAnchorLine} at targetScrollTopPx=${targetScrollTopPx}, originPreviewScrollTopPx=${snapshot.originPreviewScrollTopPx}`)
+
+      if (typeof snapshot.originPreviewScrollTopPx === 'number') {
+        lastSyncedScrollPairRef.current = {
+          noteId: snapshot.noteId,
+          editScrollTopPx: targetScrollTopPx,
+          previewScrollTopPx: snapshot.originPreviewScrollTopPx,
+        }
+        debugLogScrollSync(`recorded pair (preview->edit path): edit=${targetScrollTopPx} preview=${snapshot.originPreviewScrollTopPx}`)
+      }
     }
 
     // Restoring from integer line counts is direct and idempotent: no
@@ -694,10 +835,12 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         viewportLines: snapshot.viewport,
       })
 
-      requestAnimationFrame(() => {
-        if (cancelled) return
-        applySourceAnchorToEditor()
-      })
+      if (typeof snapshot.sourceAnchorLine === 'number') {
+        requestAnimationFrame(() => {
+          if (cancelled) return
+          applySourceAnchorToEditor()
+        })
+      }
 
       latestViewportRef.current = snapshot.viewport
       latestEditViewportRef.current = snapshot.viewport
@@ -721,6 +864,38 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   }, [lineHeightPx, focusEditorInEditMode])
 
   const captureEditModeSnapshotForRenderView = useCallback((noteId: string, activeText: string) => {
+    // Neither pane ever unmounts across a mode toggle -- SectionEditorArea.tsx
+    // toggles `.edit-container`/`.render-container` via CSS `display`, not
+    // conditional rendering, and CM6Editor itself lives inside
+    // `.edit-container` unconditionally. So if edit hasn't scrolled since the
+    // last time these two were synced, preview's DOM is *already* sitting
+    // exactly where it should be -- untouched, because nothing ever moved it
+    // away. The right response is to do nothing at all, not to recompute and
+    // re-apply a position: every previous attempt at "recompute the same
+    // signal and re-resolve it in the destination" (even using the *same*
+    // sourceAnchorLine every time) kept re-triggering react-virtual's own
+    // settling behavior on each call and produced a slow creep across
+    // repeated round trips. Only recompute+apply when something has actually
+    // changed (real scrolling, a different note, or no prior sync at all).
+    const exactEditScrollTopPx = adapterRef.current?.getSnapshot()?.viewport.scrollTopPx ?? null
+    const cachedPair = lastSyncedScrollPairRef.current
+    const isUnchangedSinceLastSync =
+      exactEditScrollTopPx !== null &&
+      cachedPair !== null &&
+      cachedPair.noteId === noteId &&
+      Math.abs(exactEditScrollTopPx - cachedPair.editScrollTopPx) <= 1
+
+    debugLogScrollSync(
+      `edit->preview capture: exactEditScrollTopPx=${exactEditScrollTopPx} cachedPair=${JSON.stringify(cachedPair)} isUnchangedSinceLastSync=${isUnchangedSinceLastSync}`,
+    )
+
+    if (isUnchangedSinceLastSync) {
+      // Leave pendingRenderViewSourceAnchorRef untouched (null) -- the
+      // preview-apply effect's own "if (pendingSourceAnchor)" check then
+      // naturally does nothing, preserving preview's current DOM state.
+      return
+    }
+
     const snapshot = captureEditModeSnapshotFromEditor(noteId)
     const viewport = snapshot?.viewport ?? latestEditViewportRef.current ?? latestViewportRef.current
 
@@ -737,7 +912,26 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       resolveSourceLineAtHeight: (heightPx) => adapterRef.current?.resolveSourceLineAtHeight(heightPx) ?? null,
     })
 
-    pendingRenderViewSourceAnchorRef.current = anchor
+    // Spoof step: this is a genuine edit scroll (we're here because
+    // isUnchangedSinceLastSync was false), so record what a preview->edit
+    // restore would produce for anchor.sourceAnchorLine right now, and how
+    // far that lands from where we actually are -- see editSpoofedSignalRef's
+    // own doc comment for why this is exact when replayed later, not an
+    // approximation stacked on an approximation.
+    if (exactEditScrollTopPx !== null) {
+      const lineTopPx = adapterRef.current?.resolveHeightForSourceLine(anchor.sourceAnchorLine) ?? null
+      if (lineTopPx !== null) {
+        const topBoundaryPx = Math.max(0, Math.round(viewport.topBoundaryLines * lineHeightPx))
+        const approximateEditScrollTopPx = Math.max(0, lineTopPx - topBoundaryPx)
+        const offsetPx = exactEditScrollTopPx - approximateEditScrollTopPx
+        editSpoofedSignalRef.current = { noteId, sourceAnchorLine: anchor.sourceAnchorLine, offsetPx }
+        debugLogScrollSync(
+          `edit->preview: recorded spoofed preview->edit signal: sourceAnchorLine=${anchor.sourceAnchorLine} approx=${approximateEditScrollTopPx} exact=${exactEditScrollTopPx} offsetPx=${offsetPx}`,
+        )
+      }
+    }
+
+    pendingRenderViewSourceAnchorRef.current = { ...anchor, originEditScrollTopPx: exactEditScrollTopPx ?? undefined }
   }, [captureEditModeSnapshotFromEditor, lineHeightPx])
 
   const previousActiveNoteIdForEditRestoreRef = useRef<string | null>(null)
@@ -1345,6 +1539,11 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
   const toggleRenderViewMode = useCallback(async () => {
     if (isPreviewMode && activeNoteId) {
+      // Captured before any await, so it reflects the position at the exact
+      // moment the user toggled -- not wherever it happens to be once the
+      // IPC round trip below resolves.
+      const previewScrollTopPxBeforeLeaving = previewScrollRef.current?.scrollTop ?? null
+
       try {
         await persistRenderViewStateForNoteNow(activeNoteId)
         const uiState = await window.thockdownNotes?.getNoteUiState({ id: activeNoteId })
@@ -1358,6 +1557,42 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             fallbackViewport,
             lineHeightPx: lineHeightPx,
           })
+
+          // If preview hasn't scrolled since the last sync, restore edit to
+          // that exact prior position instead of re-deriving an approximate
+          // one -- see lastSyncedScrollPairRef's own doc comment.
+          const cachedPair = lastSyncedScrollPairRef.current
+          const isUnchangedSinceLastSync =
+            previewScrollTopPxBeforeLeaving !== null &&
+            cachedPair !== null &&
+            cachedPair.noteId === activeNoteId &&
+            Math.abs(previewScrollTopPxBeforeLeaving - cachedPair.previewScrollTopPx) <= 1
+
+          debugLogScrollSync(
+            `preview->edit sync check: previewScrollTopPxBeforeLeaving=${previewScrollTopPxBeforeLeaving} cachedPair=${JSON.stringify(cachedPair)} isUnchangedSinceLastSync=${isUnchangedSinceLastSync}`,
+          )
+
+          if (isUnchangedSinceLastSync) {
+            // Preview hasn't moved, so there is no fresh preview-derived
+            // signal to restore edit from -- use the spoofed one instead
+            // (editSpoofedSignalRef, recorded at the moment edit itself
+            // last genuinely scrolled): the same sourceAnchorLine a real
+            // preview->edit trip would have produced, corrected by the
+            // offset recorded back then. applySourceAnchorToEditor treats
+            // this exactly like a real signal, just with a non-zero
+            // correction term -- no separate code path needed.
+            const spoofed = editSpoofedSignalRef.current
+            if (spoofed && spoofed.noteId === activeNoteId) {
+              restoreSnapshot.sourceAnchorLine = spoofed.sourceAnchorLine
+              restoreSnapshot.sourceAnchorOffsetPx = spoofed.offsetPx
+              debugLogScrollSync(`preview->edit: using spoofed signal sourceAnchorLine=${spoofed.sourceAnchorLine} offsetPx=${spoofed.offsetPx}`)
+            } else {
+              debugLogScrollSync('preview->edit: isUnchangedSinceLastSync but no spoofed signal available, falling back to rough restore')
+            }
+          } else if (previewScrollTopPxBeforeLeaving !== null) {
+            restoreSnapshot.originPreviewScrollTopPx = previewScrollTopPxBeforeLeaving
+          }
+
           pendingEditRestoreSnapshotRef.current = restoreSnapshot
           updateEditModeSnapshotCache(restoreSnapshot)
         }
@@ -1531,7 +1766,11 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       container.style.scrollBehavior = behavior
     }
 
-    const applyPreviewSourceAnchor = (sourceLine: number) => {
+    // onSettled fires once the scroll position has actually landed (both
+    // branches below), reporting the real resulting exact scrollTop so the
+    // caller can record a fresh synced pair (lastSyncedScrollPairRef) for
+    // future exact-restore round trips.
+    const applyPreviewSourceAnchor = (sourceLine: number, onSettled?: (resultScrollTopPx: number) => void) => {
       const container = previewScrollRef.current
       if (!container) return
 
@@ -1549,6 +1788,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           if (!container) return
           container.scrollTop = 0
           container.style.scrollBehavior = previousScrollBehavior
+          onSettled?.(0)
         })
         return
       }
@@ -1568,6 +1808,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         const target = findPreviewSourceAnchorElement(container, sourceLine)
         if (!target) {
           if (attemptsLeft <= 0) {
+            debugLogScrollSync(`applyPreviewSourceAnchor gave up finding sourceLine=${sourceLine} after all retries -- onSettled NOT called, no pair recorded`)
             container.style.scrollBehavior = previousScrollBehavior
             return
           }
@@ -1577,6 +1818,11 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
         target.scrollIntoView({ block: 'start', inline: 'nearest' })
         container.style.scrollBehavior = previousScrollBehavior
+        debugLogScrollSync(`applyPreviewSourceAnchor landed sourceLine=${sourceLine} at scrollTop=${container.scrollTop}, waiting for settle...`)
+        waitForScrollSettle(container, () => cancelled, (settledScrollTopPx) => {
+          debugLogScrollSync(`applyPreviewSourceAnchor settled sourceLine=${sourceLine} at scrollTop=${settledScrollTopPx}`)
+          onSettled?.(settledScrollTopPx)
+        })
       }
 
       requestAnimationFrame(() => attemptFindAndScroll(10))
@@ -1585,7 +1831,27 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     const pendingSourceAnchor = pendingRenderViewSourceAnchorRef.current
     if (pendingSourceAnchor) {
       pendingRenderViewSourceAnchorRef.current = null
-      applyPreviewSourceAnchor(pendingSourceAnchor.sourceAnchorLine)
+
+      // Preview always resolves via the reliable align-to-block mechanism,
+      // never a raw-pixel override -- see captureEditModeSnapshotForRenderView's
+      // own doc comment for why an exact-pixel bypass on this side actively
+      // fought react-virtual's reconciliation instead of eliminating drift.
+      // Recording the resulting pair (once settled) is still exactly what
+      // lets the *other* direction (preview->edit) restore losslessly.
+      const originEditScrollTopPx = pendingSourceAnchor.originEditScrollTopPx
+      applyPreviewSourceAnchor(pendingSourceAnchor.sourceAnchorLine, (resultScrollTopPx) => {
+        if (typeof originEditScrollTopPx === 'number') {
+          lastSyncedScrollPairRef.current = {
+            noteId: activeNoteId,
+            editScrollTopPx: originEditScrollTopPx,
+            previewScrollTopPx: resultScrollTopPx,
+          }
+          debugLogScrollSync(`recorded pair (edit->preview path): edit=${originEditScrollTopPx} preview=${resultScrollTopPx}`)
+        } else {
+          debugLogScrollSync('edit->preview: originEditScrollTopPx missing, no pair recorded')
+        }
+      })
+
       return () => {
         cancelled = true
         setPreviewScrollBehavior('')

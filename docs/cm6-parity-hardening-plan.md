@@ -670,3 +670,41 @@ math) this project's own process discipline calls for a live-browser check on be
 done; that verification is the user's own to do, by design, for this session. Treat as
 implemented-and-reasoned-through, not battle-tested, until confirmed live on a real long document
 in both directions.
+
+**Follow-up, same session: fixed a real round-trip drift the anchor-based sync above still had —
+went through two designs live before landing on the right one.** Even with Bug 5's fix, repeatedly
+toggling edit<->preview at what should be "the same" position drifted, because the sync always
+snaps to a *block/line boundary* in each direction (the top of whatever source line or preview
+block currently covers the target), not the exact prior pixel offset within it — a real, structural
+lossy-conversion property of anchor-based sync, not a bug in the anchor math itself.
+
+**First attempt (superseded): a raw-pixel `exactScrollTopPx` bypass symmetric across both
+directions**, via `lastSyncedScrollPairRef` recording an (edit px, preview px) pair and restoring
+either side directly from cache when the other hadn't moved. This worked immediately and perfectly
+for the edit side (confirmed live: edit position stayed pinned exactly across many round trips) but
+made preview *worse* — a live debug-logged session showed the "settled" preview value creeping
+further every single round trip (336719 → 336833 → 336846 → 337012 → ...) instead of staying fixed.
+Root cause: a raw `container.scrollTop = X` write bypasses react-virtual's own scroll API entirely,
+so it never gets a chance to proactively mount/measure the blocks near the new position; its
+reactive reconciliation (`reconcileScroll`) then fights the override on every restore, and each
+round's "settled" read became the *next* round's stale starting point — a slow random walk, not
+convergence. Tried priming the virtualizer first (calling its own index-based scroll before the
+pixel override) and polling until scrollTop genuinely stabilized (`waitForScrollSettle`, replacing
+an earlier fixed 2-frame wait that undershot by up to ~250px) — both real, still-kept
+improvements, but neither fixed the fundamental fight between two different mechanisms both trying
+to own the same scroll position.
+
+**Second design (shipped): asymmetric, not symmetric.** Realized live-testing the first attempt
+that preview never actually needed a raw-pixel bypass in the first place: unlike edit (CM6, exact
+and stable via `lineBlockAt`, no virtualization estimation involved), preview's own position is
+*inherently* block-quantized already — `applyPreviewSourceAnchor`'s existing align-to-block
+mechanism is itself stable and reproducible for a fixed `sourceAnchorLine` (react-virtual converges
+on the same measured layout every time), so re-running it plainly, with no override, is both
+correct and driftless on its own. Only the preview->edit direction keeps the `exactScrollTopPx`
+bypass; edit->preview always goes through the normal, reliable `applyPreviewSourceAnchor`, whose
+settled result (via `waitForScrollSettle`, kept from the first attempt) still feeds
+`lastSyncedScrollPairRef` so the preview->edit direction can keep restoring edit losslessly.
+Verified the same way as Bug 5 above (`npx tsc --noEmit`, `npm run lint`, `npx vite build`, full
+`npm test` 273/273) plus this round's own live debug-log confirmation of the specific failure mode
+being fixed (not just typechecking) — still owed: a full live-browser pass confirming the corrected
+design doesn't have a symmetric problem of its own on the edit side over a longer session.

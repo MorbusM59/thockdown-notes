@@ -9,6 +9,22 @@ export type EditRestoreSnapshot = {
   viewport: PersistedViewportState
   sourceAnchorLine?: number
   sourceAnchorText?: string | null
+  // A correction added on top of resolveHeightForSourceLine(sourceAnchorLine)
+  // in applySourceAnchorToEditor -- present when sourceAnchorLine came from a
+  // "spoofed" preview->edit signal (editSpoofedSignalRef in
+  // useEditorSectionMount.ts, recorded at the moment edit itself last
+  // genuinely scrolled) rather than a real signal freshly derived from
+  // preview's current position. Reconstructs the exact original edit
+  // position: resolveHeightForSourceLine is stable for an already-visited
+  // line, so re-deriving it and adding this back lands precisely where edit
+  // actually was, without needing preview to have moved at all.
+  sourceAnchorOffsetPx?: number
+  // The preview pane's exact scrollTop this restore was computed from --
+  // only set on an actual preview->edit toggle (not note-switch/persisted
+  // restores). Lets applySourceAnchorToEditor record a fresh synced pair
+  // once it resolves sourceAnchorLine to a real pixel position, so a later
+  // return trip to this same preview position can restore losslessly.
+  originPreviewScrollTopPx?: number
 }
 
 export type EditViewportTelemetry = {
