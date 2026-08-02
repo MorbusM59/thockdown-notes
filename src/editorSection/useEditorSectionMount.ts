@@ -20,13 +20,12 @@ import {
   scrollTopLinesToPx,
   buildEditRestoreSnapshotFromUiState,
   findPreviewSourceAnchorElement,
-  resolveEditSourceAnchorLineFromUiState,
   RESTORE_OFFSET_LINES,
   ZERO_EDITOR_SELECTION,
   ZERO_PERSISTED_VIEWPORT,
 } from '../editor/EditRestoreMath'
 import { normalizeInternalText } from '../editor/TextPolicy'
-import { splitMarkdownIntoPreviewBlocks } from '../editor/PreviewBlockSplit'
+import { splitMarkdownIntoPreviewBlocks, type PreviewMarkdownBlock } from '../editor/PreviewBlockSplit'
 import { resolvePreviewBlockIndexForSourceLine, resolveSourceLineForAnchorBlockIndex } from '../editor/PreviewBlockIndex'
 import {
   indentSelectionByStep,
@@ -302,6 +301,12 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   const latestEditViewportTelemetryRef = useRef<EditViewportTelemetry | null>(null)
   const editUiStateSaveTimerRef = useRef<number | null>(null)
   const lastPersistedEditUiStateRef = useRef<{ noteId: string; progressEdit: number; cursorPos: number; scrollTop: number; sourceAnchorLine: number } | null>(null)
+  // Cache for splitMarkdownIntoPreviewBlocks results. The same blocks are
+  // needed for both DB-persistence (captureCurrentAnchorBlockIndex) and
+  // mode-switch round-tripping (toggleRenderViewMode), and the full remark
+  // parse is expensive on large documents. Keyed by the normalized text
+  // string; recomputed only when the text actually changes.
+  const previewBlocksCacheRef = useRef<{ text: string; blocks: PreviewMarkdownBlock[] } | null>(null)
   // Coalesces the preview-driving setActiveNoteText/setEditorTextVersion
   // commit under deferPreviewOnRapidInput -- see scheduleCoalescedPreviewCommit.
   const pendingPreviewFrameRef = useRef<number | null>(null)
@@ -400,6 +405,21 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     }
   }, [activeNoteText, lineHeightPx, latestEditorSelectionRef, latestEditorTextRef])
 
+  // Returns the preview blocks for `text`, caching the result so the
+  // expensive full-document remark parse is only repeated when the text
+  // actually changes. Both DB-persistence and mode-switch round-tripping
+  // need these blocks, and without caching the same document can be parsed
+  // multiple times in one user operation.
+  const getPreviewBlocksForText = useCallback((text: string): PreviewMarkdownBlock[] => {
+    const cached = previewBlocksCacheRef.current
+    if (cached && cached.text === text) {
+      return cached.blocks
+    }
+    const blocks = splitMarkdownIntoPreviewBlocks(text)
+    previewBlocksCacheRef.current = { text, blocks }
+    return blocks
+  }, [])
+
   // Boundary conversion for the scroll-sync rewrite: everything in this hook
   // still computes/caches position in terms of a raw source line internally
   // (unchanged from before this rewrite -- see resolveSourceAnchorFromEditState
@@ -411,9 +431,9 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   // called at enumerated leave-editor checkpoints (never per-keystroke), so
   // the O(document length) remark parse this triggers is not a hot-path cost.
   const computeAnchorBlockIndexFromLine = useCallback((text: string, sourceAnchorLine: number): number => {
-    const blocks = splitMarkdownIntoPreviewBlocks(text)
+    const blocks = getPreviewBlocksForText(text)
     return resolvePreviewBlockIndexForSourceLine(blocks, sourceAnchorLine)
-  }, [])
+  }, [getPreviewBlocksForText])
 
   const updateEditModeSnapshotCache = useCallback((snapshot: EditRestoreSnapshot) => {
     editModeSnapshotByNoteIdRef.current.set(snapshot.noteId, snapshot)
@@ -1480,18 +1500,22 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
     const text = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
 
-    // Resolve the current source line from whichever mode is being left, then
-    // land the entered mode on it plus the one-line-height offset used by
-    // every other restore. No markdown parsing here -- the document hasn't
-    // changed between "leaving" and "entering" within this one synchronous
-    // toggle, so there's no save/restore gap to round-trip through a block
-    // index for (that conversion is reserved for the DB-persistence path,
-    // captureCurrentAnchorBlockIndex, which needs it). Two full-document
-    // parses per toggle here was what made switching modes on a large
-    // document slow.
-    const sourceAnchorLine = resolveCurrentSourceAnchorLine()
+    // Resolve the current source line from whichever mode is being left,
+    // then round-trip it through the mode-agnostic BLOCK representation so
+    // both directions of the toggle speak the same language. Edit's own
+    // anchor resolver reports the raw logical line at the top of the
+    // viewport, while Preview's resolver reports a block's start line
+    // (real block boundary). Passing those raw values across directly
+    // causes a systematic mismatch: edit hands preview a non-boundary line,
+    // preview resolves to a different block, and the next trip back lands
+    // edit at that block's start instead of the original viewport line.
+    // Converting both sides to/from anchorBlockIndex forces convergence on
+    // the same canonical block boundary (docs/editor-contract.md's Viewport
+    // Model). The blocks are cached, so this parse is only paid once per
+    // text change, not twice per toggle.
+    const rawSourceAnchorLine = resolveCurrentSourceAnchorLine()
 
-    if (sourceAnchorLine === null || sourceAnchorLine < 0) {
+    if (rawSourceAnchorLine === null || rawSourceAnchorLine < 0) {
       sectionRequiresScrollUpdateRef.current = false
       if (enteringPreview && activeNoteId) {
         setActiveNoteText(text)
@@ -1499,6 +1523,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       setIsPreviewMode((previous) => !previous)
       return
     }
+
+    const blocks = getPreviewBlocksForText(text)
+    const anchorBlockIndex = resolvePreviewBlockIndexForSourceLine(blocks, rawSourceAnchorLine)
+    const sourceAnchorLine = resolveSourceLineForAnchorBlockIndex(blocks, anchorBlockIndex)
 
     if (enteringPreview) {
       pendingRenderViewSourceAnchorRef.current = { sourceAnchorLine }
@@ -1552,6 +1580,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     activeNoteText,
     applyEditRestoreSnapshot,
     resolveCurrentSourceAnchorLine,
+    getPreviewBlocksForText,
     isPreviewMode,
     latestEditViewportRef,
     latestEditorTextRef,
@@ -1860,7 +1889,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           const uiState = await window.thockdownNotes?.getNoteUiState({ id: activeNoteId })
           if (cancelled) return
           const text = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
-          sourceAnchorLine = resolveEditSourceAnchorLineFromUiState(text, uiState)
+          const blocks = getPreviewBlocksForText(text)
+          if (uiState && typeof uiState.anchorBlockIndex === 'number' && Number.isFinite(uiState.anchorBlockIndex)) {
+            const totalLines = Math.max(1, text.split('\n').length)
+            const rawLine = resolveSourceLineForAnchorBlockIndex(blocks, Math.round(uiState.anchorBlockIndex))
+            sourceAnchorLine = Math.min(Math.max(0, rawLine), totalLines - 1)
+          }
         }
 
         if (cancelled) return
@@ -1878,7 +1912,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       cancelled = true
       setPreviewScrollBehavior('')
     }
-  }, [activeNoteId, isPreviewMode, activeNoteText, lineHeightPx, latestEditorTextRef, previewedSnapshotId, previewedSnapshotContentRef])
+  }, [activeNoteId, isPreviewMode, activeNoteText, lineHeightPx, latestEditorTextRef, previewedSnapshotId, previewedSnapshotContentRef, getPreviewBlocksForText])
 
   useEffect(() => {
     if (!isPreviewMode) return
