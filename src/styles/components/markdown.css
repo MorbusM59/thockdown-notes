@@ -96,6 +96,33 @@
 }
 
 .edit-container {
+  position: relative;
+  width:    100%;
+  height:   100%;
+  /* Mirrors .render-container's true-alpha edge fade so edit mode text and
+     overlays taper out before hitting the frame edge, regardless of what
+     layers are currently painted underneath. */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--edit-edge-fade-size),
+    #000 calc(100% - var(--edit-edge-fade-size)),
+    transparent 100%
+  );
+  -webkit-mask-repeat:   no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size:     100% 100%;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--edit-edge-fade-size),
+    #000 calc(100% - var(--edit-edge-fade-size)),
+    transparent 100%
+  );
+  mask-repeat:   no-repeat;
+  mask-position: center;
+  mask-size:     100% 100%;
+  --edit-edge-fade-size: 3px;
   color: var(--color-editor-edit-text);
 }
 
