@@ -152,7 +152,7 @@ export function SectionEditorArea({
       <main className="editor-shell">
         <div className="editor-background">
           <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}`}>
-            <div className="edit-container" style={{ display: isPreviewMode ? 'none' : undefined }}>
+            <div className={`edit-container${isPreviewMode ? ' is-pane-hidden' : ''}`}>
               {activeNoteId ? (
                 <CM6Editor
                   bindings={bindings}
@@ -172,7 +172,7 @@ export function SectionEditorArea({
                 />
               ) : emptyState}
             </div>
-            <div className="render-container" style={{ display: isPreviewMode ? undefined : 'none' }} aria-hidden={!isPreviewMode}>
+            <div className={`render-container${isPreviewMode ? '' : ' is-pane-hidden'}`} aria-hidden={!isPreviewMode}>
               <div ref={previewTextureRef} className="markdown-preview-texture" />
               <div
                 ref={previewScrollRef}

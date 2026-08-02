@@ -80,6 +80,17 @@
   color: var(--color-editor-render-text);
 }
 
+/* Keeps the inactive pane in the layout/paint tree so its scroll position
+   and virtualized state survive being hidden; display:none would reset them
+   and break the edit<->preview fast-path toggle. */
+.editor-stage > .is-pane-hidden {
+  position:      absolute;
+  inset:         0;
+  visibility:    hidden;
+  pointer-events: none;
+  z-index:       -1;
+}
+
 .edit-container {
   color: var(--color-editor-edit-text);
 }

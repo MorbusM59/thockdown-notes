@@ -624,6 +624,9 @@ export function CM6Editor({
   const layerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  // Tracks scroll events originating from applySnapshot so onViewportChange
+  // can report them as programmatic, not user-input.
+  const programmaticScrollCountRef = useRef(0);
   const bindingsRef = useRef(bindings);
   const previousTextRef = useRef('');
   const previousSelectionRef = useRef<EditorSelectionState>({ anchor: 0, focus: 0, start: 0, end: 0, isCollapsed: true });
@@ -2184,13 +2187,16 @@ export function CM6Editor({
     });
 
     // Scroll reporting -- mirrors Editor.tsx's own scroller 'scroll'
-    // listener + buildViewport. isProgrammaticScrollRef-style origin
-    // disambiguation (drag vs. real user scroll) isn't needed yet since
-    // there's no drag-handle UI here to originate a 'viewport-drag' event.
+    // listener + buildViewport. Uses programmaticScrollCountRef to tell
+    // applySnapshot-driven scrolls apart from real user scrolling.
     const handleScroll = () => {
+      const isProgrammatic = programmaticScrollCountRef.current > 0;
+      if (isProgrammatic) {
+        programmaticScrollCountRef.current -= 1;
+      }
       bindingsRef.current?.onViewportChange?.({
-        source: 'user-input',
-        origin: 'scroll',
+        source: isProgrammatic ? 'programmatic' : 'user-input',
+        origin: isProgrammatic ? 'programmatic' : 'scroll',
         viewport: buildViewport(view),
       });
       scheduleCaretUpdate();
@@ -2842,7 +2848,11 @@ export function CM6Editor({
             setBottomBoundaryLines(Math.round(normalized.bottomBoundaryPx / lineHeightPxRef.current));
           }
           if (typeof nextViewport.scrollTopPx === 'number') {
-            view.scrollDOM.scrollTo({ top: Math.max(0, nextViewport.scrollTopPx), behavior: 'auto' });
+            const targetTop = Math.max(0, nextViewport.scrollTopPx);
+            if (Math.abs(view.scrollDOM.scrollTop - targetTop) > 0.5) {
+              programmaticScrollCountRef.current += 1;
+            }
+            view.scrollDOM.scrollTo({ top: targetTop, behavior: 'auto' });
           }
         }
 
@@ -2854,8 +2864,12 @@ export function CM6Editor({
         if (snapshot.viewportLines) {
           setTopBoundaryLines(Math.max(0, Math.round(snapshot.viewportLines.topBoundaryLines)));
           setBottomBoundaryLines(Math.max(0, Math.round(snapshot.viewportLines.bottomBoundaryLines)));
+          const targetTop = Math.max(0, Math.round(snapshot.viewportLines.scrollTopLines) * lineHeightPxRef.current);
+          if (Math.abs(view.scrollDOM.scrollTop - targetTop) > 0.5) {
+            programmaticScrollCountRef.current += 1;
+          }
           view.scrollDOM.scrollTo({
-            top: Math.max(0, Math.round(snapshot.viewportLines.scrollTopLines) * lineHeightPxRef.current),
+            top: targetTop,
             behavior: 'auto',
           });
           setHasViewportLines(true);

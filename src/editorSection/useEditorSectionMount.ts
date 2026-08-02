@@ -317,6 +317,14 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   // being left, land the mode being entered on it). See toggleRenderViewMode
   // and docs/editor-contract.md's Viewport Model section.
   const sectionRequiresScrollUpdateRef = useRef(false)
+  // Tracks which (note + snapshot) preview targets have already received a
+  // first-load restore, so subsequent edit<->preview toggles can be a pure
+  // CSS visibility switch without re-running scroll code.
+  const previewRestoreCompletedForNoteIdRef = useRef<Set<string>>(new Set())
+  // Suppresses the preview scroll listener's "modes are out of sync" flag
+  // during our own programmatic preview restores (mode-switch landing,
+  // first-load restore, snapshot return). User wheel/drag still sets it.
+  const ignoreProgrammaticPreviewScrollUntilRef = useRef<number>(0)
   // Diagnostic-only call counter, see applyEditRestoreSnapshot's own entry log.
   const applyEditRestoreSnapshotCallCounterRef = useRef(0)
   const restoreInProgressRef = useRef(false)
@@ -641,11 +649,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
             scrollTopLines: scrollTopPxToLines(scrollTop, lineHeightPx),
           },
         })
-
-        // Mark that a fresh scroll-derived update is required on next
-        // mode switch; do not compute offsets now (deferred until switch).
-        sectionRequiresScrollUpdateRef.current = true
-        debugLogScrollSync(`sectionRequiresScrollUpdateRef set (persistEditUiState): note=${noteId} scrollTop=${scrollTop} sourceAnchorLine=${sourceAnchorLine}`)
       }
 
       const previousPersisted = lastPersistedEditUiStateRef.current
@@ -1395,6 +1398,14 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       return
     }
 
+    if (!sectionRequiresScrollUpdateRef.current) {
+      // Fast path: both panes are already in sync, so this is a pure CSS
+      // visibility toggle. Do not run any restore/scroll code.
+      debugLogScrollSync(`render->edit fast path skipped (flag false): note=${activeNoteId}`)
+      previousActiveNoteIdForEditRestoreRef.current = activeNoteId
+      return
+    }
+
     // Single-owner restore rule: render->edit transition owns restore for the
     // current note. Mark this note as handled so the note-activation effect
     // does not race in with a second restore source.
@@ -1469,8 +1480,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   // docs/editor-contract.md's Viewport Model section.
   const toggleRenderViewMode = useCallback(() => {
     const enteringPreview = !isPreviewMode
+    debugLogScrollSync(`toggleRenderViewMode start: enteringPreview=${enteringPreview} flag=${sectionRequiresScrollUpdateRef.current}`)
 
     if (!activeNoteId || !sectionRequiresScrollUpdateRef.current) {
+      debugLogScrollSync(`toggleRenderViewMode fast path: enteringPreview=${enteringPreview}`)
       if (enteringPreview && activeNoteId) {
         setActiveNoteText(normalizeInternalText(latestEditorTextRef.current || activeNoteText))
       }
@@ -1480,32 +1493,29 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
     const text = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
 
-    let sourceAnchorLine: number | null = null
-    if (isPreviewMode) {
-      const container = previewScrollRef.current
-      const sourceAnchor = container ? resolvePreviewSourceAnchorFromContainer(container) : null
-      sourceAnchorLine = sourceAnchor?.sourceAnchorLine ?? null
-    } else {
-      const viewport = latestEditViewportRef.current ?? latestViewportRef.current
-      if (viewport) {
-        sourceAnchorLine = resolveSourceAnchorFromEditState({
-          text,
-          lineHeightPx,
-          telemetry: latestEditViewportTelemetryRef.current ?? undefined,
-          viewport,
-          resolveSourceLineAtHeight: (heightPx) => adapterRef.current?.resolveSourceLineAtHeight(heightPx) ?? null,
-        }).sourceAnchorLine
+    // Capture the canonical mode-agnostic BLOCK from whichever mode is
+    // being left, then land the entered mode on that block's start line
+    // plus the one-line-height offset used by every other restore.
+    const anchorBlockIndex = captureCurrentAnchorBlockIndex()
+
+    if (anchorBlockIndex === null || anchorBlockIndex < 0) {
+      sectionRequiresScrollUpdateRef.current = false
+      if (enteringPreview && activeNoteId) {
+        setActiveNoteText(text)
       }
+      setIsPreviewMode((previous) => !previous)
+      return
     }
 
-    if (sourceAnchorLine === null) {
-      pendingRenderViewSourceAnchorRef.current = null
-    } else if (enteringPreview) {
+    const blocks = splitMarkdownIntoPreviewBlocks(text)
+    const sourceAnchorLine = resolveSourceLineForAnchorBlockIndex(blocks, anchorBlockIndex)
+
+    if (enteringPreview) {
       pendingRenderViewSourceAnchorRef.current = { sourceAnchorLine }
     } else {
       const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
       const topBoundaryLines = fallbackViewport?.topBoundaryLines ?? 0
-      const collapsedSelection: EditorSelectionState = { anchor: 0, focus: 0, start: 0, end: 0, isCollapsed: true }
+      const collapsedSelection = ZERO_EDITOR_SELECTION
       const restoreSnapshot: EditRestoreSnapshot = {
         noteId: activeNoteId,
         collapsedSelection,
@@ -1534,16 +1544,14 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }, [
     activeNoteId,
     activeNoteText,
-    lineHeightPx,
+    captureCurrentAnchorBlockIndex,
     isPreviewMode,
-    resolvePreviewSourceAnchorFromContainer,
-    updateEditModeSnapshotCache,
-    latestEditorTextRef,
     latestEditViewportRef,
-    latestEditViewportTelemetryRef,
+    latestEditorTextRef,
     latestViewportRef,
     setActiveNoteText,
     setIsPreviewMode,
+    updateEditModeSnapshotCache,
   ])
 
   useEffect(() => {
@@ -1595,26 +1603,56 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     // change), not on every edit. See the comment above.
   }, [activeNoteId, lineHeightPx, persistenceReady, updateEditModeSnapshotCache, latestEditorTextRef])
 
+  /**
+   * Note-activation effect: restores edit-mode position when the active
+   * note in this section changes. This is intentionally *not* an edit<->
+   * preview mode-transition handler -- the dedicated transition effect
+   * above owns that -- so it must not clear preview-restore state or apply
+   * a second restore when the same note is merely toggled between modes.
+   */
   useEffect(() => {
-    if (isPreviewMode) return
     if (!persistenceReady) return
     if (!activeNoteId) {
-      // Reset the restore sentinel when editor selection is cleared.
-      // Without this, re-selecting the same note id after a clear path can
-      // skip edit-mode restore and leave the remounted editor unhydrated.
+      // Reset sentinels when the section is cleared.
       previousActiveNoteIdForEditRestoreRef.current = null
+      sectionRequiresScrollUpdateRef.current = false
+      previewRestoreCompletedForNoteIdRef.current.clear()
       return
     }
 
     const wasPreviewMode = previousPreviewModeRef.current
     const previousActiveNoteId = previousActiveNoteIdForEditRestoreRef.current
-    previousActiveNoteIdForEditRestoreRef.current = activeNoteId
-    if (previousActiveNoteId === activeNoteId && !wasPreviewMode) {
-      // Note identity did not change and we are not returning from preview.
-      // Avoid re-restoring on plain edit-mode re-renders or same-note updates.
+
+    // Same note, same mode: nothing to restore (e.g. keystroke re-renders
+    // in edit mode, or a no-op re-render while preview is already active).
+    if (previousActiveNoteId === activeNoteId && wasPreviewMode === isPreviewMode) {
       return
     }
 
+    // Same-note edit<->preview transitions are owned by the transition
+    // effect above. Bailing here prevents that effect's pending restore
+    // from being overwritten by a second memory/persisted restore, and
+    // prevents us from clearing previewRestoreCompletedForNoteIdRef which
+    // would make every preview entry look like a first-load restore.
+    if (previousActiveNoteId === activeNoteId && wasPreviewMode !== isPreviewMode) {
+      return
+    }
+
+    // Genuine note activation: update sentinels and give the new note a
+    // clean scroll hand-off slate.
+    previousPreviewModeRef.current = isPreviewMode
+    previousActiveNoteIdForEditRestoreRef.current = activeNoteId
+    sectionRequiresScrollUpdateRef.current = false
+    previewRestoreCompletedForNoteIdRef.current.clear()
+
+    if (isPreviewMode) {
+      // Edit mode has not been restored for this note yet; force a real
+      // hand-off the first time the user toggles back to edit.
+      sectionRequiresScrollUpdateRef.current = true
+      return
+    }
+
+    // Restore edit mode for the newly activated note.
     const cachedSnapshot = pendingEditRestoreSnapshotRef.current
     if (cachedSnapshot && cachedSnapshot.noteId === activeNoteId) {
       pendingEditRestoreSnapshotRef.current = null
@@ -1627,7 +1665,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     }
 
     const memorySnapshot = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
-    if (memorySnapshot && !wasPreviewMode) {
+    if (memorySnapshot) {
       applyEditRestoreSnapshot(memorySnapshot, {
         restoreFullSelection: true,
         focusAfterApply: true,
@@ -1716,6 +1754,17 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       const container = previewScrollRef.current
       if (!container) return
 
+      // Ignore the scroll events this programmatic restore will generate;
+      // they must not be mistaken for a user scroll that would force a
+      // slow-path mode switch next time.
+      ignoreProgrammaticPreviewScrollUntilRef.current = performance.now() + 600
+
+      // Entering a snapshot preview invalidates any earlier "live" preview
+      // restore for this note, so returning to present later re-restores.
+      if (previewedSnapshotId !== null) {
+        previewRestoreCompletedForNoteIdRef.current.delete(`${activeNoteId}:live`)
+      }
+
       const previousScrollBehavior = container.style.scrollBehavior
       container.style.scrollBehavior = 'auto'
 
@@ -1771,9 +1820,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       requestAnimationFrame(() => attemptFindAndScroll(10))
     }
 
+    const previewRestoreKey = `${activeNoteId}:${previewedSnapshotId ?? 'live'}`
+
     const pendingSourceAnchor = pendingRenderViewSourceAnchorRef.current
     if (pendingSourceAnchor) {
       pendingRenderViewSourceAnchorRef.current = null
+      previewRestoreCompletedForNoteIdRef.current.add(previewRestoreKey)
       applyPreviewSourceAnchor(pendingSourceAnchor.sourceAnchorLine)
 
       return () => {
@@ -1788,6 +1840,17 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     // whichever content is on screen: a Timeline snapshot's own
     // (independently maintained) BLOCK when previewing one, otherwise the
     // live note's.
+    if (previewRestoreCompletedForNoteIdRef.current.has(previewRestoreKey)) {
+      // Preview for this target has already been restored; toggling back
+      // and forth without scrolling should be a pure CSS visibility flip.
+      return () => {
+        cancelled = true
+        setPreviewScrollBehavior('')
+      }
+    }
+
+    previewRestoreCompletedForNoteIdRef.current.add(previewRestoreKey)
+
     const restorePreviewScroll = async () => {
       try {
         let sourceAnchorLine: number | null = null
@@ -1830,6 +1893,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     if (!container) return
 
     const persistPreviewScroll = () => {
+      if (performance.now() < ignoreProgrammaticPreviewScrollUntilRef.current) return
+
       if (previewScrollSaveTimerRef.current !== null) {
         window.clearTimeout(previewScrollSaveTimerRef.current)
       }
