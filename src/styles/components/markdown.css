@@ -91,6 +91,10 @@
   z-index:       -1;
 }
 
+.editor-stage > .is-pane-hidden * {
+  visibility:    hidden;
+}
+
 .edit-container {
   color: var(--color-editor-edit-text);
 }
