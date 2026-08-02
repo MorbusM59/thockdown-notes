@@ -281,6 +281,11 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   // first-load restore, so subsequent edit<->preview toggles can be a pure
   // CSS visibility switch without re-running scroll code.
   const previewRestoreCompletedForNoteIdRef = useRef<Set<string>>(new Set())
+  // Tracks which notes have had edit mode restored for the current live
+  // document while this section owns them, so returning to edit from preview
+  // can also be a pure CSS visibility switch when the edit pane hasn't been
+  // replaced. Mirrors previewRestoreCompletedForNoteIdRef on the edit side.
+  const editRestoreCompletedForNoteIdRef = useRef<Set<string>>(new Set())
   // The block our own most recent programmatic preview restore intended to
   // land on (mode-switch landing, first-load restore, snapshot return). The
   // preview scroll listener compares its own resolved anchor against this
@@ -1405,10 +1410,25 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       return
     }
 
+    const editRestoreKey = `${activeNoteId}:${previewedSnapshotId ?? 'live'}`
+
     if (!sectionRequiresScrollUpdateRef.current) {
       // Fast path: both panes are already in sync, so this is a pure CSS
       // visibility toggle. Do not run any restore/scroll code.
       debugLogScrollSync(`render->edit fast path skipped (flag false): note=${activeNoteId}`)
+      previousActiveNoteIdForEditRestoreRef.current = activeNoteId
+      editRestoreCompletedForNoteIdRef.current.add(editRestoreKey)
+      return
+    }
+
+    // If the edit pane for this note/snapshot has already been restored
+    // (either by a real first-load restore or by a prior no-op toggle),
+    // and the only reason the flag is set is a preview-side scroll, the
+    // edit pane itself is still correctly positioned -- dual-mount keeps
+    // it alive while hidden. Just make it visible again.
+    if (editRestoreCompletedForNoteIdRef.current.has(editRestoreKey)) {
+      debugLogScrollSync(`render->edit fast path (already restored): note=${activeNoteId}`)
+      sectionRequiresScrollUpdateRef.current = false
       previousActiveNoteIdForEditRestoreRef.current = activeNoteId
       return
     }
@@ -1422,12 +1442,14 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
 
     if (cachedSnapshot && cachedSnapshot.noteId === activeNoteId) {
       pendingEditRestoreSnapshotRef.current = null
+      editRestoreCompletedForNoteIdRef.current.add(editRestoreKey)
 applyEditRestoreSnapshot(cachedSnapshot, { restoreFullSelection: true, focusAfterApply: true, onComplete: () => setIsCaretSuspended(false) })
       return
     }
 
     const memorySnapshot = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
     if (memorySnapshot) {
+      editRestoreCompletedForNoteIdRef.current.add(editRestoreKey)
 applyEditRestoreSnapshot(memorySnapshot, { restoreFullSelection: true, focusAfterApply: true, onComplete: () => setIsCaretSuspended(false) })
       return
     }
@@ -1447,6 +1469,7 @@ applyEditRestoreSnapshot(memorySnapshot, { restoreFullSelection: true, focusAfte
           fallbackViewport,
         })
         updateEditModeSnapshotCache(fallbackSnapshot)
+        editRestoreCompletedForNoteIdRef.current.add(editRestoreKey)
 
 applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusAfterApply: true, onComplete: () => setIsCaretSuspended(false) })
       } catch (error) {
@@ -1470,6 +1493,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     updateEditModeSnapshotCache,
     latestEditorSelectionRef,
     latestEditorTextRef,
+    previewedSnapshotId,
     setIsCaretSuspended,
   ])
 
@@ -1487,11 +1511,15 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   // docs/editor-contract.md's Viewport Model section.
   const toggleRenderViewMode = useCallback(() => {
     const enteringPreview = !isPreviewMode
+    const editRestoreKey = activeNoteId ? `${activeNoteId}:${previewedSnapshotId ?? 'live'}` : null
     debugLogScrollSync(`toggleRenderViewMode start: enteringPreview=${enteringPreview} flag=${sectionRequiresScrollUpdateRef.current}`)
 
     if (!activeNoteId || !sectionRequiresScrollUpdateRef.current) {
       debugLogScrollSync(`toggleRenderViewMode fast path: enteringPreview=${enteringPreview}`)
-      if (enteringPreview && activeNoteId) {
+      if (enteringPreview && editRestoreKey) {
+        // Edit is currently live and positioned; record that so returning
+        // to edit later can be a pure visibility flip.
+        editRestoreCompletedForNoteIdRef.current.add(editRestoreKey)
         setActiveNoteText(normalizeInternalText(latestEditorTextRef.current || activeNoteText))
       }
       setIsPreviewMode((previous) => !previous)
@@ -1517,7 +1545,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
     if (rawSourceAnchorLine === null || rawSourceAnchorLine < 0) {
       sectionRequiresScrollUpdateRef.current = false
-      if (enteringPreview && activeNoteId) {
+      if (enteringPreview && editRestoreKey) {
+        editRestoreCompletedForNoteIdRef.current.add(editRestoreKey)
         setActiveNoteText(text)
       }
       setIsPreviewMode((previous) => !previous)
@@ -1530,7 +1559,28 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
     if (enteringPreview) {
       pendingRenderViewSourceAnchorRef.current = { sourceAnchorLine }
+      if (editRestoreKey) {
+        // Edit is live and positioned right now; remember that so the return
+        // to edit is a pure CSS visibility flip, not a re-derived snapshot.
+        editRestoreCompletedForNoteIdRef.current.add(editRestoreKey)
+      }
     } else {
+      // Returning to edit. If the edit pane already has a valid position
+      // for this note (it was live before we entered preview), dual-mount
+      // kept it alive while hidden -- just make it visible again.
+      if (editRestoreKey && editRestoreCompletedForNoteIdRef.current.has(editRestoreKey)) {
+        debugLogScrollSync(`toggleRenderViewMode edit fast path (already restored): note=${activeNoteId}`)
+        sectionRequiresScrollUpdateRef.current = false
+        setIsPreviewMode((previous) => !previous)
+        return
+      }
+
+      // Otherwise this is the first time edit is being entered for this
+      // note (e.g. note was activated directly into preview). Restore it
+      // from the best available snapshot and record that it has been done.
+      if (editRestoreKey) {
+        editRestoreCompletedForNoteIdRef.current.add(editRestoreKey)
+      }
       const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
       const topBoundaryLines = fallbackViewport?.topBoundaryLines ?? 0
       const collapsedSelection = ZERO_EDITOR_SELECTION
@@ -1550,17 +1600,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         sourceAnchorLine,
       }
       updateEditModeSnapshotCache(restoreSnapshot)
-      // Applied directly here, not handed off via pendingEditRestoreSnapshotRef
-      // for the isPreviewMode-transition effect to pick up -- that effect
-      // gates its own restore on sectionRequiresScrollUpdateRef, which this
-      // function clears (below) before that effect ever runs, so it always
-      // saw "nothing to do" and silently dropped this snapshot. Edit mode
-      // then kept showing whatever stale position it already had (masked as
-      // "fine" by dual-mount whenever the user happened to already be
-      // nearby), and focusing that stale, likely-off-viewport position could
-      // itself trigger a scroll that gets misread as a user scroll, forcing
-      // the *next* toggle to redo real work to compensate -- exactly the
-      // "first toggle back is still slow" pattern this fixes.
       pendingEditRestoreSnapshotRef.current = null
       applyEditRestoreSnapshot(restoreSnapshot, {
         restoreFullSelection: true,
@@ -1585,6 +1624,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     latestEditViewportRef,
     latestEditorTextRef,
     latestViewportRef,
+    previewedSnapshotId,
     setActiveNoteText,
     setIsCaretSuspended,
     setIsPreviewMode,
@@ -1654,8 +1694,11 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       previousActiveNoteIdForEditRestoreRef.current = null
       sectionRequiresScrollUpdateRef.current = false
       previewRestoreCompletedForNoteIdRef.current.clear()
+      editRestoreCompletedForNoteIdRef.current.clear()
       return
     }
+
+    const editRestoreKey = `${activeNoteId}:${previewedSnapshotId ?? 'live'}`
 
     const wasPreviewMode = previousPreviewModeRef.current
     const previousActiveNoteId = previousActiveNoteIdForEditRestoreRef.current
@@ -1681,6 +1724,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     previousActiveNoteIdForEditRestoreRef.current = activeNoteId
     sectionRequiresScrollUpdateRef.current = false
     previewRestoreCompletedForNoteIdRef.current.clear()
+    editRestoreCompletedForNoteIdRef.current.clear()
 
     if (isPreviewMode) {
       // Edit mode has not been restored for this note yet; force a real
@@ -1693,6 +1737,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     const cachedSnapshot = pendingEditRestoreSnapshotRef.current
     if (cachedSnapshot && cachedSnapshot.noteId === activeNoteId) {
       pendingEditRestoreSnapshotRef.current = null
+      editRestoreCompletedForNoteIdRef.current.add(editRestoreKey)
       applyEditRestoreSnapshot(cachedSnapshot, {
         restoreFullSelection: true,
         focusAfterApply: true,
@@ -1703,6 +1748,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
     const memorySnapshot = editModeSnapshotByNoteIdRef.current.get(activeNoteId)
     if (memorySnapshot) {
+      editRestoreCompletedForNoteIdRef.current.add(editRestoreKey)
       applyEditRestoreSnapshot(memorySnapshot, {
         restoreFullSelection: true,
         focusAfterApply: true,
@@ -1727,6 +1773,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
           fallbackViewport,
         })
         updateEditModeSnapshotCache(restoreSnapshot)
+        editRestoreCompletedForNoteIdRef.current.add(editRestoreKey)
 
         applyEditRestoreSnapshot(restoreSnapshot, {
           restoreFullSelection: false,
@@ -1764,6 +1811,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     persistenceReady,
     updateEditModeSnapshotCache,
     latestEditorTextRef,
+    previewedSnapshotId,
     setIsCaretSuspended,
   ])
 
