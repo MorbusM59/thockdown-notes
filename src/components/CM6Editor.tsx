@@ -695,6 +695,7 @@ export function CM6Editor({
   const [isDocEmpty, setIsDocEmpty] = useState(() => initialText.length === 0);
   const [isDraggingTop, setIsDraggingTop] = useState(false);
   const [isDraggingBottom, setIsDraggingBottom] = useState(false);
+  const [isCtrlHeldForBoundaryDrag, setIsCtrlHeldForBoundaryDrag] = useState(false);
   const [scrollerClientHeightPx, setScrollerClientHeightPx] = useState(0);
   const availableBoundaryLines = Math.max(0, Math.floor(scrollerClientHeightPx / lineHeightPx));
   const { topLines: displayTopBoundaryLines, bottomLines: displayBottomBoundaryLines } = clampBoundaryLines(
@@ -860,6 +861,25 @@ export function CM6Editor({
     topBoundaryPxRef.current = topBoundaryPxDisplay;
     bottomBoundaryPxRef.current = bottomBoundaryPxDisplay;
   }, [topBoundaryPxDisplay, bottomBoundaryPxDisplay]);
+
+  useEffect(() => {
+    const syncCtrlState = (event: KeyboardEvent) => {
+      setIsCtrlHeldForBoundaryDrag(event.ctrlKey);
+    };
+    const clearCtrlState = () => {
+      setIsCtrlHeldForBoundaryDrag(false);
+    };
+
+    window.addEventListener('keydown', syncCtrlState);
+    window.addEventListener('keyup', syncCtrlState);
+    window.addEventListener('blur', clearCtrlState);
+
+    return () => {
+      window.removeEventListener('keydown', syncCtrlState);
+      window.removeEventListener('keyup', syncCtrlState);
+      window.removeEventListener('blur', clearCtrlState);
+    };
+  }, []);
 
   // Matches Editor.tsx's own cleanup for its snapshotRestoreRafRef -- avoids
   // a setState-after-unmount if a note switch/section teardown races the
@@ -2946,10 +2966,11 @@ export function CM6Editor({
   // CM6Editor's layer (no such padding) doesn't have -- this sliver is the
   // substitute.
   const boundaryHandleSliverPx = Math.min(lineHeightPx, 8);
-  const topHandleTopPx = topBoundaryPxDisplay >= lineHeightPx ? topBoundaryVisualPx - lineHeightPx : 0;
+  const topHandleTopPx = topBoundaryPxDisplay >= lineHeightPx ? topBoundaryVisualPx : 0;
   const topHandleHeightPx = topBoundaryPxDisplay >= lineHeightPx ? lineHeightPx : boundaryHandleSliverPx;
   const bottomHandleBottomPx = bottomBoundaryPxDisplay >= lineHeightPx ? bottomBoundaryVisualPx - lineHeightPx : 0;
   const bottomHandleHeightPx = bottomBoundaryPxDisplay >= lineHeightPx ? lineHeightPx : boundaryHandleSliverPx;
+  const boundaryDragHandlesEnabled = isCtrlHeldForBoundaryDrag || isDraggingTop || isDraggingBottom;
   // Same top-anchored positioning as bottomZoneTopPx above, and for the same
   // reason: a `bottom: Npx` inset here would resolve against the overlay
   // layer's own live (possibly fractional, possibly one tick stale) box
@@ -3126,13 +3147,13 @@ export function CM6Editor({
           />
           <div
             className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize"
-            style={{ top: topHandleTopPx, height: topHandleHeightPx }}
+            style={{ top: topHandleTopPx, height: topHandleHeightPx, pointerEvents: boundaryDragHandlesEnabled ? 'auto' : 'none' }}
             onWheel={forwardHandleWheelToScroller}
             onMouseDown={(e) => { e.preventDefault(); setIsDraggingTop(true); }}
           />
           <div
             className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize"
-            style={{ top: bottomHandleTopPx, height: bottomHandleHeightPx }}
+            style={{ top: bottomHandleTopPx, height: bottomHandleHeightPx, pointerEvents: boundaryDragHandlesEnabled ? 'auto' : 'none' }}
             onWheel={forwardHandleWheelToScroller}
             onMouseDown={(e) => { e.preventDefault(); setIsDraggingBottom(true); }}
           />
