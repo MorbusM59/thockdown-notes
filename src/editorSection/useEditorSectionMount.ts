@@ -311,6 +311,12 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   // being left, land the mode being entered on it). See toggleRenderViewMode
   // and docs/editor-contract.md's Viewport Model section.
   const sectionRequiresScrollUpdateRef = useRef(false)
+  // Prevents the preview scroll listener from treating the programmatic
+  // scroll issued by applyPreviewSourceAnchor as a genuine user scroll.
+  // Set just before the scroll write; the debounced listener bails if the
+  // callback fires inside the suppression window, but still updates the
+  // known-anchor baseline so later real scrolls compare correctly.
+  const suppressPreviewScrollUpdateUntilRef = useRef(0)
   // Tracks which (note + snapshot) preview targets have already received a
   // first-load restore, so subsequent edit<->preview toggles can be a pure
   // CSS visibility switch without re-running scroll code.
@@ -2006,6 +2012,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       const previousScrollBehavior = container.style.scrollBehavior
       container.style.scrollBehavior = 'auto'
       const clampedSourceLine = Math.max(0, sourceLine)
+      // Programmatic scrolls below will fire native 'scroll' events. Tell
+      // the listener to ignore the first burst so it doesn't flag a restore
+      // as a real user scroll.
+      suppressPreviewScrollUpdateUntilRef.current = performance.now() + 250
 
       // The block we intend to land on. The scroll listener below compares
       // its own resolved anchor against this, not against "did a scroll
@@ -2135,6 +2145,14 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         // real measured heights, all converging toward this same block.
         // None of that is a real change; only landing on a genuinely
         // different block is.
+        // A programmatic restore just fired; absorb its settle events as
+        // the new baseline without treating them as a user scroll.
+        if (performance.now() < suppressPreviewScrollUpdateUntilRef.current) {
+          debugLogScrollSync(`preview scroll ignored (programmatic restore): note=${activeNoteId} anchorLine=${sourceAnchor.sourceAnchorLine}`)
+          lastKnownPreviewAnchorLineRef.current = sourceAnchor.sourceAnchorLine
+          return
+        }
+
         if (sourceAnchor.sourceAnchorLine === lastKnownPreviewAnchorLineRef.current) {
           debugLogScrollSync(`preview scroll settled at already-known anchorLine=${sourceAnchor.sourceAnchorLine} -- not a real change, ignored`)
           return
