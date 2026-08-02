@@ -314,6 +314,7 @@ export function EditorSection({
     bindings,
     toggleRenderViewMode,
     applyProgrammaticEditorText,
+    previewBlockSplitCacheRef,
     ...editorSectionMountRest
   } = useEditorSectionMount({
     activeNoteId,
@@ -783,6 +784,7 @@ export function EditorSection({
     isDocumentFindCaseSensitive: effectiveCaseSensitive,
     renderedDisplayText,
     previewScrollToSourceLineRef: editorSectionMountRest.previewScrollToSourceLineRef,
+    previewBlockSplitCacheRef,
   })
 
   const {
@@ -926,6 +928,7 @@ export function EditorSection({
     pendingEditRestoreSnapshotRef,
     latestViewportRef,
     latestEditViewportRef,
+    previewBlockSplitCacheRef,
     readCurrentEditUiPayload,
     updateEditModeSnapshotCache,
     captureEditModeSnapshotFromEditor,

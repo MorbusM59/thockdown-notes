@@ -1652,3 +1652,14 @@ and verified. The pre-existing ~3ms/keystroke floor this doc already characteriz
 CM6/Chromium native overhead, not further attributable without new tooling" is unchanged and still
 the honest answer for whatever's left. The `sanitizeDatabase()` real-world observation window noted
 directly above is the one open item this round actually added.
+
+## This round: first edit→preview toggle latency on large notes — fixed via background preview-block prewarm
+
+The first switch from edit to preview on a large note used to pay for a full `splitMarkdownIntoPreviewBlocks` remark parse inside `usePreviewMarkdownRendering`, because the incremental block cache started empty whenever that hook first rendered. Now `useEditorSectionMount` builds that cache in the background while the user remains in edit mode, then passes the same `previewBlockSplitCacheRef` into `usePreviewMarkdownRendering` so the first toggle warm-starts the incremental parser instead of parsing the whole document on demand.
+
+**Source changes:**
+- `src/editorSection/useEditorSectionMount.ts`: added `previewBlockSplitCacheRef`, populates it via a 500ms-debounced background task using `splitMarkdownIntoPreviewBlocksIncremental` (with a `requestIdleCallback` fallback), reuses the cached result for DB-persisted anchor-block resolution, and exports the ref in the hook result.
+- `src/editorSection/usePreviewMarkdownRendering.tsx`: accepts an optional `previewBlockSplitCacheRef`; uses it as the shared cache instead of its own private ref.
+- `src/editorSection/EditorSection.tsx`: destructures `previewBlockSplitCacheRef` from `useEditorSectionMount` and passes it to `usePreviewMarkdownRendering`, including through the `SectionHandle` it registers.
+
+**Verification:** `npx tsc --noEmit`, `npm run lint`, `npm test` (277/277). `scripts/perf/verifyScrollSync.mjs` stable across 20 toggles. Isolated benchmark on a 1.5M-character synthetic document (`scripts/perf/benchmarkPreviewBlockSplit.mjs`): cold full parse ~769ms, warm cached reuse ~0ms (~36,700x speedup). Live `dev:browser` toggle measurement on the same size: first toggle ~180ms, cached toggle ~40ms, confirming the cache is live and the previous multi-second parse cost on first toggle is gone.

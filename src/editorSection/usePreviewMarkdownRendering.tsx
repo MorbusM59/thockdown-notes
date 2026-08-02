@@ -65,6 +65,12 @@ export interface UsePreviewMarkdownRenderingOptions {
    * `applyPreviewSourceAnchor` in useEditorSectionMount.ts.
    */
   previewScrollToSourceLineRef: MutableRefObject<PreviewScrollToSourceLineFn | null>
+  /**
+   * Optional warm-start cache from useEditorSectionMount's background parse.
+   * When present and text matches, the preview pane skips its own expensive
+   * first full remark parse and reuses the already-computed blocks + ranges.
+   */
+  previewBlockSplitCacheRef?: MutableRefObject<PreviewBlockSplitCache | null>
 }
 
 export interface UsePreviewMarkdownRenderingResult {
@@ -130,6 +136,7 @@ export function usePreviewMarkdownRendering({
   isDocumentFindCaseSensitive,
   renderedDisplayText,
   previewScrollToSourceLineRef,
+  previewBlockSplitCacheRef,
 }: UsePreviewMarkdownRenderingOptions): UsePreviewMarkdownRenderingResult {
   // Mirrors `notes`/`activeNoteText` for navigateToInternalPreviewLink's
   // call-time-only reads below, so that callback's identity -- and in turn
@@ -176,10 +183,14 @@ export function usePreviewMarkdownRendering({
   // instance via splitCacheRef so concurrent panes/sections never share
   // state. See PreviewBlockSplit.ts for the reuse strategy and its safety
   // argument.
-  const splitCacheRef = useRef<PreviewBlockSplitCache | null>(null)
+  const ownSplitCacheRef = useRef<PreviewBlockSplitCache | null>(null)
+  const splitCacheRef = previewBlockSplitCacheRef ?? ownSplitCacheRef
+  // Warm-start from useEditorSectionMount's background prewarm if the text
+  // matches. This avoids a second full remark parse on the first preview
+  // render after edit mode had already parsed the document in the background.
   const splitResult = useMemo(
     () => splitMarkdownIntoPreviewBlocksIncremental(renderedDisplayText, splitCacheRef.current),
-    [renderedDisplayText],
+    [renderedDisplayText, splitCacheRef],
   )
   // Committed in an effect, not during the useMemo above, so this cache
   // update never happens during a render React might discard (Strict Mode's
@@ -187,7 +198,7 @@ export function usePreviewMarkdownRendering({
   // result has actually become what's on screen.
   useLayoutEffect(() => {
     splitCacheRef.current = splitResult
-  }, [splitResult])
+  }, [splitResult, splitCacheRef])
   const previewBlocks = splitResult.blocks
 
   // Mirrors `previewBlocks` for callbacks below that resolve a block index

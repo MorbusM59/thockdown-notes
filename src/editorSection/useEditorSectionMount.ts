@@ -25,7 +25,12 @@ import {
   ZERO_PERSISTED_VIEWPORT,
 } from '../editor/EditRestoreMath'
 import { normalizeInternalText } from '../editor/TextPolicy'
-import { splitMarkdownIntoPreviewBlocks, type PreviewMarkdownBlock } from '../editor/PreviewBlockSplit'
+import {
+  splitMarkdownIntoPreviewBlocks,
+  splitMarkdownIntoPreviewBlocksIncremental,
+  type PreviewMarkdownBlock,
+  type PreviewBlockSplitCache,
+} from '../editor/PreviewBlockSplit'
 import { resolvePreviewBlockIndexForSourceLine, resolveSourceLineForAnchorBlockIndex } from '../editor/PreviewBlockIndex'
 import {
   indentSelectionByStep,
@@ -210,6 +215,13 @@ export interface UseEditorSectionMountResult {
    * through a codepath that has no other reason to know about it.
    */
   seedInitialViewport: (snapshot: EditRestoreSnapshot) => void
+  /**
+   * Background preview-block split cache. Populated by a deferred parse
+   * while in edit mode so the first toggle to preview can warm-start
+   * usePreviewMarkdownRendering's incremental parser instead of paying for
+   * a full remark parse on demand.
+   */
+  previewBlockSplitCacheRef: MutableRefObject<PreviewBlockSplitCache | null>
 }
 
 /**
@@ -306,12 +318,24 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   const latestEditViewportTelemetryRef = useRef<EditViewportTelemetry | null>(null)
   const editUiStateSaveTimerRef = useRef<number | null>(null)
   const lastPersistedEditUiStateRef = useRef<{ noteId: string; progressEdit: number; cursorPos: number; scrollTop: number; sourceAnchorLine: number } | null>(null)
-  // Cache for splitMarkdownIntoPreviewBlocks results. The same blocks are
-  // needed for both DB-persistence (captureCurrentAnchorBlockIndex) and
-  // mode-switch round-tripping (toggleRenderViewMode), and the full remark
-  // parse is expensive on large documents. Keyed by the normalized text
+  // Cache for preview block-split results. The full remark structural parse
+  // is expensive on large documents (seconds on a ~1.5M-character note),
+  // and the same result is needed by both DB-persistence / mode-switch
+  // round-tripping in this hook and by the preview pane's incremental
+  // splitter in usePreviewMarkdownRendering. Keyed by the normalized text
   // string; recomputed only when the text actually changes.
   const previewBlocksCacheRef = useRef<{ text: string; blocks: PreviewMarkdownBlock[] } | null>(null)
+  // Full PreviewBlockSplitCache, including structural ranges, so the preview
+  // pane's incremental parser can warm-start from edit mode's first parse
+  // instead of paying for a second full parse on the first toggle. Seeded by
+  // a background parse kicked off after note activation / text stabilization.
+  const previewBlockSplitCacheRef = useRef<PreviewBlockSplitCache | null>(null)
+  // Tracks the last text for which a background preview-block prewarm was
+  // initiated, so we don't restart the parse on every keystroke while the
+  // user is typing. A new parse is scheduled only after the text has been
+  // stable for PREVIEW_BLOCK_PREWARM_DEBOUNCE_MS.
+  const previewBlockPrewarmTextRef = useRef<string | null>(null)
+  const previewBlockPrewarmTimerRef = useRef<number | null>(null)
   // Coalesces the preview-driving setActiveNoteText/setEditorTextVersion
   // commit under deferPreviewOnRapidInput -- see scheduleCoalescedPreviewCommit.
   const pendingPreviewFrameRef = useRef<number | null>(null)
@@ -419,6 +443,15 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     const cached = previewBlocksCacheRef.current
     if (cached && cached.text === text) {
       return cached.blocks
+    }
+    // Reuse the full split cache if it matches; otherwise fall back to a
+    // fresh parse. The split cache is populated by the background prewarm
+    // path below and by usePreviewMarkdownRendering's own incremental
+    // parser, so this avoids duplicating the expensive full remark parse.
+    const splitCache = previewBlockSplitCacheRef.current
+    if (splitCache && splitCache.text === text) {
+      previewBlocksCacheRef.current = { text, blocks: splitCache.blocks }
+      return splitCache.blocks
     }
     const blocks = splitMarkdownIntoPreviewBlocks(text)
     previewBlocksCacheRef.current = { text, blocks }
@@ -1670,15 +1703,55 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       }
     }
 
+    const prewarmPreviewBlocks = () => {
+      const text = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+      if (previewBlockSplitCacheRef.current?.text === text) return
+      if (previewBlockPrewarmTextRef.current === text) return
+      previewBlockPrewarmTextRef.current = text
+
+      if (previewBlockPrewarmTimerRef.current !== null) {
+        window.clearTimeout(previewBlockPrewarmTimerRef.current)
+      }
+
+      previewBlockPrewarmTimerRef.current = window.setTimeout(() => {
+        previewBlockPrewarmTimerRef.current = null
+        const currentText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+        if (previewBlockSplitCacheRef.current?.text === currentText) return
+        if (previewBlockPrewarmTextRef.current !== currentText) return
+        // Use a single requestIdleCallback or setTimeout(0) boundary so the
+        // parse doesn't run synchronously inside this effect and block the
+        // initial note paint/focus.
+        const run = () => {
+          try {
+            const splitCache = splitMarkdownIntoPreviewBlocksIncremental(currentText, previewBlockSplitCacheRef.current)
+            previewBlockSplitCacheRef.current = splitCache
+            previewBlocksCacheRef.current = { text: currentText, blocks: splitCache.blocks }
+          } catch (error) {
+            console.warn('Failed to prewarm preview blocks', error)
+          }
+        }
+        if (typeof window.requestIdleCallback === 'function') {
+          window.requestIdleCallback(run, { timeout: 2000 })
+        } else {
+          window.setTimeout(run, 0)
+        }
+      }, 500)
+    }
+
     void preloadEditModeSnapshot()
+    prewarmPreviewBlocks()
 
     return () => {
       cancelled = true
+      if (previewBlockPrewarmTimerRef.current !== null) {
+        window.clearTimeout(previewBlockPrewarmTimerRef.current)
+        previewBlockPrewarmTimerRef.current = null
+      }
     }
     // Deliberately NOT dependent on activeNoteText -- this preloads the
     // persisted-position cache once per note activation (activeNoteId
     // change), not on every edit. See the comment above.
-  }, [activeNoteId, lineHeightPx, persistenceReady, updateEditModeSnapshotCache, latestEditorTextRef])
+  }, [activeNoteId, activeNoteText, lineHeightPx, persistenceReady, updateEditModeSnapshotCache, latestEditorTextRef])
 
   /**
    * Note-activation effect: restores edit-mode position when the active
@@ -2219,5 +2292,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     toggleRenderViewMode,
     applyProgrammaticEditorText,
     seedInitialViewport,
+    previewBlockSplitCacheRef,
   }
 }
