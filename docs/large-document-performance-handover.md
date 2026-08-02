@@ -1690,3 +1690,21 @@ Switching to a large note (or loading it on startup) still took >2 seconds even 
 - `src/editorSection/EditorSection.tsx`: `activateNote` now passes the restored in-memory block cache (`previewBlocksCacheRef.current.blocks`, verified to match `hydratedText`) into `buildEditRestoreSnapshotFromUiState`. Added opt-in `[activate-note-timing]` logs around each major sub-step (outgoing UI-state persist, load note + UI state, cache restore, snapshot build, external-note setup, state updates) so future slowness can be pinpointed without code changes.
 
 **Verification:** `npx tsc`, `npm run lint`, `npm test` (277/277). The cache-reuse path is verified by construction: the blocks come from `restorePreviewBlockSplitCacheFromRanges`, which materializes them from the same structural ranges that `splitMarkdownIntoPreviewBlocks` would have produced, and the hash match guarantees the text is identical. The timing logs are gated by `localStorage.getItem('thockdown:debug-input-lag') === '1'` to avoid console noise in production.
+
+## This round: scroll-sync regression after cache wiring — fixed
+
+After wiring the preview-block cache through `activateNote`, mode-toggle scroll-sync regressed in two ways:
+1. Scrolling in render (preview) mode and switching back to edit did not update edit's scroll location.
+2. Scrolling in edit and switching to render only updated after two scroll events; the first appeared ignored.
+
+Root causes in `src/editorSection/useEditorSectionMount.ts`:
+- `toggleRenderViewMode` rounded the edit viewport's source line up to the *next* preview block (`resolvePreviewBlockIndexForSourceLine(...) + 1`) instead of the containing block. This made preview land one block ahead of edit, so small intra-block scrolls produced no visible change.
+- The render->edit branch had an inner "already restored" fast path that short-circuited whenever `editRestoreCompletedForNoteIdRef` contained the current note. Because entering preview adds that key, returning to edit always hit the fast path and ignored any preview-side scrolls.
+
+**Source changes:**
+- `src/editorSection/useEditorSectionMount.ts`:
+  - `toggleRenderViewMode` now uses the containing block index (no `+1`) when round-tripping through the canonical BLOCK, so both modes land on the same top-level preview block.
+  - Removed the stale "already restored" fast paths in both `toggleRenderViewMode` and the `isPreviewMode` transition effect. When `sectionRequiresScrollUpdateRef` is true on a render->edit transition, edit is now re-derived from the current preview anchor instead of assuming the hidden edit pane is still correct.
+  - Added `[scroll-sync]` diagnostic logs around the toggle showing the raw source line, containing block index, chosen anchor index, and anchor start line.
+
+**Verification:** `npx tsc`, `npm run lint`, `npm test` (277/277). Live verification needed: open a multi-block note, enable `localStorage['thockdown:debug-input-lag']='1'`, scroll in each mode, toggle, and confirm the logs show `containingIndex === anchorIndex` and that the top block in render matches the top block in edit.

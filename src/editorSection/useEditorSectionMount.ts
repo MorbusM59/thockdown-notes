@@ -1518,21 +1518,9 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       return
     }
 
-    // If the edit pane for this note/snapshot has already been restored
-    // (either by a real first-load restore or by a prior no-op toggle),
-    // and the only reason the flag is set is a preview-side scroll, the
-    // edit pane itself is still correctly positioned -- dual-mount keeps
-    // it alive while hidden. Just make it visible again.
-    if (editRestoreCompletedForNoteIdRef.current.has(editRestoreKey)) {
-      debugLogScrollSync(`render->edit fast path (already restored): note=${activeNoteId}`)
-      sectionRequiresScrollUpdateRef.current = false
-      previousActiveNoteIdForEditRestoreRef.current = activeNoteId
-      return
-    }
-
-    // Single-owner restore rule: render->edit transition owns restore for the
-    // current note. Mark this note as handled so the note-activation effect
-    // does not race in with a second restore source.
+    // The flag is true, so something genuinely changed since the two modes
+    // were last in sync. Re-derive edit's position rather than trusting that
+    // the hidden edit pane is still correctly positioned.
     previousActiveNoteIdForEditRestoreRef.current = activeNoteId
 
     const cachedSnapshot = pendingEditRestoreSnapshotRef.current
@@ -1625,6 +1613,11 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
     const text = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
 
+    const rawSourceAnchorLine = resolveCurrentSourceAnchorLine()
+    debugLogScrollSync(
+      `toggleRenderViewMode rawSourceAnchorLine=${rawSourceAnchorLine ?? 'null'} mode=${isPreviewMode ? 'preview' : 'edit'} note=${activeNoteId}`,
+    )
+
     // Resolve the current source line from whichever mode is being left,
     // then round-trip it through the mode-agnostic BLOCK representation so
     // both directions of the toggle speak the same language. Edit's own
@@ -1638,7 +1631,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     // the same canonical block boundary (docs/editor-contract.md's Viewport
     // Model). The blocks are cached, so this parse is only paid once per
     // text change, not twice per toggle.
-    const rawSourceAnchorLine = resolveCurrentSourceAnchorLine()
 
     if (rawSourceAnchorLine === null || rawSourceAnchorLine < 0) {
       sectionRequiresScrollUpdateRef.current = false
@@ -1659,8 +1651,12 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       blockCount: blocks.length,
       blockResolveMs: Number(blockResolveMs.toFixed(2)),
     })
-    const anchorBlockIndex = Math.max(0, resolvePreviewBlockIndexForSourceLine(blocks, rawSourceAnchorLine) + 1)
+    const containingBlockIndex = resolvePreviewBlockIndexForSourceLine(blocks, rawSourceAnchorLine)
+    const anchorBlockIndex = Math.max(0, containingBlockIndex)
     const sourceAnchorLine = resolveSourceLineForAnchorBlockIndex(blocks, anchorBlockIndex)
+    debugLogScrollSync(
+      `toggleRenderViewMode blocks: rawLine=${rawSourceAnchorLine} containingIndex=${containingBlockIndex} anchorIndex=${anchorBlockIndex} anchorStartLine=${sourceAnchorLine} note=${activeNoteId}`,
+    )
 
     if (enteringPreview) {
       pendingRenderViewSourceAnchorRef.current = { sourceAnchorLine }
@@ -1670,19 +1666,13 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         editRestoreCompletedForNoteIdRef.current.add(editRestoreKey)
       }
     } else {
-      // Returning to edit. If the edit pane already has a valid position
-      // for this note (it was live before we entered preview), dual-mount
-      // kept it alive while hidden -- just make it visible again.
-      if (editRestoreKey && editRestoreCompletedForNoteIdRef.current.has(editRestoreKey)) {
-        debugLogScrollSync(`toggleRenderViewMode edit fast path (already restored): note=${activeNoteId}`)
-        sectionRequiresScrollUpdateRef.current = false
-        setIsPreviewMode((previous) => !previous)
-        return
-      }
-
-      // Otherwise this is the first time edit is being entered for this
-      // note (e.g. note was activated directly into preview). Restore it
-      // from the best available snapshot and record that it has been done.
+      // Returning to edit after a real scroll/resize/edit change. The edit
+      // pane is dual-mounted and alive while hidden, but its position is
+      // stale if preview scrolled while it was hidden. Re-derive edit's
+      // position from the current preview anchor (the canonical BLOCK) and
+      // apply it. The flag being true means something genuinely changed
+      // since the two modes were last in sync -- spurious react-virtual
+      // convergence events are filtered by the preview scroll listener.
       if (editRestoreKey) {
         editRestoreCompletedForNoteIdRef.current.add(editRestoreKey)
       }
