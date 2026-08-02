@@ -285,13 +285,13 @@ export function deriveRenderScrollDynamicFromResponsiveness(response: number): n
 }
 
 export function setRenderScrollDynamic(next: number): void {
-  renderScrollDynamic = Number.isFinite(next) && next > 0
-    ? Math.max(RENDER_SCROLL_RAMP_MIN, Math.min(RENDER_SCROLL_RAMP_MAX, next))
-    : DEFAULT_RENDER_SCROLL_DYNAMIC;
+  if (!Number.isFinite(next) || next <= 0) return;
+  renderScrollDynamic = Math.max(RENDER_SCROLL_RAMP_MIN, Math.min(RENDER_SCROLL_RAMP_MAX, next));
 }
 export function getRenderScrollDynamic(): number { return renderScrollDynamic; }
 
 export function setRenderScrollResponsiveness(next: number): void {
+  if (!Number.isFinite(next) || next <= 0) return;
   renderScrollDynamic = deriveRenderScrollDynamicFromResponsiveness(next);
 }
 export function getRenderScrollResponsiveness(): number {
