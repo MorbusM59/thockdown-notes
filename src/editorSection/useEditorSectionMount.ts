@@ -60,45 +60,6 @@ function debugLogScrollSync(label: string): void {
   console.log(`[scroll-sync] ${label}`)
 }
 
-/**
- * Waits for `container.scrollTop` to stop changing before reporting it as
- * "settled" -- polls across animation frames rather than assuming any fixed
- * number of frames is enough. Needed because react-virtual's own
- * post-restore reconciliation (nearby blocks mounting, their real measured
- * height replacing the initial estimate, `scrollToFn`'s own doc comment)
- * can keep nudging scrollTop for a variable number of frames after a
- * restore -- confirmed live: a fixed 2-frame wait still saw drift up to
- * ~250px on some restores. Considered settled once the same value is read
- * on `stableFramesRequired` consecutive checks, or once `maxFrames` is
- * reached regardless (reports whatever the last read was rather than
- * waiting forever).
- */
-function waitForScrollSettle(
-  container: HTMLElement,
-  isCancelled: () => boolean,
-  onSettled: (settledScrollTopPx: number) => void,
-  options?: { maxFrames?: number; stableFramesRequired?: number },
-): void {
-  const maxFrames = options?.maxFrames ?? 30
-  const stableFramesRequired = options?.stableFramesRequired ?? 3
-  let lastValue = container.scrollTop
-  let stableStreak = 0
-
-  const check = (framesLeft: number) => {
-    if (isCancelled()) return
-    const current = container.scrollTop
-    stableStreak = Math.abs(current - lastValue) <= 0.5 ? stableStreak + 1 : 0
-    lastValue = current
-
-    if (stableStreak >= stableFramesRequired || framesLeft <= 0) {
-      onSettled(current)
-      return
-    }
-    requestAnimationFrame(() => check(framesLeft - 1))
-  }
-
-  requestAnimationFrame(() => check(maxFrames))
-}
 
 export interface UseEditorSectionMountOptions {
   activeNoteId: string | null
@@ -321,10 +282,17 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   // first-load restore, so subsequent edit<->preview toggles can be a pure
   // CSS visibility switch without re-running scroll code.
   const previewRestoreCompletedForNoteIdRef = useRef<Set<string>>(new Set())
-  // Suppresses the preview scroll listener's "modes are out of sync" flag
-  // during our own programmatic preview restores (mode-switch landing,
-  // first-load restore, snapshot return). User wheel/drag still sets it.
-  const ignoreProgrammaticPreviewScrollUntilRef = useRef<number>(0)
+  // The block our own most recent programmatic preview restore intended to
+  // land on (mode-switch landing, first-load restore, snapshot return). The
+  // preview scroll listener compares its own resolved anchor against this
+  // value rather than trying to suppress scroll events for some duration --
+  // react-virtual's own reconciliation can keep generating genuine scroll
+  // events for an unbounded time after a restore as nearby rows mount and
+  // get their real measured heights, all converging toward this same block;
+  // no duration can be trusted to outlast that, but as long as they
+  // converge here, none of them represent an actual change worth reacting
+  // to. Null means no restore has run yet this session for this section.
+  const lastKnownPreviewAnchorLineRef = useRef<number | null>(null)
   // Diagnostic-only call counter, see applyEditRestoreSnapshot's own entry log.
   const applyEditRestoreSnapshotCallCounterRef = useRef(0)
   const restoreInProgressRef = useRef(false)
@@ -530,38 +498,41 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     }
   }, [])
 
-  const captureCurrentAnchorBlockIndex = useCallback((): number | null => {
-    const text = normalizeInternalText(
-      previewedSnapshotContentRef.current ?? (latestEditorTextRef.current || activeNoteText),
-    )
-
+  // Resolves the current source line for whichever mode is active, with no
+  // markdown parsing at all -- edit's own analytical/DOM primitives only.
+  // Shared by captureCurrentAnchorBlockIndex (DB-persistence path, which
+  // needs the extra line->block-index conversion since a save/restore gap
+  // can shift line numbers) and toggleRenderViewMode's runtime mode-switch
+  // (which does not: the document hasn't changed between "leaving" and
+  // "entering" within the same synchronous toggle, so round-tripping the
+  // line through a block index there would just be two redundant
+  // full-document parses for zero benefit -- exactly what made a mode
+  // toggle on a very large document slow).
+  const resolveCurrentSourceAnchorLine = useCallback((): number | null => {
     if (isPreviewMode) {
       const container = previewScrollRef.current
       if (!container) return null
       const sourceAnchor = resolvePreviewSourceAnchorFromContainer(container)
-      if (!sourceAnchor) return null
-      return computeAnchorBlockIndexFromLine(text, sourceAnchor.sourceAnchorLine)
+      return sourceAnchor?.sourceAnchorLine ?? null
     }
 
     const payload = readCurrentEditUiPayload()
-    if (payload) {
-      return computeAnchorBlockIndexFromLine(text, payload.sourceAnchorLine)
-    }
+    if (payload) return payload.sourceAnchorLine
 
     const cachedSnapshot = activeNoteId ? editModeSnapshotByNoteIdRef.current.get(activeNoteId) : null
     if (!cachedSnapshot) return null
-    const sourceAnchorLine = Math.max(0, cachedSnapshot.viewport.scrollTopLines + cachedSnapshot.viewport.topBoundaryLines)
+    return Math.max(0, cachedSnapshot.viewport.scrollTopLines + cachedSnapshot.viewport.topBoundaryLines)
+  }, [activeNoteId, isPreviewMode, readCurrentEditUiPayload, resolvePreviewSourceAnchorFromContainer])
+
+  const captureCurrentAnchorBlockIndex = useCallback((): number | null => {
+    const sourceAnchorLine = resolveCurrentSourceAnchorLine()
+    if (sourceAnchorLine === null) return null
+
+    const text = normalizeInternalText(
+      previewedSnapshotContentRef.current ?? (latestEditorTextRef.current || activeNoteText),
+    )
     return computeAnchorBlockIndexFromLine(text, sourceAnchorLine)
-  }, [
-    activeNoteId,
-    activeNoteText,
-    computeAnchorBlockIndexFromLine,
-    isPreviewMode,
-    latestEditorTextRef,
-    previewedSnapshotContentRef,
-    readCurrentEditUiPayload,
-    resolvePreviewSourceAnchorFromContainer,
-  ])
+  }, [activeNoteText, computeAnchorBlockIndexFromLine, latestEditorTextRef, previewedSnapshotContentRef, resolveCurrentSourceAnchorLine])
 
 
   const restoreEditorSelection = useCallback(() => {
@@ -746,12 +717,17 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     let cancelled = false
 
     if (restoreInProgressRef.current) {
-      debugLogScrollSync('applyEditRestoreSnapshot skipped: another restore in progress')
+      debugLogScrollSync(`applyEditRestoreSnapshot skipped: another restore already in progress from ${restoreActiveCallerRef.current ?? 'unknown'}`)
       return () => {
         cancelled = true
       }
     }
     restoreInProgressRef.current = true
+    // Diagnostic: which call site invoked this -- the second line of a
+    // captured stack trace is the caller's own frame. Lets a future
+    // collision (see the skip log above) name its culprit instead of being
+    // pure guesswork.
+    restoreActiveCallerRef.current = new Error().stack?.split('\n')[2]?.trim() ?? 'unknown'
 
     // Diagnostic: which call site invoked this, and how many times total
     // this render cycle -- pinpoints whether two independent effects are
@@ -780,6 +756,15 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
 
       const selection = restoreFullSelection ? snapshot.fullSelection : snapshot.collapsedSelection
 
+      // The pane going from visibility:hidden back to normal layout right
+      // around this same call can itself fire a native scroll event with no
+      // CM6 transaction to tag it "programmatic" -- it then defaults to
+      // "user-input" (see docs/editor-contract.md's Event Semantics) and
+      // gets read by onViewportChange as a genuine user scroll, re-dirtying
+      // sectionRequiresScrollUpdateRef right after this restore and forcing
+      // an unnecessary slow-path toggle next time. seedInitialViewport
+      // already guards its own applySnapshot call the same way.
+      ignoreNextUserViewportChangeRef.current = true
       adapter.applySnapshot({
         selectionScrollBehavior: 'preserve-scroll',
         selection,
@@ -825,6 +810,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       )
       const correctedViewport: PersistedViewportState = { ...viewport, scrollTopLines: correctedScrollTopLines }
 
+      // Same reasoning as applyWhenReady's own applySnapshot call above.
+      ignoreNextUserViewportChangeRef.current = true
       adapter.applySnapshot({
         selectionScrollBehavior: 'preserve-scroll',
         viewportLines: correctedViewport,
@@ -1493,12 +1480,18 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
     const text = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
 
-    // Capture the canonical mode-agnostic BLOCK from whichever mode is
-    // being left, then land the entered mode on that block's start line
-    // plus the one-line-height offset used by every other restore.
-    const anchorBlockIndex = captureCurrentAnchorBlockIndex()
+    // Resolve the current source line from whichever mode is being left, then
+    // land the entered mode on it plus the one-line-height offset used by
+    // every other restore. No markdown parsing here -- the document hasn't
+    // changed between "leaving" and "entering" within this one synchronous
+    // toggle, so there's no save/restore gap to round-trip through a block
+    // index for (that conversion is reserved for the DB-persistence path,
+    // captureCurrentAnchorBlockIndex, which needs it). Two full-document
+    // parses per toggle here was what made switching modes on a large
+    // document slow.
+    const sourceAnchorLine = resolveCurrentSourceAnchorLine()
 
-    if (anchorBlockIndex === null || anchorBlockIndex < 0) {
+    if (sourceAnchorLine === null || sourceAnchorLine < 0) {
       sectionRequiresScrollUpdateRef.current = false
       if (enteringPreview && activeNoteId) {
         setActiveNoteText(text)
@@ -1506,9 +1499,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       setIsPreviewMode((previous) => !previous)
       return
     }
-
-    const blocks = splitMarkdownIntoPreviewBlocks(text)
-    const sourceAnchorLine = resolveSourceLineForAnchorBlockIndex(blocks, anchorBlockIndex)
 
     if (enteringPreview) {
       pendingRenderViewSourceAnchorRef.current = { sourceAnchorLine }
@@ -1531,8 +1521,24 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         },
         sourceAnchorLine,
       }
-      pendingEditRestoreSnapshotRef.current = restoreSnapshot
       updateEditModeSnapshotCache(restoreSnapshot)
+      // Applied directly here, not handed off via pendingEditRestoreSnapshotRef
+      // for the isPreviewMode-transition effect to pick up -- that effect
+      // gates its own restore on sectionRequiresScrollUpdateRef, which this
+      // function clears (below) before that effect ever runs, so it always
+      // saw "nothing to do" and silently dropped this snapshot. Edit mode
+      // then kept showing whatever stale position it already had (masked as
+      // "fine" by dual-mount whenever the user happened to already be
+      // nearby), and focusing that stale, likely-off-viewport position could
+      // itself trigger a scroll that gets misread as a user scroll, forcing
+      // the *next* toggle to redo real work to compensate -- exactly the
+      // "first toggle back is still slow" pattern this fixes.
+      pendingEditRestoreSnapshotRef.current = null
+      applyEditRestoreSnapshot(restoreSnapshot, {
+        restoreFullSelection: true,
+        focusAfterApply: true,
+        onComplete: () => setIsCaretSuspended(false),
+      })
     }
 
     sectionRequiresScrollUpdateRef.current = false
@@ -1544,12 +1550,14 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   }, [
     activeNoteId,
     activeNoteText,
-    captureCurrentAnchorBlockIndex,
+    applyEditRestoreSnapshot,
+    resolveCurrentSourceAnchorLine,
     isPreviewMode,
     latestEditViewportRef,
     latestEditorTextRef,
     latestViewportRef,
     setActiveNoteText,
+    setIsCaretSuspended,
     setIsPreviewMode,
     updateEditModeSnapshotCache,
   ])
@@ -1744,20 +1752,24 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
     // Lands on the block covering `sourceLine`, one line-height below the
     // top border (never flush at 0) -- the same RESTORE_OFFSET_LINES
-    // convention every other restore uses. Always via the virtualizer's own
-    // scrollToIndex/scrollIntoView, then a single small fixed nudge applied
-    // only once settled -- never a raw/computed pixel value used to *land*,
-    // which is what previously fought react-virtual's own reconciliation
-    // and drifted across repeated round trips (see
-    // docs/cm6-parity-hardening-plan.md's Bug 5 follow-up).
+    // convention every other restore uses, achieved via `scroll-padding-top`
+    // on the container so the browser's own native `scrollIntoView` lands
+    // there directly. This is the ONLY scroll write this function makes.
+    // There is deliberately no follow-up nudge, and no "wait until
+    // scrollTop stops changing" polling: a raw/computed scrollTop write
+    // after the fact is exactly what fights react-virtual's own
+    // reconciliation as newly-mounted neighboring rows get their real
+    // measured heights (see docs/cm6-parity-hardening-plan.md's Bug 5
+    // follow-up) -- that reasoning is why this mechanism was originally
+    // built purely on scrollToIndex-to-mount + scrollIntoView-on-the-real-
+    // element with no override, and it stays that way; scroll-padding-top
+    // is a declarative shift of *where* scrollIntoView lands, not a second
+    // write competing with the first.
     const applyPreviewSourceAnchor = (sourceLine: number) => {
       const container = previewScrollRef.current
       if (!container) return
 
-      // Ignore the scroll events this programmatic restore will generate;
-      // they must not be mistaken for a user scroll that would force a
-      // slow-path mode switch next time.
-      ignoreProgrammaticPreviewScrollUntilRef.current = performance.now() + 600
+      container.style.scrollPaddingTop = `${Math.max(0, lineHeightPx)}px`
 
       // Entering a snapshot preview invalidates any earlier "live" preview
       // restore for this note, so returning to present later re-restores.
@@ -1767,41 +1779,26 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
       const previousScrollBehavior = container.style.scrollBehavior
       container.style.scrollBehavior = 'auto'
+      const clampedSourceLine = Math.max(0, sourceLine)
 
-      const landOneLineDown = () => {
-        if (!container) return
-        const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
-        container.scrollTop = Math.min(container.scrollTop + lineHeightPx, maxScrollTop)
-        container.style.scrollBehavior = previousScrollBehavior
-      }
-
-      // A source line of 0 means the anchor is the very top of the note.
-      // scrollIntoView on the first anchor would align that element's own
-      // top edge with the viewport, ignoring any container margin/padding
-      // above it, so land at true scrollTop 0 first, then nudge down.
-      if (sourceLine <= 0) {
-        previewScrollToSourceLineRef.current?.(0, { align: 'start' })
-        requestAnimationFrame(() => {
-          if (!container) return
-          container.scrollTop = 0
-          landOneLineDown()
-        })
-        return
-      }
-
-      // Force the covering block to actually mount before querying for it --
-      // under preview virtualization most of the document isn't real DOM
-      // until scrolled near, so the query below (built when every block was
-      // always real DOM) could otherwise silently resolve to the nearest
-      // already-mounted anchor instead of the true target. The virtualizer's
-      // own mount lands one React commit after this call, so retry the query
-      // across a few frames rather than assuming a single frame is enough.
-      previewScrollToSourceLineRef.current?.(sourceLine, { align: 'start' })
+      // The block we intend to land on. The scroll listener below compares
+      // its own resolved anchor against this, not against "did a scroll
+      // event fire" -- react-virtual's own reconciliation (nearby rows
+      // mounting, real measured heights replacing initial estimates) can
+      // keep generating genuine native scroll events for an unbounded,
+      // unknowable time after we call scrollIntoView, all converging toward
+      // this same block. No duration, however generous, can be trusted to
+      // outlast that; but as long as they all converge here, none of them
+      // represent an actual change worth reacting to. Set before either
+      // call below, so it covers the whole operation regardless of how many
+      // events fire or how long convergence takes.
+      lastKnownPreviewAnchorLineRef.current = clampedSourceLine
+      previewScrollToSourceLineRef.current?.(clampedSourceLine, { align: 'start' })
 
       const attemptFindAndScroll = (attemptsLeft: number) => {
         if (cancelled || !container) return
 
-        const target = findPreviewSourceAnchorElement(container, sourceLine)
+        const target = findPreviewSourceAnchorElement(container, clampedSourceLine)
         if (!target) {
           if (attemptsLeft <= 0) {
             container.style.scrollBehavior = previousScrollBehavior
@@ -1812,9 +1809,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         }
 
         target.scrollIntoView({ block: 'start', inline: 'nearest' })
-        waitForScrollSettle(container, () => cancelled, () => {
-          landOneLineDown()
-        })
+        container.style.scrollBehavior = previousScrollBehavior
       }
 
       requestAnimationFrame(() => attemptFindAndScroll(10))
@@ -1893,8 +1888,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     if (!container) return
 
     const persistPreviewScroll = () => {
-      if (performance.now() < ignoreProgrammaticPreviewScrollUntilRef.current) return
-
       if (previewScrollSaveTimerRef.current !== null) {
         window.clearTimeout(previewScrollSaveTimerRef.current)
       }
@@ -1903,6 +1896,20 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         previewScrollSaveTimerRef.current = null
         const sourceAnchor = resolvePreviewSourceAnchorFromContainer(container)
         if (!sourceAnchor) return
+
+        // Compare against the block our own last restore intended, not
+        // against "did a scroll event fire" -- react-virtual's own
+        // reconciliation can keep generating genuine scroll events for an
+        // unbounded time after a restore as nearby rows mount and get their
+        // real measured heights, all converging toward this same block.
+        // None of that is a real change; only landing on a genuinely
+        // different block is.
+        if (sourceAnchor.sourceAnchorLine === lastKnownPreviewAnchorLineRef.current) {
+          debugLogScrollSync(`preview scroll settled at already-known anchorLine=${sourceAnchor.sourceAnchorLine} -- not a real change, ignored`)
+          return
+        }
+
+        lastKnownPreviewAnchorLineRef.current = sourceAnchor.sourceAnchorLine
         // Do not persist preview scroll to the DB here. Instead, mark
         // that this section requires a fresh scroll-offset computation on
         // the next mode switch. This avoids progressive drift caused by
