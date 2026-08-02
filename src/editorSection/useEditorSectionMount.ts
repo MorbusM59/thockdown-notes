@@ -1525,7 +1525,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     }
 
     const blocks = getPreviewBlocksForText(text)
-    const anchorBlockIndex = resolvePreviewBlockIndexForSourceLine(blocks, rawSourceAnchorLine)
+    const anchorBlockIndex = Math.max(0, resolvePreviewBlockIndexForSourceLine(blocks, rawSourceAnchorLine) + 1)
     const sourceAnchorLine = resolveSourceLineForAnchorBlockIndex(blocks, anchorBlockIndex)
 
     if (enteringPreview) {
