@@ -646,7 +646,7 @@ Every feature in the app, described individually: where to find it, what it does
 
 *Tunes the custom easing curve used for preview-mode scroll animations.*
 
-- Controls for ramp, responsiveness, speed, maximum speed, and overall curve shape.
+- Controls for ramp, speed, maximum speed, and overall curve shape. Response is auto-derived from ramp.
 
 ### [Keystroke Sounds](#keystroke-sounds)
 

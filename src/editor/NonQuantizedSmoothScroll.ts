@@ -22,6 +22,8 @@ export {
   DEFAULT_RENDER_SCROLL_RESPONSIVENESS,
   DEFAULT_RENDER_SCROLL_SKEW,
   DEFAULT_RENDER_SCROLL_TOTAL_TIME_SEC,
+  deriveRenderScrollDynamicFromResponsiveness,
+  deriveRenderScrollResponsivenessFromDynamic,
   RENDER_SCROLL_SKEW_MAX,
   RENDER_SCROLL_SKEW_MIN,
   resolveApexSpeedPxPerSecFromCurrentParams,

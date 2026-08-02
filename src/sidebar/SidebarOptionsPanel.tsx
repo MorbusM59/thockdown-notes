@@ -360,8 +360,6 @@ export interface SidebarOptionsPanelProps {
 
   renderScrollDynamic: number
   setRenderScrollDynamic: (value: number) => void
-  renderScrollResponsiveness: number
-  setRenderScrollResponsiveness: (value: number) => void
   renderScrollTotalTimeSec: number
   setRenderScrollTotalTimeSec: (value: number) => void
   renderScrollMaxSpeedPxPerSec: number
@@ -545,8 +543,6 @@ export function SidebarOptionsPanel({
   setFilterColorize,
   renderScrollDynamic,
   setRenderScrollDynamic,
-  renderScrollResponsiveness,
-  setRenderScrollResponsiveness,
   renderScrollTotalTimeSec,
   setRenderScrollTotalTimeSec,
   renderScrollMaxSpeedPxPerSec,
@@ -1800,15 +1796,17 @@ export function SidebarOptionsPanel({
             onCommit={(value) => setRenderScrollDynamic(clamp(value, 0.1, 5))}
           />
           <CompactScrollbarSlider
-            id="render-scroll-responsiveness"
-            min={0.1}
-            max={5}
-            step={0.05}
-            value={renderScrollResponsiveness}
-            trackLabel="response"
-            ariaLabel="Curve responsiveness parameter b"
-            defaultValue={0.6}
-            onCommit={(value) => setRenderScrollResponsiveness(clamp(value, 0.1, 5))}
+            id="render-scroll-skew"
+            min={RENDER_SCROLL_SKEW_MIN}
+            max={RENDER_SCROLL_SKEW_MAX}
+            step={0.01}
+            value={renderScrollSkew}
+            trackLabel="shape"
+            ariaLabel="Curve skew (apex bias)"
+            defaultValue={0.5}
+            onCommit={(value) => setRenderScrollSkew(
+              Math.max(RENDER_SCROLL_SKEW_MIN, Math.min(RENDER_SCROLL_SKEW_MAX, value)),
+            )}
           />
           <CompactScrollbarSlider
             id="render-scroll-total-time"
@@ -1832,19 +1830,6 @@ export function SidebarOptionsPanel({
             ariaLabel="Maximum scroll speed in pixels per second"
             defaultValue={30000}
             onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(clamp(value, 1000, 100000))}
-          />
-          <CompactScrollbarSlider
-            id="render-scroll-skew"
-            min={RENDER_SCROLL_SKEW_MIN}
-            max={RENDER_SCROLL_SKEW_MAX}
-            step={0.01}
-            value={renderScrollSkew}
-            trackLabel="shape"
-            ariaLabel="Curve skew (apex bias)"
-            defaultValue={0.5}
-            onCommit={(value) => setRenderScrollSkew(
-              Math.max(RENDER_SCROLL_SKEW_MIN, Math.min(RENDER_SCROLL_SKEW_MAX, value)),
-            )}
           />
         </div>
       </AccordionSection>

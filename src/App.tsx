@@ -96,6 +96,8 @@ import { truncateTitle } from './shared/textSanitization'
 import { deriveNoteTitleFromText, deriveNoteTitleIncremental, type NoteTitleCache } from './shared/noteTitle'
 import { isNoteSearchQueryActive, matchesNoteSearchQuery } from './shared/noteSearch'
 import {
+  deriveRenderScrollDynamicFromResponsiveness,
+  deriveRenderScrollResponsivenessFromDynamic,
   getRenderScrollDynamic,
   getRenderScrollResponsiveness,
   getRenderScrollTotalTimeSec,
@@ -104,7 +106,6 @@ import {
   RENDER_SCROLL_SKEW_MIN,
   RENDER_SCROLL_SKEW_MAX,
   setRenderScrollDynamic as applyRenderScrollDynamic,
-  setRenderScrollResponsiveness as applyRenderScrollResponsiveness,
   setRenderScrollTotalTimeSec as applyRenderScrollTotalTimeSec,
   setRenderScrollMaxSpeedPxPerSec as applyRenderScrollMaxSpeedPxPerSec,
   setRenderScrollSkew as applyRenderScrollSkew,
@@ -818,6 +819,18 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
   const source = toRecord(loadout)
   const normalizedTextureMaterials = cloneTextureMaterials(source.textureMaterials as Partial<TextureMaterialsBySurface> | null | undefined)
   const normalizedHighlightColors = normalizeLoadoutHighlightColors(source.highlightColors)
+  const normalizedRenderScrollDynamic = roundForSignature(
+    clamp(
+      toFiniteNumber(
+        source.renderScrollDynamic,
+        deriveRenderScrollDynamicFromResponsiveness(
+          toFiniteNumber(source.renderScrollResponsiveness, getRenderScrollResponsiveness()),
+        ),
+      ),
+      0.1,
+      5,
+    ),
+  )
 
   const darkMode = source.darkMode === 'none' || source.darkMode === 'mono' || source.darkMode === 'red' || source.darkMode === 'dusk' || source.darkMode === 'neon' || source.darkMode === 'matrix'
     ? source.darkMode
@@ -844,8 +857,8 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
       BOX_SHADOW_ALPHA_PERCENT_MIN,
       BOX_SHADOW_ALPHA_PERCENT_MAX,
     ),
-    renderScrollDynamic: roundForSignature(clamp(toFiniteNumber(source.renderScrollDynamic, getRenderScrollDynamic()), 0.1, 5)),
-    renderScrollResponsiveness: roundForSignature(clamp(toFiniteNumber(source.renderScrollResponsiveness, getRenderScrollResponsiveness()), 0.1, 5)),
+    renderScrollDynamic: normalizedRenderScrollDynamic,
+    renderScrollResponsiveness: roundForSignature(deriveRenderScrollResponsivenessFromDynamic(normalizedRenderScrollDynamic)),
     renderScrollTotalTimeSec: roundForSignature(clamp(toFiniteNumber(source.renderScrollTotalTimeSec, getRenderScrollTotalTimeSec()), 0, 2)),
     renderScrollMaxSpeedPxPerSec: Math.round(clamp(toFiniteNumber(source.renderScrollMaxSpeedPxPerSec, getRenderScrollMaxSpeedPxPerSec()), 1000, 100000)),
     renderScrollSkew: roundForSignature(clamp(toFiniteNumber(source.renderScrollSkew, getRenderScrollSkew()), RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX)),
@@ -1842,7 +1855,7 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getActiveSection, persistenceReady, sidebarMode, lastSidebarModeBeforeOptions])
   const [renderScrollDynamic, setRenderScrollDynamic] = useState(() => getRenderScrollDynamic())
-  const [renderScrollResponsiveness, setRenderScrollResponsiveness] = useState(() => getRenderScrollResponsiveness())
+  const renderScrollResponsiveness = deriveRenderScrollResponsivenessFromDynamic(renderScrollDynamic)
   const [renderScrollTotalTimeSec, setRenderScrollTotalTimeSec] = useState(() => getRenderScrollTotalTimeSec())
   const [renderScrollMaxSpeedPxPerSec, setRenderScrollMaxSpeedPxPerSec] = useState(() => getRenderScrollMaxSpeedPxPerSec())
   const [renderScrollSkew, setRenderScrollSkew] = useState(() => getRenderScrollSkew())
@@ -2342,7 +2355,6 @@ function App() {
       ),
     )
     setRenderScrollDynamic(clamp(loadout.renderScrollDynamic, 0.1, 5))
-    setRenderScrollResponsiveness(clamp(loadout.renderScrollResponsiveness, 0.1, 5))
     setRenderScrollTotalTimeSec(clamp(loadout.renderScrollTotalTimeSec, 0, 2))
     setRenderScrollMaxSpeedPxPerSec(clamp(loadout.renderScrollMaxSpeedPxPerSec, 1000, 100000))
     setRenderScrollSkew(clamp(loadout.renderScrollSkew, RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX))
@@ -3585,10 +3597,6 @@ function App() {
   }, [renderScrollDynamic])
 
   useEffect(() => {
-    applyRenderScrollResponsiveness(renderScrollResponsiveness)
-  }, [renderScrollResponsiveness])
-
-  useEffect(() => {
     applyRenderScrollTotalTimeSec(renderScrollTotalTimeSec)
   }, [renderScrollTotalTimeSec])
 
@@ -4763,8 +4771,19 @@ ${markdownHtml}
                 BOX_SHADOW_ALPHA_PERCENT_MAX,
               ),
             )
-            setRenderScrollDynamic(appState.menu.renderScrollDynamic ?? appState.menu.renderScrollEaseMultiplier ?? getRenderScrollDynamic())
-            setRenderScrollResponsiveness(appState.menu.renderScrollResponsiveness ?? appState.menu.renderScrollDistanceTimeInfluence ?? getRenderScrollResponsiveness())
+            setRenderScrollDynamic(
+              clamp(
+                appState.menu.renderScrollDynamic
+                  ?? appState.menu.renderScrollEaseMultiplier
+                  ?? deriveRenderScrollDynamicFromResponsiveness(
+                    appState.menu.renderScrollResponsiveness
+                    ?? appState.menu.renderScrollDistanceTimeInfluence
+                    ?? getRenderScrollResponsiveness(),
+                  ),
+                0.1,
+                5,
+              ),
+            )
             setRenderScrollTotalTimeSec(appState.menu.renderScrollTotalTimeSec ?? getRenderScrollTotalTimeSec())
                   setRenderScrollMaxSpeedPxPerSec(appState.menu.renderScrollMaxSpeedPxPerSec ?? getRenderScrollMaxSpeedPxPerSec())
             setRenderScrollSkew(appState.menu.renderScrollSkew ?? getRenderScrollSkew())
@@ -7189,8 +7208,6 @@ ${markdownHtml}
                         setFilterColorize={setFilterColorize}
                         renderScrollDynamic={renderScrollDynamic}
                         setRenderScrollDynamic={setRenderScrollDynamic}
-                        renderScrollResponsiveness={renderScrollResponsiveness}
-                        setRenderScrollResponsiveness={setRenderScrollResponsiveness}
                         renderScrollTotalTimeSec={renderScrollTotalTimeSec}
                         setRenderScrollTotalTimeSec={setRenderScrollTotalTimeSec}
                         renderScrollMaxSpeedPxPerSec={renderScrollMaxSpeedPxPerSec}

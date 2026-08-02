@@ -26,6 +26,8 @@ export const DEFAULT_RENDER_SCROLL_SKEW = 0.5;
 export const RENDER_SCROLL_SKEW_MIN = 0.1;
 export const RENDER_SCROLL_SKEW_MAX = 0.9;
 export const CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER = 1.5;
+export const RENDER_SCROLL_RAMP_MIN = 0.1;
+export const RENDER_SCROLL_RAMP_MAX = 5;
 
 // Fixed internal CDF resolution. Coarse enough to stay cheap, fine enough that
 // piecewise-linear sampling never produces visible velocity steps at 60+ fps.
@@ -261,20 +263,40 @@ export const sampleScrollPlan = (plan: ScrollPlan, elapsedSec: number): number =
 // Shared parameter storage. Both engines read from the same source of truth so
 // that bell-curve UX is identical between render and edit views.
 let renderScrollDynamic = DEFAULT_RENDER_SCROLL_DYNAMIC;
-let renderScrollResponsiveness = DEFAULT_RENDER_SCROLL_RESPONSIVENESS;
 let renderScrollTotalTimeSec = DEFAULT_RENDER_SCROLL_TOTAL_TIME_SEC;
 let renderScrollMaxSpeedPxPerSec = DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC;
 let renderScrollSkew = DEFAULT_RENDER_SCROLL_SKEW;
 
+export function deriveRenderScrollResponsivenessFromDynamic(ramp: number): number {
+  const safeRamp = Number.isFinite(ramp) && ramp > 0
+    ? Math.max(RENDER_SCROLL_RAMP_MIN, Math.min(RENDER_SCROLL_RAMP_MAX, ramp))
+    : DEFAULT_RENDER_SCROLL_DYNAMIC;
+  return 1 / (2 * safeRamp);
+}
+
+export function deriveRenderScrollDynamicFromResponsiveness(response: number): number {
+  const safeResponse = Number.isFinite(response) && response > 0
+    ? Math.max(RENDER_SCROLL_RAMP_MIN, Math.min(RENDER_SCROLL_RAMP_MAX, response))
+    : DEFAULT_RENDER_SCROLL_RESPONSIVENESS;
+  return Math.max(
+    RENDER_SCROLL_RAMP_MIN,
+    Math.min(RENDER_SCROLL_RAMP_MAX, 1 / (2 * safeResponse)),
+  );
+}
+
 export function setRenderScrollDynamic(next: number): void {
-  renderScrollDynamic = Number.isFinite(next) && next > 0 ? next : DEFAULT_RENDER_SCROLL_DYNAMIC;
+  renderScrollDynamic = Number.isFinite(next) && next > 0
+    ? Math.max(RENDER_SCROLL_RAMP_MIN, Math.min(RENDER_SCROLL_RAMP_MAX, next))
+    : DEFAULT_RENDER_SCROLL_DYNAMIC;
 }
 export function getRenderScrollDynamic(): number { return renderScrollDynamic; }
 
 export function setRenderScrollResponsiveness(next: number): void {
-  renderScrollResponsiveness = Number.isFinite(next) && next > 0 ? next : DEFAULT_RENDER_SCROLL_RESPONSIVENESS;
+  renderScrollDynamic = deriveRenderScrollDynamicFromResponsiveness(next);
 }
-export function getRenderScrollResponsiveness(): number { return renderScrollResponsiveness; }
+export function getRenderScrollResponsiveness(): number {
+  return deriveRenderScrollResponsivenessFromDynamic(renderScrollDynamic);
+}
 
 export function setRenderScrollTotalTimeSec(next: number): void {
   renderScrollTotalTimeSec = Number.isFinite(next) && next >= 0 ? next : DEFAULT_RENDER_SCROLL_TOTAL_TIME_SEC;
@@ -296,7 +318,7 @@ export function getRenderScrollSkew(): number { return renderScrollSkew; }
 // Build a plan straight from the current parameter values.
 export const buildScrollPlanFromCurrentParams = (signedDistance: number): ScrollPlan => {
   const a = Math.max(0.0001, renderScrollDynamic);
-  const b = Math.max(0.0001, renderScrollResponsiveness);
+  const b = Math.max(0.0001, getRenderScrollResponsiveness());
   const tSec = Math.max(0.0001, renderScrollTotalTimeSec);
   const maxSpeedPxPerSec = Math.max(1, renderScrollMaxSpeedPxPerSec);
   const skew = Math.max(
@@ -319,7 +341,7 @@ export const resolveRampCrossingTimeSecFromCurrentParams = (
   if (absDistance <= 0.0001) return null;
 
   const a = Math.max(0.0001, renderScrollDynamic);
-  const b = Math.max(0.0001, renderScrollResponsiveness);
+  const b = Math.max(0.0001, getRenderScrollResponsiveness());
   const tSec = Math.max(0.0001, renderScrollTotalTimeSec);
   const skew = Math.max(
     RENDER_SCROLL_SKEW_MIN,
@@ -359,7 +381,7 @@ export const resolveApexSpeedPxPerSecFromCurrentParams = (signedDistance: number
   if (absDistance <= 0.0001) return 0;
 
   const a = Math.max(0.0001, renderScrollDynamic);
-  const b = Math.max(0.0001, renderScrollResponsiveness);
+  const b = Math.max(0.0001, getRenderScrollResponsiveness());
   const tSec = Math.max(0.0001, renderScrollTotalTimeSec);
   const skew = Math.max(
     RENDER_SCROLL_SKEW_MIN,
@@ -389,7 +411,7 @@ export const buildReleaseRampDownPlanFromCurrentParams = (
   if (speed <= 0) return null;
 
   const a = Math.max(0.0001, renderScrollDynamic);
-  const b = Math.max(0.0001, renderScrollResponsiveness);
+  const b = Math.max(0.0001, getRenderScrollResponsiveness());
   const tSec = Math.max(0.0001, renderScrollTotalTimeSec);
   const skew = Math.max(
     RENDER_SCROLL_SKEW_MIN,

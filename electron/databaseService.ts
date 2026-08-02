@@ -60,6 +60,22 @@ const TEXTURE_CACHE_DEFAULT_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 14;
 const AUDIO_BOUNCE_CACHE_DEFAULT_MAX_ENTRIES = 400;
 const AUDIO_BOUNCE_CACHE_DEFAULT_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 14;
 
+const RENDER_SCROLL_RAMP_MIN = 0.1;
+const RENDER_SCROLL_RAMP_MAX = 5;
+
+function deriveScrollResponsivenessFromRamp(ramp: number): number {
+  const clampedRamp = Math.max(RENDER_SCROLL_RAMP_MIN, Math.min(RENDER_SCROLL_RAMP_MAX, ramp));
+  return 1 / (2 * clampedRamp);
+}
+
+function deriveScrollRampFromResponsiveness(response: number): number {
+  const clampedResponse = Math.max(RENDER_SCROLL_RAMP_MIN, Math.min(RENDER_SCROLL_RAMP_MAX, response));
+  return Math.max(
+    RENDER_SCROLL_RAMP_MIN,
+    Math.min(RENDER_SCROLL_RAMP_MAX, 1 / (2 * clampedResponse)),
+  );
+}
+
 const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   borderRadiusRegularPx: 6,
   spacingRegularPx: 4,
@@ -76,7 +92,7 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   typingSoundEnabled: false,
   typingSoundSet: 'A',
   renderScrollDynamic: 1.5,
-  renderScrollResponsiveness: 0.6,
+  renderScrollResponsiveness: deriveScrollResponsivenessFromRamp(1.5),
   renderScrollTotalTimeSec: 0.4,
   renderScrollMaxSpeedPxPerSec: 6000,
   renderScrollSkew: 0.5,
@@ -437,6 +453,21 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
 
   const legacySelection = sanitizeString((highlights as Record<string, unknown>).selection, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.selectionEdit);
   const legacyTextEmboss = sanitizeString((highlights as Record<string, unknown>).textEmboss, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.textEmbossUi);
+  const normalizedRenderScrollDynamic = roundForSignature(
+    clampNumber(
+      source.renderScrollDynamic,
+      RENDER_SCROLL_RAMP_MIN,
+      RENDER_SCROLL_RAMP_MAX,
+      deriveScrollRampFromResponsiveness(
+        clampNumber(
+          source.renderScrollResponsiveness,
+          RENDER_SCROLL_RAMP_MIN,
+          RENDER_SCROLL_RAMP_MAX,
+          DEFAULT_UI_LAYOUT_LOADOUT.renderScrollResponsiveness,
+        ),
+      ),
+    ),
+  );
 
   return {
     borderRadiusRegularPx: clampInteger(source.borderRadiusRegularPx, 0, 20, DEFAULT_UI_LAYOUT_LOADOUT.borderRadiusRegularPx),
@@ -452,8 +483,8 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     audioReverbSpace: clampNumber(source.audioReverbSpace, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.audioReverbSpace),
     pitchJitterAmount: clampNumber(source.pitchJitterAmount, 0, 0.05, DEFAULT_UI_LAYOUT_LOADOUT.pitchJitterAmount),
     typingSoundEnabled: typeof source.typingSoundEnabled === 'boolean' ? source.typingSoundEnabled : DEFAULT_UI_LAYOUT_LOADOUT.typingSoundEnabled,
-    renderScrollDynamic: roundForSignature(clampNumber(source.renderScrollDynamic, 0.1, 5, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollDynamic)),
-    renderScrollResponsiveness: roundForSignature(clampNumber(source.renderScrollResponsiveness, 0.1, 5, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollResponsiveness)),
+    renderScrollDynamic: normalizedRenderScrollDynamic,
+    renderScrollResponsiveness: roundForSignature(deriveScrollResponsivenessFromRamp(normalizedRenderScrollDynamic)),
     renderScrollTotalTimeSec: roundForSignature(clampNumber(source.renderScrollTotalTimeSec, 0, 2, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollTotalTimeSec)),
     renderScrollMaxSpeedPxPerSec: Math.round(clampNumber(source.renderScrollMaxSpeedPxPerSec, 1000, 100000, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollMaxSpeedPxPerSec)),
     renderScrollSkew: roundForSignature(clampNumber(source.renderScrollSkew, 0.1, 0.9, DEFAULT_UI_LAYOUT_LOADOUT.renderScrollSkew)),
@@ -515,7 +546,7 @@ const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
   'spacingRegularPx', 'borderAlphaPercent', 'boxShadowAlphaPercent',
   'audioKeyVolume', 'audioKeyVariance', 'audioPitch', 'audioBassVolume', 'audioTrebleVolume', 'audioReverbStrength', 'audioReverbSpace', 'pitchJitterAmount',
   'typingSoundEnabled', 'typingSoundSet',
-  'renderScrollDynamic', 'renderScrollResponsiveness', 'renderScrollTotalTimeSec',
+  'renderScrollDynamic', 'renderScrollTotalTimeSec',
   'renderScrollMaxSpeedPxPerSec', 'renderScrollSkew',
   'darkMode',
   'filterInvert', 'filterSepia', 'filterHueRotate', 'filterBrightness',
