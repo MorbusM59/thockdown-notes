@@ -122,6 +122,27 @@ function fullSplit(text: string): PreviewBlockSplitCache {
   return { text, ranges, blocks: materializeBlocks(ranges, lines) }
 }
 
+/** Schema version for PersistedPreviewBlockCache. Bump whenever the range/block shape changes. */
+export const PREVIEW_BLOCK_CACHE_VERSION = 1
+
+/**
+ * Reconstructs a PreviewBlockSplitCache from a persisted range-only record
+ * and the note's current text. The persisted cache intentionally omits
+ * block text and relies on the caller to supply the exact normalized text
+ * the cache was computed for (verified via textHash/contentChecksum).
+ */
+export function restorePreviewBlockSplitCacheFromRanges(
+  text: string,
+  ranges: Array<Pick<PreviewBlockRange, 'type' | 'rangeStartLine1' | 'rangeEndLine1'>>,
+): PreviewBlockSplitCache {
+  const lines = text.split('\n')
+  return {
+    text,
+    ranges: ranges as PreviewBlockRange[],
+    blocks: materializeBlocks(ranges as PreviewBlockRange[], lines),
+  }
+}
+
 /**
  * Ranges must exactly tile 1..totalLines with no gaps or overlaps. Defensive
  * check on the incremental splice below -- should always hold by

@@ -1,7 +1,7 @@
 import type { PersistedViewportState } from '../shared/appState'
 import type { EditorSelectionState } from './EditorContract'
 import { resolvePreviewSourceAnchorEntry } from './PreviewScrollAnchor'
-import { splitMarkdownIntoPreviewBlocks } from './PreviewBlockSplit'
+import { splitMarkdownIntoPreviewBlocks, type PreviewMarkdownBlock } from './PreviewBlockSplit'
 import { resolveSourceLineForAnchorBlockIndex } from './PreviewBlockIndex'
 
 export type EditRestoreSnapshot = {
@@ -83,14 +83,18 @@ export function resolveSourceAnchorFromEditState(params: {
  * still resolves to a real line (0, via resolveSourceLineForAnchorBlockIndex's
  * own fallback), it just doesn't return null.
  */
-export function resolveEditSourceAnchorLineFromUiState(text: string, uiState: { anchorBlockIndex?: unknown } | null | undefined): number | null {
+export function resolveEditSourceAnchorLineFromUiState(
+  text: string,
+  uiState: { anchorBlockIndex?: unknown } | null | undefined,
+  blocks?: Pick<PreviewMarkdownBlock, 'startLine'>[] | null,
+): number | null {
   if (!uiState || typeof uiState.anchorBlockIndex !== 'number' || !Number.isFinite(uiState.anchorBlockIndex)) {
     return null
   }
 
   const totalLines = Math.max(1, text.split('\n').length)
-  const blocks = splitMarkdownIntoPreviewBlocks(text)
-  const sourceLine = resolveSourceLineForAnchorBlockIndex(blocks, Math.round(uiState.anchorBlockIndex))
+  const resolvedBlocks = blocks ?? splitMarkdownIntoPreviewBlocks(text)
+  const sourceLine = resolveSourceLineForAnchorBlockIndex(resolvedBlocks, Math.round(uiState.anchorBlockIndex))
   return Math.min(Math.max(0, sourceLine), totalLines - 1)
 }
 
@@ -167,8 +171,9 @@ export function buildEditRestoreSnapshotFromUiState(params: {
   uiState: { cursorPos?: unknown; anchorBlockIndex?: unknown } | null | undefined
   fallbackViewport: PersistedViewportState | null
   overrideCursorPos?: number
+  previewBlocks?: Pick<PreviewMarkdownBlock, 'startLine'>[] | null
 }): EditRestoreSnapshot {
-  const { noteId, text, uiState, fallbackViewport, overrideCursorPos } = params
+  const { noteId, text, uiState, fallbackViewport, overrideCursorPos, previewBlocks } = params
   // Default to 0 lines for both boundaries when nothing is stored (per spec:
   // a fresh/never-dragged note has no reserved top/bottom zones).
   const fallbackTopBoundaryLines = fallbackViewport?.topBoundaryLines ?? 0
@@ -180,7 +185,7 @@ export function buildEditRestoreSnapshotFromUiState(params: {
       : typeof uiState?.cursorPos === 'number' && Number.isFinite(uiState.cursorPos)
         ? Math.max(0, Math.min(Math.round(uiState.cursorPos), selectionTextLength))
         : 0
-  const anchorLine = resolveEditSourceAnchorLineFromUiState(text, uiState)
+  const anchorLine = resolveEditSourceAnchorLineFromUiState(text, uiState, previewBlocks)
   const storedScrollTopLines =
     anchorLine !== null
       ? Math.max(0, anchorLine - fallbackTopBoundaryLines + RESTORE_OFFSET_LINES)

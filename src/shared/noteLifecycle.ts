@@ -65,6 +65,13 @@ export interface SaveNoteInput {
   // NOT piggybacked here -- it's written only via saveNoteUiState, at the
   // enumerated leave-editor checkpoints (see docs/editor-contract.md).
   cursorPos?: number | null;
+  /**
+   * Persisted preview-block split cache, keyed to the saved note text by
+   * its SHA-256 checksum. Allows the first edit->preview toggle after app
+   * startup to warm-start from the previous session's parse. The renderer
+   * validates the checksum before trusting the cache.
+   */
+  previewBlockCache?: PersistedPreviewBlockCache | null;
 }
 
 export interface DeleteNoteInput {
@@ -114,15 +121,38 @@ export interface TagSummary {
   usageCount: number;
 }
 
+export type PersistedPreviewBlockCache = {
+  /** Schema version of this cache blob. Bumped whenever the structural shape changes. */
+  v: number;
+  /** SHA-256 hex digest of the normalized note text this cache was computed from. */
+  textHash: string;
+  /** Structural ranges produced by PreviewBlockSplit.ts. */
+  ranges: Array<{
+    type: string;
+    /** 1-indexed, inclusive. */
+    rangeStartLine1: number;
+    /** 1-indexed, inclusive. */
+    rangeEndLine1: number;
+  }>;
+};
+
 export type NoteUiStatePayload = {
   /** The canonical mode-agnostic BLOCK -- an index into the note's current PreviewMarkdownBlock[] array. Never a pixel offset. */
   anchorBlockIndex?: number | null;
   cursorPos?: number | null;
+  /**
+   * Persisted preview-block split cache, keyed to the note text by
+   * contentChecksum. Allows the first edit->preview toggle after app
+   * startup to warm-start from the previous session's parse. Safe to
+   * discard (renderer falls back to full parse) if invalid or stale.
+   */
+  previewBlockCache?: PersistedPreviewBlockCache | null;
 };
 
 export type NoteUiState = {
   anchorBlockIndex: number;
   cursorPos: number;
+  previewBlockCache: PersistedPreviewBlockCache | null;
 };
 
 export interface NoteLifecycleApi {

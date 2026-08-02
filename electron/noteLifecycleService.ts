@@ -380,6 +380,7 @@ export class NoteLifecycleService {
         hasUnsavedChanges,
         syncMode,
         cursorPos: input.cursorPos,
+        previewBlockCache: input.previewBlockCache ? JSON.stringify(input.previewBlockCache) : null,
       });
       this.databaseService.updateTempNoteState(input.id, hasUnsavedChanges, syncMode);
       const summary = await this.readSummary(this.databaseService.getNoteRecord(input.id) ?? {
@@ -394,6 +395,7 @@ export class NoteLifecycleService {
         hasUnsavedChanges,
         syncMode,
         assignedId: record.assignedId ?? null,
+        previewBlockCache: null,
       });
 
       if (!summary) {
@@ -416,6 +418,7 @@ export class NoteLifecycleService {
       hasUnsavedChanges: record?.hasUnsavedChanges ?? false,
       syncMode: record?.syncMode ?? false,
       cursorPos: input.cursorPos,
+      previewBlockCache: input.previewBlockCache ? JSON.stringify(input.previewBlockCache) : null,
     });
     const summary = await this.readSummary(this.databaseService.getNoteRecord(input.id) ?? {
       id: input.id,
@@ -429,6 +432,7 @@ export class NoteLifecycleService {
       hasUnsavedChanges: false,
       syncMode: false,
       assignedId: record?.assignedId ?? null,
+      previewBlockCache: null,
     });
 
     if (!summary) {
@@ -452,11 +456,31 @@ export class NoteLifecycleService {
   }
 
   async saveNoteUiState(input: { id: string; payload: NoteUiStatePayload }): Promise<void> {
-    this.databaseService.saveNoteUiState(input.id, input.payload);
+    const payload: Parameters<DatabaseService['saveNoteUiState']>[1] = {
+      anchorBlockIndex: input.payload.anchorBlockIndex,
+      cursorPos: input.payload.cursorPos,
+      previewBlockCache: input.payload.previewBlockCache
+        ? JSON.stringify(input.payload.previewBlockCache)
+        : input.payload.previewBlockCache,
+    };
+    this.databaseService.saveNoteUiState(input.id, payload);
   }
 
   async getNoteUiState(input: LoadNoteInput): Promise<NoteUiState> {
-    return this.databaseService.getNoteUiState(input.id);
+    const uiState = this.databaseService.getNoteUiState(input.id);
+    let previewBlockCache: NoteUiState['previewBlockCache'] = null;
+    if (uiState.previewBlockCache) {
+      try {
+        previewBlockCache = JSON.parse(uiState.previewBlockCache) as NoteUiState['previewBlockCache'];
+      } catch {
+        previewBlockCache = null;
+      }
+    }
+    return {
+      anchorBlockIndex: uiState.anchorBlockIndex,
+      cursorPos: uiState.cursorPos,
+      previewBlockCache,
+    };
   }
 
   async updateExternalNoteState(input: { id: string; hasUnsavedChanges: boolean; syncMode: boolean }): Promise<NoteSummary> {

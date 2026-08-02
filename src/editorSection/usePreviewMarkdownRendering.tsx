@@ -189,7 +189,24 @@ export function usePreviewMarkdownRendering({
   // matches. This avoids a second full remark parse on the first preview
   // render after edit mode had already parsed the document in the background.
   const splitResult = useMemo(
-    () => splitMarkdownIntoPreviewBlocksIncremental(renderedDisplayText, splitCacheRef.current),
+    () => {
+      const cache = splitCacheRef.current
+      const hasMatchingCache = cache && cache.text === renderedDisplayText
+      const start = typeof window !== 'undefined' && window.localStorage.getItem('thockdown:debug-input-lag') === '1' ? performance.now() : 0
+      const result = splitMarkdownIntoPreviewBlocksIncremental(renderedDisplayText, cache)
+      if (typeof window !== 'undefined' && window.localStorage.getItem('thockdown:debug-input-lag') === '1') {
+        const elapsed = Number((performance.now() - start).toFixed(2))
+        console.log('[preview-block-cache] usePreviewMarkdownRendering split', {
+          renderedLength: renderedDisplayText.length,
+          hasMatchingCache: !!hasMatchingCache,
+          cacheTextLength: cache?.text.length,
+          ranges: cache?.ranges.length,
+          resultRanges: result.ranges.length,
+          elapsedMs: elapsed,
+        })
+      }
+      return result
+    },
     [renderedDisplayText, splitCacheRef],
   )
   // Committed in an effect, not during the useMemo above, so this cache

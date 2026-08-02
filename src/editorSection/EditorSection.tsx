@@ -27,15 +27,10 @@ import { usePreviewMarkdownRendering } from './usePreviewMarkdownRendering'
 import { usePreviewScrollbar } from './usePreviewScrollbar'
 import { useDocumentFindNavigation } from './useDocumentFindNavigation'
 import { useMarkdownFormattingToolbar } from './useMarkdownFormattingToolbar'
+import { hashNormalizedText } from '../shared/hashText'
+import { restorePreviewBlockSplitCacheFromRanges } from '../editor/PreviewBlockSplit'
+import type { PreviewMarkdownBlock, PreviewBlockSplitCache } from '../editor/PreviewBlockSplit'
 import type { SectionHandle } from './sectionRegistry'
-
-async function hashNormalizedText(text: string): Promise<string> {
-  const normalized = normalizeInternalText(text)
-  const encoder = new TextEncoder()
-  const data = encoder.encode(normalized)
-  const digest = await crypto.subtle.digest('SHA-256', data)
-  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('')
-}
 
 type ViewStyleKey =
   | 'modern'
@@ -279,12 +274,24 @@ export function EditorSection({
   const isFrozenSectionPreviewRef = useRef(false)
   const { editorSelection, setEditorSelection, latestEditorSelectionRef } = useDisplayedNoteSelection(sectionId)
   const [isCaretSuspended, setIsCaretSuspended] = useState(false)
+  // Owned here so useNoteSaveQueue (which must be declared earlier) and
+  // useEditorSectionMount share the same preview-block split cache.
+  const previewBlockSplitCacheRef = useRef<PreviewBlockSplitCache | null>(null)
+  const previewBlocksCacheRef = useRef<{ text: string; blocks: PreviewMarkdownBlock[] } | null>(null)
+  // Mirrors activeNoteText into a ref so activateNote can read the latest
+  // value without taking a reactive dependency that would recreate the
+  // callback (and the SectionHandle that contains it) on every keystroke.
+  const activeNoteTextRef = useRef(activeNoteText)
+  useEffect(() => {
+    activeNoteTextRef.current = activeNoteText
+  }, [activeNoteText])
 
   const { queueSave, flushPendingSaveNow, cancelPendingSave } = useNoteSaveQueue({
     activeNoteId,
     persistenceReady,
     notesRef,
     latestEditorTextRef,
+    previewBlockSplitCacheRef,
     setActiveNoteText,
     setNotes,
   })
@@ -314,7 +321,6 @@ export function EditorSection({
     bindings,
     toggleRenderViewMode,
     applyProgrammaticEditorText,
-    previewBlockSplitCacheRef,
     ...editorSectionMountRest
   } = useEditorSectionMount({
     activeNoteId,
@@ -349,6 +355,8 @@ export function EditorSection({
     sectionContainerRef,
     isFrozenSectionPreviewRef,
     previewedSnapshotContentRef,
+    previewBlockSplitCacheRef,
+    previewBlocksCacheRef,
   })
 
   const getActiveNoteLiveText = useCallback(() => (
@@ -371,6 +379,14 @@ export function EditorSection({
   const activateNote = useCallback(async (noteId: string, overrideCursorPos?: number) => {
     if (!window.thockdownNotes) return
 
+    const debugTiming = window.localStorage.getItem('thockdown:debug-input-lag') === '1'
+    const logStep = (label: string, start: number) => {
+      if (debugTiming) {
+        console.log(`[activate-note-timing] ${label}: ${(performance.now() - start).toFixed(1)}ms`)
+      }
+    }
+    const activateStart = performance.now()
+
     const previousNoteId = activeNoteId
     // Only an actual note switch needs the caret suspended -- the
     // note-activation effect (useEditorSectionMount.ts) deliberately skips
@@ -383,33 +399,96 @@ export function EditorSection({
     if (previousNoteId !== noteId) {
       setIsCaretSuspended(true)
     }
+    const persistOutStart = performance.now()
     if (persistenceReady && previousNoteId && previousNoteId !== noteId) {
       const anchorBlockIndex = captureCurrentAnchorBlockIndex()
       if (anchorBlockIndex !== null) {
         const cursorPos = readCurrentEditUiPayload()?.cursorPos
           ?? editModeSnapshotByNoteIdRef.current.get(previousNoteId)?.fullSelection.end
-        await window.thockdownNotes.saveNoteUiState({
-          id: previousNoteId,
-          payload: cursorPos === undefined ? { anchorBlockIndex } : { anchorBlockIndex, cursorPos },
-        })
+        const leavingText = normalizeInternalText(latestEditorTextRef.current || activeNoteTextRef.current)
+        const previewBlockCache = previewBlockSplitCacheRef.current?.text === leavingText
+          ? {
+              v: 1,
+              textHash: await hashNormalizedText(leavingText),
+              ranges: previewBlockSplitCacheRef.current.ranges.map(({ type, rangeStartLine1, rangeEndLine1 }) => ({
+                type,
+                rangeStartLine1,
+                rangeEndLine1,
+              })),
+            }
+          : null
+        const payload: { anchorBlockIndex: number; cursorPos?: number; previewBlockCache?: typeof previewBlockCache } = { anchorBlockIndex, previewBlockCache }
+        if (cursorPos !== undefined) payload.cursorPos = cursorPos
+        await window.thockdownNotes.saveNoteUiState({ id: previousNoteId, payload })
       }
     }
+    logStep('persist outgoing UI state', persistOutStart)
 
+    const loadStart = performance.now()
     const [loaded, nextUiState] = await Promise.all([
       window.thockdownNotes.loadNote({ id: noteId }),
       window.thockdownNotes?.getNoteUiState({ id: noteId }) ?? Promise.resolve(null),
     ])
+    logStep('load note + UI state', loadStart)
+
+    const cacheRestoreStart = performance.now()
     const hydratedText = normalizeInternalText(loaded.text)
+    if (nextUiState?.previewBlockCache && nextUiState.previewBlockCache.v === 1) {
+      const textHash = await hashNormalizedText(hydratedText)
+      const cacheHash = nextUiState.previewBlockCache.textHash
+      const cacheRanges = nextUiState.previewBlockCache.ranges.length
+      if (textHash === cacheHash) {
+        previewBlockSplitCacheRef.current = restorePreviewBlockSplitCacheFromRanges(hydratedText, nextUiState.previewBlockCache.ranges)
+        previewBlocksCacheRef.current = { text: hydratedText, blocks: previewBlockSplitCacheRef.current.blocks }
+        if (window.localStorage.getItem('thockdown:debug-input-lag') === '1') {
+          console.log('[preview-block-cache] restored from DB cache', {
+            noteId,
+            textHash,
+            blocks: previewBlocksCacheRef.current.blocks.length,
+            ranges: cacheRanges,
+          })
+        }
+      } else {
+        previewBlockSplitCacheRef.current = null
+        previewBlocksCacheRef.current = null
+        if (window.localStorage.getItem('thockdown:debug-input-lag') === '1') {
+          console.log('[preview-block-cache] DB cache hash mismatch; will parse', {
+            noteId,
+            textHash,
+            cacheHash,
+            ranges: cacheRanges,
+          })
+        }
+      }
+    } else {
+      previewBlockSplitCacheRef.current = null
+      previewBlocksCacheRef.current = null
+      if (window.localStorage.getItem('thockdown:debug-input-lag') === '1') {
+        console.log('[preview-block-cache] no DB cache found; will parse', {
+          noteId,
+          hasPreviewBlockCache: !!nextUiState?.previewBlockCache,
+        })
+      }
+    }
+    logStep('restore/clear preview block cache', cacheRestoreStart)
+
     const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
+    const restoreSnapshotStart = performance.now()
+    const cachedBlocks = previewBlocksCacheRef.current?.text === hydratedText
+      ? previewBlocksCacheRef.current.blocks
+      : undefined
     const preloadedSnapshot = buildEditRestoreSnapshotFromUiState({
       noteId,
       text: hydratedText,
       uiState: nextUiState,
       fallbackViewport,
       overrideCursorPos,
+      previewBlocks: cachedBlocks,
     })
+    logStep('build edit restore snapshot', restoreSnapshotStart)
     updateEditModeSnapshotCache(preloadedSnapshot)
 
+    const externalStart = performance.now()
     let originalText: string | null = null
     let originalHash: string | null = null
 
@@ -444,13 +523,17 @@ export function EditorSection({
         externalPath: loaded.externalPath,
       })
     }
+    logStep('external note setup', externalStart)
 
+    const stateUpdateStart = performance.now()
     latestEditorTextRef.current = hydratedText
     pendingEditRestoreSnapshotRef.current = preloadedSnapshot
     setActiveNoteId(loaded.id)
     setActiveNoteText(hydratedText)
     pendingViewportRestoreRef.current = null
     await saveSelectedNoteState(loaded.id)
+    logStep('state updates + save selected note', stateUpdateStart)
+    logStep('total activateNote', activateStart)
     void window.thockdownSections?.setActiveNote(sectionId, loaded.id)
   }, [
     activeNoteId,
@@ -460,6 +543,7 @@ export function EditorSection({
     sectionId,
     updateEditModeSnapshotCache,
     activeNoteExternalPathRef,
+    activeNoteTextRef,
     editModeSnapshotByNoteIdRef,
     externalNoteOriginalHashByIdRef,
     externalNoteOriginalTextByIdRef,
@@ -929,6 +1013,7 @@ export function EditorSection({
     latestViewportRef,
     latestEditViewportRef,
     previewBlockSplitCacheRef,
+    previewBlocksCacheRef,
     readCurrentEditUiPayload,
     updateEditModeSnapshotCache,
     captureEditModeSnapshotFromEditor,

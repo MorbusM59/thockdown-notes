@@ -242,6 +242,7 @@ function loadStore(): BrowserMockStore {
             .map(([key, value]) => [key, {
               anchorBlockIndex: value?.anchorBlockIndex ?? 0,
               cursorPos: value?.cursorPos ?? 0,
+              previewBlockCache: value?.previewBlockCache ?? null,
             }]),
         )
       : {}
@@ -390,14 +391,16 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
         // provided one, never clobbered by callers that don't. Scroll
         // position (anchorBlockIndex) is not piggybacked here -- see
         // saveNoteUiState.
-        if (input.cursorPos != null) {
+        if (input.cursorPos != null || input.previewBlockCache != null) {
           const previousState = store.noteUiStates[input.id] ?? {
             anchorBlockIndex: 0,
             cursorPos: 0,
+            previewBlockCache: null,
           }
           store.noteUiStates[input.id] = {
             ...previousState,
-            cursorPos: input.cursorPos ?? previousState.cursorPos,
+            cursorPos: input.cursorPos != null ? input.cursorPos : previousState.cursorPos,
+            previewBlockCache: input.previewBlockCache != null ? input.previewBlockCache : previousState.previewBlockCache,
           }
         }
 
@@ -410,12 +413,14 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
         const previousState = store.noteUiStates[input.id] ?? {
           anchorBlockIndex: 0,
           cursorPos: 0,
+          previewBlockCache: null,
         }
 
         const nextState: NoteUiState = {
           ...previousState,
           anchorBlockIndex: Object.prototype.hasOwnProperty.call(input.payload, 'anchorBlockIndex') ? input.payload.anchorBlockIndex ?? 0 : previousState.anchorBlockIndex,
           cursorPos: Object.prototype.hasOwnProperty.call(input.payload, 'cursorPos') ? input.payload.cursorPos ?? 0 : previousState.cursorPos,
+          previewBlockCache: Object.prototype.hasOwnProperty.call(input.payload, 'previewBlockCache') ? input.payload.previewBlockCache ?? null : previousState.previewBlockCache,
         }
 
         store.noteUiStates[input.id] = nextState
@@ -426,6 +431,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
       return storeRef.current.noteUiStates[input.id] ?? {
         anchorBlockIndex: 0,
         cursorPos: 0,
+        previewBlockCache: null,
       }
     },
 

@@ -3,6 +3,8 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import { isExternalNote, isSameNoteSummary } from '../shared/noteLifecycle'
 import { normalizeInternalText } from '../editor/TextPolicy'
+import { hashNormalizedText } from '../shared/hashText'
+import { PREVIEW_BLOCK_CACHE_VERSION, type PreviewBlockSplitCache } from '../editor/PreviewBlockSplit'
 
 /** How long to wait after the last keystroke before persisting to disk. */
 export const SAVE_DEBOUNCE_MS = 350
@@ -13,6 +15,8 @@ export interface UseNoteSaveQueueOptions {
   /** The full shared notes list, mirrored into a ref for the same reason the rest of the app reads it this way -- avoids re-subscribing the debounce timer callback to `notes` itself. */
   notesRef: MutableRefObject<NoteSummary[]>
   latestEditorTextRef: MutableRefObject<string>
+  /** Warm-start cache from useEditorSectionMount's background preview-block parse. Used to persist the structural split alongside the note text so the next startup can warm-start. */
+  previewBlockSplitCacheRef: MutableRefObject<PreviewBlockSplitCache | null>
   setActiveNoteText: Dispatch<SetStateAction<string>>
   setNotes: Dispatch<SetStateAction<NoteSummary[]>>
 }
@@ -45,7 +49,7 @@ export interface UseNoteSaveQueueResult {
  * whatever text it's handed.
  */
 export function useNoteSaveQueue(options: UseNoteSaveQueueOptions): UseNoteSaveQueueResult {
-  const { activeNoteId, persistenceReady, notesRef, latestEditorTextRef, setActiveNoteText, setNotes } = options
+  const { activeNoteId, persistenceReady, notesRef, latestEditorTextRef, previewBlockSplitCacheRef, setActiveNoteText, setNotes } = options
 
   const pendingSaveTextRef = useRef<string | null>(null)
   const pendingSaveCursorPosRef = useRef<number | null>(null)
@@ -64,7 +68,34 @@ export function useNoteSaveQueue(options: UseNoteSaveQueueOptions): UseNoteSaveQ
       const isExternal = noteSummary ? isExternalNote(noteSummary) : false
       const normalizedText = normalizeInternalText(nextText)
 
-      const savedSummary = await window.thockdownNotes.saveNote({ id: activeNoteId, text: normalizedText, cursorPos })
+      const splitCache = previewBlockSplitCacheRef.current
+      const previewBlockCache = splitCache && splitCache.text === normalizedText
+        ? {
+            v: PREVIEW_BLOCK_CACHE_VERSION,
+            textHash: await hashNormalizedText(normalizedText),
+            ranges: splitCache.ranges.map(({ type, rangeStartLine1, rangeEndLine1 }) => ({
+              type,
+              rangeStartLine1,
+              rangeEndLine1,
+            })),
+          }
+        : null
+
+      if (typeof window !== 'undefined' && window.localStorage.getItem('thockdown:debug-input-lag') === '1') {
+        console.log('[preview-block-cache] piggybacking on saveNote', {
+          noteId: activeNoteId,
+          textLength: normalizedText.length,
+          hasCache: !!previewBlockCache,
+          ranges: previewBlockCache?.ranges.length,
+        })
+      }
+
+      const savedSummary = await window.thockdownNotes.saveNote({
+        id: activeNoteId,
+        text: normalizedText,
+        cursorPos,
+        previewBlockCache,
+      })
 
       if (isExternal) {
         await window.thockdownNotes?.saveNoteSnapshot({ id: activeNoteId, content: normalizedText, isManual: false })
@@ -88,7 +119,7 @@ export function useNoteSaveQueue(options: UseNoteSaveQueueOptions): UseNoteSaveQ
     } catch (error) {
       console.error('Failed to persist note', error)
     }
-  }, [activeNoteId, notesRef, latestEditorTextRef, setActiveNoteText, setNotes])
+  }, [activeNoteId, notesRef, latestEditorTextRef, previewBlockSplitCacheRef, setActiveNoteText, setNotes])
 
   const queueSave = useCallback((text: string, cursorPos?: number | null) => {
     if (!persistenceReady) return

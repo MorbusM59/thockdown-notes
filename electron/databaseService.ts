@@ -144,6 +144,7 @@ type NoteRecordRow = {
   hasUnsavedChanges: number;
   syncMode: number;
   assignedId: string | null;
+  previewBlockCache: string | null;
 };
 
 export type NoteRecord = {
@@ -158,6 +159,7 @@ export type NoteRecord = {
   hasUnsavedChanges: boolean;
   syncMode: boolean;
   assignedId: string | null;
+  previewBlockCache: string | null;
 };
 
 /** One entry pinned to a section's tab bar (quick-access note shortcut). */
@@ -998,6 +1000,10 @@ export class DatabaseService {
     // rewrite's policy, it's written only at explicit leave-editor
     // checkpoints (saveNoteUiState), never on every debounced text save.
     cursorPos?: number | null;
+    // Persisted preview-block cache piggybacked onto the same text write.
+    // Stored as a JSON blob keyed by the note text's contentChecksum; the
+    // renderer validates the checksum/hash before trusting the cache.
+    previewBlockCache?: string | null;
   }): void {
     const db = this.requireDb();
     const createdAtIso = new Date(input.createdAtMs).toISOString();
@@ -1022,9 +1028,10 @@ export class DatabaseService {
         externalPath,
         hasUnsavedChanges,
         syncMode,
-        cursorPos
+        cursorPos,
+        previewBlockCache
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         filePath = excluded.filePath,
@@ -1036,7 +1043,8 @@ export class DatabaseService {
         externalPath = excluded.externalPath,
         hasUnsavedChanges = excluded.hasUnsavedChanges,
         syncMode = excluded.syncMode,
-        cursorPos = COALESCE(excluded.cursorPos, notes.cursorPos)
+        cursorPos = COALESCE(excluded.cursorPos, notes.cursorPos),
+        previewBlockCache = COALESCE(excluded.previewBlockCache, notes.previewBlockCache)
     `).run(
       input.id,
       input.title,
@@ -1050,6 +1058,7 @@ export class DatabaseService {
       hasUnsavedChanges,
       syncMode,
       cursorPos,
+      input.previewBlockCache ?? null,
     );
 
     db.prepare('DELETE FROM notes_fts WHERE noteId = ?').run(input.id);
@@ -1060,7 +1069,7 @@ export class DatabaseService {
   listNoteRecords(): NoteRecord[] {
     const db = this.requireDb();
     const rows = db.prepare(`
-      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode, assignedId
+      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode, assignedId, previewBlockCache
       FROM notes
       ORDER BY datetime(updatedAt) DESC
     `).all() as NoteRecordRow[];
@@ -1077,13 +1086,14 @@ export class DatabaseService {
       hasUnsavedChanges: Boolean(row.hasUnsavedChanges),
       syncMode: Boolean(row.syncMode),
       assignedId: row.assignedId,
+      previewBlockCache: row.previewBlockCache,
     }));
   }
 
   getNoteRecord(noteId: string): NoteRecord | null {
     const db = this.requireDb();
     const row = db.prepare(`
-      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode, assignedId
+      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode, assignedId, previewBlockCache
       FROM notes
       WHERE id = ?
       LIMIT 1
@@ -1105,6 +1115,7 @@ export class DatabaseService {
       hasUnsavedChanges: Boolean(row.hasUnsavedChanges),
       syncMode: Boolean(row.syncMode),
       assignedId: row.assignedId,
+      previewBlockCache: row.previewBlockCache,
     };
   }
 
@@ -1583,22 +1594,27 @@ export class DatabaseService {
   saveNoteUiState(noteId: string, payload: {
     anchorBlockIndex?: number | null;
     cursorPos?: number | null;
+    previewBlockCache?: string | null;
   }): void {
     const db = this.requireDb();
     const hasAnchorBlockIndex = Object.prototype.hasOwnProperty.call(payload, 'anchorBlockIndex');
     const hasCursorPos = Object.prototype.hasOwnProperty.call(payload, 'cursorPos');
+    const hasPreviewBlockCache = Object.prototype.hasOwnProperty.call(payload, 'previewBlockCache');
 
     db.prepare(`
       UPDATE notes
       SET
         anchorBlockIndex = CASE WHEN ? THEN ? ELSE anchorBlockIndex END,
-        cursorPos = CASE WHEN ? THEN ? ELSE cursorPos END
+        cursorPos = CASE WHEN ? THEN ? ELSE cursorPos END,
+        previewBlockCache = CASE WHEN ? THEN ? ELSE previewBlockCache END
       WHERE id = ?
     `).run(
       hasAnchorBlockIndex ? 1 : 0,
       payload.anchorBlockIndex ?? null,
       hasCursorPos ? 1 : 0,
       payload.cursorPos ?? null,
+      hasPreviewBlockCache ? 1 : 0,
+      payload.previewBlockCache ?? null,
       noteId,
     );
   }
@@ -1606,16 +1622,18 @@ export class DatabaseService {
   getNoteUiState(noteId: string): {
     anchorBlockIndex: number;
     cursorPos: number;
+    previewBlockCache: string | null;
   } {
     const db = this.requireDb();
 
     const row = db.prepare(`
-      SELECT anchorBlockIndex, cursorPos
+      SELECT anchorBlockIndex, cursorPos, previewBlockCache
       FROM notes
       WHERE id = ?
     `).get(noteId) as {
       anchorBlockIndex?: number | null;
       cursorPos?: number | null;
+      previewBlockCache?: string | null;
     } | undefined;
 
     // A note row can sit with these columns at SQL NULL from creation until
@@ -1627,6 +1645,7 @@ export class DatabaseService {
     return {
       anchorBlockIndex: row?.anchorBlockIndex ?? 0,
       cursorPos: row?.cursorPos ?? 0,
+      previewBlockCache: row?.previewBlockCache ?? null,
     };
   }
 
@@ -2807,7 +2826,8 @@ export class DatabaseService {
         hasUnsavedChanges INTEGER DEFAULT 0,
         syncMode INTEGER DEFAULT 0,
         originalEncoding TEXT,
-        fileToken TEXT UNIQUE
+        fileToken TEXT UNIQUE,
+        previewBlockCache TEXT
       );
 
       CREATE TABLE IF NOT EXISTS tags (
@@ -2954,6 +2974,12 @@ export class DatabaseService {
     // offset or a raw line number. See docs/editor-contract.md's Viewport
     // Model section.
     this.ensureNotesColumn('anchorBlockIndex', 'INTEGER');
+    // Persisted structural preview-block cache, keyed to the note text via
+    // its SHA-256 checksum. Lets the first edit->preview toggle after app
+    // startup warm-start from the previous session's parse instead of
+    // re-parsing the whole document. Safe to discard (falls back to full
+    // parse) if the text or parser version changes.
+    this.ensureNotesColumn('previewBlockCache', 'TEXT');
     this.ensureNoteSnapshotsColumn('anchorBlockIndex', 'INTEGER');
 
     // Notes are inserted (both on creation and on filesystem-sync upsert)

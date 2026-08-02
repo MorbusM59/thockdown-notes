@@ -25,9 +25,11 @@ import {
   ZERO_PERSISTED_VIEWPORT,
 } from '../editor/EditRestoreMath'
 import { normalizeInternalText } from '../editor/TextPolicy'
+import { hashNormalizedText } from '../shared/hashText'
 import {
   splitMarkdownIntoPreviewBlocks,
   splitMarkdownIntoPreviewBlocksIncremental,
+  PREVIEW_BLOCK_CACHE_VERSION,
   type PreviewMarkdownBlock,
   type PreviewBlockSplitCache,
 } from '../editor/PreviewBlockSplit'
@@ -64,6 +66,14 @@ function debugLogScrollSync(label: string): void {
   console.log(`[scroll-sync] ${label}`)
 }
 
+/** Same opt-in flag: logs preview-block cache lifecycle (DB restore and incremental reuse). */
+function debugLogPreviewBlockCache(label: string, details?: Record<string, unknown>): void {
+  if (typeof window === 'undefined') return
+  if (window.localStorage.getItem('thockdown:debug-input-lag') !== '1') return
+  const detailString = details ? ` ${JSON.stringify(details)}` : ''
+  console.log(`[preview-block-cache] ${label}${detailString}`)
+}
+
 
 export interface UseEditorSectionMountOptions {
   activeNoteId: string | null
@@ -93,7 +103,7 @@ export interface UseEditorSectionMountOptions {
   setIsCaretSuspended: Dispatch<SetStateAction<boolean>>
   externalNoteOriginalTextByIdRef: MutableRefObject<Map<string, string>>
 
-  queueSave: (text: string, cursorPos?: number | null, scrollTopPx?: number | null) => void
+  queueSave: (text: string, cursorPos?: number | null) => void
   queueAppStateSave: (selectedNoteId: string | null) => void
   updateActiveNoteTitlePreview: (nextText: string) => void
   /** Only ever referenced in bindings' own dependency array (matching the original code), never actually called here. */
@@ -143,6 +153,14 @@ export interface UseEditorSectionMountOptions {
    * leaving it (see docs/editor-contract.md's Viewport Model section).
    */
   previewedSnapshotContentRef: MutableRefObject<string | null>
+  /**
+   * Cache refs owned by EditorSection so useNoteSaveQueue (declared earlier
+   * due to the hook-order rule) and useEditorSectionMount can share the same
+   * preview-block split state. useEditorSectionMount writes these during its
+   * background parse; useNoteSaveQueue reads them to persist the cache.
+   */
+  previewBlockSplitCacheRef: MutableRefObject<PreviewBlockSplitCache | null>
+  previewBlocksCacheRef: MutableRefObject<{ text: string; blocks: PreviewMarkdownBlock[] } | null>
 }
 
 export interface UseEditorSectionMountResult {
@@ -219,9 +237,11 @@ export interface UseEditorSectionMountResult {
    * Background preview-block split cache. Populated by a deferred parse
    * while in edit mode so the first toggle to preview can warm-start
    * usePreviewMarkdownRendering's incremental parser instead of paying for
-   * a full remark parse on demand.
+   * a full remark parse on demand. Also seeded from the persisted DB cache
+   * when a note is activated.
    */
   previewBlockSplitCacheRef: MutableRefObject<PreviewBlockSplitCache | null>
+  previewBlocksCacheRef: MutableRefObject<{ text: string; blocks: PreviewMarkdownBlock[] } | null>
 }
 
 /**
@@ -268,6 +288,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     sectionContainerRef,
     isFrozenSectionPreviewRef,
     previewedSnapshotContentRef,
+    previewBlockSplitCacheRef,
+    previewBlocksCacheRef,
   } = options
 
   const adapterRef = useRef<EditorAdapter | null>(null)
@@ -318,18 +340,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   const latestEditViewportTelemetryRef = useRef<EditViewportTelemetry | null>(null)
   const editUiStateSaveTimerRef = useRef<number | null>(null)
   const lastPersistedEditUiStateRef = useRef<{ noteId: string; progressEdit: number; cursorPos: number; scrollTop: number; sourceAnchorLine: number } | null>(null)
-  // Cache for preview block-split results. The full remark structural parse
-  // is expensive on large documents (seconds on a ~1.5M-character note),
-  // and the same result is needed by both DB-persistence / mode-switch
-  // round-tripping in this hook and by the preview pane's incremental
-  // splitter in usePreviewMarkdownRendering. Keyed by the normalized text
-  // string; recomputed only when the text actually changes.
-  const previewBlocksCacheRef = useRef<{ text: string; blocks: PreviewMarkdownBlock[] } | null>(null)
-  // Full PreviewBlockSplitCache, including structural ranges, so the preview
-  // pane's incremental parser can warm-start from edit mode's first parse
-  // instead of paying for a second full parse on the first toggle. Seeded by
-  // a background parse kicked off after note activation / text stabilization.
-  const previewBlockSplitCacheRef = useRef<PreviewBlockSplitCache | null>(null)
   // Tracks the last text for which a background preview-block prewarm was
   // initiated, so we don't restart the parse on every keystroke while the
   // user is typing. A new parse is scheduled only after the text has been
@@ -442,21 +452,45 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   const getPreviewBlocksForText = useCallback((text: string): PreviewMarkdownBlock[] => {
     const cached = previewBlocksCacheRef.current
     if (cached && cached.text === text) {
+      debugLogPreviewBlockCache('reusing in-memory blocks cache', { textLength: text.length, blocks: cached.blocks.length })
       return cached.blocks
     }
     // Reuse the full split cache if it matches; otherwise fall back to a
     // fresh parse. The split cache is populated by the background prewarm
-    // path below and by usePreviewMarkdownRendering's own incremental
-    // parser, so this avoids duplicating the expensive full remark parse.
+    // path below, by usePreviewMarkdownRendering's own incremental parser,
+    // and by the persisted DB cache loaded on note activation, so this
+    // avoids duplicating the expensive full remark parse.
     const splitCache = previewBlockSplitCacheRef.current
     if (splitCache && splitCache.text === text) {
       previewBlocksCacheRef.current = { text, blocks: splitCache.blocks }
+      debugLogPreviewBlockCache('reusing split-cache blocks', { textLength: text.length, blocks: splitCache.blocks.length })
       return splitCache.blocks
     }
+    debugLogPreviewBlockCache('falling back to full remark parse', { textLength: text.length })
     const blocks = splitMarkdownIntoPreviewBlocks(text)
     previewBlocksCacheRef.current = { text, blocks }
     return blocks
-  }, [])
+  }, [previewBlockSplitCacheRef, previewBlocksCacheRef])
+
+  /**
+   * Builds a PersistedPreviewBlockCache from the current in-memory split
+   * cache, if it matches the supplied text. The result is small (just
+   * structural ranges) and can be persisted alongside the note text so the
+   * next app startup warm-starts the first preview toggle.
+   */
+  const buildPersistedPreviewBlockCache = useCallback((text: string) => {
+    const cache = previewBlockSplitCacheRef.current
+    if (!cache || cache.text !== text) return null
+    return {
+      v: PREVIEW_BLOCK_CACHE_VERSION,
+      textHash: '', // filled in by the caller once an async hash resolves
+      ranges: cache.ranges.map(({ type, rangeStartLine1, rangeEndLine1 }) => ({
+        type,
+        rangeStartLine1,
+        rangeEndLine1,
+      })),
+    }
+  }, [previewBlockSplitCacheRef])
 
   // Boundary conversion for the scroll-sync rewrite: everything in this hook
   // still computes/caches position in terms of a raw source line internally
@@ -702,7 +736,19 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
 
       const text = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
       const anchorBlockIndex = computeAnchorBlockIndexFromLine(text, sourceAnchorLine)
-      await notesApi.saveNoteUiState({ id: noteId, payload: { anchorBlockIndex, cursorPos } })
+      const previewBlockCache = buildPersistedPreviewBlockCache(text)
+      if (previewBlockCache) {
+        previewBlockCache.textHash = await hashNormalizedText(text)
+      }
+      debugLogPreviewBlockCache('persisting edit-ui cache', {
+        noteId,
+        hasCache: !!previewBlockCache,
+        ranges: previewBlockCache?.ranges.length,
+      })
+      await notesApi.saveNoteUiState({
+        id: noteId,
+        payload: { anchorBlockIndex, cursorPos, previewBlockCache },
+      })
     }
 
     if (options?.immediate) {
@@ -722,7 +768,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       editUiStateSaveTimerRef.current = null
       void persistNow()
     }, 280)
-  }, [activeNoteText, computeAnchorBlockIndexFromLine, latestEditorTextRef, lineHeightPx, readCurrentEditUiPayload, updateEditModeSnapshotCache])
+  }, [activeNoteText, buildPersistedPreviewBlockCache, computeAnchorBlockIndexFromLine, latestEditorTextRef, lineHeightPx, readCurrentEditUiPayload, updateEditModeSnapshotCache])
 
   const cancelPendingEditUiStatePersist = useCallback(() => {
     if (editUiStateSaveTimerRef.current !== null) {
@@ -756,15 +802,33 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     // an explicit `cursorPos: undefined` still counts as present.
     const cursorPos = isPreviewMode ? undefined : readCurrentEditUiPayload()?.cursorPos
 
-    void notesApi.saveNoteUiState({
-      id: activeNoteId,
-      payload: cursorPos === undefined ? { anchorBlockIndex } : { anchorBlockIndex, cursorPos },
-    })
+    const text = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
+    const previewBlockCache = buildPersistedPreviewBlockCache(text)
+    const payloadBase: { anchorBlockIndex: number | null; cursorPos?: number | null; previewBlockCache?: ReturnType<typeof buildPersistedPreviewBlockCache> } =
+      { anchorBlockIndex, previewBlockCache }
+    if (cursorPos !== undefined) {
+      payloadBase.cursorPos = cursorPos
+    }
+
+    void (async () => {
+      if (payloadBase.previewBlockCache) {
+        payloadBase.previewBlockCache.textHash = await hashNormalizedText(text)
+      }
+      debugLogPreviewBlockCache('persisting leave-note cache', {
+        noteId: activeNoteId,
+        hasCache: !!payloadBase.previewBlockCache,
+        ranges: payloadBase.previewBlockCache?.ranges.length,
+      })
+      await notesApi.saveNoteUiState({ id: activeNoteId, payload: payloadBase })
+    })()
   }, [
     activeNoteId,
+    activeNoteText,
+    buildPersistedPreviewBlockCache,
     captureCurrentAnchorBlockIndex,
     captureEditModeSnapshotFromEditor,
     isPreviewMode,
+    latestEditorTextRef,
     readCurrentEditUiPayload,
   ])
 
@@ -1586,7 +1650,15 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       return
     }
 
+    const blockResolveStart = performance.now()
     const blocks = getPreviewBlocksForText(text)
+    const blockResolveMs = performance.now() - blockResolveStart
+    debugLogPreviewBlockCache('toggleRenderViewMode block resolve', {
+      noteId: activeNoteId,
+      textLength: text.length,
+      blockCount: blocks.length,
+      blockResolveMs: Number(blockResolveMs.toFixed(2)),
+    })
     const anchorBlockIndex = Math.max(0, resolvePreviewBlockIndexForSourceLine(blocks, rawSourceAnchorLine) + 1)
     const sourceAnchorLine = resolveSourceLineForAnchorBlockIndex(blocks, anchorBlockIndex)
 
@@ -1705,9 +1777,16 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
     const prewarmPreviewBlocks = () => {
       const text = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
-      if (previewBlockSplitCacheRef.current?.text === text) return
-      if (previewBlockPrewarmTextRef.current === text) return
+      if (previewBlockSplitCacheRef.current?.text === text) {
+        debugLogPreviewBlockCache('background prewarm skipped (cache already matches)', { textLength: text.length })
+        return
+      }
+      if (previewBlockPrewarmTextRef.current === text) {
+        debugLogPreviewBlockCache('background prewarm skipped (already scheduled)', { textLength: text.length })
+        return
+      }
       previewBlockPrewarmTextRef.current = text
+      debugLogPreviewBlockCache('scheduling background prewarm', { textLength: text.length })
 
       if (previewBlockPrewarmTimerRef.current !== null) {
         window.clearTimeout(previewBlockPrewarmTimerRef.current)
@@ -1726,6 +1805,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
             const splitCache = splitMarkdownIntoPreviewBlocksIncremental(currentText, previewBlockSplitCacheRef.current)
             previewBlockSplitCacheRef.current = splitCache
             previewBlocksCacheRef.current = { text: currentText, blocks: splitCache.blocks }
+            debugLogPreviewBlockCache('background prewarm completed', { textLength: currentText.length, blocks: splitCache.blocks.length, ranges: splitCache.ranges.length })
           } catch (error) {
             console.warn('Failed to prewarm preview blocks', error)
           }
@@ -1751,7 +1831,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     // Deliberately NOT dependent on activeNoteText -- this preloads the
     // persisted-position cache once per note activation (activeNoteId
     // change), not on every edit. See the comment above.
-  }, [activeNoteId, activeNoteText, lineHeightPx, persistenceReady, updateEditModeSnapshotCache, latestEditorTextRef])
+  }, [activeNoteId, activeNoteText, lineHeightPx, persistenceReady, updateEditModeSnapshotCache, latestEditorTextRef, previewBlockSplitCacheRef, previewBlocksCacheRef])
 
   /**
    * Note-activation effect: restores edit-mode position when the active
@@ -2293,5 +2373,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     applyProgrammaticEditorText,
     seedInitialViewport,
     previewBlockSplitCacheRef,
+    previewBlocksCacheRef,
   }
 }

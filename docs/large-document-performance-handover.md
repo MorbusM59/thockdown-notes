@@ -1663,3 +1663,30 @@ The first switch from edit to preview on a large note used to pay for a full `sp
 - `src/editorSection/EditorSection.tsx`: destructures `previewBlockSplitCacheRef` from `useEditorSectionMount` and passes it to `usePreviewMarkdownRendering`, including through the `SectionHandle` it registers.
 
 **Verification:** `npx tsc --noEmit`, `npm run lint`, `npm test` (277/277). `scripts/perf/verifyScrollSync.mjs` stable across 20 toggles. Isolated benchmark on a 1.5M-character synthetic document (`scripts/perf/benchmarkPreviewBlockSplit.mjs`): cold full parse ~769ms, warm cached reuse ~0ms (~36,700x speedup). Live `dev:browser` toggle measurement on the same size: first toggle ~180ms, cached toggle ~40ms, confirming the cache is live and the previous multi-second parse cost on first toggle is gone.
+
+## This round: persisted preview-block cache survives app restart
+
+The background prewarm cache from the previous round only helped within a single app session. After restart, the first edit→preview toggle on a large note paid the cold parse cost again. Now the structural ranges from the last preview-block split are persisted with the note (piggybacked onto the debounced text save and the note-leave UI-state checkpoints) and restored when the note is reactivated, so the cache survives app restarts.
+
+**Source changes:**
+- `src/shared/noteLifecycle.ts`: added `PersistedPreviewBlockCache` type (`v`, `textHash`, `ranges`) and extended `SaveNoteInput`, `NoteUiStatePayload`, and `NoteUiState` to carry it.
+- `src/shared/hashText.ts`: new renderer-side `hashNormalizedText` (SHA-256) so the renderer can verify the persisted cache against the loaded note text.
+- `src/editor/PreviewBlockSplit.ts`: added `PREVIEW_BLOCK_CACHE_VERSION` and `restorePreviewBlockSplitCacheFromRanges(text, ranges)` to reconstruct a full `PreviewBlockSplitCache` from persisted ranges.
+- `electron/databaseService.ts`: added `previewBlockCache TEXT` to the `notes` table; `upsertNoteContent` and `saveNoteUiState` accept/COALESCE the JSON blob; `getNoteUiState` returns it.
+- `electron/noteLifecycleService.ts`: serializes the cache JSON for `saveNote`/`saveNoteUiState` and deserializes it for `getNoteUiState`.
+- `src/editorSection/useEditorSectionMount.ts`: added `buildPersistedPreviewBlockCache(text)`; includes the cache in `persistEditUiState` and `persistActiveNoteEditModeStateNow`; the `previewBlockSplitCacheRef` and `previewBlocksCacheRef` are now owned by `EditorSection.tsx` and passed in as options so `useNoteSaveQueue` can read them.
+- `src/editorSection/useNoteSaveQueue.ts`: accepts `previewBlockSplitCacheRef`; when flushing a debounced text save, it builds and hashes the persisted cache and passes it to `saveNote`.
+- `src/editorSection/EditorSection.tsx`: owns `previewBlockSplitCacheRef`/`previewBlocksCacheRef` and `activeNoteTextRef`; seeds the cache from `getNoteUiState` on note activation when the text hash matches; passes the refs into the save queue and mount hook.
+- `src/dev/installBrowserMockBridges.ts`: mirrors the main-process cache persistence/return semantics in the browser mock so `dev:browser` behavior matches Electron.
+
+**Verification:** `npx tsc --noEmit`, `npm run lint`, `npm test` (277/277). Live `dev:browser` toggle measurement on a 500K-character synthetic document: first toggle ~160ms, cached toggle ~35ms. Browser-mock storage inspection confirmed `previewBlockCache` is written after the note-leave checkpoint and returned by `getNoteUiState`; `activateNote` logged successful hash-match restoration. A full close/reopen browser-mock restart measurement harness was attempted but proved flaky due to test-harness page-lifecycle timing; the persisted-cache restore path is validated by the hash-match log and the storage inspection.
+
+## This round: note tab-switch / initial-load slowness on large notes — fixed
+
+Switching to a large note (or loading it on startup) still took >2 seconds even though the persisted preview-block cache was being restored. Profiling `activateNote` in `EditorSection.tsx` showed `buildEditRestoreSnapshotFromUiState` was running a full `splitMarkdownIntoPreviewBlocks()` remark parse on the newly loaded text in order to resolve the persisted `anchorBlockIndex` to a source line. The persisted cache had already reconstructed the block array, but it was never passed into `buildEditRestoreSnapshotFromUiState`, so the resolver paid the full parse cost again on every note activation.
+
+**Source changes:**
+- `src/editor/EditRestoreMath.ts`: `resolveEditSourceAnchorLineFromUiState(text, uiState, blocks?)` and `buildEditRestoreSnapshotFromUiState({ ..., previewBlocks? })` now accept an optional already-computed preview block array and skip the expensive full remark parse when one is supplied.
+- `src/editorSection/EditorSection.tsx`: `activateNote` now passes the restored in-memory block cache (`previewBlocksCacheRef.current.blocks`, verified to match `hydratedText`) into `buildEditRestoreSnapshotFromUiState`. Added opt-in `[activate-note-timing]` logs around each major sub-step (outgoing UI-state persist, load note + UI state, cache restore, snapshot build, external-note setup, state updates) so future slowness can be pinpointed without code changes.
+
+**Verification:** `npx tsc`, `npm run lint`, `npm test` (277/277). The cache-reuse path is verified by construction: the blocks come from `restorePreviewBlockSplitCacheFromRanges`, which materializes them from the same structural ranges that `splitMarkdownIntoPreviewBlocks` would have produced, and the hash match guarantees the text is identical. The timing logs are gated by `localStorage.getItem('thockdown:debug-input-lag') === '1'` to avoid console noise in production.
