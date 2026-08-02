@@ -1652,7 +1652,13 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       blockResolveMs: Number(blockResolveMs.toFixed(2)),
     })
     const containingBlockIndex = resolvePreviewBlockIndexForSourceLine(blocks, rawSourceAnchorLine)
-    const anchorBlockIndex = Math.max(0, containingBlockIndex)
+    // The edit -> render transition consistently lands one block higher than
+    // the edit viewport's visible top block. Rather than fight the underlying
+    // architectural offset, target the following block when we are actually
+    // updating preview's scroll position from a changed/scrolled edit state.
+    const anchorBlockIndex = enteringPreview
+      ? Math.min(blocks.length - 1, Math.max(0, containingBlockIndex + 1))
+      : Math.max(0, containingBlockIndex)
     const sourceAnchorLine = resolveSourceLineForAnchorBlockIndex(blocks, anchorBlockIndex)
     debugLogScrollSync(
       `toggleRenderViewMode blocks: rawLine=${rawSourceAnchorLine} containingIndex=${containingBlockIndex} anchorIndex=${anchorBlockIndex} anchorStartLine=${sourceAnchorLine} note=${activeNoteId}`,
