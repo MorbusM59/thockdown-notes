@@ -943,6 +943,10 @@ export function CM6Editor({
   // above) -- used as an explicit height instead of a CSS `bottom: Npx` inset
   // for the divs below.
   const middleRegionHeightPx = middleRegionRawPx - middleRegionRemainderPx;
+  // Visual-only tweak: the trailing-zone paint should begin one whole row
+  // lower than the cage's own geometric boundary. Keep scroll/cage/handle
+  // math unchanged and only contract the painted trailing zone by one row.
+  const bottomBoundaryZoneHeightPx = Math.max(0, bottomBoundaryVisualPx - lineHeightPx);
   // Every boundary-zone/handle div below is positioned via an explicit `top`
   // computed from this one JS-tracked scrollerClientHeightPx, never via a
   // CSS `bottom: Npx` inset. `bottom` insets are resolved against the
@@ -954,7 +958,8 @@ export function CM6Editor({
   // sub-pixel amount during a continuous window resize is exactly what reads
   // as jitter; deriving every position from this single integer removes the
   // second system entirely.
-  const bottomZoneTopPx = Math.max(0, scrollerClientHeightPx - bottomBoundaryVisualPx);
+  const middleRegionZoneHeightPx = middleRegionHeightPx + (bottomBoundaryVisualPx - bottomBoundaryZoneHeightPx);
+  const bottomZoneTopPx = Math.max(0, scrollerClientHeightPx - bottomBoundaryZoneHeightPx);
   const alignmentPaddingBottomPx = lineHeightPx > 0
     ? (((scrollerClientHeightPx - halfLineHeightPx) % lineHeightPx) + lineHeightPx) % lineHeightPx
     : 0;
@@ -3104,7 +3109,7 @@ export function CM6Editor({
             className="absolute pointer-events-none"
             style={{
               top: topBoundaryVisualPx,
-              height: middleRegionHeightPx,
+              height: middleRegionZoneHeightPx,
               left: 0,
               right: 0,
               backgroundColor: 'var(--color-bg-regular)',
@@ -3117,7 +3122,7 @@ export function CM6Editor({
           />
           <div
             className="absolute left-0 right-0 pointer-events-none"
-            style={{ top: bottomZoneTopPx, height: bottomBoundaryVisualPx, backgroundColor: 'var(--color-bg-trailing)', zIndex: 2 }}
+            style={{ top: bottomZoneTopPx, height: bottomBoundaryZoneHeightPx, backgroundColor: 'var(--color-bg-trailing)', zIndex: 2 }}
           />
           <div
             className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize"
