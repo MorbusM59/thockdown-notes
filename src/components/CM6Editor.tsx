@@ -2936,9 +2936,13 @@ export function CM6Editor({
         // applySnapshot: suppress caret/selection-highlight rendering for
         // the one rAF between this call and its own settle, so a restored
         // caret never flashes at a stale position before the viewport/
-        // selection below actually lands.
+        // selection below actually lands. Skipped entirely for `quiet`
+        // re-corrections (see the field's own doc comment in
+        // EditorContract.ts) -- those must move scrollTop without re-opening
+        // the input-blocking transition or the caret-suppression window.
         const isSnapshotRestore = Boolean(snapshot.viewport || snapshot.viewportLines || snapshot.selection);
-        const snapshotTransitionId = isSnapshotRestore
+        const isQuiet = snapshot.quiet === true;
+        const snapshotTransitionId = isSnapshotRestore && !isQuiet
           ? beginScrollTransition('snapshot-restore', {
             settleMs: 200,
             maxBlockMs: 1200,
@@ -2946,7 +2950,7 @@ export function CM6Editor({
             transitionId: snapshot.transitionId,
           })
           : null;
-        if (isSnapshotRestore) {
+        if (isSnapshotRestore && !isQuiet) {
           if (snapshotRestoreRafRef.current !== null) {
             cancelAnimationFrame(snapshotRestoreRafRef.current);
           }
@@ -3020,7 +3024,7 @@ export function CM6Editor({
           view.dispatch({ selection: EditorSelection.single(anchor, focus) });
         }
 
-        if (isSnapshotRestore) {
+        if (isSnapshotRestore && !isQuiet) {
           if (snapshotRestoreRafRef.current !== null) {
             cancelAnimationFrame(snapshotRestoreRafRef.current);
           }

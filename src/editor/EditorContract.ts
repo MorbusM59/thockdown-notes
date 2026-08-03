@@ -88,6 +88,15 @@ export interface EditorSnapshotApplyRequest extends Partial<EditorSnapshot> {
   // and continuously via clampBoundaryLines, so applying this is safe at
   // any point, including before the container has been measured.
   viewportLines?: EditorViewportLines;
+  // Marks this apply as a silent follow-up nudge to an already-in-flight
+  // restore (see useEditorSectionMount.ts's settleCorrectionLoop), not a new
+  // restore in its own right: the adapter must still move scrollTop, but
+  // must NOT re-open/extend the input-blocking restore-settle transition or
+  // its caret-suppression window a second time. Without this, re-running the
+  // same correction on every settle-recheck frame kept re-arming that block
+  // on each pass, and could hold real user wheel/scroll input hostage for
+  // far longer than any single restore is meant to.
+  quiet?: boolean;
 }
 
 export interface EditorCapabilityMap {

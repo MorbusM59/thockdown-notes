@@ -995,12 +995,17 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       })
     }
 
-    const applyCorrectedViewport = (sourceAnchorLine: number, viewport: PersistedViewportState, transitionId: number) => {
+    const applyCorrectedViewport = (
+      sourceAnchorLine: number,
+      viewport: PersistedViewportState,
+      transitionId: number,
+      quiet = false,
+    ) => {
       const adapter = adapterRef.current
-      if (!adapter) return false
+      if (!adapter) return null
 
       const lineTopPx = adapter.resolveHeightForSourceLine(sourceAnchorLine)
-      if (lineTopPx === null) return false
+      if (lineTopPx === null) return null
 
       const topBoundaryPx = Math.max(0, Math.round(viewport.topBoundaryLines * lineHeightPx))
       const correctedScrollTopLines = Math.max(
@@ -1015,41 +1020,103 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         selectionScrollBehavior: 'preserve-scroll',
         transitionId,
         viewportLines: correctedViewport,
+        quiet,
       })
 
       latestViewportRef.current = correctedViewport
       latestEditViewportRef.current = correctedViewport
-      return true
+      return correctedScrollTopLines
+    }
+
+    // CM6 only has real measured heights for lines it has actually
+    // rendered. The line just scrolled to may be far outside the region
+    // rendered before this restore (e.g. many wrapped paragraphs between
+    // the old and new position), so resolveHeightForSourceLine can still
+    // be reading an *estimated* height for it (CM6's heightmap default-
+    // line-height guess for not-yet-measured content). Once CM6 actually
+    // renders/measures that region -- its own DOMObserver/
+    // IntersectionObserver-driven measure cycle, timing not guaranteed to
+    // be any fixed number of frames (varies with document size/machine
+    // load) -- it silently corrects scrollTop itself to match the real
+    // measured heights, landing on a raw pixel value that ignores our
+    // lineHeightPx/topBoundary grid entirely (confirmed live: CM6's own
+    // EditorView.measure -> a direct scrollTop write with a fractional,
+    // non-grid-aligned value, no scrollToQuantizedSmooth/
+    // scrollToNonQuantizedSmooth involved at all -- exactly the "different
+    // scroll without acceleration" users can see on restore, and why only
+    // a genuine wheel/scrollbar interaction -- which re-quantizes off
+    // whatever scrollTop is current -- visibly fixes it). Re-run the same
+    // correction on every subsequent frame, for a bounded window, until it
+    // stops moving on its own: this converges on whichever value CM6
+    // itself considers final, rather than guessing a fixed number of
+    // frames to wait out its settle.
+    const MAX_SETTLE_RECHECK_FRAMES = 20
+    const STABLE_FRAMES_REQUIRED = 3
+
+    const settleCorrectionLoop = (
+      sourceAnchorLine: number,
+      viewport: PersistedViewportState,
+      transitionId: number,
+      lastAppliedScrollTopLines: number,
+      stableFrameCount: number,
+      framesRemaining: number,
+      userScrollTokenAtStart: number,
+    ) => {
+      if (framesRemaining <= 0) return
+      requestAnimationFrame(() => {
+        if (cancelled) return
+        if (applyEditRestoreSnapshotCallCounterRef.current !== myRestoreToken) return
+        // The user has taken over scrolling since this settle pass started --
+        // their input always wins, so stop re-snapping entirely rather than
+        // treating their own scroll delta as "drift" to fight.
+        if (userScrollInterruptTokenRef.current !== userScrollTokenAtStart) return
+
+        const adapter = adapterRef.current
+        if (!adapter) return
+        const observedScrollTopPx = adapter.getSnapshot()?.viewport.scrollTopPx ?? null
+        const driftedAwayFromOurs = observedScrollTopPx !== null
+          && Math.abs(observedScrollTopPx - lastAppliedScrollTopLines * lineHeightPx) > 0.5
+
+        if (!driftedAwayFromOurs) {
+          if (stableFrameCount + 1 >= STABLE_FRAMES_REQUIRED) return
+          settleCorrectionLoop(
+            sourceAnchorLine,
+            viewport,
+            transitionId,
+            lastAppliedScrollTopLines,
+            stableFrameCount + 1,
+            framesRemaining - 1,
+            userScrollTokenAtStart,
+          )
+          return
+        }
+
+        const reappliedLines = applyCorrectedViewport(sourceAnchorLine, viewport, transitionId, true)
+        settleCorrectionLoop(
+          sourceAnchorLine,
+          viewport,
+          transitionId,
+          reappliedLines ?? lastAppliedScrollTopLines,
+          0,
+          framesRemaining - 1,
+          userScrollTokenAtStart,
+        )
+      })
     }
 
     const correctWrappingOnceReady = (sourceAnchorLine: number, viewport: PersistedViewportState, transitionId: number) => {
-      applyCorrectedViewport(sourceAnchorLine, viewport, transitionId)
-
-      // CM6 only has real measured heights for lines it has actually
-      // rendered. The line this just scrolled to may be far outside the
-      // region rendered before this restore (e.g. many wrapped paragraphs
-      // between the old and new position), so resolveHeightForSourceLine
-      // above can still be reading an *estimated* height for it (CM6's
-      // heightmap default-line-height guess for not-yet-measured content).
-      // Once CM6 actually renders/measures that region -- its own
-      // DOMObserver/IntersectionObserver-driven measure cycle, which lands
-      // one to two frames after the scrollTo above -- it silently corrects
-      // scrollTop itself to match the real measured heights, landing on a
-      // raw pixel value that ignores our lineHeightPx/topBoundary grid
-      // entirely (confirmed live: CM6's own EditorView.measure -> a direct
-      // scrollTop write with a fractional, non-grid-aligned value, no
-      // scrollToQuantizedSmooth/scrollToNonQuantizedSmooth involved at all
-      // -- exactly the "different scroll without acceleration" users can
-      // see on restore). Re-run the same correction once more after that
-      // settle so our own quantized, phase-correct value is what actually
-      // sticks, instead of CM6's raw self-correction.
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (cancelled) return
-          if (applyEditRestoreSnapshotCallCounterRef.current !== myRestoreToken) return
-          applyCorrectedViewport(sourceAnchorLine, viewport, transitionId)
-        })
-      })
+      const userScrollTokenAtStart = userScrollInterruptTokenRef.current
+      const appliedLines = applyCorrectedViewport(sourceAnchorLine, viewport, transitionId)
+      if (appliedLines === null) return
+      settleCorrectionLoop(
+        sourceAnchorLine,
+        viewport,
+        transitionId,
+        appliedLines,
+        0,
+        MAX_SETTLE_RECHECK_FRAMES,
+        userScrollTokenAtStart,
+      )
     }
 
     applyWhenReady()
@@ -1065,6 +1132,12 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   const hasPreviewModeBaselineRef = useRef(false)
   const ignoreNextUserViewportChangeRef = useRef(false)
   const previewScrollSaveTimerRef = useRef<number | null>(null)
+  // Bumped by onViewportChange on every confirmed genuine user scroll/drag
+  // of the edit view (see settleCorrectionLoop above, which snapshots this
+  // on entry and aborts the moment it changes -- a real user scroll must
+  // always win over our own post-restore re-correction polling, not fight
+  // it for up to MAX_SETTLE_RECHECK_FRAMES).
+  const userScrollInterruptTokenRef = useRef(0)
 
   // Pure predicate, single call site (onViewportChange below) -- no reason
   // for this to be a useCallback with its own identity.
@@ -1509,6 +1582,10 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (!isViewportDrag && !isScroll) {
         return
       }
+
+      // Confirmed genuine user scroll/drag of the edit view -- let any
+      // in-flight post-restore settle correction know it must back off.
+      userScrollInterruptTokenRef.current += 1
 
       // Derive line counts directly from the event's px values rather than
       // re-reading via adapterRef.current?.getSnapshot(). The adapter object
