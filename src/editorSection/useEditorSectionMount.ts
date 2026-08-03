@@ -654,8 +654,19 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     })
   }, [latestEditorSelectionRef])
 
+  const isPreviewModeRef = useRef(isPreviewMode)
+  const activeNoteIdRef = useRef(activeNoteId)
+
+  useEffect(() => {
+    isPreviewModeRef.current = isPreviewMode
+  }, [isPreviewMode])
+
+  useEffect(() => {
+    activeNoteIdRef.current = activeNoteId
+  }, [activeNoteId])
+
   const focusEditorInEditMode = useCallback((options?: { restoreSelection?: boolean }) => {
-    if (isPreviewMode || !activeNoteId) return
+    if (isPreviewModeRef.current || !activeNoteIdRef.current) return
 
     const editorRoot = sectionContainerRef.current?.querySelector<HTMLElement>('.editor-text[contenteditable="true"]')
     if (!editorRoot) return
@@ -665,11 +676,11 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       restoreEditorSelection()
     }
     editorRoot.focus({ preventScroll: true })
-  }, [activeNoteId, isPreviewMode, restoreEditorSelection, sectionContainerRef])
+  }, [restoreEditorSelection, sectionContainerRef])
 
   const scheduleFocusEditorInEditMode = useCallback((options?: { restoreSelection?: boolean }) => {
     const attemptFocus = () => {
-      if (isPreviewMode || !activeNoteId) return
+      if (isPreviewModeRef.current || !activeNoteIdRef.current) return
 
       const adapter = adapterRef.current
       const editorRoot = sectionContainerRef.current?.querySelector<HTMLElement>('.editor-text[contenteditable="true"]')
@@ -684,7 +695,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     window.setTimeout(() => {
       requestAnimationFrame(attemptFocus)
     }, 0)
-  }, [activeNoteId, focusEditorInEditMode, isPreviewMode, sectionContainerRef])
+  }, [focusEditorInEditMode, sectionContainerRef])
 
   const persistEditUiState = useCallback((noteId: string, options?: { immediate?: boolean }) => {
     const notesApi = window.thockdownNotes
@@ -1019,6 +1030,44 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   }, [])
 
   const bindings = useMemo<EditorBindings>(() => ({
+    onLifecycle: (event) => {
+      if (event.phase !== 'ready') return
+
+      const noteId = activeNoteIdRef.current
+      if (!noteId) return
+      if (isPreviewModeRef.current) return
+
+      const liveSnapshot = adapterRef.current?.getSnapshot()
+      if (liveSnapshot?.viewportLines) {
+        return
+      }
+
+      const cachedPending = pendingEditRestoreSnapshotRef.current
+      const cachedSnapshot = cachedPending?.noteId === noteId
+        ? cachedPending
+        : editModeSnapshotByNoteIdRef.current.get(noteId)
+
+      if (cachedSnapshot) {
+        applyEditRestoreSnapshot(cachedSnapshot, {
+          restoreFullSelection: true,
+          focusAfterApply: false,
+        })
+        return
+      }
+
+      const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
+      if (!fallbackViewport) return
+
+      applyEditRestoreSnapshot({
+        noteId,
+        collapsedSelection: latestEditorSelectionRef.current,
+        fullSelection: latestEditorSelectionRef.current,
+        viewport: fallbackViewport,
+      }, {
+        restoreFullSelection: true,
+        focusAfterApply: false,
+      })
+    },
     onTextChange: (event: EditorTextChangeEvent) => {
       debugLogCheckpoint('onTextChange start')
       const keyId = deriveTypingSoundKeyId(event)
@@ -1414,6 +1463,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     deferPreviewOnRapidInput,
     queueSave,
     queueAppStateSave,
+    applyEditRestoreSnapshot,
     updateActiveNoteTitlePreview,
     updateEditModeSnapshotCache,
     activeNoteHasDebugTagRef,

@@ -2436,6 +2436,28 @@ export function CM6Editor({
     scheduleCaretUpdate();
     scheduleSelectionHighlightUpdate();
 
+    // Mount hardening: intermittent "bad mount" reports showed cases where
+    // the initial geometry pass still observed a transient 0/unstable
+    // scroller height. Relying only on ResizeObserver to catch the first
+    // stable size leaves a race where grid/text alignment and keyboard
+    // scroll feel can start from stale geometry. Run a short bounded
+    // post-mount settle loop to force a second/third read and measure pass.
+    let initialGeometrySettleRafId: number | null = null;
+    const settleInitialGeometry = (attemptsLeft: number) => {
+      if (!viewRef.current) return;
+      const measuredHeight = view.scrollDOM.clientHeight;
+      setScrollerClientHeightPx(measuredHeight);
+      view.requestMeasure();
+      scheduleCaretUpdateAfterResize();
+      scheduleSelectionHighlightUpdate();
+      syncCustomScrollbar();
+
+      if (measuredHeight <= 0 && attemptsLeft > 0) {
+        initialGeometrySettleRafId = requestAnimationFrame(() => settleInitialGeometry(attemptsLeft - 1));
+      }
+    };
+    initialGeometrySettleRafId = requestAnimationFrame(() => settleInitialGeometry(6));
+
     return () => {
       if (caretAnimationFrameRef.current !== null) {
         cancelAnimationFrame(caretAnimationFrameRef.current);
@@ -2444,6 +2466,10 @@ export function CM6Editor({
       if (highlightAnimationFrameRef.current !== null) {
         cancelAnimationFrame(highlightAnimationFrameRef.current);
         highlightAnimationFrameRef.current = null;
+      }
+      if (initialGeometrySettleRafId !== null) {
+        cancelAnimationFrame(initialGeometrySettleRafId);
+        initialGeometrySettleRafId = null;
       }
       resizeObserver.disconnect();
       document.removeEventListener('focusin', handleFocusChange, true);
