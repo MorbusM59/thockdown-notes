@@ -55,6 +55,9 @@ export interface EditorSelectionChangeEvent {
 export interface EditorViewportChangeEvent {
   source: EditorChangeSource;
   origin?: EditorViewportChangeOrigin;
+  // Correlates programmatic viewport events with the scroll transition that
+  // produced them (restore/settle operation ID).
+  transitionId?: number;
   viewport: EditorViewportState;
 }
 
@@ -77,6 +80,8 @@ export type EditorSelectionScrollBehavior = 'center-caged' | 'preserve-scroll';
 
 export interface EditorSnapshotApplyRequest extends Partial<EditorSnapshot> {
   selectionScrollBehavior?: EditorSelectionScrollBehavior;
+  // Optional operation ID for deterministic restore handoff tracking.
+  transitionId?: number;
   // Restores the boundary/scroll position from integer line counts. This is
   // the preferred restore path: no clamping is performed against the
   // current container size at apply time. Display values are derived lazily

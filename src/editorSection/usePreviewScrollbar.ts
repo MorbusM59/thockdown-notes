@@ -38,6 +38,7 @@ const syncTextureToScroll = (scrollTop: number, maskEl: HTMLElement) => {
 
 export interface UsePreviewScrollbarOptions {
   isPreviewMode: boolean
+  isPreviewScrollInteractionBlocked?: () => boolean
   previewScrollRef: MutableRefObject<HTMLDivElement | null>
   activeNoteId: string | null
   currentEditorText: string
@@ -56,6 +57,7 @@ export interface UsePreviewScrollbarOptions {
  */
 export function usePreviewScrollbar({
   isPreviewMode,
+  isPreviewScrollInteractionBlocked,
   previewScrollRef,
   activeNoteId,
   currentEditorText,
@@ -86,6 +88,11 @@ export function usePreviewScrollbar({
   } | null>(null)
   const [isPreviewScrollThumbActive, setIsPreviewScrollThumbActive] = useState(false)
   const [isDraggingPreviewScrollThumb, setIsDraggingPreviewScrollThumb] = useState(false)
+
+  const shouldBlockPreviewInteraction = useCallback(() => {
+    if (!isPreviewMode) return true
+    return isPreviewScrollInteractionBlocked?.() ?? false
+  }, [isPreviewMode, isPreviewScrollInteractionBlocked])
 
   const applyPreviewThumbDom = useCallback((topPx: number, heightPx: number) => {
     previewScrollThumbTopRef.current = topPx
@@ -298,6 +305,7 @@ export function usePreviewScrollbar({
   useEffect(() => stopPreviewScrollbarRightHold, [stopPreviewScrollbarRightHold])
 
   const handlePreviewTrackRightMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if (shouldBlockPreviewInteraction()) return
     const track = previewScrollbarTrackRef.current
     if (!track) return
 
@@ -340,13 +348,14 @@ export function usePreviewScrollbar({
       hold.rafId = requestAnimationFrame(watchThumbReachesCursor)
     }
     previewScrollbarRightHoldRef.current.rafId = requestAnimationFrame(watchThumbReachesCursor)
-  }, [previewScrollRef, stopPreviewScrollbarRightHold])
+  }, [previewScrollRef, shouldBlockPreviewInteraction, stopPreviewScrollbarRightHold])
 
   const handlePreviewTrackContextMenu = useCallback((event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()
   }, [])
 
   const handlePreviewTrackMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if (shouldBlockPreviewInteraction()) return
     if (event.button === 2) {
       handlePreviewTrackRightMouseDown(event)
       return
@@ -373,9 +382,10 @@ export function usePreviewScrollbar({
     const targetScrollTop = ratio * maxScrollTop
 
     scrollToNonQuantizedSmooth(scroller, targetScrollTop)
-  }, [previewScrollRef, handlePreviewTrackRightMouseDown])
+  }, [previewScrollRef, shouldBlockPreviewInteraction, handlePreviewTrackRightMouseDown])
 
   const handlePreviewThumbMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if (shouldBlockPreviewInteraction()) return
     if (event.button !== 0) return
     event.preventDefault()
     event.stopPropagation()
@@ -388,7 +398,7 @@ export function usePreviewScrollbar({
       pointerY: event.clientY,
       thumbTopPx: previewScrollThumbTopRef.current,
     }
-  }, [previewScrollRef])
+  }, [previewScrollRef, shouldBlockPreviewInteraction])
 
   const stopPreviewContinuousScroll = useCallback(() => {
     previewContinuousScrollDirectionRef.current = 0
@@ -596,6 +606,14 @@ export function usePreviewScrollbar({
       if (isEditableTarget(event.target)) return
       if (event.key !== 'PageDown' && event.key !== 'PageUp') return
 
+      if (shouldBlockPreviewInteraction()) {
+        event.preventDefault()
+        pageKeysHeld.delete(event.key)
+        clearPreviewContinuousHandoff()
+        stopPreviewContinuousScroll()
+        return
+      }
+
       const scroller = previewScrollRef.current
       if (!scroller) return
 
@@ -675,6 +693,7 @@ export function usePreviewScrollbar({
   }, [
     clearPreviewContinuousHandoff,
     isPreviewMode,
+    shouldBlockPreviewInteraction,
     startPreviewReleaseRampDown,
     startPreviewContinuousScroll,
     stopPreviewContinuousScroll,

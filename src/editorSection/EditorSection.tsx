@@ -885,6 +885,7 @@ export function EditorSection({
     blockPreviewEditMutation,
   } = usePreviewScrollbar({
     isPreviewMode,
+    isPreviewScrollInteractionBlocked: editorSectionMountRest.isPreviewScrollInteractionBlocked,
     previewScrollRef,
     activeNoteId,
     currentEditorText,

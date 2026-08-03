@@ -46,6 +46,42 @@ do once Phase 1/2 have stopped changing the code out from under it.
    `docs/document-scale-performance-philosophy.md`'s existing contract; this doc only adds the
    "assumption-hunting" framing, it doesn't replace that doc's solution hierarchy.
 
+## Latest Session Update (transition orchestration hardening)
+
+- Added a dedicated deterministic transition state machine at
+  `src/editor/ScrollTransitionController.ts` and integrated it into
+  `CM6Editor.tsx` as the single authority for:
+  - Programmatic-vs-user scroll provenance.
+  - Temporary interaction blocking during restore/settle windows.
+  - End-of-settle callback used to force custom-scrollbar thumb resync.
+- Extended `EditorContract` (`EditorViewportChangeEvent` and
+  `EditorSnapshotApplyRequest`) with optional `transitionId` so restore flows
+  can be correlated end-to-end instead of inferred from timing/counters.
+- Wired `transitionId` through `useEditorSectionMount.ts` restore paths
+  (`applyEditRestoreSnapshot` and `seedInitialViewport`) and added matching
+  filtering in `onViewportChange` to trust transition provenance over heuristic
+  user-event suppression where IDs are present.
+- Removed legacy ad hoc scroll-suppression counters/time-window plumbing from
+  `CM6Editor.tsx` and replaced those call sites with controller lifecycle
+  operations.
+
+Validation done in this session:
+
+- `npm run lint` clean (same known TS parser support warning as before).
+- `npm test` clean (22 files, 277 tests passing).
+
+Remaining follow-up to complete parity sweep:
+
+- Preview-side paging/scroll ownership now participates in transition
+  provenance: `useEditorSectionMount` owns a preview restore transition
+  controller, classifies restore-origin scrolls deterministically, and
+  exports `isPreviewScrollInteractionBlocked`; `usePreviewScrollbar` consumes
+  it to block PageUp/PageDown and custom-scrollbar track/thumb interactions
+  while restore settle is active.
+- Next verification focus is live-behavior stress under rapid mode toggles:
+  ensure blocked interactions are released promptly after settle and no
+  starvation occurs when preview anchor resolution falls back/retries.
+
 ---
 
 ## Phase 1 — high-priority bugs (grounded, ready to implement)

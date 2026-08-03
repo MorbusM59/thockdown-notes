@@ -21,6 +21,7 @@ import { resolveCagedScrollTarget } from '../editor/CageMath';
 import { sanitizeDocumentText, sanitizeDocumentTextExtended } from '../shared/textSanitization';
 import { resolveScopeRange, isSameRange, type SelectionScope } from '../editor/ContractBridgeRangeUtils';
 import { computeMinimalTextReplacement } from '../editor/MinimalTextDiff';
+import { ScrollTransitionController } from '../editor/ScrollTransitionController';
 import type {
   EditorAdapter,
   EditorBindings,
@@ -624,9 +625,7 @@ export function CM6Editor({
   const layerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  // Tracks scroll events originating from applySnapshot so onViewportChange
-  // can report them as programmatic, not user-input.
-  const programmaticScrollCountRef = useRef(0);
+  const scrollTransitionControllerRef = useRef(new ScrollTransitionController());
   const bindingsRef = useRef(bindings);
   const previousTextRef = useRef('');
   const previousSelectionRef = useRef<EditorSelectionState>({ anchor: 0, focus: 0, start: 0, end: 0, isCollapsed: true });
@@ -688,7 +687,6 @@ export function CM6Editor({
   const hasViewportLinesRef = useRef(hasViewportLines);
   const isSnapshotRestorePendingRef = useRef(isSnapshotRestorePending);
   const snapshotRestoreRafRef = useRef<number | null>(null);
-  const programmaticScrollSuppressUntilRef = useRef(0);
   const caretHidden = isSnapshotRestorePending || caretSuspended;
   // Editor.tsx's RichTextPlugin shows/hides its placeholder automatically
   // based on whether Lexical's root node is empty; CM6 has no equivalent
@@ -744,31 +742,29 @@ export function CM6Editor({
     cursorYPx: number;
     rafId: number | null;
   } | null>(null);
-  const programmaticScrollSuppressTimeoutRef = useRef<number | null>(null);
   const syncCustomScrollbarRef = useRef<((options?: { force?: boolean }) => void) | null>(null);
 
-  const markProgrammaticScrollSettling = useCallback((durationMs = 200) => {
-    const nextUntil = performance.now() + Math.max(0, durationMs);
-    if (nextUntil > programmaticScrollSuppressUntilRef.current) {
-      programmaticScrollSuppressUntilRef.current = nextUntil;
-    }
+  const beginScrollTransition = useCallback((kind: 'snapshot-restore' | 'geometry-settle', options?: { settleMs?: number; maxBlockMs?: number; blockUserInput?: boolean; transitionId?: number }) => (
+    scrollTransitionControllerRef.current.beginTransition({
+      kind,
+      settleMs: options?.settleMs ?? 200,
+      maxBlockMs: options?.maxBlockMs,
+      blockUserInput: options?.blockUserInput,
+      transitionId: options?.transitionId,
+    })
+  ), []);
 
-    if (programmaticScrollSuppressTimeoutRef.current !== null) {
-      window.clearTimeout(programmaticScrollSuppressTimeoutRef.current);
-      programmaticScrollSuppressTimeoutRef.current = null;
-    }
+  const extendScrollTransitionSettle = useCallback((transitionId: number, settleMs = 200) => {
+    scrollTransitionControllerRef.current.extendSettle(transitionId, settleMs);
+  }, []);
 
-    const delayMs = Math.max(0, Math.ceil(programmaticScrollSuppressUntilRef.current - performance.now()));
-    programmaticScrollSuppressTimeoutRef.current = window.setTimeout(() => {
-      programmaticScrollSuppressTimeoutRef.current = null;
-      syncCustomScrollbarRef.current?.({ force: true });
-    }, delayMs);
+  const registerProgrammaticScrollEvent = useCallback((transitionId: number) => {
+    scrollTransitionControllerRef.current.registerProgrammaticScrollEvent(transitionId);
   }, []);
 
   const isEditScrollInteractionBlocked = useCallback(() => {
-    if (!hasViewportLinesRef.current) return true;
-    if (isSnapshotRestorePendingRef.current) return true;
-    return performance.now() < programmaticScrollSuppressUntilRef.current;
+    const extraBlocked = !hasViewportLinesRef.current || isSnapshotRestorePendingRef.current;
+    return scrollTransitionControllerRef.current.shouldBlockUserInput(extraBlocked);
   }, []);
 
   const readScrollbarGeometry = useCallback((): ScrollbarGeometry | null => {
@@ -866,6 +862,14 @@ export function CM6Editor({
     syncCustomScrollbarRef.current = syncCustomScrollbar;
   }, [syncCustomScrollbar]);
 
+  useEffect(() => {
+    const controller = scrollTransitionControllerRef.current;
+    controller.setOnSettled(() => {
+      syncCustomScrollbarRef.current?.({ force: true });
+    });
+    return () => controller.setOnSettled(null);
+  }, []);
+
   const scrollFromThumbTop = useCallback((thumbTopPx: number) => {
     const scroller = viewRef.current?.scrollDOM;
     const geometry = readScrollbarGeometry();
@@ -937,10 +941,6 @@ export function CM6Editor({
       if (snapshotRestoreRafRef.current !== null) {
         cancelAnimationFrame(snapshotRestoreRafRef.current);
         snapshotRestoreRafRef.current = null;
-      }
-      if (programmaticScrollSuppressTimeoutRef.current !== null) {
-        window.clearTimeout(programmaticScrollSuppressTimeoutRef.current);
-        programmaticScrollSuppressTimeoutRef.current = null;
       }
     };
   }, []);
@@ -2270,19 +2270,15 @@ export function CM6Editor({
     });
 
     // Scroll reporting -- mirrors Editor.tsx's own scroller 'scroll'
-    // listener + buildViewport. Uses programmaticScrollCountRef to tell
-    // applySnapshot-driven scrolls apart from real user scrolling.
+    // listener + buildViewport. Programmatic-vs-user provenance is resolved
+    // by ScrollTransitionController.
     const handleScroll = () => {
-      const isSuppressedProgrammatic = performance.now() < programmaticScrollSuppressUntilRef.current;
-      const isProgrammatic = programmaticScrollCountRef.current > 0 || isSuppressedProgrammatic;
-      if (isProgrammatic) {
-        if (programmaticScrollCountRef.current > 0) {
-          programmaticScrollCountRef.current -= 1;
-        }
-      }
+      const classification = scrollTransitionControllerRef.current.classifyScrollEvent();
+      const isProgrammatic = classification.isProgrammatic;
       bindingsRef.current?.onViewportChange?.({
         source: isProgrammatic ? 'programmatic' : 'user-input',
         origin: isProgrammatic ? 'programmatic' : 'scroll',
+        transitionId: isProgrammatic ? classification.transitionId : undefined,
         viewport: buildViewport(view),
       });
       scheduleCaretUpdate();
@@ -2508,9 +2504,14 @@ export function CM6Editor({
     // scroll feel can start from stale geometry. Run a short bounded
     // post-mount settle loop to force a second/third read and measure pass.
     let initialGeometrySettleRafId: number | null = null;
+    const initialGeometryTransitionId = beginScrollTransition('geometry-settle', {
+      settleMs: 120,
+      maxBlockMs: 900,
+      blockUserInput: true,
+    });
     const settleInitialGeometry = (attemptsLeft: number) => {
       if (!viewRef.current) return;
-      markProgrammaticScrollSettling(120);
+      extendScrollTransitionSettle(initialGeometryTransitionId, 120);
       const measuredHeight = view.scrollDOM.clientHeight;
       setScrollerClientHeightPx(measuredHeight);
       view.requestMeasure();
@@ -2520,6 +2521,8 @@ export function CM6Editor({
 
       if (measuredHeight <= 0 && attemptsLeft > 0) {
         initialGeometrySettleRafId = requestAnimationFrame(() => settleInitialGeometry(attemptsLeft - 1));
+      } else {
+        scrollTransitionControllerRef.current.forceComplete(initialGeometryTransitionId);
       }
     };
     initialGeometrySettleRafId = requestAnimationFrame(() => settleInitialGeometry(6));
@@ -2937,11 +2940,18 @@ export function CM6Editor({
         // caret never flashes at a stale position before the viewport/
         // selection below actually lands.
         const isSnapshotRestore = Boolean(snapshot.viewport || snapshot.viewportLines || snapshot.selection);
+        const snapshotTransitionId = isSnapshotRestore
+          ? beginScrollTransition('snapshot-restore', {
+            settleMs: 200,
+            maxBlockMs: 1200,
+            blockUserInput: true,
+            transitionId: snapshot.transitionId,
+          })
+          : null;
         if (isSnapshotRestore) {
           if (snapshotRestoreRafRef.current !== null) {
             cancelAnimationFrame(snapshotRestoreRafRef.current);
           }
-          markProgrammaticScrollSettling();
           setIsSnapshotRestorePending(true);
         }
 
@@ -2974,8 +2984,10 @@ export function CM6Editor({
           if (typeof nextViewport.scrollTopPx === 'number') {
             const targetTop = Math.max(0, nextViewport.scrollTopPx);
             if (Math.abs(view.scrollDOM.scrollTop - targetTop) > 0.5) {
-              programmaticScrollCountRef.current += 1;
-              markProgrammaticScrollSettling();
+              if (snapshotTransitionId !== null) {
+                registerProgrammaticScrollEvent(snapshotTransitionId);
+                extendScrollTransitionSettle(snapshotTransitionId, 200);
+              }
             }
             view.scrollDOM.scrollTo({ top: targetTop, behavior: 'auto' });
           }
@@ -2991,8 +3003,10 @@ export function CM6Editor({
           setBottomBoundaryLines(Math.max(0, Math.round(snapshot.viewportLines.bottomBoundaryLines)));
           const targetTop = Math.max(0, Math.round(snapshot.viewportLines.scrollTopLines) * lineHeightPxRef.current);
           if (Math.abs(view.scrollDOM.scrollTop - targetTop) > 0.5) {
-            programmaticScrollCountRef.current += 1;
-            markProgrammaticScrollSettling();
+            if (snapshotTransitionId !== null) {
+              registerProgrammaticScrollEvent(snapshotTransitionId);
+              extendScrollTransitionSettle(snapshotTransitionId, 200);
+            }
           }
           view.scrollDOM.scrollTo({
             top: targetTop,
@@ -3015,6 +3029,9 @@ export function CM6Editor({
           snapshotRestoreRafRef.current = requestAnimationFrame(() => {
             snapshotRestoreRafRef.current = null;
             setIsSnapshotRestorePending(false);
+            if (snapshotTransitionId !== null) {
+              scrollTransitionControllerRef.current.forceComplete(snapshotTransitionId);
+            }
           });
         }
       },
@@ -3053,7 +3070,14 @@ export function CM6Editor({
     // topBoundaryLines/bottomBoundaryLines ARE closed over directly (in
     // getSnapshot), so they must be deps or getSnapshot would report stale
     // values after a boundary drag.
-  }, [adapterRef, markProgrammaticScrollSettling, topBoundaryLines, bottomBoundaryLines]);
+  }, [
+    adapterRef,
+    beginScrollTransition,
+    extendScrollTransitionSettle,
+    registerProgrammaticScrollEvent,
+    topBoundaryLines,
+    bottomBoundaryLines,
+  ]);
 
   // Drag-handle geometry: a full lineHeightPx-tall strip flush against the
   // boundary line once one exists, but only a small fixed-height sliver at

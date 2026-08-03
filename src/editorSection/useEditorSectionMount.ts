@@ -41,6 +41,7 @@ import {
 import { resolveMarkdownEnterTransform } from '../editor/EnterTransformPolicy'
 import { resolveMarkdownChecklistTypeoverTransform } from '../editor/ChecklistTypingTransformPolicy'
 import { typingSoundManager } from '../sound/TypingSoundManager'
+import { ScrollTransitionController } from '../editor/ScrollTransitionController'
 import type { PreviewScrollToSourceLineFn } from './usePreviewMarkdownRendering'
 
 /**
@@ -211,6 +212,7 @@ export interface UseEditorSectionMountResult {
   /** The full EditorBindings object wired to <Editor>. */
   bindings: EditorBindings
   toggleRenderViewMode: () => void
+  isPreviewScrollInteractionBlocked: () => boolean
   applyProgrammaticEditorText: (nextText: string, selectionStart?: number, selectionEnd?: number) => void
   /**
    * Seeds the initial editor state on cold start -- viewport *and*
@@ -313,10 +315,10 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   const sectionRequiresScrollUpdateRef = useRef(false)
   // Prevents the preview scroll listener from treating the programmatic
   // scroll issued by applyPreviewSourceAnchor as a genuine user scroll.
-  // Set just before the scroll write; the debounced listener bails if the
-  // callback fires inside the suppression window, but still updates the
-  // known-anchor baseline so later real scrolls compare correctly.
-  const suppressPreviewScrollUpdateUntilRef = useRef(0)
+  // This is controller-backed (deterministic transition provenance), not a
+  // time-window heuristic.
+  const previewScrollTransitionControllerRef = useRef(new ScrollTransitionController())
+  const nextPreviewScrollTransitionIdRef = useRef(1)
   // Tracks which (note + snapshot) preview targets have already received a
   // first-load restore, so subsequent edit<->preview toggles can be a pure
   // CSS visibility switch without re-running scroll code.
@@ -341,6 +343,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   const applyEditRestoreSnapshotCallCounterRef = useRef(0)
   const restoreInProgressRef = useRef(false)
   const restoreActiveCallerRef = useRef<string | null>(null)
+  const expectedViewportRestoreTransitionIdRef = useRef<number | null>(null)
+  const nextViewportRestoreTransitionIdRef = useRef(1)
   const latestViewportRef = useRef<PersistedViewportState | null>(null)
   const latestEditViewportRef = useRef<PersistedViewportState | null>(null)
   const latestEditViewportTelemetryRef = useRef<EditViewportTelemetry | null>(null)
@@ -363,6 +367,40 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   useEffect(() => {
     notesRef.current = notes
   }, [notes])
+
+  const allocatePreviewScrollTransitionId = useCallback((): number => {
+    const next = nextPreviewScrollTransitionIdRef.current
+    nextPreviewScrollTransitionIdRef.current += 1
+    return next
+  }, [])
+
+  const beginPreviewRestoreTransition = useCallback((settleMs = 250): number => {
+    const transitionId = allocatePreviewScrollTransitionId()
+    previewScrollTransitionControllerRef.current.beginTransition({
+      kind: 'preview-restore',
+      settleMs,
+      maxBlockMs: 1200,
+      blockUserInput: true,
+      transitionId,
+    })
+    return transitionId
+  }, [allocatePreviewScrollTransitionId])
+
+  const isPreviewScrollInteractionBlocked = useCallback((): boolean => {
+    const extraBlocked = !isPreviewMode || !activeNoteId
+    return previewScrollTransitionControllerRef.current.shouldBlockUserInput(extraBlocked)
+  }, [activeNoteId, isPreviewMode])
+
+  useEffect(() => {
+    if (isPreviewMode && activeNoteId) return
+    previewScrollTransitionControllerRef.current.forceComplete()
+  }, [activeNoteId, isPreviewMode])
+
+  const allocateViewportRestoreTransitionId = useCallback((): number => {
+    const next = nextViewportRestoreTransitionIdRef.current
+    nextViewportRestoreTransitionIdRef.current += 1
+    return next
+  }, [])
 
   // Cancels a still-pending coalesced preview commit without flushing it --
   // used both when a synchronous update supersedes it and on unmount.
@@ -899,6 +937,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       }
 
       const selection = restoreFullSelection ? snapshot.fullSelection : snapshot.collapsedSelection
+      const viewportRestoreTransitionId = allocateViewportRestoreTransitionId()
+      expectedViewportRestoreTransitionIdRef.current = viewportRestoreTransitionId
 
       // The pane going from visibility:hidden back to normal layout right
       // around this same call can itself fire a native scroll event with no
@@ -912,6 +952,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       adapter.applySnapshot({
         selectionScrollBehavior: 'preserve-scroll',
         selection,
+        transitionId: viewportRestoreTransitionId,
         viewportLines: snapshot.viewport,
       })
 
@@ -923,6 +964,9 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         if (onComplete) {
           onComplete()
         }
+        if (expectedViewportRestoreTransitionIdRef.current === viewportRestoreTransitionId) {
+          expectedViewportRestoreTransitionIdRef.current = null
+        }
         clearRestoreInProgress()
         return
       }
@@ -930,7 +974,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       requestAnimationFrame(() => {
         if (cancelled) return
         if (typeof snapshot.sourceAnchorLine === 'number') {
-          correctWrappingOnceReady(snapshot.sourceAnchorLine, snapshot.viewport)
+          correctWrappingOnceReady(snapshot.sourceAnchorLine, snapshot.viewport, viewportRestoreTransitionId)
         }
         if (focusAfterApply) {
           focusEditorInEditMode({ restoreSelection: false })
@@ -938,11 +982,14 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         if (onComplete) {
           onComplete()
         }
+        if (expectedViewportRestoreTransitionIdRef.current === viewportRestoreTransitionId) {
+          expectedViewportRestoreTransitionIdRef.current = null
+        }
         clearRestoreInProgress()
       })
     }
 
-    const correctWrappingOnceReady = (sourceAnchorLine: number, viewport: PersistedViewportState) => {
+    const correctWrappingOnceReady = (sourceAnchorLine: number, viewport: PersistedViewportState, transitionId: number) => {
       const adapter = adapterRef.current
       if (!adapter) return
 
@@ -960,6 +1007,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       ignoreNextUserViewportChangeRef.current = true
       adapter.applySnapshot({
         selectionScrollBehavior: 'preserve-scroll',
+        transitionId,
         viewportLines: correctedViewport,
       })
 
@@ -970,9 +1018,10 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     applyWhenReady()
     return () => {
       cancelled = true
+      expectedViewportRestoreTransitionIdRef.current = null
       clearRestoreInProgress()
     }
-  }, [focusEditorInEditMode, lineHeightPx])
+  }, [allocateViewportRestoreTransitionId, focusEditorInEditMode, lineHeightPx])
 
   const previousActiveNoteIdForEditRestoreRef = useRef<string | null>(null)
   const previousPreviewModeRef = useRef(false)
@@ -1385,11 +1434,24 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         return
       }
 
+      const expectedTransitionId = expectedViewportRestoreTransitionIdRef.current
+      if (
+        event.source === 'programmatic'
+        && expectedTransitionId !== null
+        && typeof event.transitionId === 'number'
+        && event.transitionId !== expectedTransitionId
+      ) {
+        return
+      }
+
       const pendingRestore = pendingViewportRestoreRef.current
       if (pendingRestore) {
         if (event.source === 'programmatic' && areMatchingViewportLines(pendingRestore, event.viewport)) {
           pendingViewportRestoreRef.current = null
           isApplyingInitialViewportRef.current = false
+          if (typeof event.transitionId === 'number' && event.transitionId === expectedTransitionId) {
+            expectedViewportRestoreTransitionIdRef.current = null
+          }
         } else {
           return
         }
@@ -2057,6 +2119,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     const applyPreviewSourceAnchor = (sourceLine: number) => {
       const container = previewScrollRef.current
       if (!container) return
+      const previewTransitionId = beginPreviewRestoreTransition(250)
 
       container.style.scrollPaddingTop = `${Math.max(0, lineHeightPx)}px`
 
@@ -2069,10 +2132,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       const previousScrollBehavior = container.style.scrollBehavior
       container.style.scrollBehavior = 'auto'
       const clampedSourceLine = Math.max(0, sourceLine)
-      // Programmatic scrolls below will fire native 'scroll' events. Tell
-      // the listener to ignore the first burst so it doesn't flag a restore
-      // as a real user scroll.
-      suppressPreviewScrollUpdateUntilRef.current = performance.now() + 250
 
       // The block we intend to land on. The scroll listener below compares
       // its own resolved anchor against this, not against "did a scroll
@@ -2089,12 +2148,16 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       previewScrollToSourceLineRef.current?.(clampedSourceLine, { align: 'start' })
 
       const attemptFindAndScroll = (attemptsLeft: number) => {
-        if (cancelled || !container) return
+        if (cancelled || !container) {
+          previewScrollTransitionControllerRef.current.forceComplete(previewTransitionId)
+          return
+        }
 
         const target = findPreviewSourceAnchorElement(container, clampedSourceLine)
         if (!target) {
           if (attemptsLeft <= 0) {
             container.style.scrollBehavior = previousScrollBehavior
+            previewScrollTransitionControllerRef.current.forceComplete(previewTransitionId)
             return
           }
           requestAnimationFrame(() => attemptFindAndScroll(attemptsLeft - 1))
@@ -2176,7 +2239,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       cancelled = true
       setPreviewScrollBehavior('')
     }
-  }, [activeNoteId, isPreviewMode, activeNoteText, lineHeightPx, latestEditorTextRef, previewedSnapshotId, previewedSnapshotContentRef, getPreviewBlocksForText])
+  }, [activeNoteId, isPreviewMode, activeNoteText, lineHeightPx, latestEditorTextRef, previewedSnapshotId, previewedSnapshotContentRef, getPreviewBlocksForText, beginPreviewRestoreTransition])
 
   useEffect(() => {
     if (!isPreviewMode) return
@@ -2192,8 +2255,15 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
       previewScrollSaveTimerRef.current = window.setTimeout(() => {
         previewScrollSaveTimerRef.current = null
+        const classification = previewScrollTransitionControllerRef.current.classifyScrollEvent()
         const sourceAnchor = resolvePreviewSourceAnchorFromContainer(container)
         if (!sourceAnchor) return
+
+        if (classification.isProgrammatic) {
+          debugLogScrollSync(`preview scroll ignored (programmatic restore): note=${activeNoteId} anchorLine=${sourceAnchor.sourceAnchorLine} transition=${classification.transitionId ?? 'unknown'}`)
+          lastKnownPreviewAnchorLineRef.current = sourceAnchor.sourceAnchorLine
+          return
+        }
 
         // Compare against the block our own last restore intended, not
         // against "did a scroll event fire" -- react-virtual's own
@@ -2202,14 +2272,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         // real measured heights, all converging toward this same block.
         // None of that is a real change; only landing on a genuinely
         // different block is.
-        // A programmatic restore just fired; absorb its settle events as
-        // the new baseline without treating them as a user scroll.
-        if (performance.now() < suppressPreviewScrollUpdateUntilRef.current) {
-          debugLogScrollSync(`preview scroll ignored (programmatic restore): note=${activeNoteId} anchorLine=${sourceAnchor.sourceAnchorLine}`)
-          lastKnownPreviewAnchorLineRef.current = sourceAnchor.sourceAnchorLine
-          return
-        }
-
         if (sourceAnchor.sourceAnchorLine === lastKnownPreviewAnchorLineRef.current) {
           debugLogScrollSync(`preview scroll settled at already-known anchorLine=${sourceAnchor.sourceAnchorLine} -- not a real change, ignored`)
           return
@@ -2399,11 +2461,14 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       // same way activateNote's own restore does (applyEditRestoreSnapshot)
       // -- this used to be viewport-only, which is why cold start never
       // restored cursor position the way every other note switch does.
+      const viewportRestoreTransitionId = allocateViewportRestoreTransitionId()
+      expectedViewportRestoreTransitionIdRef.current = viewportRestoreTransitionId
       ignoreNextUserViewportChangeRef.current = true
       adapter.applySnapshot({
         viewportLines: viewport,
         selectionScrollBehavior: 'preserve-scroll',
         selection: snapshot.fullSelection,
+        transitionId: viewportRestoreTransitionId,
       })
 
       latestViewportRef.current = viewport
@@ -2415,7 +2480,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     }
 
     requestAnimationFrame(applyViewport)
-  }, [isApplyingInitialViewportRef, pendingViewportRestoreRef])
+  }, [allocateViewportRestoreTransitionId, isApplyingInitialViewportRef, pendingViewportRestoreRef])
 
   return {
     adapterRef,
@@ -2441,6 +2506,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     applyEditRestoreSnapshot,
     bindings,
     toggleRenderViewMode,
+    isPreviewScrollInteractionBlocked,
     applyProgrammaticEditorText,
     seedInitialViewport,
     previewBlockSplitCacheRef,
