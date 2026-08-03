@@ -910,6 +910,12 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     // this render cycle -- pinpoints whether two independent effects are
     // both applying a restore for the same transition.
     applyEditRestoreSnapshotCallCounterRef.current += 1
+    // Also doubles as a staleness token for the post-settle re-correction
+    // pass below (see correctWrappingOnceReady's own comment): if a newer
+    // applyEditRestoreSnapshot call comes in before that pass fires, this
+    // value moves on and the stale pass bails instead of stomping on the
+    // newer restore's own scroll position.
+    const myRestoreToken = applyEditRestoreSnapshotCallCounterRef.current
 
     // Applies the rough placement immediately (safe and idempotent: integer
     // line counts, no measurement-dependent clamping -- see
@@ -989,12 +995,12 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       })
     }
 
-    const correctWrappingOnceReady = (sourceAnchorLine: number, viewport: PersistedViewportState, transitionId: number) => {
+    const applyCorrectedViewport = (sourceAnchorLine: number, viewport: PersistedViewportState, transitionId: number) => {
       const adapter = adapterRef.current
-      if (!adapter) return
+      if (!adapter) return false
 
       const lineTopPx = adapter.resolveHeightForSourceLine(sourceAnchorLine)
-      if (lineTopPx === null) return
+      if (lineTopPx === null) return false
 
       const topBoundaryPx = Math.max(0, Math.round(viewport.topBoundaryLines * lineHeightPx))
       const correctedScrollTopLines = Math.max(
@@ -1013,6 +1019,37 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
 
       latestViewportRef.current = correctedViewport
       latestEditViewportRef.current = correctedViewport
+      return true
+    }
+
+    const correctWrappingOnceReady = (sourceAnchorLine: number, viewport: PersistedViewportState, transitionId: number) => {
+      applyCorrectedViewport(sourceAnchorLine, viewport, transitionId)
+
+      // CM6 only has real measured heights for lines it has actually
+      // rendered. The line this just scrolled to may be far outside the
+      // region rendered before this restore (e.g. many wrapped paragraphs
+      // between the old and new position), so resolveHeightForSourceLine
+      // above can still be reading an *estimated* height for it (CM6's
+      // heightmap default-line-height guess for not-yet-measured content).
+      // Once CM6 actually renders/measures that region -- its own
+      // DOMObserver/IntersectionObserver-driven measure cycle, which lands
+      // one to two frames after the scrollTo above -- it silently corrects
+      // scrollTop itself to match the real measured heights, landing on a
+      // raw pixel value that ignores our lineHeightPx/topBoundary grid
+      // entirely (confirmed live: CM6's own EditorView.measure -> a direct
+      // scrollTop write with a fractional, non-grid-aligned value, no
+      // scrollToQuantizedSmooth/scrollToNonQuantizedSmooth involved at all
+      // -- exactly the "different scroll without acceleration" users can
+      // see on restore). Re-run the same correction once more after that
+      // settle so our own quantized, phase-correct value is what actually
+      // sticks, instead of CM6's raw self-correction.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (cancelled) return
+          if (applyEditRestoreSnapshotCallCounterRef.current !== myRestoreToken) return
+          applyCorrectedViewport(sourceAnchorLine, viewport, transitionId)
+        })
+      })
     }
 
     applyWhenReady()
