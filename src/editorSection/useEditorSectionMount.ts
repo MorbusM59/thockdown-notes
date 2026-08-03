@@ -885,6 +885,11 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     // not a cached/round-tripped pixel value, so it carries none of the
     // drift risk the pre-rewrite sync/spoof caching existed to paper over
     // (docs/cm6-parity-hardening-plan.md's Bug 5 follow-up).
+    const clearRestoreInProgress = () => {
+      restoreInProgressRef.current = false
+      restoreActiveCallerRef.current = null
+    }
+
     const applyWhenReady = () => {
       if (cancelled) return
       const adapter = adapterRef.current
@@ -913,26 +918,28 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       latestViewportRef.current = snapshot.viewport
       latestEditViewportRef.current = snapshot.viewport
 
-      if (typeof snapshot.sourceAnchorLine === 'number') {
-        requestAnimationFrame(() => {
-          if (cancelled) return
-          correctWrappingOnceReady(snapshot.sourceAnchorLine!, snapshot.viewport)
-        })
+      const needsPostApplySettle = typeof snapshot.sourceAnchorLine === 'number' || focusAfterApply
+      if (!needsPostApplySettle) {
+        if (onComplete) {
+          onComplete()
+        }
+        clearRestoreInProgress()
+        return
       }
 
-      if (focusAfterApply) {
-        requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (cancelled) return
+        if (typeof snapshot.sourceAnchorLine === 'number') {
+          correctWrappingOnceReady(snapshot.sourceAnchorLine, snapshot.viewport)
+        }
+        if (focusAfterApply) {
           focusEditorInEditMode({ restoreSelection: false })
-        })
-      }
-
-      if (onComplete) {
-        onComplete()
-      }
-      // Restore completed — clear the in-progress sentinel so future
-      // callers can proceed. Also clear the active-caller diagnostic ref.
-      restoreInProgressRef.current = false
-      restoreActiveCallerRef.current = null
+        }
+        if (onComplete) {
+          onComplete()
+        }
+        clearRestoreInProgress()
+      })
     }
 
     const correctWrappingOnceReady = (sourceAnchorLine: number, viewport: PersistedViewportState) => {
@@ -960,10 +967,10 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       latestEditViewportRef.current = correctedViewport
     }
 
-    requestAnimationFrame(applyWhenReady)
+    applyWhenReady()
     return () => {
       cancelled = true
-      restoreInProgressRef.current = false
+      clearRestoreInProgress()
     }
   }, [focusEditorInEditMode, lineHeightPx])
 

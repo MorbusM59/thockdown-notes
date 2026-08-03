@@ -685,7 +685,10 @@ export function CM6Editor({
   // applySnapshot call and its own settle, same as Editor.tsx.
   const [hasViewportLines, setHasViewportLines] = useState(false);
   const [isSnapshotRestorePending, setIsSnapshotRestorePending] = useState(false);
+  const hasViewportLinesRef = useRef(hasViewportLines);
+  const isSnapshotRestorePendingRef = useRef(isSnapshotRestorePending);
   const snapshotRestoreRafRef = useRef<number | null>(null);
+  const programmaticScrollSuppressUntilRef = useRef(0);
   const caretHidden = isSnapshotRestorePending || caretSuspended;
   // Editor.tsx's RichTextPlugin shows/hides its placeholder automatically
   // based on whether Lexical's root node is empty; CM6 has no equivalent
@@ -741,6 +744,32 @@ export function CM6Editor({
     cursorYPx: number;
     rafId: number | null;
   } | null>(null);
+  const programmaticScrollSuppressTimeoutRef = useRef<number | null>(null);
+  const syncCustomScrollbarRef = useRef<((options?: { force?: boolean }) => void) | null>(null);
+
+  const markProgrammaticScrollSettling = useCallback((durationMs = 200) => {
+    const nextUntil = performance.now() + Math.max(0, durationMs);
+    if (nextUntil > programmaticScrollSuppressUntilRef.current) {
+      programmaticScrollSuppressUntilRef.current = nextUntil;
+    }
+
+    if (programmaticScrollSuppressTimeoutRef.current !== null) {
+      window.clearTimeout(programmaticScrollSuppressTimeoutRef.current);
+      programmaticScrollSuppressTimeoutRef.current = null;
+    }
+
+    const delayMs = Math.max(0, Math.ceil(programmaticScrollSuppressUntilRef.current - performance.now()));
+    programmaticScrollSuppressTimeoutRef.current = window.setTimeout(() => {
+      programmaticScrollSuppressTimeoutRef.current = null;
+      syncCustomScrollbarRef.current?.({ force: true });
+    }, delayMs);
+  }, []);
+
+  const isEditScrollInteractionBlocked = useCallback(() => {
+    if (!hasViewportLinesRef.current) return true;
+    if (isSnapshotRestorePendingRef.current) return true;
+    return performance.now() < programmaticScrollSuppressUntilRef.current;
+  }, []);
 
   const readScrollbarGeometry = useCallback((): ScrollbarGeometry | null => {
     const scroller = viewRef.current?.scrollDOM;
@@ -800,6 +829,13 @@ export function CM6Editor({
       return;
     }
 
+    if (isEditScrollInteractionBlocked() && !options?.force) {
+      setScrollThumbHeightPx(0);
+      setScrollThumbTopPx(0);
+      setIsScrollThumbActive(false);
+      return;
+    }
+
     const scroller = viewRef.current?.scrollDOM;
     const geometry = readScrollbarGeometry();
     if (!scroller || !geometry) return;
@@ -824,7 +860,11 @@ export function CM6Editor({
     setScrollThumbHeightPx(geometry.thumbHeightPx);
     setScrollThumbTopPx(nextThumbTop);
     setIsScrollThumbActive(true);
-  }, [readScrollbarGeometry]);
+  }, [isEditScrollInteractionBlocked, readScrollbarGeometry]);
+
+  useEffect(() => {
+    syncCustomScrollbarRef.current = syncCustomScrollbar;
+  }, [syncCustomScrollbar]);
 
   const scrollFromThumbTop = useCallback((thumbTopPx: number) => {
     const scroller = viewRef.current?.scrollDOM;
@@ -858,6 +898,14 @@ export function CM6Editor({
   }, [lineHeightPx, cellWidthPx]);
 
   useEffect(() => {
+    hasViewportLinesRef.current = hasViewportLines;
+  }, [hasViewportLines]);
+
+  useEffect(() => {
+    isSnapshotRestorePendingRef.current = isSnapshotRestorePending;
+  }, [isSnapshotRestorePending]);
+
+  useEffect(() => {
     topBoundaryPxRef.current = topBoundaryPxDisplay;
     bottomBoundaryPxRef.current = bottomBoundaryPxDisplay;
   }, [topBoundaryPxDisplay, bottomBoundaryPxDisplay]);
@@ -889,6 +937,10 @@ export function CM6Editor({
       if (snapshotRestoreRafRef.current !== null) {
         cancelAnimationFrame(snapshotRestoreRafRef.current);
         snapshotRestoreRafRef.current = null;
+      }
+      if (programmaticScrollSuppressTimeoutRef.current !== null) {
+        window.clearTimeout(programmaticScrollSuppressTimeoutRef.current);
+        programmaticScrollSuppressTimeoutRef.current = null;
       }
     };
   }, []);
@@ -1714,6 +1766,12 @@ export function CM6Editor({
             // (cursor movement, not the app's own quantized page-scroll feel).
             pendingCageIntent = false;
             event.preventDefault();
+            if (isEditScrollInteractionBlocked()) {
+              pageKeysHeld.delete(event.key);
+              clearPageContinuousHandoff();
+              stopPageContinuousScroll();
+              return true;
+            }
             const direction: -1 | 1 = event.key === 'PageDown' ? 1 : -1;
             const scroller = view.scrollDOM;
             pageKeysHeld.add(event.key);
@@ -2215,9 +2273,12 @@ export function CM6Editor({
     // listener + buildViewport. Uses programmaticScrollCountRef to tell
     // applySnapshot-driven scrolls apart from real user scrolling.
     const handleScroll = () => {
-      const isProgrammatic = programmaticScrollCountRef.current > 0;
+      const isSuppressedProgrammatic = performance.now() < programmaticScrollSuppressUntilRef.current;
+      const isProgrammatic = programmaticScrollCountRef.current > 0 || isSuppressedProgrammatic;
       if (isProgrammatic) {
-        programmaticScrollCountRef.current -= 1;
+        if (programmaticScrollCountRef.current > 0) {
+          programmaticScrollCountRef.current -= 1;
+        }
       }
       bindingsRef.current?.onViewportChange?.({
         source: isProgrammatic ? 'programmatic' : 'user-input',
@@ -2233,6 +2294,10 @@ export function CM6Editor({
     // Cage-quantized wheel scroll -- ported verbatim from
     // CagedScrollPlugin.tsx's own handleWheel.
     const handleWheel = (event: WheelEvent) => {
+      if (isEditScrollInteractionBlocked()) {
+        event.preventDefault();
+        return;
+      }
       if (event.deltaY === 0) return;
       event.preventDefault();
 
@@ -2445,6 +2510,7 @@ export function CM6Editor({
     let initialGeometrySettleRafId: number | null = null;
     const settleInitialGeometry = (attemptsLeft: number) => {
       if (!viewRef.current) return;
+      markProgrammaticScrollSettling(120);
       const measuredHeight = view.scrollDOM.clientHeight;
       setScrollerClientHeightPx(measuredHeight);
       view.requestMeasure();
@@ -2727,6 +2793,8 @@ export function CM6Editor({
   useEffect(() => stopScrollbarRightHold, [stopScrollbarRightHold]);
 
   const handleTrackRightMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (isEditScrollInteractionBlocked()) return;
+
     const track = scrollbarTrackRef.current;
     const view = viewRef.current;
     if (!track || !view) return;
@@ -2771,6 +2839,8 @@ export function CM6Editor({
   };
 
   const handleTrackMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (isEditScrollInteractionBlocked()) return;
+
     if (event.button === 2) {
       handleTrackRightMouseDown(event);
       return;
@@ -2806,6 +2876,8 @@ export function CM6Editor({
   };
 
   const handleThumbMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (isEditScrollInteractionBlocked()) return;
+
     if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
@@ -2869,6 +2941,7 @@ export function CM6Editor({
           if (snapshotRestoreRafRef.current !== null) {
             cancelAnimationFrame(snapshotRestoreRafRef.current);
           }
+          markProgrammaticScrollSettling();
           setIsSnapshotRestorePending(true);
         }
 
@@ -2902,6 +2975,7 @@ export function CM6Editor({
             const targetTop = Math.max(0, nextViewport.scrollTopPx);
             if (Math.abs(view.scrollDOM.scrollTop - targetTop) > 0.5) {
               programmaticScrollCountRef.current += 1;
+              markProgrammaticScrollSettling();
             }
             view.scrollDOM.scrollTo({ top: targetTop, behavior: 'auto' });
           }
@@ -2918,6 +2992,7 @@ export function CM6Editor({
           const targetTop = Math.max(0, Math.round(snapshot.viewportLines.scrollTopLines) * lineHeightPxRef.current);
           if (Math.abs(view.scrollDOM.scrollTop - targetTop) > 0.5) {
             programmaticScrollCountRef.current += 1;
+            markProgrammaticScrollSettling();
           }
           view.scrollDOM.scrollTo({
             top: targetTop,
@@ -2978,7 +3053,7 @@ export function CM6Editor({
     // topBoundaryLines/bottomBoundaryLines ARE closed over directly (in
     // getSnapshot), so they must be deps or getSnapshot would report stale
     // values after a boundary drag.
-  }, [adapterRef, topBoundaryLines, bottomBoundaryLines]);
+  }, [adapterRef, markProgrammaticScrollSettling, topBoundaryLines, bottomBoundaryLines]);
 
   // Drag-handle geometry: a full lineHeightPx-tall strip flush against the
   // boundary line once one exists, but only a small fixed-height sliver at
