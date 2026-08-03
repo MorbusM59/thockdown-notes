@@ -1007,10 +1007,9 @@ export function CM6Editor({
   // construction) makes the middle region's height an exact multiple of
   // lineHeightPx, which is what actually pins the bottom boundary to a whole
   // number of rows below the top one.
-  const bottomBoundaryVisualBasePx = bottomBoundaryPxDisplay + halfLineHeightPx;
-  const middleRegionRawPx = Math.max(0, scrollerClientHeightPx - topBoundaryVisualPx - bottomBoundaryVisualBasePx);
+  const middleRegionRawPx = Math.max(0, scrollerClientHeightPx - topBoundaryVisualPx - bottomBoundaryPxDisplay);
   const middleRegionRemainderPx = lineHeightPx > 0 ? middleRegionRawPx % lineHeightPx : 0;
-  const bottomBoundaryVisualPx = bottomBoundaryVisualBasePx + middleRegionRemainderPx;
+  const bottomBoundaryVisualPx = bottomBoundaryPxDisplay + middleRegionRemainderPx;
   // Quantized so it's an exact multiple of lineHeightPx by construction (see
   // above) -- used as an explicit height instead of a CSS `bottom: Npx` inset
   // for the divs below.
@@ -1018,7 +1017,6 @@ export function CM6Editor({
   // Visual-only tweak: the trailing-zone paint should begin one whole row
   // lower than the cage's own geometric boundary. Keep scroll/cage/handle
   // math unchanged and only contract the painted trailing zone by one row.
-  const bottomBoundaryZoneHeightPx = Math.max(0, bottomBoundaryVisualPx - lineHeightPx);
   // Every boundary-zone/handle div below is positioned via an explicit `top`
   // computed from this one JS-tracked scrollerClientHeightPx, never via a
   // CSS `bottom: Npx` inset. `bottom` insets are resolved against the
@@ -1030,8 +1028,8 @@ export function CM6Editor({
   // sub-pixel amount during a continuous window resize is exactly what reads
   // as jitter; deriving every position from this single integer removes the
   // second system entirely.
-  const middleRegionZoneHeightPx = middleRegionHeightPx + (bottomBoundaryVisualPx - bottomBoundaryZoneHeightPx);
-  const bottomZoneTopPx = Math.max(0, scrollerClientHeightPx - bottomBoundaryZoneHeightPx);
+  const middleRegionZoneHeightPx = middleRegionHeightPx + (bottomBoundaryVisualPx - bottomBoundaryVisualPx);
+  const bottomZoneTopPx = Math.max(0, scrollerClientHeightPx - bottomBoundaryVisualPx);
   const alignmentPaddingBottomPx = lineHeightPx > 0
     ? (((scrollerClientHeightPx - halfLineHeightPx) % lineHeightPx) + lineHeightPx) % lineHeightPx
     : 0;
@@ -3268,7 +3266,7 @@ export function CM6Editor({
           />
           <div
             className="absolute left-0 right-0 pointer-events-none"
-            style={{ top: bottomZoneTopPx, height: bottomBoundaryZoneHeightPx, backgroundColor: 'var(--color-bg-trailing)', zIndex: 2 }}
+            style={{ top: bottomZoneTopPx, height: bottomBoundaryVisualPx, backgroundColor: 'var(--color-bg-trailing)', zIndex: 2 }}
           />
           <div
             className="absolute left-0 right-0 z-20 bg-transparent cursor-ns-resize"
