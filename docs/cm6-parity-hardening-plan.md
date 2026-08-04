@@ -451,16 +451,116 @@ From the historical sweep (see the conversation this doc was written from, or re
   offender." Concretely: before deciding any piece of performance infrastructure from this effort
   is dead weight, check whether removing it would also remove something built *on top of* it, or
   whether keeping it is what let a later fix be simple. Don't audit each commit in isolation.
+- **New, confirmed this session: `ParagraphOffsetIndex.ts`'s fast-path infrastructure is dead
+  code today, not merely unmeasured.** It exists to be handed to `SelectionOffsets.ts`'s
+  `getOffsetWithinRoot`/`readSelectionStateFromDom`/`readSelectionOffsetFromClientPoint` as an
+  optional `FastParagraphResolver` — but the only thing that ever populated one,
+  `LexicalParagraphOffsetSync.ts`, was deleted with the rest of the Lexical fallback (see above).
+  Grepped whole-tree: `ParagraphOffsetIndex.ts` is now imported only by its own test file;
+  `CM6Editor.tsx` never references `FastParagraphResolver`, `ParagraphOffsetIndex`, or
+  `getOffsetWithinRoot` at all. The one CM6-side caller that does reach `SelectionOffsets.ts`
+  (`CaretTerminalOffset.ts:2,20`, a rare trailing-newline visual-compensation fallback gated to
+  only fire when `caretRect.source` is `'adjacent-probe'`/`'anchor-fallback'`, not a hot path)
+  always takes the slow O(document length) DOM-walk path, with no fast resolver to hand it. Not
+  urgent — the call site confirmed not-hot — but real dead weight: `ParagraphOffsetIndex.ts` plus
+  its fuzz test (`ParagraphOffsetIndex.test.ts`) are safe to delete outright, same as the other
+  Lexical-only infrastructure already removed, unless a future CM6-side fast resolver is written
+  to actually use it.
+- **New, confirmed this session: `src/editorSection/useEditorSectionMount.ts.bak` is checked into
+  the repo** (tracked, not gitignored — `git log` shows a real commit for it, last touched
+  2026-08-01). A 100KB stray backup of the file it sits next to. Delete it; there is no reason a
+  `.bak` file should be version-controlled, and its presence risks someone editing the wrong copy.
 
-## Phase 4 — emergent-bug hunting and CM6 hardening
+## Phase 4 — full CM6 integration audit (supersedes the original "emergent-bug hunting" framing)
 
-Not yet started. Exercise the editor rather than reason about it — per
-`docs/document-scale-performance-philosophy.md`'s process discipline, this class of work lives
-or dies on live-browser verification, not code review. Natural candidates once Phase 1/2 land:
-a full pass through the existing `scripts/perf/verifyCM6*.mjs` regression-script suite (18
-scripts as of the last count in the handover doc) plus deliberate adversarial use (rapid
-note-switching, resize-during-edit, focus/blur churn, clipboard edge cases) looking for anything
-that doesn't match Lexical's prior behavior.
+**Not yet started; this is the user's own "next large goal," explicitly scoped as the last major
+post-migration effort "until I come up with the next one."** The original one-line framing below
+("exercise the editor, look for anything that doesn't match Lexical's prior behavior") is kept for
+context but is too coarse to actually work through step by step — Lexical is gone from the tree
+now (Phase 3), so "diff against Lexical" is no longer even the right mental model. Reframed as a
+methodical, subsystem-by-subsystem sweep of `CM6Editor.tsx` and everything it wires into, looking
+specifically for the failure class the user named directly: **individual components silently
+falling back to native/default browser handling — bypassing this app's grid alignment, custom
+smooth-scroll, or other custom rendering — without that fallback being a deliberate, documented
+tradeoff.** `CM6Editor.tsx` already documents several *intentional* native-fallback tradeoffs
+in code comments (e.g. `:1543` native `scrollIntoView` on arrow-key movement reconciled a frame
+later by the caging system, not fought directly; `:2354` drag-selection auto-scroll snapped back
+onto the grid one frame behind native rather than intercepted outright) — the goal of this audit
+is to find the ones that *aren't* documented/intentional like those are, not to re-litigate the
+ones that already are.
+
+**Original, still-valid framing, folded in rather than replaced**: this subsumes Phase 2's
+never-completed parity inventory (per Phase 2's own updated note above, that now means exercising
+the real app adversarially rather than diffing against a git-history copy of `Editor.tsx`) — both
+questions ("does anything silently degrade to native handling" and "is anything still missing
+relative to what Lexical used to do") are answered by the same activity: exercised, adversarial,
+live-browser use of the real app, not code reading. Per this doc's own standing rule and
+`docs/document-scale-performance-philosophy.md`'s process discipline, findings from this phase get
+verified live before being called bugs, and any fix touching caret/selection/scroll gets the same
+live-browser check before being called done.
+
+### Subsystem checklist
+
+Ordered roughly by how directly each one touches the user's named symptom (native-fallback,
+grid-alignment, smooth-scroll) first, broader/lower-risk sweeps last. Each item should be worked
+as: read the relevant source fully, form concrete hypotheses about where a silent native fallback
+or streamlining gap could live, then verify live in the browser — not the reverse.
+
+1. **Scroll & viewport system** — `ScrollTransitionController.ts`, `CageMath.ts`,
+   `ScrollCurvePlan.ts`, `QuantizedSmoothScroll.ts`, and `CM6Editor.tsx`'s own scroll-adjacent
+   `domEventHandlers`/effects (arrow-key caging, PageUp/PageDown continuous scroll + release
+   ramp-down, drag-selection auto-scroll quantization, wheel/trackpad handling). Highest-priority
+   area: this is where "resets to native handling, bypassing smooth scroll" would concretely show
+   up, and it's also the area with the most prior churn (see the "hardening?"/"fade"/"scroll ramp"
+   commits in recent history) — a good sign real work has happened here, and an equally good
+   reason to suspect loose ends.
+2. **Grid alignment** — the box-grid overlay and everything that keeps `.cm-content`'s glyph
+   origin matched to it (`CM6Editor.tsx`'s theme block around `:1684-1710`, the content
+   padding-zeroing effect referenced at `:3144`, `EditorTypography.ts`). Directly the other half
+   of the user's named symptom. Check every place glyph/line geometry is read or written for
+   whether it stays grid-quantized under every code path (resize, zoom/font-size change, note
+   switch, split-view pane resize) or only under the ones already tested.
+3. **Custom scrollbar** — `usePreviewScrollbar.ts` (734 lines, both edit- and preview-side
+   scrollbar track/thumb ownership, PageUp/PageDown interaction blocking during restore settle —
+   see this doc's own "Latest Session Update" above for the most recent work here, which named its
+   own follow-up: verify blocked interactions release promptly and don't starve under rapid mode
+   toggles).
+4. **Caret & selection rendering** — `SelectionOffsets.ts`, `CaretRect.ts`, `CaretVisualPosition.ts`,
+   `CaretTerminalOffset.ts`, `SelectionRects.ts`, plus `CM6Editor.tsx`'s block-caret-overlay and
+   `.thockdown-block-selection` rendering (`drawSelection()` deliberately disabled, per the code
+   comment at `:1654-1661` — confirm nothing re-enables or partially depends on CM6's native
+   selection painting anywhere else). Highest-severity class per this project's own convention if
+   anything is found here.
+5. **Preview/edit scroll sync** — `PreviewBlockIndex.ts`, `PreviewScrollAnchor.ts`,
+   `anchorBlockIndex` persistence/restore (`EditRestoreMath.ts`, `useEditorSectionMount.ts`'s
+   restore paths), the mode-toggle path. This is the area the "Scroll-sync rewrite" section above
+   most recently rewrote and explicitly flagged as **not yet live-verified in a real browser
+   session** — that standing gap should be closed as part of this item, not treated as separate.
+6. **Text/markdown transforms** — Enter (`EnterTransformPolicy.ts`, Bug 4 above is still open and
+   belongs here), Tab-indent, markdown-shortcut, checklist typeover, paste sanitization. Confirm
+   each transform's CM6-side wiring still matches its shared policy function with no CM6-specific
+   drift.
+7. **Persistence** — cursor/scroll checkpoint coverage (already comprehensively redesigned this
+   doc, Bug 3b above) — this item is mostly a live-verification pass confirming the checkpoint
+   list still matches every real unload point, not new design work.
+8. **Split-view / multi-section** — the rough edges already named in `TODO.md`'s own "Split-view
+   rough edges" section (shared `editorStageRef`, shared `pendingViewportRestoreRef`/
+   `isApplyingInitialViewportRef`, hibernation never exercised under real N>1 typing load,
+   cold-start restore with 2+ sections never verified against a real Electron restart). Treat that
+   TODO list as this item's starting checklist rather than re-deriving it.
+9. **Performance-infrastructure loose ends** — `ParagraphOffsetIndex.ts` dead-code removal (found
+   this session, see Phase 3 above), the ~19 vestigial `thockdown:cm6-editor-spike`-setting perf
+   scripts (`TODO.md`), and a fresh read of whether any other Lexical-era performance module
+   quietly lost its only caller the same way `ParagraphOffsetIndex.ts` did — grep every module
+   under `src/editor/` for real (non-test) import sites before assuming any of them are still
+   load-bearing.
+10. **Repo hygiene** — the checked-in `.bak` file (found this session, see Phase 3 above), and a
+    scan for any other stray/generated files that shouldn't be tracked.
+
+**Process note**: this list is a starting map grounded in what's actually in the tree today, not
+a guess — but it is deliberately not exhaustive of every file under `src/editor/`/`src/editorSection/`.
+Expect to find more as each item is worked; add newly-found areas to this list rather than chasing
+them ad hoc, so the list stays the actual record of what's been covered.
 
 ## Phase 5 — outside-the-box performance exploration
 
@@ -777,3 +877,67 @@ the two legitimate restore triggers.
 
 **Not yet live-verified in a real browser session** — same standing caveat as the rest of this doc's
 scroll/caret work; live-verified only via `tsc`/`lint`/`npm test`, not yet exercised by hand.
+
+## This session: Phase 4 reframed as the full post-migration integration audit, work not yet started
+
+Per the user: the CM6 migration's remaining wiring is still "somewhat brittle and not optimized,"
+and individual components occasionally "reset to native handling, bypassing grid alignment, smooth
+scroll etc." — framed as the next large multi-session effort, requested as a plan first, then
+step-by-step execution. Phase 4 above was rewritten from a one-line "exercise the editor" note into
+a grounded 10-item subsystem checklist (see above), absorbing Phase 2's never-completed parity
+inventory into the same activity. Two concrete, verified-by-grep findings surfaced while grounding
+the plan and were filed under Phase 3 rather than Phase 4 since they're loose-ends, not audit
+targets: `ParagraphOffsetIndex.ts` is dead code (its only real caller, `LexicalParagraphOffsetSync.ts`,
+was deleted with the Lexical fallback; grepped whole-tree, confirmed only its own test still imports
+it), and `src/editorSection/useEditorSectionMount.ts.bak` is a 100KB backup file checked into git by
+mistake. Neither fixed yet — recorded, not actioned, pending the user's go-ahead on where to start.
+
+**User-supplied leads, gathered before starting execution** (asked directly rather than guessed, since
+only the user has actually seen these reproduce): split-view itself is *not* suspected. Four real,
+specific leads instead, now the actual entry points for Phase 4 rather than working the checklist
+cold:
+
+1. **Edit→render (preview) mode toggle is "highly brittle."** Lands squarely on Phase 4 item 5
+   (preview/edit scroll sync) — which this doc already flagged as "not yet live-verified in a real
+   browser session" after the scroll-sync rewrite. This is now that verification's actual mandate,
+   not a nice-to-have.
+2. **Any note load that's implicitly triggered rather than deliberately triggered by the user is
+   brittle** (the user's own distinction — e.g. restoring on app start vs. clicking a note card).
+   Likely overlaps `TODO.md`'s existing "on a full app restart, note text isn't aligned to grid on
+   initial load... clicking into either editor section fixes it for both" item, but the user's
+   framing is broader than just that one symptom — treat "every code path that mounts/hydrates a
+   note without a direct user click" as the thing to inventory and test, not just the one named
+   TODO item.
+3. **Interrupted processes, specifically interrupted smooth scrolls**, produce bad state. The
+   user's own diagnosis, worth taking seriously rather than re-deriving: "it feels like there is
+   often no sanity check for all data being present and a revert to default as a result" — i.e.
+   suspect incomplete-state guards (or their absence) in `ScrollCurvePlan.ts`/`QuantizedSmoothScroll.ts`/
+   `ScrollTransitionController.ts` when a scroll animation is cancelled or superseded mid-flight,
+   not just their happy-path behavior.
+4. **New, specific, reproducible bug, not previously known: arrow-key-Up scroll misbehavior at
+   CM6's internal viewport-chunk boundaries on large documents.** Exact repro as reported: on a very
+   large note ("Ulysses"-sized), pressing Up to move the caret line-by-line, at the point where the
+   caret crosses from one CM6-rendered chunk into the next, the viewport scrolls down 5 lines
+   instead of up 1 — and the caret's on-screen position moves with that same wrong jump (its
+   underlying logical text offset stays correct; only the visual position is wrong, consistently
+   with the bad scroll rather than desynced from it).
+   - **Working hypothesis, not yet confirmed live — record as a hypothesis, not a diagnosis, per
+     this doc's own process discipline**: `reconcileCagedScroll` (`CM6Editor.tsx:1552-1584`) reads
+     caret geometry synchronously in the `updateListener` right after the arrow-key transaction
+     commits, via `readSelectionRect`/`resolveCM6CaretTopInScroll`. CM6 internally only measures
+     line heights within/near its own rendered viewport chunk; moving the caret into a
+     previously-unmeasured chunk forces CM6 to grow that chunk and (re)measure it as part of
+     applying the transaction. If our reconcile's geometry read ever runs against a transient
+     state where CM6's own height data for the newly-entered region hasn't fully settled yet (an
+     estimated vs. measured height mismatch), `resolveCagedScrollTarget`'s row-quantization math
+     would compute a target off by whatever that mismatch is — plausibly explaining a
+     multi-line jump that self-corrects into a *visually* consistent (if wrong) position, since
+     the caret overlay is driven by the same settled geometry the scroll reconcile used. **Needs a
+     live CDP/Playwright repro on a real large note before trusting this over any other
+     explanation** — this is exactly the class of bug this project's docs warn is easy to
+     misdiagnose from reading code alone.
+
+**Nothing executed yet this session beyond planning/grounding and gathering these leads.** No code
+changed, no tests run. Next session (or later this one) should start by reproducing lead 4 live
+(most concrete/novel, cheapest to falsify), then work leads 1–3, then fall through to the general
+Phase 4 checklist above for whatever these four don't cover.

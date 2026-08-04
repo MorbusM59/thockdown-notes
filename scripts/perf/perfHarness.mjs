@@ -44,15 +44,21 @@ async function waitForServer(url, timeoutMs) {
  * leaving this running leaks a process across harness invocations).
  */
 export async function startDevServer(port) {
+  const isWindows = process.platform === 'win32'
   // detached so the child gets its own process group -- `npm run` spawns
   // vite as a grandchild, and a plain SIGTERM to the npm process alone
   // doesn't reliably reach it, leaving the dev server (and its open port)
   // running after this script exits. Killing the whole group (negative pid)
-  // in stop() below takes both out together.
-  const proc = spawn('npm', ['run', 'dev:browser', '--', '--port', String(port), '--strictPort'], {
+  // in stop() below takes both out together. Windows has no such thing as a
+  // POSIX process group/negative-pid kill, and plain `spawn('npm', ...)`
+  // fails outright there (`ENOENT` -- Windows' npm is `npm.cmd`, not on the
+  // executable search path the same way `npm` is on POSIX); `shell: true`
+  // resolves that the same way a real shell invocation would, and cleanup
+  // uses `taskkill /T` (kills the whole process tree) instead of a signal.
+  const proc = spawn(isWindows ? 'npm.cmd' : 'npm', ['run', 'dev:browser', '--', '--port', String(port), '--strictPort'], {
     cwd: REPO_ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
-    detached: true,
+    detached: !isWindows,
   })
 
   let output = ''
@@ -75,6 +81,10 @@ export async function startDevServer(port) {
   return {
     port,
     stop() {
+      if (isWindows) {
+        spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { stdio: 'ignore' })
+        return
+      }
       try {
         process.kill(-proc.pid, 'SIGTERM')
       } catch {
