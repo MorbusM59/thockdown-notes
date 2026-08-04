@@ -3093,10 +3093,10 @@ export function CM6Editor({
   // CM6Editor's layer (no such padding) doesn't have -- this sliver is the
   // substitute.
   const boundaryHandleSliverPx = Math.min(lineHeightPx, 8);
-  const topHandleTopPx = topBoundaryPxDisplay >= lineHeightPx ? topBoundaryVisualPx : 0;
-  const topHandleHeightPx = topBoundaryPxDisplay >= lineHeightPx ? lineHeightPx : boundaryHandleSliverPx;
-  const bottomHandleBottomPx = bottomBoundaryPxDisplay >= lineHeightPx ? bottomBoundaryVisualPx - lineHeightPx : 0;
-  const bottomHandleHeightPx = bottomBoundaryPxDisplay >= lineHeightPx ? lineHeightPx : boundaryHandleSliverPx;
+  const topHandleTopPx = topBoundaryVisualPx - boundaryHandleSliverPx / 2;
+  const topHandleHeightPx = boundaryHandleSliverPx;
+  const bottomHandleBottomPx = bottomBoundaryVisualPx - boundaryHandleSliverPx / 2;
+  const bottomHandleHeightPx = boundaryHandleSliverPx;
   const boundaryDragHandlesEnabled = isCtrlHeldForBoundaryDrag || isDraggingTop || isDraggingBottom;
   // Same top-anchored positioning as bottomZoneTopPx above, and for the same
   // reason: a `bottom: Npx` inset here would resolve against the overlay
