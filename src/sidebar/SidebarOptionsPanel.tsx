@@ -1959,14 +1959,14 @@ export function SidebarOptionsPanel({
           <CompactScrollbarSlider
             id="audio-pitch-jitter"
             min={0}
-            max={0.05}
-            step={0.001}
+            max={0.5}
+            step={0.01}
             value={pitchJitterAmount}
             trackLabel="jitter"
             ariaLabel="Pitch jitter"
             defaultValue={0}
             onCommit={(value) => {
-              const nextValue = clamp(value, 0, 0.05)
+              const nextValue = clamp(value, 0, 0.5)
               setPitchJitterAmount(nextValue)
               typingSoundManager.setPitchJitterAmount(nextValue)
             }}

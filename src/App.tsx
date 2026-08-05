@@ -869,7 +869,7 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     audioTrebleVolume: clamp(toFiniteNumber(source.audioTrebleVolume, 0), 0, 1),
     audioReverbStrength: clamp(toFiniteNumber(source.audioReverbStrength ?? source.audioReverbAmount, 0), 0, 1),
     audioReverbSpace: clamp(toFiniteNumber(source.audioReverbSpace, 0), 0, 1),
-    pitchJitterAmount: clamp(toFiniteNumber(source.pitchJitterAmount, 0), 0, 0.05),
+    pitchJitterAmount: clamp(toFiniteNumber(source.pitchJitterAmount, 0), 0, 0.5),
     typingSoundEnabled: source.typingSoundEnabled === true,
     typingSoundSet: source.typingSoundSet === 'A' || source.typingSoundSet === 'B' || source.typingSoundSet === 'C'
       ? source.typingSoundSet
@@ -2365,7 +2365,7 @@ function App() {
     setAudioTrebleVolume(clamp(loadout.audioTrebleVolume, 0, 1))
     setAudioReverbStrength(clamp(loadout.audioReverbStrength, 0, 1))
     setAudioReverbSpace(clamp(loadout.audioReverbSpace, 0, 1))
-    setPitchJitterAmount(clamp(loadout.pitchJitterAmount, 0, 0.05))
+    setPitchJitterAmount(clamp(loadout.pitchJitterAmount, 0, 0.5))
     setTypingSoundEnabled(loadout.typingSoundEnabled)
     setTypingSoundSet(loadout.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
     setGlazeSettings(sanitizeGlazeSettings(loadout.glaze, DEFAULT_GLAZE_SETTINGS))

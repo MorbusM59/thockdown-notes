@@ -440,7 +440,7 @@ export class TypingSoundManager {
   // so it's never baked into the cached per-key attributes -- it's applied
   // live in playLayer instead.
   setPitchJitterAmount(amount: number): void {
-    this.pitchJitterAmount = Math.max(0, Math.min(0.05, amount))
+    this.pitchJitterAmount = Math.max(0, Math.min(0.5, amount))
   }
 
   setTypingSoundSet(setId: TypingSoundSetId): void {
