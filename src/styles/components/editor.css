@@ -310,6 +310,40 @@
   z-index: 2;
 }
 
+/* Hide native cursor and caret when using the custom mouse overlay
+   (MouseCursorOverlay.tsx). Applied via .editor-stage's own React-owned
+   className in SectionEditorArea.tsx, not via imperative classList
+   mutation -- a node whose className is a template string re-rendered on
+   every keystroke silently drops any class added outside that string. */
+.hide-native-cursor {
+  cursor: none !important;
+}
+/* Force-hide cursor for every descendant inside the editor stage so the
+   native text cursor doesn't reappear when hovering different child
+   elements (CodeMirror sets cursor on nested nodes). */
+.hide-native-cursor * {
+  cursor: none !important;
+}
+.hide-native-cursor .editor-text,
+.hide-native-cursor .markdown-preview,
+.hide-native-cursor .cm-content {
+  caret-color: transparent !important;
+  cursor: none !important;
+}
+
+/* MouseCursorOverlay.tsx's own canvas: a plain child of .editor-stage
+   (last in DOM order, so it paints over both panes per that element's own
+   ".editor-stage > *" z-index rule) sized to fill it exactly -- not a
+   document.body portal, so no separate scroll/resize position tracking is
+   needed, only a ResizeObserver to keep the canvas's pixel buffer in sync. */
+.mouse-cursor-overlay-canvas {
+  position:       absolute;
+  inset:          0;
+  width:          100%;
+  height:         100%;
+  pointer-events: none;
+}
+
 /* The generated rotating Platonic solid (see src/editor/EmptyStateScene.ts)
    is a mask shape, not an image: this layer still paints the same faint
    needle-stripe texture the card always had, just clipped to the solid's
