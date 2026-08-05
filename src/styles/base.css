@@ -127,7 +127,6 @@ button.active,
   align-items:     center;
   justify-content: center;
   aspect-ratio:    1 / 1;
-  box-sizing:      border-box;
   text-shadow:      
     0 -1px 0px var(--text-shadow-emboss-ui-secondary),
     0 1px 0px var(--text-shadow-emboss-ui-main);

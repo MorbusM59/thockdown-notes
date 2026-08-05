@@ -709,7 +709,6 @@ body {
   max-width: 100%;
   min-height: auto;
   padding: 0;
-  box-sizing: border-box;
   background: ${tokens.bodyBackground};
   color: ${tokens.bodyTextColor};
   margin: 0;
@@ -721,7 +720,6 @@ body {
   height: auto;
   overflow: visible;
   padding: 0;
-  box-sizing: border-box;
   color: ${tokens.bodyTextColor};
   text-shadow: ${tokens.previewTextShadow};
 }

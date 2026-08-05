@@ -60,7 +60,6 @@
   overflow-y:     auto;
   scroll-behavior: smooth;
   padding:        var(--preview-edge-padding);
-  box-sizing:     border-box;
   text-shadow:
     0 -1px 0px var(--text-shadow-emboss-render-secondary),
     0 1px 0px var(--text-shadow-emboss-render-main);
@@ -409,7 +408,6 @@ body.pdf-exporting .markdown-preview {
   width: auto !important;
   max-width: 100% !important;
   margin: 0 auto !important;
-  box-sizing: border-box !important;
   min-width: 0 !important;
   min-height: 0 !important;
   height: auto !important;
@@ -437,7 +435,6 @@ body.pdf-exporting .markdown-preview img {
 .pdf-exporter-page {
   width: 100%;
   padding: 12mm;
-  box-sizing: border-box;
   background: #ffffff;
   color: #000000;
   margin: 0 auto;

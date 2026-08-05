@@ -7,7 +7,6 @@
   display:        flex;
   flex-direction: column;
   height:         100%;
-  box-sizing:     border-box;
   gap:            var(--spacing-regular);
   padding: var(--spacing-regular) var(--sidebar-padding-right) var(--spacing-regular) 0;
 }
@@ -41,7 +40,6 @@
   min-height: 0;
   min-width:  0;
   overflow-y: auto;
-  box-sizing: border-box;
   margin:     0;
   padding:    0;
   border:          1px solid var(--color-border-light-70);
@@ -149,7 +147,6 @@
   background:     var(--color-input-backdrop);
   transition:     border-color 0.2s;
   color:           var(--color-text-base);
-  box-sizing:     border-box;
   min-height: calc(var(--btn-square-regular-size) + var(--spacing-regular) * 2);
   max-height: calc(var(--btn-square-regular-size) + var(--spacing-regular) * 2);
 }
@@ -451,7 +448,6 @@
   display:         inline-flex;
   align-items:     center;
   justify-content: center;
-  box-sizing:      border-box;
   box-shadow: var(--box-shadow-inverted-light);
 }
 
@@ -774,7 +770,6 @@
 
 .date-view .note-list-item {
   height:     calc(var(--note-list-row-content-height) + var(--spacing-large) * 2);
-  box-sizing: border-box;
 }
 
 .note-list-content {

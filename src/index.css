@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+* {
+  box-sizing: border-box;
+}
+
 :root {
   font-family: inherit;
   line-height: 1.5;
@@ -331,7 +335,6 @@ body {
    * (--editor-scrollbar-slot-width) grows by the same amount, so the track/
    * thumb always keep their full --canonical-scroll-thickness width. */
   padding: 0 0 0 var(--spacing-regular);
-  box-sizing: border-box;
   display: flex;
   align-items: stretch;
   justify-content: flex-end;
@@ -346,7 +349,6 @@ body {
   border-radius: var(--border-radius-regular);
   box-shadow: var(--box-shadow-inverted-light);
   background: var(--canonical-scroll-track-bg);
-  box-sizing: border-box;
 }
 
 .thockdown-scroll-thumb {
@@ -355,7 +357,6 @@ body {
   right: var(--canonical-scroll-handle-gap);
   border: 1px solid var(--canonical-handle-border);
   border-radius: var(--border-radius-small);
-  box-sizing: border-box;
   background: var(--canonical-handle-bg);
   box-shadow: var(--box-shadow-regular-light);
   cursor: ns-resize;

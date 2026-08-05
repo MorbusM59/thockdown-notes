@@ -31,7 +31,6 @@
   width:          auto;
   height: auto;
   min-width:      0;
-  box-sizing:     border-box;
   -webkit-app-region: no-drag;
 }
 
@@ -276,7 +275,6 @@
   max-width: 80px;
   letter-spacing: 0em;
   height:        100%;
-  box-sizing:    border-box;
   border:        1px solid var(--btn-border-default);
   background:    var(--btn-bg-default);
   font-size:     11px;
