@@ -29,6 +29,7 @@ export interface SectionEditorAreaProps {
   isPreviewingSnapshot: boolean
   isCaretSuspended: boolean
   spellCheckEditEnabled: boolean
+  editTextureRef: RefObject<HTMLDivElement>
   previewTextureRef: RefObject<HTMLDivElement>
   previewScrollRef: RefObject<HTMLDivElement>
   handlePreviewScroll: () => void
@@ -87,6 +88,7 @@ export function SectionEditorArea({
   isPreviewingSnapshot,
   isCaretSuspended,
   spellCheckEditEnabled,
+  editTextureRef,
   previewTextureRef,
   previewScrollRef,
   handlePreviewScroll,
@@ -153,6 +155,7 @@ export function SectionEditorArea({
         <div className="editor-background">
           <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}`}>
             <div className={`edit-container${isPreviewMode ? ' is-pane-hidden' : ''}`}>
+              <div ref={editTextureRef} className="markdown-editor-texture" />
               {activeNoteId ? (
                 <CM6Editor
                   bindings={bindings}

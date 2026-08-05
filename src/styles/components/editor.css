@@ -238,7 +238,7 @@
   z-index:       1;
 }
 
-.editor-stage::before {
+.markdown-editor-texture {
   content:          '';
   position:         absolute;
   inset:            0;
