@@ -53,12 +53,12 @@ function resolveColorRgb(color: string, doc: Document): [number, number, number]
 export function MouseCursorOverlay({
   stageRef,
   radius = 10,
-  thickness = 2,
+  thickness = 3,
   frequencyHz = 0.8,
-  fadeMs = 350,
+  fadeMs = 550,
   dotCount = 3,
-  trailDegrees = 100,
-  color = '#ffffff',
+  trailDegrees = 120,
+  color = '#00000011',
 }: MouseCursorOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const posRef = useRef<{ x: number; y: number } | null>(null)
