@@ -115,6 +115,7 @@
   --color-archive-border: #0066bb88;
   --color-archive-glow:   #0066bb33;
   --color-compacting:     #ffffff;
+  --color-compacting-flip:#00000099;
 
   /* Markdown colors */
   --color-text-link:          #00459edd;
@@ -460,4 +461,6 @@
   --color-border-light-70: var(--color-border-light-70-flip);
   --color-border-light-80: var(--color-border-light-80-flip);
   --color-border-light-90: var(--color-border-light-90-flip);
+
+  --color-compacting: var(--color-compacting-flip);
 }
