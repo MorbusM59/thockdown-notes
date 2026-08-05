@@ -14,6 +14,7 @@ const DEFAULT_HOLD_MS = 550
 export function useHoldToBranch(onBranch: () => void, holdMs = DEFAULT_HOLD_MS) {
   const [isHolding, setIsHolding] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [lastFiredAt, setLastFiredAt] = useState<number | null>(null)
 
   const startedAtRef = useRef<number | null>(null)
   const rafRef = useRef<number | null>(null)
@@ -41,6 +42,7 @@ export function useHoldToBranch(onBranch: () => void, holdMs = DEFAULT_HOLD_MS) 
     if (ratio >= 1 && !firedRef.current) {
       firedRef.current = true
       onBranch()
+      setLastFiredAt(Date.now())
       clear()
       return
     }
@@ -75,6 +77,7 @@ export function useHoldToBranch(onBranch: () => void, holdMs = DEFAULT_HOLD_MS) 
   return {
     isHolding,
     progress,
+    lastFiredAt,
     handlers: {
       onContextMenu,
       onPointerDown,

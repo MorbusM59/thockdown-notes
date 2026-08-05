@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useHoldToBranch } from './useHoldToBranch'
 
 // The "empty scrollbar that's just a circle" affordance. Single
@@ -29,7 +29,27 @@ export function PresentStateCircle({
     onMergeAdjacentSnapshots?.()
   }, [onMergeAdjacentSnapshots])
 
-  const { isHolding, progress, handlers } = useHoldToBranch(doMerge, 1000)
+  const { isHolding, progress, lastFiredAt, handlers } = useHoldToBranch(doMerge, 1000)
+
+  const [showComplete, setShowComplete] = useState(false)
+  const [isFading, setIsFading] = useState(false)
+
+  // When the hold completes, keep the full indicator visible for 150ms,
+  // then fade it over 500ms.
+  useEffect(() => {
+    if (!lastFiredAt) return
+    setShowComplete(true)
+    setIsFading(false)
+    const holdTimer = window.setTimeout(() => setIsFading(true), 150)
+    const hideTimer = window.setTimeout(() => {
+      setShowComplete(false)
+      setIsFading(false)
+    }, 150 + 500)
+    return () => {
+      window.clearTimeout(holdTimer)
+      window.clearTimeout(hideTimer)
+    }
+  }, [lastFiredAt])
 
   return (
     <button
@@ -67,11 +87,42 @@ export function PresentStateCircle({
       {...handlers}
     >
       <span className="manual-snapshot-circle-dot" aria-hidden="true" />
-      {isHolding && (
-        <svg viewBox="0 0 20 20" className="snapshot-merge-circle" aria-hidden="true">
-          <circle cx="10" cy="10" r="5" fill="none" strokeWidth="2" strokeDasharray={`${progress * 45} 45`} />
-        </svg>
-      )}
+      {(isHolding || showComplete) && (() => {
+        const r = 5
+        const strokeWidth = 2
+        const circumference = 2 * Math.PI * r
+        const third = circumference / 3
+
+        const clamped = Math.max(0, Math.min(1, progress))
+        const arcLen = clamped * third
+
+        // rotate default start (3 o'clock) to 12 o'clock by offsetting 1/4 circumference
+        const topCorrection = circumference * 0.25
+
+        return (
+          <svg viewBox="0 0 20 20" className={`snapshot-merge-circle${isFading ? ' is-fading' : ''}`} aria-hidden="true">
+            {[0, 1, 2].map((i) => {
+              const startOffset = (i / 3) * circumference
+              const dashArray = `${arcLen} ${Math.max(0, circumference - arcLen)}`
+              const dashOffset = `${startOffset - topCorrection}`
+
+              return (
+                <circle
+                  key={i}
+                  cx="10"
+                  cy="10"
+                  r={r}
+                  fill="none"
+                  strokeWidth={strokeWidth}
+                  strokeLinecap="round"
+                  strokeDasharray={dashArray}
+                  strokeDashoffset={dashOffset}
+                />
+              )
+            })}
+          </svg>
+        )
+      })()}
     </button>
   )
 }

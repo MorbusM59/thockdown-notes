@@ -114,6 +114,7 @@
   --color-archive-bg:     #ecf2fe;
   --color-archive-border: #0066bb88;
   --color-archive-glow:   #0066bb33;
+  --color-compacting:     #ffffff;
 
   /* Markdown colors */
   --color-text-link:          #00459edd;

@@ -152,11 +152,16 @@
 }
 
 .snapshot-timeline-hold-ring circle, .snapshot-merge-circle circle {
-  stroke: var(--color-text-60);
+  stroke: var(--color-compacting);
 }
 
 .snapshot-merge-circle {
   transform: translate(4px, 4px);
+  opacity: 1;
+  transition: opacity 500ms linear;
+}
+.snapshot-merge-circle.is-fading {
+  opacity: 0;
 }
 
 /* Manual-snapshot circle */
