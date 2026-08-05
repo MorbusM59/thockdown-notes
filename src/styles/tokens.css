@@ -412,6 +412,9 @@
    * laid out in, same as everywhere else this spacing system reaches). */
   --bottom-utility-bar-content-height: 16px;
   --bottom-utility-bar-height: calc(var(--bottom-utility-bar-content-height) + var(--spacing-regular) + var(--spacing-large));
+
+  --chapter-panel-content-height: 24px;
+  --chapter-panel-height: calc(var(--chapter-panel-content-height) + var(--spacing-regular));
   /* The tab bar row nests two nested paddings on the way down to the actual
    * tab/tag pills: .tabbar-grid's own (top+bottom = 2 * spacing-regular), then
    * .tab-mode-shell's own pill "well" padding inside it (also top+bottom =

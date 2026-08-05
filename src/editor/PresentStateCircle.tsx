@@ -35,7 +35,7 @@ export function PresentStateCircle({
     <button
       type="button"
       className={[
-        'manual-snapshot-circle',
+        'manual-snapshot-circle btn-icon',
         hasPendingManualChanges ? 'is-hollow' : 'is-filled',
         !isPresent ? 'not-present' : '',
         isHolding ? 'is-holding' : '',

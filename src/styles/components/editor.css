@@ -29,6 +29,38 @@
   user-select:    none;
 }
 
+/* Chapter panel: hidden by default, toggled via the chapter button */
+.chapter-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--bottom-utility-bar-height);
+  height: var(--chapter-panel-height);
+  pointer-events: none;
+  z-index: 5;
+  display: none;
+}
+.chapter-panel.is-open {
+  display: block;
+}
+
+.chapter-toggle-panel {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.btn-icon.chapter-toggle-button,
+.btn-icon.manual-snapshot-circle {
+  width: var(--canonical-scroll-thickness);
+  height: var(--canonical-scroll-thickness);
+  min-width: var(--canonical-scroll-thickness);
+  min-height: var(--canonical-scroll-thickness);
+  padding: 0;
+  margin: 0;
+  font-size: 13px;
+}
+
 .wordcount-panel {
   flex:           0 0 var(--wordcount-panel-width);
   min-width:      var(--wordcount-panel-width);
@@ -129,19 +161,7 @@
   height: var(--canonical-scroll-thickness);
 }
 
-.manual-snapshot-circle {
-  position:        relative;
-  width:           var(--canonical-scroll-thickness);
-  height:          var(--canonical-scroll-thickness);
-  display:         flex;
-  align-items:     center;
-  justify-content: center;
-  padding:         0;
-  border: 1px solid var(--canonical-scroll-track-border);
-  border-radius: var(--border-radius-regular);
-  box-shadow: var(--box-shadow-inverted-light);
-  background: var(--canonical-scroll-track-bg);
-}
+
 
 .manual-snapshot-circle:disabled .manual-snapshot-circle-dot,
 .manual-snapshot-circle.not-present .manual-snapshot-circle-dot {
@@ -156,14 +176,6 @@
   background-color: var(--color-text-60);
 }
 
-.manual-snapshot-circle.is-hollow .manual-snapshot-circle-dot {
-  outline: none;
-}
-
-.manual-snapshot-circle.is-filled .manual-snapshot-circle-dot {
-  outline: 1px solid var(--color-text-60);
-}
-
 .editor-shell {
   margin:        0 0 var(--bottom-utility-bar-height) var(--spacing-large);
   flex:          1 1 auto;
@@ -175,6 +187,12 @@
   background:    transparent;
   overflow:      hidden;
   transition: box-shadow 350ms ease-out;
+  transition: ease-in margin 100ms;
+}
+
+.editor-shell.chapter-panel-is-open{
+  margin: 0 0 calc(var(--bottom-utility-bar-height) + var(--chapter-panel-height)) var(--spacing-large);
+  transition: ease-in margin 150ms;
 }
 
 .editor-shell::after {

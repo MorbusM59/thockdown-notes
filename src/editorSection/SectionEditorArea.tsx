@@ -29,7 +29,6 @@ export interface SectionEditorAreaProps {
   isPreviewingSnapshot: boolean
   isCaretSuspended: boolean
   spellCheckEditEnabled: boolean
-  editTextureRef: RefObject<HTMLDivElement>
   previewTextureRef: RefObject<HTMLDivElement>
   previewScrollRef: RefObject<HTMLDivElement>
   handlePreviewScroll: () => void
@@ -88,7 +87,6 @@ export function SectionEditorArea({
   isPreviewingSnapshot,
   isCaretSuspended,
   spellCheckEditEnabled,
-  editTextureRef,
   previewTextureRef,
   previewScrollRef,
   handlePreviewScroll,
@@ -143,6 +141,7 @@ export function SectionEditorArea({
     </div>
   )
 
+  const [isChapterPanelOpen, setIsChapterPanelOpen] = useState(false)
   return (
     <div
       className="editor-viewer-frame"
@@ -151,11 +150,11 @@ export function SectionEditorArea({
       onMouseDownCapture={() => markSectionActive(sectionId)}
       onKeyDownCapture={() => markSectionActive(sectionId)}
     >
-      <main className="editor-shell">
+      <main className={`editor-shell${isChapterPanelOpen ? ' chapter-panel-is-open' : ''}`}>
         <div className="editor-background">
           <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}`}>
             <div className={`edit-container${isPreviewMode ? ' is-pane-hidden' : ''}`}>
-              <div ref={editTextureRef} className="markdown-editor-texture" />
+              <div className="markdown-editor-texture" />
               {activeNoteId ? (
                 <CM6Editor
                   bindings={bindings}
@@ -232,7 +231,23 @@ export function SectionEditorArea({
           )}
         </div>
       </aside>
+      <div className={`chapter-panel${isChapterPanelOpen ? ' is-open' : ''}`} aria-hidden={!isChapterPanelOpen} />
       <div className="editor-document-stats" aria-live="polite">
+        <div className="chapter-toggle-panel">
+          <button
+            type="button"
+            className={[
+              'chapter-toggle-button btn-icon',
+              isChapterPanelOpen ? 'is-active' : '',
+            ].filter(Boolean).join(' ')}
+            aria-pressed={isChapterPanelOpen}
+            aria-label={isChapterPanelOpen ? 'Hide chapter panel' : 'Show chapter panel'}
+            title={isChapterPanelOpen ? 'Hide chapter panel' : 'Show chapter panel'}
+            onClick={() => setIsChapterPanelOpen((v) => !v)}
+          >
+            <span className="fa-solid fa-caret-up" aria-hidden="true" />
+          </button>
+        </div>
         <div className="wordcount-panel" aria-live="polite">
           {activeNoteId && (
             <span><b>{activeNoteDocumentStats.wordCount.toLocaleString()}</b> ({activeNoteDocumentStats.characterCount.toLocaleString()})</span>
