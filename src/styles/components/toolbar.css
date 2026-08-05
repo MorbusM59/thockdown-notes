@@ -93,7 +93,7 @@
   background:       var(--color-input-backdrop);
 }
 
-@container toolbarGrid (width < 379px) {
+@container toolbarGrid (width < 319px) {
   .toolbar-grid > .toolbar-container {
     display: none;
   }
