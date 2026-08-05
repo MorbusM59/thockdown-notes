@@ -69,7 +69,7 @@ export function PresentStateCircle({
       <span className="manual-snapshot-circle-dot" aria-hidden="true" />
       {isHolding && (
         <svg viewBox="0 0 20 20" className="snapshot-merge-circle" aria-hidden="true">
-          <circle cx="10" cy="10" r="4" fill="none" strokeWidth="4" strokeDasharray={`${progress * 36} 36`} />
+          <circle cx="10" cy="10" r="5" fill="none" strokeWidth="2" strokeDasharray={`${progress * 45} 45`} />
         </svg>
       )}
     </button>

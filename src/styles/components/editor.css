@@ -138,6 +138,10 @@
   background-color: var(--color-text-60);
 }
 
+.manual-snapshot-circle {
+  position:        relative;
+}
+
 .snapshot-timeline-hold-ring, .snapshot-merge-circle {
   position:       absolute;
   inset:          -7px;
