@@ -1476,3 +1476,80 @@ source. Neither is designed or implemented yet.
 
 **Verification this round**: `npx tsc --noEmit` clean before and after revert. No `npm test`/lint
 change since the only surviving diff is documentation. `git status --short` confirmed clean.
+
+## Lead 4, Task #10 completed — the anomaly requires a long run of uniform-height lines; wrapped and diverse content don't trigger it at all
+
+The deferred wrap-point/box-width question (Q3 from the user's original pre-fix-design questions,
+open since round 1) turned out to resolve the whole investigation's central open question: *why does
+every dispatch-layer intervention (attempts 4-8) affect nothing?* Because the trigger was never in the
+dispatch layer, or even in document size -- it's in **document content shape**, specifically long runs
+of successive, identically-rendering lines.
+
+**Method** (`scripts/perf/measureCM6WrapSensitivityDrift.mjs`, new): same continuous-ArrowUp-from-end
+methodology as `measureCM6ArrowUpDrift.mjs`, run across four ~100,000-char documents that separate
+wrapping and content diversity as independent variables:
+
+- `uniform-nowrap`: one fixed 78-char line repeated verbatim (byte-identical, no per-line numbering
+  even), well under this editor's empirically-probed ~85-char wrap width (probed live: plain repeated
+  `x` characters wrapped starting at 90 chars, not at 80). The most uniform document tested in this
+  entire investigation.
+- `uniform-wrap`: the *same* fixed line repeated 3x per logical line, wrapping to a constant 3 visual
+  rows every time -- isolates wrapping itself, zero content diversity.
+- `diverse`: `generateSyntheticDocument` (already in `perfHarness.mjs`) -- headings, list items,
+  blockquotes, variable-length prose, realistic mixed markdown.
+- `diverse-with-uniform-run`: diverse padding (60% of target chars) followed by a long (~500-line)
+  run of the exact uniform line through EOF -- approximates a real note with a long checklist, table,
+  or repeated-separator section, rather than either synthetic extreme.
+
+**Results (100,000 chars, 800 presses each, same 1.5-row anomaly threshold as every prior measurement
+in this doc):**
+
+| Document | Anomalies | Mean gap between anomalies | Mean magnitude |
+|---|---|---|---|
+| uniform-nowrap | 51/771 | 15 presses | 6.1 rows |
+| uniform-wrap | **0/771** | -- | -- |
+| diverse | **0/771** | -- | -- |
+| diverse-with-uniform-run | 25/771 | 18 presses | 7.1 rows |
+
+Wrapping alone (`uniform-wrap`) and content diversity alone (`diverse`) each independently produce
+**zero** anomalies over a 771-sample window that reliably produces 51 on the plain uniform control.
+`diverse-with-uniform-run` brings the anomaly straight back -- and its 25 anomalies stop appearing
+right around press 485-500, which is almost exactly where continuous ArrowUp from EOF would cross out
+of the ~500-line uniform run into the diverse padding above it (confirmed against the generator's own
+60/40 split). The anomaly starts the instant the caret enters a long uniform run and stops the instant
+it leaves one, inside the same single document, same single continuous keypress session.
+
+**Conclusion, now with direct experimental support rather than only measure-loop source-reading**:
+this is CM6's own height-map estimate-vs-measured reconciliation for a **batch of previously
+off-screen, identically-estimated lines** -- consistent with height-map implementations that use a
+lazy, oracle-estimated "gap" representation for runs of unmeasured content and only pay to individually
+measure (and true up the estimate against) a sub-range when the caret/viewport actually needs to enter
+it. A long run of literally identical lines is exactly the shape that representation is built to batch
+efficiently; wrapped or structurally varied lines apparently never get batched the same way (each is
+individually distinct enough that CM6 has no reason to treat them as one estimate-once block), so there
+is no batched estimate to true up and no reconciliation jump to produce. The **~15-19 press periodicity
+matches an internal chunk/gap size in that structure**, not anything this app's transaction pattern
+controls -- fully consistent with attempts 4-8 all failing identically regardless of dispatch shape,
+since none of them could have touched this.
+
+**This also reframes real-world impact, not just root cause.** A perfectly uniform 100%-synthetic
+document was always an unrealistic stand-in for actual notes, and this result shows that mattered more
+than assumed: genuinely diverse markdown content produced *zero* measured anomalies in this sample size.
+The risk is not "every large document," it's specifically **long uninterrupted runs of near-identical
+lines** -- realistic ones exist (long checklists, tables, repeated log/separator lines) but this is a
+narrower and more specific hazard than "any large-document ArrowUp session," which changes how urgently
+this needs a shipped fix versus how precisely a fix needs to be targeted.
+
+**Where this leaves the search**: the two candidate directions from the previous round can now be
+evaluated more precisely. (a) Hardening the existing cage reconcile against CM6's own later write is
+more promising with this information -- the trigger is now *predictable* (crossing a chunk boundary
+within a run of same-estimated-height lines) rather than a generic race, meaning a correction could in
+principle be scoped to exactly this situation instead of reacting to any drift. (b) Investigating CM6's
+internal height-map/oracle calibration directly remains the higher-risk option but is now much better
+targeted -- specifically the oracle's default per-line height estimate versus this app's actual
+zero-padding/26px-row CSS, rather than "somewhere in the measure loop." Neither designed or implemented
+yet -- this was a pure measurement round, no production code touched.
+
+**Verification this round**: new script only (`scripts/perf/measureCM6WrapSensitivityDrift.mjs`,
+committed); no `.ts`/`.tsx` changes, `npx tsc --noEmit` inapplicable/unaffected. `git status --short`
+confirmed clean after the script commit.
