@@ -1927,3 +1927,76 @@ worse-than-baseline regression, independent of whether the deeper timing tension
 `npx tsc --noEmit` and `npm run lint` clean on the implementation before it was reverted; live-browser
 Playwright measurement at 1.5M chars (the user's own repro scale) is what caught the regression. Fully
 reverted -- `git status` clean, matching the last-shipped commit.
+
+## Lead 4 -- second live attempt (retrigger bug fixed) still regresses; a third, structurally different design (idle-triggered) also ruled out, one variant of it possibly touching the separate pre-existing freeze bug
+
+**Attempt 2 -- same reactive design, retrigger-state bug fixed.** Reset `preWarmedDirection`/
+`preWarmedEdgeScrollTopPx` on cancel (not just the timer) so a cancelled peek stops claiming unwarmed
+territory as covered -- the specific bug diagnosed in attempt 1. **Still worse than baseline, and by
+more**: 164 anomalies / -138 rows over 400 presses (1.5M chars) vs. baseline's 18/-101, with a new,
+suspiciously regular -52px (exactly 2 rows) over-correction pattern starting almost immediately after
+the settle window. Two live implementations, two different specific bugs, both net negative -- no longer
+read as a tuning problem with this attempt's specific numbers; read as evidence against the reactive
+(per-keystroke) trigger shape itself. Reverted in full.
+
+**A supporting data point, gathered before attempt 3**: an external-script test bracketing settle time
+(16/32/48/64/90ms), using a real 1000px reach with a *raw write-back* return (not the app's own
+reconcile), peeking every 10 presses, showed 96-102/150 anomalies **regardless of settle duration** --
+ruling out "just wait longer" as a fix for the reactive shape, and pointing at round-trip *frequency*
+itself as a real cost, not merely the return mechanism's precision.
+
+**Attempt 3 -- idle-triggered, not reactive.** A structurally different design: no peeking during an
+active hold at all. `scheduleIdlePreWarm` arms a debounce timer (400ms) from the real keydown handler
+only (never from reconcileCagedScroll's own recursive calls, which is what keeps it from re-arming
+itself indefinitely while idle); the peek only fires after genuine idle time, with a generous reach
+(3000px, since it fires rarely rather than per-boundary) and returns through the same
+`reconcileCagedScroll` path. This is the one variant that structurally cannot race a fast, continuous
+hold, by construction -- confirmed live: a rapid, uninterrupted 400-press hold at 1.5M chars produced
+scrollTop numerically **identical** to true baseline, run for run (24 anomalies / -134 rows both ways) --
+proving the idle trigger genuinely never fires during continuous holding, with zero behavioral
+difference from shipping nothing in that case.
+
+**A real implementation bug found and fixed along the way**: the return-from-peek write still went
+through `scrollToQuantizedSmooth` unconditionally. For a large, deliberate peek (3000px), that function's
+own distance check (measured against the still-peeked-away `scrollTop`) took the *animated* multi-frame
+path instead of an immediate write -- the identical failure mode already found and fixed once for the
+reactive design's return path, reintroduced here by not carrying that fix forward. Confirmed live before
+the fix: a -3120px sample, several stuck (0-delta) frames, then a wrong-direction +104px lurch. Fixed the
+same way as before: direct `scroller.scrollTop` write (bypassing the animation) specifically when
+returning from a completed pre-warm peek, tracked via a `wasPreWarmPending` flag captured before
+`cancelInFlightPreWarm()` clears the in-flight state.
+
+**Even with that fixed, a human-paced test (bursts of 5 presses separated by real pauses) still
+regressed vs. baseline** -- 27-29 anomalies / -226 rows vs. baseline's 11/-61 over 200 presses at a
+500ms pause. Suspecting the 500ms pause was a knife-edge race against the mechanism's own 400ms
+debounce + 100ms settle (~500ms total), the pause was widened to 1500ms specifically to remove that race
+and test whether the underlying approach was sound when given uncontested time. It was not: 87
+anomalies, and critically, **many consecutive real ArrowUp presses in a row showed zero scrollTop
+movement at all** -- not a magnitude anomaly, but the shape of the app's own separately-tracked, real
+"stuck" freeze (see the earlier entry in this doc: the user has independently encountered this exact
+"stuck" state in real usage, unprompted, before any of this session's pre-warm work existed). Not
+conclusively proven to be the *same* bug -- not instrumented further before reverting -- but the
+resemblance (multiple real keystrokes producing zero effect) was judged too close to keep iterating on
+without treating it as a serious signal rather than a tuning nit.
+
+**Reverted in full.** Three structurally different trigger designs (reactive-v1, reactive-v2,
+idle-triggered) have now each hit a genuine, different failure mode when integrated with this app's real,
+live update cycle, despite the underlying mechanism being cleanly proven to work in an isolated,
+non-interactive proof of concept (the original pre-walked, no-live-interaction test: 0 anomalies on both
+ground-truth metrics). The gap is specifically in *safely delivering* that mechanism live, not in whether
+CM6 can be kept pre-measured ahead of the caret at all.
+
+**Where this leaves lead #4**: the shipped async-follow-up fix (caret-stability, kept per explicit user
+direction) remains the only production change for this lead. The permanent scroll-distance overshoot the
+user originally reported remains unfixed. Not yet tried and not ruled out: reaching into CM6's
+undocumented internals directly (the `HeightMapGap` class confirmed to exist in the installed source,
+`node_modules/@codemirror/view/dist/index.js:5710`) to seed a more accurate initial height estimate or
+force off-screen measurement without moving the visible scroller at all -- a materially higher-risk,
+harder-to-maintain class of change than anything tried so far, previously flagged as the last-resort
+option.
+
+**Verification this round**: byte-exact cursor movement re-confirmed on attempt 3 before measuring scroll
+behavior; `npx tsc --noEmit` and `npm run lint` clean on both attempts before each was reverted;
+live-browser Playwright measurement at 1.5M chars throughout, including a same-script baseline A/B (via
+`git stash`) to rule out run-to-run variance before concluding attempt 3's rapid-hold case was genuinely
+unregressed. All three attempts fully reverted -- `git status` clean, matching the last-shipped commit.
