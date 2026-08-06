@@ -2293,6 +2293,19 @@ export function CM6Editor({
     if (debugCageStateEnabled) {
       (window as unknown as { __thockdownDebugCageState?: () => unknown }).__thockdownDebugCageState = () => {
         const head = view.state.selection.main.head;
+        // TEMP, read-only (docs/cm6-parity-hardening-plan.md lead #4):
+        // reaching into CM6's own internal, unexported viewState to inspect
+        // its per-line height ESTIMATE (heightOracle.lineHeight) directly,
+        // to check it against this app's real, known-correct row height --
+        // a mismatch there is one candidate root cause for the height-map
+        // revision that produces the reported scroll overshoot. Not a
+        // public API (no type on EditorView exposes this); defensively cast
+        // and optional-chained so a shape change on a future CM6 upgrade
+        // degrades to `undefined` here, not a crash. Remove once the
+        // investigation closes either way.
+        const internalViewState = (view as unknown as {
+          viewState?: { heightOracle?: { lineHeight?: number; charWidth?: number; textHeight?: number } };
+        }).viewState;
         return {
           analyticalTop: view.lineBlockAt(head).top,
           scrollTop: view.scrollDOM.scrollTop,
@@ -2302,6 +2315,9 @@ export function CM6Editor({
           clientHeight: view.scrollDOM.clientHeight,
           scrollHeight: view.scrollDOM.scrollHeight,
           viewport: { from: view.viewport.from, to: view.viewport.to },
+          oracleLineHeight: internalViewState?.heightOracle?.lineHeight ?? null,
+          oracleCharWidth: internalViewState?.heightOracle?.charWidth ?? null,
+          oracleTextHeight: internalViewState?.heightOracle?.textHeight ?? null,
         };
       };
     }

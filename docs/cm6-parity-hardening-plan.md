@@ -2000,3 +2000,49 @@ behavior; `npx tsc --noEmit` and `npm run lint` clean on both attempts before ea
 live-browser Playwright measurement at 1.5M chars throughout, including a same-script baseline A/B (via
 `git stash`) to rule out run-to-run variance before concluding attempt 3's rapid-hold case was genuinely
 unregressed. All three attempts fully reverted -- `git status` clean, matching the last-shipped commit.
+
+## Lead 4 -- CM6-internals exploration, round 1: the height ESTIMATE is not the problem
+
+Started exploring the higher-risk "reach into CM6 internals directly" option flagged as last-resort. First
+concrete finding, from reading the installed `@codemirror/view` source directly
+(`node_modules/@codemirror/view/dist/index.js`): CM6's own internal `HeightOracle` class (constructed at
+`this.viewState.heightOracle` on every `EditorView`, confirmed non-private -- `this.viewState =` is a
+plain assignment, no `#` field) holds the per-line height *estimate* used for unmeasured `HeightMapGap`
+spans (`heightForGap = lineHeight * lineCount`). It starts at a hardcoded default of 14px and gets
+`refresh()`ed toward reality once CM6 has real DOM measurements.
+
+**Hypothesis tested**: if this app's own zero-padding, exact-26px row-grid CSS never fully converges
+`oracle.lineHeight` back to exactly 26, a small residual miscalibration would compound across a Gap's many
+lines into the multi-row correction this whole investigation has been chasing -- and correcting one stored
+number directly (`oracle.lineHeight = 26`) would be a small, surgical fix, not requiring any of the
+reactive/idle-triggered scroll gymnastics tried above.
+
+**Result: hypothesis refuted, cleanly.** Added a temporary, defensively-cast, optional-chained read of
+`oracleLineHeight`/`oracleCharWidth`/`oracleTextHeight` to the existing `__thockdownDebugCageState()`
+accessor (kept -- low-risk, matches the established debug-accessor pattern, degrades to `null` rather than
+throwing if CM6's internal shape ever changes). Live-measured on the same 1.5M-char uniform document this
+whole investigation has used: `oracleLineHeight` was **exactly 26** at load and stayed **exactly 26**
+across 80 ArrowUp presses, including through multiple real chunk-boundary-crossing anomalies sampled in
+the same run. CM6's own estimate is not miscalibrated at all -- it is provably, exactly correct the entire
+time. There is no wrong number to correct.
+
+**This rules out the cleanest possible internals fix and reframes what remains.** Since the *estimate* is
+accurate, the jump cannot be "CM6 guessed wrong about line height" -- it must be a side effect of the
+*mechanism* CM6 uses to restructure the height-map tree when a Gap gets decomposed (recomputing which
+content is estimated vs. measured, and repositioning the scroll anchor accordingly), not a data-accuracy
+problem. Intervening on that would mean intercepting or overriding part of CM6's own measure/anchor
+algorithm, not correcting an input to it -- a meaningfully larger and riskier undertaking than patching one
+value. Consistent with an earlier finding in this doc that every observed anomaly's *analytical* jump
+(`view.lineBlockAt(head).top`'s own delta) is an exact integer multiple of 26px, never a fractional
+row -- which now reads as further evidence for a line-*count* bookkeeping event during Gap decomposition,
+not a pixel-calibration one.
+
+**Not yet done**: inspecting the `HeightMap`/`HeightMapGap` tree itself (also unexported, same reachability
+pattern as `heightOracle`) to try to directly observe a Gap's estimated line count vs. what it resolves to
+during a real decomposition event, which would confirm or refute the line-count-bookkeeping reading above
+more directly than the exact-multiple-of-26 circumstantial evidence does. Session paused here to check in
+before going deeper, given the risk/reward of this path shifted once the simplest fix candidate was ruled
+out.
+
+**Verification this round**: `npx tsc --noEmit` clean. No `npm test`/lint delta beyond the kept debug-accessor
+addition (lint clean). Purely additive, read-only instrumentation -- no scroll-affecting behavior changed.
