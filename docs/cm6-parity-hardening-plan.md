@@ -1795,3 +1795,74 @@ the user's own reported reproduction scale), full per-press raw traces (not aggr
 `scrollTop` and native caret-rect signals, byte-exact cursor movement re-verified after each code
 change, `npx tsc --noEmit` clean throughout. No `npm test`/lint delta since the round's code changes
 were fully reverted; only this doc entry is new.
+
+## New lead, not yet investigated — a real "stuck scroll" freeze exists independent of this session's work
+
+While prototyping a pre-warm/pre-measure idea for lead #4 (see below), an external test script that jumped
+`scrollTop` away from the current position and immediately back (a round trip, repeated on a short cycle)
+reliably froze the editor: not just `scrollTop`, but the caret's own document position stopped advancing
+entirely, and ArrowUp keystrokes had no effect at all. Waiting past the app's own `beginScrollTransition`
+`maxBlockMs` (1200ms, the value used by `applySnapshot`'s snapshot-restore transition) did not clear it, so
+it is not simply a time-bound transition block resolving slowly. **The user has independently encountered
+this same "stuck" state in real usage, unprompted, before this test existed** -- this is not a test-script
+artifact, it is a real, pre-existing brittleness worth its own investigation later. Not yet root-caused:
+candidate suspects include `ScrollTransitionController`'s classification of rapid/reversing scroll events
+(it may be designed around the app's own sanctioned transition APIs, like `beginScrollTransition`, and
+misclassify or wedge on raw external `scrollTop` writes that don't go through them), or something in
+CM6's own reflow handling for rapid back-and-forth viewport moves. Tracked as a follow-up, not investigated
+further in this round -- the pre-warm design below was changed specifically to avoid the round-trip pattern
+that triggered it, rather than chasing the freeze itself right now.
+
+## Lead 4 -- the real fix candidate: force real measurement ahead of the caret, no round trip
+
+Follow-up to the tension found two rounds ago (attempt 10: raw scrollTop-distance accuracy and real
+content-alignment accuracy are not the same invariant, and a fix that only satisfies one isn't a 0).
+Direct experiment, prompted by the user's own recollection of the app's note-restore behavior never
+showing a jump: a raw `scrollTop` jump into completely untouched territory (`applySnapshot`'s own
+mechanism, `scroller.scrollTop = target`) produces **immediately stable** `scrollTop`/`analyticalTop`
+values -- sampled every animation frame for 20 frames after a jump 60% into a fresh 1.5M-char document,
+zero drift from frame 0. This is not masked settling; it's genuinely different from incremental
+(one-row-at-a-time) scrolling, which is exactly the path that leaves CM6's height-map gaps unresolved
+until forced to catch up all at once. A big, discontinuous jump appears to force CM6 to fully render and
+measure a fresh region atomically; small incremental steps don't get the same treatment.
+
+**Decisive test**: pre-walk the entire region a 300-press ArrowUp hold was about to traverse, via a series
+of forward-only `scrollTop` jumps (500px steps, real wait between each, one single return-to-start at the
+very end -- not a round trip per step), *before* starting the hold. Result: baseline was 18 scroll-distance
+anomalies / -101 rows of permanent excess over 300 presses; pre-warmed was **0 anomalies / 0 excess**, on
+both ground-truth metrics simultaneously (raw `scrollTop` distance AND the caret's real on-screen
+position) -- the first time in this entire investigation both have been clean at once. Confirmed the
+margin needs to be generous enough to cover the intended traversal (9000px left one anomaly at the edge;
+10500px closed it) -- consistent with needing to stay ahead of where the hold will reach, not simply
+"warm a small area once."
+
+**Not yet designed**: the production trigger/scheduling mechanism. The proof-of-concept was a blocking,
+pre-computed sweep run entirely before the test began -- adequate to prove the mechanism works, not a
+shape suitable for shipping (real usage doesn't know in advance how far a hold will go).
+
+**Two follow-up variants tried, both ruled out, both real/informative failures, not test noise:**
+
+1. **"Go to current line"** -- re-issuing `applySnapshot`'s own `scrollTo()` mechanism targeting the exact
+   position already on screen (either the literal same value, or a genuine but imperceptible 1px nudge).
+   No freeze either way (focus stayed intact), but also **no benefit** -- anomalies continued at the
+   normal, unmitigated ~15-press cadence in both variants. This is definitional, not a measurement gap:
+   the current line is by construction already-rendered territory, so there is nothing new for CM6 to
+   measure there. Warming only ever helps by reaching into territory *ahead* of the current position that
+   hasn't been touched yet -- "peek at where you already are" cannot work, regardless of implementation.
+2. **Peek ahead, leave it there (no return trip)** -- jump into fresh territory ahead of the caret and
+   simply don't reverse it, hoping the existing reconcile would naturally pull the visible position back
+   into alignment on the next normal keystroke. It does not: once the peek lands the caret merely *within*
+   the cage (not exceeding the boundary), the existing `resolveCagedScrollTarget`'s `'within'` branch
+   treats that as nothing-to-do and leaves `scrollTop` wherever the peek put it. Live-measured: `scrollTop`
+   stayed within ~10px of the peeked (wrong) position for over 20 subsequent presses before naturally
+   catching up -- the user would see the wrong section of the document for a couple dozen keystrokes. Worse
+   than the bug this is meant to fix, just differently shaped.
+
+Combined with the round-trip freeze above, this rules out both a same-cycle "away and immediately back"
+peek and a "jump and abandon" peek as the return mechanism. What both failures point at: an ad hoc raw
+`scrollTop` write from outside the app has no principled way back into correct alignment, but this app's
+own `reconcileCagedScroll` already computes and applies that correction correctly on every real keystroke.
+The next candidate, not yet built (requires real in-app code, no longer testable via an external script
+poking `scrollTop` directly): peek ahead once, then explicitly invoke the existing reconcile to pull the
+visible position back through the same sanctioned path every other correction in this app already uses,
+rather than a raw write or leaving it to resolve itself.
