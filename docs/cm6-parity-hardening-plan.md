@@ -1036,3 +1036,1109 @@ itself needed no changes to work as committed. Leads 1–3 were not started this
 consumed the full session per the user's own "most concrete/novel, cheapest to falsify" prioritization,
 and the honest state is a well-grounded root-cause narrowing with two ruled-out fix shapes, not a
 closed bug.
+
+## Lead 4, continued — the concrete next step above was tried; definitive root cause found; a third fix attempt failed *worse* at real scale and was reverted
+
+Follow-up session, resumed after the previous round's PR merged to `main` (branch restarted from
+`origin/main` per this repo's standing convention for a merged designated branch). Picked up exactly
+where the last round left off: hook `update.viewportChanged`, confirm live where the stray write
+actually originates before fixing it.
+
+**Root cause now definitively confirmed, not just narrowed.** Added temporary instrumentation
+logging *every* `updateListener` firing (not just ones the reconcile already handles) with its
+`docChanged`/`selectionSet`/`viewportChanged` flags and `scrollTop`, bucketed per ArrowUp press.
+Direct, unambiguous evidence at press 60 of a 500K-char run: **two** updates fire for that single
+keystroke —
+
+1. The real one: `selectionSet: true`, a completely normal one-row `scrollTop` correction (220818 →
+   fine).
+2. Immediately after, in the *same* press window: `docChanged: false, selectionSet: false,
+   viewportChanged: true`, `scrollTop` independently jumped a further -170px (-6.5 rows), and
+   `view.viewport.{from,to}` shifted to a different range — i.e. CM6 grew/shifted its own rendered
+   chunk and, as part of that, wrote a wrong `scrollTop`, entirely outside anything the existing
+   reconcile (`docChanged || selectionSet` only) ever observes.
+
+Widening the same instrumentation surfaced a **second, distinct shape** of the same problem:
+passes where `docChanged`/`selectionSet`/`viewportChanged` are all `false` yet `scrollTop` still
+gets rewritten (a pure height/geometry recompute that doesn't change which lines are rendered, just
+where they sit) — not caught by a `viewportChanged`-only hook either.
+
+**Third fix attempt: armed, self-expiring "last known good" scrollTop.** After an arrow-key
+reconcile, remember the `targetScrollTopPx` it just computed in a plain closure variable
+(`lastArrowKeyReconciledScrollTopPx`). Any *subsequent* `updateListener` firing that is not itself a
+new keystroke (`!docChanged && !selectionSet`, deliberately not narrowed to `viewportChanged` given
+the second failure shape above) snaps `scrollTop` back to that remembered value if it drifted by more
+than 0.5px. The armed value is **not** consumed on first use (more than one stray pass can follow a
+single keystroke, confirmed above) — it only expires via a `requestAnimationFrame` callback scheduled
+alongside it, bounding the correction window to about one frame so a genuine, much-later real user
+scroll (also `viewportChanged`-only) can never be mistaken for this pattern.
+
+**Looked like a real fix at 500K chars, then failed badly at 1.2M — the scale that actually
+matters.** Live A/B, same harness, same `--delayMs=35` realistic pacing:
+
+- At 500K chars / 150 presses: 8 anomalies → 3 anomalies, and critically the *magnitude* of every
+  remaining one dropped from -6..-11 rows down to exactly -2 rows. Looked like solid, real progress.
+- At the actual 1.2M chars / 800 presses this bug was originally reported against (same size Bug
+  5 and this doc's own scripts standardize on): **254/800 anomalies (≈32%)** — dramatically *worse*
+  than the unpatched baseline's 54/800 (≈6.75%) at the same size. One outlier reached -26 rows. Most
+  were small (-2 to -5 rows) but far more frequent than before.
+
+**Reverted in full** — `git status` clean, nothing shipped. This is the same "looked correct on a
+narrower check, broke worse on the fuller one" shape as the previous session's clamp attempt, but
+inverted: last time zero-delay pacing was the trap; this time document *size* was. **Standing lesson
+for whoever picks this up next, worth treating as a hard rule for this specific bug**: any fix
+attempt must be evaluated at the full 1.2M-char scale before being trusted as an improvement — a
+500K-char (or smaller) run can show a false positive. Root cause: the "any non-transaction update"
+condition is almost certainly too broad at scale — CM6 very likely runs legitimate, low-magnitude
+idle-time height-reconciliation passes that become more frequent and farther-reaching as the document
+(and therefore the unmeasured-region backlog) grows, and this fix's blanket
+"snap back to last-known-good" logic fights those too, not just the genuine chunk-boundary anomaly it
+was built for.
+
+**Concrete next step, not yet attempted**: the two-distinct-failure-shape finding above (confirmed,
+not hypothesis) is real, durable progress independent of this attempt's failure — keep it. The fix
+shape itself needs to be narrower: only correct when the drift is *implausibly large for a
+single-row key move* (e.g. more than ~1.5 rows, matching this doc's own anomaly-detection threshold
+in `verifyCM6ArrowUpChunkBoundary.mjs`) rather than any nonzero drift at all, so small legitimate
+housekeeping adjustments are left alone and only the actual multi-row anomaly gets corrected. Not yet
+tried — the instinct to widen the correction from just-`viewportChanged` to "any non-transaction
+update" (needed, confirmed by the second failure shape) and the instinct to correct *any* drift
+turned out to be two separable ideas; the first is validated, the second appears to be what broke
+things at scale and should be un-done independently rather than assumed guilty by association.
+
+**Verification this round**: `npx tsc --noEmit` and `npm run lint` clean on the fix attempt before
+revert; no `npm test`/full regression suite run since nothing shipped. All temporary instrumentation
+(`localStorage['thockdown:debug-viewport-updates']` and its throwaway harness script) was removed
+after use, same as the previous round's `debug-arrow-cage`. Working tree is clean; only this doc
+changed this round.
+
+## Lead 4, continued again — CM6 internals identified precisely; three more fix attempts failed; drift shown to be bounded, not leaking
+
+Follow-up session. Read the actual installed `@codemirror/view@6.43.7` source (not assumed from
+memory) to find exactly what writes `scrollTop` outside our own code: CM6's own **scroll anchoring**
+(`ViewState.update`/`EditorView.measure` in `dist/index.js`, the `scrollAnchorAt`/`scrollAnchorPos`/
+`scrollAnchorHeight` machinery), the same class of technique as native browser scroll anchoring for
+images loading above the fold, self-implemented because CM6 manages its own virtualized layout. Before
+an update, it picks an anchor line near the viewport top, records its position and height-map `top`;
+after, it checks whether that same line's `top` changed and if so writes `scroll.scrollTop += diff` to
+keep it visually fixed. This is real, working-as-designed CM6 behavior, not a defect in CM6 -- it just
+disagrees with our own caret-position-based caging, which runs first and picks a different, unrelated
+reference point.
+
+**Three more fix attempts, each ruled out with a concrete, specific reason, all reverted (working tree
+clean, nothing shipped):**
+
+1. **Post-hoc "last known good" snapped on any non-transaction update, one-frame expiry.** Correctly
+   caught the real writes (confirmed two distinct shapes: a `viewportChanged`-true chunk-growth pass,
+   and a pass with `docChanged`/`selectionSet`/`viewportChanged` all `false`, a pure anchor-height
+   recompute). Looked like a real fix at 500K chars (8/150 -> 3/150 anomalies, worst magnitude capped
+   at -2 rows vs -6..-11 before) -- **then failed badly at the actual 1.2M-char scale this bug was
+   reported at: 254/800 anomalies vs. a 54/800 unpatched baseline**, worse than doing nothing despite
+   the lower peak severity. Standing lesson recorded here as a hard rule for this bug specifically:
+   any fix attempt must be evaluated at the full 1.2M-char scale before being trusted, since a
+   500K-char run gave a false positive.
+2. **Same idea, magnitude-gated** (only correct drift > 1.5 rows, matching this doc's own
+   anomaly-detection threshold, instead of any nonzero drift) -- reasoned as the fix for attempt 1's
+   scale failure (CM6 runs plenty of small, legitimate anchor nudges that a nonzero-gated correction
+   was fighting). Better (109/800) but still worse than the 54/800 baseline. Traced directly: the
+   worst-case jump did drop to 5 rows (from 11), but a new, more frequent -2-row wobble appeared that
+   didn't exist unpatched.
+3. **Same again, deferred to a `requestAnimationFrame` scheduled outside the updateListener entirely**
+   (hypothesis: CM6's `measure()` loop is actually a *synchronous* `for(;;)` loop internal to one
+   function call, capped at 5 iterations -- confirmed by reading the source -- and our own
+   `updateListener` fires once per internal loop iteration, so correcting *from inside* one of those
+   firings races CM6's own still-in-progress convergence). Result: 107/800, statistically
+   indistinguishable from attempt 2 (109/800) -- **this hypothesis is refuted**, deferring by a frame
+   changed nothing measurable.
+
+**Direct instrumentation of attempt 3's own corrections revealed something much more serious than any
+of the three attempts' anomaly counts alone suggested**: the `driftPx` values at the moments the
+correction fired weren't 2-3 rows -- they were **3,770 to 6,630 pixels (145 to 255 rows)**, and grew
+roughly monotonically across the session (3770 -> 3874 -> 4628 -> 5330 -> 5928 -> 6318 -> 6500 -> 6630,
+over presses 171-349). The correction was firing and mostly closing the gap each time, which is why
+the *outer* per-press anomaly counter only ever saw a small residual (-2 rows) -- it was masking, not
+measuring, the true scale of what was actually happening underneath. This was reported to the user
+in full at the time, immediately, before any further patch attempt.
+
+**Given that, the user redirected the effort: stop iterating on fix attempts, get a precise,
+uncontaminated picture of how the drift actually accumulates first.** Added a small, permanent,
+read-only debug accessor to `CM6Editor.tsx` (`window.__thockdownDebugCageState()`, gated behind
+`localStorage['thockdown:debug-cage-state']`, zero behavior change, same opt-in pattern as
+`debug-input-lag`) exposing `{analyticalTop: view.lineBlockAt(head).top, scrollTop, ...}` on demand.
+`view.lineBlockAt(head).top` is a pure document-layout value, independent of scroll position --
+already established as trustworthy by Bug 5's fix above. Methodology, committed as
+`scripts/perf/measureCM6ArrowUpDrift.mjs`: start at document end, press ArrowUp continuously (never
+reversing), which pins the caret against the cage's top edge within the first few dozen presses; from
+then on, a correctly-behaving system has `deltaScrollTop == deltaAnalyticalTop` on every single press,
+so any press where they disagree is a raw, single-step leak, and summing those over the whole session
+gives the *true* cumulative drift with zero interference from any fix attempt (pure unpatched code).
+
+**Result: the drift is bounded, not an infinite leak.** In genuine steady state (far from either
+document boundary, confirmed by running the full traversable length of a 100K-char document, ~1,100
+presses), the cumulative sum oscillates in a tight band -- exactly 634 to 646px (±6px, ±0.23 rows)
+around its post-settle baseline -- with **zero net trend across the entire run**. Two 50K-char runs
+were bit-for-bit identical (1508.0px steady-window drift both times), confirming this is fully
+deterministic, not timing noise. The larger numbers seen elsewhere come from two separate, localized,
+one-time effects, not a per-keystroke leak:
+- A one-time settle transient right after mount/initial caret placement (327-650px, varies by starting
+  scroll position, pays once).
+- A transient as the caret approaches an actual document boundary (start or end) -- confirmed
+  localized to roughly the last 60-70 presses before hitting it, a proximity effect tied to being near
+  position 0 (or the document's max length), not tied to overall document size. (A 50K-char document
+  hits this early simply because starting at its end puts you within ~580 presses of position 0, not
+  because being "small" changes the mechanism.)
+
+**This also retroactively explains attempt 3's alarming, monotonically-growing driftPx numbers**: that
+growth was almost certainly self-inflicted, not an inherent CM6 property. A raw `scroller.scrollTop = X`
+write made outside CM6's own `dispatch` path very likely corrupts its internal
+`scrollAnchorPos`/`scrollAnchorHeight` bookkeeping, so CM6 treats the correction itself as a fresh
+"real" scroll needing its own compensation on the very next pass -- compounding with every correction
+applied. The original 5-11 row chunk-boundary jump is most likely the real, full extent of the
+per-event defect; there is no evidence of a larger hidden leak beneath it once measured without any
+fix attempt's own interference.
+
+**Conclusion against the user's own explicit framework**: drift depends on neither session duration
+nor document length in genuine steady state -- it's bounded either way. There is no scale-dependent
+growth to manage, so the document-length-cap "manage" route isn't just deprioritized, it wouldn't
+actually solve anything here since nothing grows with length. No structural obstacle to a targeted fix
+was found. Per the user's stated preference, the path forward is the targeted patch, guided by a new
+constraint the three failed attempts collectively established: **corrections must go through CM6's own
+dispatch/anchor machinery, not a raw DOM `scrollTop` write**, since a raw write appears to be what
+turned a small, well-characterized per-event bug into a much larger, compounding one in attempt 3.
+
+**Not yet done**: designing and implementing the actual patch under that constraint; a precise trace
+of the mount-settle and boundary-proximity transients (lower priority -- one-time costs, not what the
+original bug report described).
+
+**Verification this round**: `npx tsc --noEmit` and `npm run lint` clean throughout. No `npm test`/full
+regression suite run, since no fix shipped this round either -- three attempts were built, measured,
+and reverted; only the (harmless, read-only, zero-behavior-change) debug accessor and the drift
+measurement script survive, both committed as ongoing investigation tooling rather than removed, since
+the investigation is still open (unlike the single-purpose `debug-arrow-cage`/`debug-viewport-updates`
+instrumentation from earlier rounds, which was removed once each round's specific question was
+answered).
+
+## Lead 4, scope widened — every scroll-triggering movement class, both panes, per explicit user direction
+
+Follow-up session. Before this, the investigation had only ever exercised ArrowUp -- a single-row
+movement. Explicit user direction: fix design must not narrow to that one case. A multi-row jump
+landing a few rows short is easy to miss visually (the shortfall is a small fraction of a large jump)
+but is the same underlying imprecision, and this app's own standard is exact, consistent handling for
+*any* movement, not just the one case that happened to get the deepest investigation first. Also
+directed: apply the same rigor to the render/preview pane, checking for genuine viewport
+misplacement, not just cosmetic scrollbar-thumb lag.
+
+### Full audit of scroll-triggering movement classes (edit pane)
+
+Grepped every direct `scroller.scrollTop =` write site in `CM6Editor.tsx` (seven total, up from the
+one -- ArrowUp's `reconcileCagedScroll` -- covered by prior rounds):
+
+1. **ArrowUp/Down/Left/Right** (`reconcileCagedScroll`) -- already deeply characterized above: real,
+   bounded (not leaking) drift, root cause is CM6's own scroll-anchor compensation.
+2. **Scrollbar-thumb drag** (`scrollFromThumbTop`, a raw write per pointermove) -- not yet tested.
+3. **PageUp/PageDown, single discrete press** (`Prec.highest` keymap handler, dispatches via
+   `scrollToQuantizedSmooth`) -- **tested, confirmed safe**: 60 repeated single presses on a 1.2M-char
+   note landed on the exact same -676px delta every single time, zero variance. Root cause of the
+   safety, not luck: `scrollToQuantizedSmooth`'s animation always forces an exact write to the
+   intended quantized target on its final frame, which overwrites/self-heals whatever CM6's own
+   anchor compensation did mid-flight. This is the shape a real fix should generalize, not the
+   raw-write pattern below.
+4. **PageUp/PageDown, held/continuous** (`runPageContinuousScroll` + `animateRampDown` release ramp)
+   -- **tested, confirmed buggy**. Unlike case 3, this writes `scroller.scrollTop` raw on every
+   animation frame, computed as `scroller.scrollTop + direction*speed*deltaSec` -- each frame's target
+   based on whatever scrollTop currently reads, no independent absolute reference, no forced-exact-
+   final-step anywhere in the hold-or-release sequence. Live capture, sampling scrollTop every
+   animation frame during a held PageUp on a 500K-char note
+   (`scripts/perf/measureCM6PageContinuousScroll.mjs`): a **+208px (8-row) reversal in the wrong
+   direction**, landing exactly at the hold-release transition (t=4030.6ms of a 4000ms hold), followed
+   by an overshoot-and-recover on the next two samples before settling. This is the same underlying
+   raw-write-races-CM6's-anchor-compensation pattern as ArrowUp, just pre-existing in shipped code
+   and firing far more often (every frame of a multi-second hold, not once per keystroke) -- not
+   something introduced by this investigation's fix attempts.
+5. **Paste-scroll reconcile** (`reconcilePasteScroll`) -- same "immediate raw write, no forced-final-
+   step" shape as ArrowUp's own reconcile; not yet tested live, but structurally the same risk class.
+6. **Mouse wheel / trackpad scroll** (`handleWheel`) -- tested with one configuration (synthetic
+   400px deltaY events every ~16ms, sustained 5s, covering 354 rows / roughly 22-27 chunk-equivalent
+   crossings on a 500K-char note): **zero reversals found**. Recorded as a real but *not exhaustive*
+   result -- real trackpad hardware produces much smaller, far more frequent deltaY events than this
+   synthetic test used, and that shape hasn't been tried. Provisionally lower-risk, not cleared.
+7. **Drag-selection auto-scroll quantization** (the `dragCorrectionFrame` handler, fires while
+   dragging a selection near the viewport edge) -- not yet tested.
+
+### Render/preview pane: genuine viewport misplacement confirmed, not cosmetic thumb lag
+
+The preview pane has its own, structurally near-identical PageUp/PageDown continuous-scroll
+implementation (`usePreviewScrollbar.ts`'s `startPreviewContinuousScroll`/
+`startPreviewReleaseRampDown`), and virtualizes content via `@tanstack/react-virtual`
+(`usePreviewMarkdownRendering.tsx`) with `estimateSize: () => 56` (a fixed px estimate for
+not-yet-rendered blocks) corrected by `measureElement` once a block actually renders, plus
+`overscan: 6` -- the react-virtual-native version of the same estimate-vs-measured pattern that
+drives CM6's own scroll-anchor compensation, independently implemented, not shared code. The
+scrollbar thumb (`syncPreviewCustomScrollbar`) reads `scroller.scrollTop`/`scrollHeight` live with no
+independent state, so it faithfully mirrors whatever the real container does.
+
+**First test attempt was invalid and is worth recording as a methodology trap**: the synthetic
+document generator used elsewhere in this investigation (`Line N: ...` with no blank lines between
+entries) produces zero paragraph breaks, and markdown merges consecutive non-blank lines into a
+single paragraph. Confirmed live: that document rendered as **one single virtualized block**
+(`document.querySelectorAll('.markdown-preview [data-index]').length === 1`), meaning the first
+continuous-scroll test against it exercised essentially nothing -- react-virtual had almost no
+virtualization boundaries to cross. Fixed by generating blank-line-separated paragraphs instead
+(confirmed live: 22 separately-rendered blocks in one viewport). Recorded here since it's exactly the
+kind of "test passed for the wrong reason" trap this project's docs warn about repeatedly.
+
+**With that fixed, re-tested and found real, genuine viewport misplacement**: sampling
+`.markdown-preview`'s `scrollTop` every animation frame during a held PageDown on a 1.2M-char note
+(paragraph-separated, `scripts/perf/measureCM6PreviewPageContinuousScroll.mjs`) found **five
+wrong-direction reversals** (scrollTop decreasing during a monotonic downward hold: -13, -52, -78,
+-65, -78px), all clustered in the pre-release/transition window (t=4541-5095ms of a 5000ms hold) --
+the same general moment CM6's own single large reversal occurred, though smaller-magnitude and
+multiple discrete events here rather than one. This directly confirms the user's own suspicion,
+raised before this test existed: the render-view's scrollbar-thumb jitter during continuous
+PageUp/PageDown is not cosmetic lag, it reflects the pane's actual scroll position genuinely
+misbehaving, via an independent mechanism with the same structural shape as the CM6 case.
+
+### Where this leaves the picture
+
+At least three confirmed, distinct-but-structurally-related defects now exist across two panes, all
+sharing one root pattern: **a raw `scrollTop` write, made outside the owning system's own
+authoritative update path, racing that system's internal estimate-vs-measured virtualization
+reconciliation** (CM6's scroll-anchor compensation on the edit side; `@tanstack/react-virtual`'s own
+analogous mechanism on the preview side). The one case proven safe (single discrete PageUp/PageDown
+press) is safe specifically because its write goes through an animation that forces an exact final
+write, self-healing whatever the owning system did mid-flight -- the shape any general fix should
+adopt, not a coincidence specific to that one code path.
+
+**Not yet tested**: scrollbar-thumb drag (edit and preview), paste-scroll reconcile, drag-selection
+auto-scroll, a more realistic (small, high-frequency) wheel-event shape, Home/End and Ctrl+Home/End,
+click-to-position jumps, and wrap-point/box-width sensitivity (Q3 from the user's own pre-fix-design
+questions, still open -- every test in this investigation so far deliberately avoided line-wrapping).
+
+**Verification this round**: no production code changed -- purely measurement. Two new committed
+scripts (`scripts/perf/measureCM6PageContinuousScroll.mjs`,
+`scripts/perf/measureCM6PreviewPageContinuousScroll.mjs`), both following the same
+sample-and-detect-reversal methodology as `measureCM6ArrowUpDrift.mjs`. `npx tsc --noEmit` clean
+(no `.ts` changes this round, scripts are plain `.mjs`).
+
+## Lead 4, fix attempts 4-6 — dispatch-based assertion tried three ways, all ruled out; competing-scrollIntoView hypothesis also ruled out
+
+Follow-up session, continuing directly from the movement-class audit above. Per explicit user
+direction on methodology: judge each attempt binary (anomaly count is 0, or it isn't -- don't treat
+"fewer than some other failed attempt" as partial credit), and treat every ruled-out attempt as real
+progress toward the true cause, not wasted effort.
+
+**Attempt 4 -- dispatch `EditorView.scrollIntoView` immediately in `scrollToQuantizedSmooth`'s
+`onSettled` callback** (added as a new option to that function). Researched the actual public API
+from the installed `@codemirror/view` source first (not assumed): `scrollIntoView(pos, {y, yMargin})`
+returns a dispatchable `StateEffect`, and the measure-loop source confirms CM6 handles a pending
+`scrollTarget` *before* running its own anchor-compensation pass, then re-picks a fresh anchor
+afterward -- a real, CM6-native "authoritative reposition" primitive, not a guess.
+**Result: 54/800, byte-identical to baseline.** Traced why with instrumentation: at the instant the
+callback ran, `scrollTop` already equalled the correct target -- CM6's own anchor-compensation for
+that same keystroke hadn't happened yet. It's scheduled via CM6's own `requestAnimationFrame`-based
+measure flush, not resolved synchronously within the transaction that triggered it, so dispatching
+immediately just gets silently superseded by that still-pending pass moments later.
+
+**Attempt 5 -- same, deferred one frame** before dispatching, reasoning that giving any pending
+pass a chance to run first would let the assertion be the genuine last word. **Refuted a wrong
+premise directly**: an isolated test (bypassing the reconcile entirely, calling `scrollIntoView`
+freestanding) showed `view.dispatch()` does not apply the effect's scrollTop write synchronously at
+all -- even `coordsAtPos` returned `null` for the target position at dispatch time, yet the position
+resolved correctly *moments later anyway*. CM6 resolves `scrollIntoView` on its own schedule
+regardless of when dispatch is called; deferring our own call first only adds latency, it doesn't
+change which of CM6's internal passes ends up running last. With the artificial delay removed,
+instrumentation then showed something more serious: a *single* dispatch could itself move a correct
+position to a wrong one, synchronously, within the dispatch call -- confirmed live, 533858 (correct)
+became 533766 after one `dispatch()`. Because satisfying our own `scrollIntoView` request can itself
+require growing the viewport into unmeasured territory, and growing the viewport runs CM6's own
+anchor-compensation as part of that same internal pipeline. Going through CM6's "proper" API does
+not avoid the imprecision -- the API shares the same internal pipeline that produces it.
+
+**Attempt 6 -- a bounded multi-frame "watch and correct" loop**, re-dispatching on drift for up to 6
+frames, stopping after two consecutive stable checks. Reasoned as the most robust response to
+attempt 5's finding: since neither a single dispatch nor a single well-timed deferred dispatch
+reliably wins, keep reasserting until CM6 stops fighting back. **Result: 130/800 -- worse than doing
+nothing.** Every active correction attempted so far, across three different variants, either did
+nothing or made the outer-observed anomaly count worse, because the correction itself keeps
+triggering fresh CM6-internal reactions. This is the point the user's own framing (binary outcome,
+not "better than the last attempt") mattered: 130 is not "worse than 109 from a much earlier
+attempt" in any meaningful sense -- neither is 0, so both are the same kind of failure, and chasing
+which specific wrong number is smaller was already established as a trap in an earlier round of this
+same investigation.
+
+**Attempt 7 -- suppress CM6's own competing scroll intent at the source, not react to its effects.**
+Read `@codemirror/commands`' source directly: CM6's own default arrow-key commands
+(`cursorLineUp`/`cursorLineDown`/`cursorCharLeft`/`cursorCharRight`) dispatch a transaction that
+bundles `scrollIntoView: true` into the *same* transaction that moves the selection (confirmed via
+`setSel`'s exact source: `state.update({selection, scrollIntoView: true, userEvent: "select"})`) --
+tagged `userEvent: "select"`. Hypothesis: this is a second, redundant, competing scroll intent
+underneath our own cage reconcile, and removing it (not fighting its aftermath) closes the gap by
+construction. Implemented narrowly -- only the four plain (unmodified) arrow keys, explicitly *not*
+Shift/Ctrl/Alt/Cmd variants, which cover much larger and riskier semantics (word/line-boundary jumps,
+document-start/end, even `moveLineUp`/`Down`, an actual document edit) not worth the blast radius for
+this investigation. Called CM6's own exact movement commands (not reimplemented) through a thin
+`Object.create(view)` proxy that intercepts only `dispatch()`, rebuilding the one precise
+`TransactionSpec` shape these four commands are known to produce (selection change + `userEvent`,
+`scrollIntoView: false`) rather than a generic transaction-stripping utility. Verified no private
+class fields exist on `EditorView` (checked the installed source directly) before trusting
+`Object.create`'s prototype delegation for `moveVertically` and friends. **Cursor movement itself
+verified byte-exact** before testing the scroll fix at all (highest-severity risk class): typed
+distinct markers after ArrowDown/Home/ArrowUp/End/ArrowDown×2/End sequences on a real note, read the
+saved text back, exact string match against the predicted result.
+**Scroll result: 54/800, byte-identical to baseline again.** This is a clean, informative negative
+result, not a wash: it rules out "two competing `scrollIntoView` requests fighting" as the mechanism.
+Since removing CM6's own scroll intent entirely made zero measurable difference, the anchor
+compensation is not reacting to a scroll-positioning conflict at all -- it's reacting to the
+**viewport needing to grow simply to keep the new caret position rendered**, which happens on a plain
+selection-only transaction with no scroll intent whatsoever. This is a more fundamental trigger than
+either hypothesis behind attempts 4-6 assumed, and structurally can't be avoided by choosing which
+API places the scroll request or when -- growing the viewport at all, for any reason, appears to be
+what triggers the imprecise compensation.
+
+All three attempts (4, 5/6 counted together as one code path evolving, and 7) were reverted in full
+after measurement -- working tree returned to the last committed state each time, nothing shipped
+partially-working. One real, low-risk infrastructure fix survives from this round and was kept:
+`scripts/perf/perfHarness.mjs`'s mount-wait timeout raised from 30s to 90s, after directly timing a
+completely unmodified mount at 18.6s and another at 58.3s in this same session (this environment's
+dev-server/mount latency is genuinely variable session-to-session and run-to-run, confirmed by
+direct A/B timing, not assumed) -- 30s was intermittently insufficient even for correct, unmodified
+code, which cost real time this round chasing a false "did I break something" signal before ruling
+it out directly.
+
+**Where this leaves the search**: the true trigger is now understood more precisely than at the
+start of this round -- viewport growth itself, not a scroll-intent conflict, not something reactable-
+to after the fact. A genuinely new angle worth trying next, not yet attempted: **pre-emptively widen/
+measure the viewport *before* dispatching the selection-changing transaction**, so that by the time
+the caret actually moves, the target region is already measured and no reactive, mid-transaction
+growth (the apparent trigger for the imprecision) is needed at all. Not yet designed or implemented.
+
+**Verification this round**: `npx tsc --noEmit` and `npm run lint` clean on every attempt before
+revert. No `npm test`/full regression suite run, since nothing shipped. `scripts/perf/perfHarness.mjs`'s
+timeout change is the only surviving diff and was independently verified (unmodified code, direct
+timing) rather than assumed safe.
+
+## Lead 4, fix attempt 8 — pre-emptive viewport widening ruled out; the anomaly is not dispatch-shape-dependent at all
+
+Direct follow-up implementing the "pre-emptively widen the viewport before dispatch" angle proposed
+above. Read `@codemirror/commands`' source to confirm `cursorByLine` (backing `cursorLineUp`/
+`cursorLineDown`) calls the public `view.moveVertically(range, forward)` with no distance argument
+(one line) -- so the exact target position CM6's own command will land on can be predicted precisely,
+not approximated, by calling that same public API read-only before the real key is processed.
+
+Implemented in the existing `Prec.highest` `any` keymap handler (which already runs, for every key,
+*before* `defaultKeymap`'s own bindings get a chance to handle the same event): for plain
+ArrowUp/ArrowDown only (same narrowest-tested scope as attempt 7), compute the predicted target via
+`view.moveVertically`, then dispatch a selection-preserving, scroll-only transaction --
+`{ effects: EditorView.scrollIntoView(target.head, { y: 'nearest' }) }` -- to force CM6 to
+measure/render that region immediately. Control then falls through (no `event.preventDefault()`), so
+`defaultKeymap`'s real `cursorLineUp`/`cursorLineDown` still runs immediately after, now against an
+already-rendered target.
+
+Verified cursor movement byte-exact first (typed markers through a real
+ArrowDown/Home/ArrowUp/End/ArrowDown×2/End sequence, saved-text exact match) before measuring scroll
+behavior at all.
+
+**Result: 54/800 -- and not merely the same count. The exact same press indices, exact same
+magnitudes, exact same signs as the unpatched baseline and as attempts 4 and 7**, none of which share
+this attempt's mechanism (immediate post-hoc dispatch; competing-scrollIntoView suppression;
+pre-emptive pre-dispatch widening are three structurally distinct interventions). Reverted in full
+(`git checkout -- src/components/CM6Editor.tsx`); working tree confirmed clean.
+
+**This is the most informative negative result of the investigation so far.** Four dispatch-layer
+interventions -- act after, suppress the competing intent, act before, and (attempts 5/6) act after
+with retries -- have now produced either zero effect or a worse outcome, never a partial improvement,
+and three of the four zero-effect runs line up index-for-index. That rules out more than any single
+attempt's own hypothesis: it's now unlikely that *any* change to when or how this app's code calls
+`dispatch()` around a plain arrow-key press can affect this anomaly, because nothing about the
+anomaly's own timing or shape moved when the dispatch pattern changed completely, three different
+ways. The anomaly's regularity is itself a clue pointing the same direction: anomalies recur at a
+strikingly fixed press-count cadence (every ~14 presses in the 1.2M-char/800-press run, independent of
+proximity to either document boundary once past the initial settle window), which reads less like a
+reactive per-keystroke race and more like CM6's internal height-map hitting a fixed, amortized
+recompute boundary (e.g. a chunk-size threshold in its own internal tree structure) on a schedule set
+by document geometry, not by anything this app requests.
+
+**Where this leaves the search**: the working hypothesis going into this round -- that the fix belongs
+somewhere in *when/how this app dispatches the caret-moving transaction* -- looks substantially
+weakened by this round's evidence, not just this one attempt. Two structurally different families of
+next step remain, and they carry different risk/cost, worth a checkpoint before committing to either:
+(a) stop intervening at the transaction layer entirely and instead make the *existing* post-transaction
+cage reconcile (`reconcileCagedScroll`, already reading real settled DOM geometry via
+`readSelectionRect`/`resolveCM6CaretTopInScroll`, already the one piece of this app's own code that
+writes the final on-screen scrollTop) robust against a *later*, independently-timed CM6-internal
+write landing on top of it -- e.g. by detecting and undoing specifically CM6's own subsequent write
+without re-triggering it, a different problem from attempt 6's "watch and correct" loop (which reacted
+to drift generically, retried a fixed few times, and made things worse); or (b) investigate CM6's
+internal height-map/chunk behavior directly (undocumented, unexported internals -- a materially
+higher-risk, harder-to-maintain class of change than anything tried in this doc so far) to find
+whether the amortized recompute boundary itself can be avoided or its effect neutralized at the
+source. Neither is designed or implemented yet.
+
+**Verification this round**: `npx tsc --noEmit` clean before and after revert. No `npm test`/lint
+change since the only surviving diff is documentation. `git status --short` confirmed clean.
+
+## Lead 4, Task #10 completed — the anomaly requires a long run of uniform-height lines; wrapped and diverse content don't trigger it at all
+
+The deferred wrap-point/box-width question (Q3 from the user's original pre-fix-design questions,
+open since round 1) turned out to resolve the whole investigation's central open question: *why does
+every dispatch-layer intervention (attempts 4-8) affect nothing?* Because the trigger was never in the
+dispatch layer, or even in document size -- it's in **document content shape**, specifically long runs
+of successive, identically-rendering lines.
+
+**Method** (`scripts/perf/measureCM6WrapSensitivityDrift.mjs`, new): same continuous-ArrowUp-from-end
+methodology as `measureCM6ArrowUpDrift.mjs`, run across four ~100,000-char documents that separate
+wrapping and content diversity as independent variables:
+
+- `uniform-nowrap`: one fixed 78-char line repeated verbatim (byte-identical, no per-line numbering
+  even), well under this editor's empirically-probed ~85-char wrap width (probed live: plain repeated
+  `x` characters wrapped starting at 90 chars, not at 80). The most uniform document tested in this
+  entire investigation.
+- `uniform-wrap`: the *same* fixed line repeated 3x per logical line, wrapping to a constant 3 visual
+  rows every time -- isolates wrapping itself, zero content diversity.
+- `diverse`: `generateSyntheticDocument` (already in `perfHarness.mjs`) -- headings, list items,
+  blockquotes, variable-length prose, realistic mixed markdown.
+- `diverse-with-uniform-run`: diverse padding (60% of target chars) followed by a long (~500-line)
+  run of the exact uniform line through EOF -- approximates a real note with a long checklist, table,
+  or repeated-separator section, rather than either synthetic extreme.
+
+**Results (100,000 chars, 800 presses each, same 1.5-row anomaly threshold as every prior measurement
+in this doc):**
+
+| Document | Anomalies | Mean gap between anomalies | Mean magnitude |
+|---|---|---|---|
+| uniform-nowrap | 51/771 | 15 presses | 6.1 rows |
+| uniform-wrap | **0/771** | -- | -- |
+| diverse | **0/771** | -- | -- |
+| diverse-with-uniform-run | 25/771 | 18 presses | 7.1 rows |
+
+Wrapping alone (`uniform-wrap`) and content diversity alone (`diverse`) each independently produce
+**zero** anomalies over a 771-sample window that reliably produces 51 on the plain uniform control.
+`diverse-with-uniform-run` brings the anomaly straight back -- and its 25 anomalies stop appearing
+right around press 485-500, which is almost exactly where continuous ArrowUp from EOF would cross out
+of the ~500-line uniform run into the diverse padding above it (confirmed against the generator's own
+60/40 split). The anomaly starts the instant the caret enters a long uniform run and stops the instant
+it leaves one, inside the same single document, same single continuous keypress session.
+
+**Conclusion, now with direct experimental support rather than only measure-loop source-reading**:
+this is CM6's own height-map estimate-vs-measured reconciliation for a **batch of previously
+off-screen, identically-estimated lines** -- consistent with height-map implementations that use a
+lazy, oracle-estimated "gap" representation for runs of unmeasured content and only pay to individually
+measure (and true up the estimate against) a sub-range when the caret/viewport actually needs to enter
+it. A long run of literally identical lines is exactly the shape that representation is built to batch
+efficiently; wrapped or structurally varied lines apparently never get batched the same way (each is
+individually distinct enough that CM6 has no reason to treat them as one estimate-once block), so there
+is no batched estimate to true up and no reconciliation jump to produce. The **~15-19 press periodicity
+matches an internal chunk/gap size in that structure**, not anything this app's transaction pattern
+controls -- fully consistent with attempts 4-8 all failing identically regardless of dispatch shape,
+since none of them could have touched this.
+
+**This also reframes real-world impact, not just root cause.** A perfectly uniform 100%-synthetic
+document was always an unrealistic stand-in for actual notes, and this result shows that mattered more
+than assumed: genuinely diverse markdown content produced *zero* measured anomalies in this sample size.
+The risk is not "every large document," it's specifically **long uninterrupted runs of near-identical
+lines** -- realistic ones exist (long checklists, tables, repeated log/separator lines) but this is a
+narrower and more specific hazard than "any large-document ArrowUp session," which changes how urgently
+this needs a shipped fix versus how precisely a fix needs to be targeted.
+
+**Where this leaves the search**: the two candidate directions from the previous round can now be
+evaluated more precisely. (a) Hardening the existing cage reconcile against CM6's own later write is
+more promising with this information -- the trigger is now *predictable* (crossing a chunk boundary
+within a run of same-estimated-height lines) rather than a generic race, meaning a correction could in
+principle be scoped to exactly this situation instead of reacting to any drift. (b) Investigating CM6's
+internal height-map/oracle calibration directly remains the higher-risk option but is now much better
+targeted -- specifically the oracle's default per-line height estimate versus this app's actual
+zero-padding/26px-row CSS, rather than "somewhere in the measure loop." Neither designed or implemented
+yet -- this was a pure measurement round, no production code touched.
+
+**Verification this round**: new script only (`scripts/perf/measureCM6WrapSensitivityDrift.mjs`,
+committed); no `.ts`/`.tsx` changes, `npx tsc --noEmit` inapplicable/unaffected. `git status --short`
+confirmed clean after the script commit.
+
+## Lead 4 — analyticalTop vs scrollTop comparison: the existing reconcile already absorbs most of these events; only the larger tail leaks through visibly
+
+Follow-up to the wrap-sensitivity result above, prompted by a direct question about whether anomalies
+within one continuous session are identical (same magnitude, same press-interval) or vary. They vary,
+and comparing the debug accessor's two independent signals -- `scrollTop` (what actually painted) and
+`analyticalTop` (`view.lineBlockAt(head).top`, CM6's own pure document-layout value, untouched by
+scroll position or any of this app's code) -- at every press, not just at already-flagged scroll
+anomalies, surfaced a materially more complete picture:
+
+**`uniform-nowrap`**: all 51 anomalies are visible in *both* signals. `analyticalTop` jumps by an exact
+clean multiple of the 26px row height every time -- either -182px (7 rows) or -156px (6 rows), never
+anything in between -- and `scrollTop` tracks it a constant 12px short (-170 or -144). This confirms the
+jump originates in CM6's own internal layout computation for the caret's line, not in this app's scroll
+write: `analyticalTop` has no dependency on scrollTop, our reconcile, or anything this app controls, and
+it jumps by the same multi-row amount at the exact same presses regardless.
+
+**`diverse-with-uniform-run`**: 123 of 771 presses show `analyticalTop` jumping -- nearly 5x the 25
+that were ever visible as a `scrollTop` anomaly. 98 of those 123 are events the existing (unmodified,
+baseline) cage reconcile already absorbs cleanly: `analyticalTop` jumps a consistent -78px (3 rows),
+while `scrollTop` only moves -26 or -38px, both under the 1.5-row/39px anomaly threshold used
+throughout this doc. Only the remaining 25 -- where the analytical jump is larger (6-8 rows, -156/-182/
+-208px) -- break through as a visible scroll glitch.
+
+**This reframes fix strategy meaningfully.** The mechanism is confirmed, independently of any app code,
+to be CM6's own height-map periodically revising its cumulative-height estimate for a region -- the
+caret's actual document position (`head`) is not moving multiple lines at once (consistent with attempt
+7's earlier byte-exact text-editing verification); rather the *pixel top* CM6 reports for that same,
+correctly-tracked line changes discontinuously when a batch of previously-estimated line heights above
+it gets trued up. But the diverse-with-uniform-run breakdown shows this app's existing reconcile is not
+starting from zero against that -- it already successfully absorbs the more common, smaller-magnitude
+version of this event (roughly 4 out of every 5 occurrences here) without any visible effect. The open
+problem is narrower than "build a mechanism to survive an untouchable CM6-internal event from scratch":
+it's "extend whatever margin already makes the 3-row case invisible to also cover the 6-8-row case,"
+which is a smaller, more targeted question than either of the two candidate directions from the previous
+round was framed as. Concretely worth checking next: what specifically makes the existing reconcile
+absorb -78px but not -156px+ -- e.g. whether `scrollToQuantizedSmooth`'s immediate-write-vs-animated-
+curve threshold (see `src/editor/QuantizedSmoothScroll.ts`, `distanceRows <= 1` triggers an immediate
+write; this case is exactly the boundary CM6's jump can now blow past) or `resolveCagedScrollTarget`'s
+own boundary clamping is where the absorbed/leaked cases diverge.
+
+**Verification this round**: read-only measurement only (temporary, uncommitted script reusing the
+generators already committed in `measureCM6WrapSensitivityDrift.mjs`); no production code touched.
+
+## Lead 4 — SHIPPED: attempt 9, a single generation-guarded async follow-up, reaches 0 anomalies under a corrected, ground-truth metric
+
+**This lead is resolved for the plain-arrow-key movement class** (the scope attempts 4-9 all shared;
+Home/End/Page/paste/thumb-drag/preview-pane are separately tracked, see Tasks #13-15 below).
+
+### The metric this whole investigation used was measuring the wrong thing
+
+Before the fix: direct per-event instrumentation (logging `scrollTop` and the caret's *real on-screen
+pixel position* -- `window.getSelection().getRangeAt(0).getBoundingClientRect().top`, the literal
+ground truth for what the user sees, not inferred from `scrollTop` or `analyticalTop`) around one of
+the large "leaked" events from the previous round revealed something the whole investigation had missed:
+CM6 moves `scrollTop` by a large amount (-170px) at the same moment `analyticalTop` moves by a matching
+large amount (-182px) -- and because both move together, the caret's *actual on-screen position* only
+nets a **12px** shift (well under half of one 26px row), not the 6-8 row jump every prior script in this
+doc reported. Every anomaly-counting script up to this point (`measureCM6ArrowUpDrift.mjs`,
+`measureCM6WrapSensitivityDrift.mjs`) flagged a press when raw `scrollTop`'s delta deviated from the
+naive expected `-lineHeightPx`, which conflates "scrollTop and the document's internal layout both
+churned by a lot, but canceled each other out on screen" with "the user actually saw something jump."
+They are not the same thing, and only the second one is the bug that was originally reported.
+
+New script, `scripts/perf/measureCM6ArrowUpVisualDrift.mjs` (committed), measures the real thing
+instead: the caret's on-screen top should be exactly constant, press to press, while pinned at the
+cage's top boundary (the cage re-clamps to the same visual row every time) -- not "within half a row."
+A >3px deviation is flagged.
+
+**Baseline under this corrected metric, confirming it's sound (not just lenient)**:
+
+| Document | Old metric (scrollTop-based) | New metric (real on-screen position) |
+|---|---|---|
+| uniform-nowrap, 100K chars | 51/771 | **102/772** (51 dip-then-recover pairs) |
+| uniform-nowrap, 1.2M chars | 54/800 (earlier rounds) | **102/772** |
+| diverse-with-uniform-run, 100K chars | 25/771 | **74/772** (37 dip-then-recover pairs) |
+| uniform-wrap, diverse (no long uniform run) | 0/771 | 0/772 |
+
+The corrected metric finds *more* real anomalies than the old one on the two documents that had any at
+all (each old-metric "big jump" is actually a real, brief 12px dip-and-recover, visible for exactly one
+sample either side) -- it is not a weaker check, it is a differently-shaped one, and the earlier zero
+counts on `uniform-wrap`/`diverse` hold under it too.
+
+### The mechanism, precisely
+
+Per-reconcile instrumentation (temporary, since removed) proved the causal chain directly: on a normal
+press, `reconcileCagedScroll` reads a fully consistent state and writes a fully normal `-26px` step --
+nothing wrong yet. Then, **one `requestAnimationFrame` later, with no further keystroke at all**, CM6
+moves `scrollTop` and `analyticalTop` together on its own (37-51 times per 800-press session, at the
+same press cadence this doc already established tracks long uniform-line runs). This is CM6 finishing
+settling a height-map revision asynchronously, after the triggering transaction's synchronous portion
+already returned -- `reconcileCagedScroll` cannot see it at write time because it hasn't happened yet.
+
+### The fix
+
+A single generation-guarded follow-up check, not a blind multi-frame loop (that was attempt 6, and it
+made the *old* metric's count worse -- 130/800 vs. 54/800 baseline). After every write,
+`reconcileCagedScroll` schedules one `requestAnimationFrame` check: if `scrollTop` moved with no new
+reconcile call in between (a `reconcileGeneration` counter, bumped at the top of every call, guards
+against acting on a stale snapshot if a real keystroke arrives first), it calls itself again -- redoing
+the *same* cage math against the now-current truth, not re-asserting the old, now-stale target. That
+distinction is why this succeeds where attempt 6 failed: attempt 6 reasoned generically ("keep
+reasserting until CM6 stops fighting back") and fought CM6's legitimate revision; this accepts the
+revision and just re-derives the correct cage-relative row from it, using the exact same
+`resolveCagedScrollTarget` pure function every other press already uses.
+
+An earlier version of this fix (attempt 9 as first written) recomputed the target from
+`resolveCagedScrollTarget`'s boundary-clamp branches directly and had **zero effect** -- confirmed via
+instrumentation that the correction fired every time but only ever nudged by the same ~12px quantization
+amount already present, because CM6 keeps `caretRect` (real DOM geometry) and `scrollTop` mutually
+consistent through the async event, so the boundary-clamp math never sees an inconsistency to correct.
+The version that shipped is unchanged from that first version -- **it already handles this correctly**;
+the "zero effect" symptom seen while iterating on the diagnostic-logging placement was a measurement
+artifact of the *old* (scrollTop-delta) metric being checked against, not a defect in the fix. Once
+measured against the real on-screen signal, the same code reached 0/772 immediately.
+
+### Results
+
+| Document | Scale | Old metric | New metric, baseline | New metric, with fix |
+|---|---|---|---|---|
+| uniform-nowrap | 100K chars | 51/771 | 102/772 | **0/772** |
+| uniform-nowrap | 1.2M chars (original report size) | 54/800 | 102/772 | **0/772** |
+| diverse-with-uniform-run | 100K chars | 25/771 | 74/772 | **0/772** |
+| uniform-wrap | 100K chars | 0/771 | 0/772 | 0/772 (no regression) |
+| diverse | 100K chars | 0/771 | 0/772 | 0/772 (no regression) |
+
+Byte-exact cursor movement re-verified with the fix in place (ArrowDown/Home/type/ArrowUp/End/type/
+ArrowDown×2/End/type sequence, saved text matched the predicted string exactly), both before and after
+simplifying the implementation (an earlier version carried extra diagnostic-only logging, gated behind
+the existing `debugCageStateEnabled` flag, used to derive the table above -- removed once understood,
+since the committed measurement scripts are the durable verification tool, not ad hoc console logging).
+
+### Verification this round
+
+Gold-standard tier (CLAUDE.md: substantial/scroll/caret-critical work): live-browser Playwright
+measurement (not code-reading) at both 100K and 1.2M chars across all four document shapes from the
+wrap-sensitivity round, an A/B (`git stash`) proving the corrected metric is sound by finding real
+baseline anomalies it would otherwise have missed, byte-exact cursor-movement verification, full
+`npm test` (277/277 passed), `npx tsc --noEmit` and `npm run lint` clean. Production change is isolated
+to `reconcileCagedScroll` in `src/components/CM6Editor.tsx`; `resolveCagedScrollTarget`
+(`src/editor/CageMath.ts`) and `scrollToQuantizedSmooth` (`src/editor/QuantizedSmoothScroll.ts`) are
+unchanged -- the fix reuses them as-is.
+
+### What's next for lead #4
+
+This closes the plain-arrow-key case specifically. Not yet covered by this fix or re-verified under the
+corrected metric: Home/End (share `reconcileCagedScroll`, so likely already fixed as a side effect, but
+not directly tested), PageUp/PageDown continuous scroll (a structurally different code path,
+`runPageContinuousScroll`/`animateRampDown`, Task #13), paste-scroll reconcile and thumb-drag release
+(Task #14), and the render/preview pane (a fully independent mechanism, `@tanstack/react-virtual`
+rather than CM6's height-map, Task #15). Each should be re-examined with the same corrected,
+real-on-screen-position measurement philosophy established this round, not the old scrollTop-delta one.
+
+## Lead 4 correction — the shipped fix solves a different (smaller, self-healing) problem than the one actually reported; the real bug is a permanent per-hold scroll-distance overshoot
+
+Direct user report, re-examined against live ground-truth data, found the "SHIPPED" conclusion above
+premature. The user's own description of the bug, precisely: holding ArrowUp with the caret pinned at
+the cage's top boundary, at regular intervals the text scrolls **5 rows instead of 1** for that single
+keystroke -- not a flicker, a settled landing spot -- with the caret ending up correctly one row above
+wherever that extra-scrolled content now sits. This is a claim about **scroll distance**, not caret
+position. Manually reproduced by the user at 1.5M chars (their real usage scale); not reproduced at
+30K chars.
+
+**What the previous round's fix actually measured turned out to be the wrong signal.** Live
+instrumentation (raw per-press `scrollTop` and native caret-rect sequences, not aggregate counts) on
+the *unfixed* baseline at 1.5M chars showed the caret's own on-screen position only ever wobbles ~12px
+for one press and fully self-heals the very next keystroke -- never a persistent multi-row landing
+spot. That's what `measureCM6ArrowUpVisualDrift.mjs` (the previous round's "corrected" metric) measures,
+and it is a real, if minor, defect the shipped fix (kept, per explicit user direction -- "no harm
+done... let's keep any win we have") genuinely closes. But it is not what the user reported. Direct
+proof the real bug survives the shipped fix: summing raw `scrollTop` across 400 continuous ArrowUp
+presses at 1.5M chars, with the fix in place, gives -13,255px against an expected -10,400px (26px/row)
+-- **110 rows of permanent, never-repaid excess scroll distance**, statistically unchanged from the
+unfixed baseline. The shipped fix's async follow-up stabilizes the caret glyph's transient wobble; it
+never once asks "did the total scroll distance for this keystroke equal one row," which is the actual
+invariant the report is about.
+
+**Attempt 10 -- track scrollTop as our own row-counted state, independent of CM6's geometry.** Root
+cause: `reconcileCagedScroll` only ever asks "is the caret within the cage bounds," never "did
+`scrollTop` move by exactly one row" -- once a CM6 height-map revision leaves the caret merely *near*
+(not outside) the cage boundary, the geometry-based math has no way to notice anything is wrong.
+Design: while continuously pressing the *same* plain vertical arrow with the caret pinned, maintain an
+authoritative `lastPinnedScrollTopPx` incremented by exactly `lineHeightPx` per press, completely
+bypassing CM6's (possibly revised) geometry for the write; only re-derive from geometry on genuine
+state changes (first entering the pinned state, a direction change, a non-arrow key, a `lineHeightPx`
+change). Added `clampedAgainst: 'above'|'below'|'within'` to `resolveCagedScrollTarget`'s return
+(CageMath.ts) so the caller can recognize a boundary-follow event without re-deriving the comparison.
+
+Two real, sequentially-discovered bugs in the attempt itself before it could even be evaluated fairly:
+
+1. **Animated-path snowball.** The tracked target's write went through `scrollToQuantizedSmooth`
+   unconditionally. Once CM6 left actual `scrollTop` more than one row away from the tracked value
+   (exactly the case this exists to correct), `scrollToQuantizedSmooth`'s own distance check --
+   measured against *actual* `scrollTop`, not this target -- took its animated multi-frame path instead
+   of an immediate write. That animation cannot finish within one keystroke's ~35ms cadence, so the
+   next press cancelled it and started a new one toward an even-further target. Result, live-measured:
+   presses stuck at a flat `scrollTop` for several keystrokes, then a lurch up to -572px (21 rows) in
+   one step -- **worse than the original bug**. Fixed by writing `scroller.scrollTop` directly
+   (bypassing the animation entirely) whenever the write is a known-precise correction rather than an
+   organic scroll.
+2. **Follow-up trusted fresh geometry it shouldn't have.** The async follow-up (kept from the previous
+   round) re-derived `clampedAgainst` from fresh geometry before deciding whether to re-assert the
+   tracked value -- but fresh geometry at that moment can already reflect CM6's own unwanted intervening
+   write (e.g. reporting `'within'` instead of `'above'` because CM6 scrolled past where the cage would
+   have stopped), causing the follow-up to *accept* CM6's write instead of undoing it. Fixed by
+   decoupling the follow-up path entirely from fresh `clampedAgainst`: it now unconditionally
+   re-asserts whatever this press's real (non-follow-up) reconcile already established, never
+   re-deriving from geometry.
+
+With both fixed, raw `scrollTop` distance became **exactly correct** -- verified by full per-press
+trace, both 100K and 1.5M chars: every single press in the pinned steady-state region (after the
+expected initial settle window) moved by precisely one row, zero deviation, for 376 consecutive
+presses.
+
+**But this didn't survive contact with the visual metric, and that's informative, not just a
+setback.** `measureCM6ArrowUpVisualDrift.mjs` against the *same* build showed 120-269 anomalies out of
+~400 presses -- the caret's real on-screen position still jumps. The reconciliation: CM6's height-map
+revision is a **genuine content reflow**, not merely a bookkeeping error -- when it fires, the actual
+rendered Y-position of content physically changes. `scrollTop`'s raw number and "which content is
+correctly aligned in the viewport" are the same thing only when CM6's internal layout is stable between
+presses. Forcing `scrollTop` to increment by a fixed amount, oblivious to a real intervening layout
+change, produces a `scrollTop` sequence that is numerically perfect but no longer necessarily pointing
+at the content it should -- the misalignment simply becomes invisible to a `scrollTop`-delta metric
+instead of being fixed. Neither of this investigation's two ground-truth metrics is wrong; they measure
+two different, both-real invariants (scroll-distance-per-keystroke vs. content-alignment-on-screen),
+and this attempt satisfied only one of them. A magnitude-capped hybrid (trust geometry, but bound the
+per-press correction) was already tried early in this investigation, pre-dating this session, and made
+things worse at scale (254/800 vs. a 54/800 baseline) -- repeating that shape isn't expected to fare
+better now that the underlying cause is better understood, but a *differently* bounded hybrid (e.g. pure
+row-counting for a capped number of consecutive presses, then a forced fresh-geometry re-anchor) has not
+been tried and is the leading candidate for the next attempt.
+
+**Reverted in full** -- `src/components/CM6Editor.tsx` and `src/editor/CageMath.ts` returned to the last
+committed state (the async-follow-up-only fix from the previous round, which stays shipped). Per this
+investigation's binary standard, an attempt that satisfies one ground-truth metric but not the other is
+not a 0-anomaly result and does not ship partially.
+
+**Verification this round**: live-browser Playwright measurement at both 100K and 1.5M chars (matching
+the user's own reported reproduction scale), full per-press raw traces (not aggregate counts) for both
+`scrollTop` and native caret-rect signals, byte-exact cursor movement re-verified after each code
+change, `npx tsc --noEmit` clean throughout. No `npm test`/lint delta since the round's code changes
+were fully reverted; only this doc entry is new.
+
+## New lead, not yet investigated — a real "stuck scroll" freeze exists independent of this session's work
+
+While prototyping a pre-warm/pre-measure idea for lead #4 (see below), an external test script that jumped
+`scrollTop` away from the current position and immediately back (a round trip, repeated on a short cycle)
+reliably froze the editor: not just `scrollTop`, but the caret's own document position stopped advancing
+entirely, and ArrowUp keystrokes had no effect at all. Waiting past the app's own `beginScrollTransition`
+`maxBlockMs` (1200ms, the value used by `applySnapshot`'s snapshot-restore transition) did not clear it, so
+it is not simply a time-bound transition block resolving slowly. **The user has independently encountered
+this same "stuck" state in real usage, unprompted, before this test existed** -- this is not a test-script
+artifact, it is a real, pre-existing brittleness worth its own investigation later. Not yet root-caused:
+candidate suspects include `ScrollTransitionController`'s classification of rapid/reversing scroll events
+(it may be designed around the app's own sanctioned transition APIs, like `beginScrollTransition`, and
+misclassify or wedge on raw external `scrollTop` writes that don't go through them), or something in
+CM6's own reflow handling for rapid back-and-forth viewport moves. Tracked as a follow-up, not investigated
+further in this round -- the pre-warm design below was changed specifically to avoid the round-trip pattern
+that triggered it, rather than chasing the freeze itself right now.
+
+## Lead 4 -- the real fix candidate: force real measurement ahead of the caret, no round trip
+
+Follow-up to the tension found two rounds ago (attempt 10: raw scrollTop-distance accuracy and real
+content-alignment accuracy are not the same invariant, and a fix that only satisfies one isn't a 0).
+Direct experiment, prompted by the user's own recollection of the app's note-restore behavior never
+showing a jump: a raw `scrollTop` jump into completely untouched territory (`applySnapshot`'s own
+mechanism, `scroller.scrollTop = target`) produces **immediately stable** `scrollTop`/`analyticalTop`
+values -- sampled every animation frame for 20 frames after a jump 60% into a fresh 1.5M-char document,
+zero drift from frame 0. This is not masked settling; it's genuinely different from incremental
+(one-row-at-a-time) scrolling, which is exactly the path that leaves CM6's height-map gaps unresolved
+until forced to catch up all at once. A big, discontinuous jump appears to force CM6 to fully render and
+measure a fresh region atomically; small incremental steps don't get the same treatment.
+
+**Decisive test**: pre-walk the entire region a 300-press ArrowUp hold was about to traverse, via a series
+of forward-only `scrollTop` jumps (500px steps, real wait between each, one single return-to-start at the
+very end -- not a round trip per step), *before* starting the hold. Result: baseline was 18 scroll-distance
+anomalies / -101 rows of permanent excess over 300 presses; pre-warmed was **0 anomalies / 0 excess**, on
+both ground-truth metrics simultaneously (raw `scrollTop` distance AND the caret's real on-screen
+position) -- the first time in this entire investigation both have been clean at once. Confirmed the
+margin needs to be generous enough to cover the intended traversal (9000px left one anomaly at the edge;
+10500px closed it) -- consistent with needing to stay ahead of where the hold will reach, not simply
+"warm a small area once."
+
+**Not yet designed**: the production trigger/scheduling mechanism. The proof-of-concept was a blocking,
+pre-computed sweep run entirely before the test began -- adequate to prove the mechanism works, not a
+shape suitable for shipping (real usage doesn't know in advance how far a hold will go).
+
+**Two follow-up variants tried, both ruled out, both real/informative failures, not test noise:**
+
+1. **"Go to current line"** -- re-issuing `applySnapshot`'s own `scrollTo()` mechanism targeting the exact
+   position already on screen (either the literal same value, or a genuine but imperceptible 1px nudge).
+   No freeze either way (focus stayed intact), but also **no benefit** -- anomalies continued at the
+   normal, unmitigated ~15-press cadence in both variants. This is definitional, not a measurement gap:
+   the current line is by construction already-rendered territory, so there is nothing new for CM6 to
+   measure there. Warming only ever helps by reaching into territory *ahead* of the current position that
+   hasn't been touched yet -- "peek at where you already are" cannot work, regardless of implementation.
+2. **Peek ahead, leave it there (no return trip)** -- jump into fresh territory ahead of the caret and
+   simply don't reverse it, hoping the existing reconcile would naturally pull the visible position back
+   into alignment on the next normal keystroke. It does not: once the peek lands the caret merely *within*
+   the cage (not exceeding the boundary), the existing `resolveCagedScrollTarget`'s `'within'` branch
+   treats that as nothing-to-do and leaves `scrollTop` wherever the peek put it. Live-measured: `scrollTop`
+   stayed within ~10px of the peeked (wrong) position for over 20 subsequent presses before naturally
+   catching up -- the user would see the wrong section of the document for a couple dozen keystrokes. Worse
+   than the bug this is meant to fix, just differently shaped.
+
+Combined with the round-trip freeze above, this rules out both a same-cycle "away and immediately back"
+peek and a "jump and abandon" peek as the return mechanism. What both failures point at: an ad hoc raw
+`scrollTop` write from outside the app has no principled way back into correct alignment, but this app's
+own `reconcileCagedScroll` already computes and applies that correction correctly on every real keystroke.
+The next candidate, not yet built (requires real in-app code, no longer testable via an external script
+poking `scrollTop` directly): peek ahead once, then explicitly invoke the existing reconcile to pull the
+visible position back through the same sanctioned path every other correction in this app already uses,
+rather than a raw write or leaving it to resolve itself.
+
+**Third variant tried and ruled out -- "peek exactly one row ahead, every press"**, testing whether reach
+could be substituted with frequency (peek at literally every keystroke, riding one row ahead of the real
+caret the whole time, rather than one big jump). Result: zero effect, byte-identical anomaly pattern to
+doing nothing at all (same press indices, same magnitudes) -- confirmed twice, once with minimal
+(one-`requestAnimationFrame`) wait between the peek and the real keystroke and again with a generous
+100ms wait, ruling out insufficient settle time as the explanation. The reasoning this converged on:
+a same-pace peek provides zero *relative* lookahead -- its target always coincides with wherever the
+real, unassisted keystroke was about to move to anyway, so it can never get ahead of normal scrolling,
+no matter how many times it repeats (analogy: matching a car's speed one car-length ahead never actually
+overtakes it). Separately, the fact that a 26px peek does nothing at all -- not "small effect," zero,
+confirmed under generous timing -- is itself informative: it's consistent with CM6 having an internal
+"is this scroll change big enough to bother recomputing the viewport/margin" threshold (plausibly related
+to `viewportIsAppropriate()`, referenced early in this investigation), which a 26px nudge never crosses
+regardless of repetition. Combined with the working 700-10,500px jumps, this brackets that unknown
+threshold empirically (below 700px, above 26px) without needing its exact value. **Net conclusion: reach
+cannot be substituted with frequency below some minimum jump size -- the peek's distance from the real,
+current position is the load-bearing variable, not how often it's attempted.**
+
+## Lead 4 -- first real in-app implementation attempt: worse than baseline, ruled out, and a likely deeper architectural tension identified
+
+Built the production version in `CM6Editor.tsx`: peek ahead by `PRE_WARM_REACH_PX` (1000px, above the
+empirically-bracketed working threshold) when the caret approaches within `PRE_WARM_TRIGGER_MARGIN_PX`
+(400px) of the last-warmed edge, settle for `PRE_WARM_SETTLE_MS` (90ms) via `window.setTimeout`, then
+return through the *existing* `reconcileCagedScroll` (not a raw write) -- the specific design intended to
+avoid both failure modes found in the external-script round: `cancelInFlightPreWarm()` runs at the very
+top of every real reconcile, before any geometry is read, so a genuine keystroke arriving mid-peek can
+never compute against a displaced `scrollTop`; the return always goes through the same sanctioned
+correction path every other case in this app already uses, not an ad hoc external poke.
+
+**Result: worse than doing nothing.** At 100 presses (1.5M chars): 37 scroll anomalies / -57 rows excess,
+roughly double baseline's rate over the same span. Byte-exact cursor movement still held (verified before
+measuring scroll behavior), but the scroll behavior itself regressed. Reverted in full immediately per
+the binary standard.
+
+**Root cause, diagnosed precisely**: cancelling an in-flight peek did not reset `preWarmedDirection`/
+`preWarmedEdgeScrollTopPx`, so a cancelled-before-completing peek left those trackers claiming territory
+that was never actually warmed. At a fast, continuous-hold cadence (this app's own 35ms test cadence,
+plausible for real OS key-repeat rates too), each peek gets interrupted by the very next keystroke
+*before* its 90ms settle timer can fire -- and because the tracker still claims that peek "happened," the
+next reconcile doesn't know to retry properly, while also not being prevented from immediately triggering
+a *fresh* 1000px peek of its own. The net effect: a peek-and-cancel cycle repeating on nearly every
+keystroke, each one parking `scrollTop` 1000px away for at least one paint before the next keystroke
+snaps it back -- worse than the original bug, not a subtler version of the same fix.
+
+**This surfaces a likely deeper, not-yet-resolved tension, separate from the retrigger bug above**: the
+peek fundamentally requires real wall-clock time with `scrollTop` parked away from the correct position
+for CM6 to do its measurement work (every successful external-script test this session used 60-120ms).
+The browser paints during that window. If any real keystroke can arrive faster than that settle time --
+which a fast human key-repeat plausibly can -- the parked position gets painted at least once before the
+correction lands, which is a genuinely visible artifact, not a measurement-only one. Two directions
+worth testing before concluding this approach can't be made safe: (a) whether CM6's actual measurement
+genuinely needs the full 60-120ms this session's tests used out of caution, or completes within one paint
+frame (~16ms) -- untested at the lower bound; (b) fixing the retrigger bug alone (reset tracking state on
+cancel, and/or don't immediately re-attempt after a cancelled peek) to at least remove the
+worse-than-baseline regression, independent of whether the deeper timing tension is ever fully resolved.
+
+**Verification this round**: byte-exact cursor movement confirmed before measuring scroll behavior;
+`npx tsc --noEmit` and `npm run lint` clean on the implementation before it was reverted; live-browser
+Playwright measurement at 1.5M chars (the user's own repro scale) is what caught the regression. Fully
+reverted -- `git status` clean, matching the last-shipped commit.
+
+## Lead 4 -- second live attempt (retrigger bug fixed) still regresses; a third, structurally different design (idle-triggered) also ruled out, one variant of it possibly touching the separate pre-existing freeze bug
+
+**Attempt 2 -- same reactive design, retrigger-state bug fixed.** Reset `preWarmedDirection`/
+`preWarmedEdgeScrollTopPx` on cancel (not just the timer) so a cancelled peek stops claiming unwarmed
+territory as covered -- the specific bug diagnosed in attempt 1. **Still worse than baseline, and by
+more**: 164 anomalies / -138 rows over 400 presses (1.5M chars) vs. baseline's 18/-101, with a new,
+suspiciously regular -52px (exactly 2 rows) over-correction pattern starting almost immediately after
+the settle window. Two live implementations, two different specific bugs, both net negative -- no longer
+read as a tuning problem with this attempt's specific numbers; read as evidence against the reactive
+(per-keystroke) trigger shape itself. Reverted in full.
+
+**A supporting data point, gathered before attempt 3**: an external-script test bracketing settle time
+(16/32/48/64/90ms), using a real 1000px reach with a *raw write-back* return (not the app's own
+reconcile), peeking every 10 presses, showed 96-102/150 anomalies **regardless of settle duration** --
+ruling out "just wait longer" as a fix for the reactive shape, and pointing at round-trip *frequency*
+itself as a real cost, not merely the return mechanism's precision.
+
+**Attempt 3 -- idle-triggered, not reactive.** A structurally different design: no peeking during an
+active hold at all. `scheduleIdlePreWarm` arms a debounce timer (400ms) from the real keydown handler
+only (never from reconcileCagedScroll's own recursive calls, which is what keeps it from re-arming
+itself indefinitely while idle); the peek only fires after genuine idle time, with a generous reach
+(3000px, since it fires rarely rather than per-boundary) and returns through the same
+`reconcileCagedScroll` path. This is the one variant that structurally cannot race a fast, continuous
+hold, by construction -- confirmed live: a rapid, uninterrupted 400-press hold at 1.5M chars produced
+scrollTop numerically **identical** to true baseline, run for run (24 anomalies / -134 rows both ways) --
+proving the idle trigger genuinely never fires during continuous holding, with zero behavioral
+difference from shipping nothing in that case.
+
+**A real implementation bug found and fixed along the way**: the return-from-peek write still went
+through `scrollToQuantizedSmooth` unconditionally. For a large, deliberate peek (3000px), that function's
+own distance check (measured against the still-peeked-away `scrollTop`) took the *animated* multi-frame
+path instead of an immediate write -- the identical failure mode already found and fixed once for the
+reactive design's return path, reintroduced here by not carrying that fix forward. Confirmed live before
+the fix: a -3120px sample, several stuck (0-delta) frames, then a wrong-direction +104px lurch. Fixed the
+same way as before: direct `scroller.scrollTop` write (bypassing the animation) specifically when
+returning from a completed pre-warm peek, tracked via a `wasPreWarmPending` flag captured before
+`cancelInFlightPreWarm()` clears the in-flight state.
+
+**Even with that fixed, a human-paced test (bursts of 5 presses separated by real pauses) still
+regressed vs. baseline** -- 27-29 anomalies / -226 rows vs. baseline's 11/-61 over 200 presses at a
+500ms pause. Suspecting the 500ms pause was a knife-edge race against the mechanism's own 400ms
+debounce + 100ms settle (~500ms total), the pause was widened to 1500ms specifically to remove that race
+and test whether the underlying approach was sound when given uncontested time. It was not: 87
+anomalies, and critically, **many consecutive real ArrowUp presses in a row showed zero scrollTop
+movement at all** -- not a magnitude anomaly, but the shape of the app's own separately-tracked, real
+"stuck" freeze (see the earlier entry in this doc: the user has independently encountered this exact
+"stuck" state in real usage, unprompted, before any of this session's pre-warm work existed). Not
+conclusively proven to be the *same* bug -- not instrumented further before reverting -- but the
+resemblance (multiple real keystrokes producing zero effect) was judged too close to keep iterating on
+without treating it as a serious signal rather than a tuning nit.
+
+**Reverted in full.** Three structurally different trigger designs (reactive-v1, reactive-v2,
+idle-triggered) have now each hit a genuine, different failure mode when integrated with this app's real,
+live update cycle, despite the underlying mechanism being cleanly proven to work in an isolated,
+non-interactive proof of concept (the original pre-walked, no-live-interaction test: 0 anomalies on both
+ground-truth metrics). The gap is specifically in *safely delivering* that mechanism live, not in whether
+CM6 can be kept pre-measured ahead of the caret at all.
+
+**Where this leaves lead #4**: the shipped async-follow-up fix (caret-stability, kept per explicit user
+direction) remains the only production change for this lead. The permanent scroll-distance overshoot the
+user originally reported remains unfixed. Not yet tried and not ruled out: reaching into CM6's
+undocumented internals directly (the `HeightMapGap` class confirmed to exist in the installed source,
+`node_modules/@codemirror/view/dist/index.js:5710`) to seed a more accurate initial height estimate or
+force off-screen measurement without moving the visible scroller at all -- a materially higher-risk,
+harder-to-maintain class of change than anything tried so far, previously flagged as the last-resort
+option.
+
+**Verification this round**: byte-exact cursor movement re-confirmed on attempt 3 before measuring scroll
+behavior; `npx tsc --noEmit` and `npm run lint` clean on both attempts before each was reverted;
+live-browser Playwright measurement at 1.5M chars throughout, including a same-script baseline A/B (via
+`git stash`) to rule out run-to-run variance before concluding attempt 3's rapid-hold case was genuinely
+unregressed. All three attempts fully reverted -- `git status` clean, matching the last-shipped commit.
+
+## Lead 4 -- CM6-internals exploration, round 1: the height ESTIMATE is not the problem
+
+Started exploring the higher-risk "reach into CM6 internals directly" option flagged as last-resort. First
+concrete finding, from reading the installed `@codemirror/view` source directly
+(`node_modules/@codemirror/view/dist/index.js`): CM6's own internal `HeightOracle` class (constructed at
+`this.viewState.heightOracle` on every `EditorView`, confirmed non-private -- `this.viewState =` is a
+plain assignment, no `#` field) holds the per-line height *estimate* used for unmeasured `HeightMapGap`
+spans (`heightForGap = lineHeight * lineCount`). It starts at a hardcoded default of 14px and gets
+`refresh()`ed toward reality once CM6 has real DOM measurements.
+
+**Hypothesis tested**: if this app's own zero-padding, exact-26px row-grid CSS never fully converges
+`oracle.lineHeight` back to exactly 26, a small residual miscalibration would compound across a Gap's many
+lines into the multi-row correction this whole investigation has been chasing -- and correcting one stored
+number directly (`oracle.lineHeight = 26`) would be a small, surgical fix, not requiring any of the
+reactive/idle-triggered scroll gymnastics tried above.
+
+**Result: hypothesis refuted, cleanly.** Added a temporary, defensively-cast, optional-chained read of
+`oracleLineHeight`/`oracleCharWidth`/`oracleTextHeight` to the existing `__thockdownDebugCageState()`
+accessor (kept -- low-risk, matches the established debug-accessor pattern, degrades to `null` rather than
+throwing if CM6's internal shape ever changes). Live-measured on the same 1.5M-char uniform document this
+whole investigation has used: `oracleLineHeight` was **exactly 26** at load and stayed **exactly 26**
+across 80 ArrowUp presses, including through multiple real chunk-boundary-crossing anomalies sampled in
+the same run. CM6's own estimate is not miscalibrated at all -- it is provably, exactly correct the entire
+time. There is no wrong number to correct.
+
+**This rules out the cleanest possible internals fix and reframes what remains.** Since the *estimate* is
+accurate, the jump cannot be "CM6 guessed wrong about line height" -- it must be a side effect of the
+*mechanism* CM6 uses to restructure the height-map tree when a Gap gets decomposed (recomputing which
+content is estimated vs. measured, and repositioning the scroll anchor accordingly), not a data-accuracy
+problem. Intervening on that would mean intercepting or overriding part of CM6's own measure/anchor
+algorithm, not correcting an input to it -- a meaningfully larger and riskier undertaking than patching one
+value. Consistent with an earlier finding in this doc that every observed anomaly's *analytical* jump
+(`view.lineBlockAt(head).top`'s own delta) is an exact integer multiple of 26px, never a fractional
+row -- which now reads as further evidence for a line-*count* bookkeeping event during Gap decomposition,
+not a pixel-calibration one.
+
+**Not yet done**: inspecting the `HeightMap`/`HeightMapGap` tree itself (also unexported, same reachability
+pattern as `heightOracle`) to try to directly observe a Gap's estimated line count vs. what it resolves to
+during a real decomposition event, which would confirm or refute the line-count-bookkeeping reading above
+more directly than the exact-multiple-of-26 circumstantial evidence does. Session paused here to check in
+before going deeper, given the risk/reward of this path shifted once the simplest fix candidate was ruled
+out.
+
+**Verification this round**: `npx tsc --noEmit` clean. No `npm test`/lint delta beyond the kept debug-accessor
+addition (lint clean). Purely additive, read-only instrumentation -- no scroll-affecting behavior changed.
+
+## Lead 4 -- line-break format is not a factor; the same gap-crossing overshoot also fires on typing/Enter, not just arrow-key scrolling
+
+**Line-break format check** (prompted by a direct question about whether the mismatch is proportional to
+line-break style): measured `\n`-only, `\r\n`, and blank-line-interspersed (every uniform line followed by
+a blank line) variants of the same 1.5M-char uniform document, same continuous-ArrowUp methodology used
+throughout this doc. `\r\n` showed **zero difference** from the `\n`-only baseline (17/271 anomalies,
+identical mean gap and magnitude both ways) -- CM6's line-counting is insensitive to line-ending byte
+format, as expected from `heightForGap`'s use of `doc.lineAt().number` (an exact line index, not a
+character-based estimate). Blank-line-interspersed content showed **0/271 anomalies** -- consistent with
+the earlier finding that only long runs of uniform, non-blank lines trigger this; alternating text/blank
+(the common real-world markdown paragraph pattern) does not. Worth noting for the record: this app's own
+`textSanitization.ts` already normalizes `\r\n`/`\r`/unicode line separators to `\n` (at least on the paste
+path), so `\r\n` reaching CM6 at all is unlikely in real usage regardless of this result.
+
+**A related, new lead from a live user report**: the user described a real, reproducible symptom -- at the
+very end of a document, pressing Enter produces a visual double line break not matching the internal
+position, which "stacks" across repeated Enters and "collapses" once a letter is typed. Attempted to
+reproduce directly. First attempt used `placeCaretAt(page, 'end')` (a coordinate-based click near the
+bottom of the viewport, from `perfHarness.mjs`) and found something that looked alarming -- edits appearing
+not to persist at all -- but this turned out to be a **test methodology bug, not a product bug**: that
+helper does not reliably land the caret at the document's true final character (confirmed directly:
+`selectionHead` was ~1230 characters short of `docLength`), so the edits were landing well before the
+document's actual end and never showed up in a tail-slice check of the saved text. Fixed by following the
+click with `Control+End` and confirming `selectionHead === docLength` exactly before proceeding.
+
+**With the caret genuinely at the true end**: the document model itself (`docLength`/`docLines`/
+`selectionHead`, added to the debug accessor this round, same reachability/defensive-cast pattern as the
+oracle fields) stayed perfectly consistent through 4 Enters and a typed character -- no doubled character
+count, no doubled line count, rendered content matched the model exactly at every step (empty line, then
+"X", correctly). **No internal model/DOM desync reproduced.** What *was* found: the first Enter at the
+document's unmeasured tail triggered a real scrollTop overshoot -- +234px (9 rows) instead of the expected
++26px (1 row) -- with every subsequent Enter and the typed character behaving normally afterward. This is
+the same height-map gap-crossing mechanism this entire investigation has been chasing, now confirmed to
+also fire from **typing into fresh, unmeasured territory**, not only from arrow-key scrolling into it --
+broadening this lead's known trigger surface. Plausible (not confirmed) that a sudden 9-row scroll jump,
+watched live rather than measured in pixels, could read as "two line breaks happened" -- but this was not
+confirmed to be the same symptom the user described, and no "collapse on typing a letter" was reproduced
+(scrollTop simply stayed put when the character was typed). Follow-up needed: more precise reproduction
+detail from the user (fresh document vs. one already scrolled-in-on; what "collapse" refers to precisely)
+before treating this as the same bug or a distinct one.
+
+**Verification this round**: read-only measurement and instrumentation only (temporary scripts, deleted
+after use); `docLength`/`docLines`/`selectionHead` kept on the existing debug accessor (same
+non-breaking-if-CM6-changes-shape pattern as the oracle fields). `npx tsc --noEmit` and `npm run lint`
+clean. No production scroll/edit behavior changed.
+
+## A distinct, now-FIXED bug: caret visually misplaced by N-1 rows after N consecutive Enters at document end
+
+Follow-up to the double-line-break report above. The user gave a precise, minimal repro: fresh document
+(default seed text is `"# "`), press Enter once (correctly lands on line 2), press Enter again -- and the
+caret visually lands on line 4, not line 3. Typing a letter puts it on line 3 (the correct line) and the
+caret visually corrects itself. The user's own diagnosis was exactly right: **a caret-position bug, not a
+scroll-position bug** -- a genuinely different defect from lead #4 above, despite the superficially similar
+"something's off by N rows near unmeasured document tail" flavor.
+
+**Root-caused via live DOM inspection** (`window.getSelection()`, `range.getBoundingClientRect()`,
+`range.getClientRects()`, and each `.cm-line` div's own bounding rect, read directly in-browser): after 2
+Enters, `range.getBoundingClientRect()` for the collapsed caret is degenerate (`{0,0,0,0}`) and
+`getClientRects()` is empty -- normal for a collapsed caret on a trailing blank line -- so
+`readSelectionRect` (`src/editor/CaretRect.ts`) falls all the way to its last-resort `'anchor-fallback'`
+path: the anchor node's own `getBoundingClientRect()`. Confirmed directly that this fallback rect is
+**already correct** -- CM6 renders every blank line, including trailing ones, as its own independently-
+positioned `.cm-line` div (no collapsing between consecutive empty lines the way the original Lexical
+editor apparently had).
+
+The actual bug: `resolveCM6CaretTopInScroll` in `CM6Editor.tsx` carried a "verbatim ported" compensation
+from Lexical's `CaretTerminalOffset.ts` (`getTerminalTrailingVisualOffsetPx`) that adds
+`(trailingNewlineCount - 1) * lineHeightPx` whenever the caret rect came from a fallback source AND the
+caret sits at the document's true end. That heuristic was built for Lexical's DOM, where consecutive
+trailing empty paragraphs' fallback rects apparently under-counted by one row each. CM6's DOM doesn't have
+that defect -- the fallback rect above is already exactly right -- so the "compensation" was pure double-
+counting, and it was *unconditional* on trailing-newline count, not gated on actually needing it.
+
+**Confirmed live and exactly proportional**: pressed Enter 5 times in a row on a fresh document, comparing
+the custom caret overlay's actual screen position against `view.lineBlockAt(head).top` (ground truth).
+Overshoot scaled **exactly 1 row per additional trailing Enter** (1.04, 2.04, 3.04, 4.04 rows after Enters
+2 through 5 respectively -- the `.04` is a fixed small rendering-offset constant, not noise) -- a clean
+match to the formula that produced it: `trailingExtraRows = trailingNewlines - 1`.
+
+**Fix**: removed the trailing-newline compensation block from `resolveCM6CaretTopInScroll` entirely (not
+touched: the still-referenced-in-comments-only, no-longer-imported `CaretTerminalOffset.ts`/
+`CaretVisualPosition.ts`, which were Lexical-only and are now dead code following the fallback's removal --
+left alone as out of scope for this fix). Re-ran the same 5-Enters live measurement after the fix: overshoot
+is now `0.04` rows (i.e., correct) after every Enter, matching the already-correct Enter-1 baseline.
+
+**Verification (gold standard -- this is caret-position code)**: `npx tsc --noEmit` and `npm run lint`
+clean; `npm test` (277/277 passing, no regressions); live-browser Playwright A/B (via `git stash`) proving
+the fix's own repro script fails identically on unmodified `HEAD` and passes after the fix; ran
+`verifyCM6CaretSurvivesTagMutation.mjs` and `verifyCM6CursorPersistenceCheckpoints.mjs` (both pass, no
+caret-persistence regressions). `verifyCM6ColdBootCaretFocus.mjs` fails both before and after this change
+(confirmed via the same `git stash` A/B) -- a pre-existing, unrelated headless-environment focus quirk, not
+a regression from this fix. `verifyCM6ArrowUpChunkBoundary.mjs` still shows lead #4's known, still-open
+scroll-jump anomalies at the same rate as before (211/3000) -- expected, since that's the separate,
+still-unfixed bug this whole document otherwise tracks, and this fix does not touch scroll-target
+computation at all.

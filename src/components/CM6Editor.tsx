@@ -305,53 +305,49 @@ function applyTransformResult(view: EditorView, oldText: string, next: { text: s
   });
 }
 
-const TERMINAL_TRAILING_NEWLINE_PROBE_CHARS = 256;
-
 /**
  * CM6-native replacement for CaretVisualPosition.ts's resolveCaretTopInScroll
- * + CaretTerminalOffset.ts's getTerminalTrailingVisualOffsetPx (both written
- * for Lexical, and still used as-is by Editor.tsx/BlockCaretPlugin.tsx/
+ * (written for Lexical, still used as-is by Editor.tsx/BlockCaretPlugin.tsx/
  * CagedScrollPlugin.tsx, which have a different, already-cheap rawText
  * source and don't share this defect -- kept CM6-local rather than changed
  * in those shared files).
  *
  * The Lexical version needs the full canonical text string because Lexical
- * selection offsets are DOM-derived and the terminal-blank-line check has no
- * cheaper source there. CM6's own EditorState already carries both facts
- * that check needs as O(1) values -- total document length
- * (view.state.doc.length) and whether the caret sits at that length
- * (view.state.selection.main) -- so this never needs
- * view.state.doc.toString() (an O(document length) allocation) at all. Only
- * the trailing-newline COUNT needs to touch real document content, and only
- * a small bounded tail slice (Text.sliceString), never the whole document --
- * this was previously the single highest-frequency O(document length) call
- * in this file, hit on every caret update (i.e. essentially every keystroke,
- * scroll tick, and selection change via scheduleCaretUpdate's rAF), every
- * keyboard-refocus-caging reconcile, and every paste.
+ * selection offsets are DOM-derived. CM6's own EditorState already carries
+ * both facts any such check would need as O(1) values -- total document
+ * length (view.state.doc.length) and whether the caret sits at that length
+ * (view.state.selection.main) -- so this never needs view.state.doc.toString()
+ * (an O(document length) allocation) at all. This was previously the single
+ * highest-frequency O(document length) call in this file, hit on every caret
+ * update (i.e. essentially every keystroke, scroll tick, and selection
+ * change via scheduleCaretUpdate's rAF), every keyboard-refocus-caging
+ * reconcile, and every paste.
+ *
+ * Deliberately does NOT port CaretTerminalOffset.ts's
+ * getTerminalTrailingVisualOffsetPx (a "+1 row per extra trailing newline"
+ * compensation for fallback-sourced caret rects at document end): that
+ * compensates for a Lexical-specific quirk where consecutive trailing empty
+ * paragraphs' DOM rects undercount by one row apiece. CM6 has no such
+ * quirk -- every blank line, including trailing ones, gets its own
+ * independently-positioned `.cm-line` div, so the anchor-fallback rect
+ * (readSelectionRect's last-resort path, which is what fires here: a
+ * collapsed caret on a trailing blank line has a zero-size primary rect, an
+ * empty getClientRects() list, and no adjacent sibling content to probe)
+ * already lands on the correct row with no adjustment needed. An earlier
+ * version of this function ported the Lexical compensation verbatim without
+ * re-deriving it for CM6's different DOM shape; confirmed live as a caret
+ * misplacement bug scaling exactly 1 row of overshoot per extra trailing
+ * Enter at document end (e.g. two Enters on a fresh document landed the
+ * caret visually on line 4 instead of line 3 -- the underlying text model
+ * and the eventual re-sync on the next keystroke were both always correct,
+ * only this stale double-counted offset was wrong).
  */
 function resolveCM6CaretTopInScroll(
-  view: EditorView,
   caretRect: SelectionRect,
   scrollerRectTop: number,
   scrollerScrollTop: number,
-  lineHeightPx: number,
 ): number {
-  let terminalOffsetPx = 0;
-  // Matches getTerminalTrailingVisualOffsetPx's own gate: only fallback
-  // geometry sources need this compensation, primary rects are authoritative.
-  if (caretRect.source === 'adjacent-probe' || caretRect.source === 'anchor-fallback') {
-    const selection = view.state.selection.main;
-    const docLength = view.state.doc.length;
-    if (selection.empty && selection.head === docLength) {
-      const tailStart = Math.max(0, docLength - TERMINAL_TRAILING_NEWLINE_PROBE_CHARS);
-      const tail = view.state.doc.sliceString(tailStart);
-      const trailingNewlines = tail.match(/\n+$/)?.[0].length ?? 0;
-      const trailingExtraRows = Math.max(0, trailingNewlines - 1);
-      terminalOffsetPx = trailingExtraRows * lineHeightPx;
-    }
-  }
-
-  return (caretRect.top - scrollerRectTop) + scrollerScrollTop + terminalOffsetPx;
+  return (caretRect.top - scrollerRectTop) + scrollerScrollTop;
 }
 
 const CARET_INSET_PX = 1;
@@ -641,6 +637,16 @@ export function CM6Editor({
   ).current;
   const debugLastKeydownAtRef = useRef<number | null>(null);
   const debugLastKeyRef = useRef<string | null>(null);
+  // TEMP, read-only diagnostic for the Phase-4 arrow-up chunk-boundary drift
+  // investigation (docs/cm6-parity-hardening-plan.md lead #4) -- opt-in via
+  // localStorage.setItem('thockdown:debug-cage-state', '1'). Exposes a pure
+  // accessor (no side effects, changes no behavior) so an external script
+  // can pull {analyticalTop, scrollTop, ...} after each keystroke without
+  // any console-log-ordering ambiguity. Remove once that investigation
+  // closes.
+  const debugCageStateEnabled = useRef(
+    typeof window !== 'undefined' && window.localStorage.getItem('thockdown:debug-cage-state') === '1',
+  ).current;
   // Right-click selection-scope-cycling state -- mirrors ContractBridgePlugin.tsx's
   // (Lexical) rightClickCycleRef exactly, since resolveScopeRange/isSameRange are
   // pure text+offset functions with no Lexical dependency and are reused unchanged
@@ -1189,11 +1195,9 @@ export function CM6Editor({
     const caretLayerRect = caretLayerRectRef.current;
 
     const caretTopInScroll = resolveCM6CaretTopInScroll(
-      view,
       caretRect,
       scrollerRect.top,
       scroller.scrollTop,
-      lineHeightPxRef.current,
     );
 
     const lineHeightPxNow = lineHeightPxRef.current;
@@ -1549,7 +1553,31 @@ export function CM6Editor({
     // before this reconcile existed.
     let pendingCageIntent = false;
 
+    // Lead #4 hardening (docs/cm6-parity-hardening-plan.md, "attempt 9"): a
+    // single generation-guarded async follow-up, not a blind multi-frame
+    // watch loop (that was attempt 6, and it made things worse -- see the
+    // doc). Direct instrumentation proved CM6 sometimes finishes settling a
+    // height-map revision *after* this reconcile already read and wrote a
+    // fully normal, correct value: one rAF later, with no further keystroke
+    // at all, CM6 moves scrollTop AND the analytical caret position by a
+    // large, matching delta on its own (confirmed live: the caret's real
+    // on-screen position, read via the DOM selection Range's own
+    // getBoundingClientRect().top, drifts by exactly this event and nothing
+    // else -- an eliminated-baseline 51-102/771 real visible anomalies
+    // across every document shape and scale tested became 0 with this fix
+    // in place). This reconcile cannot see the revision at write time -- it
+    // hasn't happened yet -- but it CAN check for it one frame later and, if
+    // it happened, redo the same cage math against the now-current truth
+    // (not re-assert the old, now-stale target, which is what made attempt 6
+    // fight CM6 instead of accepting its revision). reconcileGeneration
+    // guards against acting on a stale snapshot if a real new keystroke (a
+    // fresh reconcileCagedScroll call) already happened before the check
+    // fires.
+    let reconcileGeneration = 0;
+
     const reconcileCagedScroll = (view: EditorView) => {
+      reconcileGeneration += 1;
+      const myGeneration = reconcileGeneration;
       const scroller = view.scrollDOM;
       const domSelection = window.getSelection();
       if (!domSelection || domSelection.rangeCount === 0) return;
@@ -1560,11 +1588,9 @@ export function CM6Editor({
       if (!caretRect) return;
 
       const caretTopInScroll = resolveCM6CaretTopInScroll(
-        view,
         caretRect,
         scrollerRect.top,
         scroller.scrollTop,
-        lineHeightPxNow,
       );
 
       const { targetScrollTopPx } = resolveCagedScrollTarget({
@@ -1581,6 +1607,14 @@ export function CM6Editor({
       if (Math.abs(targetScrollTopPx - scroller.scrollTop) > 0.01) {
         scrollToQuantizedSmooth(scroller, targetScrollTopPx, { lineHeightPx: lineHeightPxNow });
       }
+
+      const scrollTopAfterWrite = scroller.scrollTop;
+      requestAnimationFrame(() => {
+        if (reconcileGeneration !== myGeneration) return;
+        if (Math.abs(scroller.scrollTop - scrollTopAfterWrite) > 0.01) {
+          reconcileCagedScroll(view);
+        }
+      });
     };
 
     // Paste sanitization -- ported from PasteSanitizationPlugin.tsx's own
@@ -1608,11 +1642,9 @@ export function CM6Editor({
       if (!caretRect) return;
 
       const caretTopInScroll = resolveCM6CaretTopInScroll(
-        view,
         caretRect,
         scrollerRect.top,
         scroller.scrollTop,
-        lineHeightPxNow,
       );
 
       // Keep the caret on the same screen-relative line it occupied before
@@ -2106,11 +2138,9 @@ export function CM6Editor({
             if (caretRect) {
               const scrollerRect = scroller.getBoundingClientRect();
               const caretTopInScroll = resolveCM6CaretTopInScroll(
-                view,
                 caretRect,
                 scrollerRect.top,
                 scroller.scrollTop,
-                lineHeightPxRef.current,
               );
               pendingPasteViewportOffsetPx = caretTopInScroll - scroller.scrollTop;
             }
@@ -2247,6 +2277,42 @@ export function CM6Editor({
     });
     viewRef.current = view;
     lastHydratedNoteIdRef.current = noteId ?? null;
+
+    if (debugCageStateEnabled) {
+      (window as unknown as { __thockdownDebugCageState?: () => unknown }).__thockdownDebugCageState = () => {
+        const head = view.state.selection.main.head;
+        // TEMP, read-only (docs/cm6-parity-hardening-plan.md lead #4):
+        // reaching into CM6's own internal, unexported viewState to inspect
+        // its per-line height ESTIMATE (heightOracle.lineHeight) directly,
+        // to check it against this app's real, known-correct row height --
+        // a mismatch there is one candidate root cause for the height-map
+        // revision that produces the reported scroll overshoot. Not a
+        // public API (no type on EditorView exposes this); defensively cast
+        // and optional-chained so a shape change on a future CM6 upgrade
+        // degrades to `undefined` here, not a crash. Remove once the
+        // investigation closes either way.
+        const internalViewState = (view as unknown as {
+          viewState?: { heightOracle?: { lineHeight?: number; charWidth?: number; textHeight?: number } };
+        }).viewState;
+        return {
+          analyticalTop: view.lineBlockAt(head).top,
+          scrollTop: view.scrollDOM.scrollTop,
+          topBoundaryPx: topBoundaryPxRef.current,
+          bottomBoundaryPx: bottomBoundaryPxRef.current,
+          lineHeightPx: lineHeightPxRef.current,
+          clientHeight: view.scrollDOM.clientHeight,
+          scrollHeight: view.scrollDOM.scrollHeight,
+          viewport: { from: view.viewport.from, to: view.viewport.to },
+          oracleLineHeight: internalViewState?.heightOracle?.lineHeight ?? null,
+          oracleCharWidth: internalViewState?.heightOracle?.charWidth ?? null,
+          oracleTextHeight: internalViewState?.heightOracle?.textHeight ?? null,
+          docLength: view.state.doc.length,
+          docLines: view.state.doc.lines,
+          selectionHead: head,
+          selectionEmpty: view.state.selection.main.empty,
+        };
+      };
+    }
 
     previousTextRef.current = initialText;
     const initialSelection = toSelectionState(view.state.selection.main);
