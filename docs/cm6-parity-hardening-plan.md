@@ -1884,3 +1884,46 @@ regardless of repetition. Combined with the working 700-10,500px jumps, this bra
 threshold empirically (below 700px, above 26px) without needing its exact value. **Net conclusion: reach
 cannot be substituted with frequency below some minimum jump size -- the peek's distance from the real,
 current position is the load-bearing variable, not how often it's attempted.**
+
+## Lead 4 -- first real in-app implementation attempt: worse than baseline, ruled out, and a likely deeper architectural tension identified
+
+Built the production version in `CM6Editor.tsx`: peek ahead by `PRE_WARM_REACH_PX` (1000px, above the
+empirically-bracketed working threshold) when the caret approaches within `PRE_WARM_TRIGGER_MARGIN_PX`
+(400px) of the last-warmed edge, settle for `PRE_WARM_SETTLE_MS` (90ms) via `window.setTimeout`, then
+return through the *existing* `reconcileCagedScroll` (not a raw write) -- the specific design intended to
+avoid both failure modes found in the external-script round: `cancelInFlightPreWarm()` runs at the very
+top of every real reconcile, before any geometry is read, so a genuine keystroke arriving mid-peek can
+never compute against a displaced `scrollTop`; the return always goes through the same sanctioned
+correction path every other case in this app already uses, not an ad hoc external poke.
+
+**Result: worse than doing nothing.** At 100 presses (1.5M chars): 37 scroll anomalies / -57 rows excess,
+roughly double baseline's rate over the same span. Byte-exact cursor movement still held (verified before
+measuring scroll behavior), but the scroll behavior itself regressed. Reverted in full immediately per
+the binary standard.
+
+**Root cause, diagnosed precisely**: cancelling an in-flight peek did not reset `preWarmedDirection`/
+`preWarmedEdgeScrollTopPx`, so a cancelled-before-completing peek left those trackers claiming territory
+that was never actually warmed. At a fast, continuous-hold cadence (this app's own 35ms test cadence,
+plausible for real OS key-repeat rates too), each peek gets interrupted by the very next keystroke
+*before* its 90ms settle timer can fire -- and because the tracker still claims that peek "happened," the
+next reconcile doesn't know to retry properly, while also not being prevented from immediately triggering
+a *fresh* 1000px peek of its own. The net effect: a peek-and-cancel cycle repeating on nearly every
+keystroke, each one parking `scrollTop` 1000px away for at least one paint before the next keystroke
+snaps it back -- worse than the original bug, not a subtler version of the same fix.
+
+**This surfaces a likely deeper, not-yet-resolved tension, separate from the retrigger bug above**: the
+peek fundamentally requires real wall-clock time with `scrollTop` parked away from the correct position
+for CM6 to do its measurement work (every successful external-script test this session used 60-120ms).
+The browser paints during that window. If any real keystroke can arrive faster than that settle time --
+which a fast human key-repeat plausibly can -- the parked position gets painted at least once before the
+correction lands, which is a genuinely visible artifact, not a measurement-only one. Two directions
+worth testing before concluding this approach can't be made safe: (a) whether CM6's actual measurement
+genuinely needs the full 60-120ms this session's tests used out of caution, or completes within one paint
+frame (~16ms) -- untested at the lower bound; (b) fixing the retrigger bug alone (reset tracking state on
+cancel, and/or don't immediately re-attempt after a cancelled peek) to at least remove the
+worse-than-baseline regression, independent of whether the deeper timing tension is ever fully resolved.
+
+**Verification this round**: byte-exact cursor movement confirmed before measuring scroll behavior;
+`npx tsc --noEmit` and `npm run lint` clean on the implementation before it was reverted; live-browser
+Playwright measurement at 1.5M chars (the user's own repro scale) is what caught the regression. Fully
+reverted -- `git status` clean, matching the last-shipped commit.
