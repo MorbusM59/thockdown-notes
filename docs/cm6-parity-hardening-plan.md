@@ -1866,3 +1866,21 @@ The next candidate, not yet built (requires real in-app code, no longer testable
 poking `scrollTop` directly): peek ahead once, then explicitly invoke the existing reconcile to pull the
 visible position back through the same sanctioned path every other correction in this app already uses,
 rather than a raw write or leaving it to resolve itself.
+
+**Third variant tried and ruled out -- "peek exactly one row ahead, every press"**, testing whether reach
+could be substituted with frequency (peek at literally every keystroke, riding one row ahead of the real
+caret the whole time, rather than one big jump). Result: zero effect, byte-identical anomaly pattern to
+doing nothing at all (same press indices, same magnitudes) -- confirmed twice, once with minimal
+(one-`requestAnimationFrame`) wait between the peek and the real keystroke and again with a generous
+100ms wait, ruling out insufficient settle time as the explanation. The reasoning this converged on:
+a same-pace peek provides zero *relative* lookahead -- its target always coincides with wherever the
+real, unassisted keystroke was about to move to anyway, so it can never get ahead of normal scrolling,
+no matter how many times it repeats (analogy: matching a car's speed one car-length ahead never actually
+overtakes it). Separately, the fact that a 26px peek does nothing at all -- not "small effect," zero,
+confirmed under generous timing -- is itself informative: it's consistent with CM6 having an internal
+"is this scroll change big enough to bother recomputing the viewport/margin" threshold (plausibly related
+to `viewportIsAppropriate()`, referenced early in this investigation), which a 26px nudge never crosses
+regardless of repetition. Combined with the working 700-10,500px jumps, this brackets that unknown
+threshold empirically (below 700px, above 26px) without needing its exact value. **Net conclusion: reach
+cannot be substituted with frequency below some minimum jump size -- the peek's distance from the real,
+current position is the load-bearing variable, not how often it's attempted.**
