@@ -1553,3 +1553,46 @@ yet -- this was a pure measurement round, no production code touched.
 **Verification this round**: new script only (`scripts/perf/measureCM6WrapSensitivityDrift.mjs`,
 committed); no `.ts`/`.tsx` changes, `npx tsc --noEmit` inapplicable/unaffected. `git status --short`
 confirmed clean after the script commit.
+
+## Lead 4 — analyticalTop vs scrollTop comparison: the existing reconcile already absorbs most of these events; only the larger tail leaks through visibly
+
+Follow-up to the wrap-sensitivity result above, prompted by a direct question about whether anomalies
+within one continuous session are identical (same magnitude, same press-interval) or vary. They vary,
+and comparing the debug accessor's two independent signals -- `scrollTop` (what actually painted) and
+`analyticalTop` (`view.lineBlockAt(head).top`, CM6's own pure document-layout value, untouched by
+scroll position or any of this app's code) -- at every press, not just at already-flagged scroll
+anomalies, surfaced a materially more complete picture:
+
+**`uniform-nowrap`**: all 51 anomalies are visible in *both* signals. `analyticalTop` jumps by an exact
+clean multiple of the 26px row height every time -- either -182px (7 rows) or -156px (6 rows), never
+anything in between -- and `scrollTop` tracks it a constant 12px short (-170 or -144). This confirms the
+jump originates in CM6's own internal layout computation for the caret's line, not in this app's scroll
+write: `analyticalTop` has no dependency on scrollTop, our reconcile, or anything this app controls, and
+it jumps by the same multi-row amount at the exact same presses regardless.
+
+**`diverse-with-uniform-run`**: 123 of 771 presses show `analyticalTop` jumping -- nearly 5x the 25
+that were ever visible as a `scrollTop` anomaly. 98 of those 123 are events the existing (unmodified,
+baseline) cage reconcile already absorbs cleanly: `analyticalTop` jumps a consistent -78px (3 rows),
+while `scrollTop` only moves -26 or -38px, both under the 1.5-row/39px anomaly threshold used
+throughout this doc. Only the remaining 25 -- where the analytical jump is larger (6-8 rows, -156/-182/
+-208px) -- break through as a visible scroll glitch.
+
+**This reframes fix strategy meaningfully.** The mechanism is confirmed, independently of any app code,
+to be CM6's own height-map periodically revising its cumulative-height estimate for a region -- the
+caret's actual document position (`head`) is not moving multiple lines at once (consistent with attempt
+7's earlier byte-exact text-editing verification); rather the *pixel top* CM6 reports for that same,
+correctly-tracked line changes discontinuously when a batch of previously-estimated line heights above
+it gets trued up. But the diverse-with-uniform-run breakdown shows this app's existing reconcile is not
+starting from zero against that -- it already successfully absorbs the more common, smaller-magnitude
+version of this event (roughly 4 out of every 5 occurrences here) without any visible effect. The open
+problem is narrower than "build a mechanism to survive an untouchable CM6-internal event from scratch":
+it's "extend whatever margin already makes the 3-row case invisible to also cover the 6-8-row case,"
+which is a smaller, more targeted question than either of the two candidate directions from the previous
+round was framed as. Concretely worth checking next: what specifically makes the existing reconcile
+absorb -78px but not -156px+ -- e.g. whether `scrollToQuantizedSmooth`'s immediate-write-vs-animated-
+curve threshold (see `src/editor/QuantizedSmoothScroll.ts`, `distanceRows <= 1` triggers an immediate
+write; this case is exactly the boundary CM6's jump can now blow past) or `resolveCagedScrollTarget`'s
+own boundary clamping is where the absorbed/leaked cases diverge.
+
+**Verification this round**: read-only measurement only (temporary, uncommitted script reusing the
+generators already committed in `measureCM6WrapSensitivityDrift.mjs`); no production code touched.
