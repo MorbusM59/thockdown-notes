@@ -175,6 +175,7 @@ export function EditorSection({
   spellCheckEditEnabled,
   spellCheckRenderEnabled,
   highlightSearchColor,
+  customCursorSettings,
   isLeftmostSection,
   canCreateSection,
   onCreateSection,
@@ -1334,6 +1335,7 @@ export function EditorSection({
         isPreviewingSnapshot={isPreviewingSnapshot}
         isCaretSuspended={isCaretSuspended}
         spellCheckEditEnabled={spellCheckEditEnabled}
+        customCursorSettings={customCursorSettings}
         previewTextureRef={previewTextureRef}
         previewScrollRef={previewScrollRef}
         handlePreviewScroll={handlePreviewScroll}

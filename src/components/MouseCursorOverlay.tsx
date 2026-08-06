@@ -1,29 +1,19 @@
 import { useEffect, useRef } from 'react'
 import type { MutableRefObject } from 'react'
+import { parseCssColorToRgba, type RgbaColor } from '../shared/colorMath'
+import type { CustomCursorSettings } from '../shared/cursorSettings'
 
 export interface MouseCursorOverlayProps {
   stageRef: MutableRefObject<HTMLDivElement | null>
-  // defaults baked per user's request; later make configurable
-  radius?: number
-  thickness?: number
-  frequencyHz?: number
+  settings: CustomCursorSettings
+  /** Not the same as settings.trailFadeMs (a per-trail-particle decay time) -- this is how long the *whole overlay* takes to fade out after the pointer leaves the stage entirely. Not exposed in the options UI. */
   fadeMs?: number
-  /** Dots are spaced evenly around the orbit (nth complex roots of unity), not independently positioned. */
-  dotCount?: number
-  trailDegrees?: number
-  color?: string
 }
 
-/** Resolves any CSS color string to its rgb components via a throwaway probe element, so `color` can be a name/hex/var()/etc, not just a value this file already knows how to parse. */
-function resolveColorRgb(color: string, doc: Document): [number, number, number] {
-  const probe = doc.createElement('span')
-  probe.style.color = color
-  probe.style.display = 'none'
-  doc.body.appendChild(probe)
-  const computed = getComputedStyle(probe).color
-  doc.body.removeChild(probe)
-  const match = computed.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/)
-  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : [255, 255, 255]
+const FALLBACK_RGBA: RgbaColor = { r: 0, g: 0, b: 0, a: 1 }
+
+function resolveRgba(color: string): RgbaColor {
+  return parseCssColorToRgba(color) ?? FALLBACK_RGBA
 }
 
 /**
@@ -42,30 +32,41 @@ function resolveColorRgb(color: string, doc: Document): [number, number, number]
  * SectionEditorArea.tsx), so this component never touches another
  * component's DOM node.
  *
- * Visual model: `dotCount` dots orbit the cursor position at `frequencyHz`
+ * Visual model: `dotCount` dots orbit the cursor position at `spinHz`
  * revolutions/sec, evenly spaced (nth complex roots of unity), each one
- * dragging a fading `trailDegrees`-long arc behind it via a conic gradient
- * (transparent tail -> opaque head) -- one moving dot with a trail, not the
- * previous design's discrete periodic ping arcs. The rAF loop only runs
- * while the pointer is actually over the stage or fading out afterwards
- * (`fadeMs`), not continuously for the component's whole lifetime.
+ * dragging a fading trail behind it via a conic gradient (transparent tail
+ * -> opaque head), plus a stationary center dot pinned to the tracked
+ * pointer position. The trail's angular length isn't stored directly --
+ * it's derived each time from `trailFadeMs` (how long a trail particle
+ * takes to fully decay after the head passes it) and the current `spinHz`,
+ * so e.g. a 1000ms fade at 1Hz sweeps exactly one full revolution (the head
+ * chases a tail that only just finished fading where the head now sits).
+ * The orbit radius itself breathes between 100% and `pulseMagnitude` via an
+ * ease-in-out (raised-cosine) oscillation at `pulseHz`. The rAF loop only
+ * runs while the pointer is actually over the stage or fading out
+ * afterwards (`fadeMs`), not continuously for the component's whole
+ * lifetime.
  */
 export function MouseCursorOverlay({
   stageRef,
-  radius = 10,
-  thickness = 3,
-  frequencyHz = 0.8,
+  settings,
   fadeMs = 550,
-  dotCount = 3,
-  trailDegrees = 120,
-  color = '#00000011',
 }: MouseCursorOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const posRef = useRef<{ x: number; y: number } | null>(null)
   const stageRectRef = useRef<DOMRect | null>(null)
+  // Exact backing-buffer-to-CSS-box scale, not just `devicePixelRatio`: the
+  // canvas's backing resolution is rounded to a whole pixel count, which can
+  // shift the true scale by a fraction of a percent. Using that exact ratio
+  // (rather than assuming it equals dpr) keeps the drawn cursor's center
+  // pinned exactly under the real pointer position instead of drifting a
+  // sub-pixel further off at wider parts of the stage.
+  const scaleRef = useRef({ x: 1, y: 1 })
   const rafRef = useRef<number | null>(null)
   const activeSinceRef = useRef<number | null>(null)
   const leftAtRef = useRef<number | null>(null)
+
+  const { dotColor, centerColor, trailColor, dotCount, radiusPx, spinHz, trailThicknessPx, trailFadeMs, dotSizePx, centerSizePx, pulseMagnitude, pulseHz } = settings
 
   useEffect(() => {
     const stageEl = stageRef.current
@@ -76,15 +77,29 @@ export function MouseCursorOverlay({
     if (!ctx) return
 
     const dpr = window.devicePixelRatio || 1
-    const [r, g, b] = resolveColorRgb(color, stageEl.ownerDocument)
-    const trailRad = (trailDegrees * Math.PI) / 180
-    const angleStep = (Math.PI * 2) / Math.max(1, dotCount)
+    const dot = resolveRgba(dotColor)
+    const center = resolveRgba(centerColor)
+    const trail = resolveRgba(trailColor)
+    // A 1000ms fade at 1Hz spin should sweep exactly one full revolution
+    // (2*PI) -- the head chasing a tail whose oldest point just finished
+    // decaying where the head currently is. Capped at one revolution: past
+    // that the tail would start overlapping itself, which the conic
+    // gradient (0 -> 1 stops over the sweep) can't represent as a longer fade.
+    const trailRad = Math.min(Math.PI * 2, (trailFadeMs / 1000) * spinHz * Math.PI * 2)
+    const effectiveDotCount = Math.max(1, Math.round(dotCount))
+    const angleStep = (Math.PI * 2) / effectiveDotCount
 
     function updateCanvasResolution() {
       const rect = stageEl!.getBoundingClientRect()
       stageRectRef.current = rect
-      canvas!.width = Math.max(1, Math.round(rect.width * dpr))
-      canvas!.height = Math.max(1, Math.round(rect.height * dpr))
+      const backingWidth = Math.max(1, Math.round(rect.width * dpr))
+      const backingHeight = Math.max(1, Math.round(rect.height * dpr))
+      canvas!.width = backingWidth
+      canvas!.height = backingHeight
+      scaleRef.current = {
+        x: rect.width > 0 ? backingWidth / rect.width : dpr,
+        y: rect.height > 0 ? backingHeight / rect.height : dpr,
+      }
     }
 
     updateCanvasResolution()
@@ -106,10 +121,10 @@ export function MouseCursorOverlay({
         return
       }
 
-      let alpha = 1
+      let fadeAlpha = 1
       if (leftAt !== null) {
-        alpha = Math.max(0, 1 - (now - leftAt) / fadeMs)
-        if (alpha <= 0) {
+        fadeAlpha = Math.max(0, 1 - (now - leftAt) / fadeMs)
+        if (fadeAlpha <= 0) {
           ctx!.clearRect(0, 0, canvas!.width, canvas!.height)
           rafRef.current = null
           return
@@ -118,22 +133,31 @@ export function MouseCursorOverlay({
 
       ctx!.clearRect(0, 0, canvas!.width, canvas!.height)
 
-      const cx = pos.x * dpr
-      const cy = pos.y * dpr
-      const orbitRadius = radius * dpr
-      const revolutions = ((now - activeSince) / 1000) * frequencyHz
+      const cx = pos.x * scaleRef.current.x
+      const cy = pos.y * scaleRef.current.y
+
+      const elapsedSec = (now - activeSince) / 1000
+      const revolutions = elapsedSec * spinHz
       const rotation = (revolutions % 1) * Math.PI * 2
 
-      for (let i = 0; i < dotCount; i += 1) {
+      const pulsePhase = (elapsedSec * pulseHz) % 1
+      const pulseEase = (1 - Math.cos(pulsePhase * Math.PI * 2)) / 2
+      const pulseScale = 1 + (pulseMagnitude - 1) * pulseEase
+      const orbitRadius = radiusPx * dpr * pulseScale
+
+      const dotHeadRadius = Math.max(0.5, dotSizePx * dpr * 0.5)
+      const lineWidth = Math.max(1, trailThicknessPx * dpr)
+
+      for (let i = 0; i < effectiveDotCount; i += 1) {
         const headAngle = rotation + i * angleStep
         const tailAngle = headAngle - trailRad
 
         const gradient = ctx!.createConicGradient(tailAngle, cx, cy)
-        gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0)`)
-        gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, ${alpha})`)
+        gradient.addColorStop(0, `rgba(${trail.r}, ${trail.g}, ${trail.b}, 0)`)
+        gradient.addColorStop(1, `rgba(${trail.r}, ${trail.g}, ${trail.b}, ${trail.a * fadeAlpha})`)
 
         ctx!.save()
-        ctx!.lineWidth = Math.max(1, thickness * dpr)
+        ctx!.lineWidth = lineWidth
         ctx!.lineCap = 'round'
         ctx!.strokeStyle = gradient
         ctx!.beginPath()
@@ -141,12 +165,23 @@ export function MouseCursorOverlay({
         ctx!.stroke()
         ctx!.restore()
 
-        const headX = cx + Math.cos(headAngle) * orbitRadius
-        const headY = cy + Math.sin(headAngle) * orbitRadius
+        if (dotSizePx > 0) {
+          const headX = cx + Math.cos(headAngle) * orbitRadius
+          const headY = cy + Math.sin(headAngle) * orbitRadius
+          ctx!.save()
+          ctx!.fillStyle = `rgba(${dot.r}, ${dot.g}, ${dot.b}, ${dot.a * fadeAlpha})`
+          ctx!.beginPath()
+          ctx!.arc(headX, headY, dotHeadRadius, 0, Math.PI * 2)
+          ctx!.fill()
+          ctx!.restore()
+        }
+      }
+
+      if (centerSizePx > 0) {
         ctx!.save()
-        ctx!.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`
+        ctx!.fillStyle = `rgba(${center.r}, ${center.g}, ${center.b}, ${center.a * fadeAlpha})`
         ctx!.beginPath()
-        ctx!.arc(headX, headY, Math.max(1, thickness * dpr * 0.75), 0, Math.PI * 2)
+        ctx!.arc(cx, cy, Math.max(0.5, centerSizePx * dpr * 0.5), 0, Math.PI * 2)
         ctx!.fill()
         ctx!.restore()
       }
@@ -189,7 +224,7 @@ export function MouseCursorOverlay({
       activeSinceRef.current = null
       leftAtRef.current = null
     }
-  }, [stageRef, radius, thickness, frequencyHz, fadeMs, dotCount, trailDegrees, color])
+  }, [stageRef, radiusPx, trailThicknessPx, trailFadeMs, spinHz, fadeMs, dotCount, dotColor, centerColor, trailColor, dotSizePx, centerSizePx, pulseMagnitude, pulseHz])
 
   return <canvas ref={canvasRef} className="mouse-cursor-overlay-canvas" aria-hidden="true" />
 }

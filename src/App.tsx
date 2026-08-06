@@ -45,6 +45,28 @@ import {
 } from './shared/colorMath'
 import type { HighlightColorKey, HighlightColors } from './shared/highlightColors'
 import {
+  type CustomCursorSettings,
+  DEFAULT_CUSTOM_CURSOR_SETTINGS,
+  CURSOR_DOT_COUNT_MIN,
+  CURSOR_DOT_COUNT_MAX,
+  CURSOR_RADIUS_MIN_PX,
+  CURSOR_RADIUS_MAX_PX,
+  CURSOR_SPIN_HZ_MIN,
+  CURSOR_SPIN_HZ_MAX,
+  CURSOR_TRAIL_THICKNESS_MIN_PX,
+  CURSOR_TRAIL_THICKNESS_MAX_PX,
+  CURSOR_TRAIL_FADE_MIN_MS,
+  CURSOR_TRAIL_FADE_MAX_MS,
+  CURSOR_DOT_SIZE_MIN_PX,
+  CURSOR_DOT_SIZE_MAX_PX,
+  CURSOR_CENTER_SIZE_MIN_PX,
+  CURSOR_CENTER_SIZE_MAX_PX,
+  CURSOR_PULSE_MAGNITUDE_MIN,
+  CURSOR_PULSE_MAGNITUDE_MAX,
+  CURSOR_PULSE_HZ_MIN,
+  CURSOR_PULSE_HZ_MAX,
+} from './shared/cursorSettings'
+import {
   BORDER_RADIUS_REGULAR_MIN_PX,
   BORDER_RADIUS_REGULAR_MAX_PX,
   SPACING_REGULAR_MIN_PX,
@@ -218,6 +240,7 @@ type ViewStyleKey =
 type EditorTextColorTargetKey = 'editorEditText' | 'editorRenderText'
 
 type HsvaControlKey = 'h' | 's' | 'v' | 'a'
+type CursorColorTargetKey = 'dot' | 'center' | 'trail'
 const GLAZE_RADIAL_CORNERS = ['top left', 'top right', 'bottom right', 'bottom left'] as const
 
 // Fallbacks for chrome reading through the section registry before any
@@ -1606,6 +1629,33 @@ function App() {
   const [debuggingEnabled, setDebuggingEnabled] = useState(false)
   const [spellCheckEditEnabled, setSpellCheckEditEnabled] = useState(false)
   const [spellCheckRenderEnabled, setSpellCheckRenderEnabled] = useState(false)
+  const [customCursorEnabled, setCustomCursorEnabled] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.enabled)
+  const [customCursorDotColor, setCustomCursorDotColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.dotColor)
+  const [customCursorCenterColor, setCustomCursorCenterColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.centerColor)
+  const [customCursorTrailColor, setCustomCursorTrailColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.trailColor)
+  const [customCursorDotCount, setCustomCursorDotCount] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.dotCount)
+  const [customCursorRadiusPx, setCustomCursorRadiusPx] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.radiusPx)
+  const [customCursorSpinHz, setCustomCursorSpinHz] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.spinHz)
+  const [customCursorTrailThicknessPx, setCustomCursorTrailThicknessPx] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.trailThicknessPx)
+  const [customCursorTrailFadeMs, setCustomCursorTrailFadeMs] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.trailFadeMs)
+  const [customCursorDotSizePx, setCustomCursorDotSizePx] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.dotSizePx)
+  const [customCursorCenterSizePx, setCustomCursorCenterSizePx] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.centerSizePx)
+  const [customCursorPulseMagnitude, setCustomCursorPulseMagnitude] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseMagnitude)
+  const [customCursorPulseHz, setCustomCursorPulseHz] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseHz)
+  // Local "staged" HSVA color for the Mouse options row-1 H/S/V/A drag
+  // controls -- deliberately not tied to the app-wide activeColorHsva/
+  // primedColorSource rig (that system arms a swatch anywhere in the app;
+  // this one is a closed loop scoped to the 3 row-2 targets below it).
+  // Seeded from a real color, same as activeColorHsva below -- HSV is
+  // degenerate at v=0 (pure black regardless of h/s), so starting there
+  // like a naive {h:0,s:0,v:0,a:1} would make the saturation control look
+  // broken (dragging it produces no visible change until v is raised).
+  const [cursorColorHsva, setCursorColorHsva] = useState<HsvaColor>(() => {
+    const seed = parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS.caret) ?? { r: 120, g: 115, b: 112, a: 1 }
+    return rgbaToHsva(seed)
+  })
+  const [cursorHsvaDragState, setCursorHsvaDragState] = useState<HsvaDragState | null>(null)
+  const cursorColorArmTimerRef = useRef<number | null>(null)
   const debugNoteIdRef = useRef<string | null>(null)
   const [windowIsMaximized, setWindowIsMaximized] = useState(false)
   const [windowIsCollapsed, setWindowIsCollapsed] = useState(false)
@@ -2136,6 +2186,44 @@ function App() {
     const aGhostColor = rgbaToCssColor(hsvaToRgba({ h: activeColorHsva.h, s: 0, v: 0, a: activeColorHsva.a }))
     return { hColor, sColor, vColor, aGhostColor }
   }, [activeColorHsva])
+
+  const cursorHsvaDisplayColors = useMemo(() => {
+    const hColor = rgbaToCssColor(hsvaToRgba({ h: cursorColorHsva.h, s: 1, v: 1, a: 1 }))
+    const sColor = rgbaToCssColor(hsvaToRgba({ h: cursorColorHsva.h, s: cursorColorHsva.s, v: 1, a: 1 }))
+    const vColor = rgbaToCssColor(hsvaToRgba({ h: cursorColorHsva.h, s: 0, v: cursorColorHsva.v, a: 1 }))
+    const aGhostColor = rgbaToCssColor(hsvaToRgba({ h: cursorColorHsva.h, s: 0, v: 0, a: cursorColorHsva.a }))
+    return { hColor, sColor, vColor, aGhostColor }
+  }, [cursorColorHsva])
+
+  const customCursorSettings: CustomCursorSettings = useMemo(() => ({
+    enabled: customCursorEnabled,
+    dotColor: customCursorDotColor,
+    centerColor: customCursorCenterColor,
+    trailColor: customCursorTrailColor,
+    dotCount: customCursorDotCount,
+    radiusPx: customCursorRadiusPx,
+    spinHz: customCursorSpinHz,
+    trailThicknessPx: customCursorTrailThicknessPx,
+    trailFadeMs: customCursorTrailFadeMs,
+    dotSizePx: customCursorDotSizePx,
+    centerSizePx: customCursorCenterSizePx,
+    pulseMagnitude: customCursorPulseMagnitude,
+    pulseHz: customCursorPulseHz,
+  }), [
+    customCursorEnabled,
+    customCursorDotColor,
+    customCursorCenterColor,
+    customCursorTrailColor,
+    customCursorDotCount,
+    customCursorRadiusPx,
+    customCursorSpinHz,
+    customCursorTrailThicknessPx,
+    customCursorTrailFadeMs,
+    customCursorDotSizePx,
+    customCursorCenterSizePx,
+    customCursorPulseMagnitude,
+    customCursorPulseHz,
+  ])
 
   const updateTextureMaterial = useCallback((surface: TextureSurfaceKey, updater: (current: TextureMaterialSettings) => TextureMaterialSettings) => {
     setTextureMaterials((previous) => {
@@ -2871,6 +2959,114 @@ function App() {
     setHsvaDragState(null)
   }, [hsvaDragState])
 
+  // Mouse-cursor-overlay color widget (Options > Mouse options): a local
+  // closed loop, not tied to primedColorSource/colorArmTimerRef above -- see
+  // cursorColorHsva's declaration for why. Left-click on a row-2 swatch
+  // applies the staged H/S/V/A; holding right-click on one copies its color
+  // back into the staged H/S/V/A, mirroring startElementPreviewCopyHold.
+  const clearCursorColorArmTimer = useCallback(() => {
+    if (cursorColorArmTimerRef.current === null) return
+    window.clearTimeout(cursorColorArmTimerRef.current)
+    cursorColorArmTimerRef.current = null
+  }, [])
+
+  const applyCursorColorToTarget = useCallback((target: CursorColorTargetKey) => {
+    const css = rgbaToCssColor(hsvaToRgba(cursorColorHsva))
+    if (target === 'dot') setCustomCursorDotColor(css)
+    else if (target === 'center') setCustomCursorCenterColor(css)
+    else setCustomCursorTrailColor(css)
+  }, [cursorColorHsva])
+
+  const copyCursorTargetColorToHsva = useCallback((target: CursorColorTargetKey) => {
+    const css = target === 'dot' ? customCursorDotColor : target === 'center' ? customCursorCenterColor : customCursorTrailColor
+    const rgba = parseCssColorToRgba(css)
+    if (!rgba) return
+    setCursorColorHsva(rgbaToHsva(rgba))
+  }, [customCursorDotColor, customCursorCenterColor, customCursorTrailColor])
+
+  const startCursorColorCopyHold = useCallback((target: CursorColorTargetKey, event: MouseEvent<HTMLButtonElement>) => {
+    if (event.button !== 2) return
+    event.preventDefault()
+    event.stopPropagation()
+    clearCursorColorArmTimer()
+
+    cursorColorArmTimerRef.current = window.setTimeout(() => {
+      copyCursorTargetColorToHsva(target)
+      cursorColorArmTimerRef.current = null
+    }, COLOR_BUTTON_ARM_HOLD_MS)
+  }, [clearCursorColorArmTimer, copyCursorTargetColorToHsva])
+
+  const updateCursorHsvaControlValue = useCallback((control: HsvaControlKey, rawValue: number) => {
+    setCursorColorHsva((previous) => {
+      if (control === 'h') {
+        const nextHue = Math.max(0, Math.min(360, rawValue))
+        return { ...previous, h: nextHue }
+      }
+
+      const normalized = Math.max(0, Math.min(1, rawValue / 255))
+      return { ...previous, [control]: normalized }
+    })
+  }, [])
+
+  const wheelAdjustCursorHsvaControl = useCallback((control: HsvaControlKey, event: React.WheelEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    const stepDirection = getWheelStepDirection(event)
+    if (stepDirection === 0) return
+
+    const baseValue = control === 'h'
+      ? cursorColorHsva.h
+      : cursorColorHsva[control] * 255
+
+    updateCursorHsvaControlValue(control, baseValue + stepDirection)
+  }, [cursorColorHsva, getWheelStepDirection, updateCursorHsvaControlValue])
+
+  const startCursorHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return
+
+    event.preventDefault()
+
+    const baseValue = control === 'h'
+      ? cursorColorHsva.h
+      : cursorColorHsva[control] * 255
+
+    event.currentTarget.setPointerCapture(event.pointerId)
+
+    setCursorHsvaDragState({
+      control,
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      baseValue,
+    })
+
+    updateCursorHsvaControlValue(control, baseValue)
+  }, [cursorColorHsva, updateCursorHsvaControlValue])
+
+  const handleCursorHsvaDragMove = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
+    const currentDrag = cursorHsvaDragState
+    if (!currentDrag) return
+    if (currentDrag.control !== control) return
+    if (currentDrag.pointerId !== event.pointerId) return
+
+    event.preventDefault()
+    const delta = currentDrag.startY - event.clientY
+    updateCursorHsvaControlValue(control, currentDrag.baseValue + delta)
+  }, [cursorHsvaDragState, updateCursorHsvaControlValue])
+
+  const stopCursorHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
+    const currentDrag = cursorHsvaDragState
+    if (!currentDrag) return
+    if (currentDrag.control !== control) return
+    if (currentDrag.pointerId !== event.pointerId) return
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+
+    setCursorHsvaDragState(null)
+  }, [cursorHsvaDragState])
+
   const getTextureControlBounds = useCallback((control: TextureControlKey) => {
     if (control === 'granularity') {
       return {
@@ -3218,10 +3414,36 @@ function App() {
       reduceVisualEffects,
       reducedCaretAnimation,
       deferPreviewOnRapidInput,
+      customCursorEnabled,
+      customCursorDotColor,
+      customCursorCenterColor,
+      customCursorTrailColor,
+      customCursorDotCount,
+      customCursorRadiusPx,
+      customCursorSpinHz,
+      customCursorTrailThicknessPx,
+      customCursorTrailFadeMs,
+      customCursorDotSizePx,
+      customCursorCenterSizePx,
+      customCursorPulseMagnitude,
+      customCursorPulseHz,
     }
   }, [
     archiveCollapsedPrimary,
     archiveCollapsedSecondary,
+    customCursorEnabled,
+    customCursorDotColor,
+    customCursorCenterColor,
+    customCursorTrailColor,
+    customCursorDotCount,
+    customCursorRadiusPx,
+    customCursorSpinHz,
+    customCursorTrailThicknessPx,
+    customCursorTrailFadeMs,
+    customCursorDotSizePx,
+    customCursorCenterSizePx,
+    customCursorPulseMagnitude,
+    customCursorPulseHz,
     categoryCollapsedPrimary,
     categoryCollapsedSecondary,
     debuggingEnabled,
@@ -4880,6 +5102,47 @@ ${markdownHtml}
 
             // Restore persisted sidebar visibility
             setIsSidebarVisible(appState.menu.isSidebarVisible ?? true)
+
+            setCustomCursorEnabled(appState.menu.customCursorEnabled ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.enabled)
+            setCustomCursorDotColor(appState.menu.customCursorDotColor ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.dotColor)
+            setCustomCursorCenterColor(appState.menu.customCursorCenterColor ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.centerColor)
+            setCustomCursorTrailColor(appState.menu.customCursorTrailColor ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.trailColor)
+            setCustomCursorDotCount(clamp(
+              appState.menu.customCursorDotCount ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.dotCount,
+              CURSOR_DOT_COUNT_MIN, CURSOR_DOT_COUNT_MAX,
+            ))
+            setCustomCursorRadiusPx(clamp(
+              appState.menu.customCursorRadiusPx ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.radiusPx,
+              CURSOR_RADIUS_MIN_PX, CURSOR_RADIUS_MAX_PX,
+            ))
+            setCustomCursorSpinHz(clamp(
+              appState.menu.customCursorSpinHz ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.spinHz,
+              CURSOR_SPIN_HZ_MIN, CURSOR_SPIN_HZ_MAX,
+            ))
+            setCustomCursorTrailThicknessPx(clamp(
+              appState.menu.customCursorTrailThicknessPx ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.trailThicknessPx,
+              CURSOR_TRAIL_THICKNESS_MIN_PX, CURSOR_TRAIL_THICKNESS_MAX_PX,
+            ))
+            setCustomCursorTrailFadeMs(clamp(
+              appState.menu.customCursorTrailFadeMs ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.trailFadeMs,
+              CURSOR_TRAIL_FADE_MIN_MS, CURSOR_TRAIL_FADE_MAX_MS,
+            ))
+            setCustomCursorDotSizePx(clamp(
+              appState.menu.customCursorDotSizePx ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.dotSizePx,
+              CURSOR_DOT_SIZE_MIN_PX, CURSOR_DOT_SIZE_MAX_PX,
+            ))
+            setCustomCursorCenterSizePx(clamp(
+              appState.menu.customCursorCenterSizePx ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.centerSizePx,
+              CURSOR_CENTER_SIZE_MIN_PX, CURSOR_CENTER_SIZE_MAX_PX,
+            ))
+            setCustomCursorPulseMagnitude(clamp(
+              appState.menu.customCursorPulseMagnitude ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseMagnitude,
+              CURSOR_PULSE_MAGNITUDE_MIN, CURSOR_PULSE_MAGNITUDE_MAX,
+            ))
+            setCustomCursorPulseHz(clamp(
+              appState.menu.customCursorPulseHz ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseHz,
+              CURSOR_PULSE_HZ_MIN, CURSOR_PULSE_HZ_MAX,
+            ))
 
             setCurrentPage(loadedSidebarViewState[appState.menu.sidebarMode].page)
             setCategoryCollapsedPrimary(loadedSidebarViewState.category.collapsedPrimary)
@@ -7266,6 +7529,39 @@ ${markdownHtml}
                         debugNoteIdRef={debugNoteIdRef}
                         queueAppStateSave={queueAppStateSave}
                         activeNoteId={activeSection?.activeNoteId ?? null}
+                        customCursorEnabled={customCursorEnabled}
+                        setCustomCursorEnabled={setCustomCursorEnabled}
+                        customCursorDotColor={customCursorDotColor}
+                        customCursorCenterColor={customCursorCenterColor}
+                        customCursorTrailColor={customCursorTrailColor}
+                        customCursorDotCount={customCursorDotCount}
+                        setCustomCursorDotCount={setCustomCursorDotCount}
+                        customCursorRadiusPx={customCursorRadiusPx}
+                        setCustomCursorRadiusPx={setCustomCursorRadiusPx}
+                        customCursorSpinHz={customCursorSpinHz}
+                        setCustomCursorSpinHz={setCustomCursorSpinHz}
+                        customCursorTrailThicknessPx={customCursorTrailThicknessPx}
+                        setCustomCursorTrailThicknessPx={setCustomCursorTrailThicknessPx}
+                        customCursorTrailFadeMs={customCursorTrailFadeMs}
+                        setCustomCursorTrailFadeMs={setCustomCursorTrailFadeMs}
+                        customCursorDotSizePx={customCursorDotSizePx}
+                        setCustomCursorDotSizePx={setCustomCursorDotSizePx}
+                        customCursorCenterSizePx={customCursorCenterSizePx}
+                        setCustomCursorCenterSizePx={setCustomCursorCenterSizePx}
+                        customCursorPulseMagnitude={customCursorPulseMagnitude}
+                        setCustomCursorPulseMagnitude={setCustomCursorPulseMagnitude}
+                        customCursorPulseHz={customCursorPulseHz}
+                        setCustomCursorPulseHz={setCustomCursorPulseHz}
+                        cursorColorHsva={cursorColorHsva}
+                        cursorHsvaDisplayColors={cursorHsvaDisplayColors}
+                        cursorHsvaDragState={cursorHsvaDragState}
+                        startCursorHsvaDrag={startCursorHsvaDrag}
+                        handleCursorHsvaDragMove={handleCursorHsvaDragMove}
+                        stopCursorHsvaDrag={stopCursorHsvaDrag}
+                        wheelAdjustCursorHsvaControl={wheelAdjustCursorHsvaControl}
+                        applyCursorColorToTarget={applyCursorColorToTarget}
+                        startCursorColorCopyHold={startCursorColorCopyHold}
+                        clearCursorColorArmTimer={clearCursorColorArmTimer}
                       />
                     ) : (
                       <div
@@ -7641,6 +7937,7 @@ ${markdownHtml}
                   spellCheckEditEnabled={spellCheckEditEnabled}
                   spellCheckRenderEnabled={spellCheckRenderEnabled}
                   highlightSearchColor={highlightColors.search}
+                  customCursorSettings={customCursorSettings}
                 />
                 </div>
               </Fragment>

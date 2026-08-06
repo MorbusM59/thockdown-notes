@@ -74,7 +74,7 @@ See the full [Keyboard Shortcuts]($#keyboard-shortcuts) table.
 
 ### Appearance
 
-- The gear icon opens Settings: fonts, color presets, custom "paint bucket" theming, decorative overlays (Glaze), CSS filters, scroll feel, sounds, and performance toggles.
+- The gear icon opens Settings: fonts, color presets, custom "paint bucket" theming, decorative overlays (Glaze), CSS filters, scroll feel, sounds, a custom animated mouse cursor, and performance toggles.
 - Save your whole look as a custom preset and export/import it as a \`.tdl\` layout file.
 
 ### Window controls
@@ -647,6 +647,17 @@ Every feature in the app, described individually: where to find it, what it does
 *Tunes the custom easing curve used for preview-mode scroll animations.*
 
 - Controls for ramp, speed, maximum speed, and overall curve shape. Response is auto-derived from ramp.
+
+### [Mouse Options](#mouse-options)
+
+> **Where?**
+> Settings panel → Mouse Options.
+
+*An optional animated cursor replacement: orbiting dots with fading trails, a center dot, and a breathing pulse, all pinned to the real pointer position. Off by default.*
+
+- Top button toggles the custom cursor on/off; while on, the native cursor is hidden in the editor.
+- The 4 buttons beside it (H, S, V, A) stage a color by dragging up/down or scrolling on each — left-click one of the 3 swatches below (circling dots, center dot, trail) to paint it onto that element; hold right-click on a swatch to load its current color back into H/S/V/A.
+- Sliders: number of circling dots, orbit radius, spin speed, trail fade duration (how long a trail particle takes to decay after the head passes it — e.g. 1000ms at 1Hz spin sweeps exactly one full revolution), trail thickness, dot size, center dot size (0 hides it), and a pulse effect (magnitude and speed) that breathes the orbit's size in and out.
 
 ### [Keystroke Sounds](#keystroke-sounds)
 

@@ -146,6 +146,20 @@ export interface PersistedMenuState {
   tabBarMode?: 'tags' | 'tabs';
   /** Whether the sidebar is visible (not part of layout widths). */
   isSidebarVisible?: boolean;
+  /** Custom animated mouse cursor overlay (Options > Mouse options). Not part of UiLayoutLoadout. */
+  customCursorEnabled?: boolean;
+  customCursorDotColor?: string;
+  customCursorCenterColor?: string;
+  customCursorTrailColor?: string;
+  customCursorDotCount?: number;
+  customCursorRadiusPx?: number;
+  customCursorSpinHz?: number;
+  customCursorTrailThicknessPx?: number;
+  customCursorTrailFadeMs?: number;
+  customCursorDotSizePx?: number;
+  customCursorCenterSizePx?: number;
+  customCursorPulseMagnitude?: number;
+  customCursorPulseHz?: number;
 }
 
 // Persisted boundary/scroll position as integer line counts. See

@@ -689,6 +689,25 @@
   display: block;
 }
 
+/* Mouse options: cursor toggle + local HSVA staging row (row 1: toggle,
+   1-cell gap, H/S/V/A) over the 3 target swatches (row 2, each spanning 2 of
+   the same 6 columns) -- reuses the HSVA grid's 32px cell sizing. */
+.options-mouse-color-grid {
+  display: grid;
+  grid-template-columns: repeat(6, var(--color-grid-cell));
+  grid-auto-rows: var(--color-grid-cell);
+  gap: var(--color-grid-gap);
+}
+
+/* Mouse options slider rows: full-width sliders (not 32px swatch cells), so
+   columns are fractional -- .options-glaze-cell-span-2/-3 (grid-column: span
+   N) are reused as-is from the glaze grid below since spans are unit-agnostic. */
+.options-mouse-slider-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--toolbar-options-gap);
+}
+
 .options-active-color {
   grid-row:     span 2;
   aspect-ratio: auto;
