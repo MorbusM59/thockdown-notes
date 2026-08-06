@@ -941,3 +941,98 @@ cold:
 changed, no tests run. Next session (or later this one) should start by reproducing lead 4 live
 (most concrete/novel, cheapest to falsify), then work leads 1–3, then fall through to the general
 Phase 4 checklist above for whatever these four don't cover.
+
+## Lead 4 (arrow-up chunk-boundary scroll) — reproduced live, root cause substantially narrowed, no fix shipped yet
+
+A later session picked this up as the entry point per the above. **Confirmed real, not a
+misdiagnosis or test artifact**, via `scripts/perf/verifyCM6ArrowUpChunkBoundary.mjs` (already
+committed at the point this doc was last touched, apparently never actually run before this
+session): on a 1.2M-char uniform-content note, holding ArrowUp produces a scroll jump of roughly
+5–11 rows (not the reported "5 down," but the same-shape anomaly — magnitude and direction both
+wrong for a single-row move) on about **6.75% of presses** (54/800), at a strikingly regular
+~13–16-press cadence matching CM6's own internal viewport-chunk growth interval. Explicitly
+re-verified with a **35ms inter-press delay** (matching real OS key-repeat cadence, not the
+harness's default zero-delay back-to-back presses) to rule out "this is just an artifact of
+pressing faster than a browser can paint a frame" — identical anomaly count, indices, and
+magnitudes either way, so this is a real, timing-independent defect, not a synthetic-test-speed
+artifact. (The zero-delay pacing turned out to matter a lot for evaluating *fix attempts*, see
+below — just not for reproducing the original bug.)
+
+**The original hypothesis (an estimated-vs-measured height mismatch inside `reconcileCagedScroll`'s
+own geometry read) is refuted.** Instrumented `reconcileCagedScroll` to log, at every reconcile,
+both the DOM-measured caret position it actually uses and CM6's own analytical
+`view.lineBlockAt(head).top` (the same class of "trust CM6's layout data over DOM measurement"
+primitive Bug 5 above already established as correct for exactly this kind of virtualization-era
+staleness) — at every anomaly, `resolveCagedScrollTarget`'s own computed correction was small (well
+under 1.5 rows), fully consistent with `scroller.scrollTop` at the moment the reconcile ran. The
+reconcile's own math is not the site of the bug.
+
+**Root cause, narrowed via that same instrumentation plus a fix attempt's own A/B failure (see
+below): the overshoot write happens on a separate, *later* pass, decoupled from the arrow
+keystroke's own transaction.** Direct evidence: logged `scroller.scrollTop` immediately before each
+keydown is processed (captured in the `Prec.highest` keymap handler, before CM6's own defaultKeymap
+dispatch) and again inside that same press's reconcile — the two *matched* at every anomaly (e.g.
+press 61: pre-press 533338, reconcile-time 533338, reconcile computes a totally normal one-row
+target of 533312). The actual overshoot only became visible at the **next** press's pre-capture
+(533142 — 170px/6.5 rows further than what the previous reconcile had legitimately targeted),
+meaning something wrote `scrollTop` again, wrongly, *after* the reconcile that "fixed" it had
+already run and finished, and before the next keydown. Grepped `CM6Editor.tsx` for how its
+`updateListener` is wired: `reconcileCagedScroll` is only ever invoked from the
+`pendingCageIntent && (update.docChanged || update.selectionSet)` branch
+(`CM6Editor.tsx` around the updateListener's tail) — **a `viewportChanged`-only update (no doc or
+selection change, exactly what CM6 firing its own deferred/measured viewport-growth pass on a
+later tick would look like) never reaches the reconcile at all.** This lines up with CM6's known
+architecture (expensive remeasurement of newly-grown viewport regions is commonly deferred to a
+`requestMeasure` pass on a subsequent frame, not done synchronously inside the transaction that
+triggered the growth) far better than the original same-tick-measurement-race hypothesis did. Not
+yet proven by directly instrumenting a `viewportChanged`-only update firing with a stale scrollTop
+write attached — that's the concrete next step, not a restatement of this paragraph as settled fact.
+
+**A fix attempt was built, tested, and reverted — recorded honestly since it very nearly shipped
+looking correct.** Tried clamping the post-transaction `scroller.scrollTop` to within one row of
+its pre-keydown value for the four arrow keys specifically (the one class of refocus key where "the
+caret only ever needs a ≤1-row scroll correction" is a sound invariant, unlike Home/End/typing/etc).
+Two live A/B rounds, both against the same harness:
+
+- **Zero-delay (rapid-fire) pacing**: the clamp actively made things *worse* (211/3000 anomalies vs.
+  ~205/3000 extrapolated baseline) once a same-scroller in-flight `scrollToQuantizedSmooth` animation
+  was exempted from the clamp (needed, since without the exemption the clamp fought its own
+  legitimate multi-frame corrections and — confirmed via the same debug instrumentation — drove the
+  caret progressively further **off-screen**, one row further behind every press, because
+  `scrollToQuantizedSmooth`'s animated branch never got a chance to actually paint between
+  back-to-back presses with no yield to a real frame, and the clamp kept discarding the backlog
+  instead of letting it resolve).
+- **Realistic 35ms pacing**: the clamp made **zero measurable difference** — identical anomaly
+  count, indices, and magnitudes to unpatched code. Traced why: at the exact press where the
+  anomaly occurs, the clamp's own pre/post scrollTop comparison shows *no* discrepancy (both sides
+  of the clamp check agree, `willClamp: false`) — because, per the root-cause narrowing above, the
+  actual bad write happens strictly *after* this reconcile call finishes, not within the window the
+  clamp was watching. A same-transaction, same-tick clamp structurally cannot catch a write that
+  happens on a different, later update.
+
+Both code changes (the clamp in `CM6Editor.tsx`'s `reconcileCagedScroll` plus a small
+`isQuantizedSmoothScrollActive` export added to `QuantizedSmoothScroll.ts` to support it) were
+**reverted in full** rather than shipped not-working — `git status` is clean, nothing landed. The
+debug instrumentation added mid-session (`localStorage['thockdown:debug-arrow-cage']`, gated,
+mirroring the existing `debug-input-lag` pattern) was reverted too rather than kept, since it was
+purpose-built for this one investigation and the next step needs different instrumentation (on
+`viewportChanged`, not on the keydown/reconcile pair this round's logging targeted).
+
+**Concrete next step, not yet attempted**: hook a reconcile pass off `update.viewportChanged` (not
+just `docChanged || selectionSet`) — comparing scrollTop against a value *this code* last
+deliberately set (not a pre-keydown DOM snapshot, which the two failed attempts above both showed
+is the wrong reference point) is very likely the right shape, but needs its own live
+instrumentation to confirm a `viewportChanged`-only update is actually where the bad write
+originates before writing a fix against it — don't skip that confirmation step given how far the
+original hypothesis (refuted above) was from the real mechanism despite sounding plausible on a
+first read of the code.
+
+**Verification this round**: `npx tsc --noEmit` clean on the (ultimately reverted) fix attempt
+before revert; no `npm test`/full regression suite run, since nothing shipped — not needed per this
+doc's own "don't run the full suite for changes that didn't land" logic, though this was a
+substantial-tier investigation regardless (scroll/caret-adjacent), not a small one. `npm ci` was run
+this session (repo had no installed `node_modules`); `scripts/perf/verifyCM6ArrowUpChunkBoundary.mjs`
+itself needed no changes to work as committed. Leads 1–3 were not started this session — lead 4 alone
+consumed the full session per the user's own "most concrete/novel, cheapest to falsify" prioritization,
+and the honest state is a well-grounded root-cause narrowing with two ruled-out fix shapes, not a
+closed bug.
