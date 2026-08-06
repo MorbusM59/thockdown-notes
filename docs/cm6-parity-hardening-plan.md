@@ -2092,3 +2092,53 @@ before treating this as the same bug or a distinct one.
 after use); `docLength`/`docLines`/`selectionHead` kept on the existing debug accessor (same
 non-breaking-if-CM6-changes-shape pattern as the oracle fields). `npx tsc --noEmit` and `npm run lint`
 clean. No production scroll/edit behavior changed.
+
+## A distinct, now-FIXED bug: caret visually misplaced by N-1 rows after N consecutive Enters at document end
+
+Follow-up to the double-line-break report above. The user gave a precise, minimal repro: fresh document
+(default seed text is `"# "`), press Enter once (correctly lands on line 2), press Enter again -- and the
+caret visually lands on line 4, not line 3. Typing a letter puts it on line 3 (the correct line) and the
+caret visually corrects itself. The user's own diagnosis was exactly right: **a caret-position bug, not a
+scroll-position bug** -- a genuinely different defect from lead #4 above, despite the superficially similar
+"something's off by N rows near unmeasured document tail" flavor.
+
+**Root-caused via live DOM inspection** (`window.getSelection()`, `range.getBoundingClientRect()`,
+`range.getClientRects()`, and each `.cm-line` div's own bounding rect, read directly in-browser): after 2
+Enters, `range.getBoundingClientRect()` for the collapsed caret is degenerate (`{0,0,0,0}`) and
+`getClientRects()` is empty -- normal for a collapsed caret on a trailing blank line -- so
+`readSelectionRect` (`src/editor/CaretRect.ts`) falls all the way to its last-resort `'anchor-fallback'`
+path: the anchor node's own `getBoundingClientRect()`. Confirmed directly that this fallback rect is
+**already correct** -- CM6 renders every blank line, including trailing ones, as its own independently-
+positioned `.cm-line` div (no collapsing between consecutive empty lines the way the original Lexical
+editor apparently had).
+
+The actual bug: `resolveCM6CaretTopInScroll` in `CM6Editor.tsx` carried a "verbatim ported" compensation
+from Lexical's `CaretTerminalOffset.ts` (`getTerminalTrailingVisualOffsetPx`) that adds
+`(trailingNewlineCount - 1) * lineHeightPx` whenever the caret rect came from a fallback source AND the
+caret sits at the document's true end. That heuristic was built for Lexical's DOM, where consecutive
+trailing empty paragraphs' fallback rects apparently under-counted by one row each. CM6's DOM doesn't have
+that defect -- the fallback rect above is already exactly right -- so the "compensation" was pure double-
+counting, and it was *unconditional* on trailing-newline count, not gated on actually needing it.
+
+**Confirmed live and exactly proportional**: pressed Enter 5 times in a row on a fresh document, comparing
+the custom caret overlay's actual screen position against `view.lineBlockAt(head).top` (ground truth).
+Overshoot scaled **exactly 1 row per additional trailing Enter** (1.04, 2.04, 3.04, 4.04 rows after Enters
+2 through 5 respectively -- the `.04` is a fixed small rendering-offset constant, not noise) -- a clean
+match to the formula that produced it: `trailingExtraRows = trailingNewlines - 1`.
+
+**Fix**: removed the trailing-newline compensation block from `resolveCM6CaretTopInScroll` entirely (not
+touched: the still-referenced-in-comments-only, no-longer-imported `CaretTerminalOffset.ts`/
+`CaretVisualPosition.ts`, which were Lexical-only and are now dead code following the fallback's removal --
+left alone as out of scope for this fix). Re-ran the same 5-Enters live measurement after the fix: overshoot
+is now `0.04` rows (i.e., correct) after every Enter, matching the already-correct Enter-1 baseline.
+
+**Verification (gold standard -- this is caret-position code)**: `npx tsc --noEmit` and `npm run lint`
+clean; `npm test` (277/277 passing, no regressions); live-browser Playwright A/B (via `git stash`) proving
+the fix's own repro script fails identically on unmodified `HEAD` and passes after the fix; ran
+`verifyCM6CaretSurvivesTagMutation.mjs` and `verifyCM6CursorPersistenceCheckpoints.mjs` (both pass, no
+caret-persistence regressions). `verifyCM6ColdBootCaretFocus.mjs` fails both before and after this change
+(confirmed via the same `git stash` A/B) -- a pre-existing, unrelated headless-environment focus quirk, not
+a regression from this fix. `verifyCM6ArrowUpChunkBoundary.mjs` still shows lead #4's known, still-open
+scroll-jump anomalies at the same rate as before (211/3000) -- expected, since that's the separate,
+still-unfixed bug this whole document otherwise tracks, and this fix does not touch scroll-target
+computation at all.

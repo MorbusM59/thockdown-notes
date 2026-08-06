@@ -305,53 +305,49 @@ function applyTransformResult(view: EditorView, oldText: string, next: { text: s
   });
 }
 
-const TERMINAL_TRAILING_NEWLINE_PROBE_CHARS = 256;
-
 /**
  * CM6-native replacement for CaretVisualPosition.ts's resolveCaretTopInScroll
- * + CaretTerminalOffset.ts's getTerminalTrailingVisualOffsetPx (both written
- * for Lexical, and still used as-is by Editor.tsx/BlockCaretPlugin.tsx/
+ * (written for Lexical, still used as-is by Editor.tsx/BlockCaretPlugin.tsx/
  * CagedScrollPlugin.tsx, which have a different, already-cheap rawText
  * source and don't share this defect -- kept CM6-local rather than changed
  * in those shared files).
  *
  * The Lexical version needs the full canonical text string because Lexical
- * selection offsets are DOM-derived and the terminal-blank-line check has no
- * cheaper source there. CM6's own EditorState already carries both facts
- * that check needs as O(1) values -- total document length
- * (view.state.doc.length) and whether the caret sits at that length
- * (view.state.selection.main) -- so this never needs
- * view.state.doc.toString() (an O(document length) allocation) at all. Only
- * the trailing-newline COUNT needs to touch real document content, and only
- * a small bounded tail slice (Text.sliceString), never the whole document --
- * this was previously the single highest-frequency O(document length) call
- * in this file, hit on every caret update (i.e. essentially every keystroke,
- * scroll tick, and selection change via scheduleCaretUpdate's rAF), every
- * keyboard-refocus-caging reconcile, and every paste.
+ * selection offsets are DOM-derived. CM6's own EditorState already carries
+ * both facts any such check would need as O(1) values -- total document
+ * length (view.state.doc.length) and whether the caret sits at that length
+ * (view.state.selection.main) -- so this never needs view.state.doc.toString()
+ * (an O(document length) allocation) at all. This was previously the single
+ * highest-frequency O(document length) call in this file, hit on every caret
+ * update (i.e. essentially every keystroke, scroll tick, and selection
+ * change via scheduleCaretUpdate's rAF), every keyboard-refocus-caging
+ * reconcile, and every paste.
+ *
+ * Deliberately does NOT port CaretTerminalOffset.ts's
+ * getTerminalTrailingVisualOffsetPx (a "+1 row per extra trailing newline"
+ * compensation for fallback-sourced caret rects at document end): that
+ * compensates for a Lexical-specific quirk where consecutive trailing empty
+ * paragraphs' DOM rects undercount by one row apiece. CM6 has no such
+ * quirk -- every blank line, including trailing ones, gets its own
+ * independently-positioned `.cm-line` div, so the anchor-fallback rect
+ * (readSelectionRect's last-resort path, which is what fires here: a
+ * collapsed caret on a trailing blank line has a zero-size primary rect, an
+ * empty getClientRects() list, and no adjacent sibling content to probe)
+ * already lands on the correct row with no adjustment needed. An earlier
+ * version of this function ported the Lexical compensation verbatim without
+ * re-deriving it for CM6's different DOM shape; confirmed live as a caret
+ * misplacement bug scaling exactly 1 row of overshoot per extra trailing
+ * Enter at document end (e.g. two Enters on a fresh document landed the
+ * caret visually on line 4 instead of line 3 -- the underlying text model
+ * and the eventual re-sync on the next keystroke were both always correct,
+ * only this stale double-counted offset was wrong).
  */
 function resolveCM6CaretTopInScroll(
-  view: EditorView,
   caretRect: SelectionRect,
   scrollerRectTop: number,
   scrollerScrollTop: number,
-  lineHeightPx: number,
 ): number {
-  let terminalOffsetPx = 0;
-  // Matches getTerminalTrailingVisualOffsetPx's own gate: only fallback
-  // geometry sources need this compensation, primary rects are authoritative.
-  if (caretRect.source === 'adjacent-probe' || caretRect.source === 'anchor-fallback') {
-    const selection = view.state.selection.main;
-    const docLength = view.state.doc.length;
-    if (selection.empty && selection.head === docLength) {
-      const tailStart = Math.max(0, docLength - TERMINAL_TRAILING_NEWLINE_PROBE_CHARS);
-      const tail = view.state.doc.sliceString(tailStart);
-      const trailingNewlines = tail.match(/\n+$/)?.[0].length ?? 0;
-      const trailingExtraRows = Math.max(0, trailingNewlines - 1);
-      terminalOffsetPx = trailingExtraRows * lineHeightPx;
-    }
-  }
-
-  return (caretRect.top - scrollerRectTop) + scrollerScrollTop + terminalOffsetPx;
+  return (caretRect.top - scrollerRectTop) + scrollerScrollTop;
 }
 
 const CARET_INSET_PX = 1;
@@ -1199,11 +1195,9 @@ export function CM6Editor({
     const caretLayerRect = caretLayerRectRef.current;
 
     const caretTopInScroll = resolveCM6CaretTopInScroll(
-      view,
       caretRect,
       scrollerRect.top,
       scroller.scrollTop,
-      lineHeightPxRef.current,
     );
 
     const lineHeightPxNow = lineHeightPxRef.current;
@@ -1594,11 +1588,9 @@ export function CM6Editor({
       if (!caretRect) return;
 
       const caretTopInScroll = resolveCM6CaretTopInScroll(
-        view,
         caretRect,
         scrollerRect.top,
         scroller.scrollTop,
-        lineHeightPxNow,
       );
 
       const { targetScrollTopPx } = resolveCagedScrollTarget({
@@ -1650,11 +1642,9 @@ export function CM6Editor({
       if (!caretRect) return;
 
       const caretTopInScroll = resolveCM6CaretTopInScroll(
-        view,
         caretRect,
         scrollerRect.top,
         scroller.scrollTop,
-        lineHeightPxNow,
       );
 
       // Keep the caret on the same screen-relative line it occupied before
@@ -2148,11 +2138,9 @@ export function CM6Editor({
             if (caretRect) {
               const scrollerRect = scroller.getBoundingClientRect();
               const caretTopInScroll = resolveCM6CaretTopInScroll(
-                view,
                 caretRect,
                 scrollerRect.top,
                 scroller.scrollTop,
-                lineHeightPxRef.current,
               );
               pendingPasteViewportOffsetPx = caretTopInScroll - scroller.scrollTop;
             }
