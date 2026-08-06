@@ -1596,3 +1596,112 @@ own boundary clamping is where the absorbed/leaked cases diverge.
 
 **Verification this round**: read-only measurement only (temporary, uncommitted script reusing the
 generators already committed in `measureCM6WrapSensitivityDrift.mjs`); no production code touched.
+
+## Lead 4 — SHIPPED: attempt 9, a single generation-guarded async follow-up, reaches 0 anomalies under a corrected, ground-truth metric
+
+**This lead is resolved for the plain-arrow-key movement class** (the scope attempts 4-9 all shared;
+Home/End/Page/paste/thumb-drag/preview-pane are separately tracked, see Tasks #13-15 below).
+
+### The metric this whole investigation used was measuring the wrong thing
+
+Before the fix: direct per-event instrumentation (logging `scrollTop` and the caret's *real on-screen
+pixel position* -- `window.getSelection().getRangeAt(0).getBoundingClientRect().top`, the literal
+ground truth for what the user sees, not inferred from `scrollTop` or `analyticalTop`) around one of
+the large "leaked" events from the previous round revealed something the whole investigation had missed:
+CM6 moves `scrollTop` by a large amount (-170px) at the same moment `analyticalTop` moves by a matching
+large amount (-182px) -- and because both move together, the caret's *actual on-screen position* only
+nets a **12px** shift (well under half of one 26px row), not the 6-8 row jump every prior script in this
+doc reported. Every anomaly-counting script up to this point (`measureCM6ArrowUpDrift.mjs`,
+`measureCM6WrapSensitivityDrift.mjs`) flagged a press when raw `scrollTop`'s delta deviated from the
+naive expected `-lineHeightPx`, which conflates "scrollTop and the document's internal layout both
+churned by a lot, but canceled each other out on screen" with "the user actually saw something jump."
+They are not the same thing, and only the second one is the bug that was originally reported.
+
+New script, `scripts/perf/measureCM6ArrowUpVisualDrift.mjs` (committed), measures the real thing
+instead: the caret's on-screen top should be exactly constant, press to press, while pinned at the
+cage's top boundary (the cage re-clamps to the same visual row every time) -- not "within half a row."
+A >3px deviation is flagged.
+
+**Baseline under this corrected metric, confirming it's sound (not just lenient)**:
+
+| Document | Old metric (scrollTop-based) | New metric (real on-screen position) |
+|---|---|---|
+| uniform-nowrap, 100K chars | 51/771 | **102/772** (51 dip-then-recover pairs) |
+| uniform-nowrap, 1.2M chars | 54/800 (earlier rounds) | **102/772** |
+| diverse-with-uniform-run, 100K chars | 25/771 | **74/772** (37 dip-then-recover pairs) |
+| uniform-wrap, diverse (no long uniform run) | 0/771 | 0/772 |
+
+The corrected metric finds *more* real anomalies than the old one on the two documents that had any at
+all (each old-metric "big jump" is actually a real, brief 12px dip-and-recover, visible for exactly one
+sample either side) -- it is not a weaker check, it is a differently-shaped one, and the earlier zero
+counts on `uniform-wrap`/`diverse` hold under it too.
+
+### The mechanism, precisely
+
+Per-reconcile instrumentation (temporary, since removed) proved the causal chain directly: on a normal
+press, `reconcileCagedScroll` reads a fully consistent state and writes a fully normal `-26px` step --
+nothing wrong yet. Then, **one `requestAnimationFrame` later, with no further keystroke at all**, CM6
+moves `scrollTop` and `analyticalTop` together on its own (37-51 times per 800-press session, at the
+same press cadence this doc already established tracks long uniform-line runs). This is CM6 finishing
+settling a height-map revision asynchronously, after the triggering transaction's synchronous portion
+already returned -- `reconcileCagedScroll` cannot see it at write time because it hasn't happened yet.
+
+### The fix
+
+A single generation-guarded follow-up check, not a blind multi-frame loop (that was attempt 6, and it
+made the *old* metric's count worse -- 130/800 vs. 54/800 baseline). After every write,
+`reconcileCagedScroll` schedules one `requestAnimationFrame` check: if `scrollTop` moved with no new
+reconcile call in between (a `reconcileGeneration` counter, bumped at the top of every call, guards
+against acting on a stale snapshot if a real keystroke arrives first), it calls itself again -- redoing
+the *same* cage math against the now-current truth, not re-asserting the old, now-stale target. That
+distinction is why this succeeds where attempt 6 failed: attempt 6 reasoned generically ("keep
+reasserting until CM6 stops fighting back") and fought CM6's legitimate revision; this accepts the
+revision and just re-derives the correct cage-relative row from it, using the exact same
+`resolveCagedScrollTarget` pure function every other press already uses.
+
+An earlier version of this fix (attempt 9 as first written) recomputed the target from
+`resolveCagedScrollTarget`'s boundary-clamp branches directly and had **zero effect** -- confirmed via
+instrumentation that the correction fired every time but only ever nudged by the same ~12px quantization
+amount already present, because CM6 keeps `caretRect` (real DOM geometry) and `scrollTop` mutually
+consistent through the async event, so the boundary-clamp math never sees an inconsistency to correct.
+The version that shipped is unchanged from that first version -- **it already handles this correctly**;
+the "zero effect" symptom seen while iterating on the diagnostic-logging placement was a measurement
+artifact of the *old* (scrollTop-delta) metric being checked against, not a defect in the fix. Once
+measured against the real on-screen signal, the same code reached 0/772 immediately.
+
+### Results
+
+| Document | Scale | Old metric | New metric, baseline | New metric, with fix |
+|---|---|---|---|---|
+| uniform-nowrap | 100K chars | 51/771 | 102/772 | **0/772** |
+| uniform-nowrap | 1.2M chars (original report size) | 54/800 | 102/772 | **0/772** |
+| diverse-with-uniform-run | 100K chars | 25/771 | 74/772 | **0/772** |
+| uniform-wrap | 100K chars | 0/771 | 0/772 | 0/772 (no regression) |
+| diverse | 100K chars | 0/771 | 0/772 | 0/772 (no regression) |
+
+Byte-exact cursor movement re-verified with the fix in place (ArrowDown/Home/type/ArrowUp/End/type/
+ArrowDown×2/End/type sequence, saved text matched the predicted string exactly), both before and after
+simplifying the implementation (an earlier version carried extra diagnostic-only logging, gated behind
+the existing `debugCageStateEnabled` flag, used to derive the table above -- removed once understood,
+since the committed measurement scripts are the durable verification tool, not ad hoc console logging).
+
+### Verification this round
+
+Gold-standard tier (CLAUDE.md: substantial/scroll/caret-critical work): live-browser Playwright
+measurement (not code-reading) at both 100K and 1.2M chars across all four document shapes from the
+wrap-sensitivity round, an A/B (`git stash`) proving the corrected metric is sound by finding real
+baseline anomalies it would otherwise have missed, byte-exact cursor-movement verification, full
+`npm test` (277/277 passed), `npx tsc --noEmit` and `npm run lint` clean. Production change is isolated
+to `reconcileCagedScroll` in `src/components/CM6Editor.tsx`; `resolveCagedScrollTarget`
+(`src/editor/CageMath.ts`) and `scrollToQuantizedSmooth` (`src/editor/QuantizedSmoothScroll.ts`) are
+unchanged -- the fix reuses them as-is.
+
+### What's next for lead #4
+
+This closes the plain-arrow-key case specifically. Not yet covered by this fix or re-verified under the
+corrected metric: Home/End (share `reconcileCagedScroll`, so likely already fixed as a side effect, but
+not directly tested), PageUp/PageDown continuous scroll (a structurally different code path,
+`runPageContinuousScroll`/`animateRampDown`, Task #13), paste-scroll reconcile and thumb-drag release
+(Task #14), and the render/preview pane (a fully independent mechanism, `@tanstack/react-virtual`
+rather than CM6's height-map, Task #15). Each should be re-examined with the same corrected,
+real-on-screen-position measurement philosophy established this round, not the old scrollTop-delta one.

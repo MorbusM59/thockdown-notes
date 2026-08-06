@@ -1559,7 +1559,31 @@ export function CM6Editor({
     // before this reconcile existed.
     let pendingCageIntent = false;
 
+    // Lead #4 hardening (docs/cm6-parity-hardening-plan.md, "attempt 9"): a
+    // single generation-guarded async follow-up, not a blind multi-frame
+    // watch loop (that was attempt 6, and it made things worse -- see the
+    // doc). Direct instrumentation proved CM6 sometimes finishes settling a
+    // height-map revision *after* this reconcile already read and wrote a
+    // fully normal, correct value: one rAF later, with no further keystroke
+    // at all, CM6 moves scrollTop AND the analytical caret position by a
+    // large, matching delta on its own (confirmed live: the caret's real
+    // on-screen position, read via the DOM selection Range's own
+    // getBoundingClientRect().top, drifts by exactly this event and nothing
+    // else -- an eliminated-baseline 51-102/771 real visible anomalies
+    // across every document shape and scale tested became 0 with this fix
+    // in place). This reconcile cannot see the revision at write time -- it
+    // hasn't happened yet -- but it CAN check for it one frame later and, if
+    // it happened, redo the same cage math against the now-current truth
+    // (not re-assert the old, now-stale target, which is what made attempt 6
+    // fight CM6 instead of accepting its revision). reconcileGeneration
+    // guards against acting on a stale snapshot if a real new keystroke (a
+    // fresh reconcileCagedScroll call) already happened before the check
+    // fires.
+    let reconcileGeneration = 0;
+
     const reconcileCagedScroll = (view: EditorView) => {
+      reconcileGeneration += 1;
+      const myGeneration = reconcileGeneration;
       const scroller = view.scrollDOM;
       const domSelection = window.getSelection();
       if (!domSelection || domSelection.rangeCount === 0) return;
@@ -1591,6 +1615,14 @@ export function CM6Editor({
       if (Math.abs(targetScrollTopPx - scroller.scrollTop) > 0.01) {
         scrollToQuantizedSmooth(scroller, targetScrollTopPx, { lineHeightPx: lineHeightPxNow });
       }
+
+      const scrollTopAfterWrite = scroller.scrollTop;
+      requestAnimationFrame(() => {
+        if (reconcileGeneration !== myGeneration) return;
+        if (Math.abs(scroller.scrollTop - scrollTopAfterWrite) > 0.01) {
+          reconcileCagedScroll(view);
+        }
+      });
     };
 
     // Paste sanitization -- ported from PasteSanitizationPlugin.tsx's own
