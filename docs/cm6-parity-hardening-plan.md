@@ -1319,3 +1319,100 @@ scripts (`scripts/perf/measureCM6PageContinuousScroll.mjs`,
 `scripts/perf/measureCM6PreviewPageContinuousScroll.mjs`), both following the same
 sample-and-detect-reversal methodology as `measureCM6ArrowUpDrift.mjs`. `npx tsc --noEmit` clean
 (no `.ts` changes this round, scripts are plain `.mjs`).
+
+## Lead 4, fix attempts 4-6 — dispatch-based assertion tried three ways, all ruled out; competing-scrollIntoView hypothesis also ruled out
+
+Follow-up session, continuing directly from the movement-class audit above. Per explicit user
+direction on methodology: judge each attempt binary (anomaly count is 0, or it isn't -- don't treat
+"fewer than some other failed attempt" as partial credit), and treat every ruled-out attempt as real
+progress toward the true cause, not wasted effort.
+
+**Attempt 4 -- dispatch `EditorView.scrollIntoView` immediately in `scrollToQuantizedSmooth`'s
+`onSettled` callback** (added as a new option to that function). Researched the actual public API
+from the installed `@codemirror/view` source first (not assumed): `scrollIntoView(pos, {y, yMargin})`
+returns a dispatchable `StateEffect`, and the measure-loop source confirms CM6 handles a pending
+`scrollTarget` *before* running its own anchor-compensation pass, then re-picks a fresh anchor
+afterward -- a real, CM6-native "authoritative reposition" primitive, not a guess.
+**Result: 54/800, byte-identical to baseline.** Traced why with instrumentation: at the instant the
+callback ran, `scrollTop` already equalled the correct target -- CM6's own anchor-compensation for
+that same keystroke hadn't happened yet. It's scheduled via CM6's own `requestAnimationFrame`-based
+measure flush, not resolved synchronously within the transaction that triggered it, so dispatching
+immediately just gets silently superseded by that still-pending pass moments later.
+
+**Attempt 5 -- same, deferred one frame** before dispatching, reasoning that giving any pending
+pass a chance to run first would let the assertion be the genuine last word. **Refuted a wrong
+premise directly**: an isolated test (bypassing the reconcile entirely, calling `scrollIntoView`
+freestanding) showed `view.dispatch()` does not apply the effect's scrollTop write synchronously at
+all -- even `coordsAtPos` returned `null` for the target position at dispatch time, yet the position
+resolved correctly *moments later anyway*. CM6 resolves `scrollIntoView` on its own schedule
+regardless of when dispatch is called; deferring our own call first only adds latency, it doesn't
+change which of CM6's internal passes ends up running last. With the artificial delay removed,
+instrumentation then showed something more serious: a *single* dispatch could itself move a correct
+position to a wrong one, synchronously, within the dispatch call -- confirmed live, 533858 (correct)
+became 533766 after one `dispatch()`. Because satisfying our own `scrollIntoView` request can itself
+require growing the viewport into unmeasured territory, and growing the viewport runs CM6's own
+anchor-compensation as part of that same internal pipeline. Going through CM6's "proper" API does
+not avoid the imprecision -- the API shares the same internal pipeline that produces it.
+
+**Attempt 6 -- a bounded multi-frame "watch and correct" loop**, re-dispatching on drift for up to 6
+frames, stopping after two consecutive stable checks. Reasoned as the most robust response to
+attempt 5's finding: since neither a single dispatch nor a single well-timed deferred dispatch
+reliably wins, keep reasserting until CM6 stops fighting back. **Result: 130/800 -- worse than doing
+nothing.** Every active correction attempted so far, across three different variants, either did
+nothing or made the outer-observed anomaly count worse, because the correction itself keeps
+triggering fresh CM6-internal reactions. This is the point the user's own framing (binary outcome,
+not "better than the last attempt") mattered: 130 is not "worse than 109 from a much earlier
+attempt" in any meaningful sense -- neither is 0, so both are the same kind of failure, and chasing
+which specific wrong number is smaller was already established as a trap in an earlier round of this
+same investigation.
+
+**Attempt 7 -- suppress CM6's own competing scroll intent at the source, not react to its effects.**
+Read `@codemirror/commands`' source directly: CM6's own default arrow-key commands
+(`cursorLineUp`/`cursorLineDown`/`cursorCharLeft`/`cursorCharRight`) dispatch a transaction that
+bundles `scrollIntoView: true` into the *same* transaction that moves the selection (confirmed via
+`setSel`'s exact source: `state.update({selection, scrollIntoView: true, userEvent: "select"})`) --
+tagged `userEvent: "select"`. Hypothesis: this is a second, redundant, competing scroll intent
+underneath our own cage reconcile, and removing it (not fighting its aftermath) closes the gap by
+construction. Implemented narrowly -- only the four plain (unmodified) arrow keys, explicitly *not*
+Shift/Ctrl/Alt/Cmd variants, which cover much larger and riskier semantics (word/line-boundary jumps,
+document-start/end, even `moveLineUp`/`Down`, an actual document edit) not worth the blast radius for
+this investigation. Called CM6's own exact movement commands (not reimplemented) through a thin
+`Object.create(view)` proxy that intercepts only `dispatch()`, rebuilding the one precise
+`TransactionSpec` shape these four commands are known to produce (selection change + `userEvent`,
+`scrollIntoView: false`) rather than a generic transaction-stripping utility. Verified no private
+class fields exist on `EditorView` (checked the installed source directly) before trusting
+`Object.create`'s prototype delegation for `moveVertically` and friends. **Cursor movement itself
+verified byte-exact** before testing the scroll fix at all (highest-severity risk class): typed
+distinct markers after ArrowDown/Home/ArrowUp/End/ArrowDown×2/End sequences on a real note, read the
+saved text back, exact string match against the predicted result.
+**Scroll result: 54/800, byte-identical to baseline again.** This is a clean, informative negative
+result, not a wash: it rules out "two competing `scrollIntoView` requests fighting" as the mechanism.
+Since removing CM6's own scroll intent entirely made zero measurable difference, the anchor
+compensation is not reacting to a scroll-positioning conflict at all -- it's reacting to the
+**viewport needing to grow simply to keep the new caret position rendered**, which happens on a plain
+selection-only transaction with no scroll intent whatsoever. This is a more fundamental trigger than
+either hypothesis behind attempts 4-6 assumed, and structurally can't be avoided by choosing which
+API places the scroll request or when -- growing the viewport at all, for any reason, appears to be
+what triggers the imprecise compensation.
+
+All three attempts (4, 5/6 counted together as one code path evolving, and 7) were reverted in full
+after measurement -- working tree returned to the last committed state each time, nothing shipped
+partially-working. One real, low-risk infrastructure fix survives from this round and was kept:
+`scripts/perf/perfHarness.mjs`'s mount-wait timeout raised from 30s to 90s, after directly timing a
+completely unmodified mount at 18.6s and another at 58.3s in this same session (this environment's
+dev-server/mount latency is genuinely variable session-to-session and run-to-run, confirmed by
+direct A/B timing, not assumed) -- 30s was intermittently insufficient even for correct, unmodified
+code, which cost real time this round chasing a false "did I break something" signal before ruling
+it out directly.
+
+**Where this leaves the search**: the true trigger is now understood more precisely than at the
+start of this round -- viewport growth itself, not a scroll-intent conflict, not something reactable-
+to after the fact. A genuinely new angle worth trying next, not yet attempted: **pre-emptively widen/
+measure the viewport *before* dispatching the selection-changing transaction**, so that by the time
+the caret actually moves, the target region is already measured and no reactive, mid-transaction
+growth (the apparent trigger for the imprecision) is needed at all. Not yet designed or implemented.
+
+**Verification this round**: `npx tsc --noEmit` and `npm run lint` clean on every attempt before
+revert. No `npm test`/full regression suite run, since nothing shipped. `scripts/perf/perfHarness.mjs`'s
+timeout change is the only surviving diff and was independently verified (unmodified code, direct
+timing) rather than assumed safe.

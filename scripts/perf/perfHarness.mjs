@@ -134,7 +134,13 @@ export async function seedLargeNoteAndReload(page, text) {
     await window.thockdownSections.setActiveNote('default', note.id)
   }, text)
   await page.reload()
-  await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 30000 })
+  // 90s, not 30s: this environment's dev-server/mount latency has been
+  // observed to vary widely session-to-session (and even run-to-run within
+  // a session) for large synthetic notes -- a single directly-timed
+  // baseline mount took 18.6s on one run and CI-like conditions elsewhere
+  // in this project's own investigation history have taken longer still.
+  // 30s intermittently timed out on completely unmodified code.
+  await page.waitForSelector('.editor-text[contenteditable="true"]', { timeout: 90000 })
   // Let the initial mount/hydration settle (virtualizer measurement passes,
   // fixed-focus viewport boundary calculation) before any measurement starts.
   await page.waitForTimeout(500)
