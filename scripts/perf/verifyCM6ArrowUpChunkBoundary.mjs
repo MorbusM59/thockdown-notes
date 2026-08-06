@@ -49,13 +49,14 @@ function generateUniformDocument(targetChars) {
 }
 
 function parseArgs(argv) {
-  const args = { chars: 1_200_000, presses: 3000, port: 5187, headed: false }
+  const args = { chars: 1_200_000, presses: 3000, port: 5187, headed: false, delayMs: 0 }
   for (const raw of argv) {
     const [key, value] = raw.replace(/^--/, '').split('=')
     if (key === 'headed') args.headed = true
     else if (key === 'chars') args.chars = Number(value)
     else if (key === 'presses') args.presses = Number(value)
     else if (key === 'port') args.port = Number(value)
+    else if (key === 'delayMs') args.delayMs = Number(value)
   }
   return args
 }
@@ -141,9 +142,17 @@ async function main() {
     let prev = initial
     for (let i = 0; i < args.presses; i += 1) {
       await page.keyboard.press('ArrowUp')
-      // No artificial wait -- pressing at native repeat cadence is exactly
-      // when this bug was reported ("pressing Up... to move the caret").
-      // A short settle wait would mask a transient mid-reconcile jump.
+      // Default: no artificial wait -- pressing at native repeat cadence is
+      // exactly when this bug was reported ("pressing Up... to move the
+      // caret"), and a short settle wait would mask a transient mid-reconcile
+      // jump. --delayMs is available to re-run at a specific inter-press
+      // interval (e.g. ~35ms, matching typical OS key-repeat) -- confirmed
+      // live that the bug this script targets reproduces identically at
+      // that pacing, ruling out "reproduces only because presses arrive
+      // faster than a frame can paint" as an explanation. See
+      // docs/cm6-parity-hardening-plan.md's Phase 4 lead #4 for the session
+      // that added this flag and what it was used to rule out.
+      if (args.delayMs > 0) await page.waitForTimeout(args.delayMs)
       const next = await readState(page)
 
       if (prev.scrollTop !== null && next.scrollTop !== null && lineHeightPx) {
