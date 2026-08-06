@@ -1217,3 +1217,105 @@ measurement script survive, both committed as ongoing investigation tooling rath
 the investigation is still open (unlike the single-purpose `debug-arrow-cage`/`debug-viewport-updates`
 instrumentation from earlier rounds, which was removed once each round's specific question was
 answered).
+
+## Lead 4, scope widened — every scroll-triggering movement class, both panes, per explicit user direction
+
+Follow-up session. Before this, the investigation had only ever exercised ArrowUp -- a single-row
+movement. Explicit user direction: fix design must not narrow to that one case. A multi-row jump
+landing a few rows short is easy to miss visually (the shortfall is a small fraction of a large jump)
+but is the same underlying imprecision, and this app's own standard is exact, consistent handling for
+*any* movement, not just the one case that happened to get the deepest investigation first. Also
+directed: apply the same rigor to the render/preview pane, checking for genuine viewport
+misplacement, not just cosmetic scrollbar-thumb lag.
+
+### Full audit of scroll-triggering movement classes (edit pane)
+
+Grepped every direct `scroller.scrollTop =` write site in `CM6Editor.tsx` (seven total, up from the
+one -- ArrowUp's `reconcileCagedScroll` -- covered by prior rounds):
+
+1. **ArrowUp/Down/Left/Right** (`reconcileCagedScroll`) -- already deeply characterized above: real,
+   bounded (not leaking) drift, root cause is CM6's own scroll-anchor compensation.
+2. **Scrollbar-thumb drag** (`scrollFromThumbTop`, a raw write per pointermove) -- not yet tested.
+3. **PageUp/PageDown, single discrete press** (`Prec.highest` keymap handler, dispatches via
+   `scrollToQuantizedSmooth`) -- **tested, confirmed safe**: 60 repeated single presses on a 1.2M-char
+   note landed on the exact same -676px delta every single time, zero variance. Root cause of the
+   safety, not luck: `scrollToQuantizedSmooth`'s animation always forces an exact write to the
+   intended quantized target on its final frame, which overwrites/self-heals whatever CM6's own
+   anchor compensation did mid-flight. This is the shape a real fix should generalize, not the
+   raw-write pattern below.
+4. **PageUp/PageDown, held/continuous** (`runPageContinuousScroll` + `animateRampDown` release ramp)
+   -- **tested, confirmed buggy**. Unlike case 3, this writes `scroller.scrollTop` raw on every
+   animation frame, computed as `scroller.scrollTop + direction*speed*deltaSec` -- each frame's target
+   based on whatever scrollTop currently reads, no independent absolute reference, no forced-exact-
+   final-step anywhere in the hold-or-release sequence. Live capture, sampling scrollTop every
+   animation frame during a held PageUp on a 500K-char note
+   (`scripts/perf/measureCM6PageContinuousScroll.mjs`): a **+208px (8-row) reversal in the wrong
+   direction**, landing exactly at the hold-release transition (t=4030.6ms of a 4000ms hold), followed
+   by an overshoot-and-recover on the next two samples before settling. This is the same underlying
+   raw-write-races-CM6's-anchor-compensation pattern as ArrowUp, just pre-existing in shipped code
+   and firing far more often (every frame of a multi-second hold, not once per keystroke) -- not
+   something introduced by this investigation's fix attempts.
+5. **Paste-scroll reconcile** (`reconcilePasteScroll`) -- same "immediate raw write, no forced-final-
+   step" shape as ArrowUp's own reconcile; not yet tested live, but structurally the same risk class.
+6. **Mouse wheel / trackpad scroll** (`handleWheel`) -- tested with one configuration (synthetic
+   400px deltaY events every ~16ms, sustained 5s, covering 354 rows / roughly 22-27 chunk-equivalent
+   crossings on a 500K-char note): **zero reversals found**. Recorded as a real but *not exhaustive*
+   result -- real trackpad hardware produces much smaller, far more frequent deltaY events than this
+   synthetic test used, and that shape hasn't been tried. Provisionally lower-risk, not cleared.
+7. **Drag-selection auto-scroll quantization** (the `dragCorrectionFrame` handler, fires while
+   dragging a selection near the viewport edge) -- not yet tested.
+
+### Render/preview pane: genuine viewport misplacement confirmed, not cosmetic thumb lag
+
+The preview pane has its own, structurally near-identical PageUp/PageDown continuous-scroll
+implementation (`usePreviewScrollbar.ts`'s `startPreviewContinuousScroll`/
+`startPreviewReleaseRampDown`), and virtualizes content via `@tanstack/react-virtual`
+(`usePreviewMarkdownRendering.tsx`) with `estimateSize: () => 56` (a fixed px estimate for
+not-yet-rendered blocks) corrected by `measureElement` once a block actually renders, plus
+`overscan: 6` -- the react-virtual-native version of the same estimate-vs-measured pattern that
+drives CM6's own scroll-anchor compensation, independently implemented, not shared code. The
+scrollbar thumb (`syncPreviewCustomScrollbar`) reads `scroller.scrollTop`/`scrollHeight` live with no
+independent state, so it faithfully mirrors whatever the real container does.
+
+**First test attempt was invalid and is worth recording as a methodology trap**: the synthetic
+document generator used elsewhere in this investigation (`Line N: ...` with no blank lines between
+entries) produces zero paragraph breaks, and markdown merges consecutive non-blank lines into a
+single paragraph. Confirmed live: that document rendered as **one single virtualized block**
+(`document.querySelectorAll('.markdown-preview [data-index]').length === 1`), meaning the first
+continuous-scroll test against it exercised essentially nothing -- react-virtual had almost no
+virtualization boundaries to cross. Fixed by generating blank-line-separated paragraphs instead
+(confirmed live: 22 separately-rendered blocks in one viewport). Recorded here since it's exactly the
+kind of "test passed for the wrong reason" trap this project's docs warn about repeatedly.
+
+**With that fixed, re-tested and found real, genuine viewport misplacement**: sampling
+`.markdown-preview`'s `scrollTop` every animation frame during a held PageDown on a 1.2M-char note
+(paragraph-separated, `scripts/perf/measureCM6PreviewPageContinuousScroll.mjs`) found **five
+wrong-direction reversals** (scrollTop decreasing during a monotonic downward hold: -13, -52, -78,
+-65, -78px), all clustered in the pre-release/transition window (t=4541-5095ms of a 5000ms hold) --
+the same general moment CM6's own single large reversal occurred, though smaller-magnitude and
+multiple discrete events here rather than one. This directly confirms the user's own suspicion,
+raised before this test existed: the render-view's scrollbar-thumb jitter during continuous
+PageUp/PageDown is not cosmetic lag, it reflects the pane's actual scroll position genuinely
+misbehaving, via an independent mechanism with the same structural shape as the CM6 case.
+
+### Where this leaves the picture
+
+At least three confirmed, distinct-but-structurally-related defects now exist across two panes, all
+sharing one root pattern: **a raw `scrollTop` write, made outside the owning system's own
+authoritative update path, racing that system's internal estimate-vs-measured virtualization
+reconciliation** (CM6's scroll-anchor compensation on the edit side; `@tanstack/react-virtual`'s own
+analogous mechanism on the preview side). The one case proven safe (single discrete PageUp/PageDown
+press) is safe specifically because its write goes through an animation that forces an exact final
+write, self-healing whatever the owning system did mid-flight -- the shape any general fix should
+adopt, not a coincidence specific to that one code path.
+
+**Not yet tested**: scrollbar-thumb drag (edit and preview), paste-scroll reconcile, drag-selection
+auto-scroll, a more realistic (small, high-frequency) wheel-event shape, Home/End and Ctrl+Home/End,
+click-to-position jumps, and wrap-point/box-width sensitivity (Q3 from the user's own pre-fix-design
+questions, still open -- every test in this investigation so far deliberately avoided line-wrapping).
+
+**Verification this round**: no production code changed -- purely measurement. Two new committed
+scripts (`scripts/perf/measureCM6PageContinuousScroll.mjs`,
+`scripts/perf/measureCM6PreviewPageContinuousScroll.mjs`), both following the same
+sample-and-detect-reversal methodology as `measureCM6ArrowUpDrift.mjs`. `npx tsc --noEmit` clean
+(no `.ts` changes this round, scripts are plain `.mjs`).
