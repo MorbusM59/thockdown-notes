@@ -1705,3 +1705,93 @@ not directly tested), PageUp/PageDown continuous scroll (a structurally differen
 (Task #14), and the render/preview pane (a fully independent mechanism, `@tanstack/react-virtual`
 rather than CM6's height-map, Task #15). Each should be re-examined with the same corrected,
 real-on-screen-position measurement philosophy established this round, not the old scrollTop-delta one.
+
+## Lead 4 correction — the shipped fix solves a different (smaller, self-healing) problem than the one actually reported; the real bug is a permanent per-hold scroll-distance overshoot
+
+Direct user report, re-examined against live ground-truth data, found the "SHIPPED" conclusion above
+premature. The user's own description of the bug, precisely: holding ArrowUp with the caret pinned at
+the cage's top boundary, at regular intervals the text scrolls **5 rows instead of 1** for that single
+keystroke -- not a flicker, a settled landing spot -- with the caret ending up correctly one row above
+wherever that extra-scrolled content now sits. This is a claim about **scroll distance**, not caret
+position. Manually reproduced by the user at 1.5M chars (their real usage scale); not reproduced at
+30K chars.
+
+**What the previous round's fix actually measured turned out to be the wrong signal.** Live
+instrumentation (raw per-press `scrollTop` and native caret-rect sequences, not aggregate counts) on
+the *unfixed* baseline at 1.5M chars showed the caret's own on-screen position only ever wobbles ~12px
+for one press and fully self-heals the very next keystroke -- never a persistent multi-row landing
+spot. That's what `measureCM6ArrowUpVisualDrift.mjs` (the previous round's "corrected" metric) measures,
+and it is a real, if minor, defect the shipped fix (kept, per explicit user direction -- "no harm
+done... let's keep any win we have") genuinely closes. But it is not what the user reported. Direct
+proof the real bug survives the shipped fix: summing raw `scrollTop` across 400 continuous ArrowUp
+presses at 1.5M chars, with the fix in place, gives -13,255px against an expected -10,400px (26px/row)
+-- **110 rows of permanent, never-repaid excess scroll distance**, statistically unchanged from the
+unfixed baseline. The shipped fix's async follow-up stabilizes the caret glyph's transient wobble; it
+never once asks "did the total scroll distance for this keystroke equal one row," which is the actual
+invariant the report is about.
+
+**Attempt 10 -- track scrollTop as our own row-counted state, independent of CM6's geometry.** Root
+cause: `reconcileCagedScroll` only ever asks "is the caret within the cage bounds," never "did
+`scrollTop` move by exactly one row" -- once a CM6 height-map revision leaves the caret merely *near*
+(not outside) the cage boundary, the geometry-based math has no way to notice anything is wrong.
+Design: while continuously pressing the *same* plain vertical arrow with the caret pinned, maintain an
+authoritative `lastPinnedScrollTopPx` incremented by exactly `lineHeightPx` per press, completely
+bypassing CM6's (possibly revised) geometry for the write; only re-derive from geometry on genuine
+state changes (first entering the pinned state, a direction change, a non-arrow key, a `lineHeightPx`
+change). Added `clampedAgainst: 'above'|'below'|'within'` to `resolveCagedScrollTarget`'s return
+(CageMath.ts) so the caller can recognize a boundary-follow event without re-deriving the comparison.
+
+Two real, sequentially-discovered bugs in the attempt itself before it could even be evaluated fairly:
+
+1. **Animated-path snowball.** The tracked target's write went through `scrollToQuantizedSmooth`
+   unconditionally. Once CM6 left actual `scrollTop` more than one row away from the tracked value
+   (exactly the case this exists to correct), `scrollToQuantizedSmooth`'s own distance check --
+   measured against *actual* `scrollTop`, not this target -- took its animated multi-frame path instead
+   of an immediate write. That animation cannot finish within one keystroke's ~35ms cadence, so the
+   next press cancelled it and started a new one toward an even-further target. Result, live-measured:
+   presses stuck at a flat `scrollTop` for several keystrokes, then a lurch up to -572px (21 rows) in
+   one step -- **worse than the original bug**. Fixed by writing `scroller.scrollTop` directly
+   (bypassing the animation entirely) whenever the write is a known-precise correction rather than an
+   organic scroll.
+2. **Follow-up trusted fresh geometry it shouldn't have.** The async follow-up (kept from the previous
+   round) re-derived `clampedAgainst` from fresh geometry before deciding whether to re-assert the
+   tracked value -- but fresh geometry at that moment can already reflect CM6's own unwanted intervening
+   write (e.g. reporting `'within'` instead of `'above'` because CM6 scrolled past where the cage would
+   have stopped), causing the follow-up to *accept* CM6's write instead of undoing it. Fixed by
+   decoupling the follow-up path entirely from fresh `clampedAgainst`: it now unconditionally
+   re-asserts whatever this press's real (non-follow-up) reconcile already established, never
+   re-deriving from geometry.
+
+With both fixed, raw `scrollTop` distance became **exactly correct** -- verified by full per-press
+trace, both 100K and 1.5M chars: every single press in the pinned steady-state region (after the
+expected initial settle window) moved by precisely one row, zero deviation, for 376 consecutive
+presses.
+
+**But this didn't survive contact with the visual metric, and that's informative, not just a
+setback.** `measureCM6ArrowUpVisualDrift.mjs` against the *same* build showed 120-269 anomalies out of
+~400 presses -- the caret's real on-screen position still jumps. The reconciliation: CM6's height-map
+revision is a **genuine content reflow**, not merely a bookkeeping error -- when it fires, the actual
+rendered Y-position of content physically changes. `scrollTop`'s raw number and "which content is
+correctly aligned in the viewport" are the same thing only when CM6's internal layout is stable between
+presses. Forcing `scrollTop` to increment by a fixed amount, oblivious to a real intervening layout
+change, produces a `scrollTop` sequence that is numerically perfect but no longer necessarily pointing
+at the content it should -- the misalignment simply becomes invisible to a `scrollTop`-delta metric
+instead of being fixed. Neither of this investigation's two ground-truth metrics is wrong; they measure
+two different, both-real invariants (scroll-distance-per-keystroke vs. content-alignment-on-screen),
+and this attempt satisfied only one of them. A magnitude-capped hybrid (trust geometry, but bound the
+per-press correction) was already tried early in this investigation, pre-dating this session, and made
+things worse at scale (254/800 vs. a 54/800 baseline) -- repeating that shape isn't expected to fare
+better now that the underlying cause is better understood, but a *differently* bounded hybrid (e.g. pure
+row-counting for a capped number of consecutive presses, then a forced fresh-geometry re-anchor) has not
+been tried and is the leading candidate for the next attempt.
+
+**Reverted in full** -- `src/components/CM6Editor.tsx` and `src/editor/CageMath.ts` returned to the last
+committed state (the async-follow-up-only fix from the previous round, which stays shipped). Per this
+investigation's binary standard, an attempt that satisfies one ground-truth metric but not the other is
+not a 0-anomaly result and does not ship partially.
+
+**Verification this round**: live-browser Playwright measurement at both 100K and 1.5M chars (matching
+the user's own reported reproduction scale), full per-press raw traces (not aggregate counts) for both
+`scrollTop` and native caret-rect signals, byte-exact cursor movement re-verified after each code
+change, `npx tsc --noEmit` clean throughout. No `npm test`/lint delta since the round's code changes
+were fully reverted; only this doc entry is new.
