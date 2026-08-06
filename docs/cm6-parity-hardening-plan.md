@@ -1416,3 +1416,63 @@ growth (the apparent trigger for the imprecision) is needed at all. Not yet desi
 revert. No `npm test`/full regression suite run, since nothing shipped. `scripts/perf/perfHarness.mjs`'s
 timeout change is the only surviving diff and was independently verified (unmodified code, direct
 timing) rather than assumed safe.
+
+## Lead 4, fix attempt 8 — pre-emptive viewport widening ruled out; the anomaly is not dispatch-shape-dependent at all
+
+Direct follow-up implementing the "pre-emptively widen the viewport before dispatch" angle proposed
+above. Read `@codemirror/commands`' source to confirm `cursorByLine` (backing `cursorLineUp`/
+`cursorLineDown`) calls the public `view.moveVertically(range, forward)` with no distance argument
+(one line) -- so the exact target position CM6's own command will land on can be predicted precisely,
+not approximated, by calling that same public API read-only before the real key is processed.
+
+Implemented in the existing `Prec.highest` `any` keymap handler (which already runs, for every key,
+*before* `defaultKeymap`'s own bindings get a chance to handle the same event): for plain
+ArrowUp/ArrowDown only (same narrowest-tested scope as attempt 7), compute the predicted target via
+`view.moveVertically`, then dispatch a selection-preserving, scroll-only transaction --
+`{ effects: EditorView.scrollIntoView(target.head, { y: 'nearest' }) }` -- to force CM6 to
+measure/render that region immediately. Control then falls through (no `event.preventDefault()`), so
+`defaultKeymap`'s real `cursorLineUp`/`cursorLineDown` still runs immediately after, now against an
+already-rendered target.
+
+Verified cursor movement byte-exact first (typed markers through a real
+ArrowDown/Home/ArrowUp/End/ArrowDown×2/End sequence, saved-text exact match) before measuring scroll
+behavior at all.
+
+**Result: 54/800 -- and not merely the same count. The exact same press indices, exact same
+magnitudes, exact same signs as the unpatched baseline and as attempts 4 and 7**, none of which share
+this attempt's mechanism (immediate post-hoc dispatch; competing-scrollIntoView suppression;
+pre-emptive pre-dispatch widening are three structurally distinct interventions). Reverted in full
+(`git checkout -- src/components/CM6Editor.tsx`); working tree confirmed clean.
+
+**This is the most informative negative result of the investigation so far.** Four dispatch-layer
+interventions -- act after, suppress the competing intent, act before, and (attempts 5/6) act after
+with retries -- have now produced either zero effect or a worse outcome, never a partial improvement,
+and three of the four zero-effect runs line up index-for-index. That rules out more than any single
+attempt's own hypothesis: it's now unlikely that *any* change to when or how this app's code calls
+`dispatch()` around a plain arrow-key press can affect this anomaly, because nothing about the
+anomaly's own timing or shape moved when the dispatch pattern changed completely, three different
+ways. The anomaly's regularity is itself a clue pointing the same direction: anomalies recur at a
+strikingly fixed press-count cadence (every ~14 presses in the 1.2M-char/800-press run, independent of
+proximity to either document boundary once past the initial settle window), which reads less like a
+reactive per-keystroke race and more like CM6's internal height-map hitting a fixed, amortized
+recompute boundary (e.g. a chunk-size threshold in its own internal tree structure) on a schedule set
+by document geometry, not by anything this app requests.
+
+**Where this leaves the search**: the working hypothesis going into this round -- that the fix belongs
+somewhere in *when/how this app dispatches the caret-moving transaction* -- looks substantially
+weakened by this round's evidence, not just this one attempt. Two structurally different families of
+next step remain, and they carry different risk/cost, worth a checkpoint before committing to either:
+(a) stop intervening at the transaction layer entirely and instead make the *existing* post-transaction
+cage reconcile (`reconcileCagedScroll`, already reading real settled DOM geometry via
+`readSelectionRect`/`resolveCM6CaretTopInScroll`, already the one piece of this app's own code that
+writes the final on-screen scrollTop) robust against a *later*, independently-timed CM6-internal
+write landing on top of it -- e.g. by detecting and undoing specifically CM6's own subsequent write
+without re-triggering it, a different problem from attempt 6's "watch and correct" loop (which reacted
+to drift generically, retried a fixed few times, and made things worse); or (b) investigate CM6's
+internal height-map/chunk behavior directly (undocumented, unexported internals -- a materially
+higher-risk, harder-to-maintain class of change than anything tried in this doc so far) to find
+whether the amortized recompute boundary itself can be avoided or its effect neutralized at the
+source. Neither is designed or implemented yet.
+
+**Verification this round**: `npx tsc --noEmit` clean before and after revert. No `npm test`/lint
+change since the only surviving diff is documentation. `git status --short` confirmed clean.
