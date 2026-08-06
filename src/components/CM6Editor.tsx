@@ -2318,6 +2318,10 @@ export function CM6Editor({
           oracleLineHeight: internalViewState?.heightOracle?.lineHeight ?? null,
           oracleCharWidth: internalViewState?.heightOracle?.charWidth ?? null,
           oracleTextHeight: internalViewState?.heightOracle?.textHeight ?? null,
+          docLength: view.state.doc.length,
+          docLines: view.state.doc.lines,
+          selectionHead: head,
+          selectionEmpty: view.state.selection.main.empty,
         };
       };
     }

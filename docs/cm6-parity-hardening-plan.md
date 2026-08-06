@@ -2046,3 +2046,49 @@ out.
 
 **Verification this round**: `npx tsc --noEmit` clean. No `npm test`/lint delta beyond the kept debug-accessor
 addition (lint clean). Purely additive, read-only instrumentation -- no scroll-affecting behavior changed.
+
+## Lead 4 -- line-break format is not a factor; the same gap-crossing overshoot also fires on typing/Enter, not just arrow-key scrolling
+
+**Line-break format check** (prompted by a direct question about whether the mismatch is proportional to
+line-break style): measured `\n`-only, `\r\n`, and blank-line-interspersed (every uniform line followed by
+a blank line) variants of the same 1.5M-char uniform document, same continuous-ArrowUp methodology used
+throughout this doc. `\r\n` showed **zero difference** from the `\n`-only baseline (17/271 anomalies,
+identical mean gap and magnitude both ways) -- CM6's line-counting is insensitive to line-ending byte
+format, as expected from `heightForGap`'s use of `doc.lineAt().number` (an exact line index, not a
+character-based estimate). Blank-line-interspersed content showed **0/271 anomalies** -- consistent with
+the earlier finding that only long runs of uniform, non-blank lines trigger this; alternating text/blank
+(the common real-world markdown paragraph pattern) does not. Worth noting for the record: this app's own
+`textSanitization.ts` already normalizes `\r\n`/`\r`/unicode line separators to `\n` (at least on the paste
+path), so `\r\n` reaching CM6 at all is unlikely in real usage regardless of this result.
+
+**A related, new lead from a live user report**: the user described a real, reproducible symptom -- at the
+very end of a document, pressing Enter produces a visual double line break not matching the internal
+position, which "stacks" across repeated Enters and "collapses" once a letter is typed. Attempted to
+reproduce directly. First attempt used `placeCaretAt(page, 'end')` (a coordinate-based click near the
+bottom of the viewport, from `perfHarness.mjs`) and found something that looked alarming -- edits appearing
+not to persist at all -- but this turned out to be a **test methodology bug, not a product bug**: that
+helper does not reliably land the caret at the document's true final character (confirmed directly:
+`selectionHead` was ~1230 characters short of `docLength`), so the edits were landing well before the
+document's actual end and never showed up in a tail-slice check of the saved text. Fixed by following the
+click with `Control+End` and confirming `selectionHead === docLength` exactly before proceeding.
+
+**With the caret genuinely at the true end**: the document model itself (`docLength`/`docLines`/
+`selectionHead`, added to the debug accessor this round, same reachability/defensive-cast pattern as the
+oracle fields) stayed perfectly consistent through 4 Enters and a typed character -- no doubled character
+count, no doubled line count, rendered content matched the model exactly at every step (empty line, then
+"X", correctly). **No internal model/DOM desync reproduced.** What *was* found: the first Enter at the
+document's unmeasured tail triggered a real scrollTop overshoot -- +234px (9 rows) instead of the expected
++26px (1 row) -- with every subsequent Enter and the typed character behaving normally afterward. This is
+the same height-map gap-crossing mechanism this entire investigation has been chasing, now confirmed to
+also fire from **typing into fresh, unmeasured territory**, not only from arrow-key scrolling into it --
+broadening this lead's known trigger surface. Plausible (not confirmed) that a sudden 9-row scroll jump,
+watched live rather than measured in pixels, could read as "two line breaks happened" -- but this was not
+confirmed to be the same symptom the user described, and no "collapse on typing a letter" was reproduced
+(scrollTop simply stayed put when the character was typed). Follow-up needed: more precise reproduction
+detail from the user (fresh document vs. one already scrolled-in-on; what "collapse" refers to precisely)
+before treating this as the same bug or a distinct one.
+
+**Verification this round**: read-only measurement and instrumentation only (temporary scripts, deleted
+after use); `docLength`/`docLines`/`selectionHead` kept on the existing debug accessor (same
+non-breaking-if-CM6-changes-shape pattern as the oracle fields). `npx tsc --noEmit` and `npm run lint`
+clean. No production scroll/edit behavior changed.
