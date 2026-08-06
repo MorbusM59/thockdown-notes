@@ -1036,3 +1036,78 @@ itself needed no changes to work as committed. Leads 1–3 were not started this
 consumed the full session per the user's own "most concrete/novel, cheapest to falsify" prioritization,
 and the honest state is a well-grounded root-cause narrowing with two ruled-out fix shapes, not a
 closed bug.
+
+## Lead 4, continued — the concrete next step above was tried; definitive root cause found; a third fix attempt failed *worse* at real scale and was reverted
+
+Follow-up session, resumed after the previous round's PR merged to `main` (branch restarted from
+`origin/main` per this repo's standing convention for a merged designated branch). Picked up exactly
+where the last round left off: hook `update.viewportChanged`, confirm live where the stray write
+actually originates before fixing it.
+
+**Root cause now definitively confirmed, not just narrowed.** Added temporary instrumentation
+logging *every* `updateListener` firing (not just ones the reconcile already handles) with its
+`docChanged`/`selectionSet`/`viewportChanged` flags and `scrollTop`, bucketed per ArrowUp press.
+Direct, unambiguous evidence at press 60 of a 500K-char run: **two** updates fire for that single
+keystroke —
+
+1. The real one: `selectionSet: true`, a completely normal one-row `scrollTop` correction (220818 →
+   fine).
+2. Immediately after, in the *same* press window: `docChanged: false, selectionSet: false,
+   viewportChanged: true`, `scrollTop` independently jumped a further -170px (-6.5 rows), and
+   `view.viewport.{from,to}` shifted to a different range — i.e. CM6 grew/shifted its own rendered
+   chunk and, as part of that, wrote a wrong `scrollTop`, entirely outside anything the existing
+   reconcile (`docChanged || selectionSet` only) ever observes.
+
+Widening the same instrumentation surfaced a **second, distinct shape** of the same problem:
+passes where `docChanged`/`selectionSet`/`viewportChanged` are all `false` yet `scrollTop` still
+gets rewritten (a pure height/geometry recompute that doesn't change which lines are rendered, just
+where they sit) — not caught by a `viewportChanged`-only hook either.
+
+**Third fix attempt: armed, self-expiring "last known good" scrollTop.** After an arrow-key
+reconcile, remember the `targetScrollTopPx` it just computed in a plain closure variable
+(`lastArrowKeyReconciledScrollTopPx`). Any *subsequent* `updateListener` firing that is not itself a
+new keystroke (`!docChanged && !selectionSet`, deliberately not narrowed to `viewportChanged` given
+the second failure shape above) snaps `scrollTop` back to that remembered value if it drifted by more
+than 0.5px. The armed value is **not** consumed on first use (more than one stray pass can follow a
+single keystroke, confirmed above) — it only expires via a `requestAnimationFrame` callback scheduled
+alongside it, bounding the correction window to about one frame so a genuine, much-later real user
+scroll (also `viewportChanged`-only) can never be mistaken for this pattern.
+
+**Looked like a real fix at 500K chars, then failed badly at 1.2M — the scale that actually
+matters.** Live A/B, same harness, same `--delayMs=35` realistic pacing:
+
+- At 500K chars / 150 presses: 8 anomalies → 3 anomalies, and critically the *magnitude* of every
+  remaining one dropped from -6..-11 rows down to exactly -2 rows. Looked like solid, real progress.
+- At the actual 1.2M chars / 800 presses this bug was originally reported against (same size Bug
+  5 and this doc's own scripts standardize on): **254/800 anomalies (≈32%)** — dramatically *worse*
+  than the unpatched baseline's 54/800 (≈6.75%) at the same size. One outlier reached -26 rows. Most
+  were small (-2 to -5 rows) but far more frequent than before.
+
+**Reverted in full** — `git status` clean, nothing shipped. This is the same "looked correct on a
+narrower check, broke worse on the fuller one" shape as the previous session's clamp attempt, but
+inverted: last time zero-delay pacing was the trap; this time document *size* was. **Standing lesson
+for whoever picks this up next, worth treating as a hard rule for this specific bug**: any fix
+attempt must be evaluated at the full 1.2M-char scale before being trusted as an improvement — a
+500K-char (or smaller) run can show a false positive. Root cause: the "any non-transaction update"
+condition is almost certainly too broad at scale — CM6 very likely runs legitimate, low-magnitude
+idle-time height-reconciliation passes that become more frequent and farther-reaching as the document
+(and therefore the unmeasured-region backlog) grows, and this fix's blanket
+"snap back to last-known-good" logic fights those too, not just the genuine chunk-boundary anomaly it
+was built for.
+
+**Concrete next step, not yet attempted**: the two-distinct-failure-shape finding above (confirmed,
+not hypothesis) is real, durable progress independent of this attempt's failure — keep it. The fix
+shape itself needs to be narrower: only correct when the drift is *implausibly large for a
+single-row key move* (e.g. more than ~1.5 rows, matching this doc's own anomaly-detection threshold
+in `verifyCM6ArrowUpChunkBoundary.mjs`) rather than any nonzero drift at all, so small legitimate
+housekeeping adjustments are left alone and only the actual multi-row anomaly gets corrected. Not yet
+tried — the instinct to widen the correction from just-`viewportChanged` to "any non-transaction
+update" (needed, confirmed by the second failure shape) and the instinct to correct *any* drift
+turned out to be two separable ideas; the first is validated, the second appears to be what broke
+things at scale and should be un-done independently rather than assumed guilty by association.
+
+**Verification this round**: `npx tsc --noEmit` and `npm run lint` clean on the fix attempt before
+revert; no `npm test`/full regression suite run since nothing shipped. All temporary instrumentation
+(`localStorage['thockdown:debug-viewport-updates']` and its throwaway harness script) was removed
+after use, same as the previous round's `debug-arrow-cage`. Working tree is clean; only this doc
+changed this round.
