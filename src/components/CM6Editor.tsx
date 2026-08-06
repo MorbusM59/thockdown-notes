@@ -641,6 +641,16 @@ export function CM6Editor({
   ).current;
   const debugLastKeydownAtRef = useRef<number | null>(null);
   const debugLastKeyRef = useRef<string | null>(null);
+  // TEMP, read-only diagnostic for the Phase-4 arrow-up chunk-boundary drift
+  // investigation (docs/cm6-parity-hardening-plan.md lead #4) -- opt-in via
+  // localStorage.setItem('thockdown:debug-cage-state', '1'). Exposes a pure
+  // accessor (no side effects, changes no behavior) so an external script
+  // can pull {analyticalTop, scrollTop, ...} after each keystroke without
+  // any console-log-ordering ambiguity. Remove once that investigation
+  // closes.
+  const debugCageStateEnabled = useRef(
+    typeof window !== 'undefined' && window.localStorage.getItem('thockdown:debug-cage-state') === '1',
+  ).current;
   // Right-click selection-scope-cycling state -- mirrors ContractBridgePlugin.tsx's
   // (Lexical) rightClickCycleRef exactly, since resolveScopeRange/isSameRange are
   // pure text+offset functions with no Lexical dependency and are reused unchanged
@@ -2247,6 +2257,22 @@ export function CM6Editor({
     });
     viewRef.current = view;
     lastHydratedNoteIdRef.current = noteId ?? null;
+
+    if (debugCageStateEnabled) {
+      (window as unknown as { __thockdownDebugCageState?: () => unknown }).__thockdownDebugCageState = () => {
+        const head = view.state.selection.main.head;
+        return {
+          analyticalTop: view.lineBlockAt(head).top,
+          scrollTop: view.scrollDOM.scrollTop,
+          topBoundaryPx: topBoundaryPxRef.current,
+          bottomBoundaryPx: bottomBoundaryPxRef.current,
+          lineHeightPx: lineHeightPxRef.current,
+          clientHeight: view.scrollDOM.clientHeight,
+          scrollHeight: view.scrollDOM.scrollHeight,
+          viewport: { from: view.viewport.from, to: view.viewport.to },
+        };
+      };
+    }
 
     previousTextRef.current = initialText;
     const initialSelection = toSelectionState(view.state.selection.main);

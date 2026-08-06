@@ -1111,3 +1111,109 @@ revert; no `npm test`/full regression suite run since nothing shipped. All tempo
 (`localStorage['thockdown:debug-viewport-updates']` and its throwaway harness script) was removed
 after use, same as the previous round's `debug-arrow-cage`. Working tree is clean; only this doc
 changed this round.
+
+## Lead 4, continued again — CM6 internals identified precisely; three more fix attempts failed; drift shown to be bounded, not leaking
+
+Follow-up session. Read the actual installed `@codemirror/view@6.43.7` source (not assumed from
+memory) to find exactly what writes `scrollTop` outside our own code: CM6's own **scroll anchoring**
+(`ViewState.update`/`EditorView.measure` in `dist/index.js`, the `scrollAnchorAt`/`scrollAnchorPos`/
+`scrollAnchorHeight` machinery), the same class of technique as native browser scroll anchoring for
+images loading above the fold, self-implemented because CM6 manages its own virtualized layout. Before
+an update, it picks an anchor line near the viewport top, records its position and height-map `top`;
+after, it checks whether that same line's `top` changed and if so writes `scroll.scrollTop += diff` to
+keep it visually fixed. This is real, working-as-designed CM6 behavior, not a defect in CM6 -- it just
+disagrees with our own caret-position-based caging, which runs first and picks a different, unrelated
+reference point.
+
+**Three more fix attempts, each ruled out with a concrete, specific reason, all reverted (working tree
+clean, nothing shipped):**
+
+1. **Post-hoc "last known good" snapped on any non-transaction update, one-frame expiry.** Correctly
+   caught the real writes (confirmed two distinct shapes: a `viewportChanged`-true chunk-growth pass,
+   and a pass with `docChanged`/`selectionSet`/`viewportChanged` all `false`, a pure anchor-height
+   recompute). Looked like a real fix at 500K chars (8/150 -> 3/150 anomalies, worst magnitude capped
+   at -2 rows vs -6..-11 before) -- **then failed badly at the actual 1.2M-char scale this bug was
+   reported at: 254/800 anomalies vs. a 54/800 unpatched baseline**, worse than doing nothing despite
+   the lower peak severity. Standing lesson recorded here as a hard rule for this bug specifically:
+   any fix attempt must be evaluated at the full 1.2M-char scale before being trusted, since a
+   500K-char run gave a false positive.
+2. **Same idea, magnitude-gated** (only correct drift > 1.5 rows, matching this doc's own
+   anomaly-detection threshold, instead of any nonzero drift) -- reasoned as the fix for attempt 1's
+   scale failure (CM6 runs plenty of small, legitimate anchor nudges that a nonzero-gated correction
+   was fighting). Better (109/800) but still worse than the 54/800 baseline. Traced directly: the
+   worst-case jump did drop to 5 rows (from 11), but a new, more frequent -2-row wobble appeared that
+   didn't exist unpatched.
+3. **Same again, deferred to a `requestAnimationFrame` scheduled outside the updateListener entirely**
+   (hypothesis: CM6's `measure()` loop is actually a *synchronous* `for(;;)` loop internal to one
+   function call, capped at 5 iterations -- confirmed by reading the source -- and our own
+   `updateListener` fires once per internal loop iteration, so correcting *from inside* one of those
+   firings races CM6's own still-in-progress convergence). Result: 107/800, statistically
+   indistinguishable from attempt 2 (109/800) -- **this hypothesis is refuted**, deferring by a frame
+   changed nothing measurable.
+
+**Direct instrumentation of attempt 3's own corrections revealed something much more serious than any
+of the three attempts' anomaly counts alone suggested**: the `driftPx` values at the moments the
+correction fired weren't 2-3 rows -- they were **3,770 to 6,630 pixels (145 to 255 rows)**, and grew
+roughly monotonically across the session (3770 -> 3874 -> 4628 -> 5330 -> 5928 -> 6318 -> 6500 -> 6630,
+over presses 171-349). The correction was firing and mostly closing the gap each time, which is why
+the *outer* per-press anomaly counter only ever saw a small residual (-2 rows) -- it was masking, not
+measuring, the true scale of what was actually happening underneath. This was reported to the user
+in full at the time, immediately, before any further patch attempt.
+
+**Given that, the user redirected the effort: stop iterating on fix attempts, get a precise,
+uncontaminated picture of how the drift actually accumulates first.** Added a small, permanent,
+read-only debug accessor to `CM6Editor.tsx` (`window.__thockdownDebugCageState()`, gated behind
+`localStorage['thockdown:debug-cage-state']`, zero behavior change, same opt-in pattern as
+`debug-input-lag`) exposing `{analyticalTop: view.lineBlockAt(head).top, scrollTop, ...}` on demand.
+`view.lineBlockAt(head).top` is a pure document-layout value, independent of scroll position --
+already established as trustworthy by Bug 5's fix above. Methodology, committed as
+`scripts/perf/measureCM6ArrowUpDrift.mjs`: start at document end, press ArrowUp continuously (never
+reversing), which pins the caret against the cage's top edge within the first few dozen presses; from
+then on, a correctly-behaving system has `deltaScrollTop == deltaAnalyticalTop` on every single press,
+so any press where they disagree is a raw, single-step leak, and summing those over the whole session
+gives the *true* cumulative drift with zero interference from any fix attempt (pure unpatched code).
+
+**Result: the drift is bounded, not an infinite leak.** In genuine steady state (far from either
+document boundary, confirmed by running the full traversable length of a 100K-char document, ~1,100
+presses), the cumulative sum oscillates in a tight band -- exactly 634 to 646px (±6px, ±0.23 rows)
+around its post-settle baseline -- with **zero net trend across the entire run**. Two 50K-char runs
+were bit-for-bit identical (1508.0px steady-window drift both times), confirming this is fully
+deterministic, not timing noise. The larger numbers seen elsewhere come from two separate, localized,
+one-time effects, not a per-keystroke leak:
+- A one-time settle transient right after mount/initial caret placement (327-650px, varies by starting
+  scroll position, pays once).
+- A transient as the caret approaches an actual document boundary (start or end) -- confirmed
+  localized to roughly the last 60-70 presses before hitting it, a proximity effect tied to being near
+  position 0 (or the document's max length), not tied to overall document size. (A 50K-char document
+  hits this early simply because starting at its end puts you within ~580 presses of position 0, not
+  because being "small" changes the mechanism.)
+
+**This also retroactively explains attempt 3's alarming, monotonically-growing driftPx numbers**: that
+growth was almost certainly self-inflicted, not an inherent CM6 property. A raw `scroller.scrollTop = X`
+write made outside CM6's own `dispatch` path very likely corrupts its internal
+`scrollAnchorPos`/`scrollAnchorHeight` bookkeeping, so CM6 treats the correction itself as a fresh
+"real" scroll needing its own compensation on the very next pass -- compounding with every correction
+applied. The original 5-11 row chunk-boundary jump is most likely the real, full extent of the
+per-event defect; there is no evidence of a larger hidden leak beneath it once measured without any
+fix attempt's own interference.
+
+**Conclusion against the user's own explicit framework**: drift depends on neither session duration
+nor document length in genuine steady state -- it's bounded either way. There is no scale-dependent
+growth to manage, so the document-length-cap "manage" route isn't just deprioritized, it wouldn't
+actually solve anything here since nothing grows with length. No structural obstacle to a targeted fix
+was found. Per the user's stated preference, the path forward is the targeted patch, guided by a new
+constraint the three failed attempts collectively established: **corrections must go through CM6's own
+dispatch/anchor machinery, not a raw DOM `scrollTop` write**, since a raw write appears to be what
+turned a small, well-characterized per-event bug into a much larger, compounding one in attempt 3.
+
+**Not yet done**: designing and implementing the actual patch under that constraint; a precise trace
+of the mount-settle and boundary-proximity transients (lower priority -- one-time costs, not what the
+original bug report described).
+
+**Verification this round**: `npx tsc --noEmit` and `npm run lint` clean throughout. No `npm test`/full
+regression suite run, since no fix shipped this round either -- three attempts were built, measured,
+and reverted; only the (harmless, read-only, zero-behavior-change) debug accessor and the drift
+measurement script survive, both committed as ongoing investigation tooling rather than removed, since
+the investigation is still open (unlike the single-purpose `debug-arrow-cage`/`debug-viewport-updates`
+instrumentation from earlier rounds, which was removed once each round's specific question was
+answered).
