@@ -29,12 +29,16 @@ export interface UseNoteChaptersResult {
   /**
    * Clones a dragged-in note's content into a brand-new chapter of
    * `menuIdentityNoteId` -- the dragged note itself is never touched or
-   * linked, only copied (see cloneNoteAsChapter's doc comment). Never
-   * switches the editor's active note; dropping a note onto the chapter bar
-   * only files a copy there, the dragged note stays wherever it was being
-   * edited. No-ops for a self-drop (dragging the parent onto its own bar).
+   * linked, only copied (see cloneNoteAsChapter's doc comment) -- and
+   * immediately switches the editor to it, same as every other way a
+   * chapter gets created (handleCreateChapter, handleExtractSelectionToChapter).
+   * The dragged note itself is left wherever it was, untouched. No-ops for a
+   * self-drop (dragging the parent onto its own bar).
+   * `insertBeforeChapterNoteId`, when given (dropped directly on an existing
+   * chapter pill rather than the bar's background or the "+" button), moves
+   * the new chapter in front of that one instead of leaving it last.
    */
-  handleCloneNoteAsChapter: (sourceNoteId: string) => Promise<void>
+  handleCloneNoteAsChapter: (sourceNoteId: string, insertBeforeChapterNoteId?: string) => Promise<void>
   /**
    * The chapter bar's right mini button: cuts the current editor selection
    * out of whatever's actively displayed (the parent or an already-open
@@ -124,13 +128,31 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     void activateNote(chapterNoteId)
   }, [activeNoteId, activateNote])
 
-  const handleCloneNoteAsChapter = useCallback(async (sourceNoteId: string) => {
+  const handleCloneNoteAsChapter = useCallback(async (sourceNoteId: string, insertBeforeChapterNoteId?: string) => {
     if (!window.thockdownChapters || !menuIdentityNoteId) return
     if (sourceNoteId === menuIdentityNoteId) return
-    const { chapters: updatedChapters } = await window.thockdownChapters.cloneNoteAsChapter(menuIdentityNoteId, sourceNoteId)
-    setChapters(updatedChapters)
-    await refreshNotes()
-  }, [menuIdentityNoteId, refreshNotes])
+    const { chapters: createdChapters, created } = await window.thockdownChapters.cloneNoteAsChapter(menuIdentityNoteId, sourceNoteId)
+
+    // cloneNoteAsChapter always appends the new chapter last -- move it in
+    // front of insertBeforeChapterNoteId (dropped directly on an existing
+    // pill), if given, pushing that one and everything after it back by one.
+    const insertAt = insertBeforeChapterNoteId
+      ? createdChapters.findIndex((chapter) => chapter.chapterNoteId === insertBeforeChapterNoteId)
+      : -1
+    if (insertAt < 0) {
+      setChapters(createdChapters)
+    } else {
+      const orderedChapterNoteIds = createdChapters
+        .filter((chapter) => chapter.chapterNoteId !== created.id)
+        .map((chapter) => chapter.chapterNoteId)
+      orderedChapterNoteIds.splice(insertAt, 0, created.id)
+      const reorderedChapters = await window.thockdownChapters.reorderChapters(menuIdentityNoteId, orderedChapterNoteIds)
+      setChapters(reorderedChapters)
+    }
+
+    await refreshNotes(created.id)
+    await activateNote(created.id)
+  }, [menuIdentityNoteId, refreshNotes, activateNote])
 
   const handleExtractSelectionToChapter = useCallback(async () => {
     if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId) return

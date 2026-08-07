@@ -1179,18 +1179,22 @@ export function EditorSection({
     const payload = parseNoteDragPayload(raw)
     if (!payload) return
 
-    // A drop landing on the chapter bar always means "clone this note's
-    // content into a new chapter of whichever note it's showing chapters of"
-    // -- regardless of where the drag started (sidebar or a tab, even one of
-    // this section's own), since that's a structurally different drop target
-    // than "open/pin this as a tab." Claimed before the same-section check
-    // below, which exists only to let an in-bar *tab* reorder drag fall
-    // through to useSectionTabs's own handlers -- irrelevant here.
+    // A drop landing on the chapter bar (or the "+" button that creates a
+    // chapter even before the bar has ever appeared) always means "clone
+    // this note's content into a new chapter of whichever note it's showing
+    // chapters of" -- regardless of where the drag started (sidebar or a
+    // tab, even one of this section's own), since that's a structurally
+    // different drop target than "open/pin this as a tab." Claimed before
+    // the same-section check below, which exists only to let an in-bar
+    // *tab* reorder drag fall through to useSectionTabs's own handlers --
+    // irrelevant here. Dropping directly on an existing chapter pill inserts
+    // the new chapter right in front of it instead of appending it last.
     const dropTarget = event.target
-    if (dropTarget instanceof Element && dropTarget.closest('.chapter-bar-display')) {
+    if (dropTarget instanceof Element && (dropTarget.closest('.chapter-bar-display') || dropTarget.closest('.chapter-toggle-button'))) {
       event.preventDefault()
       event.stopPropagation()
-      void handleCloneNoteAsChapter(payload.noteId)
+      const targetPill = dropTarget.closest<HTMLElement>('.chapter-pill[data-chapter-note-id]')
+      void handleCloneNoteAsChapter(payload.noteId, targetPill?.dataset.chapterNoteId)
       return
     }
 

@@ -40,11 +40,12 @@ export interface ChapterBarProps {
  * `isChapterPanelOpen`; new chapters are created from the bottom utility
  * bar's "+" button instead of from inside this bar.
  *
- * Dropping a note dragged in from the sidebar anywhere onto this bar
- * attaches it as an existing chapter -- handled by EditorSection.tsx's
- * section-wide drop-capture handler (which recognizes a drop landing inside
- * `.chapter-bar-display`), not by this component, so there's no drag
- * handler here.
+ * Dropping a note dragged in from the sidebar onto this bar's background (or
+ * the bottom utility bar's "+" button) clones it into a brand-new last
+ * chapter; dropping directly on an existing chapter pill (`.chapter-pill`,
+ * matched via its `data-chapter-note-id`) clones it in *front* of that one
+ * instead. All handled by EditorSection.tsx's section-wide drop-capture
+ * handler, not by this component, so there's no drag handler here.
  */
 export function ChapterBar({
   parentNoteId,
@@ -158,6 +159,7 @@ export function ChapterBar({
                 <div
                   key={chapter.chapterNoteId}
                   className={`tag-pill note-tab-pill chapter-pill${isActive ? ' active' : ''}`}
+                  data-chapter-note-id={chapter.chapterNoteId}
                   onClick={() => onChapterClick(chapter.chapterNoteId)}
                   onContextMenu={(event) => {
                     event.preventDefault()
