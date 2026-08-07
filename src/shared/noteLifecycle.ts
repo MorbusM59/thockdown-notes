@@ -42,10 +42,8 @@ export interface NoteSummary {
   isInSync?: boolean;
   /** User-assignable tab-bar label. Null until first assigned (explicitly via `$id`, or lazily defaulted). */
   assignedId?: string | null;
-  /** True for a note created via a chapter bar's "+" button -- excluded from every menu view (date/category/archive/trash), only ever shown through its parent's chapter bar. */
+  /** True for a note created via a chapter bar's "+" button -- excluded from every menu view (date/category/archive/trash), only ever shown through its parent's chapter bar. A chapter can belong to any number of parents (see the `chapters` table); which one is "current" is a navigation-time concept, not a note property, so it isn't tracked here. */
   chapterOnly: boolean;
-  /** The parent note this note is a chapter of. Only meaningful when `chapterOnly` is true; omitted otherwise. */
-  chapterParentId?: string | null;
 }
 
 export interface NoteDocument extends NoteSummary {

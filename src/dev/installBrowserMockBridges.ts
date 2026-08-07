@@ -100,11 +100,7 @@ function normalizeDocument(note: NoteDocument): NoteDocument {
   }
 }
 
-function getChapterParentId(store: BrowserMockStore, noteId: string): string | null {
-  return store.chapters.find((chapter) => chapter.chapterNoteId === noteId)?.parentNoteId ?? null
-}
-
-function toSummary(note: NoteDocument, store: BrowserMockStore): NoteSummary {
+function toSummary(note: NoteDocument): NoteSummary {
   return {
     id: note.id,
     fileName: note.fileName,
@@ -115,7 +111,6 @@ function toSummary(note: NoteDocument, store: BrowserMockStore): NoteSummary {
     sizeBytes: note.sizeBytes,
     assignedId: note.assignedId ?? null,
     chapterOnly: Boolean(note.chapterOnly),
-    chapterParentId: note.chapterOnly ? getChapterParentId(store, note.id) : null,
   }
 }
 
@@ -364,7 +359,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
 
   return {
     async listNotes(): Promise<NoteSummary[]> {
-      return sortNotesDesc(storeRef.current.notes).map((note) => toSummary(note, storeRef.current))
+      return sortNotesDesc(storeRef.current.notes).map((note) => toSummary(note))
     },
 
     async loadNote(input: LoadNoteInput): Promise<NoteDocument> {
@@ -425,7 +420,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
           }
         }
 
-        return clone(toSummary(note, store))
+        return clone(toSummary(note))
       })
     },
 
@@ -461,7 +456,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
       if (!note) {
         throw new Error(`Note not found: ${input.id}`)
       }
-      return clone(toSummary(note, storeRef.current))
+      return clone(toSummary(note))
     },
 
     async syncExternalNoteToFile(_input: { id: string; content: string }): Promise<boolean> {
@@ -512,7 +507,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
         if (!note) return null
         const base = normalizeAssignedIdInput(input.requestedId) || deriveDefaultAssignedIdBase(note.title)
         note.assignedId = resolveUniqueAssignedId(store.notes, base, note.id)
-        return clone(toSummary(note, store))
+        return clone(toSummary(note))
       })
     },
 

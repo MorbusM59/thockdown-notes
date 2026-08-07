@@ -188,7 +188,7 @@ export type NoteTabEntry = {
   addedAtMs: number;
 };
 
-/** One chapter: `chapterNoteId` is itself a full note, ordered (gapless, 0-indexed) among `parentNoteId`'s other chapters. A note can be at most one parent's chapter. */
+/** One chapter: `chapterNoteId` is itself a full note, ordered (gapless, 0-indexed) among `parentNoteId`'s other chapters. The same note can be a chapter of any number of different parents. */
 export type ChapterEntry = {
   parentNoteId: string;
   position: number;
@@ -1419,13 +1419,6 @@ export class DatabaseService {
     const db = this.requireDb();
     const rows = db.prepare('SELECT parentNoteId, position, chapterNoteId FROM chapters WHERE parentNoteId = ? ORDER BY position ASC').all(parentNoteId) as ChapterEntry[];
     return rows;
-  }
-
-  /** The parent note this note is a chapter of, or null if it isn't anyone's chapter -- a note can be at most one parent's chapter (chapterNoteId is UNIQUE). */
-  getChapterParent(chapterNoteId: string): string | null {
-    const db = this.requireDb();
-    const row = db.prepare('SELECT parentNoteId FROM chapters WHERE chapterNoteId = ?').get(chapterNoteId) as { parentNoteId: string } | undefined;
-    return row?.parentNoteId ?? null;
   }
 
   /** Appends `chapterNoteId` as the new last chapter of `parentNoteId`. */
@@ -3046,11 +3039,17 @@ export class DatabaseService {
 
       CREATE INDEX IF NOT EXISTS idx_note_tabs_section_position ON note_tabs(sectionId, position);
 
+      -- Deliberately no UNIQUE on chapterNoteId alone: a note can be a
+      -- chapter of any number of other notes (e.g. a shared reference card
+      -- appended as the final chapter of several unrelated notes). Only the
+      -- (parentNoteId, chapterNoteId) pair is unique -- the same note can't
+      -- be added as a chapter of the same parent twice.
       CREATE TABLE IF NOT EXISTS chapters (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
         parentNoteId  TEXT    NOT NULL,
         position      INTEGER NOT NULL,
-        chapterNoteId TEXT    NOT NULL UNIQUE,
+        chapterNoteId TEXT    NOT NULL,
+        UNIQUE (parentNoteId, chapterNoteId),
         CHECK (parentNoteId != chapterNoteId),
         FOREIGN KEY (parentNoteId)  REFERENCES notes(id) ON DELETE CASCADE,
         FOREIGN KEY (chapterNoteId) REFERENCES notes(id) ON DELETE CASCADE

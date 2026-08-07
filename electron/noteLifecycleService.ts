@@ -169,7 +169,6 @@ export class NoteLifecycleService {
         isInSync: Boolean(record.syncMode && !record.hasUnsavedChanges),
         assignedId: record.assignedId,
         chapterOnly: record.chapterOnly,
-        chapterParentId: record.chapterOnly ? this.databaseService.getChapterParent(record.id) : null,
       };
     } catch {
       return null;
@@ -264,7 +263,6 @@ export class NoteLifecycleService {
     const parsed = parseNoteMetadata(text, shouldSanitize);
 
     const tags = this.databaseService.getNoteTags(input.id);
-    const chapterOnly = record?.chapterOnly ?? false;
 
     return {
       id: input.id,
@@ -280,8 +278,7 @@ export class NoteLifecycleService {
       externalPath: record?.externalPath ?? (record?.isTemp ? record.filePath : null) ?? null,
       hasUnsavedChanges: record?.hasUnsavedChanges ?? false,
       isInSync: Boolean(record?.syncMode && !record?.hasUnsavedChanges),
-      chapterOnly,
-      chapterParentId: chapterOnly ? this.databaseService.getChapterParent(input.id) : null,
+      chapterOnly: record?.chapterOnly ?? false,
     };
   }
 
