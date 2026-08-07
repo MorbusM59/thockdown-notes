@@ -2193,9 +2193,9 @@ export function SidebarOptionsPanel({
                   typingSoundManager.setTypingSoundSet(setId)
                 }}
                 aria-pressed={typingSoundEnabled && typingSoundSet === setId}
-                title={`${setId === 'A' ? 'Pops' : ''}${setId === 'B' ? 'Pins' : ''}${setId === 'C' ? 'Creamy' : ''}${setId === 'D' ? 'Clicks' : ''}`}
+                title={`${setId === 'A' ? 'Pops' : ''}${setId === 'B' ? 'Pins' : ''}${setId === 'C' ? 'Creamy' : ''}${setId === 'D' ? 'Forge' : ''}`}
               >
-                <span className={`${setId === 'A' ? 'fa-solid fa-burst' : ''}${setId === 'B' ? 'fa-solid fa-map-pin' : ''}${setId === 'C' ? 'fa-solid fa-ice-cream' : ''}${setId === 'D' ? 'fa-solid fa-circle-check' : ''}`} aria-hidden="true" />
+                <span className={`${setId === 'A' ? 'fa-solid fa-burst' : ''}${setId === 'B' ? 'fa-solid fa-map-pin' : ''}${setId === 'C' ? 'fa-solid fa-ice-cream' : ''}${setId === 'D' ? 'fa-solid fa-hammer' : ''}`} aria-hidden="true" />
               </button>
             ))}
           </div>
