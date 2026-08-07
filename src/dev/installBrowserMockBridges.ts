@@ -37,6 +37,7 @@ import type { NoteTabEntry, NoteTabsApi } from '../shared/tabs'
 import type { EditorSectionEntry, EditorSectionsApi } from '../shared/sections'
 import { DEFAULT_EDITOR_SECTION_ID } from '../shared/sections'
 import type { ChapterEntry, ChaptersApi } from '../shared/chapters'
+import { increaseHeadingLevels } from '../shared/markdownHeadings'
 
 const MOCK_STORAGE_KEY = 'thockdown-notes:browser-mock:v1'
 
@@ -1028,6 +1029,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
 
         const now = Date.now()
         const id = createId()
+        const clonedText = increaseHeadingLevels(source.text)
         const created: NoteDocument = normalizeDocument({
           id,
           fileName: `${id}.md`,
@@ -1035,8 +1037,8 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           tags: [],
           createdAtMs: now,
           updatedAtMs: now,
-          sizeBytes: source.text.length,
-          text: source.text,
+          sizeBytes: clonedText.length,
+          text: clonedText,
           chapterOnly: true,
           chapterParentId: parentNoteId,
         })

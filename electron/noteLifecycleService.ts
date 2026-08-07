@@ -19,6 +19,7 @@ import type {
   TagSummary,
 } from '../src/shared/noteLifecycle';
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
+import { increaseHeadingLevels } from '../src/shared/markdownHeadings';
 import type { ChapterEntry, DatabaseService, NoteRecord } from './databaseService';
 
 const NOTES_DIR_NAME = 'notes';
@@ -350,7 +351,10 @@ export class NoteLifecycleService {
   // be chapters (see the chapterOnly doc comment on NoteSummary), so this is
   // the only way a regular note's content reaches a chapter bar, and it's
   // also what rules out sub-chapters: a chapterOnly note is never a valid
-  // drag source in the first place.
+  // drag source in the first place. Every heading in the clone shifts down
+  // one level (see increaseHeadingLevels' doc comment) so the source note's
+  // own title-heading nests under the parent's, rather than competing with
+  // it -- the source note itself keeps its original heading levels.
   async cloneNoteAsChapter(parentNoteId: string, sourceNoteId: string): Promise<{ chapters: ChapterEntry[]; created: NoteDocument }> {
     const sourceRecord = this.databaseService.getNoteRecord(sourceNoteId);
     if (sourceRecord?.chapterOnly) {
@@ -358,7 +362,11 @@ export class NoteLifecycleService {
     }
 
     const source = await this.loadNote({ id: sourceNoteId });
-    const created = await this.createNote({ initialText: source.text });
+    // title explicit, not re-derived from the shifted text: titleFromText
+    // only recognizes a level-1 "# " heading, so a shifted "## Title" would
+    // otherwise fall through to using that whole line (hashes and all) as
+    // the title instead.
+    const created = await this.createNote({ initialText: increaseHeadingLevels(source.text), title: source.title });
     this.databaseService.setNoteChapterOnly(created.id, true);
     const chapters = this.databaseService.addChapter(parentNoteId, created.id);
     const createdDocument = await this.loadNote({ id: created.id });
