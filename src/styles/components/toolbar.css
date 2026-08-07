@@ -575,10 +575,19 @@
   grid-auto-flow:    column;
 }
 
-.options-glaze-settings-grid {
+.options-glaze-settings-grid,
+.options-mouse-settings-grid {
   display: grid;
   grid-template-columns: repeat(6, var(--color-grid-cell));
   grid-template-rows: 32px repeat(3, auto);
+  gap: var(--color-grid-gap);
+}
+
+.options-mouse-center-grid {
+  align-content:center;
+  display: grid;
+  grid-column: span 2;
+  grid-row: span 2;
   gap: var(--color-grid-gap);
 }
 

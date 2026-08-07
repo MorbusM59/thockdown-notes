@@ -1940,7 +1940,7 @@ export function SidebarOptionsPanel({
         ariaLabel="Mouse Options"
         heading="Mouse Options"
       >
-        <div className="options-mouse-color-grid" role="group" aria-label="Custom cursor color controls">
+        <div className="options-mouse-settings-grid" role="group" aria-label="Custom cursor color controls">
           <button
             type="button"
             className={`btn-icon options-color-swatch options-mouse-cursor-toggle${customCursorEnabled ? ' active' : ''}`}
@@ -1950,7 +1950,61 @@ export function SidebarOptionsPanel({
           >
             <span className="fa-solid fa-arrow-pointer" aria-hidden="true" />
           </button>
-          <div aria-hidden="true" />
+          <button
+            type="button"
+            className="btn-icon options-color-swatch"
+            style={{ background: customCursorDotColor }}
+            title="Circling dots color -- click to apply, hold right-click to copy"
+            onClick={() => applyCursorColorToTarget('dot')}
+            onMouseDown={(event) => startCursorColorCopyHold('dot', event)}
+            onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
+            onMouseLeave={clearCursorColorArmTimer}
+            onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
+          ><span className="options-color-swatch-glyph fa-solid fa-spinner" aria-hidden="true" /></button>
+
+          <div className="options-mouse-center-grid" aria-hidden="true">
+            <div className="options-glaze-cell options-glaze-cell-span-2">
+              <CompactScrollbarSlider
+                id="cursor-trail-thickness"
+                min={CURSOR_TRAIL_THICKNESS_MIN_PX}
+                max={CURSOR_TRAIL_THICKNESS_MAX_PX}
+                step={1}
+                value={customCursorTrailThicknessPx}
+                trackLabel="trail"
+                ariaLabel="Trail thickness in pixels"
+                defaultValue={CURSOR_TRAIL_THICKNESS_DEFAULT_PX}
+                onCommit={(value) => setCustomCursorTrailThicknessPx(clamp(value, CURSOR_TRAIL_THICKNESS_MIN_PX, CURSOR_TRAIL_THICKNESS_MAX_PX))}
+              />
+            </div>
+            <div className="options-glaze-cell options-glaze-cell-span-2">
+              <CompactScrollbarSlider
+                id="cursor-dot-size"
+                min={CURSOR_DOT_SIZE_MIN_PX}
+                max={CURSOR_DOT_SIZE_MAX_PX}
+                step={1}
+                value={customCursorDotSizePx}
+                trackLabel="dot size"
+                ariaLabel="Circling dot size in pixels"
+                defaultValue={CURSOR_DOT_SIZE_DEFAULT_PX}
+                onCommit={(value) => setCustomCursorDotSizePx(clamp(value, CURSOR_DOT_SIZE_MIN_PX, CURSOR_DOT_SIZE_MAX_PX))}
+              />
+            </div>
+            <div className="options-glaze-cell options-glaze-cell-span-2">
+              <CompactScrollbarSlider
+                id="cursor-center-size"
+                min={CURSOR_CENTER_SIZE_MIN_PX}
+                max={CURSOR_CENTER_SIZE_MAX_PX}
+                step={1}
+                value={customCursorCenterSizePx}
+                trackLabel="center"
+                ariaLabel="Center dot size in pixels"
+                defaultValue={CURSOR_CENTER_SIZE_DEFAULT_PX}
+                onCommit={(value) => setCustomCursorCenterSizePx(clamp(value, CURSOR_CENTER_SIZE_MIN_PX, CURSOR_CENTER_SIZE_MAX_PX))}
+              />
+            </div>
+
+          </div>
+
           <button
             type="button"
             className={`btn-icon options-color-swatch options-hsva-control${cursorHsvaDragState?.control === 'h' ? ' is-dragging' : ''}`}
@@ -1975,6 +2029,30 @@ export function SidebarOptionsPanel({
             onLostPointerCapture={(event) => stopCursorHsvaDrag('s', event)}
             onWheel={(event) => wheelAdjustCursorHsvaControl('s', event)}
           ><span className="options-hsva-glyph fa-solid fa-droplet" aria-hidden="true" /></button>
+
+          <button
+            type="button"
+            className="btn-icon options-color-swatch "
+            style={{ background: customCursorCenterColor }}
+            title="Center dot color -- click to apply, hold right-click to copy"
+            onClick={() => applyCursorColorToTarget('center')}
+            onMouseDown={(event) => startCursorColorCopyHold('center', event)}
+            onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
+            onMouseLeave={clearCursorColorArmTimer}
+            onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
+          ><span className="options-color-swatch-glyph fa-regular fa-circle-dot" aria-hidden="true" /></button>
+          <button
+            type="button"
+            className="btn-icon options-color-swatch"
+            style={{ background: customCursorTrailColor }}
+            title="Trail color -- click to apply, hold right-click to copy"
+            onClick={() => applyCursorColorToTarget('trail')}
+            onMouseDown={(event) => startCursorColorCopyHold('trail', event)}
+            onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
+            onMouseLeave={clearCursorColorArmTimer}
+            onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
+          ><span className="options-color-swatch-glyph fa-solid fa-cancer" aria-hidden="true" /></button>
+
           <button
             type="button"
             className={`btn-icon options-color-swatch options-hsva-control${cursorHsvaDragState?.control === 'v' ? ' is-dragging' : ''}`}
@@ -2000,43 +2078,8 @@ export function SidebarOptionsPanel({
             onWheel={(event) => wheelAdjustCursorHsvaControl('a', event)}
           ><span className="options-hsva-glyph fa-solid fa-eye" aria-hidden="true" /></button>
 
-          <button
-            type="button"
-            className="btn-icon options-color-swatch options-glaze-cell-span-2"
-            style={{ background: customCursorDotColor }}
-            title="Circling dots color -- click to apply, hold right-click to copy"
-            onClick={() => applyCursorColorToTarget('dot')}
-            onMouseDown={(event) => startCursorColorCopyHold('dot', event)}
-            onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
-            onMouseLeave={clearCursorColorArmTimer}
-            onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
-          ><span className="options-color-swatch-glyph fa-solid fa-circle-notch" aria-hidden="true" /></button>
-          <button
-            type="button"
-            className="btn-icon options-color-swatch options-glaze-cell-span-2"
-            style={{ background: customCursorCenterColor }}
-            title="Center dot color -- click to apply, hold right-click to copy"
-            onClick={() => applyCursorColorToTarget('center')}
-            onMouseDown={(event) => startCursorColorCopyHold('center', event)}
-            onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
-            onMouseLeave={clearCursorColorArmTimer}
-            onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
-          ><span className="options-color-swatch-glyph fa-solid fa-crosshairs" aria-hidden="true" /></button>
-          <button
-            type="button"
-            className="btn-icon options-color-swatch options-glaze-cell-span-2"
-            style={{ background: customCursorTrailColor }}
-            title="Trail color -- click to apply, hold right-click to copy"
-            onClick={() => applyCursorColorToTarget('trail')}
-            onMouseDown={(event) => startCursorColorCopyHold('trail', event)}
-            onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
-            onMouseLeave={clearCursorColorArmTimer}
-            onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
-          ><span className="options-color-swatch-glyph fa-solid fa-wind" aria-hidden="true" /></button>
-        </div>
 
-        <div className="options-mouse-slider-grid" role="group" aria-label="Custom cursor orbit settings">
-          <div className="options-glaze-cell options-glaze-cell-span-2">
+          <div className="options-glaze-cell options-glaze-cell-span-3">
             <CompactScrollbarSlider
               id="cursor-dot-count"
               min={CURSOR_DOT_COUNT_MIN}
@@ -2049,20 +2092,7 @@ export function SidebarOptionsPanel({
               onCommit={(value) => setCustomCursorDotCount(clamp(Math.round(value), CURSOR_DOT_COUNT_MIN, CURSOR_DOT_COUNT_MAX))}
             />
           </div>
-          <div className="options-glaze-cell options-glaze-cell-span-2">
-            <CompactScrollbarSlider
-              id="cursor-radius"
-              min={CURSOR_RADIUS_MIN_PX}
-              max={CURSOR_RADIUS_MAX_PX}
-              step={1}
-              value={customCursorRadiusPx}
-              trackLabel="radius"
-              ariaLabel="Orbit radius in pixels"
-              defaultValue={CURSOR_RADIUS_DEFAULT_PX}
-              onCommit={(value) => setCustomCursorRadiusPx(clamp(value, CURSOR_RADIUS_MIN_PX, CURSOR_RADIUS_MAX_PX))}
-            />
-          </div>
-          <div className="options-glaze-cell options-glaze-cell-span-2">
+          <div className="options-glaze-cell options-glaze-cell-span-3">
             <CompactScrollbarSlider
               id="cursor-spin-hz"
               min={CURSOR_SPIN_HZ_MIN}
@@ -2075,65 +2105,34 @@ export function SidebarOptionsPanel({
               onCommit={(value) => setCustomCursorSpinHz(clamp(value, CURSOR_SPIN_HZ_MIN, CURSOR_SPIN_HZ_MAX))}
             />
           </div>
-        </div>
-
-        <div className="utility-setting-slider-stack" aria-label="Custom cursor trail fade setting">
-          <CompactScrollbarSlider
-            id="cursor-trail-fade"
-            min={CURSOR_TRAIL_FADE_MIN_MS}
-            max={CURSOR_TRAIL_FADE_MAX_MS}
-            step={CURSOR_TRAIL_FADE_STEP_MS}
-            value={customCursorTrailFadeMs}
-            trackLabel="trail fade"
-            ariaLabel="Trail fade duration in milliseconds -- how long a trail particle takes to decay after the head passes it"
-            defaultValue={CURSOR_TRAIL_FADE_DEFAULT_MS}
-            onCommit={(value) => setCustomCursorTrailFadeMs(clamp(value, CURSOR_TRAIL_FADE_MIN_MS, CURSOR_TRAIL_FADE_MAX_MS))}
-          />
-        </div>
-
-        <div className="options-mouse-slider-grid" role="group" aria-label="Custom cursor size settings">
-          <div className="options-glaze-cell options-glaze-cell-span-2">
+          <div className="options-glaze-cell options-glaze-cell-span-3">
             <CompactScrollbarSlider
-              id="cursor-trail-thickness"
-              min={CURSOR_TRAIL_THICKNESS_MIN_PX}
-              max={CURSOR_TRAIL_THICKNESS_MAX_PX}
+              id="cursor-radius"
+              min={CURSOR_RADIUS_MIN_PX}
+              max={CURSOR_RADIUS_MAX_PX}
               step={1}
-              value={customCursorTrailThicknessPx}
-              trackLabel="trail"
-              ariaLabel="Trail thickness in pixels"
-              defaultValue={CURSOR_TRAIL_THICKNESS_DEFAULT_PX}
-              onCommit={(value) => setCustomCursorTrailThicknessPx(clamp(value, CURSOR_TRAIL_THICKNESS_MIN_PX, CURSOR_TRAIL_THICKNESS_MAX_PX))}
+              value={customCursorRadiusPx}
+              trackLabel="radius"
+              ariaLabel="Orbit radius in pixels"
+              defaultValue={CURSOR_RADIUS_DEFAULT_PX}
+              onCommit={(value) => setCustomCursorRadiusPx(clamp(value, CURSOR_RADIUS_MIN_PX, CURSOR_RADIUS_MAX_PX))}
             />
           </div>
-          <div className="options-glaze-cell options-glaze-cell-span-2">
+          <div className="options-glaze-cell options-glaze-cell-span-3">
             <CompactScrollbarSlider
-              id="cursor-dot-size"
-              min={CURSOR_DOT_SIZE_MIN_PX}
-              max={CURSOR_DOT_SIZE_MAX_PX}
-              step={1}
-              value={customCursorDotSizePx}
-              trackLabel="dot size"
-              ariaLabel="Circling dot size in pixels"
-              defaultValue={CURSOR_DOT_SIZE_DEFAULT_PX}
-              onCommit={(value) => setCustomCursorDotSizePx(clamp(value, CURSOR_DOT_SIZE_MIN_PX, CURSOR_DOT_SIZE_MAX_PX))}
+              id="cursor-trail-fade"
+              min={CURSOR_TRAIL_FADE_MIN_MS}
+              max={CURSOR_TRAIL_FADE_MAX_MS}
+              step={CURSOR_TRAIL_FADE_STEP_MS}
+              value={customCursorTrailFadeMs}
+              trackLabel="trail fade"
+              ariaLabel="Trail fade duration in milliseconds -- how long a trail particle takes to decay after the head passes it"
+              defaultValue={CURSOR_TRAIL_FADE_DEFAULT_MS}
+              onCommit={(value) => setCustomCursorTrailFadeMs(clamp(value, CURSOR_TRAIL_FADE_MIN_MS, CURSOR_TRAIL_FADE_MAX_MS))}
             />
           </div>
-          <div className="options-glaze-cell options-glaze-cell-span-2">
-            <CompactScrollbarSlider
-              id="cursor-center-size"
-              min={CURSOR_CENTER_SIZE_MIN_PX}
-              max={CURSOR_CENTER_SIZE_MAX_PX}
-              step={1}
-              value={customCursorCenterSizePx}
-              trackLabel="center"
-              ariaLabel="Center dot size in pixels"
-              defaultValue={CURSOR_CENTER_SIZE_DEFAULT_PX}
-              onCommit={(value) => setCustomCursorCenterSizePx(clamp(value, CURSOR_CENTER_SIZE_MIN_PX, CURSOR_CENTER_SIZE_MAX_PX))}
-            />
-          </div>
-        </div>
 
-        <div className="options-mouse-slider-grid" role="group" aria-label="Custom cursor pulse settings">
+
           <div className="options-glaze-cell options-glaze-cell-span-3">
             <CompactScrollbarSlider
               id="cursor-pulse-magnitude"
