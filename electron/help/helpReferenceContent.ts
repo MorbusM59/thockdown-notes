@@ -49,7 +49,7 @@ Every heading below is also a jump target: \`[Anchor Text](#anchor-id)\` defines
 - The \`+\` button next to the tab bar splits the editor into another section. Each section has its own tabs.
 - The identity tab area holds either your open note tabs or the tag editor — toggle with the tag icon.
 - Hold-click a note in the sidebar to pin it as a tab; a plain click opens it as a temporary tab.
-- The chapter panel (caret button, bottom bar) splits a note into chapters — full notes of their own, browsable from a bar there instead of the sidebar.
+- The chapter panel (\`+\` button, bottom bar) splits a note into chapters — full notes of their own, browsable from a bar there instead of the sidebar.
 
 ### Time Machine
 
@@ -331,14 +331,16 @@ Every feature in the app, described individually: where to find it, what it does
 ### [Chapters](#chapters)
 
 > **Where?**
-> The caret button on the bottom utility bar opens the chapter panel, above the tab bar.
+> The \`+\` button on the bottom utility bar creates a chapter and opens the chapter panel, above the tab bar.
 
 *Splits a note into sub-notes, browsable from a bar of their own.*
 
-- The chapter bar's first tab is always the parent note itself; every chapter follows in order, then a trailing \`+\` that creates a new empty chapter and opens it immediately. Click the parent tab or any chapter pill to switch between them — each keeps and saves its own text independently. Too many chapters to fit scrolls horizontally, fading at whichever edge has more off-screen, same as the tab bar.
+- The chapter panel shows itself automatically the moment a note has at least one chapter, and hides itself again the moment it has none — there's no manual show/hide toggle. The bottom utility bar's button doubles as both: it always creates a new empty chapter and switches to it, which opens the panel as a side effect the first time.
+- The chapter bar's first tab is always the parent note itself; every chapter follows in order. Click the parent tab or any chapter pill to switch between them — each keeps and saves its own text independently. Too many chapters to fit scrolls horizontally, fading at whichever edge has more off-screen, same as the tab bar.
 - A chapter is a full, independent note — it just doesn't appear on its own in Date/Category/Archive/Trash/Find, only through whichever parent's chapter bar(s) it's attached to. The same note can be a chapter of any number of different parents at once (e.g. a shared reference card appended to several notes) — dragging a note from the sidebar onto an open chapter bar attaches it there without removing it from the sidebar or any other parent it's already a chapter of.
 - While a chapter is open, its parent stays the one shown as active in the sidebar and the tab bar — the chapter bar itself shows which chapter you're in.
 - Right-click a chapter tab to give it a short id (\`§1: ···\` becomes \`§1: INTRO\`, say) — same rules as a note's \`$id\`. Link straight to it with \`[text]($NOTE-ID§CHAPTER-ID)\`, optionally down to one of its own anchors with \`[text]($NOTE-ID§CHAPTER-ID#anchor-id)\`; opening it this way keeps the parent shown as active exactly like clicking the pill would.
+- Two small buttons flank the chapter tab strip. The scissors on the right cuts whatever's currently selected in the editor out of the note you're viewing (parent or chapter) and pastes it into a brand-new chapter, caret landing right after the pasted text — a quick way to split a long note as you write it. The merge icon on the left collapses the chapter you're currently viewing: its content is appended to the end of the previous chapter (or the parent, if it's the first chapter), the now-empty chapter is moved to Trash, and you land in the destination note with the caret at the end. Collapsing a note's last remaining chapter this way hides the panel again.
 
 ## Archiving, Trash & Deletion
 

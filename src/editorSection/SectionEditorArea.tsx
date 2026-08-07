@@ -69,6 +69,7 @@ export interface SectionEditorAreaProps {
   menuIdentityNoteId: string | null
   chapters: ChapterEntry[]
   onParentTabClick: () => void
+  /** The bottom utility bar's "+" button (formerly the manual show/hide toggle) -- creates a blank new chapter. */
   onCreateChapter: () => void
   onChapterClick: (chapterNoteId: string) => void
   editingChapterNoteId: string | null
@@ -77,6 +78,8 @@ export interface SectionEditorAreaProps {
   onStartEditingChapterId: (chapterNoteId: string) => void
   onCommitChapterIdEdit: () => void
   onCancelChapterIdEdit: () => void
+  onCollapseChapterIntoPrevious: () => void
+  onExtractSelectionToChapter: () => void
 }
 
 /**
@@ -148,6 +151,8 @@ export function SectionEditorArea({
   onStartEditingChapterId,
   onCommitChapterIdEdit,
   onCancelChapterIdEdit,
+  onCollapseChapterIntoPrevious,
+  onExtractSelectionToChapter,
 }: SectionEditorAreaProps) {
   const setStageEl = useCallback((el: HTMLDivElement | null) => {
     (editorStageRef as MutableRefObject<HTMLDivElement | null>).current = el
@@ -173,7 +178,15 @@ export function SectionEditorArea({
     </div>
   )
 
-  const [isChapterPanelOpen, setIsChapterPanelOpen] = useState(false)
+  // Smart-toggled, not manually: the panel shows itself exactly when the
+  // current note (or its own currently-open chapter) actually has chapters,
+  // and hides itself the moment the last one collapses back into its
+  // parent -- see the chapter-panel-hides-when-empty behavior on the
+  // collapse action in useNoteChapters.ts. No user-facing show/hide control
+  // exists anymore; the old toggle button is now the "+" create-chapter
+  // button below, which opens the panel as a side effect of chapters.length
+  // becoming positive, not by toggling visibility directly.
+  const isChapterPanelOpen = chapters.length > 0
   return (
     <div
       className="editor-viewer-frame"
@@ -246,7 +259,7 @@ export function SectionEditorArea({
           </div>
         </div>
       </main>
-      <aside className="editor-scrollbar-slot">
+      <aside className={`editor-scrollbar-slot${isChapterPanelOpen ? ' chapter-panel-is-open' : ''}`}>
         <div className="editor-scrollbar-slot-inner" aria-hidden="true">
           {!isPreviewMode ? (
             activeNoteId ? (
@@ -284,7 +297,6 @@ export function SectionEditorArea({
             notes={notes}
             activeNoteId={activeNoteId}
             onParentTabClick={onParentTabClick}
-            onCreateChapter={onCreateChapter}
             onChapterClick={onChapterClick}
             editingChapterNoteId={editingChapterNoteId}
             chapterIdDraft={chapterIdDraft}
@@ -292,6 +304,8 @@ export function SectionEditorArea({
             onStartEditingChapterId={onStartEditingChapterId}
             onCommitChapterIdEdit={onCommitChapterIdEdit}
             onCancelChapterIdEdit={onCancelChapterIdEdit}
+            onCollapseChapterIntoPrevious={onCollapseChapterIntoPrevious}
+            onExtractSelectionToChapter={onExtractSelectionToChapter}
           />
         ) : null}
       </div>
@@ -299,16 +313,13 @@ export function SectionEditorArea({
         <div className="chapter-toggle-panel">
           <button
             type="button"
-            className={[
-              'chapter-toggle-button btn-icon',
-              isChapterPanelOpen ? 'is-active' : '',
-            ].filter(Boolean).join(' ')}
-            aria-pressed={isChapterPanelOpen}
-            aria-label={isChapterPanelOpen ? 'Hide chapter panel' : 'Show chapter panel'}
-            title={isChapterPanelOpen ? 'Hide chapter panel' : 'Show chapter panel'}
-            onClick={() => setIsChapterPanelOpen((v) => !v)}
+            className="chapter-toggle-button btn-icon"
+            aria-label="Add a chapter"
+            title="Add a chapter"
+            disabled={!activeNoteId}
+            onClick={onCreateChapter}
           >
-            <span className="fa-solid fa-caret-up" aria-hidden="true" />
+            <span className="fa-solid fa-plus" aria-hidden="true" />
           </button>
         </div>
         <div className="wordcount-panel" aria-live="polite">
