@@ -329,7 +329,13 @@ export class TypingSoundManager {
       }
     }
 
-    const baseDetune = options?.detune ?? this.getRandomLayerDetune()
+    // Base detune is only applied when either an explicit `detune` is
+    // provided in options or when `keyVariance` is non-zero. Previously
+    // getRandomLayerDetune() could produce large random detunes even with
+    // `keyVariance === 0`, which made key sounds noticeably pitch-shifted
+    // at the default variance. Scale the random detune by keyVariance so
+    // zero variance yields no detune.
+    const baseDetune = options?.detune ?? (this.keyVariance > 0 ? Math.round(this.getRandomLayerDetune() * this.keyVariance) : 0)
     const randomVariance = this.keyVariance > 0 ? (Math.random() * 2 - 1) * this.keyVariance : 0
     const varianceScale = randomVariance >= 0 ? 1 + randomVariance : 1 / (1 - randomVariance)
     const pitchScale = this.pitch >= 0 ? (100 + this.pitch) / 100 : 100 / (100 - this.pitch)
@@ -346,8 +352,10 @@ export class TypingSoundManager {
       reverse: options?.reverse ?? false,
       gain: options?.gain ?? 1,
       echo: options?.echo ? { ...options.echo } : undefined,
-      bassDetune: baseDetune + this.getRandomLayerDetune(),
-      trebleDetune: baseDetune + this.getRandomLayerDetune(),
+      // Additional layer detune offsets are likewise scaled by keyVariance
+      // so they don't introduce audible pitch shifts when variance is 0.
+      bassDetune: baseDetune + (this.keyVariance > 0 ? Math.round(this.getRandomLayerDetune() * this.keyVariance) : 0),
+      trebleDetune: baseDetune + (this.keyVariance > 0 ? Math.round(this.getRandomLayerDetune() * this.keyVariance) : 0),
       frequencyScale: varianceScale * pitchScale,
       flipChannels,
     }
