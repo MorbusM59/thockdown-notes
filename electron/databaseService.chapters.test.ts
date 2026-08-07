@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import BetterSqlite3 from 'better-sqlite3'
 import { DatabaseService } from './databaseService'
 
 function seedNote(db: DatabaseService, id: string): void {
@@ -147,5 +148,80 @@ describe('DatabaseService chapters', () => {
       const resolved = db.setChapterId('parent-a', 'chapter-1', 'INTRO')
       expect(resolved).toBe('INTRO')
     })
+  })
+})
+
+describe('DatabaseService startup on a pre-chapterId database', () => {
+  // Reproduces the real bug: a database created between the `chapters` table
+  // first shipping and the `chapterId` column being added to it later has a
+  // `chapters` table missing that column. CREATE TABLE IF NOT EXISTS is a
+  // no-op against it, so an index referencing chapterId placed in that same
+  // exec block (rather than after ensureChaptersColumn's migration) throws
+  // "no such column: chapterId" and aborts ensureSchema -- and with it,
+  // DatabaseService.initialize() -- crashing the whole app on startup.
+  let dataRoot: string
+
+  beforeEach(() => {
+    dataRoot = mkdtempSync(path.join(tmpdir(), 'thockdown-chapters-upgrade-test-'))
+  })
+
+  afterEach(() => {
+    rmSync(dataRoot, { recursive: true, force: true })
+  })
+
+  it('initializes cleanly against a chapters table that predates the chapterId column, backfilling it via migration', async () => {
+    const rawDb = new BetterSqlite3(path.join(dataRoot, 'thockdown-notes.db'))
+    rawDb.pragma('foreign_keys = ON')
+    rawDb.exec(`
+      CREATE TABLE notes (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        filePath TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        lastEdited TEXT,
+        progressPreview REAL,
+        progressEdit REAL,
+        cursorPos INTEGER,
+        scrollTop INTEGER,
+        sourceAnchorLine INTEGER,
+        sourceAnchorText TEXT,
+        contentChecksum TEXT,
+        isTemp INTEGER DEFAULT 0,
+        externalPath TEXT,
+        hasUnsavedChanges INTEGER DEFAULT 0,
+        syncMode INTEGER DEFAULT 0,
+        originalEncoding TEXT,
+        fileToken TEXT UNIQUE,
+        previewBlockCache TEXT
+      );
+
+      CREATE TABLE chapters (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        parentNoteId  TEXT    NOT NULL,
+        position      INTEGER NOT NULL,
+        chapterNoteId TEXT    NOT NULL,
+        UNIQUE (parentNoteId, chapterNoteId),
+        CHECK (parentNoteId != chapterNoteId),
+        FOREIGN KEY (parentNoteId)  REFERENCES notes(id) ON DELETE CASCADE,
+        FOREIGN KEY (chapterNoteId) REFERENCES notes(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX idx_chapters_parent_position ON chapters(parentNoteId, position);
+    `)
+    rawDb.close()
+
+    const upgradedDb = new DatabaseService(dataRoot)
+    await expect(upgradedDb.initialize()).resolves.not.toThrow()
+
+    seedNote(upgradedDb, 'parent-a')
+    seedNote(upgradedDb, 'chapter-1')
+    upgradedDb.addChapter('parent-a', 'chapter-1')
+
+    const chapters = upgradedDb.listChaptersForNote('parent-a')
+    expect(chapters).toEqual([{ parentNoteId: 'parent-a', position: 0, chapterNoteId: 'chapter-1', chapterId: null }])
+
+    const resolved = upgradedDb.setChapterId('parent-a', 'chapter-1', 'INTRO')
+    expect(resolved).toBe('INTRO')
   })
 })

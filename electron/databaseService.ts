@@ -3110,7 +3110,6 @@ export class DatabaseService {
       );
 
       CREATE INDEX IF NOT EXISTS idx_chapters_parent_position ON chapters(parentNoteId, position);
-      CREATE INDEX IF NOT EXISTS idx_chapters_parent_chapterid ON chapters(parentNoteId, chapterId);
     `);
 
     // A fresh install always starts with exactly one (default, unnamed)
@@ -3150,6 +3149,15 @@ export class DatabaseService {
     // the `chapters` table above for the parent/position/chapter linkage.
     this.ensureNotesColumn('chapterOnly', 'INTEGER NOT NULL DEFAULT 0');
     this.ensureChaptersColumn('chapterId', 'TEXT');
+    // Deliberately after ensureChaptersColumn, not inside the CREATE TABLE
+    // block above: on a database that already had a `chapters` table before
+    // chapterId existed, CREATE TABLE IF NOT EXISTS is a no-op, so an index
+    // referencing chapterId there would run before the ALTER TABLE that adds
+    // it -- "no such column: chapterId", aborting ensureSchema (and startup)
+    // entirely. Same reasoning, and same fix, as idx_notes_internal_id below.
+    this.requireDb().exec(`
+      CREATE INDEX IF NOT EXISTS idx_chapters_parent_chapterid ON chapters(parentNoteId, chapterId);
+    `);
     this.ensureNoteSnapshotsColumn('anchorBlockIndex', 'INTEGER');
 
     // Notes are inserted (both on creation and on filesystem-sync upsert)
