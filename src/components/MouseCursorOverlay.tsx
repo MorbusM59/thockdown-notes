@@ -133,7 +133,8 @@ export function MouseCursorOverlay({
 
       ctx!.clearRect(0, 0, canvas!.width, canvas!.height)
 
-      const cx = pos.x * scaleRef.current.x
+      // magical number offset so that we actually have pin point accuracy on the grid.
+      const cx = pos.x * scaleRef.current.x + 5
       const cy = pos.y * scaleRef.current.y
 
       const elapsedSec = (now - activeSince) / 1000
