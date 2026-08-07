@@ -319,7 +319,7 @@ export function SectionEditorArea({
             disabled={!activeNoteId}
             onClick={onCreateChapter}
           >
-            <span className="fa-solid fa-plus" aria-hidden="true" />
+            <span className="fa-solid fa-book-medical" aria-hidden="true" />
           </button>
         </div>
         <div className="wordcount-panel" aria-live="polite">

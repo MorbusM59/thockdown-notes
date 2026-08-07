@@ -37,6 +37,7 @@
   bottom: var(--bottom-utility-bar-height);
   height: var(--chapter-panel-height);
   pointer-events: none;
+  padding: var(--spacing-regular) 0 0 var(--spacing-regular);
   z-index: 5;
   display: none;
 }
@@ -135,8 +136,9 @@
    note tab's assigned id) -- the parent tab keeps its normal .note-tab-pill
    sizing. */
 .note-tab-pill.chapter-pill {
-  flex:  0 0 120px;
-  width: 120px;
+  flex:  0 1 auto;
+  max-width: 120px;
+  width: fit-content;
 }
 
 .chapter-id-input {
@@ -172,7 +174,7 @@
   min-height: var(--canonical-scroll-thickness);
   padding: 0;
   margin: 0;
-  font-size: 13px;
+  font-size: 10px;
 }
 
 .wordcount-panel {
