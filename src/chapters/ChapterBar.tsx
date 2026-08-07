@@ -176,8 +176,8 @@ export function ChapterBar({
       <button
         type="button"
         className="btn-icon chapter-extract-button"
-        title="Cut the current selection into a new chapter"
-        aria-label="Cut the current selection into a new chapter"
+        title="Cut the selection (or everything after the caret) into a new chapter right behind this one"
+        aria-label="Cut the selection (or everything after the caret) into a new chapter right behind this one"
         onClick={onExtractSelectionToChapter}
       >
         <span className="fa-solid fa-scissors" aria-hidden="true" />

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ChapterEntry } from '../shared/chapters'
 import type { EditorSelectionState } from '../editor/EditorContract'
+import { collapseSurgerySite } from './chapterExtraction'
 
 export interface UseNoteChaptersOptions {
   /** The note identity the chapter bar shows chapters *of* -- the chapter-aware "menu identity" (see EditorSection.tsx's `menuIdentityNoteId`), never a chapter's own id (chapters can't have chapters in this UI). */
@@ -45,9 +46,16 @@ export interface UseNoteChaptersResult {
   /**
    * The chapter bar's right mini button: cuts the current editor selection
    * out of whatever's actively displayed (the parent or an already-open
-   * chapter), creates a brand-new chapter of `menuIdentityNoteId`, and
-   * loads it with the cut text pasted in and the caret collapsed to its
-   * end -- ready to keep typing. A no-op when nothing is selected.
+   * chapter), creates a brand-new chapter of `menuIdentityNoteId` positioned
+   * directly behind the chapter (or parent) being cut from -- pushing every
+   * later chapter back by one -- and loads it with the cut text pasted in
+   * and the caret collapsed to its end, ready to keep typing. A collapsed
+   * selection (just a caret, nothing highlighted) extracts everything from
+   * the caret to the end of the document instead of no-op'ing. Any blank-line
+   * run left behind at the cut site (e.g. a paragraph that had a blank line
+   * on both sides) is collapsed down to a single blank line. A no-op only
+   * when there's genuinely nothing to extract (caret already at the end of
+   * an empty selection).
    */
   handleExtractSelectionToChapter: () => Promise<void>
   /**
@@ -131,29 +139,50 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
 
   const handleExtractSelectionToChapter = useCallback(async () => {
     if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId) return
-    if (editorSelection.isCollapsed) return
 
     const start = Math.max(0, Math.min(editorSelection.start, currentEditorText.length))
-    const end = Math.max(start, Math.min(editorSelection.end, currentEditorText.length))
-    if (start === end) return
+    // A collapsed selection is just a caret -- there's nothing to highlight,
+    // so it extracts from the caret to the end of the document instead of
+    // no-op'ing. An expanded selection extracts exactly what's highlighted.
+    const end = editorSelection.isCollapsed
+      ? currentEditorText.length
+      : Math.max(start, Math.min(editorSelection.end, currentEditorText.length))
+    if (start >= end) return
 
     const extractedText = currentEditorText.slice(start, end)
-    const remainingText = currentEditorText.slice(0, start) + currentEditorText.slice(end)
+    const before = currentEditorText.slice(0, start)
+    const after = currentEditorText.slice(end)
+    // Tidy up the surgery site: a paragraph cut from between two blank lines
+    // would otherwise leave both stacked behind it.
+    const { text: remainingText, seamPos } = collapseSurgerySite(before, after)
 
     // Cut from whatever's currently displayed first, and flush it to disk
     // before creating/populating the new chapter -- so a crash between the
     // two steps can't leave the text duplicated in both notes (or lost from
     // both) instead of cleanly moved.
-    applyProgrammaticEditorText(remainingText, start, start)
+    applyProgrammaticEditorText(remainingText, seamPos, seamPos)
     await flushPendingSaveNow()
 
-    const { chapters: updatedChapters, created } = await window.thockdownChapters.createChapter(menuIdentityNoteId)
+    const { chapters: createdChapters, created } = await window.thockdownChapters.createChapter(menuIdentityNoteId)
     await window.thockdownNotes.saveNote({ id: created.id, text: extractedText })
+
+    // createChapter appends the new chapter as the last one -- move it to
+    // sit directly behind whichever chapter (or the parent, if there's no
+    // "current chapter") we just cut from, pushing every later chapter in
+    // the list back by one.
+    const currentIndex = createdChapters.findIndex((chapter) => chapter.chapterNoteId === activeNoteId)
+    const insertAt = currentIndex >= 0 ? currentIndex + 1 : 0
+    const orderedChapterNoteIds = createdChapters
+      .filter((chapter) => chapter.chapterNoteId !== created.id)
+      .map((chapter) => chapter.chapterNoteId)
+    orderedChapterNoteIds.splice(insertAt, 0, created.id)
+    const updatedChapters = await window.thockdownChapters.reorderChapters(menuIdentityNoteId, orderedChapterNoteIds)
+
     setChapters(updatedChapters)
     await refreshNotes(created.id)
     // Caret at the end of the pasted text -- "waiting for input behind" it.
     await activateNote(created.id, extractedText.length, menuIdentityNoteId)
-  }, [menuIdentityNoteId, editorSelection, currentEditorText, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, activateNote])
+  }, [menuIdentityNoteId, activeNoteId, editorSelection, currentEditorText, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, activateNote])
 
   const handleCollapseChapterIntoPrevious = useCallback(async () => {
     if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId) return

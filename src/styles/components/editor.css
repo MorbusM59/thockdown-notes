@@ -33,7 +33,7 @@
 .chapter-panel {
   position: absolute;
   left: 0;
-  right: 0;
+  right: calc(var(--canonical-scroll-thickness) + var(--spacing-regular));
   bottom: var(--bottom-utility-bar-height);
   height: var(--chapter-panel-height);
   pointer-events: none;
@@ -348,11 +348,8 @@
   position:  relative;
 }
 
-/* Matches .editor-shell.chapter-panel-is-open's own bottom margin bump --
-   without this, the scroll track's hit-region still extends down over the
-   now-visible chapter panel and swallows clicks on its buttons/tabs. */
 .editor-scrollbar-slot.chapter-panel-is-open {
-  margin: 0 0 calc(var(--bottom-utility-bar-height) + var(--chapter-panel-height));
+  margin: 0 0 var(--bottom-utility-bar-height);
 }
 
 .editor-scrollbar-slot-inner {
