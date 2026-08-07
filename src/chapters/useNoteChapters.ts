@@ -69,6 +69,46 @@ export interface UseNoteChaptersResult {
    * purely `chapters.length > 0` (see SectionEditorArea.tsx).
    */
   handleCollapseChapterIntoPrevious: () => Promise<void>
+  /**
+   * Shift+Alt+Delete. Operates on whatever's *after* the selection (start
+   * ignored -- only the end matters, so an expanded selection's own
+   * highlighted text is left untouched, only what comes after it moves):
+   * - Non-whitespace text after the selection end: cuts everything from
+   *   there to the document's end into a brand-new chapter placed directly
+   *   after the current one (or first, from the parent). Stays on the
+   *   current chapter, caret collapsed to the end of what's left.
+   * - Otherwise (nothing but whitespace after -- effectively "at the end"):
+   *   pulls the *next* chapter in instead, appending its content to the
+   *   current chapter and permanently deleting it. No note switch or reload
+   *   at all, so the viewport can't jump -- caret lands exactly at the seam
+   *   between the old and newly-appended text. A no-op with no next chapter
+   *   to pull in.
+   */
+  handleChapterForwardSplitOrMerge: () => Promise<void>
+  /**
+   * Shift+Alt+Backspace -- the mirror of handleChapterForwardSplitOrMerge,
+   * operating on whatever's *before* the selection instead:
+   * - Non-whitespace text before the selection start, viewing a chapter:
+   *   cuts everything from the document's start to there into a brand-new
+   *   chapter placed directly before the current one. Stays on the current
+   *   chapter, caret collapsed to the very beginning of what's left.
+   * - Non-whitespace text before the selection start, viewing the *parent*:
+   *   there's no chapter-list slot before it to insert into (the parent tab
+   *   is always first), so this flips which side moves instead -- the
+   *   parent's own identity is untouched, it just keeps the text before the
+   *   selection as its new content; everything from the selection onward is
+   *   cut into a brand-new chapter placed right after it (the new first
+   *   chapter), which is switched to -- same as every other freshly-created
+   *   chapter.
+   * - Otherwise (nothing but whitespace before -- effectively "at the
+   *   start"): pulls the *previous* chapter in instead, prepending its
+   *   content to the current chapter and permanently deleting it. No note
+   *   switch or reload at all, so the viewport can't jump -- caret lands
+   *   exactly at the seam between the newly-prepended and old text. A no-op
+   *   while viewing the parent (nothing precedes it) or the first chapter
+   *   (its "previous" is the parent, which can never be merged away).
+   */
+  handleChapterBackwardSplitOrMerge: () => Promise<void>
   /** Which chapter pill (by chapterNoteId) is mid-inline-edit of its chapterId, if any. */
   editingChapterNoteId: string | null
   chapterIdDraft: string
@@ -235,6 +275,144 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     await activateNote(previousId, mergedText.length)
   }, [menuIdentityNoteId, activeNoteId, chapters, currentEditorText, refreshNotes, activateNote])
 
+  const handleChapterForwardSplitOrMerge = useCallback(async () => {
+    if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId || !activeNoteId) return
+
+    const selectionEnd = Math.max(0, Math.min(editorSelection.end, currentEditorText.length))
+    const afterSelection = currentEditorText.slice(selectionEnd)
+
+    if (/\S/.test(afterSelection)) {
+      const extractedText = trimBlankLines(afterSelection)
+      const { text: remainingText, seamPos } = collapseSurgerySite(currentEditorText.slice(0, selectionEnd), '')
+
+      applyProgrammaticEditorText(remainingText, seamPos, seamPos)
+      await flushPendingSaveNow()
+
+      const { chapters: createdChapters, created } = await window.thockdownChapters.createChapter(menuIdentityNoteId)
+      await window.thockdownNotes.saveNote({ id: created.id, text: extractedText })
+
+      const currentIndex = createdChapters.findIndex((chapter) => chapter.chapterNoteId === activeNoteId)
+      const insertAt = currentIndex >= 0 ? currentIndex + 1 : 0
+      const orderedChapterNoteIds = createdChapters
+        .filter((chapter) => chapter.chapterNoteId !== created.id)
+        .map((chapter) => chapter.chapterNoteId)
+      orderedChapterNoteIds.splice(insertAt, 0, created.id)
+      const updatedChapters = await window.thockdownChapters.reorderChapters(menuIdentityNoteId, orderedChapterNoteIds)
+
+      setChapters(updatedChapters)
+      await refreshNotes()
+      return
+    }
+
+    const currentIndex = chapters.findIndex((chapter) => chapter.chapterNoteId === activeNoteId)
+    const nextChapterId = activeNoteId === menuIdentityNoteId
+      ? chapters[0]?.chapterNoteId
+      : (currentIndex >= 0 ? chapters[currentIndex + 1]?.chapterNoteId : undefined)
+    if (!nextChapterId) return
+
+    const nextDoc = await window.thockdownNotes.loadNote({ id: nextChapterId })
+    const { text: mergedText, seamPos } = collapseSurgerySite(currentEditorText, nextDoc.text)
+
+    // Update the live buffer + caret in place and flush before deleting the
+    // source chapter -- same crash-safety ordering as the extract path
+    // above, and no note switch/reload means the viewport can't jump.
+    applyProgrammaticEditorText(mergedText, seamPos, seamPos)
+    await flushPendingSaveNow()
+
+    const updatedChapters = await window.thockdownChapters.removeChapter(menuIdentityNoteId, nextChapterId)
+    await window.thockdownNotes.deleteNote({ id: nextChapterId })
+
+    setChapters(updatedChapters)
+    await refreshNotes()
+  }, [menuIdentityNoteId, activeNoteId, chapters, currentEditorText, editorSelection, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes])
+
+  const handleChapterBackwardSplitOrMerge = useCallback(async () => {
+    if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId || !activeNoteId) return
+
+    const selectionStart = Math.max(0, Math.min(editorSelection.start, currentEditorText.length))
+    const beforeSelection = currentEditorText.slice(0, selectionStart)
+
+    if (/\S/.test(beforeSelection)) {
+      // Viewing the parent: there's no chapter-list slot "before" it to
+      // insert into (the parent tab is always first), so this flips which
+      // side moves compared to the chapter case below -- the "before" text
+      // simply stays as the parent's own new content (nothing about the
+      // parent's identity changes), and everything from the selection
+      // onward is cut into a brand-new chapter placed right after it (the
+      // new first chapter), which we switch to -- same as every other
+      // freshly-created chapter.
+      if (activeNoteId === menuIdentityNoteId) {
+        const cutText = trimBlankLines(currentEditorText.slice(selectionStart))
+        const { text: keptText, seamPos } = collapseSurgerySite(beforeSelection, '')
+
+        applyProgrammaticEditorText(keptText, seamPos, seamPos)
+        await flushPendingSaveNow()
+
+        const { chapters: createdChapters, created } = await window.thockdownChapters.createChapter(menuIdentityNoteId)
+        await window.thockdownNotes.saveNote({ id: created.id, text: cutText })
+
+        const orderedChapterNoteIds = [
+          created.id,
+          ...createdChapters.filter((chapter) => chapter.chapterNoteId !== created.id).map((chapter) => chapter.chapterNoteId),
+        ]
+        const updatedChapters = await window.thockdownChapters.reorderChapters(menuIdentityNoteId, orderedChapterNoteIds)
+
+        setChapters(updatedChapters)
+        await refreshNotes(created.id)
+        // Explicit, rather than relying on a fresh note's UI state defaulting
+        // to this already -- guarantees the caret (start of the cut text) is
+        // scrolled fully into view rather than wherever a stale/inherited
+        // scroll position would otherwise land.
+        await window.thockdownNotes.saveNoteUiState({ id: created.id, payload: { anchorBlockIndex: 0, cursorPos: 0 } })
+        await activateNote(created.id)
+        return
+      }
+
+      const extractedText = trimBlankLines(beforeSelection)
+      const { text: remainingText, seamPos } = collapseSurgerySite('', currentEditorText.slice(selectionStart))
+
+      applyProgrammaticEditorText(remainingText, seamPos, seamPos)
+      await flushPendingSaveNow()
+
+      const { chapters: createdChapters, created } = await window.thockdownChapters.createChapter(menuIdentityNoteId)
+      await window.thockdownNotes.saveNote({ id: created.id, text: extractedText })
+
+      const currentIndex = createdChapters.findIndex((chapter) => chapter.chapterNoteId === activeNoteId)
+      const insertAt = currentIndex >= 0 ? currentIndex : 0
+      const orderedChapterNoteIds = createdChapters
+        .filter((chapter) => chapter.chapterNoteId !== created.id)
+        .map((chapter) => chapter.chapterNoteId)
+      orderedChapterNoteIds.splice(insertAt, 0, created.id)
+      const updatedChapters = await window.thockdownChapters.reorderChapters(menuIdentityNoteId, orderedChapterNoteIds)
+
+      setChapters(updatedChapters)
+      await refreshNotes()
+      return
+    }
+
+    // The first chapter's "previous" is the parent -- unlike
+    // handleCollapseChapterIntoPrevious (which folds the *current* chapter
+    // away into it), this command would have to delete the parent to merge
+    // it away, which can never happen. No-op there, and while viewing the
+    // parent itself (nothing precedes it at all).
+    if (activeNoteId === menuIdentityNoteId) return
+    const currentIndex = chapters.findIndex((chapter) => chapter.chapterNoteId === activeNoteId)
+    if (currentIndex <= 0) return
+    const previousChapterId = chapters[currentIndex - 1].chapterNoteId
+
+    const previousDoc = await window.thockdownNotes.loadNote({ id: previousChapterId })
+    const { text: mergedText, seamPos } = collapseSurgerySite(previousDoc.text, currentEditorText)
+
+    applyProgrammaticEditorText(mergedText, seamPos, seamPos)
+    await flushPendingSaveNow()
+
+    const updatedChapters = await window.thockdownChapters.removeChapter(menuIdentityNoteId, previousChapterId)
+    await window.thockdownNotes.deleteNote({ id: previousChapterId })
+
+    setChapters(updatedChapters)
+    await refreshNotes()
+  }, [menuIdentityNoteId, activeNoteId, chapters, currentEditorText, editorSelection, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, activateNote])
+
   const [editingChapterNoteId, setEditingChapterNoteId] = useState<string | null>(null)
   const [chapterIdDraft, setChapterIdDraft] = useState('')
 
@@ -270,6 +448,8 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     handleCloneNoteAsChapter,
     handleExtractSelectionToChapter,
     handleCollapseChapterIntoPrevious,
+    handleChapterForwardSplitOrMerge,
+    handleChapterBackwardSplitOrMerge,
     editingChapterNoteId,
     chapterIdDraft,
     setChapterIdDraft,

@@ -6972,6 +6972,20 @@ ${markdownHtml}
         }
       }
 
+      if (isEditorTarget && activeSection?.activeNoteId && event.shiftKey && event.altKey && !event.ctrlKey && !event.metaKey) {
+        if (event.key === 'Delete') {
+          event.preventDefault()
+          void activeSection.handleChapterForwardSplitOrMerge()
+          return
+        }
+
+        if (event.key === 'Backspace') {
+          event.preventDefault()
+          void activeSection.handleChapterBackwardSplitOrMerge()
+          return
+        }
+      }
+
       if (event.key === 'Escape') {
         const activeElement = document.activeElement
         // The main editor's own contentEditable root is deliberately excluded

@@ -8,6 +8,7 @@ import type { UseDocumentFindNavigationResult } from './useDocumentFindNavigatio
 import type { UseEditorSectionMountResult } from './useEditorSectionMount'
 import type { UseNoteSaveQueueResult } from './useNoteSaveQueue'
 import type { UseSectionTabsResult } from '../tabBar/useSectionTabs'
+import type { UseNoteChaptersResult } from '../chapters/useNoteChapters'
 
 /**
  * What one `<EditorSection>` instance publishes about itself for "chrome"
@@ -29,7 +30,8 @@ export interface SectionHandle extends
   UseDocumentFindNavigationResult,
   UseEditorSectionMountResult,
   UseNoteSaveQueueResult,
-  UseSectionTabsResult {
+  UseSectionTabsResult,
+  UseNoteChaptersResult {
   sectionId: string
   activeNoteId: string | null
   activeNoteText: string
