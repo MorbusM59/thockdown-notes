@@ -42,6 +42,10 @@ export interface NoteSummary {
   isInSync?: boolean;
   /** User-assignable tab-bar label. Null until first assigned (explicitly via `$id`, or lazily defaulted). */
   assignedId?: string | null;
+  /** True for a note created via a chapter bar's "+" button -- excluded from every menu view (date/category/archive/trash), only ever shown through its parent's chapter bar. */
+  chapterOnly: boolean;
+  /** The parent note this note is a chapter of. Only meaningful when `chapterOnly` is true; omitted otherwise. */
+  chapterParentId?: string | null;
 }
 
 export interface NoteDocument extends NoteSummary {
@@ -196,6 +200,10 @@ export function isDeletedNote(note: NoteSummary): boolean {
 
 export function isExternalNote(note: NoteSummary): boolean {
   return note.tags.some((tag) => isExternalTagName(tag))
+}
+
+export function isChapterOnlyNote(note: NoteSummary): boolean {
+  return note.chapterOnly
 }
 
 export function isSameNoteSummary(a: NoteSummary, b: NoteSummary): boolean {

@@ -12,6 +12,18 @@ export interface UseSectionTabsOptions {
   /** Which section this instance belongs to -- scopes both the tag bar (this section's active note) and the pinned tabs it shows. */
   sectionId: string
   activeNoteId: string | null
+  /**
+   * The note identity the tab bar's own concerns (pinned/temp tab
+   * highlighting, "add current note to tabs", closing the active tab)
+   * should treat as active -- equal to `activeNoteId` except when a chapter
+   * is loaded, in which case this is the chapter's parent (see
+   * EditorSection.tsx's `menuIdentityNoteId`). Chapters must never appear
+   * as their own tab pill; the parent's pill stays highlighted/pinnable
+   * instead. The *tag bar* (this hook's other half) deliberately keeps
+   * using the true `activeNoteId` throughout -- tags belong to whatever
+   * note is actually loaded, chapter or not.
+   */
+  tabIdentityNoteId: string | null
   notes: NoteSummary[]
   persistenceReady: boolean
   /** Switches which note this section is showing. Will become section-scoped itself once sections can diverge; passed straight through for now. */
@@ -105,6 +117,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   const {
     sectionId,
     activeNoteId,
+    tabIdentityNoteId,
     notes,
     persistenceReady,
     activateNote,
@@ -502,8 +515,8 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   // leftmost position whenever it isn't already pinned. It tracks whichever
   // unpinned note is active — it isn't a real entry in note_tabs until the
   // user holds it long enough to promote it (see handleTempTabMouseDown).
-  const activeNoteIsPinned = activeNoteId ? pinnedTabs.some((tab) => tab.noteId === activeNoteId) : false
-  const tempTabNoteId = activeNoteId && !activeNoteIsPinned ? activeNoteId : null
+  const activeNoteIsPinned = tabIdentityNoteId ? pinnedTabs.some((tab) => tab.noteId === tabIdentityNoteId) : false
+  const tempTabNoteId = tabIdentityNoteId && !activeNoteIsPinned ? tabIdentityNoteId : null
 
   const pinNoteToTabs = useCallback(async (noteId: string) => {
     if (!window.thockdownTabs) return
@@ -531,7 +544,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   const unpinNoteTab = useCallback(async (noteId: string) => {
     if (!window.thockdownTabs) return
 
-    const wasActiveTab = noteId === activeNoteId
+    const wasActiveTab = noteId === tabIdentityNoteId
 
     const allUpdatedTabs = await window.thockdownTabs.removeTab(sectionId, noteId).catch(() => null)
     if (!allUpdatedTabs) return
@@ -540,7 +553,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     if (wasActiveTab) {
       await clearActiveNote()
     }
-  }, [activeNoteId, sectionId, clearActiveNote])
+  }, [tabIdentityNoteId, sectionId, clearActiveNote])
 
   // Pins `noteId` to this section if it isn't already, then moves it to the
   // rightmost slot -- idempotent either way, so it's safe to call whether
@@ -577,20 +590,20 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   // real note_tabs row) -- just blanks the editor, same as unpinning the
   // active pinned tab does.
   const dismissTempTab = useCallback((noteId: string) => {
-    if (noteId !== activeNoteId) return
+    if (noteId !== tabIdentityNoteId) return
     void clearActiveNote()
-  }, [activeNoteId, clearActiveNote])
+  }, [tabIdentityNoteId, clearActiveNote])
 
   const handleAddCurrentNoteToTabs = useCallback(async () => {
-    if (!activeNoteId || !persistenceReady) return
+    if (!tabIdentityNoteId || !persistenceReady) return
 
     // Ctrl+T toggles: pin if not already pinned, unpin if it is.
     if (activeNoteIsPinned) {
-      void unpinNoteTab(activeNoteId)
+      void unpinNoteTab(tabIdentityNoteId)
     } else {
-      void pinNoteToTabs(activeNoteId)
+      void pinNoteToTabs(tabIdentityNoteId)
     }
-  }, [activeNoteId, persistenceReady, activeNoteIsPinned, unpinNoteTab, pinNoteToTabs])
+  }, [tabIdentityNoteId, persistenceReady, activeNoteIsPinned, unpinNoteTab, pinNoteToTabs])
 
   // Right-click primes a tab for unpinning — the tab-bar equivalent of
   // closing it (same end result as Ctrl+T on an already-pinned note). A

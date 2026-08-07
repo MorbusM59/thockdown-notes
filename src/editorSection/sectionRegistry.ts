@@ -36,6 +36,20 @@ export interface SectionHandle extends
   currentEditorText: string
   latestEditorTextRef: MutableRefObject<string>
   activeNoteSummary: NoteSummary | null
+  /**
+   * The note identity that "menu views" (sidebar highlight/reveal, tab bar
+   * pill highlight/pinning) should treat as active. Equal to `activeNoteId`
+   * except when the active note is a chapter (`chapterOnly`), in which case
+   * this resolves one hop up to its parent -- chapters are never shown in
+   * any menu view themselves, so menu-facing code should never see a
+   * chapter's own id. See the note-chapters feature: a chapter is loaded
+   * into the editor as the section's real `activeNoteId` (so save/restore/
+   * snapshot machinery all work unmodified), while the menu/tab bar keep
+   * showing the parent as "active" -- this is the single derived value both
+   * of those consumers read instead of `activeNoteId` directly.
+   */
+  menuIdentityNoteId: string | null
+  menuIdentityNoteSummary: NoteSummary | null
   editorSelection: EditorSelectionState
   previewedSnapshotId: number | null
   isPreviewMode: boolean

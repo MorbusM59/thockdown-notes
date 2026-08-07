@@ -20,6 +20,7 @@ import { useNoteSaveQueue } from './useNoteSaveQueue'
 import { useEditorSectionMount } from './useEditorSectionMount'
 import { useSnapshotFreeze } from './useSnapshotFreeze'
 import { useSectionTabs } from '../tabBar/useSectionTabs'
+import { useNoteChapters } from '../chapters/useNoteChapters'
 import { useNoteProtectionActions } from './useNoteProtectionActions'
 import { useNoteSnapshotTimeline } from './useNoteSnapshotTimeline'
 import { useDocumentFind } from '../find/useDocumentFind'
@@ -53,7 +54,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'isPreviewScrollThumbActive' | 'handlePreviewThumbMouseDown' | 'activeNoteDocumentStats' | 'noteSnapshots'
   | 'handleNavigateSnapshot' | 'handleBranchOpened' | 'handleBranchError' | 'timelineCurveConstant' | 'setTimelineCurveConstant'
   | 'setTimelineTrackLengthPx' | 'handleCreateManualSnapshot' | 'handleReturnToPresent' | 'handleMergeAdjacentSnapshots'
-  | 'scrollbarHostEl' | 'setScrollbarHostEl'> {
+  | 'scrollbarHostEl' | 'setScrollbarHostEl' | 'notes' | 'chapters' | 'onCreateChapter' | 'onChapterClick'> {
   sectionId: string
   markSectionActive: (sectionId: string) => void
   isSidebarVisible: boolean
@@ -604,6 +605,29 @@ export function EditorSection({
     setActiveNoteText,
   ])
 
+  const activeNoteSummary = useMemo(() => {
+    if (!activeNoteId) return null
+    return notes.find((note) => note.id === activeNoteId) ?? null
+  }, [activeNoteId, notes])
+
+  // See sectionRegistry.ts's SectionHandle doc comment: the note identity
+  // menu-facing code (sidebar highlight/reveal, tab bar pill highlighting +
+  // pinning) should treat as active. Resolves one hop up to the parent when
+  // the true active note is a chapter -- chapters never appear in any menu
+  // view themselves.
+  const menuIdentityNoteId = useMemo(() => {
+    if (activeNoteSummary?.chapterOnly && activeNoteSummary.chapterParentId) {
+      return activeNoteSummary.chapterParentId
+    }
+    return activeNoteId
+  }, [activeNoteId, activeNoteSummary])
+
+  const menuIdentityNoteSummary = useMemo(() => {
+    if (!menuIdentityNoteId) return null
+    if (menuIdentityNoteId === activeNoteId) return activeNoteSummary
+    return notes.find((note) => note.id === menuIdentityNoteId) ?? null
+  }, [menuIdentityNoteId, activeNoteId, activeNoteSummary, notes])
+
   const {
     tagInputRef,
     tagInputValue,
@@ -660,6 +684,7 @@ export function EditorSection({
   }: UseSectionTabsResult = useSectionTabs({
     sectionId,
     activeNoteId,
+    tabIdentityNoteId: menuIdentityNoteId,
     notes,
     persistenceReady,
     activateNote,
@@ -671,6 +696,14 @@ export function EditorSection({
     scheduleFocusEditorInEditMode,
     updateNoteAssignedId,
     initialTabBarMode: restoredTabBarMode,
+  })
+
+  const { chapters, handleCreateChapter, handleChapterClick } = useNoteChapters({
+    menuIdentityNoteId,
+    activeNoteId,
+    persistenceReady,
+    activateNote,
+    refreshNotes,
   })
 
   useEffect(() => {
@@ -733,11 +766,6 @@ export function EditorSection({
     externalNoteOriginalHashByIdRef,
     setCurrentExternalNoteHash,
   })
-
-  const activeNoteSummary = useMemo(() => {
-    if (!activeNoteId) return null
-    return notes.find((note) => note.id === activeNoteId) ?? null
-  }, [activeNoteId, notes])
 
   const activeNoteHasDebugTag = useMemo(() => {
     return activeNoteSummary?.tags.some((tag) => tag.trim().toLowerCase() === 'debug') ?? false
@@ -1032,6 +1060,8 @@ export function EditorSection({
     currentEditorText,
     latestEditorTextRef,
     activeNoteSummary,
+    menuIdentityNoteId,
+    menuIdentityNoteSummary,
     editorSelection,
     previewedSnapshotId,
     isPreviewMode,
@@ -1287,6 +1317,7 @@ export function EditorSection({
         toggleSidebarVisible={toggleSidebarVisible}
         persistenceReady={persistenceReady}
         activeNoteId={activeNoteId}
+        tabIdentityNoteId={menuIdentityNoteId}
         notes={notes}
         activeNoteSummary={activeNoteSummary}
         isLeftmostSection={isLeftmostSection}
@@ -1365,6 +1396,10 @@ export function EditorSection({
         handleCreateManualSnapshot={handleCreateManualSnapshot}
         handleReturnToPresent={handleReturnToPresent}
         handleMergeAdjacentSnapshots={handleMergeAdjacentSnapshots}
+        notes={notes}
+        chapters={chapters}
+        onCreateChapter={handleCreateChapter}
+        onChapterClick={handleChapterClick}
       />
     </div>
   )

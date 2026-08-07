@@ -36,6 +36,7 @@ import type {
 import type { NoteTabEntry, NoteTabsApi } from '../shared/tabs'
 import type { EditorSectionEntry, EditorSectionsApi } from '../shared/sections'
 import { DEFAULT_EDITOR_SECTION_ID } from '../shared/sections'
+import type { ChapterEntry, ChaptersApi } from '../shared/chapters'
 
 const MOCK_STORAGE_KEY = 'thockdown-notes:browser-mock:v1'
 
@@ -51,6 +52,7 @@ type BrowserMockStore = {
   textureCache: Record<string, { mimeType: string; dataBase64: string; createdAt: number }>
   noteTabs: NoteTabEntry[]
   editorSections: EditorSectionEntry[]
+  chapters: ChapterEntry[]
 }
 
 type BrowserMockWindow = Window & {
@@ -94,10 +96,15 @@ function normalizeDocument(note: NoteDocument): NoteDocument {
     updatedAtMs,
     sizeBytes: text.length,
     text,
+    chapterOnly: Boolean(note.chapterOnly),
   }
 }
 
-function toSummary(note: NoteDocument): NoteSummary {
+function getChapterParentId(store: BrowserMockStore, noteId: string): string | null {
+  return store.chapters.find((chapter) => chapter.chapterNoteId === noteId)?.parentNoteId ?? null
+}
+
+function toSummary(note: NoteDocument, store: BrowserMockStore): NoteSummary {
   return {
     id: note.id,
     fileName: note.fileName,
@@ -107,6 +114,8 @@ function toSummary(note: NoteDocument): NoteSummary {
     updatedAtMs: note.updatedAtMs,
     sizeBytes: note.sizeBytes,
     assignedId: note.assignedId ?? null,
+    chapterOnly: Boolean(note.chapterOnly),
+    chapterParentId: note.chapterOnly ? getChapterParentId(store, note.id) : null,
   }
 }
 
@@ -228,6 +237,7 @@ function loadStore(): BrowserMockStore {
         textureCache: {},
         noteTabs: [],
         editorSections: createDefaultEditorSections(),
+        chapters: [],
       }
     }
 
@@ -311,6 +321,15 @@ function loadStore(): BrowserMockStore {
               noteSlotInitialized: entry.noteSlotInitialized === true,
             }))
         : createDefaultEditorSections(),
+      chapters: Array.isArray(parsed.chapters)
+        ? (parsed.chapters as ChapterEntry[])
+            .filter((entry) => typeof entry?.parentNoteId === 'string' && typeof entry?.chapterNoteId === 'string')
+            .map((entry, index) => ({
+              parentNoteId: entry.parentNoteId,
+              chapterNoteId: entry.chapterNoteId,
+              position: Number.isFinite(entry.position) ? entry.position : index,
+            }))
+        : [],
     }
   } catch {
     const seeded = seedUiLoadoutEntries()
@@ -325,6 +344,7 @@ function loadStore(): BrowserMockStore {
       textureCache: {},
       noteTabs: [],
       editorSections: createDefaultEditorSections(),
+      chapters: [],
     }
   }
 }
@@ -344,7 +364,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
 
   return {
     async listNotes(): Promise<NoteSummary[]> {
-      return sortNotesDesc(storeRef.current.notes).map((note) => toSummary(note))
+      return sortNotesDesc(storeRef.current.notes).map((note) => toSummary(note, storeRef.current))
     },
 
     async loadNote(input: LoadNoteInput): Promise<NoteDocument> {
@@ -369,6 +389,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
           updatedAtMs: now,
           sizeBytes: 0,
           text,
+          chapterOnly: false,
         })
         store.notes.push(created)
         return clone(created)
@@ -404,7 +425,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
           }
         }
 
-        return clone(toSummary(note))
+        return clone(toSummary(note, store))
       })
     },
 
@@ -440,7 +461,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
       if (!note) {
         throw new Error(`Note not found: ${input.id}`)
       }
-      return clone(toSummary(note))
+      return clone(toSummary(note, storeRef.current))
     },
 
     async syncExternalNoteToFile(_input: { id: string; content: string }): Promise<boolean> {
@@ -491,7 +512,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
         if (!note) return null
         const base = normalizeAssignedIdInput(input.requestedId) || deriveDefaultAssignedIdBase(note.title)
         note.assignedId = resolveUniqueAssignedId(store.notes, base, note.id)
-        return clone(toSummary(note))
+        return clone(toSummary(note, store))
       })
     },
 
@@ -934,6 +955,77 @@ function buildTabsBridge(storeRef: { current: BrowserMockStore }): NoteTabsApi {
   }
 }
 
+function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersApi {
+  const mutate = <T,>(transform: (store: BrowserMockStore) => T): T => {
+    const result = transform(storeRef.current)
+    persistStore(storeRef.current)
+    return result
+  }
+
+  const sorted = (store: BrowserMockStore, parentNoteId: string): ChapterEntry[] =>
+    store.chapters.filter((chapter) => chapter.parentNoteId === parentNoteId).sort((a, b) => a.position - b.position)
+
+  return {
+    async listChapters(parentNoteId: string): Promise<ChapterEntry[]> {
+      return sorted(storeRef.current, parentNoteId)
+    },
+
+    async createChapter(parentNoteId: string): Promise<{ chapters: ChapterEntry[]; created: NoteDocument }> {
+      return mutate((store) => {
+        const now = Date.now()
+        const id = createId()
+        const created: NoteDocument = normalizeDocument({
+          id,
+          fileName: `${id}.md`,
+          title: '',
+          tags: [],
+          createdAtMs: now,
+          updatedAtMs: now,
+          sizeBytes: 0,
+          text: '',
+          chapterOnly: true,
+        })
+        store.notes.push(created)
+
+        const maxPosition = store.chapters
+          .filter((chapter) => chapter.parentNoteId === parentNoteId)
+          .reduce((max, chapter) => Math.max(max, chapter.position), -1)
+        store.chapters.push({ parentNoteId, chapterNoteId: id, position: maxPosition + 1 })
+
+        return { chapters: sorted(store, parentNoteId), created: clone(created) }
+      })
+    },
+
+    async reorderChapters(parentNoteId: string, orderedChapterNoteIds: string[]): Promise<ChapterEntry[]> {
+      return mutate((store) => {
+        const positionByChapterNoteId = new Map(orderedChapterNoteIds.map((chapterNoteId, index) => [chapterNoteId, index]))
+        store.chapters = store.chapters.map((chapter) => (
+          chapter.parentNoteId === parentNoteId
+            ? { ...chapter, position: positionByChapterNoteId.get(chapter.chapterNoteId) ?? chapter.position }
+            : chapter
+        ))
+        return sorted(store, parentNoteId)
+      })
+    },
+
+    async removeChapter(parentNoteId: string, chapterNoteId: string): Promise<ChapterEntry[]> {
+      return mutate((store) => {
+        const removed = store.chapters.find((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === chapterNoteId)
+        if (removed) {
+          store.chapters = store.chapters
+            .filter((chapter) => !(chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === chapterNoteId))
+            .map((chapter) => (
+              chapter.parentNoteId === parentNoteId && chapter.position > removed.position
+                ? { ...chapter, position: chapter.position - 1 }
+                : chapter
+            ))
+        }
+        return sorted(store, parentNoteId)
+      })
+    },
+  }
+}
+
 function buildSectionsBridge(storeRef: { current: BrowserMockStore }): EditorSectionsApi {
   const mutate = <T,>(transform: (store: BrowserMockStore) => T): T => {
     const result = transform(storeRef.current)
@@ -1087,7 +1179,7 @@ export function installBrowserMockBridges(): void {
   if (scopedWindow.__thockdownBrowserMockInstalled) return
 
   // Electron renderer already owns bridge provisioning through preload.
-  if (window.thockdownNotes && window.thockdownState && window.thockdownTextures && window.thockdownLoadouts && window.thockdownTabs && window.thockdownSections) {
+  if (window.thockdownNotes && window.thockdownState && window.thockdownTextures && window.thockdownLoadouts && window.thockdownTabs && window.thockdownSections && window.thockdownChapters) {
     scopedWindow.__thockdownBrowserMockInstalled = true
     return
   }
@@ -1114,6 +1206,9 @@ export function installBrowserMockBridges(): void {
   }
   if (!window.thockdownSections) {
     window.thockdownSections = buildSectionsBridge(storeRef)
+  }
+  if (!window.thockdownChapters) {
+    window.thockdownChapters = buildChaptersBridge(storeRef)
   }
 
   scopedWindow.__thockdownBrowserMockInstalled = true

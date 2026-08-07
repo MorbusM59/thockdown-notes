@@ -30,7 +30,7 @@ import {
   LOADOUT_FACTORY_PRESET_COUNT,
 } from './shared/loadouts'
 import type { NoteSummary } from './shared/noteLifecycle'
-import { isArchivedNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
+import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
 import { NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload } from './shared/noteDrag'
 import {
   type RgbaColor,
@@ -3629,7 +3629,10 @@ function App() {
   ])
 
   const focusActiveNoteInSidebarMode = useCallback((mode: SidebarMode): boolean => {
-    const activeNoteId = getActiveSection()?.activeNoteId
+    // menuIdentityNoteId, not activeNoteId directly -- a chapter is never in
+    // any of these menu-derived sources, so locating "the note this section
+    // is showing" here means its parent when a chapter is loaded.
+    const activeNoteId = getActiveSection()?.menuIdentityNoteId
     if (!activeNoteId) {
       return false
     }
@@ -6074,6 +6077,10 @@ ${markdownHtml}
     return searchedNotes.filter((note) => {
       if (isDeletedNote(note)) return false
       if (isArchivedNote(note)) return false
+      // Chapters only ever exist to be shown through their parent's chapter
+      // bar -- excluded from every menu view, unlike external notes (which
+      // still show in 'date').
+      if (isChapterOnlyNote(note)) return false
       return true
     })
   }, [searchedNotes])
@@ -6084,12 +6091,12 @@ ${markdownHtml}
   }, [dateEligibleNotes, filterNotesBySelectedDate])
 
   const archiveEligibleNotes = useMemo(() => {
-    const archiveNotes = searchedNotes.filter((note) => isArchivedNote(note) && !isDeletedNote(note) && !isExternalNote(note))
+    const archiveNotes = searchedNotes.filter((note) => isArchivedNote(note) && !isDeletedNote(note) && !isExternalNote(note) && !isChapterOnlyNote(note))
     return filterNotesBySelectedDate(archiveNotes)
   }, [filterNotesBySelectedDate, searchedNotes])
 
   const trashEligibleNotes = useMemo(() => {
-    return searchedNotes.filter((note) => isDeletedNote(note) && !isExternalNote(note))
+    return searchedNotes.filter((note) => isDeletedNote(note) && !isExternalNote(note) && !isChapterOnlyNote(note))
   }, [searchedNotes])
 
   const dateFilteredNotes = useMemo(() => {
@@ -6159,8 +6166,11 @@ ${markdownHtml}
   // already showing).
   const revealNoteInMenu = useCallback(() => {
     const section = getActiveSection()
-    const activeNoteId = section?.activeNoteId
-    const activeNoteSummary = section?.activeNoteSummary
+    // menuIdentityNoteId/menuIdentityNoteSummary, not the true active note --
+    // chapters never appear in the menu, so revealing one means revealing
+    // its parent instead (see sectionRegistry.ts's SectionHandle doc comment).
+    const activeNoteId = section?.menuIdentityNoteId
+    const activeNoteSummary = section?.menuIdentityNoteSummary
     if (!activeNoteId || !activeNoteSummary) return
 
     // Clear only whichever filter is actually hiding the note -- never one
@@ -7294,7 +7304,7 @@ ${markdownHtml}
                         aria-label="Note list"
                       >
                         {pagedVisibleNotes.map((note) => {
-                          const isActive = note.id === activeSection?.activeNoteId
+                          const isActive = note.id === activeSection?.menuIdentityNoteId
                           const isModified = isExternalNote(note) && getCurrentExternalNoteModifiedState(note)
                           return (
                             <NoteListItem
@@ -7570,7 +7580,7 @@ ${markdownHtml}
                       >
                         <CategoryTreeView
                           groups={sidebarMode === 'category' ? categoryTree : archiveTree}
-                          activeNoteId={activeSection?.activeNoteId ?? null}
+                          activeNoteId={activeSection?.menuIdentityNoteId ?? null}
                           persistedCollapsedPrimary={sidebarMode === 'category' ? categoryCollapsedPrimary : archiveCollapsedPrimary}
                           persistedCollapsedSecondary={sidebarMode === 'category' ? categoryCollapsedSecondary : archiveCollapsedSecondary}
                           focusNoteRequestKey={sidebarMode === 'category' ? categoryFocusRequestKey : archiveFocusRequestKey}

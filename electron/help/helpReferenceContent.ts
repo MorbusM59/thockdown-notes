@@ -48,6 +48,7 @@ Every heading below is also a jump target: \`[Anchor Text](#anchor-id)\` defines
 - The \`+\` button next to the tab bar splits the editor into another section. Each section has its own tabs.
 - The identity tab area holds either your open note tabs or the tag editor — toggle with the tag icon.
 - Hold-click a note in the sidebar to pin it as a tab; a plain click opens it as a temporary tab.
+- The chapter panel (caret button, bottom bar) splits a note into chapters — full notes of their own, browsable from a bar there instead of the sidebar.
 
 ### Time Machine
 
@@ -325,6 +326,18 @@ Every feature in the app, described individually: where to find it, what it does
 - Holding the click past a short threshold pins it as a permanent tab instead, which stays open alongside others.
 - Right-click a pinned tab, or hold-click it, to unpin/close it.
 - Drag tabs to reorder them; drag a note from the sidebar directly into a tab bar to open it there.
+
+### [Chapters](#chapters)
+
+> **Where?**
+> The caret button on the bottom utility bar opens the chapter panel, above the tab bar.
+
+*Splits a note into sub-notes, browsable from a bar of their own.*
+
+- A chapter is a full, independent note — it just doesn't appear on its own in Date/Category/Archive/Trash/Find, only through its parent's chapter bar.
+- The \`+\` at the left of the chapter bar creates a new empty chapter and opens it immediately.
+- While a chapter is open, its parent stays the one shown as active in the sidebar and the tab bar — the chapter bar itself shows which chapter you're in.
+- Click any chapter pill, or the parent's own tab, to switch between them; each keeps and saves its own text independently.
 
 ## Archiving, Trash & Deletion
 

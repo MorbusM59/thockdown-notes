@@ -168,6 +168,8 @@ export class NoteLifecycleService {
         hasUnsavedChanges: record.hasUnsavedChanges,
         isInSync: Boolean(record.syncMode && !record.hasUnsavedChanges),
         assignedId: record.assignedId,
+        chapterOnly: record.chapterOnly,
+        chapterParentId: record.chapterOnly ? this.databaseService.getChapterParent(record.id) : null,
       };
     } catch {
       return null;
@@ -262,6 +264,7 @@ export class NoteLifecycleService {
     const parsed = parseNoteMetadata(text, shouldSanitize);
 
     const tags = this.databaseService.getNoteTags(input.id);
+    const chapterOnly = record?.chapterOnly ?? false;
 
     return {
       id: input.id,
@@ -277,6 +280,8 @@ export class NoteLifecycleService {
       externalPath: record?.externalPath ?? (record?.isTemp ? record.filePath : null) ?? null,
       hasUnsavedChanges: record?.hasUnsavedChanges ?? false,
       isInSync: Boolean(record?.syncMode && !record?.hasUnsavedChanges),
+      chapterOnly,
+      chapterParentId: chapterOnly ? this.databaseService.getChapterParent(input.id) : null,
     };
   }
 
@@ -326,6 +331,17 @@ export class NoteLifecycleService {
       }
     }
     return this.loadNote({ id });
+  }
+
+  // Creates a fresh empty note marked chapterOnly and appends it as
+  // parentNoteId's last chapter -- the chapter bar's "+" button. Chapters
+  // are otherwise full, independent notes (own tags, own file, own
+  // snapshots); chapterOnly only controls menu-view visibility.
+  async createChapterNote(parentNoteId: string): Promise<NoteDocument> {
+    const created = await this.createNote({});
+    this.databaseService.setNoteChapterOnly(created.id, true);
+    this.databaseService.addChapter(parentNoteId, created.id);
+    return this.loadNote({ id: created.id });
   }
 
   // Clones a past snapshot of an existing note into a brand-new, independent
@@ -396,6 +412,7 @@ export class NoteLifecycleService {
         syncMode,
         assignedId: record.assignedId ?? null,
         previewBlockCache: null,
+        chapterOnly: record.chapterOnly,
       });
 
       if (!summary) {
@@ -433,6 +450,7 @@ export class NoteLifecycleService {
       syncMode: false,
       assignedId: record?.assignedId ?? null,
       previewBlockCache: null,
+      chapterOnly: record?.chapterOnly ?? false,
     });
 
     if (!summary) {
