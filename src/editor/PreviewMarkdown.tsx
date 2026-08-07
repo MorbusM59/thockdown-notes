@@ -52,11 +52,15 @@ function isSafePreviewImageSrc(src: string | undefined): boolean {
 // `$`: `$` alone selects "this note" (an empty note-id slot can never
 // collide with a real one, since assigned IDs are never empty — see
 // setNoteAssignedId), or `$NOTE-ID` selects another note by its
-// user-assignable internal ID. An optional trailing `#anchor-id` on either
-// form jumps to the matching `[Anchor Text](#anchor-id)` definition once
-// the target note is open. Because both forms are ordinary Markdown links
-// — not a separate text-scanning syntax — an example shown inside a code
-// span is never mistaken for a live one.
+// user-assignable internal ID. An optional `§CHAPTER-ID` segment right
+// after the note id (or right after the bare `$` for a chapter of "this
+// note") drills into one of that note's chapters by its own user-assignable
+// id (same normalization/dedup rules as a note id, scoped per parent -- see
+// setChapterId). An optional trailing `#anchor-id` on any of these jumps to
+// the matching `[Anchor Text](#anchor-id)` definition once the target note
+// (or chapter) is open. Because every form here is an ordinary Markdown
+// link — not a separate text-scanning syntax — an example shown inside a
+// code span is never mistaken for a live one.
 
 function escapeRegExpLiteral(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -73,28 +77,51 @@ export interface ParsedAnchorDefinition {
   anchorId: string
 }
 
-/** A `$` / `$#anchor-id` / `$NOTE-ID` / `$NOTE-ID#anchor-id` navigable link. `noteIdRaw === null` means "this note." */
+/**
+ * A `$` / `$#anchor-id` / `$NOTE-ID` / `$NOTE-ID#anchor-id` /
+ * `$NOTE-ID§CHAPTER-ID` / `$NOTE-ID§CHAPTER-ID#anchor-id` navigable link
+ * (and the `$§CHAPTER-ID...` variants, a chapter of "this note").
+ * `noteIdRaw === null` means "this note"; `chapterIdRaw === null` means no
+ * (non-empty) chapter segment was present.
+ */
 export interface ParsedInternalPreviewLink {
   kind: 'internal-link'
   noteIdRaw: string | null
+  chapterIdRaw: string | null
   anchorId: string | null
 }
 
 export type ParsedPreviewHref = ParsedAnchorDefinition | ParsedInternalPreviewLink
 
 /** Parses a preview link href into an anchor definition or a navigable internal link, or null if it isn't one of ours. */
-export function parseInternalPreviewHref(href: string): ParsedPreviewHref | null {
+export function parseInternalPreviewHref(rawHref: string): ParsedPreviewHref | null {
+  // mdast-util-to-hast's CommonMark-spec-mandated destination percent-encoding
+  // (https://spec.commonmark.org/0.31.2/#example-599) leaves ASCII `$`/`#`
+  // alone but always percent-encodes non-ASCII characters -- so a `§`
+  // chapter-segment separator survives markdown parsing as `%C2%A7`, not the
+  // literal character, by the time it reaches this function as `href`.
+  // Decoding first (falling back to the raw string on a malformed sequence)
+  // makes every downstream check below operate on what the user actually
+  // typed, regardless of that encoding step.
+  let href = rawHref
+  try {
+    href = decodeURIComponent(rawHref)
+  } catch {
+    // Malformed percent-encoding -- fall back to the raw string rather than throwing.
+  }
+
   const definitionMatch = /^#([^#]+)$/.exec(href)
   if (definitionMatch) {
     return { kind: 'anchor-definition', anchorId: definitionMatch[1] }
   }
 
-  const linkMatch = /^\$([^#]*)(?:#([^#]+))?$/.exec(href)
+  const linkMatch = /^\$([^#§]*)(?:§([^#]*))?(?:#([^#]+))?$/.exec(href)
   if (linkMatch) {
     const noteIdRaw = linkMatch[1].length > 0 ? linkMatch[1] : null
-    const anchorId = linkMatch[2] ?? null
-    if (noteIdRaw === null && anchorId === null) return null
-    return { kind: 'internal-link', noteIdRaw, anchorId }
+    const chapterIdRaw = linkMatch[2] != null && linkMatch[2].length > 0 ? linkMatch[2] : null
+    const anchorId = linkMatch[3] ?? null
+    if (noteIdRaw === null && chapterIdRaw === null && anchorId === null) return null
+    return { kind: 'internal-link', noteIdRaw, chapterIdRaw, anchorId }
   }
 
   return null

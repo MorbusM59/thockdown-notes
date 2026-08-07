@@ -927,12 +927,20 @@ function registerIpcHandlers() {
     return { chapters, created };
   });
 
+  ipcMain.handle(CHAPTER_CHANNELS.addExisting, async (_event, parentNoteId: string, chapterNoteId: string) => {
+    return databaseService!.addChapter(parentNoteId, chapterNoteId);
+  });
+
   ipcMain.handle(CHAPTER_CHANNELS.reorder, async (_event, parentNoteId: string, orderedChapterNoteIds: string[]) => {
     return databaseService!.reorderChapters(parentNoteId, orderedChapterNoteIds);
   });
 
   ipcMain.handle(CHAPTER_CHANNELS.remove, async (_event, parentNoteId: string, chapterNoteId: string) => {
     return databaseService!.removeChapter(parentNoteId, chapterNoteId);
+  });
+
+  ipcMain.handle(CHAPTER_CHANNELS.setChapterId, async (_event, parentNoteId: string, chapterNoteId: string, requestedId: string) => {
+    return databaseService!.setChapterId(parentNoteId, chapterNoteId, requestedId);
   });
 }
 

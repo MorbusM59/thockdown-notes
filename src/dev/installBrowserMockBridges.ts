@@ -111,6 +111,14 @@ function toSummary(note: NoteDocument): NoteSummary {
     sizeBytes: note.sizeBytes,
     assignedId: note.assignedId ?? null,
     chapterOnly: Boolean(note.chapterOnly),
+    // The real app derives this from the on-disk file minus any legacy
+    // metadata header (readSummary in noteLifecycleService.ts); the mock has
+    // no such header, so the live text itself already is the content text.
+    // Needed for internal `$id#anchor-id` link navigation (and now
+    // `§chapter-id`) to find anchor definitions -- without this, every such
+    // link silently no-ops in the browser mock regardless of whether the
+    // anchor actually exists.
+    contentText: note.text,
   }
 }
 
@@ -323,6 +331,7 @@ function loadStore(): BrowserMockStore {
               parentNoteId: entry.parentNoteId,
               chapterNoteId: entry.chapterNoteId,
               position: Number.isFinite(entry.position) ? entry.position : index,
+              chapterId: typeof entry.chapterId === 'string' ? entry.chapterId : null,
             }))
         : [],
     }
@@ -985,9 +994,56 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
         const maxPosition = store.chapters
           .filter((chapter) => chapter.parentNoteId === parentNoteId)
           .reduce((max, chapter) => Math.max(max, chapter.position), -1)
-        store.chapters.push({ parentNoteId, chapterNoteId: id, position: maxPosition + 1 })
+        store.chapters.push({ parentNoteId, chapterNoteId: id, position: maxPosition + 1, chapterId: null })
 
         return { chapters: sorted(store, parentNoteId), created: clone(created) }
+      })
+    },
+
+    async addExistingChapter(parentNoteId: string, chapterNoteId: string): Promise<ChapterEntry[]> {
+      return mutate((store) => {
+        if (parentNoteId === chapterNoteId) return sorted(store, parentNoteId)
+        if (store.chapters.some((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === chapterNoteId)) {
+          return sorted(store, parentNoteId)
+        }
+        const maxPosition = store.chapters
+          .filter((chapter) => chapter.parentNoteId === parentNoteId)
+          .reduce((max, chapter) => Math.max(max, chapter.position), -1)
+        store.chapters.push({ parentNoteId, chapterNoteId, position: maxPosition + 1, chapterId: null })
+        return sorted(store, parentNoteId)
+      })
+    },
+
+    async setChapterId(parentNoteId: string, chapterNoteId: string, requestedId: string): Promise<string | null> {
+      return mutate((store) => {
+        const normalized = normalizeAssignedIdInput(requestedId)
+        if (normalized.length === 0) {
+          store.chapters = store.chapters.map((chapter) => (
+            chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === chapterNoteId
+              ? { ...chapter, chapterId: null }
+              : chapter
+          ))
+          return null
+        }
+
+        const used = new Set(
+          store.chapters
+            .filter((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId !== chapterNoteId && chapter.chapterId)
+            .map((chapter) => chapter.chapterId as string),
+        )
+        let resolved = normalized
+        let attempt = 2
+        while (used.has(resolved)) {
+          resolved = `${normalized}-${attempt}`
+          attempt += 1
+        }
+
+        store.chapters = store.chapters.map((chapter) => (
+          chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === chapterNoteId
+            ? { ...chapter, chapterId: resolved }
+            : chapter
+        ))
+        return resolved
       })
     },
 

@@ -88,4 +88,64 @@ describe('DatabaseService chapters', () => {
     db.addChapter('parent-a', 'chapter-1')
     expect(() => db.addChapter('parent-a', 'chapter-1')).toThrow()
   })
+
+  describe('setChapterId', () => {
+    it('assigns and normalizes a chapterId, defaulting to unassigned (null)', () => {
+      seedNote(db, 'parent-a')
+      seedNote(db, 'chapter-1')
+      db.addChapter('parent-a', 'chapter-1')
+
+      expect(db.listChaptersForNote('parent-a')[0].chapterId).toBeNull()
+
+      const resolved = db.setChapterId('parent-a', 'chapter-1', 'intro chapter')
+      expect(resolved).toBe('INTRO-CHAPTER')
+      expect(db.listChaptersForNote('parent-a')[0].chapterId).toBe('INTRO-CHAPTER')
+    })
+
+    it('clears a chapterId back to unassigned given an empty string', () => {
+      seedNote(db, 'parent-a')
+      seedNote(db, 'chapter-1')
+      db.addChapter('parent-a', 'chapter-1')
+      db.setChapterId('parent-a', 'chapter-1', 'INTRO')
+
+      const resolved = db.setChapterId('parent-a', 'chapter-1', '   ')
+      expect(resolved).toBeNull()
+      expect(db.listChaptersForNote('parent-a')[0].chapterId).toBeNull()
+    })
+
+    it('dedupes chapterId collisions within the same parent with a "-2" suffix', () => {
+      seedNote(db, 'parent-a')
+      seedNote(db, 'chapter-1')
+      seedNote(db, 'chapter-2')
+      db.addChapter('parent-a', 'chapter-1')
+      db.addChapter('parent-a', 'chapter-2')
+
+      db.setChapterId('parent-a', 'chapter-1', 'INTRO')
+      const resolved = db.setChapterId('parent-a', 'chapter-2', 'INTRO')
+      expect(resolved).toBe('INTRO-2')
+    })
+
+    it('scopes chapterId uniqueness per parent -- the same id is reusable across different parents', () => {
+      seedNote(db, 'parent-a')
+      seedNote(db, 'parent-b')
+      seedNote(db, 'chapter-1')
+      seedNote(db, 'chapter-2')
+      db.addChapter('parent-a', 'chapter-1')
+      db.addChapter('parent-b', 'chapter-2')
+
+      db.setChapterId('parent-a', 'chapter-1', 'INTRO')
+      const resolved = db.setChapterId('parent-b', 'chapter-2', 'INTRO')
+      expect(resolved).toBe('INTRO')
+    })
+
+    it('lets a chapter keep its own current chapterId unchanged without colliding with itself', () => {
+      seedNote(db, 'parent-a')
+      seedNote(db, 'chapter-1')
+      db.addChapter('parent-a', 'chapter-1')
+      db.setChapterId('parent-a', 'chapter-1', 'INTRO')
+
+      const resolved = db.setChapterId('parent-a', 'chapter-1', 'INTRO')
+      expect(resolved).toBe('INTRO')
+    })
+  })
 })

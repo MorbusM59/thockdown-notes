@@ -188,11 +188,12 @@ export type NoteTabEntry = {
   addedAtMs: number;
 };
 
-/** One chapter: `chapterNoteId` is itself a full note, ordered (gapless, 0-indexed) among `parentNoteId`'s other chapters. The same note can be a chapter of any number of different parents. */
+/** One chapter: `chapterNoteId` is itself a full note, ordered (gapless, 0-indexed) among `parentNoteId`'s other chapters. The same note can be a chapter of any number of different parents. `chapterId` is a user-assignable label (chapter bar right-click, or `$noteid§chapterid` links), unique per parentNoteId; null until first assigned. */
 export type ChapterEntry = {
   parentNoteId: string;
   position: number;
   chapterNoteId: string;
+  chapterId: string | null;
 };
 
 /**
@@ -1417,17 +1418,63 @@ export class DatabaseService {
   /** This parent note's chapters, in order. Deliberately no UNIQUE(parentNoteId, position) constraint -- see reorderChapters's doc comment, same reasoning as note_tabs above. */
   listChaptersForNote(parentNoteId: string): ChapterEntry[] {
     const db = this.requireDb();
-    const rows = db.prepare('SELECT parentNoteId, position, chapterNoteId FROM chapters WHERE parentNoteId = ? ORDER BY position ASC').all(parentNoteId) as ChapterEntry[];
+    const rows = db.prepare('SELECT parentNoteId, position, chapterNoteId, chapterId FROM chapters WHERE parentNoteId = ? ORDER BY position ASC').all(parentNoteId) as ChapterEntry[];
     return rows;
   }
 
-  /** Appends `chapterNoteId` as the new last chapter of `parentNoteId`. */
+  /** Appends `chapterNoteId` as the new last chapter of `parentNoteId`. Used both for a brand-new empty chapter note (createChapterNote) and for attaching an existing note as a chapter (dragged in from the sidebar) -- either way this is the sole place a `chapters` row is inserted. */
   addChapter(parentNoteId: string, chapterNoteId: string): ChapterEntry[] {
     const db = this.requireDb();
     const { maxPosition } = db.prepare('SELECT MAX(position) AS maxPosition FROM chapters WHERE parentNoteId = ?').get(parentNoteId) as { maxPosition: number | null };
     const nextPosition = maxPosition === null ? 0 : maxPosition + 1;
     db.prepare('INSERT INTO chapters (parentNoteId, position, chapterNoteId) VALUES (?, ?, ?)').run(parentNoteId, nextPosition, chapterNoteId);
     return this.listChaptersForNote(parentNoteId);
+  }
+
+  /**
+   * All chapterIds currently in use among `parentNoteId`'s own chapters,
+   * optionally excluding one chapter (so it can keep its current id without
+   * colliding with itself when re-resolving uniqueness). Scoped per parent,
+   * unlike notes.assignedId's global uniqueness -- the same chapterId text
+   * can be reused across different parents' chapter lists.
+   */
+  private listUsedChapterIds(parentNoteId: string, excludeChapterNoteId?: string): Set<string> {
+    const db = this.requireDb();
+    const rows = excludeChapterNoteId
+      ? db.prepare('SELECT chapterId FROM chapters WHERE parentNoteId = ? AND chapterId IS NOT NULL AND chapterNoteId != ?').all(parentNoteId, excludeChapterNoteId) as Array<{ chapterId: string }>
+      : db.prepare('SELECT chapterId FROM chapters WHERE parentNoteId = ? AND chapterId IS NOT NULL').all(parentNoteId) as Array<{ chapterId: string }>;
+    return new Set(rows.map((row) => row.chapterId));
+  }
+
+  /** Resolves `requestedBase` to a value not already taken by another of `parentNoteId`'s chapters. Collisions get an incremental "-2", "-3", ... suffix, same as resolveUniqueAssignedId. */
+  private resolveUniqueChapterId(parentNoteId: string, requestedBase: string, excludeChapterNoteId?: string): string {
+    const used = this.listUsedChapterIds(parentNoteId, excludeChapterNoteId);
+    if (!used.has(requestedBase)) return requestedBase;
+
+    let attempt = 2;
+    while (used.has(`${requestedBase}-${attempt}`)) {
+      attempt += 1;
+    }
+    return `${requestedBase}-${attempt}`;
+  }
+
+  /**
+   * Explicitly assigns a chapterId to one of `parentNoteId`'s chapters (the
+   * chapter bar's right-click-to-assign path). Same normalization as a note's
+   * `$id` (normalizeAssignedIdInput), but uniqueness is resolved only against
+   * this parent's own other chapters, not globally. An empty/whitespace-only
+   * `requestedRaw` clears it back to unassigned (the chapter bar's "···"
+   * placeholder) rather than falling back to a derived default -- unlike
+   * notes.assignedId, a chapter has no title-derived default to fall back to
+   * (its label is otherwise just "§<position>"). Returns the final,
+   * collision-resolved id that was actually stored, or null if cleared.
+   */
+  setChapterId(parentNoteId: string, chapterNoteId: string, requestedRaw: string): string | null {
+    const db = this.requireDb();
+    const normalized = normalizeAssignedIdInput(requestedRaw);
+    const resolved = normalized.length > 0 ? this.resolveUniqueChapterId(parentNoteId, normalized, chapterNoteId) : null;
+    db.prepare('UPDATE chapters SET chapterId = ? WHERE parentNoteId = ? AND chapterNoteId = ?').run(resolved, parentNoteId, chapterNoteId);
+    return resolved;
   }
 
   /** Removes a chapter and closes the gap so every later chapter's position shifts forward by one. */
@@ -3049,6 +3096,13 @@ export class DatabaseService {
         parentNoteId  TEXT    NOT NULL,
         position      INTEGER NOT NULL,
         chapterNoteId TEXT    NOT NULL,
+        -- User-assignable label ($noteid section chapterId link syntax,
+        -- chapter-bar right-click) -- same normalization/dedup rules as
+        -- notes.assignedId, but scoped per parentNoteId instead of globally,
+        -- since the same chapter note can appear under several parents with
+        -- independent labels. Null until first assigned; displayed as the
+        -- chapter bar's placeholder ("...") until then.
+        chapterId     TEXT,
         UNIQUE (parentNoteId, chapterNoteId),
         CHECK (parentNoteId != chapterNoteId),
         FOREIGN KEY (parentNoteId)  REFERENCES notes(id) ON DELETE CASCADE,
@@ -3056,6 +3110,7 @@ export class DatabaseService {
       );
 
       CREATE INDEX IF NOT EXISTS idx_chapters_parent_position ON chapters(parentNoteId, position);
+      CREATE INDEX IF NOT EXISTS idx_chapters_parent_chapterid ON chapters(parentNoteId, chapterId);
     `);
 
     // A fresh install always starts with exactly one (default, unnamed)
@@ -3094,6 +3149,7 @@ export class DatabaseService {
     // since it only exists to be shown through its parent's chapter bar. See
     // the `chapters` table above for the parent/position/chapter linkage.
     this.ensureNotesColumn('chapterOnly', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureChaptersColumn('chapterId', 'TEXT');
     this.ensureNoteSnapshotsColumn('anchorBlockIndex', 'INTEGER');
 
     // Notes are inserted (both on creation and on filesystem-sync upsert)
@@ -3144,6 +3200,16 @@ export class DatabaseService {
     }
 
     db.exec(`ALTER TABLE note_snapshots ADD COLUMN ${columnName} ${columnDefinition}`);
+  }
+
+  private ensureChaptersColumn(columnName: string, columnDefinition: string): void {
+    const db = this.requireDb();
+    const columns = db.prepare('PRAGMA table_info(chapters)').all() as Array<{ name: string }>;
+    if (columns.some((column) => column.name === columnName)) {
+      return;
+    }
+
+    db.exec(`ALTER TABLE chapters ADD COLUMN ${columnName} ${columnDefinition}`);
   }
 
   private ensureProtectedTags(): void {

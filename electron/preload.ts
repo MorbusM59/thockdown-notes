@@ -234,10 +234,12 @@ const editorSectionsApi: EditorSectionsApi = {
 contextBridge.exposeInMainWorld('thockdownSections', editorSectionsApi)
 
 const chaptersApi: ChaptersApi = {
-  listChapters:    (parentNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.list, parentNoteId),
-  createChapter:   (parentNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.create, parentNoteId),
-  reorderChapters: (parentNoteId, orderedChapterNoteIds) => ipcRenderer.invoke(CHAPTER_CHANNELS.reorder, parentNoteId, orderedChapterNoteIds),
-  removeChapter:   (parentNoteId, chapterNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.remove, parentNoteId, chapterNoteId),
+  listChapters:      (parentNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.list, parentNoteId),
+  createChapter:     (parentNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.create, parentNoteId),
+  addExistingChapter: (parentNoteId, chapterNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.addExisting, parentNoteId, chapterNoteId),
+  reorderChapters:   (parentNoteId, orderedChapterNoteIds) => ipcRenderer.invoke(CHAPTER_CHANNELS.reorder, parentNoteId, orderedChapterNoteIds),
+  removeChapter:     (parentNoteId, chapterNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.remove, parentNoteId, chapterNoteId),
+  setChapterId:      (parentNoteId, chapterNoteId, requestedId) => ipcRenderer.invoke(CHAPTER_CHANNELS.setChapterId, parentNoteId, chapterNoteId, requestedId),
 }
 
 contextBridge.exposeInMainWorld('thockdownChapters', chaptersApi)

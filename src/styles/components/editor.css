@@ -45,15 +45,48 @@
   pointer-events: auto;
 }
 
+/* Fade mask + horizontal scroll: identical technique to .tabbar-tabs-scroll-shell
+   (tags.css) -- same --tab-fade-left-w/--tab-fade-right-w registered custom
+   properties, so the fade transitions smoothly there too. */
 .chapter-bar-scroll-shell {
-  position: relative;
-  width:    100%;
-  height:   var(--chapter-panel-content-height);
-  overflow: hidden;
-  padding:  0 var(--spacing-regular);
+  position:  relative;
+  width:     100%;
+  height:    var(--chapter-panel-content-height);
+  overflow:  hidden;
+  padding:   0 var(--spacing-regular);
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--tab-fade-left-w),
+    #000 calc(100% - var(--tab-fade-right-w)),
+    transparent 100%
+  );
+  -webkit-mask-repeat:   no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size:     100% 100%;
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--tab-fade-left-w),
+    #000 calc(100% - var(--tab-fade-right-w)),
+    transparent 100%
+  );
+  mask-repeat:   no-repeat;
+  mask-position: center;
+  mask-size:     100% 100%;
+  transition: --tab-fade-left-w 0.15s ease, --tab-fade-right-w 0.15s ease;
+}
+
+.chapter-bar-scroll-shell.fade-left {
+  --tab-fade-left-w: 14px;
+}
+
+.chapter-bar-scroll-shell.fade-right {
+  --tab-fade-right-w: 14px;
 }
 
 .chapter-bar-display {
+  padding:     1px;
   display:     flex;
   flex-wrap:   nowrap;
   align-items: center;
@@ -69,6 +102,22 @@
 
 .chapter-bar-display::-webkit-scrollbar {
   display: none;               /* Chromium / Electron */
+}
+
+/* Chapter tabs get a wider, uniform width (long ids need more room than a
+   note tab's assigned id) -- the parent tab and the "+" button keep their
+   normal .note-tab-pill / .btn-icon sizing. */
+.note-tab-pill.chapter-pill {
+  flex:  0 0 120px;
+  width: 120px;
+}
+
+.chapter-id-input {
+  height: 100%;
+  text-align: center;
+  justify-content: center;
+  outline: none;
+  letter-spacing: 0.1em;
 }
 
 .chapter-add-button {

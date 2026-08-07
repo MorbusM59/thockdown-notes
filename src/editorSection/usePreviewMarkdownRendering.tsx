@@ -52,7 +52,7 @@ export interface UsePreviewMarkdownRenderingOptions {
   activeNoteId: string | null
   activeNoteText: string
   latestEditorTextRef: MutableRefObject<string>
-  activateNote: (noteId: string, overrideCursorPos?: number) => Promise<void>
+  activateNote: (noteId: string, overrideCursorPos?: number, chapterParentContext?: string | null) => Promise<void>
   previewScrollRef: MutableRefObject<HTMLDivElement | null>
   documentFindDirective: DocumentFindDirective
   isDocumentFindCaseSensitive: boolean
@@ -328,53 +328,87 @@ export function usePreviewMarkdownRendering({
     }
   }, [virtualizer])
 
-  // Resolves and follows a `$`, `$#anchor-id`, `$NOTE-ID`, or
-  // `$NOTE-ID#anchor-id` preview link. Broken destinations (unknown note ID,
+  // Shared by both the direct-note and chapter branches of
+  // navigateToInternalPreviewLink below: activates `targetNoteId` (unless
+  // already active) then either scrolls to `anchorId` within it or, on a
+  // genuine note switch with no anchor, resets to the top.
+  // `chapterParentContext`, when navigating into a chapter, records which
+  // parent's chapter bar it was reached through (see activateNote's own doc
+  // comment in EditorSection.tsx) so the sidebar/tab bar keep showing that
+  // parent as active.
+  const activateAndScroll = useCallback((targetNoteId: string, contentTextForExistenceCheck: string, anchorId: string | null, chapterParentContext?: string | null) => {
+    const isAlreadyActive = targetNoteId === activeNoteId
+    const followUp = () => {
+      if (anchorId !== null) {
+        // Once the target note is active, its own live text is what
+        // previewBlocks actually reflects -- not the (possibly stale)
+        // stored contentText used for the existence check at the call site.
+        const anchorSourceText = isAlreadyActive
+          ? (latestEditorTextRef.current || activeNoteTextRef.current)
+          : contentTextForExistenceCheck
+        const sourceLine = findAnchorDefinitionLine(anchorSourceText, anchorId)
+        scrollToAnchorInPreview(anchorId, sourceLine, !isAlreadyActive)
+      } else if (!isAlreadyActive) {
+        // Already-active notes stay wherever the reader currently is —
+        // only a genuine note switch resets to the top.
+        scrollPreviewToTop(true)
+      }
+    }
+
+    if (isAlreadyActive) {
+      followUp()
+    } else {
+      void activateNote(targetNoteId, undefined, chapterParentContext ?? null).then(followUp)
+    }
+  }, [activeNoteId, activateNote, scrollToAnchorInPreview, scrollPreviewToTop, latestEditorTextRef])
+
+  // Resolves and follows a `$`, `$#anchor-id`, `$NOTE-ID`,
+  // `$NOTE-ID#anchor-id`, `$NOTE-ID§CHAPTER-ID`, or
+  // `$NOTE-ID§CHAPTER-ID#anchor-id` preview link (also `$§CHAPTER-ID...`, a
+  // chapter of "this note"). Broken destinations (unknown note/chapter ID,
   // missing anchor) are silently ignored rather than partially navigating.
   const navigateToInternalPreviewLink = useCallback((target: ParsedInternalPreviewLink) => {
+    // `contextNote` is the note a `§CHAPTER-ID` segment (if present) is
+    // scoped to, or the direct navigation target if there's no chapter
+    // segment -- explicit via noteIdRaw, or "this note" when it's null.
+    let contextNote: NoteSummary | undefined
     if (target.noteIdRaw !== null) {
       const normalizedTarget = normalizeInternalIdForLookup(target.noteIdRaw)
-      const targetNote = notesRef.current.find((note) => note.assignedId && normalizeInternalIdForLookup(note.assignedId) === normalizedTarget)
-      if (!targetNote) return
+      contextNote = notesRef.current.find((note) => note.assignedId && normalizeInternalIdForLookup(note.assignedId) === normalizedTarget)
+      if (!contextNote) return
+    } else if (activeNoteId) {
+      contextNote = notesRef.current.find((note) => note.id === activeNoteId)
+    }
 
-      const targetContentText = targetNote.contentText ?? ''
-      if (target.anchorId !== null && !noteContainsAnchorDefinition(targetContentText, target.anchorId)) {
-        return
-      }
-
-      const isAlreadyActive = targetNote.id === activeNoteId
-      const followUp = () => {
-        if (target.anchorId !== null) {
-          // Once the target note is active, its own live text is what
-          // previewBlocks actually reflects -- not the (possibly stale)
-          // stored contentText used for the existence check above.
-          const anchorSourceText = isAlreadyActive
-            ? (latestEditorTextRef.current || activeNoteTextRef.current)
-            : targetContentText
-          const sourceLine = findAnchorDefinitionLine(anchorSourceText, target.anchorId)
-          scrollToAnchorInPreview(target.anchorId, sourceLine, !isAlreadyActive)
-        } else if (!isAlreadyActive) {
-          // Already-active notes stay wherever the reader currently is —
-          // only a genuine note switch resets to the top.
-          scrollPreviewToTop(true)
-        }
-      }
-
-      if (isAlreadyActive) {
-        followUp()
-      } else {
-        void activateNote(targetNote.id).then(followUp)
-      }
+    if (target.chapterIdRaw !== null) {
+      if (!contextNote || !window.thockdownChapters) return
+      const parentNoteId = contextNote.id
+      const normalizedChapterTarget = normalizeInternalIdForLookup(target.chapterIdRaw)
+      void window.thockdownChapters.listChapters(parentNoteId).then((chapters) => {
+        const chapterEntry = chapters.find((entry) => entry.chapterId && normalizeInternalIdForLookup(entry.chapterId) === normalizedChapterTarget)
+        if (!chapterEntry) return
+        const chapterContentText = notesRef.current.find((note) => note.id === chapterEntry.chapterNoteId)?.contentText ?? ''
+        if (target.anchorId !== null && !noteContainsAnchorDefinition(chapterContentText, target.anchorId)) return
+        activateAndScroll(chapterEntry.chapterNoteId, chapterContentText, target.anchorId, parentNoteId)
+      })
       return
     }
 
-    // No noteIdRaw means "this note" (a bare `$` or `$#anchor-id`).
+    if (target.noteIdRaw !== null) {
+      if (!contextNote) return
+      const targetContentText = contextNote.contentText ?? ''
+      if (target.anchorId !== null && !noteContainsAnchorDefinition(targetContentText, target.anchorId)) return
+      activateAndScroll(contextNote.id, targetContentText, target.anchorId)
+      return
+    }
+
+    // No noteIdRaw and no chapterIdRaw means "this note" (a bare `$` or `$#anchor-id`).
     if (target.anchorId === null || !activeNoteId) return
     const currentText = latestEditorTextRef.current || activeNoteTextRef.current
     if (!noteContainsAnchorDefinition(currentText, target.anchorId)) return
     const sourceLine = findAnchorDefinitionLine(currentText, target.anchorId)
     scrollToAnchorInPreview(target.anchorId, sourceLine, false)
-  }, [activeNoteId, activateNote, scrollToAnchorInPreview, scrollPreviewToTop, latestEditorTextRef])
+  }, [activeNoteId, activateAndScroll, scrollToAnchorInPreview, latestEditorTextRef])
 
   // navigateToInternalPreviewLink itself still isn't fully keystroke-stable
   // -- it depends (transitively, via `activateNote`) on other callbacks
