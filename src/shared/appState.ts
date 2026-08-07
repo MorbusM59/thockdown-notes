@@ -123,7 +123,7 @@ export interface PersistedMenuState {
   reducedCaretAnimation?: boolean;
   deferPreviewOnRapidInput?: boolean;
   typingSoundEnabled?: boolean;
-  typingSoundSet?: 'A' | 'B' | 'C';
+  typingSoundSet?: 'A' | 'B' | 'C' | 'D';
   musicVolume?: number;
   musicReverbAmount?: number;
   musicReverbRoom?: number;

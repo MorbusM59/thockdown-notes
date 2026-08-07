@@ -86,6 +86,7 @@ export class TypingSoundManager {
     A: [],
     B: [],
     C: [],
+    D: [],
   }
   private reversedBufferGroups: Record<string, AudioBuffer[]> | null = null
   private flippedBufferGroups: Record<string, AudioBuffer[]> | null = null
@@ -95,6 +96,7 @@ export class TypingSoundManager {
     A: [],
     B: [],
     C: [],
+    D: [],
   }
   private reversedFlippedClickBuffersBySet: Record<TypingSoundSetId, AudioBuffer[]> | null = null
   private activeKeySet: TypingSoundSetId = DEFAULT_TYPING_SOUND_SET
@@ -190,18 +192,21 @@ export class TypingSoundManager {
         A: clickBuffersBySet.A.map((buffer) => this.createReversedBuffer(buffer, context)),
         B: clickBuffersBySet.B.map((buffer) => this.createReversedBuffer(buffer, context)),
         C: clickBuffersBySet.C.map((buffer) => this.createReversedBuffer(buffer, context)),
+        D: clickBuffersBySet.D.map((buffer) => this.createReversedBuffer(buffer, context)),
       }
 
       this.flippedClickBuffersBySet = {
         A: clickBuffersBySet.A.map((buffer) => this.createFlippedBuffer(buffer, context)),
         B: clickBuffersBySet.B.map((buffer) => this.createFlippedBuffer(buffer, context)),
         C: clickBuffersBySet.C.map((buffer) => this.createFlippedBuffer(buffer, context)),
+        D: clickBuffersBySet.D.map((buffer) => this.createFlippedBuffer(buffer, context)),
       }
 
       this.reversedFlippedClickBuffersBySet = {
         A: this.reversedClickBuffersBySet.A.map((buffer) => this.createFlippedBuffer(buffer, context)),
         B: this.reversedClickBuffersBySet.B.map((buffer) => this.createFlippedBuffer(buffer, context)),
         C: this.reversedClickBuffersBySet.C.map((buffer) => this.createFlippedBuffer(buffer, context)),
+        D: this.reversedClickBuffersBySet.D.map((buffer) => this.createFlippedBuffer(buffer, context)),
       }
 
       this.reversedBufferGroups = {

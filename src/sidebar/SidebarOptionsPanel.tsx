@@ -403,8 +403,8 @@ export interface SidebarOptionsPanelProps {
 
   typingSoundEnabled: boolean
   setTypingSoundEnabled: (value: boolean) => void
-  typingSoundSet: 'A' | 'B' | 'C'
-  setTypingSoundSet: (value: 'A' | 'B' | 'C') => void
+  typingSoundSet: 'A' | 'B' | 'C' | 'D'
+  setTypingSoundSet: (value: 'A' | 'B' | 'C' | 'D') => void
   audioKeyVolume: number
   setAudioKeyVolume: (value: number) => void
   audioKeyVariance: number
@@ -2181,7 +2181,7 @@ export function SidebarOptionsPanel({
             >
               <span className="fa-solid fa-ban" aria-hidden="true" />
             </button>
-            {(['A', 'B', 'C'] as const).map((setId) => (
+            {(['A', 'B', 'C', 'D'] as const).map((setId) => (
               <button
                 key={setId}
                 type="button"
@@ -2193,9 +2193,9 @@ export function SidebarOptionsPanel({
                   typingSoundManager.setTypingSoundSet(setId)
                 }}
                 aria-pressed={typingSoundEnabled && typingSoundSet === setId}
-                title={`${setId === 'A' ? 'Pops' : ''}${setId === 'B' ? 'Pins' : ''}${setId === 'C' ? 'Creamy' : ''}`}
+                title={`${setId === 'A' ? 'Pops' : ''}${setId === 'B' ? 'Pins' : ''}${setId === 'C' ? 'Creamy' : ''}${setId === 'D' ? 'Clicks' : ''}`}
               >
-                <span className={`${setId === 'A' ? 'fa-solid fa-burst' : ''}${setId === 'B' ? 'fa-solid fa-map-pin' : ''}${setId === 'C' ? 'fa-solid fa-ice-cream' : ''}`} aria-hidden="true" />
+                <span className={`${setId === 'A' ? 'fa-solid fa-burst' : ''}${setId === 'B' ? 'fa-solid fa-map-pin' : ''}${setId === 'C' ? 'fa-solid fa-ice-cream' : ''}${setId === 'D' ? 'fa-solid fa-circle-check' : ''}`} aria-hidden="true" />
               </button>
             ))}
           </div>

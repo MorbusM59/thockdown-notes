@@ -1,4 +1,4 @@
-export const TYPING_SOUND_SET_IDS = ['A', 'B', 'C'] as const
+export const TYPING_SOUND_SET_IDS = ['A', 'B', 'C', 'D'] as const
 export type TypingSoundSetId = (typeof TYPING_SOUND_SET_IDS)[number]
 export const DEFAULT_TYPING_SOUND_SET: TypingSoundSetId = 'A'
 
@@ -38,6 +38,18 @@ export const TYPING_SOUND_ASSETS: Record<TypingSoundSetId, readonly string[]> = 
     new URL('../assets/sounds/keys/setc/ckey-08.wav', import.meta.url).href,
     new URL('../assets/sounds/keys/setc/ckey-09.wav', import.meta.url).href,
     new URL('../assets/sounds/keys/setc/ckey-10.wav', import.meta.url).href,
+  ],
+  D: [
+    new URL('../assets/sounds/keys/setd/dkey-01.wav', import.meta.url).href,
+    new URL('../assets/sounds/keys/setd/dkey-02.wav', import.meta.url).href,
+    new URL('../assets/sounds/keys/setd/dkey-03.wav', import.meta.url).href,
+    new URL('../assets/sounds/keys/setd/dkey-04.wav', import.meta.url).href,
+    new URL('../assets/sounds/keys/setd/dkey-05.wav', import.meta.url).href,
+    new URL('../assets/sounds/keys/setd/dkey-06.wav', import.meta.url).href,
+    new URL('../assets/sounds/keys/setd/dkey-07.wav', import.meta.url).href,
+    new URL('../assets/sounds/keys/setd/dkey-08.wav', import.meta.url).href,
+    new URL('../assets/sounds/keys/setd/dkey-09.wav', import.meta.url).href,
+    new URL('../assets/sounds/keys/setd/dkey-10.wav', import.meta.url).href,
   ],
 } as const;
 

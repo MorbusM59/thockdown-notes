@@ -27,7 +27,7 @@ export type UiLayoutLoadout = {
   audioReverbSpace: number;
   pitchJitterAmount: number;
   typingSoundEnabled: boolean;
-  typingSoundSet: 'A' | 'B' | 'C';
+  typingSoundSet: 'A' | 'B' | 'C' | 'D';
   renderScrollDynamic: number;
   renderScrollResponsiveness: number;
   renderScrollTotalTimeSec: number;

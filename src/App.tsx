@@ -894,7 +894,7 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     audioReverbSpace: clamp(toFiniteNumber(source.audioReverbSpace, 0), 0, 1),
     pitchJitterAmount: clamp(toFiniteNumber(source.pitchJitterAmount, 0), 0, 0.5),
     typingSoundEnabled: source.typingSoundEnabled === true,
-    typingSoundSet: source.typingSoundSet === 'A' || source.typingSoundSet === 'B' || source.typingSoundSet === 'C'
+    typingSoundSet: source.typingSoundSet === 'A' || source.typingSoundSet === 'B' || source.typingSoundSet === 'C' || source.typingSoundSet === 'D'
       ? source.typingSoundSet
       : DEFAULT_TYPING_SOUND_SET,
     glaze: sanitizeGlazeSettings(source.glaze, DEFAULT_GLAZE_SETTINGS),
@@ -1950,7 +1950,7 @@ function App() {
   const [reducedCaretAnimation, setReducedCaretAnimation] = useState(false)
   const [deferPreviewOnRapidInput, setDeferPreviewOnRapidInput] = useState(false)
   const [typingSoundEnabled, setTypingSoundEnabled] = useState(false)
-  const [typingSoundSet, setTypingSoundSet] = useState<'A' | 'B' | 'C'>(DEFAULT_TYPING_SOUND_SET)
+  const [typingSoundSet, setTypingSoundSet] = useState<'A' | 'B' | 'C' | 'D'>(DEFAULT_TYPING_SOUND_SET)
   const [musicVolume, setMusicVolume] = useState(0.8)
   const [musicReverbAmount, setMusicReverbAmount] = useState(0)
   const [musicReverbRoom, setMusicReverbRoom] = useState(0.3)
