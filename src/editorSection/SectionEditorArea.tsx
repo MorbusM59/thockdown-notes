@@ -65,9 +65,18 @@ export interface SectionEditorAreaProps {
   handleMergeAdjacentSnapshots: () => void
   customCursorSettings: CustomCursorSettings
   notes: NoteSummary[]
+  /** The chapter-aware "menu identity" (see EditorSection.tsx's `menuIdentityNoteId`) -- the note the chapter bar shows chapters *of*, and its first tab. Non-null exactly when activeNoteId is. */
+  menuIdentityNoteId: string | null
   chapters: ChapterEntry[]
+  onParentTabClick: () => void
   onCreateChapter: () => void
   onChapterClick: (chapterNoteId: string) => void
+  editingChapterNoteId: string | null
+  chapterIdDraft: string
+  setChapterIdDraft: (value: string) => void
+  onStartEditingChapterId: (chapterNoteId: string) => void
+  onCommitChapterIdEdit: () => void
+  onCancelChapterIdEdit: () => void
 }
 
 /**
@@ -128,9 +137,17 @@ export function SectionEditorArea({
   handleMergeAdjacentSnapshots,
   customCursorSettings,
   notes,
+  menuIdentityNoteId,
   chapters,
+  onParentTabClick,
   onCreateChapter,
   onChapterClick,
+  editingChapterNoteId,
+  chapterIdDraft,
+  setChapterIdDraft,
+  onStartEditingChapterId,
+  onCommitChapterIdEdit,
+  onCancelChapterIdEdit,
 }: SectionEditorAreaProps) {
   const setStageEl = useCallback((el: HTMLDivElement | null) => {
     (editorStageRef as MutableRefObject<HTMLDivElement | null>).current = el
@@ -260,13 +277,21 @@ export function SectionEditorArea({
         </div>
       </aside>
       <div className={`chapter-panel${isChapterPanelOpen ? ' is-open' : ''}`} aria-hidden={!isChapterPanelOpen}>
-        {activeNoteId ? (
+        {activeNoteId && menuIdentityNoteId ? (
           <ChapterBar
+            parentNoteId={menuIdentityNoteId}
             chapters={chapters}
             notes={notes}
             activeNoteId={activeNoteId}
+            onParentTabClick={onParentTabClick}
             onCreateChapter={onCreateChapter}
             onChapterClick={onChapterClick}
+            editingChapterNoteId={editingChapterNoteId}
+            chapterIdDraft={chapterIdDraft}
+            setChapterIdDraft={setChapterIdDraft}
+            onStartEditingChapterId={onStartEditingChapterId}
+            onCommitChapterIdEdit={onCommitChapterIdEdit}
+            onCancelChapterIdEdit={onCancelChapterIdEdit}
           />
         ) : null}
       </div>

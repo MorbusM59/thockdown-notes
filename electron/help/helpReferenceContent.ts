@@ -42,6 +42,7 @@ Every heading below is also a jump target: \`[Anchor Text](#anchor-id)\` defines
 
 - Turn any heading or phrase into a jump target with \`[Anchor Text](#anchor-id)\` — the label is the visible text, the id is just a short internal handle.
 - Link to it from the same note with \`[link text]($#anchor-id)\`. Give a note a short id (e.g. \`$MEETING-2\`) via the tab bar's identity tab, then link to it from anywhere with \`[text]($MEETING-2)\`, or straight to one of its anchors with \`[text]($MEETING-2#anchor-id)\`.
+- Give one of that note's chapters a short id too (right-click its chapter-bar tab), then link straight into it with \`[text]($MEETING-2§AGENDA)\`, or to one of its anchors with \`[text]($MEETING-2§AGENDA#anchor-id)\`.
 
 ### Split view & tabs
 
@@ -334,10 +335,10 @@ Every feature in the app, described individually: where to find it, what it does
 
 *Splits a note into sub-notes, browsable from a bar of their own.*
 
-- A chapter is a full, independent note — it just doesn't appear on its own in Date/Category/Archive/Trash/Find, only through its parent's chapter bar.
-- The \`+\` at the left of the chapter bar creates a new empty chapter and opens it immediately.
+- The chapter bar's first tab is always the parent note itself; every chapter follows in order, then a trailing \`+\` that creates a new empty chapter and opens it immediately. Click the parent tab or any chapter pill to switch between them — each keeps and saves its own text independently. Too many chapters to fit scrolls horizontally, fading at whichever edge has more off-screen, same as the tab bar.
+- A chapter is a full, independent note — it just doesn't appear on its own in Date/Category/Archive/Trash/Find, only through whichever parent's chapter bar(s) it's attached to. The same note can be a chapter of any number of different parents at once (e.g. a shared reference card appended to several notes) — dragging a note from the sidebar onto an open chapter bar attaches it there without removing it from the sidebar or any other parent it's already a chapter of.
 - While a chapter is open, its parent stays the one shown as active in the sidebar and the tab bar — the chapter bar itself shows which chapter you're in.
-- Click any chapter pill, or the parent's own tab, to switch between them; each keeps and saves its own text independently.
+- Right-click a chapter tab to give it a short id (\`§1: ···\` becomes \`§1: INTRO\`, say) — same rules as a note's \`$id\`. Link straight to it with \`[text]($NOTE-ID§CHAPTER-ID)\`, optionally down to one of its own anchors with \`[text]($NOTE-ID§CHAPTER-ID#anchor-id)\`; opening it this way keeps the parent shown as active exactly like clicking the pill would.
 
 ## Archiving, Trash & Deletion
 

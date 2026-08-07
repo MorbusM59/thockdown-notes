@@ -54,7 +54,8 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'isPreviewScrollThumbActive' | 'handlePreviewThumbMouseDown' | 'activeNoteDocumentStats' | 'noteSnapshots'
   | 'handleNavigateSnapshot' | 'handleBranchOpened' | 'handleBranchError' | 'timelineCurveConstant' | 'setTimelineCurveConstant'
   | 'setTimelineTrackLengthPx' | 'handleCreateManualSnapshot' | 'handleReturnToPresent' | 'handleMergeAdjacentSnapshots'
-  | 'scrollbarHostEl' | 'setScrollbarHostEl' | 'notes' | 'chapters' | 'onCreateChapter' | 'onChapterClick'> {
+  | 'scrollbarHostEl' | 'setScrollbarHostEl' | 'notes' | 'menuIdentityNoteId' | 'chapters' | 'onParentTabClick' | 'onCreateChapter' | 'onChapterClick'
+  | 'editingChapterNoteId' | 'chapterIdDraft' | 'setChapterIdDraft' | 'onStartEditingChapterId' | 'onCommitChapterIdEdit' | 'onCancelChapterIdEdit'> {
   sectionId: string
   markSectionActive: (sectionId: string) => void
   isSidebarVisible: boolean
@@ -716,13 +717,34 @@ export function EditorSection({
     initialTabBarMode: restoredTabBarMode,
   })
 
-  const { chapters, handleCreateChapter, handleChapterClick } = useNoteChapters({
+  const {
+    chapters,
+    handleCreateChapter,
+    handleChapterClick,
+    handleAttachExistingChapter,
+    editingChapterNoteId,
+    chapterIdDraft,
+    setChapterIdDraft,
+    startEditingChapterId,
+    commitChapterIdEdit,
+    cancelChapterIdEdit,
+  } = useNoteChapters({
     menuIdentityNoteId,
     activeNoteId,
     persistenceReady,
     activateNote,
     refreshNotes,
   })
+
+  // Clicking the chapter bar's parent tab returns to the parent's own
+  // content -- no chapterParentContext, since the parent is never itself a
+  // chapter. A no-op if it's already what's showing (matches handleTabClick's
+  // own "second click doesn't reload" rule, though there's no reveal-in-menu
+  // equivalent to fall back to here).
+  const handleParentTabClick = useCallback(() => {
+    if (!menuIdentityNoteId || menuIdentityNoteId === activeNoteId) return
+    void activateNote(menuIdentityNoteId)
+  }, [menuIdentityNoteId, activeNoteId, activateNote])
 
   useEffect(() => {
     tabBarModeRef.current = tabBarMode
@@ -1162,6 +1184,22 @@ export function EditorSection({
     if (!raw) return
     const payload = parseNoteDragPayload(raw)
     if (!payload) return
+
+    // A drop landing on the chapter bar always means "attach this note as a
+    // chapter of whichever note it's showing chapters of" -- regardless of
+    // where the drag started (sidebar or a tab, even one of this section's
+    // own), since that's a structurally different drop target than "open/pin
+    // this as a tab." Claimed before the same-section check below, which
+    // exists only to let an in-bar *tab* reorder drag fall through to
+    // useSectionTabs's own handlers -- irrelevant here.
+    const dropTarget = event.target
+    if (dropTarget instanceof Element && dropTarget.closest('.chapter-bar-display')) {
+      event.preventDefault()
+      event.stopPropagation()
+      void handleAttachExistingChapter(payload.noteId)
+      return
+    }
+
     if (payload.sourceSectionId === sectionId) return
 
     event.preventDefault()
@@ -1183,7 +1221,7 @@ export function EditorSection({
 
     void pinNoteAsRightmostTab(payload.noteId)
     unpinNoteFromSection(payload.sourceSectionId, payload.noteId)
-  }, [activateNote, pinNoteAsRightmostTab, pinnedTabs, sectionId, unpinNoteFromSection])
+  }, [activateNote, pinNoteAsRightmostTab, pinnedTabs, sectionId, unpinNoteFromSection, handleAttachExistingChapter])
 
   // Plain assignment (not an effect) -- safe, it's just a ref mutation. Powers
   // imperative, non-reactive registry lookups (getActiveSectionHandle()).
@@ -1415,9 +1453,17 @@ export function EditorSection({
         handleReturnToPresent={handleReturnToPresent}
         handleMergeAdjacentSnapshots={handleMergeAdjacentSnapshots}
         notes={notes}
+        menuIdentityNoteId={menuIdentityNoteId}
         chapters={chapters}
+        onParentTabClick={handleParentTabClick}
         onCreateChapter={handleCreateChapter}
         onChapterClick={handleChapterClick}
+        editingChapterNoteId={editingChapterNoteId}
+        chapterIdDraft={chapterIdDraft}
+        setChapterIdDraft={setChapterIdDraft}
+        onStartEditingChapterId={startEditingChapterId}
+        onCommitChapterIdEdit={commitChapterIdEdit}
+        onCancelChapterIdEdit={cancelChapterIdEdit}
       />
     </div>
   )

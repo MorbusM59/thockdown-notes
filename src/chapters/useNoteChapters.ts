@@ -25,14 +25,31 @@ export interface UseNoteChaptersResult {
   /** Creates a new empty chapter of `menuIdentityNoteId` and immediately loads it into the editor. */
   handleCreateChapter: () => Promise<void>
   handleChapterClick: (chapterNoteId: string) => void
+  /**
+   * Attaches an already-existing note (dragged in from the sidebar) as a
+   * chapter of `menuIdentityNoteId` -- unlike handleCreateChapter, this
+   * never switches the editor's active note; dropping a note onto the
+   * chapter bar only files it there; it stays wherever it was being edited.
+   * No-ops (rather than throwing) for a self-reference or an already-
+   * attached chapter, both of which the DB layer would otherwise reject.
+   */
+  handleAttachExistingChapter: (chapterNoteId: string) => Promise<void>
+  /** Which chapter pill (by chapterNoteId) is mid-inline-edit of its chapterId, if any. */
+  editingChapterNoteId: string | null
+  chapterIdDraft: string
+  setChapterIdDraft: (value: string) => void
+  startEditingChapterId: (chapterNoteId: string) => void
+  commitChapterIdEdit: () => Promise<void>
+  cancelChapterIdEdit: () => void
 }
 
 /**
  * Owns the chapter bar's data: this note's chapters (fetched fresh whenever
- * the note it's showing chapters of changes) and the "+" / pill click
- * handlers. Deliberately thin, mirroring useSectionTabs.ts's own scope --
- * loading/activating a chapter is just `activateNote`, already handled
- * identically to activating any other note (a chapter is a full note).
+ * the note it's showing chapters of changes), the "+" / pill / drag-in
+ * handlers, and the right-click-to-assign chapterId inline edit. Deliberately
+ * thin, mirroring useSectionTabs.ts's own scope -- loading/activating a
+ * chapter is just `activateNote`, already handled identically to activating
+ * any other note (a chapter is a full note).
  */
 export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChaptersResult {
   const { menuIdentityNoteId, activeNoteId, persistenceReady, activateNote, refreshNotes } = options
@@ -66,5 +83,52 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     void activateNote(chapterNoteId, undefined, menuIdentityNoteId)
   }, [activeNoteId, activateNote, menuIdentityNoteId])
 
-  return { chapters, handleCreateChapter, handleChapterClick }
+  const handleAttachExistingChapter = useCallback(async (chapterNoteId: string) => {
+    if (!window.thockdownChapters || !menuIdentityNoteId) return
+    if (chapterNoteId === menuIdentityNoteId) return
+    if (chapters.some((chapter) => chapter.chapterNoteId === chapterNoteId)) return
+    const updatedChapters = await window.thockdownChapters.addExistingChapter(menuIdentityNoteId, chapterNoteId)
+    setChapters(updatedChapters)
+  }, [menuIdentityNoteId, chapters])
+
+  const [editingChapterNoteId, setEditingChapterNoteId] = useState<string | null>(null)
+  const [chapterIdDraft, setChapterIdDraft] = useState('')
+
+  const startEditingChapterId = useCallback((chapterNoteId: string) => {
+    const current = chapters.find((chapter) => chapter.chapterNoteId === chapterNoteId)
+    setChapterIdDraft(current?.chapterId ?? '')
+    setEditingChapterNoteId(chapterNoteId)
+  }, [chapters])
+
+  const cancelChapterIdEdit = useCallback(() => {
+    setEditingChapterNoteId(null)
+  }, [])
+
+  const commitChapterIdEdit = useCallback(async () => {
+    const chapterNoteId = editingChapterNoteId
+    setEditingChapterNoteId(null)
+    if (!chapterNoteId || !menuIdentityNoteId || !window.thockdownChapters) return
+
+    const current = chapters.find((chapter) => chapter.chapterNoteId === chapterNoteId)
+    const trimmed = chapterIdDraft.trim()
+    if (trimmed === (current?.chapterId ?? '')) return
+
+    const resolved = await window.thockdownChapters.setChapterId(menuIdentityNoteId, chapterNoteId, trimmed)
+    setChapters((previous) => previous.map((chapter) => (
+      chapter.chapterNoteId === chapterNoteId ? { ...chapter, chapterId: resolved } : chapter
+    )))
+  }, [editingChapterNoteId, menuIdentityNoteId, chapters, chapterIdDraft])
+
+  return {
+    chapters,
+    handleCreateChapter,
+    handleChapterClick,
+    handleAttachExistingChapter,
+    editingChapterNoteId,
+    chapterIdDraft,
+    setChapterIdDraft,
+    startEditingChapterId,
+    commitChapterIdEdit,
+    cancelChapterIdEdit,
+  }
 }
