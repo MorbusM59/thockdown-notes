@@ -30,6 +30,8 @@ import type { NoteTabsApi } from '../src/shared/tabs'
 import { NOTE_TABS_CHANNELS } from '../src/shared/tabs'
 import type { EditorSectionsApi } from '../src/shared/sections'
 import { EDITOR_SECTIONS_CHANNELS } from '../src/shared/sections'
+import type { ChaptersApi } from '../src/shared/chapters'
+import { CHAPTER_CHANNELS } from '../src/shared/chapters'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
@@ -230,3 +232,12 @@ const editorSectionsApi: EditorSectionsApi = {
 }
 
 contextBridge.exposeInMainWorld('thockdownSections', editorSectionsApi)
+
+const chaptersApi: ChaptersApi = {
+  listChapters:    (parentNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.list, parentNoteId),
+  createChapter:   (parentNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.create, parentNoteId),
+  reorderChapters: (parentNoteId, orderedChapterNoteIds) => ipcRenderer.invoke(CHAPTER_CHANNELS.reorder, parentNoteId, orderedChapterNoteIds),
+  removeChapter:   (parentNoteId, chapterNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.remove, parentNoteId, chapterNoteId),
+}
+
+contextBridge.exposeInMainWorld('thockdownChapters', chaptersApi)

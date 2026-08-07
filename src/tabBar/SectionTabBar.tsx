@@ -13,6 +13,8 @@ export interface SectionTabBarProps {
   toggleSidebarVisible: () => void
   persistenceReady: boolean
   activeNoteId: string | null
+  /** Which pinned-tab pill to highlight as active -- the chapter-aware identity (see useSectionTabs.ts's `tabIdentityNoteId`), not necessarily `activeNoteId` itself. */
+  tabIdentityNoteId: string | null
   notes: NoteSummary[]
   activeNoteSummary: NoteSummary | null
   /** The leftmost section keeps the sidebar toggle at the left edge; every other section shows a close button there instead. */
@@ -70,6 +72,7 @@ export function SectionTabBar({
   toggleSidebarVisible,
   persistenceReady,
   activeNoteId,
+  tabIdentityNoteId,
   notes,
   activeNoteSummary,
   isLeftmostSection,
@@ -321,7 +324,7 @@ export function SectionTabBar({
                       ? `$${note.assignedId}`
                       : '···';
                     const isGhost = note ? (isArchivedNote(note) || isDeletedNote(note)) : true
-                    const isActive = tab.noteId === activeNoteId
+                    const isActive = tab.noteId === tabIdentityNoteId
                     const isPrimed = unpinPrimedTabNoteId === tab.noteId
                     return (
                       <div

@@ -20,6 +20,7 @@ import { useNoteSaveQueue } from './useNoteSaveQueue'
 import { useEditorSectionMount } from './useEditorSectionMount'
 import { useSnapshotFreeze } from './useSnapshotFreeze'
 import { useSectionTabs } from '../tabBar/useSectionTabs'
+import { useNoteChapters } from '../chapters/useNoteChapters'
 import { useNoteProtectionActions } from './useNoteProtectionActions'
 import { useNoteSnapshotTimeline } from './useNoteSnapshotTimeline'
 import { useDocumentFind } from '../find/useDocumentFind'
@@ -53,7 +54,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'isPreviewScrollThumbActive' | 'handlePreviewThumbMouseDown' | 'activeNoteDocumentStats' | 'noteSnapshots'
   | 'handleNavigateSnapshot' | 'handleBranchOpened' | 'handleBranchError' | 'timelineCurveConstant' | 'setTimelineCurveConstant'
   | 'setTimelineTrackLengthPx' | 'handleCreateManualSnapshot' | 'handleReturnToPresent' | 'handleMergeAdjacentSnapshots'
-  | 'scrollbarHostEl' | 'setScrollbarHostEl'> {
+  | 'scrollbarHostEl' | 'setScrollbarHostEl' | 'notes' | 'chapters' | 'onCreateChapter' | 'onChapterClick'> {
   sectionId: string
   markSectionActive: (sectionId: string) => void
   isSidebarVisible: boolean
@@ -263,6 +264,11 @@ export function EditorSection({
   }, [isSectionPickerOpen])
   const { isPreviewMode, setIsPreviewMode } = useDisplayedNoteRenderMode(sectionId)
   const { activeNoteId, setActiveNoteId } = useActiveNoteId(sectionId)
+  // Which parent's chapter bar the current chapter (if any) was opened
+  // through -- see activateNote's `chapterParentContext` param doc comment
+  // below (declared here, ahead of activateNote/clearActiveNote, since both
+  // reference its setter in their own dependency arrays).
+  const [activeChapterParentId, setActiveChapterParentId] = useState<string | null>(null)
   const {
     activeNoteText,
     setActiveNoteText,
@@ -377,7 +383,14 @@ export function EditorSection({
     isFrozenSectionPreviewRef,
   })
 
-  const activateNote = useCallback(async (noteId: string, overrideCursorPos?: number) => {
+  // `chapterParentContext`: only the chapter bar (useNoteChapters.ts) ever
+  // passes this -- the parent whose chapter bar `noteId` was opened through,
+  // recorded as activeChapterParentId so menu-facing code (sidebar, tab bar)
+  // keeps showing that parent as active. Every other caller omits it, which
+  // explicitly clears any previously-recorded parent -- see
+  // activeChapterParentId's doc comment above for why there's no fallback
+  // resolution attempted instead.
+  const activateNote = useCallback(async (noteId: string, overrideCursorPos?: number, chapterParentContext?: string | null) => {
     if (!window.thockdownNotes) return
 
     const debugTiming = window.localStorage.getItem('thockdown:debug-input-lag') === '1'
@@ -531,6 +544,7 @@ export function EditorSection({
     pendingEditRestoreSnapshotRef.current = preloadedSnapshot
     setActiveNoteId(loaded.id)
     setActiveNoteText(hydratedText)
+    setActiveChapterParentId(chapterParentContext ?? null)
     pendingViewportRestoreRef.current = null
     await saveSelectedNoteState(loaded.id)
     logStep('state updates + save selected note', stateUpdateStart)
@@ -556,6 +570,7 @@ export function EditorSection({
     readCurrentEditUiPayload,
     setActiveNoteId,
     setActiveNoteText,
+    setActiveChapterParentId,
   ])
 
   // Unloads this section back to its brand-new-section empty state -- same
@@ -585,6 +600,7 @@ export function EditorSection({
     pendingEditRestoreSnapshotRef.current = null
     setActiveNoteId(null)
     setActiveNoteText('')
+    setActiveChapterParentId(null)
     pendingViewportRestoreRef.current = null
     await saveSelectedNoteState(null)
     void window.thockdownSections?.setActiveNote(sectionId, null)
@@ -602,7 +618,33 @@ export function EditorSection({
     readCurrentEditUiPayload,
     setActiveNoteId,
     setActiveNoteText,
+    setActiveChapterParentId,
   ])
+
+  const activeNoteSummary = useMemo(() => {
+    if (!activeNoteId) return null
+    return notes.find((note) => note.id === activeNoteId) ?? null
+  }, [activeNoteId, notes])
+
+  // See sectionRegistry.ts's SectionHandle doc comment: the note identity
+  // menu-facing code (sidebar highlight/reveal, tab bar pill highlighting +
+  // pinning) should treat as active. Resolves to activeChapterParentId when
+  // the true active note is a chapter *and* it was opened through that
+  // parent's chapter bar; otherwise falls back to the note's own identity
+  // (including for a chapter reached some other way, with no known "current"
+  // parent) -- chapters never appear in any menu view themselves regardless.
+  const menuIdentityNoteId = useMemo(() => {
+    if (activeNoteSummary?.chapterOnly && activeChapterParentId) {
+      return activeChapterParentId
+    }
+    return activeNoteId
+  }, [activeNoteId, activeNoteSummary, activeChapterParentId])
+
+  const menuIdentityNoteSummary = useMemo(() => {
+    if (!menuIdentityNoteId) return null
+    if (menuIdentityNoteId === activeNoteId) return activeNoteSummary
+    return notes.find((note) => note.id === menuIdentityNoteId) ?? null
+  }, [menuIdentityNoteId, activeNoteId, activeNoteSummary, notes])
 
   const {
     tagInputRef,
@@ -660,6 +702,7 @@ export function EditorSection({
   }: UseSectionTabsResult = useSectionTabs({
     sectionId,
     activeNoteId,
+    tabIdentityNoteId: menuIdentityNoteId,
     notes,
     persistenceReady,
     activateNote,
@@ -671,6 +714,14 @@ export function EditorSection({
     scheduleFocusEditorInEditMode,
     updateNoteAssignedId,
     initialTabBarMode: restoredTabBarMode,
+  })
+
+  const { chapters, handleCreateChapter, handleChapterClick } = useNoteChapters({
+    menuIdentityNoteId,
+    activeNoteId,
+    persistenceReady,
+    activateNote,
+    refreshNotes,
   })
 
   useEffect(() => {
@@ -733,11 +784,6 @@ export function EditorSection({
     externalNoteOriginalHashByIdRef,
     setCurrentExternalNoteHash,
   })
-
-  const activeNoteSummary = useMemo(() => {
-    if (!activeNoteId) return null
-    return notes.find((note) => note.id === activeNoteId) ?? null
-  }, [activeNoteId, notes])
 
   const activeNoteHasDebugTag = useMemo(() => {
     return activeNoteSummary?.tags.some((tag) => tag.trim().toLowerCase() === 'debug') ?? false
@@ -1032,6 +1078,8 @@ export function EditorSection({
     currentEditorText,
     latestEditorTextRef,
     activeNoteSummary,
+    menuIdentityNoteId,
+    menuIdentityNoteSummary,
     editorSelection,
     previewedSnapshotId,
     isPreviewMode,
@@ -1287,6 +1335,7 @@ export function EditorSection({
         toggleSidebarVisible={toggleSidebarVisible}
         persistenceReady={persistenceReady}
         activeNoteId={activeNoteId}
+        tabIdentityNoteId={menuIdentityNoteId}
         notes={notes}
         activeNoteSummary={activeNoteSummary}
         isLeftmostSection={isLeftmostSection}
@@ -1365,6 +1414,10 @@ export function EditorSection({
         handleCreateManualSnapshot={handleCreateManualSnapshot}
         handleReturnToPresent={handleReturnToPresent}
         handleMergeAdjacentSnapshots={handleMergeAdjacentSnapshots}
+        notes={notes}
+        chapters={chapters}
+        onCreateChapter={handleCreateChapter}
+        onChapterClick={handleChapterClick}
       />
     </div>
   )

@@ -161,6 +161,7 @@ type NoteRecordRow = {
   syncMode: number;
   assignedId: string | null;
   previewBlockCache: string | null;
+  chapterOnly: number;
 };
 
 export type NoteRecord = {
@@ -176,6 +177,7 @@ export type NoteRecord = {
   syncMode: boolean;
   assignedId: string | null;
   previewBlockCache: string | null;
+  chapterOnly: boolean;
 };
 
 /** One entry pinned to a section's tab bar (quick-access note shortcut). */
@@ -184,6 +186,13 @@ export type NoteTabEntry = {
   noteId: string;
   position: number;
   addedAtMs: number;
+};
+
+/** One chapter: `chapterNoteId` is itself a full note, ordered (gapless, 0-indexed) among `parentNoteId`'s other chapters. The same note can be a chapter of any number of different parents. */
+export type ChapterEntry = {
+  parentNoteId: string;
+  position: number;
+  chapterNoteId: string;
 };
 
 /**
@@ -1100,7 +1109,7 @@ export class DatabaseService {
   listNoteRecords(): NoteRecord[] {
     const db = this.requireDb();
     const rows = db.prepare(`
-      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode, assignedId, previewBlockCache
+      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode, assignedId, previewBlockCache, chapterOnly
       FROM notes
       ORDER BY datetime(updatedAt) DESC
     `).all() as NoteRecordRow[];
@@ -1118,13 +1127,14 @@ export class DatabaseService {
       syncMode: Boolean(row.syncMode),
       assignedId: row.assignedId,
       previewBlockCache: row.previewBlockCache,
+      chapterOnly: Boolean(row.chapterOnly),
     }));
   }
 
   getNoteRecord(noteId: string): NoteRecord | null {
     const db = this.requireDb();
     const row = db.prepare(`
-      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode, assignedId, previewBlockCache
+      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode, assignedId, previewBlockCache, chapterOnly
       FROM notes
       WHERE id = ?
       LIMIT 1
@@ -1147,7 +1157,14 @@ export class DatabaseService {
       syncMode: Boolean(row.syncMode),
       assignedId: row.assignedId,
       previewBlockCache: row.previewBlockCache,
+      chapterOnly: Boolean(row.chapterOnly),
     };
+  }
+
+  /** Marks (or unmarks) a note as existing only to be shown as a chapter -- see the `chapterOnly` column doc comment in ensureSchema(). */
+  setNoteChapterOnly(noteId: string, value: boolean): void {
+    const db = this.requireDb();
+    db.prepare('UPDATE notes SET chapterOnly = ? WHERE id = ?').run(value ? 1 : 0, noteId);
   }
 
   // ── Note internal IDs (tab-bar labels) ──────────────────────────────────
@@ -1393,6 +1410,49 @@ export class DatabaseService {
     });
     tx();
     return this.listNoteTabs();
+  }
+
+  // ── Chapters (a note's ordered sub-notes) ────────────────────────────────
+
+  /** This parent note's chapters, in order. Deliberately no UNIQUE(parentNoteId, position) constraint -- see reorderChapters's doc comment, same reasoning as note_tabs above. */
+  listChaptersForNote(parentNoteId: string): ChapterEntry[] {
+    const db = this.requireDb();
+    const rows = db.prepare('SELECT parentNoteId, position, chapterNoteId FROM chapters WHERE parentNoteId = ? ORDER BY position ASC').all(parentNoteId) as ChapterEntry[];
+    return rows;
+  }
+
+  /** Appends `chapterNoteId` as the new last chapter of `parentNoteId`. */
+  addChapter(parentNoteId: string, chapterNoteId: string): ChapterEntry[] {
+    const db = this.requireDb();
+    const { maxPosition } = db.prepare('SELECT MAX(position) AS maxPosition FROM chapters WHERE parentNoteId = ?').get(parentNoteId) as { maxPosition: number | null };
+    const nextPosition = maxPosition === null ? 0 : maxPosition + 1;
+    db.prepare('INSERT INTO chapters (parentNoteId, position, chapterNoteId) VALUES (?, ?, ?)').run(parentNoteId, nextPosition, chapterNoteId);
+    return this.listChaptersForNote(parentNoteId);
+  }
+
+  /** Removes a chapter and closes the gap so every later chapter's position shifts forward by one. */
+  removeChapter(parentNoteId: string, chapterNoteId: string): ChapterEntry[] {
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      const removed = db.prepare('SELECT position FROM chapters WHERE parentNoteId = ? AND chapterNoteId = ?').get(parentNoteId, chapterNoteId) as { position: number } | undefined;
+      if (!removed) return;
+      db.prepare('DELETE FROM chapters WHERE parentNoteId = ? AND chapterNoteId = ?').run(parentNoteId, chapterNoteId);
+      db.prepare('UPDATE chapters SET position = position - 1 WHERE parentNoteId = ? AND position > ?').run(parentNoteId, removed.position);
+    });
+    tx();
+    return this.listChaptersForNote(parentNoteId);
+  }
+
+  /** Rewrites every chapter's position from an explicit final order -- used for drag-reorder. No UNIQUE(parentNoteId, position) constraint (mirroring reorderNoteTabs) since a straight per-row position rewrite can transiently collide mid-transaction otherwise. */
+  reorderChapters(parentNoteId: string, orderedChapterNoteIds: string[]): ChapterEntry[] {
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      orderedChapterNoteIds.forEach((chapterNoteId, index) => {
+        db.prepare('UPDATE chapters SET position = ? WHERE parentNoteId = ? AND chapterNoteId = ?').run(index, parentNoteId, chapterNoteId);
+      });
+    });
+    tx();
+    return this.listChaptersForNote(parentNoteId);
   }
 
   getNoteContentSnapshot(noteId: string): string | null {
@@ -2978,6 +3038,24 @@ export class DatabaseService {
       );
 
       CREATE INDEX IF NOT EXISTS idx_note_tabs_section_position ON note_tabs(sectionId, position);
+
+      -- Deliberately no UNIQUE on chapterNoteId alone: a note can be a
+      -- chapter of any number of other notes (e.g. a shared reference card
+      -- appended as the final chapter of several unrelated notes). Only the
+      -- (parentNoteId, chapterNoteId) pair is unique -- the same note can't
+      -- be added as a chapter of the same parent twice.
+      CREATE TABLE IF NOT EXISTS chapters (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        parentNoteId  TEXT    NOT NULL,
+        position      INTEGER NOT NULL,
+        chapterNoteId TEXT    NOT NULL,
+        UNIQUE (parentNoteId, chapterNoteId),
+        CHECK (parentNoteId != chapterNoteId),
+        FOREIGN KEY (parentNoteId)  REFERENCES notes(id) ON DELETE CASCADE,
+        FOREIGN KEY (chapterNoteId) REFERENCES notes(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_chapters_parent_position ON chapters(parentNoteId, position);
     `);
 
     // A fresh install always starts with exactly one (default, unnamed)
@@ -3011,6 +3089,11 @@ export class DatabaseService {
     // re-parsing the whole document. Safe to discard (falls back to full
     // parse) if the text or parser version changes.
     this.ensureNotesColumn('previewBlockCache', 'TEXT');
+    // A note created as a chapter of another note (via the chapter bar's "+"
+    // button) -- excluded from every menu view (date/category/archive/trash)
+    // since it only exists to be shown through its parent's chapter bar. See
+    // the `chapters` table above for the parent/position/chapter linkage.
+    this.ensureNotesColumn('chapterOnly', 'INTEGER NOT NULL DEFAULT 0');
     this.ensureNoteSnapshotsColumn('anchorBlockIndex', 'INTEGER');
 
     // Notes are inserted (both on creation and on filesystem-sync upsert)

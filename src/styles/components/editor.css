@@ -42,6 +42,40 @@
 }
 .chapter-panel.is-open {
   display: block;
+  pointer-events: auto;
+}
+
+.chapter-bar-scroll-shell {
+  position: relative;
+  width:    100%;
+  height:   var(--chapter-panel-content-height);
+  overflow: hidden;
+  padding:  0 var(--spacing-regular);
+}
+
+.chapter-bar-display {
+  display:     flex;
+  flex-wrap:   nowrap;
+  align-items: center;
+  gap:         var(--spacing-small);
+  width:       100%;
+  height:      100%;
+  overflow-x:  auto;
+  overflow-y:  hidden;
+  -webkit-app-region: no-drag;
+  scrollbar-width: none;      /* Firefox */
+  -ms-overflow-style: none;   /* legacy Edge */
+}
+
+.chapter-bar-display::-webkit-scrollbar {
+  display: none;               /* Chromium / Electron */
+}
+
+.chapter-add-button {
+  flex: 0 0 auto;
+  height: 100%;
+  aspect-ratio: 1;
+  -webkit-app-region: no-drag;
 }
 
 .chapter-toggle-panel {

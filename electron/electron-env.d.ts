@@ -33,4 +33,5 @@ interface Window {
   thockdownAudioPlayer?: import('../src/shared/audioPlayer').AudioPlayerApi
   thockdownTabs?: import('../src/shared/tabs').NoteTabsApi
   thockdownSections?: import('../src/shared/sections').EditorSectionsApi
+  thockdownChapters?: import('../src/shared/chapters').ChaptersApi
 }

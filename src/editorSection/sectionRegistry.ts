@@ -36,13 +36,42 @@ export interface SectionHandle extends
   currentEditorText: string
   latestEditorTextRef: MutableRefObject<string>
   activeNoteSummary: NoteSummary | null
+  /**
+   * The note identity that "menu views" (sidebar highlight/reveal, tab bar
+   * pill highlight/pinning) should treat as active. Equal to `activeNoteId`
+   * except when the active note is a chapter (`chapterOnly`) that was
+   * opened through a specific parent's chapter bar, in which case this
+   * resolves to that parent -- chapters are never shown in any menu view
+   * themselves, so menu-facing code should never see a chapter's own id.
+   * A chapter can belong to any number of parents (no per-note uniqueness
+   * on the chapter side of the `chapters` table -- e.g. a shared reference
+   * card appended to several notes), so "the" parent isn't a fixed property
+   * of the chapter note; it's recorded per-navigation via `activateNote`'s
+   * `chapterParentContext` param and falls back to the chapter's own id
+   * (unhighlighted in menu views) if that context is unknown, rather than
+   * guessing among several equally-valid parents. See the note-chapters
+   * feature: a chapter is loaded into the editor as the section's real
+   * `activeNoteId` (so save/restore/snapshot machinery all work
+   * unmodified), while the menu/tab bar keep showing the parent as
+   * "active" -- this is the single derived value both of those consumers
+   * read instead of `activeNoteId` directly.
+   */
+  menuIdentityNoteId: string | null
+  menuIdentityNoteSummary: NoteSummary | null
   editorSelection: EditorSelectionState
   previewedSnapshotId: number | null
   isPreviewMode: boolean
   setIsPreviewMode: Dispatch<SetStateAction<boolean>>
   setActiveNoteId: Dispatch<SetStateAction<string | null>>
-  /** Switches which note this section shows -- the section's own, not a shared/parameterized one (see the handover doc's design decision). */
-  activateNote: (noteId: string, overrideCursorPos?: number) => Promise<void>
+  /**
+   * Switches which note this section shows -- the section's own, not a
+   * shared/parameterized one (see the handover doc's design decision).
+   * `chapterParentContext`, when passed, records which parent's chapter bar
+   * `noteId` was opened through (see `menuIdentityNoteId`'s doc comment
+   * above) -- only useNoteChapters.ts's chapter-bar handlers ever pass it;
+   * every other caller omits it, clearing any previously-recorded parent.
+   */
+  activateNote: (noteId: string, overrideCursorPos?: number, chapterParentContext?: string | null) => Promise<void>
 }
 
 export type SectionRegistry = MutableRefObject<Map<string, SectionHandle>>

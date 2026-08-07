@@ -10,6 +10,9 @@ import type { UseNoteSnapshotsResult } from '../editor/useNoteSnapshots'
 import { resolvePreviewEdgePaddingPx } from '../exportStyles'
 import MouseCursorOverlay from '../components/MouseCursorOverlay'
 import type { CustomCursorSettings } from '../shared/cursorSettings'
+import type { NoteSummary } from '../shared/noteLifecycle'
+import type { ChapterEntry } from '../shared/chapters'
+import { ChapterBar } from '../chapters/ChapterBar'
 
 export interface SectionEditorAreaProps {
   sectionId: string
@@ -61,6 +64,10 @@ export interface SectionEditorAreaProps {
   handleReturnToPresent: () => void
   handleMergeAdjacentSnapshots: () => void
   customCursorSettings: CustomCursorSettings
+  notes: NoteSummary[]
+  chapters: ChapterEntry[]
+  onCreateChapter: () => void
+  onChapterClick: (chapterNoteId: string) => void
 }
 
 /**
@@ -120,6 +127,10 @@ export function SectionEditorArea({
   handleReturnToPresent,
   handleMergeAdjacentSnapshots,
   customCursorSettings,
+  notes,
+  chapters,
+  onCreateChapter,
+  onChapterClick,
 }: SectionEditorAreaProps) {
   const setStageEl = useCallback((el: HTMLDivElement | null) => {
     (editorStageRef as MutableRefObject<HTMLDivElement | null>).current = el
@@ -248,7 +259,17 @@ export function SectionEditorArea({
           )}
         </div>
       </aside>
-      <div className={`chapter-panel${isChapterPanelOpen ? ' is-open' : ''}`} aria-hidden={!isChapterPanelOpen} />
+      <div className={`chapter-panel${isChapterPanelOpen ? ' is-open' : ''}`} aria-hidden={!isChapterPanelOpen}>
+        {activeNoteId ? (
+          <ChapterBar
+            chapters={chapters}
+            notes={notes}
+            activeNoteId={activeNoteId}
+            onCreateChapter={onCreateChapter}
+            onChapterClick={onChapterClick}
+          />
+        ) : null}
+      </div>
       <div className="editor-document-stats" aria-live="polite">
         <div className="chapter-toggle-panel">
           <button

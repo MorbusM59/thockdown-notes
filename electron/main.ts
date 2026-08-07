@@ -17,6 +17,7 @@ import { AUDIO_PLAYER_CHANNELS, AUDIO_EXTENSIONS } from '../src/shared/audioPlay
 import type { PlaylistSlot } from '../src/shared/audioPlayer'
 import { NOTE_TABS_CHANNELS } from '../src/shared/tabs'
 import { EDITOR_SECTIONS_CHANNELS } from '../src/shared/sections'
+import { CHAPTER_CHANNELS } from '../src/shared/chapters'
 
 // Defense in depth: if something throws outside of a path we've explicitly
 // wrapped (e.g. during startup, before a window exists to show an in-app
@@ -914,6 +915,24 @@ function registerIpcHandlers() {
 
   ipcMain.handle(EDITOR_SECTIONS_CHANNELS.swapIntoSlot, async (_event, outgoingSectionId: string, incomingSectionId: string) => {
     return databaseService!.swapSectionIntoSlot(outgoingSectionId, incomingSectionId);
+  });
+
+  ipcMain.handle(CHAPTER_CHANNELS.list, async (_event, parentNoteId: string) => {
+    return databaseService!.listChaptersForNote(parentNoteId);
+  });
+
+  ipcMain.handle(CHAPTER_CHANNELS.create, async (_event, parentNoteId: string) => {
+    const created = await noteLifecycleService!.createChapterNote(parentNoteId);
+    const chapters = databaseService!.listChaptersForNote(parentNoteId);
+    return { chapters, created };
+  });
+
+  ipcMain.handle(CHAPTER_CHANNELS.reorder, async (_event, parentNoteId: string, orderedChapterNoteIds: string[]) => {
+    return databaseService!.reorderChapters(parentNoteId, orderedChapterNoteIds);
+  });
+
+  ipcMain.handle(CHAPTER_CHANNELS.remove, async (_event, parentNoteId: string, chapterNoteId: string) => {
+    return databaseService!.removeChapter(parentNoteId, chapterNoteId);
   });
 }
 
