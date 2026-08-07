@@ -216,6 +216,9 @@ export function isSameNoteSummary(a: NoteSummary, b: NoteSummary): boolean {
     a.createdAtMs === b.createdAtMs &&
     a.updatedAtMs === b.updatedAtMs &&
     a.sizeBytes === b.sizeBytes &&
-    Boolean(a.hasUnsavedChanges) === Boolean(b.hasUnsavedChanges)
+    Boolean(a.hasUnsavedChanges) === Boolean(b.hasUnsavedChanges) &&
+    (a.assignedId ?? null) === (b.assignedId ?? null) &&
+    a.chapterOnly === b.chapterOnly &&
+    a.chapterParentId === b.chapterParentId
   )
 }

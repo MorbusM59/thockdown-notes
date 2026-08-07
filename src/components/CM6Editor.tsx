@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { EditorState, EditorSelection, Prec, RangeSetBuilder } from '@codemirror/state';
+import { Annotation, EditorState, EditorSelection, Prec, RangeSetBuilder } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView, Decoration, ViewPlugin, keymap, type DecorationSet } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
@@ -243,6 +243,19 @@ function toSelectionState(range: { anchor: number; head: number; from: number; t
     isCollapsed: range.empty,
   };
 }
+
+// Tags the note-switch hydration effect's own dispatches (full-document
+// replace on a genuine note switch, or the same-note transient-mismatch
+// correction) so the shared updateListener below can tell them apart from a
+// real keystroke -- both are programmatic, neither is something the user
+// typed. Without this, every note switch's hydration dispatch was
+// indistinguishable from a real edit (still a genuine `docChanged`
+// transaction even though the *content* happens to be a full replace), so
+// onTextChange reported it as `source: 'user-input'`, which queued a save
+// and bumped the note's `updatedAt` -- pushing it to the top of the
+// updatedAt-sorted "latest" view just from being opened, never mind actually
+// edited.
+const ProgrammaticHydrationAnnotation = Annotation.define<true>();
 
 function commonPrefixLen(a: string, b: string): number {
   const max = Math.min(a.length, b.length);
@@ -2226,8 +2239,15 @@ export function CM6Editor({
           previousSelectionRef.current = nextSelection;
           setIsDocEmpty(nextText.length === 0);
 
+          // The note-switch hydration effect's own dispatches are real
+          // `docChanged` transactions too (even a full replace with
+          // identical resulting content still counts), so without this
+          // check they'd be indistinguishable here from an actual
+          // keystroke -- see ProgrammaticHydrationAnnotation's doc comment.
+          const isProgrammaticHydration = update.transactions.some((tr) => tr.annotation(ProgrammaticHydrationAnnotation));
+
           const event: EditorTextChangeEvent = {
-            source: 'user-input',
+            source: isProgrammaticHydration ? 'initial-load' : 'user-input',
             text: nextText,
             previousText,
             selection: nextSelection,
@@ -2679,9 +2699,13 @@ export function CM6Editor({
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: initialText },
         selection: EditorSelection.cursor(0),
+        annotations: ProgrammaticHydrationAnnotation.of(true),
       });
     } else {
-      view.dispatch({ changes: computeMinimalTextReplacement(currentText, initialText) });
+      view.dispatch({
+        changes: computeMinimalTextReplacement(currentText, initialText),
+        annotations: ProgrammaticHydrationAnnotation.of(true),
+      });
     }
     previousTextRef.current = initialText;
 

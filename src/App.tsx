@@ -6984,6 +6984,12 @@ ${markdownHtml}
           void activeSection.handleChapterBackwardSplitOrMerge()
           return
         }
+
+        if (event.key.toLowerCase() === 'n') {
+          event.preventDefault()
+          void activeSection.handleCreateChapter()
+          return
+        }
       }
 
       if (event.key === 'Escape') {

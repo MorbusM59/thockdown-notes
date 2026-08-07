@@ -2142,3 +2142,38 @@ a regression from this fix. `verifyCM6ArrowUpChunkBoundary.mjs` still shows lead
 scroll-jump anomalies at the same rate as before (211/3000) -- expected, since that's the separate,
 still-unfixed bug this whole document otherwise tracks, and this fix does not touch scroll-target
 computation at all.
+
+### Bug 6 — merely opening a note bumped its `updatedAt`, pushing it to the top of the Latest view — FIXED
+
+**Reported**: "selecting a note seems to immediately update its 'last modified' date and push the note to
+the top of the latest view. reading a note should not update last modified, even if scrolling and caret
+changed when reading."
+
+**Root cause**: the note-switch hydration effect in `CM6Editor.tsx` (keyed on `noteId`/`initialText`) loads
+the newly-activated note's content via `view.dispatch({ changes: { from: 0, to: doc.length, insert:
+initialText }, ... })` -- a real `docChanged` transaction (a full replace always counts as one, even though
+the *resulting* content is simply "whatever the new note's text already was," not an edit). The shared
+`EditorView.updateListener` unconditionally tagged every `docChanged` transaction `source: 'user-input'`
+with no check of transaction origin/annotation -- so this hydration dispatch was indistinguishable from a
+real keystroke by the time it reached `useEditorSectionMount.ts`'s `onTextChange`, whose `isUserEditableSource`
+check (`'user-input' | 'history-undo' | 'history-redo'`) let it straight through to `queueSave`. That flushed
+a save for the note's own (unchanged) text, and `upsertNoteContent` sets `updatedAtMs` from the just-written
+file's fresh `stat.mtimeMs` -- bumping `updatedAt` on every single note open, not just real edits.
+
+**Fix**: tagged both of the hydration effect's own dispatches (the genuine-note-switch full replace, and the
+same-note transient-mismatch correction) with a CM6 `Annotation` (`ProgrammaticHydrationAnnotation` in
+`CM6Editor.tsx`), and the `updateListener` now checks `update.transactions.some(tr =>
+tr.annotation(ProgrammaticHydrationAnnotation))` to emit `source: 'initial-load'` instead of `'user-input'`
+for those -- `'initial-load'` already existed in `EditorChangeSource` and was already excluded from
+`isUserEditableSource`, so no changes were needed downstream; the type system had already anticipated this
+distinction, it just wasn't being fed correctly.
+
+**Verification**: `tsc --noEmit` (both configs) and `npm run lint` clean; `npm test` unaffected (313/328,
+same pre-existing 15 native-module-ABI failures on this machine, unrelated to this change and present
+identically before it). Root cause independently confirmed via a dedicated Explore-agent trace before
+implementing, with specific file/line evidence for every step of the chain. **Not verified live**: this
+machine's `scripts/perf/verifyCM6*.mjs` regression suite can't run here -- `spawn('npm', ...)` in those
+scripts fails with `ENOENT` on Windows (missing `shell: true`/`.cmd` resolution, a pre-existing cross-platform
+gap in the scripts themselves, reproduced identically on unmodified `HEAD`), and there's no other live-browser
+path available in this environment. Worth an actual click-through (open a note, confirm it doesn't jump to
+the top of Date/Latest) before considering this fully closed.
