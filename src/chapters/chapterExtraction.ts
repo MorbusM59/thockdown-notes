@@ -20,3 +20,13 @@ export function collapseSurgerySite(before: string, after: string): { text: stri
   const seam = '\n'.repeat(seamNewlines)
   return { text: trimmedBefore + seam + trimmedAfter, seamPos: trimmedBefore.length + seam.length }
 }
+
+/**
+ * Strips leading and trailing blank lines from newly-extracted chapter
+ * content -- a selection that swept up the blank line separating it from its
+ * neighboring paragraph (very likely, since that's how paragraphs are
+ * delimited) would otherwise start/end the new chapter on empty lines.
+ */
+export function trimBlankLines(text: string): string {
+  return text.replace(/^\n+/, '').replace(/\n+$/, '')
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { collapseSurgerySite } from './chapterExtraction'
+import { collapseSurgerySite, trimBlankLines } from './chapterExtraction'
 
 describe('collapseSurgerySite', () => {
   it('collapses a blank line on both sides down to a single blank line', () => {
@@ -53,5 +53,31 @@ describe('collapseSurgerySite', () => {
     const { text, seamPos } = collapseSurgerySite('', '')
     expect(text).toBe('')
     expect(seamPos).toBe(0)
+  })
+})
+
+describe('trimBlankLines', () => {
+  it('strips leading and trailing blank lines swept up in the selection', () => {
+    expect(trimBlankLines('\n\nParagraph B\n\n')).toBe('Paragraph B')
+  })
+
+  it('strips only a leading run', () => {
+    expect(trimBlankLines('\n\nParagraph B')).toBe('Paragraph B')
+  })
+
+  it('strips only a trailing run', () => {
+    expect(trimBlankLines('Paragraph B\n\n')).toBe('Paragraph B')
+  })
+
+  it('leaves internal blank lines (multi-paragraph extraction) untouched', () => {
+    expect(trimBlankLines('\nParagraph B\n\nParagraph C\n')).toBe('Paragraph B\n\nParagraph C')
+  })
+
+  it('is a no-op when there are no surrounding blank lines', () => {
+    expect(trimBlankLines('Paragraph B')).toBe('Paragraph B')
+  })
+
+  it('reduces an all-blank-lines selection to an empty string', () => {
+    expect(trimBlankLines('\n\n\n')).toBe('')
   })
 })

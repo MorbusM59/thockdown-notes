@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ChapterEntry } from '../shared/chapters'
 import type { EditorSelectionState } from '../editor/EditorContract'
-import { collapseSurgerySite } from './chapterExtraction'
+import { collapseSurgerySite, trimBlankLines } from './chapterExtraction'
 
 export interface UseNoteChaptersOptions {
   /** The note identity the chapter bar shows chapters *of* -- the chapter-aware "menu identity" (see EditorSection.tsx's `menuIdentityNoteId`), never a chapter's own id (chapters can't have chapters in this UI). */
@@ -53,9 +53,11 @@ export interface UseNoteChaptersResult {
    * selection (just a caret, nothing highlighted) extracts everything from
    * the caret to the end of the document instead of no-op'ing. Any blank-line
    * run left behind at the cut site (e.g. a paragraph that had a blank line
-   * on both sides) is collapsed down to a single blank line. A no-op only
-   * when there's genuinely nothing to extract (caret already at the end of
-   * an empty selection).
+   * on both sides) is collapsed down to a single blank line, and the
+   * extracted content itself has its own leading/trailing blank lines
+   * trimmed before landing in the new chapter. A no-op only when there's
+   * genuinely nothing to extract (caret already at the end of an empty
+   * selection).
    */
   handleExtractSelectionToChapter: () => Promise<void>
   /**
@@ -149,7 +151,10 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
       : Math.max(start, Math.min(editorSelection.end, currentEditorText.length))
     if (start >= end) return
 
-    const extractedText = currentEditorText.slice(start, end)
+    // Leading/trailing blank lines are trimmed off the extracted content
+    // itself (the new chapter's own text), separately from the surgery-site
+    // cleanup below (which tidies the document being cut *from*).
+    const extractedText = trimBlankLines(currentEditorText.slice(start, end))
     const before = currentEditorText.slice(0, start)
     const after = currentEditorText.slice(end)
     // Tidy up the surgery site: a paragraph cut from between two blank lines
