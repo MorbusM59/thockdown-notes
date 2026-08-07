@@ -13,15 +13,13 @@ export interface UseSectionTabsOptions {
   sectionId: string
   activeNoteId: string | null
   /**
-   * The note identity the tab bar's own concerns (pinned/temp tab
-   * highlighting, "add current note to tabs", closing the active tab)
-   * should treat as active -- equal to `activeNoteId` except when a chapter
-   * is loaded, in which case this is the chapter's parent (see
-   * EditorSection.tsx's `menuIdentityNoteId`). Chapters must never appear
-   * as their own tab pill; the parent's pill stays highlighted/pinnable
-   * instead. The *tag bar* (this hook's other half) deliberately keeps
-   * using the true `activeNoteId` throughout -- tags belong to whatever
-   * note is actually loaded, chapter or not.
+   * The note identity both halves of this hook treat as active -- equal to
+   * `activeNoteId` except when a chapter is loaded, in which case this is
+   * the chapter's parent (see EditorSection.tsx's `menuIdentityNoteId`).
+   * Chapters must never appear as their own tab pill; the parent's pill
+   * stays highlighted/pinnable instead. Chapters also have no tag life of
+   * their own -- tags always belong to the parent note -- so the *tag bar*
+   * reads/writes through this same identity, not the true `activeNoteId`.
    */
   tabIdentityNoteId: string | null
   notes: NoteSummary[]
@@ -140,19 +138,21 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   const [renamingTagName, setRenamingTagName] = useState<string | null>(null)
   const [draggedTagIndex, setDraggedTagIndex] = useState<number | null>(null)
 
-  const activeNoteSummary = useMemo(() => {
-    if (!activeNoteId) return null
-    return notes.find((note) => note.id === activeNoteId) ?? null
-  }, [activeNoteId, notes])
+  // Tags always belong to `tabIdentityNoteId` (the parent, when a chapter is
+  // loaded) -- see this hook's own doc comment on that option.
+  const tagIdentityNoteSummary = useMemo(() => {
+    if (!tabIdentityNoteId) return null
+    return notes.find((note) => note.id === tabIdentityNoteId) ?? null
+  }, [tabIdentityNoteId, notes])
 
-  const orderedActiveTags = useMemo(() => activeNoteSummary?.tags ?? [], [activeNoteSummary])
+  const orderedActiveTags = useMemo(() => tagIdentityNoteSummary?.tags ?? [], [tagIdentityNoteSummary])
   const activeNoteIsExternal = orderedActiveTags.some((tag) => isExternalTagName(tag))
 
-  // Switching notes or the active note's own tags changing both invalidate
-  // any in-progress "click again to delete" arm.
+  // Switching notes (or the tag-owning note's own tags changing) both
+  // invalidate any in-progress "click again to delete" arm.
   useEffect(() => {
     setDeletePrimedTagName(null)
-  }, [activeNoteId, orderedActiveTags])
+  }, [tabIdentityNoteId, orderedActiveTags])
 
   const suggestedTags = useMemo(() => {
     const usageByName = new Map<string, number>()
@@ -180,14 +180,14 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   const runActiveNoteTagMutation = useCallback(async (mutate: (noteId: string) => Promise<void>) => {
     if (!window.thockdownNotes) return
     if (!persistenceReady) return
-    if (!activeNoteId) return
+    if (!tabIdentityNoteId || !activeNoteId) return
     if (noteTransitionLockRef.current) return
 
     noteTransitionLockRef.current = true
     setIsTagMutationPending(true)
     try {
       await flushPendingSaveNow()
-      await mutate(activeNoteId)
+      await mutate(tabIdentityNoteId)
       await refreshNotes(activeNoteId)
       await activateNote(activeNoteId)
     } catch (error) {
@@ -196,7 +196,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
       setIsTagMutationPending(false)
       noteTransitionLockRef.current = false
     }
-  }, [activeNoteId, activateNote, flushPendingSaveNow, noteTransitionLockRef, persistenceReady, refreshNotes])
+  }, [activeNoteId, tabIdentityNoteId, activateNote, flushPendingSaveNow, noteTransitionLockRef, persistenceReady, refreshNotes])
 
   const handleAddSuggestedTag = useCallback((tagName: string) => {
     if (activeNoteIsExternal) return

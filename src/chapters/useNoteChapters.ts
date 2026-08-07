@@ -9,16 +9,8 @@ export interface UseNoteChaptersOptions {
   /** The note actually loaded in the editor right now -- used only to tell which chapter pill (if any) is the active one. */
   activeNoteId: string | null
   persistenceReady: boolean
-  /**
-   * EditorSection.tsx's own `activateNote`, whose 3rd param
-   * (`chapterParentContext`) records which parent's chapter bar a chapter
-   * was opened through -- see its doc comment there. Both handlers below
-   * pass `menuIdentityNoteId` (this bar's own parent) for it, since a
-   * chapter can belong to any number of parents (no per-note uniqueness on
-   * the chapter side of the `chapters` table) and clicking a pill *in this
-   * bar* unambiguously means "via this parent."
-   */
-  activateNote: (noteId: string, overrideCursorPos?: number, chapterParentContext?: string | null) => Promise<void>
+  /** EditorSection.tsx's own `activateNote`. Which parent a chapter belongs to is a DB fact now (a chapter has exactly one parent, ever), not navigation state, so this no longer takes a parent-context param. */
+  activateNote: (noteId: string, overrideCursorPos?: number) => Promise<void>
   refreshNotes: (preferredId?: string | null) => Promise<string | null>
   /** Whatever's actually loaded in the editor right now (parent or a chapter) -- see EditorSection.tsx's own `currentEditorText` doc comment for why this, not `activeNoteText`, is the canonical live read. */
   currentEditorText: string
@@ -35,14 +27,14 @@ export interface UseNoteChaptersResult {
   handleCreateChapter: () => Promise<void>
   handleChapterClick: (chapterNoteId: string) => void
   /**
-   * Attaches an already-existing note (dragged in from the sidebar) as a
-   * chapter of `menuIdentityNoteId` -- unlike handleCreateChapter, this
-   * never switches the editor's active note; dropping a note onto the
-   * chapter bar only files it there; it stays wherever it was being edited.
-   * No-ops (rather than throwing) for a self-reference or an already-
-   * attached chapter, both of which the DB layer would otherwise reject.
+   * Clones a dragged-in note's content into a brand-new chapter of
+   * `menuIdentityNoteId` -- the dragged note itself is never touched or
+   * linked, only copied (see cloneNoteAsChapter's doc comment). Never
+   * switches the editor's active note; dropping a note onto the chapter bar
+   * only files a copy there, the dragged note stays wherever it was being
+   * edited. No-ops for a self-drop (dragging the parent onto its own bar).
    */
-  handleAttachExistingChapter: (chapterNoteId: string) => Promise<void>
+  handleCloneNoteAsChapter: (sourceNoteId: string) => Promise<void>
   /**
    * The chapter bar's right mini button: cuts the current editor selection
    * out of whatever's actively displayed (the parent or an already-open
@@ -63,9 +55,10 @@ export interface UseNoteChaptersResult {
   /**
    * The chapter bar's left mini button: cuts the *entire* content of the
    * currently-open chapter, appends it to the previous chapter (or the
-   * parent note, if this is the first chapter), soft-deletes (moves to
-   * Trash -- reversible, same as the sidebar's Trash icon) the now-empty
-   * chapter, and loads the destination note with the caret at its end. A
+   * parent note, if this is the first chapter), permanently deletes the
+   * now-empty chapter (chapters have no independent trash state -- its
+   * content has already been moved out, not destroyed), and loads the
+   * destination note with the caret at its end. A
    * no-op while viewing the parent directly -- there's no "current chapter"
    * to collapse. Collapsing a note's last remaining chapter back into the
    * parent naturally hides the chapter panel again, since its visibility is
@@ -123,21 +116,21 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     const { chapters: updatedChapters, created } = await window.thockdownChapters.createChapter(menuIdentityNoteId)
     setChapters(updatedChapters)
     await refreshNotes(created.id)
-    await activateNote(created.id, undefined, menuIdentityNoteId)
+    await activateNote(created.id)
   }, [menuIdentityNoteId, refreshNotes, activateNote])
 
   const handleChapterClick = useCallback((chapterNoteId: string) => {
     if (chapterNoteId === activeNoteId) return
-    void activateNote(chapterNoteId, undefined, menuIdentityNoteId)
-  }, [activeNoteId, activateNote, menuIdentityNoteId])
+    void activateNote(chapterNoteId)
+  }, [activeNoteId, activateNote])
 
-  const handleAttachExistingChapter = useCallback(async (chapterNoteId: string) => {
+  const handleCloneNoteAsChapter = useCallback(async (sourceNoteId: string) => {
     if (!window.thockdownChapters || !menuIdentityNoteId) return
-    if (chapterNoteId === menuIdentityNoteId) return
-    if (chapters.some((chapter) => chapter.chapterNoteId === chapterNoteId)) return
-    const updatedChapters = await window.thockdownChapters.addExistingChapter(menuIdentityNoteId, chapterNoteId)
+    if (sourceNoteId === menuIdentityNoteId) return
+    const { chapters: updatedChapters } = await window.thockdownChapters.cloneNoteAsChapter(menuIdentityNoteId, sourceNoteId)
     setChapters(updatedChapters)
-  }, [menuIdentityNoteId, chapters])
+    await refreshNotes()
+  }, [menuIdentityNoteId, refreshNotes])
 
   const handleExtractSelectionToChapter = useCallback(async () => {
     if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId) return
@@ -186,7 +179,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     setChapters(updatedChapters)
     await refreshNotes(created.id)
     // Caret at the end of the pasted text -- "waiting for input behind" it.
-    await activateNote(created.id, extractedText.length, menuIdentityNoteId)
+    await activateNote(created.id, extractedText.length)
   }, [menuIdentityNoteId, activeNoteId, editorSelection, currentEditorText, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, activateNote])
 
   const handleCollapseChapterIntoPrevious = useCallback(async () => {
@@ -209,17 +202,15 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     await window.thockdownNotes.saveNote({ id: previousId, text: mergedText })
 
     const updatedChapters = await window.thockdownChapters.removeChapter(menuIdentityNoteId, currentChapterNoteId)
-    // Soft delete (Trash), same as the sidebar's Trash icon -- reversible,
-    // unlike a permanent unlink -- since its content has already been moved
-    // out, not destroyed.
-    await window.thockdownNotes.addTagToNote({ id: currentChapterNoteId, tagName: 'deleted', position: 0 })
+    // Permanently removed, not trashed -- chapters have no independent trash
+    // state, and its content has already been moved into the destination
+    // note above, not destroyed.
+    await window.thockdownNotes.deleteNote({ id: currentChapterNoteId })
 
     setChapters(updatedChapters)
     await refreshNotes(previousId)
-    // Caret at the end of the merged note. previousId === menuIdentityNoteId
-    // means we collapsed the first chapter back into the parent itself, so
-    // there's no parent context to record for it.
-    await activateNote(previousId, mergedText.length, previousId === menuIdentityNoteId ? undefined : menuIdentityNoteId)
+    // Caret at the end of the merged note.
+    await activateNote(previousId, mergedText.length)
   }, [menuIdentityNoteId, activeNoteId, chapters, currentEditorText, refreshNotes, activateNote])
 
   const [editingChapterNoteId, setEditingChapterNoteId] = useState<string | null>(null)
@@ -254,7 +245,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     chapters,
     handleCreateChapter,
     handleChapterClick,
-    handleAttachExistingChapter,
+    handleCloneNoteAsChapter,
     handleExtractSelectionToChapter,
     handleCollapseChapterIntoPrevious,
     editingChapterNoteId,

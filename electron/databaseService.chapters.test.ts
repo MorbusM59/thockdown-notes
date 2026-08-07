@@ -28,36 +28,43 @@ describe('DatabaseService chapters', () => {
   })
 
   afterEach(() => {
+    db.close()
     rmSync(dataRoot, { recursive: true, force: true })
   })
 
-  it('lets the same note be a chapter of any number of different parents (e.g. a shared reference card)', () => {
+  it('rejects a note becoming a chapter of a second parent -- a chapter belongs to at most one parent, ever', () => {
     seedNote(db, 'parent-a')
     seedNote(db, 'parent-b')
-    seedNote(db, 'reference-card')
+    seedNote(db, 'shared-note')
 
-    db.addChapter('parent-a', 'reference-card')
-    db.addChapter('parent-b', 'reference-card')
+    db.addChapter('parent-a', 'shared-note')
+    expect(() => db.addChapter('parent-b', 'shared-note')).toThrow()
 
-    const chaptersOfA = db.listChaptersForNote('parent-a')
-    const chaptersOfB = db.listChaptersForNote('parent-b')
-
-    expect(chaptersOfA.map((c) => c.chapterNoteId)).toEqual(['reference-card'])
-    expect(chaptersOfB.map((c) => c.chapterNoteId)).toEqual(['reference-card'])
+    expect(db.listChaptersForNote('parent-a').map((c) => c.chapterNoteId)).toEqual(['shared-note'])
+    expect(db.listChaptersForNote('parent-b').map((c) => c.chapterNoteId)).toEqual([])
   })
 
-  it('keeps each parent-chapter relationship independent -- removing from one parent leaves the other untouched', () => {
+  it('getChapterParent resolves a chapter note to its single parent, or null if it isn\'t a chapter', () => {
+    seedNote(db, 'parent-a')
+    seedNote(db, 'chapter-1')
+    seedNote(db, 'standalone')
+
+    db.addChapter('parent-a', 'chapter-1')
+
+    expect(db.getChapterParent('chapter-1')).toBe('parent-a')
+    expect(db.getChapterParent('standalone')).toBeNull()
+  })
+
+  it('re-attaching a chapter to a new parent after detaching from the old one is allowed', () => {
     seedNote(db, 'parent-a')
     seedNote(db, 'parent-b')
-    seedNote(db, 'reference-card')
+    seedNote(db, 'chapter-1')
 
-    db.addChapter('parent-a', 'reference-card')
-    db.addChapter('parent-b', 'reference-card')
+    db.addChapter('parent-a', 'chapter-1')
+    db.removeChapter('parent-a', 'chapter-1')
+    db.addChapter('parent-b', 'chapter-1')
 
-    db.removeChapter('parent-a', 'reference-card')
-
-    expect(db.listChaptersForNote('parent-a').map((c) => c.chapterNoteId)).toEqual([])
-    expect(db.listChaptersForNote('parent-b').map((c) => c.chapterNoteId)).toEqual(['reference-card'])
+    expect(db.getChapterParent('chapter-1')).toBe('parent-b')
   })
 
   it('maintains gapless positions per parent independently of the same chapter appearing elsewhere', () => {
@@ -88,6 +95,30 @@ describe('DatabaseService chapters', () => {
 
     db.addChapter('parent-a', 'chapter-1')
     expect(() => db.addChapter('parent-a', 'chapter-1')).toThrow()
+  })
+
+  it('deleting a parent note permanently deletes its chapters too, not just the attachment', () => {
+    seedNote(db, 'parent-a')
+    seedNote(db, 'chapter-1')
+    seedNote(db, 'chapter-2')
+    db.addChapter('parent-a', 'chapter-1')
+    db.addChapter('parent-a', 'chapter-2')
+
+    db.deleteNote('parent-a')
+
+    expect(db.getNoteRecord('parent-a')).toBeNull()
+    expect(db.getNoteRecord('chapter-1')).toBeNull()
+    expect(db.getNoteRecord('chapter-2')).toBeNull()
+  })
+
+  it('deleting a note with no chapters only deletes that note', () => {
+    seedNote(db, 'parent-a')
+    seedNote(db, 'unrelated')
+
+    db.deleteNote('unrelated')
+
+    expect(db.getNoteRecord('unrelated')).toBeNull()
+    expect(db.getNoteRecord('parent-a')).not.toBeNull()
   })
 
   describe('setChapterId', () => {
@@ -148,6 +179,128 @@ describe('DatabaseService chapters', () => {
       const resolved = db.setChapterId('parent-a', 'chapter-1', 'INTRO')
       expect(resolved).toBe('INTRO')
     })
+  })
+})
+
+describe('DatabaseService startup migration back to single-parent chapters', () => {
+  // Reproduces leftover state from the multi-parent experiment (72f9864,
+  // since reverted): a chapter attached to more than one parent, tags sitting
+  // directly on a chapterOnly note, and a chapterOnly note with no `chapters`
+  // row at all (parentless). Built via raw SQL against a schema that predates
+  // idx_chapters_chapterNoteId_unique, same technique as the pre-chapterId
+  // migration test below.
+  let dataRoot: string
+
+  beforeEach(() => {
+    dataRoot = mkdtempSync(path.join(tmpdir(), 'thockdown-chapters-migration-test-'))
+  })
+
+  afterEach(() => {
+    rmSync(dataRoot, { recursive: true, force: true })
+  })
+
+  it('dedupes multi-parent chapters (keeping the oldest attachment), merges orphaned chapter tags onto the parent, and purges parentless chapters', async () => {
+    const rawDb = new BetterSqlite3(path.join(dataRoot, 'thockdown-notes.db'))
+    rawDb.pragma('foreign_keys = ON')
+    rawDb.exec(`
+      CREATE TABLE notes (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        filePath TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        lastEdited TEXT,
+        progressPreview REAL,
+        progressEdit REAL,
+        cursorPos INTEGER,
+        scrollTop INTEGER,
+        sourceAnchorLine INTEGER,
+        sourceAnchorText TEXT,
+        contentChecksum TEXT,
+        isTemp INTEGER DEFAULT 0,
+        externalPath TEXT,
+        hasUnsavedChanges INTEGER DEFAULT 0,
+        syncMode INTEGER DEFAULT 0,
+        originalEncoding TEXT,
+        fileToken TEXT UNIQUE,
+        previewBlockCache TEXT,
+        chapterOnly INTEGER NOT NULL DEFAULT 0
+      );
+
+      CREATE TABLE tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL
+      );
+
+      CREATE TABLE note_tags (
+        noteId TEXT NOT NULL,
+        tagId INTEGER NOT NULL,
+        position INTEGER NOT NULL,
+        PRIMARY KEY (noteId, tagId),
+        FOREIGN KEY (noteId) REFERENCES notes(id) ON DELETE CASCADE,
+        FOREIGN KEY (tagId) REFERENCES tags(id) ON DELETE CASCADE
+      );
+
+      CREATE VIRTUAL TABLE notes_fts USING fts5(
+        noteId UNINDEXED,
+        title,
+        content
+      );
+
+      CREATE TABLE chapters (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        parentNoteId  TEXT    NOT NULL,
+        position      INTEGER NOT NULL,
+        chapterNoteId TEXT    NOT NULL,
+        chapterId     TEXT,
+        UNIQUE (parentNoteId, chapterNoteId),
+        CHECK (parentNoteId != chapterNoteId),
+        FOREIGN KEY (parentNoteId)  REFERENCES notes(id) ON DELETE CASCADE,
+        FOREIGN KEY (chapterNoteId) REFERENCES notes(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX idx_chapters_parent_position ON chapters(parentNoteId, position);
+      CREATE INDEX idx_chapters_parent_chapterid ON chapters(parentNoteId, chapterId);
+    `)
+
+    const now = new Date().toISOString()
+    const insertNote = rawDb.prepare(`
+      INSERT INTO notes (id, title, filePath, createdAt, updatedAt, chapterOnly)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `)
+    insertNote.run('parent-a', 'parent-a', '/tmp/parent-a.md', now, now, 0)
+    insertNote.run('parent-b', 'parent-b', '/tmp/parent-b.md', now, now, 0)
+    insertNote.run('shared-chapter', 'shared-chapter', '/tmp/shared-chapter.md', now, now, 1)
+    insertNote.run('orphan-chapter', 'orphan-chapter', '/tmp/orphan-chapter.md', now, now, 1)
+
+    // shared-chapter attached to parent-a first (lower chapters.id), then
+    // parent-b -- the migration should keep the parent-a attachment.
+    rawDb.prepare('INSERT INTO chapters (parentNoteId, position, chapterNoteId) VALUES (?, ?, ?)').run('parent-a', 0, 'shared-chapter')
+    rawDb.prepare('INSERT INTO chapters (parentNoteId, position, chapterNoteId) VALUES (?, ?, ?)').run('parent-b', 0, 'shared-chapter')
+
+    const tagId = Number(rawDb.prepare('INSERT INTO tags (name) VALUES (?)').run('leftover-tag').lastInsertRowid)
+    rawDb.prepare('INSERT INTO note_tags (noteId, tagId, position) VALUES (?, ?, ?)').run('shared-chapter', tagId, 0)
+
+    rawDb.close()
+
+    const upgradedDb = new DatabaseService(dataRoot)
+    await expect(upgradedDb.initialize()).resolves.not.toThrow()
+
+    // Dedupe: only parent-a's attachment survives.
+    expect(upgradedDb.getChapterParent('shared-chapter')).toBe('parent-a')
+    expect(upgradedDb.listChaptersForNote('parent-b').map((c) => c.chapterNoteId)).toEqual([])
+
+    // The unique index is actually enforced going forward.
+    expect(() => upgradedDb.addChapter('parent-b', 'shared-chapter')).toThrow()
+
+    // Tag merge: the chapter's own tag moved to its surviving parent.
+    expect(upgradedDb.getNoteTags('shared-chapter')).toEqual([])
+    expect(upgradedDb.getNoteTags('parent-a')).toEqual(['leftover-tag'])
+
+    // Orphan purge: a chapterOnly note with no `chapters` row is gone.
+    expect(upgradedDb.getNoteRecord('orphan-chapter')).toBeNull()
+
+    upgradedDb.close()
   })
 })
 
@@ -223,5 +376,7 @@ describe('DatabaseService startup on a pre-chapterId database', () => {
 
     const resolved = upgradedDb.setChapterId('parent-a', 'chapter-1', 'INTRO')
     expect(resolved).toBe('INTRO')
+
+    upgradedDb.close()
   })
 })

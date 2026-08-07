@@ -19,7 +19,7 @@ import type {
   TagSummary,
 } from '../src/shared/noteLifecycle';
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
-import type { DatabaseService, NoteRecord } from './databaseService';
+import type { ChapterEntry, DatabaseService, NoteRecord } from './databaseService';
 
 const NOTES_DIR_NAME = 'notes';
 const META_PREFIX = '<!-- thockdown-meta:';
@@ -169,6 +169,7 @@ export class NoteLifecycleService {
         isInSync: Boolean(record.syncMode && !record.hasUnsavedChanges),
         assignedId: record.assignedId,
         chapterOnly: record.chapterOnly,
+        chapterParentId: record.chapterParentId,
       };
     } catch {
       return null;
@@ -279,6 +280,7 @@ export class NoteLifecycleService {
       hasUnsavedChanges: record?.hasUnsavedChanges ?? false,
       isInSync: Boolean(record?.syncMode && !record?.hasUnsavedChanges),
       chapterOnly: record?.chapterOnly ?? false,
+      chapterParentId: record?.chapterParentId ?? null,
     };
   }
 
@@ -339,6 +341,28 @@ export class NoteLifecycleService {
     this.databaseService.setNoteChapterOnly(created.id, true);
     this.databaseService.addChapter(parentNoteId, created.id);
     return this.loadNote({ id: created.id });
+  }
+
+  // Dragging a note from the sidebar onto a chapter bar: clones the dragged
+  // note's content into a brand-new chapterOnly note and appends that as
+  // parentNoteId's last chapter. The dragged note itself is never touched,
+  // marked chapterOnly, or linked -- only already-chapterOnly notes can ever
+  // be chapters (see the chapterOnly doc comment on NoteSummary), so this is
+  // the only way a regular note's content reaches a chapter bar, and it's
+  // also what rules out sub-chapters: a chapterOnly note is never a valid
+  // drag source in the first place.
+  async cloneNoteAsChapter(parentNoteId: string, sourceNoteId: string): Promise<{ chapters: ChapterEntry[]; created: NoteDocument }> {
+    const sourceRecord = this.databaseService.getNoteRecord(sourceNoteId);
+    if (sourceRecord?.chapterOnly) {
+      throw new Error(`Cannot clone chapter-only note ${sourceNoteId} as a chapter -- only regular notes can be dragged onto a chapter bar`);
+    }
+
+    const source = await this.loadNote({ id: sourceNoteId });
+    const created = await this.createNote({ initialText: source.text });
+    this.databaseService.setNoteChapterOnly(created.id, true);
+    const chapters = this.databaseService.addChapter(parentNoteId, created.id);
+    const createdDocument = await this.loadNote({ id: created.id });
+    return { chapters, created: createdDocument };
   }
 
   // Clones a past snapshot of an existing note into a brand-new, independent
@@ -410,6 +434,7 @@ export class NoteLifecycleService {
         assignedId: record.assignedId ?? null,
         previewBlockCache: null,
         chapterOnly: record.chapterOnly,
+        chapterParentId: record.chapterParentId,
       });
 
       if (!summary) {
@@ -448,6 +473,7 @@ export class NoteLifecycleService {
       assignedId: record?.assignedId ?? null,
       previewBlockCache: null,
       chapterOnly: record?.chapterOnly ?? false,
+      chapterParentId: record?.chapterParentId ?? null,
     });
 
     if (!summary) {
@@ -457,7 +483,17 @@ export class NoteLifecycleService {
     return summary;
   }
 
+  // Chapters have no life outside their parent -- deleting a parent note
+  // must delete its chapters' files too, not just their DB rows (which
+  // databaseService.deleteNote already cascades). Recurses one level (chapters
+  // can't have sub-chapters, so listChaptersForNote on a chapter is always
+  // empty) before deleting the note's own file/row.
   async deleteNote(input: DeleteNoteInput): Promise<void> {
+    const chapterEntries = this.databaseService.listChaptersForNote(input.id);
+    for (const chapter of chapterEntries) {
+      await this.deleteNote({ id: chapter.chapterNoteId });
+    }
+
     const record = this.databaseService.getNoteRecord(input.id);
 
     if (record?.isTemp) {

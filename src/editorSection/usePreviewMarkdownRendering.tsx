@@ -52,7 +52,7 @@ export interface UsePreviewMarkdownRenderingOptions {
   activeNoteId: string | null
   activeNoteText: string
   latestEditorTextRef: MutableRefObject<string>
-  activateNote: (noteId: string, overrideCursorPos?: number, chapterParentContext?: string | null) => Promise<void>
+  activateNote: (noteId: string, overrideCursorPos?: number) => Promise<void>
   previewScrollRef: MutableRefObject<HTMLDivElement | null>
   documentFindDirective: DocumentFindDirective
   isDocumentFindCaseSensitive: boolean
@@ -332,11 +332,7 @@ export function usePreviewMarkdownRendering({
   // navigateToInternalPreviewLink below: activates `targetNoteId` (unless
   // already active) then either scrolls to `anchorId` within it or, on a
   // genuine note switch with no anchor, resets to the top.
-  // `chapterParentContext`, when navigating into a chapter, records which
-  // parent's chapter bar it was reached through (see activateNote's own doc
-  // comment in EditorSection.tsx) so the sidebar/tab bar keep showing that
-  // parent as active.
-  const activateAndScroll = useCallback((targetNoteId: string, contentTextForExistenceCheck: string, anchorId: string | null, chapterParentContext?: string | null) => {
+  const activateAndScroll = useCallback((targetNoteId: string, contentTextForExistenceCheck: string, anchorId: string | null) => {
     const isAlreadyActive = targetNoteId === activeNoteId
     const followUp = () => {
       if (anchorId !== null) {
@@ -358,7 +354,7 @@ export function usePreviewMarkdownRendering({
     if (isAlreadyActive) {
       followUp()
     } else {
-      void activateNote(targetNoteId, undefined, chapterParentContext ?? null).then(followUp)
+      void activateNote(targetNoteId, undefined).then(followUp)
     }
   }, [activeNoteId, activateNote, scrollToAnchorInPreview, scrollPreviewToTop, latestEditorTextRef])
 
@@ -389,7 +385,7 @@ export function usePreviewMarkdownRendering({
         if (!chapterEntry) return
         const chapterContentText = notesRef.current.find((note) => note.id === chapterEntry.chapterNoteId)?.contentText ?? ''
         if (target.anchorId !== null && !noteContainsAnchorDefinition(chapterContentText, target.anchorId)) return
-        activateAndScroll(chapterEntry.chapterNoteId, chapterContentText, target.anchorId, parentNoteId)
+        activateAndScroll(chapterEntry.chapterNoteId, chapterContentText, target.anchorId)
       })
       return
     }

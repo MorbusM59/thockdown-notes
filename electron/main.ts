@@ -927,8 +927,8 @@ function registerIpcHandlers() {
     return { chapters, created };
   });
 
-  ipcMain.handle(CHAPTER_CHANNELS.addExisting, async (_event, parentNoteId: string, chapterNoteId: string) => {
-    return databaseService!.addChapter(parentNoteId, chapterNoteId);
+  ipcMain.handle(CHAPTER_CHANNELS.cloneFromNote, async (_event, parentNoteId: string, sourceNoteId: string) => {
+    return noteLifecycleService!.cloneNoteAsChapter(parentNoteId, sourceNoteId);
   });
 
   ipcMain.handle(CHAPTER_CHANNELS.reorder, async (_event, parentNoteId: string, orderedChapterNoteIds: string[]) => {

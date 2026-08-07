@@ -162,6 +162,7 @@ type NoteRecordRow = {
   assignedId: string | null;
   previewBlockCache: string | null;
   chapterOnly: number;
+  chapterParentId: string | null;
 };
 
 export type NoteRecord = {
@@ -178,6 +179,8 @@ export type NoteRecord = {
   assignedId: string | null;
   previewBlockCache: string | null;
   chapterOnly: boolean;
+  /** The single note this note is a chapter of, or null when it isn't (any) chapter. DB-derived (see getChapterParent), not navigation state. */
+  chapterParentId: string | null;
 };
 
 /** One entry pinned to a section's tab bar (quick-access note shortcut). */
@@ -188,7 +191,7 @@ export type NoteTabEntry = {
   addedAtMs: number;
 };
 
-/** One chapter: `chapterNoteId` is itself a full note, ordered (gapless, 0-indexed) among `parentNoteId`'s other chapters. The same note can be a chapter of any number of different parents. `chapterId` is a user-assignable label (chapter bar right-click, or `$noteid§chapterid` links), unique per parentNoteId; null until first assigned. */
+/** One chapter: `chapterNoteId` is itself a full note, ordered (gapless, 0-indexed) among `parentNoteId`'s other chapters. A chapter note belongs to exactly one parent, ever. `chapterId` is a user-assignable label (chapter bar right-click, or `$noteid§chapterid` links), unique per parentNoteId; null until first assigned. */
 export type ChapterEntry = {
   parentNoteId: string;
   position: number;
@@ -1110,9 +1113,10 @@ export class DatabaseService {
   listNoteRecords(): NoteRecord[] {
     const db = this.requireDb();
     const rows = db.prepare(`
-      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode, assignedId, previewBlockCache, chapterOnly
-      FROM notes
-      ORDER BY datetime(updatedAt) DESC
+      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, c.parentNoteId AS chapterParentId
+      FROM notes n
+      LEFT JOIN chapters c ON c.chapterNoteId = n.id
+      ORDER BY datetime(n.updatedAt) DESC
     `).all() as NoteRecordRow[];
 
     return rows.map((row) => ({
@@ -1129,15 +1133,17 @@ export class DatabaseService {
       assignedId: row.assignedId,
       previewBlockCache: row.previewBlockCache,
       chapterOnly: Boolean(row.chapterOnly),
+      chapterParentId: row.chapterParentId,
     }));
   }
 
   getNoteRecord(noteId: string): NoteRecord | null {
     const db = this.requireDb();
     const row = db.prepare(`
-      SELECT id, title, filePath, createdAt, updatedAt, contentChecksum, isTemp, externalPath, hasUnsavedChanges, syncMode, assignedId, previewBlockCache, chapterOnly
-      FROM notes
-      WHERE id = ?
+      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, c.parentNoteId AS chapterParentId
+      FROM notes n
+      LEFT JOIN chapters c ON c.chapterNoteId = n.id
+      WHERE n.id = ?
       LIMIT 1
     `).get(noteId) as NoteRecordRow | undefined;
 
@@ -1159,6 +1165,7 @@ export class DatabaseService {
       assignedId: row.assignedId,
       previewBlockCache: row.previewBlockCache,
       chapterOnly: Boolean(row.chapterOnly),
+      chapterParentId: row.chapterParentId,
     };
   }
 
@@ -1422,7 +1429,14 @@ export class DatabaseService {
     return rows;
   }
 
-  /** Appends `chapterNoteId` as the new last chapter of `parentNoteId`. Used both for a brand-new empty chapter note (createChapterNote) and for attaching an existing note as a chapter (dragged in from the sidebar) -- either way this is the sole place a `chapters` row is inserted. */
+  /** The single note this chapter belongs to, or null if `chapterNoteId` isn't currently anyone's chapter. */
+  getChapterParent(chapterNoteId: string): string | null {
+    const db = this.requireDb();
+    const row = db.prepare('SELECT parentNoteId FROM chapters WHERE chapterNoteId = ?').get(chapterNoteId) as { parentNoteId: string } | undefined;
+    return row?.parentNoteId ?? null;
+  }
+
+  /** Appends `chapterNoteId` as the new last chapter of `parentNoteId`. Used both for a brand-new empty chapter note (createChapterNote) and for a note cloned from a dragged-in note (cloneNoteAsChapter) -- either way this is the sole place a `chapters` row is inserted. Throws if `chapterNoteId` already belongs to a (any) parent -- see idx_chapters_chapterNoteId_unique. */
   addChapter(parentNoteId: string, chapterNoteId: string): ChapterEntry[] {
     const db = this.requireDb();
     const { maxPosition } = db.prepare('SELECT MAX(position) AS maxPosition FROM chapters WHERE parentNoteId = ?').get(parentNoteId) as { maxPosition: number | null };
@@ -1538,10 +1552,21 @@ export class DatabaseService {
     };
   }
 
+  /** Permanently deletes a note. If it's a parent, its chapters cascade-delete with it -- chapters have no life outside their parent (see `chapters` table doc), so `ON DELETE CASCADE` alone isn't enough: it only removes the `chapters` join row, not the chapter's own `notes` row. One level only -- chapters can't have sub-chapters. */
   deleteNote(id: string): void {
     const db = this.requireDb();
-    db.prepare('DELETE FROM notes WHERE id = ?').run(id);
-    db.prepare('DELETE FROM notes_fts WHERE noteId = ?').run(id);
+    const chapterNoteIds = (db.prepare('SELECT chapterNoteId FROM chapters WHERE parentNoteId = ?').all(id) as Array<{ chapterNoteId: string }>)
+      .map((row) => row.chapterNoteId);
+
+    const tx = db.transaction(() => {
+      for (const chapterNoteId of chapterNoteIds) {
+        db.prepare('DELETE FROM notes WHERE id = ?').run(chapterNoteId);
+        db.prepare('DELETE FROM notes_fts WHERE noteId = ?').run(chapterNoteId);
+      }
+      db.prepare('DELETE FROM notes WHERE id = ?').run(id);
+      db.prepare('DELETE FROM notes_fts WHERE noteId = ?').run(id);
+    });
+    tx();
   }
 
   getNoteTags(noteId: string): string[] {
@@ -3086,11 +3111,11 @@ export class DatabaseService {
 
       CREATE INDEX IF NOT EXISTS idx_note_tabs_section_position ON note_tabs(sectionId, position);
 
-      -- Deliberately no UNIQUE on chapterNoteId alone: a note can be a
-      -- chapter of any number of other notes (e.g. a shared reference card
-      -- appended as the final chapter of several unrelated notes). Only the
-      -- (parentNoteId, chapterNoteId) pair is unique -- the same note can't
-      -- be added as a chapter of the same parent twice.
+      -- A note can be a chapter of at most one parent, ever -- enforced by
+      -- idx_chapters_chapterNoteId_unique below (added via migration, since
+      -- ALTER TABLE can't add a UNIQUE constraint directly on an existing
+      -- table). The (parentNoteId, chapterNoteId) pair below is redundant
+      -- with that global constraint but harmless to keep.
       CREATE TABLE IF NOT EXISTS chapters (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
         parentNoteId  TEXT    NOT NULL,
@@ -3098,10 +3123,9 @@ export class DatabaseService {
         chapterNoteId TEXT    NOT NULL,
         -- User-assignable label ($noteid section chapterId link syntax,
         -- chapter-bar right-click) -- same normalization/dedup rules as
-        -- notes.assignedId, but scoped per parentNoteId instead of globally,
-        -- since the same chapter note can appear under several parents with
-        -- independent labels. Null until first assigned; displayed as the
-        -- chapter bar's placeholder ("...") until then.
+        -- notes.assignedId, but scoped per parentNoteId instead of globally.
+        -- Null until first assigned; displayed as the chapter bar's
+        -- placeholder ("...") until then.
         chapterId     TEXT,
         UNIQUE (parentNoteId, chapterNoteId),
         CHECK (parentNoteId != chapterNoteId),
@@ -3158,6 +3182,15 @@ export class DatabaseService {
     this.requireDb().exec(`
       CREATE INDEX IF NOT EXISTS idx_chapters_parent_chapterid ON chapters(parentNoteId, chapterId);
     `);
+    // One-time (but idempotent -- safe to re-run every startup) migration
+    // back to "a chapter belongs to at most one parent, ever", reverting the
+    // multi-parent experiment. Order matters: dedupe before the unique index,
+    // tag merge before the orphan purge (purge would otherwise silently drop
+    // tags along with truly-orphaned notes, which is fine, but merge first
+    // means only actually-orphaned notes lose anything).
+    this.migrateChaptersToSingleParent();
+    this.migrateChapterTagsToParent();
+    this.purgeParentlessChapters();
     this.ensureNoteSnapshotsColumn('anchorBlockIndex', 'INTEGER');
 
     // Notes are inserted (both on creation and on filesystem-sync upsert)
@@ -3218,6 +3251,71 @@ export class DatabaseService {
     }
 
     db.exec(`ALTER TABLE chapters ADD COLUMN ${columnName} ${columnDefinition}`);
+  }
+
+  /**
+   * Reverts the multi-parent chapter experiment: a chapter note can only
+   * ever belong to one parent. For any chapterNoteId still attached to more
+   * than one parent (left over from before this migration), keeps the
+   * oldest attachment (lowest `chapters.id`) and drops the rest, then adds a
+   * unique index enforcing this going forward. ALTER TABLE can't add a
+   * UNIQUE constraint to an existing table, hence the index rather than a
+   * rewritten CREATE TABLE.
+   */
+  private migrateChaptersToSingleParent(): void {
+    const db = this.requireDb();
+    db.exec(`
+      DELETE FROM chapters
+      WHERE id NOT IN (SELECT MIN(id) FROM chapters GROUP BY chapterNoteId);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_chapters_chapterNoteId_unique ON chapters(chapterNoteId);
+    `);
+  }
+
+  /**
+   * Chapters have no tag life of their own -- tags always belong to the
+   * parent note. Merges any tags still sitting on a `chapterOnly` note
+   * (leftover from before chapters stopped exposing their own tag bar) up
+   * onto that chapter's parent, then clears the chapter's own tag rows.
+   */
+  private migrateChapterTagsToParent(): void {
+    const db = this.requireDb();
+    const orphanTagRows = db.prepare(`
+      SELECT nt.noteId AS chapterNoteId, nt.tagId AS tagId, c.parentNoteId AS parentNoteId
+      FROM note_tags nt
+      JOIN notes n ON n.id = nt.noteId AND n.chapterOnly = 1
+      JOIN chapters c ON c.chapterNoteId = nt.noteId
+    `).all() as Array<{ chapterNoteId: string; tagId: number; parentNoteId: string }>;
+
+    if (orphanTagRows.length === 0) return;
+
+    const insertOntoParentStmt = db.prepare(`
+      INSERT OR IGNORE INTO note_tags (noteId, tagId, position)
+      VALUES (?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM note_tags WHERE noteId = ?))
+    `);
+    const clearChapterTagsStmt = db.prepare('DELETE FROM note_tags WHERE noteId = ?');
+
+    const tx = db.transaction(() => {
+      const chapterIdsToClear = new Set<string>();
+      for (const row of orphanTagRows) {
+        chapterIdsToClear.add(row.chapterNoteId);
+        insertOntoParentStmt.run(row.parentNoteId, row.tagId, row.parentNoteId);
+      }
+      for (const chapterNoteId of chapterIdsToClear) {
+        clearChapterTagsStmt.run(chapterNoteId);
+      }
+    });
+    tx();
+  }
+
+  /** A `chapterOnly` note with no `chapters` row at all can't be reached from anywhere -- it isn't shown in any menu view, and it isn't anyone's chapter. Cleans up leftovers from prior states/bugs rather than leaving them permanently invisible. */
+  private purgeParentlessChapters(): void {
+    const db = this.requireDb();
+    db.exec(`
+      DELETE FROM notes_fts WHERE noteId IN (
+        SELECT id FROM notes WHERE chapterOnly = 1 AND id NOT IN (SELECT chapterNoteId FROM chapters)
+      );
+      DELETE FROM notes WHERE chapterOnly = 1 AND id NOT IN (SELECT chapterNoteId FROM chapters);
+    `);
   }
 
   private ensureProtectedTags(): void {

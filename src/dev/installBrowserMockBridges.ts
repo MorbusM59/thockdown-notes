@@ -97,6 +97,7 @@ function normalizeDocument(note: NoteDocument): NoteDocument {
     sizeBytes: text.length,
     text,
     chapterOnly: Boolean(note.chapterOnly),
+    chapterParentId: note.chapterParentId ?? null,
   }
 }
 
@@ -111,6 +112,7 @@ function toSummary(note: NoteDocument): NoteSummary {
     sizeBytes: note.sizeBytes,
     assignedId: note.assignedId ?? null,
     chapterOnly: Boolean(note.chapterOnly),
+    chapterParentId: note.chapterParentId ?? null,
     // The real app derives this from the on-disk file minus any legacy
     // metadata header (readSummary in noteLifecycleService.ts); the mock has
     // no such header, so the live text itself already is the content text.
@@ -394,6 +396,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
           sizeBytes: 0,
           text,
           chapterOnly: false,
+          chapterParentId: null,
         })
         store.notes.push(created)
         return clone(created)
@@ -533,11 +536,20 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
 
     async deleteNote(input: DeleteNoteInput): Promise<void> {
       mutate((store) => {
-        store.notes = store.notes.filter((note) => note.id !== input.id)
-        if (store.appState.selectedNoteId === input.id) {
+        // Chapters have no life outside their parent -- deleting a parent
+        // note deletes its chapters with it (one level only; chapters can't
+        // have sub-chapters). Mirrors databaseService.ts's deleteNote.
+        const chapterNoteIds = store.chapters
+          .filter((chapter) => chapter.parentNoteId === input.id)
+          .map((chapter) => chapter.chapterNoteId)
+        const idsToDelete = new Set([input.id, ...chapterNoteIds])
+
+        store.notes = store.notes.filter((note) => !idsToDelete.has(note.id))
+        store.chapters = store.chapters.filter((chapter) => !idsToDelete.has(chapter.parentNoteId) && !idsToDelete.has(chapter.chapterNoteId))
+        if (store.appState.selectedNoteId && idsToDelete.has(store.appState.selectedNoteId)) {
           store.appState.selectedNoteId = null
         }
-        store.noteTabs = store.noteTabs.filter((tab) => tab.noteId !== input.id)
+        store.noteTabs = store.noteTabs.filter((tab) => !idsToDelete.has(tab.noteId))
       })
     },
 
@@ -988,6 +1000,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           sizeBytes: 0,
           text: '',
           chapterOnly: true,
+          chapterParentId: parentNoteId,
         })
         store.notes.push(created)
 
@@ -1000,17 +1013,41 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
       })
     },
 
-    async addExistingChapter(parentNoteId: string, chapterNoteId: string): Promise<ChapterEntry[]> {
+    // Dragging a note onto a chapter bar: clones its content into a brand-new
+    // chapterOnly note appended as parentNoteId's last chapter. The dragged
+    // note itself is never touched or linked -- a note can be a chapter of at
+    // most one parent, ever, and only already-chapterOnly notes can be
+    // chapters, so a regular note's content can only ever reach a chapter bar
+    // by being copied, never by being attached directly.
+    async cloneNoteAsChapter(parentNoteId: string, sourceNoteId: string): Promise<{ chapters: ChapterEntry[]; created: NoteDocument }> {
       return mutate((store) => {
-        if (parentNoteId === chapterNoteId) return sorted(store, parentNoteId)
-        if (store.chapters.some((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === chapterNoteId)) {
-          return sorted(store, parentNoteId)
+        const source = store.notes.find((note) => note.id === sourceNoteId)
+        if (!source || source.chapterOnly || sourceNoteId === parentNoteId) {
+          throw new Error(`Cannot clone note ${sourceNoteId} as a chapter of ${parentNoteId}`)
         }
+
+        const now = Date.now()
+        const id = createId()
+        const created: NoteDocument = normalizeDocument({
+          id,
+          fileName: `${id}.md`,
+          title: source.title,
+          tags: [],
+          createdAtMs: now,
+          updatedAtMs: now,
+          sizeBytes: source.text.length,
+          text: source.text,
+          chapterOnly: true,
+          chapterParentId: parentNoteId,
+        })
+        store.notes.push(created)
+
         const maxPosition = store.chapters
           .filter((chapter) => chapter.parentNoteId === parentNoteId)
           .reduce((max, chapter) => Math.max(max, chapter.position), -1)
-        store.chapters.push({ parentNoteId, chapterNoteId, position: maxPosition + 1, chapterId: null })
-        return sorted(store, parentNoteId)
+        store.chapters.push({ parentNoteId, chapterNoteId: id, position: maxPosition + 1, chapterId: null })
+
+        return { chapters: sorted(store, parentNoteId), created: clone(created) }
       })
     },
 
@@ -1070,6 +1107,8 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
                 ? { ...chapter, position: chapter.position - 1 }
                 : chapter
             ))
+          const note = store.notes.find((entry) => entry.id === chapterNoteId)
+          if (note) note.chapterParentId = null
         }
         return sorted(store, parentNoteId)
       })
