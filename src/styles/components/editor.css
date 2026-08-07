@@ -45,15 +45,43 @@
   pointer-events: auto;
 }
 
+/* The whole chapter-panel row: a left mini icon button (collapse the
+   current chapter into the previous one), the boxed tab strip, then a right
+   mini icon button (cut the current selection into a new chapter) -- same
+   flanking-buttons shape as the regular tab bar's own
+   tagbar-toggle/section-create-toggle around .tab-mode-shell. */
+.chapter-bar-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-regular);
+  width: 100%;
+  height: var(--chapter-panel-content-height);
+  padding: 0 var(--spacing-regular);
+}
+
+/* The visible tab-strip container -- deliberately the same box treatment as
+   .tab-mode-shell (tags.css), so the chapter bar reads as "the same kind of
+   thing" as the regular tab bar, just one row down. */
+.chapter-tab-mode-shell {
+  background:     var(--color-input-backdrop);
+  border:         1px solid var(--color-border-light-70);
+  box-shadow:     var(--box-shadow-inverted);
+  border-radius:  var(--border-radius-regular);
+  padding:        calc(var(--spacing-regular) - 2px);
+  flex:           1 1 auto;
+  min-width:      0;
+  height:         100%;
+  -webkit-app-region: no-drag;
+}
+
 /* Fade mask + horizontal scroll: identical technique to .tabbar-tabs-scroll-shell
    (tags.css) -- same --tab-fade-left-w/--tab-fade-right-w registered custom
    properties, so the fade transitions smoothly there too. */
 .chapter-bar-scroll-shell {
   position:  relative;
   width:     100%;
-  height:    var(--chapter-panel-content-height);
+  height:    100%;
   overflow:  hidden;
-  padding:   0 var(--spacing-regular);
   -webkit-mask-image: linear-gradient(
     to right,
     transparent 0,
@@ -86,7 +114,6 @@
 }
 
 .chapter-bar-display {
-  padding:     1px;
   display:     flex;
   flex-wrap:   nowrap;
   align-items: center;
@@ -105,8 +132,8 @@
 }
 
 /* Chapter tabs get a wider, uniform width (long ids need more room than a
-   note tab's assigned id) -- the parent tab and the "+" button keep their
-   normal .note-tab-pill / .btn-icon sizing. */
+   note tab's assigned id) -- the parent tab keeps its normal .note-tab-pill
+   sizing. */
 .note-tab-pill.chapter-pill {
   flex:  0 0 120px;
   width: 120px;
@@ -120,7 +147,11 @@
   letter-spacing: 0.1em;
 }
 
-.chapter-add-button {
+/* Left/right flanking mini buttons -- same sizing convention as
+   .tagbar-toggle/.section-create-toggle (tags.css): square, sized to the
+   row's own height. */
+.chapter-collapse-button,
+.chapter-extract-button {
   flex: 0 0 auto;
   height: 100%;
   aspect-ratio: 1;
@@ -313,6 +344,13 @@
   max-width: var(--editor-scrollbar-slot-width);
   margin:    0 0 var(--bottom-utility-bar-height);
   position:  relative;
+}
+
+/* Matches .editor-shell.chapter-panel-is-open's own bottom margin bump --
+   without this, the scroll track's hit-region still extends down over the
+   now-visible chapter panel and swallows clicks on its buttons/tabs. */
+.editor-scrollbar-slot.chapter-panel-is-open {
+  margin: 0 0 calc(var(--bottom-utility-bar-height) + var(--chapter-panel-height));
 }
 
 .editor-scrollbar-slot-inner {

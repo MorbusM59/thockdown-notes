@@ -55,7 +55,8 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'handleNavigateSnapshot' | 'handleBranchOpened' | 'handleBranchError' | 'timelineCurveConstant' | 'setTimelineCurveConstant'
   | 'setTimelineTrackLengthPx' | 'handleCreateManualSnapshot' | 'handleReturnToPresent' | 'handleMergeAdjacentSnapshots'
   | 'scrollbarHostEl' | 'setScrollbarHostEl' | 'notes' | 'menuIdentityNoteId' | 'chapters' | 'onParentTabClick' | 'onCreateChapter' | 'onChapterClick'
-  | 'editingChapterNoteId' | 'chapterIdDraft' | 'setChapterIdDraft' | 'onStartEditingChapterId' | 'onCommitChapterIdEdit' | 'onCancelChapterIdEdit'> {
+  | 'editingChapterNoteId' | 'chapterIdDraft' | 'setChapterIdDraft' | 'onStartEditingChapterId' | 'onCommitChapterIdEdit' | 'onCancelChapterIdEdit'
+  | 'onCollapseChapterIntoPrevious' | 'onExtractSelectionToChapter'> {
   sectionId: string
   markSectionActive: (sectionId: string) => void
   isSidebarVisible: boolean
@@ -281,6 +282,23 @@ export function EditorSection({
   /** See useEditorSectionMount's doc comment on this ref: distinguishes a hibernated live section from a genuine Time Machine browse, both of which drive previewedSnapshotId. */
   const isFrozenSectionPreviewRef = useRef(false)
   const { editorSelection, setEditorSelection, latestEditorSelectionRef } = useDisplayedNoteSelection(sectionId)
+  // Moved ahead of useNoteChapters (which needs it to read the live
+  // selection text for the extract-into-chapter action) from its original
+  // spot further down, alongside the rest of useNoteSnapshotTimeline's
+  // inputs -- kept here since it only depends on values already available
+  // this early (activeNoteText/editorTextVersion/latestEditorTextRef).
+  const currentEditorText = useMemo(() => {
+    // latestEditorTextRef, once populated, is always already canonical (it's
+    // set directly from ContractBridgePlugin's canonical event.text) -- only
+    // the activeNoteText fallback (used before the ref is first populated,
+    // e.g. right after a note switch) still needs normalizing here.
+    const latest = latestEditorTextRef.current
+    return latest ? latest : normalizeInternalText(activeNoteText)
+    // editorTextVersion isn't read here -- it's a version counter bumped
+    // alongside every latestEditorTextRef mutation, the only signal that
+    // tells this memo to recompute (ref writes aren't reactive on their own).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeNoteText, editorTextVersion, latestEditorTextRef])
   const [isCaretSuspended, setIsCaretSuspended] = useState(false)
   // Owned here so useNoteSaveQueue (which must be declared earlier) and
   // useEditorSectionMount share the same preview-block split cache.
@@ -722,6 +740,8 @@ export function EditorSection({
     handleCreateChapter,
     handleChapterClick,
     handleAttachExistingChapter,
+    handleExtractSelectionToChapter,
+    handleCollapseChapterIntoPrevious,
     editingChapterNoteId,
     chapterIdDraft,
     setChapterIdDraft,
@@ -734,6 +754,10 @@ export function EditorSection({
     persistenceReady,
     activateNote,
     refreshNotes,
+    currentEditorText,
+    editorSelection,
+    applyProgrammaticEditorText,
+    flushPendingSaveNow,
   })
 
   // Clicking the chapter bar's parent tab returns to the parent's own
@@ -811,19 +835,6 @@ export function EditorSection({
     return activeNoteSummary?.tags.some((tag) => tag.trim().toLowerCase() === 'debug') ?? false
   }, [activeNoteSummary])
   activeNoteHasDebugTagRef.current = activeNoteHasDebugTag
-
-  const currentEditorText = useMemo(() => {
-    // latestEditorTextRef, once populated, is always already canonical (it's
-    // set directly from ContractBridgePlugin's canonical event.text) -- only
-    // the activeNoteText fallback (used before the ref is first populated,
-    // e.g. right after a note switch) still needs normalizing here.
-    const latest = latestEditorTextRef.current
-    return latest ? latest : normalizeInternalText(activeNoteText)
-    // editorTextVersion isn't read here -- it's a version counter bumped
-    // alongside every latestEditorTextRef mutation, the only signal that
-    // tells this memo to recompute (ref writes aren't reactive on their own).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeNoteText, editorTextVersion, latestEditorTextRef])
 
   const {
     noteSnapshots,
@@ -1464,6 +1475,8 @@ export function EditorSection({
         onStartEditingChapterId={startEditingChapterId}
         onCommitChapterIdEdit={commitChapterIdEdit}
         onCancelChapterIdEdit={cancelChapterIdEdit}
+        onCollapseChapterIntoPrevious={handleCollapseChapterIntoPrevious}
+        onExtractSelectionToChapter={handleExtractSelectionToChapter}
       />
     </div>
   )
