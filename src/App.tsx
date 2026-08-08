@@ -139,8 +139,6 @@ import {
   getRenderScrollTotalTimeSec,
   getRenderScrollMaxSpeedPxPerSec,
   getRenderScrollSkew,
-  RENDER_SCROLL_SKEW_MIN,
-  RENDER_SCROLL_SKEW_MAX,
   setRenderScrollDynamic as applyRenderScrollDynamic,
   setRenderScrollTotalTimeSec as applyRenderScrollTotalTimeSec,
   setRenderScrollMaxSpeedPxPerSec as applyRenderScrollMaxSpeedPxPerSec,
@@ -864,18 +862,6 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
   const source = toRecord(loadout)
   const normalizedTextureMaterials = cloneTextureMaterials(source.textureMaterials as Partial<TextureMaterialsBySurface> | null | undefined)
   const normalizedHighlightColors = normalizeLoadoutHighlightColors(source.highlightColors)
-  const normalizedRenderScrollDynamic = roundForSignature(
-    clamp(
-      toFiniteNumber(
-        source.renderScrollDynamic,
-        deriveRenderScrollDynamicFromResponsiveness(
-          toFiniteNumber(source.renderScrollResponsiveness, getRenderScrollResponsiveness()),
-        ),
-      ),
-      0.1,
-      5,
-    ),
-  )
 
   const darkMode = source.darkMode === 'none' || source.darkMode === 'mono' || source.darkMode === 'red' || source.darkMode === 'dusk' || source.darkMode === 'neon' || source.darkMode === 'matrix'
     ? source.darkMode
@@ -902,11 +888,6 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
       BOX_SHADOW_ALPHA_PERCENT_MIN,
       BOX_SHADOW_ALPHA_PERCENT_MAX,
     ),
-    renderScrollDynamic: normalizedRenderScrollDynamic,
-    renderScrollResponsiveness: roundForSignature(deriveRenderScrollResponsivenessFromDynamic(normalizedRenderScrollDynamic)),
-    renderScrollTotalTimeSec: roundForSignature(clamp(toFiniteNumber(source.renderScrollTotalTimeSec, getRenderScrollTotalTimeSec()), 0, 2)),
-    renderScrollMaxSpeedPxPerSec: Math.round(clamp(toFiniteNumber(source.renderScrollMaxSpeedPxPerSec, getRenderScrollMaxSpeedPxPerSec()), 1000, 100000)),
-    renderScrollSkew: roundForSignature(clamp(toFiniteNumber(source.renderScrollSkew, getRenderScrollSkew()), RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX)),
     audioKeyVolume: clamp(toFiniteNumber(source.audioKeyVolume, 1), 0, 1),
     audioKeyVariance: clamp(toFiniteNumber(source.audioKeyVariance, 0), 0, 0.5),
     audioPitch: clamp(toFiniteNumber(source.audioPitch, 0), -100, 100),
@@ -2418,11 +2399,6 @@ function App() {
       pitchJitterAmount,
       typingSoundEnabled,
       typingSoundSet,
-      renderScrollDynamic,
-      renderScrollResponsiveness,
-      renderScrollTotalTimeSec,
-      renderScrollMaxSpeedPxPerSec,
-      renderScrollSkew,
       glaze: glazeSettings,
       darkMode,
       filterInvert,
@@ -2498,11 +2474,6 @@ function App() {
     filterContrast,
     filterSaturate,
     filterColorize,
-    renderScrollDynamic,
-    renderScrollResponsiveness,
-    renderScrollTotalTimeSec,
-    renderScrollMaxSpeedPxPerSec,
-    renderScrollSkew,
     audioKeyVolume,
     audioKeyVariance,
     audioPitch,
@@ -2566,10 +2537,6 @@ function App() {
         BOX_SHADOW_ALPHA_PERCENT_MAX,
       ),
     )
-    setRenderScrollDynamic(clamp(loadout.renderScrollDynamic, 0.1, 5))
-    setRenderScrollTotalTimeSec(clamp(loadout.renderScrollTotalTimeSec, 0, 2))
-    setRenderScrollMaxSpeedPxPerSec(clamp(loadout.renderScrollMaxSpeedPxPerSec, 1000, 100000))
-    setRenderScrollSkew(clamp(loadout.renderScrollSkew, RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX))
     setAudioKeyVolume(clamp(loadout.audioKeyVolume, 0, 1))
     setAudioKeyVariance(clamp(loadout.audioKeyVariance, 0, 0.5))
     setAudioPitch(clamp(loadout.audioPitch, -100, 100))

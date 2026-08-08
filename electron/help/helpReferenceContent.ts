@@ -685,6 +685,7 @@ Every feature in the app, described individually: where to find it, what it does
 *Tunes the custom easing curve used for preview-mode scroll animations.*
 
 - Controls for ramp, speed, maximum speed, and overall curve shape. Response is auto-derived from ramp.
+- These settings aren't part of a layout — they stay as you left them across layout switches and app restarts, the same way the custom cursor toggle does.
 
 ### [Mouse Options](#mouse-options)
 

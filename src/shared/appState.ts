@@ -75,6 +75,9 @@ export interface PersistedMenuState {
   scrollDistanceTimeInfluence?: number;
   scrollBaseDistanceRows?: number;
   scrollMaxDurationMultiplier?: number;
+  // Scroll curve tuning (Options > Scrolling Behavior). Deliberately NOT part
+  // of UiLayoutLoadout -- it must persist across layout switches rather than
+  // being reset to whatever layout last had stored. See loadouts.ts.
   renderScrollDynamic?: number;
   renderScrollResponsiveness?: number;
   renderScrollTotalTimeSec?: number;

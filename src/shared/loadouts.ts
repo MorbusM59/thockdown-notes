@@ -28,11 +28,10 @@ export type UiLayoutLoadout = {
   pitchJitterAmount: number;
   typingSoundEnabled: boolean;
   typingSoundSet: 'A' | 'B' | 'C' | 'D';
-  renderScrollDynamic: number;
-  renderScrollResponsiveness: number;
-  renderScrollTotalTimeSec: number;
-  renderScrollMaxSpeedPxPerSec: number;
-  renderScrollSkew: number;
+  // Scroll curve tuning (Options > Scrolling Behavior) is deliberately NOT
+  // here -- it lives in PersistedMenuState instead so it persists across
+  // layout switches independent of whichever layout is active. See
+  // appState.ts's renderScrollDynamic and friends.
   glaze: GlazeSettings;
   darkMode: 'none' | 'mono' | 'red' | 'dusk' | 'neon' | 'matrix';
   filterInvert: number;

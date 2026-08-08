@@ -1947,7 +1947,7 @@ export function SidebarOptionsPanel({
             value={renderScrollDynamic}
             trackLabel="ramp"
             ariaLabel="Curve dynamic parameter a"
-            defaultValue={4}
+            defaultValue={5 / 3}
             onCommit={(value) => setRenderScrollDynamic(clamp(value, 0.1, 5))}
           />
           <CompactScrollbarSlider
