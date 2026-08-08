@@ -5,6 +5,7 @@ import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent 
 import ReactMarkdown from 'react-markdown'
 import { SidebarOptionsPanel } from './sidebar/SidebarOptionsPanel'
 import { AudioControls } from './components/AudioControls'
+import MouseCursorOverlay from './components/MouseCursorOverlay'
 import './App.css'
 import { buildExportCss, type ExportViewStyle } from './exportStyles'
 import {
@@ -7227,7 +7228,12 @@ ${markdownHtml}
   }, [syncSidebarTexture, sidebarMode, isSidebarScrollbarMode])
 
   return (
-    <div className="app-root" style={appRootStyle} onDragOver={handleAppDragOver} onDrop={handleAppDrop}>
+    <div
+      className={`app-root${customCursorSettings.enabled ? ' hide-native-cursor' : ''}`}
+      style={appRootStyle}
+      onDragOver={handleAppDragOver}
+      onDrop={handleAppDrop}
+    >
       {bootstrapError ? (
         <div
           role="alert"
@@ -8096,7 +8102,6 @@ ${markdownHtml}
                   spellCheckEditEnabled={spellCheckEditEnabled}
                   spellCheckRenderEnabled={spellCheckRenderEnabled}
                   highlightSearchColor={highlightColors.search}
-                  customCursorSettings={customCursorSettings}
                 />
                 </div>
               </Fragment>
@@ -8145,6 +8150,12 @@ ${markdownHtml}
           />
         )}
       </div>
+      {/* Mounted once, app-wide -- not scoped to the editor. See that
+          component's own doc comment for why it's a sibling of
+          .app-saturate-wrapper (not nested inside it) and how it tracks the
+          pointer/hides the native cursor across the whole app instead of
+          just one part of it. */}
+      {customCursorSettings.enabled ? <MouseCursorOverlay settings={customCursorSettings} /> : null}
     </div>
   )
 }

@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react'
-import type { MutableRefObject } from 'react'
 import { parseCssColorToRgba, type RgbaColor } from '../shared/colorMath'
 import type { CustomCursorSettings } from '../shared/cursorSettings'
 import {
@@ -13,9 +12,8 @@ import {
 } from '../editor/CursorClickCurve'
 
 export interface MouseCursorOverlayProps {
-  stageRef: MutableRefObject<HTMLDivElement | null>
   settings: CustomCursorSettings
-  /** Not the same as settings.trailFadeMs (a per-trail-particle decay time) -- this is how long the *whole overlay* takes to fade out after the pointer leaves the stage entirely. Not exposed in the options UI. */
+  /** Not the same as settings.trailFadeMs (a per-trail-particle decay time) -- this is how long the *whole overlay* takes to fade out after the pointer leaves the window entirely. Not exposed in the options UI. */
   fadeMs?: number
 }
 
@@ -26,20 +24,30 @@ function resolveRgba(color: string): RgbaColor {
 }
 
 /**
- * Rendered by SectionEditorArea as a plain JSX child of `.editor-stage`
- * (a sibling of the edit/preview panes, painting over both via that
- * element's own `.editor-stage > *` z-index rule) -- not a `document.body`
- * portal. The previous version detached its canvas to `document.body` with
- * manual `position: fixed` + window scroll/resize tracking to fake what
- * `.editor-stage`'s own `position: relative`/`overflow: hidden` already
- * gives it for free, and hid the native cursor by calling
- * `stageEl.classList.add('hide-native-cursor')` directly on a DOM node
- * whose `className` is a React-owned template string in SectionEditorArea
- * -- every re-render of that component (i.e. every keystroke) reset
- * `className` back to its own computed value, silently dropping the class
- * again. The class is now baked into that template string instead (see
- * SectionEditorArea.tsx), so this component never touches another
- * component's DOM node.
+ * Mounted once, as the last child of `.app-root` (see App.tsx) -- deliberately
+ * a sibling of `.app-saturate-wrapper`, not nested inside it, because that
+ * wrapper conditionally applies a CSS `filter` (see appOuterStyle) whenever
+ * any filter slider is active, and `filter` on an ancestor turns this
+ * canvas's `position: fixed` into "fixed relative to that ancestor" instead
+ * of the true viewport (same containing-block rule as `transform`). `.app-root`
+ * itself sets neither, so mounting there keeps `position: fixed; inset: 0`
+ * always meaning the real window viewport, with a z-index high enough to
+ * paint over literally everything else in the app (see mouse-cursor-overlay-
+ * canvas's own CSS) -- covering the whole app surface, not just the editor,
+ * is the whole point: this used to be scoped to `.editor-stage` and require
+ * `stageRef`-based DOM listeners/geometry, but a canvas that tracks the
+ * pointer has no reason to be scoped to any one part of the app; the pointer
+ * moves everywhere. Native cursor hiding (`.hide-native-cursor`, CSS) is
+ * likewise now applied to `.app-root` itself instead of just the editor
+ * stage -- see App.tsx and editor.css.
+ *
+ * Tracking is window/document-level (capture phase, so a component calling
+ * stopPropagation on a click/move -- dropdowns, modals -- can't cause the
+ * cursor to silently stop updating), not scoped to any element: a
+ * `pointer-events: auto` full-viewport element sitting on top of the whole
+ * app would swallow every click before it ever reaches the real UI
+ * underneath, which is why this canvas stays `pointer-events: none` and
+ * pointer state comes from `window`/`document` listeners instead.
  *
  * Visual model: `dotCount` dots orbit the cursor position at `spinHz`
  * revolutions/sec, evenly spaced (nth complex roots of unity), each one
@@ -57,12 +65,12 @@ function resolveRgba(color: string): RgbaColor {
  * as if it were always positive), and reversal is applied once at the very
  * end by mirroring the entire finished frame left-right about the cursor's
  * own center -- see the `reverseSpin` block in draw(). The rAF loop only
- * runs while the pointer is actually over the stage or fading out
+ * runs while the pointer is actually within the window or fading out
  * afterwards (`fadeMs`), not continuously for the component's whole
  * lifetime.
  *
- * Click response: mousedown (left = tighten, right = widen) inside the
- * stage drives a shared "intent" axis (clickAxisRef) that is NOT a
+ * Click response: mousedown (left = tighten, right = widen) anywhere in the
+ * app drives a shared "intent" axis (clickAxisRef) that is NOT a
  * position -- like a scroll animation's current speed rather than its
  * resulting scrollTop, it always returns to exactly 0 once the gesture
  * settles. Every press is handled identically regardless of how long the
@@ -81,19 +89,17 @@ function resolveRgba(color: string): RgbaColor {
  * values themselves are never mutated by clicking.
  */
 export function MouseCursorOverlay({
-  stageRef,
   settings,
   fadeMs = 550,
 }: MouseCursorOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const posRef = useRef<{ x: number; y: number } | null>(null)
-  const stageRectRef = useRef<DOMRect | null>(null)
   // Exact backing-buffer-to-CSS-box scale, not just `devicePixelRatio`: the
   // canvas's backing resolution is rounded to a whole pixel count, which can
   // shift the true scale by a fraction of a percent. Using that exact ratio
   // (rather than assuming it equals dpr) keeps the drawn cursor's center
   // pinned exactly under the real pointer position instead of drifting a
-  // sub-pixel further off at wider parts of the stage.
+  // sub-pixel further off at wider parts of the window.
   const scaleRef = useRef({ x: 1, y: 1 })
   const rafRef = useRef<number | null>(null)
   const activeSinceRef = useRef<number | null>(null)
@@ -117,9 +123,8 @@ export function MouseCursorOverlay({
   } = settings
 
   useEffect(() => {
-    const stageEl = stageRef.current
     const canvas = canvasRef.current
-    if (!stageEl || !canvas) return
+    if (!canvas) return
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return
@@ -150,15 +155,15 @@ export function MouseCursorOverlay({
     const clickDurationSec = resolveCursorClickDurationSec(clickSpeedX)
 
     function updateCanvasResolution() {
-      const rect = stageEl!.getBoundingClientRect()
-      stageRectRef.current = rect
-      const backingWidth = Math.max(1, Math.round(rect.width * dpr))
-      const backingHeight = Math.max(1, Math.round(rect.height * dpr))
+      const width = window.innerWidth
+      const height = window.innerHeight
+      const backingWidth = Math.max(1, Math.round(width * dpr))
+      const backingHeight = Math.max(1, Math.round(height * dpr))
       canvas!.width = backingWidth
       canvas!.height = backingHeight
       scaleRef.current = {
-        x: rect.width > 0 ? backingWidth / rect.width : dpr,
-        y: rect.height > 0 ? backingHeight / rect.height : dpr,
+        x: width > 0 ? backingWidth / width : dpr,
+        y: height > 0 ? backingHeight / height : dpr,
       }
     }
 
@@ -331,26 +336,26 @@ export function MouseCursorOverlay({
       rafRef.current = requestAnimationFrame(draw)
     }
 
+    // Window/document-level, not scoped to any element -- see the component
+    // doc comment. First move after a fresh mount, or after the pointer had
+    // left the window, re-activates (resets phase/fade) same as the old
+    // per-element pointerenter used to.
     function handlePointerMove(event: PointerEvent) {
-      const rect = stageRectRef.current
-      if (!rect) return
-      posRef.current = { x: event.clientX - rect.left, y: event.clientY - rect.top }
+      posRef.current = { x: event.clientX, y: event.clientY }
+      if (activeSinceRef.current === null || leftAtRef.current !== null) {
+        activeSinceRef.current = performance.now()
+        lastFrameMsRef.current = null
+        leftAtRef.current = null
+      }
       ensureLoopRunning()
     }
 
-    function handlePointerEnter() {
-      activeSinceRef.current = performance.now()
-      leftAtRef.current = null
-      lastFrameMsRef.current = null
-      ensureLoopRunning()
-    }
-
-    function handlePointerLeave() {
+    function handleDocumentMouseLeave() {
       leftAtRef.current = performance.now()
       ensureLoopRunning()
     }
 
-    function handleStageMouseDown(event: MouseEvent) {
+    function handleWindowMouseDown(event: MouseEvent) {
       if (event.button !== 0 && event.button !== 2) return
       const direction: -1 | 1 = event.button === 0 ? -1 : 1
 
@@ -384,22 +389,22 @@ export function MouseCursorOverlay({
       beginRelease()
     }
 
-    stageEl.addEventListener('pointermove', handlePointerMove, { passive: true })
-    stageEl.addEventListener('pointerenter', handlePointerEnter)
-    stageEl.addEventListener('pointerleave', handlePointerLeave)
-    stageEl.addEventListener('mousedown', handleStageMouseDown)
-    window.addEventListener('mouseup', handleWindowMouseUp)
-
-    const resizeObserver = new ResizeObserver(updateCanvasResolution)
-    resizeObserver.observe(stageEl)
+    // capture: true throughout -- a component calling stopPropagation on a
+    // click or move (dropdowns, modals) fires during the bubble phase, so
+    // listening in the capture phase (which runs first, top-down) means
+    // the cursor keeps tracking regardless of what happens further down.
+    window.addEventListener('pointermove', handlePointerMove, { passive: true, capture: true })
+    document.addEventListener('mouseleave', handleDocumentMouseLeave)
+    window.addEventListener('mousedown', handleWindowMouseDown, { capture: true })
+    window.addEventListener('mouseup', handleWindowMouseUp, { capture: true })
+    window.addEventListener('resize', updateCanvasResolution)
 
     return () => {
-      stageEl.removeEventListener('pointermove', handlePointerMove)
-      stageEl.removeEventListener('pointerenter', handlePointerEnter)
-      stageEl.removeEventListener('pointerleave', handlePointerLeave)
-      stageEl.removeEventListener('mousedown', handleStageMouseDown)
-      window.removeEventListener('mouseup', handleWindowMouseUp)
-      resizeObserver.disconnect()
+      window.removeEventListener('pointermove', handlePointerMove, { capture: true })
+      document.removeEventListener('mouseleave', handleDocumentMouseLeave)
+      window.removeEventListener('mousedown', handleWindowMouseDown, { capture: true })
+      window.removeEventListener('mouseup', handleWindowMouseUp, { capture: true })
+      window.removeEventListener('resize', updateCanvasResolution)
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
       rafRef.current = null
       activeSinceRef.current = null
@@ -409,7 +414,7 @@ export function MouseCursorOverlay({
       clickReleaseRef.current = null
     }
   }, [
-    stageRef, radiusPx, trailThicknessPx, trailFadeMs, spinHz, fadeMs, dotCount, dotColor, centerColor, trailColor,
+    radiusPx, trailThicknessPx, trailFadeMs, spinHz, fadeMs, dotCount, dotColor, centerColor, trailColor,
     dotSizePx, centerSizePx, pulseMagnitude, pulseHz,
     clickRamp, clickSkew, clickSpeedX, clickMaxSpeed, clickMinHoldMs, clickBalance,
   ])

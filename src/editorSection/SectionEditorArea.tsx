@@ -8,8 +8,6 @@ import type { EditorAdapter, EditorBindings } from '../editor/EditorContract'
 import type { EditorRuntimeMetrics } from '../editor/EditorTypography'
 import type { UseNoteSnapshotsResult } from '../editor/useNoteSnapshots'
 import { resolvePreviewEdgePaddingPx } from '../exportStyles'
-import MouseCursorOverlay from '../components/MouseCursorOverlay'
-import type { CustomCursorSettings } from '../shared/cursorSettings'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { ChapterEntry } from '../shared/chapters'
 import { ChapterBar } from '../chapters/ChapterBar'
@@ -63,7 +61,6 @@ export interface SectionEditorAreaProps {
   handleCreateManualSnapshot: () => void | Promise<void>
   handleReturnToPresent: () => void
   handleMergeAdjacentSnapshots: () => void
-  customCursorSettings: CustomCursorSettings
   notes: NoteSummary[]
   /** The chapter-aware "menu identity" (see EditorSection.tsx's `menuIdentityNoteId`) -- the note the chapter bar shows chapters *of*, and its first tab. Non-null exactly when activeNoteId is. */
   menuIdentityNoteId: string | null
@@ -138,7 +135,6 @@ export function SectionEditorArea({
   handleCreateManualSnapshot,
   handleReturnToPresent,
   handleMergeAdjacentSnapshots,
-  customCursorSettings,
   notes,
   menuIdentityNoteId,
   chapters,
@@ -197,7 +193,7 @@ export function SectionEditorArea({
     >
       <main className={`editor-shell${isChapterPanelOpen ? ' chapter-panel-is-open' : ''}`}>
         <div className="editor-background">
-          <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}${activeNoteId && customCursorSettings.enabled ? ' hide-native-cursor' : ''}`}>
+          <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}`}>
             <div className={`edit-container${isPreviewMode ? ' is-pane-hidden' : ''}`}>
               <div className="markdown-editor-texture" />
               {activeNoteId ? (
@@ -243,19 +239,6 @@ export function SectionEditorArea({
                 {activeNoteId ? previewMarkdownElement : emptyState}
               </div>
             </div>
-            {/* Mouse cursor overlay: hides native cursor and paints animated arc. Only
-                mounted while there's a real note to edit and the feature is toggled on
-                (Options > Mouse options) -- hide-native-cursor above is gated the same
-                way, so the empty-state pane and the disabled case both keep the normal
-                arrow cursor. Uses sectionContainerRef, not editorStageRef -- the latter is one ref
-                shared across every section (see TODO.md), so it only ever points at
-                whichever section's stage mounted/updated last; every section's overlay
-                would end up attaching its pointer listeners to that one section's DOM
-                node instead of its own. sectionContainerRef is created fresh per
-                EditorSection instance and set to this same stage element. */}
-            {activeNoteId && customCursorSettings.enabled ? (
-              <MouseCursorOverlay stageRef={sectionContainerRef} settings={customCursorSettings} />
-            ) : null}
           </div>
         </div>
       </main>
