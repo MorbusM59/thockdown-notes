@@ -56,6 +56,7 @@ export function EditorToolbar({
   toggleChecklistList,
   toggleBlockquote,
   applyLink,
+  applyAnchor,
   applyInlineCode,
   applyCodeBlock,
   insertHorizontalRule,
@@ -199,7 +200,8 @@ export function EditorToolbar({
 
             <div className="toolbar-group">
               <button type="button" className="btn-icon" title="Horizontal rule" onClick={insertHorizontalRule} disabled={!activeNoteId}>—</button>
-              <button type="button" className="btn-icon" title="Link" onClick={applyLink} disabled={!activeNoteId}>🔗</button>
+              <button type="button" className="btn-icon" title="Link (Ctrl+L)" onClick={applyLink} disabled={!activeNoteId}><span className="fa-solid fa-link" aria-hidden="true" /></button>
+              <button type="button" className="btn-icon" title="Set anchor (Shift+Ctrl+L)" onClick={applyAnchor} disabled={!activeNoteId}><span className="fa-solid fa-anchor" aria-hidden="true" /></button>
             </div>
           </div>
         ) : <div className="markdown-toolbar" aria-label="Markdown toolbar"/>}

@@ -12,6 +12,25 @@ const TEXT_DECORATION_MARKERS: Record<TextDecorationFormat, { open: string; clos
   strikethrough: { open: '~~', close: '~~' },
 }
 
+/**
+ * Derives an anchor id from the selection applyAnchor is wrapping, e.g.
+ * "two words" -> "two-words". Lowercased, whitespace runs collapsed to a
+ * single `-`, and anything else stripped that would either break the `[label
+ * (#anchor-id)` syntax outright (parens, brackets, `#`) or just be visual
+ * noise in an id -- deliberately not deduped/disambiguated against existing
+ * anchors elsewhere in the document; that's left to the user, same as a
+ * manually-typed anchor id always has been.
+ */
+function slugifyAnchorId(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
 export interface UseMarkdownFormattingToolbarOptions {
   activeNoteId: string | null
   currentEditorText: string
@@ -24,6 +43,10 @@ export interface UseMarkdownFormattingToolbarOptions {
   buildToggleCurrentLineHeadingTransformRef: MutableRefObject<(text: string, selection: EditorSelectionState) => { text: string; selection: EditorSelectionState } | null>
   buildToggleBulletedListTransformRef: MutableRefObject<(text: string, selection: EditorSelectionState) => { text: string; selection: EditorSelectionState } | null>
   buildToggleNumberedListTransformRef: MutableRefObject<(text: string, selection: EditorSelectionState) => { text: string; selection: EditorSelectionState } | null>
+  /** Builds "Insert Link"'s prefilled target, read fresh on every call -- see App.tsx's `getLinkTargetPrefill` doc comment. Optional so this hook stays usable without it (falls back to the old literal `url` placeholder). */
+  getLinkTargetPrefill?: () => string
+  /** Fired with the freshly-generated anchor id whenever applyAnchor sets one, so the caller can remember where it lives for later link prefills. */
+  onAnchorCreated?: (anchorId: string) => void
 }
 
 export interface UseMarkdownFormattingToolbarResult {
@@ -43,6 +66,7 @@ export interface UseMarkdownFormattingToolbarResult {
   toggleChecklistList: () => void
   toggleBlockquote: () => void
   applyLink: () => void
+  applyAnchor: () => void
   applyInlineCode: () => void
   applyCodeBlock: () => void
   insertHorizontalRule: () => void
@@ -68,6 +92,8 @@ export function useMarkdownFormattingToolbar({
   buildToggleCurrentLineHeadingTransformRef,
   buildToggleBulletedListTransformRef,
   buildToggleNumberedListTransformRef,
+  getLinkTargetPrefill,
+  onAnchorCreated,
 }: UseMarkdownFormattingToolbarOptions): UseMarkdownFormattingToolbarResult {
   const lastHeadlineLevelRef = useRef<1 | 2 | 3 | 4 | 5 | 6>(1)
 
@@ -694,8 +720,28 @@ export function useMarkdownFormattingToolbar({
   }, [currentEditorText, resolveLineRange, resolveSelectionBounds, transformSelectedLines])
 
   const applyLink = useCallback(() => {
-    applyWrappedMarker('[', '](url)', 'link')
-  }, [applyWrappedMarker])
+    const target = getLinkTargetPrefill?.() ?? 'url'
+    applyWrappedMarker('[', `](${target})`, 'link')
+  }, [applyWrappedMarker, getLinkTargetPrefill])
+
+  const applyAnchor = useCallback(() => {
+    if (!activeNoteId) return
+    // Nothing selected to derive a label/anchor id from -- unlike applyLink,
+    // there's no sensible placeholder to fall back to here.
+    if (editorSelection.isCollapsed) return
+
+    const sourceText = currentEditorText
+    const { start, end } = resolveSelectionBounds(sourceText)
+    const selectedText = sourceText.slice(start, end)
+    const anchorId = slugifyAnchorId(selectedText)
+    if (!anchorId) return
+
+    const nextText = `${sourceText.slice(0, start)}[${selectedText}](#${anchorId})${sourceText.slice(end)}`
+    const nextStart = start + 1
+    const nextEnd = nextStart + selectedText.length
+    applyProgrammaticEditorText(nextText, nextStart, nextEnd)
+    onAnchorCreated?.(anchorId)
+  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, editorSelection, onAnchorCreated, resolveSelectionBounds])
 
   const applyInlineCode = useCallback(() => {
     applyWrappedMarker('`', '`', 'code')
@@ -735,6 +781,7 @@ export function useMarkdownFormattingToolbar({
     toggleChecklistList,
     toggleBlockquote,
     applyLink,
+    applyAnchor,
     applyInlineCode,
     applyCodeBlock,
     insertHorizontalRule,

@@ -165,13 +165,15 @@ Every feature in the app, described individually: where to find it, what it does
 ### [Defining an Anchor](#defining-an-anchor)
 
 > **Where?**
-> Typed directly into a note's text, anywhere, in either edit or preview source.
+> Typed directly into a note's text, anywhere, in either edit or preview source — or select some text and hit the anchor button (⚓, right behind the link button) or \`Shift+Ctrl+L\`.
 
 *Turns a heading or phrase into a jump target with \`[Anchor Text](#anchor-id)\` — a real link whose destination is never clicked.*
 
 - The bracketed part is the label — shown exactly as written, formatting and all. The \`#anchor-id\` part is just an internal handle: short, no spaces, and separate from the label.
+- The anchor button/shortcut needs an actual selection (not just a caret) — it wraps whatever's selected as the label and derives the id from it automatically: lowercased, spaces become hyphens, anything else stripped. Selecting "Two Words" and hitting it gives \`[Two Words](#two-words)\`. It doesn't check whether that id collides with another anchor already in the note — same as typing one by hand, that's on you to keep unambiguous.
 - Anchor ids only need to be unique within the note they're defined in.
 - Anchors work in both the current note and any note you link to; a link naming an anchor that doesn't actually exist in the target note simply does nothing when clicked, rather than partially navigating.
+- The app remembers the note/chapter and id of whichever anchor you most recently set this way (button or shortcut, anywhere in the app) for the rest of the session — see the link button's own prefill below.
 
 ### [Assigning a Note Id](#assigning-a-note-id)
 
@@ -187,7 +189,7 @@ Every feature in the app, described individually: where to find it, what it does
 ### [Linking to Notes and Anchors](#linking-to-notes-and-anchors)
 
 > **Where?**
-> Typed directly into a note's text, using standard Markdown link syntax \`[text](destination)\`.
+> Typed directly into a note's text, using standard Markdown link syntax \`[text](destination)\` — or select some text and hit the link button (🔗) or \`Ctrl+L\`.
 
 *One link syntax covers jumping within a note, to another note, or straight to a spot inside another note — the \`$\` always means "go somewhere," never "you are here."*
 
@@ -196,6 +198,7 @@ Every feature in the app, described individually: where to find it, what it does
 - \`[text]($NOTE-ID#anchor-id)\` — open another note and jump straight to one of its anchors.
 - A bare \`[text](#anchor-id)\` — no \`$\` — always means "define an anchor here," never a link; if you want to link, the \`$\` is required.
 - Opening a link to the note that's already active just scrolls to the anchor, without disrupting your place otherwise.
+- The link button/shortcut prefills the destination with the last anchor you set (button or shortcut, anywhere, this session) — \`$NOTE-ID§CHAPTER-ID#anchor-id\`, with each part left blank if that anchor wasn't set inside a chapter, or if nothing's been set yet this session. Wraps a selection as the link text the same way the other toolbar buttons do; with just a caret, it inserts \`[link](...)\` with "link" selected, ready to type over.
 
 ## Tags
 

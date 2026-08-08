@@ -4864,6 +4864,22 @@ ${markdownHtml}
     setNotes((previous) => previous.map((note) => (note.id === noteId ? { ...note, assignedId } : note)))
   }, [])
 
+  // Session-only memory (never persisted) of the last anchor set via the
+  // toolbar button or Shift+Ctrl+L, anywhere in the app -- not scoped to any
+  // one section or note, since the whole point is linking to it later from
+  // wherever. A plain ref, not state: only ever read imperatively at
+  // link-insertion time, never rendered.
+  const lastAnchorRef = useRef<{ noteId: string; chapterId: string; anchorId: string }>({ noteId: '', chapterId: '', anchorId: '' })
+
+  const recordLastAnchor = useCallback((payload: { noteId: string; chapterId: string; anchorId: string }) => {
+    lastAnchorRef.current = payload
+  }, [])
+
+  const getLinkTargetPrefill = useCallback(() => {
+    const { noteId, chapterId, anchorId } = lastAnchorRef.current
+    return `$${noteId}§${chapterId}#${anchorId}`
+  }, [])
+
   const handleViewModeButtonClick = useCallback((mode: SidebarMode) => {
     const section = getActiveSection()
     if (mode === 'trash' && section?.isTrashViewDeletePrimed) {
@@ -6958,6 +6974,16 @@ ${markdownHtml}
           return
         }
 
+        if (key === 'l') {
+          event.preventDefault()
+          if (event.shiftKey) {
+            activeSection.applyAnchor()
+          } else {
+            activeSection.applyLink()
+          }
+          return
+        }
+
         const isOrderedListShortcut = event.key === '#' || (event.shiftKey && event.key === '3')
         if (isOrderedListShortcut) {
           event.preventDefault()
@@ -7883,6 +7909,7 @@ ${markdownHtml}
               toggleChecklistList={activeSection?.toggleChecklistList ?? noop}
               toggleBlockquote={activeSection?.toggleBlockquote ?? noop}
               applyLink={activeSection?.applyLink ?? noop}
+              applyAnchor={activeSection?.applyAnchor ?? noop}
               applyInlineCode={activeSection?.applyInlineCode ?? noop}
               applyCodeBlock={activeSection?.applyCodeBlock ?? noop}
               insertHorizontalRule={activeSection?.insertHorizontalRule ?? noop}
@@ -7950,6 +7977,8 @@ ${markdownHtml}
                   refreshNotes={refreshNotes}
                   noteTransitionLockRef={noteTransitionLockRef}
                   updateNoteAssignedId={updateNoteAssignedId}
+                  recordLastAnchor={recordLastAnchor}
+                  getLinkTargetPrefill={getLinkTargetPrefill}
                   restoredTabBarMode={restoredTabBarMode}
                   tabBarModeRef={tabBarModeRef}
                   sidebarMode={sidebarMode}

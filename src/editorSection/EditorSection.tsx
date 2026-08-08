@@ -87,6 +87,10 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   refreshNotes: (preferredId?: string | null) => Promise<string | null>
   noteTransitionLockRef: MutableRefObject<boolean>
   updateNoteAssignedId: (noteId: string, assignedId: string) => void
+  /** Records the note/chapter this anchor lives in (as `$id`/`chapterId` labels, "" if unassigned) plus its own id, whenever an anchor is set anywhere in the app -- see App.tsx's `lastAnchorRef` doc comment. */
+  recordLastAnchor: (payload: { noteId: string; chapterId: string; anchorId: string }) => void
+  /** Builds the `$<noteid>§<chapterid>#<anchorid>` link target to prefill "Insert Link" with, from whatever `recordLastAnchor` last recorded (each part "" if nothing's been recorded yet this session). */
+  getLinkTargetPrefill: () => string
   restoredTabBarMode: 'tags' | 'tabs' | null
   tabBarModeRef: MutableRefObject<'tags' | 'tabs'>
 
@@ -161,6 +165,8 @@ export function EditorSection({
   refreshNotes,
   noteTransitionLockRef,
   updateNoteAssignedId,
+  recordLastAnchor,
+  getLinkTargetPrefill,
   restoredTabBarMode,
   tabBarModeRef,
   sidebarMode,
@@ -755,6 +761,21 @@ export function EditorSection({
     void activateNote(menuIdentityNoteId)
   }, [menuIdentityNoteId, activeNoteId, activateNote])
 
+  // Fires whenever useMarkdownFormattingToolbar's applyAnchor sets a new
+  // anchor -- records which note/chapter it lives in (as `$id`/`chapterId`
+  // labels, matching the $noteid§chapterid#anchorid link syntax) so
+  // "Insert Link" can prefill a working link to it later, from anywhere.
+  // `$noteid` is always the *parent's* label (menuIdentityNoteSummary,
+  // already resolved through chapterParentId when viewing a chapter);
+  // `chapterId` is only non-empty when the anchor itself was set inside a
+  // chapter, not the parent.
+  const handleAnchorCreated = useCallback((anchorId: string) => {
+    const isChapter = Boolean(activeNoteSummary?.chapterOnly)
+    const noteId = (isChapter ? menuIdentityNoteSummary?.assignedId : activeNoteSummary?.assignedId) ?? ''
+    const chapterId = isChapter ? (chapters.find((chapter) => chapter.chapterNoteId === activeNoteId)?.chapterId ?? '') : ''
+    recordLastAnchor({ noteId, chapterId, anchorId })
+  }, [activeNoteSummary, menuIdentityNoteSummary, chapters, activeNoteId, recordLastAnchor])
+
   useEffect(() => {
     tabBarModeRef.current = tabBarMode
   }, [tabBarMode, tabBarModeRef])
@@ -999,6 +1020,7 @@ export function EditorSection({
     toggleChecklistList,
     toggleBlockquote,
     applyLink,
+    applyAnchor,
     applyInlineCode,
     applyCodeBlock,
     insertHorizontalRule,
@@ -1013,6 +1035,8 @@ export function EditorSection({
     buildToggleCurrentLineHeadingTransformRef,
     buildToggleBulletedListTransformRef,
     buildToggleNumberedListTransformRef,
+    getLinkTargetPrefill,
+    onAnchorCreated: handleAnchorCreated,
   })
 
   const currentSectionHandle: SectionHandle = {
@@ -1133,6 +1157,7 @@ export function EditorSection({
     toggleChecklistList,
     toggleBlockquote,
     applyLink,
+    applyAnchor,
     applyInlineCode,
     applyCodeBlock,
     insertHorizontalRule,
