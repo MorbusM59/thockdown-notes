@@ -12,45 +12,68 @@ import { WINDOW_DRAG_EXCLUDED_SELECTOR, WINDOW_DRAG_THRESHOLD_PX, WINDOW_TITLEBA
  * before app code can stopPropagation() it, so the exclusion selector is the
  * single source of truth for what's draggable -- not listener ordering.
  *
- * Two title-bar-like behaviors (double-click to maximize/restore, and
- * dragging a maximized window to restore-then-move) are further scoped to
- * WINDOW_TITLEBAR_SELECTOR so that ordinary drag-to-move elsewhere in the
- * app can't accidentally pop the window out of its maximized state.
+ * Double-click to maximize/restore, and dragging a *maximized* window from
+ * the title-bar-like chrome (WINDOW_TITLEBAR_SELECTOR), are both scoped to
+ * that selector so ordinary drag-to-move elsewhere in the app can't
+ * accidentally pop the window out of its maximized state.
+ *
+ * The maximized-drag case can't actually move the window live, though:
+ * Windows won't apply a setBounds()/unmaximize() while the mouse button is
+ * still physically held down (Chromium holds native input capture on the
+ * window for the whole gesture, and Windows silently drops window-placement
+ * changes against a window that currently owns capture) -- confirmed by
+ * `once('unmaximize', ...)` never firing mid-drag even for a bare
+ * unmaximize() with no repositioning attached. So instead of chasing that,
+ * a drag that starts on a maximized window's title-bar chrome tracks the
+ * cursor without moving anything, then on the actual mouseup -- by then a
+ * genuine release, the same circumstance double-click-to-restore already
+ * relies on -- restores the window and places it as if the drag had been
+ * followed live the whole time, anchored the same way a real title-bar
+ * drag would be: the point under the cursor at mousedown stays under the
+ * cursor at mouseup. See electron/main.ts's restoreMaximized handler.
  */
 export function useWindowDragRegion() {
   useEffect(() => {
     const controls = window.windowControls
     if (!controls?.startWindowDrag || !controls.moveWindowDrag || !controls.endWindowDrag) return
 
+    let isMaximized = false
+    const unsubscribeMaximize = controls.onMaximizeStateChange?.((value) => {
+      isMaximized = value
+    })
+
     let candidateOrigin: { x: number; y: number } | null = null
     let isDragging = false
-    let isTitlebarOrigin = false
+    let restoreOrigin: { x: number; y: number } | null = null
+    let lastCursorPos: { x: number; y: number } | null = null
 
     function handleMouseDown(event: MouseEvent) {
-      const target = event.target
-      window.windowControls?.debugLog?.('mousedown', {
-        button: event.button,
-        isElement: target instanceof Element,
-        className: target instanceof Element ? target.className : String(target),
-        excluded: target instanceof Element ? !!target.closest(WINDOW_DRAG_EXCLUDED_SELECTOR) : null,
-        titlebar: target instanceof Element ? !!target.closest(WINDOW_TITLEBAR_SELECTOR) : null,
-      })
       if (event.button !== 0) return
+      const target = event.target
       if (!(target instanceof Element) || target.closest(WINDOW_DRAG_EXCLUDED_SELECTOR)) return
       candidateOrigin = { x: event.screenX, y: event.screenY }
       isDragging = false
-      isTitlebarOrigin = target.closest(WINDOW_TITLEBAR_SELECTOR) !== null
+      restoreOrigin = null
+      lastCursorPos = null
+      if (isMaximized && target.closest(WINDOW_TITLEBAR_SELECTOR)) {
+        restoreOrigin = { x: event.screenX, y: event.screenY }
+      }
     }
 
     function handleMouseMove(event: MouseEvent) {
       if (!candidateOrigin) return
+
+      if (restoreOrigin) {
+        lastCursorPos = { x: event.screenX, y: event.screenY }
+        return
+      }
 
       if (!isDragging) {
         const dx = event.screenX - candidateOrigin.x
         const dy = event.screenY - candidateOrigin.y
         if (Math.hypot(dx, dy) < WINDOW_DRAG_THRESHOLD_PX) return
         isDragging = true
-        controls!.startWindowDrag!(candidateOrigin.x, candidateOrigin.y, isTitlebarOrigin)
+        controls!.startWindowDrag!(candidateOrigin.x, candidateOrigin.y)
       }
 
       event.preventDefault()
@@ -59,8 +82,14 @@ export function useWindowDragRegion() {
 
     function endGesture() {
       if (isDragging) controls!.endWindowDrag!()
+      if (restoreOrigin) {
+        const release = lastCursorPos ?? restoreOrigin
+        controls!.restoreMaximizedWindow?.(restoreOrigin.x, restoreOrigin.y, release.x, release.y)
+      }
       candidateOrigin = null
       isDragging = false
+      restoreOrigin = null
+      lastCursorPos = null
     }
 
     function handleDoubleClick(event: MouseEvent) {
@@ -83,6 +112,7 @@ export function useWindowDragRegion() {
       window.removeEventListener('mouseup', endGesture, { capture: true })
       window.removeEventListener('dblclick', handleDoubleClick, { capture: true })
       window.removeEventListener('blur', endGesture)
+      unsubscribeMaximize?.()
     }
   }, [])
 }

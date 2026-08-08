@@ -25,10 +25,10 @@ interface Window {
 		reportBackgroundColor: (hex: string) => void;
 		setSidebarVisible: (visible: boolean) => void;
 		setSectionCount: (count: number) => void;
-		startWindowDrag: (screenX: number, screenY: number, isTitlebarOrigin: boolean) => void;
+		startWindowDrag: (screenX: number, screenY: number) => void;
 		moveWindowDrag: (screenX: number, screenY: number) => void;
 		endWindowDrag: () => void;
-		debugLog: (...args: unknown[]) => void;
+		restoreMaximizedWindow: (originX: number, originY: number, releaseX: number, releaseY: number) => void;
 		onMaximizeStateChange: (callback: (isMaximized: boolean) => void) => () => void;
 		onCollapsedStateChange: (callback: (isCollapsed: boolean) => void) => () => void;
 	};

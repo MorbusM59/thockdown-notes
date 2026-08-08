@@ -1993,7 +1993,7 @@ export function SidebarOptionsPanel({
             value={renderScrollMaxSpeedPxPerSec}
             trackLabel="max speed"
             ariaLabel="Maximum scroll speed in pixels per second"
-            defaultValue={30000}
+            defaultValue={80000}
             onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(clamp(value, 1000, 100000))}
           />
         </div>

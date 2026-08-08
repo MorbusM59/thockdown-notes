@@ -108,12 +108,13 @@ const windowControls = {
     ipcRenderer.send('window-control:report-background-color', hex),
   setSidebarVisible: (visible: boolean) => ipcRenderer.send('window-control:sidebar-visibility', visible),
   setSectionCount: (count: number) => ipcRenderer.send('window-control:section-count', count),
-  startWindowDrag: (screenX: number, screenY: number, isTitlebarOrigin: boolean) =>
-    ipcRenderer.send(WINDOW_DRAG_CHANNELS.start, { screenX, screenY, isTitlebarOrigin }),
+  startWindowDrag: (screenX: number, screenY: number) =>
+    ipcRenderer.send(WINDOW_DRAG_CHANNELS.start, { screenX, screenY }),
   moveWindowDrag: (screenX: number, screenY: number) =>
     ipcRenderer.send(WINDOW_DRAG_CHANNELS.move, { screenX, screenY }),
   endWindowDrag: () => ipcRenderer.send(WINDOW_DRAG_CHANNELS.end),
-  debugLog: (...args: unknown[]) => ipcRenderer.send('debug-log', ...args),
+  restoreMaximizedWindow: (originX: number, originY: number, releaseX: number, releaseY: number) =>
+    ipcRenderer.send(WINDOW_DRAG_CHANNELS.restoreMaximized, { originX, originY, releaseX, releaseY }),
   onMaximizeStateChange: (callback: (isMaximized: boolean) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, value: boolean) => {
       callback(value)

@@ -10,6 +10,7 @@ export const WINDOW_DRAG_CHANNELS = {
   start: 'window-drag:start',
   move: 'window-drag:move',
   end: 'window-drag:end',
+  restoreMaximized: 'window-drag:restore-maximized',
 } as const
 
 // How far the primary button has to move (in screen px) after a mousedown
@@ -39,10 +40,13 @@ export const WINDOW_DRAG_EXCLUDED_SELECTOR = [
   '.no-window-drag', '[data-no-window-drag]',
 ].join(', ')
 
-// The subset of the drag-eligible surface that behaves like a native
-// title bar: double-click toggles maximize, and dragging a maximized
-// window from here demaximizes it and picks the move up mid-gesture.
-// Everywhere else remains drag-to-move only (a maximized window ignores
-// drags started outside this region, same as it would with no title bar
-// under the cursor at all).
+// The subset of the drag-eligible surface that behaves like a native title
+// bar: double-click toggles maximize/restore, and -- only while the window
+// is already maximized -- starting a drag here restores it. The restore
+// itself is queued for actual mouseup rather than live-followed (see
+// useWindowDragRegion.ts for why), but the release position is still used
+// to place the restored window as if the drag had been followed live the
+// whole time -- see WINDOW_DRAG_CHANNELS.restoreMaximized. Everywhere else
+// stays plain drag-to-move; a maximized window ignores drags started
+// outside this region entirely.
 export const WINDOW_TITLEBAR_SELECTOR = '.toolbar-grid, .window-controls-grid'

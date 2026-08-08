@@ -484,10 +484,6 @@ function registerIpcHandlers() {
     }
   })
 
-  ipcMain.on('debug-log', (_event, ...args: unknown[]) => {
-    console.log('[renderer debug]', ...args)
-  })
-
   ipcMain.on('window-control', (_event, action: string) => {
     if (!win || win.isDestroyed()) return
 
@@ -524,51 +520,16 @@ function registerIpcHandlers() {
   // so pointer tracking in the renderer (the custom cursor overlay) never
   // gets swallowed by a native Chromium drag region. See src/shared/windowDrag.ts
   // and src/window/useWindowDragRegion.ts for the renderer side.
-  ipcMain.on(WINDOW_DRAG_CHANNELS.start, (_event, payload: { screenX: number; screenY: number; isTitlebarOrigin: boolean }) => {
-    if (!win || win.isDestroyed()) return
-    console.log('[window-drag:start]', { isMaximized: win.isMaximized(), isTitlebarOrigin: payload.isTitlebarOrigin })
-
-    if (win.isMaximized()) {
-      // Only a drag that started in the title-bar-like chrome (toolbar /
-      // window-controls grids) is allowed to restore-then-move the window --
-      // see WINDOW_TITLEBAR_SELECTOR. A drag starting anywhere else on a
-      // maximized window is a no-op, same as it would be with no title bar
-      // under the cursor at all.
-      if (!payload.isTitlebarOrigin) {
-        windowDragState = null
-        return
-      }
-      // Mirrors native title-bar drag: unmaximize first, re-anchored so the
-      // window edge under the cursor stays under the cursor instead of
-      // jumping to wherever the restored bounds happen to land.
-      //
-      // Windows doesn't apply unmaximize() synchronously -- it's posted to
-      // the native message queue, so a setBounds()/setPosition() issued in
-      // the same tick races the pending restore and gets silently dropped
-      // (the window ends up looking like it never left maximized). Waiting
-      // for the actual 'unmaximize' event before repositioning sidesteps
-      // that; getNormalBounds() (not getBounds()) is used for the restored
-      // size since a maximized frameless BrowserWindow's getBounds() rect
-      // on Windows is inflated by its invisible resize border (e.g. y: -8).
-      const maximizedBounds = win.getBounds()
-      const normalBounds = win.getNormalBounds()
-      const relativeX = maximizedBounds.width > 0
-        ? (payload.screenX - maximizedBounds.x) / maximizedBounds.width
-        : 0.5
-      const targetX = Math.round(payload.screenX - relativeX * normalBounds.width)
-      const targetY = Math.max(0, Math.round(payload.screenY - 10))
-      const winRef = win
-      winRef.once('unmaximize', () => {
-        if (winRef.isDestroyed()) return
-        winRef.setBounds({ x: targetX, y: targetY, width: normalBounds.width, height: normalBounds.height })
-        windowDragState = {
-          startCursorX: payload.screenX,
-          startCursorY: payload.screenY,
-          startWinX: targetX,
-          startWinY: targetY,
-        }
-      })
-      winRef.unmaximize()
+  //
+  // A maximized window is never moved through this path -- Windows won't
+  // apply setBounds()/unmaximize() while the mouse button is still held
+  // down, so there's no way to make it live-follow the cursor. Restoring a
+  // maximized window via drag is instead handled by the restoreMaximized
+  // channel below, fired once on the actual mouseup. See
+  // useWindowDragRegion.ts's doc comment for the full story.
+  ipcMain.on(WINDOW_DRAG_CHANNELS.start, (_event, payload: { screenX: number; screenY: number }) => {
+    if (!win || win.isDestroyed() || win.isMaximized()) {
+      windowDragState = null
       return
     }
 
@@ -593,6 +554,32 @@ function registerIpcHandlers() {
 
   ipcMain.on(WINDOW_DRAG_CHANNELS.end, () => {
     windowDragState = null
+  })
+
+  // Fired on genuine mouseup after a drag started on a maximized window's
+  // title-bar chrome (see useWindowDragRegion.ts). Restores the window and
+  // places it as if the drag had been live-followed the whole time: the
+  // point under the cursor at mousedown (originX/Y, while still maximized)
+  // stays under the cursor at release (releaseX/Y, after restoring).
+  // getNormalBounds() (not getBounds()) is used for the restored size --
+  // see readCurrentWindowState()'s comment on why getBounds() can't be
+  // trusted while maximized.
+  ipcMain.on(WINDOW_DRAG_CHANNELS.restoreMaximized, (_event, payload: { originX: number; originY: number; releaseX: number; releaseY: number }) => {
+    if (!win || win.isDestroyed() || !win.isMaximized()) return
+
+    const maximizedBounds = win.getBounds()
+    const normalBounds = win.getNormalBounds()
+    const relativeX = maximizedBounds.width > 0
+      ? (payload.originX - maximizedBounds.x) / maximizedBounds.width
+      : 0.5
+    const targetX = Math.round(payload.releaseX - relativeX * normalBounds.width)
+    const targetY = Math.max(0, Math.round(payload.releaseY - 10))
+    const winRef = win
+    winRef.once('unmaximize', () => {
+      if (winRef.isDestroyed()) return
+      winRef.setBounds({ x: targetX, y: targetY, width: normalBounds.width, height: normalBounds.height })
+    })
+    winRef.unmaximize()
   })
 
   ipcMain.handle('window-control:toggle-utility-collapse', (_event, payload: unknown) => {
