@@ -46,7 +46,6 @@
   width:     8px;
   min-width: 8px;
   cursor:    col-resize;
-  -webkit-app-region: no-drag;
   border: 1px solid var(--color-border-light-30);
   border-radius: var(--border-radius-small);
   box-shadow: var(--box-shadow-inverted);
@@ -71,7 +70,6 @@
   min-height: 0;
   padding: var(--spacing-regular);
   padding-left: var(--spacing-large);
-  -webkit-app-region: drag;
 }
 
 .app-grid.is-window-collapsed {
@@ -114,16 +112,6 @@
   position:  relative;
   width:     8px;
   min-width: 8px;
-}
-
-.tabbar-grid,
-.window-controls-grid {
-  -webkit-app-region: drag;
-}
-
-.tabbar-grid          :is(button, input, select, textarea),
-.window-controls-grid :is(button, input, select, textarea) {
-  -webkit-app-region: no-drag;
 }
 
 .divider-sidebar {

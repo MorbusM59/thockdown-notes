@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown'
 import { SidebarOptionsPanel } from './sidebar/SidebarOptionsPanel'
 import { AudioControls } from './components/AudioControls'
 import MouseCursorOverlay from './components/MouseCursorOverlay'
+import { useWindowDragRegion } from './window/useWindowDragRegion'
 import './App.css'
 import { buildExportCss, type ExportViewStyle } from './exportStyles'
 import {
@@ -1629,6 +1630,8 @@ async function hashNormalizedText(text: string): Promise<string> {
 }
 
 function App() {
+  useWindowDragRegion()
+
   const appShellRef = useRef<HTMLDivElement | null>(null)
   const windowControlsGridRef = useRef<HTMLElement | null>(null)
   const sidebarContentRef = useRef<HTMLDivElement | null>(null)

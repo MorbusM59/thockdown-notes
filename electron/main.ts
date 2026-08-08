@@ -18,6 +18,7 @@ import type { PlaylistSlot } from '../src/shared/audioPlayer'
 import { NOTE_TABS_CHANNELS } from '../src/shared/tabs'
 import { EDITOR_SECTIONS_CHANNELS } from '../src/shared/sections'
 import { CHAPTER_CHANNELS } from '../src/shared/chapters'
+import { WINDOW_DRAG_CHANNELS } from '../src/shared/windowDrag'
 
 // Defense in depth: if something throws outside of a path we've explicitly
 // wrapped (e.g. during startup, before a window exists to show an in-app
@@ -115,6 +116,7 @@ let pendingExternalFilePaths: string[] = [];
 let windowIsUtilityCollapsed = false;
 let utilityCollapseRestoreState: WindowState | null = null;
 let alwaysOnTopBeforeUtilityCollapse: boolean | null = null;
+let windowDragState: { startCursorX: number; startCursorY: number; startWinX: number; startWinY: number } | null = null;
 
 const UTILITY_COLLAPSE_MIN_WIDTH_PX = 96;
 const UTILITY_COLLAPSE_MIN_HEIGHT_PX = 40;
@@ -505,6 +507,52 @@ function registerIpcHandlers() {
       default:
         break
     }
+  })
+
+  // Custom (JS-driven) window dragging -- replaces `-webkit-app-region: drag`
+  // so pointer tracking in the renderer (the custom cursor overlay) never
+  // gets swallowed by a native Chromium drag region. See src/shared/windowDrag.ts
+  // and src/window/useWindowDragRegion.ts for the renderer side.
+  ipcMain.on(WINDOW_DRAG_CHANNELS.start, (_event, payload: { screenX: number; screenY: number }) => {
+    if (!win || win.isDestroyed()) return
+
+    if (win.isMaximized()) {
+      // Mirrors native title-bar drag: unmaximize first, re-anchored so the
+      // window edge under the cursor stays under the cursor instead of
+      // jumping to wherever the restored bounds happen to land.
+      const maximizedBounds = win.getBounds()
+      const relativeX = maximizedBounds.width > 0
+        ? (payload.screenX - maximizedBounds.x) / maximizedBounds.width
+        : 0.5
+      win.unmaximize()
+      const restoredBounds = win.getBounds()
+      win.setPosition(
+        Math.round(payload.screenX - relativeX * restoredBounds.width),
+        Math.max(0, Math.round(payload.screenY - 10)),
+      )
+    }
+
+    const bounds = win.getBounds()
+    windowDragState = {
+      startCursorX: payload.screenX,
+      startCursorY: payload.screenY,
+      startWinX: bounds.x,
+      startWinY: bounds.y,
+    }
+  })
+
+  ipcMain.on(WINDOW_DRAG_CHANNELS.move, (_event, payload: { screenX: number; screenY: number }) => {
+    if (!win || win.isDestroyed() || !windowDragState) return
+    const dx = payload.screenX - windowDragState.startCursorX
+    const dy = payload.screenY - windowDragState.startCursorY
+    win.setPosition(
+      Math.round(windowDragState.startWinX + dx),
+      Math.round(windowDragState.startWinY + dy),
+    )
+  })
+
+  ipcMain.on(WINDOW_DRAG_CHANNELS.end, () => {
+    windowDragState = null
   })
 
   ipcMain.handle('window-control:toggle-utility-collapse', (_event, payload: unknown) => {

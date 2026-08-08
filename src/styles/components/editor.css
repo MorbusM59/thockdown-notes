@@ -72,7 +72,6 @@
   flex:           1 1 auto;
   min-width:      0;
   height:         100%;
-  -webkit-app-region: no-drag;
 }
 
 /* Fade mask + horizontal scroll: identical technique to .tabbar-tabs-scroll-shell
@@ -123,7 +122,6 @@
   height:      100%;
   overflow-x:  auto;
   overflow-y:  hidden;
-  -webkit-app-region: no-drag;
   scrollbar-width: none;      /* Firefox */
   -ms-overflow-style: none;   /* legacy Edge */
 }
@@ -157,7 +155,6 @@
   flex: 0 0 auto;
   height: 100%;
   aspect-ratio: 1;
-  -webkit-app-region: no-drag;
 }
 
 .chapter-toggle-panel {
@@ -451,17 +448,6 @@
 .hide-native-cursor input,
 .hide-native-cursor textarea,
 .hide-native-cursor [contenteditable] {
-  cursor: none !important;
-}
-/* Electron's -webkit-app-region: drag regions (the window-drag title bar
-   areas -- see controls.css/toolbar.css/layout.css) get special native
-   cursor handling from Chromium that a generic `.hide-native-cursor *`
-   wildcard rule doesn't reliably reach; these need `cursor` set directly
-   on the drag-region element itself, so list them explicitly here too. */
-.hide-native-cursor .window-controls-grid,
-.hide-native-cursor .note-tools,
-.hide-native-cursor .toolbar-grid,
-.hide-native-cursor .tabbar-grid {
   cursor: none !important;
 }
 

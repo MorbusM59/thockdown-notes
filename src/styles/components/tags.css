@@ -31,7 +31,6 @@
   width:          auto;
   height: auto;
   min-width:      0;
-  -webkit-app-region: no-drag;
 }
 
 .tabbar-tag-input {
@@ -41,7 +40,6 @@
   height:      100%;
   width:      40px;
   overflow:    hidden;
-  -webkit-app-region: no-drag;
 }
 
 .tabbar-tag-input-field {
@@ -78,7 +76,6 @@
   gap:         var(--spacing-small);
   height:      100%;
   overflow:    hidden;
-  -webkit-app-region: no-drag;
 }
 
 /* Flex items default to min-width: auto, which floors their shrink at their
@@ -133,7 +130,6 @@
   overflow-y:  hidden;
   font-style: italic;
   opacity: 75%;
-  -webkit-app-region: no-drag;
   scrollbar-width: none;      /* Firefox */
   -ms-overflow-style: none;   /* legacy Edge */
 }
@@ -164,7 +160,6 @@
   white-space:      nowrap;
   overflow:         hidden;
   padding:          0 var(--spacing-regular);
-  -webkit-app-region: no-drag;
   flex: 0 0 auto;
   height: 100%;
 }
@@ -225,7 +220,6 @@
   display: block;
   height:       100%;
   aspect-ratio: 1;
-  -webkit-app-region: no-drag;
 }
 
 .sidebar-toggle .fa-solid,
@@ -284,7 +278,6 @@
   align-items: center;
   outline: none;
   padding-bottom: 1px;
-  -webkit-app-region: no-drag;
 }
 
 /* Section picker: takes over the tab bar's own pill area (in place of the
@@ -369,7 +362,6 @@
   height:      100%;
   overflow-x:  auto;
   overflow-y:  hidden;
-  -webkit-app-region: no-drag;
   scrollbar-width: none;      /* Firefox */
   -ms-overflow-style: none;   /* legacy Edge */
 }

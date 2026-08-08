@@ -32,6 +32,7 @@ import type { EditorSectionsApi } from '../src/shared/sections'
 import { EDITOR_SECTIONS_CHANNELS } from '../src/shared/sections'
 import type { ChaptersApi } from '../src/shared/chapters'
 import { CHAPTER_CHANNELS } from '../src/shared/chapters'
+import { WINDOW_DRAG_CHANNELS } from '../src/shared/windowDrag'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
@@ -105,6 +106,11 @@ const windowControls = {
     ipcRenderer.send('window-control:report-background-color', hex),
   setSidebarVisible: (visible: boolean) => ipcRenderer.send('window-control:sidebar-visibility', visible),
   setSectionCount: (count: number) => ipcRenderer.send('window-control:section-count', count),
+  startWindowDrag: (screenX: number, screenY: number) =>
+    ipcRenderer.send(WINDOW_DRAG_CHANNELS.start, { screenX, screenY }),
+  moveWindowDrag: (screenX: number, screenY: number) =>
+    ipcRenderer.send(WINDOW_DRAG_CHANNELS.move, { screenX, screenY }),
+  endWindowDrag: () => ipcRenderer.send(WINDOW_DRAG_CHANNELS.end),
   onMaximizeStateChange: (callback: (isMaximized: boolean) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, value: boolean) => {
       callback(value)
