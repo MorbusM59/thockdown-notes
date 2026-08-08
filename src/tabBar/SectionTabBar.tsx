@@ -174,7 +174,7 @@ export function SectionTabBar({
           aria-label="Close this section"
           onClick={onCloseSection}
         >
-          <span className="fa-solid fa-chevron-left" aria-hidden="true" />
+          <span className="fa-solid fa-chevron-right" aria-hidden="true" />
         </button>
       )}
 
