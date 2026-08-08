@@ -761,6 +761,25 @@ export function CM6Editor({
   const [isDraggingTop, setIsDraggingTop] = useState(false);
   const [isDraggingBottom, setIsDraggingBottom] = useState(false);
   const [isCtrlHeldForBoundaryDrag, setIsCtrlHeldForBoundaryDrag] = useState(false);
+  // Bumped once, right after the mount-once effect below (re)creates the CM6
+  // EditorView (viewRef.current = view). Exists purely so effects that
+  // imperatively mutate view.contentDOM/view.scrollDOM (the padding effect
+  // below is the only one today) can depend on "a fresh view instance now
+  // exists," not just on the computed pixel values they'd otherwise write --
+  // those values can come out numerically IDENTICAL to before a remount
+  // (nothing about font size/boundaries actually changed), which makes
+  // React's own dependency-array diff skip re-running the effect even
+  // though the DOM node it needs to touch is a brand-new one with no inline
+  // styles yet. Found via a dev-mode Fast Refresh repro: editing this file
+  // while a note was open left the text rendered flush at (0,0) -- the
+  // mount-once effect recreated the EditorView (fresh, unstyled
+  // contentDOM), but the padding effect's own deps (halfCellWidthPx,
+  // topBoundaryVisualPx, etc.) were unchanged from before the edit, so
+  // React correctly-by-its-own-rules concluded there was nothing to
+  // reapply. It self-corrected the moment anything else nudged one of
+  // those deps (e.g. loading a different note), which is what made it look
+  // intermittent/"fixes itself" rather than a clean reproduction.
+  const [viewMountGeneration, setViewMountGeneration] = useState(0);
   const [scrollerClientHeightPx, setScrollerClientHeightPx] = useState(0);
   // Review gutter's flag-column width only -- everything else here still
   // reasons in lineHeightPx/cellWidthPx units. Tracked the same way (and at
@@ -1169,7 +1188,13 @@ export function CM6Editor({
     // reconciliation across that needs to be forced rather than left to
     // whatever unforced schedule it would otherwise settle on.
     view.requestMeasure();
-  }, [topBoundaryVisualPx, bottomBoundaryPxDisplay, alignmentPaddingBottomPx, halfCellWidthPx, reviewGutterLeftPx, reviewGutterRightPx]);
+    // viewMountGeneration: forces this to re-run whenever the EditorView
+    // itself was (re)created, independent of whether any of the pixel
+    // values above actually changed -- see viewMountGeneration's own doc
+    // comment for the class of bug this closes (a fresh contentDOM with no
+    // inline styles yet, paired with unchanged geometry numbers that would
+    // otherwise make React skip re-running this effect).
+  }, [topBoundaryVisualPx, bottomBoundaryPxDisplay, alignmentPaddingBottomPx, halfCellWidthPx, reviewGutterLeftPx, reviewGutterRightPx, viewMountGeneration]);
 
   // Custom scrollbar sync -- ported from Editor.tsx's own three sync
   // effects. Runs after the portal target (scrollbarHost) or any layout
@@ -2587,6 +2612,7 @@ export function CM6Editor({
     });
     viewRef.current = view;
     lastHydratedNoteIdRef.current = noteId ?? null;
+    setViewMountGeneration((generation) => generation + 1);
 
     if (debugCageStateEnabled) {
       (window as unknown as { __thockdownDebugCageState?: () => unknown }).__thockdownDebugCageState = () => {
