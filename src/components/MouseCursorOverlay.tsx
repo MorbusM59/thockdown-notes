@@ -50,8 +50,13 @@ function resolveRgba(color: string): RgbaColor {
  * takes to fully decay after the head passes it) and the current `spinHz`,
  * so e.g. a 1000ms fade at 1Hz sweeps exactly one full revolution (the head
  * chases a tail that only just finished fading where the head now sits).
- * The orbit radius itself breathes between 100% and `pulseMagnitude` via an
- * ease-in-out (raised-cosine) oscillation at `pulseHz`. The rAF loop only
+ * The orbit radius itself breathes between 100% and `100% + pulseMagnitude`
+ * (0 = no pulsing, 1 = up to 200%) via an ease-in-out (raised-cosine)
+ * oscillation at `pulseHz`. `spinHz` can be negative (reversed spin); every
+ * angle/trail calculation always uses its absolute value (spin is computed
+ * as if it were always positive), and reversal is applied once at the very
+ * end by mirroring the entire finished frame left-right about the cursor's
+ * own center -- see the `reverseSpin` block in draw(). The rAF loop only
  * runs while the pointer is actually over the stage or fading out
  * afterwards (`fadeMs`), not continuously for the component's whole
  * lifetime.
@@ -128,7 +133,17 @@ export function MouseCursorOverlay({
     // decaying where the head currently is. Capped at one revolution: past
     // that the tail would start overlapping itself, which the conic
     // gradient (0 -> 1 stops over the sweep) can't represent as a longer fade.
-    const trailRad = Math.min(Math.PI * 2, (trailFadeMs / 1000) * spinHz * Math.PI * 2)
+    // Everything below is computed as if spin were always positive (using
+    // |spinHz|) -- reversed (negative) spin is handled entirely by mirroring
+    // the finished frame at the end of draw(), not by threading a sign
+    // through this math. (An earlier attempt flipped just arc()'s sweep
+    // direction for negative spin, but a conic gradient's alpha ramp is
+    // always painted clockwise from its start angle regardless of the
+    // stroke path's direction, so that desynced the gradient from the
+    // stroke and produced a solid, non-fading tail. Mirroring the whole
+    // rendered image instead keeps the gradient and geometry consistent.)
+    const trailRad = Math.min(Math.PI * 2, (trailFadeMs / 1000) * Math.abs(spinHz) * Math.PI * 2)
+    const reverseSpin = spinHz < 0
     const effectiveDotCount = Math.max(1, Math.round(dotCount))
     const angleStep = (Math.PI * 2) / effectiveDotCount
     const clickWeights = resolveCursorClickWeights(clickBalance)
@@ -231,7 +246,7 @@ export function MouseCursorOverlay({
       }
       clickAxisRef.current = axis
       const effectiveRadiusPx = radiusPx * axisToRadiusMultiplier(axis, clickWeights.radiusWeight)
-      const effectiveSpinHz = spinHz * axisToSpinMultiplier(axis, clickWeights.spinWeight)
+      const effectiveSpinHz = Math.abs(spinHz) * axisToSpinMultiplier(axis, clickWeights.spinWeight)
 
       rotationPhaseRef.current += effectiveSpinHz * dtSec
       const rotation = (rotationPhaseRef.current % 1) * Math.PI * 2
@@ -239,11 +254,29 @@ export function MouseCursorOverlay({
       const elapsedSec = (now - activeSince) / 1000
       const pulsePhase = (elapsedSec * pulseHz) % 1
       const pulseEase = (1 - Math.cos(pulsePhase * Math.PI * 2)) / 2
-      const pulseScale = 1 + (pulseMagnitude - 1) * pulseEase
+      // pulseMagnitude is the ADDITIONAL fraction grown at the pulse peak
+      // (0 = no pulsing, stays at the stable base radius; 1 = breathes up
+      // to 200% of it) -- not a peak multiplier itself, so no "-1" here.
+      const pulseScale = 1 + pulseMagnitude * pulseEase
       const orbitRadius = effectiveRadiusPx * dpr * pulseScale
 
       const dotHeadRadius = Math.max(0.5, dotSizePx * dpr * 0.5)
       const lineWidth = Math.max(1, trailThicknessPx * dpr)
+
+      // Everything from here to the matching restore() below is drawn as if
+      // spin were positive; for reversed spin the whole frame is mirrored
+      // left-right about the cursor's own center (cx), which reverses the
+      // apparent rotation direction while keeping the gradient and stroke
+      // geometry (computed with unsigned trailRad/effectiveSpinHz above)
+      // consistent with each other. cx already includes the "pinpoint
+      // accuracy" +5 offset, so mirroring about it leaves the cursor's own
+      // position fixed -- only the orbiting elements around it flip.
+      if (reverseSpin) {
+        ctx!.save()
+        ctx!.translate(cx, 0)
+        ctx!.scale(-1, 1)
+        ctx!.translate(-cx, 0)
+      }
 
       for (let i = 0; i < effectiveDotCount; i += 1) {
         const headAngle = rotation + i * angleStep
@@ -288,6 +321,10 @@ export function MouseCursorOverlay({
         ctx!.beginPath()
         ctx!.arc(cx, cy, Math.max(0.5, centerSizePx * dpr * 0.5), 0, Math.PI * 2)
         ctx!.fill()
+        ctx!.restore()
+      }
+
+      if (reverseSpin) {
         ctx!.restore()
       }
 

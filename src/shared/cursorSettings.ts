@@ -47,13 +47,13 @@ export const CURSOR_RADIUS_MIN_PX = 4
 export const CURSOR_RADIUS_MAX_PX = 30
 export const CURSOR_RADIUS_DEFAULT_PX = 10
 
-export const CURSOR_SPIN_HZ_MIN = 0.1
-export const CURSOR_SPIN_HZ_MAX = 2
+export const CURSOR_SPIN_HZ_MIN = -4
+export const CURSOR_SPIN_HZ_MAX = 4
 export const CURSOR_SPIN_HZ_STEP = 0.1
-export const CURSOR_SPIN_HZ_DEFAULT = 0.8
+export const CURSOR_SPIN_HZ_DEFAULT = 0
 
-export const CURSOR_TRAIL_THICKNESS_MIN_PX = 1
-export const CURSOR_TRAIL_THICKNESS_MAX_PX = 6
+export const CURSOR_TRAIL_THICKNESS_MIN_PX = 0
+export const CURSOR_TRAIL_THICKNESS_MAX_PX = 12
 export const CURSOR_TRAIL_THICKNESS_DEFAULT_PX = 3
 
 export const CURSOR_TRAIL_FADE_MIN_MS = 50
@@ -61,18 +61,22 @@ export const CURSOR_TRAIL_FADE_MAX_MS = 3000
 export const CURSOR_TRAIL_FADE_STEP_MS = 50
 export const CURSOR_TRAIL_FADE_DEFAULT_MS = 500
 
-export const CURSOR_DOT_SIZE_MIN_PX = 1
-export const CURSOR_DOT_SIZE_MAX_PX = 6
+export const CURSOR_DOT_SIZE_MIN_PX = 0
+export const CURSOR_DOT_SIZE_MAX_PX = 12
 export const CURSOR_DOT_SIZE_DEFAULT_PX = 2
 
 export const CURSOR_CENTER_SIZE_MIN_PX = 0
-export const CURSOR_CENTER_SIZE_MAX_PX = 6
+export const CURSOR_CENTER_SIZE_MAX_PX = 12
 export const CURSOR_CENTER_SIZE_DEFAULT_PX = 3
 
-export const CURSOR_PULSE_MAGNITUDE_MIN = 0.5
-export const CURSOR_PULSE_MAGNITUDE_MAX = 2
+// pulseMagnitude is the ADDITIONAL fraction the orbit grows by at the pulse
+// peak (0 = no pulsing, radius stays at its stable base value; 1 = breathes
+// all the way up to 200% of it). No negative range -- shrinking below 100%
+// is what the radius slider itself is for.
+export const CURSOR_PULSE_MAGNITUDE_MIN = 0
+export const CURSOR_PULSE_MAGNITUDE_MAX = 1
 export const CURSOR_PULSE_MAGNITUDE_STEP = 0.05
-export const CURSOR_PULSE_MAGNITUDE_DEFAULT = 1
+export const CURSOR_PULSE_MAGNITUDE_DEFAULT = 0
 
 export const CURSOR_PULSE_HZ_MIN = 0.1
 export const CURSOR_PULSE_HZ_MAX = 2
