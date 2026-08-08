@@ -159,7 +159,15 @@ export function MouseCursorOverlay({
 
         ctx!.save()
         ctx!.lineWidth = lineWidth
-        ctx!.lineCap = 'round'
+        // 'butt', not 'round': a round cap at the tail end bleeds slightly
+        // past tailAngle, and because a conic gradient wraps a full circle
+        // (angle just before the start reads as nearly the OTHER end of the
+        // gradient, i.e. nearly opaque instead of the alpha-0 we want there),
+        // that sliver renders as a solid half-circle blob at the fading tail.
+        // The head's own round cap is harmless (it's already near-opaque
+        // there, and covered by the separately-drawn head dot) but dropping
+        // it too keeps both ends consistent.
+        ctx!.lineCap = 'butt'
         ctx!.strokeStyle = gradient
         ctx!.beginPath()
         ctx!.arc(cx, cy, orbitRadius, tailAngle, headAngle)
