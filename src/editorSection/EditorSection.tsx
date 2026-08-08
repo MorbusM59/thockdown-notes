@@ -1219,18 +1219,20 @@ export function EditorSection({
     const payload = parseNoteDragPayload(raw)
     if (!payload) return
 
-    // A drop landing on the chapter bar (or the "+" button that creates a
-    // chapter even before the bar has ever appeared) always means "clone
-    // this note's content into a new chapter of whichever note it's showing
-    // chapters of" -- regardless of where the drag started (sidebar or a
-    // tab, even one of this section's own), since that's a structurally
-    // different drop target than "open/pin this as a tab." Claimed before
-    // the same-section check below, which exists only to let an in-bar
-    // *tab* reorder drag fall through to useSectionTabs's own handlers --
+    // A drop landing on the chapter bar always means "clone this note's
+    // content into a new chapter of whichever note it's showing chapters
+    // of" -- regardless of where the drag started (sidebar or a tab, even
+    // one of this section's own), since that's a structurally different
+    // drop target than "open/pin this as a tab." Claimed before the
+    // same-section check below, which exists only to let an in-bar *tab*
+    // reorder drag fall through to useSectionTabs's own handlers --
     // irrelevant here. Dropping directly on an existing chapter pill inserts
     // the new chapter right in front of it instead of appending it last.
+    // (The "+" add-chapter button used to be part of this drop target too,
+    // but it now lives in the global toolbar, outside this section's DOM
+    // subtree, so it can no longer receive these drops.)
     const dropTarget = event.target
-    if (dropTarget instanceof Element && (dropTarget.closest('.chapter-bar-display') || dropTarget.closest('.chapter-toggle-button'))) {
+    if (dropTarget instanceof Element && dropTarget.closest('.chapter-bar-display')) {
       event.preventDefault()
       event.stopPropagation()
       const targetPill = dropTarget.closest<HTMLElement>('.chapter-pill[data-chapter-note-id]')
@@ -1493,7 +1495,6 @@ export function EditorSection({
         menuIdentityNoteId={menuIdentityNoteId}
         chapters={chapters}
         onParentTabClick={handleParentTabClick}
-        onCreateChapter={handleCreateChapter}
         onChapterClick={handleChapterClick}
         editingChapterNoteId={editingChapterNoteId}
         chapterIdDraft={chapterIdDraft}

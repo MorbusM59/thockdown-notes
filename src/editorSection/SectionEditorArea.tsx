@@ -66,8 +66,6 @@ export interface SectionEditorAreaProps {
   menuIdentityNoteId: string | null
   chapters: ChapterEntry[]
   onParentTabClick: () => void
-  /** The bottom utility bar's "+" button (formerly the manual show/hide toggle) -- creates a blank new chapter. */
-  onCreateChapter: () => void
   onChapterClick: (chapterNoteId: string) => void
   editingChapterNoteId: string | null
   chapterIdDraft: string
@@ -139,7 +137,6 @@ export function SectionEditorArea({
   menuIdentityNoteId,
   chapters,
   onParentTabClick,
-  onCreateChapter,
   onChapterClick,
   editingChapterNoteId,
   chapterIdDraft,
@@ -299,8 +296,6 @@ export function SectionEditorArea({
             className="chapter-toggle-button btn-icon"
             aria-label="Add a chapter"
             title="Add a chapter"
-            disabled={!activeNoteId}
-            onClick={onCreateChapter}
           >
             <span className="fa-solid fa-book-medical" aria-hidden="true" />
           </button>

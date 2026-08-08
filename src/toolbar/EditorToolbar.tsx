@@ -16,6 +16,7 @@ export interface EditorToolbarProps extends UseMarkdownFormattingToolbarResult {
   isExportingPdf: boolean
   handleExportMd: (forceChooseFolder?: boolean) => Promise<void>
   isExportingMd: boolean
+  handleCreateChapter: () => void | Promise<void>
 }
 
 /**
@@ -41,6 +42,7 @@ export function EditorToolbar({
   isExportingPdf,
   handleExportMd,
   isExportingMd,
+  handleCreateChapter,
   activeDecorationFormats,
   activeHeadingLevel,
   isChecklistActive,
@@ -202,6 +204,20 @@ export function EditorToolbar({
               <button type="button" className="btn-icon" title="Horizontal rule" onClick={insertHorizontalRule} disabled={!activeNoteId}>—</button>
               <button type="button" className="btn-icon" title="Link (Ctrl+L)" onClick={applyLink} disabled={!activeNoteId}><span className="fa-solid fa-link" aria-hidden="true" /></button>
               <button type="button" className="btn-icon" title="Set anchor (Shift+Ctrl+L)" onClick={applyAnchor} disabled={!activeNoteId}><span className="fa-solid fa-anchor" aria-hidden="true" /></button>
+            </div>
+            <div className="toolbar-group chapter-group">
+              <button
+                type="button"
+                className="btn-icon"
+                title="Add a chapter"
+                aria-label="Add a chapter"
+                disabled={!activeNoteId}
+                onClick={() => {
+                  void handleCreateChapter()
+                }}
+              >
+                <span className="fa-solid fa-book-medical" aria-hidden="true" />
+              </button>
             </div>
           </div>
         ) : <div className="markdown-toolbar" aria-label="Markdown toolbar"/>}
