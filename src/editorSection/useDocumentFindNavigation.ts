@@ -185,6 +185,7 @@ export function useDocumentFindNavigation({
         end: hit.index + hit.matchLength,
         isCollapsed: false,
       },
+      selectionScrollBehavior: 'center-caged',
     })
   }, [isPreviewMode, jumpToPreviewDocumentFindHit, adapterRef])
 

@@ -676,6 +676,11 @@ export function CM6Editor({
   const layerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  // Bridges reconcileCagedScroll (defined inside the CM6 mount effect, below)
+  // out to the separate adapterRef-assignment effect's applySnapshot, which
+  // needs to scroll a newly-applied selection into the caged middle -- see
+  // its use in applySnapshot's `snapshot.selection` handling.
+  const reconcileCagedScrollRef = useRef<((view: EditorView) => void) | null>(null);
   const scrollTransitionControllerRef = useRef(new ScrollTransitionController());
   const bindingsRef = useRef(bindings);
   const previousTextRef = useRef('');
@@ -1983,6 +1988,7 @@ export function CM6Editor({
         }
       });
     };
+    reconcileCagedScrollRef.current = reconcileCagedScroll;
 
     // Paste sanitization -- ported from PasteSanitizationPlugin.tsx's own
     // PASTE_COMMAND/KEY_DOWN_COMMAND handlers. Strips rich clipboard content
@@ -3039,6 +3045,7 @@ export function CM6Editor({
       bindingsRef.current?.onLifecycle?.({ phase: 'destroyed' });
       view.destroy();
       viewRef.current = null;
+      reconcileCagedScrollRef.current = null;
       rightClickCycleRef.current = null;
     };
     // Deliberately mount-once: noteId/initialText changes are handled by the
@@ -3563,6 +3570,16 @@ export function CM6Editor({
           const anchor = Math.max(0, Math.min(docLength, snapshot.selection.anchor));
           const focus = Math.max(0, Math.min(docLength, snapshot.selection.focus));
           view.dispatch({ selection: EditorSelection.single(anchor, focus) });
+
+          // Scroll the new selection into the caged middle -- mirrors
+          // Editor.tsx's old centerSelectionInCagedMiddle call. Skipped when
+          // the caller explicitly opted out (preserve-scroll, used by typing/
+          // transform-replay call sites) or already drove scroll itself via
+          // viewport/viewportLines above. CM6 applies transaction DOM changes
+          // synchronously, so window.getSelection() is already current here.
+          if (snapshot.selectionScrollBehavior !== 'preserve-scroll' && !snapshot.viewport && !snapshot.viewportLines) {
+            reconcileCagedScrollRef.current?.(view);
+          }
         }
 
         if (isSnapshotRestore && !isQuiet) {

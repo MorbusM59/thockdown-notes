@@ -7105,6 +7105,7 @@ ${markdownHtml}
             end: targetOffset,
             isCollapsed: true,
           },
+          selectionScrollBehavior: 'center-caged',
         })
         return
       }
