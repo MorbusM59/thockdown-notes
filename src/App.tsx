@@ -65,6 +65,18 @@ import {
   CURSOR_PULSE_MAGNITUDE_MAX,
   CURSOR_PULSE_HZ_MIN,
   CURSOR_PULSE_HZ_MAX,
+  CURSOR_CLICK_RAMP_MIN,
+  CURSOR_CLICK_RAMP_MAX,
+  CURSOR_CLICK_SKEW_MIN,
+  CURSOR_CLICK_SKEW_MAX,
+  CURSOR_CLICK_DURATION_MIN_SEC,
+  CURSOR_CLICK_DURATION_MAX_SEC,
+  CURSOR_CLICK_MAX_SPEED_MIN,
+  CURSOR_CLICK_MAX_SPEED_MAX,
+  CURSOR_CLICK_STEP_MIN,
+  CURSOR_CLICK_STEP_MAX,
+  CURSOR_CLICK_BALANCE_MIN,
+  CURSOR_CLICK_BALANCE_MAX,
 } from './shared/cursorSettings'
 import {
   BORDER_RADIUS_REGULAR_MIN_PX,
@@ -933,6 +945,12 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     cursorCenterSizePx: clamp(toFiniteNumber(source.cursorCenterSizePx, DEFAULT_CUSTOM_CURSOR_SETTINGS.centerSizePx), CURSOR_CENTER_SIZE_MIN_PX, CURSOR_CENTER_SIZE_MAX_PX),
     cursorPulseMagnitude: roundForSignature(clamp(toFiniteNumber(source.cursorPulseMagnitude, DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseMagnitude), CURSOR_PULSE_MAGNITUDE_MIN, CURSOR_PULSE_MAGNITUDE_MAX)),
     cursorPulseHz: roundForSignature(clamp(toFiniteNumber(source.cursorPulseHz, DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseHz), CURSOR_PULSE_HZ_MIN, CURSOR_PULSE_HZ_MAX)),
+    cursorClickRamp: roundForSignature(clamp(toFiniteNumber(source.cursorClickRamp, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickRamp), CURSOR_CLICK_RAMP_MIN, CURSOR_CLICK_RAMP_MAX)),
+    cursorClickSkew: roundForSignature(clamp(toFiniteNumber(source.cursorClickSkew, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickSkew), CURSOR_CLICK_SKEW_MIN, CURSOR_CLICK_SKEW_MAX)),
+    cursorClickDurationSec: roundForSignature(clamp(toFiniteNumber(source.cursorClickDurationSec, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickDurationSec), CURSOR_CLICK_DURATION_MIN_SEC, CURSOR_CLICK_DURATION_MAX_SEC)),
+    cursorClickMaxSpeed: roundForSignature(clamp(toFiniteNumber(source.cursorClickMaxSpeed, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMaxSpeed), CURSOR_CLICK_MAX_SPEED_MIN, CURSOR_CLICK_MAX_SPEED_MAX)),
+    cursorClickStep: roundForSignature(clamp(toFiniteNumber(source.cursorClickStep, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickStep), CURSOR_CLICK_STEP_MIN, CURSOR_CLICK_STEP_MAX)),
+    cursorClickBalance: roundForSignature(clamp(toFiniteNumber(source.cursorClickBalance, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickBalance), CURSOR_CLICK_BALANCE_MIN, CURSOR_CLICK_BALANCE_MAX)),
   }
 }
 
@@ -1654,6 +1672,12 @@ function App() {
   const [customCursorCenterSizePx, setCustomCursorCenterSizePx] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.centerSizePx)
   const [customCursorPulseMagnitude, setCustomCursorPulseMagnitude] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseMagnitude)
   const [customCursorPulseHz, setCustomCursorPulseHz] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseHz)
+  const [customCursorClickRamp, setCustomCursorClickRamp] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickRamp)
+  const [customCursorClickSkew, setCustomCursorClickSkew] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickSkew)
+  const [customCursorClickDurationSec, setCustomCursorClickDurationSec] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickDurationSec)
+  const [customCursorClickMaxSpeed, setCustomCursorClickMaxSpeed] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMaxSpeed)
+  const [customCursorClickStep, setCustomCursorClickStep] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickStep)
+  const [customCursorClickBalance, setCustomCursorClickBalance] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickBalance)
   // Local "staged" HSVA color for the Mouse options row-1 H/S/V/A drag
   // controls -- deliberately not tied to the app-wide activeColorHsva/
   // primedColorSource rig (that system arms a swatch anywhere in the app;
@@ -2221,6 +2245,12 @@ function App() {
     centerSizePx: customCursorCenterSizePx,
     pulseMagnitude: customCursorPulseMagnitude,
     pulseHz: customCursorPulseHz,
+    clickRamp: customCursorClickRamp,
+    clickSkew: customCursorClickSkew,
+    clickDurationSec: customCursorClickDurationSec,
+    clickMaxSpeed: customCursorClickMaxSpeed,
+    clickStep: customCursorClickStep,
+    clickBalance: customCursorClickBalance,
   }), [
     customCursorEnabled,
     customCursorDotColor,
@@ -2235,6 +2265,12 @@ function App() {
     customCursorCenterSizePx,
     customCursorPulseMagnitude,
     customCursorPulseHz,
+    customCursorClickRamp,
+    customCursorClickSkew,
+    customCursorClickDurationSec,
+    customCursorClickMaxSpeed,
+    customCursorClickStep,
+    customCursorClickBalance,
   ])
 
   const updateTextureMaterial = useCallback((surface: TextureSurfaceKey, updater: (current: TextureMaterialSettings) => TextureMaterialSettings) => {
@@ -2401,6 +2437,12 @@ function App() {
       cursorCenterSizePx: customCursorCenterSizePx,
       cursorPulseMagnitude: customCursorPulseMagnitude,
       cursorPulseHz: customCursorPulseHz,
+      cursorClickRamp: customCursorClickRamp,
+      cursorClickSkew: customCursorClickSkew,
+      cursorClickDurationSec: customCursorClickDurationSec,
+      cursorClickMaxSpeed: customCursorClickMaxSpeed,
+      cursorClickStep: customCursorClickStep,
+      cursorClickBalance: customCursorClickBalance,
     }
   }, [
     borderRadiusRegularPx,
@@ -2446,6 +2488,12 @@ function App() {
     customCursorCenterSizePx,
     customCursorPulseMagnitude,
     customCursorPulseHz,
+    customCursorClickRamp,
+    customCursorClickSkew,
+    customCursorClickDurationSec,
+    customCursorClickMaxSpeed,
+    customCursorClickStep,
+    customCursorClickBalance,
   ])
 
   const applyUiLayoutLoadout = useCallback((loadoutInput: unknown) => {
@@ -2574,6 +2622,30 @@ function App() {
     setCustomCursorPulseHz(clamp(
       loadout.cursorPulseHz ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseHz,
       CURSOR_PULSE_HZ_MIN, CURSOR_PULSE_HZ_MAX,
+    ))
+    setCustomCursorClickRamp(clamp(
+      loadout.cursorClickRamp ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.clickRamp,
+      CURSOR_CLICK_RAMP_MIN, CURSOR_CLICK_RAMP_MAX,
+    ))
+    setCustomCursorClickSkew(clamp(
+      loadout.cursorClickSkew ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.clickSkew,
+      CURSOR_CLICK_SKEW_MIN, CURSOR_CLICK_SKEW_MAX,
+    ))
+    setCustomCursorClickDurationSec(clamp(
+      loadout.cursorClickDurationSec ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.clickDurationSec,
+      CURSOR_CLICK_DURATION_MIN_SEC, CURSOR_CLICK_DURATION_MAX_SEC,
+    ))
+    setCustomCursorClickMaxSpeed(clamp(
+      loadout.cursorClickMaxSpeed ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMaxSpeed,
+      CURSOR_CLICK_MAX_SPEED_MIN, CURSOR_CLICK_MAX_SPEED_MAX,
+    ))
+    setCustomCursorClickStep(clamp(
+      loadout.cursorClickStep ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.clickStep,
+      CURSOR_CLICK_STEP_MIN, CURSOR_CLICK_STEP_MAX,
+    ))
+    setCustomCursorClickBalance(clamp(
+      loadout.cursorClickBalance ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.clickBalance,
+      CURSOR_CLICK_BALANCE_MIN, CURSOR_CLICK_BALANCE_MAX,
     ))
   }, [applyDarkModePreset])
 
@@ -7624,6 +7696,18 @@ ${markdownHtml}
                         setCustomCursorPulseMagnitude={setCustomCursorPulseMagnitude}
                         customCursorPulseHz={customCursorPulseHz}
                         setCustomCursorPulseHz={setCustomCursorPulseHz}
+                        customCursorClickRamp={customCursorClickRamp}
+                        setCustomCursorClickRamp={setCustomCursorClickRamp}
+                        customCursorClickSkew={customCursorClickSkew}
+                        setCustomCursorClickSkew={setCustomCursorClickSkew}
+                        customCursorClickDurationSec={customCursorClickDurationSec}
+                        setCustomCursorClickDurationSec={setCustomCursorClickDurationSec}
+                        customCursorClickMaxSpeed={customCursorClickMaxSpeed}
+                        setCustomCursorClickMaxSpeed={setCustomCursorClickMaxSpeed}
+                        customCursorClickStep={customCursorClickStep}
+                        setCustomCursorClickStep={setCustomCursorClickStep}
+                        customCursorClickBalance={customCursorClickBalance}
+                        setCustomCursorClickBalance={setCustomCursorClickBalance}
                         cursorColorHsva={cursorColorHsva}
                         cursorHsvaDisplayColors={cursorHsvaDisplayColors}
                         cursorHsvaDragState={cursorHsvaDragState}

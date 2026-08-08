@@ -84,6 +84,28 @@ import {
   CURSOR_PULSE_HZ_MAX,
   CURSOR_PULSE_HZ_STEP,
   CURSOR_PULSE_HZ_DEFAULT,
+  CURSOR_CLICK_RAMP_MIN,
+  CURSOR_CLICK_RAMP_MAX,
+  CURSOR_CLICK_RAMP_DEFAULT,
+  CURSOR_CLICK_SKEW_MIN,
+  CURSOR_CLICK_SKEW_MAX,
+  CURSOR_CLICK_SKEW_DEFAULT,
+  CURSOR_CLICK_DURATION_MIN_SEC,
+  CURSOR_CLICK_DURATION_MAX_SEC,
+  CURSOR_CLICK_DURATION_STEP_SEC,
+  CURSOR_CLICK_DURATION_DEFAULT_SEC,
+  CURSOR_CLICK_MAX_SPEED_MIN,
+  CURSOR_CLICK_MAX_SPEED_MAX,
+  CURSOR_CLICK_MAX_SPEED_STEP,
+  CURSOR_CLICK_MAX_SPEED_DEFAULT,
+  CURSOR_CLICK_STEP_MIN,
+  CURSOR_CLICK_STEP_MAX,
+  CURSOR_CLICK_STEP_STEP,
+  CURSOR_CLICK_STEP_DEFAULT,
+  CURSOR_CLICK_BALANCE_MIN,
+  CURSOR_CLICK_BALANCE_MAX,
+  CURSOR_CLICK_BALANCE_STEP,
+  CURSOR_CLICK_BALANCE_DEFAULT,
 } from '../shared/cursorSettings'
 import {
   GLAZE_GLOOM_OPACITY_MAX,
@@ -481,6 +503,18 @@ export interface SidebarOptionsPanelProps {
   setCustomCursorPulseMagnitude: (value: number) => void
   customCursorPulseHz: number
   setCustomCursorPulseHz: (value: number) => void
+  customCursorClickRamp: number
+  setCustomCursorClickRamp: (value: number) => void
+  customCursorClickSkew: number
+  setCustomCursorClickSkew: (value: number) => void
+  customCursorClickDurationSec: number
+  setCustomCursorClickDurationSec: (value: number) => void
+  customCursorClickMaxSpeed: number
+  setCustomCursorClickMaxSpeed: (value: number) => void
+  customCursorClickStep: number
+  setCustomCursorClickStep: (value: number) => void
+  customCursorClickBalance: number
+  setCustomCursorClickBalance: (value: number) => void
   cursorColorHsva: HsvaColor
   cursorHsvaDisplayColors: { hColor: string; sColor: string; vColor: string; aGhostColor: string }
   cursorHsvaDragState: HsvaDragState | null
@@ -692,6 +726,18 @@ export function SidebarOptionsPanel({
   setCustomCursorPulseMagnitude,
   customCursorPulseHz,
   setCustomCursorPulseHz,
+  customCursorClickRamp,
+  setCustomCursorClickRamp,
+  customCursorClickSkew,
+  setCustomCursorClickSkew,
+  customCursorClickDurationSec,
+  setCustomCursorClickDurationSec,
+  customCursorClickMaxSpeed,
+  setCustomCursorClickMaxSpeed,
+  customCursorClickStep,
+  setCustomCursorClickStep,
+  customCursorClickBalance,
+  setCustomCursorClickBalance,
   cursorColorHsva,
   cursorHsvaDisplayColors,
   cursorHsvaDragState,
@@ -2157,6 +2203,86 @@ export function SidebarOptionsPanel({
               ariaLabel="Pulse frequency in hertz"
               defaultValue={CURSOR_PULSE_HZ_DEFAULT}
               onCommit={(value) => setCustomCursorPulseHz(clamp(value, CURSOR_PULSE_HZ_MIN, CURSOR_PULSE_HZ_MAX))}
+            />
+          </div>
+
+          <div className="options-glaze-cell options-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="cursor-click-ramp"
+              min={CURSOR_CLICK_RAMP_MIN}
+              max={CURSOR_CLICK_RAMP_MAX}
+              step={0.05}
+              value={customCursorClickRamp}
+              trackLabel="click ramp"
+              ariaLabel="Click response curve dynamic parameter a"
+              defaultValue={CURSOR_CLICK_RAMP_DEFAULT}
+              onCommit={(value) => setCustomCursorClickRamp(clamp(value, CURSOR_CLICK_RAMP_MIN, CURSOR_CLICK_RAMP_MAX))}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="cursor-click-skew"
+              min={CURSOR_CLICK_SKEW_MIN}
+              max={CURSOR_CLICK_SKEW_MAX}
+              step={0.01}
+              value={customCursorClickSkew}
+              trackLabel="click shape"
+              ariaLabel="Click response curve skew (apex bias)"
+              defaultValue={CURSOR_CLICK_SKEW_DEFAULT}
+              onCommit={(value) => setCustomCursorClickSkew(clamp(value, CURSOR_CLICK_SKEW_MIN, CURSOR_CLICK_SKEW_MAX))}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="cursor-click-duration"
+              min={CURSOR_CLICK_DURATION_MIN_SEC}
+              max={CURSOR_CLICK_DURATION_MAX_SEC}
+              step={CURSOR_CLICK_DURATION_STEP_SEC}
+              value={customCursorClickDurationSec}
+              trackLabel="click speed"
+              ariaLabel="Click response total time in seconds"
+              reverseScale
+              defaultValue={CURSOR_CLICK_DURATION_DEFAULT_SEC}
+              onCommit={(value) => setCustomCursorClickDurationSec(clamp(value, CURSOR_CLICK_DURATION_MIN_SEC, CURSOR_CLICK_DURATION_MAX_SEC))}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="cursor-click-step"
+              min={CURSOR_CLICK_STEP_MIN}
+              max={CURSOR_CLICK_STEP_MAX}
+              step={CURSOR_CLICK_STEP_STEP}
+              value={customCursorClickStep}
+              trackLabel="min impact"
+              ariaLabel="Distance covered by a single un-held click"
+              defaultValue={CURSOR_CLICK_STEP_DEFAULT}
+              onCommit={(value) => setCustomCursorClickStep(clamp(value, CURSOR_CLICK_STEP_MIN, CURSOR_CLICK_STEP_MAX))}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="cursor-click-max-speed"
+              min={CURSOR_CLICK_MAX_SPEED_MIN}
+              max={CURSOR_CLICK_MAX_SPEED_MAX}
+              step={CURSOR_CLICK_MAX_SPEED_STEP}
+              value={customCursorClickMaxSpeed}
+              trackLabel="max impact"
+              ariaLabel="Maximum click response speed while held"
+              defaultValue={CURSOR_CLICK_MAX_SPEED_DEFAULT}
+              onCommit={(value) => setCustomCursorClickMaxSpeed(clamp(value, CURSOR_CLICK_MAX_SPEED_MIN, CURSOR_CLICK_MAX_SPEED_MAX))}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="cursor-click-balance"
+              min={CURSOR_CLICK_BALANCE_MIN}
+              max={CURSOR_CLICK_BALANCE_MAX}
+              step={CURSOR_CLICK_BALANCE_STEP}
+              value={customCursorClickBalance}
+              trackLabel="balance"
+              ariaLabel="Click response balance between radius and spin -- left affects radius only, right affects spin only, center affects both"
+              defaultValue={CURSOR_CLICK_BALANCE_DEFAULT}
+              onCommit={(value) => setCustomCursorClickBalance(clamp(value, CURSOR_CLICK_BALANCE_MIN, CURSOR_CLICK_BALANCE_MAX))}
             />
           </div>
         </div>

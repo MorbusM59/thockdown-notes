@@ -147,6 +147,12 @@ export const NEUTRAL_BASE: UiLayoutLoadout = {
   cursorCenterSizePx: DEFAULT_CUSTOM_CURSOR_SETTINGS.centerSizePx,
   cursorPulseMagnitude: DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseMagnitude,
   cursorPulseHz: DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseHz,
+  cursorClickRamp: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickRamp,
+  cursorClickSkew: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickSkew,
+  cursorClickDurationSec: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickDurationSec,
+  cursorClickMaxSpeed: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMaxSpeed,
+  cursorClickStep: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickStep,
+  cursorClickBalance: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickBalance,
 };
 
 export const DEFAULT_CUSTOM_LIGHT: UiLayoutLoadout = {

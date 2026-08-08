@@ -87,6 +87,15 @@ export type UiLayoutLoadout = {
   cursorCenterSizePx: number;
   cursorPulseMagnitude: number;
   cursorPulseHz: number;
+  // Click response tuning (Options > Mouse options, "click response"
+  // sliders) -- see CursorClickCurve.ts. The live "current tightness" axis
+  // itself is NOT here; only the curve-shape parameters are persisted.
+  cursorClickRamp: number;
+  cursorClickSkew: number;
+  cursorClickDurationSec: number;
+  cursorClickMaxSpeed: number;
+  cursorClickStep: number;
+  cursorClickBalance: number;
 };
 
 // ---------------------------------------------------------------------------

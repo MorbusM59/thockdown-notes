@@ -41,6 +41,12 @@ import {
   CURSOR_CENTER_SIZE_MIN_PX, CURSOR_CENTER_SIZE_MAX_PX,
   CURSOR_PULSE_MAGNITUDE_MIN, CURSOR_PULSE_MAGNITUDE_MAX,
   CURSOR_PULSE_HZ_MIN, CURSOR_PULSE_HZ_MAX,
+  CURSOR_CLICK_RAMP_MIN, CURSOR_CLICK_RAMP_MAX,
+  CURSOR_CLICK_SKEW_MIN, CURSOR_CLICK_SKEW_MAX,
+  CURSOR_CLICK_DURATION_MIN_SEC, CURSOR_CLICK_DURATION_MAX_SEC,
+  CURSOR_CLICK_MAX_SPEED_MIN, CURSOR_CLICK_MAX_SPEED_MAX,
+  CURSOR_CLICK_STEP_MIN, CURSOR_CLICK_STEP_MAX,
+  CURSOR_CLICK_BALANCE_MIN, CURSOR_CLICK_BALANCE_MAX,
 } from '../src/shared/cursorSettings';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureMaterialSettings, type TextureMaterialsBySurface } from '../src/textures/types';
 import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../src/shared/audioPlayer';
@@ -158,6 +164,12 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   cursorCenterSizePx: DEFAULT_CUSTOM_CURSOR_SETTINGS.centerSizePx,
   cursorPulseMagnitude: DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseMagnitude,
   cursorPulseHz: DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseHz,
+  cursorClickRamp: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickRamp,
+  cursorClickSkew: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickSkew,
+  cursorClickDurationSec: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickDurationSec,
+  cursorClickMaxSpeed: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMaxSpeed,
+  cursorClickStep: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickStep,
+  cursorClickBalance: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickBalance,
 };
 
 type SqliteDatabase = import('better-sqlite3').Database;
@@ -582,6 +594,12 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     cursorCenterSizePx: clampNumber(source.cursorCenterSizePx, CURSOR_CENTER_SIZE_MIN_PX, CURSOR_CENTER_SIZE_MAX_PX, DEFAULT_UI_LAYOUT_LOADOUT.cursorCenterSizePx),
     cursorPulseMagnitude: clampNumber(source.cursorPulseMagnitude, CURSOR_PULSE_MAGNITUDE_MIN, CURSOR_PULSE_MAGNITUDE_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorPulseMagnitude),
     cursorPulseHz: clampNumber(source.cursorPulseHz, CURSOR_PULSE_HZ_MIN, CURSOR_PULSE_HZ_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorPulseHz),
+    cursorClickRamp: clampNumber(source.cursorClickRamp, CURSOR_CLICK_RAMP_MIN, CURSOR_CLICK_RAMP_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickRamp),
+    cursorClickSkew: clampNumber(source.cursorClickSkew, CURSOR_CLICK_SKEW_MIN, CURSOR_CLICK_SKEW_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickSkew),
+    cursorClickDurationSec: clampNumber(source.cursorClickDurationSec, CURSOR_CLICK_DURATION_MIN_SEC, CURSOR_CLICK_DURATION_MAX_SEC, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickDurationSec),
+    cursorClickMaxSpeed: clampNumber(source.cursorClickMaxSpeed, CURSOR_CLICK_MAX_SPEED_MIN, CURSOR_CLICK_MAX_SPEED_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickMaxSpeed),
+    cursorClickStep: clampNumber(source.cursorClickStep, CURSOR_CLICK_STEP_MIN, CURSOR_CLICK_STEP_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickStep),
+    cursorClickBalance: clampNumber(source.cursorClickBalance, CURSOR_CLICK_BALANCE_MIN, CURSOR_CLICK_BALANCE_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickBalance),
   };
 }
 
@@ -603,6 +621,8 @@ const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
   'cursorDotColor', 'cursorCenterColor', 'cursorTrailColor', 'cursorDotCount',
   'cursorRadiusPx', 'cursorSpinHz', 'cursorTrailThicknessPx', 'cursorTrailFadeMs',
   'cursorDotSizePx', 'cursorCenterSizePx', 'cursorPulseMagnitude', 'cursorPulseHz',
+  'cursorClickRamp', 'cursorClickSkew', 'cursorClickDurationSec', 'cursorClickMaxSpeed',
+  'cursorClickStep', 'cursorClickBalance',
 ];
 
 // Keys whose values are nested objects; they're emitted as inline JSON when

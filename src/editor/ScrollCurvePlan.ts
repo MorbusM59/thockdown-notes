@@ -102,7 +102,9 @@ export const buildCurvePlan = (a: number, b: number, tSec: number, skew: number)
   return { cdf, slopes, peakSlope };
 };
 
-const sampleCdf = (cdf: Float64Array, progress: number): number => {
+// Exported so other curve-driven interactions (e.g. CursorClickCurve.ts)
+// can build their own release-ramp-down sampling without duplicating this.
+export const sampleCdf = (cdf: Float64Array, progress: number): number => {
   if (progress <= 0) return 0;
   if (progress >= 1) return 1;
   const lastIndex = cdf.length - 1;
