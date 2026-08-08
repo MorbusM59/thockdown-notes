@@ -2177,3 +2177,78 @@ scripts fails with `ENOENT` on Windows (missing `shell: true`/`.cmd` resolution,
 gap in the scripts themselves, reproduced identically on unmodified `HEAD`), and there's no other live-browser
 path available in this environment. Worth an actual click-through (open a note, confirm it doesn't jump to
 the top of Date/Latest) before considering this fully closed.
+
+## New subsystem: line-number / review-flag gutter, plus a real EditorView-recreation desync bug found along the way
+
+A toggleable per-line gutter was added to `CM6Editor.tsx`: a left column of true (unwrapped) Markdown
+line numbers and a right column of click-to-cycle review (`?`) / warning (`!`) flags, both rendered as
+overlay `<div>`s in the same hand-rolled style as the existing box-grid/boundary-zone overlays --
+deliberately NOT a native CM6 `gutter()` extension, to keep one grid-alignment mechanism rather than two
+competing ones (this file's own long-standing fragility around exactly that class of bug is why).
+
+**Where it lives**:
+- Geometry: `updateLineLayout` (new, in `CM6Editor.tsx`) reads `view.viewportLineBlocks` -- CM6's own
+  analytical per-document-line layout, not a DOM measurement -- recomputed in lockstep with
+  `updateSelectionHighlight`'s existing resync cadence (scroll/doc/viewport/resize), so there's a single
+  source of truth for "when do overlays need to resync," not a second parallel schedule.
+- Persistence: a new `review_flags` SQLite table (FK'd to `notes(id) ON DELETE CASCADE`), full IPC
+  round-trip (`src/shared/reviewFlags.ts`, `databaseService.ts`, `main.ts`/`preload.ts`, dev-mode browser
+  mock bridge). Flags are anchored to a live document *position*, remapped exactly via CM6's own
+  `ChangeSet.mapPos` on every transaction (the same mechanism CM6 uses internally to reposition its own
+  marks/decorations/selections across an edit) -- not a heuristic, and not hash-based; a lightweight
+  content-hash sanity check runs only at note load, the one point live remapping structurally can't reach
+  (no transaction history exists yet for a note that just opened).
+- Toggle state: `reviewGutterVisibleBySection` in `PersistedMenuState`, keyed per editor slot
+  (`sectionId`), not per note -- pruned on every slot-close path (`handleCloseSection`,
+  `handleSwapSection`, `handleClearSection` in `App.tsx`), defaults off for a freshly created slot. Wired
+  to what was previously a fully dead "Add a chapter" button in `SectionEditorArea.tsx` (no `onClick` at
+  all -- real chapter-creation already lives in `ChapterBar`).
+- Colors: three new `HighlightColorKey`s (`gutterBackground`, `reviewLine`, `warningLine`) threaded through
+  the full existing color-customization pipeline (defaults, loadout save/restore, CSS var application,
+  options-panel swatch), same as every other user-settable box color.
+
+**Two grid-alignment corrections found live, both against this file's own established conventions rather
+than new invention**:
+1. Gutter rows needed the same `quantizeToPhase` snap `updateSelectionHighlight` already applies to its
+   own rects -- a raw `block.top` read isn't automatically on the grid's half-line-height phase.
+2. `block.top` (CM6's heightmap coordinate) does NOT include `contentDOM`'s own CSS `paddingTop` -- the
+   fixed-focus cage's top-boundary inset -- so gutter rows were short by exactly that padding, worse,
+   frozen regardless of boundary drags since the heightmap term never reflected them. Fixed by adding
+   `topBoundaryPxRef.current + halfLineHeightPx` (the exact same value driving the real `paddingTop`) into
+   the row-position calculation, plus wiring a live recompute into the boundary-drag `mousemove` handler
+   (the real content already followed the drag reactively via CSS; the gutter overlay's row positions are
+   plain JS state and needed an explicit nudge).
+3. The flag column's width and position needed the same "remainder into the last cell" treatment
+   `alignmentPaddingBottomPx` already uses for the bottom edge, applied horizontally: the grid's box
+   columns are phase-anchored from the left only (never phase-corrected against the right edge, same
+   "cut-off boxes at the far edges expected and fine" as the grid overlay's own doc comment), so a flat
+   one-cell-wide column almost never lands on a real box boundary. Reserves one full box + the leftover
+   remainder instead, and is positioned via an explicit JS-computed `left` (a new `scrollerClientWidthPx`
+   state, tracked the same way `scrollerClientHeightPx` already is) rather than `right: 0` -- a
+   `right`-anchored box's edge is resolved live by the browser against the parent's actual current width
+   every layout pass, while its *width* only updates when our own state does, so the two visibly drift
+   apart for a few frames during a live resize.
+
+**A separate, higher-value bug found while chasing an unrelated dev-only symptom**: editing `CM6Editor.tsx`
+and triggering a Vite/React Fast Refresh hot reload while a note was open left the text rendered flush at
+`(0, 0)` -- no left/top offset at all -- until the next note load happened to fix it as an incidental side
+effect. Root cause: the padding-application effect (the only place in this file that imperatively mutates
+`view.contentDOM.style.*`) depended only on the *computed pixel values* it writes (`halfCellWidthPx`,
+`topBoundaryVisualPx`, etc.), never on anything tied to the `EditorView` instance itself. The mount-once
+effect that creates the `EditorView` tore down and recreated it on the Fast Refresh remount -- a fresh,
+unstyled `contentDOM` -- but none of the geometry *numbers* actually changed (same font size, same
+boundary lines), so React's own dependency-array diff correctly concluded "nothing changed here" and
+skipped re-running the effect, leaving the new node with no inline padding at all. **Fix**: added a
+`viewMountGeneration` counter (`CM6Editor.tsx`), bumped once right after `viewRef.current = view` in the
+mount-once effect, and added to the padding effect's dependency array -- forcing it to re-run whenever a
+fresh `EditorView` exists, decoupled from whether the geometry values happened to also change. This closes
+the whole class of bug (any future code path that recreates the view without a coincident geometry change
+would have hit the same silent desync), not just the HMR trigger that happened to reproduce it reliably.
+
+**Verification**: `tsc --noEmit` and `npm run lint` clean after every incremental change in this session.
+`npm test` shows the same pre-existing 15 native-module-ABI failures as `HEAD` (confirmed via `git stash`),
+none newly introduced. **Not verified live** -- this session ran without browser-preview access by explicit
+user preference; the user verified visually themselves and reported back the three grid-alignment
+corrections above, each fixed and re-confirmed in the same loop. Worth a normal click-through pass (toggle
+the gutter, resize the pane, flag a few wrapped lines, trigger a dev-mode hot reload) before considering
+this fully closed.
