@@ -1044,6 +1044,8 @@ export function SidebarOptionsPanel({
         className="sidebar-options-section-layouts"
         ariaLabel="Custom Presets"
         heading="Custom Presets"
+        iconClass="fa-floppy-disk"
+        iconTooltip=""
       >
         <div className="options-loadout-grid" role="group" aria-label="Custom UI layout presets">
           {customSlotEntriesForCurrentMode.map((entry) => (
@@ -1097,6 +1099,8 @@ export function SidebarOptionsPanel({
         className="sidebar-options-section-colors"
         ariaLabel="Colors & Textures"
         heading="Colors & Textures"
+        iconClass="fa-rectangle-list"
+        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
       >
         <div className="options-color-layout" aria-label="Color and texture controls">
           <div className="options-color-grid options-hsva-grid" role="group" aria-label="HSVA value controls">
@@ -1523,6 +1527,8 @@ export function SidebarOptionsPanel({
         className="sidebar-options-section-misc"
         ariaLabel="Borders & Spacing"
         heading="Borders & Spacing"
+        iconClass="fa-rectangle-list"
+        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
       >
 <div className="utility-setting-slider-stack" aria-label="Borders and spacing controls">
           <CompactScrollbarSlider
@@ -1599,6 +1605,8 @@ export function SidebarOptionsPanel({
       <AccordionSection
         ariaLabel="Glaze"
         heading="Glaze"
+        iconClass="fa-rectangle-list"
+        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
       >
         <div className="options-glaze-settings-grid" role="group" aria-label="Glaze overlay controls">
           <div className="options-glaze-cell options-glaze-cell-span-2 options-glaze-top-left">
@@ -1921,6 +1929,8 @@ export function SidebarOptionsPanel({
       <AccordionSection
         ariaLabel="Filters"
         heading="Filters"
+        iconClass="fa-rectangle-list"
+        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
       >
 <div className="utility-setting-slider-stack" aria-label="CSS filter controls">
           <CompactScrollbarSlider id="filter-invert" min={0} max={1} step={0.01} value={filterInvert} trackLabel="invert" ariaLabel="Invert" defaultValue={0} onCommit={setFilterInvert} />
@@ -1993,6 +2003,8 @@ export function SidebarOptionsPanel({
         className="sidebar-options-section-mouse"
         ariaLabel="Mouse Options"
         heading="Mouse Options"
+        iconClass="fa-rectangle-list"
+        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
       >
         <div className="options-mouse-settings-grid" role="group" aria-label="Custom cursor color controls">
           <button
@@ -2299,6 +2311,8 @@ export function SidebarOptionsPanel({
         className="sidebar-options-section-audio"
         ariaLabel="Keystroke Sounds"
         heading="Keystroke Sounds"
+        iconClass="fa-rectangle-list"
+        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
       >
 <div className="utility-setting-slider-stack" aria-label="Keystroke Sounds controls">
           <div className="utility-setting-button-row" role="group" aria-label="Typing sound controls">

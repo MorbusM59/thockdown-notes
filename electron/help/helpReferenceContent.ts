@@ -164,6 +164,7 @@ Every feature in the app, described individually: where to find it, what it does
 - Click a line's box in the flag column to mark it for review (\`?\`); click again to escalate it to a warning (\`!\`); click again to go back to \`?\`. Either state tints the whole line (all of its wrapped rows) in the review or warning color. Right-click the box to clear the flag entirely — the only way to remove one.
 - Flags are saved permanently per note (or chapter) regardless of whether the gutter is currently shown — toggling the gutter off only hides them, it never deletes them.
 - Review and warning colors (plus the gutter's own background) are customizable from Settings alongside the other box colors.
+- When a flagged line sits above or below what's currently visible, the flag column's topmost or bottommost box swaps to an up or down arrow — click it (or press Ctrl+Up/Ctrl+Down) to smooth-scroll to and center that flagged line. If the box showing the arrow is itself already flagged, clicking centers that line instead of jumping past it.
 
 ### [Spell Check](#spell-check)
 

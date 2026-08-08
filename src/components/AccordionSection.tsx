@@ -77,7 +77,14 @@ interface AccordionSectionProps {
   ariaLabel?: string
   /** Increment to programmatically open this section (e.g. from an external button). */
   forceOpenNonce?: number
+  /** fa-solid icon class for the heading, e.g. "fa-rectangle-list". Defaults to the global-scope icon. */
+  iconClass?: string
+  /** Tooltip shown when hovering the icon. Pass '' to suppress the title attribute entirely. */
+  iconTooltip?: string
 }
+
+const DEFAULT_ICON_CLASS   = 'fa-globe-americas'
+const DEFAULT_ICON_TOOLTIP = 'These settings are global and persist across layouts.'
 
 interface AnimState {
   rafId: number
@@ -93,6 +100,8 @@ export function AccordionSection({
   headingClassName,
   ariaLabel,
   forceOpenNonce,
+  iconClass = DEFAULT_ICON_CLASS,
+  iconTooltip = DEFAULT_ICON_TOOLTIP,
 }: AccordionSectionProps) {
   const id = useId()
   const group = useContext(AccordionGroupContext)
@@ -217,6 +226,10 @@ export function AccordionSection({
           onClick={handleClick}
           onContextMenu={handleContextMenu}
         >
+          <span
+            className={`fa-solid ${iconClass}`}
+            title={iconTooltip || undefined}
+          />
           {heading}
         </summary>
         <div ref={contentRef}>

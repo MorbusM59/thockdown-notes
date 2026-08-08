@@ -587,6 +587,17 @@ interface LineLayoutRow {
   heightPx: number;
 }
 
+// The review gutter's static top/bottom "jump arrow" box slots -- see
+// updateLineLayout's own doc comment on why these are resolved via
+// view.lineBlockAtHeight against fixed, editor-height-derived pixel
+// positions rather than read off whichever rows happen to be rendered.
+interface ReviewGutterEdgeLines {
+  topLine: number;
+  bottomLine: number;
+  topBoxTopPx: number;
+  bottomBoxTopPx: number;
+}
+
 /** Ported verbatim from BlockSelectionPlugin.tsx -- walks up from `node` to the .cm-line element that's a direct child of `rootEl` (view.contentDOM), mirroring that file's own "top-level child" notion. */
 function findTopLevelChild(rootEl: HTMLElement, node: Node | null): HTMLElement | null {
   let current: Node | null = node;
@@ -682,6 +693,11 @@ export function CM6Editor({
   // hits, go-to-start/end) in the viewport -- see its use in applySnapshot's
   // `snapshot.selection` handling.
   const reconcileSelectionJumpScrollRef = useRef<((view: EditorView) => void) | null>(null);
+  // Read by the Ctrl+ArrowUp/Down keymap handler below (registered once at
+  // view-construction time), same "stable ref to a closure that's recreated
+  // every render" pattern as bindingsRef -- see navigateToFlaggedLine's own
+  // doc comment for what it does.
+  const navigateToFlaggedLineRef = useRef<((direction: 'up' | 'down') => boolean) | null>(null);
   const scrollTransitionControllerRef = useRef(new ScrollTransitionController());
   const bindingsRef = useRef(bindings);
   const previousTextRef = useRef('');
@@ -751,6 +767,16 @@ export function CM6Editor({
   useEffect(() => { reviewFlagsRef.current = reviewFlags; }, [reviewFlags]);
   const flagPositionsRef = useRef<Map<number, number>>(new Map());
   const [lineLayoutRows, setLineLayoutRows] = useState<LineLayoutRow[]>([]);
+  // The review gutter's static top/bottom "jump arrow" box positions and the
+  // document line currently resolved at each (see updateLineLayout) --
+  // pinned purely by editor height, independent of which rows
+  // viewportLineBlocks happens to render this pass. reviewGutterEdgeLinesRef
+  // mirrors the state for navigateToFlaggedLine, called from the
+  // Ctrl+ArrowUp/Down keymap handler via a stable ref (registered once at
+  // view-construction time, so it can't see fresh render-scoped state) --
+  // same reasoning as flagsByLineRef.
+  const [reviewGutterEdgeLines, setReviewGutterEdgeLines] = useState<ReviewGutterEdgeLines | null>(null);
+  const reviewGutterEdgeLinesRef = useRef<ReviewGutterEdgeLines | null>(null);
   const [totalLineCount, setTotalLineCount] = useState(1);
   // line number -> {id, severity} for the CURRENT (post-remap) document,
   // recomputed in lockstep with lineLayoutRows -- see updateLineLayout.
@@ -1156,6 +1182,15 @@ export function CM6Editor({
   // rendering it at the full reserved width visually extended the gutter
   // all the way to the border, past where a single box actually ends.
   const reviewGutterFlagBoxWidthPx = showReviewGutter ? cellWidthPx : 0;
+  // Whether the gutter's static top/bottom edge box (see
+  // ReviewGutterEdgeLines) should show an up/down-long "jump" arrow -- true
+  // iff a flagged line exists strictly past that edge (above
+  // reviewGutterEdgeLines.topLine, below .bottomLine). Recomputed every
+  // render off flagsByLineRef (all flags, not just visible ones).
+  const reviewGutterHasFlagAboveTop = reviewGutterEdgeLines !== null
+    && Array.from(flagsByLineRef.current.keys()).some((line) => line < reviewGutterEdgeLines.topLine);
+  const reviewGutterHasFlagBelowBottom = reviewGutterEdgeLines !== null
+    && Array.from(flagsByLineRef.current.keys()).some((line) => line > reviewGutterEdgeLines.bottomLine);
   // topBoundaryPxDisplay/bottomBoundaryPxDisplay are phase-0 (plain multiples
   // of lineHeightPx) because that's what the scroll-cage math needs them to
   // stay as -- see CageMath.ts's own doc comment on why its screen-anchored
@@ -1435,6 +1470,8 @@ export function CM6Editor({
     const layerEl = layerRef.current;
     if (!view || !layerEl) {
       setLineLayoutRows([]);
+      setReviewGutterEdgeLines(null);
+      reviewGutterEdgeLinesRef.current = null;
       return;
     }
 
@@ -1481,6 +1518,38 @@ export function CM6Editor({
     }
     setLineLayoutRows(rows);
     setTotalLineCount(view.state.doc.lines);
+
+    // Static top/bottom "jump arrow" box positions -- pinned purely by
+    // editor height (scroller.clientHeight / lineHeightPx), NOT by which
+    // rows viewportLineBlocks happens to include this render. Found live:
+    // anchoring the arrow to lineLayoutRows[0]/[length-1] instead put it on
+    // whatever line CM6's virtualization buffer (which extends beyond the
+    // actually-visible pixels, both above and below) happened to report
+    // first/last that render, so the arrow visibly jittered between rows
+    // and wasn't reliably at the real bottom edge. Resolving the line at
+    // each fixed pixel slot via view.lineBlockAtHeight (the same analytical,
+    // non-DOM primitive resolveSourceLineAtHeight uses) instead of scanning
+    // the rendered-rows array sidesteps the virtualization window entirely.
+    const staticVisibleRowCount = Math.max(1, Math.floor((scroller.clientHeight - topBoundaryVisualPxNow) / lineHeightPxNow));
+    const topBoxTopPx = quantizeToPhase(scrollerTopInLayer + topBoundaryVisualPxNow, lineHeightPxNow, halfLineHeightPxNow);
+    const bottomBoxTopPx = quantizeToPhase(
+      scrollerTopInLayer + topBoundaryVisualPxNow + (staticVisibleRowCount - 1) * lineHeightPxNow,
+      lineHeightPxNow,
+      halfLineHeightPxNow,
+    );
+    const resolveLineAtHeightMapPos = (heightMapPos: number): number => {
+      const clamped = Math.max(0, Math.min(view.contentHeight, heightMapPos));
+      const block = view.lineBlockAtHeight(clamped);
+      return view.state.doc.lineAt(block.from).number;
+    };
+    const edgeLines = {
+      topLine: resolveLineAtHeightMapPos(scroller.scrollTop),
+      bottomLine: resolveLineAtHeightMapPos(scroller.scrollTop + (staticVisibleRowCount - 1) * lineHeightPxNow),
+      topBoxTopPx,
+      bottomBoxTopPx,
+    };
+    setReviewGutterEdgeLines(edgeLines);
+    reviewGutterEdgeLinesRef.current = edgeLines;
 
     const flagsByLine = new Map<number, { id: number; severity: ReviewFlagSeverity }>();
     for (const flag of reviewFlagsRef.current) {
@@ -1720,6 +1789,55 @@ export function CM6Editor({
       scheduleSelectionHighlightUpdate();
     }).catch(() => {});
   }, [scheduleSelectionHighlightUpdate]);
+
+  /**
+   * Jumps to the nearest flagged line above ('up') or below ('down') the
+   * gutter's static top/bottom edge box (see updateLineLayout's
+   * ReviewGutterEdgeLines), or -- if the line resolved at that edge box is
+   * itself already flagged -- centers that line instead of skipping past
+   * it. Reuses reconcileSelectionJumpScrollRef (the same "center the new
+   * selection in the caged middle" pass useDocumentFindNavigation's
+   * search-hit jump uses via applySnapshot's `selectionScrollBehavior:
+   * 'center-caged'`) rather than a separate scroll path, so a flag jump
+   * settles with the exact same viewport-virtualization-aware retry
+   * behavior a search jump gets.
+   */
+  const navigateToFlaggedLine = useCallback((direction: 'up' | 'down'): boolean => {
+    const view = viewRef.current;
+    const edgeLines = reviewGutterEdgeLinesRef.current;
+    if (!view || !edgeLines) return false;
+
+    const edgeLine = direction === 'up' ? edgeLines.topLine : edgeLines.bottomLine;
+    const flaggedLines = flagsByLineRef.current;
+
+    let targetLine: number | null = null;
+    if (flaggedLines.has(edgeLine)) {
+      targetLine = edgeLine;
+    } else if (direction === 'up') {
+      let best: number | null = null;
+      for (const line of flaggedLines.keys()) {
+        if (line < edgeLine && (best === null || line > best)) best = line;
+      }
+      targetLine = best;
+    } else {
+      let best: number | null = null;
+      for (const line of flaggedLines.keys()) {
+        if (line > edgeLine && (best === null || line < best)) best = line;
+      }
+      targetLine = best;
+    }
+
+    if (targetLine === null || targetLine < 1 || targetLine > view.state.doc.lines) return false;
+
+    const linePos = view.state.doc.line(targetLine).from;
+    view.dispatch({ selection: EditorSelection.cursor(linePos) });
+    reconcileSelectionJumpScrollRef.current?.(view);
+    return true;
+  }, []);
+
+  useEffect(() => {
+    navigateToFlaggedLineRef.current = navigateToFlaggedLine;
+  }, [navigateToFlaggedLine]);
 
   // Found live: changing the y-box (line-height) slider while scrolled into
   // a large (virtualized) document could leave every visible line sitting
@@ -2229,6 +2347,20 @@ export function CM6Editor({
 
           if (isRefocusKey(event)) {
             pendingCageIntent = true;
+          }
+
+          if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+            // Ctrl+Up/Down jumps to the nearest flagged line off the top/
+            // bottom of the currently rendered gutter range -- the keyboard
+            // equivalent of clicking the gutter's own up/down-arrow flag
+            // boxes (see navigateToFlaggedLine). Only claimed when there's
+            // actually somewhere to jump to, so with no flags nearby this
+            // falls through to whatever Ctrl+Up/Down would otherwise do.
+            const acted = navigateToFlaggedLineRef.current?.(event.key === 'ArrowUp' ? 'up' : 'down') ?? false;
+            if (acted) {
+              event.preventDefault();
+              return true;
+            }
           }
 
           if (event.key === 'PageUp' || event.key === 'PageDown') {
@@ -4021,6 +4153,66 @@ export function CM6Editor({
               </div>
             );
           })}
+          {/* Off-screen-flag indicators: two boxes pinned at fixed,
+              editor-height-derived pixel slots -- the gutter's static top
+              and bottom edge (see ReviewGutterEdgeLines) -- NOT tied to any
+              particular rendered row, so they never jitter as CM6's
+              virtualization window shifts (see updateLineLayout's own doc
+              comment on why lineLayoutRows[0]/[length-1] was the wrong
+              anchor). Rendered on top of (z-index above) whatever line
+              happens to sit at that slot, replacing its normal flag-glyph
+              content, whenever a flagged line exists past that edge. A
+              click reuses the exact same centering pass a search-hit jump
+              uses (navigateToFlaggedLine); if the edge slot's own line is
+              already flagged, the click centers that line instead of
+              skipping past it -- see navigateToFlaggedLine's own doc
+              comment. */}
+          {reviewGutterFlagBoxWidthPx > 0 && scrollerClientWidthPx > 0 && reviewGutterEdgeLines && reviewGutterHasFlagAboveTop && (
+            <div
+              className="absolute editor-text select-none"
+              style={{
+                top: reviewGutterEdgeLines.topBoxTopPx,
+                left: reviewGutterRightLeftPx,
+                width: reviewGutterFlagBoxWidthPx,
+                height: lineHeightPx,
+                zIndex: 12,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.7em',
+                cursor: 'pointer',
+                backgroundColor: 'var(--color-gutter-bg)',
+                color: 'var(--color-editor-edit-text)',
+              }}
+              onClick={() => navigateToFlaggedLine('up')}
+              onContextMenu={(event) => handleGutterFlagContextMenu(reviewGutterEdgeLines.topLine, event)}
+            >
+              <span className="fa-solid fa-up-long" aria-hidden="true" />
+            </div>
+          )}
+          {reviewGutterFlagBoxWidthPx > 0 && scrollerClientWidthPx > 0 && reviewGutterEdgeLines && reviewGutterHasFlagBelowBottom && (
+            <div
+              className="absolute editor-text select-none"
+              style={{
+                top: reviewGutterEdgeLines.bottomBoxTopPx,
+                left: reviewGutterRightLeftPx,
+                width: reviewGutterFlagBoxWidthPx,
+                height: lineHeightPx,
+                zIndex: 12,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.7em',
+                cursor: 'pointer',
+                backgroundColor: 'var(--color-gutter-bg)',
+                color: 'var(--color-editor-edit-text)',
+              }}
+              onClick={() => navigateToFlaggedLine('down')}
+              onContextMenu={(event) => handleGutterFlagContextMenu(reviewGutterEdgeLines.bottomLine, event)}
+            >
+              <span className="fa-solid fa-down-long" aria-hidden="true" />
+            </div>
+          )}
         </>
       )}
       {hasViewportLines && fontReady && !caretHidden && highlightRects.map((rect, index) => (
