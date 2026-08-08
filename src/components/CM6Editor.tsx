@@ -1337,15 +1337,39 @@ export function CM6Editor({
     const layerRect = layerEl.getBoundingClientRect();
     const scrollerTopInLayer = scrollerRect.top - layerRect.top;
 
+    // Same phase-aware quantization updateSelectionHighlight already applies
+    // to its own row tops (see quantizeToPhase's doc comment): the content's
+    // half-line-height "infinity grid" breathing-room shift moves every real
+    // row's true position off a plain multiple of lineHeightPx, so a raw
+    // block.top read needs snapping to the SAME phase the grid overlay's own
+    // backgroundPosition uses, or gutter rows drift a fraction of a row off
+    // the visible grid boxes they're meant to sit inside.
+    const lineHeightPxNow = lineHeightPxRef.current;
+    const halfLineHeightPxNow = Math.round(lineHeightPxNow / 2);
+    // view.viewportLineBlocks' `top` is in CM6's OWN heightmap coordinate
+    // space -- accumulated line heights from the document's start -- which
+    // does NOT include view.contentDOM's own CSS paddingTop (the fixed-
+    // focus cage's top-boundary inset). scroller.scrollTop=0, however, is
+    // the top of the padding box (padding is inside the scrollable area),
+    // so `block.top - scroller.scrollTop` alone is short by exactly that
+    // padding -- found live: without this term, gutter rows sat a fraction
+    // of a row too high at boundary=0, and never moved at all as the top
+    // boundary was dragged down, even though the real first line visibly
+    // did (its position comes from CSS padding, not the heightmap this loop
+    // reads). topBoundaryPxRef mirrors topBoundaryPxDisplay (see the effect
+    // syncing it) so this stays correct as the boundary is dragged live.
+    const topBoundaryVisualPxNow = topBoundaryPxRef.current + halfLineHeightPxNow;
+
     const rows: LineLayoutRow[] = [];
     for (const block of view.viewportLineBlocks) {
       const docLine = view.state.doc.lineAt(block.from);
       // A document line can be split across multiple blocks (block widgets);
       // only the block starting at the line's own `from` gets a gutter row.
       if (block.from !== docLine.from) continue;
+      const rawTopPx = scrollerTopInLayer + topBoundaryVisualPxNow + (block.top - scroller.scrollTop);
       rows.push({
         line: docLine.number,
-        topPx: scrollerTopInLayer + (block.top - scroller.scrollTop),
+        topPx: quantizeToPhase(rawTopPx, lineHeightPxNow, halfLineHeightPxNow),
         heightPx: block.height,
       });
     }
@@ -3043,6 +3067,16 @@ export function CM6Editor({
         setBottomBoundaryLines(bottomLines);
         emitUserViewportChange(topBoundaryLines, bottomLines);
       }
+      // The content's own paddingTop/paddingBottom follow the boundary
+      // reactively (the padding effect is keyed on topBoundaryVisualPx/
+      // bottomBoundaryPxDisplay), so the real first/last line visibly moves
+      // every drag frame -- but the gutter's row positions are plain JS
+      // state, computed once per explicit recompute call, not something
+      // that just follows a CSS change. Without this, dragging the top
+      // handle down moved the real content but left every gutter row
+      // frozen at its pre-drag position until some unrelated event (a
+      // keystroke, a scroll) happened to trigger the next recompute.
+      scheduleSelectionHighlightUpdate();
     };
 
     const handleMouseUp = () => {
@@ -3667,10 +3701,18 @@ export function CM6Editor({
           flash) until those are ready either way. */}
       {showReviewGutter && (reviewGutterLeftPx > 0 || reviewGutterRightPx > 0) && (
         <>
+          {/* left starts at halfCellWidthPx, not 0 -- the same "infinity
+              grid" breathing-room shift the content's own paddingLeft gets,
+              so this column's boundaries land exactly on the grid's real box
+              boundaries (backgroundPosition ${halfCellWidthPx}px below)
+              instead of straddling two of them. Leaves the same half-box
+              sliver at the container's own left edge that the un-gated
+              content always has -- "cut-off boxes at the far edges expected
+              and fine," same as the grid overlay's own doc comment. */}
           {reviewGutterLeftPx > 0 && (
             <div
               className="absolute pointer-events-none"
-              style={{ top: 0, bottom: 0, left: 0, width: reviewGutterLeftPx, backgroundColor: 'var(--color-gutter-bg)', zIndex: 2 }}
+              style={{ top: 0, bottom: 0, left: halfCellWidthPx, width: reviewGutterLeftPx, backgroundColor: 'var(--color-gutter-bg)', zIndex: 2 }}
             />
           )}
           {reviewGutterRightPx > 0 && (
@@ -3710,12 +3752,11 @@ export function CM6Editor({
               className="absolute pointer-events-none select-none editor-text"
               style={{
                 top: row.topPx,
-                left: 0,
+                left: halfCellWidthPx,
                 width: reviewGutterLeftPx,
                 height: lineHeightPx,
                 zIndex: 11,
                 textAlign: 'right',
-                paddingRight: halfCellWidthPx,
                 lineHeight: `${lineHeightPx}px`,
                 opacity: 0.6,
               }}
