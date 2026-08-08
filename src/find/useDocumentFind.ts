@@ -57,6 +57,19 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
   void sectionId
 
   const [documentFindQuery, setDocumentFindQuery] = useState('')
+  // What the (potentially expensive) search actually runs against --
+  // deliberately a separate state from documentFindQuery, updated only
+  // after a debounce. buildDocumentFindHits is a synchronous full-document
+  // scan; a short, unspecific query (e.g. the first letter typed) against a
+  // large note can produce enormous hit counts and take long enough to
+  // block the main thread mid-keystroke. If that scan ran directly off
+  // documentFindQuery, the render committing each new character would be
+  // gated behind it -- exactly what caused characters to appear "swallowed"
+  // while typing a whole word quickly. Keeping documentFindQuery (which
+  // only drives the input's own displayed value) untouched by the debounce
+  // means every keystroke's own render+commit stays cheap and immediate
+  // regardless of how long the debounced search takes once it does run.
+  const [debouncedFindQuery, setDebouncedFindQuery] = useState('')
   const [documentReplaceQuery, setDocumentReplaceQuery] = useState('')
   const [isDocumentReplaceMode, setIsDocumentReplaceMode] = useState(false)
   const [isDocumentFindCaseSensitive, setIsDocumentFindCaseSensitive] = useState(false)
@@ -76,9 +89,29 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
   const effectiveCaseSensitive = isDocumentReplaceMode ? !isDocumentFindCaseSensitive : isDocumentFindCaseSensitive
   const preserveCase = isDocumentReplaceMode && isDocumentFindCaseSensitive
 
+  // Debounced at 1/(character count) seconds: 1s of no further typing after
+  // the 1st character before the search runs, 500ms after the 2nd, ~333ms
+  // after the 3rd, and so on. Each keystroke resets the timer at the new,
+  // shorter delay -- a short query is exactly the case that tends to match
+  // everywhere (most lag-prone), so it gets the most patience; once enough
+  // characters have narrowed things down, search resumes almost instantly.
+  // An empty query clears immediately since matching nothing is free.
+  useEffect(() => {
+    const charCount = documentFindQuery.length
+    if (charCount === 0) {
+      setDebouncedFindQuery('')
+      return
+    }
+    const delayMs = 1000 / charCount
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedFindQuery(documentFindQuery)
+    }, delayMs)
+    return () => window.clearTimeout(timeoutId)
+  }, [documentFindQuery])
+
   const documentFindDirective = useMemo<DocumentFindDirective>(() => {
-    return resolveDocumentFindDirective(documentFindQuery, documentReplaceQuery, isDocumentReplaceMode)
-  }, [documentFindQuery, documentReplaceQuery, isDocumentReplaceMode])
+    return resolveDocumentFindDirective(debouncedFindQuery, documentReplaceQuery, isDocumentReplaceMode)
+  }, [debouncedFindQuery, documentReplaceQuery, isDocumentReplaceMode])
 
   const documentFindHits = useMemo<DocumentFindHit[]>(() => {
     return buildDocumentFindHits(sourceText, documentFindDirective.findText, effectiveCaseSensitive)
