@@ -515,10 +515,19 @@ function registerIpcHandlers() {
   // so pointer tracking in the renderer (the custom cursor overlay) never
   // gets swallowed by a native Chromium drag region. See src/shared/windowDrag.ts
   // and src/window/useWindowDragRegion.ts for the renderer side.
-  ipcMain.on(WINDOW_DRAG_CHANNELS.start, (_event, payload: { screenX: number; screenY: number }) => {
+  ipcMain.on(WINDOW_DRAG_CHANNELS.start, (_event, payload: { screenX: number; screenY: number; isTitlebarOrigin: boolean }) => {
     if (!win || win.isDestroyed()) return
 
     if (win.isMaximized()) {
+      // Only a drag that started in the title-bar-like chrome (toolbar /
+      // window-controls grids) is allowed to restore-then-move the window --
+      // see WINDOW_TITLEBAR_SELECTOR. A drag starting anywhere else on a
+      // maximized window is a no-op, same as it would be with no title bar
+      // under the cursor at all.
+      if (!payload.isTitlebarOrigin) {
+        windowDragState = null
+        return
+      }
       // Mirrors native title-bar drag: unmaximize first, re-anchored so the
       // window edge under the cursor stays under the cursor instead of
       // jumping to wherever the restored bounds happen to land.

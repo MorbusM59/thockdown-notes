@@ -108,8 +108,8 @@ const windowControls = {
     ipcRenderer.send('window-control:report-background-color', hex),
   setSidebarVisible: (visible: boolean) => ipcRenderer.send('window-control:sidebar-visibility', visible),
   setSectionCount: (count: number) => ipcRenderer.send('window-control:section-count', count),
-  startWindowDrag: (screenX: number, screenY: number) =>
-    ipcRenderer.send(WINDOW_DRAG_CHANNELS.start, { screenX, screenY }),
+  startWindowDrag: (screenX: number, screenY: number, isTitlebarOrigin: boolean) =>
+    ipcRenderer.send(WINDOW_DRAG_CHANNELS.start, { screenX, screenY, isTitlebarOrigin }),
   moveWindowDrag: (screenX: number, screenY: number) =>
     ipcRenderer.send(WINDOW_DRAG_CHANNELS.move, { screenX, screenY }),
   endWindowDrag: () => ipcRenderer.send(WINDOW_DRAG_CHANNELS.end),

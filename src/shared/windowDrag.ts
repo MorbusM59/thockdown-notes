@@ -38,3 +38,11 @@ export const WINDOW_DRAG_EXCLUDED_SELECTOR = [
   '.audio-controls',
   '.no-window-drag', '[data-no-window-drag]',
 ].join(', ')
+
+// The subset of the drag-eligible surface that behaves like a native
+// title bar: double-click toggles maximize, and dragging a maximized
+// window from here demaximizes it and picks the move up mid-gesture.
+// Everywhere else remains drag-to-move only (a maximized window ignores
+// drags started outside this region, same as it would with no title bar
+// under the cursor at all).
+export const WINDOW_TITLEBAR_SELECTOR = '.toolbar-grid, .window-controls-grid'

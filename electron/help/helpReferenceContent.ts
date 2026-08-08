@@ -602,6 +602,7 @@ Every feature in the app, described individually: where to find it, what it does
 - **Music player** — see [Music Player]($#music-player).
 - **Mini mode** — collapses the window into a compact strip; while collapsed, the music player's options button is disabled.
 - **Minimize / Maximize–Restore / Close** — standard window controls.
+- **Drag the toolbar or this top bar to move the window; double-click either to maximize/restore.** Dragging a maximized window from these areas restores it first and picks the move up under the cursor, like a native title bar. Dragging elsewhere in the app also moves the window, but won't restore it from maximized.
 
 ## Appearance & Settings
 

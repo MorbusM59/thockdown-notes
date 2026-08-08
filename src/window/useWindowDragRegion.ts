@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { WINDOW_DRAG_EXCLUDED_SELECTOR, WINDOW_DRAG_THRESHOLD_PX } from '../shared/windowDrag'
+import { WINDOW_DRAG_EXCLUDED_SELECTOR, WINDOW_DRAG_THRESHOLD_PX, WINDOW_TITLEBAR_SELECTOR } from '../shared/windowDrag'
 
 /**
  * Global, mount-once replacement for `-webkit-app-region: drag`. Listens for
@@ -11,6 +11,11 @@ import { WINDOW_DRAG_EXCLUDED_SELECTOR, WINDOW_DRAG_THRESHOLD_PX } from '../shar
  * capture phase (not on any specific element) means it sees every mousedown
  * before app code can stopPropagation() it, so the exclusion selector is the
  * single source of truth for what's draggable -- not listener ordering.
+ *
+ * Two title-bar-like behaviors (double-click to maximize/restore, and
+ * dragging a maximized window to restore-then-move) are further scoped to
+ * WINDOW_TITLEBAR_SELECTOR so that ordinary drag-to-move elsewhere in the
+ * app can't accidentally pop the window out of its maximized state.
  */
 export function useWindowDragRegion() {
   useEffect(() => {
@@ -19,6 +24,7 @@ export function useWindowDragRegion() {
 
     let candidateOrigin: { x: number; y: number } | null = null
     let isDragging = false
+    let isTitlebarOrigin = false
 
     function handleMouseDown(event: MouseEvent) {
       if (event.button !== 0) return
@@ -26,6 +32,7 @@ export function useWindowDragRegion() {
       if (!(target instanceof Element) || target.closest(WINDOW_DRAG_EXCLUDED_SELECTOR)) return
       candidateOrigin = { x: event.screenX, y: event.screenY }
       isDragging = false
+      isTitlebarOrigin = target.closest(WINDOW_TITLEBAR_SELECTOR) !== null
     }
 
     function handleMouseMove(event: MouseEvent) {
@@ -36,7 +43,7 @@ export function useWindowDragRegion() {
         const dy = event.screenY - candidateOrigin.y
         if (Math.hypot(dx, dy) < WINDOW_DRAG_THRESHOLD_PX) return
         isDragging = true
-        controls!.startWindowDrag!(candidateOrigin.x, candidateOrigin.y)
+        controls!.startWindowDrag!(candidateOrigin.x, candidateOrigin.y, isTitlebarOrigin)
       }
 
       event.preventDefault()
@@ -49,15 +56,25 @@ export function useWindowDragRegion() {
       isDragging = false
     }
 
+    function handleDoubleClick(event: MouseEvent) {
+      if (event.button !== 0) return
+      const target = event.target
+      if (!(target instanceof Element) || target.closest(WINDOW_DRAG_EXCLUDED_SELECTOR)) return
+      if (!target.closest(WINDOW_TITLEBAR_SELECTOR)) return
+      controls!.toggleMaximize?.()
+    }
+
     window.addEventListener('mousedown', handleMouseDown, { capture: true })
     window.addEventListener('mousemove', handleMouseMove, { capture: true })
     window.addEventListener('mouseup', endGesture, { capture: true })
+    window.addEventListener('dblclick', handleDoubleClick, { capture: true })
     window.addEventListener('blur', endGesture)
 
     return () => {
       window.removeEventListener('mousedown', handleMouseDown, { capture: true })
       window.removeEventListener('mousemove', handleMouseMove, { capture: true })
       window.removeEventListener('mouseup', endGesture, { capture: true })
+      window.removeEventListener('dblclick', handleDoubleClick, { capture: true })
       window.removeEventListener('blur', endGesture)
     }
   }, [])
