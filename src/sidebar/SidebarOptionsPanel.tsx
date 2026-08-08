@@ -90,10 +90,10 @@ import {
   CURSOR_CLICK_SKEW_MIN,
   CURSOR_CLICK_SKEW_MAX,
   CURSOR_CLICK_SKEW_DEFAULT,
-  CURSOR_CLICK_DURATION_MIN_SEC,
-  CURSOR_CLICK_DURATION_MAX_SEC,
-  CURSOR_CLICK_DURATION_STEP_SEC,
-  CURSOR_CLICK_DURATION_DEFAULT_SEC,
+  CURSOR_CLICK_SPEED_X_MIN,
+  CURSOR_CLICK_SPEED_X_MAX,
+  CURSOR_CLICK_SPEED_X_STEP,
+  CURSOR_CLICK_SPEED_X_DEFAULT,
   CURSOR_CLICK_MAX_SPEED_MIN,
   CURSOR_CLICK_MAX_SPEED_MAX,
   CURSOR_CLICK_MAX_SPEED_STEP,
@@ -507,8 +507,8 @@ export interface SidebarOptionsPanelProps {
   setCustomCursorClickRamp: (value: number) => void
   customCursorClickSkew: number
   setCustomCursorClickSkew: (value: number) => void
-  customCursorClickDurationSec: number
-  setCustomCursorClickDurationSec: (value: number) => void
+  customCursorClickSpeedX: number
+  setCustomCursorClickSpeedX: (value: number) => void
   customCursorClickMaxSpeed: number
   setCustomCursorClickMaxSpeed: (value: number) => void
   customCursorClickMinHoldMs: number
@@ -730,8 +730,8 @@ export function SidebarOptionsPanel({
   setCustomCursorClickRamp,
   customCursorClickSkew,
   setCustomCursorClickSkew,
-  customCursorClickDurationSec,
-  setCustomCursorClickDurationSec,
+  customCursorClickSpeedX,
+  setCustomCursorClickSpeedX,
   customCursorClickMaxSpeed,
   setCustomCursorClickMaxSpeed,
   customCursorClickMinHoldMs,
@@ -2213,7 +2213,7 @@ export function SidebarOptionsPanel({
               max={CURSOR_CLICK_RAMP_MAX}
               step={0.05}
               value={customCursorClickRamp}
-              trackLabel="click ramp"
+              trackLabel="ramp"
               ariaLabel="Click response curve dynamic parameter a"
               defaultValue={CURSOR_CLICK_RAMP_DEFAULT}
               onCommit={(value) => setCustomCursorClickRamp(clamp(value, CURSOR_CLICK_RAMP_MIN, CURSOR_CLICK_RAMP_MAX))}
@@ -2226,7 +2226,7 @@ export function SidebarOptionsPanel({
               max={CURSOR_CLICK_SKEW_MAX}
               step={0.01}
               value={customCursorClickSkew}
-              trackLabel="click shape"
+              trackLabel="shape"
               ariaLabel="Click response curve skew (apex bias)"
               defaultValue={CURSOR_CLICK_SKEW_DEFAULT}
               onCommit={(value) => setCustomCursorClickSkew(clamp(value, CURSOR_CLICK_SKEW_MIN, CURSOR_CLICK_SKEW_MAX))}
@@ -2234,16 +2234,15 @@ export function SidebarOptionsPanel({
           </div>
           <div className="options-glaze-cell options-glaze-cell-span-2">
             <CompactScrollbarSlider
-              id="cursor-click-duration"
-              min={CURSOR_CLICK_DURATION_MIN_SEC}
-              max={CURSOR_CLICK_DURATION_MAX_SEC}
-              step={CURSOR_CLICK_DURATION_STEP_SEC}
-              value={customCursorClickDurationSec}
-              trackLabel="click speed"
-              ariaLabel="Click response total time in seconds"
-              reverseScale
-              defaultValue={CURSOR_CLICK_DURATION_DEFAULT_SEC}
-              onCommit={(value) => setCustomCursorClickDurationSec(clamp(value, CURSOR_CLICK_DURATION_MIN_SEC, CURSOR_CLICK_DURATION_MAX_SEC))}
+              id="cursor-click-speed"
+              min={CURSOR_CLICK_SPEED_X_MIN}
+              max={CURSOR_CLICK_SPEED_X_MAX}
+              step={CURSOR_CLICK_SPEED_X_STEP}
+              value={customCursorClickSpeedX}
+              trackLabel="speed"
+              ariaLabel="Click response speed -- higher is faster, with finer control as it approaches instant"
+              defaultValue={CURSOR_CLICK_SPEED_X_DEFAULT}
+              onCommit={(value) => setCustomCursorClickSpeedX(clamp(value, CURSOR_CLICK_SPEED_X_MIN, CURSOR_CLICK_SPEED_X_MAX))}
             />
           </div>
           <div className="options-glaze-cell options-glaze-cell-span-2">

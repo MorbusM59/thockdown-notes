@@ -149,7 +149,7 @@ export const NEUTRAL_BASE: UiLayoutLoadout = {
   cursorPulseHz: DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseHz,
   cursorClickRamp: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickRamp,
   cursorClickSkew: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickSkew,
-  cursorClickDurationSec: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickDurationSec,
+  cursorClickSpeedX: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickSpeedX,
   cursorClickMaxSpeed: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMaxSpeed,
   cursorClickMinHoldMs: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMinHoldMs,
   cursorClickBalance: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickBalance,

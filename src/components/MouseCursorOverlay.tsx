@@ -6,6 +6,7 @@ import {
   axisToRadiusMultiplier,
   axisToSpinMultiplier,
   cursorClickReleaseTailDurationSec,
+  resolveCursorClickDurationSec,
   resolveCursorClickWeights,
   sampleCursorPressAxis,
   sampleCursorReleaseAxis,
@@ -107,7 +108,7 @@ export function MouseCursorOverlay({
   const {
     dotColor, centerColor, trailColor, dotCount, radiusPx, spinHz, trailThicknessPx, trailFadeMs,
     dotSizePx, centerSizePx, pulseMagnitude, pulseHz,
-    clickRamp, clickSkew, clickDurationSec, clickMaxSpeed, clickMinHoldMs, clickBalance,
+    clickRamp, clickSkew, clickSpeedX, clickMaxSpeed, clickMinHoldMs, clickBalance,
   } = settings
 
   useEffect(() => {
@@ -131,6 +132,7 @@ export function MouseCursorOverlay({
     const effectiveDotCount = Math.max(1, Math.round(dotCount))
     const angleStep = (Math.PI * 2) / effectiveDotCount
     const clickWeights = resolveCursorClickWeights(clickBalance)
+    const clickDurationSec = resolveCursorClickDurationSec(clickSpeedX)
 
     function updateCanvasResolution() {
       const rect = stageEl!.getBoundingClientRect()
@@ -372,7 +374,7 @@ export function MouseCursorOverlay({
   }, [
     stageRef, radiusPx, trailThicknessPx, trailFadeMs, spinHz, fadeMs, dotCount, dotColor, centerColor, trailColor,
     dotSizePx, centerSizePx, pulseMagnitude, pulseHz,
-    clickRamp, clickSkew, clickDurationSec, clickMaxSpeed, clickMinHoldMs, clickBalance,
+    clickRamp, clickSkew, clickSpeedX, clickMaxSpeed, clickMinHoldMs, clickBalance,
   ])
 
   return <canvas ref={canvasRef} className="mouse-cursor-overlay-canvas" aria-hidden="true" />

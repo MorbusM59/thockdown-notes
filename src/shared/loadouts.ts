@@ -92,7 +92,7 @@ export type UiLayoutLoadout = {
   // itself is NOT here; only the curve-shape parameters are persisted.
   cursorClickRamp: number;
   cursorClickSkew: number;
-  cursorClickDurationSec: number;
+  cursorClickSpeedX: number;
   cursorClickMaxSpeed: number;
   cursorClickMinHoldMs: number;
   cursorClickBalance: number;

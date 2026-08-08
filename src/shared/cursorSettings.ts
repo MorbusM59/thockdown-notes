@@ -32,7 +32,8 @@ export interface CustomCursorSettings {
    */
   clickRamp: number
   clickSkew: number
-  clickDurationSec: number
+  /** Raw "click speed" slider position in [0, 1] (0 = slowest, 1 = fastest) -- NOT seconds. See CursorClickCurve.ts's resolveCursorClickDurationSec for the x -> actual-duration mapping (a cubic falloff that gives finer resolution as duration approaches 0). */
+  clickSpeedX: number
   clickMaxSpeed: number
   clickMinHoldMs: number
   clickBalance: number
@@ -94,10 +95,13 @@ export const CURSOR_CLICK_SKEW_MIN = 0.1
 export const CURSOR_CLICK_SKEW_MAX = 0.9
 export const CURSOR_CLICK_SKEW_DEFAULT = 0.5
 
-export const CURSOR_CLICK_DURATION_MIN_SEC = 0
-export const CURSOR_CLICK_DURATION_MAX_SEC = 2
-export const CURSOR_CLICK_DURATION_STEP_SEC = 0.05
-export const CURSOR_CLICK_DURATION_DEFAULT_SEC = 0.3
+// "Click speed" is a plain x in [0, 1], not seconds -- see
+// CursorClickCurve.ts's resolveCursorClickDurationSec for the cubic mapping
+// to an actual animation duration (internal max-duration, not user-facing).
+export const CURSOR_CLICK_SPEED_X_MIN = 0
+export const CURSOR_CLICK_SPEED_X_MAX = 1
+export const CURSOR_CLICK_SPEED_X_STEP = 0.01
+export const CURSOR_CLICK_SPEED_X_DEFAULT = 0.5
 
 export const CURSOR_CLICK_MAX_SPEED_MIN = 0.05
 export const CURSOR_CLICK_MAX_SPEED_MAX = 1
@@ -145,7 +149,7 @@ export const DEFAULT_CUSTOM_CURSOR_SETTINGS: CustomCursorSettings = {
   pulseHz: CURSOR_PULSE_HZ_DEFAULT,
   clickRamp: CURSOR_CLICK_RAMP_DEFAULT,
   clickSkew: CURSOR_CLICK_SKEW_DEFAULT,
-  clickDurationSec: CURSOR_CLICK_DURATION_DEFAULT_SEC,
+  clickSpeedX: CURSOR_CLICK_SPEED_X_DEFAULT,
   clickMaxSpeed: CURSOR_CLICK_MAX_SPEED_DEFAULT,
   clickMinHoldMs: CURSOR_CLICK_MIN_HOLD_DEFAULT_MS,
   clickBalance: CURSOR_CLICK_BALANCE_DEFAULT,

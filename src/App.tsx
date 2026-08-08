@@ -69,8 +69,8 @@ import {
   CURSOR_CLICK_RAMP_MAX,
   CURSOR_CLICK_SKEW_MIN,
   CURSOR_CLICK_SKEW_MAX,
-  CURSOR_CLICK_DURATION_MIN_SEC,
-  CURSOR_CLICK_DURATION_MAX_SEC,
+  CURSOR_CLICK_SPEED_X_MIN,
+  CURSOR_CLICK_SPEED_X_MAX,
   CURSOR_CLICK_MAX_SPEED_MIN,
   CURSOR_CLICK_MAX_SPEED_MAX,
   CURSOR_CLICK_MIN_HOLD_MIN_MS,
@@ -947,7 +947,7 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     cursorPulseHz: roundForSignature(clamp(toFiniteNumber(source.cursorPulseHz, DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseHz), CURSOR_PULSE_HZ_MIN, CURSOR_PULSE_HZ_MAX)),
     cursorClickRamp: roundForSignature(clamp(toFiniteNumber(source.cursorClickRamp, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickRamp), CURSOR_CLICK_RAMP_MIN, CURSOR_CLICK_RAMP_MAX)),
     cursorClickSkew: roundForSignature(clamp(toFiniteNumber(source.cursorClickSkew, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickSkew), CURSOR_CLICK_SKEW_MIN, CURSOR_CLICK_SKEW_MAX)),
-    cursorClickDurationSec: roundForSignature(clamp(toFiniteNumber(source.cursorClickDurationSec, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickDurationSec), CURSOR_CLICK_DURATION_MIN_SEC, CURSOR_CLICK_DURATION_MAX_SEC)),
+    cursorClickSpeedX: roundForSignature(clamp(toFiniteNumber(source.cursorClickSpeedX, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickSpeedX), CURSOR_CLICK_SPEED_X_MIN, CURSOR_CLICK_SPEED_X_MAX)),
     cursorClickMaxSpeed: roundForSignature(clamp(toFiniteNumber(source.cursorClickMaxSpeed, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMaxSpeed), CURSOR_CLICK_MAX_SPEED_MIN, CURSOR_CLICK_MAX_SPEED_MAX)),
     cursorClickMinHoldMs: roundForSignature(clamp(toFiniteNumber(source.cursorClickMinHoldMs, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMinHoldMs), CURSOR_CLICK_MIN_HOLD_MIN_MS, CURSOR_CLICK_MIN_HOLD_MAX_MS)),
     cursorClickBalance: roundForSignature(clamp(toFiniteNumber(source.cursorClickBalance, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickBalance), CURSOR_CLICK_BALANCE_MIN, CURSOR_CLICK_BALANCE_MAX)),
@@ -1674,7 +1674,7 @@ function App() {
   const [customCursorPulseHz, setCustomCursorPulseHz] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseHz)
   const [customCursorClickRamp, setCustomCursorClickRamp] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickRamp)
   const [customCursorClickSkew, setCustomCursorClickSkew] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickSkew)
-  const [customCursorClickDurationSec, setCustomCursorClickDurationSec] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickDurationSec)
+  const [customCursorClickSpeedX, setCustomCursorClickSpeedX] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickSpeedX)
   const [customCursorClickMaxSpeed, setCustomCursorClickMaxSpeed] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMaxSpeed)
   const [customCursorClickMinHoldMs, setCustomCursorClickMinHoldMs] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMinHoldMs)
   const [customCursorClickBalance, setCustomCursorClickBalance] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickBalance)
@@ -2247,7 +2247,7 @@ function App() {
     pulseHz: customCursorPulseHz,
     clickRamp: customCursorClickRamp,
     clickSkew: customCursorClickSkew,
-    clickDurationSec: customCursorClickDurationSec,
+    clickSpeedX: customCursorClickSpeedX,
     clickMaxSpeed: customCursorClickMaxSpeed,
     clickMinHoldMs: customCursorClickMinHoldMs,
     clickBalance: customCursorClickBalance,
@@ -2267,7 +2267,7 @@ function App() {
     customCursorPulseHz,
     customCursorClickRamp,
     customCursorClickSkew,
-    customCursorClickDurationSec,
+    customCursorClickSpeedX,
     customCursorClickMaxSpeed,
     customCursorClickMinHoldMs,
     customCursorClickBalance,
@@ -2439,7 +2439,7 @@ function App() {
       cursorPulseHz: customCursorPulseHz,
       cursorClickRamp: customCursorClickRamp,
       cursorClickSkew: customCursorClickSkew,
-      cursorClickDurationSec: customCursorClickDurationSec,
+      cursorClickSpeedX: customCursorClickSpeedX,
       cursorClickMaxSpeed: customCursorClickMaxSpeed,
       cursorClickMinHoldMs: customCursorClickMinHoldMs,
       cursorClickBalance: customCursorClickBalance,
@@ -2490,7 +2490,7 @@ function App() {
     customCursorPulseHz,
     customCursorClickRamp,
     customCursorClickSkew,
-    customCursorClickDurationSec,
+    customCursorClickSpeedX,
     customCursorClickMaxSpeed,
     customCursorClickMinHoldMs,
     customCursorClickBalance,
@@ -2631,9 +2631,9 @@ function App() {
       loadout.cursorClickSkew ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.clickSkew,
       CURSOR_CLICK_SKEW_MIN, CURSOR_CLICK_SKEW_MAX,
     ))
-    setCustomCursorClickDurationSec(clamp(
-      loadout.cursorClickDurationSec ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.clickDurationSec,
-      CURSOR_CLICK_DURATION_MIN_SEC, CURSOR_CLICK_DURATION_MAX_SEC,
+    setCustomCursorClickSpeedX(clamp(
+      loadout.cursorClickSpeedX ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.clickSpeedX,
+      CURSOR_CLICK_SPEED_X_MIN, CURSOR_CLICK_SPEED_X_MAX,
     ))
     setCustomCursorClickMaxSpeed(clamp(
       loadout.cursorClickMaxSpeed ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMaxSpeed,
@@ -7700,8 +7700,8 @@ ${markdownHtml}
                         setCustomCursorClickRamp={setCustomCursorClickRamp}
                         customCursorClickSkew={customCursorClickSkew}
                         setCustomCursorClickSkew={setCustomCursorClickSkew}
-                        customCursorClickDurationSec={customCursorClickDurationSec}
-                        setCustomCursorClickDurationSec={setCustomCursorClickDurationSec}
+                        customCursorClickSpeedX={customCursorClickSpeedX}
+                        setCustomCursorClickSpeedX={setCustomCursorClickSpeedX}
                         customCursorClickMaxSpeed={customCursorClickMaxSpeed}
                         setCustomCursorClickMaxSpeed={setCustomCursorClickMaxSpeed}
                         customCursorClickMinHoldMs={customCursorClickMinHoldMs}

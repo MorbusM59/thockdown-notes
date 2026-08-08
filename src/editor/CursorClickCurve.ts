@@ -38,6 +38,21 @@ export function clampAxis(value: number): number {
   return Math.max(-1, Math.min(1, value));
 }
 
+// The "click speed" slider is really an animation-DURATION slider in
+// disguise: the user drags a plain x in [0, 1] (0 = slowest, 1 = fastest)
+// and this maps it to an actual duration via f(x) = maxDurationSec *
+// (1-x)^3. maxDurationSec is deliberately internal, not a slider -- only
+// the shape (cubic falloff) is exposed. The cubic's derivative flattens out
+// as x -> 1 (duration -> 0), so equal slider steps produce increasingly
+// small duration changes exactly where "faster" needs the finest control,
+// instead of a linear slider's coarse steps near zero.
+const CURSOR_CLICK_MAX_DURATION_SEC = 2;
+
+export function resolveCursorClickDurationSec(speedX: number): number {
+  const clampedX = Math.max(0, Math.min(1, speedX));
+  return CURSOR_CLICK_MAX_DURATION_SEC * Math.pow(1 - clampedX, 2);
+}
+
 // axis -> a multiplier in [TIGHTEN_MIN, WIDEN_MAX], 1 at axis=0. axis is
 // clamped to [-1, 1] here since that's where the deviation bounds live
 // (clickMaxSpeed is bounded to that same range).
