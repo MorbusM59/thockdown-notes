@@ -676,11 +676,12 @@ export function CM6Editor({
   const layerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  // Bridges reconcileCagedScroll (defined inside the CM6 mount effect, below)
-  // out to the separate adapterRef-assignment effect's applySnapshot, which
-  // needs to scroll a newly-applied selection into the caged middle -- see
-  // its use in applySnapshot's `snapshot.selection` handling.
-  const reconcileCagedScrollRef = useRef<((view: EditorView) => void) | null>(null);
+  // Bridges reconcileSelectionJumpScroll (defined inside the CM6 mount
+  // effect, below) out to the separate adapterRef-assignment effect's
+  // applySnapshot, which needs to center a newly-applied selection (search
+  // hits, go-to-start/end) in the viewport -- see its use in applySnapshot's
+  // `snapshot.selection` handling.
+  const reconcileSelectionJumpScrollRef = useRef<((view: EditorView) => void) | null>(null);
   const scrollTransitionControllerRef = useRef(new ScrollTransitionController());
   const bindingsRef = useRef(bindings);
   const previousTextRef = useRef('');
@@ -1988,7 +1989,76 @@ export function CM6Editor({
         }
       });
     };
-    reconcileCagedScrollRef.current = reconcileCagedScroll;
+
+    // Scroll-to-selection for discrete jumps (search-hit navigation,
+    // go-to-start/end -- see applySnapshot's `selectionScrollBehavior`
+    // handling), as opposed to reconcileCagedScroll's minimal-movement
+    // "keep the caret inside the cage" behavior for typing/arrow-key
+    // navigation. Ported from Editor.tsx's own centerSelectionInCagedMiddle:
+    // centers the selection in the middle of the cage (topBoundaryPx..
+    // clientHeight-bottomBoundaryPx) rather than snapping it to the near
+    // edge. This matters specifically for large documents: CM6 virtualizes
+    // layout, so a jump to a distant, not-yet-measured position is computed
+    // against estimated block heights that can be off by enough to matter.
+    // Landing at the cage edge leaves zero slack -- any underestimate pushes
+    // the target clean off-screen, so the caller sees the jump undershoot
+    // and needs a second or third click to actually arrive. Landing in the
+    // center leaves roughly half a viewport of slack in both directions, so
+    // the same estimate error is very unlikely to fully miss.
+    // Uses the same generation-guarded settle loop as reconcileCagedScroll
+    // as its sanity check: after writing scrollTop, re-measure one frame
+    // later and, if CM6 revised its height map (moving scrollTop and/or the
+    // caret's real position on its own -- see reconcileCagedScroll's own
+    // doc comment above), redo the same centering math against the
+    // now-current truth and try again. Self-terminating: it only recurses
+    // while scrollTop is still actually changing between frames, so it
+    // costs nothing once the position has settled.
+    let selectionJumpReconcileGeneration = 0;
+
+    const reconcileSelectionJumpScroll = (view: EditorView) => {
+      selectionJumpReconcileGeneration += 1;
+      const myGeneration = selectionJumpReconcileGeneration;
+      const scroller = view.scrollDOM;
+      const domSelection = window.getSelection();
+      if (!domSelection || domSelection.rangeCount === 0) return;
+
+      const lineHeightPxNow = lineHeightPxRef.current;
+      const scrollerRect = scroller.getBoundingClientRect();
+      const selectionRect = readSelectionRect(domSelection, lineHeightPxNow, view.contentDOM);
+      if (!selectionRect) return;
+
+      const selectionTopInScroll = resolveCM6CaretTopInScroll(
+        selectionRect,
+        scrollerRect.top,
+        scroller.scrollTop,
+      );
+      const selectionHeightPx = Math.max(lineHeightPxNow, selectionRect.bottom - selectionRect.top);
+      const selectionCenterInScroll = selectionTopInScroll + (selectionHeightPx / 2);
+
+      const middleTopPx = topBoundaryPxRef.current;
+      const middleBottomPx = Math.max(middleTopPx + lineHeightPxNow, scroller.clientHeight - bottomBoundaryPxRef.current);
+      const middleCenterPx = (middleTopPx + middleBottomPx) / 2;
+
+      const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      const rawTargetScrollTopPx = selectionCenterInScroll - middleCenterPx;
+      const targetScrollTopPx = Math.max(
+        0,
+        Math.min(maxScrollTopPx, Math.round(rawTargetScrollTopPx / lineHeightPxNow) * lineHeightPxNow),
+      );
+
+      if (Math.abs(targetScrollTopPx - scroller.scrollTop) > 0.01) {
+        scrollToQuantizedSmooth(scroller, targetScrollTopPx, { lineHeightPx: lineHeightPxNow });
+      }
+
+      const scrollTopAfterWrite = scroller.scrollTop;
+      requestAnimationFrame(() => {
+        if (selectionJumpReconcileGeneration !== myGeneration) return;
+        if (Math.abs(scroller.scrollTop - scrollTopAfterWrite) > 0.01) {
+          reconcileSelectionJumpScroll(view);
+        }
+      });
+    };
+    reconcileSelectionJumpScrollRef.current = reconcileSelectionJumpScroll;
 
     // Paste sanitization -- ported from PasteSanitizationPlugin.tsx's own
     // PASTE_COMMAND/KEY_DOWN_COMMAND handlers. Strips rich clipboard content
@@ -3045,7 +3115,7 @@ export function CM6Editor({
       bindingsRef.current?.onLifecycle?.({ phase: 'destroyed' });
       view.destroy();
       viewRef.current = null;
-      reconcileCagedScrollRef.current = null;
+      reconcileSelectionJumpScrollRef.current = null;
       rightClickCycleRef.current = null;
     };
     // Deliberately mount-once: noteId/initialText changes are handled by the
@@ -3578,7 +3648,7 @@ export function CM6Editor({
           // viewport/viewportLines above. CM6 applies transaction DOM changes
           // synchronously, so window.getSelection() is already current here.
           if (snapshot.selectionScrollBehavior !== 'preserve-scroll' && !snapshot.viewport && !snapshot.viewportLines) {
-            reconcileCagedScrollRef.current?.(view);
+            reconcileSelectionJumpScrollRef.current?.(view);
           }
         }
 

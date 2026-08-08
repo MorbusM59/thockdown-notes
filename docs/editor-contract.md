@@ -81,9 +81,9 @@ This contract isolates app features from editor engine internals. Features that 
 - `getSnapshot()` returns current integration-safe state.
 - `applySnapshot()` restores supported subsets without forcing unsupported behavior.
 - Unsupported snapshot fields must be treated as no-ops by callers unless the corresponding granular capability is true.
-- `applySnapshot(selection)` honors `selectionScrollBehavior`:
+- `applySnapshot(selection)` honors `selectionScrollBehavior` (default, if omitted, is `center-caged`), skipped entirely when the same call also sets `viewport`/`viewportLines` (those already drive scroll explicitly):
   - `preserve-scroll`: apply selection while preserving current `scrollTop`.
-  - `center-caged`: apply selection without forced scroll preservation.
+  - `center-caged`: scroll the new selection to the vertical center of the cage (`topBoundaryPx`..`clientHeight - bottomBoundaryPx`), not its near edge -- used for discrete jumps (search-hit navigation, go-to-start/end) so an inaccurate CM6 height estimate for not-yet-measured content still leaves roughly half a viewport of slack instead of undershooting off-screen. Self-corrects across a few frames if CM6 revises its height map after the initial write (see `reconcileSelectionJumpScroll` in CM6Editor.tsx).
 - Transform-originated selection replay is intentionally deferred to the next frame
   to avoid applying offsets against pre-transform DOM text.
 
