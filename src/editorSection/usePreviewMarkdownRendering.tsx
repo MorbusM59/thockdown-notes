@@ -367,13 +367,20 @@ export function usePreviewMarkdownRendering({
     // `contextNote` is the note a `§CHAPTER-ID` segment (if present) is
     // scoped to, or the direct navigation target if there's no chapter
     // segment -- explicit via noteIdRaw, or "this note" when it's null.
+    // "This note" means the *parent* when the active note is itself a
+    // chapter (chapterParentId), not the literal activeNoteId -- a chapter
+    // can never have chapters of its own, so resolving `$§CHAPTER-ID` while
+    // viewing one against its own id would always look up an empty chapter
+    // list. Matches menuIdentityNoteId's own derivation in EditorSection.tsx.
     let contextNote: NoteSummary | undefined
     if (target.noteIdRaw !== null) {
       const normalizedTarget = normalizeInternalIdForLookup(target.noteIdRaw)
       contextNote = notesRef.current.find((note) => note.assignedId && normalizeInternalIdForLookup(note.assignedId) === normalizedTarget)
       if (!contextNote) return
     } else if (activeNoteId) {
-      contextNote = notesRef.current.find((note) => note.id === activeNoteId)
+      const activeNote = notesRef.current.find((note) => note.id === activeNoteId)
+      const contextNoteId = activeNote?.chapterOnly && activeNote.chapterParentId ? activeNote.chapterParentId : activeNoteId
+      contextNote = notesRef.current.find((note) => note.id === contextNoteId)
     }
 
     if (target.chapterIdRaw !== null) {
