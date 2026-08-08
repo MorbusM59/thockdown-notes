@@ -3886,7 +3886,16 @@ export function CM6Editor({
                 zIndex: 11,
                 textAlign: 'right',
                 lineHeight: `${lineHeightPx}px`,
-                opacity: 0.6,
+                // editor-text's own text-shadow (the regular editor emboss)
+                // is left untouched -- only the glyph color is forced
+                // opaque, with the user's chosen color's alpha applied as
+                // `opacity` on the whole element instead. Coloring by rgba
+                // directly (or applying alpha to color and shadow
+                // separately) let the two fade independently and looked
+                // muddy/inconsistent; opacity composites the already-
+                // shadowed glyph as one unit and fades that.
+                color: 'var(--color-line-number)',
+                opacity: 'var(--line-number-opacity)',
               }}
             >
               {row.line}

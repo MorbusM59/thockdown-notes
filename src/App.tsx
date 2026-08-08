@@ -214,6 +214,7 @@ const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   gutterBackground: 'rgba(196, 187, 182, 0.49)',
   reviewLine: 'rgba(255, 221, 105, 0.35)',
   warningLine: 'rgba(199, 60, 0, 0.35)',
+  lineNumber: 'rgba(0, 0, 0, 0.6)',
   base: '#f9f6f4',
   inputFields: '#ffffff',
   appButtons: '#FFFFFFBB',
@@ -282,7 +283,7 @@ type DarkModePresetValues = {
 
 // Saturate slider: position x in [0,1] maps to CSS saturate value via
 // s(x) = x / (1 - 4^(x-1)), capped at SATURATE_MAX.
-// At x=0: s=0 (greyscale), x=0.5: s=1 (neutral), x→1: s→∞ (capped).
+// At x=0: s=0 (greyscale), x=0.5: s=1 (neutral), xâ†’1: sâ†’âˆž (capped).
 const SATURATE_MAX = 64
 
 function saturatePosToValue(x: number): number {
@@ -810,6 +811,7 @@ function normalizeLoadoutHighlightColors(source: unknown): HighlightColors {
     gutterBackground: typeof record.gutterBackground === 'string' ? record.gutterBackground : DEFAULT_HIGHLIGHT_COLORS.gutterBackground,
     reviewLine: typeof record.reviewLine === 'string' ? record.reviewLine : DEFAULT_HIGHLIGHT_COLORS.reviewLine,
     warningLine: typeof record.warningLine === 'string' ? record.warningLine : DEFAULT_HIGHLIGHT_COLORS.warningLine,
+    lineNumber: typeof record.lineNumber === 'string' ? record.lineNumber : DEFAULT_HIGHLIGHT_COLORS.lineNumber,
     base: typeof record.base === 'string' ? record.base : DEFAULT_HIGHLIGHT_COLORS.base,
     inputFields: typeof record.inputFields === 'string' ? record.inputFields : DEFAULT_HIGHLIGHT_COLORS.inputFields,
     appButtons: typeof record.appButtons === 'string' ? record.appButtons : DEFAULT_HIGHLIGHT_COLORS.appButtons,
@@ -2152,6 +2154,21 @@ function App() {
     () => rgbaToCssColor(invertRgbaColor(textEmbossUiPrimaryRgba, 0.22)),
     [textEmbossUiPrimaryRgba],
   )
+  // Line-number gutter color: rendered as an opaque color (its shadow stays
+  // the same emboss shadow as the rest of the editor text, unaffected by
+  // this color's own alpha) with the chosen color's alpha applied as
+  // `opacity` on the whole glyph+shadow element instead -- so a translucent
+  // pick fades the number and its shadow uniformly as one composited unit,
+  // rather than tinting each independently which read as muddy/inconsistent
+  // (per direct user testing).
+  const lineNumberRgba = useMemo(
+    () => parseCssColorToRgba(highlightColors.lineNumber) ?? { r: 0, g: 0, b: 0, a: 0.6 },
+    [highlightColors.lineNumber],
+  )
+  const lineNumberOpaqueCss = useMemo(
+    () => rgbaToCssColor({ ...lineNumberRgba, a: 1 }),
+    [lineNumberRgba],
+  )
   const textEmbossEditPrimaryRgba = useMemo(
     () => parseCssColorToRgba(highlightColors.textEmbossEdit) ?? { r: 255, g: 255, b: 255, a: 1 },
     [highlightColors.textEmbossEdit],
@@ -2432,6 +2449,7 @@ function App() {
         gutterBackground: highlightColors.gutterBackground,
         reviewLine: highlightColors.reviewLine,
         warningLine: highlightColors.warningLine,
+        lineNumber: highlightColors.lineNumber,
         base: highlightColors.base,
         inputFields: highlightColors.inputFields,
         appButtons: highlightColors.appButtons,
@@ -2590,6 +2608,7 @@ function App() {
       gutterBackground: loadout.highlightColors.gutterBackground,
       reviewLine: loadout.highlightColors.reviewLine,
       warningLine: loadout.highlightColors.warningLine,
+      lineNumber: loadout.highlightColors.lineNumber,
       base: loadout.highlightColors.base,
       inputFields: loadout.highlightColors.inputFields,
       appButtons: loadout.highlightColors.appButtons,
@@ -2697,7 +2716,7 @@ function App() {
   )
 
   // True once the live captured state has drifted from whatever entry is
-  // marked active for this mode — i.e. there are unsaved pending changes.
+  // marked active for this mode â€” i.e. there are unsaved pending changes.
   const hasUnsavedUiLoadoutChanges = useMemo(() => {
     if (!activeEntryForCurrentMode) return false
     if (idKind(activeEntryForCurrentMode.id) === 'pending') return true
@@ -3379,9 +3398,9 @@ function App() {
   // plain mount (`[]`) instead of `[persistenceReady]` was the bug: uiMode
   // is a state value closed over at the time this effect was created, and
   // with an empty dependency array that's permanently the initial 'light'
-  // default — no matter what the bootstrap effect later restores it to.
+  // default â€” no matter what the bootstrap effect later restores it to.
   // That meant every launch re-applied the light-mode loadout's payload
-  // (colors, filters, glaze, audio, everything — see applyEntryToLiveState)
+  // (colors, filters, glaze, audio, everything â€” see applyEntryToLiveState)
   // over whatever appState had just correctly restored, even when the app
   // was last closed in dark mode. Gating on persistenceReady means this
   // effect's closure is freshly created on the render where uiMode already
@@ -3408,7 +3427,7 @@ function App() {
       cancelled = true
     }
     // uiMode is intentionally excluded: manual light/dark toggling already
-    // applies the target mode's loadout itself (see toggleUiMode) — this
+    // applies the target mode's loadout itself (see toggleUiMode) â€” this
     // effect's job is only the one-time apply-on-launch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persistenceReady])
@@ -3553,6 +3572,7 @@ function App() {
       highlightGutterBackgroundColor: highlightColors.gutterBackground,
       highlightReviewColor: highlightColors.reviewLine,
       highlightWarningColor: highlightColors.warningLine,
+      highlightLineNumberColor: highlightColors.lineNumber,
       highlightBaseColor: highlightColors.base,
       highlightInputFieldsColor: highlightColors.inputFields,
       highlightAppButtonsColor: highlightColors.appButtons,
@@ -3798,8 +3818,8 @@ function App() {
         return false
       }
 
-      // Measure itemsPerPage from the DOM directly — same calculation as the
-      // useLayoutEffect compute() — so the target page always agrees with
+      // Measure itemsPerPage from the DOM directly â€” same calculation as the
+      // useLayoutEffect compute() â€” so the target page always agrees with
       // the clamp that compute() applies. Using the itemsPerPage state value
       // risks a frame where state and DOM measurement disagree.
       const container = sidebarContentRef.current
@@ -4095,6 +4115,8 @@ function App() {
       '--color-gutter-bg': highlightColors.gutterBackground,
       '--color-review-line': highlightColors.reviewLine,
       '--color-warning-line': highlightColors.warningLine,
+      '--color-line-number': lineNumberOpaqueCss,
+      '--line-number-opacity': String(lineNumberRgba.a),
       '--color-caret': highlightColors.caret,
       '--color-selection': activeSectionSnapshot?.isPreviewMode ? highlightColors.selectionRender : highlightColors.selectionEdit,
       '--color-input-backdrop': highlightColors.inputFields,
@@ -4156,6 +4178,8 @@ function App() {
     textEmbossUiSecondaryCss,
     textEmbossEditSecondaryCss,
     textEmbossRenderSecondaryCss,
+    lineNumberOpaqueCss,
+    lineNumberRgba,
     textColor90,
     textColor80,
     textColor70,
@@ -4369,7 +4393,7 @@ function App() {
 
   // Writes a structured debug entry to a session-scoped debug note (tagged
   // "debug"). No-ops when debuggingEnabled is false. Safe to call from any
-  // async or sync context — creation and tagging are fire-and-forget.
+  // async or sync context â€” creation and tagging are fire-and-forget.
   const createDebugNote = useCallback(async (): Promise<string | null> => {
     if (!window.thockdownNotes) return null
 
@@ -5034,7 +5058,7 @@ ${markdownHtml}
 
   const getLinkTargetPrefill = useCallback(() => {
     const { noteId, chapterId, anchorId } = lastAnchorRef.current
-    return `$${noteId}§${chapterId}#${anchorId}`
+    return `$${noteId}Â§${chapterId}#${anchorId}`
   }, [])
 
   const handleViewModeButtonClick = useCallback((mode: SidebarMode) => {
@@ -5258,6 +5282,7 @@ ${markdownHtml}
               gutterBackground: appState.menu.highlightGutterBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.gutterBackground,
               reviewLine: appState.menu.highlightReviewColor ?? DEFAULT_HIGHLIGHT_COLORS.reviewLine,
               warningLine: appState.menu.highlightWarningColor ?? DEFAULT_HIGHLIGHT_COLORS.warningLine,
+              lineNumber: appState.menu.highlightLineNumberColor ?? DEFAULT_HIGHLIGHT_COLORS.lineNumber,
               base: appState.menu.highlightBaseColor ?? DEFAULT_HIGHLIGHT_COLORS.base,
               inputFields: appState.menu.highlightInputFieldsColor ?? DEFAULT_HIGHLIGHT_COLORS.inputFields,
               appButtons: appState.menu.highlightAppButtonsColor ?? DEFAULT_HIGHLIGHT_COLORS.appButtons,
@@ -8222,7 +8247,7 @@ ${markdownHtml}
               background: `hsl(${filterHueRotate}deg, 50%, 50%)`,
               opacity: filterColorize,
               // 'color' blend mode takes hue+saturation from this overlay and keeps
-              // only the backdrop's luminosity — unlike 'hue', it still colorizes
+              // only the backdrop's luminosity â€” unlike 'hue', it still colorizes
               // near-neutral/grey pixels (e.g. text at #222) since the saturation
               // comes entirely from the overlay rather than being multiplied by
               // the (near-zero) backdrop saturation.

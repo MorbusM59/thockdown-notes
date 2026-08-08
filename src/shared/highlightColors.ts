@@ -15,6 +15,7 @@ export type HighlightColorKey =
   | 'gutterBackground'
   | 'reviewLine'
   | 'warningLine'
+  | 'lineNumber'
   | 'base'
   | 'inputFields'
   | 'appButtons'

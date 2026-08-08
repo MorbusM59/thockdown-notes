@@ -189,7 +189,7 @@ const VIEW_STYLE_OPTIONS: Array<{ key: ViewStyleKey; label: string; family: stri
   { key: 'bubblerone', label: 'Bubbler One', family: "'Bubbler One', 'Segoe UI', sans-serif" },
 ]
 
-const BOX_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['background', 'grid', 'gridOutline', 'topBackground', 'bottomBackground', 'gutterBackground', 'reviewLine', 'warningLine']
+const BOX_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['background', 'grid', 'gridOutline', 'topBackground', 'bottomBackground', 'gutterBackground', 'reviewLine', 'warningLine', 'lineNumber']
 const MARKDOWN_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = [
   'markdownHeadline',
   'markdownList',
@@ -216,6 +216,7 @@ const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   gutterBackground: 'Gutter Background',
   reviewLine: 'Review Flag Color',
   warningLine: 'Warning Flag Color',
+  lineNumber: 'Line Number Color',
   base: 'App Base Background',
   inputFields: 'App (Input) Fields',
   appButtons: 'App Buttons',
@@ -244,6 +245,7 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   gutterBackground: 'fa-solid fa-list-ol',
   reviewLine: 'fa-solid fa-question',
   warningLine: 'fa-solid fa-triangle-exclamation',
+  lineNumber: 'fa-solid fa-hashtag',
   base: 'fa-solid fa-display',
   inputFields: 'fa-solid fa-pen-to-square',
   appButtons: 'fa-solid fa-hockey-puck',
