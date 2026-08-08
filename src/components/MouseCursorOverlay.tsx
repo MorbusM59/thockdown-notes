@@ -15,12 +15,31 @@ export interface MouseCursorOverlayProps {
   settings: CustomCursorSettings
   /** Not the same as settings.trailFadeMs (a per-trail-particle decay time) -- this is how long the *whole overlay* takes to fade out after the pointer leaves the window entirely. Not exposed in the options UI. */
   fadeMs?: number
+  /**
+   * The app's dark-mode invert amount (0-1, see App.tsx's filterInvert),
+   * applied to the cursor's own dot/center/trail colors. Since this overlay
+   * is mounted as a sibling of .app-saturate-wrapper rather than nested
+   * inside it (see the doc comment below), it never picks up that
+   * wrapper's `filter: invert(...)` the rest of the app gets -- without
+   * this, the cursor would keep its light-mode colors on an inverted/dark
+   * background. Defaults to 0 (no invert) for any caller that doesn't pass it.
+   */
+  filterInvert?: number
 }
 
 const FALLBACK_RGBA: RgbaColor = { r: 0, g: 0, b: 0, a: 1 }
 
 function resolveRgba(color: string): RgbaColor {
   return parseCssColorToRgba(color) ?? FALLBACK_RGBA
+}
+
+// Same per-channel formula as CSS's `filter: invert(amount)`: 0 = unchanged,
+// 1 = fully inverted, continuous in between.
+function applyInvert(color: RgbaColor, amount: number): RgbaColor {
+  if (amount <= 0) return color
+  const clampedAmount = Math.min(1, amount)
+  const invertChannel = (channel: number) => Math.round(channel + (255 - 2 * channel) * clampedAmount)
+  return { r: invertChannel(color.r), g: invertChannel(color.g), b: invertChannel(color.b), a: color.a }
 }
 
 /**
@@ -91,6 +110,7 @@ function resolveRgba(color: string): RgbaColor {
 export function MouseCursorOverlay({
   settings,
   fadeMs = 550,
+  filterInvert = 0,
 }: MouseCursorOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const posRef = useRef<{ x: number; y: number } | null>(null)
@@ -130,9 +150,9 @@ export function MouseCursorOverlay({
     if (!ctx) return
 
     const dpr = window.devicePixelRatio || 1
-    const dot = resolveRgba(dotColor)
-    const center = resolveRgba(centerColor)
-    const trail = resolveRgba(trailColor)
+    const dot = applyInvert(resolveRgba(dotColor), filterInvert)
+    const center = applyInvert(resolveRgba(centerColor), filterInvert)
+    const trail = applyInvert(resolveRgba(trailColor), filterInvert)
     // A 1000ms fade at 1Hz spin should sweep exactly one full revolution
     // (2*PI) -- the head chasing a tail whose oldest point just finished
     // decaying where the head currently is. Capped at one revolution: past
@@ -415,7 +435,7 @@ export function MouseCursorOverlay({
     }
   }, [
     radiusPx, trailThicknessPx, trailFadeMs, spinHz, fadeMs, dotCount, dotColor, centerColor, trailColor,
-    dotSizePx, centerSizePx, pulseMagnitude, pulseHz,
+    dotSizePx, centerSizePx, pulseMagnitude, pulseHz, filterInvert,
     clickRamp, clickSkew, clickSpeedX, clickMaxSpeed, clickMinHoldMs, clickBalance,
   ])
 

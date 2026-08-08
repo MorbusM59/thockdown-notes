@@ -8155,7 +8155,7 @@ ${markdownHtml}
           .app-saturate-wrapper (not nested inside it) and how it tracks the
           pointer/hides the native cursor across the whole app instead of
           just one part of it. */}
-      {customCursorSettings.enabled ? <MouseCursorOverlay settings={customCursorSettings} /> : null}
+      {customCursorSettings.enabled ? <MouseCursorOverlay settings={customCursorSettings} filterInvert={filterInvert} /> : null}
     </div>
   )
 }
