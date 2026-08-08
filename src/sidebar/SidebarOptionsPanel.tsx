@@ -98,10 +98,10 @@ import {
   CURSOR_CLICK_MAX_SPEED_MAX,
   CURSOR_CLICK_MAX_SPEED_STEP,
   CURSOR_CLICK_MAX_SPEED_DEFAULT,
-  CURSOR_CLICK_STEP_MIN,
-  CURSOR_CLICK_STEP_MAX,
-  CURSOR_CLICK_STEP_STEP,
-  CURSOR_CLICK_STEP_DEFAULT,
+  CURSOR_CLICK_MIN_HOLD_MIN_MS,
+  CURSOR_CLICK_MIN_HOLD_MAX_MS,
+  CURSOR_CLICK_MIN_HOLD_STEP_MS,
+  CURSOR_CLICK_MIN_HOLD_DEFAULT_MS,
   CURSOR_CLICK_BALANCE_MIN,
   CURSOR_CLICK_BALANCE_MAX,
   CURSOR_CLICK_BALANCE_STEP,
@@ -511,8 +511,8 @@ export interface SidebarOptionsPanelProps {
   setCustomCursorClickDurationSec: (value: number) => void
   customCursorClickMaxSpeed: number
   setCustomCursorClickMaxSpeed: (value: number) => void
-  customCursorClickStep: number
-  setCustomCursorClickStep: (value: number) => void
+  customCursorClickMinHoldMs: number
+  setCustomCursorClickMinHoldMs: (value: number) => void
   customCursorClickBalance: number
   setCustomCursorClickBalance: (value: number) => void
   cursorColorHsva: HsvaColor
@@ -734,8 +734,8 @@ export function SidebarOptionsPanel({
   setCustomCursorClickDurationSec,
   customCursorClickMaxSpeed,
   setCustomCursorClickMaxSpeed,
-  customCursorClickStep,
-  setCustomCursorClickStep,
+  customCursorClickMinHoldMs,
+  setCustomCursorClickMinHoldMs,
   customCursorClickBalance,
   setCustomCursorClickBalance,
   cursorColorHsva,
@@ -2248,15 +2248,15 @@ export function SidebarOptionsPanel({
           </div>
           <div className="options-glaze-cell options-glaze-cell-span-2">
             <CompactScrollbarSlider
-              id="cursor-click-step"
-              min={CURSOR_CLICK_STEP_MIN}
-              max={CURSOR_CLICK_STEP_MAX}
-              step={CURSOR_CLICK_STEP_STEP}
-              value={customCursorClickStep}
+              id="cursor-click-min-hold"
+              min={CURSOR_CLICK_MIN_HOLD_MIN_MS}
+              max={CURSOR_CLICK_MIN_HOLD_MAX_MS}
+              step={CURSOR_CLICK_MIN_HOLD_STEP_MS}
+              value={customCursorClickMinHoldMs}
               trackLabel="min impact"
-              ariaLabel="Distance covered by a single un-held click"
-              defaultValue={CURSOR_CLICK_STEP_DEFAULT}
-              onCommit={(value) => setCustomCursorClickStep(clamp(value, CURSOR_CLICK_STEP_MIN, CURSOR_CLICK_STEP_MAX))}
+              ariaLabel="Minimum internal hold duration in milliseconds, regardless of how brief the physical click was"
+              defaultValue={CURSOR_CLICK_MIN_HOLD_DEFAULT_MS}
+              onCommit={(value) => setCustomCursorClickMinHoldMs(clamp(Math.round(value), CURSOR_CLICK_MIN_HOLD_MIN_MS, CURSOR_CLICK_MIN_HOLD_MAX_MS))}
             />
           </div>
           <div className="options-glaze-cell options-glaze-cell-span-2">

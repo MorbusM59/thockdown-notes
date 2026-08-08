@@ -21,17 +21,20 @@ export interface CustomCursorSettings {
   pulseHz: number
   /**
    * Click response: left-click tightens the orbit (smaller radius, faster
-   * spin) and right-click widens it (larger radius, slower spin). Tap/hold/
-   * release feel is governed by the same bell-curve model as smooth
-   * scrolling (see CursorClickCurve.ts / ScrollCurvePlan.ts) -- ramp/skew/
-   * duration/maxSpeed play the same roles as the scroll "ramp", "shape",
-   * "speed", and "max speed" sliders.
+   * spin) and right-click widens it (larger radius, slower spin). Every
+   * press is handled identically (no tap/hold distinction -- a plain click
+   * is too fast for that to be perceptible): it attacks toward
+   * `clickMaxSpeed` along a bell curve, sustains there while held (for at
+   * least `clickMinHoldMs`, even if the physical click was shorter), then
+   * decays back to exactly 0 on release. See CursorClickCurve.ts /
+   * ScrollCurvePlan.ts -- ramp/skew/duration play the same roles as the
+   * scroll "ramp"/"shape"/"speed" sliders.
    */
   clickRamp: number
   clickSkew: number
   clickDurationSec: number
   clickMaxSpeed: number
-  clickStep: number
+  clickMinHoldMs: number
   clickBalance: number
 }
 
@@ -77,15 +80,12 @@ export const CURSOR_PULSE_HZ_DEFAULT = 0.5
 
 // Click response bounds/defaults. The axis is a *deviation* (like a scroll
 // animation's current speed, not its resulting position) that always
-// returns to exactly 0 once a tap or a release decay finishes -- 0 =
+// returns to exactly 0 once a press's release decay finishes -- 0 =
 // neutral, negative = tightening, positive = widening. ramp/skew/duration
 // mirror the scroll bell curve's "ramp"/"shape"/"speed" sliders 1:1 (same
-// formula, same ranges). clickStep is the peak deviation a single un-held
-// tap naturally reaches (proportional to the same "distance" role
-// pageStepPx plays for a single PageDown press); clickMaxSpeed is the
-// (typically higher) plateau ceiling continuous holding pins the deviation
-// at -- both are expressed directly in axis units, where 1.0 is the point
-// axisToMultiplier saturates at the full 200%/50% swing.
+// formula, same ranges). clickMaxSpeed is the plateau every press attacks
+// toward and sustains at while held, expressed directly in axis units where
+// 1.0 is the point axisToMultiplier saturates at the full 200%/50% swing.
 export const CURSOR_CLICK_RAMP_MIN = 0.1
 export const CURSOR_CLICK_RAMP_MAX = 5
 export const CURSOR_CLICK_RAMP_DEFAULT = 1.5
@@ -105,12 +105,14 @@ export const CURSOR_CLICK_MAX_SPEED_STEP = 0.05
 // Holding long enough reaches the full 200%/50% swing.
 export const CURSOR_CLICK_MAX_SPEED_DEFAULT = 1
 
-export const CURSOR_CLICK_STEP_MIN = 0.05
-export const CURSOR_CLICK_STEP_MAX = 1
-export const CURSOR_CLICK_STEP_STEP = 0.05
-// A quick, un-held tap gives a moderate nudge -- noticeably less than what
-// holding through to clickMaxSpeed reaches.
-export const CURSOR_CLICK_STEP_DEFAULT = 0.35
+// Floor on how long a press is treated as "held" internally, regardless of
+// how quickly the physical mouse button actually came back up -- a plain
+// click is usually too fast for the attack/sustain/release shape to read as
+// anything but a flicker without this.
+export const CURSOR_CLICK_MIN_HOLD_MIN_MS = 0
+export const CURSOR_CLICK_MIN_HOLD_MAX_MS = 200
+export const CURSOR_CLICK_MIN_HOLD_STEP_MS = 10
+export const CURSOR_CLICK_MIN_HOLD_DEFAULT_MS = 80
 
 export const CURSOR_CLICK_BALANCE_MIN = -1
 export const CURSOR_CLICK_BALANCE_MAX = 1
@@ -145,6 +147,6 @@ export const DEFAULT_CUSTOM_CURSOR_SETTINGS: CustomCursorSettings = {
   clickSkew: CURSOR_CLICK_SKEW_DEFAULT,
   clickDurationSec: CURSOR_CLICK_DURATION_DEFAULT_SEC,
   clickMaxSpeed: CURSOR_CLICK_MAX_SPEED_DEFAULT,
-  clickStep: CURSOR_CLICK_STEP_DEFAULT,
+  clickMinHoldMs: CURSOR_CLICK_MIN_HOLD_DEFAULT_MS,
   clickBalance: CURSOR_CLICK_BALANCE_DEFAULT,
 }

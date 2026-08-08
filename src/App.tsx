@@ -73,8 +73,8 @@ import {
   CURSOR_CLICK_DURATION_MAX_SEC,
   CURSOR_CLICK_MAX_SPEED_MIN,
   CURSOR_CLICK_MAX_SPEED_MAX,
-  CURSOR_CLICK_STEP_MIN,
-  CURSOR_CLICK_STEP_MAX,
+  CURSOR_CLICK_MIN_HOLD_MIN_MS,
+  CURSOR_CLICK_MIN_HOLD_MAX_MS,
   CURSOR_CLICK_BALANCE_MIN,
   CURSOR_CLICK_BALANCE_MAX,
 } from './shared/cursorSettings'
@@ -949,7 +949,7 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     cursorClickSkew: roundForSignature(clamp(toFiniteNumber(source.cursorClickSkew, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickSkew), CURSOR_CLICK_SKEW_MIN, CURSOR_CLICK_SKEW_MAX)),
     cursorClickDurationSec: roundForSignature(clamp(toFiniteNumber(source.cursorClickDurationSec, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickDurationSec), CURSOR_CLICK_DURATION_MIN_SEC, CURSOR_CLICK_DURATION_MAX_SEC)),
     cursorClickMaxSpeed: roundForSignature(clamp(toFiniteNumber(source.cursorClickMaxSpeed, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMaxSpeed), CURSOR_CLICK_MAX_SPEED_MIN, CURSOR_CLICK_MAX_SPEED_MAX)),
-    cursorClickStep: roundForSignature(clamp(toFiniteNumber(source.cursorClickStep, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickStep), CURSOR_CLICK_STEP_MIN, CURSOR_CLICK_STEP_MAX)),
+    cursorClickMinHoldMs: roundForSignature(clamp(toFiniteNumber(source.cursorClickMinHoldMs, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMinHoldMs), CURSOR_CLICK_MIN_HOLD_MIN_MS, CURSOR_CLICK_MIN_HOLD_MAX_MS)),
     cursorClickBalance: roundForSignature(clamp(toFiniteNumber(source.cursorClickBalance, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickBalance), CURSOR_CLICK_BALANCE_MIN, CURSOR_CLICK_BALANCE_MAX)),
   }
 }
@@ -1676,7 +1676,7 @@ function App() {
   const [customCursorClickSkew, setCustomCursorClickSkew] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickSkew)
   const [customCursorClickDurationSec, setCustomCursorClickDurationSec] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickDurationSec)
   const [customCursorClickMaxSpeed, setCustomCursorClickMaxSpeed] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMaxSpeed)
-  const [customCursorClickStep, setCustomCursorClickStep] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickStep)
+  const [customCursorClickMinHoldMs, setCustomCursorClickMinHoldMs] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMinHoldMs)
   const [customCursorClickBalance, setCustomCursorClickBalance] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickBalance)
   // Local "staged" HSVA color for the Mouse options row-1 H/S/V/A drag
   // controls -- deliberately not tied to the app-wide activeColorHsva/
@@ -2249,7 +2249,7 @@ function App() {
     clickSkew: customCursorClickSkew,
     clickDurationSec: customCursorClickDurationSec,
     clickMaxSpeed: customCursorClickMaxSpeed,
-    clickStep: customCursorClickStep,
+    clickMinHoldMs: customCursorClickMinHoldMs,
     clickBalance: customCursorClickBalance,
   }), [
     customCursorEnabled,
@@ -2269,7 +2269,7 @@ function App() {
     customCursorClickSkew,
     customCursorClickDurationSec,
     customCursorClickMaxSpeed,
-    customCursorClickStep,
+    customCursorClickMinHoldMs,
     customCursorClickBalance,
   ])
 
@@ -2441,7 +2441,7 @@ function App() {
       cursorClickSkew: customCursorClickSkew,
       cursorClickDurationSec: customCursorClickDurationSec,
       cursorClickMaxSpeed: customCursorClickMaxSpeed,
-      cursorClickStep: customCursorClickStep,
+      cursorClickMinHoldMs: customCursorClickMinHoldMs,
       cursorClickBalance: customCursorClickBalance,
     }
   }, [
@@ -2492,7 +2492,7 @@ function App() {
     customCursorClickSkew,
     customCursorClickDurationSec,
     customCursorClickMaxSpeed,
-    customCursorClickStep,
+    customCursorClickMinHoldMs,
     customCursorClickBalance,
   ])
 
@@ -2639,9 +2639,9 @@ function App() {
       loadout.cursorClickMaxSpeed ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMaxSpeed,
       CURSOR_CLICK_MAX_SPEED_MIN, CURSOR_CLICK_MAX_SPEED_MAX,
     ))
-    setCustomCursorClickStep(clamp(
-      loadout.cursorClickStep ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.clickStep,
-      CURSOR_CLICK_STEP_MIN, CURSOR_CLICK_STEP_MAX,
+    setCustomCursorClickMinHoldMs(clamp(
+      loadout.cursorClickMinHoldMs ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMinHoldMs,
+      CURSOR_CLICK_MIN_HOLD_MIN_MS, CURSOR_CLICK_MIN_HOLD_MAX_MS,
     ))
     setCustomCursorClickBalance(clamp(
       loadout.cursorClickBalance ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.clickBalance,
@@ -7704,8 +7704,8 @@ ${markdownHtml}
                         setCustomCursorClickDurationSec={setCustomCursorClickDurationSec}
                         customCursorClickMaxSpeed={customCursorClickMaxSpeed}
                         setCustomCursorClickMaxSpeed={setCustomCursorClickMaxSpeed}
-                        customCursorClickStep={customCursorClickStep}
-                        setCustomCursorClickStep={setCustomCursorClickStep}
+                        customCursorClickMinHoldMs={customCursorClickMinHoldMs}
+                        setCustomCursorClickMinHoldMs={setCustomCursorClickMinHoldMs}
                         customCursorClickBalance={customCursorClickBalance}
                         setCustomCursorClickBalance={setCustomCursorClickBalance}
                         cursorColorHsva={cursorColorHsva}

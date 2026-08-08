@@ -94,7 +94,7 @@ export type UiLayoutLoadout = {
   cursorClickSkew: number;
   cursorClickDurationSec: number;
   cursorClickMaxSpeed: number;
-  cursorClickStep: number;
+  cursorClickMinHoldMs: number;
   cursorClickBalance: number;
 };
 

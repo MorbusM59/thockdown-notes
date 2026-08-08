@@ -7,36 +7,26 @@
 // axisToRadiusMultiplier / axisToSpinMultiplier below, weighted by the
 // "balance" slider.
 //
-// Critical distinction from smooth scrolling: the axis is NOT a position
-// (an accumulated, persistent offset) -- it's a velocity-shaped *deviation*
-// that always returns to exactly 0 once the current gesture settles, the
-// same way a scroll animation's CURRENT SPEED (not its resulting scrollTop)
-// rises from 0, peaks, and falls back to 0 over the course of one scroll.
-// Concretely: a tap's deviation follows the bell curve's raw height over
-// elapsed time (rise then fall, back to 0 by durationSec); holding past the
-// point the bell would reach clickMaxSpeed pins the deviation at exactly
-// clickMaxSpeed for as long as the button stays down; releasing during that
-// hold decays smoothly from clickMaxSpeed back to 0 via the bell's natural
-// tail shape. Nothing here ever leaves the cursor permanently offset.
+// Every press is handled identically regardless of how long the button is
+// actually down for -- a plain mouse click is far too fast for a human to
+// reliably distinguish "tap" from "hold" (they're both a handful of
+// milliseconds), so that distinction doesn't exist here. A press always
+// ATTACKS toward clickMaxSpeed along the bell curve's rising half, holds
+// there (SUSTAIN) for as long as the button stays down, then on release
+// DECAYS back to exactly 0 along the bell's falling half. clickMinHoldMs
+// enforces a floor on how long the internal press lasts even if the
+// physical click was shorter than that, so quick real-world clicks still
+// produce a felt pulse instead of an imperceptible flicker.
 //
-// The curve-shape math (ramp/skew/duration/maxSpeed sliders) deliberately
-// mirrors the smooth-scroll engine in ScrollCurvePlan.ts, reusing its
-// exported generic curve-plan primitives directly -- but where scroll
-// integrates the bell into a *position* plan and samples displacement, this
-// module samples the same plans' instantaneous *velocity* instead (the
-// bell's height, not its area), since that's what "deviation" means here.
-// buildCursorReleaseRampDownPlan and resolveCursorRampCrossingTimeSec
-// duplicate a small amount of logic from NonQuantizedSmoothScroll/
-// ScrollCurvePlan's "FromCurrentParams" variants because those read from
-// module-level scroll globals -- this module needs the same shapes driven
-// by its own (ramp, skew, durationSec) parameters instead of a shared global.
+// The axis is NOT a position (an accumulated, persistent offset) -- it's a
+// deviation that's fully determined by elapsed time within the current
+// phase (attack/sustain/release) and always settles to exactly 0. The
+// curve-shape math (ramp/skew/duration/maxSpeed sliders) mirrors the
+// smooth-scroll engine in ScrollCurvePlan.ts, reusing its exported
+// evaluateCurve/warpForSkew primitives directly, sampled as a raw height
+// (not integrated into a position) since that height IS the deviation here.
 
-import {
-  buildCurvePlan,
-  buildScrollPlan,
-  type CurvePlan,
-  type ScrollPlan,
-} from './ScrollCurvePlan';
+import { evaluateCurve, warpForSkew } from './ScrollCurvePlan';
 import {
   CURSOR_CLICK_SKEW_MIN,
   CURSOR_CLICK_SKEW_MAX,
@@ -50,8 +40,7 @@ export function clampAxis(value: number): number {
 
 // axis -> a multiplier in [TIGHTEN_MIN, WIDEN_MAX], 1 at axis=0. axis is
 // clamped to [-1, 1] here since that's where the deviation bounds live
-// (clickMaxSpeed/clickStep are bounded to that same range), even though the
-// raw sampled velocity is mathematically unbounded.
+// (clickMaxSpeed is bounded to that same range).
 function axisToMultiplier(axis: number): number {
   const clamped = clampAxis(axis);
   return clamped >= 0
@@ -86,163 +75,71 @@ export function axisToSpinMultiplier(axis: number, spinWeight: number): number {
   return axisToMultiplier(-axis * spinWeight);
 }
 
-export function buildCursorCurvePlan(ramp: number, skew: number, durationSec: number): CurvePlan {
+function clampedSkewOf(skew: number): number {
+  return Math.max(CURSOR_CLICK_SKEW_MIN, Math.min(CURSOR_CLICK_SKEW_MAX, skew));
+}
+
+// Seconds from press-start to the bell's apex -- also where ATTACK ends and
+// SUSTAIN begins.
+export function cursorClickApexTimeSec(skew: number, durationSec: number): number {
+  return Math.max(0.0001, durationSec) * clampedSkewOf(skew);
+}
+
+// Normalized bell height at elapsedSec into the curve, in [0, 1] -- peaks at
+// exactly 1 at cursorClickApexTimeSec(skew, durationSec) by construction
+// (evaluateCurve's own peak, at its warped midpoint, equals exactly `a`).
+function normalizedBellHeight(elapsedSec: number, ramp: number, skew: number, durationSec: number): number {
   const a = Math.max(0.0001, ramp);
   const b = 1 / (2 * a);
   const tSec = Math.max(0.0001, durationSec);
-  const clampedSkew = Math.max(CURSOR_CLICK_SKEW_MIN, Math.min(CURSOR_CLICK_SKEW_MAX, skew));
-  return buildCurvePlan(a, b, tSec, clampedSkew);
+  const clampedSkew = clampedSkewOf(skew);
+  const warped = warpForSkew(Math.max(0, Math.min(tSec, elapsedSec)), tSec, clampedSkew);
+  return evaluateCurve(warped, a, b, tSec) / a;
 }
 
-// signedAxisDistance/maxSpeedUnitsPerSec play exactly the role signedDistance/
-// maxSpeedPxPerSec do for scroll: they shape how HIGH the tap's velocity
-// naturally peaks (proportional to clickStep) and, if that would exceed
-// clickMaxSpeed, clip it into a ramp-up/plateau/ramp-down shape that peaks
-// at exactly clickMaxSpeed instead -- reusing buildScrollPlan completely
-// unmodified. Only the *sampling* differs (velocity, not displacement).
-export function buildCursorStepPlan(
-  curve: CurvePlan,
-  durationSec: number,
-  signedAxisDistance: number,
-  maxSpeedUnitsPerSec: number,
-): ScrollPlan {
-  const tSec = Math.max(0.0001, durationSec);
-  const maxSpeed = Math.max(0.0001, maxSpeedUnitsPerSec);
-  return buildScrollPlan(curve, tSec, signedAxisDistance, maxSpeed);
-}
-
-function slopeAtNormalizedX(curve: CurvePlan, xNorm: number): number {
-  const lastIndex = curve.slopes.length - 1;
-  if (lastIndex < 0) return 0;
-  const clampedX = Math.max(0, Math.min(1, xNorm));
-  const idx = Math.min(lastIndex, Math.floor(clampedX * curve.slopes.length));
-  return curve.slopes[idx];
-}
-
-// Instantaneous signed velocity (deviation) at elapsedSec into the plan --
-// the bell's height at that instant, not its accumulated area. Rises from 0,
-// optionally plateaus at maxSpeed (see buildCursorStepPlan), falls back to
-// exactly 0 by plan.totalDurationSec. Needs `curve` (the same CurvePlan
-// buildCursorStepPlan was built from) because ScrollPlan itself only retains
-// the normalized cdf, not the per-segment slopes this needs.
-export function sampleCursorStepPlanVelocity(curve: CurvePlan, plan: ScrollPlan, elapsedSec: number): number {
-  if (elapsedSec <= 0 || elapsedSec >= plan.totalDurationSec) return 0;
-
-  const sign = plan.signedDistance >= 0 ? 1 : -1;
-  const absDistance = Math.abs(plan.signedDistance);
-  if (absDistance <= 0) return 0;
-
-  if (!plan.hasPlateau || elapsedSec <= plan.rampUpEndSec) {
-    const xNorm = elapsedSec / plan.tSec;
-    return sign * absDistance * slopeAtNormalizedX(curve, xNorm) / plan.tSec;
-  }
-  if (elapsedSec <= plan.plateauEndSec) {
-    return sign * plan.plateauSpeedPxPerSec;
-  }
-  const localSec = elapsedSec - plan.plateauEndSec;
-  const xNorm = plan.rampDownStartX + (localSec / plan.tSec);
-  return sign * absDistance * slopeAtNormalizedX(curve, xNorm) / plan.tSec;
-}
-
-// Elapsed seconds from tap start to the point where the bell ramp's
-// instantaneous speed first reaches targetSpeedUnitsPerSec -- used to
-// schedule the handoff from the one-shot tap animation to the continuous
-// (pinned-at-clickMaxSpeed) hold, exactly like
-// resolveRampCrossingTimeSecFromCurrentParams does for scroll's
-// PageUp/PageDown hold. Returns null if the distance is ~0.
-export function resolveCursorRampCrossingTimeSec(
-  ramp: number,
-  skew: number,
-  durationSec: number,
-  signedAxisDistance: number,
-  targetSpeedUnitsPerSec: number,
-): number | null {
-  const absDistance = Math.abs(signedAxisDistance);
-  if (absDistance <= 0.0001) return null;
-
-  const clampedSkew = Math.max(CURSOR_CLICK_SKEW_MIN, Math.min(CURSOR_CLICK_SKEW_MAX, skew));
-  const tSec = Math.max(0.0001, durationSec);
-  const apexTimeSec = tSec * clampedSkew;
-  const curve = buildCursorCurvePlan(ramp, clampedSkew, tSec);
-
-  const effectiveTargetSpeed = Math.max(0, targetSpeedUnitsPerSec);
-  if (effectiveTargetSpeed <= 0) return 0;
-
-  const naturalPeakSpeed = (absDistance * curve.peakSlope) / tSec;
-  if (naturalPeakSpeed < effectiveTargetSpeed) {
-    return apexTimeSec;
-  }
-
-  const thresholdSlope = (effectiveTargetSpeed * tSec) / absDistance;
-  let iLow = -1;
-  for (let i = 0; i < curve.slopes.length; i += 1) {
-    if (curve.slopes[i] >= thresholdSlope) {
-      iLow = i;
-      break;
-    }
-  }
-  if (iLow < 0) return apexTimeSec;
-
-  const lastIndex = curve.cdf.length - 1;
-  const x = iLow / Math.max(1, lastIndex);
-  return x * tSec;
-}
-
-// Post-apex-only decay plan that starts at the bell apex (current hold
-// speed) and follows the natural bell tail down to zero, for the release
-// (mouseup during continuous hold) ramp-down -- mirrors
-// buildReleaseRampDownPlanFromCurrentParams but parameterized instead of
-// reading module-level scroll globals, and returns the CurvePlan alongside
-// it (needed by sampleCursorReleaseRampDownPlanVelocity below) since the
-// scroll version's ReleaseRampDownPlan shape only carries the cdf.
-export interface CursorReleaseRampDownPlan {
-  curve: CurvePlan;
-  tSec: number;
-  apexX: number;
-  tailDurationSec: number;
-  signedDistanceForFullCurve: number;
-}
-
-export function buildCursorReleaseRampDownPlan(
-  ramp: number,
-  skew: number,
-  durationSec: number,
+// ATTACK/SUSTAIN: signed deviation while a press is active (real button down
+// or still within the enforced clickMinHoldMs floor). Rises from 0 along the
+// bell's rising half, reaches exactly clickMaxSpeed at the apex, and stays
+// pinned there for as long as the caller keeps calling with a larger
+// elapsedSec -- the plateau isn't time-limited here, the caller decides how
+// long the press lasts.
+export function sampleCursorPressAxis(
   direction: -1 | 1,
-  initialSpeedUnitsPerSec: number,
-): CursorReleaseRampDownPlan | null {
-  const speed = Math.max(0, initialSpeedUnitsPerSec);
-  if (speed <= 0) return null;
-
-  const clampedSkew = Math.max(CURSOR_CLICK_SKEW_MIN, Math.min(CURSOR_CLICK_SKEW_MAX, skew));
-  const tSec = Math.max(0.0001, durationSec);
-  const curve = buildCursorCurvePlan(ramp, clampedSkew, tSec);
-
-  const apexX = clampedSkew;
-  const tailDurationSec = Math.max(0, (1 - apexX) * tSec);
-  if (tailDurationSec <= 0.0001) return null;
-
-  const slopeIndex = Math.max(0, Math.min(curve.slopes.length - 1, Math.floor(apexX * curve.slopes.length)));
-  const slopeAtApex = Math.max(0.0001, curve.slopes[slopeIndex]);
-  // Sized so that velocity at elapsedSec=0 (the release instant) equals
-  // exactly `speed` -- see sampleCursorReleaseRampDownPlanVelocity.
-  const signedDistanceForFullCurve = direction * ((speed * tSec) / slopeAtApex);
-
-  return { curve, tSec, apexX, tailDurationSec, signedDistanceForFullCurve };
-}
-
-// Instantaneous signed velocity at elapsedSec since release -- starts at
-// exactly the initialSpeedUnitsPerSec the plan was built with, decays along
-// the bell's natural tail, reaches exactly 0 by plan.tailDurationSec.
-export function sampleCursorReleaseRampDownPlanVelocity(
-  plan: CursorReleaseRampDownPlan,
   elapsedSec: number,
+  ramp: number,
+  skew: number,
+  durationSec: number,
+  maxSpeed: number,
 ): number {
-  if (elapsedSec <= 0 || elapsedSec >= plan.tailDurationSec) return 0;
-
-  const sign = plan.signedDistanceForFullCurve >= 0 ? 1 : -1;
-  const absDistanceForFullCurve = Math.abs(plan.signedDistanceForFullCurve);
-  const xNorm = plan.apexX + (elapsedSec / plan.tSec);
-  return sign * absDistanceForFullCurve * slopeAtNormalizedX(plan.curve, xNorm) / plan.tSec;
+  const apexTimeSec = cursorClickApexTimeSec(skew, durationSec);
+  if (elapsedSec >= apexTimeSec) {
+    return direction * maxSpeed;
+  }
+  return direction * maxSpeed * normalizedBellHeight(elapsedSec, ramp, skew, durationSec);
 }
 
-export type { ScrollPlan as CursorClickStepPlan };
+// RELEASE: signed deviation while decaying back to 0 after the button (or
+// the enforced minimum hold) lets go. Follows the bell's falling half
+// starting from wherever the axis actually was at the moment of release
+// (`initialAxis` -- not necessarily clickMaxSpeed, if released before the
+// apex was reached), scaled so the decay begins exactly at initialAxis and
+// reaches (approximately) 0 by releaseTailDurationSec -- callers should
+// treat elapsedSec >= releaseTailDurationSec as "settled, clamp to exactly
+// 0" since the underlying bell is asymptotic rather than exactly zero at
+// its edges.
+export function sampleCursorReleaseAxis(
+  initialAxis: number,
+  elapsedSec: number,
+  ramp: number,
+  skew: number,
+  durationSec: number,
+): number {
+  const apexTimeSec = cursorClickApexTimeSec(skew, durationSec);
+  // normalizedBellHeight(apexTimeSec, ...) is exactly 1, so this scales the
+  // tail's natural shape to start at initialAxis without discontinuity.
+  return initialAxis * normalizedBellHeight(apexTimeSec + elapsedSec, ramp, skew, durationSec);
+}
+
+export function cursorClickReleaseTailDurationSec(skew: number, durationSec: number): number {
+  return Math.max(0, durationSec - cursorClickApexTimeSec(skew, durationSec));
+}

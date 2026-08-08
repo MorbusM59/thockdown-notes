@@ -45,7 +45,7 @@ import {
   CURSOR_CLICK_SKEW_MIN, CURSOR_CLICK_SKEW_MAX,
   CURSOR_CLICK_DURATION_MIN_SEC, CURSOR_CLICK_DURATION_MAX_SEC,
   CURSOR_CLICK_MAX_SPEED_MIN, CURSOR_CLICK_MAX_SPEED_MAX,
-  CURSOR_CLICK_STEP_MIN, CURSOR_CLICK_STEP_MAX,
+  CURSOR_CLICK_MIN_HOLD_MIN_MS, CURSOR_CLICK_MIN_HOLD_MAX_MS,
   CURSOR_CLICK_BALANCE_MIN, CURSOR_CLICK_BALANCE_MAX,
 } from '../src/shared/cursorSettings';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureMaterialSettings, type TextureMaterialsBySurface } from '../src/textures/types';
@@ -168,7 +168,7 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   cursorClickSkew: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickSkew,
   cursorClickDurationSec: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickDurationSec,
   cursorClickMaxSpeed: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMaxSpeed,
-  cursorClickStep: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickStep,
+  cursorClickMinHoldMs: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMinHoldMs,
   cursorClickBalance: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickBalance,
 };
 
@@ -598,7 +598,7 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     cursorClickSkew: clampNumber(source.cursorClickSkew, CURSOR_CLICK_SKEW_MIN, CURSOR_CLICK_SKEW_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickSkew),
     cursorClickDurationSec: clampNumber(source.cursorClickDurationSec, CURSOR_CLICK_DURATION_MIN_SEC, CURSOR_CLICK_DURATION_MAX_SEC, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickDurationSec),
     cursorClickMaxSpeed: clampNumber(source.cursorClickMaxSpeed, CURSOR_CLICK_MAX_SPEED_MIN, CURSOR_CLICK_MAX_SPEED_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickMaxSpeed),
-    cursorClickStep: clampNumber(source.cursorClickStep, CURSOR_CLICK_STEP_MIN, CURSOR_CLICK_STEP_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickStep),
+    cursorClickMinHoldMs: clampNumber(source.cursorClickMinHoldMs, CURSOR_CLICK_MIN_HOLD_MIN_MS, CURSOR_CLICK_MIN_HOLD_MAX_MS, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickMinHoldMs),
     cursorClickBalance: clampNumber(source.cursorClickBalance, CURSOR_CLICK_BALANCE_MIN, CURSOR_CLICK_BALANCE_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorClickBalance),
   };
 }
@@ -622,7 +622,7 @@ const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
   'cursorRadiusPx', 'cursorSpinHz', 'cursorTrailThicknessPx', 'cursorTrailFadeMs',
   'cursorDotSizePx', 'cursorCenterSizePx', 'cursorPulseMagnitude', 'cursorPulseHz',
   'cursorClickRamp', 'cursorClickSkew', 'cursorClickDurationSec', 'cursorClickMaxSpeed',
-  'cursorClickStep', 'cursorClickBalance',
+  'cursorClickMinHoldMs', 'cursorClickBalance',
 ];
 
 // Keys whose values are nested objects; they're emitted as inline JSON when

@@ -151,7 +151,7 @@ export const NEUTRAL_BASE: UiLayoutLoadout = {
   cursorClickSkew: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickSkew,
   cursorClickDurationSec: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickDurationSec,
   cursorClickMaxSpeed: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMaxSpeed,
-  cursorClickStep: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickStep,
+  cursorClickMinHoldMs: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickMinHoldMs,
   cursorClickBalance: DEFAULT_CUSTOM_CURSOR_SETTINGS.clickBalance,
 };
 

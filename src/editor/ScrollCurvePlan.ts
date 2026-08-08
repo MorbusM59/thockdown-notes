@@ -34,7 +34,10 @@ export const RENDER_SCROLL_RAMP_MAX = 5;
 const CDF_SAMPLE_COUNT = 256;
 
 // f(x) = 1 / ((1/a) + ((2(x/t) - 1) / b)^2)
-const evaluateCurve = (xSec: number, a: number, b: number, tSec: number): number => {
+// Exported so other curve-driven interactions (e.g. CursorClickCurve.ts's
+// direct-sampled attack/release envelope, rather than an integrated
+// position plan) can reuse the exact same bell shape.
+export const evaluateCurve = (xSec: number, a: number, b: number, tSec: number): number => {
   const normalized = (2 * (xSec / tSec)) - 1;
   return 1 / ((1 / a) + Math.pow(normalized / b, 2));
 };
@@ -42,7 +45,7 @@ const evaluateCurve = (xSec: number, a: number, b: number, tSec: number): number
 // Piecewise linear time warp that maps [0, t] -> [0, t] with x = skew*t -> t/2.
 // Used to bias the bell's apex while pinning both endpoints (f(0) and f(t)
 // remain unchanged because warp(0) = 0 and warp(t) = t).
-const warpForSkew = (xSec: number, tSec: number, skew: number): number => {
+export const warpForSkew = (xSec: number, tSec: number, skew: number): number => {
   const split = skew * tSec;
   const half = tSec * 0.5;
   if (xSec <= split) {

@@ -5,17 +5,11 @@ import type { CustomCursorSettings } from '../shared/cursorSettings'
 import {
   axisToRadiusMultiplier,
   axisToSpinMultiplier,
-  buildCursorCurvePlan,
-  buildCursorReleaseRampDownPlan,
-  buildCursorStepPlan,
+  cursorClickReleaseTailDurationSec,
   resolveCursorClickWeights,
-  resolveCursorRampCrossingTimeSec,
-  sampleCursorReleaseRampDownPlanVelocity,
-  sampleCursorStepPlanVelocity,
-  type CursorClickStepPlan,
-  type CursorReleaseRampDownPlan,
+  sampleCursorPressAxis,
+  sampleCursorReleaseAxis,
 } from '../editor/CursorClickCurve'
-import type { CurvePlan } from '../editor/ScrollCurvePlan'
 
 export interface MouseCursorOverlayProps {
   stageRef: MutableRefObject<HTMLDivElement | null>
@@ -65,21 +59,20 @@ function resolveRgba(color: string): RgbaColor {
  * stage drives a shared "intent" axis (clickAxisRef) that is NOT a
  * position -- like a scroll animation's current speed rather than its
  * resulting scrollTop, it always returns to exactly 0 once the gesture
- * settles. A tap samples the raw bell-curve height (ramp/skew/duration,
- * same math as smooth scrolling -- see CursorClickCurve.ts) at elapsed time
- * directly: rises from 0, peaks at `clickStep`, falls back to 0, all within
- * `clickDurationSec`, regardless of how long the button was actually held
- * (a quick tap still plays out in full, like a single un-repeated
- * PageDown). If still held once that rise would cross `clickMaxSpeed`,
- * control hands off to a continuous phase that pins the axis at exactly
- * `clickMaxSpeed` for as long as the button stays down (mirrors
- * PageUp/PageDown hold in usePreviewScrollbar.ts); releasing during that
- * phase decays smoothly back to exactly 0 via a release-ramp plan sampled
- * the same way, instead of snapping. `radiusPx`/`spinHz` below are each
- * scaled by their own multiplier derived from the axis (radius and spin
- * have inverted polarity: tightening speeds spin up while shrinking radius)
- * and the `clickBalance` weight, entirely at draw time -- the underlying
- * settings values themselves are never mutated by clicking.
+ * settles. Every press is handled identically regardless of how long the
+ * button is actually down for -- a plain click is too fast to reliably
+ * register as anything but "held" -- so there's no separate short-tap
+ * pulse: a press always ATTACKs toward `clickMaxSpeed` along the bell
+ * curve's rising half (ramp/skew/duration -- see CursorClickCurve.ts),
+ * SUSTAINs there for as long as it's held, then on release DECAYs back to
+ * exactly 0 along the bell's falling half. `clickMinHoldMs` floors how long
+ * the press is treated as held internally even if the physical click was
+ * shorter, so a quick real click still produces a felt pulse instead of a
+ * flicker. `radiusPx`/`spinHz` below are each scaled by their own
+ * multiplier derived from the axis (radius and spin have inverted
+ * polarity: tightening speeds spin up while shrinking radius) and the
+ * `clickBalance` weight, entirely at draw time -- the underlying settings
+ * values themselves are never mutated by clicking.
  */
 export function MouseCursorOverlay({
   stageRef,
@@ -107,16 +100,14 @@ export function MouseCursorOverlay({
   const clickAxisRef = useRef(0)
   const rotationPhaseRef = useRef(0)
   const lastFrameMsRef = useRef<number | null>(null)
-  const clickHoldRef = useRef<{ button: 0 | 2; direction: -1 | 1 } | null>(null)
-  const clickContinuousActiveRef = useRef(false)
-  const clickTapPlanRef = useRef<{ curve: CurvePlan; plan: CursorClickStepPlan; startMs: number } | null>(null)
-  const clickReleasePlanRef = useRef<{ plan: CursorReleaseRampDownPlan; startMs: number } | null>(null)
-  const clickHandoffTimeoutRef = useRef<number | null>(null)
+  const clickPressRef = useRef<{ button: 0 | 2; direction: -1 | 1; startMs: number } | null>(null)
+  const clickReleaseRef = useRef<{ initialAxis: number; startMs: number } | null>(null)
+  const clickPendingReleaseTimeoutRef = useRef<number | null>(null)
 
   const {
     dotColor, centerColor, trailColor, dotCount, radiusPx, spinHz, trailThicknessPx, trailFadeMs,
     dotSizePx, centerSizePx, pulseMagnitude, pulseHz,
-    clickRamp, clickSkew, clickDurationSec, clickMaxSpeed, clickStep, clickBalance,
+    clickRamp, clickSkew, clickDurationSec, clickMaxSpeed, clickMinHoldMs, clickBalance,
   } = settings
 
   useEffect(() => {
@@ -162,30 +153,25 @@ export function MouseCursorOverlay({
       }
     }
 
-    function clearClickHandoffTimeout() {
-      if (clickHandoffTimeoutRef.current !== null) {
-        window.clearTimeout(clickHandoffTimeoutRef.current)
-        clickHandoffTimeoutRef.current = null
+    function clearPendingRelease() {
+      if (clickPendingReleaseTimeoutRef.current !== null) {
+        window.clearTimeout(clickPendingReleaseTimeoutRef.current)
+        clickPendingReleaseTimeoutRef.current = null
       }
     }
 
-    // Ends whatever hold is currently tracked (real mouseup, or a different
-    // button pressed while one was already held): if it had handed off to
-    // the continuous plateau, starts a release-ramp-down from clickMaxSpeed
-    // back to 0; otherwise the tap (if any) is left to finish playing out
-    // (rise then fall, back to 0) on its own -- a quick click always
-    // completes its full pulse regardless of when the button comes back up.
-    function finalizeActiveHold() {
-      clearClickHandoffTimeout()
-      const hold = clickHoldRef.current
-      if (hold && clickContinuousActiveRef.current) {
-        const plan = buildCursorReleaseRampDownPlan(clickRamp, clickSkew, clickDurationSec, hold.direction, clickMaxSpeed)
-        if (plan) {
-          clickReleasePlanRef.current = { plan, startMs: performance.now() }
-        }
-      }
-      clickContinuousActiveRef.current = false
-      clickHoldRef.current = null
+    // Ends the currently-tracked press (real mouseup once clickMinHoldMs is
+    // satisfied, or a fresh click superseding an old one): samples wherever
+    // the attack/sustain currently is and starts a release decay from
+    // exactly that value back to 0.
+    function beginRelease() {
+      clearPendingRelease()
+      const press = clickPressRef.current
+      if (!press) return
+      const elapsedSec = (performance.now() - press.startMs) / 1000
+      const initialAxis = sampleCursorPressAxis(press.direction, elapsedSec, clickRamp, clickSkew, clickDurationSec, clickMaxSpeed)
+      clickPressRef.current = null
+      clickReleaseRef.current = { initialAxis, startMs: performance.now() }
     }
 
     function draw(now: number) {
@@ -227,23 +213,18 @@ export function MouseCursorOverlay({
       // phase is active, never accumulated from a prior value. It settles
       // to exactly 0 the instant no phase is active.
       let axis = 0
-      if (clickTapPlanRef.current) {
-        const tap = clickTapPlanRef.current
-        const elapsedSec = (now - tap.startMs) / 1000
-        if (elapsedSec >= tap.plan.totalDurationSec) {
-          clickTapPlanRef.current = null
-        } else {
-          axis = sampleCursorStepPlanVelocity(tap.curve, tap.plan, elapsedSec)
-        }
-      } else if (clickContinuousActiveRef.current && clickHoldRef.current) {
-        axis = clickHoldRef.current.direction * clickMaxSpeed
-      } else if (clickReleasePlanRef.current) {
-        const release = clickReleasePlanRef.current
+      if (clickPressRef.current) {
+        const press = clickPressRef.current
+        const elapsedSec = (now - press.startMs) / 1000
+        axis = sampleCursorPressAxis(press.direction, elapsedSec, clickRamp, clickSkew, clickDurationSec, clickMaxSpeed)
+      } else if (clickReleaseRef.current) {
+        const release = clickReleaseRef.current
         const elapsedSec = (now - release.startMs) / 1000
-        if (elapsedSec >= release.plan.tailDurationSec) {
-          clickReleasePlanRef.current = null
+        const tailDurationSec = cursorClickReleaseTailDurationSec(clickSkew, clickDurationSec)
+        if (elapsedSec >= tailDurationSec) {
+          clickReleaseRef.current = null
         } else {
-          axis = sampleCursorReleaseRampDownPlanVelocity(release.plan, elapsedSec)
+          axis = sampleCursorReleaseAxis(release.initialAxis, elapsedSec, clickRamp, clickSkew, clickDurationSec)
         }
       }
       clickAxisRef.current = axis
@@ -334,37 +315,34 @@ export function MouseCursorOverlay({
       if (event.button !== 0 && event.button !== 2) return
       const direction: -1 | 1 = event.button === 0 ? -1 : 1
 
-      // Any prior gesture (a different button held, a tap still rising, or
-      // a release still decaying) is retriggered from scratch -- a fresh
-      // click always starts a brand-new pulse at 0.
-      finalizeActiveHold()
-      clickReleasePlanRef.current = null
-      clickTapPlanRef.current = null
-
-      clickHoldRef.current = { button: event.button as 0 | 2, direction }
+      // Any prior gesture (a different button pressed, or a release still
+      // decaying) is retriggered from scratch -- a fresh click always
+      // starts a brand-new pulse at 0.
+      clearPendingRelease()
+      clickReleaseRef.current = null
+      clickPressRef.current = { button: event.button as 0 | 2, direction, startMs: performance.now() }
       ensureLoopRunning()
-
-      const signedDistance = direction * clickStep
-      const curve = buildCursorCurvePlan(clickRamp, clickSkew, clickDurationSec)
-      const plan = buildCursorStepPlan(curve, clickDurationSec, signedDistance, clickMaxSpeed)
-      clickTapPlanRef.current = { curve, plan, startMs: performance.now() }
-
-      const crossingTimeSec = resolveCursorRampCrossingTimeSec(clickRamp, clickSkew, clickDurationSec, signedDistance, clickMaxSpeed)
-      if (crossingTimeSec !== null) {
-        const delayMs = Math.max(0, Math.round(crossingTimeSec * 1000))
-        clickHandoffTimeoutRef.current = window.setTimeout(() => {
-          clickHandoffTimeoutRef.current = null
-          if (!clickHoldRef.current || clickHoldRef.current.button !== event.button) return
-          clickTapPlanRef.current = null
-          clickContinuousActiveRef.current = true
-        }, delayMs)
-      }
     }
 
     function handleWindowMouseUp(event: globalThis.MouseEvent) {
       if (event.button !== 0 && event.button !== 2) return
-      if (!clickHoldRef.current || clickHoldRef.current.button !== event.button) return
-      finalizeActiveHold()
+      const press = clickPressRef.current
+      if (!press || press.button !== event.button) return
+
+      const heldMs = performance.now() - press.startMs
+      const remainingMs = clickMinHoldMs - heldMs
+      if (remainingMs > 0) {
+        // Physical click was shorter than the enforced floor -- keep the
+        // press (attack/sustain) running until that floor is met, THEN
+        // start the release decay.
+        clearPendingRelease()
+        clickPendingReleaseTimeoutRef.current = window.setTimeout(() => {
+          clickPendingReleaseTimeoutRef.current = null
+          beginRelease()
+        }, remainingMs)
+        return
+      }
+      beginRelease()
     }
 
     stageEl.addEventListener('pointermove', handlePointerMove, { passive: true })
@@ -387,16 +365,14 @@ export function MouseCursorOverlay({
       rafRef.current = null
       activeSinceRef.current = null
       leftAtRef.current = null
-      clearClickHandoffTimeout()
-      clickHoldRef.current = null
-      clickContinuousActiveRef.current = false
-      clickTapPlanRef.current = null
-      clickReleasePlanRef.current = null
+      clearPendingRelease()
+      clickPressRef.current = null
+      clickReleaseRef.current = null
     }
   }, [
     stageRef, radiusPx, trailThicknessPx, trailFadeMs, spinHz, fadeMs, dotCount, dotColor, centerColor, trailColor,
     dotSizePx, centerSizePx, pulseMagnitude, pulseHz,
-    clickRamp, clickSkew, clickDurationSec, clickMaxSpeed, clickStep, clickBalance,
+    clickRamp, clickSkew, clickDurationSec, clickMaxSpeed, clickMinHoldMs, clickBalance,
   ])
 
   return <canvas ref={canvasRef} className="mouse-cursor-overlay-canvas" aria-hidden="true" />
