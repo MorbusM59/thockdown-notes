@@ -1140,6 +1140,16 @@ export function CM6Editor({
   // measurement lands, scrollerClientWidthPx is still 0 and this would
   // otherwise go negative.
   const reviewGutterRightLeftPx = Math.max(0, scrollerClientWidthPx - reviewGutterRightPx);
+  // The VISIBLE/clickable flag column is exactly one box, not the full
+  // reviewGutterRightPx region (that's one box PLUS the cut-off remainder --
+  // see its own comment -- reserved from text wrapping so the remainder
+  // sliver stays clear of glyphs too, but the flag box itself doesn't need
+  // to fill it). Anchored at the same reviewGutterRightLeftPx grid boundary,
+  // so it's still exactly one real grid box, just not stretched out to the
+  // scroller's own right edge the way the reserved region is -- found live:
+  // rendering it at the full reserved width visually extended the gutter
+  // all the way to the border, past where a single box actually ends.
+  const reviewGutterFlagBoxWidthPx = showReviewGutter ? cellWidthPx : 0;
   // topBoundaryPxDisplay/bottomBoundaryPxDisplay are phase-0 (plain multiples
   // of lineHeightPx) because that's what the scroll-cage math needs them to
   // stay as -- see CageMath.ts's own doc comment on why its screen-anchored
@@ -3843,10 +3853,10 @@ export function CM6Editor({
               style={{ top: 0, bottom: 0, left: halfCellWidthPx, width: reviewGutterLeftPx, backgroundColor: 'var(--color-gutter-bg)', zIndex: 2 }}
             />
           )}
-          {reviewGutterRightPx > 0 && scrollerClientWidthPx > 0 && (
+          {reviewGutterFlagBoxWidthPx > 0 && scrollerClientWidthPx > 0 && (
             <div
               className="absolute pointer-events-none"
-              style={{ top: 0, bottom: 0, left: reviewGutterRightLeftPx, width: reviewGutterRightPx, backgroundColor: 'var(--color-gutter-bg)', zIndex: 2 }}
+              style={{ top: 0, bottom: 0, left: reviewGutterRightLeftPx, width: reviewGutterFlagBoxWidthPx, backgroundColor: 'var(--color-gutter-bg)', zIndex: 2 }}
             />
           )}
           {/* Full-width row tint for every flagged line -- "all boxes that
@@ -3901,37 +3911,26 @@ export function CM6Editor({
               {row.line}
             </div>
           ))}
-          {reviewGutterRightPx > 0 && scrollerClientWidthPx > 0 && lineLayoutRows.map((row) => {
+          {reviewGutterFlagBoxWidthPx > 0 && scrollerClientWidthPx > 0 && lineLayoutRows.map((row) => {
             const flag = flagsByLineRef.current.get(row.line);
             return (
               <div
                 key={`flag-${row.line}`}
-                className="absolute"
+                className="absolute editor-text select-none"
                 style={{
                   top: row.topPx,
                   left: reviewGutterRightLeftPx,
-                  width: reviewGutterRightPx,
+                  width: reviewGutterFlagBoxWidthPx,
                   height: row.heightPx,
                   zIndex: 11,
+                  textAlign: 'center',
+                  lineHeight: `${lineHeightPx}px`,
                   cursor: 'pointer',
                 }}
                 onClick={() => handleGutterFlagClick(row.line)}
                 onContextMenu={(event) => handleGutterFlagContextMenu(row.line, event)}
               >
-                {/* reviewGutterRightPx is one real grid box PLUS whatever's
-                    cut off past it (see its own doc comment) -- the outer
-                    div above is the full click target, but the glyph itself
-                    must only occupy the real box, which is the LEFT
-                    cellWidthPx of this region (the cut-off sliver sits to
-                    its right, flush against the scroller's own edge).
-                    Centering across the whole outer width would draw the
-                    glyph off-center from the box it's meant to sit in. */}
-                <div
-                  className="editor-text select-none"
-                  style={{ width: cellWidthPx, height: lineHeightPx, textAlign: 'center', lineHeight: `${lineHeightPx}px` }}
-                >
-                  {flag ? (flag.severity === 'warning' ? '!' : '?') : ''}
-                </div>
+                {flag ? (flag.severity === 'warning' ? '!' : '?') : ''}
               </div>
             );
           })}
