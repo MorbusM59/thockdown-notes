@@ -1075,6 +1075,21 @@ export function CM6Editor({
     ? (((scrollerClientWidthPx - halfCellWidthPx) % cellWidthPx) + cellWidthPx) % cellWidthPx
     : 0;
   const reviewGutterRightPx = showReviewGutter ? cellWidthPx + reviewGutterFlagRemainderPx : 0;
+  // Rendered via an explicit `left`, never `right: 0`: a `right: 0` box's
+  // right edge is resolved live by the browser against the parent's actual
+  // current width on every layout pass, while reviewGutterRightPx (its
+  // width) only updates when scrollerClientWidthPx's own state does (the
+  // ResizeObserver callback/settle loop, not every frame) -- during a live
+  // window/pane resize those two go out of sync for a few frames, and a
+  // right-anchored box with a stale width visibly jitters/stretches against
+  // the instantly-resizing parent. Anchoring from an explicit, JS-computed
+  // left position instead means the box only ever moves when our own state
+  // says so, matching how every other geometry value in this file is
+  // positioned (topPx, halfCellWidthPx, etc. -- always explicit offsets,
+  // never a CSS edge keyword). Clamped to 0: before the first real width
+  // measurement lands, scrollerClientWidthPx is still 0 and this would
+  // otherwise go negative.
+  const reviewGutterRightLeftPx = Math.max(0, scrollerClientWidthPx - reviewGutterRightPx);
   // topBoundaryPxDisplay/bottomBoundaryPxDisplay are phase-0 (plain multiples
   // of lineHeightPx) because that's what the scroll-cage math needs them to
   // stay as -- see CageMath.ts's own doc comment on why its screen-anchored
@@ -3737,10 +3752,10 @@ export function CM6Editor({
               style={{ top: 0, bottom: 0, left: halfCellWidthPx, width: reviewGutterLeftPx, backgroundColor: 'var(--color-gutter-bg)', zIndex: 2 }}
             />
           )}
-          {reviewGutterRightPx > 0 && (
+          {reviewGutterRightPx > 0 && scrollerClientWidthPx > 0 && (
             <div
               className="absolute pointer-events-none"
-              style={{ top: 0, bottom: 0, right: 0, width: reviewGutterRightPx, backgroundColor: 'var(--color-gutter-bg)', zIndex: 2 }}
+              style={{ top: 0, bottom: 0, left: reviewGutterRightLeftPx, width: reviewGutterRightPx, backgroundColor: 'var(--color-gutter-bg)', zIndex: 2 }}
             />
           )}
           {/* Full-width row tint for every flagged line -- "all boxes that
@@ -3786,26 +3801,37 @@ export function CM6Editor({
               {row.line}
             </div>
           ))}
-          {reviewGutterRightPx > 0 && lineLayoutRows.map((row) => {
+          {reviewGutterRightPx > 0 && scrollerClientWidthPx > 0 && lineLayoutRows.map((row) => {
             const flag = flagsByLineRef.current.get(row.line);
             return (
               <div
                 key={`flag-${row.line}`}
-                className="absolute editor-text"
+                className="absolute"
                 style={{
                   top: row.topPx,
-                  right: 0,
+                  left: reviewGutterRightLeftPx,
                   width: reviewGutterRightPx,
                   height: row.heightPx,
                   zIndex: 11,
-                  textAlign: 'center',
-                  lineHeight: `${lineHeightPx}px`,
                   cursor: 'pointer',
                 }}
                 onClick={() => handleGutterFlagClick(row.line)}
                 onContextMenu={(event) => handleGutterFlagContextMenu(row.line, event)}
               >
-                {flag ? (flag.severity === 'warning' ? '!' : '?') : ''}
+                {/* reviewGutterRightPx is one real grid box PLUS whatever's
+                    cut off past it (see its own doc comment) -- the outer
+                    div above is the full click target, but the glyph itself
+                    must only occupy the real box, which is the LEFT
+                    cellWidthPx of this region (the cut-off sliver sits to
+                    its right, flush against the scroller's own edge).
+                    Centering across the whole outer width would draw the
+                    glyph off-center from the box it's meant to sit in. */}
+                <div
+                  className="editor-text select-none"
+                  style={{ width: cellWidthPx, height: lineHeightPx, textAlign: 'center', lineHeight: `${lineHeightPx}px` }}
+                >
+                  {flag ? (flag.severity === 'warning' ? '!' : '?') : ''}
+                </div>
               </div>
             );
           })}
