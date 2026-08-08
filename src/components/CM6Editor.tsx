@@ -1668,8 +1668,18 @@ export function CM6Editor({
       }
       flagPositionsRef.current = positions;
       setReviewFlags(flags);
+      // setReviewFlags alone only triggers a React re-render -- it does NOT
+      // re-run updateLineLayout (an imperative recompute, not tied to the
+      // render cycle), so flagsByLineRef -- what the tint/glyph JSX actually
+      // reads -- stayed stale until some UNRELATED trigger (clicking into
+      // the text, which fires selectionchange) happened to run it next.
+      // Found live: a clicked flag didn't visually appear until the user
+      // then clicked into the note text, which looked like the click needed
+      // "arming" but was actually just a missed repaint. Forcing the same
+      // recompute pass right here closes that gap.
+      scheduleSelectionHighlightUpdate();
     }).catch(() => {});
-  }, []);
+  }, [scheduleSelectionHighlightUpdate]);
 
   /** The sole, deliberate clear-a-flag action -- distinct from the click-cycle above. */
   const handleGutterFlagContextMenu = useCallback((line: number, event: React.MouseEvent<HTMLDivElement>) => {
@@ -1690,8 +1700,10 @@ export function CM6Editor({
       }
       flagPositionsRef.current = positions;
       setReviewFlags(flags);
+      // Same reasoning as handleGutterFlagClick above.
+      scheduleSelectionHighlightUpdate();
     }).catch(() => {});
-  }, []);
+  }, [scheduleSelectionHighlightUpdate]);
 
   // Found live: changing the y-box (line-height) slider while scrolled into
   // a large (virtualized) document could leave every visible line sitting
