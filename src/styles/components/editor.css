@@ -174,6 +174,11 @@
   font-size: 10px;
 }
 
+.btn-icon.chapter-toggle-button.is-active {
+  background-color: var(--color-gutter-bg);
+  box-shadow: inset 0 0 0 1px var(--color-grid-outline);
+}
+
 .wordcount-panel {
   flex:           0 0 var(--wordcount-panel-width);
   min-width:      var(--wordcount-panel-width);

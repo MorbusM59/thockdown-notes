@@ -32,6 +32,8 @@ import type { EditorSectionsApi } from '../src/shared/sections'
 import { EDITOR_SECTIONS_CHANNELS } from '../src/shared/sections'
 import type { ChaptersApi } from '../src/shared/chapters'
 import { CHAPTER_CHANNELS } from '../src/shared/chapters'
+import type { ReviewFlagsApi } from '../src/shared/reviewFlags'
+import { REVIEW_FLAG_CHANNELS } from '../src/shared/reviewFlags'
 import { WINDOW_DRAG_CHANNELS } from '../src/shared/windowDrag'
 
 // --------- Expose some API to the Renderer process ---------
@@ -249,3 +251,12 @@ const chaptersApi: ChaptersApi = {
 }
 
 contextBridge.exposeInMainWorld('thockdownChapters', chaptersApi)
+
+const reviewFlagsApi: ReviewFlagsApi = {
+  listReviewFlags: (noteId) => ipcRenderer.invoke(REVIEW_FLAG_CHANNELS.list, noteId),
+  setReviewFlag:   (noteId, flag) => ipcRenderer.invoke(REVIEW_FLAG_CHANNELS.set, noteId, flag),
+  clearReviewFlag: (noteId, lineNumber) => ipcRenderer.invoke(REVIEW_FLAG_CHANNELS.clear, noteId, lineNumber),
+  syncReviewFlags: (noteId, remaps) => ipcRenderer.invoke(REVIEW_FLAG_CHANNELS.sync, noteId, remaps),
+}
+
+contextBridge.exposeInMainWorld('thockdownReviewFlags', reviewFlagsApi)

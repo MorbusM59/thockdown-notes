@@ -184,6 +184,8 @@ export function EditorSection({
   spellCheckEditEnabled,
   spellCheckRenderEnabled,
   highlightSearchColor,
+  showReviewGutter,
+  onToggleReviewGutter,
   isLeftmostSection,
   canCreateSection,
   onCreateSection,
@@ -1470,6 +1472,8 @@ export function EditorSection({
         viewSpacing={viewSpacing}
         viewLetterSpacingEm={viewLetterSpacingEm}
         highlightSearchColor={highlightSearchColor}
+        showReviewGutter={showReviewGutter}
+        onToggleReviewGutter={onToggleReviewGutter}
         spellCheckRenderEnabled={spellCheckRenderEnabled}
         blockPreviewEditMutation={blockPreviewEditMutation}
         previewMarkdownElement={previewMarkdownElement}

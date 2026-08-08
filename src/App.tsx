@@ -211,6 +211,9 @@ const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   bottomBackground: 'rgba(196, 187, 182, 0.49)',
   gridOutline: '#00000022',
   grid: '#f9f6f3',
+  gutterBackground: 'rgba(196, 187, 182, 0.49)',
+  reviewLine: 'rgba(255, 221, 105, 0.35)',
+  warningLine: 'rgba(199, 60, 0, 0.35)',
   base: '#f9f6f4',
   inputFields: '#ffffff',
   appButtons: '#FFFFFFBB',
@@ -804,6 +807,9 @@ function normalizeLoadoutHighlightColors(source: unknown): HighlightColors {
     bottomBackground: typeof record.bottomBackground === 'string' ? record.bottomBackground : DEFAULT_HIGHLIGHT_COLORS.bottomBackground,
     gridOutline: typeof record.gridOutline === 'string' ? record.gridOutline : DEFAULT_HIGHLIGHT_COLORS.gridOutline,
     grid: typeof record.grid === 'string' ? record.grid : DEFAULT_HIGHLIGHT_COLORS.grid,
+    gutterBackground: typeof record.gutterBackground === 'string' ? record.gutterBackground : DEFAULT_HIGHLIGHT_COLORS.gutterBackground,
+    reviewLine: typeof record.reviewLine === 'string' ? record.reviewLine : DEFAULT_HIGHLIGHT_COLORS.reviewLine,
+    warningLine: typeof record.warningLine === 'string' ? record.warningLine : DEFAULT_HIGHLIGHT_COLORS.warningLine,
     base: typeof record.base === 'string' ? record.base : DEFAULT_HIGHLIGHT_COLORS.base,
     inputFields: typeof record.inputFields === 'string' ? record.inputFields : DEFAULT_HIGHLIGHT_COLORS.inputFields,
     appButtons: typeof record.appButtons === 'string' ? record.appButtons : DEFAULT_HIGHLIGHT_COLORS.appButtons,
@@ -1784,6 +1790,15 @@ function App() {
   const [persistenceReady, setPersistenceReady] = useState(false)
   const [appShellWidthPx, setAppShellWidthPx] = useState(APP_WINDOW_MIN_WIDTH_PX)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
+  // Line-number/review-flag gutter visibility, keyed per editor slot
+  // (sectionId) -- not per note/chapter, so switching which note a slot
+  // shows leaves the toggle alone. Absent key = off (a freshly created slot
+  // starts with the gutter off). Entries are pruned whenever a slot closes
+  // (handleCloseSection/the swap-close path below) -- the toggle is a
+  // property of "this occupied slot," not of any section identity that
+  // might outlive it, so there is nothing to restore once the slot is gone,
+  // even for a named section later recalled via swapIntoSlot.
+  const [reviewGutterVisibleBySection, setReviewGutterVisibleBySection] = useState<Record<string, boolean>>({})
   // The sections actually occupying a slot right now, sorted left-to-right --
   // resolved from window.thockdownSections.listSections() during bootstrap
   // (see the bootstrap effect below), filtered to position !== null. Starts
@@ -2414,6 +2429,9 @@ function App() {
         bottomBackground: highlightColors.bottomBackground,
         gridOutline: highlightColors.gridOutline,
         grid: highlightColors.grid,
+        gutterBackground: highlightColors.gutterBackground,
+        reviewLine: highlightColors.reviewLine,
+        warningLine: highlightColors.warningLine,
         base: highlightColors.base,
         inputFields: highlightColors.inputFields,
         appButtons: highlightColors.appButtons,
@@ -2569,6 +2587,9 @@ function App() {
       bottomBackground: loadout.highlightColors.bottomBackground,
       gridOutline: loadout.highlightColors.gridOutline,
       grid: loadout.highlightColors.grid,
+      gutterBackground: loadout.highlightColors.gutterBackground,
+      reviewLine: loadout.highlightColors.reviewLine,
+      warningLine: loadout.highlightColors.warningLine,
       base: loadout.highlightColors.base,
       inputFields: loadout.highlightColors.inputFields,
       appButtons: loadout.highlightColors.appButtons,
@@ -3460,6 +3481,7 @@ function App() {
     sidebarMode?: SidebarMode
     sidebarViewStateByMode?: SidebarViewStateByMode
     isSidebarVisible?: boolean
+    reviewGutterVisibleBySection?: Record<string, boolean>
   }): PersistedMenuState => {
     const effectiveViewStateByMode = overrides?.sidebarViewStateByMode ?? sidebarViewStateByMode
 
@@ -3528,6 +3550,9 @@ function App() {
       highlightBottomBackgroundColor: highlightColors.bottomBackground,
       highlightGridOutlineColor: highlightColors.gridOutline,
       highlightGridColor: highlightColors.grid,
+      highlightGutterBackgroundColor: highlightColors.gutterBackground,
+      highlightReviewColor: highlightColors.reviewLine,
+      highlightWarningColor: highlightColors.warningLine,
       highlightBaseColor: highlightColors.base,
       highlightInputFieldsColor: highlightColors.inputFields,
       highlightAppButtonsColor: highlightColors.appButtons,
@@ -3559,6 +3584,7 @@ function App() {
       spellCheckRenderEnabled,
       tabBarMode: tabBarModeRef.current,
       isSidebarVisible: overrides?.isSidebarVisible ?? isSidebarVisible,
+      reviewGutterVisibleBySection: overrides?.reviewGutterVisibleBySection ?? reviewGutterVisibleBySection,
       // Machine-level performance prefs, deliberately NOT part of
       // UiLayoutLoadout -- these must survive switching between layouts
       // rather than being reset to whatever each layout last had stored.
@@ -3625,6 +3651,7 @@ function App() {
     sidebarMode,
     sidebarViewStateByMode,
     isSidebarVisible,
+    reviewGutterVisibleBySection,
     viewFontSize,
     viewSpacing,
     viewLetterSpacingEm,
@@ -4065,6 +4092,9 @@ function App() {
       '--color-bg-trailing': highlightColors.bottomBackground,
       '--color-grid-outline': highlightColors.gridOutline,
       '--color-grid-bg': highlightColors.grid,
+      '--color-gutter-bg': highlightColors.gutterBackground,
+      '--color-review-line': highlightColors.reviewLine,
+      '--color-warning-line': highlightColors.warningLine,
       '--color-caret': highlightColors.caret,
       '--color-selection': activeSectionSnapshot?.isPreviewMode ? highlightColors.selectionRender : highlightColors.selectionEdit,
       '--color-input-backdrop': highlightColors.inputFields,
@@ -5225,6 +5255,9 @@ ${markdownHtml}
               bottomBackground: appState.menu.highlightBottomBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.bottomBackground,
               gridOutline: appState.menu.highlightGridOutlineColor ?? DEFAULT_HIGHLIGHT_COLORS.gridOutline,
               grid: appState.menu.highlightGridColor ?? DEFAULT_HIGHLIGHT_COLORS.grid,
+              gutterBackground: appState.menu.highlightGutterBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.gutterBackground,
+              reviewLine: appState.menu.highlightReviewColor ?? DEFAULT_HIGHLIGHT_COLORS.reviewLine,
+              warningLine: appState.menu.highlightWarningColor ?? DEFAULT_HIGHLIGHT_COLORS.warningLine,
               base: appState.menu.highlightBaseColor ?? DEFAULT_HIGHLIGHT_COLORS.base,
               inputFields: appState.menu.highlightInputFieldsColor ?? DEFAULT_HIGHLIGHT_COLORS.inputFields,
               appButtons: appState.menu.highlightAppButtonsColor ?? DEFAULT_HIGHLIGHT_COLORS.appButtons,
@@ -5248,6 +5281,7 @@ ${markdownHtml}
 
             // Restore persisted sidebar visibility
             setIsSidebarVisible(appState.menu.isSidebarVisible ?? true)
+            setReviewGutterVisibleBySection(appState.menu.reviewGutterVisibleBySection ?? {})
 
             // Cursor appearance (color/size/speed) now lives in the active
             // UiLayoutLoadout, restored when that loadout is applied below.
@@ -5548,6 +5582,43 @@ ${markdownHtml}
   // (left first, then right); if neither neighbor is flexible it's split
   // equally across all flexible sections; only when everything is fixed does
   // a fixed neighbor absorb it (and its pinned width is updated to match).
+  // Persists a review-gutter-visibility change through the same
+  // buildMenuStateSnapshot/saveAppState round trip every other menu toggle
+  // uses (see setIsSidebarVisible's own save call above for the pattern this
+  // mirrors).
+  const persistReviewGutterVisibility = useCallback((next: Record<string, boolean>) => {
+    if (!window.thockdownState || !persistenceReady) return
+    const snapshot = buildMenuStateSnapshot({ reviewGutterVisibleBySection: next })
+    const section = getActiveSection()
+    void window.thockdownState.saveAppState({
+      selectedNoteId: section?.activeNoteId ?? null,
+      viewport: section?.latestViewportRef.current ?? undefined,
+      menu: snapshot,
+    })
+  }, [buildMenuStateSnapshot, getActiveSection, persistenceReady])
+
+  const handleToggleReviewGutter = useCallback((sectionId: string) => {
+    setReviewGutterVisibleBySection((previous) => {
+      const next = { ...previous, [sectionId]: !previous[sectionId] }
+      persistReviewGutterVisibility(next)
+      return next
+    })
+  }, [persistReviewGutterVisibility])
+
+  // A slot's gutter toggle is a property of "this occupied slot," not of any
+  // section identity that might outlive it (see reviewGutterVisibleBySection's
+  // own doc comment) -- called from every path that closes a slot, whether
+  // the section itself is deleted (unnamed) or merely parked (named).
+  const pruneReviewGutterVisibility = useCallback((sectionId: string) => {
+    setReviewGutterVisibleBySection((previous) => {
+      if (!(sectionId in previous)) return previous
+      const next = { ...previous }
+      delete next[sectionId]
+      persistReviewGutterVisibility(next)
+      return next
+    })
+  }, [persistReviewGutterVisibility])
+
   const handleCloseSection = useCallback(async (sectionId: string) => {
     const sectionsApi = window.thockdownSections
     if (!sectionsApi) return
@@ -5567,6 +5638,7 @@ ${markdownHtml}
 
     const updated = await sectionsApi.closeSlot(sectionId)
     sectionRegistryRef.current.delete(sectionId)
+    pruneReviewGutterVisibility(sectionId)
 
     // Same synchronous overlay as creation: the left neighbor inherits the
     // closed slot's width on the very first post-close render.
@@ -5586,7 +5658,7 @@ ${markdownHtml}
     if (finalized) {
       applyResolvedSections(finalized)
     }
-  }, [applyResolvedSections, fixedWidthPxBySectionId, measureSectionWidthsPx, persistSectionWidthsPx, syncFixedWidthsToComputed])
+  }, [applyResolvedSections, fixedWidthPxBySectionId, measureSectionWidthsPx, persistSectionWidthsPx, pruneReviewGutterVisibility, syncFixedWidthsToComputed])
 
   const handleRenameSection = useCallback(async (sectionId: string, name: string | null) => {
     const sectionsApi = window.thockdownSections
@@ -5682,6 +5754,11 @@ ${markdownHtml}
 
     let updated = await sectionsApi.swapIntoSlot(outgoingSectionId, incomingSectionId)
     sectionRegistryRef.current.delete(outgoingSectionId)
+    // outgoingSectionId's slot is closed the same way handleCloseSection's
+    // is (see swapIntoSlot's own doc comment) -- same prune. incomingSectionId
+    // is a fresh occupant of a slot it wasn't showing in before, so it
+    // correctly has no entry yet either (default off, per spec).
+    pruneReviewGutterVisibility(outgoingSectionId)
 
     const widthFixups: { id: string; widthFraction: number | null }[] = [
       { id: incomingSectionId, widthFraction: outgoingWidthFraction },
@@ -5747,7 +5824,7 @@ ${markdownHtml}
     pendingTabBarModeBySectionIdRef.current.set(incomingSectionId, 'tabs')
     applyResolvedSections(updated)
     setActiveSectionId((previous) => (previous === outgoingSectionId ? incomingSectionId : previous))
-  }, [applyResolvedSections, editorSections])
+  }, [applyResolvedSections, editorSections, pruneReviewGutterVisibility])
 
   // "Clear this section" from the section picker's leading pill. This must
   // NOT touch the section's own data (name, pinned tabs, last-active note) --
@@ -5774,6 +5851,7 @@ ${markdownHtml}
 
     let updated = await sectionsApi.closeSlot(sectionId)
     sectionRegistryRef.current.delete(sectionId)
+    pruneReviewGutterVisibility(sectionId)
 
     updated = await sectionsApi.createSection(null, (outgoingPosition ?? 1) - 1)
     const created = updated.find((entry) => entry.position === outgoingPosition)
@@ -5806,7 +5884,7 @@ ${markdownHtml}
     if (created) {
       setActiveSectionId((previous) => (previous === sectionId ? created.id : previous))
     }
-  }, [applyResolvedSections, editorSections])
+  }, [applyResolvedSections, editorSections, pruneReviewGutterVisibility])
 
   const editorSectionsRowRef = useRef<HTMLDivElement | null>(null)
   const sectionSlotElByIdRef = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -8106,6 +8184,8 @@ ${markdownHtml}
                   spellCheckEditEnabled={spellCheckEditEnabled}
                   spellCheckRenderEnabled={spellCheckRenderEnabled}
                   highlightSearchColor={highlightColors.search}
+                  showReviewGutter={reviewGutterVisibleBySection[entry.id] ?? false}
+                  onToggleReviewGutter={() => handleToggleReviewGutter(entry.id)}
                 />
                 </div>
               </Fragment>

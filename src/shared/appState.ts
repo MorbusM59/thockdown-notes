@@ -98,6 +98,9 @@ export interface PersistedMenuState {
   highlightBottomBackgroundColor?: string;
   highlightGridOutlineColor?: string;
   highlightGridColor?: string;
+  highlightGutterBackgroundColor?: string;
+  highlightReviewColor?: string;
+  highlightWarningColor?: string;
   highlightBaseColor?: string;
   highlightInputFieldsColor?: string;
   highlightAppButtonsColor?: string;
@@ -154,6 +157,8 @@ export interface PersistedMenuState {
    * (colors, size, speed, etc.) live in UiLayoutLoadout instead.
    */
   customCursorEnabled?: boolean;
+  /** Line-number/review-flag gutter visibility, keyed per editor slot (sectionId), not per note. See App.tsx's reviewGutterVisibleBySection. */
+  reviewGutterVisibleBySection?: Record<string, boolean>;
 }
 
 // Persisted boundary/scroll position as integer line counts. See

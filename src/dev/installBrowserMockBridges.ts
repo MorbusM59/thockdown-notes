@@ -37,6 +37,7 @@ import type { NoteTabEntry, NoteTabsApi } from '../shared/tabs'
 import type { EditorSectionEntry, EditorSectionsApi } from '../shared/sections'
 import { DEFAULT_EDITOR_SECTION_ID } from '../shared/sections'
 import type { ChapterEntry, ChaptersApi } from '../shared/chapters'
+import type { ReviewFlagEntry, ReviewFlagsApi } from '../shared/reviewFlags'
 import { increaseHeadingLevels } from '../shared/markdownHeadings'
 
 const MOCK_STORAGE_KEY = 'thockdown-notes:browser-mock:v1'
@@ -54,6 +55,8 @@ type BrowserMockStore = {
   noteTabs: NoteTabEntry[]
   editorSections: EditorSectionEntry[]
   chapters: ChapterEntry[]
+  reviewFlags: ReviewFlagEntry[]
+  nextReviewFlagId: number
 }
 
 type BrowserMockWindow = Window & {
@@ -244,6 +247,8 @@ function loadStore(): BrowserMockStore {
         noteTabs: [],
         editorSections: createDefaultEditorSections(),
         chapters: [],
+        reviewFlags: [],
+        nextReviewFlagId: 1,
       }
     }
 
@@ -337,6 +342,18 @@ function loadStore(): BrowserMockStore {
               chapterId: typeof entry.chapterId === 'string' ? entry.chapterId : null,
             }))
         : [],
+      reviewFlags: Array.isArray(parsed.reviewFlags)
+        ? (parsed.reviewFlags as ReviewFlagEntry[])
+            .filter((entry) => typeof entry?.noteId === 'string' && Number.isFinite(entry?.id))
+            .map((entry) => ({
+              id: entry.id,
+              noteId: entry.noteId,
+              lineNumber: Number.isFinite(entry.lineNumber) ? entry.lineNumber : 1,
+              severity: entry.severity === 'warning' ? 'warning' : 'review',
+              lineHash: typeof entry.lineHash === 'string' ? entry.lineHash : '',
+            }))
+        : [],
+      nextReviewFlagId: Number.isFinite(parsed.nextReviewFlagId) ? Number(parsed.nextReviewFlagId) : 1,
     }
   } catch {
     const seeded = seedUiLoadoutEntries()
@@ -352,6 +369,8 @@ function loadStore(): BrowserMockStore {
       noteTabs: [],
       editorSections: createDefaultEditorSections(),
       chapters: [],
+      reviewFlags: [],
+      nextReviewFlagId: 1,
     }
   }
 }
@@ -1118,6 +1137,65 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
   }
 }
 
+function buildReviewFlagsBridge(storeRef: { current: BrowserMockStore }): ReviewFlagsApi {
+  const mutate = <T,>(transform: (store: BrowserMockStore) => T): T => {
+    const result = transform(storeRef.current)
+    persistStore(storeRef.current)
+    return result
+  }
+
+  const sorted = (store: BrowserMockStore, noteId: string): ReviewFlagEntry[] =>
+    store.reviewFlags.filter((flag) => flag.noteId === noteId).sort((a, b) => a.lineNumber - b.lineNumber)
+
+  return {
+    async listReviewFlags(noteId: string): Promise<ReviewFlagEntry[]> {
+      return sorted(storeRef.current, noteId)
+    },
+
+    async setReviewFlag(noteId: string, flag): Promise<ReviewFlagEntry[]> {
+      return mutate((store) => {
+        const existing = store.reviewFlags.find((entry) => entry.noteId === noteId && entry.lineNumber === flag.lineNumber)
+        if (existing) {
+          existing.severity = flag.severity
+          existing.lineHash = flag.lineHash
+        } else {
+          store.reviewFlags.push({
+            id: store.nextReviewFlagId,
+            noteId,
+            lineNumber: flag.lineNumber,
+            severity: flag.severity,
+            lineHash: flag.lineHash,
+          })
+          store.nextReviewFlagId += 1
+        }
+        return sorted(store, noteId)
+      })
+    },
+
+    async clearReviewFlag(noteId: string, lineNumber: number): Promise<ReviewFlagEntry[]> {
+      return mutate((store) => {
+        store.reviewFlags = store.reviewFlags.filter((entry) => !(entry.noteId === noteId && entry.lineNumber === lineNumber))
+        return sorted(store, noteId)
+      })
+    },
+
+    async syncReviewFlags(noteId: string, remaps): Promise<ReviewFlagEntry[]> {
+      return mutate((store) => {
+        const keepIds = new Set(remaps.map((remap) => remap.id))
+        store.reviewFlags = store.reviewFlags.filter((entry) => entry.noteId !== noteId || keepIds.has(entry.id))
+        for (const remap of remaps) {
+          const existing = store.reviewFlags.find((entry) => entry.id === remap.id && entry.noteId === noteId)
+          if (existing) {
+            existing.lineNumber = remap.lineNumber
+            existing.lineHash = remap.lineHash
+          }
+        }
+        return sorted(store, noteId)
+      })
+    },
+  }
+}
+
 function buildSectionsBridge(storeRef: { current: BrowserMockStore }): EditorSectionsApi {
   const mutate = <T,>(transform: (store: BrowserMockStore) => T): T => {
     const result = transform(storeRef.current)
@@ -1271,7 +1349,7 @@ export function installBrowserMockBridges(): void {
   if (scopedWindow.__thockdownBrowserMockInstalled) return
 
   // Electron renderer already owns bridge provisioning through preload.
-  if (window.thockdownNotes && window.thockdownState && window.thockdownTextures && window.thockdownLoadouts && window.thockdownTabs && window.thockdownSections && window.thockdownChapters) {
+  if (window.thockdownNotes && window.thockdownState && window.thockdownTextures && window.thockdownLoadouts && window.thockdownTabs && window.thockdownSections && window.thockdownChapters && window.thockdownReviewFlags) {
     scopedWindow.__thockdownBrowserMockInstalled = true
     return
   }
@@ -1301,6 +1379,9 @@ export function installBrowserMockBridges(): void {
   }
   if (!window.thockdownChapters) {
     window.thockdownChapters = buildChaptersBridge(storeRef)
+  }
+  if (!window.thockdownReviewFlags) {
+    window.thockdownReviewFlags = buildReviewFlagsBridge(storeRef)
   }
 
   scopedWindow.__thockdownBrowserMockInstalled = true

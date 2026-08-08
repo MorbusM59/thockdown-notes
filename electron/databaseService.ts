@@ -50,6 +50,7 @@ import {
 } from '../src/shared/cursorSettings';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureMaterialSettings, type TextureMaterialsBySurface } from '../src/textures/types';
 import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../src/shared/audioPlayer';
+import type { ReviewFlagEntry, ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags';
 import { AUDIO_EXTENSIONS } from '../src/shared/audioPlayer';
 
 const require = createRequire(import.meta.url);
@@ -137,6 +138,9 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
     bottomBackground: 'rgba(196, 187, 182, 0.49)',
     gridOutline: '#00000022',
     grid: '#f9f6f3',
+    gutterBackground: 'rgba(196, 187, 182, 0.49)',
+    reviewLine: 'rgba(255, 221, 105, 0.35)',
+    warningLine: 'rgba(199, 60, 0, 0.35)',
     base: '#f9f6f4',
     inputFields: '#ffffff',
     appButtons: '#FFFFFFBB',
@@ -563,6 +567,9 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
       bottomBackground: sanitizeString(highlights.bottomBackground, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.bottomBackground),
       gridOutline: sanitizeString(highlights.gridOutline, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.gridOutline),
       grid: sanitizeString(highlights.grid, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.grid),
+      gutterBackground: sanitizeString(highlights.gutterBackground, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.gutterBackground),
+      reviewLine: sanitizeString(highlights.reviewLine, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.reviewLine),
+      warningLine: sanitizeString(highlights.warningLine, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.warningLine),
       base: sanitizeString(highlights.base, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.base),
       inputFields: sanitizeString(highlights.inputFields, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.inputFields),
       appButtons: sanitizeString(highlights.appButtons, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.appButtons),
@@ -1945,6 +1952,67 @@ export class DatabaseService {
     db.prepare('DELETE FROM note_snapshots WHERE id = ?').run(snapshotId);
   }
 
+  listReviewFlags(noteId: string): ReviewFlagEntry[] {
+    const db = this.requireDb();
+    const rows = db.prepare(`
+      SELECT id, noteId, lineNumber, severity, lineHash
+      FROM review_flags
+      WHERE noteId = ?
+      ORDER BY lineNumber ASC
+    `).all(noteId) as ReviewFlagEntry[];
+    return rows;
+  }
+
+  /** Upserts the flag at `flag.lineNumber` -- one flag per line, click-cycle path. */
+  setReviewFlag(noteId: string, flag: ReviewFlagWrite): ReviewFlagEntry[] {
+    const db = this.requireDb();
+    db.transaction(() => {
+      const existing = db.prepare('SELECT id FROM review_flags WHERE noteId = ? AND lineNumber = ?')
+        .get(noteId, flag.lineNumber) as { id: number } | undefined;
+      if (existing) {
+        db.prepare('UPDATE review_flags SET severity = ?, lineHash = ? WHERE id = ?')
+          .run(flag.severity, flag.lineHash, existing.id);
+      } else {
+        db.prepare('INSERT INTO review_flags (noteId, lineNumber, severity, lineHash) VALUES (?, ?, ?, ?)')
+          .run(noteId, flag.lineNumber, flag.severity, flag.lineHash);
+      }
+    })();
+    return this.listReviewFlags(noteId);
+  }
+
+  /** Deletes the flag at `lineNumber`, if any -- the deliberate right-click-to-resolve path. */
+  clearReviewFlag(noteId: string, lineNumber: number): ReviewFlagEntry[] {
+    const db = this.requireDb();
+    db.prepare('DELETE FROM review_flags WHERE noteId = ? AND lineNumber = ?').run(noteId, lineNumber);
+    return this.listReviewFlags(noteId);
+  }
+
+  /**
+   * Applies exact post-edit line-number/hash corrections (computed via CM6
+   * ChangeSet.mapPos in the renderer) keyed by each flag's row id. Any
+   * existing flag for this note whose id is absent from `remaps` is deleted
+   * -- the caller already resolved a remap collision (two flags landing on
+   * the same line) by dropping the less severe one before calling this.
+   */
+  syncReviewFlags(noteId: string, remaps: ReviewFlagRemap[]): ReviewFlagEntry[] {
+    const db = this.requireDb();
+    db.transaction(() => {
+      const keepIds = new Set(remaps.map((remap) => remap.id));
+      const existingIds = (db.prepare('SELECT id FROM review_flags WHERE noteId = ?').all(noteId) as Array<{ id: number }>)
+        .map((row) => row.id);
+      for (const id of existingIds) {
+        if (!keepIds.has(id)) {
+          db.prepare('DELETE FROM review_flags WHERE id = ?').run(id);
+        }
+      }
+      const update = db.prepare('UPDATE review_flags SET lineNumber = ?, lineHash = ? WHERE id = ? AND noteId = ?');
+      for (const remap of remaps) {
+        update.run(remap.lineNumber, remap.lineHash, remap.id, noteId);
+      }
+    })();
+    return this.listReviewFlags(noteId);
+  }
+
   // Per-snapshot counterpart to saveNoteUiState/getNoteUiState -- a Timeline
   // snapshot tracks its own canonical BLOCK independently once loaded,
   // written when it's navigated away from (see useNoteSnapshotTimeline.ts's
@@ -3193,6 +3261,22 @@ export class DatabaseService {
       );
 
       CREATE INDEX IF NOT EXISTS idx_chapters_parent_position ON chapters(parentNoteId, position);
+
+      -- One row per flagged line. No UNIQUE(noteId, lineNumber): a live edit
+      -- can transiently remap two flags onto the same line before collision
+      -- resolution (keep-the-more-severe, done by the caller) runs and
+      -- deletes the loser via syncReviewFlags. lineHash is a cold-load
+      -- sanity check only -- see src/shared/reviewFlags.ts.
+      CREATE TABLE IF NOT EXISTS review_flags (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        noteId     TEXT    NOT NULL,
+        lineNumber INTEGER NOT NULL,
+        severity   TEXT    NOT NULL CHECK (severity IN ('review', 'warning')),
+        lineHash   TEXT    NOT NULL,
+        FOREIGN KEY (noteId) REFERENCES notes(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_review_flags_note ON review_flags(noteId);
     `);
 
     // A fresh install always starts with exactly one (default, unnamed)

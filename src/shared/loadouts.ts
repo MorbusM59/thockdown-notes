@@ -56,6 +56,9 @@ export type UiLayoutLoadout = {
     bottomBackground: string;
     gridOutline: string;
     grid: string;
+    gutterBackground: string;
+    reviewLine: string;
+    warningLine: string;
     base: string;
     inputFields: string;
     appButtons: string;

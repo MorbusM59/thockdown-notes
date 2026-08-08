@@ -18,6 +18,8 @@ import type { PlaylistSlot } from '../src/shared/audioPlayer'
 import { NOTE_TABS_CHANNELS } from '../src/shared/tabs'
 import { EDITOR_SECTIONS_CHANNELS } from '../src/shared/sections'
 import { CHAPTER_CHANNELS } from '../src/shared/chapters'
+import { REVIEW_FLAG_CHANNELS } from '../src/shared/reviewFlags'
+import type { ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags'
 import { WINDOW_DRAG_CHANNELS } from '../src/shared/windowDrag'
 
 // Defense in depth: if something throws outside of a path we've explicitly
@@ -989,6 +991,22 @@ function registerIpcHandlers() {
 
   ipcMain.handle(CHAPTER_CHANNELS.setChapterId, async (_event, parentNoteId: string, chapterNoteId: string, requestedId: string) => {
     return databaseService!.setChapterId(parentNoteId, chapterNoteId, requestedId);
+  });
+
+  ipcMain.handle(REVIEW_FLAG_CHANNELS.list, async (_event, noteId: string) => {
+    return databaseService!.listReviewFlags(noteId);
+  });
+
+  ipcMain.handle(REVIEW_FLAG_CHANNELS.set, async (_event, noteId: string, flag: ReviewFlagWrite) => {
+    return databaseService!.setReviewFlag(noteId, flag);
+  });
+
+  ipcMain.handle(REVIEW_FLAG_CHANNELS.clear, async (_event, noteId: string, lineNumber: number) => {
+    return databaseService!.clearReviewFlag(noteId, lineNumber);
+  });
+
+  ipcMain.handle(REVIEW_FLAG_CHANNELS.sync, async (_event, noteId: string, remaps: ReviewFlagRemap[]) => {
+    return databaseService!.syncReviewFlags(noteId, remaps);
   });
 }
 

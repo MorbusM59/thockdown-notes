@@ -75,6 +75,9 @@ export interface SectionEditorAreaProps {
   onCancelChapterIdEdit: () => void
   onCollapseChapterIntoPrevious: () => void
   onExtractSelectionToChapter: () => void
+  /** Line-number/review-flag gutter toggle, per editor slot -- see App.tsx's reviewGutterVisibleBySection. */
+  showReviewGutter: boolean
+  onToggleReviewGutter: () => void
 }
 
 /**
@@ -146,6 +149,8 @@ export function SectionEditorArea({
   onCancelChapterIdEdit,
   onCollapseChapterIntoPrevious,
   onExtractSelectionToChapter,
+  showReviewGutter,
+  onToggleReviewGutter,
 }: SectionEditorAreaProps) {
   const setStageEl = useCallback((el: HTMLDivElement | null) => {
     (editorStageRef as MutableRefObject<HTMLDivElement | null>).current = el
@@ -209,6 +214,7 @@ export function SectionEditorArea({
                   spellCheckEnabled={spellCheckEditEnabled}
                   fontReady={editorFontLoadVersion > 0}
                   caretSuspended={isCaretSuspended}
+                  showReviewGutter={showReviewGutter}
                 />
               ) : emptyState}
             </div>
@@ -293,11 +299,13 @@ export function SectionEditorArea({
         <div className="chapter-toggle-panel">
           <button
             type="button"
-            className="chapter-toggle-button btn-icon"
-            aria-label="Add a chapter"
-            title="Add a chapter"
+            className={`chapter-toggle-button btn-icon${showReviewGutter ? ' is-active' : ''}`}
+            aria-label="Toggle line numbers and review flags"
+            aria-pressed={showReviewGutter}
+            title="Toggle line numbers and review flags"
+            onClick={onToggleReviewGutter}
           >
-            <span className="fa-solid fa-book-medical" aria-hidden="true" />
+            <span className="fa-solid fa-list-ol" aria-hidden="true" />
           </button>
         </div>
         <div className="wordcount-panel" aria-live="polite">

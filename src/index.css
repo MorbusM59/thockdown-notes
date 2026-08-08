@@ -251,6 +251,9 @@
   --color-bg-regular: #e9e6e3;    /* Regular text box shading */
   --color-bg-leading: #d9d6d3;    /* Top section overlay */
   --color-bg-trailing: #d9d6d3;   /* Bottom section overlay */
+  --color-gutter-bg: rgba(196, 187, 182, 0.49);   /* Line-number/flag gutter overlay */
+  --color-review-line: rgba(255, 221, 105, 0.35); /* "?" review-flagged line tint */
+  --color-warning-line: rgba(199, 60, 0, 0.35);   /* "!" warning-flagged line tint */
   --color-caret: rgba(120, 115, 112, 0.8);
   --color-selection: rgba(199, 94, 0, 0.49);
 

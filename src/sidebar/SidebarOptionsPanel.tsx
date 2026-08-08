@@ -189,7 +189,7 @@ const VIEW_STYLE_OPTIONS: Array<{ key: ViewStyleKey; label: string; family: stri
   { key: 'bubblerone', label: 'Bubbler One', family: "'Bubbler One', 'Segoe UI', sans-serif" },
 ]
 
-const BOX_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['background', 'grid', 'gridOutline', 'topBackground', 'bottomBackground']
+const BOX_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['background', 'grid', 'gridOutline', 'topBackground', 'bottomBackground', 'gutterBackground', 'reviewLine', 'warningLine']
 const MARKDOWN_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = [
   'markdownHeadline',
   'markdownList',
@@ -213,6 +213,9 @@ const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   bottomBackground: 'Lower Box Background',
   gridOutline: 'Box Outline',
   grid: 'Box Grid',
+  gutterBackground: 'Gutter Background',
+  reviewLine: 'Review Flag Color',
+  warningLine: 'Warning Flag Color',
   base: 'App Base Background',
   inputFields: 'App (Input) Fields',
   appButtons: 'App Buttons',
@@ -238,6 +241,9 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   bottomBackground: 'fa-solid fa-square-caret-down',
   gridOutline: 'fa-regular fa-square',
   grid: 'fa-solid fa-border-all',
+  gutterBackground: 'fa-solid fa-list-ol',
+  reviewLine: 'fa-solid fa-question',
+  warningLine: 'fa-solid fa-triangle-exclamation',
   base: 'fa-solid fa-display',
   inputFields: 'fa-solid fa-pen-to-square',
   appButtons: 'fa-solid fa-hockey-puck',

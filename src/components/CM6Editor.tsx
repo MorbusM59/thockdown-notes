@@ -22,6 +22,8 @@ import { sanitizeDocumentText, sanitizeDocumentTextExtended } from '../shared/te
 import { resolveScopeRange, isSameRange, type SelectionScope } from '../editor/ContractBridgeRangeUtils';
 import { computeMinimalTextReplacement } from '../editor/MinimalTextDiff';
 import { ScrollTransitionController } from '../editor/ScrollTransitionController';
+import type { ReviewFlagEntry, ReviewFlagRemap, ReviewFlagSeverity } from '../shared/reviewFlags';
+import { hashLineText, reviewFlagSeverityRank } from '../shared/reviewFlags';
 import type {
   EditorAdapter,
   EditorBindings,
@@ -232,6 +234,12 @@ export interface CM6EditorProps {
   // both this and hasViewportLines (below).
   fontReady?: boolean;
   caretSuspended?: boolean;
+  // Per-editor-slot toggle (owned by app state, not this component -- see
+  // useReviewGutterVisibility.ts) for the line-number/review-flag gutter
+  // columns. Flags themselves are always loaded/tracked/persisted regardless
+  // of this flag's value -- toggling only shows/hides the columns; see
+  // docs/editor-contract.md-adjacent reasoning in the gutter section below.
+  showReviewGutter?: boolean;
 }
 
 function toSelectionState(range: { anchor: number; head: number; from: number; to: number; empty: boolean }): EditorSelectionState {
@@ -546,6 +554,17 @@ interface HighlightRect {
   height: number;
 }
 
+// One entry per document line currently in the viewport, for the review
+// gutter (see updateLineLayout). heightPx spans the line's full wrapped
+// height (all its visual rows) -- CM6's own view.viewportLineBlocks already
+// reports one block per document line under lineWrapping, covering every
+// wrapped row, so this needs no separate visual-row bookkeeping.
+interface LineLayoutRow {
+  line: number;
+  topPx: number;
+  heightPx: number;
+}
+
 /** Ported verbatim from BlockSelectionPlugin.tsx -- walks up from `node` to the .cm-line element that's a direct child of `rootEl` (view.contentDOM), mirroring that file's own "top-level child" notion. */
 function findTopLevelChild(rootEl: HTMLElement, node: Node | null): HTMLElement | null {
   let current: Node | null = node;
@@ -630,6 +649,7 @@ export function CM6Editor({
   spellCheckEnabled = false,
   fontReady = true,
   caretSuspended = false,
+  showReviewGutter = false,
 }: CM6EditorProps) {
   const layerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -684,6 +704,31 @@ export function CM6Editor({
   const caretLayerRectRef = useRef<DOMRect | null>(null);
   const [highlightRects, setHighlightRects] = useState<HighlightRect[]>([]);
   const highlightAnimationFrameRef = useRef<number | null>(null);
+
+  // Review/warning-flag gutter state. reviewFlagsRef mirrors reviewFlags (the
+  // id/severity truth, from the DB) for read access inside the updateListener
+  // closure below without becoming a dependency that would force it to
+  // re-register on every flag change. flagPositionsRef is the live,
+  // per-keystroke-remapped document POSITION (not line number) for each
+  // flag id -- exact via ChangeSet.mapPos (see the updateListener's
+  // docChanged branch) -- line numbers are only ever derived FROM these
+  // positions, never tracked independently, so there is exactly one source
+  // of truth for "where is this flag now" while a note is open.
+  const [reviewFlags, setReviewFlags] = useState<ReviewFlagEntry[]>([]);
+  const reviewFlagsRef = useRef<ReviewFlagEntry[]>([]);
+  useEffect(() => { reviewFlagsRef.current = reviewFlags; }, [reviewFlags]);
+  const flagPositionsRef = useRef<Map<number, number>>(new Map());
+  const [lineLayoutRows, setLineLayoutRows] = useState<LineLayoutRow[]>([]);
+  const [totalLineCount, setTotalLineCount] = useState(1);
+  // line number -> {id, severity} for the CURRENT (post-remap) document,
+  // recomputed in lockstep with lineLayoutRows -- see updateLineLayout.
+  const flagsByLineRef = useRef<Map<number, { id: number; severity: ReviewFlagSeverity }>>(new Map());
+  const reviewFlagSyncTimeoutRef = useRef<number | null>(null);
+  // The updateListener closure below is registered once at mount (see its
+  // own "mount-once" comment) and can't see prop changes directly -- kept in
+  // sync by the note-switch effect further down, same pattern as
+  // lastHydratedNoteIdRef.
+  const noteIdRef = useRef<string | null>(noteId ?? null);
 
   // Fixed-focus caging boundary state -- ported from Editor.tsx. Stored as
   // integer line counts (resolution-independent, see EditorViewportLines's
@@ -1003,6 +1048,14 @@ export function CM6Editor({
   // half, so rounding costs nothing and keeps every grid line equally crisp.
   const halfCellWidthPx = Math.round(cellWidthPx / 2);
   const halfLineHeightPx = Math.round(lineHeightPx / 2);
+  // Review gutter widths: one grid cell reserved per digit of the highest
+  // line number currently in the document (dynamically reserved, per the
+  // spec) for the line-number column, plus exactly one cell for the single
+  // flag column. Zero when the gutter is toggled off -- additive-only
+  // against the existing padding math below, so a user who never enables
+  // this feature sees byte-identical layout to before it existed.
+  const reviewGutterLeftPx = showReviewGutter ? String(Math.max(1, totalLineCount)).length * cellWidthPx : 0;
+  const reviewGutterRightPx = showReviewGutter ? cellWidthPx : 0;
   // topBoundaryPxDisplay/bottomBoundaryPxDisplay are phase-0 (plain multiples
   // of lineHeightPx) because that's what the scroll-cage math needs them to
   // stay as -- see CageMath.ts's own doc comment on why its screen-anchored
@@ -1068,7 +1121,12 @@ export function CM6Editor({
     // far edges are expected, not a bug -- see the grid overlay's own
     // backgroundPosition below, which is shifted by the exact same amount
     // so text and grid move together and stay aligned).
-    view.contentDOM.style.paddingLeft = `${halfCellWidthPx}px`;
+    // reviewGutterLeftPx/reviewGutterRightPx (0 when the gutter is off) push
+    // the grid-alignment math above outward without altering it: text still
+    // starts exactly halfCellWidthPx past wherever the content box now
+    // begins, the gutter columns occupy the reserved space to either side.
+    view.contentDOM.style.paddingLeft = `${halfCellWidthPx + reviewGutterLeftPx}px`;
+    view.contentDOM.style.paddingRight = `${reviewGutterRightPx}px`;
     view.contentDOM.style.paddingTop = `${topBoundaryVisualPx}px`;
     view.contentDOM.style.paddingBottom = `${bottomBoundaryPxDisplay + alignmentPaddingBottomPx}px`;
     // Same reasoning as the lineHeightPx/cellWidthPx metrics-change effect
@@ -1077,7 +1135,7 @@ export function CM6Editor({
     // reconciliation across that needs to be forced rather than left to
     // whatever unforced schedule it would otherwise settle on.
     view.requestMeasure();
-  }, [topBoundaryVisualPx, bottomBoundaryPxDisplay, alignmentPaddingBottomPx, halfCellWidthPx]);
+  }, [topBoundaryVisualPx, bottomBoundaryPxDisplay, alignmentPaddingBottomPx, halfCellWidthPx, reviewGutterLeftPx, reviewGutterRightPx]);
 
   // Custom scrollbar sync -- ported from Editor.tsx's own three sync
   // effects. Runs after the portal target (scrollbarHost) or any layout
@@ -1257,14 +1315,72 @@ export function CM6Editor({
   }, [invalidateCaretRectCache, scheduleCaretUpdate]);
 
   /**
+   * Review gutter's per-document-line geometry + current flag placement.
+   * Reads CM6's own analytical line-block layout (view.viewportLineBlocks) --
+   * not a DOM measurement -- so it's exact under wrapping and viewport
+   * virtualization for free, the same primitive resolveSourceLineAtHeight
+   * already relies on elsewhere in this file. Deliberately NOT gated on
+   * showReviewGutter: flagsByLineRef must stay current even while the
+   * columns are hidden, since toggling them back on must show up-to-date
+   * flags immediately, not a stale snapshot from before the toggle.
+   */
+  const updateLineLayout = useCallback(() => {
+    const view = viewRef.current;
+    const layerEl = layerRef.current;
+    if (!view || !layerEl) {
+      setLineLayoutRows([]);
+      return;
+    }
+
+    const scroller = view.scrollDOM;
+    const scrollerRect = scroller.getBoundingClientRect();
+    const layerRect = layerEl.getBoundingClientRect();
+    const scrollerTopInLayer = scrollerRect.top - layerRect.top;
+
+    const rows: LineLayoutRow[] = [];
+    for (const block of view.viewportLineBlocks) {
+      const docLine = view.state.doc.lineAt(block.from);
+      // A document line can be split across multiple blocks (block widgets);
+      // only the block starting at the line's own `from` gets a gutter row.
+      if (block.from !== docLine.from) continue;
+      rows.push({
+        line: docLine.number,
+        topPx: scrollerTopInLayer + (block.top - scroller.scrollTop),
+        heightPx: block.height,
+      });
+    }
+    setLineLayoutRows(rows);
+    setTotalLineCount(view.state.doc.lines);
+
+    const flagsByLine = new Map<number, { id: number; severity: ReviewFlagSeverity }>();
+    for (const flag of reviewFlagsRef.current) {
+      const pos = flagPositionsRef.current.get(flag.id);
+      if (pos == null) continue;
+      const clampedPos = Math.max(0, Math.min(pos, view.state.doc.length));
+      const line = view.state.doc.lineAt(clampedPos).number;
+      const existing = flagsByLine.get(line);
+      if (!existing || reviewFlagSeverityRank(flag.severity) > reviewFlagSeverityRank(existing.severity)) {
+        flagsByLine.set(line, { id: flag.id, severity: flag.severity });
+      }
+    }
+    flagsByLineRef.current = flagsByLine;
+  }, []);
+
+  /**
    * Ported verbatim from BlockSelectionPlugin.tsx's own updateSelection --
    * same algorithm (readSelectionLineRects, empty-line filtering, quantized
    * row merging, viewport clipping), sourced from the CM6 EditorView instead
    * of Lexical's editor state. Doesn't require focus the way updateCaret
    * does: a read-only note's native text selection still works (and should
    * still highlight) even though it never becomes document.activeElement.
+   * Recomputes the review-gutter's line layout in lockstep (updateLineLayout)
+   * -- both need to resync on exactly the same doc/viewport/scroll/resize
+   * triggers, so this reuses the one already-correct schedule instead of a
+   * second parallel one that risked drifting out of sync with it.
    */
   const updateSelectionHighlight = useCallback(() => {
+    updateLineLayout();
+
     const view = viewRef.current;
     const layerEl = layerRef.current;
     if (!view || !layerEl) return;
@@ -1349,7 +1465,7 @@ export function CM6Editor({
     }
 
     setHighlightRects(nextRects);
-  }, []);
+  }, [updateLineLayout]);
 
   const scheduleSelectionHighlightUpdate = useCallback(() => {
     if (highlightAnimationFrameRef.current !== null) {
@@ -1360,6 +1476,108 @@ export function CM6Editor({
       updateSelectionHighlight();
     });
   }, [updateSelectionHighlight]);
+
+  /**
+   * Recomputes each flag's current line number (from its live, ChangeSet-
+   * remapped position -- see flagPositionsRef) and content hash, resolves
+   * any collision (an edit merged two flagged lines into one) by keeping the
+   * more severe flag, and persists the result. Debounced (scheduleReviewFlagSync)
+   * rather than run on every keystroke -- the live position remap that keeps
+   * rendering correct is exact and synchronous already; this only needs to
+   * catch the DB up periodically plus once before a note switch/unmount.
+   */
+  const runReviewFlagSync = useCallback(() => {
+    const view = viewRef.current;
+    const noteId = noteIdRef.current;
+    if (!view || !noteId || flagPositionsRef.current.size === 0) return;
+    const doc = view.state.doc;
+    const winners = new Map<number, { remap: ReviewFlagRemap; severity: ReviewFlagSeverity }>();
+    for (const flag of reviewFlagsRef.current) {
+      const pos = flagPositionsRef.current.get(flag.id);
+      if (pos == null) continue;
+      const clampedPos = Math.max(0, Math.min(pos, doc.length));
+      const line = doc.lineAt(clampedPos);
+      const existing = winners.get(line.number);
+      if (!existing || reviewFlagSeverityRank(flag.severity) > reviewFlagSeverityRank(existing.severity)) {
+        winners.set(line.number, {
+          remap: { id: flag.id, lineNumber: line.number, lineHash: hashLineText(line.text) },
+          severity: flag.severity,
+        });
+      }
+    }
+    window.thockdownReviewFlags?.syncReviewFlags(noteId, Array.from(winners.values(), (w) => w.remap))
+      .then(setReviewFlags)
+      .catch(() => {});
+  }, []);
+
+  const scheduleReviewFlagSync = useCallback(() => {
+    if (reviewFlagSyncTimeoutRef.current !== null) {
+      window.clearTimeout(reviewFlagSyncTimeoutRef.current);
+    }
+    reviewFlagSyncTimeoutRef.current = window.setTimeout(() => {
+      reviewFlagSyncTimeoutRef.current = null;
+      runReviewFlagSync();
+    }, 800);
+  }, [runReviewFlagSync]);
+
+  /**
+   * Flag-column click: a severity toggle, not a delete. Empty -> "?"
+   * (review) -> "!" (warning) -> "?" -> ... -- clicking a "!" box demotes it
+   * back to "?" rather than clearing it (see handleGutterFlagContextMenu for
+   * the deliberate, separate clear action). Applies to the whole logical
+   * line regardless of which of its wrapped visual rows was clicked, since
+   * the flag column renders one clickable region per document line spanning
+   * its full wrapped height.
+   */
+  const handleGutterFlagClick = useCallback((line: number) => {
+    const view = viewRef.current;
+    const noteId = noteIdRef.current;
+    if (!view || !noteId || line < 1 || line > view.state.doc.lines) return;
+    const lineObj = view.state.doc.line(line);
+    const existing = flagsByLineRef.current.get(line);
+    const nextSeverity: ReviewFlagSeverity = !existing || existing.severity === 'warning' ? 'review' : 'warning';
+    window.thockdownReviewFlags?.setReviewFlag(noteId, {
+      lineNumber: line,
+      severity: nextSeverity,
+      lineHash: hashLineText(lineObj.text),
+    }).then((flags) => {
+      if (noteIdRef.current !== noteId) return;
+      const currentView = viewRef.current;
+      const positions = new Map<number, number>();
+      if (currentView) {
+        const doc = currentView.state.doc;
+        for (const flag of flags) {
+          if (flag.lineNumber >= 1 && flag.lineNumber <= doc.lines) {
+            positions.set(flag.id, doc.line(flag.lineNumber).from);
+          }
+        }
+      }
+      flagPositionsRef.current = positions;
+      setReviewFlags(flags);
+    }).catch(() => {});
+  }, []);
+
+  /** The sole, deliberate clear-a-flag action -- distinct from the click-cycle above. */
+  const handleGutterFlagContextMenu = useCallback((line: number, event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const noteId = noteIdRef.current;
+    if (!noteId) return;
+    window.thockdownReviewFlags?.clearReviewFlag(noteId, line).then((flags) => {
+      if (noteIdRef.current !== noteId) return;
+      const currentView = viewRef.current;
+      const positions = new Map<number, number>();
+      if (currentView) {
+        const doc = currentView.state.doc;
+        for (const flag of flags) {
+          if (flag.lineNumber >= 1 && flag.lineNumber <= doc.lines) {
+            positions.set(flag.id, doc.line(flag.lineNumber).from);
+          }
+        }
+      }
+      flagPositionsRef.current = positions;
+      setReviewFlags(flags);
+    }).catch(() => {});
+  }, []);
 
   // Found live: changing the y-box (line-height) slider while scrolled into
   // a large (virtualized) document could leave every visible line sitting
@@ -2211,6 +2429,20 @@ export function CM6Editor({
           }
         }
         if (update.docChanged) {
+          // Exact position remap via CM6's own ChangeSet.mapPos -- the same
+          // mechanism CM6 uses internally to reposition marks/decorations/
+          // selections across an edit, not a heuristic. Runs on every
+          // docChanged transaction (cheap: O(flag count), no DOM/DB work) so
+          // flagsByLineRef (read by updateLineLayout, thus by rendering) is
+          // never stale; the DB write itself is debounced separately below.
+          if (flagPositionsRef.current.size > 0) {
+            const remappedPositions = new Map<number, number>();
+            for (const [id, pos] of flagPositionsRef.current) {
+              remappedPositions.set(id, update.changes.mapPos(pos));
+            }
+            flagPositionsRef.current = remappedPositions;
+            scheduleReviewFlagSync();
+          }
           // doc.toJSON() (public, documented CodeMirror API -- collects each
           // line via direct array pushes, Text.flatten) + one native
           // .join('\n') call, instead of doc.toString() (equivalent to
@@ -2716,6 +2948,53 @@ export function CM6Editor({
       });
     }
   }, [noteId, initialText, debugInputLagEnabled]);
+
+  // Review-flag load on note switch. Declared textually AFTER the hydration
+  // effect above so React runs it after: it needs view.state.doc to already
+  // hold the NEW note's text (to resolve each flag's stored lineNumber to a
+  // document position), and effects run in declaration order within a
+  // commit. Cancels any pending debounced sync from the outgoing note first
+  // -- otherwise a sync queued just before the switch would still fire
+  // ~800ms later against noteIdRef.current (already repointed to the new
+  // note by then), silently writing the old note's remapped flags onto the
+  // new note.
+  useEffect(() => {
+    if (reviewFlagSyncTimeoutRef.current !== null) {
+      window.clearTimeout(reviewFlagSyncTimeoutRef.current);
+      reviewFlagSyncTimeoutRef.current = null;
+    }
+    noteIdRef.current = noteId ?? null;
+    flagPositionsRef.current = new Map();
+    setReviewFlags([]);
+    if (!noteId) return;
+
+    let cancelled = false;
+    window.thockdownReviewFlags?.listReviewFlags(noteId).then((flags) => {
+      if (cancelled) return;
+      const view = viewRef.current;
+      const positions = new Map<number, number>();
+      if (view) {
+        const doc = view.state.doc;
+        for (const flag of flags) {
+          const clampedLine = Math.max(1, Math.min(flag.lineNumber, doc.lines));
+          const lineObj = doc.line(clampedLine);
+          if (hashLineText(lineObj.text) !== flag.lineHash) {
+            // Cold-load sanity check failed: no live ChangeSet history exists
+            // to resolve this exactly (see runReviewFlagSync's doc comment),
+            // so this is surfaced rather than silently trusted or dropped --
+            // it still displays at its last persisted line, and the next
+            // edit's remap will re-derive a correct position going forward.
+            console.warn(`[review-flags] note ${noteId} flag ${flag.id}: stored line ${flag.lineNumber} no longer matches its saved hash -- displaying at last-known position.`);
+          }
+          positions.set(flag.id, lineObj.from);
+        }
+      }
+      flagPositionsRef.current = positions;
+      setReviewFlags(flags);
+    }).catch(() => {});
+
+    return () => { cancelled = true; };
+  }, [noteId]);
 
   // Boundary drag-handle global listeners -- ported from Editor.tsx's own
   // "Global Mouse listeners for Dragging" effect. Deliberately re-binds only
@@ -3374,6 +3653,99 @@ export function CM6Editor({
             onWheel={forwardHandleWheelToScroller}
             onMouseDown={(e) => { e.preventDefault(); setIsDraggingBottom(true); }}
           />
+        </>
+      )}
+      {/* Line-number + review-flag gutter -- reuses the exact grid units
+          (cellWidthPx/lineHeightPx) and half-cell phase offset as the box
+          grid above, so it reads as columns of that same grid rather than a
+          separate visual system. Per-note-line entries (lineLayoutRows) come
+          from updateLineLayout, CM6's own analytical line-block layout, kept
+          in lockstep with everything else that resyncs on doc/viewport/
+          scroll/resize. Deliberately NOT gated on hasViewportLines/fontReady
+          the way the grid/boundary zones are -- reviewGutterLeftPx/RightPx
+          are already 0 when off, so this renders nothing (not a wrong-pitch
+          flash) until those are ready either way. */}
+      {showReviewGutter && (reviewGutterLeftPx > 0 || reviewGutterRightPx > 0) && (
+        <>
+          {reviewGutterLeftPx > 0 && (
+            <div
+              className="absolute pointer-events-none"
+              style={{ top: 0, bottom: 0, left: 0, width: reviewGutterLeftPx, backgroundColor: 'var(--color-gutter-bg)', zIndex: 2 }}
+            />
+          )}
+          {reviewGutterRightPx > 0 && (
+            <div
+              className="absolute pointer-events-none"
+              style={{ top: 0, bottom: 0, right: 0, width: reviewGutterRightPx, backgroundColor: 'var(--color-gutter-bg)', zIndex: 2 }}
+            />
+          )}
+          {/* Full-width row tint for every flagged line -- "all boxes that
+              belong to that line," not just the flag-column cell. Sits below
+              the grid-line overlays (zIndex 6/7) and text (10) so it reads as
+              a background tint layered under the existing coloring, same
+              tier as the top/bottom boundary zones (zIndex 2) but one step
+              above them since a flag is a more specific, later-applied
+              signal than the ambient zone color. */}
+          {lineLayoutRows.map((row) => {
+            const flag = flagsByLineRef.current.get(row.line);
+            if (!flag) return null;
+            return (
+              <div
+                key={`tint-${row.line}`}
+                className="absolute pointer-events-none"
+                style={{
+                  top: row.topPx,
+                  left: 0,
+                  right: 0,
+                  height: row.heightPx,
+                  zIndex: 3,
+                  backgroundColor: flag.severity === 'warning' ? 'var(--color-warning-line)' : 'var(--color-review-line)',
+                }}
+              />
+            );
+          })}
+          {reviewGutterLeftPx > 0 && lineLayoutRows.map((row) => (
+            <div
+              key={`line-${row.line}`}
+              className="absolute pointer-events-none select-none editor-text"
+              style={{
+                top: row.topPx,
+                left: 0,
+                width: reviewGutterLeftPx,
+                height: lineHeightPx,
+                zIndex: 11,
+                textAlign: 'right',
+                paddingRight: halfCellWidthPx,
+                lineHeight: `${lineHeightPx}px`,
+                opacity: 0.6,
+              }}
+            >
+              {row.line}
+            </div>
+          ))}
+          {reviewGutterRightPx > 0 && lineLayoutRows.map((row) => {
+            const flag = flagsByLineRef.current.get(row.line);
+            return (
+              <div
+                key={`flag-${row.line}`}
+                className="absolute editor-text"
+                style={{
+                  top: row.topPx,
+                  right: 0,
+                  width: reviewGutterRightPx,
+                  height: row.heightPx,
+                  zIndex: 11,
+                  textAlign: 'center',
+                  lineHeight: `${lineHeightPx}px`,
+                  cursor: 'pointer',
+                }}
+                onClick={() => handleGutterFlagClick(row.line)}
+                onContextMenu={(event) => handleGutterFlagContextMenu(row.line, event)}
+              >
+                {flag ? (flag.severity === 'warning' ? '!' : '?') : ''}
+              </div>
+            );
+          })}
         </>
       )}
       {hasViewportLines && fontReady && !caretHidden && highlightRects.map((rect, index) => (
