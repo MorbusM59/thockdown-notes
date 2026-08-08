@@ -113,6 +113,7 @@ const windowControls = {
   moveWindowDrag: (screenX: number, screenY: number) =>
     ipcRenderer.send(WINDOW_DRAG_CHANNELS.move, { screenX, screenY }),
   endWindowDrag: () => ipcRenderer.send(WINDOW_DRAG_CHANNELS.end),
+  debugLog: (...args: unknown[]) => ipcRenderer.send('debug-log', ...args),
   onMaximizeStateChange: (callback: (isMaximized: boolean) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, value: boolean) => {
       callback(value)

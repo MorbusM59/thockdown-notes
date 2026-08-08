@@ -27,8 +27,15 @@ export function useWindowDragRegion() {
     let isTitlebarOrigin = false
 
     function handleMouseDown(event: MouseEvent) {
-      if (event.button !== 0) return
       const target = event.target
+      window.windowControls?.debugLog?.('mousedown', {
+        button: event.button,
+        isElement: target instanceof Element,
+        className: target instanceof Element ? target.className : String(target),
+        excluded: target instanceof Element ? !!target.closest(WINDOW_DRAG_EXCLUDED_SELECTOR) : null,
+        titlebar: target instanceof Element ? !!target.closest(WINDOW_TITLEBAR_SELECTOR) : null,
+      })
+      if (event.button !== 0) return
       if (!(target instanceof Element) || target.closest(WINDOW_DRAG_EXCLUDED_SELECTOR)) return
       candidateOrigin = { x: event.screenX, y: event.screenY }
       isDragging = false

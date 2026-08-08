@@ -124,6 +124,11 @@ const UTILITY_COLLAPSE_MIN_WIDTH_PX = 96;
 const UTILITY_COLLAPSE_MIN_HEIGHT_PX = 40;
 const APP_WINDOW_MIN_WIDTH_PX = 873;
 const APP_WINDOW_MIN_HEIGHT_PX = 525;
+// Fallback "restored" size used when launching into a saved maximized state
+// -- see the createWindow() comment on why the saved x/y/width/height can't
+// be trusted for the initial (pre-maximize) bounds in that case.
+const APP_WINDOW_DEFAULT_WIDTH_PX = 1200;
+const APP_WINDOW_DEFAULT_HEIGHT_PX = 900;
 // Mirror renderer constants for sidebar sizing so main can compute effective minima
 const SIDEBAR_WIDTH_PX = 288;
 const GRID_DIVIDER_PX = 8;
@@ -479,6 +484,10 @@ function registerIpcHandlers() {
     }
   })
 
+  ipcMain.on('debug-log', (_event, ...args: unknown[]) => {
+    console.log('[renderer debug]', ...args)
+  })
+
   ipcMain.on('window-control', (_event, action: string) => {
     if (!win || win.isDestroyed()) return
 
@@ -517,6 +526,7 @@ function registerIpcHandlers() {
   // and src/window/useWindowDragRegion.ts for the renderer side.
   ipcMain.on(WINDOW_DRAG_CHANNELS.start, (_event, payload: { screenX: number; screenY: number; isTitlebarOrigin: boolean }) => {
     if (!win || win.isDestroyed()) return
+    console.log('[window-drag:start]', { isMaximized: win.isMaximized(), isTitlebarOrigin: payload.isTitlebarOrigin })
 
     if (win.isMaximized()) {
       // Only a drag that started in the title-bar-like chrome (toolbar /
@@ -531,16 +541,35 @@ function registerIpcHandlers() {
       // Mirrors native title-bar drag: unmaximize first, re-anchored so the
       // window edge under the cursor stays under the cursor instead of
       // jumping to wherever the restored bounds happen to land.
+      //
+      // Windows doesn't apply unmaximize() synchronously -- it's posted to
+      // the native message queue, so a setBounds()/setPosition() issued in
+      // the same tick races the pending restore and gets silently dropped
+      // (the window ends up looking like it never left maximized). Waiting
+      // for the actual 'unmaximize' event before repositioning sidesteps
+      // that; getNormalBounds() (not getBounds()) is used for the restored
+      // size since a maximized frameless BrowserWindow's getBounds() rect
+      // on Windows is inflated by its invisible resize border (e.g. y: -8).
       const maximizedBounds = win.getBounds()
+      const normalBounds = win.getNormalBounds()
       const relativeX = maximizedBounds.width > 0
         ? (payload.screenX - maximizedBounds.x) / maximizedBounds.width
         : 0.5
-      win.unmaximize()
-      const restoredBounds = win.getBounds()
-      win.setPosition(
-        Math.round(payload.screenX - relativeX * restoredBounds.width),
-        Math.max(0, Math.round(payload.screenY - 10)),
-      )
+      const targetX = Math.round(payload.screenX - relativeX * normalBounds.width)
+      const targetY = Math.max(0, Math.round(payload.screenY - 10))
+      const winRef = win
+      winRef.once('unmaximize', () => {
+        if (winRef.isDestroyed()) return
+        winRef.setBounds({ x: targetX, y: targetY, width: normalBounds.width, height: normalBounds.height })
+        windowDragState = {
+          startCursorX: payload.screenX,
+          startCursorY: payload.screenY,
+          startWinX: targetX,
+          startWinY: targetY,
+        }
+      })
+      winRef.unmaximize()
+      return
     }
 
     const bounds = win.getBounds()
@@ -1020,7 +1049,15 @@ function registerIpcHandlers() {
 }
 
 function readCurrentWindowState(windowRef: BrowserWindow): WindowState {
-  const bounds = windowRef.getBounds();
+  // getNormalBounds() (not getBounds()) while maximized -- getBounds() on a
+  // maximized frameless window reports Windows' inflated resize-border rect
+  // (e.g. y: -8, width covering the whole monitor), and persisting that as
+  // the "restored" size/position poisons every future launch: the window
+  // gets recreated at that inflated size and immediately re-maximized on
+  // top of it, permanently baking in a restore rect that's the same size as
+  // maximized (see the getNormalBounds() fallback in createWindow(), which
+  // undoes an already-poisoned save).
+  const bounds = windowRef.isMaximized() ? windowRef.getNormalBounds() : windowRef.getBounds();
   return {
     x: bounds.x,
     y: bounds.y,
@@ -1162,12 +1199,21 @@ async function createWindow() {
   utilityCollapseRestoreState = null;
   alwaysOnTopBeforeUtilityCollapse = null;
 
+  // If the saved state is maximized, its x/y/width/height can't be trusted
+  // as the window's pre-maximize ("restore") geometry -- they may have been
+  // captured while already maximized (see readCurrentWindowState()), and
+  // constructing the window at that size before calling maximize() below
+  // would permanently bake that inflated rect in as the OS-level restore
+  // placement, which is exactly the bug that made dragging/double-clicking
+  // a maximized window to restore it silently do nothing. Fall back to a
+  // sane default size instead; it's invisible anyway since the window opens
+  // maximized.
   win = new BrowserWindow({
   icon: resolveWindowIconPath(),
-  width: savedWindowState.width,
-  height: savedWindowState.height,
-  x: savedWindowState.x,
-  y: savedWindowState.y,
+  width: savedWindowState.isMaximized ? APP_WINDOW_DEFAULT_WIDTH_PX : savedWindowState.width,
+  height: savedWindowState.isMaximized ? APP_WINDOW_DEFAULT_HEIGHT_PX : savedWindowState.height,
+  x: savedWindowState.isMaximized ? undefined : savedWindowState.x,
+  y: savedWindowState.isMaximized ? undefined : savedWindowState.y,
   minWidth: initialMinWidth,
   minHeight: APP_WINDOW_MIN_HEIGHT_PX,
   frame: false,

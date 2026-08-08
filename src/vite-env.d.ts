@@ -28,6 +28,7 @@ interface Window {
 		startWindowDrag: (screenX: number, screenY: number, isTitlebarOrigin: boolean) => void;
 		moveWindowDrag: (screenX: number, screenY: number) => void;
 		endWindowDrag: () => void;
+		debugLog: (...args: unknown[]) => void;
 		onMaximizeStateChange: (callback: (isMaximized: boolean) => void) => () => void;
 		onCollapsedStateChange: (callback: (isCollapsed: boolean) => void) => () => void;
 	};
