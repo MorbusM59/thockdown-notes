@@ -146,20 +146,14 @@ export interface PersistedMenuState {
   tabBarMode?: 'tags' | 'tabs';
   /** Whether the sidebar is visible (not part of layout widths). */
   isSidebarVisible?: boolean;
-  /** Custom animated mouse cursor overlay (Options > Mouse options). Not part of UiLayoutLoadout. */
+  /**
+   * Whether the custom animated mouse cursor overlay is on (Options > Mouse
+   * options). Deliberately kept out of UiLayoutLoadout and always defaults
+   * to off -- it must persist across layout switches and app restarts
+   * independent of whichever layout is active. Its appearance settings
+   * (colors, size, speed, etc.) live in UiLayoutLoadout instead.
+   */
   customCursorEnabled?: boolean;
-  customCursorDotColor?: string;
-  customCursorCenterColor?: string;
-  customCursorTrailColor?: string;
-  customCursorDotCount?: number;
-  customCursorRadiusPx?: number;
-  customCursorSpinHz?: number;
-  customCursorTrailThicknessPx?: number;
-  customCursorTrailFadeMs?: number;
-  customCursorDotSizePx?: number;
-  customCursorCenterSizePx?: number;
-  customCursorPulseMagnitude?: number;
-  customCursorPulseHz?: number;
 }
 
 // Persisted boundary/scroll position as integer line counts. See

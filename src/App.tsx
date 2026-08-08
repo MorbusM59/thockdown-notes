@@ -921,6 +921,18 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
       editorEditText: normalizeTextureMaterialForLoadoutSignature(normalizedTextureMaterials.editorEditText),
       editorRenderText: normalizeTextureMaterialForLoadoutSignature(normalizedTextureMaterials.editorRenderText),
     },
+    cursorDotColor: typeof source.cursorDotColor === 'string' ? source.cursorDotColor : DEFAULT_CUSTOM_CURSOR_SETTINGS.dotColor,
+    cursorCenterColor: typeof source.cursorCenterColor === 'string' ? source.cursorCenterColor : DEFAULT_CUSTOM_CURSOR_SETTINGS.centerColor,
+    cursorTrailColor: typeof source.cursorTrailColor === 'string' ? source.cursorTrailColor : DEFAULT_CUSTOM_CURSOR_SETTINGS.trailColor,
+    cursorDotCount: clamp(toFiniteNumber(source.cursorDotCount, DEFAULT_CUSTOM_CURSOR_SETTINGS.dotCount), CURSOR_DOT_COUNT_MIN, CURSOR_DOT_COUNT_MAX),
+    cursorRadiusPx: clamp(toFiniteNumber(source.cursorRadiusPx, DEFAULT_CUSTOM_CURSOR_SETTINGS.radiusPx), CURSOR_RADIUS_MIN_PX, CURSOR_RADIUS_MAX_PX),
+    cursorSpinHz: roundForSignature(clamp(toFiniteNumber(source.cursorSpinHz, DEFAULT_CUSTOM_CURSOR_SETTINGS.spinHz), CURSOR_SPIN_HZ_MIN, CURSOR_SPIN_HZ_MAX)),
+    cursorTrailThicknessPx: clamp(toFiniteNumber(source.cursorTrailThicknessPx, DEFAULT_CUSTOM_CURSOR_SETTINGS.trailThicknessPx), CURSOR_TRAIL_THICKNESS_MIN_PX, CURSOR_TRAIL_THICKNESS_MAX_PX),
+    cursorTrailFadeMs: clamp(toFiniteNumber(source.cursorTrailFadeMs, DEFAULT_CUSTOM_CURSOR_SETTINGS.trailFadeMs), CURSOR_TRAIL_FADE_MIN_MS, CURSOR_TRAIL_FADE_MAX_MS),
+    cursorDotSizePx: clamp(toFiniteNumber(source.cursorDotSizePx, DEFAULT_CUSTOM_CURSOR_SETTINGS.dotSizePx), CURSOR_DOT_SIZE_MIN_PX, CURSOR_DOT_SIZE_MAX_PX),
+    cursorCenterSizePx: clamp(toFiniteNumber(source.cursorCenterSizePx, DEFAULT_CUSTOM_CURSOR_SETTINGS.centerSizePx), CURSOR_CENTER_SIZE_MIN_PX, CURSOR_CENTER_SIZE_MAX_PX),
+    cursorPulseMagnitude: roundForSignature(clamp(toFiniteNumber(source.cursorPulseMagnitude, DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseMagnitude), CURSOR_PULSE_MAGNITUDE_MIN, CURSOR_PULSE_MAGNITUDE_MAX)),
+    cursorPulseHz: roundForSignature(clamp(toFiniteNumber(source.cursorPulseHz, DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseHz), CURSOR_PULSE_HZ_MIN, CURSOR_PULSE_HZ_MAX)),
   }
 }
 
@@ -2377,6 +2389,18 @@ function App() {
         editorRenderText: editorTextColors.editorRenderText,
       },
       textureMaterials: cloneTextureMaterials(textureMaterials),
+      cursorDotColor: customCursorDotColor,
+      cursorCenterColor: customCursorCenterColor,
+      cursorTrailColor: customCursorTrailColor,
+      cursorDotCount: customCursorDotCount,
+      cursorRadiusPx: customCursorRadiusPx,
+      cursorSpinHz: customCursorSpinHz,
+      cursorTrailThicknessPx: customCursorTrailThicknessPx,
+      cursorTrailFadeMs: customCursorTrailFadeMs,
+      cursorDotSizePx: customCursorDotSizePx,
+      cursorCenterSizePx: customCursorCenterSizePx,
+      cursorPulseMagnitude: customCursorPulseMagnitude,
+      cursorPulseHz: customCursorPulseHz,
     }
   }, [
     borderRadiusRegularPx,
@@ -2410,6 +2434,18 @@ function App() {
     textureMaterials,
     highlightColors,
     editorTextColors,
+    customCursorDotColor,
+    customCursorCenterColor,
+    customCursorTrailColor,
+    customCursorDotCount,
+    customCursorRadiusPx,
+    customCursorSpinHz,
+    customCursorTrailThicknessPx,
+    customCursorTrailFadeMs,
+    customCursorDotSizePx,
+    customCursorCenterSizePx,
+    customCursorPulseMagnitude,
+    customCursorPulseHz,
   ])
 
   const applyUiLayoutLoadout = useCallback((loadoutInput: unknown) => {
@@ -2500,6 +2536,45 @@ function App() {
       editorRenderText: loadout.editorTextColors.editorRenderText,
     })
     setTextureMaterials(cloneTextureMaterials(loadout.textureMaterials))
+    setCustomCursorDotColor(loadout.cursorDotColor ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.dotColor)
+    setCustomCursorCenterColor(loadout.cursorCenterColor ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.centerColor)
+    setCustomCursorTrailColor(loadout.cursorTrailColor ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.trailColor)
+    setCustomCursorDotCount(clamp(
+      loadout.cursorDotCount ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.dotCount,
+      CURSOR_DOT_COUNT_MIN, CURSOR_DOT_COUNT_MAX,
+    ))
+    setCustomCursorRadiusPx(clamp(
+      loadout.cursorRadiusPx ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.radiusPx,
+      CURSOR_RADIUS_MIN_PX, CURSOR_RADIUS_MAX_PX,
+    ))
+    setCustomCursorSpinHz(clamp(
+      loadout.cursorSpinHz ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.spinHz,
+      CURSOR_SPIN_HZ_MIN, CURSOR_SPIN_HZ_MAX,
+    ))
+    setCustomCursorTrailThicknessPx(clamp(
+      loadout.cursorTrailThicknessPx ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.trailThicknessPx,
+      CURSOR_TRAIL_THICKNESS_MIN_PX, CURSOR_TRAIL_THICKNESS_MAX_PX,
+    ))
+    setCustomCursorTrailFadeMs(clamp(
+      loadout.cursorTrailFadeMs ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.trailFadeMs,
+      CURSOR_TRAIL_FADE_MIN_MS, CURSOR_TRAIL_FADE_MAX_MS,
+    ))
+    setCustomCursorDotSizePx(clamp(
+      loadout.cursorDotSizePx ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.dotSizePx,
+      CURSOR_DOT_SIZE_MIN_PX, CURSOR_DOT_SIZE_MAX_PX,
+    ))
+    setCustomCursorCenterSizePx(clamp(
+      loadout.cursorCenterSizePx ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.centerSizePx,
+      CURSOR_CENTER_SIZE_MIN_PX, CURSOR_CENTER_SIZE_MAX_PX,
+    ))
+    setCustomCursorPulseMagnitude(clamp(
+      loadout.cursorPulseMagnitude ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseMagnitude,
+      CURSOR_PULSE_MAGNITUDE_MIN, CURSOR_PULSE_MAGNITUDE_MAX,
+    ))
+    setCustomCursorPulseHz(clamp(
+      loadout.cursorPulseHz ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseHz,
+      CURSOR_PULSE_HZ_MIN, CURSOR_PULSE_HZ_MAX,
+    ))
   }, [applyDarkModePreset])
 
   const capturedUiLayoutLoadout = useMemo(
@@ -3415,35 +3490,11 @@ function App() {
       reducedCaretAnimation,
       deferPreviewOnRapidInput,
       customCursorEnabled,
-      customCursorDotColor,
-      customCursorCenterColor,
-      customCursorTrailColor,
-      customCursorDotCount,
-      customCursorRadiusPx,
-      customCursorSpinHz,
-      customCursorTrailThicknessPx,
-      customCursorTrailFadeMs,
-      customCursorDotSizePx,
-      customCursorCenterSizePx,
-      customCursorPulseMagnitude,
-      customCursorPulseHz,
     }
   }, [
     archiveCollapsedPrimary,
     archiveCollapsedSecondary,
     customCursorEnabled,
-    customCursorDotColor,
-    customCursorCenterColor,
-    customCursorTrailColor,
-    customCursorDotCount,
-    customCursorRadiusPx,
-    customCursorSpinHz,
-    customCursorTrailThicknessPx,
-    customCursorTrailFadeMs,
-    customCursorDotSizePx,
-    customCursorCenterSizePx,
-    customCursorPulseMagnitude,
-    customCursorPulseHz,
     categoryCollapsedPrimary,
     categoryCollapsedSecondary,
     debuggingEnabled,
@@ -5122,46 +5173,11 @@ ${markdownHtml}
             // Restore persisted sidebar visibility
             setIsSidebarVisible(appState.menu.isSidebarVisible ?? true)
 
+            // Cursor appearance (color/size/speed) now lives in the active
+            // UiLayoutLoadout, restored when that loadout is applied below.
+            // enabled is kept out of layouts on purpose -- always defaults
+            // to off and persists independently in app state.
             setCustomCursorEnabled(appState.menu.customCursorEnabled ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.enabled)
-            setCustomCursorDotColor(appState.menu.customCursorDotColor ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.dotColor)
-            setCustomCursorCenterColor(appState.menu.customCursorCenterColor ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.centerColor)
-            setCustomCursorTrailColor(appState.menu.customCursorTrailColor ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.trailColor)
-            setCustomCursorDotCount(clamp(
-              appState.menu.customCursorDotCount ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.dotCount,
-              CURSOR_DOT_COUNT_MIN, CURSOR_DOT_COUNT_MAX,
-            ))
-            setCustomCursorRadiusPx(clamp(
-              appState.menu.customCursorRadiusPx ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.radiusPx,
-              CURSOR_RADIUS_MIN_PX, CURSOR_RADIUS_MAX_PX,
-            ))
-            setCustomCursorSpinHz(clamp(
-              appState.menu.customCursorSpinHz ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.spinHz,
-              CURSOR_SPIN_HZ_MIN, CURSOR_SPIN_HZ_MAX,
-            ))
-            setCustomCursorTrailThicknessPx(clamp(
-              appState.menu.customCursorTrailThicknessPx ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.trailThicknessPx,
-              CURSOR_TRAIL_THICKNESS_MIN_PX, CURSOR_TRAIL_THICKNESS_MAX_PX,
-            ))
-            setCustomCursorTrailFadeMs(clamp(
-              appState.menu.customCursorTrailFadeMs ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.trailFadeMs,
-              CURSOR_TRAIL_FADE_MIN_MS, CURSOR_TRAIL_FADE_MAX_MS,
-            ))
-            setCustomCursorDotSizePx(clamp(
-              appState.menu.customCursorDotSizePx ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.dotSizePx,
-              CURSOR_DOT_SIZE_MIN_PX, CURSOR_DOT_SIZE_MAX_PX,
-            ))
-            setCustomCursorCenterSizePx(clamp(
-              appState.menu.customCursorCenterSizePx ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.centerSizePx,
-              CURSOR_CENTER_SIZE_MIN_PX, CURSOR_CENTER_SIZE_MAX_PX,
-            ))
-            setCustomCursorPulseMagnitude(clamp(
-              appState.menu.customCursorPulseMagnitude ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseMagnitude,
-              CURSOR_PULSE_MAGNITUDE_MIN, CURSOR_PULSE_MAGNITUDE_MAX,
-            ))
-            setCustomCursorPulseHz(clamp(
-              appState.menu.customCursorPulseHz ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseHz,
-              CURSOR_PULSE_HZ_MIN, CURSOR_PULSE_HZ_MAX,
-            ))
 
             setCurrentPage(loadedSidebarViewState[appState.menu.sidebarMode].page)
             setCategoryCollapsedPrimary(loadedSidebarViewState.category.collapsedPrimary)

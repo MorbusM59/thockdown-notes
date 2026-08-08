@@ -11,6 +11,7 @@
 
 import { DEFAULT_TEXTURE_MATERIALS, type TextureMaterialSettings, type TextureColorHsva } from '../textures/types';
 import { DEFAULT_GLAZE_SETTINGS } from './glaze';
+import { DEFAULT_CUSTOM_CURSOR_SETTINGS } from './cursorSettings';
 import type { UiLayoutLoadout } from './loadouts';
 
 type PartialTextureMaterialSettings = Omit<Partial<TextureMaterialSettings>, 'color'> & {
@@ -134,6 +135,18 @@ export const NEUTRAL_BASE: UiLayoutLoadout = {
     editorRenderText: '#000000DD',
   },
   textureMaterials: DEFAULT_TEXTURE_MATERIALS,
+  cursorDotColor: DEFAULT_CUSTOM_CURSOR_SETTINGS.dotColor,
+  cursorCenterColor: DEFAULT_CUSTOM_CURSOR_SETTINGS.centerColor,
+  cursorTrailColor: DEFAULT_CUSTOM_CURSOR_SETTINGS.trailColor,
+  cursorDotCount: DEFAULT_CUSTOM_CURSOR_SETTINGS.dotCount,
+  cursorRadiusPx: DEFAULT_CUSTOM_CURSOR_SETTINGS.radiusPx,
+  cursorSpinHz: DEFAULT_CUSTOM_CURSOR_SETTINGS.spinHz,
+  cursorTrailThicknessPx: DEFAULT_CUSTOM_CURSOR_SETTINGS.trailThicknessPx,
+  cursorTrailFadeMs: DEFAULT_CUSTOM_CURSOR_SETTINGS.trailFadeMs,
+  cursorDotSizePx: DEFAULT_CUSTOM_CURSOR_SETTINGS.dotSizePx,
+  cursorCenterSizePx: DEFAULT_CUSTOM_CURSOR_SETTINGS.centerSizePx,
+  cursorPulseMagnitude: DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseMagnitude,
+  cursorPulseHz: DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseHz,
 };
 
 export const DEFAULT_CUSTOM_LIGHT: UiLayoutLoadout = {

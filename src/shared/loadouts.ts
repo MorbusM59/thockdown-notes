@@ -71,6 +71,22 @@ export type UiLayoutLoadout = {
     editorRenderText: string;
   };
   textureMaterials: TextureMaterialsBySurface;
+  // Custom mouse cursor overlay appearance (Options > Mouse options). The
+  // enabled toggle itself is deliberately NOT here -- it lives in
+  // PersistedMenuState instead so it persists across layout switches
+  // independent of whichever layout is active. See appState.ts.
+  cursorDotColor: string;
+  cursorCenterColor: string;
+  cursorTrailColor: string;
+  cursorDotCount: number;
+  cursorRadiusPx: number;
+  cursorSpinHz: number;
+  cursorTrailThicknessPx: number;
+  cursorTrailFadeMs: number;
+  cursorDotSizePx: number;
+  cursorCenterSizePx: number;
+  cursorPulseMagnitude: number;
+  cursorPulseHz: number;
 };
 
 // ---------------------------------------------------------------------------

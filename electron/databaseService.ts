@@ -30,6 +30,18 @@ import {
   DEFAULT_CUSTOM_DARK,
 } from '../src/shared/presets';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '../src/shared/glaze';
+import {
+  DEFAULT_CUSTOM_CURSOR_SETTINGS,
+  CURSOR_DOT_COUNT_MIN, CURSOR_DOT_COUNT_MAX,
+  CURSOR_RADIUS_MIN_PX, CURSOR_RADIUS_MAX_PX,
+  CURSOR_SPIN_HZ_MIN, CURSOR_SPIN_HZ_MAX,
+  CURSOR_TRAIL_THICKNESS_MIN_PX, CURSOR_TRAIL_THICKNESS_MAX_PX,
+  CURSOR_TRAIL_FADE_MIN_MS, CURSOR_TRAIL_FADE_MAX_MS,
+  CURSOR_DOT_SIZE_MIN_PX, CURSOR_DOT_SIZE_MAX_PX,
+  CURSOR_CENTER_SIZE_MIN_PX, CURSOR_CENTER_SIZE_MAX_PX,
+  CURSOR_PULSE_MAGNITUDE_MIN, CURSOR_PULSE_MAGNITUDE_MAX,
+  CURSOR_PULSE_HZ_MIN, CURSOR_PULSE_HZ_MAX,
+} from '../src/shared/cursorSettings';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureMaterialSettings, type TextureMaterialsBySurface } from '../src/textures/types';
 import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../src/shared/audioPlayer';
 import { AUDIO_EXTENSIONS } from '../src/shared/audioPlayer';
@@ -134,6 +146,18 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
     editorEditText: '#000000DD',
     editorRenderText: '#000000DD',
   },
+  cursorDotColor: DEFAULT_CUSTOM_CURSOR_SETTINGS.dotColor,
+  cursorCenterColor: DEFAULT_CUSTOM_CURSOR_SETTINGS.centerColor,
+  cursorTrailColor: DEFAULT_CUSTOM_CURSOR_SETTINGS.trailColor,
+  cursorDotCount: DEFAULT_CUSTOM_CURSOR_SETTINGS.dotCount,
+  cursorRadiusPx: DEFAULT_CUSTOM_CURSOR_SETTINGS.radiusPx,
+  cursorSpinHz: DEFAULT_CUSTOM_CURSOR_SETTINGS.spinHz,
+  cursorTrailThicknessPx: DEFAULT_CUSTOM_CURSOR_SETTINGS.trailThicknessPx,
+  cursorTrailFadeMs: DEFAULT_CUSTOM_CURSOR_SETTINGS.trailFadeMs,
+  cursorDotSizePx: DEFAULT_CUSTOM_CURSOR_SETTINGS.dotSizePx,
+  cursorCenterSizePx: DEFAULT_CUSTOM_CURSOR_SETTINGS.centerSizePx,
+  cursorPulseMagnitude: DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseMagnitude,
+  cursorPulseHz: DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseHz,
 };
 
 type SqliteDatabase = import('better-sqlite3').Database;
@@ -546,6 +570,18 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
         ? String((source.editorTextColors as Record<string, unknown>).editorRenderText)
         : DEFAULT_UI_LAYOUT_LOADOUT.editorTextColors.editorRenderText,
     },
+    cursorDotColor: sanitizeString(source.cursorDotColor, DEFAULT_UI_LAYOUT_LOADOUT.cursorDotColor),
+    cursorCenterColor: sanitizeString(source.cursorCenterColor, DEFAULT_UI_LAYOUT_LOADOUT.cursorCenterColor),
+    cursorTrailColor: sanitizeString(source.cursorTrailColor, DEFAULT_UI_LAYOUT_LOADOUT.cursorTrailColor),
+    cursorDotCount: clampInteger(source.cursorDotCount, CURSOR_DOT_COUNT_MIN, CURSOR_DOT_COUNT_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorDotCount),
+    cursorRadiusPx: clampNumber(source.cursorRadiusPx, CURSOR_RADIUS_MIN_PX, CURSOR_RADIUS_MAX_PX, DEFAULT_UI_LAYOUT_LOADOUT.cursorRadiusPx),
+    cursorSpinHz: clampNumber(source.cursorSpinHz, CURSOR_SPIN_HZ_MIN, CURSOR_SPIN_HZ_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorSpinHz),
+    cursorTrailThicknessPx: clampNumber(source.cursorTrailThicknessPx, CURSOR_TRAIL_THICKNESS_MIN_PX, CURSOR_TRAIL_THICKNESS_MAX_PX, DEFAULT_UI_LAYOUT_LOADOUT.cursorTrailThicknessPx),
+    cursorTrailFadeMs: clampNumber(source.cursorTrailFadeMs, CURSOR_TRAIL_FADE_MIN_MS, CURSOR_TRAIL_FADE_MAX_MS, DEFAULT_UI_LAYOUT_LOADOUT.cursorTrailFadeMs),
+    cursorDotSizePx: clampNumber(source.cursorDotSizePx, CURSOR_DOT_SIZE_MIN_PX, CURSOR_DOT_SIZE_MAX_PX, DEFAULT_UI_LAYOUT_LOADOUT.cursorDotSizePx),
+    cursorCenterSizePx: clampNumber(source.cursorCenterSizePx, CURSOR_CENTER_SIZE_MIN_PX, CURSOR_CENTER_SIZE_MAX_PX, DEFAULT_UI_LAYOUT_LOADOUT.cursorCenterSizePx),
+    cursorPulseMagnitude: clampNumber(source.cursorPulseMagnitude, CURSOR_PULSE_MAGNITUDE_MIN, CURSOR_PULSE_MAGNITUDE_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorPulseMagnitude),
+    cursorPulseHz: clampNumber(source.cursorPulseHz, CURSOR_PULSE_HZ_MIN, CURSOR_PULSE_HZ_MAX, DEFAULT_UI_LAYOUT_LOADOUT.cursorPulseHz),
   };
 }
 
@@ -564,6 +600,9 @@ const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
   'darkMode',
   'filterInvert', 'filterSepia', 'filterHueRotate', 'filterBrightness',
   'filterContrast', 'filterSaturate', 'filterColorize',
+  'cursorDotColor', 'cursorCenterColor', 'cursorTrailColor', 'cursorDotCount',
+  'cursorRadiusPx', 'cursorSpinHz', 'cursorTrailThicknessPx', 'cursorTrailFadeMs',
+  'cursorDotSizePx', 'cursorCenterSizePx', 'cursorPulseMagnitude', 'cursorPulseHz',
 ];
 
 // Keys whose values are nested objects; they're emitted as inline JSON when
