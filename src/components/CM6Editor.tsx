@@ -762,6 +762,10 @@ export function CM6Editor({
   const [isDraggingBottom, setIsDraggingBottom] = useState(false);
   const [isCtrlHeldForBoundaryDrag, setIsCtrlHeldForBoundaryDrag] = useState(false);
   const [scrollerClientHeightPx, setScrollerClientHeightPx] = useState(0);
+  // Review gutter's flag-column width only -- everything else here still
+  // reasons in lineHeightPx/cellWidthPx units. Tracked the same way (and at
+  // the same call sites) as scrollerClientHeightPx above.
+  const [scrollerClientWidthPx, setScrollerClientWidthPx] = useState(0);
   const availableBoundaryLines = Math.max(0, Math.floor(scrollerClientHeightPx / lineHeightPx));
   const { topLines: displayTopBoundaryLines, bottomLines: displayBottomBoundaryLines } = clampBoundaryLines(
     topBoundaryLines,
@@ -1055,7 +1059,22 @@ export function CM6Editor({
   // against the existing padding math below, so a user who never enables
   // this feature sees byte-identical layout to before it existed.
   const reviewGutterLeftPx = showReviewGutter ? String(Math.max(1, totalLineCount)).length * cellWidthPx : 0;
-  const reviewGutterRightPx = showReviewGutter ? cellWidthPx : 0;
+  // The flag column can't be a flat one-cell width: the grid's box columns
+  // are anchored from the LEFT (halfCellWidthPx + n*cellWidthPx) and are
+  // never phase-corrected against the right edge -- same "cut-off boxes at
+  // the far edges expected and fine" as the grid overlay's own doc comment
+  // -- so the scroller's right edge almost never lands exactly on a box
+  // boundary. A flat cellWidthPx-wide column would then straddle the last
+  // full box and that leftover partial one. Reserving one full box PLUS
+  // whatever's left over instead makes the column's own LEFT edge land
+  // exactly on a real grid boundary, with its right edge flush against the
+  // scroller's own right edge -- same remainder-into-the-last-cell trick
+  // alignmentPaddingBottomPx below already uses for the bottom edge, just
+  // horizontal.
+  const reviewGutterFlagRemainderPx = (showReviewGutter && cellWidthPx > 0)
+    ? (((scrollerClientWidthPx - halfCellWidthPx) % cellWidthPx) + cellWidthPx) % cellWidthPx
+    : 0;
+  const reviewGutterRightPx = showReviewGutter ? cellWidthPx + reviewGutterFlagRemainderPx : 0;
   // topBoundaryPxDisplay/bottomBoundaryPxDisplay are phase-0 (plain multiples
   // of lineHeightPx) because that's what the scroll-cage math needs them to
   // stay as -- see CageMath.ts's own doc comment on why its screen-anchored
@@ -2829,11 +2848,13 @@ export function CM6Editor({
       scheduleCaretUpdateAfterResize();
       scheduleSelectionHighlightUpdate();
       setScrollerClientHeightPx(view.scrollDOM.clientHeight);
+      setScrollerClientWidthPx(view.scrollDOM.clientWidth);
     });
     resizeObserver.observe(view.scrollDOM);
     if (layerRef.current) resizeObserver.observe(layerRef.current);
 
     setScrollerClientHeightPx(view.scrollDOM.clientHeight);
+    setScrollerClientWidthPx(view.scrollDOM.clientWidth);
     scheduleCaretUpdate();
     scheduleSelectionHighlightUpdate();
 
@@ -2854,6 +2875,7 @@ export function CM6Editor({
       extendScrollTransitionSettle(initialGeometryTransitionId, 120);
       const measuredHeight = view.scrollDOM.clientHeight;
       setScrollerClientHeightPx(measuredHeight);
+      setScrollerClientWidthPx(view.scrollDOM.clientWidth);
       view.requestMeasure();
       scheduleCaretUpdateAfterResize();
       scheduleSelectionHighlightUpdate();
