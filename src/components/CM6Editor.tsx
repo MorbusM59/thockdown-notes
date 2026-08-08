@@ -455,6 +455,28 @@ const quantizeToPhase = (value: number, unit: number, phase: number) => (
   phase + Math.round((value - phase) / unit) * unit
 );
 
+/**
+ * The review gutter's flag-column width: one real grid box plus whatever's
+ * cut off past it (see reviewGutterRightPx's own render-scope doc comment
+ * for why -- the grid's box columns are phase-anchored from the left only,
+ * never corrected against the right edge). Factored out as a pure function,
+ * not just inlined at render time, so the resize-observer callback below
+ * can call this SAME formula synchronously the instant it measures a new
+ * scroller width -- applying view.contentDOM.style.paddingRight there
+ * directly, rather than only through the render-driven padding effect,
+ * closes the one-frame window where the browser has already reflowed the
+ * pane to its new width but React hasn't re-rendered with the corrected
+ * padding yet: CM6 wraps text against the stale width for that frame, then
+ * snaps to the correct wrap the moment React catches up -- the reported
+ * "characters jitter, calculate a wrap, then revert" during a live resize.
+ */
+const computeReviewGutterRightPx = (measuredWidthPx: number, cellWidthPx: number, gutterOn: boolean): number => {
+  if (!gutterOn || cellWidthPx <= 0) return 0;
+  const halfCellWidthPxNow = Math.round(cellWidthPx / 2);
+  const remainderPx = (((measuredWidthPx - halfCellWidthPxNow) % cellWidthPx) + cellWidthPx) % cellWidthPx;
+  return cellWidthPx + remainderPx;
+};
+
 /** Ported verbatim from CagedScrollPlugin.tsx's own resolveDirectionalQuantizedScrollTop. */
 function resolveDirectionalQuantizedScrollTop(
   currentScrollTopPx: number,
@@ -693,6 +715,10 @@ export function CM6Editor({
   const lastHydratedNoteIdRef = useRef<string | null>(null);
   const lineHeightPxRef = useRef(lineHeightPx);
   const cellWidthPxRef = useRef(cellWidthPx);
+  // Mirrors the showReviewGutter prop for the resize-observer callback below,
+  // which needs the CURRENT value inside a mount-once closure -- same
+  // pattern as lineHeightPxRef/cellWidthPxRef.
+  const showReviewGutterRef = useRef(showReviewGutter);
   const [caretStyle, setCaretStyle] = useState<React.CSSProperties | null>(null);
   const caretAnimationFrameRef = useRef<number | null>(null);
   // scrollerRect/layerRect don't change on a plain text keystroke -- only
@@ -989,6 +1015,10 @@ export function CM6Editor({
   }, [lineHeightPx, cellWidthPx]);
 
   useEffect(() => {
+    showReviewGutterRef.current = showReviewGutter;
+  }, [showReviewGutter]);
+
+  useEffect(() => {
     hasViewportLinesRef.current = hasViewportLines;
   }, [hasViewportLines]);
 
@@ -1090,10 +1120,11 @@ export function CM6Editor({
   // scroller's own right edge -- same remainder-into-the-last-cell trick
   // alignmentPaddingBottomPx below already uses for the bottom edge, just
   // horizontal.
-  const reviewGutterFlagRemainderPx = (showReviewGutter && cellWidthPx > 0)
-    ? (((scrollerClientWidthPx - halfCellWidthPx) % cellWidthPx) + cellWidthPx) % cellWidthPx
-    : 0;
-  const reviewGutterRightPx = showReviewGutter ? cellWidthPx + reviewGutterFlagRemainderPx : 0;
+  // Shares computeReviewGutterRightPx with the resize-observer callback
+  // below, which applies the same formula synchronously against a freshly
+  // measured width -- see that function's own doc comment for why the
+  // formula needs to live in exactly one place, called from two triggers.
+  const reviewGutterRightPx = computeReviewGutterRightPx(scrollerClientWidthPx, cellWidthPx, showReviewGutter);
   // Rendered via an explicit `left`, never `right: 0`: a `right: 0` box's
   // right edge is resolved live by the browser against the parent's actual
   // current width on every layout pass, while reviewGutterRightPx (its
@@ -2885,17 +2916,37 @@ export function CM6Editor({
     // toggle, split-view pane resize, font-size change). Also keeps
     // scrollerClientHeightPx (the boundary UI's clampBoundaryLines input)
     // live, matching Editor.tsx's own editorSize.innerHeight tracking.
+    // applySynchronousGutterRightPadding: called at every point this file
+    // measures a fresh scroller width, right alongside setScrollerClientWidthPx
+    // -- NOT only through the render-driven padding effect. That effect is
+    // passive (runs after paint) and its input (scrollerClientWidthPx) only
+    // updates once React processes the state update from setState below, so
+    // there is a real window where the browser has already reflowed the
+    // pane to its new width but contentDOM's paddingRight is still stale:
+    // CM6 wraps text against that stale width for one visible frame, then
+    // snaps to the corrected wrap the moment React catches up. Applying the
+    // same formula (computeReviewGutterRightPx) directly to the DOM in the
+    // exact callback that measured the new width closes that window --
+    // found live as "characters next to the flag column jitter, wrap, then
+    // revert" while dragging a pane divider narrower.
+    const applySynchronousGutterRightPadding = (measuredWidthPx: number) => {
+      view.contentDOM.style.paddingRight = `${computeReviewGutterRightPx(measuredWidthPx, cellWidthPxRef.current, showReviewGutterRef.current)}px`;
+    };
+
     const resizeObserver = new ResizeObserver(() => {
       scheduleCaretUpdateAfterResize();
       scheduleSelectionHighlightUpdate();
       setScrollerClientHeightPx(view.scrollDOM.clientHeight);
-      setScrollerClientWidthPx(view.scrollDOM.clientWidth);
+      const measuredWidthPx = view.scrollDOM.clientWidth;
+      setScrollerClientWidthPx(measuredWidthPx);
+      applySynchronousGutterRightPadding(measuredWidthPx);
     });
     resizeObserver.observe(view.scrollDOM);
     if (layerRef.current) resizeObserver.observe(layerRef.current);
 
     setScrollerClientHeightPx(view.scrollDOM.clientHeight);
     setScrollerClientWidthPx(view.scrollDOM.clientWidth);
+    applySynchronousGutterRightPadding(view.scrollDOM.clientWidth);
     scheduleCaretUpdate();
     scheduleSelectionHighlightUpdate();
 
@@ -2916,7 +2967,9 @@ export function CM6Editor({
       extendScrollTransitionSettle(initialGeometryTransitionId, 120);
       const measuredHeight = view.scrollDOM.clientHeight;
       setScrollerClientHeightPx(measuredHeight);
-      setScrollerClientWidthPx(view.scrollDOM.clientWidth);
+      const measuredWidthPx = view.scrollDOM.clientWidth;
+      setScrollerClientWidthPx(measuredWidthPx);
+      applySynchronousGutterRightPadding(measuredWidthPx);
       view.requestMeasure();
       scheduleCaretUpdateAfterResize();
       scheduleSelectionHighlightUpdate();
