@@ -67,7 +67,7 @@ export const CURSOR_DOT_SIZE_DEFAULT_PX = 2
 
 export const CURSOR_CENTER_SIZE_MIN_PX = 0
 export const CURSOR_CENTER_SIZE_MAX_PX = 12
-export const CURSOR_CENTER_SIZE_DEFAULT_PX = 3
+export const CURSOR_CENTER_SIZE_DEFAULT_PX = 5
 
 // pulseMagnitude is the ADDITIONAL fraction the orbit grows by at the pulse
 // peak (0 = no pulsing, radius stays at its stable base value; 1 = breathes
