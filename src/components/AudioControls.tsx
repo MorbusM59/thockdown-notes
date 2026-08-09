@@ -500,7 +500,7 @@ export const AudioControls = memo(function AudioControls({
         <button
           type="button"
           className={`audio-ctrl-btn audio-play-btn${isPlaying ? ' is-active' : ''}`}
-          title={isPlaying ? `${songLabel}` : `${songLabel}`}
+          data-tooltip={isPlaying ? `${songLabel}` : `${songLabel}`}
           aria-label={isPlaying ? 'Stop music' : 'Play music'}
           aria-pressed={isPlaying}
           onClick={() => { void handlePlayToggle() }}
@@ -516,7 +516,7 @@ export const AudioControls = memo(function AudioControls({
         <button
           type="button"
           className={`audio-ctrl-btn${currentSong?.priority === 0 ? ' is-active' : ''}`}
-          title="Left-click: favourite (replay next). Right-click: skip. Hold right-click: purge."
+          data-tooltip="Left-click: favourite (replay next). Right-click: skip. Hold right-click: purge."
           aria-label="Favourite or skip current song"
           aria-pressed={currentSong?.priority === 0}
           onClick={() => { void handleFavoriteLeft() }}
@@ -531,7 +531,7 @@ export const AudioControls = memo(function AudioControls({
         <button
           type="button"
           className="audio-ctrl-btn"
-          title="Left-click: forward 20%. Right-click: rewind 20%. Hold: scrub ±5%/100 ms."
+          data-tooltip="Left-click: forward 20%. Right-click: rewind 20%. Hold: scrub ±5%/100 ms."
           aria-label="Seek forward or backward"
           onClick={handleSeekClick}
           onContextMenu={handleSeekContextMenu}
@@ -546,7 +546,7 @@ export const AudioControls = memo(function AudioControls({
         <button
           type="button"
           className={`audio-ctrl-btn${isOptionsOpen ? ' is-active' : ''}`}
-          title={isOptionsOpen ? 'Close options' : isMiniMode ? 'Music options (disabled in mini mode)' : 'Music options'}
+          data-tooltip={isOptionsOpen ? 'Close options' : isMiniMode ? 'Music options (disabled in mini mode)' : 'Music options'}
           aria-label={isOptionsOpen ? 'Close options panel' : 'Open music options'}
           aria-pressed={isOptionsOpen}
           onClick={() => { if (!isMiniMode) onOpenMusicOptions() }}
@@ -565,7 +565,7 @@ export const AudioControls = memo(function AudioControls({
               key={slot}
               type="button"
               className={`audio-ctrl-btn audio-playlist-btn${isActive ? ' is-active' : ''}${isPrimed ? ' is-primed' : ''}${isEmpty ? ' is-empty' : ''}`}
-              title={
+              data-tooltip={
                 isEmpty
                   ? `${PLAYLIST_SLOT_THEMES[slot]}: empty — click to add files`
                   : isPrimed

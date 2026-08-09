@@ -3,6 +3,12 @@
    ============================================================================= */
 
 .window-controls-grid {
+  /* Own stacking context, above the editor row's own (z-index:auto) content
+     -- otherwise its buttons' flipped-below tooltip (see the top-row-chrome
+     rule further down) has no explicit stacking order of its own to win
+     against tab-bar content it visually spills into. */
+  position:        relative;
+  z-index:         2;
   display:         grid;
   grid-template-columns: auto auto auto;
   grid-template-rows: auto;
@@ -149,19 +155,23 @@
   border-color: rgba(81, 73, 66, 0.8);
 }
 
-/* Live-updating tooltip for wheel/drag-adjustable controls (HSVA swatches,
-   texture controls, every CompactScrollbarSlider). Native `title` tooltips
-   don't reliably refresh their text once shown and can vanish mid-adjustment,
-   so the live value goes into a `data-live-tooltip` attribute instead and a
-   CSS ::after reads it via attr() -- visibility is driven purely by :hover,
-   so the tooltip tracks the real cursor with no JS-side show/hide state and
-   is gone the instant the cursor actually leaves the element. */
-[data-live-tooltip] {
+/* App-wide custom tooltip. Native `title` tooltips are OS-rendered (can't be
+   styled, don't reliably refresh their text once shown, and can vanish
+   mid-adjustment), so every tooltip in the app renders through this same
+   CSS ::after instead: `data-tooltip` for static text (replaces `title`
+   everywhere), `data-live-tooltip` for text that changes while the pointer
+   stays down (HSVA swatches, texture controls, every CompactScrollbarSlider).
+   Visibility is driven purely by :hover, so it tracks the real cursor with
+   no JS-side show/hide state and is gone the instant the cursor leaves the
+   element. Both attributes share one visual/positioning rule below; only
+   the `content` source differs. */
+[data-live-tooltip],
+[data-tooltip] {
   position: relative;
 }
 
-[data-live-tooltip]::after {
-  content:        attr(data-live-tooltip);
+[data-live-tooltip]::after,
+[data-tooltip]::after {
   position:       absolute;
   bottom:         calc(100% + 6px);
   left:           50%;
@@ -169,7 +179,8 @@
   white-space:    pre-line;
   text-align:     center;
   padding:        4px 8px;
-  border-radius:  var(--border-radius-regular);
+  border-radius:  var(--border-radius-small);
+  border:         1px solid var(--color-border-light-70);
   background:     var(--color-text-base);
   color:          var(--color-background-light);
   font-size:      11px;
@@ -179,11 +190,28 @@
   opacity:        0;
   visibility:     hidden;
   transition:     opacity 0.1s ease;
+  box-shadow:     var(--box-shadow-regular);
 }
 
-[data-live-tooltip]:hover::after {
+[data-live-tooltip]::after { content: attr(data-live-tooltip); }
+[data-tooltip]::after      { content: attr(data-tooltip); }
+
+[data-live-tooltip]:hover::after,
+[data-tooltip]:hover::after {
   opacity:    1;
   visibility: visible;
+}
+
+/* Top-row chrome (toolbar, window controls) sits flush against the app's own
+   top edge -- an upward tooltip there has no room and gets clipped by
+   .app-shell's overflow: hidden, so these two containers flip it below the
+   element instead. */
+.toolbar-grid [data-live-tooltip]::after,
+.toolbar-grid [data-tooltip]::after,
+.window-controls-grid [data-live-tooltip]::after,
+.window-controls-grid [data-tooltip]::after {
+  bottom: auto;
+  top:    calc(100% + 6px);
 }
 
 

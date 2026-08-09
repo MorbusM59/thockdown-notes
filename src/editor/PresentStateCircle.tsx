@@ -67,7 +67,7 @@ export function PresentStateCircle({
           ? 'Create a manual save point'
           : 'Current text matches your last manual save'
       }
-      title={
+      data-tooltip={
         hasPendingManualChanges
           ? 'Create a manual save point'
           : 'On your last manual save'

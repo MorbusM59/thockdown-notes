@@ -1218,7 +1218,7 @@ const NoteListItem = memo(function NoteListItem({
                   className="note-list-action-button note-list-action-button-save"
                   disabled={!isModified}
                   aria-label={isModified ? 'Save external note' : 'Save disabled'}
-                  title={isModified ? 'Save external note' : 'Save disabled'}
+                  data-tooltip={isModified ? 'Save external note' : 'Save disabled'}
                   onClick={handleSaveClick}
                   onMouseDown={(event) => event.stopPropagation()}
                   onMouseUp={(event) => event.stopPropagation()}
@@ -1234,7 +1234,7 @@ const NoteListItem = memo(function NoteListItem({
                   className="note-list-action-button note-list-action-button-close"
                   disabled={!isExternal}
                   aria-label="Close external note"
-                  title="Close external note"
+                  data-tooltip="Close external note"
                   onClick={handleCloseClick}
                   onMouseDown={(event) => event.stopPropagation()}
                   onMouseUp={(event) => event.stopPropagation()}
@@ -1252,7 +1252,7 @@ const NoteListItem = memo(function NoteListItem({
                   className="note-list-action-button note-list-action-button-archive"
                   disabled={isArchiveButtonDisabled}
                   aria-label={isArchiveButtonDisabled ? 'Archive disabled' : 'Archive note'}
-                  title={isArchiveButtonDisabled ? 'Archive disabled' : 'Archive note'}
+                  data-tooltip={isArchiveButtonDisabled ? 'Archive disabled' : 'Archive note'}
                   onClick={handleArchiveClick}
                   onMouseDown={(event) => event.stopPropagation()}
                   onMouseUp={(event) => event.stopPropagation()}
@@ -1265,7 +1265,7 @@ const NoteListItem = memo(function NoteListItem({
                   className="note-list-action-button note-list-action-button-trash"
                   disabled={isTrashButtonDisabled}
                   aria-label={isTrashButtonDisabled ? 'Trash disabled' : isTrashMode && isDeleted ? 'Permanently delete note' : 'Trash note'}
-                  title={isTrashButtonDisabled ? 'Trash disabled' : isTrashMode && isDeleted ? 'Permanently delete note' : 'Trash note'}
+                  data-tooltip={isTrashButtonDisabled ? 'Trash disabled' : isTrashMode && isDeleted ? 'Permanently delete note' : 'Trash note'}
                   onClick={handleTrashClick}
                   onMouseDown={(event) => event.stopPropagation()}
                   onMouseUp={(event) => event.stopPropagation()}
@@ -7491,7 +7491,7 @@ ${markdownHtml}
                       type="button"
                       className={`btn-icon search-input-case-toggle${activeSection?.isDocumentFindCaseSensitive ? ' is-active' : ''}`}
                       aria-pressed={activeSection?.isDocumentFindCaseSensitive}
-                      title="Keep case"
+                      data-tooltip="Keep case"
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => getActiveSection()?.setIsDocumentFindCaseSensitive((previous: boolean) => !previous)}
                     >
@@ -7503,7 +7503,7 @@ ${markdownHtml}
                     type="button"
                     className={`btn-icon search-input-case-toggle${(isFindMode ? activeSection?.isDocumentFindCaseSensitive : isSearchQueryCaseSensitive) ? ' is-active' : ''}`}
                     aria-pressed={isFindMode ? activeSection?.isDocumentFindCaseSensitive : isSearchQueryCaseSensitive}
-                    title="Match letter case"
+                    data-tooltip="Match letter case"
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => {
                       if (isFindMode) {
@@ -7537,7 +7537,7 @@ ${markdownHtml}
                       type="button"
                       role="tab"
                       aria-selected={isActive}
-                      title={label}
+                      data-tooltip={label}
                       aria-label={label}
                       onClick={() => handleViewModeButtonClick(mode)}
                       onContextMenu={
@@ -7620,7 +7620,7 @@ ${markdownHtml}
                               event.preventDefault()
                               getActiveSection()?.replaceDocumentFindHit(hit)
                             }}
-                            title={`Jump to occurrence ${index + 1}`}
+                            data-tooltip={`Jump to occurrence ${index + 1}`}
                           >
                             <span className="find-hit-snippet">
                               {hit.hasSnippetPrefixEllipsis ? '... ' : ''}
@@ -8033,7 +8033,7 @@ ${markdownHtml}
                 <button
                   type="button"
                   className={`toggle-btn icon-btn window-control-btn dark-mode-btn${uiMode === 'dark' ? ' is-active' : ''}`}
-                  title="Toggle dark mode"
+                  data-tooltip="Toggle dark mode"
                   aria-label="Toggle dark mode"
                   onClick={toggleUiMode}
                 >
@@ -8046,7 +8046,7 @@ ${markdownHtml}
                 <button
                   type="button"
                   className={`toggle-btn icon-btn window-control-btn options-btn${sidebarMode === 'options' ? ' is-active' : ''}`}
-                  title="View options"
+                  data-tooltip="View options"
                   aria-label="View options"
                   onClick={toggleSidebarOptionsMenu}
                 >
@@ -8080,7 +8080,7 @@ ${markdownHtml}
                   <button
                     type="button"
                     className="window-control-btn btn-icon window-minimize-split-btn mini-mode"
-                    title={windowIsCollapsed ? 'Exit mini mode' : 'Enter mini mode'}
+                    data-tooltip={windowIsCollapsed ? 'Exit mini mode' : 'Enter mini mode'}
                     aria-label={windowIsCollapsed ? 'Exit mini mode' : 'Enter mini mode'}
                     onClick={handleWindowUtilityCollapseToggle}
                   >
@@ -8089,7 +8089,7 @@ ${markdownHtml}
                   <button
                     type="button"
                     className="window-control-btn btn-icon window-minimize-split-btn minimize"
-                    title="Minimize"
+                    data-tooltip="Minimize"
                     aria-label="Minimize window"
                     onClick={handleWindowMinimize}
                   >
@@ -8099,7 +8099,7 @@ ${markdownHtml}
                 <button
                   type="button"
                   className="window-control-btn btn-icon maximize-btn"
-                  title={windowIsMaximized ? 'Restore' : 'Maximize'}
+                  data-tooltip={windowIsMaximized ? 'Restore' : 'Maximize'}
                   aria-label={windowIsMaximized ? 'Restore window' : 'Maximize window'}
                   onClick={handleWindowToggleMaximize}
                 >
@@ -8111,7 +8111,7 @@ ${markdownHtml}
                 <button
                   type="button"
                   className="window-control-btn btn-icon close-btn"
-                  title="Close"
+                  data-tooltip="Close"
                   aria-label="Close window"
                   onClick={handleWindowClose}
                 >

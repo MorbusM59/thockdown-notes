@@ -42,6 +42,8 @@
 }
 
 .toolbar-grid {
+  position:        relative;
+  z-index:         2;
   padding:         0;
   display:         flex;
   flex-direction:  row;
@@ -49,7 +51,12 @@
   justify-content: flex-start;
   margin-left: var(--spacing-large);
   flex-wrap:   nowrap;
-  overflow:    hidden;
+  /* `clip` (not `hidden`) so a button's escaping tooltip -- content the
+     container query below never needs to account for -- isn't clipped along
+     with genuine layout overflow. overflow-clip-margin only takes effect
+     paired with `clip`; hidden doesn't support it. */
+  overflow:             clip;
+  overflow-clip-margin: 60px;
   container-name: toolbarGrid;
   container-type: size;
 }
@@ -192,7 +199,12 @@
 
 .options-panel-inner {
   min-height: 0;
-  overflow:   hidden;
+  /* `clip` (not `hidden`) + a margin so the collapse/expand row-height
+     animation still fully hides its content while animating, but a button's
+     tooltip near the panel's own top/bottom edge isn't clipped along with
+     it -- `overflow-clip-margin` only takes effect paired with `clip`. */
+  overflow:             clip;
+  overflow-clip-margin: 60px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -446,6 +458,18 @@
   width:       1px;
   background:  #ccc;
   align-self:  stretch;
+}
+
+/* Grid item wrapping a swatch button that can't carry its own tooltip: the
+   swatch is overflow:hidden and its ::before/::after are already spent on
+   the paper+color fill layers, so a data-tooltip on the button itself would
+   be clipped and content-shadowed at once. This wrapper takes the grid
+   item's place (sized by the grid track, same as the button used to be) and
+   the button fills it at 100%/100%, so nothing about the swatch's own look
+   changes -- only the tooltip anchor moves up one level. */
+.options-swatch-tooltip-anchor {
+  width:  100%;
+  height: 100%;
 }
 
 /* Swatch base */

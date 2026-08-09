@@ -69,7 +69,7 @@ export function EditorToolbar({
         <button
           className={`btn-icon ${!isPreviewMode ? 'active' : ''}`}
           type="button"
-          title={isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)'}
+          data-tooltip={isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)'}
           aria-label={isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)'}
           onClick={toggleRenderViewMode}
         >
@@ -78,7 +78,7 @@ export function EditorToolbar({
         <button
           className="btn-icon"
           type="button"
-          title="Create note (Ctrl+N)"
+          data-tooltip="Create note (Ctrl+N)"
           aria-label="Create note"
           onClick={() => {
             void createNote()
@@ -89,7 +89,7 @@ export function EditorToolbar({
         <button
           className={`btn-icon ${(isPreviewMode ? spellCheckRenderEnabled : spellCheckEditEnabled) ? 'active' : ''}`}
           type="button"
-          title={
+          data-tooltip={
             isPreviewMode
               ? (spellCheckRenderEnabled ? 'Disable spell check' : 'Enable spell check')
               : (spellCheckEditEnabled ? 'Disable spell check' : 'Enable spell check')
@@ -116,7 +116,7 @@ export function EditorToolbar({
           <button
             type="button"
             className="btn-icon"
-            title="Export PDF"
+            data-tooltip="Export PDF"
             aria-label="Export current note to PDF"
             onClick={handleExportPdf}
             onContextMenu={(event: MouseEvent<HTMLButtonElement>) => {
@@ -133,7 +133,7 @@ export function EditorToolbar({
           <button
             type="button"
             className="btn-icon"
-            title="Export Markdown"
+            data-tooltip="Export Markdown"
             aria-label="Export current note to Markdown"
             onClick={() => void handleExportMd()}
             onContextMenu={(event: MouseEvent<HTMLButtonElement>) => {
@@ -154,7 +154,7 @@ export function EditorToolbar({
                 type="button"
                 className={`btn-icon ${activeDecorationFormats.has('bold') ? 'active' : ''}`}
                 onClick={() => applyTextDecoration('bold')}
-                title="Bold"
+                data-tooltip="Bold"
                 aria-label="Bold"
                 disabled={!activeNoteId}
               >
@@ -164,7 +164,7 @@ export function EditorToolbar({
                 type="button"
                 className={`btn-icon ${activeDecorationFormats.has('italic') ? 'active' : ''}`}
                 onClick={() => applyTextDecoration('italic')}
-                title="Italic"
+                data-tooltip="Italic"
                 aria-label="Italic"
                 disabled={!activeNoteId}
               >
@@ -174,7 +174,7 @@ export function EditorToolbar({
                 type="button"
                 className={`btn-icon ${activeDecorationFormats.has('strikethrough') ? 'active' : ''}`}
                 onClick={() => applyTextDecoration('strikethrough')}
-                title="Strikethrough"
+                data-tooltip="Strikethrough"
                 aria-label="Strikethrough"
                 disabled={!activeNoteId}
               >
@@ -183,33 +183,33 @@ export function EditorToolbar({
             </div>
 
             <div className="toolbar-group">
-              <button type="button" className={`btn-icon ${activeHeadingLevel === 1 ? 'active' : ''}`} title="Heading 1" onClick={() => applyHeading(1)} disabled={!activeNoteId}>H1</button>
-              <button type="button" className={`btn-icon ${activeHeadingLevel === 2 ? 'active' : ''}`} title="Heading 2" onClick={() => applyHeading(2)} disabled={!activeNoteId}>H2</button>
-              <button type="button" className={`btn-icon ${activeHeadingLevel === 3 ? 'active' : ''}`} title="Heading 3" onClick={() => applyHeading(3)} disabled={!activeNoteId}>H3</button>
+              <button type="button" className={`btn-icon ${activeHeadingLevel === 1 ? 'active' : ''}`} data-tooltip="Heading 1" onClick={() => applyHeading(1)} disabled={!activeNoteId}>H1</button>
+              <button type="button" className={`btn-icon ${activeHeadingLevel === 2 ? 'active' : ''}`} data-tooltip="Heading 2" onClick={() => applyHeading(2)} disabled={!activeNoteId}>H2</button>
+              <button type="button" className={`btn-icon ${activeHeadingLevel === 3 ? 'active' : ''}`} data-tooltip="Heading 3" onClick={() => applyHeading(3)} disabled={!activeNoteId}>H3</button>
             </div>
 
             <div className="toolbar-group">
-              <button type="button" className={`btn-icon ${isBulletedListActive ? 'active' : ''}`} title="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>≡</button>
-              <button type="button" className={`btn-icon ${isNumberedListActive ? 'active' : ''}`} title="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>#</button>
-              <button type="button" className={`btn-icon ${isChecklistActive ? 'active' : ''}`} title="Checklist" onClick={toggleChecklistList} disabled={!activeNoteId}>☐</button>
+              <button type="button" className={`btn-icon ${isBulletedListActive ? 'active' : ''}`} data-tooltip="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>≡</button>
+              <button type="button" className={`btn-icon ${isNumberedListActive ? 'active' : ''}`} data-tooltip="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>#</button>
+              <button type="button" className={`btn-icon ${isChecklistActive ? 'active' : ''}`} data-tooltip="Checklist" onClick={toggleChecklistList} disabled={!activeNoteId}>☐</button>
             </div>
 
             <div className="toolbar-group">
-              <button type="button" className={`btn-icon ${isBlockquoteActive ? 'active' : ''}`} title="Blockquote" onClick={toggleBlockquote} disabled={!activeNoteId}>&quot;</button>
-              <button type="button" className={`btn-icon ${isCodeBlockActive ? 'active' : ''}`} title="Code block" onClick={applyCodeBlock} disabled={!activeNoteId}>{'{ }'}</button>
-              <button type="button" className={`btn-icon ${isInlineCodeActive ? 'active' : ''}`} title="Inline code" onClick={applyInlineCode} disabled={!activeNoteId}>{'<>'}</button>
+              <button type="button" className={`btn-icon ${isBlockquoteActive ? 'active' : ''}`} data-tooltip="Blockquote" onClick={toggleBlockquote} disabled={!activeNoteId}>&quot;</button>
+              <button type="button" className={`btn-icon ${isCodeBlockActive ? 'active' : ''}`} data-tooltip="Code block" onClick={applyCodeBlock} disabled={!activeNoteId}>{'{ }'}</button>
+              <button type="button" className={`btn-icon ${isInlineCodeActive ? 'active' : ''}`} data-tooltip="Inline code" onClick={applyInlineCode} disabled={!activeNoteId}>{'<>'}</button>
             </div>
 
             <div className="toolbar-group">
-              <button type="button" className="btn-icon" title="Horizontal rule" onClick={insertHorizontalRule} disabled={!activeNoteId}>—</button>
-              <button type="button" className="btn-icon" title="Link (Ctrl+L)" onClick={applyLink} disabled={!activeNoteId}><span className="fa-solid fa-link" aria-hidden="true" /></button>
-              <button type="button" className="btn-icon" title="Set anchor (Shift+Ctrl+L)" onClick={applyAnchor} disabled={!activeNoteId}><span className="fa-solid fa-anchor" aria-hidden="true" /></button>
+              <button type="button" className="btn-icon" data-tooltip="Horizontal rule" onClick={insertHorizontalRule} disabled={!activeNoteId}>—</button>
+              <button type="button" className="btn-icon" data-tooltip="Link (Ctrl+L)" onClick={applyLink} disabled={!activeNoteId}><span className="fa-solid fa-link" aria-hidden="true" /></button>
+              <button type="button" className="btn-icon" data-tooltip="Set anchor (Shift+Ctrl+L)" onClick={applyAnchor} disabled={!activeNoteId}><span className="fa-solid fa-anchor" aria-hidden="true" /></button>
             </div>
             <div className="toolbar-group chapter-group">
               <button
                 type="button"
                 className="btn-icon"
-                title="Add a chapter"
+                data-tooltip="Add a chapter"
                 aria-label="Add a chapter"
                 disabled={!activeNoteId}
                 onClick={() => {

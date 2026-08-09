@@ -79,7 +79,7 @@ interface AccordionSectionProps {
   forceOpenNonce?: number
   /** fa-solid icon class for the heading, e.g. "fa-rectangle-list". Defaults to the global-scope icon. */
   iconClass?: string
-  /** Tooltip shown when hovering the icon. Pass '' to suppress the title attribute entirely. */
+  /** Tooltip shown when hovering the icon. Pass '' to suppress the tooltip attribute entirely. */
   iconTooltip?: string
 }
 
@@ -228,7 +228,7 @@ export function AccordionSection({
         >
           <span
             className={`fa-solid ${iconClass}`}
-            title={iconTooltip || undefined}
+            data-tooltip={iconTooltip || undefined}
           />
           {heading}
         </summary>

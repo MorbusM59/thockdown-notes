@@ -109,7 +109,7 @@ export function ChapterBar({
       <button
         type="button"
         className="btn-icon chapter-collapse-button"
-        title="Collapse this chapter into the previous one"
+        data-tooltip="Collapse this chapter into the previous one"
         aria-label="Collapse this chapter into the previous one"
         disabled={!hasCurrentChapter}
         onClick={onCollapseChapterIntoPrevious}
@@ -130,7 +130,7 @@ export function ChapterBar({
             <div
               className={`tag-pill note-tab-pill chapter-parent-pill${isParentActive ? ' active' : ''}`}
               onClick={onParentTabClick}
-              title={parentNote?.title ?? 'Parent note'}
+              data-tooltip={parentNote?.title ?? 'Parent note'}
             >
               <span className="tag-pill-label">{parentLabel}</span>
             </div>
@@ -165,7 +165,7 @@ export function ChapterBar({
                     event.preventDefault()
                     onStartEditingChapterId(chapter.chapterNoteId)
                   }}
-                  title={note?.title ?? 'Chapter'}
+                  data-tooltip={note?.title ?? 'Chapter'}
                 >
                   <span className="tag-pill-label">{label}</span>
                 </div>
@@ -178,7 +178,7 @@ export function ChapterBar({
       <button
         type="button"
         className="btn-icon chapter-extract-button"
-        title="Cut the selection (or everything after the caret) into a new chapter right behind this one"
+        data-tooltip="Cut the selection (or everything after the caret) into a new chapter right behind this one"
         aria-label="Cut the selection (or everything after the caret) into a new chapter right behind this one"
         onClick={onExtractSelectionToChapter}
       >

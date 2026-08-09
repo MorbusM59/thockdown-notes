@@ -791,26 +791,72 @@ export function SidebarOptionsPanel({
       const buttonIcon = isSearchHighlightControl ? 'fa-solid fa-magnifying-glass' : HIGHLIGHT_COLOR_ICONS[key]
 
       return (
+        // The swatch button itself is `overflow: hidden` and already spends
+        // both its ::before/::after on the paper+color fill layers (see
+        // toolbar.css), so a tooltip attribute on the button is invisible --
+        // clipped and content-shadowed at once. Anchoring the tooltip on this
+        // untouched wrapper instead (a plain grid item the button fills at
+        // 100%/100%, same as before) sidesteps both.
+        <span key={key} className="options-swatch-tooltip-anchor" data-tooltip={buttonTitle}>
+          <button
+            type="button"
+            className={`btn-icon options-color-swatch${key === 'textBase' ? ' text-ui-icon' : ''}${key === 'lineNumber' ? ' text-icon' : ''}`}
+            onClick={() => {
+              if (primedColorSource.kind === 'active-color') {
+                applyActiveColorToElement(resolvedKey)
+                return
+              }
+
+              if (primedColorSource.kind === 'texture-preview') {
+                updateHighlightColor(resolvedKey, hsvaToRgba(texturePreviewMaterial.color))
+                return
+              }
+
+              if (primedColorSource.kind === 'hsva') {
+                applyHsvaValueToElement(primedColorSource.key, resolvedKey)
+              }
+            }}
+            onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'element', key: resolvedKey }, event)}
+            onMouseUp={(event) => {
+              if (event.button !== 2) return
+              clearColorArmTimer()
+            }}
+            onMouseLeave={() => {
+              clearColorArmTimer()
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              clearColorArmTimer()
+            }}
+            style={{ '--options-swatch-color': highlightColors[resolvedKey] } as React.CSSProperties}
+          >
+            <span className={`options-color-swatch-glyph ${buttonIcon}`} aria-hidden="true" />
+          </button>
+        </span>
+      )
+    }
+
+    const renderTextureSwatchButton = (surface: TextureSurfaceKey) => (
+      <span key={surface} className="options-swatch-tooltip-anchor" data-tooltip={TEXTURE_SURFACE_TITLES[surface]}>
         <button
-          key={key}
           type="button"
-          className={`btn-icon options-color-swatch${key === 'textBase' ? ' text-ui-icon' : ''}${key === 'lineNumber' ? ' text-icon' : ''}`}
+          className="btn-icon options-color-swatch"
           onClick={() => {
             if (primedColorSource.kind === 'active-color') {
-              applyActiveColorToElement(resolvedKey)
+              applyActiveColorToTexture(surface)
               return
             }
 
             if (primedColorSource.kind === 'texture-preview') {
-              updateHighlightColor(resolvedKey, hsvaToRgba(texturePreviewMaterial.color))
+              applyTexturePreviewToSurface(surface)
               return
             }
 
             if (primedColorSource.kind === 'hsva') {
-              applyHsvaValueToElement(primedColorSource.key, resolvedKey)
+              applyHsvaValueToTexture(primedColorSource.key, surface)
             }
           }}
-          onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'element', key: resolvedKey }, event)}
+          onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'texture', key: surface }, event)}
           onMouseUp={(event) => {
             if (event.button !== 2) return
             clearColorArmTimer()
@@ -822,51 +868,11 @@ export function SidebarOptionsPanel({
             event.preventDefault()
             clearColorArmTimer()
           }}
-          style={{ '--options-swatch-color': highlightColors[resolvedKey] } as React.CSSProperties}
-          title={buttonTitle}
+          style={{ '--options-swatch-color': rgbaToCssColor(hsvaToRgba(textureMaterials[surface].color)) } as React.CSSProperties}
         >
-          <span className={`options-color-swatch-glyph ${buttonIcon}`} aria-hidden="true" />
+          <span className={`options-color-swatch-glyph ${TEXTURE_SURFACE_ICONS[surface]}`} aria-hidden="true" />
         </button>
-      )
-    }
-
-    const renderTextureSwatchButton = (surface: TextureSurfaceKey) => (
-      <button
-        key={surface}
-        type="button"
-        className="btn-icon options-color-swatch"
-        onClick={() => {
-          if (primedColorSource.kind === 'active-color') {
-            applyActiveColorToTexture(surface)
-            return
-          }
-
-          if (primedColorSource.kind === 'texture-preview') {
-            applyTexturePreviewToSurface(surface)
-            return
-          }
-
-          if (primedColorSource.kind === 'hsva') {
-            applyHsvaValueToTexture(primedColorSource.key, surface)
-          }
-        }}
-        onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'texture', key: surface }, event)}
-        onMouseUp={(event) => {
-          if (event.button !== 2) return
-          clearColorArmTimer()
-        }}
-        onMouseLeave={() => {
-          clearColorArmTimer()
-        }}
-        onContextMenu={(event) => {
-          event.preventDefault()
-          clearColorArmTimer()
-        }}
-        style={{ '--options-swatch-color': rgbaToCssColor(hsvaToRgba(textureMaterials[surface].color)) } as React.CSSProperties}
-        title={TEXTURE_SURFACE_TITLES[surface]}
-      >
-        <span className={`options-color-swatch-glyph ${TEXTURE_SURFACE_ICONS[surface]}`} aria-hidden="true" />
-      </button>
+      </span>
     )
 
     return (
@@ -926,7 +932,7 @@ export function SidebarOptionsPanel({
                 key={option.key}
                 type="button"
                 className={`btn-icon typography-font-btn${viewStyle === option.key ? ' active' : ''}`}
-                title={option.label}
+                data-tooltip={option.label}
                 aria-label={option.label}
                 aria-pressed={viewStyle === option.key}
                 onClick={() => setViewStyle(option.key)}
@@ -992,7 +998,7 @@ export function SidebarOptionsPanel({
                 key={option.key}
                 type="button"
                 className={`btn-icon typography-font-btn${editorStyle === option.key ? ' active' : ''}`}
-                title={option.label}
+                data-tooltip={option.label}
                 aria-label={option.label}
                 aria-pressed={editorStyle === option.key}
                 onClick={() => {
@@ -1080,7 +1086,7 @@ export function SidebarOptionsPanel({
                 key={`preset-${entry.id}`}
                 type="button"
                 className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}`}
-                title={theme}
+                data-tooltip={theme}
                 aria-label={theme}
                 onClick={() => void selectLoadoutPreset(entry.id)}
               >
@@ -1091,7 +1097,7 @@ export function SidebarOptionsPanel({
           <button
             type="button"
             className={`btn-icon options-color-swatch options-loadout-btn${isDynamicCustomPresetActive ? ' active' : ''}`}
-            title="Custom"
+            data-tooltip="Custom"
             aria-label="Custom Layout"
             onClick={selectDynamicCustomPreset}
           >
@@ -1113,7 +1119,7 @@ export function SidebarOptionsPanel({
               key={`custom-${entry.id}`}
               type="button"
               className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}${primedCustomLayoutId === entry.id ? ' primed' : ''}`}
-              title={`Custom Layout ${Math.abs(entry.id) - LOADOUT_FACTORY_PRESET_COUNT - 2}\nClick RMB to mark for deletion. \nHold RMB to export.`}
+              data-tooltip={`Custom Layout ${Math.abs(entry.id) - LOADOUT_FACTORY_PRESET_COUNT - 2}\nClick RMB to mark for deletion. \nHold RMB to export.`}
               onClick={() => {
                 handleCustomLoadoutSlotClick(entry.id)
               }}
@@ -1135,7 +1141,7 @@ export function SidebarOptionsPanel({
           <button
             type="button"
             className={`btn-icon options-color-swatch options-loadout-btn options-loadout-plus${hasUnsavedUiLoadoutChanges ? ' active' : ''}`}
-            title="Save current settings as a new custom layout"
+            data-tooltip="Save current settings as a new custom layout"
             aria-label="Save current settings as a new custom layout"
             onClick={() => void saveCustomLoadout()}
           >
@@ -1144,7 +1150,7 @@ export function SidebarOptionsPanel({
           <button
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn"
-            title="Reset custom layout to defaults"
+            data-tooltip="Reset custom layout to defaults"
             aria-label="Reset custom layout to defaults"
             onClick={() => void resetCustomLoadout()}
             onContextMenu={(event) => event.preventDefault()}
@@ -1324,7 +1330,7 @@ export function SidebarOptionsPanel({
             <button
               type="button"
               className={`btn-icon options-color-swatch options-active-color${primedColorSource.kind === 'active-color' ? ' active' : ''}`}
-              title={`Active color:\n${activeColorHex}`}
+              data-tooltip={`Active color:\n${activeColorHex}`}
               style={{ background: `linear-gradient(${activeColorCss}, ${activeColorCss}), var(--color-background-light)` }}
               onMouseDown={(event) => {
                 if (event.button !== 2) return
@@ -1343,11 +1349,15 @@ export function SidebarOptionsPanel({
             />
           </div>
           <div className="options-texture-settings" aria-label="Texture generation settings">
-            <div className="options-texture-preview-row">
+            {/* Tooltip lives on the row, not the button: .options-texture-preview
+                is overflow:hidden and already spends both its ::before/::after
+                on the texture-fill layers (see toolbar.css), so a tooltip
+                attribute on the button itself would be clipped and
+                content-shadowed at once. */}
+            <div className="options-texture-preview-row" data-tooltip={`Texture preview: ${texturePreviewHex}`}>
               <button
                 type="button"
                 className={`btn-icon options-color-swatch options-active-color options-texture-preview${primedColorSource.kind === 'texture-preview' ? ' active' : ''}`}
-                title={`Texture preview: ${texturePreviewHex}`}
                 style={{
                   '--texture-preview-color': texturePreviewTintCss,
                   '--texture-preview-mask': texturePreviewCss,
@@ -1414,7 +1424,7 @@ export function SidebarOptionsPanel({
                     type="button"
                     className="options-seed-btn"
                     aria-label={`Texture seed ${texturePreviewMaterial.seed}. Left click to randomize. Right click to edit.`}
-                    title="Left click: random seed. Right click: edit seed."
+                    data-tooltip="Left click: random seed. Right click: edit seed."
                     onClick={randomizeTextureSeed}
                     onContextMenu={(event) => {
                       event.preventDefault()
@@ -1526,45 +1536,49 @@ export function SidebarOptionsPanel({
         <div className="sidebar-options-divider" aria-hidden="true" />
 
         <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Mode text and selection colors">
-          <button
-            type="button"
-            className="btn-icon options-color-swatch text-icon"
-            onClick={() => {
-              const target: EditorTextColorTargetKey = isPreviewMode ? 'editorRenderText' : 'editorEditText'
-
-              if (primedColorSource.kind === 'active-color') {
-                applyActiveColorToEditorText(target)
-                return
-              }
-
-              if (primedColorSource.kind === 'texture-preview') {
-                updateEditorTextColor(target, hsvaToRgba(texturePreviewMaterial.color))
-                return
-              }
-
-              if (primedColorSource.kind === 'hsva') {
-                applyHsvaValueToEditorText(primedColorSource.key, target)
-              }
-            }}
-            onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'text', key: isPreviewMode ? 'editorRenderText' : 'editorEditText' }, event)}
-            onMouseUp={(event) => {
-              if (event.button !== 2) return
-              clearColorArmTimer()
-            }}
-            onMouseLeave={() => {
-              clearColorArmTimer()
-            }}
-            onContextMenu={(event) => {
-              event.preventDefault()
-              clearColorArmTimer()
-            }}
-            style={{
-              '--options-swatch-color': editorTextColors[isPreviewMode ? 'editorRenderText' : 'editorEditText'],
-            } as React.CSSProperties}
-            title={isPreviewMode ? 'Render mode text color' : 'Edit mode text color'}
+          <span
+            className="options-swatch-tooltip-anchor"
+            data-tooltip={isPreviewMode ? 'Render mode text color' : 'Edit mode text color'}
           >
-            <span className="options-color-swatch-glyph fa-solid fa-font" aria-hidden="true" />
-          </button>
+            <button
+              type="button"
+              className="btn-icon options-color-swatch text-icon"
+              onClick={() => {
+                const target: EditorTextColorTargetKey = isPreviewMode ? 'editorRenderText' : 'editorEditText'
+
+                if (primedColorSource.kind === 'active-color') {
+                  applyActiveColorToEditorText(target)
+                  return
+                }
+
+                if (primedColorSource.kind === 'texture-preview') {
+                  updateEditorTextColor(target, hsvaToRgba(texturePreviewMaterial.color))
+                  return
+                }
+
+                if (primedColorSource.kind === 'hsva') {
+                  applyHsvaValueToEditorText(primedColorSource.key, target)
+                }
+              }}
+              onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'text', key: isPreviewMode ? 'editorRenderText' : 'editorEditText' }, event)}
+              onMouseUp={(event) => {
+                if (event.button !== 2) return
+                clearColorArmTimer()
+              }}
+              onMouseLeave={() => {
+                clearColorArmTimer()
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                clearColorArmTimer()
+              }}
+              style={{
+                '--options-swatch-color': editorTextColors[isPreviewMode ? 'editorRenderText' : 'editorEditText'],
+              } as React.CSSProperties}
+            >
+              <span className="options-color-swatch-glyph fa-solid fa-font" aria-hidden="true" />
+            </button>
+          </span>
 
           {middleRowHighlightKeys.map((key) => renderHighlightSwatchButton(key))}
         </div>
@@ -1635,7 +1649,7 @@ export function SidebarOptionsPanel({
                   type="button"
                   className="options-seed-btn"
                   aria-label={`Linear glaze seed ${glazeSettings.linearSeed}. Left click to randomize. Right click to edit.`}
-                  title="Left click: random seed. Right click: edit seed."
+                  data-tooltip="Left click: random seed. Right click: edit seed."
                   onClick={randomizeGlazeLinearSeed}
                   onContextMenu={(event) => {
                     event.preventDefault()
@@ -1652,7 +1666,7 @@ export function SidebarOptionsPanel({
               type="button"
               className={`btn-icon options-color-swatch options-glaze-layer-order-btn${glazeSettings.radialAboveLinear ? ' active' : ''}`}
               aria-label={glazeSettings.radialAboveLinear ? 'Display flair above glare.' : 'Display flair above glare.'}
-              title={glazeSettings.radialAboveLinear ? 'Display flair above glare.' : 'Display flair above glare.'}
+              data-tooltip={glazeSettings.radialAboveLinear ? 'Display flair above glare.' : 'Display flair above glare.'}
               onClick={() => {
                 setGlazeSettings((current) => ({
                   ...current,
@@ -1708,7 +1722,7 @@ export function SidebarOptionsPanel({
                   type="button"
                   className="options-seed-btn"
                   aria-label={`Radial glaze seed ${glazeSettings.radialSeed}. Left click to randomize. Right click to edit.`}
-                  title="Left click: random seed. Right click: edit seed."
+                  data-tooltip="Left click: random seed. Right click: edit seed."
                   onClick={randomizeGlazeRadialSeed}
                   onContextMenu={(event) => {
                     event.preventDefault()
@@ -2015,7 +2029,7 @@ export function SidebarOptionsPanel({
             type="button"
             className="btn-icon options-color-swatch "
             style={{ background: customCursorCenterColor }}
-            title="Center dot color -- click to apply, hold right-click to copy"
+            data-tooltip="Center dot color -- click to apply, hold right-click to copy"
             onClick={() => applyCursorColorToTarget('center')}
             onMouseDown={(event) => startCursorColorCopyHold('center', event)}
             onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
@@ -2026,7 +2040,7 @@ export function SidebarOptionsPanel({
             type="button"
             className="btn-icon options-color-swatch"
             style={{ background: customCursorHaloColor }}
-            title="Halo color -- click to apply, hold right-click to copy"
+            data-tooltip="Halo color -- click to apply, hold right-click to copy"
             onClick={() => applyCursorColorToTarget('halo')}
             onMouseDown={(event) => startCursorColorCopyHold('halo', event)}
             onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
@@ -2106,7 +2120,7 @@ export function SidebarOptionsPanel({
             type="button"
             className="btn-icon options-color-swatch"
             style={{ background: customCursorDotColor }}
-            title="Circling dots color -- click to apply, hold right-click to copy"
+            data-tooltip="Circling dots color -- click to apply, hold right-click to copy"
             onClick={() => applyCursorColorToTarget('dot')}
             onMouseDown={(event) => startCursorColorCopyHold('dot', event)}
             onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
@@ -2117,7 +2131,7 @@ export function SidebarOptionsPanel({
             type="button"
             className="btn-icon options-color-swatch"
             style={{ background: customCursorTrailColor }}
-            title="Trail color -- click to apply, hold right-click to copy"
+            data-tooltip="Trail color -- click to apply, hold right-click to copy"
             onClick={() => applyCursorColorToTarget('trail')}
             onMouseDown={(event) => startCursorColorCopyHold('trail', event)}
             onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
@@ -2356,7 +2370,7 @@ export function SidebarOptionsPanel({
                 typingSoundManager.setTypingSoundEnabled(false)
               }}
               aria-pressed={!typingSoundEnabled}
-              title="No Key Sounds"
+              data-tooltip="No Key Sounds"
             >
               <span className="fa-solid fa-ban" aria-hidden="true" />
             </button>
@@ -2372,7 +2386,7 @@ export function SidebarOptionsPanel({
                   typingSoundManager.setTypingSoundSet(setId)
                 }}
                 aria-pressed={typingSoundEnabled && typingSoundSet === setId}
-                title={`${setId === 'A' ? 'Pops' : ''}${setId === 'B' ? 'Pins' : ''}${setId === 'C' ? 'Creamy' : ''}${setId === 'D' ? 'Forge' : ''}`}
+                data-tooltip={`${setId === 'A' ? 'Pops' : ''}${setId === 'B' ? 'Pins' : ''}${setId === 'C' ? 'Creamy' : ''}${setId === 'D' ? 'Forge' : ''}`}
               >
                 <span className={`${setId === 'A' ? 'fa-solid fa-burst' : ''}${setId === 'B' ? 'fa-solid fa-map-pin' : ''}${setId === 'C' ? 'fa-solid fa-ice-cream' : ''}${setId === 'D' ? 'fa-solid fa-hammer' : ''}`} aria-hidden="true" />
               </button>
@@ -2552,7 +2566,7 @@ export function SidebarOptionsPanel({
               queueAppStateSave(activeNoteId)
             }}
             aria-pressed={reduceVisualEffects}
-            title="Reduce visual effects (forces glaze/filter/colorize off without losing your slider positions; invert stays on for dark layouts)"
+            data-tooltip="Reduce visual effects (forces glaze/filter/colorize off without losing your slider positions; invert stays on for dark layouts)"
           >
             <span className="fa-solid fa-spray-can-sparkles" aria-hidden="true" />
           </button>
@@ -2565,7 +2579,7 @@ export function SidebarOptionsPanel({
               queueAppStateSave(activeNoteId)
             }}
             aria-pressed={reducedCaretAnimation}
-            title="Reduce caret animation (stops the idle blink from keeping the compositor busy)"
+            data-tooltip="Reduce caret animation (stops the idle blink from keeping the compositor busy)"
           >
             <span className="fa-solid fa-computer-mouse" aria-hidden="true" />
           </button>
@@ -2578,7 +2592,7 @@ export function SidebarOptionsPanel({
               queueAppStateSave(activeNoteId)
             }}
             aria-pressed={deferPreviewOnRapidInput}
-            title="Defer preview on rapid input (coalesces the preview update onto one frame during fast key-repeat, e.g. held Backspace)"
+            data-tooltip="Defer preview on rapid input (coalesces the preview update onto one frame during fast key-repeat, e.g. held Backspace)"
           >
             <span className="fa-solid fa-gauge-high" aria-hidden="true" />
           </button>
@@ -2587,7 +2601,7 @@ export function SidebarOptionsPanel({
             className={`btn-icon${customCursorEnabled ? ' is-active' : ''}`}
             onClick={() => setCustomCursorEnabled(!customCursorEnabled)}
             aria-pressed={customCursorEnabled}
-            title={customCursorEnabled ? 'Disable custom mouse cursor' : 'Enable custom mouse cursor'}
+            data-tooltip={customCursorEnabled ? 'Disable custom mouse cursor' : 'Enable custom mouse cursor'}
           >
             <span className="fa-solid fa-arrow-pointer" aria-hidden="true" />
           </button>
@@ -2604,7 +2618,7 @@ export function SidebarOptionsPanel({
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn"
             onClick={syncExistingNotes}
-            title="Sync stored note files"
+            data-tooltip="Sync stored note files"
             aria-label="Sync stored note files"
           >
             <span className="fa-solid fa-rotate" aria-hidden="true" />
@@ -2613,7 +2627,7 @@ export function SidebarOptionsPanel({
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn"
             onClick={importNotes}
-            title="Import notes from files or folders"
+            data-tooltip="Import notes from files or folders"
             aria-label="Import notes from files or folders"
           >
             <span className="fa-solid fa-file-import" aria-hidden="true" />
@@ -2622,7 +2636,7 @@ export function SidebarOptionsPanel({
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn"
             onClick={() => void exportLayoutsTdl()}
-            title="Export custom layouts to a .tdl file"
+            data-tooltip="Export custom layouts to a .tdl file"
             aria-label="Export custom layouts to a .tdl file"
           >
             <span className="fa-solid fa-file-export" aria-hidden="true" />
@@ -2631,7 +2645,7 @@ export function SidebarOptionsPanel({
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn"
             onClick={() => void importLayoutsTdl()}
-            title="Import layouts from a .tdl file"
+            data-tooltip="Import layouts from a .tdl file"
             aria-label="Import layouts from a .tdl file"
           >
             <span className="fa-solid fa-file-arrow-up" aria-hidden="true" />
@@ -2658,7 +2672,7 @@ export function SidebarOptionsPanel({
               }
               queueAppStateSave(activeNoteId)
             }}
-            title={debuggingEnabled ? 'Disable debug logging' : 'Enable debug logging to a note'}
+            data-tooltip={debuggingEnabled ? 'Disable debug logging' : 'Enable debug logging to a note'}
             aria-label={debuggingEnabled ? 'Disable debug logging' : 'Enable debug logging to a note'}
             aria-pressed={debuggingEnabled}
           >
@@ -2668,7 +2682,7 @@ export function SidebarOptionsPanel({
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn"
             onClick={() => window.windowControls?.toggleDevTools()}
-            title="Open DevTools (detached window)"
+            data-tooltip="Open DevTools (detached window)"
             aria-label="Open DevTools (detached window)"
           >
             <span className="fa-solid fa-code" aria-hidden="true" />

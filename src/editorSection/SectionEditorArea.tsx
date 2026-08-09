@@ -300,7 +300,7 @@ export function SectionEditorArea({
             className={`chapter-toggle-button btn-icon${showReviewGutter ? ' is-active' : ''}`}
             aria-label="Toggle line numbers and review flags"
             aria-pressed={showReviewGutter}
-            title="Toggle line numbers and review flags"
+            data-tooltip="Toggle line numbers and review flags"
             onClick={onToggleReviewGutter}
           >
             <span className="fa-solid fa-list-ol" aria-hidden="true" />

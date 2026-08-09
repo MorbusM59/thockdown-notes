@@ -231,7 +231,7 @@ export function SnapshotTimelineSlider({
         className="utility-setting-scrollbar-rail snapshot-timeline-rail"
         ref={railRef}
         onWheel={handleWheel}
-        title={`Cut-off: ${formatTimescaleLabel(curveConstant)}\nScroll up/down to zoom.`}
+        data-tooltip={`Cut-off: ${formatTimescaleLabel(curveConstant)}\nScroll up/down to zoom.`}
       >
         {historyMarksToRender.map((mark, index) => (
           <SnapshotMark
@@ -319,7 +319,7 @@ function SnapshotMark({
         event.stopPropagation()
         onNavigate(placement.id)
       }}
-      title={tooltip}
+      data-tooltip={tooltip}
       {...handlers}
     >
       {isHolding && (

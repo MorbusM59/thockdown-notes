@@ -160,7 +160,7 @@ export function SectionTabBar({
         <button
           type="button"
           className="btn-icon sidebar-toggle"
-          title={isSidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
+          data-tooltip={isSidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
           aria-label={isSidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
           onClick={toggleSidebarVisible}
         >
@@ -170,7 +170,7 @@ export function SectionTabBar({
         <button
           type="button"
           className="btn-icon section-close-toggle"
-          title="Close this section"
+          data-tooltip="Close this section"
           aria-label="Close this section"
           onClick={onCloseSection}
         >
@@ -181,7 +181,7 @@ export function SectionTabBar({
       <button
         type="button"
         className={`btn-icon tagbar-toggle${tabBarMode === 'tags' ? ' active' : ''}`}
-        title={tabBarMode === 'tags' ? 'Show tabs' : 'Show tags'}
+        data-tooltip={tabBarMode === 'tags' ? 'Show tabs' : 'Show tags'}
         aria-label={tabBarMode === 'tags' ? 'Show tabs' : 'Show tags'}
         onClick={toggleTabBarMode}
       >
@@ -231,7 +231,7 @@ export function SectionTabBar({
             className={`tag-pill section-identity-tab${(isSectionPickerOpen || isSuggestedTagsExpanded) ? ' active' : ''}`}
             onClick={onIdentityClick}
             onContextMenu={onIdentityContextMenu}
-            title={
+            data-tooltip={
               tabBarMode === 'tabs'
                 ? (sectionName ? `Section: ${sectionName} -- click to swap in another named section, right-click to rename` : 'Unnamed section -- click to swap in a named section, right-click to name this section')
                 : 'Click to show suggested tags, right-click to assign this note\'s id'
@@ -263,7 +263,7 @@ export function SectionTabBar({
                       type="button"
                       className="tag-pill section-picker-item section-picker-create"
                       onClick={onSectionPickerClearClick}
-                      title="Clear this section (no note, no tabs, no name)"
+                      data-tooltip="Clear this section (no note, no tabs, no name)"
                     >
                       <span className="tag-pill-label">···</span>
                     </button>
@@ -278,7 +278,7 @@ export function SectionTabBar({
                         onClick={() => onSectionPickerCandidateClick(candidate.id)}
                         onContextMenu={(event) => onSectionPickerCandidateContextMenu(event, candidate.id)}
                         onMouseLeave={() => onSectionPickerCandidateMouseLeave(candidate.id)}
-                        title={isDeletionPrimed ? `Click again to permanently delete "${candidate.name}"` : `Swap in "${candidate.name}" -- right-click to delete`}
+                        data-tooltip={isDeletionPrimed ? `Click again to permanently delete "${candidate.name}"` : `Swap in "${candidate.name}" -- right-click to delete`}
                       >
                         <span className="tag-pill-label">{candidate.name}</span>
                       </button>
@@ -308,7 +308,7 @@ export function SectionTabBar({
                           handleTabMouseLeave(tempTabNoteId)
                           clearTempTabHoldTimer()
                         }}
-                        title={
+                        data-tooltip={
                           isPrimed
                             ? 'Click again to close, or move cursor away to cancel'
                             : `${note?.title ?? 'Open note'} — hold to pin`
@@ -337,7 +337,7 @@ export function SectionTabBar({
                         onClick={() => handleTabClick(tab.noteId)}
                         onContextMenu={(event) => handleTabContextMenu(event, tab.noteId)}
                         onMouseLeave={() => handleTabMouseLeave(tab.noteId)}
-                        title={
+                        data-tooltip={
                           isPrimed
                             ? 'Click again to unpin, or move cursor away to cancel'
                             : (note?.title ?? 'Open note')
@@ -371,7 +371,7 @@ export function SectionTabBar({
                     key={tagName}
                     className="tag-pill suggested"
                     onClick={() => handleAddSuggestedTag(tagName)}
-                    title={`Add ${tagName}`}
+                    data-tooltip={`Add ${tagName}`}
                     aria-disabled={!activeNoteId || isTagMutationPending || activeNoteIsExternal}
                   >
                     {tagName}
@@ -429,7 +429,7 @@ export function SectionTabBar({
                       onClick={() => handleTagChipClick(tagName)}
                       onContextMenu={(event) => handleTagContextMenu(event, tagName)}
                       onMouseLeave={() => handleTagChipMouseLeave(tagName)}
-                      title={deletePrimedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion'}
+                      data-tooltip={deletePrimedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion'}
                     >
                       <span className="tag-pill-label">{tagName}</span>
                     </div>
@@ -443,7 +443,7 @@ export function SectionTabBar({
                   key={tagName}
                   className="tag-pill suggested"
                   onClick={() => handleAddSuggestedTag(tagName)}
-                  title={`Add ${tagName}`}
+                  data-tooltip={`Add ${tagName}`}
                   aria-disabled={!activeNoteId || isTagMutationPending || activeNoteIsExternal}
                 >
                   {tagName}
@@ -462,7 +462,7 @@ export function SectionTabBar({
         <button
           type="button"
           className="btn-icon section-create-toggle"
-          title="Add a section"
+          data-tooltip="Add a section"
           aria-label="Add a section"
           onClick={onCreateSection}
         >
