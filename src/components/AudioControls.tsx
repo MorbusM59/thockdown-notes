@@ -8,6 +8,12 @@ import { musicPlayerService, MissingFileError } from '../sound/MusicPlayerServic
 // Duration (ms) a pointer must be held to trigger the "arm for clear" action.
 const HOLD_THRESHOLD_MS = 700
 
+// Fade-in duration (seconds) for playback resumed from the previous
+// session (see the initialWasPlaying restore below) -- starts at silence
+// and full reverb, ramping up to the persisted volume/reverb over this
+// span, rather than jumping straight in at launch.
+const RESTORE_PLAYBACK_FADE_IN_SEC = 10
+
 const SLOTS: PlaylistSlot[] = [1, 2, 3, 4, 5]
 
 /** Latest playback snapshot, kept fresh by AudioControls for the parent to read on save. */
@@ -182,6 +188,7 @@ export const AudioControls = memo(function AudioControls({
       if (initialWasPlaying) {
         try {
           await musicPlayerService.play(song.filePath)
+          musicPlayerService.beginFadeIn(RESTORE_PLAYBACK_FADE_IN_SEC)
           if (pendingSeekSecRef.current) musicPlayerService.setCurrentTime(pendingSeekSecRef.current)
           pendingSeekSecRef.current = null
           setIsPlaying(true)

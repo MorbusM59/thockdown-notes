@@ -764,6 +764,7 @@ Every feature in the app, described individually: where to find it, what it does
 - **Choosing what plays** — click a slot to toggle it in or out of the active playback pool; more than one slot can be active at once.
 - **Playback** — play/stop; the favorite/skip button (click to favorite the current song for early replay, right-click to skip it, hold right-click to purge it from its slot entirely); the seek button (click forward 20%, right-click back 20%, hold to scrub continuously).
 - **Volume and reverb** — adjustable from [Settings panel → Music]($#music-settings), or directly by scrolling over the player: plain scroll adjusts volume, Shift+scroll adjusts reverb amount, Ctrl+scroll adjusts reverb room size.
+- **Resuming across restarts** — if music was playing when the app was last closed, it resumes on launch (same song and position), fading in over 10 seconds from silence and full reverb up to your usual volume/reverb settings.
 
 ## Data Storage
 

@@ -132,17 +132,55 @@ export class MusicPlayerService {
     const prev = this.config;
     this.config = { ...prev, ...cfg };
 
-    if (this.gainNode) {
-      this.gainNode.gain.value = this.config.volume;
+    // cancelScheduledValues + setValueAtTime (not a bare `.value =`) so this
+    // always wins over an in-progress beginFadeIn() ramp -- an explicit
+    // config change (e.g. the user dragging the volume slider mid-fade)
+    // should cut the automation off and jump straight to the new value,
+    // rather than have the scheduled ramp silently keep overriding it on
+    // every subsequent audio frame.
+    if (this.gainNode && this.audioCtx) {
+      const now = this.audioCtx.currentTime;
+      this.gainNode.gain.cancelScheduledValues(now);
+      this.gainNode.gain.setValueAtTime(this.config.volume, now);
     }
-    if (this.dryGain && this.wetGain) {
-      this.dryGain.gain.value = 1 - this.config.reverbAmount;
-      this.wetGain.gain.value = this.config.reverbAmount;
+    if (this.dryGain && this.wetGain && this.audioCtx) {
+      const now = this.audioCtx.currentTime;
+      this.dryGain.gain.cancelScheduledValues(now);
+      this.dryGain.gain.setValueAtTime(1 - this.config.reverbAmount, now);
+      this.wetGain.gain.cancelScheduledValues(now);
+      this.wetGain.gain.setValueAtTime(this.config.reverbAmount, now);
     }
     // Rebuild impulse response only when roomSize changes (relatively expensive).
     if (this.convolver && this.audioCtx && cfg.reverbRoom !== undefined && cfg.reverbRoom !== prev.reverbRoom) {
       this.convolver.buffer = buildImpulseResponse(this.audioCtx, this.config.reverbRoom);
     }
+  }
+
+  /**
+   * Fade in from silence + full reverb up to the current config's
+   * volume/reverbAmount over durationSec, via native Web Audio gain
+   * scheduling (sample-accurate, no polling). Used only when resuming
+   * playback that was already in progress when the app was last closed
+   * (see AudioControls' initialWasPlaying restore) -- ordinary play() calls
+   * (user pressing play, auto-advance) start at full volume as before.
+   * Assumes play() has already been called so the gain nodes exist.
+   */
+  beginFadeIn(durationSec: number): void {
+    if (!this.gainNode || !this.dryGain || !this.wetGain || !this.audioCtx) return;
+    const now = this.audioCtx.currentTime;
+    const { volume, reverbAmount } = this.config;
+
+    this.gainNode.gain.cancelScheduledValues(now);
+    this.gainNode.gain.setValueAtTime(0, now);
+    this.gainNode.gain.linearRampToValueAtTime(volume, now + durationSec);
+
+    this.dryGain.gain.cancelScheduledValues(now);
+    this.dryGain.gain.setValueAtTime(0, now); // full reverb = no dry signal
+    this.dryGain.gain.linearRampToValueAtTime(1 - reverbAmount, now + durationSec);
+
+    this.wetGain.gain.cancelScheduledValues(now);
+    this.wetGain.gain.setValueAtTime(1, now); // full reverb = fully wet
+    this.wetGain.gain.linearRampToValueAtTime(reverbAmount, now + durationSec);
   }
 
   onEnded(handler: PlaybackEndHandler): void {
