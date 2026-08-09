@@ -164,9 +164,13 @@
    Visibility is driven purely by :hover, so it tracks the real cursor with
    no JS-side show/hide state and is gone the instant the cursor leaves the
    element. Both attributes share one visual/positioning rule below; only
-   the `content` source differs. */
-[data-live-tooltip],
-[data-tooltip] {
+   the `content` source differs.
+   The `position: relative` bootstrap is wrapped in :where() (zero
+   specificity) so it never outranks a component's own `position` --
+   .search-input-case-toggle needs `position: absolute` to sit inside its
+   input's padding, and an equal-specificity `[data-tooltip]` rule loading
+   later in the cascade silently clobbered it back to relative. */
+:where([data-live-tooltip], [data-tooltip]) {
   position: relative;
 }
 
