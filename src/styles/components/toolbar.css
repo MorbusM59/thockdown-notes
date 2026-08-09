@@ -360,10 +360,6 @@
   width: var(--sidebar-options-content-width);
 }
 
-.options-section:first-child {
-  margin-top: calc(var(--toolbar-options-gap) + var(--spacing-regular));
-}
-
 .options-section-scrolling,
 .options-section-layout {
   width:     100px;
