@@ -14,7 +14,6 @@ import { ChapterBar } from '../chapters/ChapterBar'
 
 export interface SectionEditorAreaProps {
   sectionId: string
-  markSectionActive: (sectionId: string) => void
   isPreviewMode: boolean
   editorStageRef: RefObject<HTMLDivElement>
   sectionContainerRef: MutableRefObject<HTMLDivElement | null>
@@ -89,7 +88,6 @@ export interface SectionEditorAreaProps {
  */
 export function SectionEditorArea({
   sectionId,
-  markSectionActive,
   isPreviewMode,
   editorStageRef,
   sectionContainerRef,
@@ -189,9 +187,6 @@ export function SectionEditorArea({
     <div
       className="editor-viewer-frame"
       style={{ flex: '1 1 0' }}
-      onFocusCapture={() => markSectionActive(sectionId)}
-      onMouseDownCapture={() => markSectionActive(sectionId)}
-      onKeyDownCapture={() => markSectionActive(sectionId)}
     >
       <main className={`editor-shell${isChapterPanelOpen ? ' chapter-panel-is-open' : ''}`}>
         <div className="editor-background">

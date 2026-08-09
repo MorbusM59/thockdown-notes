@@ -1801,9 +1801,23 @@ export function CM6Editor({
    * 'center-caged'`) rather than a separate scroll path, so a flag jump
    * settles with the exact same viewport-virtualization-aware retry
    * behavior a search jump gets.
+   *
+   * Refreshes reviewGutterEdgeLinesRef synchronously before reading it,
+   * rather than trusting whatever updateLineLayout last happened to leave
+   * there: this fires from a plain click/keydown, which can land before this
+   * section's own next scheduled layout pass (e.g. right after a click
+   * elsewhere in the section -- the toolbar, the tab bar -- made it the
+   * active section for the first time, with no intervening scroll/viewport
+   * event of its own to have refreshed the edge lines yet). Found live as a
+   * jump landing on the wrong line -- effectively still using the previously
+   * active section's stale-for-this-instance edge data -- right after
+   * switching sections and immediately clicking a flag-jump arrow.
+   * updateLineLayout is cheap (one measure pass) and idempotent, so calling
+   * it an extra time here even when it wasn't actually stale costs nothing.
    */
   const navigateToFlaggedLine = useCallback((direction: 'up' | 'down'): boolean => {
     const view = viewRef.current;
+    updateLineLayout();
     const edgeLines = reviewGutterEdgeLinesRef.current;
     if (!view || !edgeLines) return false;
 
@@ -1829,11 +1843,11 @@ export function CM6Editor({
 
     if (targetLine === null || targetLine < 1 || targetLine > view.state.doc.lines) return false;
 
-    const linePos = view.state.doc.line(targetLine).from;
+    const linePos = view.state.doc.line(targetLine).to;
     view.dispatch({ selection: EditorSelection.cursor(linePos) });
     reconcileSelectionJumpScrollRef.current?.(view);
     return true;
-  }, []);
+  }, [updateLineLayout]);
 
   useEffect(() => {
     navigateToFlaggedLineRef.current = navigateToFlaggedLine;

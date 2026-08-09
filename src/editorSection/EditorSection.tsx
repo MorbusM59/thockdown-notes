@@ -47,7 +47,7 @@ type ViewStyleKey =
   | 'fredericka'
   | 'bubblerone'
 export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
-  'sectionId' | 'markSectionActive' | 'activeNoteId' | 'isPreviewMode' | 'previewedSnapshotId' | 'bindings' | 'adapterRef' | 'sectionContainerRef'
+  'sectionId' | 'activeNoteId' | 'isPreviewMode' | 'previewedSnapshotId' | 'bindings' | 'adapterRef' | 'sectionContainerRef'
   | 'editorDisplayText' | 'activeNoteHasDebugTag' | 'isPreviewingSnapshot' | 'isCaretSuspended' | 'previewTextureRef'
   | 'previewScrollRef' | 'handlePreviewScroll' | 'blockPreviewEditMutation' | 'previewMarkdownElement'
   | 'previewScrollbarTrackRef' | 'handlePreviewTrackMouseDown' | 'handlePreviewTrackContextMenu' | 'previewScrollbarThumbRef' | 'isDraggingPreviewScrollThumb'
@@ -1354,6 +1354,9 @@ export function EditorSection({
     <div
       className={`editor-section-column${sectionId === activeSectionId ? ' is-active' : ''}`}
       onDropCapture={handleSectionDropCapture}
+      onFocusCapture={() => markSectionActive(sectionId)}
+      onMouseDownCapture={() => markSectionActive(sectionId)}
+      onKeyDownCapture={() => markSectionActive(sectionId)}
     >
       <SectionTabBar
         tabbarGridRef={tabbarGridRef}
@@ -1446,7 +1449,6 @@ export function EditorSection({
 
       <SectionEditorArea
         sectionId={sectionId}
-        markSectionActive={markSectionActive}
         isPreviewMode={isPreviewMode}
         editorStageRef={editorStageRef}
         sectionContainerRef={sectionContainerRef}
