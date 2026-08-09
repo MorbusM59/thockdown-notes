@@ -7228,8 +7228,6 @@ ${markdownHtml}
   ])
 
   useEffect(() => {
-    if (activeSection?.isPreviewMode || !activeSection?.activeNoteId) return
-
     const onMouseDownCapture = (event: globalThis.MouseEvent) => {
       const target = event.target
       if (!(target instanceof HTMLElement)) return
@@ -7249,13 +7247,37 @@ ${markdownHtml}
         return
       }
 
+      // Resolve which section to refocus from the click's own DOM position
+      // (via .editor-section-column's data-section-id), NOT from
+      // activeSection/activeSectionId React state. This listener is attached
+      // on `window` -- an ANCESTOR of every .editor-section-column -- so its
+      // capture phase fires BEFORE that column's own onMouseDownCapture
+      // (EditorSection.tsx), which is what actually marks a still-inactive
+      // section active. A click on a still-inactive section's own chrome
+      // (e.g. its flag-jump arrow) therefore reaches this handler first,
+      // while activeSection/activeSectionId still reflect whichever section
+      // was PREVIOUSLY active -- refocusing that stale section instead of
+      // the one actually clicked. Found live as an instant, wrongly-targeted
+      // scroll/refocus racing ahead of (and stomping) the correct section's
+      // own just-activated flag jump. Falls back to getActiveSection() only
+      // for clicks that land outside every section entirely (sidebar,
+      // toolbar, dialogs), where there's no clicked section to resolve and
+      // refocusing whatever's currently active is still the right call.
+      const sectionEl = target.closest<HTMLElement>('[data-section-id]')
+      const targetSectionId = sectionEl?.dataset.sectionId
+      const targetSection = targetSectionId
+        ? sectionRegistryRef.current.get(targetSectionId)
+        : getActiveSection()
+
+      if (targetSection?.isPreviewMode || !targetSection?.activeNoteId) return
+
       event.preventDefault()
-      activeSection?.scheduleFocusEditorInEditMode()
+      targetSection.scheduleFocusEditorInEditMode()
     }
 
     window.addEventListener('mousedown', onMouseDownCapture, true)
     return () => window.removeEventListener('mousedown', onMouseDownCapture, true)
-  }, [activeSection, isAllowedNonEditorFocusTarget])
+  }, [getActiveSection, isAllowedNonEditorFocusTarget])
 
   useEffect(() => {
     const handleBeforeUnload = () => {

@@ -14,6 +14,7 @@ import { ChapterBar } from '../chapters/ChapterBar'
 
 export interface SectionEditorAreaProps {
   sectionId: string
+  isSectionActive: boolean
   isPreviewMode: boolean
   editorStageRef: RefObject<HTMLDivElement>
   sectionContainerRef: MutableRefObject<HTMLDivElement | null>
@@ -88,6 +89,7 @@ export interface SectionEditorAreaProps {
  */
 export function SectionEditorArea({
   sectionId,
+  isSectionActive,
   isPreviewMode,
   editorStageRef,
   sectionContainerRef,
@@ -197,6 +199,7 @@ export function SectionEditorArea({
                 <CM6Editor
                   bindings={bindings}
                   adapterRef={adapterRef}
+                  isSectionActive={isSectionActive}
                   noteId={activeNoteId}
                   initialText={editorDisplayText}
                   scrollbarHost={scrollbarHostEl}

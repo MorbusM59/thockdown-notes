@@ -218,6 +218,12 @@ import type {
 export interface CM6EditorProps {
   bindings?: EditorBindings;
   adapterRef?: React.MutableRefObject<EditorAdapter | null>;
+  // Whether this editor's own split-view section is the currently active
+  // one -- see navigateToFlaggedLine's own doc comment for why the
+  // flag-jump controls need this (a click on a still-inactive section's
+  // jump arrow has to activate the section and wait for that to land
+  // before it's safe to jump).
+  isSectionActive?: boolean;
   noteId?: string | null;
   initialText?: string;
   scrollbarHost?: HTMLElement | null;
@@ -670,6 +676,7 @@ const lineTokenPlugin = ViewPlugin.fromClass(class {
 export function CM6Editor({
   bindings,
   adapterRef,
+  isSectionActive = true,
   noteId,
   initialText = '',
   scrollbarHost = null,
@@ -1848,6 +1855,62 @@ export function CM6Editor({
     reconcileSelectionJumpScrollRef.current?.(view);
     return true;
   }, [updateLineLayout]);
+
+  // isSectionActive tracked via a ref (not read directly in requestFlagJump
+  // below) because requestFlagJump has to see the value as of the exact
+  // moment its mousedown fired -- a plain closure over the prop would be
+  // fine too, but the ref makes the "read at call time, not at render time"
+  // intent explicit and matches every other latest-value ref in this file.
+  const isSectionActiveRef = useRef(isSectionActive);
+  useEffect(() => {
+    isSectionActiveRef.current = isSectionActive;
+  }, [isSectionActive]);
+
+  const topFlagArrowElRef = useRef<HTMLDivElement | null>(null);
+  const bottomFlagArrowElRef = useRef<HTMLDivElement | null>(null);
+  const pendingFlagJumpElementRef = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * Click entry point for the flag-jump arrows -- NOT navigateToFlaggedLine
+   * directly. A click on a still-inactive section's jump arrow fires from
+   * the same mousedown that also activates the section (see
+   * .editor-section-column's onMouseDownCapture in EditorSection.tsx):
+   * mousedown always precedes click, so markSectionActive has already been
+   * dispatched by the time this runs, but React hasn't committed that state
+   * update yet -- isSectionActiveRef here still reflects the PRE-activation
+   * render. Jumping immediately against that risks measuring/acting on this
+   * editor before activation has actually landed. Found live as a jump that
+   * landed on the wrong line right after switching sections and clicking a
+   * jump arrow in the same gesture.
+   *
+   * Rather than caching anything about THIS click and replaying a guess at
+   * what it should have computed, a still-inactive section just remembers
+   * WHICH element was clicked. The effect below, once isSectionActive/
+   * editorReadOnly confirm the section has actually landed, replays a real
+   * `element.click()` on it -- an honest fresh click through this exact same
+   * handler, at which point isSectionActiveRef reads true and this falls
+   * through to the normal immediate branch below. Nothing about the jump
+   * itself (edge lines, flagged lines, doc content) is ever computed ahead
+   * of time or threaded through the deferral; navigateToFlaggedLine only
+   * ever runs against whatever is live at the moment it's actually called,
+   * exactly like a genuine click always did.
+   */
+  const requestFlagJump = useCallback((direction: 'up' | 'down', element: HTMLDivElement | null) => {
+    if (!isSectionActiveRef.current) {
+      pendingFlagJumpElementRef.current = element;
+      return;
+    }
+    pendingFlagJumpElementRef.current = null;
+    navigateToFlaggedLine(direction);
+  }, [navigateToFlaggedLine]);
+
+  useEffect(() => {
+    if (!isSectionActive || editorReadOnly) return;
+    const element = pendingFlagJumpElementRef.current;
+    if (!element) return;
+    pendingFlagJumpElementRef.current = null;
+    element.click();
+  }, [isSectionActive, editorReadOnly]);
 
   useEffect(() => {
     navigateToFlaggedLineRef.current = navigateToFlaggedLine;
@@ -4212,6 +4275,7 @@ export function CM6Editor({
               comment. */}
           {reviewGutterFlagBoxWidthPx > 0 && scrollerClientWidthPx > 0 && reviewGutterEdgeLines && reviewGutterHasFlagAboveTop && (
             <div
+              ref={topFlagArrowElRef}
               className="absolute editor-text select-none"
               style={{
                 top: reviewGutterEdgeLines.topBoxTopPx,
@@ -4227,7 +4291,7 @@ export function CM6Editor({
                 backgroundColor: 'var(--color-gutter-bg)',
                 color: 'var(--color-editor-edit-text)',
               }}
-              onClick={() => navigateToFlaggedLine('up')}
+              onClick={() => requestFlagJump('up', topFlagArrowElRef.current)}
               onContextMenu={(event) => handleGutterFlagContextMenu(reviewGutterEdgeLines.topLine, event)}
             >
               <span className="fa-solid fa-up-long" aria-hidden="true" />
@@ -4235,6 +4299,7 @@ export function CM6Editor({
           )}
           {reviewGutterFlagBoxWidthPx > 0 && scrollerClientWidthPx > 0 && reviewGutterEdgeLines && reviewGutterHasFlagBelowBottom && (
             <div
+              ref={bottomFlagArrowElRef}
               className="absolute editor-text select-none"
               style={{
                 top: reviewGutterEdgeLines.bottomBoxTopPx,
@@ -4250,7 +4315,7 @@ export function CM6Editor({
                 backgroundColor: 'var(--color-gutter-bg)',
                 color: 'var(--color-editor-edit-text)',
               }}
-              onClick={() => navigateToFlaggedLine('down')}
+              onClick={() => requestFlagJump('down', bottomFlagArrowElRef.current)}
               onContextMenu={(event) => handleGutterFlagContextMenu(reviewGutterEdgeLines.bottomLine, event)}
             >
               <span className="fa-solid fa-down-long" aria-hidden="true" />
