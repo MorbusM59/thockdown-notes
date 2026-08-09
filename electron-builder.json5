@@ -15,7 +15,9 @@
     "assets/icon.icns",
     "assets/icon.png",
     "assets/md.ico",
+    "assets/md.icns",
     "assets/txt.ico",
+    "assets/txt.icns",
     "node_modules/**/*",
     "package.json"
   ],
