@@ -138,7 +138,7 @@ export function MouseCursorOverlay({
 
   const {
     dotColor, centerColor, trailColor, dotCount, radiusPx, spinHz, trailThicknessPx, trailFadeMs,
-    dotSizePx, centerSizePx, pulseMagnitude, pulseHz,
+    dotSizePx, centerSizePx, haloColor, haloRadiusPx, haloFalloff, pulseMagnitude, pulseHz,
     clickRamp, clickSkew, clickSpeedX, clickMaxSpeed, clickMinHoldMs, clickBalance,
   } = settings
 
@@ -153,6 +153,7 @@ export function MouseCursorOverlay({
     const dot = applyInvert(resolveRgba(dotColor), filterInvert)
     const center = applyInvert(resolveRgba(centerColor), filterInvert)
     const trail = applyInvert(resolveRgba(trailColor), filterInvert)
+    const halo = applyInvert(resolveRgba(haloColor), filterInvert)
     // A 1000ms fade at 1Hz spin should sweep exactly one full revolution
     // (2*PI) -- the head chasing a tail whose oldest point just finished
     // decaying where the head currently is. Capped at one revolution: past
@@ -340,6 +341,21 @@ export function MouseCursorOverlay({
         }
       }
 
+      if (haloRadiusPx > 0) {
+        const haloOuterRadius = haloRadiusPx * dpr
+        const falloffStop = haloFalloff / 100
+        const gradient = ctx!.createRadialGradient(cx, cy, 0, cx, cy, haloOuterRadius)
+        gradient.addColorStop(0, `rgba(${halo.r}, ${halo.g}, ${halo.b}, ${halo.a * fadeAlpha})`)
+        gradient.addColorStop(falloffStop, `rgba(${halo.r}, ${halo.g}, ${halo.b}, ${halo.a * falloffStop * fadeAlpha})`)
+        gradient.addColorStop(1, `rgba(${halo.r}, ${halo.g}, ${halo.b}, 0)`)
+        ctx!.save()
+        ctx!.fillStyle = gradient
+        ctx!.beginPath()
+        ctx!.arc(cx, cy, haloOuterRadius, 0, Math.PI * 2)
+        ctx!.fill()
+        ctx!.restore()
+      }
+
       if (centerSizePx > 0) {
         ctx!.save()
         ctx!.fillStyle = `rgba(${center.r}, ${center.g}, ${center.b}, ${center.a * fadeAlpha})`
@@ -435,7 +451,7 @@ export function MouseCursorOverlay({
     }
   }, [
     radiusPx, trailThicknessPx, trailFadeMs, spinHz, fadeMs, dotCount, dotColor, centerColor, trailColor,
-    dotSizePx, centerSizePx, pulseMagnitude, pulseHz, filterInvert,
+    dotSizePx, centerSizePx, haloColor, haloRadiusPx, haloFalloff, pulseMagnitude, pulseHz, filterInvert,
     clickRamp, clickSkew, clickSpeedX, clickMaxSpeed, clickMinHoldMs, clickBalance,
   ])
 

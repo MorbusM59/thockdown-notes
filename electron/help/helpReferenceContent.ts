@@ -695,11 +695,10 @@ Every feature in the app, described individually: where to find it, what it does
 > **Where?**
 > Settings panel → Mouse Options.
 
-*An optional animated cursor replacement: orbiting dots with fading trails, a center dot, and a breathing pulse, all pinned to the real pointer position. Off by default.*
+*An optional animated cursor replacement: orbiting dots with fading trails, a center dot, a soft halo, and a breathing pulse, all pinned to the real pointer position. Off by default — flip it on in [Performance]($#performance).*
 
-- Top button toggles the custom cursor on/off; while on, the native cursor is hidden everywhere in the app, not just the editor — sidebar, toolbar, dialogs, all of it. This toggle always starts off and isn't part of a layout — it stays as you left it across layout switches and app restarts until you flip it again.
-- The 4 buttons beside it (H, S, V, A) stage a color by dragging up/down or scrolling on each — left-click one of the 3 swatches below (circling dots, center dot, trail) to paint it onto that element; hold right-click on a swatch to load its current color back into H/S/V/A.
-- Sliders: number of circling dots, orbit radius, spin speed (-4Hz to 4Hz, negative reverses direction, 0 freezes it), trail fade duration (how long a trail particle takes to decay after the head passes it — e.g. 1000ms at 1Hz spin sweeps exactly one full revolution), trail thickness (0–12px, 0 hides it), dot size (0–12px, 0 hides it), center dot size (0–12px, 0 hides it), and a pulse effect that breathes the orbit's radius outward — magnitude 0 keeps it locked at its base size, magnitude 1 breathes up to 200% of it — at a given speed. Colors and these sliders are saved per layout, same as the rest of your theming.
+- Top-left button is a halo color swatch. The 4 buttons beside it (H, S, V, A) stage a color by dragging up/down or scrolling on each — left-click a swatch (halo, circling dots, center dot, trail) to paint it onto that element; hold right-click on a swatch to load its current color back into H/S/V/A.
+- Sliders: number of circling dots, orbit radius, spin speed (-4Hz to 4Hz, negative reverses direction, 0 freezes it), trail fade duration (how long a trail particle takes to decay after the head passes it — e.g. 1000ms at 1Hz spin sweeps exactly one full revolution), trail thickness (0–12px, 0 hides it), dot size (0–12px, 0 hides it), center dot size (0–12px, 0 hides it), halo radius (0 hides it, capped at the same max as orbit radius), fall-off (0–100 — how far out the halo's glow stays near-opaque before fading to nothing at its edge; low values fade fast near the center, high values stay bright almost all the way to the rim), and a pulse effect that breathes the orbit's radius outward — magnitude 0 keeps it locked at its base size, magnitude 1 breathes up to 200% of it — at a given speed. The halo is rendered centered behind the center dot. Colors and these sliders are saved per layout, same as the rest of your theming.
 - Click response: left-click tightens the orbit (smaller radius, faster spin) and right-click widens it (larger radius, slower spin), up to 200% and down to 50% of your base radius/spin. Every click is handled the same way regardless of how long you hold it — a plain click is too fast to tell "tap" from "hold" apart — it rises to full strength, stays there while held, then eases back down to baseline on release instead of snapping. Six more sliders tune the feel, using the same bell-curve model as Scrolling Behavior's ramp/shape/speed/max-speed: click ramp (linear → bouncy), click shape (apex bias), click speed (how long the rise/fall takes -- weighted so the high-speed end of the slider gives much finer control than the low-speed end), click max speed (how strong the effect gets), min impact (floors how long a click is treated as held internally, 0–200ms, so even a quick real click still registers instead of flickering), and click balance (center = radius and spin both affected equally; left = radius only; right = spin only).
 
 ### [Keystroke Sounds](#keystroke-sounds)
@@ -735,10 +734,12 @@ Every feature in the app, described individually: where to find it, what it does
 > **Where?**
 > Settings panel → Performance.
 
-*Two toggles for easing load on constrained machines.*
+*Toggles for easing load on constrained machines, plus the custom cursor switch.*
 
 - **Reduce visual effects** forces [Glaze]($#glaze), [Filters]($#filters), and the colorize filter off, without discarding your slider positions (Invert is kept, since it's often load-bearing for dark layouts).
 - **Reduce caret animation** stops the idle caret blink, easing compositor load.
+- **Defer preview on rapid input** coalesces preview updates onto one frame during fast key-repeat (e.g. held Backspace).
+- The cursor button toggles the [custom cursor]($#mouse-options) on/off; while on, the native cursor is hidden everywhere in the app, not just the editor — sidebar, toolbar, dialogs, all of it. This toggle always starts off and isn't part of a layout — it stays as you left it across layout switches and app restarts until you flip it again.
 
 ### [Debugging](#debugging)
 

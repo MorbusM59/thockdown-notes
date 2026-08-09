@@ -76,6 +76,13 @@ import {
   CURSOR_CENTER_SIZE_MIN_PX,
   CURSOR_CENTER_SIZE_MAX_PX,
   CURSOR_CENTER_SIZE_DEFAULT_PX,
+  CURSOR_HALO_RADIUS_MIN_PX,
+  CURSOR_HALO_RADIUS_MAX_PX,
+  CURSOR_HALO_RADIUS_DEFAULT_PX,
+  CURSOR_HALO_FALLOFF_MIN,
+  CURSOR_HALO_FALLOFF_MAX,
+  CURSOR_HALO_FALLOFF_STEP,
+  CURSOR_HALO_FALLOFF_DEFAULT,
   CURSOR_PULSE_MAGNITUDE_MIN,
   CURSOR_PULSE_MAGNITUDE_MAX,
   CURSOR_PULSE_MAGNITUDE_STEP,
@@ -143,7 +150,7 @@ type ViewStyleKey =
 type EditorTextColorTargetKey = 'editorEditText' | 'editorRenderText'
 type HsvaControlKey = 'h' | 's' | 'v' | 'a'
 type TextureControlKey = 'granularity' | 'smoothness'
-type CursorColorTargetKey = 'dot' | 'center' | 'trail'
+type CursorColorTargetKey = 'dot' | 'center' | 'trail' | 'halo'
 
 type HsvaDragState = {
   control: HsvaControlKey
@@ -507,6 +514,11 @@ export interface SidebarOptionsPanelProps {
   setCustomCursorDotSizePx: (value: number) => void
   customCursorCenterSizePx: number
   setCustomCursorCenterSizePx: (value: number) => void
+  customCursorHaloColor: string
+  customCursorHaloRadiusPx: number
+  setCustomCursorHaloRadiusPx: (value: number) => void
+  customCursorHaloFalloff: number
+  setCustomCursorHaloFalloff: (value: number) => void
   customCursorPulseMagnitude: number
   setCustomCursorPulseMagnitude: (value: number) => void
   customCursorPulseHz: number
@@ -730,6 +742,11 @@ export function SidebarOptionsPanel({
   setCustomCursorDotSizePx,
   customCursorCenterSizePx,
   setCustomCursorCenterSizePx,
+  customCursorHaloColor,
+  customCursorHaloRadiusPx,
+  setCustomCursorHaloRadiusPx,
+  customCursorHaloFalloff,
+  setCustomCursorHaloFalloff,
   customCursorPulseMagnitude,
   setCustomCursorPulseMagnitude,
   customCursorPulseHz,
@@ -1996,13 +2013,15 @@ export function SidebarOptionsPanel({
         <div className="options-mouse-settings-grid" role="group" aria-label="Custom cursor color controls">
           <button
             type="button"
-            className={`btn-icon options-color-swatch options-mouse-cursor-toggle${customCursorEnabled ? ' active' : ''}`}
-            aria-pressed={customCursorEnabled}
-            title={customCursorEnabled ? 'Disable custom mouse cursor' : 'Enable custom mouse cursor'}
-            onClick={() => setCustomCursorEnabled(!customCursorEnabled)}
-          >
-            <span className="fa-solid fa-arrow-pointer" aria-hidden="true" />
-          </button>
+            className="btn-icon options-color-swatch"
+            style={{ background: customCursorHaloColor }}
+            title="Halo color -- click to apply, hold right-click to copy"
+            onClick={() => applyCursorColorToTarget('halo')}
+            onMouseDown={(event) => startCursorColorCopyHold('halo', event)}
+            onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
+            onMouseLeave={clearCursorColorArmTimer}
+            onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
+          ><span className="options-color-swatch-glyph fa-solid fa-circle" aria-hidden="true" /></button>
           <button
             type="button"
             className="btn-icon options-color-swatch"
@@ -2182,6 +2201,32 @@ export function SidebarOptionsPanel({
               ariaLabel="Trail fade duration in milliseconds -- how long a trail particle takes to decay after the head passes it"
               defaultValue={CURSOR_TRAIL_FADE_DEFAULT_MS}
               onCommit={(value) => setCustomCursorTrailFadeMs(clamp(value, CURSOR_TRAIL_FADE_MIN_MS, CURSOR_TRAIL_FADE_MAX_MS))}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-3">
+            <CompactScrollbarSlider
+              id="cursor-halo-radius"
+              min={CURSOR_HALO_RADIUS_MIN_PX}
+              max={CURSOR_HALO_RADIUS_MAX_PX}
+              step={1}
+              value={customCursorHaloRadiusPx}
+              trackLabel="halo"
+              ariaLabel="Halo radius in pixels -- 0 disables the halo"
+              defaultValue={CURSOR_HALO_RADIUS_DEFAULT_PX}
+              onCommit={(value) => setCustomCursorHaloRadiusPx(clamp(value, CURSOR_HALO_RADIUS_MIN_PX, CURSOR_HALO_RADIUS_MAX_PX))}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-3">
+            <CompactScrollbarSlider
+              id="cursor-halo-falloff"
+              min={CURSOR_HALO_FALLOFF_MIN}
+              max={CURSOR_HALO_FALLOFF_MAX}
+              step={CURSOR_HALO_FALLOFF_STEP}
+              value={customCursorHaloFalloff}
+              trackLabel="fall-off"
+              ariaLabel="Halo fall-off -- higher keeps the glow near-opaque further out before it fades at the rim"
+              defaultValue={CURSOR_HALO_FALLOFF_DEFAULT}
+              onCommit={(value) => setCustomCursorHaloFalloff(clamp(Math.round(value), CURSOR_HALO_FALLOFF_MIN, CURSOR_HALO_FALLOFF_MAX))}
             />
           </div>
 
@@ -2536,6 +2581,15 @@ export function SidebarOptionsPanel({
             title="Defer preview on rapid input (coalesces the preview update onto one frame during fast key-repeat, e.g. held Backspace)"
           >
             <span className="fa-solid fa-gauge-high" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={`btn-icon${customCursorEnabled ? ' is-active' : ''}`}
+            onClick={() => setCustomCursorEnabled(!customCursorEnabled)}
+            aria-pressed={customCursorEnabled}
+            title={customCursorEnabled ? 'Disable custom mouse cursor' : 'Enable custom mouse cursor'}
+          >
+            <span className="fa-solid fa-arrow-pointer" aria-hidden="true" />
           </button>
         </div>
       </AccordionSection>

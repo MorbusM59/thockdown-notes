@@ -17,6 +17,17 @@ export interface CustomCursorSettings {
   trailFadeMs: number
   dotSizePx: number
   centerSizePx: number
+  /** Radial glow rendered centered behind the center dot. 0 = no halo. Bounded by CURSOR_RADIUS_MAX_PX, independent of the live radiusPx value. */
+  haloColor: string
+  haloRadiusPx: number
+  /**
+   * Where (0-100, as a percent of haloRadiusPx) the gradient's one interior
+   * stop sits between the fully-opaque center (0%) and fully-transparent
+   * edge (100%). At that stop, the halo color's alpha is multiplied by
+   * falloff/100 -- so a low value fades out fast near the center, a high
+   * value stays near-opaque until close to the rim.
+   */
+  haloFalloff: number
   pulseMagnitude: number
   pulseHz: number
   /**
@@ -64,6 +75,17 @@ export const CURSOR_TRAIL_FADE_DEFAULT_MS = 500
 export const CURSOR_DOT_SIZE_MIN_PX = 0
 export const CURSOR_DOT_SIZE_MAX_PX = 12
 export const CURSOR_DOT_SIZE_DEFAULT_PX = 2
+
+// Bounded by CURSOR_RADIUS_MAX_PX itself (not the live radiusPx value) --
+// see CustomCursorSettings.haloRadiusPx.
+export const CURSOR_HALO_RADIUS_MIN_PX = 0
+export const CURSOR_HALO_RADIUS_MAX_PX = CURSOR_RADIUS_MAX_PX
+export const CURSOR_HALO_RADIUS_DEFAULT_PX = 0
+
+export const CURSOR_HALO_FALLOFF_MIN = 0
+export const CURSOR_HALO_FALLOFF_MAX = 100
+export const CURSOR_HALO_FALLOFF_STEP = 1
+export const CURSOR_HALO_FALLOFF_DEFAULT = 50
 
 export const CURSOR_CENTER_SIZE_MIN_PX = 0
 export const CURSOR_CENTER_SIZE_MAX_PX = 12
@@ -136,6 +158,7 @@ export const CURSOR_CLICK_TIGHTEN_MIN_MULTIPLIER = 0.5
 export const DEFAULT_CURSOR_DOT_COLOR = 'rgba(0, 0, 0, 0.6)'
 export const DEFAULT_CURSOR_CENTER_COLOR = 'rgba(0, 0, 0, 0.85)'
 export const DEFAULT_CURSOR_TRAIL_COLOR = 'rgba(0, 0, 0, 0.35)'
+export const DEFAULT_CURSOR_HALO_COLOR = 'rgba(0, 0, 0, 0.6)'
 
 export const DEFAULT_CUSTOM_CURSOR_SETTINGS: CustomCursorSettings = {
   enabled: false,
@@ -149,6 +172,9 @@ export const DEFAULT_CUSTOM_CURSOR_SETTINGS: CustomCursorSettings = {
   trailFadeMs: CURSOR_TRAIL_FADE_DEFAULT_MS,
   dotSizePx: CURSOR_DOT_SIZE_DEFAULT_PX,
   centerSizePx: CURSOR_CENTER_SIZE_DEFAULT_PX,
+  haloColor: DEFAULT_CURSOR_HALO_COLOR,
+  haloRadiusPx: CURSOR_HALO_RADIUS_DEFAULT_PX,
+  haloFalloff: CURSOR_HALO_FALLOFF_DEFAULT,
   pulseMagnitude: CURSOR_PULSE_MAGNITUDE_DEFAULT,
   pulseHz: CURSOR_PULSE_HZ_DEFAULT,
   clickRamp: CURSOR_CLICK_RAMP_DEFAULT,

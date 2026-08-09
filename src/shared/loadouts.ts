@@ -88,6 +88,9 @@ export type UiLayoutLoadout = {
   cursorTrailFadeMs: number;
   cursorDotSizePx: number;
   cursorCenterSizePx: number;
+  cursorHaloColor: string;
+  cursorHaloRadiusPx: number;
+  cursorHaloFalloff: number;
   cursorPulseMagnitude: number;
   cursorPulseHz: number;
   // Click response tuning (Options > Mouse options, "click response"

@@ -63,6 +63,10 @@ import {
   CURSOR_DOT_SIZE_MAX_PX,
   CURSOR_CENTER_SIZE_MIN_PX,
   CURSOR_CENTER_SIZE_MAX_PX,
+  CURSOR_HALO_RADIUS_MIN_PX,
+  CURSOR_HALO_RADIUS_MAX_PX,
+  CURSOR_HALO_FALLOFF_MIN,
+  CURSOR_HALO_FALLOFF_MAX,
   CURSOR_PULSE_MAGNITUDE_MIN,
   CURSOR_PULSE_MAGNITUDE_MAX,
   CURSOR_PULSE_HZ_MIN,
@@ -256,7 +260,7 @@ type ViewStyleKey =
 type EditorTextColorTargetKey = 'editorEditText' | 'editorRenderText'
 
 type HsvaControlKey = 'h' | 's' | 'v' | 'a'
-type CursorColorTargetKey = 'dot' | 'center' | 'trail'
+type CursorColorTargetKey = 'dot' | 'center' | 'trail' | 'halo'
 const GLAZE_RADIAL_CORNERS = ['top left', 'top right', 'bottom right', 'bottom left'] as const
 
 // Fallbacks for chrome reading through the section registry before any
@@ -934,6 +938,9 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     cursorTrailFadeMs: clamp(toFiniteNumber(source.cursorTrailFadeMs, DEFAULT_CUSTOM_CURSOR_SETTINGS.trailFadeMs), CURSOR_TRAIL_FADE_MIN_MS, CURSOR_TRAIL_FADE_MAX_MS),
     cursorDotSizePx: clamp(toFiniteNumber(source.cursorDotSizePx, DEFAULT_CUSTOM_CURSOR_SETTINGS.dotSizePx), CURSOR_DOT_SIZE_MIN_PX, CURSOR_DOT_SIZE_MAX_PX),
     cursorCenterSizePx: clamp(toFiniteNumber(source.cursorCenterSizePx, DEFAULT_CUSTOM_CURSOR_SETTINGS.centerSizePx), CURSOR_CENTER_SIZE_MIN_PX, CURSOR_CENTER_SIZE_MAX_PX),
+    cursorHaloColor: typeof source.cursorHaloColor === 'string' ? source.cursorHaloColor : DEFAULT_CUSTOM_CURSOR_SETTINGS.haloColor,
+    cursorHaloRadiusPx: clamp(toFiniteNumber(source.cursorHaloRadiusPx, DEFAULT_CUSTOM_CURSOR_SETTINGS.haloRadiusPx), CURSOR_HALO_RADIUS_MIN_PX, CURSOR_HALO_RADIUS_MAX_PX),
+    cursorHaloFalloff: clamp(toFiniteNumber(source.cursorHaloFalloff, DEFAULT_CUSTOM_CURSOR_SETTINGS.haloFalloff), CURSOR_HALO_FALLOFF_MIN, CURSOR_HALO_FALLOFF_MAX),
     cursorPulseMagnitude: roundForSignature(clamp(toFiniteNumber(source.cursorPulseMagnitude, DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseMagnitude), CURSOR_PULSE_MAGNITUDE_MIN, CURSOR_PULSE_MAGNITUDE_MAX)),
     cursorPulseHz: roundForSignature(clamp(toFiniteNumber(source.cursorPulseHz, DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseHz), CURSOR_PULSE_HZ_MIN, CURSOR_PULSE_HZ_MAX)),
     cursorClickRamp: roundForSignature(clamp(toFiniteNumber(source.cursorClickRamp, DEFAULT_CUSTOM_CURSOR_SETTINGS.clickRamp), CURSOR_CLICK_RAMP_MIN, CURSOR_CLICK_RAMP_MAX)),
@@ -1663,6 +1670,9 @@ function App() {
   const [customCursorTrailFadeMs, setCustomCursorTrailFadeMs] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.trailFadeMs)
   const [customCursorDotSizePx, setCustomCursorDotSizePx] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.dotSizePx)
   const [customCursorCenterSizePx, setCustomCursorCenterSizePx] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.centerSizePx)
+  const [customCursorHaloColor, setCustomCursorHaloColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.haloColor)
+  const [customCursorHaloRadiusPx, setCustomCursorHaloRadiusPx] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.haloRadiusPx)
+  const [customCursorHaloFalloff, setCustomCursorHaloFalloff] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.haloFalloff)
   const [customCursorPulseMagnitude, setCustomCursorPulseMagnitude] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseMagnitude)
   const [customCursorPulseHz, setCustomCursorPulseHz] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseHz)
   const [customCursorClickRamp, setCustomCursorClickRamp] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.clickRamp)
@@ -2260,6 +2270,9 @@ function App() {
     trailFadeMs: customCursorTrailFadeMs,
     dotSizePx: customCursorDotSizePx,
     centerSizePx: customCursorCenterSizePx,
+    haloColor: customCursorHaloColor,
+    haloRadiusPx: customCursorHaloRadiusPx,
+    haloFalloff: customCursorHaloFalloff,
     pulseMagnitude: customCursorPulseMagnitude,
     pulseHz: customCursorPulseHz,
     clickRamp: customCursorClickRamp,
@@ -2280,6 +2293,9 @@ function App() {
     customCursorTrailFadeMs,
     customCursorDotSizePx,
     customCursorCenterSizePx,
+    customCursorHaloColor,
+    customCursorHaloRadiusPx,
+    customCursorHaloFalloff,
     customCursorPulseMagnitude,
     customCursorPulseHz,
     customCursorClickRamp,
@@ -2451,6 +2467,9 @@ function App() {
       cursorTrailFadeMs: customCursorTrailFadeMs,
       cursorDotSizePx: customCursorDotSizePx,
       cursorCenterSizePx: customCursorCenterSizePx,
+      cursorHaloColor: customCursorHaloColor,
+      cursorHaloRadiusPx: customCursorHaloRadiusPx,
+      cursorHaloFalloff: customCursorHaloFalloff,
       cursorPulseMagnitude: customCursorPulseMagnitude,
       cursorPulseHz: customCursorPulseHz,
       cursorClickRamp: customCursorClickRamp,
@@ -2497,6 +2516,9 @@ function App() {
     customCursorTrailFadeMs,
     customCursorDotSizePx,
     customCursorCenterSizePx,
+    customCursorHaloColor,
+    customCursorHaloRadiusPx,
+    customCursorHaloFalloff,
     customCursorPulseMagnitude,
     customCursorPulseHz,
     customCursorClickRamp,
@@ -2625,6 +2647,15 @@ function App() {
     setCustomCursorCenterSizePx(clamp(
       loadout.cursorCenterSizePx ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.centerSizePx,
       CURSOR_CENTER_SIZE_MIN_PX, CURSOR_CENTER_SIZE_MAX_PX,
+    ))
+    setCustomCursorHaloColor(loadout.cursorHaloColor ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.haloColor)
+    setCustomCursorHaloRadiusPx(clamp(
+      loadout.cursorHaloRadiusPx ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.haloRadiusPx,
+      CURSOR_HALO_RADIUS_MIN_PX, CURSOR_HALO_RADIUS_MAX_PX,
+    ))
+    setCustomCursorHaloFalloff(clamp(
+      loadout.cursorHaloFalloff ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.haloFalloff,
+      CURSOR_HALO_FALLOFF_MIN, CURSOR_HALO_FALLOFF_MAX,
     ))
     setCustomCursorPulseMagnitude(clamp(
       loadout.cursorPulseMagnitude ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.pulseMagnitude,
@@ -3132,15 +3163,19 @@ function App() {
     const css = rgbaToCssColor(hsvaToRgba(cursorColorHsva))
     if (target === 'dot') setCustomCursorDotColor(css)
     else if (target === 'center') setCustomCursorCenterColor(css)
+    else if (target === 'halo') setCustomCursorHaloColor(css)
     else setCustomCursorTrailColor(css)
   }, [cursorColorHsva])
 
   const copyCursorTargetColorToHsva = useCallback((target: CursorColorTargetKey) => {
-    const css = target === 'dot' ? customCursorDotColor : target === 'center' ? customCursorCenterColor : customCursorTrailColor
+    const css = target === 'dot' ? customCursorDotColor
+      : target === 'center' ? customCursorCenterColor
+      : target === 'halo' ? customCursorHaloColor
+      : customCursorTrailColor
     const rgba = parseCssColorToRgba(css)
     if (!rgba) return
     setCursorColorHsva(rgbaToHsva(rgba))
-  }, [customCursorDotColor, customCursorCenterColor, customCursorTrailColor])
+  }, [customCursorDotColor, customCursorCenterColor, customCursorHaloColor, customCursorTrailColor])
 
   const startCursorColorCopyHold = useCallback((target: CursorColorTargetKey, event: MouseEvent<HTMLButtonElement>) => {
     if (event.button !== 2) return
@@ -7794,6 +7829,11 @@ ${markdownHtml}
                         setCustomCursorDotSizePx={setCustomCursorDotSizePx}
                         customCursorCenterSizePx={customCursorCenterSizePx}
                         setCustomCursorCenterSizePx={setCustomCursorCenterSizePx}
+                        customCursorHaloColor={customCursorHaloColor}
+                        customCursorHaloRadiusPx={customCursorHaloRadiusPx}
+                        setCustomCursorHaloRadiusPx={setCustomCursorHaloRadiusPx}
+                        customCursorHaloFalloff={customCursorHaloFalloff}
+                        setCustomCursorHaloFalloff={setCustomCursorHaloFalloff}
                         customCursorPulseMagnitude={customCursorPulseMagnitude}
                         setCustomCursorPulseMagnitude={setCustomCursorPulseMagnitude}
                         customCursorPulseHz={customCursorPulseHz}
