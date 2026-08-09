@@ -1855,6 +1855,21 @@ export function CM6Editor({
   // does across one) synchronously in this same effect, rather than
   // however many frames its own default schedule would otherwise take.
   //
+  // requestMeasure() alone still wasn't the whole story: CM6's own
+  // scroll-position preservation across the reflow keeps scrollTop at
+  // roughly the same VISUAL spot, but that preserved value has no reason to
+  // still be an exact multiple of the NEW lineHeightPx the way it was of
+  // the old one -- e.g. scrollTop 240 was a clean 10 rows at 24px, but isn't
+  // a whole number of rows at 26px. The fixed-position grid overlay doesn't
+  // move with scrollTop, so an off-grid scrollTop is exactly what leaves
+  // every visible row sitting off it, and it stayed that way until whatever
+  // next scroll gesture happened to run the same quantization handleWheel
+  // already applies on every wheel tick. Re-running that identical
+  // rounding here, once, closes the gap instead of waiting on the user's
+  // next scroll to do it as a side effect -- and it fires for every
+  // mounted CM6Editor independently (each split-view section has its own),
+  // not just whichever one happens to be focused.
+  //
   // Separately (still worth keeping): scheduleCaretUpdateAfterResize/
   // scheduleSelectionHighlightUpdate/syncCustomScrollbar are the exact same
   // three calls the ResizeObserver path elsewhere in this file already
@@ -1862,7 +1877,21 @@ export function CM6Editor({
   // even though the container's own outer bounding box doesn't move, so
   // these overlays don't paint from a stale pre-change measurement either.
   useEffect(() => {
-    viewRef.current?.requestMeasure();
+    const view = viewRef.current;
+    if (view) {
+      view.requestMeasure();
+      if (lineHeightPx > 0) {
+        const scroller = view.scrollDOM;
+        const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+        const quantizedScrollTopPx = Math.max(
+          0,
+          Math.min(maxScrollTopPx, Math.round(scroller.scrollTop / lineHeightPx) * lineHeightPx),
+        );
+        if (Math.abs(quantizedScrollTopPx - scroller.scrollTop) > 0.01) {
+          scroller.scrollTop = quantizedScrollTopPx;
+        }
+      }
+    }
     scheduleCaretUpdateAfterResize();
     scheduleSelectionHighlightUpdate();
     syncCustomScrollbar();
