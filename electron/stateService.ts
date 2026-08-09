@@ -299,6 +299,55 @@ function sanitizeSidebarViewState(
   };
 }
 
+// Type-preserving passthrough for optional numeric/string fields whose
+// range clamping already happens where they're consumed in the renderer
+// (see the `?? default` / clamp() calls around each appState.menu.* read in
+// App.tsx) -- sanitizeMenu's job here is just making sure corrupt/foreign
+// data in the JSON file can't leak through as the wrong type, not
+// re-deriving each field's valid range.
+function sanitizeOptionalNumber(input: unknown): number | undefined {
+  return typeof input === 'number' && Number.isFinite(input) ? input : undefined;
+}
+
+function sanitizeOptionalString(input: unknown): string | undefined {
+  return typeof input === 'string' ? input : undefined;
+}
+
+function sanitizeOptionalBoolean(input: unknown): boolean | undefined {
+  return typeof input === 'boolean' ? input : undefined;
+}
+
+const VALID_DARK_MODE_KEYS = ['none', 'mono', 'red', 'dusk', 'neon', 'matrix'] as const;
+
+function sanitizeDarkMode(input: unknown): (typeof VALID_DARK_MODE_KEYS)[number] | undefined {
+  return (VALID_DARK_MODE_KEYS as readonly unknown[]).includes(input) ? input as (typeof VALID_DARK_MODE_KEYS)[number] : undefined;
+}
+
+const VALID_TYPING_SOUND_SETS = ['A', 'B', 'C', 'D'] as const;
+
+function sanitizeTypingSoundSet(input: unknown): (typeof VALID_TYPING_SOUND_SETS)[number] | undefined {
+  return (VALID_TYPING_SOUND_SETS as readonly unknown[]).includes(input) ? input as (typeof VALID_TYPING_SOUND_SETS)[number] : undefined;
+}
+
+function sanitizeTabBarMode(input: unknown): 'tags' | 'tabs' | undefined {
+  return input === 'tags' || input === 'tabs' ? input : undefined;
+}
+
+function sanitizeMusicActiveSlots(input: unknown): number[] | undefined {
+  return Array.isArray(input)
+    ? input.filter((value): value is number => Number.isInteger(value) && value >= 1 && value <= 5)
+    : undefined;
+}
+
+function sanitizeReviewGutterVisibleBySection(input: unknown): Record<string, boolean> {
+  if (!input || typeof input !== 'object') return {};
+  const result: Record<string, boolean> = {};
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (key.length > 0) result[key] = Boolean(value);
+  }
+  return result;
+}
+
 function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): PersistedMenuState {
   const selectedMonths = Array.isArray(input?.selectedMonths)
     ? input.selectedMonths.filter((value): value is number => Number.isInteger(value) && value >= 1 && value <= 12)
@@ -335,10 +384,55 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
       20,
       DEFAULT_APP_STATE.menu!.borderRadiusRegularPx ?? 6,
     ),
+    spacingRegularPx: sanitizeOptionalNumber(input?.spacingRegularPx),
+    borderAlphaPercent: sanitizeOptionalNumber(input?.borderAlphaPercent),
+    boxShadowAlphaPercent: sanitizeOptionalNumber(input?.boxShadowAlphaPercent),
+    darkMode: sanitizeDarkMode(input?.darkMode),
+    filterInvert: sanitizeOptionalNumber(input?.filterInvert),
+    filterSepia: sanitizeOptionalNumber(input?.filterSepia),
+    filterHueRotate: sanitizeOptionalNumber(input?.filterHueRotate),
+    filterBrightness: sanitizeOptionalNumber(input?.filterBrightness),
+    filterContrast: sanitizeOptionalNumber(input?.filterContrast),
+    filterSaturate: sanitizeOptionalNumber(input?.filterSaturate),
+    filterColorize: sanitizeOptionalNumber(input?.filterColorize),
+    renderScrollDynamic: sanitizeOptionalNumber(input?.renderScrollDynamic),
+    renderScrollResponsiveness: sanitizeOptionalNumber(input?.renderScrollResponsiveness),
+    renderScrollTotalTimeSec: sanitizeOptionalNumber(input?.renderScrollTotalTimeSec),
+    renderScrollMaxSpeedPxPerSec: sanitizeOptionalNumber(input?.renderScrollMaxSpeedPxPerSec),
+    renderScrollSkew: sanitizeOptionalNumber(input?.renderScrollSkew),
+    // Legacy pre-curve-model keys -- kept as passthrough (not written by any
+    // current save, but still read as a migration fallback for saves from
+    // before renderScrollDynamic/Responsiveness existed; see App.tsx).
+    renderScrollEaseMultiplier: sanitizeOptionalNumber(input?.renderScrollEaseMultiplier),
+    renderScrollDistanceTimeInfluence: sanitizeOptionalNumber(input?.renderScrollDistanceTimeInfluence),
+    highlightCaretColor: sanitizeOptionalString(input?.highlightCaretColor),
+    highlightSearchColor: sanitizeOptionalString(input?.highlightSearchColor),
+    highlightSelectionColor: sanitizeOptionalString(input?.highlightSelectionColor),
+    highlightSelectionEditColor: sanitizeOptionalString(input?.highlightSelectionEditColor),
+    highlightSelectionRenderColor: sanitizeOptionalString(input?.highlightSelectionRenderColor),
+    highlightTextBaseColor: sanitizeOptionalString(input?.highlightTextBaseColor),
+    highlightTextEmbossColor: sanitizeOptionalString(input?.highlightTextEmbossColor),
+    highlightTextEmbossEditColor: sanitizeOptionalString(input?.highlightTextEmbossEditColor),
+    highlightTextEmbossRenderColor: sanitizeOptionalString(input?.highlightTextEmbossRenderColor),
+    highlightTextEmbossUiColor: sanitizeOptionalString(input?.highlightTextEmbossUiColor),
+    highlightBackgroundColor: sanitizeOptionalString(input?.highlightBackgroundColor),
+    editorEditTextColor: sanitizeOptionalString(input?.editorEditTextColor),
+    editorRenderTextColor: sanitizeOptionalString(input?.editorRenderTextColor),
+    exportFolder: sanitizeOptionalString(input?.exportFolder),
+    highlightTopBackgroundColor: sanitizeOptionalString(input?.highlightTopBackgroundColor),
+    highlightBottomBackgroundColor: sanitizeOptionalString(input?.highlightBottomBackgroundColor),
     highlightGridOutlineColor:
       typeof input?.highlightGridOutlineColor === 'string'
         ? input.highlightGridOutlineColor
         : (DEFAULT_APP_STATE.menu!.highlightGridOutlineColor ?? '#00000022'),
+    highlightGridColor: sanitizeOptionalString(input?.highlightGridColor),
+    highlightGutterBackgroundColor: sanitizeOptionalString(input?.highlightGutterBackgroundColor),
+    highlightReviewColor: sanitizeOptionalString(input?.highlightReviewColor),
+    highlightWarningColor: sanitizeOptionalString(input?.highlightWarningColor),
+    highlightLineNumberColor: sanitizeOptionalString(input?.highlightLineNumberColor),
+    highlightBaseColor: sanitizeOptionalString(input?.highlightBaseColor),
+    highlightInputFieldsColor: sanitizeOptionalString(input?.highlightInputFieldsColor),
+    highlightAppButtonsColor: sanitizeOptionalString(input?.highlightAppButtonsColor),
     highlightMarkdownHeadlineColor: typeof input?.highlightMarkdownHeadlineColor === 'string'
       ? input.highlightMarkdownHeadlineColor
       : undefined,
@@ -362,12 +456,39 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     uiMode: sanitizeUiMode(input?.uiMode),
     textureActiveSurface: sanitizeTextureSurface(input?.textureActiveSurface),
     textureMaterials: sanitizeTextureMaterials(input?.textureMaterials),
+    audioKeyVolume: sanitizeOptionalNumber(input?.audioKeyVolume),
+    audioBassVolume: sanitizeOptionalNumber(input?.audioBassVolume),
+    audioTrebleVolume: sanitizeOptionalNumber(input?.audioTrebleVolume),
+    audioKeyVariance: sanitizeOptionalNumber(input?.audioKeyVariance),
+    audioPitch: sanitizeOptionalNumber(input?.audioPitch),
+    audioReverbStrength: sanitizeOptionalNumber(input?.audioReverbStrength),
+    audioReverbSpace: sanitizeOptionalNumber(input?.audioReverbSpace),
+    audioReverbAmount: sanitizeOptionalNumber(input?.audioReverbAmount),
+    pitchJitterAmount: sanitizeOptionalNumber(input?.pitchJitterAmount),
+    reduceVisualEffects: Boolean(input?.reduceVisualEffects),
+    reducedCaretAnimation: Boolean(input?.reducedCaretAnimation),
+    deferPreviewOnRapidInput: Boolean(input?.deferPreviewOnRapidInput),
+    typingSoundEnabled: Boolean(input?.typingSoundEnabled),
+    typingSoundSet: sanitizeTypingSoundSet(input?.typingSoundSet),
+    musicVolume: sanitizeOptionalNumber(input?.musicVolume),
+    musicReverbAmount: sanitizeOptionalNumber(input?.musicReverbAmount),
+    musicReverbRoom: sanitizeOptionalNumber(input?.musicReverbRoom),
+    musicActiveSlots: sanitizeMusicActiveSlots(input?.musicActiveSlots),
+    musicLastSongId: sanitizeOptionalNumber(input?.musicLastSongId),
+    musicLastPositionSec: sanitizeOptionalNumber(input?.musicLastPositionSec),
+    musicWasPlaying: sanitizeOptionalBoolean(input?.musicWasPlaying),
     scrollEaseMultiplier: sanitizePositive(input?.scrollEaseMultiplier, DEFAULT_APP_STATE.menu!.scrollEaseMultiplier ?? 1),
     scrollDistanceTimeInfluence: sanitizeRatio(input?.scrollDistanceTimeInfluence, DEFAULT_APP_STATE.menu!.scrollDistanceTimeInfluence ?? 0),
     scrollBaseDistanceRows: sanitizePositive(input?.scrollBaseDistanceRows, DEFAULT_APP_STATE.menu!.scrollBaseDistanceRows ?? 1),
     scrollMaxDurationMultiplier: sanitizePositive(input?.scrollMaxDurationMultiplier, DEFAULT_APP_STATE.menu!.scrollMaxDurationMultiplier ?? 1),
     sidebarViewState: sanitizeSidebarViewState(input?.sidebarViewState),
     debuggingEnabled: Boolean(input?.debuggingEnabled),
+    spellCheckEditEnabled: Boolean(input?.spellCheckEditEnabled),
+    spellCheckRenderEnabled: Boolean(input?.spellCheckRenderEnabled),
+    tabBarMode: sanitizeTabBarMode(input?.tabBarMode),
+    isSidebarVisible: typeof input?.isSidebarVisible === 'boolean' ? input.isSidebarVisible : true,
+    customCursorEnabled: Boolean(input?.customCursorEnabled),
+    reviewGutterVisibleBySection: sanitizeReviewGutterVisibleBySection(input?.reviewGutterVisibleBySection),
   };
 }
 
