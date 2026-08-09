@@ -60,6 +60,10 @@ export function useWindowDragRegion() {
 
     function handleMouseDown(event: MouseEvent) {
       if (event.button !== 0) return
+      // Ctrl+click is reserved app-wide (e.g. CM6Editor's scroll-cage boundary
+      // handles) and must never itself be treated as a window-move gesture,
+      // regardless of where it lands.
+      if (event.ctrlKey) return
       const target = event.target
       if (!(target instanceof Element) || target.closest(WINDOW_DRAG_EXCLUDED_SELECTOR)) return
       candidateOrigin = { x: event.screenX, y: event.screenY }
