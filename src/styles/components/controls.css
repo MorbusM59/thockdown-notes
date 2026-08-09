@@ -149,6 +149,43 @@
   border-color: rgba(81, 73, 66, 0.8);
 }
 
+/* Live-updating tooltip for wheel/drag-adjustable controls (HSVA swatches,
+   texture controls, every CompactScrollbarSlider). Native `title` tooltips
+   don't reliably refresh their text once shown and can vanish mid-adjustment,
+   so the live value goes into a `data-live-tooltip` attribute instead and a
+   CSS ::after reads it via attr() -- visibility is driven purely by :hover,
+   so the tooltip tracks the real cursor with no JS-side show/hide state and
+   is gone the instant the cursor actually leaves the element. */
+[data-live-tooltip] {
+  position: relative;
+}
+
+[data-live-tooltip]::after {
+  content:        attr(data-live-tooltip);
+  position:       absolute;
+  bottom:         calc(100% + 6px);
+  left:           50%;
+  transform:      translateX(-50%);
+  white-space:    pre-line;
+  text-align:     center;
+  padding:        4px 8px;
+  border-radius:  var(--border-radius-regular);
+  background:     var(--color-text-base);
+  color:          var(--color-background-light);
+  font-size:      11px;
+  line-height:    1.35;
+  pointer-events: none;
+  z-index:        50;
+  opacity:        0;
+  visibility:     hidden;
+  transition:     opacity 0.1s ease;
+}
+
+[data-live-tooltip]:hover::after {
+  opacity:    1;
+  visibility: visible;
+}
+
 
 /* =============================================================================
    WINDOW CONTROLS

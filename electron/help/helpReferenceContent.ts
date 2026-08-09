@@ -615,6 +615,7 @@ Every feature in the app, described individually: where to find it, what it does
 *The home for every appearance, sound, sync, and performance control in the app, organized into collapsible sections.*
 
 - Most controls apply live, and separately to edit mode and preview mode where the two differ (e.g. typography, text color).
+- Every slider, and the draggable H/S/V/A and texture-control swatches, can also be adjusted by scrolling the mouse wheel over them — each notch moves the value by exactly one step. Hovering any of them shows a tooltip with the current value; it stays open and updates live as you scroll or drag, and only closes once the cursor actually leaves the control.
 
 ### [Typography](#typography)
 

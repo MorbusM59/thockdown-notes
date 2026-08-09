@@ -1151,7 +1151,7 @@ export function SidebarOptionsPanel({
               type="button"
               className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'h' ? ' is-dragging' : ''}${primedColorSource.kind === 'hsva' && primedColorSource.key === 'h' ? ' active' : ''}`}
               style={{ background: hsvaDisplayColors.hColor }}
-              title={`Hue: ${Math.round(activeColorHsva.h)}\n${activeColorHex}`}
+              data-live-tooltip={`Hue: ${Math.round(activeColorHsva.h)}\n${activeColorHex}`}
               onPointerDown={(event) => {
                 startHsvaDrag('h', event)
               }}
@@ -1188,7 +1188,7 @@ export function SidebarOptionsPanel({
               type="button"
               className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 's' ? ' is-dragging' : ''}${primedColorSource.kind === 'hsva' && primedColorSource.key === 's' ? ' active' : ''}`}
               style={{ background: hsvaDisplayColors.sColor }}
-              title={`Saturation: ${Math.round(activeColorHsva.s * 255)}\n${activeColorHex}`}
+              data-live-tooltip={`Saturation: ${Math.round(activeColorHsva.s * 255)}\n${activeColorHex}`}
               onPointerDown={(event) => {
                 startHsvaDrag('s', event)
               }}
@@ -1225,7 +1225,7 @@ export function SidebarOptionsPanel({
               type="button"
               className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'v' ? ' is-dragging' : ''}${primedColorSource.kind === 'hsva' && primedColorSource.key === 'v' ? ' active' : ''}`}
               style={{ background: hsvaDisplayColors.vColor }}
-              title={`Value: ${Math.round(activeColorHsva.v * 255)}\n${activeColorHex}`}
+              data-live-tooltip={`Value: ${Math.round(activeColorHsva.v * 255)}\n${activeColorHex}`}
               onPointerDown={(event) => {
                 startHsvaDrag('v', event)
               }}
@@ -1271,7 +1271,7 @@ export function SidebarOptionsPanel({
                 .filter(Boolean)
                 .join(' ')}
               style={{ background: 'var(--color-background-light)', color: hsvaDisplayColors.aGhostColor }}
-              title={`Alpha: ${Math.round(activeColorHsva.a * 255)}\n${activeColorHex}`}
+              data-live-tooltip={`Alpha: ${Math.round(activeColorHsva.a * 255)}\n${activeColorHex}`}
               onPointerDown={(event) => {
                 startHsvaDrag('a', event)
               }}
@@ -1427,7 +1427,7 @@ export function SidebarOptionsPanel({
               ]
                 .filter(Boolean)
                 .join(' ')}
-              title={`Granularity (${texturePreviewMaterial.granularity})`}
+              data-live-tooltip={`Granularity (${texturePreviewMaterial.granularity})`}
               onPointerDown={(event) => {
                 startTextureControlDrag('granularity', event)
               }}
@@ -1471,7 +1471,7 @@ export function SidebarOptionsPanel({
               ]
                 .filter(Boolean)
                 .join(' ')}
-              title={`Smoothness (${texturePreviewMaterial.vSteps})`}
+              data-live-tooltip={`Smoothness (${texturePreviewMaterial.vSteps})`}
               onPointerDown={(event) => {
                 startTextureControlDrag('smoothness', event)
               }}
@@ -2062,7 +2062,7 @@ export function SidebarOptionsPanel({
             type="button"
             className={`btn-icon options-color-swatch options-hsva-control${cursorHsvaDragState?.control === 'h' ? ' is-dragging' : ''}`}
             style={{ background: cursorHsvaDisplayColors.hColor }}
-            title={`Hue: ${Math.round(cursorColorHsva.h)}`}
+            data-live-tooltip={`Hue: ${Math.round(cursorColorHsva.h)}`}
             onPointerDown={(event) => startCursorHsvaDrag('h', event)}
             onPointerMove={(event) => handleCursorHsvaDragMove('h', event)}
             onPointerUp={(event) => stopCursorHsvaDrag('h', event)}
@@ -2074,7 +2074,7 @@ export function SidebarOptionsPanel({
             type="button"
             className={`btn-icon options-color-swatch options-hsva-control${cursorHsvaDragState?.control === 's' ? ' is-dragging' : ''}`}
             style={{ background: cursorHsvaDisplayColors.sColor }}
-            title={`Saturation: ${Math.round(cursorColorHsva.s * 255)}`}
+            data-live-tooltip={`Saturation: ${Math.round(cursorColorHsva.s * 255)}`}
             onPointerDown={(event) => startCursorHsvaDrag('s', event)}
             onPointerMove={(event) => handleCursorHsvaDragMove('s', event)}
             onPointerUp={(event) => stopCursorHsvaDrag('s', event)}
@@ -2110,7 +2110,7 @@ export function SidebarOptionsPanel({
             type="button"
             className={`btn-icon options-color-swatch options-hsva-control${cursorHsvaDragState?.control === 'v' ? ' is-dragging' : ''}`}
             style={{ background: cursorHsvaDisplayColors.vColor }}
-            title={`Value: ${Math.round(cursorColorHsva.v * 255)}`}
+            data-live-tooltip={`Value: ${Math.round(cursorColorHsva.v * 255)}`}
             onPointerDown={(event) => startCursorHsvaDrag('v', event)}
             onPointerMove={(event) => handleCursorHsvaDragMove('v', event)}
             onPointerUp={(event) => stopCursorHsvaDrag('v', event)}
@@ -2122,7 +2122,7 @@ export function SidebarOptionsPanel({
             type="button"
             className={`btn-icon options-color-swatch options-hsva-control options-hsva-alpha${cursorHsvaDragState?.control === 'a' ? ' is-dragging' : ''}`}
             style={{ background: 'var(--color-background-light)', color: cursorHsvaDisplayColors.aGhostColor }}
-            title={`Alpha: ${Math.round(cursorColorHsva.a * 255)}`}
+            data-live-tooltip={`Alpha: ${Math.round(cursorColorHsva.a * 255)}`}
             onPointerDown={(event) => startCursorHsvaDrag('a', event)}
             onPointerMove={(event) => handleCursorHsvaDragMove('a', event)}
             onPointerUp={(event) => stopCursorHsvaDrag('a', event)}

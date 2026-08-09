@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
+import type * as React from 'react'
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
@@ -80,6 +81,15 @@ export function CompactScrollbarSlider({
     onCommit(snapValue(value + delta))
   }, [onCommit, snapValue, value])
 
+  const handleWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    const dominantDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
+    if (dominantDelta === 0) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    nudgeBy(dominantDelta > 0 ? -step : step)
+  }, [nudgeBy, step])
+
   return (
     <div
       id={id}
@@ -91,6 +101,8 @@ export function CompactScrollbarSlider({
       aria-valuemax={max}
       aria-valuenow={Number(formatCompactSettingNumber(value, step))}
       className={`utility-setting-scrollbar-shell${isDragging ? ' is-dragging' : ''}`}
+      data-live-tooltip={`${trackLabel}: ${formatCompactSettingNumber(value, step)}`}
+      onWheel={handleWheel}
       onKeyDown={(event) => {
         if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
           event.preventDefault()
