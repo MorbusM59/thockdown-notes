@@ -36,13 +36,6 @@
 .sidebar-content {
   position:   relative;
   isolation:  isolate;
-  /* isolate traps any escaping tooltip's own z-index inside this element's
-     local stacking context -- from .sidebar-scrollbar-slot's point of view
-     (a sibling, not a descendant, so isolation doesn't shield it from this)
-     the whole element then paints as one z-index:auto unit, losing to the
-     scrollbar rail's explicit z-index:4 regardless of what's escaping from
-     inside. An explicit z-index here, above the rail's, fixes that. */
-  z-index:    5;
   flex:       1 1 auto;
   min-height: 0;
   min-width:  0;

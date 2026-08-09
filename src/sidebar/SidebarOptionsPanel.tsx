@@ -791,72 +791,26 @@ export function SidebarOptionsPanel({
       const buttonIcon = isSearchHighlightControl ? 'fa-solid fa-magnifying-glass' : HIGHLIGHT_COLOR_ICONS[key]
 
       return (
-        // The swatch button itself is `overflow: hidden` and already spends
-        // both its ::before/::after on the paper+color fill layers (see
-        // toolbar.css), so a tooltip attribute on the button is invisible --
-        // clipped and content-shadowed at once. Anchoring the tooltip on this
-        // untouched wrapper instead (a plain grid item the button fills at
-        // 100%/100%, same as before) sidesteps both.
-        <span key={key} className="options-swatch-tooltip-anchor" data-tooltip={buttonTitle}>
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch${key === 'textBase' ? ' text-ui-icon' : ''}${key === 'lineNumber' ? ' text-icon' : ''}`}
-            onClick={() => {
-              if (primedColorSource.kind === 'active-color') {
-                applyActiveColorToElement(resolvedKey)
-                return
-              }
-
-              if (primedColorSource.kind === 'texture-preview') {
-                updateHighlightColor(resolvedKey, hsvaToRgba(texturePreviewMaterial.color))
-                return
-              }
-
-              if (primedColorSource.kind === 'hsva') {
-                applyHsvaValueToElement(primedColorSource.key, resolvedKey)
-              }
-            }}
-            onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'element', key: resolvedKey }, event)}
-            onMouseUp={(event) => {
-              if (event.button !== 2) return
-              clearColorArmTimer()
-            }}
-            onMouseLeave={() => {
-              clearColorArmTimer()
-            }}
-            onContextMenu={(event) => {
-              event.preventDefault()
-              clearColorArmTimer()
-            }}
-            style={{ '--options-swatch-color': highlightColors[resolvedKey] } as React.CSSProperties}
-          >
-            <span className={`options-color-swatch-glyph ${buttonIcon}`} aria-hidden="true" />
-          </button>
-        </span>
-      )
-    }
-
-    const renderTextureSwatchButton = (surface: TextureSurfaceKey) => (
-      <span key={surface} className="options-swatch-tooltip-anchor" data-tooltip={TEXTURE_SURFACE_TITLES[surface]}>
         <button
+          key={key}
           type="button"
-          className="btn-icon options-color-swatch"
+          className={`btn-icon options-color-swatch${key === 'textBase' ? ' text-ui-icon' : ''}${key === 'lineNumber' ? ' text-icon' : ''}`}
           onClick={() => {
             if (primedColorSource.kind === 'active-color') {
-              applyActiveColorToTexture(surface)
+              applyActiveColorToElement(resolvedKey)
               return
             }
 
             if (primedColorSource.kind === 'texture-preview') {
-              applyTexturePreviewToSurface(surface)
+              updateHighlightColor(resolvedKey, hsvaToRgba(texturePreviewMaterial.color))
               return
             }
 
             if (primedColorSource.kind === 'hsva') {
-              applyHsvaValueToTexture(primedColorSource.key, surface)
+              applyHsvaValueToElement(primedColorSource.key, resolvedKey)
             }
           }}
-          onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'texture', key: surface }, event)}
+          onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'element', key: resolvedKey }, event)}
           onMouseUp={(event) => {
             if (event.button !== 2) return
             clearColorArmTimer()
@@ -868,11 +822,51 @@ export function SidebarOptionsPanel({
             event.preventDefault()
             clearColorArmTimer()
           }}
-          style={{ '--options-swatch-color': rgbaToCssColor(hsvaToRgba(textureMaterials[surface].color)) } as React.CSSProperties}
+          style={{ '--options-swatch-color': highlightColors[resolvedKey] } as React.CSSProperties}
+          data-tooltip={buttonTitle}
         >
-          <span className={`options-color-swatch-glyph ${TEXTURE_SURFACE_ICONS[surface]}`} aria-hidden="true" />
+          <span className={`options-color-swatch-glyph ${buttonIcon}`} aria-hidden="true" />
         </button>
-      </span>
+      )
+    }
+
+    const renderTextureSwatchButton = (surface: TextureSurfaceKey) => (
+      <button
+        key={surface}
+        type="button"
+        className="btn-icon options-color-swatch"
+        onClick={() => {
+          if (primedColorSource.kind === 'active-color') {
+            applyActiveColorToTexture(surface)
+            return
+          }
+
+          if (primedColorSource.kind === 'texture-preview') {
+            applyTexturePreviewToSurface(surface)
+            return
+          }
+
+          if (primedColorSource.kind === 'hsva') {
+            applyHsvaValueToTexture(primedColorSource.key, surface)
+          }
+        }}
+        onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'texture', key: surface }, event)}
+        onMouseUp={(event) => {
+          if (event.button !== 2) return
+          clearColorArmTimer()
+        }}
+        onMouseLeave={() => {
+          clearColorArmTimer()
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault()
+          clearColorArmTimer()
+        }}
+        style={{ '--options-swatch-color': rgbaToCssColor(hsvaToRgba(textureMaterials[surface].color)) } as React.CSSProperties}
+        data-tooltip={TEXTURE_SURFACE_TITLES[surface]}
+      >
+        <span className={`options-color-swatch-glyph ${TEXTURE_SURFACE_ICONS[surface]}`} aria-hidden="true" />
+      </button>
     )
 
     return (
@@ -1349,15 +1343,11 @@ export function SidebarOptionsPanel({
             />
           </div>
           <div className="options-texture-settings" aria-label="Texture generation settings">
-            {/* Tooltip lives on the row, not the button: .options-texture-preview
-                is overflow:hidden and already spends both its ::before/::after
-                on the texture-fill layers (see toolbar.css), so a tooltip
-                attribute on the button itself would be clipped and
-                content-shadowed at once. */}
-            <div className="options-texture-preview-row" data-tooltip={`Texture preview: ${texturePreviewHex}`}>
+            <div className="options-texture-preview-row">
               <button
                 type="button"
                 className={`btn-icon options-color-swatch options-active-color options-texture-preview${primedColorSource.kind === 'texture-preview' ? ' active' : ''}`}
+                data-tooltip={`Texture preview: ${texturePreviewHex}`}
                 style={{
                   '--texture-preview-color': texturePreviewTintCss,
                   '--texture-preview-mask': texturePreviewCss,
@@ -1536,49 +1526,45 @@ export function SidebarOptionsPanel({
         <div className="sidebar-options-divider" aria-hidden="true" />
 
         <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Mode text and selection colors">
-          <span
-            className="options-swatch-tooltip-anchor"
+          <button
+            type="button"
+            className="btn-icon options-color-swatch text-icon"
+            onClick={() => {
+              const target: EditorTextColorTargetKey = isPreviewMode ? 'editorRenderText' : 'editorEditText'
+
+              if (primedColorSource.kind === 'active-color') {
+                applyActiveColorToEditorText(target)
+                return
+              }
+
+              if (primedColorSource.kind === 'texture-preview') {
+                updateEditorTextColor(target, hsvaToRgba(texturePreviewMaterial.color))
+                return
+              }
+
+              if (primedColorSource.kind === 'hsva') {
+                applyHsvaValueToEditorText(primedColorSource.key, target)
+              }
+            }}
+            onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'text', key: isPreviewMode ? 'editorRenderText' : 'editorEditText' }, event)}
+            onMouseUp={(event) => {
+              if (event.button !== 2) return
+              clearColorArmTimer()
+            }}
+            onMouseLeave={() => {
+              clearColorArmTimer()
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              clearColorArmTimer()
+            }}
+            style={{
+              '--options-swatch-color': editorTextColors[isPreviewMode ? 'editorRenderText' : 'editorEditText'],
+            } as React.CSSProperties}
             data-tooltip={isPreviewMode ? 'Render mode text color' : 'Edit mode text color'}
           >
-            <button
-              type="button"
-              className="btn-icon options-color-swatch text-icon"
-              onClick={() => {
-                const target: EditorTextColorTargetKey = isPreviewMode ? 'editorRenderText' : 'editorEditText'
-
-                if (primedColorSource.kind === 'active-color') {
-                  applyActiveColorToEditorText(target)
-                  return
-                }
-
-                if (primedColorSource.kind === 'texture-preview') {
-                  updateEditorTextColor(target, hsvaToRgba(texturePreviewMaterial.color))
-                  return
-                }
-
-                if (primedColorSource.kind === 'hsva') {
-                  applyHsvaValueToEditorText(primedColorSource.key, target)
-                }
-              }}
-              onMouseDown={(event) => startElementPreviewCopyHold({ kind: 'text', key: isPreviewMode ? 'editorRenderText' : 'editorEditText' }, event)}
-              onMouseUp={(event) => {
-                if (event.button !== 2) return
-                clearColorArmTimer()
-              }}
-              onMouseLeave={() => {
-                clearColorArmTimer()
-              }}
-              onContextMenu={(event) => {
-                event.preventDefault()
-                clearColorArmTimer()
-              }}
-              style={{
-                '--options-swatch-color': editorTextColors[isPreviewMode ? 'editorRenderText' : 'editorEditText'],
-              } as React.CSSProperties}
-            >
-              <span className="options-color-swatch-glyph fa-solid fa-font" aria-hidden="true" />
-            </button>
-          </span>
+            <span className="options-color-swatch-glyph fa-solid fa-font" aria-hidden="true" />
+          </button>
 
           {middleRowHighlightKeys.map((key) => renderHighlightSwatchButton(key))}
         </div>

@@ -3,12 +3,6 @@
    ============================================================================= */
 
 .window-controls-grid {
-  /* Own stacking context, above the editor row's own (z-index:auto) content
-     -- otherwise its buttons' flipped-below tooltip (see the top-row-chrome
-     rule further down) has no explicit stacking order of its own to win
-     against tab-bar content it visually spills into. */
-  position:        relative;
-  z-index:         2;
   display:         grid;
   grid-template-columns: auto auto auto;
   grid-template-rows: auto;
@@ -155,31 +149,30 @@
   border-color: rgba(81, 73, 66, 0.8);
 }
 
-/* App-wide custom tooltip. Native `title` tooltips are OS-rendered (can't be
-   styled, don't reliably refresh their text once shown, and can vanish
-   mid-adjustment), so every tooltip in the app renders through this same
-   CSS ::after instead: `data-tooltip` for static text (replaces `title`
-   everywhere), `data-live-tooltip` for text that changes while the pointer
-   stays down (HSVA swatches, texture controls, every CompactScrollbarSlider).
-   Visibility is driven purely by :hover, so it tracks the real cursor with
-   no JS-side show/hide state and is gone the instant the cursor leaves the
-   element. Both attributes share one visual/positioning rule below; only
-   the `content` source differs.
-   The `position: relative` bootstrap is wrapped in :where() (zero
-   specificity) so it never outranks a component's own `position` --
-   .search-input-case-toggle needs `position: absolute` to sit inside its
-   input's padding, and an equal-specificity `[data-tooltip]` rule loading
-   later in the cascade silently clobbered it back to relative. */
-:where([data-live-tooltip], [data-tooltip]) {
-  position: relative;
+/* App-wide custom tooltip, rendered by TooltipLayer.tsx into one fixed
+   top-level layer instead of a per-element CSS ::after -- see that
+   component's doc comment for why (mainly: it used to fight every
+   ancestor's own overflow/stacking context individually as each new
+   clipping case turned up). `data-tooltip` (static text) / `data-live-
+   tooltip` (text that changes while still hovering) stay exactly where they
+   already were on ~150 elements app-wide; only the rendering mechanism
+   changed. TooltipLayer computes left/top/placement itself and sets them as
+   inline styles -- this stylesheet only owns the visual look and the
+   layer's own stacking position. */
+.app-tooltip-layer {
+  position:       fixed;
+  inset:          0;
+  pointer-events: none;
+  /* Above every normal UI element, below .app-saturate-wrapper's own
+     filter/glaze/colorize layers (glaze-overlay-stack, and the inline
+     colorize overlay at z-index 9999 in App.tsx) -- those are meant to
+     visually apply over tooltips too, same as over the rest of the app. */
+  z-index:        5000;
 }
 
-[data-live-tooltip]::after,
-[data-tooltip]::after {
+.app-tooltip-bubble {
   position:       absolute;
-  bottom:         calc(100% + 6px);
-  left:           50%;
-  transform:      translateX(-50%);
+  max-width:      260px;
   white-space:    pre-line;
   text-align:     center;
   padding:        4px 8px;
@@ -198,40 +191,19 @@
     calc(255 - b)
     / alpha
   );
-  font-size:      10px;
-  line-height:    1.35;
-  pointer-events: none;
-  z-index:        50;
-  opacity:        0;
-  visibility:     hidden;
-  transition:     opacity 0.2s ease;
-  box-shadow: none;
-  text-shadow: none;
+  font-size:   10px;
+  line-height: 1.35;
+  opacity:     0;
+  /* The 600ms show-delay already happened in TooltipLayer's JS before this
+     ever mounts, so no transition-delay is needed here -- just a quick
+     fade-in, which plays automatically on mount since it's a keyframe
+     animation rather than a class-toggled transition. */
+  animation:   app-tooltip-fade-in 0.2s ease forwards;
 }
 
-[data-live-tooltip]::after { content: attr(data-live-tooltip); }
-[data-tooltip]::after      { content: attr(data-tooltip); }
-
-[data-live-tooltip]:hover::after,
-[data-tooltip]:hover::after {
-  opacity:    1;
-  visibility: visible;
-  /* Grace period before a tooltip appears -- only applies to this show
-     transition; :hover no longer matching on mouseout falls back to the
-     base rule's undelayed transition, so hiding stays instant. */
-  transition-delay: 600ms;
-}
-
-/* Top-row chrome (toolbar, window controls) sits flush against the app's own
-   top edge -- an upward tooltip there has no room and gets clipped by
-   .app-shell's overflow: hidden, so these two containers flip it below the
-   element instead. */
-.toolbar-grid [data-live-tooltip]::after,
-.toolbar-grid [data-tooltip]::after,
-.window-controls-grid [data-live-tooltip]::after,
-.window-controls-grid [data-tooltip]::after {
-  bottom: auto;
-  top:    calc(100% + 6px);
+@keyframes app-tooltip-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 

@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown'
 import { SidebarOptionsPanel } from './sidebar/SidebarOptionsPanel'
 import { AudioControls } from './components/AudioControls'
 import MouseCursorOverlay from './components/MouseCursorOverlay'
+import { TooltipLayer } from './components/TooltipLayer'
 import { useWindowDragRegion } from './window/useWindowDragRegion'
 import './App.css'
 import { buildExportCss, type ExportViewStyle } from './exportStyles'
@@ -7415,6 +7416,12 @@ ${markdownHtml}
           {glazeRadialBackgroundImage !== 'none' && <div className="glaze-overlay-layer glaze-overlay-layer-radial" />}
           {glazeGloomBackgroundImage !== 'none' && <div className="glaze-overlay-layer glaze-overlay-layer-gloom" />}
         </div>
+        {/* Mounted here (inside .app-saturate-wrapper, not as a sibling of
+            it like MouseCursorOverlay) deliberately -- unlike the cursor
+            overlay, tooltips should still pick up this wrapper's own
+            filter/glaze/colorize layers, same as the rest of the app's UI.
+            See the component's own doc comment. */}
+        <TooltipLayer />
         {windowModeTransitionOverlayNonce > 0 ? (
           <div key={windowModeTransitionOverlayNonce} className="window-mode-transition-overlay" aria-hidden="true" />
         ) : null}
