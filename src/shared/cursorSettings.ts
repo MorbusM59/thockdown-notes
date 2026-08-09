@@ -161,7 +161,7 @@ export const DEFAULT_CURSOR_TRAIL_COLOR = 'rgba(0, 0, 0, 0.35)'
 export const DEFAULT_CURSOR_HALO_COLOR = 'rgba(0, 0, 0, 0.6)'
 
 export const DEFAULT_CUSTOM_CURSOR_SETTINGS: CustomCursorSettings = {
-  enabled: false,
+  enabled: true,
   dotColor: DEFAULT_CURSOR_DOT_COLOR,
   centerColor: DEFAULT_CURSOR_CENTER_COLOR,
   trailColor: DEFAULT_CURSOR_TRAIL_COLOR,
