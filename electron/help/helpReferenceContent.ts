@@ -78,7 +78,7 @@ See the full [Keyboard Shortcuts]($#keyboard-shortcuts) table.
 ### Appearance
 
 - The gear icon opens Settings: fonts, color presets, custom "paint bucket" theming, decorative overlays (Glaze), CSS filters, scroll feel, sounds, a custom animated mouse cursor, and performance toggles.
-- Save your whole look as a custom preset and export/import it as a \`.tdl\` layout file.
+- Save your whole look as a custom layout and export/import it as a \`.tdl\` layout file.
 
 ### Window controls
 
@@ -619,7 +619,7 @@ Every feature in the app, described individually: where to find it, what it does
 ### [Typography](#typography)
 
 > **Where?**
-> Settings panel, top section, above the presets.
+> Settings panel, below Music, above the presets.
 
 *Font family, size, spacing, and padding for the editor and the rendered preview.*
 
@@ -634,15 +634,15 @@ Every feature in the app, described individually: where to find it, what it does
 
 - A "Custom" marker preset activates automatically once you've changed anything away from a built-in preset.
 
-### [Custom Presets](#custom-presets)
+### [Custom Layouts](#custom-layouts)
 
 > **Where?**
-> Settings panel → Custom Presets.
+> Settings panel → Custom Layouts.
 
 *Saves your entire current configuration as a reusable, numbered preset slot.*
 
 - Right-click a slot to arm it for deletion, or hold right-click to export it.
-- Use the reset button to restore the active custom preset back to its defaults.
+- Use the reset button to restore the active custom layout back to its defaults.
 
 ### [Colors and Textures](#colors-and-textures)
 

@@ -858,6 +858,49 @@ export function SidebarOptionsPanel({
       className={`options-content sidebar-options-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`}
       aria-label="Settings panel"
     >
+      <AccordionSection
+        className="sidebar-options-section-music"
+        ariaLabel="Music"
+        heading="Music"
+        forceOpenNonce={musicAccordionNonce}
+      >
+        <div className="utility-setting-slider-stack" aria-label="Music player controls">
+          <CompactScrollbarSlider
+            id="music-volume"
+            min={0}
+            max={1}
+            step={0.01}
+            value={musicVolume}
+            trackLabel="volume"
+            ariaLabel="Music volume"
+            defaultValue={0.8}
+            onCommit={(value) => setMusicVolume(clamp(value, 0, 1))}
+          />
+          <CompactScrollbarSlider
+            id="music-reverb-amount"
+            min={0}
+            max={1}
+            step={0.01}
+            value={musicReverbAmount}
+            trackLabel="reverb"
+            ariaLabel="Music reverb amount"
+            defaultValue={0}
+            onCommit={(value) => setMusicReverbAmount(clamp(value, 0, 1))}
+          />
+          <CompactScrollbarSlider
+            id="music-reverb-room"
+            min={0}
+            max={1}
+            step={0.01}
+            value={musicReverbRoom}
+            trackLabel="room"
+            ariaLabel="Music reverb room size"
+            defaultValue={0.3}
+            onCommit={(value) => setMusicReverbRoom(clamp(value, 0, 1))}
+          />
+        </div>
+      </AccordionSection>
+
       <div className="typography-section">
         {isPreviewMode ? (
           <div className="typography-grid" role="group" aria-label="Render typography">
@@ -1032,7 +1075,7 @@ export function SidebarOptionsPanel({
             type="button"
             className={`btn-icon options-color-swatch options-loadout-btn${isDynamicCustomPresetActive ? ' active' : ''}`}
             title="Custom"
-            aria-label="Custom preset"
+            aria-label="Custom Layout"
             onClick={selectDynamicCustomPreset}
           >
             <span className="fa-solid fa-marker" aria-hidden="true" />
@@ -1042,12 +1085,12 @@ export function SidebarOptionsPanel({
       <AccordionGroup>
       <AccordionSection
         className="sidebar-options-section-layouts"
-        ariaLabel="Custom Presets"
-        heading="Custom Presets"
+        ariaLabel="Custom Layouts"
+        heading="Custom Layouts"
         iconClass="fa-floppy-disk"
         iconTooltip=""
       >
-        <div className="options-loadout-grid" role="group" aria-label="Custom UI layout presets">
+        <div className="options-loadout-grid" role="group" aria-label="Custom UI Layouts">
           {customSlotEntriesForCurrentMode.map((entry) => (
             <button
               key={`custom-${entry.id}`}
@@ -1075,8 +1118,8 @@ export function SidebarOptionsPanel({
           <button
             type="button"
             className={`btn-icon options-color-swatch options-loadout-btn options-loadout-plus${hasUnsavedUiLoadoutChanges ? ' active' : ''}`}
-            title="Save current settings as a new custom preset"
-            aria-label="Save current settings as a new custom preset"
+            title="Save current settings as a new custom layout"
+            aria-label="Save current settings as a new custom layout"
             onClick={() => void saveCustomLoadout()}
           >
             <span className="options-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
@@ -1084,8 +1127,8 @@ export function SidebarOptionsPanel({
           <button
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn"
-            title="Reset custom preset to defaults"
-            aria-label="Reset custom preset to defaults"
+            title="Reset custom layout to defaults"
+            aria-label="Reset custom layout to defaults"
             onClick={() => void resetCustomLoadout()}
             onContextMenu={(event) => event.preventDefault()}
           >
@@ -1524,85 +1567,6 @@ export function SidebarOptionsPanel({
       </AccordionSection>
 
       <AccordionSection
-        className="sidebar-options-section-misc"
-        ariaLabel="Borders & Spacing"
-        heading="Borders & Spacing"
-        iconClass="fa-rectangle-list"
-        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
-      >
-<div className="utility-setting-slider-stack" aria-label="Borders and spacing controls">
-          <CompactScrollbarSlider
-            id="ui-border-radius"
-            min={BORDER_RADIUS_REGULAR_MIN_PX}
-            max={BORDER_RADIUS_REGULAR_MAX_PX}
-            step={1}
-            value={borderRadiusRegularPx}
-            trackLabel="radius"
-            ariaLabel="UI border radius in pixels"
-            defaultValue={BORDER_RADIUS_REGULAR_DEFAULT_PX}
-            onCommit={(value) => setBorderRadiusRegularPx(
-              clamp(
-                Math.round(value),
-                BORDER_RADIUS_REGULAR_MIN_PX,
-                BORDER_RADIUS_REGULAR_MAX_PX,
-              ),
-            )}
-          />
-          <CompactScrollbarSlider
-            id="ui-spacing-regular"
-            min={SPACING_REGULAR_MIN_PX}
-            max={SPACING_REGULAR_MAX_PX}
-            step={1}
-            value={spacingRegularPx}
-            trackLabel="spacing"
-            ariaLabel="UI spacing in pixels"
-            defaultValue={SPACING_REGULAR_DEFAULT_PX}
-            onCommit={(value) => setSpacingRegularPx(
-              clamp(
-                Math.round(value),
-                SPACING_REGULAR_MIN_PX,
-                SPACING_REGULAR_MAX_PX,
-              ),
-            )}
-          />
-          <CompactScrollbarSlider
-            id="ui-border-alpha"
-            min={BORDER_ALPHA_PERCENT_MIN}
-            max={BORDER_ALPHA_PERCENT_MAX}
-            step={1}
-            value={borderAlphaPercent}
-            trackLabel="border α"
-            ariaLabel="Border alpha adjustment, percent"
-            defaultValue={BORDER_ALPHA_PERCENT_DEFAULT}
-            onCommit={(value) => setBorderAlphaPercent(
-              clamp(
-                Math.round(value),
-                BORDER_ALPHA_PERCENT_MIN,
-                BORDER_ALPHA_PERCENT_MAX,
-              ),
-            )}
-          />
-          <CompactScrollbarSlider
-            id="ui-box-shadow-alpha"
-            min={BOX_SHADOW_ALPHA_PERCENT_MIN}
-            max={BOX_SHADOW_ALPHA_PERCENT_MAX}
-            step={1}
-            value={boxShadowAlphaPercent}
-            trackLabel="shadow α"
-            ariaLabel="Box shadow alpha adjustment, percent"
-            defaultValue={BOX_SHADOW_ALPHA_PERCENT_DEFAULT}
-            onCommit={(value) => setBoxShadowAlphaPercent(
-              clamp(
-                Math.round(value),
-                BOX_SHADOW_ALPHA_PERCENT_MIN,
-                BOX_SHADOW_ALPHA_PERCENT_MAX,
-              ),
-            )}
-          />
-        </div>
-      </AccordionSection>
-
-      <AccordionSection
         ariaLabel="Glaze"
         heading="Glaze"
         iconClass="fa-rectangle-list"
@@ -1944,57 +1908,80 @@ export function SidebarOptionsPanel({
       </AccordionSection>
 
       <AccordionSection
-        className="sidebar-options-section-scrolling"
-        ariaLabel="Scrolling Behavior"
-        heading="Scrolling Behavior"
+        className="sidebar-options-section-misc"
+        ariaLabel="Borders & Spacing"
+        heading="Borders & Spacing"
+        iconClass="fa-rectangle-list"
+        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
       >
-<div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
+<div className="utility-setting-slider-stack" aria-label="Borders and spacing controls">
           <CompactScrollbarSlider
-            id="render-scroll-dynamic"
-            min={0.1}
-            max={5}
-            step={0.05}
-            value={renderScrollDynamic}
-            trackLabel="ramp"
-            ariaLabel="Curve dynamic parameter a"
-            defaultValue={5 / 3}
-            onCommit={(value) => setRenderScrollDynamic(clamp(value, 0.1, 5))}
-          />
-          <CompactScrollbarSlider
-            id="render-scroll-skew"
-            min={RENDER_SCROLL_SKEW_MIN}
-            max={RENDER_SCROLL_SKEW_MAX}
-            step={0.01}
-            value={renderScrollSkew}
-            trackLabel="shape"
-            ariaLabel="Curve skew (apex bias)"
-            defaultValue={0.5}
-            onCommit={(value) => setRenderScrollSkew(
-              Math.max(RENDER_SCROLL_SKEW_MIN, Math.min(RENDER_SCROLL_SKEW_MAX, value)),
+            id="ui-border-radius"
+            min={BORDER_RADIUS_REGULAR_MIN_PX}
+            max={BORDER_RADIUS_REGULAR_MAX_PX}
+            step={1}
+            value={borderRadiusRegularPx}
+            trackLabel="radius"
+            ariaLabel="UI border radius in pixels"
+            defaultValue={BORDER_RADIUS_REGULAR_DEFAULT_PX}
+            onCommit={(value) => setBorderRadiusRegularPx(
+              clamp(
+                Math.round(value),
+                BORDER_RADIUS_REGULAR_MIN_PX,
+                BORDER_RADIUS_REGULAR_MAX_PX,
+              ),
             )}
           />
           <CompactScrollbarSlider
-            id="render-scroll-total-time"
-            min={0}
-            max={2}
-            step={0.05}
-            value={renderScrollTotalTimeSec}
-            trackLabel="speed"
-            ariaLabel="Total time parameter t in seconds"
-            reverseScale
-            defaultValue={0.4}
-            onCommit={(value) => setRenderScrollTotalTimeSec(clamp(value, 0, 2))}
+            id="ui-spacing-regular"
+            min={SPACING_REGULAR_MIN_PX}
+            max={SPACING_REGULAR_MAX_PX}
+            step={1}
+            value={spacingRegularPx}
+            trackLabel="spacing"
+            ariaLabel="UI spacing in pixels"
+            defaultValue={SPACING_REGULAR_DEFAULT_PX}
+            onCommit={(value) => setSpacingRegularPx(
+              clamp(
+                Math.round(value),
+                SPACING_REGULAR_MIN_PX,
+                SPACING_REGULAR_MAX_PX,
+              ),
+            )}
           />
           <CompactScrollbarSlider
-            id="render-scroll-max-speed"
-            min={1000}
-            max={100000}
-            step={1000}
-            value={renderScrollMaxSpeedPxPerSec}
-            trackLabel="max speed"
-            ariaLabel="Maximum scroll speed in pixels per second"
-            defaultValue={80000}
-            onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(clamp(value, 1000, 100000))}
+            id="ui-border-alpha"
+            min={BORDER_ALPHA_PERCENT_MIN}
+            max={BORDER_ALPHA_PERCENT_MAX}
+            step={1}
+            value={borderAlphaPercent}
+            trackLabel="border α"
+            ariaLabel="Border alpha adjustment, percent"
+            defaultValue={BORDER_ALPHA_PERCENT_DEFAULT}
+            onCommit={(value) => setBorderAlphaPercent(
+              clamp(
+                Math.round(value),
+                BORDER_ALPHA_PERCENT_MIN,
+                BORDER_ALPHA_PERCENT_MAX,
+              ),
+            )}
+          />
+          <CompactScrollbarSlider
+            id="ui-box-shadow-alpha"
+            min={BOX_SHADOW_ALPHA_PERCENT_MIN}
+            max={BOX_SHADOW_ALPHA_PERCENT_MAX}
+            step={1}
+            value={boxShadowAlphaPercent}
+            trackLabel="shadow α"
+            ariaLabel="Box shadow alpha adjustment, percent"
+            defaultValue={BOX_SHADOW_ALPHA_PERCENT_DEFAULT}
+            onCommit={(value) => setBoxShadowAlphaPercent(
+              clamp(
+                Math.round(value),
+                BOX_SHADOW_ALPHA_PERCENT_MIN,
+                BOX_SHADOW_ALPHA_PERCENT_MAX,
+              ),
+            )}
           />
         </div>
       </AccordionSection>
@@ -2450,90 +2437,58 @@ export function SidebarOptionsPanel({
       </AccordionSection>
 
       <AccordionSection
-        className="sidebar-options-section-music"
-        ariaLabel="Music"
-        heading="Music"
-        forceOpenNonce={musicAccordionNonce}
+        className="sidebar-options-section-scrolling"
+        ariaLabel="Scrolling Behavior"
+        heading="Scrolling Behavior"
       >
-        <div className="utility-setting-slider-stack" aria-label="Music player controls">
+<div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
           <CompactScrollbarSlider
-            id="music-volume"
-            min={0}
-            max={1}
-            step={0.01}
-            value={musicVolume}
-            trackLabel="volume"
-            ariaLabel="Music volume"
-            defaultValue={0.8}
-            onCommit={(value) => setMusicVolume(clamp(value, 0, 1))}
+            id="render-scroll-dynamic"
+            min={0.1}
+            max={5}
+            step={0.05}
+            value={renderScrollDynamic}
+            trackLabel="ramp"
+            ariaLabel="Curve dynamic parameter a"
+            defaultValue={5 / 3}
+            onCommit={(value) => setRenderScrollDynamic(clamp(value, 0.1, 5))}
           />
           <CompactScrollbarSlider
-            id="music-reverb-amount"
-            min={0}
-            max={1}
+            id="render-scroll-skew"
+            min={RENDER_SCROLL_SKEW_MIN}
+            max={RENDER_SCROLL_SKEW_MAX}
             step={0.01}
-            value={musicReverbAmount}
-            trackLabel="reverb"
-            ariaLabel="Music reverb amount"
-            defaultValue={0}
-            onCommit={(value) => setMusicReverbAmount(clamp(value, 0, 1))}
+            value={renderScrollSkew}
+            trackLabel="shape"
+            ariaLabel="Curve skew (apex bias)"
+            defaultValue={0.5}
+            onCommit={(value) => setRenderScrollSkew(
+              Math.max(RENDER_SCROLL_SKEW_MIN, Math.min(RENDER_SCROLL_SKEW_MAX, value)),
+            )}
           />
           <CompactScrollbarSlider
-            id="music-reverb-room"
+            id="render-scroll-total-time"
             min={0}
-            max={1}
-            step={0.01}
-            value={musicReverbRoom}
-            trackLabel="room"
-            ariaLabel="Music reverb room size"
-            defaultValue={0.3}
-            onCommit={(value) => setMusicReverbRoom(clamp(value, 0, 1))}
+            max={2}
+            step={0.05}
+            value={renderScrollTotalTimeSec}
+            trackLabel="speed"
+            ariaLabel="Total time parameter t in seconds"
+            reverseScale
+            defaultValue={0.4}
+            onCommit={(value) => setRenderScrollTotalTimeSec(clamp(value, 0, 2))}
           />
-        </div>
-      </AccordionSection>
-
-      <AccordionSection
-        className="sidebar-options-section-notes"
-        ariaLabel="Notes and Import"
-        heading="Data Synchronization"
-      >
-<div className="options-loadout-grid" role="group" aria-label="Note sync and import actions">
-          <button
-            type="button"
-            className="btn-icon options-color-swatch options-loadout-btn"
-            onClick={syncExistingNotes}
-            title="Sync stored note files"
-            aria-label="Sync stored note files"
-          >
-            <span className="fa-solid fa-rotate" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="btn-icon options-color-swatch options-loadout-btn"
-            onClick={importNotes}
-            title="Import notes from files or folders"
-            aria-label="Import notes from files or folders"
-          >
-            <span className="fa-solid fa-file-import" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="btn-icon options-color-swatch options-loadout-btn"
-            onClick={() => void exportLayoutsTdl()}
-            title="Export custom layouts to a .tdl file"
-            aria-label="Export custom layouts to a .tdl file"
-          >
-            <span className="fa-solid fa-file-export" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="btn-icon options-color-swatch options-loadout-btn"
-            onClick={() => void importLayoutsTdl()}
-            title="Import layouts from a .tdl file"
-            aria-label="Import layouts from a .tdl file"
-          >
-            <span className="fa-solid fa-file-arrow-up" aria-hidden="true" />
-          </button>
+          <CompactScrollbarSlider
+            id="render-scroll-max-speed"
+            min={1000}
+            max={100000}
+            step={1000}
+            value={renderScrollMaxSpeedPxPerSec}
+            trackLabel="max speed"
+            ariaLabel="Maximum scroll speed in pixels per second"
+            defaultValue={80000}
+            onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(clamp(value, 1000, 100000))}
+          />
         </div>
       </AccordionSection>
 
@@ -2581,6 +2536,51 @@ export function SidebarOptionsPanel({
             title="Defer preview on rapid input (coalesces the preview update onto one frame during fast key-repeat, e.g. held Backspace)"
           >
             <span className="fa-solid fa-gauge-high" aria-hidden="true" />
+          </button>
+        </div>
+      </AccordionSection>
+
+      <AccordionSection
+        className="sidebar-options-section-notes"
+        ariaLabel="Notes and Import"
+        heading="Data Synchronization"
+      >
+<div className="options-loadout-grid" role="group" aria-label="Note sync and import actions">
+          <button
+            type="button"
+            className="btn-icon options-color-swatch options-loadout-btn"
+            onClick={syncExistingNotes}
+            title="Sync stored note files"
+            aria-label="Sync stored note files"
+          >
+            <span className="fa-solid fa-rotate" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="btn-icon options-color-swatch options-loadout-btn"
+            onClick={importNotes}
+            title="Import notes from files or folders"
+            aria-label="Import notes from files or folders"
+          >
+            <span className="fa-solid fa-file-import" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="btn-icon options-color-swatch options-loadout-btn"
+            onClick={() => void exportLayoutsTdl()}
+            title="Export custom layouts to a .tdl file"
+            aria-label="Export custom layouts to a .tdl file"
+          >
+            <span className="fa-solid fa-file-export" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="btn-icon options-color-swatch options-loadout-btn"
+            onClick={() => void importLayoutsTdl()}
+            title="Import layouts from a .tdl file"
+            aria-label="Import layouts from a .tdl file"
+          >
+            <span className="fa-solid fa-file-arrow-up" aria-hidden="true" />
           </button>
         </div>
       </AccordionSection>
