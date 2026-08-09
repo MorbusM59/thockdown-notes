@@ -184,17 +184,29 @@
   text-align:     center;
   padding:        4px 8px;
   border-radius:  var(--border-radius-small);
-  border:         1px solid var(--color-border-light-70);
-  background:     var(--color-text-base);
-  color:          var(--color-background-light);
-  font-size:      11px;
+  background-color: rgb(
+    from var(--btn-bg-default)
+    calc(255 - r)
+    calc(255 - g)
+    calc(255 - b)
+    / 100%
+  );
+  color: rgb(
+    from var(--color-text-80)
+    calc(255 - r)
+    calc(255 - g)
+    calc(255 - b)
+    / alpha
+  );
+  font-size:      10px;
   line-height:    1.35;
   pointer-events: none;
   z-index:        50;
   opacity:        0;
   visibility:     hidden;
-  transition:     opacity 0.1s ease;
-  box-shadow:     var(--box-shadow-regular);
+  transition:     opacity 0.2s ease;
+  box-shadow: none;
+  text-shadow: none;
 }
 
 [data-live-tooltip]::after { content: attr(data-live-tooltip); }
@@ -204,6 +216,10 @@
 [data-tooltip]:hover::after {
   opacity:    1;
   visibility: visible;
+  /* Grace period before a tooltip appears -- only applies to this show
+     transition; :hover no longer matching on mouseout falls back to the
+     base rule's undelayed transition, so hiding stays instant. */
+  transition-delay: 600ms;
 }
 
 /* Top-row chrome (toolbar, window controls) sits flush against the app's own
