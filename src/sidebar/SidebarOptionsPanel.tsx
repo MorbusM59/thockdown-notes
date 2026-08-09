@@ -2013,6 +2013,17 @@ export function SidebarOptionsPanel({
         <div className="options-mouse-settings-grid" role="group" aria-label="Custom cursor color controls">
           <button
             type="button"
+            className="btn-icon options-color-swatch "
+            style={{ background: customCursorCenterColor }}
+            title="Center dot color -- click to apply, hold right-click to copy"
+            onClick={() => applyCursorColorToTarget('center')}
+            onMouseDown={(event) => startCursorColorCopyHold('center', event)}
+            onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
+            onMouseLeave={clearCursorColorArmTimer}
+            onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
+          ><span className="options-color-swatch-glyph fa-regular fa-circle-dot" aria-hidden="true" /></button>
+          <button
+            type="button"
             className="btn-icon options-color-swatch"
             style={{ background: customCursorHaloColor }}
             title="Halo color -- click to apply, hold right-click to copy"
@@ -2022,17 +2033,6 @@ export function SidebarOptionsPanel({
             onMouseLeave={clearCursorColorArmTimer}
             onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
           ><span className="options-color-swatch-glyph fa-solid fa-circle" aria-hidden="true" /></button>
-          <button
-            type="button"
-            className="btn-icon options-color-swatch"
-            style={{ background: customCursorDotColor }}
-            title="Circling dots color -- click to apply, hold right-click to copy"
-            onClick={() => applyCursorColorToTarget('dot')}
-            onMouseDown={(event) => startCursorColorCopyHold('dot', event)}
-            onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
-            onMouseLeave={clearCursorColorArmTimer}
-            onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
-          ><span className="options-color-swatch-glyph fa-solid fa-spinner" aria-hidden="true" /></button>
 
           <div className="options-mouse-center-grid" aria-hidden="true">
             <div className="options-glaze-cell options-glaze-cell-span-2">
@@ -2104,15 +2104,15 @@ export function SidebarOptionsPanel({
 
           <button
             type="button"
-            className="btn-icon options-color-swatch "
-            style={{ background: customCursorCenterColor }}
-            title="Center dot color -- click to apply, hold right-click to copy"
-            onClick={() => applyCursorColorToTarget('center')}
-            onMouseDown={(event) => startCursorColorCopyHold('center', event)}
+            className="btn-icon options-color-swatch"
+            style={{ background: customCursorDotColor }}
+            title="Circling dots color -- click to apply, hold right-click to copy"
+            onClick={() => applyCursorColorToTarget('dot')}
+            onMouseDown={(event) => startCursorColorCopyHold('dot', event)}
             onMouseUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
             onMouseLeave={clearCursorColorArmTimer}
             onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
-          ><span className="options-color-swatch-glyph fa-regular fa-circle-dot" aria-hidden="true" /></button>
+          ><span className="options-color-swatch-glyph fa-solid fa-spinner" aria-hidden="true" /></button>
           <button
             type="button"
             className="btn-icon options-color-swatch"
