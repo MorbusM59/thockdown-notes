@@ -31,7 +31,7 @@ Every heading below is also a jump target: \`[Anchor Text](#anchor-id)\` defines
 - The first line of a note (starting with \`# \`) is its title. Everything else is content.
 - Notes save automatically as you type. \`Esc\` toggles between the Markdown editor and the rendered preview.
 - Left-click the scrollbar track to jump straight to that spot. Right-click above/below the thumb to page up/down once; hold the right click to keep paging until you release it or the thumb reaches your cursor.
-- The list-number icon next to the word count toggles line numbers and a review-flag column for that editor. Click a line's flag box to mark it for review (\`?\`), click again for a warning (\`!\`); right-click clears it.
+- The list-number icon next to the word count toggles line numbers and a review-flag column for that editor. Left-click toggles both together; right-click toggles the review-flag column alone. Click a line's flag box to mark it for review (\`?\`), click again for a warning (\`!\`); right-click clears it.
 
 ### Organizing
 
@@ -160,6 +160,7 @@ Every feature in the app, described individually: where to find it, what it does
 *A toggleable gutter: true (unwrapped) line numbers on the left, a review/warning flag column on the right, both fit into the editor's existing grid.*
 
 - Toggling is per open editor (split-view section) — each section remembers its own on/off state independently, and a freshly opened section always starts with it off. It's not tied to which note or chapter happens to be showing in that section.
+- Left-click toggles both columns together, based on whether line numbers are currently shown: off shows both, on hides both. Right-click toggles the review-flag column alone, leaving line numbers as they are.
 - Line numbers count actual Markdown source lines, not wrapped visual rows: a long wrapped line gets one number, shown beside its first row, with the rest of its rows left blank.
 - Click a line's box in the flag column to mark it for review (\`?\`); click again to escalate it to a warning (\`!\`); click again to go back to \`?\`. Either state tints the whole line (all of its wrapped rows) in the review or warning color. Right-click the box to clear the flag entirely — the only way to remove one.
 - Flags are saved permanently per note (or chapter) regardless of whether the gutter is currently shown — toggling the gutter off only hides them, it never deletes them.

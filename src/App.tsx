@@ -1784,15 +1784,23 @@ function App() {
   const [persistenceReady, setPersistenceReady] = useState(false)
   const [appShellWidthPx, setAppShellWidthPx] = useState(APP_WINDOW_MIN_WIDTH_PX)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
-  // Line-number/review-flag gutter visibility, keyed per editor slot
-  // (sectionId) -- not per note/chapter, so switching which note a slot
-  // shows leaves the toggle alone. Absent key = off (a freshly created slot
-  // starts with the gutter off). Entries are pruned whenever a slot closes
-  // (handleCloseSection/the swap-close path below) -- the toggle is a
-  // property of "this occupied slot," not of any section identity that
-  // might outlive it, so there is nothing to restore once the slot is gone,
-  // even for a named section later recalled via swapIntoSlot.
+  // Line-number gutter visibility, keyed per editor slot (sectionId) -- not
+  // per note/chapter, so switching which note a slot shows leaves the toggle
+  // alone. Absent key = off (a freshly created slot starts with the gutter
+  // off). Entries are pruned whenever a slot closes (handleCloseSection/the
+  // swap-close path below) -- the toggle is a property of "this occupied
+  // slot," not of any section identity that might outlive it, so there is
+  // nothing to restore once the slot is gone, even for a named section later
+  // recalled via swapIntoSlot.
   const [reviewGutterVisibleBySection, setReviewGutterVisibleBySection] = useState<Record<string, boolean>>({})
+  // Review-flag gutter column visibility, keyed the same way, but toggled
+  // independently of the line-number column (right-click on the toggle
+  // button -- see handleToggleReviewFlags). Left-click
+  // (handleToggleReviewGutter) drives both columns together, based on the
+  // CURRENT line-number state, ignoring whatever this was set to -- so a
+  // user who right-clicked flags off/on separately still gets predictable
+  // "both on" / "both off" behavior from a left click.
+  const [reviewFlagsVisibleBySection, setReviewFlagsVisibleBySection] = useState<Record<string, boolean>>({})
   // The sections actually occupying a slot right now, sorted left-to-right --
   // resolved from window.thockdownSections.listSections() during bootstrap
   // (see the bootstrap effect below), filtered to position !== null. Starts
@@ -3504,6 +3512,7 @@ function App() {
     sidebarViewStateByMode?: SidebarViewStateByMode
     isSidebarVisible?: boolean
     reviewGutterVisibleBySection?: Record<string, boolean>
+    reviewFlagsVisibleBySection?: Record<string, boolean>
   }): PersistedMenuState => {
     const effectiveViewStateByMode = overrides?.sidebarViewStateByMode ?? sidebarViewStateByMode
 
@@ -3608,6 +3617,7 @@ function App() {
       tabBarMode: tabBarModeRef.current,
       isSidebarVisible: overrides?.isSidebarVisible ?? isSidebarVisible,
       reviewGutterVisibleBySection: overrides?.reviewGutterVisibleBySection ?? reviewGutterVisibleBySection,
+      reviewFlagsVisibleBySection: overrides?.reviewFlagsVisibleBySection ?? reviewFlagsVisibleBySection,
       // Machine-level performance prefs, deliberately NOT part of
       // UiLayoutLoadout -- these must survive switching between layouts
       // rather than being reset to whatever each layout last had stored.
@@ -3675,6 +3685,7 @@ function App() {
     sidebarViewStateByMode,
     isSidebarVisible,
     reviewGutterVisibleBySection,
+    reviewFlagsVisibleBySection,
     viewFontSize,
     viewSpacing,
     viewLetterSpacingEm,
@@ -5309,7 +5320,15 @@ ${markdownHtml}
 
             // Restore persisted sidebar visibility
             setIsSidebarVisible(appState.menu.isSidebarVisible ?? true)
-            setReviewGutterVisibleBySection(appState.menu.reviewGutterVisibleBySection ?? {})
+            const restoredReviewGutterVisibleBySection = appState.menu.reviewGutterVisibleBySection ?? {}
+            setReviewGutterVisibleBySection(restoredReviewGutterVisibleBySection)
+            // Legacy migration: states saved before the line-number/review-flag
+            // split have no reviewFlagsVisibleBySection field at all -- seed it
+            // from the old combined gutter value so upgrading doesn't silently
+            // hide flags that were visible before. Once the user toggles
+            // anything post-upgrade, the field gets persisted for real and this
+            // fallback no longer applies.
+            setReviewFlagsVisibleBySection(appState.menu.reviewFlagsVisibleBySection ?? restoredReviewGutterVisibleBySection)
 
             // Cursor appearance (color/size/speed) now lives in the active
             // UiLayoutLoadout, restored when that loadout is applied below.
@@ -5613,10 +5632,18 @@ ${markdownHtml}
   // Persists a review-gutter-visibility change through the same
   // buildMenuStateSnapshot/saveAppState round trip every other menu toggle
   // uses (see setIsSidebarVisible's own save call above for the pattern this
-  // mirrors).
-  const persistReviewGutterVisibility = useCallback((next: Record<string, boolean>) => {
+  // mirrors). Takes both maps explicitly rather than reading state directly,
+  // since every caller below already has the just-computed next value for
+  // (at least) one of the two and the current value of the other in scope.
+  const persistReviewGutterVisibility = useCallback((
+    nextLineNumbers: Record<string, boolean>,
+    nextReviewFlags: Record<string, boolean>,
+  ) => {
     if (!window.thockdownState || !persistenceReady) return
-    const snapshot = buildMenuStateSnapshot({ reviewGutterVisibleBySection: next })
+    const snapshot = buildMenuStateSnapshot({
+      reviewGutterVisibleBySection: nextLineNumbers,
+      reviewFlagsVisibleBySection: nextReviewFlags,
+    })
     const section = getActiveSection()
     void window.thockdownState.saveAppState({
       selectedNoteId: section?.activeNoteId ?? null,
@@ -5625,25 +5652,58 @@ ${markdownHtml}
     })
   }, [buildMenuStateSnapshot, getActiveSection, persistenceReady])
 
+  // Left click on the toggle button: both columns move together, driven by
+  // the line-number column's CURRENT visibility -- not by independently
+  // flipping each column's own state, which would incorrectly turn flags
+  // back on if a prior right click had turned them off while line numbers
+  // stayed on. "Off" -> both on; "on" -> both off.
   const handleToggleReviewGutter = useCallback((sectionId: string) => {
-    setReviewGutterVisibleBySection((previous) => {
-      const next = { ...previous, [sectionId]: !previous[sectionId] }
-      persistReviewGutterVisibility(next)
-      return next
+    setReviewGutterVisibleBySection((previousLineNumbers) => {
+      const nextValue = !previousLineNumbers[sectionId]
+      const nextLineNumbers = { ...previousLineNumbers, [sectionId]: nextValue }
+      setReviewFlagsVisibleBySection((previousFlags) => {
+        const nextFlags = { ...previousFlags, [sectionId]: nextValue }
+        persistReviewGutterVisibility(nextLineNumbers, nextFlags)
+        return nextFlags
+      })
+      return nextLineNumbers
     })
   }, [persistReviewGutterVisibility])
 
-  // A slot's gutter toggle is a property of "this occupied slot," not of any
-  // section identity that might outlive it (see reviewGutterVisibleBySection's
-  // own doc comment) -- called from every path that closes a slot, whether
-  // the section itself is deleted (unnamed) or merely parked (named).
+  // Right click on the toggle button: flips the review-flag column alone,
+  // leaving line-number visibility untouched.
+  const handleToggleReviewFlags = useCallback((sectionId: string) => {
+    setReviewFlagsVisibleBySection((previousFlags) => {
+      const nextFlags = { ...previousFlags, [sectionId]: !previousFlags[sectionId] }
+      setReviewGutterVisibleBySection((previousLineNumbers) => {
+        persistReviewGutterVisibility(previousLineNumbers, nextFlags)
+        return previousLineNumbers
+      })
+      return nextFlags
+    })
+  }, [persistReviewGutterVisibility])
+
+  // A slot's gutter toggles are a property of "this occupied slot," not of
+  // any section identity that might outlive it (see
+  // reviewGutterVisibleBySection's own doc comment) -- called from every
+  // path that closes a slot, whether the section itself is deleted
+  // (unnamed) or merely parked (named). Prunes both maps: the two columns
+  // toggle independently, so a slot can have an entry in one but not the
+  // other (e.g. review flags were right-clicked on before line numbers were
+  // ever toggled).
   const pruneReviewGutterVisibility = useCallback((sectionId: string) => {
-    setReviewGutterVisibleBySection((previous) => {
-      if (!(sectionId in previous)) return previous
-      const next = { ...previous }
-      delete next[sectionId]
-      persistReviewGutterVisibility(next)
-      return next
+    setReviewGutterVisibleBySection((previousLineNumbers) => {
+      const hasLineNumbers = sectionId in previousLineNumbers
+      const nextLineNumbers = hasLineNumbers ? { ...previousLineNumbers } : previousLineNumbers
+      if (hasLineNumbers) delete nextLineNumbers[sectionId]
+      setReviewFlagsVisibleBySection((previousFlags) => {
+        const hasFlags = sectionId in previousFlags
+        const nextFlags = hasFlags ? { ...previousFlags } : previousFlags
+        if (hasFlags) delete nextFlags[sectionId]
+        if (hasLineNumbers || hasFlags) persistReviewGutterVisibility(nextLineNumbers, nextFlags)
+        return nextFlags
+      })
+      return nextLineNumbers
     })
   }, [persistReviewGutterVisibility])
 
@@ -8246,8 +8306,10 @@ ${markdownHtml}
                   spellCheckEditEnabled={spellCheckEditEnabled}
                   spellCheckRenderEnabled={spellCheckRenderEnabled}
                   highlightSearchColor={highlightColors.search}
-                  showReviewGutter={reviewGutterVisibleBySection[entry.id] ?? false}
+                  showLineNumbers={reviewGutterVisibleBySection[entry.id] ?? false}
+                  showReviewFlags={reviewFlagsVisibleBySection[entry.id] ?? false}
                   onToggleReviewGutter={() => handleToggleReviewGutter(entry.id)}
+                  onToggleReviewFlags={() => handleToggleReviewFlags(entry.id)}
                 />
                 </div>
               </Fragment>

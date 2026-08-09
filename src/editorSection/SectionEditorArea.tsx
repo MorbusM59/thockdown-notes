@@ -75,9 +75,17 @@ export interface SectionEditorAreaProps {
   onCancelChapterIdEdit: () => void
   onCollapseChapterIntoPrevious: () => void
   onExtractSelectionToChapter: () => void
-  /** Line-number/review-flag gutter toggle, per editor slot -- see App.tsx's reviewGutterVisibleBySection. */
-  showReviewGutter: boolean
+  /**
+   * Line-number/review-flag gutter toggles, per editor slot -- see App.tsx's
+   * reviewGutterVisibleBySection/reviewFlagsVisibleBySection. Independently
+   * switchable: onToggleReviewGutter (left click) flips both together, based
+   * on the current line-number state; onToggleReviewFlags (right click)
+   * flips the flag column alone.
+   */
+  showLineNumbers: boolean
+  showReviewFlags: boolean
   onToggleReviewGutter: () => void
+  onToggleReviewFlags: () => void
 }
 
 /**
@@ -149,8 +157,10 @@ export function SectionEditorArea({
   onCancelChapterIdEdit,
   onCollapseChapterIntoPrevious,
   onExtractSelectionToChapter,
-  showReviewGutter,
+  showLineNumbers,
+  showReviewFlags,
   onToggleReviewGutter,
+  onToggleReviewFlags,
 }: SectionEditorAreaProps) {
   const setStageEl = useCallback((el: HTMLDivElement | null) => {
     (editorStageRef as MutableRefObject<HTMLDivElement | null>).current = el
@@ -212,7 +222,8 @@ export function SectionEditorArea({
                   spellCheckEnabled={spellCheckEditEnabled}
                   fontReady={editorFontLoadVersion > 0}
                   caretSuspended={isCaretSuspended}
-                  showReviewGutter={showReviewGutter}
+                  showLineNumbers={showLineNumbers}
+                  showReviewFlags={showReviewFlags}
                 />
               ) : emptyState}
             </div>
@@ -297,11 +308,15 @@ export function SectionEditorArea({
         <div className="chapter-toggle-panel">
           <button
             type="button"
-            className={`chapter-toggle-button btn-icon${showReviewGutter ? ' is-active' : ''}`}
-            aria-label="Toggle line numbers and review flags"
-            aria-pressed={showReviewGutter}
-            data-tooltip="Toggle line numbers and review flags"
+            className={`chapter-toggle-button btn-icon${(showLineNumbers || showReviewFlags) ? ' is-active' : ''}`}
+            aria-label="Toggle line numbers and review flags (right-click to toggle review flags only)"
+            aria-pressed={showLineNumbers || showReviewFlags}
+            data-tooltip="Left-click: toggle line numbers + review flags. Right-click: toggle review flags only."
             onClick={onToggleReviewGutter}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              onToggleReviewFlags()
+            }}
           >
             <span className="fa-solid fa-list-ol" aria-hidden="true" />
           </button>

@@ -240,12 +240,15 @@ export interface CM6EditorProps {
   // both this and hasViewportLines (below).
   fontReady?: boolean;
   caretSuspended?: boolean;
-  // Per-editor-slot toggle (owned by app state, not this component -- see
-  // useReviewGutterVisibility.ts) for the line-number/review-flag gutter
-  // columns. Flags themselves are always loaded/tracked/persisted regardless
-  // of this flag's value -- toggling only shows/hides the columns; see
+  // Per-editor-slot toggles (owned by app state, not this component -- see
+  // useReviewGutterVisibility.ts) for the two gutter columns, independently
+  // switchable (left click on the toggle button flips both together, right
+  // click flips showReviewFlags alone -- see SectionEditorArea's toggle
+  // button). Flags themselves are always loaded/tracked/persisted regardless
+  // of either flag's value -- toggling only shows/hides the columns; see
   // docs/editor-contract.md-adjacent reasoning in the gutter section below.
-  showReviewGutter?: boolean;
+  showLineNumbers?: boolean;
+  showReviewFlags?: boolean;
 }
 
 function toSelectionState(range: { anchor: number; head: number; from: number; to: number; empty: boolean }): EditorSelectionState {
@@ -689,7 +692,8 @@ export function CM6Editor({
   spellCheckEnabled = false,
   fontReady = true,
   caretSuspended = false,
-  showReviewGutter = false,
+  showLineNumbers = false,
+  showReviewFlags = false,
 }: CM6EditorProps) {
   const layerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -744,10 +748,12 @@ export function CM6Editor({
   const lastHydratedNoteIdRef = useRef<string | null>(null);
   const lineHeightPxRef = useRef(lineHeightPx);
   const cellWidthPxRef = useRef(cellWidthPx);
-  // Mirrors the showReviewGutter prop for the resize-observer callback below,
-  // which needs the CURRENT value inside a mount-once closure -- same
-  // pattern as lineHeightPxRef/cellWidthPxRef.
-  const showReviewGutterRef = useRef(showReviewGutter);
+  // Mirrors showReviewFlags for the resize-observer callback below, which
+  // needs the CURRENT value inside a mount-once closure -- same pattern as
+  // lineHeightPxRef/cellWidthPxRef. Only the flag column affects the right
+  // padding computed there (see computeReviewGutterRightPx), so line-number
+  // visibility doesn't need a mirror ref.
+  const showReviewFlagsRef = useRef(showReviewFlags);
   const [caretStyle, setCaretStyle] = useState<React.CSSProperties | null>(null);
   const caretAnimationFrameRef = useRef<number | null>(null);
   // scrollerRect/layerRect don't change on a plain text keystroke -- only
@@ -1054,8 +1060,8 @@ export function CM6Editor({
   }, [lineHeightPx, cellWidthPx]);
 
   useEffect(() => {
-    showReviewGutterRef.current = showReviewGutter;
-  }, [showReviewGutter]);
+    showReviewFlagsRef.current = showReviewFlags;
+  }, [showReviewFlags]);
 
   useEffect(() => {
     hasViewportLinesRef.current = hasViewportLines;
@@ -1146,7 +1152,7 @@ export function CM6Editor({
   // flag column. Zero when the gutter is toggled off -- additive-only
   // against the existing padding math below, so a user who never enables
   // this feature sees byte-identical layout to before it existed.
-  const reviewGutterLeftPx = showReviewGutter ? String(Math.max(1, totalLineCount)).length * cellWidthPx : 0;
+  const reviewGutterLeftPx = showLineNumbers ? String(Math.max(1, totalLineCount)).length * cellWidthPx : 0;
   // The flag column can't be a flat one-cell width: the grid's box columns
   // are anchored from the LEFT (halfCellWidthPx + n*cellWidthPx) and are
   // never phase-corrected against the right edge -- same "cut-off boxes at
@@ -1163,7 +1169,7 @@ export function CM6Editor({
   // below, which applies the same formula synchronously against a freshly
   // measured width -- see that function's own doc comment for why the
   // formula needs to live in exactly one place, called from two triggers.
-  const reviewGutterRightPx = computeReviewGutterRightPx(scrollerClientWidthPx, cellWidthPx, showReviewGutter);
+  const reviewGutterRightPx = computeReviewGutterRightPx(scrollerClientWidthPx, cellWidthPx, showReviewFlags);
   // Rendered via an explicit `left`, never `right: 0`: a `right: 0` box's
   // right edge is resolved live by the browser against the parent's actual
   // current width on every layout pass, while reviewGutterRightPx (its
@@ -1188,7 +1194,7 @@ export function CM6Editor({
   // scroller's own right edge the way the reserved region is -- found live:
   // rendering it at the full reserved width visually extended the gutter
   // all the way to the border, past where a single box actually ends.
-  const reviewGutterFlagBoxWidthPx = showReviewGutter ? cellWidthPx : 0;
+  const reviewGutterFlagBoxWidthPx = showReviewFlags ? cellWidthPx : 0;
   // Whether the gutter's static top/bottom edge box (see
   // ReviewGutterEdgeLines) should show an up/down-long "jump" arrow -- true
   // iff a flagged line exists strictly past that edge (above
@@ -1468,9 +1474,9 @@ export function CM6Editor({
    * not a DOM measurement -- so it's exact under wrapping and viewport
    * virtualization for free, the same primitive resolveSourceLineAtHeight
    * already relies on elsewhere in this file. Deliberately NOT gated on
-   * showReviewGutter: flagsByLineRef must stay current even while the
-   * columns are hidden, since toggling them back on must show up-to-date
-   * flags immediately, not a stale snapshot from before the toggle.
+   * showLineNumbers/showReviewFlags: flagsByLineRef must stay current even
+   * while the columns are hidden, since toggling them back on must show
+   * up-to-date flags immediately, not a stale snapshot from before the toggle.
    */
   const updateLineLayout = useCallback(() => {
     const view = viewRef.current;
@@ -3266,7 +3272,7 @@ export function CM6Editor({
     // found live as "characters next to the flag column jitter, wrap, then
     // revert" while dragging a pane divider narrower.
     const applySynchronousGutterRightPadding = (measuredWidthPx: number) => {
-      view.contentDOM.style.paddingRight = `${computeReviewGutterRightPx(measuredWidthPx, cellWidthPxRef.current, showReviewGutterRef.current)}px`;
+      view.contentDOM.style.paddingRight = `${computeReviewGutterRightPx(measuredWidthPx, cellWidthPxRef.current, showReviewFlagsRef.current)}px`;
     };
 
     const resizeObserver = new ResizeObserver(() => {
@@ -4162,7 +4168,7 @@ export function CM6Editor({
           the way the grid/boundary zones are -- reviewGutterLeftPx/RightPx
           are already 0 when off, so this renders nothing (not a wrong-pitch
           flash) until those are ready either way. */}
-      {showReviewGutter && (reviewGutterLeftPx > 0 || reviewGutterRightPx > 0) && (
+      {(showLineNumbers || showReviewFlags) && (reviewGutterLeftPx > 0 || reviewGutterRightPx > 0) && (
         <>
           {/* left starts at halfCellWidthPx, not 0 -- the same "infinity
               grid" breathing-room shift the content's own paddingLeft gets,

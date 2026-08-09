@@ -161,8 +161,19 @@ export interface PersistedMenuState {
    * (colors, size, speed, etc.) live in UiLayoutLoadout instead.
    */
   customCursorEnabled?: boolean;
-  /** Line-number/review-flag gutter visibility, keyed per editor slot (sectionId), not per note. See App.tsx's reviewGutterVisibleBySection. */
+  /** Line-number gutter visibility, keyed per editor slot (sectionId), not per note. See App.tsx's reviewGutterVisibleBySection. */
   reviewGutterVisibleBySection?: Record<string, boolean>;
+  /**
+   * Review-flag gutter column visibility, keyed per editor slot (sectionId),
+   * independent of reviewGutterVisibleBySection's line-number column -- see
+   * App.tsx's handleToggleReviewGutter (left click, both columns move
+   * together based on the line-number state) vs handleToggleReviewFlags
+   * (right click, this column alone). Older saved states predate the split
+   * and won't have this field; App.tsx seeds it from
+   * reviewGutterVisibleBySection on first load so upgrading preserves
+   * whatever was visible before.
+   */
+  reviewFlagsVisibleBySection?: Record<string, boolean>;
 }
 
 // Persisted boundary/scroll position as integer line counts. See

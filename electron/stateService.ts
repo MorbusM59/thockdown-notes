@@ -489,6 +489,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     isSidebarVisible: typeof input?.isSidebarVisible === 'boolean' ? input.isSidebarVisible : true,
     customCursorEnabled: Boolean(input?.customCursorEnabled),
     reviewGutterVisibleBySection: sanitizeReviewGutterVisibleBySection(input?.reviewGutterVisibleBySection),
+    reviewFlagsVisibleBySection: sanitizeReviewGutterVisibleBySection(input?.reviewFlagsVisibleBySection),
   };
 }
 
