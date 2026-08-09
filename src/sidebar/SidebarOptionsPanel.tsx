@@ -2566,20 +2566,16 @@ export function SidebarOptionsPanel({
               queueAppStateSave(activeNoteId)
             }}
             aria-pressed={reduceVisualEffects}
-            data-tooltip="Reduce visual effects (forces glaze/filter/colorize off without losing your slider positions; invert stays on for dark layouts)"
+            data-tooltip="Reduce visual effects"
           >
             <span className="fa-solid fa-spray-can-sparkles" aria-hidden="true" />
           </button>
           <button
             type="button"
-            className={`btn-icon${reducedCaretAnimation ? ' is-active' : ''}`}
-            onClick={() => {
-              const next = !reducedCaretAnimation
-              setReducedCaretAnimation(next)
-              queueAppStateSave(activeNoteId)
-            }}
-            aria-pressed={reducedCaretAnimation}
-            data-tooltip="Reduce caret animation (stops the idle blink from keeping the compositor busy)"
+            className={`btn-icon${!customCursorEnabled ? ' is-active' : ''}`}
+            onClick={() => setCustomCursorEnabled(!customCursorEnabled)}
+            aria-pressed={!customCursorEnabled}
+            data-tooltip="Disable custom mouse cursor"
           >
             <span className="fa-solid fa-computer-mouse" aria-hidden="true" />
           </button>
@@ -2592,18 +2588,22 @@ export function SidebarOptionsPanel({
               queueAppStateSave(activeNoteId)
             }}
             aria-pressed={deferPreviewOnRapidInput}
-            data-tooltip="Defer preview on rapid input (coalesces the preview update onto one frame during fast key-repeat, e.g. held Backspace)"
+            data-tooltip="Allow asynchronous input"
           >
             <span className="fa-solid fa-gauge-high" aria-hidden="true" />
           </button>
           <button
             type="button"
-            className={`btn-icon${customCursorEnabled ? ' is-active' : ''}`}
-            onClick={() => setCustomCursorEnabled(!customCursorEnabled)}
-            aria-pressed={customCursorEnabled}
-            data-tooltip={customCursorEnabled ? 'Disable custom mouse cursor' : 'Enable custom mouse cursor'}
+            className={`btn-icon${reducedCaretAnimation ? ' is-active' : ''}`}
+            onClick={() => {
+              const next = !reducedCaretAnimation
+              setReducedCaretAnimation(next)
+              queueAppStateSave(activeNoteId)
+            }}
+            aria-pressed={reducedCaretAnimation}
+            data-tooltip="Reduce caret animation"
           >
-            <span className="fa-solid fa-arrow-pointer" aria-hidden="true" />
+            <span className="fa-solid fa-square" aria-hidden="true" />
           </button>
         </div>
       </AccordionSection>

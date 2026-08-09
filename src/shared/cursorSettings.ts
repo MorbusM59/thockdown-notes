@@ -80,12 +80,12 @@ export const CURSOR_DOT_SIZE_DEFAULT_PX = 2
 // see CustomCursorSettings.haloRadiusPx.
 export const CURSOR_HALO_RADIUS_MIN_PX = 0
 export const CURSOR_HALO_RADIUS_MAX_PX = CURSOR_RADIUS_MAX_PX
-export const CURSOR_HALO_RADIUS_DEFAULT_PX = 0
+export const CURSOR_HALO_RADIUS_DEFAULT_PX = 8
 
 export const CURSOR_HALO_FALLOFF_MIN = 0
 export const CURSOR_HALO_FALLOFF_MAX = 100
 export const CURSOR_HALO_FALLOFF_STEP = 1
-export const CURSOR_HALO_FALLOFF_DEFAULT = 50
+export const CURSOR_HALO_FALLOFF_DEFAULT = 30
 
 export const CURSOR_CENTER_SIZE_MIN_PX = 0
 export const CURSOR_CENTER_SIZE_MAX_PX = 12
@@ -98,7 +98,7 @@ export const CURSOR_CENTER_SIZE_DEFAULT_PX = 5
 export const CURSOR_PULSE_MAGNITUDE_MIN = 0
 export const CURSOR_PULSE_MAGNITUDE_MAX = 1
 export const CURSOR_PULSE_MAGNITUDE_STEP = 0.05
-export const CURSOR_PULSE_MAGNITUDE_DEFAULT = 0
+export const CURSOR_PULSE_MAGNITUDE_DEFAULT = 0.1
 
 export const CURSOR_PULSE_HZ_MIN = 0.1
 export const CURSOR_PULSE_HZ_MAX = 2
@@ -119,7 +119,7 @@ export const CURSOR_CLICK_RAMP_DEFAULT = 1.5
 
 export const CURSOR_CLICK_SKEW_MIN = 0.1
 export const CURSOR_CLICK_SKEW_MAX = 0.9
-export const CURSOR_CLICK_SKEW_DEFAULT = 0.5
+export const CURSOR_CLICK_SKEW_DEFAULT = 0.1
 
 // "Click speed" is a plain x in [0, 1], not seconds -- see
 // CursorClickCurve.ts's resolveCursorClickDurationSec for the cubic mapping
@@ -127,13 +127,13 @@ export const CURSOR_CLICK_SKEW_DEFAULT = 0.5
 export const CURSOR_CLICK_SPEED_X_MIN = 0
 export const CURSOR_CLICK_SPEED_X_MAX = 1
 export const CURSOR_CLICK_SPEED_X_STEP = 0.01
-export const CURSOR_CLICK_SPEED_X_DEFAULT = 0.5
+export const CURSOR_CLICK_SPEED_X_DEFAULT = 0.6
 
 export const CURSOR_CLICK_MAX_SPEED_MIN = 0.05
 export const CURSOR_CLICK_MAX_SPEED_MAX = 1
 export const CURSOR_CLICK_MAX_SPEED_STEP = 0.05
 // Holding long enough reaches the full 200%/50% swing.
-export const CURSOR_CLICK_MAX_SPEED_DEFAULT = 1
+export const CURSOR_CLICK_MAX_SPEED_DEFAULT = 0.7
 
 // Floor on how long a press is treated as "held" internally, regardless of
 // how quickly the physical mouse button actually came back up -- a plain
@@ -147,7 +147,7 @@ export const CURSOR_CLICK_MIN_HOLD_DEFAULT_MS = 80
 export const CURSOR_CLICK_BALANCE_MIN = -1
 export const CURSOR_CLICK_BALANCE_MAX = 1
 export const CURSOR_CLICK_BALANCE_STEP = 0.05
-export const CURSOR_CLICK_BALANCE_DEFAULT = 0
+export const CURSOR_CLICK_BALANCE_DEFAULT = 0.5
 
 // Fixed (not user-configurable) deviation bounds for the click-response
 // multiplier: widening tops out at 200% of the base value, tightening
