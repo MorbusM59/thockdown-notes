@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import type * as React from 'react'
+import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
@@ -38,6 +38,7 @@ export function CompactScrollbarSlider({
   onCommit,
 }: CompactScrollbarSliderProps) {
   const railRef = useRef<HTMLDivElement | null>(null)
+  const shellRef = useRef<HTMLDivElement | null>(null)
   const [isDragging, setIsDragging] = useState(false)
 
   const valueSpan = Math.max(max - min, Number.EPSILON)
@@ -81,7 +82,7 @@ export function CompactScrollbarSlider({
     onCommit(snapValue(value + delta))
   }, [onCommit, snapValue, value])
 
-  const handleWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+  const handleWheel = useCallback((event: WheelEvent) => {
     const dominantDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
     if (dominantDelta === 0) return
 
@@ -89,6 +90,8 @@ export function CompactScrollbarSlider({
     event.stopPropagation()
     nudgeBy(dominantDelta > 0 ? -step : step)
   }, [nudgeBy, step])
+
+  useNonPassiveWheel(shellRef, handleWheel)
 
   return (
     <div
@@ -102,7 +105,7 @@ export function CompactScrollbarSlider({
       aria-valuenow={Number(formatCompactSettingNumber(value, step))}
       className={`utility-setting-scrollbar-shell${isDragging ? ' is-dragging' : ''}`}
       data-live-tooltip={`${trackLabel}: ${formatCompactSettingNumber(value, step)}`}
-      onWheel={handleWheel}
+      ref={shellRef}
       onKeyDown={(event) => {
         if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
           event.preventDefault()

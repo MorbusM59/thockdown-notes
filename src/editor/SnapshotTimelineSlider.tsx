@@ -4,6 +4,7 @@ import { clusterPlacements } from './SnapshotTimelineCurve'
 import { useHoldToBranch } from './useHoldToBranch'
 import type { NoteSnapshotRecord } from './useNoteSnapshots'
 import { countWords } from './WordCount'
+import { useNonPassiveWheel } from '../shared/useNonPassiveWheel'
 
 // Reuses the same rail visual language as CompactScrollbarSlider (the
 // filter/settings sliders) via the shared .utility-setting-scrollbar-*
@@ -202,7 +203,7 @@ export function SnapshotTimelineSlider({
   }, [activeSnapshotId, onNavigate, orderedNavTargets])
 
   const handleWheel = useCallback(
-    (event: React.WheelEvent<HTMLDivElement>) => {
+    (event: WheelEvent) => {
       event.preventDefault()
       event.stopPropagation()
 
@@ -214,6 +215,8 @@ export function SnapshotTimelineSlider({
     },
     [curveConstant, onCurveConstantChange],
   )
+
+  useNonPassiveWheel(railRef, handleWheel)
 
   return (
     <div
@@ -230,7 +233,6 @@ export function SnapshotTimelineSlider({
       <div
         className="utility-setting-scrollbar-rail snapshot-timeline-rail"
         ref={railRef}
-        onWheel={handleWheel}
         data-tooltip={`Cut-off: ${formatTimescaleLabel(curveConstant)}\nScroll up/down to zoom.`}
       >
         {historyMarksToRender.map((mark, index) => (
