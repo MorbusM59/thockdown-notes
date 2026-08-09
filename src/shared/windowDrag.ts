@@ -19,6 +19,14 @@ export const WINDOW_DRAG_CHANNELS = {
 // toolbar background) from ever nudging the window by a stray pixel.
 export const WINDOW_DRAG_THRESHOLD_PX = 5
 
+// How far the cursor has to move (in screen px) after a mousedown on a
+// maximized window's title-bar chrome before the gesture is treated as
+// "drag to restore" rather than a click -- a plain click that jitters by a
+// pixel or two while releasing the button must not collapse maximized mode.
+// Larger than WINDOW_DRAG_THRESHOLD_PX because collapsing maximized mode is
+// a much more disruptive false positive than a stray window nudge.
+export const WINDOW_RESTORE_DRAG_THRESHOLD_PX = 12
+
 // Elements (and everything inside them) that must never start a window-drag
 // gesture: native form controls and links, the editor's own contenteditable
 // surface, anything using HTML5 drag-and-drop (tab/note reordering, section

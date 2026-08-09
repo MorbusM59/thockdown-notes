@@ -1,5 +1,10 @@
 import { useEffect } from 'react'
-import { WINDOW_DRAG_EXCLUDED_SELECTOR, WINDOW_DRAG_THRESHOLD_PX, WINDOW_TITLEBAR_SELECTOR } from '../shared/windowDrag'
+import {
+  WINDOW_DRAG_EXCLUDED_SELECTOR,
+  WINDOW_DRAG_THRESHOLD_PX,
+  WINDOW_RESTORE_DRAG_THRESHOLD_PX,
+  WINDOW_TITLEBAR_SELECTOR,
+} from '../shared/windowDrag'
 
 /**
  * Global, mount-once replacement for `-webkit-app-region: drag`. Listens for
@@ -25,9 +30,14 @@ import { WINDOW_DRAG_EXCLUDED_SELECTOR, WINDOW_DRAG_THRESHOLD_PX, WINDOW_TITLEBA
  * `once('unmaximize', ...)` never firing mid-drag even for a bare
  * unmaximize() with no repositioning attached. So instead of chasing that,
  * a drag that starts on a maximized window's title-bar chrome tracks the
- * cursor without moving anything, then on the actual mouseup -- by then a
- * genuine release, the same circumstance double-click-to-restore already
- * relies on -- restores the window and places it as if the drag had been
+ * cursor without moving anything, and only "arms" the restore once the
+ * cursor has moved WINDOW_RESTORE_DRAG_THRESHOLD_PX from mousedown -- a
+ * larger grace distance than WINDOW_DRAG_THRESHOLD_PX because collapsing
+ * maximized mode is a much more disruptive false positive than a stray
+ * window nudge, and an ordinary click naturally jitters a pixel or two
+ * before release. Then on the actual mouseup -- by then a genuine release,
+ * the same circumstance double-click-to-restore already relies on -- if
+ * armed, restores the window and places it as if the drag had been
  * followed live the whole time, anchored the same way a real title-bar
  * drag would be: the point under the cursor at mousedown stays under the
  * cursor at mouseup. See electron/main.ts's restoreMaximized handler.
@@ -45,6 +55,7 @@ export function useWindowDragRegion() {
     let candidateOrigin: { x: number; y: number } | null = null
     let isDragging = false
     let restoreOrigin: { x: number; y: number } | null = null
+    let restoreArmed = false
     let lastCursorPos: { x: number; y: number } | null = null
 
     function handleMouseDown(event: MouseEvent) {
@@ -54,6 +65,7 @@ export function useWindowDragRegion() {
       candidateOrigin = { x: event.screenX, y: event.screenY }
       isDragging = false
       restoreOrigin = null
+      restoreArmed = false
       lastCursorPos = null
       if (isMaximized && target.closest(WINDOW_TITLEBAR_SELECTOR)) {
         restoreOrigin = { x: event.screenX, y: event.screenY }
@@ -65,6 +77,11 @@ export function useWindowDragRegion() {
 
       if (restoreOrigin) {
         lastCursorPos = { x: event.screenX, y: event.screenY }
+        if (!restoreArmed) {
+          const dx = event.screenX - restoreOrigin.x
+          const dy = event.screenY - restoreOrigin.y
+          if (Math.hypot(dx, dy) >= WINDOW_RESTORE_DRAG_THRESHOLD_PX) restoreArmed = true
+        }
         return
       }
 
@@ -82,13 +99,14 @@ export function useWindowDragRegion() {
 
     function endGesture() {
       if (isDragging) controls!.endWindowDrag!()
-      if (restoreOrigin) {
+      if (restoreOrigin && restoreArmed) {
         const release = lastCursorPos ?? restoreOrigin
         controls!.restoreMaximizedWindow?.(restoreOrigin.x, restoreOrigin.y, release.x, release.y)
       }
       candidateOrigin = null
       isDragging = false
       restoreOrigin = null
+      restoreArmed = false
       lastCursorPos = null
     }
 
