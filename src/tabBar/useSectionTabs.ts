@@ -461,6 +461,25 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     }
   }, [persistenceReady, sectionId])
 
+  // Permanently deleting a note cascade-removes its note_tabs row in SQLite,
+  // but this section's own in-memory pinnedTabs was fetched once above and
+  // has no way to hear about that -- prune it here whenever a pinned note
+  // drops out of the shared notes list (soft-deleted/archived notes stay in
+  // that list, so they're untouched; only a true `deleteNote` makes a note
+  // vanish from it). Gated on persistenceReady since `notes` starts empty
+  // before the initial load resolves.
+  useEffect(() => {
+    if (!persistenceReady) return
+    const noteIds = new Set(notes.map((note) => note.id))
+    setPinnedTabs((previous) => {
+      const stillPresent = previous.filter((tab) => noteIds.has(tab.noteId))
+      return stillPresent.length === previous.length ? previous : stillPresent
+    })
+    if (tabIdentityNoteId && !noteIds.has(tabIdentityNoteId)) {
+      void clearActiveNote()
+    }
+  }, [persistenceReady, notes, tabIdentityNoteId, clearActiveNote])
+
   const toggleTabBarMode = useCallback(() => {
     setTabBarMode((previous) => (previous === 'tags' ? 'tabs' : 'tags'))
     setUnpinPrimedTabNoteId(null)
