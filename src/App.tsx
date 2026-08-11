@@ -1073,6 +1073,8 @@ type NoteListItemProps = {
   onMouseLeave?: (noteId: string) => void
   isTrashMode?: boolean
   variant?: 'default' | 'tree'
+  /** Set only for a chapter surfaced via search -- shown instead of the chapter's own title, since it's meaningless out of its parent's context. */
+  chapterParentTitle?: string
 }
 
 const NoteListItem = memo(function NoteListItem({
@@ -1091,6 +1093,7 @@ const NoteListItem = memo(function NoteListItem({
   onMouseLeave,
   isTrashMode = false,
   variant = 'default',
+  chapterParentTitle,
 }: NoteListItemProps) {
   const isTreeVariant = variant === 'tree'
   const createdDate = isTreeVariant ? '' : formatCreatedDate(note.createdAtMs)
@@ -1138,7 +1141,7 @@ const NoteListItem = memo(function NoteListItem({
   }, [note.id, onTrashClick])
 
   const isExternal = isExternalNote(note)
-  const displayTitle = isExternal ? note.fileName : note.title
+  const displayTitle = isExternal ? note.fileName : (chapterParentTitle ?? note.title)
 
   const handleMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
     if (event.button !== 2) return
@@ -1180,8 +1183,11 @@ const NoteListItem = memo(function NoteListItem({
   const hasActionColumns = !isTreeVariant
   const isArchived = isArchivedNote(note)
   const isDeleted = isDeletedNote(note)
-  const isArchiveButtonDisabled = !onArchiveClick || isArchived || (!isTrashMode && isDeleted)
-  const isTrashButtonDisabled = !onTrashClick || (!isTrashMode && isDeleted)
+  // A chapter has no tag life of its own -- archiving/trashing only makes
+  // sense on its parent note, so these are disabled for chapters surfaced
+  // via search (see chapterParentTitle).
+  const isArchiveButtonDisabled = !onArchiveClick || isArchived || (!isTrashMode && isDeleted) || note.chapterOnly
+  const isTrashButtonDisabled = !onTrashClick || (!isTrashMode && isDeleted) || note.chapterOnly
 
   return (
     <div
@@ -6347,20 +6353,33 @@ ${markdownHtml}
     return source.filter((note) => matchesSelectedDateFilter(note.updatedAtMs))
   }, [hasDateFilter, matchesSelectedDateFilter])
 
+  const isSidebarSearchActive = isNoteSearchQueryActive(searchQuery)
+
+  const notesById = useMemo(() => {
+    return new Map(notes.map((note) => [note.id, note]))
+  }, [notes])
+
   const dateEligibleNotes = useMemo(() => {
     return searchedNotes.filter((note) => {
       if (isDeletedNote(note)) return false
       if (isArchivedNote(note)) return false
       // Chapters only ever exist to be shown through their parent's chapter
       // bar -- excluded from every menu view, unlike external notes (which
-      // still show in 'date').
-      if (isChapterOnlyNote(note)) return false
+      // still show in 'date'). The one exception is an active search: a
+      // chapter whose own content/title matched is surfaced like any other
+      // note (see NoteListItem's chapterParentTitle override, which shows
+      // the parent's title instead of the chapter's own).
+      if (isChapterOnlyNote(note) && !isSidebarSearchActive) return false
       return true
     })
-  }, [searchedNotes])
+  }, [isSidebarSearchActive, searchedNotes])
 
   const categoryEligibleNotes = useMemo(() => {
-    const categoryNotes = dateEligibleNotes.filter((note) => !isExternalNote(note))
+    // The category tree groups by tag, and a chapter has no tags of its own
+    // (see isChapterOnlyNote's other callers) -- surfacing it here would
+    // just dump it into an untagged bucket with the wrong title. Chapters
+    // stay search-only, in the flat 'date' list.
+    const categoryNotes = dateEligibleNotes.filter((note) => !isExternalNote(note) && !isChapterOnlyNote(note))
     return filterNotesBySelectedDate(categoryNotes)
   }, [dateEligibleNotes, filterNotesBySelectedDate])
 
@@ -6422,8 +6441,6 @@ ${markdownHtml}
   const totalPagedNotes = (sidebarMode === 'date' || sidebarMode === 'trash')
     ? visibleNotes.length
     : 0
-
-  const isSidebarSearchActive = isNoteSearchQueryActive(searchQuery)
 
   // The menu is deliberately a stable "file cabinet," not something that
   // chases the active note -- browsing the sidebar (changing a filter,
@@ -7642,14 +7659,25 @@ ${markdownHtml}
                         aria-label="Note list"
                       >
                         {pagedVisibleNotes.map((note) => {
-                          const isActive = note.id === activeSection?.menuIdentityNoteId
+                          // menuIdentityNoteId collapses an active chapter to
+                          // its parent (so the chapter bar's owner note
+                          // highlights normally) -- but a chapter can now
+                          // appear as its own row via search, so it needs to
+                          // compare against the true active note instead.
+                          const isActive = note.chapterOnly
+                            ? note.id === activeSection?.activeNoteId
+                            : note.id === activeSection?.menuIdentityNoteId
                           const isModified = isExternalNote(note) && getCurrentExternalNoteModifiedState(note)
+                          const chapterParentTitle = note.chapterOnly && note.chapterParentId
+                            ? notesById.get(note.chapterParentId)?.title
+                            : undefined
                           return (
                             <NoteListItem
                               key={note.id}
                               note={note}
                               isActive={isActive}
                               isModified={isModified}
+                              chapterParentTitle={chapterParentTitle}
                               onSelect={handleSelectNote}
                               onPrimedLeftClick={(noteId) => getActiveSection()?.handlePrimedNoteLeftClick(noteId)}
                               onSaveClick={activeSection?.handleSaveButtonClick}

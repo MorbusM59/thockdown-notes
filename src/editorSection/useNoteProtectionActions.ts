@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent, MutableRefObject } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
-import { isArchivedNote, isDeletedNote, isExternalNote, isSameNoteSummary } from '../shared/noteLifecycle'
+import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from '../shared/noteLifecycle'
 import { normalizeTagName } from '../shared/tags'
 import { normalizeInternalText } from '../editor/TextPolicy'
 
@@ -405,7 +405,11 @@ export function useNoteProtectionActions({
 
     const summary = notes.find((note) => note.id === noteId)
     const isExternal = summary ? isExternalNote(summary) : false
-    if (isExternal) {
+    // Chapters have no tag life of their own -- archiving/deleting only
+    // makes sense on their parent note (see the tag-bar identity comment in
+    // useSectionTabs.ts). They can still surface here via search results.
+    const isChapterOnly = summary ? isChapterOnlyNote(summary) : false
+    if (isExternal || isChapterOnly) {
       return
     }
 
