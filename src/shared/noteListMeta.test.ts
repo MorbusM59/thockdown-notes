@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getNoteListMetaKind, type NoteListMetaCandidate } from './noteListMeta'
+import { getChapterNoteListMetaLabel, getNoteListMetaKind, type NoteListMetaCandidate } from './noteListMeta'
 
 describe('getNoteListMetaKind', () => {
   it('prefers the assigned id over the created date when one exists', () => {
@@ -18,5 +18,39 @@ describe('getNoteListMetaKind', () => {
     }
 
     expect(getNoteListMetaKind(note)).toBe('created')
+  })
+})
+
+describe('getChapterNoteListMetaLabel', () => {
+  it('uses the parent assigned id and chapter id when both exist', () => {
+    expect(getChapterNoteListMetaLabel({
+      parentAssignedId: 'NOTE-42',
+      chapterAssignedId: 'AGENDA',
+      createdDateText: '01 Jan 26',
+    })).toBe('$NOTE-42 §AGENDA')
+  })
+
+  it('uses the parent assigned id and the creation date when the chapter has no id', () => {
+    expect(getChapterNoteListMetaLabel({
+      parentAssignedId: 'NOTE-42',
+      chapterAssignedId: null,
+      createdDateText: '01 Jan 26',
+    })).toBe('$NOTE-42 § 01 Jan 26')
+  })
+
+  it('uses the chapter id without the parent when the parent has no assigned id', () => {
+    expect(getChapterNoteListMetaLabel({
+      parentAssignedId: null,
+      chapterAssignedId: 'AGENDA',
+      createdDateText: '01 Jan 26',
+    })).toBe('§AGENDA')
+  })
+
+  it('falls back to the chapter marker and creation date when neither id exists', () => {
+    expect(getChapterNoteListMetaLabel({
+      parentAssignedId: null,
+      chapterAssignedId: null,
+      createdDateText: '01 Jan 26',
+    })).toBe('§ 01 Jan 26')
   })
 })

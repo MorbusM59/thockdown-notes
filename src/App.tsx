@@ -34,7 +34,7 @@ import {
 } from './shared/loadouts'
 import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
-import { getNoteListMetaKind } from './shared/noteListMeta'
+import { getChapterNoteListMetaLabel, getNoteListMetaKind } from './shared/noteListMeta'
 import { NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload } from './shared/noteDrag'
 import {
   type RgbaColor,
@@ -1076,6 +1076,7 @@ type NoteListItemProps = {
   variant?: 'default' | 'tree'
   /** Set only for a chapter surfaced via search -- shown instead of the chapter's own title, since it's meaningless out of its parent's context. */
   chapterParentTitle?: string
+  chapterParentAssignedId?: string | null
 }
 
 const NoteListItem = memo(function NoteListItem({
@@ -1095,6 +1096,7 @@ const NoteListItem = memo(function NoteListItem({
   isTrashMode = false,
   variant = 'default',
   chapterParentTitle,
+  chapterParentAssignedId,
 }: NoteListItemProps) {
   const isTreeVariant = variant === 'tree'
   const createdDate = isTreeVariant ? '' : formatCreatedDate(note.createdAtMs)
@@ -1144,6 +1146,13 @@ const NoteListItem = memo(function NoteListItem({
   const isExternal = isExternalNote(note)
   const displayTitle = isExternal ? note.fileName : (chapterParentTitle ?? note.title)
   const noteListMetaKind = getNoteListMetaKind(note)
+  const chapterMetadataText = note.chapterOnly && note.chapterParentId
+    ? getChapterNoteListMetaLabel({
+      parentAssignedId: chapterParentAssignedId ?? null,
+      chapterAssignedId: note.assignedId ?? null,
+      createdDateText: createdDate,
+    })
+    : null
 
   const handleMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
     if (event.button !== 2) return
@@ -1214,9 +1223,7 @@ const NoteListItem = memo(function NoteListItem({
               <div className="note-list-title">{displayTitle || 'Untitled'}</div>
               <div className="note-list-meta-row">
                 <span className="note-list-meta-left">
-                  {noteListMetaKind === 'id'
-                    ? `$${note.assignedId}`
-                    : createdDate}
+                  {chapterMetadataText ?? (noteListMetaKind === 'id' ? `$${note.assignedId}` : createdDate)}
                 </span>
                 <span className="note-list-meta-right"><ModifiedDateLabel timestampMs={note.updatedAtMs} /></span>
               </div>
@@ -1293,9 +1300,7 @@ const NoteListItem = memo(function NoteListItem({
           {isTreeVariant ? null : (
             <div className="note-list-meta-row">
               <span className="note-list-meta-left">
-                {noteListMetaKind === 'id'
-                  ? `$${note.assignedId}`
-                  : createdDate}
+                {chapterMetadataText ?? (noteListMetaKind === 'id' ? `$${note.assignedId}` : createdDate)}
               </span>
               <span className="note-list-meta-right"><ModifiedDateLabel timestampMs={note.updatedAtMs} /></span>
             </div>
@@ -7688,6 +7693,7 @@ ${markdownHtml}
                               isActive={isActive}
                               isModified={isModified}
                               chapterParentTitle={chapterParentTitle}
+                              chapterParentAssignedId={note.chapterOnly && note.chapterParentId ? notesById.get(note.chapterParentId)?.assignedId ?? null : null}
                               onSelect={handleSelectNote}
                               onPrimedLeftClick={(noteId) => getActiveSection()?.handlePrimedNoteLeftClick(noteId)}
                               onSaveClick={activeSection?.handleSaveButtonClick}
