@@ -625,6 +625,10 @@
   display: none;
 }
 
+.note-list-columns:hover .note-list-meta-right {
+  display: none;
+}
+
 .note-list-columns:hover .note-list-column-action,
 .note-list-item.is-external.is-modified .note-list-column-save,
 .note-list-item.is-external .note-list-column-close {
