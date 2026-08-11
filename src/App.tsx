@@ -8255,6 +8255,7 @@ ${markdownHtml}
               isBlockquoteActive={activeSection?.isBlockquoteActive ?? false}
               isCodeBlockActive={activeSection?.isCodeBlockActive ?? false}
               isInlineCodeActive={activeSection?.isInlineCodeActive ?? false}
+              isTableOfContentsActive={activeSection?.isTableOfContentsActive ?? false}
               applyTextDecoration={activeSection?.applyTextDecoration ?? noop}
               applyHeading={activeSection?.applyHeading ?? noop}
               toggleCurrentLineHeading={activeSection?.toggleCurrentLineHeading ?? noop}
@@ -8268,6 +8269,7 @@ ${markdownHtml}
               applyCodeBlock={activeSection?.applyCodeBlock ?? noop}
               insertHorizontalRule={activeSection?.insertHorizontalRule ?? noop}
               insertTableOfContents={activeSection?.insertTableOfContents ?? noop}
+              toggleTableOfContents={activeSection?.toggleTableOfContents ?? noop}
             />
 
             <div className="editor-sections-row" ref={editorSectionsRowRef}>

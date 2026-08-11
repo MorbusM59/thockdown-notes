@@ -51,6 +51,7 @@ export function EditorToolbar({
   isBlockquoteActive,
   isCodeBlockActive,
   isInlineCodeActive,
+  isTableOfContentsActive,
   applyTextDecoration,
   applyHeading,
   toggleBulletedList,
@@ -63,6 +64,7 @@ export function EditorToolbar({
   applyCodeBlock,
   insertHorizontalRule,
   insertTableOfContents,
+  toggleTableOfContents,
 }: EditorToolbarProps) {
   return (
     <section className="toolbar-grid" style={{ gridArea: 'toolbar' }} aria-label="Editor toolbar">
@@ -209,11 +211,17 @@ export function EditorToolbar({
             <div className="toolbar-group chapter-group">
               <button
                 type="button"
-                className="btn-icon"
-                data-tooltip="Insert table of contents"
-                aria-label="Insert table of contents"
+                className={`btn-icon ${isTableOfContentsActive ? 'active' : ''}`}
+                data-tooltip={isTableOfContentsActive ? 'Remove table of contents' : 'Insert table of contents'}
+                aria-label={isTableOfContentsActive ? 'Remove table of contents' : 'Insert table of contents'}
                 disabled={!activeNoteId}
-                onClick={insertTableOfContents}
+                onClick={() => {
+                  if (isTableOfContentsActive) {
+                    toggleTableOfContents()
+                  } else {
+                    insertTableOfContents()
+                  }
+                }}
               >
                 <span className="fa-solid fa-list-ol" aria-hidden="true" />
               </button>

@@ -23,14 +23,55 @@ function stripMarkdownInlineFormatting(text: string): string {
     .trim()
 }
 
-function makeAnchorHeadingLine(line: string): string {
+function isTableOfContentsHeadingLine(line: string): boolean {
+  return /^#{2}\s+\[[^\]]+\]\(#toc\)\s*$/.test(line.trim())
+}
+
+function findTitleLineIndex(lines: string[]): number {
+  for (let index = 0; index < lines.length; index += 1) {
+    const heading = parseMarkdownHeading(lines[index])
+    if (heading && heading.level === 1) return index
+  }
+  return -1
+}
+
+function noteHasTableOfContents(sourceText: string): boolean {
+  const lines = normalizeInternalText(sourceText).split('\n')
+  const titleIndex = findTitleLineIndex(lines)
+  let inFence = false
+
+  for (let index = titleIndex >= 0 ? titleIndex + 1 : 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    if (/^\s{0,3}(?:`{3,}|~{3,})/.test(line)) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence) continue
+
+    const heading = parseMarkdownHeading(line)
+    if (heading && heading.level === 2) {
+      return isTableOfContentsHeadingLine(line) || /\]\(#toc\)/.test(line)
+    }
+  }
+
+  return false
+}
+
+function makeAnchorHeadingLine(line: string, dedupeCounts: Map<string, number>): string {
   const heading = parseMarkdownHeading(line)
   if (!heading) return line
 
   const label = stripMarkdownInlineFormatting(heading.text)
   if (!label) return line
 
-  const anchorId = slugifyAnchorId(label)
+  const baseId = slugifyAnchorId(label)
+  let anchorId = baseId
+  const seenCount = dedupeCounts.get(baseId) ?? 0
+  if (seenCount > 0) {
+    anchorId = `${baseId}-${seenCount}`
+  }
+  dedupeCounts.set(baseId, seenCount + 1)
+
   const anchorLink = `[${label}](#${anchorId})`
   return `${'#'.repeat(heading.level)} ${anchorLink}`
 }
@@ -49,6 +90,46 @@ function trimLeadingBlankLines(lines: string[]): string[] {
     start += 1
   }
   return lines.slice(start)
+}
+
+function isTableOfContentsListLine(line: string): boolean {
+  return /^\s*(?:[-*]\s+\[[^\]]+\]\(\$#.*\)|\s{2,}-\s+\[[^\]]+\]\(\$#.*\))\s*$/.test(line)
+}
+
+function stripAnchorLinkFromHeadingText(text: string): string {
+  return stripMarkdownInlineFormatting(text).replace(/\[([^\]]+)\]\(#.*\)/g, '$1')
+}
+
+export function removeTableOfContentsAndAnchors(sourceText: string): string {
+  const lines = normalizeInternalText(sourceText).split('\n')
+  const titleIndex = findTitleLineIndex(lines)
+  const nextLines: string[] = []
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+
+    if (isTableOfContentsHeadingLine(line)) {
+      index += 1
+      while (index < lines.length && (lines[index] === '' || isTableOfContentsListLine(lines[index]))) {
+        index += 1
+      }
+      index -= 1
+      continue
+    }
+
+    const heading = parseMarkdownHeading(line)
+    if (heading && !(titleIndex !== null && index === titleIndex)) {
+      const label = stripAnchorLinkFromHeadingText(heading.text)
+      if (label) {
+        nextLines.push(`${'#'.repeat(heading.level)} ${label}`)
+        continue
+      }
+    }
+
+    nextLines.push(line)
+  }
+
+  return nextLines.join('\n')
 }
 
 const TEXT_DECORATION_MARKERS: Record<TextDecorationFormat, { open: string; close: string }> = {
@@ -101,21 +182,24 @@ export function buildTableOfContentsInsertion(
     }
   }
 
-  const anchoredLines = lines.map((line) => {
+  const dedupeCounts = new Map<string, number>()
+  const anchoredLines = lines.map((line, index) => {
     const heading = parseMarkdownHeading(line)
     if (!heading) return line
+    if (titleIndex !== null && index === titleIndex) return line
 
     const label = stripMarkdownInlineFormatting(heading.text)
     if (!label) return line
 
-    return makeAnchorHeadingLine(line)
+    return makeAnchorHeadingLine(line, dedupeCounts)
   })
 
   const insertionIndex = titleIndex === null ? 0 : titleIndex + 1
   const beforeLines = trimTrailingBlankLines(anchoredLines.slice(0, insertionIndex))
   const afterLines = trimLeadingBlankLines(anchoredLines.slice(insertionIndex))
 
-  const headings: Array<{ level: number; label: string }> = []
+  const headings: Array<{ level: number; label: string; anchorId: string }> = []
+  const headingAnchorCounts = new Map<string, number>()
   inFence = false
 
   for (let index = 0; index < anchoredLines.length; index += 1) {
@@ -133,17 +217,21 @@ export function buildTableOfContentsInsertion(
     const label = stripMarkdownInlineFormatting(heading.text)
     if (!label || label.trim().toLowerCase() === 'table of contents') continue
 
-    headings.push({ level: heading.level, label })
+    const baseId = slugifyAnchorId(label)
+    const seenCount = headingAnchorCounts.get(baseId) ?? 0
+    const anchorId = seenCount > 0 ? `${baseId}-${seenCount}` : baseId
+    headingAnchorCounts.set(baseId, seenCount + 1)
+    headings.push({ level: heading.level, label, anchorId })
   }
 
   const rootLevel = headings.length > 0 ? Math.min(...headings.map((heading) => heading.level)) : 2
-  const listLines = headings.map(({ level, label }) => {
+  const listLines = headings.map(({ level, label, anchorId }) => {
     const depth = Math.max(0, level - rootLevel)
-    return `${'  '.repeat(depth)}- [${label}]($#${slugifyAnchorId(label)})`
+    return `${'  '.repeat(depth)}- [${label}]($#${anchorId})`
   })
 
   const insertedBlock = [
-    '## [Table of Contents](#table-of-contents)',
+    '## [Table of Contents](#toc)',
     '',
     ...listLines,
   ]
@@ -193,6 +281,7 @@ export interface UseMarkdownFormattingToolbarResult {
   isBlockquoteActive: boolean
   isCodeBlockActive: boolean
   isInlineCodeActive: boolean
+  isTableOfContentsActive: boolean
   applyTextDecoration: (format: TextDecorationFormat) => void
   applyHeading: (level: 1 | 2 | 3 | 4 | 5 | 6) => void
   toggleCurrentLineHeading: () => void
@@ -206,6 +295,7 @@ export interface UseMarkdownFormattingToolbarResult {
   applyCodeBlock: () => void
   insertHorizontalRule: () => void
   insertTableOfContents: () => void
+  toggleTableOfContents: () => void
 }
 
 /**
@@ -900,12 +990,46 @@ export function useMarkdownFormattingToolbar({
     applyProgrammaticEditorText(nextText, cursor, cursor)
   }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, resolveSelectionBounds])
 
+  const isTableOfContentsActive = useMemo(() => noteHasTableOfContents(currentEditorText), [currentEditorText])
+
+  const toggleTableOfContents = useCallback(() => {
+    if (!activeNoteId) return
+
+    const sourceText = normalizeInternalText(currentEditorText)
+    if (noteHasTableOfContents(sourceText)) {
+      const nextText = removeTableOfContentsAndAnchors(sourceText)
+      const nextSelection = latestEditorSelectionRef.current
+      applyProgrammaticEditorText(nextText, nextSelection.anchor, nextSelection.focus)
+      return
+    }
+
+    const next = buildTableOfContentsInsertion(sourceText, latestEditorSelectionRef.current)
+    applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
+  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, latestEditorSelectionRef])
+
   const insertTableOfContents = useCallback(() => {
     if (!activeNoteId) return
 
+    if (isTableOfContentsActive) {
+      toggleTableOfContents()
+      return
+    }
+
     const next = buildTableOfContentsInsertion(currentEditorText, latestEditorSelectionRef.current)
     applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
-  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, latestEditorSelectionRef])
+  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, isTableOfContentsActive, latestEditorSelectionRef, toggleTableOfContents])
+
+  useLayoutEffect(() => {
+    if (!activeNoteId || !isTableOfContentsActive) return
+
+    const stripped = removeTableOfContentsAndAnchors(currentEditorText)
+    const canonical = buildTableOfContentsInsertion(stripped, latestEditorSelectionRef.current)
+    const nextText = canonical.text
+
+    if (nextText !== currentEditorText) {
+      applyProgrammaticEditorText(nextText, latestEditorSelectionRef.current.anchor, latestEditorSelectionRef.current.focus)
+    }
+  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, isTableOfContentsActive, latestEditorSelectionRef])
 
   return {
     activeDecorationFormats,
@@ -916,6 +1040,7 @@ export function useMarkdownFormattingToolbar({
     isBlockquoteActive,
     isCodeBlockActive,
     isInlineCodeActive,
+    isTableOfContentsActive,
     applyTextDecoration,
     applyHeading,
     toggleCurrentLineHeading,
@@ -929,5 +1054,6 @@ export function useMarkdownFormattingToolbar({
     applyCodeBlock,
     insertHorizontalRule,
     insertTableOfContents,
+    toggleTableOfContents,
   }
 }
