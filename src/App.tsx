@@ -34,6 +34,7 @@ import {
 } from './shared/loadouts'
 import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
+import { getNoteListMetaKind } from './shared/noteListMeta'
 import { NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload } from './shared/noteDrag'
 import {
   type RgbaColor,
@@ -1142,6 +1143,7 @@ const NoteListItem = memo(function NoteListItem({
 
   const isExternal = isExternalNote(note)
   const displayTitle = isExternal ? note.fileName : (chapterParentTitle ?? note.title)
+  const noteListMetaKind = getNoteListMetaKind(note)
 
   const handleMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
     if (event.button !== 2) return
@@ -1211,7 +1213,11 @@ const NoteListItem = memo(function NoteListItem({
             <div className="note-list-content">
               <div className="note-list-title">{displayTitle || 'Untitled'}</div>
               <div className="note-list-meta-row">
-                <span className="note-list-meta-left">{createdDate}</span>
+                <span className="note-list-meta-left">
+                  {noteListMetaKind === 'id'
+                    ? `$${note.assignedId}`
+                    : createdDate}
+                </span>
                 <span className="note-list-meta-right"><ModifiedDateLabel timestampMs={note.updatedAtMs} /></span>
               </div>
             </div>
@@ -1286,7 +1292,11 @@ const NoteListItem = memo(function NoteListItem({
           <div className="note-list-title">{displayTitle || 'Untitled'}</div>
           {isTreeVariant ? null : (
             <div className="note-list-meta-row">
-              <span className="note-list-meta-left">{createdDate}</span>
+              <span className="note-list-meta-left">
+                {noteListMetaKind === 'id'
+                  ? `$${note.assignedId}`
+                  : createdDate}
+              </span>
               <span className="note-list-meta-right"><ModifiedDateLabel timestampMs={note.updatedAtMs} /></span>
             </div>
           )}
