@@ -1027,6 +1027,7 @@ export function EditorSection({
     applyInlineCode,
     applyCodeBlock,
     insertHorizontalRule,
+    insertTableOfContents,
   } = useMarkdownFormattingToolbar({
     activeNoteId,
     currentEditorText,
@@ -1164,6 +1165,7 @@ export function EditorSection({
     applyInlineCode,
     applyCodeBlock,
     insertHorizontalRule,
+    insertTableOfContents,
     primedNoteActionById,
     isTrashViewDeletePrimed,
     setIsTrashViewDeletePrimed,

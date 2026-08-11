@@ -8267,6 +8267,7 @@ ${markdownHtml}
               applyInlineCode={activeSection?.applyInlineCode ?? noop}
               applyCodeBlock={activeSection?.applyCodeBlock ?? noop}
               insertHorizontalRule={activeSection?.insertHorizontalRule ?? noop}
+              insertTableOfContents={activeSection?.insertTableOfContents ?? noop}
             />
 
             <div className="editor-sections-row" ref={editorSectionsRowRef}>

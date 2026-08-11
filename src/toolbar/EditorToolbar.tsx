@@ -62,6 +62,7 @@ export function EditorToolbar({
   applyInlineCode,
   applyCodeBlock,
   insertHorizontalRule,
+  insertTableOfContents,
 }: EditorToolbarProps) {
   return (
     <section className="toolbar-grid" style={{ gridArea: 'toolbar' }} aria-label="Editor toolbar">
@@ -206,6 +207,16 @@ export function EditorToolbar({
               <button type="button" className="btn-icon" data-tooltip="Set anchor (Shift+Ctrl+L)" onClick={applyAnchor} disabled={!activeNoteId}><span className="fa-solid fa-anchor" aria-hidden="true" /></button>
             </div>
             <div className="toolbar-group chapter-group">
+              <button
+                type="button"
+                className="btn-icon"
+                data-tooltip="Insert table of contents"
+                aria-label="Insert table of contents"
+                disabled={!activeNoteId}
+                onClick={insertTableOfContents}
+              >
+                <span className="fa-solid fa-list-ol" aria-hidden="true" />
+              </button>
               <button
                 type="button"
                 className="btn-icon"

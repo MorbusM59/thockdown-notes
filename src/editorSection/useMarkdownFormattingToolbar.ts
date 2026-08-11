@@ -6,6 +6,51 @@ import type { EditorSelectionState } from '../editor/EditorContract'
 
 export type TextDecorationFormat = 'bold' | 'italic' | 'strikethrough'
 
+function parseMarkdownHeading(line: string): { level: number; text: string } | null {
+  const match = /^#{1,6}\s+(.*)$/.exec(line.trimStart())
+  if (!match) return null
+  const level = match[0].match(/^#+/)?.[0].length ?? 0
+  if (level < 1 || level > 6) return null
+  return { level, text: match[1].trim() }
+}
+
+function stripMarkdownInlineFormatting(text: string): string {
+  return text
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/[*_~]/g, '')
+    .trim()
+}
+
+function makeAnchorHeadingLine(line: string): string {
+  const heading = parseMarkdownHeading(line)
+  if (!heading) return line
+
+  const label = stripMarkdownInlineFormatting(heading.text)
+  if (!label) return line
+
+  const anchorId = slugifyAnchorId(label)
+  const anchorLink = `[${label}](#${anchorId})`
+  return `${'#'.repeat(heading.level)} ${anchorLink}`
+}
+
+function trimTrailingBlankLines(lines: string[]): string[] {
+  let end = lines.length
+  while (end > 0 && lines[end - 1] === '') {
+    end -= 1
+  }
+  return lines.slice(0, end)
+}
+
+function trimLeadingBlankLines(lines: string[]): string[] {
+  let start = 0
+  while (start < lines.length && lines[start] === '') {
+    start += 1
+  }
+  return lines.slice(start)
+}
+
 const TEXT_DECORATION_MARKERS: Record<TextDecorationFormat, { open: string; close: string }> = {
   bold: { open: '**', close: '**' },
   italic: { open: '*', close: '*' },
@@ -29,6 +74,96 @@ function slugifyAnchorId(text: string): string {
     .replace(/[^a-z0-9-]/g, '')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
+}
+
+export function buildTableOfContentsInsertion(
+  sourceText: string,
+  selection: EditorSelectionState,
+): { text: string; selection: EditorSelectionState } {
+  const normalizedText = normalizeInternalText(sourceText)
+  const lines = normalizedText.split('\n')
+
+  let titleIndex: number | null = null
+  let inFence = false
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    if (/^\s{0,3}(?:`{3,}|~{3,})/.test(line)) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence) continue
+
+    const heading = parseMarkdownHeading(line)
+    if (heading) {
+      titleIndex = index
+      break
+    }
+  }
+
+  const anchoredLines = lines.map((line) => {
+    const heading = parseMarkdownHeading(line)
+    if (!heading) return line
+
+    const label = stripMarkdownInlineFormatting(heading.text)
+    if (!label) return line
+
+    return makeAnchorHeadingLine(line)
+  })
+
+  const insertionIndex = titleIndex === null ? 0 : titleIndex + 1
+  const beforeLines = trimTrailingBlankLines(anchoredLines.slice(0, insertionIndex))
+  const afterLines = trimLeadingBlankLines(anchoredLines.slice(insertionIndex))
+
+  const headings: Array<{ level: number; label: string }> = []
+  inFence = false
+
+  for (let index = 0; index < anchoredLines.length; index += 1) {
+    const line = anchoredLines[index]
+    if (/^\s{0,3}(?:`{3,}|~{3,})/.test(line)) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence) continue
+
+    const heading = parseMarkdownHeading(line)
+    if (!heading) continue
+    if (titleIndex !== null && index === titleIndex) continue
+
+    const label = stripMarkdownInlineFormatting(heading.text)
+    if (!label || label.trim().toLowerCase() === 'table of contents') continue
+
+    headings.push({ level: heading.level, label })
+  }
+
+  const rootLevel = headings.length > 0 ? Math.min(...headings.map((heading) => heading.level)) : 2
+  const listLines = headings.map(({ level, label }) => {
+    const depth = Math.max(0, level - rootLevel)
+    return `${'  '.repeat(depth)}- [${label}]($#${slugifyAnchorId(label)})`
+  })
+
+  const insertedBlock = [
+    '## [Table of Contents](#table-of-contents)',
+    '',
+    ...listLines,
+  ]
+
+  const nextLines = [...beforeLines, '', ...insertedBlock, '', ...afterLines]
+  const nextText = nextLines.join('\n')
+
+  const insertedPrefixLength = beforeLines.join('\n').length + (beforeLines.length > 0 ? 1 : 0)
+  const nextSelection = {
+    anchor: Math.min(nextText.length, selection.anchor + insertedPrefixLength),
+    focus: Math.min(nextText.length, selection.focus + insertedPrefixLength),
+    start: Math.min(nextText.length, selection.start + insertedPrefixLength),
+    end: Math.min(nextText.length, selection.end + insertedPrefixLength),
+    isCollapsed: selection.isCollapsed,
+  }
+
+  return {
+    text: nextText,
+    selection: nextSelection,
+  }
 }
 
 export interface UseMarkdownFormattingToolbarOptions {
@@ -70,6 +205,7 @@ export interface UseMarkdownFormattingToolbarResult {
   applyInlineCode: () => void
   applyCodeBlock: () => void
   insertHorizontalRule: () => void
+  insertTableOfContents: () => void
 }
 
 /**
@@ -764,6 +900,13 @@ export function useMarkdownFormattingToolbar({
     applyProgrammaticEditorText(nextText, cursor, cursor)
   }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, resolveSelectionBounds])
 
+  const insertTableOfContents = useCallback(() => {
+    if (!activeNoteId) return
+
+    const next = buildTableOfContentsInsertion(currentEditorText, latestEditorSelectionRef.current)
+    applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
+  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, latestEditorSelectionRef])
+
   return {
     activeDecorationFormats,
     activeHeadingLevel,
@@ -785,5 +928,6 @@ export function useMarkdownFormattingToolbar({
     applyInlineCode,
     applyCodeBlock,
     insertHorizontalRule,
+    insertTableOfContents,
   }
 }
