@@ -92,6 +92,10 @@ export function shouldSuppressPlainTypingSoundForInsertion(event: {
   return insertedChar === '\n' || insertedChar === '\r'
 }
 
+export function shouldBakeReverbIntoTransient(reverbStrength: number): boolean {
+  return false && reverbStrength > 0
+}
+
 export class TypingSoundManager {
   private audioContext: AudioContext | null = null
   private masterGain: GainNode | null = null
@@ -709,8 +713,21 @@ export class TypingSoundManager {
       source.playbackRate.value = 1 + (Math.random() * 2 - 1) * this.pitchJitterAmount
     }
 
-    source.connect(this.masterGain)
-    source.onended = () => this.safeDisconnect(source)
+    const gainNode = this.audioContext.createGain()
+    gainNode.gain.value = 1
+    source.connect(gainNode)
+
+    if (this.reverbDryGain && this.reverbNode) {
+      gainNode.connect(this.reverbDryGain)
+      gainNode.connect(this.reverbNode)
+    } else {
+      gainNode.connect(this.masterGain)
+    }
+
+    source.onended = () => {
+      this.safeDisconnect(source)
+      this.safeDisconnect(gainNode)
+    }
     source.start()
     return true
   }
@@ -824,9 +841,8 @@ export class TypingSoundManager {
     const effectiveRate = Math.max(0.01, attrs.playbackRate * attrs.frequencyScale)
     const echo = attrs.echo
     const echoTailSec = echo ? (echo.delayMs * echo.count) / 1000 : 0
-    const reverbTailSec = this.reverbStrength > 0 ? 0.8 + this.reverbStrength * 1.7 : 0
     const maxRawDurationSec = Math.max(...layerPlans.map((plan) => plan.buffer.duration))
-    const totalDurationSec = maxRawDurationSec / effectiveRate + echoTailSec + reverbTailSec + 0.1
+    const totalDurationSec = maxRawDurationSec / effectiveRate + echoTailSec + 0.1
     const sampleRate = this.audioContext.sampleRate
     const length = Math.max(1, Math.ceil(totalDurationSec * sampleRate))
 
@@ -841,33 +857,12 @@ export class TypingSoundManager {
     offlineMasterGain.gain.value = 1
     offlineMasterGain.connect(offlineContext.destination)
 
-    // E3: mirrors A2's "skip the convolver at zero reverb" guard.
-    let offlineDryGain: GainNode | null = null
-    let offlineReverbNode: ConvolverNode | null = null
-    if (this.reverbStrength > 0 && this.reverbNode?.buffer) {
-      offlineDryGain = offlineContext.createGain()
-      const offlineWetGain = offlineContext.createGain()
-      offlineReverbNode = offlineContext.createConvolver()
-      const offlineReverbFilter = offlineContext.createBiquadFilter()
-      offlineDryGain.gain.value = 1 - this.reverbStrength
-      offlineWetGain.gain.value = this.reverbStrength
-      offlineReverbFilter.type = 'lowpass'
-      offlineReverbFilter.frequency.value = this.reverbFilter?.frequency.value ?? 12000
-      offlineReverbFilter.Q.value = this.reverbFilter?.Q.value ?? 0.7
-      // AudioBuffers aren't tied to the context that created them -- reusing
-      // the live reverb tail avoids recomputing the same noise buffer here.
-      offlineReverbNode.buffer = this.reverbNode.buffer
-      offlineDryGain.connect(offlineMasterGain)
-      offlineReverbNode.connect(offlineReverbFilter).connect(offlineWetGain).connect(offlineMasterGain)
-    }
-
+    // Keep the transient dry and cheap: the reverb tail remains in the shared
+    // live convolver so each cached key hit doesn't duplicate a long-tail
+    // impulse response per sample. This preserves a single composite onset
+    // while keeping memory/CPU usage low on slower machines.
     const connectToDestination = (gainNode: GainNode) => {
-      if (offlineDryGain && offlineReverbNode) {
-        gainNode.connect(offlineDryGain)
-        gainNode.connect(offlineReverbNode)
-      } else {
-        gainNode.connect(offlineMasterGain)
-      }
+      gainNode.connect(offlineMasterGain)
     }
 
     const scheduleLayerSources = (startTimeSec: number, decayMultiplier: number) => {
@@ -913,8 +908,6 @@ export class TypingSoundManager {
   private computeAudioBounceSignature(): string {
     return [
       this.activeKeySet,
-      this.reverbStrength.toFixed(3),
-      this.reverbSpace.toFixed(3),
       this.layers.click.enabled ? 1 : 0,
       this.layers.click.gain.toFixed(3),
       this.layers.bass.enabled ? 1 : 0,
