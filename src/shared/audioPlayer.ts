@@ -83,6 +83,24 @@ export type AudioPlayerApi = {
   getSongById(id: number): Promise<MusicSongEntry | null>;
 };
 
+export function getNextActiveSlotsForToggle(activeSlots: PlaylistSlot[], toggledSlot: PlaylistSlot): PlaylistSlot[] {
+  return activeSlots.includes(toggledSlot)
+    ? activeSlots.filter((slot) => slot !== toggledSlot)
+    : [...activeSlots, toggledSlot];
+}
+
+export function shouldStopCurrentSongOnSlotToggle({
+  currentSongSlot,
+  activeSlots,
+  toggledSlot,
+}: {
+  currentSongSlot: PlaylistSlot | undefined;
+  activeSlots: PlaylistSlot[];
+  toggledSlot: PlaylistSlot;
+}): boolean {
+  return activeSlots.includes(toggledSlot) && currentSongSlot === toggledSlot;
+}
+
 /** Supported audio file extensions that can be added to playlists. */
 export const AUDIO_EXTENSIONS = new Set([
   '.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac', '.opus', '.weba', '.webm',

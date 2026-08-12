@@ -1,8 +1,12 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { MouseEvent, WheelEvent } from 'react'
 import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../shared/audioPlayer'
-import { PLAYLIST_SLOT_ICONS } from '../shared/audioPlayer'
-import { PLAYLIST_SLOT_THEMESS as PLAYLIST_SLOT_THEMES } from '../shared/audioPlayer'
+import {
+  getNextActiveSlotsForToggle,
+  PLAYLIST_SLOT_ICONS,
+  PLAYLIST_SLOT_THEMESS as PLAYLIST_SLOT_THEMES,
+  shouldStopCurrentSongOnSlotToggle,
+} from '../shared/audioPlayer'
 import { musicPlayerService, MissingFileError } from '../sound/MusicPlayerService'
 
 // Duration (ms) a pointer must be held to trigger the "arm for clear" action.
@@ -127,8 +131,8 @@ export const AudioControls = memo(function AudioControls({
 
   // ---------------------------------------------------------------- helpers
 
-  const advanceToNextSong = useCallback(async () => {
-    const slots = activeRef.current
+  const advanceToNextSong = useCallback(async (slotsOverride?: PlaylistSlot[]) => {
+    const slots = slotsOverride ?? activeRef.current
     if (slots.length === 0) {
       setIsPlaying(false)
       setCurrentSong(null)
@@ -385,11 +389,22 @@ export const AudioControls = memo(function AudioControls({
       return
     }
     // Toggle the slot in/out of the active pool.
-    const next = activeSlots.includes(slot)
-      ? activeSlots.filter((s) => s !== slot)
-      : [...activeSlots, slot]
+    const next = getNextActiveSlotsForToggle(activeSlots, slot)
+    const isDeactivating = activeSlots.includes(slot) && !next.includes(slot)
+
     onActiveSlotsChange(next)
-  }, [counts, activeSlots, onActiveSlotsChange, refreshCounts])
+
+    if (isDeactivating && shouldStopCurrentSongOnSlotToggle({
+      currentSongSlot: currentSong?.playlistSlot,
+      activeSlots,
+      toggledSlot: slot,
+    })) {
+      musicPlayerService.stop()
+      setIsPlaying(false)
+      setCurrentSong(null)
+      await advanceToNextSong(next)
+    }
+  }, [activeSlots, counts, currentSong, onActiveSlotsChange, advanceToNextSong, refreshCounts])
 
   const handleSlotRightClick = useCallback(async (event: MouseEvent, slot: PlaylistSlot) => {
     event.preventDefault()
@@ -418,16 +433,17 @@ export const AudioControls = memo(function AudioControls({
     }
     if (primedSlot === slot) {
       setPrimedSlot(null)
+      const nextActiveSlots = activeSlots.filter((s) => s !== slot)
       await window.thockdownAudioPlayer?.clearPlaylist(slot)
       await refreshCounts()
       // Remove this slot from active set if it was active.
-      onActiveSlotsChange(activeSlots.filter((s) => s !== slot))
+      onActiveSlotsChange(nextActiveSlots)
       // If current song was from this slot, stop and pick next.
       if (currentSong?.playlistSlot === slot) {
         musicPlayerService.stop()
         setIsPlaying(false)
         setCurrentSong(null)
-        await advanceToNextSong()
+        await advanceToNextSong(nextActiveSlots)
       }
     }
   }, [primedSlot, activeSlots, currentSong, onActiveSlotsChange, refreshCounts, advanceToNextSong])
