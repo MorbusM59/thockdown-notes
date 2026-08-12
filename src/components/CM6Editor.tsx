@@ -5,7 +5,7 @@ import type { Extension } from '@codemirror/state';
 import { EditorView, Decoration, ViewPlugin, keymap, type DecorationSet } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
-import { typingSoundManager } from '../sound/TypingSoundManager';
+import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/TypingSoundManager';
 import { readSelectionRect, type SelectionRect } from '../editor/CaretRect';
 import { readSelectionLineRects } from '../editor/SelectionRects';
 import { PIXELS_PER_WHEEL_UNIT } from '../editor/LayoutConstants';
@@ -2540,7 +2540,10 @@ export function CM6Editor({
             // Same click sound/echo as ContractBridgePlugin.tsx's own
             // KEY_TAB_COMMAND handler -- played unconditionally like the
             // original, not gated on the transform actually changing
-            // anything.
+            // anything. Suppress the generic text-change click that follows
+            // the tab transform, because the dedicated tab burst is already
+            // the intended sound for this keystroke.
+            suppressNextPlainTypingSoundOnce();
             const tabKeyId = event.shiftKey ? 'key:Shift:Tab' : 'key:Tab';
             if (event.shiftKey) {
               void typingSoundManager.playRandomClick({

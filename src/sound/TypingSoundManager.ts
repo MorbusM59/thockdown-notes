@@ -69,6 +69,29 @@ interface TypingSoundHistoryEntry {
   }
 }
 
+let suppressNextPlainTypingSound = false
+
+export function suppressNextPlainTypingSoundOnce(): void {
+  suppressNextPlainTypingSound = true
+}
+
+export function shouldSuppressPlainTypingSoundForInsertion(event: {
+  source: string
+  text: string
+  previousText: string
+  selection: { start: number }
+}): boolean {
+  if (event.source !== 'user-input') return false
+  if (suppressNextPlainTypingSound) {
+    suppressNextPlainTypingSound = false
+    return true
+  }
+  const delta = event.text.length - event.previousText.length
+  if (delta !== 1) return false
+  const insertedChar = event.text[event.selection.start - 1]
+  return insertedChar === '\n' || insertedChar === '\r'
+}
+
 export class TypingSoundManager {
   private audioContext: AudioContext | null = null
   private masterGain: GainNode | null = null

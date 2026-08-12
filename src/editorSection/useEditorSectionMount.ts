@@ -40,7 +40,11 @@ import {
 } from '../editor/MarkdownContext'
 import { resolveMarkdownEnterTransform } from '../editor/EnterTransformPolicy'
 import { resolveMarkdownChecklistTypeoverTransform } from '../editor/ChecklistTypingTransformPolicy'
-import { typingSoundManager } from '../sound/TypingSoundManager'
+import {
+  shouldSuppressPlainTypingSoundForInsertion,
+  suppressNextPlainTypingSoundOnce,
+  typingSoundManager,
+} from '../sound/TypingSoundManager'
 import { ScrollTransitionController } from '../editor/ScrollTransitionController'
 import type { PreviewScrollToSourceLineFn } from './usePreviewMarkdownRendering'
 
@@ -1155,6 +1159,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
 
   const shouldPlayTypingSound = useCallback((event: EditorTextChangeEvent) => {
     if (event.source !== 'user-input') return false
+    if (shouldSuppressPlainTypingSoundForInsertion(event)) return false
     const delta = event.text.length - event.previousText.length
     return delta > 0 && delta <= 8
   }, [])
@@ -1518,6 +1523,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         return null
       }
       if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      suppressNextPlainTypingSoundOnce()
       void typingSoundManager.playRandomClick({ detune: -500 })
       const next = resolveMarkdownEnterTransform(event)
       if (!next) {
