@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, WheelEvent as ReactWheelEvent } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { ChapterEntry } from '../shared/chapters'
+import { getChapterTabLabel, getParentTabLabel } from '../shared/tabLabels'
 
 export interface ChapterBarProps {
   parentNoteId: string
@@ -64,7 +65,7 @@ export function ChapterBar({
   onExtractSelectionToChapter,
 }: ChapterBarProps) {
   const parentNote = notes.find((note) => note.id === parentNoteId)
-  const parentLabel = parentNote?.assignedId != null ? `$${parentNote.assignedId}` : '···'
+  const parentLabel = getParentTabLabel()
   const isParentActive = activeNoteId === parentNoteId
   const hasCurrentChapter = !isParentActive
 
@@ -138,7 +139,7 @@ export function ChapterBar({
               const isEditing = editingChapterNoteId === chapter.chapterNoteId
               const isActive = chapter.chapterNoteId === activeNoteId
               const note = notes.find((entry) => entry.id === chapter.chapterNoteId)
-              const label = `§${index + 1}: ${chapter.chapterId ?? '···'}`
+              const label = getChapterTabLabel(chapter.chapterId, note?.contentText)
 
               if (isEditing) {
                 return (

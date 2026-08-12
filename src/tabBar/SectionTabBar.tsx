@@ -2,6 +2,7 @@ import type { CSSProperties, MouseEvent, RefObject } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import { isArchivedNote, isDeletedNote } from '../shared/noteLifecycle'
 import { normalizeTagName, isProtectedTagName } from '../shared/tags'
+import { getNoteTabLabel } from '../shared/tabLabels'
 import { TEMP_TAB_PIN_HOLD_MS, type UseSectionTabsResult } from './useSectionTabs'
 
 export interface SectionTabBarProps {
@@ -238,7 +239,7 @@ export function SectionTabBar({
             }
           >
             <span className="tag-pill-label">
-              {tabBarMode === 'tabs' ? (sectionName ?? '···') : `$${activeNoteSummary?.assignedId ?? '···'}`}
+              {tabBarMode === 'tabs' ? (sectionName ?? '···') : getNoteTabLabel(activeNoteSummary?.assignedId)}
             </span>
           </button>
         )}
@@ -291,7 +292,7 @@ export function SectionTabBar({
                 <>
                   {tempTabNoteId ? (() => {
                     const note = notes.find((entry) => entry.id === tempTabNoteId)
-                    const label = note?.assignedId ?? '···'
+                    const label = getNoteTabLabel(note?.assignedId)
                     const isGhost = note ? (isArchivedNote(note) || isDeletedNote(note)) : true
                     const isPrimed = unpinPrimedTabNoteId === tempTabNoteId
                     const isArming = pinArmingTabNoteId === tempTabNoteId
@@ -314,15 +315,13 @@ export function SectionTabBar({
                             : `${note?.title ?? 'Open note'} — hold to pin`
                         }
                       >
-                        <span className="tag-pill-label">${label}</span>
+                        <span className="tag-pill-label">{label}</span>
                       </div>
                     )
                   })() : null}
                   {pinnedTabs.map((tab, index) => {
                     const note = notes.find((entry) => entry.id === tab.noteId)
-                    const label = note?.assignedId != null
-                      ? `$${note.assignedId}`
-                      : '···';
+                    const label = getNoteTabLabel(note?.assignedId)
                     const isGhost = note ? (isArchivedNote(note) || isDeletedNote(note)) : true
                     const isActive = tab.noteId === tabIdentityNoteId
                     const isPrimed = unpinPrimedTabNoteId === tab.noteId
