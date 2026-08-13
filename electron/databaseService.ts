@@ -1471,10 +1471,30 @@ export class DatabaseService {
 
   // ── Tab bar (pinned quick-access notes, scoped per section) ─────────────
 
-  /** Every pinned tab across every section -- callers group by `sectionId` client-side. */
+  /**
+   * Every pinned tab across every section -- callers group by `sectionId`
+   * client-side. Excludes any note that's currently `chapterOnly` (a chapter
+   * has no tab-bar identity of its own; only its parent's pill is
+   * pinnable/tabbable) -- a single, root-cause filter here rather than
+   * trusting every write path to keep note_tabs and a note's chapterOnly
+   * status in sync. Chapters are always brand-new notes with no pre-existing
+   * tab row, EXCEPT one path: promoteChapterToParent demotes the *old*
+   * parent to chapterOnly, and that note could easily have had pinned tabs
+   * from its life as a regular note -- this filter is what actually hides
+   * them (promoteChapterToParent also hands that row over to the newly-
+   * promoted note in place, but this is the backstop for any row that
+   * somehow survives unclaimed, including in a database that predates that
+   * handoff).
+   */
   listNoteTabs(): NoteTabEntry[] {
     const db = this.requireDb();
-    const rows = db.prepare('SELECT sectionId, noteId, position, addedAt FROM note_tabs ORDER BY sectionId ASC, position ASC').all() as Array<{ sectionId: string; noteId: string; position: number; addedAt: number }>;
+    const rows = db.prepare(`
+      SELECT nt.sectionId AS sectionId, nt.noteId AS noteId, nt.position AS position, nt.addedAt AS addedAt
+      FROM note_tabs nt
+      JOIN notes n ON n.id = nt.noteId
+      WHERE n.chapterOnly = 0
+      ORDER BY nt.sectionId ASC, nt.position ASC
+    `).all() as Array<{ sectionId: string; noteId: string; position: number; addedAt: number }>;
     return rows.map((row) => ({ sectionId: row.sectionId, noteId: row.noteId, position: row.position, addedAtMs: row.addedAt }));
   }
 
@@ -1701,6 +1721,25 @@ export class DatabaseService {
         insertOntoNewParentStmt.run(chapterNoteId, row.tagId, chapterNoteId);
       }
       db.prepare('DELETE FROM note_tags WHERE noteId = ?').run(parentNoteId);
+
+      // The newly-promoted note takes over the old parent's exact tab-bar
+      // spot (same section, same position) rather than the old parent's
+      // pins just vanishing -- a chapter has no tab-bar identity of its
+      // own, so whichever note is playing the parent role now is the one
+      // that spot belongs to, same as tags just above. Falls back to a
+      // plain delete only if the promoted note somehow already has its own
+      // row in that section (it shouldn't -- chapters are never tabbable --
+      // but the UNIQUE(sectionId, noteId) constraint would reject the
+      // UPDATE otherwise).
+      const oldParentTabRows = db.prepare('SELECT sectionId FROM note_tabs WHERE noteId = ?').all(parentNoteId) as Array<{ sectionId: string }>;
+      for (const row of oldParentTabRows) {
+        const collision = db.prepare('SELECT 1 FROM note_tabs WHERE sectionId = ? AND noteId = ?').get(row.sectionId, chapterNoteId);
+        if (collision) {
+          db.prepare('DELETE FROM note_tabs WHERE sectionId = ? AND noteId = ?').run(row.sectionId, parentNoteId);
+        } else {
+          db.prepare('UPDATE note_tabs SET noteId = ? WHERE sectionId = ? AND noteId = ?').run(chapterNoteId, row.sectionId, parentNoteId);
+        }
+      }
 
       const insertionRows = [
         { parentNoteId: chapterNoteId, chapterNoteId: parentNoteId, chapterId: null },

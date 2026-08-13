@@ -975,8 +975,15 @@ function buildTabsBridge(storeRef: { current: BrowserMockStore }): NoteTabsApi {
     return result
   }
 
-  const sorted = (store: BrowserMockStore): NoteTabEntry[] =>
-    store.noteTabs.slice().sort((a, b) => a.sectionId.localeCompare(b.sectionId) || a.position - b.position)
+  // Excludes any note that's currently chapterOnly -- mirrors the real
+  // backend's listNoteTabs doc comment: a chapter has no tab-bar identity of
+  // its own, so this is the root-cause filter, not just a display nicety.
+  const sorted = (store: BrowserMockStore): NoteTabEntry[] => {
+    const chapterOnlyNoteIds = new Set(store.notes.filter((note) => note.chapterOnly).map((note) => note.id))
+    return store.noteTabs
+      .filter((tab) => !chapterOnlyNoteIds.has(tab.noteId))
+      .sort((a, b) => a.sectionId.localeCompare(b.sectionId) || a.position - b.position)
+  }
 
   return {
     async listTabs(): Promise<NoteTabEntry[]> {
@@ -1488,6 +1495,23 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           ...parentNote.tags.filter((tag) => !chapterNote.tags.includes(tag)),
         ]
         parentNote.tags = []
+
+        // The newly-promoted note takes over the old parent's exact
+        // tab-bar spot (same section, same position) rather than its pins
+        // just vanishing. Mirrors databaseService.ts's promoteChapterToParent,
+        // including the same collision fallback (shouldn't happen -- chapters
+        // are never tabbable -- but avoids a duplicate {sectionId, noteId} pair).
+        const oldParentSectionIds = store.noteTabs.filter((tab) => tab.noteId === parentNoteId).map((tab) => tab.sectionId)
+        for (const sectionId of oldParentSectionIds) {
+          const collides = store.noteTabs.some((tab) => tab.sectionId === sectionId && tab.noteId === chapterNoteId)
+          if (collides) {
+            store.noteTabs = store.noteTabs.filter((tab) => !(tab.sectionId === sectionId && tab.noteId === parentNoteId))
+          } else {
+            store.noteTabs = store.noteTabs.map((tab) => (
+              tab.sectionId === sectionId && tab.noteId === parentNoteId ? { ...tab, noteId: chapterNoteId } : tab
+            ))
+          }
+        }
 
         const insertionRows = [
           { parentNoteId: chapterNoteId, chapterNoteId: parentNoteId, position: 0, chapterId: null },

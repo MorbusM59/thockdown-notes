@@ -142,6 +142,50 @@ describe('DatabaseService chapters', () => {
     expect(db.getNoteTags('parent-a')).toEqual([])
   })
 
+  it('promoting a chapter to parent hands the old parent\'s pinned-tab spots over to the newly-promoted note, in the same sections and positions', () => {
+    seedNote(db, 'parent-a')
+    seedNote(db, 'chapter-1')
+    seedNote(db, 'other-note')
+    db.setNoteChapterOnly('chapter-1', true)
+    db.addChapter('parent-a', 'chapter-1')
+
+    const section1 = db.createEditorSection().slice(-1)[0].id
+    const section2 = db.createEditorSection().slice(-1)[0].id
+    // section1: parent-a pinned alongside another note, at a non-zero
+    // position -- proves the position itself carries over, not just "some"
+    // tab appearing for the promoted note.
+    db.addNoteTab(section1, 'other-note')
+    db.addNoteTab(section1, 'parent-a')
+    db.addNoteTab(section2, 'parent-a')
+
+    const parentTabsBefore = db.listNoteTabs().filter((tab) => tab.noteId === 'parent-a')
+
+    db.promoteChapterToParent('parent-a', 'chapter-1')
+
+    // The old parent's own tab-bar identity is gone...
+    expect(db.listNoteTabs().some((tab) => tab.noteId === 'parent-a')).toBe(false)
+    // ...replaced by the newly-promoted note, in the exact same sections and positions.
+    const chapterTabsAfter = db.listNoteTabs().filter((tab) => tab.noteId === 'chapter-1')
+    expect(chapterTabsAfter.map((tab) => ({ sectionId: tab.sectionId, position: tab.position })).sort((a, b) => a.sectionId.localeCompare(b.sectionId)))
+      .toEqual(parentTabsBefore.map((tab) => ({ sectionId: tab.sectionId, position: tab.position })).sort((a, b) => a.sectionId.localeCompare(b.sectionId)))
+    // The unrelated tab in section1 is untouched.
+    expect(db.listNoteTabs().some((tab) => tab.sectionId === section1 && tab.noteId === 'other-note')).toBe(true)
+  })
+
+  it('listNoteTabs never lists a chapterOnly note, regardless of how its note_tabs row got there', () => {
+    seedNote(db, 'parent-a')
+    seedNote(db, 'chapter-1')
+    const section1 = db.createEditorSection().slice(-1)[0].id
+    db.addNoteTab(section1, 'chapter-1')
+
+    // Not yet chapterOnly -- the tab is real.
+    expect(db.listNoteTabs().map((tab) => tab.noteId)).toEqual(['chapter-1'])
+
+    db.setNoteChapterOnly('chapter-1', true)
+
+    expect(db.listNoteTabs()).toEqual([])
+  })
+
   it('still rejects a note being a chapter of itself', () => {
     seedNote(db, 'note-a')
     expect(() => db.addChapter('note-a', 'note-a')).toThrow()
