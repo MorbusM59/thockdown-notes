@@ -1010,6 +1010,10 @@ function registerIpcHandlers() {
     return databaseService!.reorderChapters(parentNoteId, orderedChapterNoteIds);
   });
 
+  ipcMain.handle(CHAPTER_CHANNELS.promote, async (_event, parentNoteId: string, chapterNoteId: string) => {
+    return databaseService!.promoteChapterToParent(parentNoteId, chapterNoteId);
+  });
+
   ipcMain.handle(CHAPTER_CHANNELS.remove, async (_event, parentNoteId: string, chapterNoteId: string) => {
     return databaseService!.removeChapter(parentNoteId, chapterNoteId);
   });

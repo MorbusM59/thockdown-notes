@@ -109,6 +109,8 @@ export interface UseNoteChaptersResult {
    *   (its "previous" is the parent, which can never be merged away).
    */
   handleChapterBackwardSplitOrMerge: () => Promise<void>
+  onChapterDragStart: (chapterNoteId: string) => void
+  onChapterDrop: (targetIndex: number, draggedChapterNoteId: string) => void
   /** Which chapter pill (by chapterNoteId) is mid-inline-edit of its chapterId, if any. */
   editingChapterNoteId: string | null
   chapterIdDraft: string
@@ -140,6 +142,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
   } = options
 
   const [chapters, setChapters] = useState<ChapterEntry[]>([])
+  const [draggedChapterNoteId, setDraggedChapterNoteId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!persistenceReady || !window.thockdownChapters || !menuIdentityNoteId) {
@@ -413,6 +416,39 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     await refreshNotes()
   }, [menuIdentityNoteId, activeNoteId, chapters, currentEditorText, editorSelection, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, activateNote])
 
+  const handleChapterDragStart = useCallback((chapterNoteId: string) => {
+    setDraggedChapterNoteId(chapterNoteId)
+  }, [])
+
+  const handleChapterDrop = useCallback(async (targetIndex: number, draggedChapterNoteIdLocal: string) => {
+    if (!window.thockdownChapters || !menuIdentityNoteId) return
+    const draggedId = draggedChapterNoteIdLocal || draggedChapterNoteId
+    if (!draggedId) return
+
+    setDraggedChapterNoteId(null)
+
+    if (targetIndex === 0) {
+      const updatedChapters = await window.thockdownChapters.promoteChapterToParent(menuIdentityNoteId, draggedId)
+      setChapters(updatedChapters)
+      await refreshNotes(draggedId)
+      await activateNote(draggedId)
+      return
+    }
+
+    const reordered = [...chapters]
+    const fromIndex = reordered.findIndex((chapter) => chapter.chapterNoteId === draggedId)
+    if (fromIndex < 0) return
+    if (fromIndex === targetIndex || fromIndex === targetIndex - 1) {
+      return
+    }
+
+    const [moved] = reordered.splice(fromIndex, 1)
+    reordered.splice(targetIndex, 0, moved)
+    const orderedChapterNoteIds = reordered.map((chapter) => chapter.chapterNoteId)
+    const updatedChapters = await window.thockdownChapters.reorderChapters(menuIdentityNoteId, orderedChapterNoteIds)
+    setChapters(updatedChapters)
+  }, [chapters, draggedChapterNoteId, menuIdentityNoteId, refreshNotes, activateNote])
+
   const [editingChapterNoteId, setEditingChapterNoteId] = useState<string | null>(null)
   const [chapterIdDraft, setChapterIdDraft] = useState('')
 
@@ -450,6 +486,8 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     handleCollapseChapterIntoPrevious,
     handleChapterForwardSplitOrMerge,
     handleChapterBackwardSplitOrMerge,
+    onChapterDragStart: handleChapterDragStart,
+    onChapterDrop: handleChapterDrop,
     editingChapterNoteId,
     chapterIdDraft,
     setChapterIdDraft,

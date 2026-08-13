@@ -1117,6 +1117,49 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
       })
     },
 
+    async promoteChapterToParent(parentNoteId: string, chapterNoteId: string): Promise<ChapterEntry[]> {
+      return mutate((store) => {
+        const chapterRows = store.chapters
+          .filter((chapter) => chapter.parentNoteId === parentNoteId)
+          .sort((a, b) => a.position - b.position)
+
+        const dragged = chapterRows.find((row) => row.chapterNoteId === chapterNoteId)
+        if (!dragged) {
+          throw new Error(`Chapter ${chapterNoteId} is not a chapter of ${parentNoteId}`)
+        }
+
+        const remaining = chapterRows.filter((row) => row.chapterNoteId !== chapterNoteId)
+        const parentNote = store.notes.find((note) => note.id === parentNoteId)
+        const chapterNote = store.notes.find((note) => note.id === chapterNoteId)
+        if (!parentNote || !chapterNote) {
+          throw new Error(`Missing parent/chapter note for promotion`)
+        }
+
+        store.chapters = store.chapters.filter((chapter) => chapter.parentNoteId !== parentNoteId)
+        chapterNote.chapterOnly = false
+        chapterNote.chapterParentId = null
+        parentNote.chapterOnly = true
+        parentNote.chapterParentId = chapterNoteId
+
+        const insertionRows = [
+          { parentNoteId: chapterNoteId, chapterNoteId: parentNoteId, position: 0, chapterId: null },
+          ...remaining.map((row) => ({ parentNoteId: chapterNoteId, chapterNoteId: row.chapterNoteId, position: 0, chapterId: row.chapterId })),
+        ]
+
+        for (let index = 0; index < insertionRows.length; index += 1) {
+          const row = insertionRows[index]
+          store.chapters.push({
+            parentNoteId: row.parentNoteId,
+            chapterNoteId: row.chapterNoteId,
+            position: index,
+            chapterId: row.chapterId,
+          })
+        }
+
+        return sorted(store, chapterNoteId)
+      })
+    },
+
     async removeChapter(parentNoteId: string, chapterNoteId: string): Promise<ChapterEntry[]> {
       return mutate((store) => {
         const removed = store.chapters.find((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === chapterNoteId)

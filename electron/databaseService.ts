@@ -1551,6 +1551,36 @@ export class DatabaseService {
     return this.listChaptersForNote(parentNoteId);
   }
 
+  /** Re-parents the active note tree by promoting the dragged chapter to the root and converting the previous parent into its first chapter. */
+  promoteChapterToParent(parentNoteId: string, chapterNoteId: string): ChapterEntry[] {
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      const chapterRows = db.prepare('SELECT position, chapterNoteId, chapterId FROM chapters WHERE parentNoteId = ? ORDER BY position ASC').all(parentNoteId) as Array<{ position: number; chapterNoteId: string; chapterId: string | null }>;
+      const dragged = chapterRows.find((row) => row.chapterNoteId === chapterNoteId);
+      if (!dragged) {
+        throw new Error(`Chapter ${chapterNoteId} is not a chapter of ${parentNoteId}`);
+      }
+
+      const remaining = chapterRows.filter((row) => row.chapterNoteId !== chapterNoteId);
+      db.prepare('DELETE FROM chapters WHERE parentNoteId = ?').run(parentNoteId);
+
+      db.prepare('UPDATE notes SET chapterOnly = 0 WHERE id = ?').run(chapterNoteId);
+      db.prepare('UPDATE notes SET chapterOnly = 1 WHERE id = ?').run(parentNoteId);
+
+      const insertionRows = [
+        { parentNoteId: chapterNoteId, chapterNoteId: parentNoteId, chapterId: null },
+        ...remaining.map((row) => ({ parentNoteId: chapterNoteId, chapterNoteId: row.chapterNoteId, chapterId: row.chapterId })),
+      ];
+
+      insertionRows.forEach((row, index) => {
+        db.prepare('INSERT INTO chapters (parentNoteId, position, chapterNoteId, chapterId) VALUES (?, ?, ?, ?)')
+          .run(row.parentNoteId, index, row.chapterNoteId, row.chapterId);
+      });
+    });
+    tx();
+    return this.listChaptersForNote(chapterNoteId);
+  }
+
   getNoteContentSnapshot(noteId: string): string | null {
     const db = this.requireDb();
 

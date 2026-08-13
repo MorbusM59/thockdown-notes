@@ -55,7 +55,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'handleNavigateSnapshot' | 'handleBranchOpened' | 'handleBranchError' | 'timelineCurveConstant' | 'setTimelineCurveConstant'
   | 'setTimelineTrackLengthPx' | 'handleCreateManualSnapshot' | 'handleReturnToPresent' | 'handleMergeAdjacentSnapshots'
   | 'scrollbarHostEl' | 'setScrollbarHostEl' | 'notes' | 'menuIdentityNoteId' | 'chapters' | 'onParentTabClick' | 'onCreateChapter' | 'onChapterClick'
-  | 'editingChapterNoteId' | 'chapterIdDraft' | 'setChapterIdDraft' | 'onStartEditingChapterId' | 'onCommitChapterIdEdit' | 'onCancelChapterIdEdit'
+  | 'onChapterDragStart' | 'onChapterDrop' | 'editingChapterNoteId' | 'chapterIdDraft' | 'setChapterIdDraft' | 'onStartEditingChapterId' | 'onCommitChapterIdEdit' | 'onCancelChapterIdEdit'
   | 'onCollapseChapterIntoPrevious' | 'onExtractSelectionToChapter'> {
   sectionId: string
   markSectionActive: (sectionId: string) => void
@@ -737,6 +737,8 @@ export function EditorSection({
     handleCollapseChapterIntoPrevious,
     handleChapterForwardSplitOrMerge,
     handleChapterBackwardSplitOrMerge,
+    onChapterDragStart,
+    onChapterDrop,
     editingChapterNoteId,
     chapterIdDraft,
     setChapterIdDraft,
@@ -1110,6 +1112,8 @@ export function EditorSection({
     handleCollapseChapterIntoPrevious,
     handleChapterForwardSplitOrMerge,
     handleChapterBackwardSplitOrMerge,
+    onChapterDragStart,
+    onChapterDrop,
     editingChapterNoteId,
     chapterIdDraft,
     setChapterIdDraft,
@@ -1514,6 +1518,8 @@ export function EditorSection({
         chapters={chapters}
         onParentTabClick={handleParentTabClick}
         onChapterClick={handleChapterClick}
+        onChapterDragStart={onChapterDragStart}
+        onChapterDrop={onChapterDrop}
         editingChapterNoteId={editingChapterNoteId}
         chapterIdDraft={chapterIdDraft}
         setChapterIdDraft={setChapterIdDraft}

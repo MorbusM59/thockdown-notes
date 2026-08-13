@@ -67,6 +67,8 @@ export interface SectionEditorAreaProps {
   chapters: ChapterEntry[]
   onParentTabClick: () => void
   onChapterClick: (chapterNoteId: string) => void
+  onChapterDragStart: (chapterNoteId: string) => void
+  onChapterDrop: (targetIndex: number, draggedChapterNoteId: string) => void
   editingChapterNoteId: string | null
   chapterIdDraft: string
   setChapterIdDraft: (value: string) => void
@@ -149,6 +151,8 @@ export function SectionEditorArea({
   chapters,
   onParentTabClick,
   onChapterClick,
+  onChapterDragStart,
+  onChapterDrop,
   editingChapterNoteId,
   chapterIdDraft,
   setChapterIdDraft,
@@ -293,6 +297,8 @@ export function SectionEditorArea({
             activeNoteId={activeNoteId}
             onParentTabClick={onParentTabClick}
             onChapterClick={onChapterClick}
+            onChapterDragStart={onChapterDragStart}
+            onChapterDrop={onChapterDrop}
             editingChapterNoteId={editingChapterNoteId}
             chapterIdDraft={chapterIdDraft}
             setChapterIdDraft={setChapterIdDraft}

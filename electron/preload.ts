@@ -248,6 +248,7 @@ const chaptersApi: ChaptersApi = {
   createChapter:     (parentNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.create, parentNoteId),
   cloneNoteAsChapter: (parentNoteId, sourceNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.cloneFromNote, parentNoteId, sourceNoteId),
   reorderChapters:   (parentNoteId, orderedChapterNoteIds) => ipcRenderer.invoke(CHAPTER_CHANNELS.reorder, parentNoteId, orderedChapterNoteIds),
+  promoteChapterToParent: (parentNoteId, chapterNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.promote, parentNoteId, chapterNoteId),
   removeChapter:     (parentNoteId, chapterNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.remove, parentNoteId, chapterNoteId),
   setChapterId:      (parentNoteId, chapterNoteId, requestedId) => ipcRenderer.invoke(CHAPTER_CHANNELS.setChapterId, parentNoteId, chapterNoteId, requestedId),
 }

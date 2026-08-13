@@ -84,6 +84,29 @@ describe('DatabaseService chapters', () => {
     expect(remaining.map((c) => c.position)).toEqual([0, 1])
   })
 
+  it('promotes a chapter to the parent slot while preserving the old parent as a chapter', () => {
+    seedNote(db, 'parent-a')
+    seedNote(db, 'chapter-1')
+    seedNote(db, 'chapter-2')
+    seedNote(db, 'chapter-3')
+    db.setNoteChapterOnly('chapter-1', true)
+    db.setNoteChapterOnly('chapter-2', true)
+    db.setNoteChapterOnly('chapter-3', true)
+
+    db.addChapter('parent-a', 'chapter-1')
+    db.addChapter('parent-a', 'chapter-2')
+    db.addChapter('parent-a', 'chapter-3')
+
+    db.promoteChapterToParent('parent-a', 'chapter-2')
+
+    expect(db.getNoteRecord('chapter-2')?.chapterOnly).toBe(false)
+    expect(db.getNoteRecord('chapter-2')?.chapterParentId).toBeNull()
+    expect(db.getNoteRecord('parent-a')?.chapterOnly).toBe(true)
+    expect(db.getNoteRecord('parent-a')?.chapterParentId).toBe('chapter-2')
+    expect(db.listChaptersForNote('chapter-2').map((chapter) => chapter.chapterNoteId)).toEqual(['parent-a', 'chapter-1', 'chapter-3'])
+    expect(db.getChapterParent('parent-a')).toBe('chapter-2')
+  })
+
   it('still rejects a note being a chapter of itself', () => {
     seedNote(db, 'note-a')
     expect(() => db.addChapter('note-a', 'note-a')).toThrow()
