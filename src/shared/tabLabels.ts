@@ -15,11 +15,19 @@ function normalizeContentPreviewText(text: string): string {
   return stripMarkdownInlineFormatting(withoutHeading).replace(/\s+/g, ' ').trim()
 }
 
-export function getChapterTabLabel(chapterId: string | null | undefined, chapterContentText?: string | null): string {
-  const trimmedId = chapterId?.trim()
-  if (trimmedId) return trimmedId
-
-  const fallbackText = normalizeContentPreviewText(chapterContentText ?? '')
+/**
+ * A chapter's own display identity when it has no explicit chapterId: a
+ * short snippet lifted from its first line, markdown/heading syntax
+ * stripped. Chapters have no "title" concept at all (see noteLifecycleService.ts's
+ * titleFromText doc comment) -- this is the one and only fallback identity
+ * a chapter has, shared between the chapter pill's own label
+ * (getChapterTabLabel below) and databaseService.ts's ensureChapterId
+ * (the same snippet seeds a chapter's auto-generated default id, so a
+ * chapter's displayed label and its own default id are never derived from
+ * two different things).
+ */
+export function deriveChapterContentSnippet(contentText: string | null | undefined): string {
+  const fallbackText = normalizeContentPreviewText(contentText ?? '')
   if (!fallbackText) return '···'
 
   let n = Math.min(fallbackText.length, 12)
@@ -36,4 +44,10 @@ export function getChapterTabLabel(chapterId: string | null | undefined, chapter
   }
 
   return fallbackText.slice(0, Math.min(fallbackText.length, n)).trimEnd() || '···'
+}
+
+export function getChapterTabLabel(chapterId: string | null | undefined, chapterContentText?: string | null): string {
+  const trimmedId = chapterId?.trim()
+  if (trimmedId) return trimmedId
+  return deriveChapterContentSnippet(chapterContentText)
 }

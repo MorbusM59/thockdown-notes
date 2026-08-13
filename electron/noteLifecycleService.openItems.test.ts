@@ -43,7 +43,9 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     const ch1Entry = chapters.find((c) => c.chapterNoteId === ch1.id)!
     const openItemsDoc = await lifecycle.loadNote({ id: openItemsId! })
 
-    expect(openItemsDoc.text).toContain(`[Chapter One]($${parentAssignedId}§${ch1Entry.chapterId})`)
+    // The chapter has no title concept -- its own group is labeled with its
+    // chapterId, same as the TOC's own chapter entries.
+    expect(openItemsDoc.text).toContain(`[${ch1Entry.chapterId}]($${parentAssignedId}§${ch1Entry.chapterId})`)
     expect(openItemsDoc.text).toContain(`[Setting]($${parentAssignedId}§${ch1Entry.chapterId}#setting)`)
     expect(openItemsDoc.text).toContain('- [ ] world-building task')
     // Checked items are never listed.

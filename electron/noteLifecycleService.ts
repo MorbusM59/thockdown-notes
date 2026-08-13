@@ -51,6 +51,13 @@ function checksumText(text: string): string {
 
 function titleFromText(text: string): string {
   const lines = normalizeText(text).split('\n');
+  // Level 1 only -- a chapter's own first-line heading is always level 2
+  // (see markdownHeadings.ts's normalizeChapterHeadings/
+  // clampChapterHeadlineLevels) and deliberately does NOT count: chapters
+  // have no "title" concept at all, only a chapterId (see
+  // databaseService.ts's ensureChapterId / tabLabels.ts's getChapterTabLabel
+  // for the actual chapter-identity logic; nothing chapter-facing should
+  // read `.title`).
   const heading = lines.find((line) => line.startsWith('# ') && line.trim().length > 2);
   if (heading) return truncateTitle(heading.slice(2).trim());
 
@@ -426,8 +433,8 @@ export class NoteLifecycleService {
         await this.saveNote({ id: row.chapterNoteId, text: anchoredChapter.text }, { skipAutoChapterHooks: true });
       }
 
-      const chapterId = this.databaseService.ensureChapterId(parentNoteId, row.chapterNoteId, chapterDoc.title);
-      lines.push(`- [${chapterDoc.title || 'Untitled'}]($${parentAssignedId}§${chapterId})`);
+      const chapterId = this.databaseService.ensureChapterId(parentNoteId, row.chapterNoteId, chapterDoc.text);
+      lines.push(`- [${chapterId}]($${parentAssignedId}§${chapterId})`);
       for (const heading of anchoredChapter.headings) {
         lines.push(`  - [${heading.label}]($${parentAssignedId}§${chapterId}#${heading.anchorId})`);
       }
@@ -527,18 +534,24 @@ export class NoteLifecycleService {
     }
 
     let linkPrefix: string;
+    // The parent has a real title (its own single-# first line); a chapter
+    // has no title concept at all, only a chapterId -- same distinction
+    // regenerateAutoTocChapter's own TOC-entry label makes.
+    let groupLabel: string;
     if (changedNoteId === parentNoteId) {
       const parentAssignedId = this.databaseService.ensureNoteAssignedId(parentNoteId, changedDoc.title);
       linkPrefix = `$${parentAssignedId}`;
+      groupLabel = changedDoc.title || 'Untitled';
     } else {
       const parentRecord = this.databaseService.getNoteRecord(parentNoteId);
       if (!parentRecord) return;
       const parentAssignedId = this.databaseService.ensureNoteAssignedId(parentNoteId, parentRecord.title);
-      const chapterId = this.databaseService.ensureChapterId(parentNoteId, changedNoteId, changedDoc.title);
+      const chapterId = this.databaseService.ensureChapterId(parentNoteId, changedNoteId, changedDoc.text);
       linkPrefix = `$${parentAssignedId}§${chapterId}`;
+      groupLabel = chapterId;
     }
 
-    const newGroupMarkdown = buildOpenItemsGroupMarkdown(changedText, linkPrefix, changedDoc.title || 'Untitled');
+    const newGroupMarkdown = buildOpenItemsGroupMarkdown(changedText, linkPrefix, groupLabel);
 
     let openItemsChapterNoteId = this.databaseService.getAutoOpenItemsChapterNoteId(parentNoteId);
 

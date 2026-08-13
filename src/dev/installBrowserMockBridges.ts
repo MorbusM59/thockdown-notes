@@ -39,6 +39,7 @@ import { DEFAULT_EDITOR_SECTION_ID } from '../shared/sections'
 import type { ChapterEntry, ChaptersApi } from '../shared/chapters'
 import type { ReviewFlagEntry, ReviewFlagsApi } from '../shared/reviewFlags'
 import { normalizeChapterHeadings } from '../shared/markdownHeadings'
+import { deriveChapterContentSnippet } from '../shared/tabLabels'
 import { anchorizeHeadings } from '../shared/tableOfContentsText'
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, parseOpenItemsGroups } from '../shared/openItemsText'
 
@@ -1088,7 +1089,12 @@ function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string)
     }
 
     if (!row.chapterId) {
-      const base = deriveDefaultAssignedIdBase(chapterNote.title)
+      // Chapters have no "title" concept -- their default id is seeded from
+      // the same content snippet their own pill falls back to displaying,
+      // not from `.title` (see the real backend's ensureChapterId doc
+      // comment).
+      const snippet = deriveChapterContentSnippet(chapterNote.text)
+      const base = deriveDefaultAssignedIdBase(snippet === '···' ? 'CHAPTER' : snippet)
       const used = new Set(
         store.chapters
           .filter((c) => c.parentNoteId === parentNoteId && c.chapterNoteId !== row.chapterNoteId && c.chapterId)
@@ -1103,7 +1109,7 @@ function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string)
       row.chapterId = resolved
     }
 
-    lines.push(`- [${chapterNote.title || 'Untitled'}]($${parentAssignedId}§${row.chapterId})`)
+    lines.push(`- [${row.chapterId}]($${parentAssignedId}§${row.chapterId})`)
     for (const heading of anchoredChapter.headings) {
       lines.push(`  - [${heading.label}]($${parentAssignedId}§${row.chapterId}#${heading.anchorId})`)
     }
@@ -1190,13 +1196,19 @@ function regenerateOpenItemsGroupInStore(store: BrowserMockStore, parentNoteId: 
   const parentAssignedId = parentNote.assignedId
 
   let linkPrefix: string
+  // The parent has a real title; a chapter has no title concept at all,
+  // only a chapterId -- same distinction the real backend's
+  // regenerateOpenItemsGroup makes.
+  let groupLabel: string
   if (changedNoteId === parentNoteId) {
     linkPrefix = `$${parentAssignedId}`
+    groupLabel = changedNote.title || 'Untitled'
   } else {
     const chapterRow = store.chapters.find((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === changedNoteId)
     if (!chapterRow) return
     if (!chapterRow.chapterId) {
-      const base = deriveDefaultAssignedIdBase(changedNote.title)
+      const snippet = deriveChapterContentSnippet(changedNote.text)
+      const base = deriveDefaultAssignedIdBase(snippet === '···' ? 'CHAPTER' : snippet)
       const used = new Set(
         store.chapters
           .filter((c) => c.parentNoteId === parentNoteId && c.chapterNoteId !== changedNoteId && c.chapterId)
@@ -1211,9 +1223,10 @@ function regenerateOpenItemsGroupInStore(store: BrowserMockStore, parentNoteId: 
       chapterRow.chapterId = resolved
     }
     linkPrefix = `$${parentAssignedId}§${chapterRow.chapterId}`
+    groupLabel = chapterRow.chapterId
   }
 
-  const newGroupMarkdown = buildOpenItemsGroupMarkdown(changedNote.text, linkPrefix, changedNote.title || 'Untitled')
+  const newGroupMarkdown = buildOpenItemsGroupMarkdown(changedNote.text, linkPrefix, groupLabel)
 
   let openItemsChapter = findOpenItemsChapterInStore(store, parentNoteId)
 

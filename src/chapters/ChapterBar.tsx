@@ -243,7 +243,7 @@ export function ChapterBar({
                     event.preventDefault()
                     onStartEditingChapterId(chapter.chapterNoteId)
                   }}
-                  data-tooltip={note?.title ?? 'Chapter'}
+                  data-tooltip={label}
                 >
                   <span className={`tag-pill-label${hasAssignedId ? '' : ' chapter-pill-label-unassigned'}`}>{label}</span>
                 </div>

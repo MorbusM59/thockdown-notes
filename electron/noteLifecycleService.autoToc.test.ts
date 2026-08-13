@@ -44,13 +44,16 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     expect(ch1Entry.chapterId).toBeTruthy()
     expect(ch2Entry.chapterId).toBeTruthy()
 
-    // Master index links to the parent's own heading and both chapters' headings.
+    // Master index links to the parent's own heading and both chapters'
+    // headings. The parent has a real title ("The Book"); each chapter has
+    // no title concept at all, so its own entry is labeled with its
+    // chapterId instead (see ensureChapterId's doc comment).
     expect(created.text).toContain(`[The Book]($${parentAssignedId})`)
     expect(created.text).toContain(`[Setting]($${parentAssignedId}#setting)`)
-    expect(created.text).toContain(`[Chapter One]($${parentAssignedId}§${ch1Entry.chapterId})`)
+    expect(created.text).toContain(`[${ch1Entry.chapterId}]($${parentAssignedId}§${ch1Entry.chapterId})`)
     expect(created.text).toContain(`[Arrival]($${parentAssignedId}§${ch1Entry.chapterId}#arrival)`)
     expect(created.text).toContain(`[Departure]($${parentAssignedId}§${ch1Entry.chapterId}#departure)`)
-    expect(created.text).toContain(`[Chapter Two]($${parentAssignedId}§${ch2Entry.chapterId})`)
+    expect(created.text).toContain(`[${ch2Entry.chapterId}]($${parentAssignedId}§${ch2Entry.chapterId})`)
     expect(created.text).toContain(`[Climax]($${parentAssignedId}§${ch2Entry.chapterId}#climax)`)
 
     // The TOC chapter never lists itself.
@@ -129,17 +132,20 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
 
     const { created } = await lifecycle.regenerateAutoTocChapter(parent.id)
 
-    // Only the parent and the two real chapters are indexed.
-    expect(created.text).toContain('[Bugs]($')
-    expect(created.text).toContain('[Features]($')
+    // Only the parent and the two real chapters are indexed, each labeled
+    // with its own chapterId (chapters have no title concept).
+    const bugsChapterId = db.listChaptersForNote(parent.id).find((c) => c.chapterNoteId === bugs.id)!.chapterId
+    const featuresChapterId = db.listChaptersForNote(parent.id).find((c) => c.chapterNoteId === features.id)!.chapterId
+    expect(created.text).toContain(`[${bugsChapterId}]($`)
+    expect(created.text).toContain(`[${featuresChapterId}]($`)
     // The Open Items chapter itself, and its internal group headings, must
     // never appear as TOC entries or link targets.
     expect(created.text).not.toContain('Open Items]($')
     expect(created.text).not.toContain('§OPEN')
     // No nested/duplicated link syntax like "[## [Bugs](#bugs)](...)".
     expect(created.text).not.toMatch(/\[##/)
-    expect((created.text.match(/\[Bugs\]/g) ?? []).length).toBe(1)
-    expect((created.text.match(/\[Features\]/g) ?? []).length).toBe(1)
+    expect((created.text.match(new RegExp(`\\[${bugsChapterId}\\]`, 'g')) ?? []).length).toBe(1)
+    expect((created.text.match(new RegExp(`\\[${featuresChapterId}\\]`, 'g')) ?? []).length).toBe(1)
   })
 
   it('regenerates the TOC automatically as a side effect of saving a chapter with an edited heading', async () => {
@@ -194,5 +200,47 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     // Exactly one entry for the new heading, not duplicated by a second
     // recursive regeneration pass.
     expect((tocDoc.text.match(/\[Second\]/g) ?? []).length).toBe(1)
+  })
+
+  it('never derives a chapter\'s "title" from its level-2 heading -- chapters have no title concept, only a chapterId (titleFromText stays level-1-only)', async () => {
+    const parent = await lifecycle.createNote({ initialText: '# Book' })
+    const ch1 = await lifecycle.createChapterNote(parent.id)
+    const saved = await lifecycle.saveNote({ id: ch1.id, text: '## Chapter One\n\nBody.' })
+
+    // titleFromText only recognizes level 1 -- a chapter's own level-2
+    // first line falls through to the raw-first-line fallback, hashes and
+    // all. That's fine: nothing chapter-facing reads `.title` (see the
+    // regression tests below), only ensureChapterId's own content-snippet
+    // derivation.
+    expect(saved.title).toBe('## Chapter One')
+  })
+
+  it('derives a clean chapterId default from a content snippet, never from `.title` (regression: a corrupted "##..." title used to leak into ensureChapterId)', async () => {
+    const parent = await lifecycle.createNote({ initialText: '# Book' })
+    const ch1 = await lifecycle.createChapterNote(parent.id)
+    await lifecycle.saveNote({ id: ch1.id, text: '## Chapter One\n\nBody.' })
+    await lifecycle.createAutoTocChapter(parent.id)
+
+    const chapterId = db.listChaptersForNote(parent.id).find((c) => c.chapterNoteId === ch1.id)!.chapterId
+    expect(chapterId).toBeTruthy()
+    expect(chapterId).not.toContain('#')
+    // deriveDefaultAssignedIdBase truncates to 8 chars: "Chapter One" -> "CHAPTER-ONE" -> "CHAPTER" (trailing hyphen stripped).
+    expect(chapterId).toBe('CHAPTER')
+  })
+
+  it('labels a chapter\'s own top-level TOC entry with its chapterId, never `.title` (regression: TOC used to show a chapter\'s corrupted "##..." title as the link label)', async () => {
+    const parent = await lifecycle.createNote({ initialText: '# Book' })
+    const ch1 = await lifecycle.createChapterNote(parent.id)
+    await lifecycle.saveNote({ id: ch1.id, text: '## Chapter One\n\nBody.' })
+    const { created } = await lifecycle.createAutoTocChapter(parent.id)
+
+    const chapterId = db.listChaptersForNote(parent.id).find((c) => c.chapterNoteId === ch1.id)!.chapterId
+    // The chapter's own top-level index line -- not its "## Chapter One"
+    // heading's own anchor sub-entry, which legitimately still shows "Chapter
+    // One" as a regular anchored heading (a chapter has no level-1 title for
+    // anchorizeHeadings to skip, so its only heading is anchored like any
+    // other).
+    expect(created.text).toContain(`- [${chapterId}]($${db.getNoteRecord(parent.id)!.assignedId}§${chapterId})`)
+    expect(created.text).not.toContain('##')
   })
 })

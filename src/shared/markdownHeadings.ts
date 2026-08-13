@@ -100,3 +100,80 @@ export function normalizeChapterHeadings(text: string): string {
   const shiftedText = minLevel === null ? text : shiftHeadingLevelsBy(text, 3 - minLevel)
   return `## Unnamed Chapter\n\n${shiftedText}`
 }
+
+export interface HeadingLevelEdit {
+  /** Offset (in the ORIGINAL text) where the corrected line begins. */
+  lineStart: number
+  /** Offset (in the ORIGINAL text) where the '#' run itself begins. */
+  markerStart: number
+  oldLevel: number
+  newLevel: number
+}
+
+/**
+ * Live-editing counterpart to `normalizeChapterHeadings`: clamps (never
+ * shifts) heading levels that violate a chapter's own invariant -- the first
+ * line, if it's a heading, must be exactly level 2; every other heading must
+ * be level 3 or deeper. Unlike `normalizeChapterHeadings`, this never
+ * synthesizes a heading where none exists and never touches a heading that
+ * already satisfies the rule (a `####` stays `####`) -- it's meant to run on
+ * every edit, so it must be a no-op on already-valid text.
+ */
+export function clampChapterHeadlineLevels(text: string): { text: string; edits: HeadingLevelEdit[] } {
+  const lines = text.split('\n')
+  let inFence = false
+  let offset = 0
+  const edits: HeadingLevelEdit[] = []
+
+  const nextLines = lines.map((line, index) => {
+    const lineStart = offset
+    offset += line.length + 1
+
+    if (FENCE_LINE.test(line)) {
+      inFence = !inFence
+      return line
+    }
+    if (inFence) return line
+    if (!ATX_HEADING_LINE.test(line)) return line
+
+    const oldLevel = line.match(/^#+/)?.[0].length ?? 0
+    const newLevel = index === 0 ? 2 : Math.max(3, oldLevel)
+    if (newLevel === oldLevel) return line
+
+    edits.push({ lineStart, markerStart: lineStart, oldLevel, newLevel })
+    return line.replace(/^#+/, '#'.repeat(newLevel))
+  })
+
+  return { text: nextLines.join('\n'), edits }
+}
+
+/**
+ * Remaps a single document offset across the corrections
+ * `clampChapterHeadlineLevels` made -- an offset before a corrected marker
+ * is untouched, one that fell inside the old `#` run clamps to the end of
+ * the new one, and one after it shifts by that correction's own level
+ * delta, with each earlier correction's delta accumulated first. `edits`
+ * must be in ascending `lineStart` order, exactly as `clampChapterHeadlineLevels`
+ * already returns them.
+ */
+export function remapOffsetThroughHeadingLevelEdits(offset: number, edits: HeadingLevelEdit[]): number {
+  let result = offset
+  let cumulativeDelta = 0
+
+  for (const edit of edits) {
+    const delta = edit.newLevel - edit.oldLevel
+
+    if (offset <= edit.markerStart) {
+      // Untouched -- still need this edit's delta accumulated for later edits.
+    } else if (offset <= edit.markerStart + edit.oldLevel) {
+      const relative = offset - edit.markerStart
+      result = edit.markerStart + cumulativeDelta + Math.min(relative, edit.newLevel)
+    } else {
+      result = offset + cumulativeDelta + delta
+    }
+
+    cumulativeDelta += delta
+  }
+
+  return result
+}

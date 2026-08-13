@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { increaseHeadingLevels, normalizeChapterHeadings } from './markdownHeadings'
+import { clampChapterHeadlineLevels, increaseHeadingLevels, normalizeChapterHeadings, remapOffsetThroughHeadingLevelEdits } from './markdownHeadings'
 
 describe('increaseHeadingLevels', () => {
   it('bumps every heading level by one throughout the text', () => {
@@ -74,5 +74,93 @@ describe('normalizeChapterHeadings', () => {
   it('does not treat headings inside a fenced code block as the highest heading', () => {
     const text = 'intro\n\n```\n# looks like a heading but is code\n```\n\n#### Real'
     expect(normalizeChapterHeadings(text)).toBe('## Unnamed Chapter\n\nintro\n\n```\n# looks like a heading but is code\n```\n\n### Real')
+  })
+})
+
+describe('clampChapterHeadlineLevels', () => {
+  it('is a no-op on already-valid text (idempotency)', () => {
+    const text = '## Title\n\nbody\n\n### Sub\n\n#### SubSub'
+    const result = clampChapterHeadlineLevels(text)
+    expect(result.text).toBe(text)
+    expect(result.edits).toEqual([])
+  })
+
+  it('clamps a shallower first-line heading up to level 2', () => {
+    const result = clampChapterHeadlineLevels('# Title\n\nbody')
+    expect(result.text).toBe('## Title\n\nbody')
+    expect(result.edits).toEqual([{ lineStart: 0, markerStart: 0, oldLevel: 1, newLevel: 2 }])
+  })
+
+  it('clamps a deeper first-line heading down to level 2', () => {
+    const result = clampChapterHeadlineLevels('#### Title\n\nbody')
+    expect(result.text).toBe('## Title\n\nbody')
+    expect(result.edits).toEqual([{ lineStart: 0, markerStart: 0, oldLevel: 4, newLevel: 2 }])
+  })
+
+  it('leaves a non-heading first line alone (does not synthesize a heading there)', () => {
+    const text = 'not a heading\n\n### Sub'
+    const result = clampChapterHeadlineLevels(text)
+    expect(result.text).toBe(text)
+    expect(result.edits).toEqual([])
+  })
+
+  it('clamps a level-1 or level-2 heading elsewhere in the document up to level 3', () => {
+    const text = '## Title\n\n# TooShallow\n\n## AlsoTooShallow'
+    const result = clampChapterHeadlineLevels(text)
+    expect(result.text).toBe('## Title\n\n### TooShallow\n\n### AlsoTooShallow')
+    expect(result.edits.length).toBe(2)
+  })
+
+  it('leaves headings already at level 3 or deeper elsewhere untouched', () => {
+    const text = '## Title\n\n### Sub\n\n###### Deepest'
+    const result = clampChapterHeadlineLevels(text)
+    expect(result.text).toBe(text)
+    expect(result.edits).toEqual([])
+  })
+
+  it('ignores headings inside a fenced code block', () => {
+    const text = '## Title\n\n```\n# not a real heading\n```'
+    const result = clampChapterHeadlineLevels(text)
+    expect(result.text).toBe(text)
+    expect(result.edits).toEqual([])
+  })
+})
+
+describe('remapOffsetThroughHeadingLevelEdits', () => {
+  it('leaves an offset before the marker untouched', () => {
+    const { edits } = clampChapterHeadlineLevels('# Title')
+    expect(remapOffsetThroughHeadingLevelEdits(0, edits)).toBe(0)
+  })
+
+  it('clamps an offset that was inside the old marker into the same relative position in the new one', () => {
+    // '# Title' -> '## Title': old marker is just '#' (length 1). Offset 1
+    // sits right at the old marker's end (1 char in) -- same convention as
+    // useEditorSectionMount.ts's onTabIndentTransform remap: min(relative, newLevel).
+    const { edits } = clampChapterHeadlineLevels('# Title')
+    expect(remapOffsetThroughHeadingLevelEdits(1, edits)).toBe(1)
+  })
+
+  it('shifts an offset after the marker by the level delta', () => {
+    // '# Title' -> '## Title', delta = +1. Offset 2 is the space before "Title".
+    const { edits } = clampChapterHeadlineLevels('# Title')
+    expect(remapOffsetThroughHeadingLevelEdits(2, edits)).toBe(3)
+    // Offset at the very end of the line shifts by the same delta.
+    expect(remapOffsetThroughHeadingLevelEdits(7, edits)).toBe(8)
+  })
+
+  it('shifts an offset by a negative delta when a heading gets shallower', () => {
+    // '#### Title' -> '## Title', delta = -2.
+    const { edits } = clampChapterHeadlineLevels('#### Title\n\nbody')
+    expect(remapOffsetThroughHeadingLevelEdits(10, edits)).toBe(8)
+  })
+
+  it('accumulates deltas across multiple corrected lines', () => {
+    const text = '# Title\n\n## Sub'
+    const { edits } = clampChapterHeadlineLevels(text)
+    expect(edits.length).toBe(2)
+    // Offset at the very end of the (uncorrected) text.
+    const endOffset = text.length
+    // First line: '#'->'##' is +1. Second line: '##'->'###' is +1. Total +2.
+    expect(remapOffsetThroughHeadingLevelEdits(endOffset, edits)).toBe(endOffset + 2)
   })
 })

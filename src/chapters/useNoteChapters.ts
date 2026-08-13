@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import type { DragEvent } from 'react'
 import type { ChapterEntry } from '../shared/chapters'
 import { splitChapterFamily } from '../shared/chapters'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { EditorSelectionState } from '../editor/EditorContract'
 import { collapseSurgerySite, trimBlankLines } from './chapterExtraction'
-import { normalizeChapterHeadings } from '../shared/markdownHeadings'
+import { clampChapterHeadlineLevels, normalizeChapterHeadings, remapOffsetThroughHeadingLevelEdits } from '../shared/markdownHeadings'
 
 export interface UseNoteChaptersOptions {
   /** The note identity the chapter bar shows chapters *of* -- the chapter-aware "menu identity" (see EditorSection.tsx's `menuIdentityNoteId`), never a chapter's own id (chapters can't have chapters in this UI). */
@@ -171,6 +171,30 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
 
   const [chapters, setChapters] = useState<ChapterEntry[]>([])
   const [draggedChapterIndex, setDraggedChapterIndex] = useState<number | null>(null)
+
+  // Live invariant for a real chapter's own headings (never the auto-TOC/
+  // auto-Open-Items synthetic ones, and never the parent note): the first
+  // line, if it's a heading, is always exactly level 2; every other heading
+  // is always level 3 or deeper. Runs on every text change rather than
+  // hooking a specific keystroke transform (Tab/Enter/character-insert) --
+  // those can't see backspace or paste, and this invariant has to hold after
+  // any edit -- mirroring useMarkdownFormattingToolbar.ts's single-note TOC
+  // auto-refresh effect: idempotent, recompute-and-diff against the
+  // currently displayed text, only touch the editor when something actually
+  // needs correcting. useLayoutEffect (not useEffect) so the correction lands
+  // before paint, same timing as that TOC effect.
+  useLayoutEffect(() => {
+    if (!activeNoteId) return
+    const activeNote = notes.find((note) => note.id === activeNoteId)
+    if (!activeNote?.chapterOnly || activeNote.isAutoToc || activeNote.isAutoOpenItems) return
+
+    const { text: clampedText, edits } = clampChapterHeadlineLevels(currentEditorText)
+    if (clampedText === currentEditorText) return
+
+    const nextAnchor = remapOffsetThroughHeadingLevelEdits(editorSelection.anchor, edits)
+    const nextFocus = remapOffsetThroughHeadingLevelEdits(editorSelection.focus, edits)
+    applyProgrammaticEditorText(clampedText, nextAnchor, nextFocus)
+  }, [activeNoteId, notes, currentEditorText, editorSelection, applyProgrammaticEditorText])
 
   useEffect(() => {
     if (!persistenceReady || !window.thockdownChapters || !menuIdentityNoteId) {

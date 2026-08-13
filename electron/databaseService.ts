@@ -3,6 +3,7 @@ import { existsSync, promises as fs } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
+import { deriveChapterContentSnippet } from '../src/shared/tabLabels';
 import { ensureHelpNote } from './help/helpNote';
 import { shouldVacuumForBloat } from './databaseSanitationPolicy';
 import type { TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../src/shared/textures';
@@ -331,6 +332,12 @@ function checksumText(text: string): string {
 
 function titleFromText(text: string): string {
   const lines = normalizeText(text).split('\n');
+  // Level 1 only -- a chapter's own first-line heading is always level 2
+  // (see markdownHeadings.ts's normalizeChapterHeadings/
+  // clampChapterHeadlineLevels) and deliberately does NOT count: chapters
+  // have no "title" concept at all, only a chapterId (see this file's
+  // ensureChapterId / tabLabels.ts's getChapterTabLabel for the actual
+  // chapter-identity logic; nothing chapter-facing should read `.title`).
   const heading = lines.find((line) => line.startsWith('# ') && line.trim().length > 2);
   if (heading) return truncateTitle(heading.slice(2).trim());
 
@@ -1576,18 +1583,22 @@ export class DatabaseService {
 
   /**
    * Returns the chapter's current chapterId, assigning and persisting a
-   * title-derived default (same base-derivation as ensureNoteAssignedId) on
-   * first use if it doesn't have one yet. Used by the auto-TOC chapter's
+   * content-snippet-derived default (a chapter has no "title" -- see
+   * noteLifecycleService.ts's titleFromText doc comment -- so the default is
+   * seeded from the same snippet its own pill falls back to displaying,
+   * tabLabels.ts's deriveChapterContentSnippet, not from `.title`) on first
+   * use if it doesn't have one yet. Used by the auto-TOC chapter's
    * regeneration pass -- a chapter with no chapterId can't be linked to via
    * `$parentId§chapterId`, so every chapter needs one before it can appear
    * in the generated index.
    */
-  ensureChapterId(parentNoteId: string, chapterNoteId: string, currentTitle: string): string {
+  ensureChapterId(parentNoteId: string, chapterNoteId: string, contentText: string): string {
     const db = this.requireDb();
     const existing = db.prepare('SELECT chapterId FROM chapters WHERE parentNoteId = ? AND chapterNoteId = ?').get(parentNoteId, chapterNoteId) as { chapterId: string | null } | undefined;
     if (existing?.chapterId) return existing.chapterId;
 
-    const base = deriveDefaultAssignedIdBase(currentTitle);
+    const snippet = deriveChapterContentSnippet(contentText);
+    const base = deriveDefaultAssignedIdBase(snippet === '···' ? 'CHAPTER' : snippet);
     const resolved = this.resolveUniqueChapterId(parentNoteId, base, chapterNoteId);
     db.prepare('UPDATE chapters SET chapterId = ? WHERE parentNoteId = ? AND chapterNoteId = ?').run(resolved, parentNoteId, chapterNoteId);
     return resolved;
