@@ -664,7 +664,7 @@ export function EditorSection({
     readCurrentEditUiPayload,
     setActiveNoteId,
     setActiveNoteText,
-    setIsPreviewMode,
+    setIsForcedPreviewNote,
   ])
 
   // Unloads this section back to its brand-new-section empty state -- same
