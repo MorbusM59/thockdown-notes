@@ -2,8 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { DatabaseService } from './databaseService'
+import { DatabaseService, deriveDefaultAssignedIdBase } from './databaseService'
 import { NoteLifecycleService } from './noteLifecycleService'
+import { deriveChapterContentSnippet } from '../src/shared/tabLabels'
 
 describe('NoteLifecycleService auto-Open-Items chapter', () => {
   let dataRoot: string
@@ -43,10 +44,13 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     const ch1Entry = chapters.find((c) => c.chapterNoteId === ch1.id)!
     const openItemsDoc = await lifecycle.loadNote({ id: openItemsId! })
 
-    // The chapter has no title concept -- its own group is labeled with its
-    // chapterId, same as the TOC's own chapter entries.
-    expect(openItemsDoc.text).toContain(`[${ch1Entry.chapterId}]($${parentAssignedId}§${ch1Entry.chapterId})`)
-    expect(openItemsDoc.text).toContain(`[Setting]($${parentAssignedId}§${ch1Entry.chapterId}#setting)`)
+    // The chapter has no title concept -- its own group is labeled with a
+    // live, unpersisted content-snippet link id, same as the TOC's own
+    // chapter entries. Never explicitly assigned, so it never persists.
+    expect(ch1Entry.chapterId).toBeNull()
+    const chapterLinkId = deriveDefaultAssignedIdBase(deriveChapterContentSnippet('# Chapter One\n\n## Setting\n\n- [x] done already\n- [ ] world-building task'))
+    expect(openItemsDoc.text).toContain(`[${chapterLinkId}]($${parentAssignedId}§${chapterLinkId})`)
+    expect(openItemsDoc.text).toContain(`[Setting]($${parentAssignedId}§${chapterLinkId}#setting)`)
     expect(openItemsDoc.text).toContain('- [ ] world-building task')
     // Checked items are never listed.
     expect(openItemsDoc.text).not.toContain('done already')

@@ -21,10 +21,12 @@ function normalizeContentPreviewText(text: string): string {
  * stripped. Chapters have no "title" concept at all (see noteLifecycleService.ts's
  * titleFromText doc comment) -- this is the one and only fallback identity
  * a chapter has, shared between the chapter pill's own label
- * (getChapterTabLabel below) and databaseService.ts's ensureChapterId
- * (the same snippet seeds a chapter's auto-generated default id, so a
- * chapter's displayed label and its own default id are never derived from
- * two different things).
+ * (getChapterTabLabel below) and databaseService.ts's getChapterLinkId
+ * (the same snippet seeds a chapter's live, unpersisted stand-in link id,
+ * so a chapter's displayed label and its filler link id are never derived
+ * from two different things -- and, like the label, that stand-in is never
+ * written to the chapterId column; only the user assigning one explicitly
+ * ever persists it).
  */
 export function deriveChapterContentSnippet(contentText: string | null | undefined): string {
   const fallbackText = normalizeContentPreviewText(contentText ?? '')

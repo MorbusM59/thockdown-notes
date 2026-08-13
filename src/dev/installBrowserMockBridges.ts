@@ -1076,6 +1076,13 @@ function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string)
 
   const chapterRows = getRealChapterRowsInStore(store, parentNoteId)
 
+  // Two unassigned siblings whose content happens to derive the same
+  // snippet-based id would otherwise collide within this one pass (nothing
+  // persists, so the DB-backed `used` check below can't see an earlier
+  // sibling's derived id) -- tracked locally, never persisted, same as the
+  // ids themselves. Mirrors noteLifecycleService.ts's own linkIdsUsedThisPass.
+  const linkIdsUsedThisPass = new Set<string>()
+
   for (const row of chapterRows) {
     const chapterNote = store.notes.find((note) => note.id === row.chapterNoteId)
     if (!chapterNote) continue
@@ -1088,30 +1095,35 @@ function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string)
       chapterNote.title = deriveTitle(anchoredChapter.text)
     }
 
-    if (!row.chapterId) {
-      // Chapters have no "title" concept -- their default id is seeded from
-      // the same content snippet their own pill falls back to displaying,
-      // not from `.title` (see the real backend's ensureChapterId doc
-      // comment).
+    // Chapters have no "title" concept -- an unassigned chapter's link id is
+    // a live, unpersisted stand-in seeded from the same content snippet its
+    // own pill falls back to displaying (see the real backend's
+    // getChapterLinkId doc comment). Only a user explicitly assigning a
+    // chapterId (setChapterId) ever writes `row.chapterId` -- this never
+    // does, so it's recomputed fresh here every time, same as the pill.
+    let linkChapterId = row.chapterId
+    if (!linkChapterId) {
       const snippet = deriveChapterContentSnippet(chapterNote.text)
       const base = deriveDefaultAssignedIdBase(snippet === '···' ? 'CHAPTER' : snippet)
-      const used = new Set(
-        store.chapters
+      const used = new Set([
+        ...store.chapters
           .filter((c) => c.parentNoteId === parentNoteId && c.chapterNoteId !== row.chapterNoteId && c.chapterId)
           .map((c) => c.chapterId as string),
-      )
+        ...linkIdsUsedThisPass,
+      ])
       let resolved = base
       let attempt = 2
       while (used.has(resolved)) {
         resolved = `${base}-${attempt}`
         attempt += 1
       }
-      row.chapterId = resolved
+      linkChapterId = resolved
     }
+    linkIdsUsedThisPass.add(linkChapterId)
 
-    lines.push(`- [${row.chapterId}]($${parentAssignedId}§${row.chapterId})`)
+    lines.push(`- [${linkChapterId}]($${parentAssignedId}§${linkChapterId})`)
     for (const heading of anchoredChapter.headings) {
-      lines.push(`  - [${heading.label}]($${parentAssignedId}§${row.chapterId}#${heading.anchorId})`)
+      lines.push(`  - [${heading.label}]($${parentAssignedId}§${linkChapterId}#${heading.anchorId})`)
     }
   }
 
@@ -1206,7 +1218,9 @@ function regenerateOpenItemsGroupInStore(store: BrowserMockStore, parentNoteId: 
   } else {
     const chapterRow = store.chapters.find((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === changedNoteId)
     if (!chapterRow) return
-    if (!chapterRow.chapterId) {
+    // Live, unpersisted stand-in when unassigned -- never writes chapterRow.chapterId (see regenerateAutoTocInStore's own comment on this).
+    let linkChapterId = chapterRow.chapterId
+    if (!linkChapterId) {
       const snippet = deriveChapterContentSnippet(changedNote.text)
       const base = deriveDefaultAssignedIdBase(snippet === '···' ? 'CHAPTER' : snippet)
       const used = new Set(
@@ -1220,10 +1234,10 @@ function regenerateOpenItemsGroupInStore(store: BrowserMockStore, parentNoteId: 
         resolved = `${base}-${attempt}`
         attempt += 1
       }
-      chapterRow.chapterId = resolved
+      linkChapterId = resolved
     }
-    linkPrefix = `$${parentAssignedId}§${chapterRow.chapterId}`
-    groupLabel = chapterRow.chapterId
+    linkPrefix = `$${parentAssignedId}§${linkChapterId}`
+    groupLabel = linkChapterId
   }
 
   const newGroupMarkdown = buildOpenItemsGroupMarkdown(changedNote.text, linkPrefix, groupLabel)

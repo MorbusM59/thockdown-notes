@@ -336,7 +336,7 @@ function titleFromText(text: string): string {
   // (see markdownHeadings.ts's normalizeChapterHeadings/
   // clampChapterHeadlineLevels) and deliberately does NOT count: chapters
   // have no "title" concept at all, only a chapterId (see this file's
-  // ensureChapterId / tabLabels.ts's getChapterTabLabel for the actual
+  // getChapterLinkId / tabLabels.ts's getChapterTabLabel for the actual
   // chapter-identity logic; nothing chapter-facing should read `.title`).
   const heading = lines.find((line) => line.startsWith('# ') && line.trim().length > 2);
   if (heading) return truncateTitle(heading.slice(2).trim());
@@ -1582,26 +1582,29 @@ export class DatabaseService {
   }
 
   /**
-   * Returns the chapter's current chapterId, assigning and persisting a
-   * content-snippet-derived default (a chapter has no "title" -- see
-   * noteLifecycleService.ts's titleFromText doc comment -- so the default is
-   * seeded from the same snippet its own pill falls back to displaying,
-   * tabLabels.ts's deriveChapterContentSnippet, not from `.title`) on first
-   * use if it doesn't have one yet. Used by the auto-TOC chapter's
-   * regeneration pass -- a chapter with no chapterId can't be linked to via
-   * `$parentId§chapterId`, so every chapter needs one before it can appear
-   * in the generated index.
+   * Returns the chapter's current chapterId if the user has explicitly
+   * assigned one (setChapterId), or otherwise a live, content-snippet-derived
+   * stand-in for building a TOC/link target -- NEVER persisted. A chapter has
+   * no "title" (see noteLifecycleService.ts's titleFromText doc comment), so
+   * this falls back to the exact same snippet its own pill falls back to
+   * displaying (tabLabels.ts's deriveChapterContentSnippet) -- a filler
+   * display value, same contract as the pill: only a user explicitly
+   * assigning a chapterId ever writes to the chapterId column. Recomputed
+   * fresh on every call from the chapter's current content, so it tracks
+   * edits the same way the pill label does, rather than freezing whatever
+   * the content happened to be the first time this was called. Used by the
+   * auto-TOC chapter's regeneration pass -- a chapter with no chapterId
+   * still needs SOME id to be linked to via `$parentId§chapterId`, even an
+   * unstable one, until the user assigns a real one.
    */
-  ensureChapterId(parentNoteId: string, chapterNoteId: string, contentText: string): string {
+  getChapterLinkId(parentNoteId: string, chapterNoteId: string, contentText: string): string {
     const db = this.requireDb();
     const existing = db.prepare('SELECT chapterId FROM chapters WHERE parentNoteId = ? AND chapterNoteId = ?').get(parentNoteId, chapterNoteId) as { chapterId: string | null } | undefined;
     if (existing?.chapterId) return existing.chapterId;
 
     const snippet = deriveChapterContentSnippet(contentText);
     const base = deriveDefaultAssignedIdBase(snippet === '···' ? 'CHAPTER' : snippet);
-    const resolved = this.resolveUniqueChapterId(parentNoteId, base, chapterNoteId);
-    db.prepare('UPDATE chapters SET chapterId = ? WHERE parentNoteId = ? AND chapterNoteId = ?').run(resolved, parentNoteId, chapterNoteId);
-    return resolved;
+    return this.resolveUniqueChapterId(parentNoteId, base, chapterNoteId);
   }
 
   /** Removes a chapter and closes the gap so every later chapter's position shifts forward by one. */

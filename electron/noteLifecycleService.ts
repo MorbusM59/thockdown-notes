@@ -55,7 +55,7 @@ function titleFromText(text: string): string {
   // (see markdownHeadings.ts's normalizeChapterHeadings/
   // clampChapterHeadlineLevels) and deliberately does NOT count: chapters
   // have no "title" concept at all, only a chapterId (see
-  // databaseService.ts's ensureChapterId / tabLabels.ts's getChapterTabLabel
+  // databaseService.ts's getChapterLinkId / tabLabels.ts's getChapterTabLabel
   // for the actual chapter-identity logic; nothing chapter-facing should
   // read `.title`).
   const heading = lines.find((line) => line.startsWith('# ') && line.trim().length > 2);
@@ -398,9 +398,11 @@ export class NoteLifecycleService {
   // 2. The master index is rebuilt: the parent's own headings under a link
   //    to the parent itself (`$parentAssignedId`), then each chapter's own
   //    headings under a link to that chapter (`$parentAssignedId§chapterId`).
-  //    Chapters without a chapterId yet get one assigned (ensureChapterId,
-  //    the same lazy-default pattern as a note's own assignedId) -- a
-  //    chapter can't be linked to at all without one.
+  //    Chapters without a user-assigned chapterId get a live, unpersisted
+  //    content-snippet stand-in (getChapterLinkId) so the index can still
+  //    link somewhere -- unlike a note's own assignedId, this is never
+  //    written back; only the user explicitly assigning one (setChapterId)
+  //    ever does.
   async regenerateAutoTocChapter(parentNoteId: string): Promise<{ chapters: ChapterEntry[]; created: NoteDocument }> {
     const tocChapterNoteId = this.databaseService.getAutoTocChapterNoteId(parentNoteId);
     if (!tocChapterNoteId) {
@@ -426,6 +428,13 @@ export class NoteLifecycleService {
 
     const chapterRows = this.getRealChapterRows(parentNoteId);
 
+    // getChapterLinkId's own dedup only ever checks PERSISTED chapterIds
+    // (it never writes one for an unassigned chapter -- see its doc
+    // comment), so two unassigned siblings whose content happens to derive
+    // the same snippet-based id would otherwise collide within this one
+    // pass, silently pointing two different `§chapterId` links at the same
+    // target. Tracked locally, never persisted, same as the ids themselves.
+    const linkIdsUsedThisPass = new Set<string>();
     for (const row of chapterRows) {
       const chapterDoc = await this.loadNote({ id: row.chapterNoteId });
       const anchoredChapter = anchorizeHeadings(chapterDoc.text);
@@ -433,7 +442,10 @@ export class NoteLifecycleService {
         await this.saveNote({ id: row.chapterNoteId, text: anchoredChapter.text }, { skipAutoChapterHooks: true });
       }
 
-      const chapterId = this.databaseService.ensureChapterId(parentNoteId, row.chapterNoteId, chapterDoc.text);
+      const chapterId = this.resolveUnusedLinkIdThisPass(
+        this.databaseService.getChapterLinkId(parentNoteId, row.chapterNoteId, chapterDoc.text),
+        linkIdsUsedThisPass,
+      );
       lines.push(`- [${chapterId}]($${parentAssignedId}§${chapterId})`);
       for (const heading of anchoredChapter.headings) {
         lines.push(`  - [${heading.label}]($${parentAssignedId}§${chapterId}#${heading.anchorId})`);
@@ -449,6 +461,18 @@ export class NoteLifecycleService {
     const chapters = this.databaseService.listChaptersForNote(parentNoteId);
     const created = await this.loadNote({ id: tocChapterNoteId });
     return { chapters, created };
+  }
+
+  /** Suffixes `candidateId` with `-2`, `-3`, ... until it's not already in `usedThisPass`, then records whichever id it settles on -- see regenerateAutoTocChapter's own comment on why this local, never-persisted dedup is needed on top of getChapterLinkId's own (DB-only) one. */
+  private resolveUnusedLinkIdThisPass(candidateId: string, usedThisPass: Set<string>): string {
+    let resolved = candidateId;
+    let attempt = 2;
+    while (usedThisPass.has(resolved)) {
+      resolved = `${candidateId}-${attempt}`;
+      attempt += 1;
+    }
+    usedThisPass.add(resolved);
+    return resolved;
   }
 
   // The single canonical source of "real" chapters for parentNoteId --
@@ -546,7 +570,7 @@ export class NoteLifecycleService {
       const parentRecord = this.databaseService.getNoteRecord(parentNoteId);
       if (!parentRecord) return;
       const parentAssignedId = this.databaseService.ensureNoteAssignedId(parentNoteId, parentRecord.title);
-      const chapterId = this.databaseService.ensureChapterId(parentNoteId, changedNoteId, changedDoc.text);
+      const chapterId = this.databaseService.getChapterLinkId(parentNoteId, changedNoteId, changedDoc.text);
       linkPrefix = `$${parentAssignedId}§${chapterId}`;
       groupLabel = chapterId;
     }
