@@ -90,6 +90,16 @@ export function ChapterBar({
   const isParentActive = activeNoteId === parentNoteId
   const hasCurrentChapter = !isParentActive
 
+  // The auto-generated Table of Contents chapter (if any) always renders
+  // pinned first, right after the parent tab -- not draggable, not a
+  // reorder/promote drop target, no chapterId to right-click-rename. Every
+  // other chapter renders from `reorderableChapters` instead of `chapters`
+  // so drag-and-drop's index math (useNoteChapters.ts) never sees it.
+  const autoTocChapter = chapters.find((chapter) => notes.find((note) => note.id === chapter.chapterNoteId)?.isAutoToc) ?? null
+  const reorderableChapters = autoTocChapter
+    ? chapters.filter((chapter) => chapter.chapterNoteId !== autoTocChapter.chapterNoteId)
+    : chapters
+
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
@@ -160,7 +170,22 @@ export function ChapterBar({
             >
               <span className="tag-pill-label">{parentLabel}</span>
             </div>
-            {chapters.map((chapter, index) => {
+            {autoTocChapter ? (() => {
+              const isActive = autoTocChapter.chapterNoteId === activeNoteId
+              const note = notes.find((entry) => entry.id === autoTocChapter.chapterNoteId)
+              return (
+                <div
+                  key={autoTocChapter.chapterNoteId}
+                  className={`tag-pill note-tab-pill chapter-pill chapter-auto-toc-pill${isActive ? ' active' : ''}`}
+                  data-chapter-note-id={autoTocChapter.chapterNoteId}
+                  onClick={() => onChapterClick(autoTocChapter.chapterNoteId)}
+                  data-tooltip={note?.title ?? 'Table of Contents'}
+                >
+                  <span className="fa-solid fa-sitemap" aria-hidden="true" />
+                </div>
+              )
+            })() : null}
+            {reorderableChapters.map((chapter, index) => {
               const isEditing = editingChapterNoteId === chapter.chapterNoteId
               const isActive = chapter.chapterNoteId === activeNoteId
               const note = notes.find((entry) => entry.id === chapter.chapterNoteId)

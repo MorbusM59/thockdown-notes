@@ -469,11 +469,46 @@ export function EditorSection({
     logStep('persist outgoing UI state', persistOutStart)
 
     const loadStart = performance.now()
-    const [loaded, nextUiState] = await Promise.all([
+    const [loadedInitial, nextUiState] = await Promise.all([
       window.thockdownNotes.loadNote({ id: noteId }),
       window.thockdownNotes?.getNoteUiState({ id: noteId }) ?? Promise.resolve(null),
     ])
+    let loaded = loadedInitial
     logStep('load note + UI state', loadStart)
+
+    // Refreshes the auto-TOC chapter's own content the instant it's about to
+    // be shown -- see noteLifecycleService.ts's regenerateAutoTocChapter doc
+    // comment for why this is a "materialized view, refreshed on read"
+    // rather than eagerly kept in sync in the background: zero cost while
+    // it's not being looked at, always accurate the moment it is. Every way
+    // of switching to a note funnels through this one function, so this is
+    // the single choke point that needs to know about it, not each
+    // individual navigation path (chapter-pill click, a link, session
+    // restore, ...).
+    //
+    // Checked off `loaded` itself (a fresh DB read, via the loadNote call
+    // just above), not the `notes` summaries array -- found live, not
+    // assumed: right after toggleAutoTocChapter creates this exact note and
+    // immediately calls activateNote(created.id), `notes` hasn't picked up
+    // the brand-new summary yet (refreshNotes()'s setNotes() call schedules
+    // a re-render; it doesn't synchronously give this already-in-flight
+    // callback's own closure a fresh `notes` to read), so a `notes.find(...)`
+    // check here found nothing and silently skipped regeneration entirely on
+    // first creation. `loaded`/`chapterParentId` carry no such staleness --
+    // they're both real DB reads.
+    if (loaded.isAutoToc && loaded.chapterParentId && window.thockdownChapters) {
+      await window.thockdownChapters.regenerateAutoTocChapter(loaded.chapterParentId)
+      loaded = await window.thockdownNotes.loadNote({ id: noteId })
+      // Edit mode shows raw markdown text -- `[Label]($noteId#anchor)` isn't
+      // a real, clickable link there, only in the rendered preview pane (see
+      // PreviewMarkdown.tsx). A read-only page that exists purely to be
+      // clicked through would otherwise look broken (unclickable bracket
+      // syntax) to anyone who happens to be in edit mode when they open it,
+      // so force preview mode on entry. Not restored on the way back out --
+      // same as every other view-mode change, it's just where you land, not
+      // a special saved/restored state.
+      setIsPreviewMode(true)
+    }
 
     const cacheRestoreStart = performance.now()
     const hydratedText = normalizeInternalText(loaded.text)
@@ -599,6 +634,7 @@ export function EditorSection({
     readCurrentEditUiPayload,
     setActiveNoteId,
     setActiveNoteText,
+    setIsPreviewMode,
   ])
 
   // Unloads this section back to its brand-new-section empty state -- same
@@ -764,9 +800,13 @@ export function EditorSection({
     startEditingChapterId,
     commitChapterIdEdit,
     cancelChapterIdEdit,
+    isAutoTocActive,
+    toggleAutoTocChapter,
+    autoTocChapterNoteId,
   } = useNoteChapters({
     menuIdentityNoteId,
     activeNoteId,
+    notes,
     persistenceReady,
     activateNote,
     refreshNotes,
@@ -1140,6 +1180,9 @@ export function EditorSection({
     onChapterContainerDrop,
     onChapterPromoteDragOver,
     onChapterPromoteDrop,
+    isAutoTocActive,
+    toggleAutoTocChapter,
+    autoTocChapterNoteId,
     editingChapterNoteId,
     chapterIdDraft,
     setChapterIdDraft,

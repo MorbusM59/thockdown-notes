@@ -187,6 +187,7 @@ type NoteRecordRow = {
   assignedId: string | null;
   previewBlockCache: string | null;
   chapterOnly: number;
+  isAutoToc: number;
   chapterParentId: string | null;
 };
 
@@ -204,6 +205,8 @@ export type NoteRecord = {
   assignedId: string | null;
   previewBlockCache: string | null;
   chapterOnly: boolean;
+  /** True for the one chapter (if any) that's the auto-generated table of contents for its parent's whole chapter family -- see the `isAutoToc` column doc comment in ensureSchema(). */
+  isAutoToc: boolean;
   /** The single note this note is a chapter of, or null when it isn't (any) chapter. DB-derived (see getChapterParent), not navigation state. */
   chapterParentId: string | null;
 };
@@ -1148,7 +1151,7 @@ export class DatabaseService {
   listNoteRecords(): NoteRecord[] {
     const db = this.requireDb();
     const rows = db.prepare(`
-      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, c.parentNoteId AS chapterParentId
+      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, c.parentNoteId AS chapterParentId
       FROM notes n
       LEFT JOIN chapters c ON c.chapterNoteId = n.id
       ORDER BY datetime(n.updatedAt) DESC
@@ -1168,6 +1171,7 @@ export class DatabaseService {
       assignedId: row.assignedId,
       previewBlockCache: row.previewBlockCache,
       chapterOnly: Boolean(row.chapterOnly),
+      isAutoToc: Boolean(row.isAutoToc),
       chapterParentId: row.chapterParentId,
     }));
   }
@@ -1175,7 +1179,7 @@ export class DatabaseService {
   getNoteRecord(noteId: string): NoteRecord | null {
     const db = this.requireDb();
     const row = db.prepare(`
-      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, c.parentNoteId AS chapterParentId
+      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, c.parentNoteId AS chapterParentId
       FROM notes n
       LEFT JOIN chapters c ON c.chapterNoteId = n.id
       WHERE n.id = ?
@@ -1200,6 +1204,7 @@ export class DatabaseService {
       assignedId: row.assignedId,
       previewBlockCache: row.previewBlockCache,
       chapterOnly: Boolean(row.chapterOnly),
+      isAutoToc: Boolean(row.isAutoToc),
       chapterParentId: row.chapterParentId,
     };
   }
@@ -1208,6 +1213,25 @@ export class DatabaseService {
   setNoteChapterOnly(noteId: string, value: boolean): void {
     const db = this.requireDb();
     db.prepare('UPDATE notes SET chapterOnly = ? WHERE id = ?').run(value ? 1 : 0, noteId);
+  }
+
+  /** Marks (or unmarks) a note as the auto-generated table-of-contents chapter -- see the `isAutoToc` column doc comment in ensureSchema(). */
+  setNoteAutoToc(noteId: string, value: boolean): void {
+    const db = this.requireDb();
+    db.prepare('UPDATE notes SET isAutoToc = ? WHERE id = ?').run(value ? 1 : 0, noteId);
+  }
+
+  /** The parent's current auto-TOC chapter, if it has one, or null. Scans its own chapters rather than a global lookup -- isAutoToc is only ever meaningful in the context of one parent's family. */
+  getAutoTocChapterNoteId(parentNoteId: string): string | null {
+    const db = this.requireDb();
+    const row = db.prepare(`
+      SELECT c.chapterNoteId AS chapterNoteId
+      FROM chapters c
+      JOIN notes n ON n.id = c.chapterNoteId
+      WHERE c.parentNoteId = ? AND n.isAutoToc = 1
+      LIMIT 1
+    `).get(parentNoteId) as { chapterNoteId: string } | undefined;
+    return row?.chapterNoteId ?? null;
   }
 
   // ── Note internal IDs (tab-bar labels) ──────────────────────────────────
@@ -1526,6 +1550,25 @@ export class DatabaseService {
     return resolved;
   }
 
+  /**
+   * Returns the chapter's current chapterId, assigning and persisting a
+   * title-derived default (same base-derivation as ensureNoteAssignedId) on
+   * first use if it doesn't have one yet. Used by the auto-TOC chapter's
+   * regeneration pass -- a chapter with no chapterId can't be linked to via
+   * `$parentId§chapterId`, so every chapter needs one before it can appear
+   * in the generated index.
+   */
+  ensureChapterId(parentNoteId: string, chapterNoteId: string, currentTitle: string): string {
+    const db = this.requireDb();
+    const existing = db.prepare('SELECT chapterId FROM chapters WHERE parentNoteId = ? AND chapterNoteId = ?').get(parentNoteId, chapterNoteId) as { chapterId: string | null } | undefined;
+    if (existing?.chapterId) return existing.chapterId;
+
+    const base = deriveDefaultAssignedIdBase(currentTitle);
+    const resolved = this.resolveUniqueChapterId(parentNoteId, base, chapterNoteId);
+    db.prepare('UPDATE chapters SET chapterId = ? WHERE parentNoteId = ? AND chapterNoteId = ?').run(resolved, parentNoteId, chapterNoteId);
+    return resolved;
+  }
+
   /** Removes a chapter and closes the gap so every later chapter's position shifts forward by one. */
   removeChapter(parentNoteId: string, chapterNoteId: string): ChapterEntry[] {
     const db = this.requireDb();
@@ -1546,6 +1589,24 @@ export class DatabaseService {
       orderedChapterNoteIds.forEach((chapterNoteId, index) => {
         db.prepare('UPDATE chapters SET position = ? WHERE parentNoteId = ? AND chapterNoteId = ?').run(index, parentNoteId, chapterNoteId);
       });
+    });
+    tx();
+    return this.listChaptersForNote(parentNoteId);
+  }
+
+  /**
+   * Forces `chapterNoteId` to position 0 among `parentNoteId`'s chapters,
+   * shifting every other chapter back by one -- used once, right after the
+   * auto-TOC chapter is created, to pin it first. Ordinary drag-reorder
+   * (useNoteChapters.ts) never moves it again after that: the chapter bar
+   * excludes it from the draggable/droppable set entirely, so this method
+   * only ever needs to run at creation time, not on every regeneration.
+   */
+  pinChapterToFront(parentNoteId: string, chapterNoteId: string): ChapterEntry[] {
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      db.prepare('UPDATE chapters SET position = position + 1 WHERE parentNoteId = ? AND chapterNoteId != ?').run(parentNoteId, chapterNoteId);
+      db.prepare('UPDATE chapters SET position = 0 WHERE parentNoteId = ? AND chapterNoteId = ?').run(parentNoteId, chapterNoteId);
     });
     tx();
     return this.listChaptersForNote(parentNoteId);
@@ -3331,6 +3392,17 @@ export class DatabaseService {
     // since it only exists to be shown through its parent's chapter bar. See
     // the `chapters` table above for the parent/position/chapter linkage.
     this.ensureNotesColumn('chapterOnly', 'INTEGER NOT NULL DEFAULT 0');
+    // Marks the one chapter (if any) that's the auto-generated table of
+    // contents for its parent's whole chapter family -- see
+    // promoteChapterToParent's neighbor, regenerateAutoTocChapter, for what
+    // populates it. A dedicated flag rather than reusing chapterId (e.g. a
+    // reserved "TOC" label) deliberately: chapterId is user-editable text
+    // (right-click any chapter to retype it), so a reserved string could
+    // collide with something a user typed themselves, silently reassigning
+    // "the auto-TOC chapter" identity or getting quietly renamed out from
+    // under it by resolveUniqueChapterId's own dedup suffixing. This flag
+    // can't collide with anything.
+    this.ensureNotesColumn('isAutoToc', 'INTEGER NOT NULL DEFAULT 0');
     this.ensureChaptersColumn('chapterId', 'TEXT');
     // Deliberately after ensureChaptersColumn, not inside the CREATE TABLE
     // block above: on a database that already had a `chapters` table before

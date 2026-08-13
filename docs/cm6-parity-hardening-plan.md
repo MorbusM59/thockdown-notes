@@ -2252,3 +2252,46 @@ user preference; the user verified visually themselves and reported back the thr
 corrections above, each fixed and re-confirmed in the same loop. Worth a normal click-through pass (toggle
 the gutter, resize the pane, flag a few wrapped lines, trigger a dev-mode hot reload) before considering
 this fully closed.
+
+## `editorReadOnly` never reactively took effect post-mount -- found live while building the auto-generated cross-chapter Table of Contents feature, fixed with a Compartment
+
+**Not part of this doc's own tracked effort** -- surfaced as a side effect of a different feature
+(an auto-generated, read-only "Table of Contents" chapter that lists every heading across a note's
+whole chapter family) needing the editor to actually go read-only the instant it's opened. Recorded
+here per this file's own "keep it current" rule since it's a genuine CM6-internals correctness fix,
+not a UI-layer bug.
+
+**Bug**: `extensions` in the mount-once `EditorState.create()` call bakes in
+`EditorView.editable.of(!editorReadOnly)` directly, with no `Compartment` -- so `editorReadOnly`
+changing on an *already-mounted* section (switching from a normal note into a read-only one, or vice
+versa, without a remount -- which this component deliberately never does on a note switch, see the
+"mount-once" doc comment a few sections up) never reached the live view. The DOM's real
+`contenteditable` stayed stuck at whatever it was the instant the section first mounted. Confirmed
+live, not just reasoned about: a Playwright check driving an actual note switch into a read-only note
+showed `contenteditable="true"` (should have been `"false"`) until this fix landed, and the `.editor-stage`
+element was missing its `is-preview-mode` class until a *second*, unrelated fix (see below) was also in
+place.
+
+This is a **pre-existing gap**, not something introduced by the TOC feature -- `isPreviewingSnapshot`
+(Time Machine preview) and `activeNoteHasDebugTag` both already fed the same broken `editorReadOnly`
+prop before this fix, so switching into snapshot-preview or a debug-tagged note from an already-open
+section very likely had this exact same silent failure. Worth a live check next time either of those
+paths is touched, rather than assuming this fix's scope only covers the new caller.
+
+**Fix**: wrapped the extension in a `Compartment` (`readOnlyCompartmentRef`, one per component instance,
+created once via `useRef(new Compartment())`), and added a small `useEffect(() => {...}, [editorReadOnly])`
+that dispatches `readOnlyCompartmentRef.current.reconfigure(EditorView.editable.of(!editorReadOnly))`
+against `viewRef.current` whenever the prop changes. Placed right after the mount-once effect so
+`viewRef.current` is already populated by the time this effect's own first run happens.
+
+**Note**: `spellCheckEnabled` has the exact same mount-once-only gap one line below `editorReadOnly` in
+`extensions` (`EditorView.contentAttributes.of({ spellcheck: ... })`, no compartment either) and was
+**not** fixed here -- out of scope for this change, left as a separate, pre-existing finding for
+whoever picks it up next rather than folded in speculatively.
+
+**Verification**: live Playwright check (`scripts/perf/` throwaway script, not committed) driving a
+real note switch into and out of a read-only note, confirming `contenteditable` flips both directions;
+`tsc --noEmit` and `npm run lint` clean; full `npm test` suite (355/355) unaffected. Not run through
+this doc's own full CM6 regression-script suite -- this change doesn't touch caret/selection/scroll
+arithmetic at all, just editability reconfiguration, so that tier was judged disproportionate; flag
+for a fuller pass if a future session touches this same compartment again.

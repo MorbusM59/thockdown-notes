@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { DragEvent } from 'react'
 import type { ChapterEntry } from '../shared/chapters'
+import type { NoteSummary } from '../shared/noteLifecycle'
 import type { EditorSelectionState } from '../editor/EditorContract'
 import { collapseSurgerySite, trimBlankLines } from './chapterExtraction'
 
@@ -9,6 +10,8 @@ export interface UseNoteChaptersOptions {
   menuIdentityNoteId: string | null
   /** The note actually loaded in the editor right now -- used only to tell which chapter pill (if any) is the active one. */
   activeNoteId: string | null
+  /** The full shared notes list -- read to tell which chapter (if any) is the auto-generated Table of Contents (NoteSummary.isAutoToc), so it can be pinned/excluded from drag-reorder without ChapterEntry itself needing that field. */
+  notes: NoteSummary[]
   persistenceReady: boolean
   /** EditorSection.tsx's own `activateNote`. Which parent a chapter belongs to is a DB fact now (a chapter has exactly one parent, ever), not navigation state, so this no longer takes a parent-context param. */
   activateNote: (noteId: string, overrideCursorPos?: number) => Promise<void>
@@ -130,6 +133,12 @@ export interface UseNoteChaptersResult {
   /** Drop on the parent tab itself -- promotes the dragged chapter to the parent slot (see handleChapterPromoteDrop's own doc comment). */
   onChapterPromoteDragOver: (event: DragEvent<HTMLDivElement>) => void
   onChapterPromoteDrop: (event: DragEvent<HTMLDivElement>) => void
+  /** True while this note's chapter family has an auto-generated Table of Contents chapter -- the toolbar button's toggled/untoggled state. */
+  isAutoTocActive: boolean
+  /** Toggles the auto-TOC chapter: creates + activates it when absent (regenerated fresh, then pinned to chapter-bar position 0); permanently deletes it (no trash -- fully regenerable) when present. */
+  toggleAutoTocChapter: () => Promise<void>
+  /** Which chapter (if any) is the auto-generated TOC -- pinned first, excluded from drag-reorder/promote. Null when this family has none. */
+  autoTocChapterNoteId: string | null
   /** Which chapter pill (by chapterNoteId) is mid-inline-edit of its chapterId, if any. */
   editingChapterNoteId: string | null
   chapterIdDraft: string
@@ -151,6 +160,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
   const {
     menuIdentityNoteId,
     activeNoteId,
+    notes,
     persistenceReady,
     activateNote,
     refreshNotes,
@@ -177,6 +187,21 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
       cancelled = true
     }
   }, [persistenceReady, menuIdentityNoteId])
+
+  // The auto-TOC chapter (if any) is a note-level fact (NoteSummary.isAutoToc),
+  // not something ChapterEntry itself carries -- looked up against the
+  // shared notes list rather than adding a new field to every chapter row.
+  // Pinned to chapter-bar position 0 at creation time (see
+  // createAutoTocChapter) and never moved after that; drag-reorder below
+  // operates only on `reorderableChapters` (everything else) so it can never
+  // be dragged, dropped onto, or displaced by an ordinary reorder.
+  const autoTocChapterNoteId = useMemo(() => (
+    chapters.find((chapter) => notes.find((note) => note.id === chapter.chapterNoteId)?.isAutoToc)?.chapterNoteId ?? null
+  ), [chapters, notes])
+  const isAutoTocActive = autoTocChapterNoteId !== null
+  const reorderableChapters = useMemo(() => (
+    autoTocChapterNoteId === null ? chapters : chapters.filter((chapter) => chapter.chapterNoteId !== autoTocChapterNoteId)
+  ), [chapters, autoTocChapterNoteId])
 
   const handleCreateChapter = useCallback(async () => {
     if (!window.thockdownChapters || !menuIdentityNoteId) return
@@ -451,16 +476,30 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
   // index in state (this hook already knows `chapters`) sidesteps that
   // entirely, same as the tab/tag bar never had the bug in the first place.
   const handleChapterDragStart = useCallback((event: DragEvent<HTMLDivElement>, index: number) => {
-    const chapter = chapters[index]
+    const chapter = reorderableChapters[index]
     if (!chapter) return
     event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData('text/plain', chapter.chapterNoteId)
     setDraggedChapterIndex(index)
-  }, [chapters])
+  }, [reorderableChapters])
 
   const handleChapterDragEnd = useCallback(() => {
     setDraggedChapterIndex(null)
   }, [])
+
+  // Persists a new order for the reorderable subset, always re-prepending
+  // the pinned auto-TOC chapter (if any) first -- reorderChapters rewrites
+  // every position from this exact list, so leaving it out (or sending it
+  // anywhere but first) would un-pin it.
+  const persistReorderedChapters = useCallback(async (reorderedReorderable: ChapterEntry[]) => {
+    if (!window.thockdownChapters || !menuIdentityNoteId) return
+    const orderedChapterNoteIds = [
+      ...(autoTocChapterNoteId !== null ? [autoTocChapterNoteId] : []),
+      ...reorderedReorderable.map((chapter) => chapter.chapterNoteId),
+    ]
+    const updatedChapters = await window.thockdownChapters.reorderChapters(menuIdentityNoteId, orderedChapterNoteIds)
+    setChapters(updatedChapters)
+  }, [menuIdentityNoteId, autoTocChapterNoteId])
 
   const handleChapterDrop = useCallback(async (event: DragEvent<HTMLDivElement>, targetIndex: number) => {
     if (draggedChapterIndex === null) return
@@ -472,16 +511,14 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
       return
     }
 
-    const reordered = [...chapters]
+    const reordered = [...reorderableChapters]
     const [moved] = reordered.splice(draggedChapterIndex, 1)
     setDraggedChapterIndex(null)
     if (!moved) return
 
     reordered.splice(targetIndex, 0, moved)
-    const orderedChapterNoteIds = reordered.map((chapter) => chapter.chapterNoteId)
-    const updatedChapters = await window.thockdownChapters.reorderChapters(menuIdentityNoteId, orderedChapterNoteIds)
-    setChapters(updatedChapters)
-  }, [draggedChapterIndex, chapters, menuIdentityNoteId])
+    await persistReorderedChapters(reordered)
+  }, [draggedChapterIndex, reorderableChapters, menuIdentityNoteId, persistReorderedChapters])
 
   // Drop on the bar's own background, past the last pill -- appends to the
   // end, mirroring useSectionTabs.ts's handleTabsContainerDrop/
@@ -502,16 +539,14 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
       return
     }
 
-    const reordered = [...chapters]
+    const reordered = [...reorderableChapters]
     const [moved] = reordered.splice(draggedChapterIndex, 1)
     setDraggedChapterIndex(null)
     if (!moved) return
 
     reordered.push(moved)
-    const orderedChapterNoteIds = reordered.map((chapter) => chapter.chapterNoteId)
-    const updatedChapters = await window.thockdownChapters.reorderChapters(menuIdentityNoteId, orderedChapterNoteIds)
-    setChapters(updatedChapters)
-  }, [draggedChapterIndex, chapters, menuIdentityNoteId])
+    await persistReorderedChapters(reordered)
+  }, [draggedChapterIndex, reorderableChapters, menuIdentityNoteId, persistReorderedChapters])
 
   // Drop directly on the parent tab -- the one place chapter drag-and-drop
   // diverges from a plain tab/tag reorder. The dragged chapter becomes the
@@ -541,14 +576,42 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
       return
     }
 
-    const dragged = chapters[draggedChapterIndex]
+    const dragged = reorderableChapters[draggedChapterIndex]
     setDraggedChapterIndex(null)
     if (!dragged) return
 
     const updatedChapters = await window.thockdownChapters.promoteChapterToParent(menuIdentityNoteId, dragged.chapterNoteId)
     setChapters(updatedChapters)
     await refreshNotes(activeNoteId)
-  }, [draggedChapterIndex, chapters, menuIdentityNoteId, refreshNotes, activeNoteId])
+  }, [draggedChapterIndex, reorderableChapters, menuIdentityNoteId, refreshNotes, activeNoteId])
+
+  // Toolbar toggle (next to the single-note TOC button): off -> creates and
+  // activates the auto-TOC chapter (pinned first, populated by the same
+  // regeneration pass a later on-view refresh uses -- see
+  // createAutoTocChapter's own doc comment). On -> permanently deletes it,
+  // no trash -- it's fully regenerable from the parent/chapters' own
+  // content, so there's nothing to lose.
+  const toggleAutoTocChapter = useCallback(async () => {
+    if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId) return
+
+    if (autoTocChapterNoteId !== null) {
+      const removedId = autoTocChapterNoteId
+      const updatedChapters = await window.thockdownChapters.removeChapter(menuIdentityNoteId, removedId)
+      await window.thockdownNotes.deleteNote({ id: removedId })
+      onNotePermanentlyDeleted?.(removedId)
+      setChapters(updatedChapters)
+      if (activeNoteId === removedId) {
+        await activateNote(menuIdentityNoteId)
+      }
+      await refreshNotes(activeNoteId === removedId ? menuIdentityNoteId : activeNoteId)
+      return
+    }
+
+    const { chapters: updatedChapters, created } = await window.thockdownChapters.createAutoTocChapter(menuIdentityNoteId)
+    setChapters(updatedChapters)
+    await refreshNotes(created.id)
+    await activateNote(created.id)
+  }, [menuIdentityNoteId, autoTocChapterNoteId, activeNoteId, activateNote, refreshNotes, onNotePermanentlyDeleted])
 
   const [editingChapterNoteId, setEditingChapterNoteId] = useState<string | null>(null)
   const [chapterIdDraft, setChapterIdDraft] = useState('')
@@ -594,6 +657,9 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     onChapterContainerDrop: handleChapterContainerDrop,
     onChapterPromoteDragOver: handleChapterPromoteDragOver,
     onChapterPromoteDrop: handleChapterPromoteDrop,
+    isAutoTocActive,
+    toggleAutoTocChapter,
+    autoTocChapterNoteId,
     editingChapterNoteId,
     chapterIdDraft,
     setChapterIdDraft,

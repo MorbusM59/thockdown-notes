@@ -39,6 +39,7 @@ import { DEFAULT_EDITOR_SECTION_ID } from '../shared/sections'
 import type { ChapterEntry, ChaptersApi } from '../shared/chapters'
 import type { ReviewFlagEntry, ReviewFlagsApi } from '../shared/reviewFlags'
 import { increaseHeadingLevels } from '../shared/markdownHeadings'
+import { anchorizeHeadings } from '../shared/tableOfContentsText'
 
 const MOCK_STORAGE_KEY = 'thockdown-notes:browser-mock:v1'
 
@@ -101,6 +102,7 @@ function normalizeDocument(note: NoteDocument): NoteDocument {
     sizeBytes: text.length,
     text,
     chapterOnly: Boolean(note.chapterOnly),
+    isAutoToc: Boolean(note.isAutoToc),
     chapterParentId: note.chapterParentId ?? null,
   }
 }
@@ -116,6 +118,7 @@ function toSummary(note: NoteDocument): NoteSummary {
     sizeBytes: note.sizeBytes,
     assignedId: note.assignedId ?? null,
     chapterOnly: Boolean(note.chapterOnly),
+    isAutoToc: Boolean(note.isAutoToc),
     chapterParentId: note.chapterParentId ?? null,
     // The real app derives this from the on-disk file minus any legacy
     // metadata header (readSummary in noteLifecycleService.ts); the mock has
@@ -416,6 +419,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
           sizeBytes: 0,
           text,
           chapterOnly: false,
+          isAutoToc: false,
           chapterParentId: null,
         })
         store.notes.push(created)
@@ -991,6 +995,90 @@ function buildTabsBridge(storeRef: { current: BrowserMockStore }): NoteTabsApi {
   }
 }
 
+/**
+ * Dev-mode mirror of noteLifecycleService.ts's regenerateAutoTocChapter --
+ * see that method's own doc comment for what this actually does and why.
+ * A no-op if `parentNoteId` has no auto-TOC chapter. Mutates `store`
+ * directly rather than round-tripping through this file's own
+ * loadNote/saveNote bridge methods (unlike the real backend, which has to,
+ * since chapters are file-backed there) -- the mock store has no such file
+ * layer, so a direct in-place update is both sufficient and faithful to
+ * what those calls would produce.
+ */
+function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string): void {
+  const parentNote = store.notes.find((note) => note.id === parentNoteId)
+  const tocChapter = store.chapters.find((chapter) => (
+    chapter.parentNoteId === parentNoteId && store.notes.find((note) => note.id === chapter.chapterNoteId)?.isAutoToc
+  ))
+  if (!parentNote || !tocChapter) return
+
+  if (!parentNote.assignedId) {
+    const base = deriveDefaultAssignedIdBase(parentNote.title)
+    parentNote.assignedId = resolveUniqueAssignedId(store.notes, base, parentNote.id)
+  }
+  const parentAssignedId = parentNote.assignedId
+
+  const anchoredParent = anchorizeHeadings(parentNote.text)
+  if (anchoredParent.text !== parentNote.text) {
+    parentNote.text = anchoredParent.text
+    parentNote.updatedAtMs = Date.now()
+    parentNote.sizeBytes = anchoredParent.text.length
+    parentNote.title = deriveTitle(anchoredParent.text)
+  }
+
+  const lines = ['# Table of Contents', '', `- [${parentNote.title || 'Untitled'}]($${parentAssignedId})`]
+  for (const heading of anchoredParent.headings) {
+    lines.push(`  - [${heading.label}]($${parentAssignedId}#${heading.anchorId})`)
+  }
+
+  const chapterRows = store.chapters
+    .filter((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId !== tocChapter.chapterNoteId)
+    .sort((a, b) => a.position - b.position)
+
+  for (const row of chapterRows) {
+    const chapterNote = store.notes.find((note) => note.id === row.chapterNoteId)
+    if (!chapterNote) continue
+
+    const anchoredChapter = anchorizeHeadings(chapterNote.text)
+    if (anchoredChapter.text !== chapterNote.text) {
+      chapterNote.text = anchoredChapter.text
+      chapterNote.updatedAtMs = Date.now()
+      chapterNote.sizeBytes = anchoredChapter.text.length
+      chapterNote.title = deriveTitle(anchoredChapter.text)
+    }
+
+    if (!row.chapterId) {
+      const base = deriveDefaultAssignedIdBase(chapterNote.title)
+      const used = new Set(
+        store.chapters
+          .filter((c) => c.parentNoteId === parentNoteId && c.chapterNoteId !== row.chapterNoteId && c.chapterId)
+          .map((c) => c.chapterId as string),
+      )
+      let resolved = base
+      let attempt = 2
+      while (used.has(resolved)) {
+        resolved = `${base}-${attempt}`
+        attempt += 1
+      }
+      row.chapterId = resolved
+    }
+
+    lines.push(`- [${chapterNote.title || 'Untitled'}]($${parentAssignedId}§${row.chapterId})`)
+    for (const heading of anchoredChapter.headings) {
+      lines.push(`  - [${heading.label}]($${parentAssignedId}§${row.chapterId}#${heading.anchorId})`)
+    }
+  }
+
+  const tocText = lines.join('\n')
+  const tocNote = store.notes.find((note) => note.id === tocChapter.chapterNoteId)
+  if (tocNote && tocNote.text !== tocText) {
+    tocNote.text = tocText
+    tocNote.updatedAtMs = Date.now()
+    tocNote.sizeBytes = tocText.length
+    tocNote.title = deriveTitle(tocText)
+  }
+}
+
 function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersApi {
   const mutate = <T,>(transform: (store: BrowserMockStore) => T): T => {
     const result = transform(storeRef.current)
@@ -1020,6 +1108,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           sizeBytes: 0,
           text: '',
           chapterOnly: true,
+          isAutoToc: false,
           chapterParentId: parentNoteId,
         })
         store.notes.push(created)
@@ -1059,6 +1148,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           sizeBytes: clonedText.length,
           text: clonedText,
           chapterOnly: true,
+          isAutoToc: false,
           chapterParentId: parentNoteId,
         })
         store.notes.push(created)
@@ -1186,6 +1276,65 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           if (note) note.chapterParentId = null
         }
         return sorted(store, parentNoteId)
+      })
+    },
+
+    async createAutoTocChapter(parentNoteId: string): Promise<{ chapters: ChapterEntry[]; created: NoteDocument }> {
+      return mutate((store) => {
+        const alreadyExists = store.chapters.some((chapter) => (
+          chapter.parentNoteId === parentNoteId && store.notes.find((note) => note.id === chapter.chapterNoteId)?.isAutoToc
+        ))
+        if (alreadyExists) {
+          throw new Error(`Parent ${parentNoteId} already has an auto-TOC chapter`)
+        }
+
+        const now = Date.now()
+        const id = createId()
+        const created: NoteDocument = normalizeDocument({
+          id,
+          fileName: `${id}.md`,
+          title: '',
+          tags: [],
+          createdAtMs: now,
+          updatedAtMs: now,
+          sizeBytes: 0,
+          text: '',
+          chapterOnly: true,
+          isAutoToc: true,
+          chapterParentId: parentNoteId,
+        })
+        store.notes.push(created)
+
+        store.chapters = store.chapters.map((chapter) => (
+          chapter.parentNoteId === parentNoteId
+            ? { ...chapter, position: chapter.position + 1 }
+            : chapter
+        ))
+        store.chapters.push({ parentNoteId, chapterNoteId: id, position: 0, chapterId: null })
+
+        regenerateAutoTocInStore(store, parentNoteId)
+
+        const refreshed = store.notes.find((note) => note.id === id)
+        return { chapters: sorted(store, parentNoteId), created: clone(refreshed ?? created) }
+      })
+    },
+
+    async regenerateAutoTocChapter(parentNoteId: string): Promise<{ chapters: ChapterEntry[]; created: NoteDocument }> {
+      return mutate((store) => {
+        const tocChapter = store.chapters.find((chapter) => (
+          chapter.parentNoteId === parentNoteId && store.notes.find((note) => note.id === chapter.chapterNoteId)?.isAutoToc
+        ))
+        if (!tocChapter) {
+          throw new Error(`Parent ${parentNoteId} has no auto-TOC chapter to regenerate`)
+        }
+
+        regenerateAutoTocInStore(store, parentNoteId)
+
+        const refreshed = store.notes.find((note) => note.id === tocChapter.chapterNoteId)
+        if (!refreshed) {
+          throw new Error(`Auto-TOC chapter note ${tocChapter.chapterNoteId} missing from store`)
+        }
+        return { chapters: sorted(store, parentNoteId), created: clone(refreshed) }
       })
     },
   }

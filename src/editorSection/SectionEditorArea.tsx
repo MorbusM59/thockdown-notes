@@ -209,6 +209,12 @@ export function SectionEditorArea({
   // button below, which opens the panel as a side effect of chapters.length
   // becoming positive, not by toggling visibility directly.
   const isChapterPanelOpen = chapters.length > 0
+  // Read-only: it's regenerated (overwritten) the instant it's next viewed
+  // (EditorSection.tsx's activateNote), so nothing typed here would survive
+  // a round trip away and back -- same editorReadOnly mechanism
+  // (EditorView.editable) already used for Time Machine snapshot preview,
+  // not a new one.
+  const isViewingAutoTocChapter = notes.find((note) => note.id === activeNoteId)?.isAutoToc ?? false
   return (
     <div
       className="editor-viewer-frame"
@@ -232,7 +238,7 @@ export function SectionEditorArea({
                   lineHeightPx={editorRuntimeMetrics.lineHeightPx}
                   glyphWidthPx={editorRuntimeMetrics.glyphWidthPx}
                   cellWidthPx={editorRuntimeMetrics.cellWidthPx}
-                  editorReadOnly={activeNoteHasDebugTag || isPreviewingSnapshot}
+                  editorReadOnly={activeNoteHasDebugTag || isPreviewingSnapshot || isViewingAutoTocChapter}
                   spellCheckEnabled={spellCheckEditEnabled}
                   fontReady={editorFontLoadVersion > 0}
                   caretSuspended={isCaretSuspended}

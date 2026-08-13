@@ -44,6 +44,8 @@ export interface NoteSummary {
   assignedId?: string | null;
   /** True for a note created only to be a chapter (via the chapter bar's "+" button, or cloned from a note dragged onto a chapter bar) -- excluded from every menu view (date/category/archive/trash), only ever shown through its parent's chapter bar. Never true for a note that can also stand on its own. */
   chapterOnly: boolean;
+  /** True for the one chapter (if any) that's the auto-generated table of contents for its parent's whole chapter family -- see databaseService.ts's `isAutoToc` column doc comment. Always false for a non-chapter note. */
+  isAutoToc: boolean;
   /** The single note this note is a chapter of, or null when it isn't (any) chapter. A `chapterOnly` note always has a non-null parent; a regular note is always null (regular notes can never become chapters). */
   chapterParentId: string | null;
 }
@@ -219,6 +221,7 @@ export function isSameNoteSummary(a: NoteSummary, b: NoteSummary): boolean {
     Boolean(a.hasUnsavedChanges) === Boolean(b.hasUnsavedChanges) &&
     (a.assignedId ?? null) === (b.assignedId ?? null) &&
     a.chapterOnly === b.chapterOnly &&
+    a.isAutoToc === b.isAutoToc &&
     a.chapterParentId === b.chapterParentId
   )
 }

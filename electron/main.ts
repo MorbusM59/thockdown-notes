@@ -1022,6 +1022,14 @@ function registerIpcHandlers() {
     return databaseService!.setChapterId(parentNoteId, chapterNoteId, requestedId);
   });
 
+  ipcMain.handle(CHAPTER_CHANNELS.createAutoToc, async (_event, parentNoteId: string) => {
+    return noteLifecycleService!.createAutoTocChapter(parentNoteId);
+  });
+
+  ipcMain.handle(CHAPTER_CHANNELS.regenerateAutoToc, async (_event, parentNoteId: string) => {
+    return noteLifecycleService!.regenerateAutoTocChapter(parentNoteId);
+  });
+
   ipcMain.handle(REVIEW_FLAG_CHANNELS.list, async (_event, noteId: string) => {
     return databaseService!.listReviewFlags(noteId);
   });

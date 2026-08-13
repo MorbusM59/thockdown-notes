@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Annotation, EditorState, EditorSelection, Prec, RangeSetBuilder } from '@codemirror/state';
+import { Annotation, Compartment, EditorState, EditorSelection, Prec, RangeSetBuilder } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView, Decoration, ViewPlugin, keymap, type DecorationSet } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
@@ -698,6 +698,11 @@ export function CM6Editor({
   const layerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  // Lets editorReadOnly reconfigure live post-mount -- see the effect below
+  // that reacts to it. One compartment per component instance (created once,
+  // not per-render) so reconfigure() calls target the same slot the mount
+  // effect originally installed via `readOnlyCompartmentRef.current.of(...)`.
+  const readOnlyCompartmentRef = useRef(new Compartment());
   // Bridges reconcileSelectionJumpScroll (defined inside the CM6 mount
   // effect, below) out to the separate adapterRef-assignment effect's
   // applySnapshot, which needs to center a newly-applied selection (search
@@ -2355,7 +2360,7 @@ export function CM6Editor({
       keymap.of([...defaultKeymap, ...historyKeymap]),
       lineTokenPlugin,
       EditorView.lineWrapping,
-      EditorView.editable.of(!editorReadOnly),
+      readOnlyCompartmentRef.current.of(EditorView.editable.of(!editorReadOnly)),
       // CM6's own drawSelection() extension is deliberately NOT included --
       // both the cursor (block-grid caret overlay below) and the
       // non-collapsed selection background (highlightRects overlay below)
@@ -3370,6 +3375,25 @@ export function CM6Editor({
     // "patch, don't remount" discipline), not by tearing this effect down.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // editorReadOnly reconfiguration. Found live, not assumed: `extensions`
+  // above bakes `EditorView.editable.of(!editorReadOnly)` into the one-time
+  // `EditorState.create()` call in the mount effect, with no Compartment --
+  // so without this effect, a *later* editorReadOnly change (e.g. switching
+  // from a normal note into a read-only one without a remount, which this
+  // component deliberately never does -- see "mount-once" above) would never
+  // reach the live view at all, leaving the DOM's real `contenteditable`
+  // stuck at whatever it was the instant this note's section first mounted.
+  // Confirmed via a live Playwright check driving an actual note switch, not
+  // just reasoned about. `spellCheckEnabled` has the exact same
+  // mount-once-only gap one line below in `extensions` and is NOT fixed here
+  // -- out of scope for this change, left as a separate, pre-existing
+  // finding rather than folded in speculatively.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({ effects: readOnlyCompartmentRef.current.reconfigure(EditorView.editable.of(!editorReadOnly)) });
+  }, [editorReadOnly]);
 
   // Note-switch hydration: replace the whole document when noteId changes.
   // For a genuine note switch this stays a full replace (Slice-1

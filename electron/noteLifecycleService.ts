@@ -20,6 +20,7 @@ import type {
 } from '../src/shared/noteLifecycle';
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
 import { increaseHeadingLevels } from '../src/shared/markdownHeadings';
+import { anchorizeHeadings } from '../src/shared/tableOfContentsText';
 import type { ChapterEntry, DatabaseService, NoteRecord } from './databaseService';
 
 const NOTES_DIR_NAME = 'notes';
@@ -170,6 +171,7 @@ export class NoteLifecycleService {
         isInSync: Boolean(record.syncMode && !record.hasUnsavedChanges),
         assignedId: record.assignedId,
         chapterOnly: record.chapterOnly,
+        isAutoToc: record.isAutoToc,
         chapterParentId: record.chapterParentId,
       };
     } catch {
@@ -281,6 +283,7 @@ export class NoteLifecycleService {
       hasUnsavedChanges: record?.hasUnsavedChanges ?? false,
       isInSync: Boolean(record?.syncMode && !record?.hasUnsavedChanges),
       chapterOnly: record?.chapterOnly ?? false,
+      isAutoToc: record?.isAutoToc ?? false,
       chapterParentId: record?.chapterParentId ?? null,
     };
   }
@@ -342,6 +345,101 @@ export class NoteLifecycleService {
     this.databaseService.setNoteChapterOnly(created.id, true);
     this.databaseService.addChapter(parentNoteId, created.id);
     return this.loadNote({ id: created.id });
+  }
+
+  // Creates the auto-generated Table of Contents chapter: an empty chapter
+  // pinned to position 0 (before every real chapter), then immediately
+  // populated by the same regeneration pass a later on-view refresh uses --
+  // see regenerateAutoTocChapter's own doc comment for what that actually
+  // does. Throws if one already exists for this parent (the toolbar toggle
+  // button is the only caller, and it only ever calls this when
+  // isAutoTocActive is false).
+  async createAutoTocChapter(parentNoteId: string): Promise<{ chapters: ChapterEntry[]; created: NoteDocument }> {
+    if (this.databaseService.getAutoTocChapterNoteId(parentNoteId)) {
+      throw new Error(`Parent ${parentNoteId} already has an auto-TOC chapter`);
+    }
+
+    const created = await this.createNote({});
+    this.databaseService.setNoteChapterOnly(created.id, true);
+    this.databaseService.setNoteAutoToc(created.id, true);
+    this.databaseService.addChapter(parentNoteId, created.id);
+    this.databaseService.pinChapterToFront(parentNoteId, created.id);
+
+    return this.regenerateAutoTocChapter(parentNoteId);
+  }
+
+  // Refreshes the auto-TOC chapter's content from the *current* state of the
+  // parent and every real chapter -- called right before the auto-TOC
+  // chapter is actually displayed (EditorSection.tsx's activateNote), so
+  // it's always accurate the moment it's looked at without ever being
+  // eagerly kept in sync in the background. Two things happen:
+  //
+  // 1. Every heading in the parent and each chapter gets anchor-linkified
+  //    (anchorizeHeadings, shared with the single-note TOC button) so the
+  //    generated links below have something to actually land on --
+  //    `$noteId#anchor-id` navigation requires a literal `[Label](#id)`
+  //    definition already sitting in the target note (see
+  //    PreviewMarkdown.tsx's own doc comment on internal links), it isn't
+  //    resolved from raw heading text on the fly. Idempotent: a note whose
+  //    headings are already anchored reproduces the same text, so it's only
+  //    ever actually re-saved when something changed since the last
+  //    regeneration -- the common case (nothing changed since the last
+  //    visit) costs a read per note, not a write.
+  // 2. The master index is rebuilt: the parent's own headings under a link
+  //    to the parent itself (`$parentAssignedId`), then each chapter's own
+  //    headings under a link to that chapter (`$parentAssignedId§chapterId`).
+  //    Chapters without a chapterId yet get one assigned (ensureChapterId,
+  //    the same lazy-default pattern as a note's own assignedId) -- a
+  //    chapter can't be linked to at all without one.
+  async regenerateAutoTocChapter(parentNoteId: string): Promise<{ chapters: ChapterEntry[]; created: NoteDocument }> {
+    const tocChapterNoteId = this.databaseService.getAutoTocChapterNoteId(parentNoteId);
+    if (!tocChapterNoteId) {
+      throw new Error(`Parent ${parentNoteId} has no auto-TOC chapter to regenerate`);
+    }
+
+    const parentRecord = this.databaseService.getNoteRecord(parentNoteId);
+    if (!parentRecord) {
+      throw new Error(`Parent note ${parentNoteId} not found`);
+    }
+    const parentAssignedId = this.databaseService.ensureNoteAssignedId(parentNoteId, parentRecord.title);
+
+    const parentDoc = await this.loadNote({ id: parentNoteId });
+    const anchoredParent = anchorizeHeadings(parentDoc.text);
+    if (anchoredParent.text !== parentDoc.text) {
+      await this.saveNote({ id: parentNoteId, text: anchoredParent.text });
+    }
+
+    const lines = ['# Table of Contents', '', `- [${parentRecord.title || 'Untitled'}]($${parentAssignedId})`];
+    for (const heading of anchoredParent.headings) {
+      lines.push(`  - [${heading.label}]($${parentAssignedId}#${heading.anchorId})`);
+    }
+
+    const chapterRows = this.databaseService.listChaptersForNote(parentNoteId)
+      .filter((chapter) => chapter.chapterNoteId !== tocChapterNoteId);
+
+    for (const row of chapterRows) {
+      const chapterDoc = await this.loadNote({ id: row.chapterNoteId });
+      const anchoredChapter = anchorizeHeadings(chapterDoc.text);
+      if (anchoredChapter.text !== chapterDoc.text) {
+        await this.saveNote({ id: row.chapterNoteId, text: anchoredChapter.text });
+      }
+
+      const chapterId = this.databaseService.ensureChapterId(parentNoteId, row.chapterNoteId, chapterDoc.title);
+      lines.push(`- [${chapterDoc.title || 'Untitled'}]($${parentAssignedId}§${chapterId})`);
+      for (const heading of anchoredChapter.headings) {
+        lines.push(`  - [${heading.label}]($${parentAssignedId}§${chapterId}#${heading.anchorId})`);
+      }
+    }
+
+    const tocText = lines.join('\n');
+    const currentTocDoc = await this.loadNote({ id: tocChapterNoteId });
+    if (tocText !== currentTocDoc.text) {
+      await this.saveNote({ id: tocChapterNoteId, text: tocText });
+    }
+
+    const chapters = this.databaseService.listChaptersForNote(parentNoteId);
+    const created = await this.loadNote({ id: tocChapterNoteId });
+    return { chapters, created };
   }
 
   // Dragging a note from the sidebar onto a chapter bar: clones the dragged
@@ -442,6 +540,7 @@ export class NoteLifecycleService {
         assignedId: record.assignedId ?? null,
         previewBlockCache: null,
         chapterOnly: record.chapterOnly,
+        isAutoToc: record.isAutoToc,
         chapterParentId: record.chapterParentId,
       });
 
@@ -481,6 +580,7 @@ export class NoteLifecycleService {
       assignedId: record?.assignedId ?? null,
       previewBlockCache: null,
       chapterOnly: record?.chapterOnly ?? false,
+      isAutoToc: record?.isAutoToc ?? false,
       chapterParentId: record?.chapterParentId ?? null,
     });
 
