@@ -8247,8 +8247,6 @@ ${markdownHtml}
               handleExportMd={handleExportMd}
               isExportingMd={isExportingMd}
               handleCreateChapter={activeSection?.handleCreateChapter ?? noopAsync}
-              isAutoTocActive={activeSection?.isAutoTocActive ?? false}
-              toggleAutoTocChapter={activeSection?.toggleAutoTocChapter ?? noopAsync}
               activeDecorationFormats={activeSection?.activeDecorationFormats ?? EMPTY_DECORATION_FORMATS}
               activeHeadingLevel={activeSection?.activeHeadingLevel ?? 0}
               isChecklistActive={activeSection?.isChecklistActive ?? false}

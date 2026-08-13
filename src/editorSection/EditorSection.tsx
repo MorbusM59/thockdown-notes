@@ -488,13 +488,13 @@ export function EditorSection({
     //
     // Checked off `loaded` itself (a fresh DB read, via the loadNote call
     // just above), not the `notes` summaries array -- found live, not
-    // assumed: right after toggleAutoTocChapter creates this exact note and
-    // immediately calls activateNote(created.id), `notes` hasn't picked up
-    // the brand-new summary yet (refreshNotes()'s setNotes() call schedules
-    // a re-render; it doesn't synchronously give this already-in-flight
-    // callback's own closure a fresh `notes` to read), so a `notes.find(...)`
-    // check here found nothing and silently skipped regeneration entirely on
-    // first creation. `loaded`/`chapterParentId` carry no such staleness --
+    // assumed: a brand-new note's own summary isn't guaranteed to be in
+    // `notes` yet at the moment some *other* in-flight callback's closure
+    // reads it (refreshNotes()'s setNotes() call schedules a re-render, it
+    // doesn't synchronously hand an already-running callback's own closure a
+    // fresh `notes` to read) -- a `notes.find(...)` check here can silently
+    // find nothing and skip regeneration entirely right after creation.
+    // `loaded`/`chapterParentId` carry no such staleness --
     // they're both real DB reads.
     if (loaded.isAutoToc && loaded.chapterParentId && window.thockdownChapters) {
       await window.thockdownChapters.regenerateAutoTocChapter(loaded.chapterParentId)
@@ -800,9 +800,6 @@ export function EditorSection({
     startEditingChapterId,
     commitChapterIdEdit,
     cancelChapterIdEdit,
-    isAutoTocActive,
-    toggleAutoTocChapter,
-    autoTocChapterNoteId,
   } = useNoteChapters({
     menuIdentityNoteId,
     activeNoteId,
@@ -1180,9 +1177,6 @@ export function EditorSection({
     onChapterContainerDrop,
     onChapterPromoteDragOver,
     onChapterPromoteDrop,
-    isAutoTocActive,
-    toggleAutoTocChapter,
-    autoTocChapterNoteId,
     editingChapterNoteId,
     chapterIdDraft,
     setChapterIdDraft,

@@ -17,8 +17,6 @@ export interface EditorToolbarProps extends UseMarkdownFormattingToolbarResult {
   handleExportMd: (forceChooseFolder?: boolean) => Promise<void>
   isExportingMd: boolean
   handleCreateChapter: () => void | Promise<void>
-  isAutoTocActive: boolean
-  toggleAutoTocChapter: () => void | Promise<void>
 }
 
 /**
@@ -45,8 +43,6 @@ export function EditorToolbar({
   handleExportMd,
   isExportingMd,
   handleCreateChapter,
-  isAutoTocActive,
-  toggleAutoTocChapter,
   activeDecorationFormats,
   activeHeadingLevel,
   isChecklistActive,
@@ -228,18 +224,6 @@ export function EditorToolbar({
                 }}
               >
                 <span className="fa-solid fa-list-ol" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                className={`btn-icon ${isAutoTocActive ? 'active' : ''}`}
-                data-tooltip={isAutoTocActive ? 'Remove auto-generated Table of Contents chapter' : 'Add auto-generated Table of Contents chapter'}
-                aria-label={isAutoTocActive ? 'Remove auto-generated Table of Contents chapter' : 'Add auto-generated Table of Contents chapter'}
-                disabled={!activeNoteId}
-                onClick={() => {
-                  void toggleAutoTocChapter()
-                }}
-              >
-                <span className="fa-solid fa-sitemap" aria-hidden="true" />
               </button>
               <button
                 type="button"
