@@ -134,7 +134,7 @@
    note tab's assigned id) -- the parent tab keeps its normal .note-tab-pill
    sizing. */
 .note-tab-pill.chapter-pill {
-  flex:  0 1 auto;
+  flex:  0 0 auto;
   max-width: 120px;
   width: fit-content;
 }

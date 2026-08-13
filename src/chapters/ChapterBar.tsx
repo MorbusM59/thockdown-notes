@@ -164,13 +164,13 @@ export function ChapterBar({
             onDrop={onChapterContainerDrop}
           >
             <div
-              className={`tag-pill note-tab-pill chapter-parent-pill${isParentActive ? ' active' : ''}`}
+              className={`tag-pill note-tab-pill chapter-pill chapter-parent-pill${isParentActive ? ' active' : ''}`}
               onClick={onParentTabClick}
               onDragOver={onChapterPromoteDragOver}
               onDrop={onChapterPromoteDrop}
-              data-tooltip={parentNote?.title ?? 'Parent note'}
+              data-tooltip={parentNote?.title ?? parentLabel}
             >
-              <span className="tag-pill-label">{parentLabel}</span>
+              <span className="fa-solid fa-book" aria-hidden="true" />
             </div>
             {autoTocChapter ? (() => {
               const isActive = autoTocChapter.chapterNoteId === activeNoteId
@@ -183,7 +183,7 @@ export function ChapterBar({
                   onClick={() => onChapterClick(autoTocChapter.chapterNoteId)}
                   data-tooltip={note?.title ?? 'Table of Contents'}
                 >
-                  <span className="fa-solid fa-sitemap" aria-hidden="true" />
+                  <span className="fa-solid fa-bookmark" aria-hidden="true" />
                 </div>
               )
             })() : null}
