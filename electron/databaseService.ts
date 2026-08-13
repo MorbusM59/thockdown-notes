@@ -188,6 +188,7 @@ type NoteRecordRow = {
   previewBlockCache: string | null;
   chapterOnly: number;
   isAutoToc: number;
+  isAutoOpenItems: number;
   chapterParentId: string | null;
 };
 
@@ -207,6 +208,8 @@ export type NoteRecord = {
   chapterOnly: boolean;
   /** True for the one chapter (if any) that's the auto-generated table of contents for its parent's whole chapter family -- see the `isAutoToc` column doc comment in ensureSchema(). */
   isAutoToc: boolean;
+  /** True for the one chapter (if any) that's the auto-generated Open Items chapter for its parent's whole chapter family -- see the `isAutoOpenItems` column doc comment in ensureSchema(). */
+  isAutoOpenItems: boolean;
   /** The single note this note is a chapter of, or null when it isn't (any) chapter. DB-derived (see getChapterParent), not navigation state. */
   chapterParentId: string | null;
 };
@@ -1151,7 +1154,7 @@ export class DatabaseService {
   listNoteRecords(): NoteRecord[] {
     const db = this.requireDb();
     const rows = db.prepare(`
-      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, c.parentNoteId AS chapterParentId
+      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, n.isAutoOpenItems, c.parentNoteId AS chapterParentId
       FROM notes n
       LEFT JOIN chapters c ON c.chapterNoteId = n.id
       ORDER BY datetime(n.updatedAt) DESC
@@ -1172,6 +1175,7 @@ export class DatabaseService {
       previewBlockCache: row.previewBlockCache,
       chapterOnly: Boolean(row.chapterOnly),
       isAutoToc: Boolean(row.isAutoToc),
+      isAutoOpenItems: Boolean(row.isAutoOpenItems),
       chapterParentId: row.chapterParentId,
     }));
   }
@@ -1179,7 +1183,7 @@ export class DatabaseService {
   getNoteRecord(noteId: string): NoteRecord | null {
     const db = this.requireDb();
     const row = db.prepare(`
-      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, c.parentNoteId AS chapterParentId
+      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, n.isAutoOpenItems, c.parentNoteId AS chapterParentId
       FROM notes n
       LEFT JOIN chapters c ON c.chapterNoteId = n.id
       WHERE n.id = ?
@@ -1205,6 +1209,7 @@ export class DatabaseService {
       previewBlockCache: row.previewBlockCache,
       chapterOnly: Boolean(row.chapterOnly),
       isAutoToc: Boolean(row.isAutoToc),
+      isAutoOpenItems: Boolean(row.isAutoOpenItems),
       chapterParentId: row.chapterParentId,
     };
   }
@@ -1229,6 +1234,25 @@ export class DatabaseService {
       FROM chapters c
       JOIN notes n ON n.id = c.chapterNoteId
       WHERE c.parentNoteId = ? AND n.isAutoToc = 1
+      LIMIT 1
+    `).get(parentNoteId) as { chapterNoteId: string } | undefined;
+    return row?.chapterNoteId ?? null;
+  }
+
+  /** Marks (or unmarks) a note as the auto-generated Open Items chapter -- see the `isAutoOpenItems` column doc comment in ensureSchema(). */
+  setNoteAutoOpenItems(noteId: string, value: boolean): void {
+    const db = this.requireDb();
+    db.prepare('UPDATE notes SET isAutoOpenItems = ? WHERE id = ?').run(value ? 1 : 0, noteId);
+  }
+
+  /** The parent's current auto-Open-Items chapter, if it has one, or null. Mirrors getAutoTocChapterNoteId. */
+  getAutoOpenItemsChapterNoteId(parentNoteId: string): string | null {
+    const db = this.requireDb();
+    const row = db.prepare(`
+      SELECT c.chapterNoteId AS chapterNoteId
+      FROM chapters c
+      JOIN notes n ON n.id = c.chapterNoteId
+      WHERE c.parentNoteId = ? AND n.isAutoOpenItems = 1
       LIMIT 1
     `).get(parentNoteId) as { chapterNoteId: string } | undefined;
     return row?.chapterNoteId ?? null;
@@ -1607,6 +1631,25 @@ export class DatabaseService {
     const tx = db.transaction(() => {
       db.prepare('UPDATE chapters SET position = position + 1 WHERE parentNoteId = ? AND chapterNoteId != ?').run(parentNoteId, chapterNoteId);
       db.prepare('UPDATE chapters SET position = 0 WHERE parentNoteId = ? AND chapterNoteId = ?').run(parentNoteId, chapterNoteId);
+    });
+    tx();
+    return this.listChaptersForNote(parentNoteId);
+  }
+
+  /**
+   * Forces `chapterNoteId` to position 1 -- right after the auto-TOC
+   * chapter, which is guaranteed to already exist by the time an auto-Open-
+   * Items chapter is ever created (Open Items requires at least one real
+   * chapter to aggregate across, the exact same precondition regenerateAutoTocChapter
+   * already requires, so TOC is always created first). Every other chapter
+   * (positions 1+) shifts back by one; the auto-TOC chapter at position 0 is
+   * untouched.
+   */
+  pinChapterAfterAutoToc(parentNoteId: string, chapterNoteId: string): ChapterEntry[] {
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      db.prepare('UPDATE chapters SET position = position + 1 WHERE parentNoteId = ? AND chapterNoteId != ? AND position >= 1').run(parentNoteId, chapterNoteId);
+      db.prepare('UPDATE chapters SET position = 1 WHERE parentNoteId = ? AND chapterNoteId = ?').run(parentNoteId, chapterNoteId);
     });
     tx();
     return this.listChaptersForNote(parentNoteId);
@@ -3403,6 +3446,12 @@ export class DatabaseService {
     // under it by resolveUniqueChapterId's own dedup suffixing. This flag
     // can't collide with anything.
     this.ensureNotesColumn('isAutoToc', 'INTEGER NOT NULL DEFAULT 0');
+    // Marks the one chapter (if any) that's the auto-generated Open Items
+    // (unchecked checklist items) chapter for its parent's whole chapter
+    // family -- see noteLifecycleService.ts's regenerateOpenItemsGroup and
+    // neighbors. Same "dedicated flag, not a reserved chapterId" reasoning
+    // as isAutoToc just above.
+    this.ensureNotesColumn('isAutoOpenItems', 'INTEGER NOT NULL DEFAULT 0');
     this.ensureChaptersColumn('chapterId', 'TEXT');
     // Deliberately after ensureChaptersColumn, not inside the CREATE TABLE
     // block above: on a database that already had a `chapters` table before

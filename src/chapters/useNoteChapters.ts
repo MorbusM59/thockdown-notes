@@ -29,6 +29,8 @@ export interface UseNoteChaptersOptions {
 
 export interface UseNoteChaptersResult {
   chapters: ChapterEntry[]
+  /** Re-fetches `chapters` from the backend -- see its own doc comment at the definition site for why this needs to be called explicitly after saves. */
+  refreshChapters: () => Promise<void>
   /** Creates a new empty chapter of `menuIdentityNoteId` and immediately loads it into the editor. */
   handleCreateChapter: () => Promise<void>
   handleChapterClick: (chapterNoteId: string) => void
@@ -182,6 +184,32 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     }
   }, [persistenceReady, menuIdentityNoteId])
 
+  // Re-fetches this note's chapters from the backend and syncs local state --
+  // called (via EditorSection.tsx's onSaveCompleted, since useNoteSaveQueue is
+  // declared before this hook and can't call it directly) after every save,
+  // because the auto-Open-Items chapter can be lazily created/patched/torn
+  // down by a save's own checklist-diff hook (noteLifecycleService.ts)
+  // without this hook ever calling any of its own chapter-mutating handlers.
+  // The auto-TOC chapter doesn't need this: its own creation/removal already
+  // goes through the reactive effect below, which calls setChapters directly.
+  const refreshChapters = useCallback(async () => {
+    if (!window.thockdownChapters || !menuIdentityNoteId) return
+    const updatedChapters = await window.thockdownChapters.listChapters(menuIdentityNoteId)
+    setChapters(updatedChapters)
+
+    // The common case (a save with no chapter-structure side effect) should
+    // cost only the cheap listChapters round trip above -- only pay for a
+    // full notes refresh (needed so ChapterBar.tsx's `notes.find(...)
+    // ?.isAutoOpenItems` lookup can see a brand-new Open Items chapter's
+    // note record at all) when the chapter set actually changed.
+    const previousIds = chapters.map((chapter) => chapter.chapterNoteId).sort()
+    const nextIds = updatedChapters.map((chapter) => chapter.chapterNoteId).sort()
+    const changed = previousIds.length !== nextIds.length || previousIds.some((id, index) => id !== nextIds[index])
+    if (changed) {
+      await refreshNotes()
+    }
+  }, [menuIdentityNoteId, chapters, refreshNotes])
+
   // The auto-TOC chapter (if any) is a note-level fact (NoteSummary.isAutoToc),
   // not something ChapterEntry itself carries -- looked up against the
   // shared notes list rather than adding a new field to every chapter row.
@@ -192,9 +220,18 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
   const autoTocChapterNoteId = useMemo(() => (
     chapters.find((chapter) => notes.find((note) => note.id === chapter.chapterNoteId)?.isAutoToc)?.chapterNoteId ?? null
   ), [chapters, notes])
+  // The auto-Open-Items chapter (if any) -- same "note-level fact, not a
+  // ChapterEntry field" reasoning as autoTocChapterNoteId, and excluded from
+  // reorderableChapters/positional navigation the same way: it's a managed
+  // note (patched incrementally by regenerateOpenItemsGroup/
+  // reorderChaptersAndSyncOpenItems/removeChapterAndSyncOpenItems on the main
+  // process side), never something to drag, merge, or split against.
+  const autoOpenItemsChapterNoteId = useMemo(() => (
+    chapters.find((chapter) => notes.find((note) => note.id === chapter.chapterNoteId)?.isAutoOpenItems)?.chapterNoteId ?? null
+  ), [chapters, notes])
   const reorderableChapters = useMemo(() => (
-    autoTocChapterNoteId === null ? chapters : chapters.filter((chapter) => chapter.chapterNoteId !== autoTocChapterNoteId)
-  ), [chapters, autoTocChapterNoteId])
+    chapters.filter((chapter) => chapter.chapterNoteId !== autoTocChapterNoteId && chapter.chapterNoteId !== autoOpenItemsChapterNoteId)
+  ), [chapters, autoTocChapterNoteId, autoOpenItemsChapterNoteId])
 
   // Keeps the auto-TOC chapter's existence a hard invariant of "this note has
   // at least one real chapter" -- no manual toggle. Appears the moment the
@@ -213,8 +250,15 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     if (reorderableChapterCount > 0 && autoTocChapterNoteId === null) {
       let cancelled = false
       void window.thockdownChapters.createAutoTocChapter(menuIdentityNoteId)
-        .then(({ chapters: updatedChapters }) => {
-          if (!cancelled) setChapters(updatedChapters)
+        .then(async ({ chapters: updatedChapters }) => {
+          if (cancelled) return
+          setChapters(updatedChapters)
+          // The brand-new TOC note has never been fetched into the shared
+          // notes list -- without this, ChapterBar.tsx's `notes.find(...)
+          // ?.isAutoToc` lookup finds nothing and renders it as an ordinary
+          // chapter pill instead of the special TOC one, indefinitely (until
+          // some unrelated flow happens to refresh notes).
+          await refreshNotes()
         })
         .catch(async () => {
           // Another section open on the same note family may have already
@@ -231,26 +275,33 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
       }
     }
 
-    if (reorderableChapterCount === 0 && autoTocChapterNoteId !== null) {
-      const removedId = autoTocChapterNoteId
+    if (reorderableChapterCount === 0 && (autoTocChapterNoteId !== null || autoOpenItemsChapterNoteId !== null)) {
+      // Both auto-chapters are torn down together the moment the last real
+      // chapter disappears -- the auto-Open-Items chapter has no reason to
+      // exist without a chapter bar to aggregate across, even if the
+      // parent's own group would otherwise still have content (see
+      // regenerateOpenItemsGroup's own doc comment).
+      const removedIds = [autoTocChapterNoteId, autoOpenItemsChapterNoteId].filter((id): id is string => id !== null)
       let cancelled = false
       void (async () => {
         // The note being deleted can't be left as the active one -- switch
         // to the parent first if that's what's currently shown (this last
         // real chapter's own removal already switches the active note away
         // from *itself* through its own handler; this only ever matters if
-        // the user was specifically browsing the auto-TOC chapter at the
-        // exact moment the last real chapter disappeared elsewhere).
-        if (activeNoteId === removedId && menuIdentityNoteId) {
+        // the user was specifically browsing one of these auto-chapters at
+        // the exact moment the last real chapter disappeared elsewhere).
+        if (activeNoteId && removedIds.includes(activeNoteId) && menuIdentityNoteId) {
           await activateNote(menuIdentityNoteId)
         }
-        try {
-          await window.thockdownChapters!.removeChapter(menuIdentityNoteId!, removedId)
-          await window.thockdownNotes!.deleteNote({ id: removedId })
-          onNotePermanentlyDeleted?.(removedId)
-        } catch {
-          // Same cross-section race as above, mirrored: another instance may
-          // have already removed it first.
+        for (const removedId of removedIds) {
+          try {
+            await window.thockdownChapters!.removeChapter(menuIdentityNoteId!, removedId)
+            await window.thockdownNotes!.deleteNote({ id: removedId })
+            onNotePermanentlyDeleted?.(removedId)
+          } catch {
+            // Same cross-section race as above, mirrored: another instance
+            // may have already removed it first.
+          }
         }
         if (cancelled || !menuIdentityNoteId || !window.thockdownChapters) return
         const updatedChapters = await window.thockdownChapters.listChapters(menuIdentityNoteId)
@@ -260,7 +311,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
         cancelled = true
       }
     }
-  }, [reorderableChapterCount, autoTocChapterNoteId, menuIdentityNoteId, persistenceReady, activeNoteId, activateNote, onNotePermanentlyDeleted])
+  }, [reorderableChapterCount, autoTocChapterNoteId, autoOpenItemsChapterNoteId, menuIdentityNoteId, persistenceReady, activeNoteId, activateNote, refreshNotes, onNotePermanentlyDeleted])
 
   const handleCreateChapter = useCallback(async () => {
     if (!window.thockdownChapters || !menuIdentityNoteId) return
@@ -306,7 +357,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     // The auto-TOC chapter is regenerated (overwritten) on every visit --
     // cutting a "selection" out of it would just be silently discarded next
     // time it's viewed, so treat it the same as viewing nothing extractable.
-    if (activeNoteId === autoTocChapterNoteId) return
+    if (activeNoteId === autoTocChapterNoteId || activeNoteId === autoOpenItemsChapterNoteId) return
 
     const start = Math.max(0, Math.min(editorSelection.start, currentEditorText.length))
     // A collapsed selection is just a caret -- there's nothing to highlight,
@@ -353,7 +404,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     await refreshNotes(created.id)
     // Caret at the end of the pasted text -- "waiting for input behind" it.
     await activateNote(created.id, extractedText.length)
-  }, [menuIdentityNoteId, activeNoteId, autoTocChapterNoteId, editorSelection, currentEditorText, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, activateNote])
+  }, [menuIdentityNoteId, activeNoteId, autoTocChapterNoteId, autoOpenItemsChapterNoteId, editorSelection, currentEditorText, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, activateNote])
 
   const handleCollapseChapterIntoPrevious = useCallback(async () => {
     if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId) return
@@ -363,7 +414,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     // isn't part of the real chapter sequence -- collapsing it would merge
     // its generated link markup into whatever's "previous", polluting real
     // content with throwaway TOC text.
-    if (activeNoteId === autoTocChapterNoteId) return
+    if (activeNoteId === autoTocChapterNoteId || activeNoteId === autoOpenItemsChapterNoteId) return
 
     // Positional navigation ("previous"/"next" chapter) always operates on
     // reorderableChapters, never raw `chapters` -- the pinned auto-TOC
@@ -395,14 +446,14 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     await refreshNotes(previousId)
     // Caret at the end of the merged note.
     await activateNote(previousId, mergedText.length)
-  }, [menuIdentityNoteId, activeNoteId, autoTocChapterNoteId, reorderableChapters, currentEditorText, refreshNotes, activateNote, onNotePermanentlyDeleted])
+  }, [menuIdentityNoteId, activeNoteId, autoTocChapterNoteId, autoOpenItemsChapterNoteId, reorderableChapters, currentEditorText, refreshNotes, activateNote, onNotePermanentlyDeleted])
 
   const handleChapterForwardSplitOrMerge = useCallback(async () => {
     if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId || !activeNoteId) return
     // Same reasoning as handleCollapseChapterIntoPrevious: the auto-TOC
     // chapter is regenerated on every visit and isn't part of the real
     // chapter sequence.
-    if (activeNoteId === autoTocChapterNoteId) return
+    if (activeNoteId === autoTocChapterNoteId || activeNoteId === autoOpenItemsChapterNoteId) return
 
     const selectionEnd = Math.max(0, Math.min(editorSelection.end, currentEditorText.length))
     const afterSelection = currentEditorText.slice(selectionEnd)
@@ -418,15 +469,17 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
       await window.thockdownNotes.saveNote({ id: created.id, text: extractedText })
 
       // Reinsert relative to the reorderable subset only, then re-prepend
-      // the pinned auto-TOC chapter (if any) before persisting --
-      // createChapter's own "append last" would otherwise leave it
-      // displaced from position 0.
+      // the pinned auto-chapters (if any) before persisting -- reorderChapters
+      // rewrites every position from this exact list, so createChapter's own
+      // "append last" would otherwise leave them displaced from positions
+      // 0/1.
       const reorderableIds = reorderableChapters.map((chapter) => chapter.chapterNoteId)
       const currentIndex = reorderableIds.findIndex((chapterNoteId) => chapterNoteId === activeNoteId)
       const insertAt = currentIndex >= 0 ? currentIndex + 1 : 0
       reorderableIds.splice(insertAt, 0, created.id)
       const orderedChapterNoteIds = [
         ...(autoTocChapterNoteId !== null ? [autoTocChapterNoteId] : []),
+        ...(autoOpenItemsChapterNoteId !== null ? [autoOpenItemsChapterNoteId] : []),
         ...reorderableIds,
       ]
       const updatedChapters = await window.thockdownChapters.reorderChapters(menuIdentityNoteId, orderedChapterNoteIds)
@@ -460,14 +513,14 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
 
     setChapters(updatedChapters)
     await refreshNotes()
-  }, [menuIdentityNoteId, activeNoteId, autoTocChapterNoteId, reorderableChapters, currentEditorText, editorSelection, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, onNotePermanentlyDeleted])
+  }, [menuIdentityNoteId, activeNoteId, autoTocChapterNoteId, autoOpenItemsChapterNoteId, reorderableChapters, currentEditorText, editorSelection, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, onNotePermanentlyDeleted])
 
   const handleChapterBackwardSplitOrMerge = useCallback(async () => {
     if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId || !activeNoteId) return
     // Same reasoning as handleCollapseChapterIntoPrevious: the auto-TOC
     // chapter is regenerated on every visit and isn't part of the real
     // chapter sequence.
-    if (activeNoteId === autoTocChapterNoteId) return
+    if (activeNoteId === autoTocChapterNoteId || activeNoteId === autoOpenItemsChapterNoteId) return
 
     const selectionStart = Math.max(0, Math.min(editorSelection.start, currentEditorText.length))
     const beforeSelection = currentEditorText.slice(0, selectionStart)
@@ -492,10 +545,11 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
         await window.thockdownNotes.saveNote({ id: created.id, text: cutText })
 
         // "New first chapter" means first among the *real* chapters -- right
-        // after the pinned auto-TOC chapter (if any), never displacing it
-        // from position 0.
+        // after the pinned auto-chapters (if any), never displacing them
+        // from positions 0/1.
         const orderedChapterNoteIds = [
           ...(autoTocChapterNoteId !== null ? [autoTocChapterNoteId] : []),
+          ...(autoOpenItemsChapterNoteId !== null ? [autoOpenItemsChapterNoteId] : []),
           created.id,
           ...reorderableChapters.map((chapter) => chapter.chapterNoteId),
         ]
@@ -559,7 +613,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
 
     setChapters(updatedChapters)
     await refreshNotes()
-  }, [menuIdentityNoteId, activeNoteId, autoTocChapterNoteId, reorderableChapters, currentEditorText, editorSelection, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, activateNote, onNotePermanentlyDeleted])
+  }, [menuIdentityNoteId, activeNoteId, autoTocChapterNoteId, autoOpenItemsChapterNoteId, reorderableChapters, currentEditorText, editorSelection, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, activateNote, onNotePermanentlyDeleted])
 
   // Chapter-pill drag-to-reorder -- deliberately mirrors useSectionTabs.ts's
   // handleTabDragStart/handleTabDrop/handleTabsContainerDrop pattern exactly
@@ -585,18 +639,19 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
   }, [])
 
   // Persists a new order for the reorderable subset, always re-prepending
-  // the pinned auto-TOC chapter (if any) first -- reorderChapters rewrites
-  // every position from this exact list, so leaving it out (or sending it
+  // the pinned auto-chapters (if any) first -- reorderChapters rewrites
+  // every position from this exact list, so leaving one out (or sending it
   // anywhere but first) would un-pin it.
   const persistReorderedChapters = useCallback(async (reorderedReorderable: ChapterEntry[]) => {
     if (!window.thockdownChapters || !menuIdentityNoteId) return
     const orderedChapterNoteIds = [
       ...(autoTocChapterNoteId !== null ? [autoTocChapterNoteId] : []),
+      ...(autoOpenItemsChapterNoteId !== null ? [autoOpenItemsChapterNoteId] : []),
       ...reorderedReorderable.map((chapter) => chapter.chapterNoteId),
     ]
     const updatedChapters = await window.thockdownChapters.reorderChapters(menuIdentityNoteId, orderedChapterNoteIds)
     setChapters(updatedChapters)
-  }, [menuIdentityNoteId, autoTocChapterNoteId])
+  }, [menuIdentityNoteId, autoTocChapterNoteId, autoOpenItemsChapterNoteId])
 
   const handleChapterDrop = useCallback(async (event: DragEvent<HTMLDivElement>, targetIndex: number) => {
     if (draggedChapterIndex === null) return
@@ -713,6 +768,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
 
   return {
     chapters,
+    refreshChapters,
     handleCreateChapter,
     handleChapterClick,
     handleCloneNoteAsChapter,

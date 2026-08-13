@@ -19,6 +19,17 @@ export interface UseNoteSaveQueueOptions {
   previewBlockSplitCacheRef: MutableRefObject<PreviewBlockSplitCache | null>
   setActiveNoteText: Dispatch<SetStateAction<string>>
   setNotes: Dispatch<SetStateAction<NoteSummary[]>>
+  /**
+   * Fires after every successful save with the saved note's id. The chapter
+   * bar's own `chapters` state (useNoteChapters.ts) has no other way to
+   * learn about the auto-Open-Items chapter being lazily created/patched/
+   * torn down in the background by this same save (see
+   * noteLifecycleService.ts's saveNote checklist-diff hook) -- unlike the
+   * auto-TOC chapter, whose creation/removal is driven by a reactive effect
+   * already watching `chapters` state directly. Optional: only EditorSection.tsx
+   * wires this today, not e.g. tests instantiating this hook standalone.
+   */
+  onSaveCompleted?: (noteId: string) => void
 }
 
 export interface UseNoteSaveQueueResult {
@@ -49,7 +60,7 @@ export interface UseNoteSaveQueueResult {
  * whatever text it's handed.
  */
 export function useNoteSaveQueue(options: UseNoteSaveQueueOptions): UseNoteSaveQueueResult {
-  const { activeNoteId, persistenceReady, notesRef, latestEditorTextRef, previewBlockSplitCacheRef, setActiveNoteText, setNotes } = options
+  const { activeNoteId, persistenceReady, notesRef, latestEditorTextRef, previewBlockSplitCacheRef, setActiveNoteText, setNotes, onSaveCompleted } = options
 
   const pendingSaveTextRef = useRef<string | null>(null)
   const pendingSaveCursorPosRef = useRef<number | null>(null)
@@ -116,10 +127,12 @@ export function useNoteSaveQueue(options: UseNoteSaveQueueOptions): UseNoteSaveQ
         next[index] = savedSummary
         return next
       })
+
+      onSaveCompleted?.(activeNoteId)
     } catch (error) {
       console.error('Failed to persist note', error)
     }
-  }, [activeNoteId, notesRef, latestEditorTextRef, previewBlockSplitCacheRef, setActiveNoteText, setNotes])
+  }, [activeNoteId, notesRef, latestEditorTextRef, previewBlockSplitCacheRef, setActiveNoteText, setNotes, onSaveCompleted])
 
   const queueSave = useCallback((text: string, cursorPos?: number | null) => {
     if (!persistenceReady) return

@@ -21,6 +21,7 @@ import type {
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
 import { increaseHeadingLevels } from '../src/shared/markdownHeadings';
 import { anchorizeHeadings } from '../src/shared/tableOfContentsText';
+import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, parseOpenItemsGroups } from '../src/shared/openItemsText';
 import type { ChapterEntry, DatabaseService, NoteRecord } from './databaseService';
 
 const NOTES_DIR_NAME = 'notes';
@@ -172,6 +173,7 @@ export class NoteLifecycleService {
         assignedId: record.assignedId,
         chapterOnly: record.chapterOnly,
         isAutoToc: record.isAutoToc,
+        isAutoOpenItems: record.isAutoOpenItems,
         chapterParentId: record.chapterParentId,
       };
     } catch {
@@ -284,6 +286,7 @@ export class NoteLifecycleService {
       isInSync: Boolean(record?.syncMode && !record?.hasUnsavedChanges),
       chapterOnly: record?.chapterOnly ?? false,
       isAutoToc: record?.isAutoToc ?? false,
+      isAutoOpenItems: record?.isAutoOpenItems ?? false,
       chapterParentId: record?.chapterParentId ?? null,
     };
   }
@@ -442,6 +445,164 @@ export class NoteLifecycleService {
     return { chapters, created };
   }
 
+  // The parent, then every *real* (non-auto) chapter, in current chapter-bar
+  // order -- the canonical ordering the auto-Open-Items chapter's own groups
+  // are kept sorted against, both when a group is (re)written
+  // (regenerateOpenItemsGroup) and when chapters are reordered with no text
+  // change at all (resyncOpenItemsOrder).
+  private openItemsFamilyOrder(parentNoteId: string): string[] {
+    const realChapterIds = this.databaseService.listChaptersForNote(parentNoteId)
+      .filter((chapter) => {
+        const chapterRecord = this.databaseService.getNoteRecord(chapter.chapterNoteId);
+        return chapterRecord ? !chapterRecord.isAutoToc && !chapterRecord.isAutoOpenItems : false;
+      })
+      .map((chapter) => chapter.chapterNoteId);
+    return [parentNoteId, ...realChapterIds];
+  }
+
+  // Drops `noteIdToRemove`'s own group out of the auto-Open-Items chapter --
+  // used both when that note's checklist items all became empty/checked
+  // (regenerateOpenItemsGroup) and when the note itself is being permanently
+  // deleted (removeChapterAndSyncOpenItems). Removing the last remaining
+  // group deletes the whole Open-Items chapter, mirroring the "disappears
+  // when there are none left" requirement -- an empty title with nothing
+  // under it is never left behind.
+  private async dropOpenItemsGroup(parentNoteId: string, openItemsChapterNoteId: string, noteIdToRemove: string): Promise<void> {
+    const currentDoc = await this.loadNote({ id: openItemsChapterNoteId });
+    const remainingGroups = parseOpenItemsGroups(currentDoc.text).filter((group) => group.noteId !== noteIdToRemove);
+    const nextText = assembleOpenItemsText(remainingGroups);
+
+    if (nextText === null) {
+      this.databaseService.removeChapter(parentNoteId, openItemsChapterNoteId);
+      await this.deleteNote({ id: openItemsChapterNoteId });
+      return;
+    }
+
+    if (nextText !== currentDoc.text) {
+      await this.saveNote({ id: openItemsChapterNoteId, text: nextText });
+    }
+  }
+
+  // Re-derives and patches *only* `changedNoteId`'s own group inside the
+  // auto-Open-Items chapter -- called from saveNote whenever a checklist
+  // item was created or its checked state flipped (see checklistStateChanged's
+  // own doc comment for exactly what does and doesn't count). Every other
+  // note's already-correct group markdown is left untouched, which is what
+  // makes this an incremental patch rather than a rescan of the whole
+  // chapter family: costs one read/write on the changed note (to anchor its
+  // headings, same as the auto-TOC chapter already does) and one read/write
+  // on the auto-Open-Items chapter itself.
+  //
+  // Requires the auto-TOC chapter to already exist -- same "at least one
+  // real chapter" precondition regenerateAutoTocChapter has, and TOC is
+  // always created first (its own reactive creation effect in
+  // useNoteChapters.ts fires the moment the first real chapter appears,
+  // before the user has had a chance to type a checklist item into it). If
+  // it's missing, this save landed in that brief window; the next
+  // checklist-changing save on any family member simply retries.
+  async regenerateOpenItemsGroup(parentNoteId: string, changedNoteId: string): Promise<void> {
+    if (!this.databaseService.getAutoTocChapterNoteId(parentNoteId)) return;
+
+    const changedDoc = await this.loadNote({ id: changedNoteId });
+    const anchored = anchorizeHeadings(changedDoc.text);
+    const changedText = anchored.text;
+    if (changedText !== changedDoc.text) {
+      await this.saveNote({ id: changedNoteId, text: changedText });
+    }
+
+    let linkPrefix: string;
+    if (changedNoteId === parentNoteId) {
+      const parentAssignedId = this.databaseService.ensureNoteAssignedId(parentNoteId, changedDoc.title);
+      linkPrefix = `$${parentAssignedId}`;
+    } else {
+      const parentRecord = this.databaseService.getNoteRecord(parentNoteId);
+      if (!parentRecord) return;
+      const parentAssignedId = this.databaseService.ensureNoteAssignedId(parentNoteId, parentRecord.title);
+      const chapterId = this.databaseService.ensureChapterId(parentNoteId, changedNoteId, changedDoc.title);
+      linkPrefix = `$${parentAssignedId}§${chapterId}`;
+    }
+
+    const newGroupMarkdown = buildOpenItemsGroupMarkdown(changedText, linkPrefix, changedDoc.title || 'Untitled');
+
+    let openItemsChapterNoteId = this.databaseService.getAutoOpenItemsChapterNoteId(parentNoteId);
+
+    if (newGroupMarkdown === null) {
+      if (openItemsChapterNoteId) {
+        await this.dropOpenItemsGroup(parentNoteId, openItemsChapterNoteId, changedNoteId);
+      }
+      return;
+    }
+
+    if (!openItemsChapterNoteId) {
+      const created = await this.createNote({});
+      this.databaseService.setNoteChapterOnly(created.id, true);
+      this.databaseService.setNoteAutoOpenItems(created.id, true);
+      this.databaseService.addChapter(parentNoteId, created.id);
+      this.databaseService.pinChapterAfterAutoToc(parentNoteId, created.id);
+      openItemsChapterNoteId = created.id;
+    }
+
+    const currentDoc = await this.loadNote({ id: openItemsChapterNoteId });
+    const existingGroups = parseOpenItemsGroups(currentDoc.text).filter((group) => group.noteId !== changedNoteId);
+    const familyOrder = this.openItemsFamilyOrder(parentNoteId);
+    const orderIndex = new Map(familyOrder.map((id, index) => [id, index]));
+    const nextGroups = [...existingGroups, { noteId: changedNoteId, markdown: newGroupMarkdown }]
+      .sort((a, b) => (orderIndex.get(a.noteId) ?? Number.MAX_SAFE_INTEGER) - (orderIndex.get(b.noteId) ?? Number.MAX_SAFE_INTEGER));
+
+    const nextText = assembleOpenItemsText(nextGroups);
+    if (nextText !== null && nextText !== currentDoc.text) {
+      await this.saveNote({ id: openItemsChapterNoteId, text: nextText });
+    }
+  }
+
+  // Re-sorts the auto-Open-Items chapter's already-correct groups to match a
+  // fresh chapter order with no text regeneration at all -- the "reorder
+  // reorders the list without a rescan" half of the Open Items contract.
+  private async resyncOpenItemsOrder(parentNoteId: string): Promise<void> {
+    const openItemsChapterNoteId = this.databaseService.getAutoOpenItemsChapterNoteId(parentNoteId);
+    if (!openItemsChapterNoteId) return;
+
+    const currentDoc = await this.loadNote({ id: openItemsChapterNoteId });
+    const groups = parseOpenItemsGroups(currentDoc.text);
+    if (groups.length === 0) return;
+
+    const familyOrder = this.openItemsFamilyOrder(parentNoteId);
+    const orderIndex = new Map(familyOrder.map((id, index) => [id, index]));
+    const sorted = [...groups].sort((a, b) => (orderIndex.get(a.noteId) ?? Number.MAX_SAFE_INTEGER) - (orderIndex.get(b.noteId) ?? Number.MAX_SAFE_INTEGER));
+    if (sorted.every((group, index) => group.noteId === groups[index].noteId)) return;
+
+    const nextText = assembleOpenItemsText(sorted);
+    if (nextText !== null && nextText !== currentDoc.text) {
+      await this.saveNote({ id: openItemsChapterNoteId, text: nextText });
+    }
+  }
+
+  // Wraps databaseService.reorderChapters with the Open Items "smart reorder"
+  // sync -- every chapter-bar reorder (drag-and-drop, or any of the
+  // extract/split/merge handlers repositioning a freshly-created chapter)
+  // goes through this single choke point (main.ts's CHAPTER_CHANNELS.reorder
+  // handler), so callers never need to remember to sync it themselves.
+  async reorderChaptersAndSyncOpenItems(parentNoteId: string, orderedChapterNoteIds: string[]): Promise<ChapterEntry[]> {
+    const chapters = this.databaseService.reorderChapters(parentNoteId, orderedChapterNoteIds);
+    await this.resyncOpenItemsOrder(parentNoteId);
+    return chapters;
+  }
+
+  // Wraps databaseService.removeChapter with the Open Items "smart delete"
+  // sync -- drops the removed chapter's own group (if any) before the
+  // chapter row itself is deleted, same single-choke-point reasoning as
+  // reorderChaptersAndSyncOpenItems (main.ts's CHAPTER_CHANNELS.remove
+  // handler). Guarded against `chapterNoteId` being the auto-Open-Items
+  // chapter itself (its own removal, via the chapter bar's reactive cleanup
+  // effect, has no "own group" to drop).
+  async removeChapterAndSyncOpenItems(parentNoteId: string, chapterNoteId: string): Promise<ChapterEntry[]> {
+    const openItemsChapterNoteId = this.databaseService.getAutoOpenItemsChapterNoteId(parentNoteId);
+    if (openItemsChapterNoteId && openItemsChapterNoteId !== chapterNoteId) {
+      await this.dropOpenItemsGroup(parentNoteId, openItemsChapterNoteId, chapterNoteId);
+    }
+    return this.databaseService.removeChapter(parentNoteId, chapterNoteId);
+  }
+
   // Dragging a note from the sidebar onto a chapter bar: clones the dragged
   // note's content into a brand-new chapterOnly note and appends that as
   // parentNoteId's last chapter. The dragged note itself is never touched,
@@ -541,6 +702,7 @@ export class NoteLifecycleService {
         previewBlockCache: null,
         chapterOnly: record.chapterOnly,
         isAutoToc: record.isAutoToc,
+        isAutoOpenItems: record.isAutoOpenItems,
         chapterParentId: record.chapterParentId,
       });
 
@@ -549,6 +711,27 @@ export class NoteLifecycleService {
       }
 
       return summary;
+    }
+
+    // Cheap "is this note part of a chapter family" check up front (a
+    // handful of DB reads, no I/O) so the file read below -- needed only to
+    // diff checklist state against the pre-save text -- is skipped entirely
+    // for the vast majority of saves, which touch a note with no chapters at
+    // all. Auto-generated chapters (TOC, Open Items) are excluded here even
+    // though they *are* chapters -- Open Items' own text contains literal
+    // `- [ ] ...` lines by design, and diffing those against themselves would
+    // otherwise regenerate the very group it just wrote.
+    const isAutoChapter = Boolean(record?.isAutoToc || record?.isAutoOpenItems);
+    const openItemsFamilyParentId = isAutoChapter
+      ? null
+      : (this.databaseService.getChapterParent(input.id) ?? (this.databaseService.listChaptersForNote(input.id).length > 0 ? input.id : null));
+    let oldTextForOpenItemsDiff: string | null = null;
+    if (openItemsFamilyParentId) {
+      try {
+        oldTextForOpenItemsDiff = await fs.readFile(filePath, 'utf8');
+      } catch {
+        oldTextForOpenItemsDiff = null;
+      }
     }
 
     await fs.writeFile(filePath, text, 'utf8');
@@ -581,11 +764,24 @@ export class NoteLifecycleService {
       previewBlockCache: null,
       chapterOnly: record?.chapterOnly ?? false,
       isAutoToc: record?.isAutoToc ?? false,
+      isAutoOpenItems: record?.isAutoOpenItems ?? false,
       chapterParentId: record?.chapterParentId ?? null,
     });
 
     if (!summary) {
       throw new Error(`Failed to read saved note summary for id=${input.id}`);
+    }
+
+    // Only ever triggers on the two events the auto-Open-Items chapter is
+    // meant to update on -- a checklist item created/removed, or an existing
+    // one's checked state flipped (see checklistStateChanged) -- never on a
+    // plain text edit, and never blocks the save itself if it fails.
+    if (openItemsFamilyParentId && oldTextForOpenItemsDiff !== null && checklistStateChanged(oldTextForOpenItemsDiff, text)) {
+      try {
+        await this.regenerateOpenItemsGroup(openItemsFamilyParentId, input.id);
+      } catch {
+        // best-effort -- the list will catch up on the next checklist-changing save
+      }
     }
 
     return summary;

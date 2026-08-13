@@ -215,6 +215,14 @@ export function SectionEditorArea({
   // (EditorView.editable) already used for Time Machine snapshot preview,
   // not a new one.
   const isViewingAutoTocChapter = notes.find((note) => note.id === activeNoteId)?.isAutoToc ?? false
+  // Also read-only, for a different reason: it's not regenerated on every
+  // view like the TOC chapter above (see noteLifecycleService.ts's
+  // regenerateOpenItemsGroup), but it exists purely to be a read/click-
+  // through view of state you manage in the corresponding chapter, not a
+  // place to edit directly -- any edit made here would just be silently
+  // overwritten (or left stale) by the next real checklist change anywhere
+  // in the family, which would be a confusing way to lose typed text.
+  const isViewingAutoOpenItemsChapter = notes.find((note) => note.id === activeNoteId)?.isAutoOpenItems ?? false
   return (
     <div
       className="editor-viewer-frame"
@@ -238,7 +246,7 @@ export function SectionEditorArea({
                   lineHeightPx={editorRuntimeMetrics.lineHeightPx}
                   glyphWidthPx={editorRuntimeMetrics.glyphWidthPx}
                   cellWidthPx={editorRuntimeMetrics.cellWidthPx}
-                  editorReadOnly={activeNoteHasDebugTag || isPreviewingSnapshot || isViewingAutoTocChapter}
+                  editorReadOnly={activeNoteHasDebugTag || isPreviewingSnapshot || isViewingAutoTocChapter || isViewingAutoOpenItemsChapter}
                   spellCheckEnabled={spellCheckEditEnabled}
                   fontReady={editorFontLoadVersion > 0}
                   caretSuspended={isCaretSuspended}

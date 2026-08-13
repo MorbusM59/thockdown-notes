@@ -46,6 +46,8 @@ export interface NoteSummary {
   chapterOnly: boolean;
   /** True for the one chapter (if any) that's the auto-generated table of contents for its parent's whole chapter family -- see databaseService.ts's `isAutoToc` column doc comment. Always false for a non-chapter note. */
   isAutoToc: boolean;
+  /** True for the one chapter (if any) that's the auto-generated Open Items list for its parent's whole chapter family -- see databaseService.ts's `isAutoOpenItems` column doc comment. Always false for a non-chapter note. */
+  isAutoOpenItems: boolean;
   /** The single note this note is a chapter of, or null when it isn't (any) chapter. A `chapterOnly` note always has a non-null parent; a regular note is always null (regular notes can never become chapters). */
   chapterParentId: string | null;
 }
@@ -222,6 +224,7 @@ export function isSameNoteSummary(a: NoteSummary, b: NoteSummary): boolean {
     (a.assignedId ?? null) === (b.assignedId ?? null) &&
     a.chapterOnly === b.chapterOnly &&
     a.isAutoToc === b.isAutoToc &&
+    a.isAutoOpenItems === b.isAutoOpenItems &&
     a.chapterParentId === b.chapterParentId
   )
 }

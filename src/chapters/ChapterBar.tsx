@@ -96,9 +96,13 @@ export function ChapterBar({
   // other chapter renders from `reorderableChapters` instead of `chapters`
   // so drag-and-drop's index math (useNoteChapters.ts) never sees it.
   const autoTocChapter = chapters.find((chapter) => notes.find((note) => note.id === chapter.chapterNoteId)?.isAutoToc) ?? null
-  const reorderableChapters = autoTocChapter
-    ? chapters.filter((chapter) => chapter.chapterNoteId !== autoTocChapter.chapterNoteId)
-    : chapters
+  // The auto-generated Open Items chapter (if any) renders pinned right
+  // after the auto-TOC chapter -- same non-draggable, non-droppable,
+  // no-chapterId treatment as autoTocChapter above.
+  const autoOpenItemsChapter = chapters.find((chapter) => notes.find((note) => note.id === chapter.chapterNoteId)?.isAutoOpenItems) ?? null
+  const reorderableChapters = chapters.filter((chapter) => (
+    chapter.chapterNoteId !== autoTocChapter?.chapterNoteId && chapter.chapterNoteId !== autoOpenItemsChapter?.chapterNoteId
+  ))
 
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
@@ -182,6 +186,21 @@ export function ChapterBar({
                   data-tooltip={note?.title ?? 'Table of Contents'}
                 >
                   <span className="fa-solid fa-sitemap" aria-hidden="true" />
+                </div>
+              )
+            })() : null}
+            {autoOpenItemsChapter ? (() => {
+              const isActive = autoOpenItemsChapter.chapterNoteId === activeNoteId
+              const note = notes.find((entry) => entry.id === autoOpenItemsChapter.chapterNoteId)
+              return (
+                <div
+                  key={autoOpenItemsChapter.chapterNoteId}
+                  className={`tag-pill note-tab-pill chapter-pill chapter-auto-open-items-pill${isActive ? ' active' : ''}`}
+                  data-chapter-note-id={autoOpenItemsChapter.chapterNoteId}
+                  onClick={() => onChapterClick(autoOpenItemsChapter.chapterNoteId)}
+                  data-tooltip={note?.title ?? 'Open Items'}
+                >
+                  <span className="fa-solid fa-square-check" aria-hidden="true" />
                 </div>
               )
             })() : null}

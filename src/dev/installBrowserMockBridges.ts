@@ -40,6 +40,7 @@ import type { ChapterEntry, ChaptersApi } from '../shared/chapters'
 import type { ReviewFlagEntry, ReviewFlagsApi } from '../shared/reviewFlags'
 import { increaseHeadingLevels } from '../shared/markdownHeadings'
 import { anchorizeHeadings } from '../shared/tableOfContentsText'
+import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, parseOpenItemsGroups } from '../shared/openItemsText'
 
 const MOCK_STORAGE_KEY = 'thockdown-notes:browser-mock:v1'
 
@@ -103,6 +104,7 @@ function normalizeDocument(note: NoteDocument): NoteDocument {
     text,
     chapterOnly: Boolean(note.chapterOnly),
     isAutoToc: Boolean(note.isAutoToc),
+    isAutoOpenItems: Boolean(note.isAutoOpenItems),
     chapterParentId: note.chapterParentId ?? null,
   }
 }
@@ -119,6 +121,7 @@ function toSummary(note: NoteDocument): NoteSummary {
     assignedId: note.assignedId ?? null,
     chapterOnly: Boolean(note.chapterOnly),
     isAutoToc: Boolean(note.isAutoToc),
+    isAutoOpenItems: Boolean(note.isAutoOpenItems),
     chapterParentId: note.chapterParentId ?? null,
     // The real app derives this from the on-disk file minus any legacy
     // metadata header (readSummary in noteLifecycleService.ts); the mock has
@@ -420,6 +423,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
           text,
           chapterOnly: false,
           isAutoToc: false,
+          isAutoOpenItems: false,
           chapterParentId: null,
         })
         store.notes.push(created)
@@ -433,10 +437,27 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
         if (!note) {
           throw new Error(`Note not found: ${input.id}`)
         }
+        const oldText = note.text
         note.text = input.text
         note.updatedAtMs = Date.now()
         note.sizeBytes = input.text.length
         note.title = deriveTitle(input.text)
+
+        // Mirrors noteLifecycleService.ts's saveNote checklist-diff hook --
+        // only ever regenerates the auto-Open-Items chapter's affected group
+        // on the two events it's meant to update on (see
+        // checklistStateChanged's own doc comment), never on a plain text
+        // edit. Auto-generated chapters are excluded: the Open Items
+        // chapter's own text is made of literal `- [ ] ...` lines, and
+        // diffing those against themselves would regenerate the very group
+        // that was just written.
+        if (!note.isAutoToc && !note.isAutoOpenItems && checklistStateChanged(oldText, input.text)) {
+          const familyParentId = note.chapterParentId
+            ?? (store.chapters.some((chapter) => chapter.parentNoteId === note.id) ? note.id : null)
+          if (familyParentId) {
+            regenerateOpenItemsGroupInStore(store, familyParentId, note.id)
+          }
+        }
 
         // Mirrors databaseService.ts's upsertNoteContent COALESCE semantics:
         // piggybacked cursor position, only written when the caller actually
@@ -1079,6 +1100,190 @@ function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string)
   }
 }
 
+/** Dev-mode mirror of noteLifecycleService.ts's private openItemsFamilyOrder. */
+function openItemsFamilyOrderInStore(store: BrowserMockStore, parentNoteId: string): string[] {
+  const realChapterIds = store.chapters
+    .filter((chapter) => chapter.parentNoteId === parentNoteId)
+    .sort((a, b) => a.position - b.position)
+    .filter((chapter) => {
+      const chapterNote = store.notes.find((note) => note.id === chapter.chapterNoteId)
+      return chapterNote ? !chapterNote.isAutoToc && !chapterNote.isAutoOpenItems : false
+    })
+    .map((chapter) => chapter.chapterNoteId)
+  return [parentNoteId, ...realChapterIds]
+}
+
+function findOpenItemsChapterInStore(store: BrowserMockStore, parentNoteId: string): ChapterEntry | undefined {
+  return store.chapters.find((chapter) => (
+    chapter.parentNoteId === parentNoteId && store.notes.find((note) => note.id === chapter.chapterNoteId)?.isAutoOpenItems
+  ))
+}
+
+/** Dev-mode mirror of noteLifecycleService.ts's private dropOpenItemsGroup. */
+function dropOpenItemsGroupInStore(store: BrowserMockStore, parentNoteId: string, openItemsChapterNoteId: string, noteIdToRemove: string): void {
+  const openItemsNote = store.notes.find((note) => note.id === openItemsChapterNoteId)
+  if (!openItemsNote) return
+
+  const remainingGroups = parseOpenItemsGroups(openItemsNote.text).filter((group) => group.noteId !== noteIdToRemove)
+  const nextText = assembleOpenItemsText(remainingGroups)
+
+  if (nextText === null) {
+    const removed = store.chapters.find((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === openItemsChapterNoteId)
+    store.chapters = store.chapters
+      .filter((chapter) => !(chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === openItemsChapterNoteId))
+      .map((chapter) => (
+        chapter.parentNoteId === parentNoteId && removed && chapter.position > removed.position
+          ? { ...chapter, position: chapter.position - 1 }
+          : chapter
+      ))
+    store.notes = store.notes.filter((note) => note.id !== openItemsChapterNoteId)
+    return
+  }
+
+  if (nextText !== openItemsNote.text) {
+    openItemsNote.text = nextText
+    openItemsNote.updatedAtMs = Date.now()
+    openItemsNote.sizeBytes = nextText.length
+    openItemsNote.title = deriveTitle(nextText)
+  }
+}
+
+/**
+ * Dev-mode mirror of noteLifecycleService.ts's regenerateOpenItemsGroup --
+ * see that method's own doc comment for the full reasoning. Requires the
+ * auto-TOC chapter to already exist, same precondition as the real backend.
+ */
+function regenerateOpenItemsGroupInStore(store: BrowserMockStore, parentNoteId: string, changedNoteId: string): void {
+  const tocChapter = store.chapters.find((chapter) => (
+    chapter.parentNoteId === parentNoteId && store.notes.find((note) => note.id === chapter.chapterNoteId)?.isAutoToc
+  ))
+  if (!tocChapter) return
+
+  const changedNote = store.notes.find((note) => note.id === changedNoteId)
+  const parentNote = store.notes.find((note) => note.id === parentNoteId)
+  if (!changedNote || !parentNote) return
+
+  const anchored = anchorizeHeadings(changedNote.text)
+  if (anchored.text !== changedNote.text) {
+    changedNote.text = anchored.text
+    changedNote.updatedAtMs = Date.now()
+    changedNote.sizeBytes = anchored.text.length
+    changedNote.title = deriveTitle(anchored.text)
+  }
+
+  if (!parentNote.assignedId) {
+    const base = deriveDefaultAssignedIdBase(parentNote.title)
+    parentNote.assignedId = resolveUniqueAssignedId(store.notes, base, parentNote.id)
+  }
+  const parentAssignedId = parentNote.assignedId
+
+  let linkPrefix: string
+  if (changedNoteId === parentNoteId) {
+    linkPrefix = `$${parentAssignedId}`
+  } else {
+    const chapterRow = store.chapters.find((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === changedNoteId)
+    if (!chapterRow) return
+    if (!chapterRow.chapterId) {
+      const base = deriveDefaultAssignedIdBase(changedNote.title)
+      const used = new Set(
+        store.chapters
+          .filter((c) => c.parentNoteId === parentNoteId && c.chapterNoteId !== changedNoteId && c.chapterId)
+          .map((c) => c.chapterId as string),
+      )
+      let resolved = base
+      let attempt = 2
+      while (used.has(resolved)) {
+        resolved = `${base}-${attempt}`
+        attempt += 1
+      }
+      chapterRow.chapterId = resolved
+    }
+    linkPrefix = `$${parentAssignedId}§${chapterRow.chapterId}`
+  }
+
+  const newGroupMarkdown = buildOpenItemsGroupMarkdown(changedNote.text, linkPrefix, changedNote.title || 'Untitled')
+
+  let openItemsChapter = findOpenItemsChapterInStore(store, parentNoteId)
+
+  if (newGroupMarkdown === null) {
+    if (openItemsChapter) {
+      dropOpenItemsGroupInStore(store, parentNoteId, openItemsChapter.chapterNoteId, changedNoteId)
+    }
+    return
+  }
+
+  if (!openItemsChapter) {
+    const now = Date.now()
+    const id = createId()
+    const created: NoteDocument = normalizeDocument({
+      id,
+      fileName: `${id}.md`,
+      title: '',
+      tags: [],
+      createdAtMs: now,
+      updatedAtMs: now,
+      sizeBytes: 0,
+      text: '',
+      chapterOnly: true,
+      isAutoToc: false,
+      isAutoOpenItems: true,
+      chapterParentId: parentNoteId,
+    })
+    store.notes.push(created)
+
+    // Pin to position 1, right after the auto-TOC chapter -- mirrors
+    // databaseService.ts's pinChapterAfterAutoToc.
+    store.chapters = store.chapters.map((chapter) => (
+      chapter.parentNoteId === parentNoteId && chapter.position >= 1
+        ? { ...chapter, position: chapter.position + 1 }
+        : chapter
+    ))
+    store.chapters.push({ parentNoteId, chapterNoteId: id, position: 1, chapterId: null })
+    openItemsChapter = { parentNoteId, chapterNoteId: id, position: 1, chapterId: null }
+  }
+
+  const openItemsNote = store.notes.find((note) => note.id === openItemsChapter!.chapterNoteId)
+  if (!openItemsNote) return
+
+  const existingGroups = parseOpenItemsGroups(openItemsNote.text).filter((group) => group.noteId !== changedNoteId)
+  const familyOrder = openItemsFamilyOrderInStore(store, parentNoteId)
+  const orderIndex = new Map(familyOrder.map((id, index) => [id, index]))
+  const nextGroups = [...existingGroups, { noteId: changedNoteId, markdown: newGroupMarkdown }]
+    .sort((a, b) => (orderIndex.get(a.noteId) ?? Number.MAX_SAFE_INTEGER) - (orderIndex.get(b.noteId) ?? Number.MAX_SAFE_INTEGER))
+
+  const nextText = assembleOpenItemsText(nextGroups)
+  if (nextText !== null && nextText !== openItemsNote.text) {
+    openItemsNote.text = nextText
+    openItemsNote.updatedAtMs = Date.now()
+    openItemsNote.sizeBytes = nextText.length
+    openItemsNote.title = deriveTitle(nextText)
+  }
+}
+
+/** Dev-mode mirror of noteLifecycleService.ts's private resyncOpenItemsOrder. */
+function resyncOpenItemsOrderInStore(store: BrowserMockStore, parentNoteId: string): void {
+  const openItemsChapter = findOpenItemsChapterInStore(store, parentNoteId)
+  if (!openItemsChapter) return
+  const openItemsNote = store.notes.find((note) => note.id === openItemsChapter.chapterNoteId)
+  if (!openItemsNote) return
+
+  const groups = parseOpenItemsGroups(openItemsNote.text)
+  if (groups.length === 0) return
+
+  const familyOrder = openItemsFamilyOrderInStore(store, parentNoteId)
+  const orderIndex = new Map(familyOrder.map((id, index) => [id, index]))
+  const sortedGroups = [...groups].sort((a, b) => (orderIndex.get(a.noteId) ?? Number.MAX_SAFE_INTEGER) - (orderIndex.get(b.noteId) ?? Number.MAX_SAFE_INTEGER))
+  if (sortedGroups.every((group, index) => group.noteId === groups[index].noteId)) return
+
+  const nextText = assembleOpenItemsText(sortedGroups)
+  if (nextText !== null && nextText !== openItemsNote.text) {
+    openItemsNote.text = nextText
+    openItemsNote.updatedAtMs = Date.now()
+    openItemsNote.sizeBytes = nextText.length
+    openItemsNote.title = deriveTitle(nextText)
+  }
+}
+
 function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersApi {
   const mutate = <T,>(transform: (store: BrowserMockStore) => T): T => {
     const result = transform(storeRef.current)
@@ -1109,6 +1314,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           text: '',
           chapterOnly: true,
           isAutoToc: false,
+          isAutoOpenItems: false,
           chapterParentId: parentNoteId,
         })
         store.notes.push(created)
@@ -1149,6 +1355,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           text: clonedText,
           chapterOnly: true,
           isAutoToc: false,
+          isAutoOpenItems: false,
           chapterParentId: parentNoteId,
         })
         store.notes.push(created)
@@ -1203,6 +1410,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
             ? { ...chapter, position: positionByChapterNoteId.get(chapter.chapterNoteId) ?? chapter.position }
             : chapter
         ))
+        resyncOpenItemsOrderInStore(store, parentNoteId)
         return sorted(store, parentNoteId)
       })
     },
@@ -1263,6 +1471,11 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
 
     async removeChapter(parentNoteId: string, chapterNoteId: string): Promise<ChapterEntry[]> {
       return mutate((store) => {
+        const openItemsChapter = findOpenItemsChapterInStore(store, parentNoteId)
+        if (openItemsChapter && openItemsChapter.chapterNoteId !== chapterNoteId) {
+          dropOpenItemsGroupInStore(store, parentNoteId, openItemsChapter.chapterNoteId, chapterNoteId)
+        }
+
         const removed = store.chapters.find((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === chapterNoteId)
         if (removed) {
           store.chapters = store.chapters
@@ -1301,6 +1514,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           text: '',
           chapterOnly: true,
           isAutoToc: true,
+          isAutoOpenItems: false,
           chapterParentId: parentNoteId,
         })
         store.notes.push(created)

@@ -317,6 +317,19 @@ export function EditorSection({
     activeNoteTextRef.current = activeNoteText
   }, [activeNoteText])
 
+  // useNoteChapters (which owns refreshChapters) is declared further down
+  // this function than useNoteSaveQueue needs it -- routed through a ref,
+  // kept current by the effect right after useNoteChapters below, same
+  // pattern as activeNoteTextRef above.
+  const refreshChaptersRef = useRef<() => Promise<void>>(async () => {})
+  // Stable identity (empty deps -- only ever reads the ref) so it doesn't
+  // recreate useNoteSaveQueue's own memoized callbacks on every render; an
+  // inline arrow here previously did exactly that, cascading into an
+  // infinite render loop the moment any effect downstream depended on
+  // flushPendingSaveNow's identity.
+  const handleSaveCompleted = useCallback(() => {
+    void refreshChaptersRef.current()
+  }, [])
   const { queueSave, flushPendingSaveNow, cancelPendingSave } = useNoteSaveQueue({
     activeNoteId,
     persistenceReady,
@@ -325,6 +338,7 @@ export function EditorSection({
     previewBlockSplitCacheRef,
     setActiveNoteText,
     setNotes,
+    onSaveCompleted: handleSaveCompleted,
   })
 
   const buildTextDecorationTransformRef = useRef<(text: string, selection: import('../editor/EditorContract').EditorSelectionState, format: 'bold' | 'italic' | 'strikethrough') => { text: string; selection: import('../editor/EditorContract').EditorSelectionState } | null>(() => null)
@@ -507,6 +521,13 @@ export function EditorSection({
       // so force preview mode on entry. Not restored on the way back out --
       // same as every other view-mode change, it's just where you land, not
       // a special saved/restored state.
+      setIsPreviewMode(true)
+    } else if (loaded.isAutoOpenItems) {
+      // Same "its own links look broken as raw bracket syntax in edit mode"
+      // reasoning as the auto-TOC branch above, minus the regenerate-on-read
+      // step -- Open Items is patched incrementally on specific write-time
+      // triggers (noteLifecycleService.ts's saveNote checklist-diff hook),
+      // never rescanned just because it's being viewed.
       setIsPreviewMode(true)
     }
 
@@ -780,6 +801,7 @@ export function EditorSection({
 
   const {
     chapters,
+    refreshChapters,
     handleCreateChapter,
     handleChapterClick,
     handleCloneNoteAsChapter,
@@ -813,6 +835,9 @@ export function EditorSection({
     flushPendingSaveNow,
     onNotePermanentlyDeleted: evictPermanentlyDeletedNoteCaches,
   })
+  useEffect(() => {
+    refreshChaptersRef.current = refreshChapters
+  }, [refreshChapters])
 
   // Clicking the chapter bar's parent tab returns to the parent's own
   // content. A no-op if it's already what's showing (matches handleTabClick's
@@ -1163,6 +1188,7 @@ export function EditorSection({
     unpinNoteTab,
     pinNoteAsRightmostTab,
     chapters,
+    refreshChapters,
     handleCreateChapter,
     handleChapterClick,
     handleCloneNoteAsChapter,

@@ -12,6 +12,7 @@ function baseSummary(overrides: Partial<NoteSummary> = {}): NoteSummary {
     sizeBytes: 42,
     chapterOnly: false,
     isAutoToc: false,
+    isAutoOpenItems: false,
     chapterParentId: null,
     ...overrides,
   }
