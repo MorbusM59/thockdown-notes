@@ -141,4 +141,58 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     expect((created.text.match(/\[Bugs\]/g) ?? []).length).toBe(1)
     expect((created.text.match(/\[Features\]/g) ?? []).length).toBe(1)
   })
+
+  it('regenerates the TOC automatically as a side effect of saving a chapter with an edited heading', async () => {
+    const parent = await lifecycle.createNote({ initialText: '# Book' })
+    const ch1 = await lifecycle.createChapterNote(parent.id)
+    await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n## First\n\nBody.' })
+    await lifecycle.createAutoTocChapter(parent.id)
+
+    // No explicit regenerateAutoTocChapter call -- saveNote itself should
+    // pick up the new heading and refresh the TOC chapter on this save.
+    await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n## First\n\nBody.\n\n## Second\n\nMore.' })
+
+    const parentAssignedId = db.getNoteRecord(parent.id)!.assignedId!
+    const chapterId = db.listChaptersForNote(parent.id).find((c) => c.chapterNoteId === ch1.id)!.chapterId
+    const tocChapterNoteId = db.getAutoTocChapterNoteId(parent.id)!
+    const tocDoc = await lifecycle.loadNote({ id: tocChapterNoteId })
+    expect(tocDoc.text).toContain(`[Second]($${parentAssignedId}§${chapterId}#second)`)
+  })
+
+  it('does not regenerate the TOC when a save does not touch any heading', async () => {
+    const parent = await lifecycle.createNote({ initialText: '# Book' })
+    const ch1 = await lifecycle.createChapterNote(parent.id)
+    await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n## First\n\nBody.' })
+    await lifecycle.createAutoTocChapter(parent.id)
+
+    const tocChapterNoteId = db.getAutoTocChapterNoteId(parent.id)!
+    const before = await lifecycle.loadNote({ id: tocChapterNoteId })
+
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n## First\n\nDifferent body text, no heading change.' })
+
+    const after = await lifecycle.loadNote({ id: tocChapterNoteId })
+    expect(after.updatedAtMs).toBe(before.updatedAtMs)
+  })
+
+  it('does not recurse or duplicate-regenerate when a save-triggered TOC refresh anchors headings in the same save', async () => {
+    const parent = await lifecycle.createNote({ initialText: '# Book' })
+    const ch1 = await lifecycle.createChapterNote(parent.id)
+    await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n## First\n\nBody.' })
+    await lifecycle.createAutoTocChapter(parent.id)
+
+    // Adding a brand-new, not-yet-anchored heading forces regenerateAutoTocChapter's
+    // own internal saveNote (to persist the newly-anchored chapter text) --
+    // exactly the path that could recurse into itself without the
+    // skipAutoChapterHooks guard.
+    await expect(
+      lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n## First\n\nBody.\n\n## Second\n\nMore.' }),
+    ).resolves.toBeTruthy()
+
+    const tocChapterNoteId = db.getAutoTocChapterNoteId(parent.id)!
+    const tocDoc = await lifecycle.loadNote({ id: tocChapterNoteId })
+    // Exactly one entry for the new heading, not duplicated by a second
+    // recursive regeneration pass.
+    expect((tocDoc.text.match(/\[Second\]/g) ?? []).length).toBe(1)
+  })
 })

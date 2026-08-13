@@ -38,7 +38,7 @@ import type { EditorSectionEntry, EditorSectionsApi } from '../shared/sections'
 import { DEFAULT_EDITOR_SECTION_ID } from '../shared/sections'
 import type { ChapterEntry, ChaptersApi } from '../shared/chapters'
 import type { ReviewFlagEntry, ReviewFlagsApi } from '../shared/reviewFlags'
-import { increaseHeadingLevels } from '../shared/markdownHeadings'
+import { normalizeChapterHeadings } from '../shared/markdownHeadings'
 import { anchorizeHeadings } from '../shared/tableOfContentsText'
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, parseOpenItemsGroups } from '../shared/openItemsText'
 
@@ -1355,7 +1355,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
 
         const now = Date.now()
         const id = createId()
-        const clonedText = increaseHeadingLevels(source.text)
+        const clonedText = normalizeChapterHeadings(source.text)
         const created: NoteDocument = normalizeDocument({
           id,
           fileName: `${id}.md`,

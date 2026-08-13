@@ -19,8 +19,8 @@ import type {
   TagSummary,
 } from '../src/shared/noteLifecycle';
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
-import { increaseHeadingLevels } from '../src/shared/markdownHeadings';
-import { anchorizeHeadings } from '../src/shared/tableOfContentsText';
+import { normalizeChapterHeadings } from '../src/shared/markdownHeadings';
+import { anchorizeHeadings, headingsChanged } from '../src/shared/tableOfContentsText';
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, parseOpenItemsGroups } from '../src/shared/openItemsText';
 import type { ChapterEntry, DatabaseService, NoteRecord } from './databaseService';
 
@@ -409,7 +409,7 @@ export class NoteLifecycleService {
     const parentDoc = await this.loadNote({ id: parentNoteId });
     const anchoredParent = anchorizeHeadings(parentDoc.text);
     if (anchoredParent.text !== parentDoc.text) {
-      await this.saveNote({ id: parentNoteId, text: anchoredParent.text });
+      await this.saveNote({ id: parentNoteId, text: anchoredParent.text }, { skipAutoChapterHooks: true });
     }
 
     const lines = ['# Table of Contents', '', `- [${parentRecord.title || 'Untitled'}]($${parentAssignedId})`];
@@ -423,7 +423,7 @@ export class NoteLifecycleService {
       const chapterDoc = await this.loadNote({ id: row.chapterNoteId });
       const anchoredChapter = anchorizeHeadings(chapterDoc.text);
       if (anchoredChapter.text !== chapterDoc.text) {
-        await this.saveNote({ id: row.chapterNoteId, text: anchoredChapter.text });
+        await this.saveNote({ id: row.chapterNoteId, text: anchoredChapter.text }, { skipAutoChapterHooks: true });
       }
 
       const chapterId = this.databaseService.ensureChapterId(parentNoteId, row.chapterNoteId, chapterDoc.title);
@@ -436,7 +436,7 @@ export class NoteLifecycleService {
     const tocText = lines.join('\n');
     const currentTocDoc = await this.loadNote({ id: tocChapterNoteId });
     if (tocText !== currentTocDoc.text) {
-      await this.saveNote({ id: tocChapterNoteId, text: tocText });
+      await this.saveNote({ id: tocChapterNoteId, text: tocText }, { skipAutoChapterHooks: true });
     }
 
     const chapters = this.databaseService.listChaptersForNote(parentNoteId);
@@ -626,10 +626,10 @@ export class NoteLifecycleService {
   // be chapters (see the chapterOnly doc comment on NoteSummary), so this is
   // the only way a regular note's content reaches a chapter bar, and it's
   // also what rules out sub-chapters: a chapterOnly note is never a valid
-  // drag source in the first place. Every heading in the clone shifts down
-  // one level (see increaseHeadingLevels' doc comment) so the source note's
-  // own title-heading nests under the parent's, rather than competing with
-  // it -- the source note itself keeps its original heading levels.
+  // drag source in the first place. The clone's headings are normalized
+  // (see normalizeChapterHeadings' doc comment) the same way every other
+  // chapter-creation path is -- the source note itself keeps its original
+  // heading levels.
   async cloneNoteAsChapter(parentNoteId: string, sourceNoteId: string): Promise<{ chapters: ChapterEntry[]; created: NoteDocument }> {
     const sourceRecord = this.databaseService.getNoteRecord(sourceNoteId);
     if (sourceRecord?.chapterOnly) {
@@ -641,7 +641,7 @@ export class NoteLifecycleService {
     // only recognizes a level-1 "# " heading, so a shifted "## Title" would
     // otherwise fall through to using that whole line (hashes and all) as
     // the title instead.
-    const created = await this.createNote({ initialText: increaseHeadingLevels(source.text), title: source.title });
+    const created = await this.createNote({ initialText: normalizeChapterHeadings(source.text), title: source.title });
     this.databaseService.setNoteChapterOnly(created.id, true);
     const chapters = this.databaseService.addChapter(parentNoteId, created.id);
     const createdDocument = await this.loadNote({ id: created.id });
@@ -674,7 +674,16 @@ export class NoteLifecycleService {
     return this.loadNote({ id: created.id });
   }
 
-  async saveNote(input: SaveNoteInput): Promise<NoteSummary> {
+  // `skipAutoChapterHooks` is internal-only (not part of the public
+  // SaveNoteInput IPC type) -- set by regenerateAutoTocChapter's own
+  // internal saveNote calls so persisting freshly-anchored heading text
+  // doesn't re-trigger the very heading-diff regen this save is already
+  // part of. Without it, anchorizing rewrites heading text, so the
+  // heading-diff block below would see a "change" and call
+  // regenerateAutoTocChapter again -- self-limiting via anchorizeHeadings'
+  // idempotency (the second pass reproduces identical text, so nothing
+  // saves and the recursion stops there), but wastefully.
+  async saveNote(input: SaveNoteInput, options?: { skipAutoChapterHooks?: boolean }): Promise<NoteSummary> {
     const record = this.databaseService.getNoteRecord(input.id);
     const filePath = record?.filePath ?? path.join(this.notesDir, idToFileName(input.id));
     const text = normalizeText(input.text);
@@ -731,22 +740,26 @@ export class NoteLifecycleService {
 
     // Cheap "is this note part of a chapter family" check up front (a
     // handful of DB reads, no I/O) so the file read below -- needed only to
-    // diff checklist state against the pre-save text -- is skipped entirely
-    // for the vast majority of saves, which touch a note with no chapters at
-    // all. Auto-generated chapters (TOC, Open Items) are excluded here even
-    // though they *are* chapters -- Open Items' own text contains literal
-    // `- [ ] ...` lines by design, and diffing those against themselves would
-    // otherwise regenerate the very group it just wrote.
+    // diff checklist/heading state against the pre-save text -- is skipped
+    // entirely for the vast majority of saves, which touch a note with no
+    // chapters at all. Auto-generated chapters (TOC, Open Items) are
+    // excluded here even though they *are* chapters -- Open Items' own text
+    // contains literal `- [ ] ...` lines by design, and diffing those
+    // against themselves would otherwise regenerate the very group it just
+    // wrote; TOC's own text is all headings that just got rewritten, same
+    // problem. Shared between the checklist-diff (Open Items) and
+    // heading-diff (TOC) hooks below -- both need the same "which parent,
+    // what did it look like before this save" facts.
     const isAutoChapter = Boolean(record?.isAutoToc || record?.isAutoOpenItems);
-    const openItemsFamilyParentId = isAutoChapter
+    const chapterFamilyParentId = isAutoChapter
       ? null
       : (this.databaseService.getChapterParent(input.id) ?? (this.databaseService.listChaptersForNote(input.id).length > 0 ? input.id : null));
-    let oldTextForOpenItemsDiff: string | null = null;
-    if (openItemsFamilyParentId) {
+    let oldTextForChapterFamilyDiff: string | null = null;
+    if (chapterFamilyParentId && !options?.skipAutoChapterHooks) {
       try {
-        oldTextForOpenItemsDiff = await fs.readFile(filePath, 'utf8');
+        oldTextForChapterFamilyDiff = await fs.readFile(filePath, 'utf8');
       } catch {
-        oldTextForOpenItemsDiff = null;
+        oldTextForChapterFamilyDiff = null;
       }
     }
 
@@ -792,11 +805,27 @@ export class NoteLifecycleService {
     // meant to update on -- a checklist item created/removed, or an existing
     // one's checked state flipped (see checklistStateChanged) -- never on a
     // plain text edit, and never blocks the save itself if it fails.
-    if (openItemsFamilyParentId && oldTextForOpenItemsDiff !== null && checklistStateChanged(oldTextForOpenItemsDiff, text)) {
+    if (!options?.skipAutoChapterHooks && chapterFamilyParentId && oldTextForChapterFamilyDiff !== null && checklistStateChanged(oldTextForChapterFamilyDiff, text)) {
       try {
-        await this.regenerateOpenItemsGroup(openItemsFamilyParentId, input.id);
+        await this.regenerateOpenItemsGroup(chapterFamilyParentId, input.id);
       } catch {
         // best-effort -- the list will catch up on the next checklist-changing save
+      }
+    }
+
+    // Same debounce-riding, best-effort pattern as the checklist-diff hook
+    // above, keyed on heading changes instead: a heading added/removed/
+    // relabeled/re-leveled in the parent or any real chapter refreshes the
+    // auto-TOC chapter immediately (on this save's own debounce) rather than
+    // waiting for the TOC chapter to actually be viewed.
+    if (!options?.skipAutoChapterHooks && chapterFamilyParentId && oldTextForChapterFamilyDiff !== null && headingsChanged(oldTextForChapterFamilyDiff, text)) {
+      const tocChapterNoteId = this.databaseService.getAutoTocChapterNoteId(chapterFamilyParentId);
+      if (tocChapterNoteId) {
+        try {
+          await this.regenerateAutoTocChapter(chapterFamilyParentId);
+        } catch {
+          // best-effort -- the TOC will catch up on the next heading-changing save, or the next time it's viewed
+        }
       }
     }
 

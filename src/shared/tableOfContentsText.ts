@@ -115,3 +115,23 @@ export function anchorizeHeadings(sourceText: string): { text: string; headings:
 
   return { text: nextLines.join('\n'), headings }
 }
+
+/**
+ * True if `oldText` and `newText` have a different set of headings (by
+ * level + label, in document order) -- used to gate a debounced, best-effort
+ * auto-TOC regeneration on save, the same way `checklistStateChanged`
+ * (openItemsText.ts) gates the auto-Open-Items regeneration: cheap to run
+ * on every save of a chapter-family note, but only actually worth acting on
+ * when a heading was added, removed, relabeled, or leveled differently.
+ * Reuses `anchorizeHeadings` rather than a separate heading scan so this
+ * can never drift from what the TOC itself considers "a heading" (fenced
+ * code blocks excluded, the first H1 excluded as the note's own title).
+ */
+export function headingsChanged(oldText: string, newText: string): boolean {
+  const oldHeadings = anchorizeHeadings(oldText).headings
+  const newHeadings = anchorizeHeadings(newText).headings
+  if (oldHeadings.length !== newHeadings.length) return true
+  return oldHeadings.some((heading, index) => (
+    heading.level !== newHeadings[index].level || heading.label !== newHeadings[index].label
+  ))
+}

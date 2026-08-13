@@ -5,6 +5,7 @@ import { splitChapterFamily } from '../shared/chapters'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { EditorSelectionState } from '../editor/EditorContract'
 import { collapseSurgerySite, trimBlankLines } from './chapterExtraction'
+import { normalizeChapterHeadings } from '../shared/markdownHeadings'
 
 export interface UseNoteChaptersOptions {
   /** The note identity the chapter bar shows chapters *of* -- the chapter-aware "menu identity" (see EditorSection.tsx's `menuIdentityNoteId`), never a chapter's own id (chapters can't have chapters in this UI). */
@@ -308,11 +309,13 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
   }, [reorderableChapterCount, autoTocChapterNoteId, autoOpenItemsChapterNoteId, menuIdentityNoteId, persistenceReady, activeNoteId, activateNote, refreshNotes, onNotePermanentlyDeleted])
 
   const handleCreateChapter = useCallback(async () => {
-    if (!window.thockdownChapters || !menuIdentityNoteId) return
+    if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId) return
     const { chapters: updatedChapters, created } = await window.thockdownChapters.createChapter(menuIdentityNoteId)
+    const initialText = normalizeChapterHeadings('')
+    await window.thockdownNotes.saveNote({ id: created.id, text: initialText })
     setChapters(updatedChapters)
     await refreshNotes(created.id)
-    await activateNote(created.id)
+    await activateNote(created.id, initialText.length)
   }, [menuIdentityNoteId, refreshNotes, activateNote])
 
   const handleChapterClick = useCallback((chapterNoteId: string) => {
@@ -380,7 +383,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     await flushPendingSaveNow()
 
     const { chapters: createdChapters, created } = await window.thockdownChapters.createChapter(menuIdentityNoteId)
-    await window.thockdownNotes.saveNote({ id: created.id, text: extractedText })
+    await window.thockdownNotes.saveNote({ id: created.id, text: normalizeChapterHeadings(extractedText) })
 
     // createChapter appends the new chapter as the last one -- move it to
     // sit directly behind whichever chapter (or the parent, if there's no
@@ -460,7 +463,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
       await flushPendingSaveNow()
 
       const { created } = await window.thockdownChapters.createChapter(menuIdentityNoteId)
-      await window.thockdownNotes.saveNote({ id: created.id, text: extractedText })
+      await window.thockdownNotes.saveNote({ id: created.id, text: normalizeChapterHeadings(extractedText) })
 
       // Reinsert relative to the reorderable subset only, then re-prepend
       // the pinned auto-chapters (if any) before persisting -- reorderChapters
@@ -536,7 +539,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
         await flushPendingSaveNow()
 
         const { created } = await window.thockdownChapters.createChapter(menuIdentityNoteId)
-        await window.thockdownNotes.saveNote({ id: created.id, text: cutText })
+        await window.thockdownNotes.saveNote({ id: created.id, text: normalizeChapterHeadings(cutText) })
 
         // "New first chapter" means first among the *real* chapters -- right
         // after the pinned auto-chapters (if any), never displacing them
@@ -567,7 +570,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
       await flushPendingSaveNow()
 
       const { chapters: createdChapters, created } = await window.thockdownChapters.createChapter(menuIdentityNoteId)
-      await window.thockdownNotes.saveNote({ id: created.id, text: extractedText })
+      await window.thockdownNotes.saveNote({ id: created.id, text: normalizeChapterHeadings(extractedText) })
 
       const currentIndex = createdChapters.findIndex((chapter) => chapter.chapterNoteId === activeNoteId)
       const insertAt = currentIndex >= 0 ? currentIndex : 0
