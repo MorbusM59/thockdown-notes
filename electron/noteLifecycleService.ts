@@ -417,8 +417,7 @@ export class NoteLifecycleService {
       lines.push(`  - [${heading.label}]($${parentAssignedId}#${heading.anchorId})`);
     }
 
-    const chapterRows = this.databaseService.listChaptersForNote(parentNoteId)
-      .filter((chapter) => chapter.chapterNoteId !== tocChapterNoteId);
+    const chapterRows = this.getRealChapterRows(parentNoteId);
 
     for (const row of chapterRows) {
       const chapterDoc = await this.loadNote({ id: row.chapterNoteId });
@@ -445,18 +444,35 @@ export class NoteLifecycleService {
     return { chapters, created };
   }
 
+  // The single canonical source of "real" chapters for parentNoteId --
+  // every row in listChaptersForNote() with the auto-TOC and auto-Open-Items
+  // chapters (if either exists) excluded, decided the same way in exactly
+  // one place: by reading each chapter note's own isAutoToc/isAutoOpenItems
+  // flags off its NoteRecord. Every content-facing consumer in this file
+  // (TOC regeneration, Open-Items family ordering, and any future one) MUST
+  // go through this rather than re-deriving its own exclusion filter --
+  // that duplication is exactly how regenerateAutoTocChapter previously
+  // excluded only the TOC chapter itself and left the auto-Open-Items
+  // chapter to be walked as if it were a real chapter (its own "## Bugs" /
+  // "## Features" group headings got anchor-linkified and indexed as
+  // duplicate, malformed chapter entries in the generated TOC). If a third
+  // auto-chapter kind is ever added, extend the check inside this one
+  // function -- nowhere else.
+  private getRealChapterRows(parentNoteId: string): ChapterEntry[] {
+    return this.databaseService.listChaptersForNote(parentNoteId)
+      .filter((chapter) => {
+        const chapterRecord = this.databaseService.getNoteRecord(chapter.chapterNoteId);
+        return chapterRecord ? !chapterRecord.isAutoToc && !chapterRecord.isAutoOpenItems : false;
+      });
+  }
+
   // The parent, then every *real* (non-auto) chapter, in current chapter-bar
   // order -- the canonical ordering the auto-Open-Items chapter's own groups
   // are kept sorted against, both when a group is (re)written
   // (regenerateOpenItemsGroup) and when chapters are reordered with no text
   // change at all (resyncOpenItemsOrder).
   private openItemsFamilyOrder(parentNoteId: string): string[] {
-    const realChapterIds = this.databaseService.listChaptersForNote(parentNoteId)
-      .filter((chapter) => {
-        const chapterRecord = this.databaseService.getNoteRecord(chapter.chapterNoteId);
-        return chapterRecord ? !chapterRecord.isAutoToc && !chapterRecord.isAutoOpenItems : false;
-      })
-      .map((chapter) => chapter.chapterNoteId);
+    const realChapterIds = this.getRealChapterRows(parentNoteId).map((chapter) => chapter.chapterNoteId);
     return [parentNoteId, ...realChapterIds];
   }
 

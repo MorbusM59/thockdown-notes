@@ -105,4 +105,40 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     const parent = await lifecycle.createNote({ initialText: '# Book' })
     await expect(lifecycle.regenerateAutoTocChapter(parent.id)).rejects.toThrow()
   })
+
+  it('never walks the auto-Open-Items chapter as a real chapter (regression: previously produced duplicate, malformed entries for its own group headings)', async () => {
+    const parent = await lifecycle.createNote({ initialText: '# Book' })
+    const bugs = await lifecycle.createChapterNote(parent.id)
+    const features = await lifecycle.createChapterNote(parent.id)
+    // The auto-Open-Items chapter only ever gets created once an auto-TOC
+    // chapter already exists (regenerateOpenItemsGroup's own precondition).
+    await lifecycle.createAutoTocChapter(parent.id)
+
+    await lifecycle.saveNote({ id: bugs.id, text: '# Bugs\n\n- [ ] Fix the thing' })
+    await lifecycle.saveNote({ id: features.id, text: '# Features\n\n- [ ] Ship the thing' })
+
+    // Saving with unchecked items auto-creates/updates the Open Items
+    // chapter, whose own text ends up with "## Bugs" / "## Features" group
+    // headings -- the exact shape that used to leak into the TOC below.
+    const openItemsChapterNoteId = db.listChaptersForNote(parent.id)
+      .find((c) => {
+        const record = db.getNoteRecord(c.chapterNoteId)
+        return record?.isAutoOpenItems
+      })?.chapterNoteId
+    expect(openItemsChapterNoteId).toBeTruthy()
+
+    const { created } = await lifecycle.regenerateAutoTocChapter(parent.id)
+
+    // Only the parent and the two real chapters are indexed.
+    expect(created.text).toContain('[Bugs]($')
+    expect(created.text).toContain('[Features]($')
+    // The Open Items chapter itself, and its internal group headings, must
+    // never appear as TOC entries or link targets.
+    expect(created.text).not.toContain('Open Items]($')
+    expect(created.text).not.toContain('§OPEN')
+    // No nested/duplicated link syntax like "[## [Bugs](#bugs)](...)".
+    expect(created.text).not.toMatch(/\[##/)
+    expect((created.text.match(/\[Bugs\]/g) ?? []).length).toBe(1)
+    expect((created.text.match(/\[Features\]/g) ?? []).length).toBe(1)
+  })
 })

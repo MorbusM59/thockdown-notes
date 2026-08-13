@@ -1,4 +1,4 @@
-import type { NoteDocument } from './noteLifecycle'
+import type { NoteDocument, NoteSummary } from './noteLifecycle'
 
 export const CHAPTER_CHANNELS = {
   list: 'chapters:list',
@@ -18,6 +18,54 @@ export interface ChapterEntry {
   position: number;
   chapterNoteId: string;
   chapterId: string | null;
+}
+
+export interface ChapterFamilySplit {
+  /** Pinned first in the chapter bar, right after the parent tab. Not draggable, not reorderable, no user-assignable chapterId. Null if this parent has none yet. */
+  autoTocChapter: ChapterEntry | null;
+  /** Pinned second, right after the auto-TOC chapter. Same non-draggable, non-reorderable, no-chapterId treatment. Null if this parent has none yet (it only exists once at least one chapter has an unchecked checklist item). */
+  autoOpenItemsChapter: ChapterEntry | null;
+  /** Every other chapter, in chapter-bar order -- the only ones a user can drag-reorder, promote to parent, collapse, or assign a chapterId to. */
+  realChapters: ChapterEntry[];
+}
+
+/**
+ * The single source of truth for telling a parent's auto-TOC and
+ * auto-Open-Items chapters apart from its real ones, by each chapter note's
+ * own `isAutoToc`/`isAutoOpenItems` flag -- and *only* that; `chapters`
+ * itself carries no such field (this note-level fact deliberately lives on
+ * NoteSummary instead, see NoteSummary.isAutoToc's own doc comment). Every
+ * frontend consumer that needs this split (pinning the two auto chapters to
+ * the front of the bar, excluding them from drag-reorder, building the
+ * regeneration index, ...) MUST call this rather than re-deriving its own
+ * filter -- that duplication is exactly how the auto-Open-Items chapter
+ * once got walked as if it were a real chapter and leaked its own group
+ * headings into the generated TOC as duplicate entries (see
+ * noteLifecycleService.ts's `getRealChapterRows`, the equivalent
+ * single-source-of-truth for the main-process side, which this mirrors --
+ * kept as two separate functions since a NoteSummary and a NoteRecord are
+ * different shapes, but the *rule* must never drift between them).
+ */
+export function splitChapterFamily(chapters: ChapterEntry[], notes: NoteSummary[]): ChapterFamilySplit {
+  const noteById = new Map(notes.map((note) => [note.id, note]));
+  let autoTocChapter: ChapterEntry | null = null;
+  let autoOpenItemsChapter: ChapterEntry | null = null;
+  const realChapters: ChapterEntry[] = [];
+
+  for (const chapter of chapters) {
+    const note = noteById.get(chapter.chapterNoteId);
+    if (note?.isAutoToc) {
+      autoTocChapter = chapter;
+      continue;
+    }
+    if (note?.isAutoOpenItems) {
+      autoOpenItemsChapter = chapter;
+      continue;
+    }
+    realChapters.push(chapter);
+  }
+
+  return { autoTocChapter, autoOpenItemsChapter, realChapters };
 }
 
 export interface ChaptersApi {

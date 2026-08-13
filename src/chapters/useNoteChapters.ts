@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { DragEvent } from 'react'
 import type { ChapterEntry } from '../shared/chapters'
+import { splitChapterFamily } from '../shared/chapters'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { EditorSelectionState } from '../editor/EditorContract'
 import { collapseSurgerySite, trimBlankLines } from './chapterExtraction'
@@ -210,28 +211,21 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     }
   }, [menuIdentityNoteId, chapters, refreshNotes])
 
-  // The auto-TOC chapter (if any) is a note-level fact (NoteSummary.isAutoToc),
-  // not something ChapterEntry itself carries -- looked up against the
-  // shared notes list rather than adding a new field to every chapter row.
-  // Pinned to chapter-bar position 0 at creation time (see
-  // createAutoTocChapter) and never moved after that; drag-reorder below
-  // operates only on `reorderableChapters` (everything else) so it can never
-  // be dragged, dropped onto, or displaced by an ordinary reorder.
-  const autoTocChapterNoteId = useMemo(() => (
-    chapters.find((chapter) => notes.find((note) => note.id === chapter.chapterNoteId)?.isAutoToc)?.chapterNoteId ?? null
+  // The auto-TOC and auto-Open-Items chapters (if they exist) are note-level
+  // facts (NoteSummary.isAutoToc/isAutoOpenItems), not something ChapterEntry
+  // itself carries -- split out via the one shared, canonical rule
+  // (splitChapterFamily) rather than a locally re-derived filter, so this
+  // can never drift from ChapterBar.tsx's or the main process's own
+  // exclusion logic again. Both are pinned at creation time (see
+  // createAutoTocChapter/regenerateOpenItemsGroup) and never moved after
+  // that; drag-reorder below operates only on `reorderableChapters`
+  // (everything else) so neither can ever be dragged, dropped onto, or
+  // displaced by an ordinary reorder.
+  const { autoTocChapter, autoOpenItemsChapter, realChapters: reorderableChapters } = useMemo(() => (
+    splitChapterFamily(chapters, notes)
   ), [chapters, notes])
-  // The auto-Open-Items chapter (if any) -- same "note-level fact, not a
-  // ChapterEntry field" reasoning as autoTocChapterNoteId, and excluded from
-  // reorderableChapters/positional navigation the same way: it's a managed
-  // note (patched incrementally by regenerateOpenItemsGroup/
-  // reorderChaptersAndSyncOpenItems/removeChapterAndSyncOpenItems on the main
-  // process side), never something to drag, merge, or split against.
-  const autoOpenItemsChapterNoteId = useMemo(() => (
-    chapters.find((chapter) => notes.find((note) => note.id === chapter.chapterNoteId)?.isAutoOpenItems)?.chapterNoteId ?? null
-  ), [chapters, notes])
-  const reorderableChapters = useMemo(() => (
-    chapters.filter((chapter) => chapter.chapterNoteId !== autoTocChapterNoteId && chapter.chapterNoteId !== autoOpenItemsChapterNoteId)
-  ), [chapters, autoTocChapterNoteId, autoOpenItemsChapterNoteId])
+  const autoTocChapterNoteId = autoTocChapter?.chapterNoteId ?? null
+  const autoOpenItemsChapterNoteId = autoOpenItemsChapter?.chapterNoteId ?? null
 
   // Keeps the auto-TOC chapter's existence a hard invariant of "this note has
   // at least one real chapter" -- no manual toggle. Appears the moment the

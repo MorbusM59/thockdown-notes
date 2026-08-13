@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DragEvent, KeyboardEvent, WheelEvent as ReactWheelEvent } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { ChapterEntry } from '../shared/chapters'
+import { splitChapterFamily } from '../shared/chapters'
 import { getChapterTabLabel, getParentTabLabel } from '../shared/tabLabels'
 
 export interface ChapterBarProps {
@@ -90,19 +91,16 @@ export function ChapterBar({
   const isParentActive = activeNoteId === parentNoteId
   const hasCurrentChapter = !isParentActive
 
-  // The auto-generated Table of Contents chapter (if any) always renders
-  // pinned first, right after the parent tab -- not draggable, not a
-  // reorder/promote drop target, no chapterId to right-click-rename. Every
-  // other chapter renders from `reorderableChapters` instead of `chapters`
-  // so drag-and-drop's index math (useNoteChapters.ts) never sees it.
-  const autoTocChapter = chapters.find((chapter) => notes.find((note) => note.id === chapter.chapterNoteId)?.isAutoToc) ?? null
-  // The auto-generated Open Items chapter (if any) renders pinned right
-  // after the auto-TOC chapter -- same non-draggable, non-droppable,
-  // no-chapterId treatment as autoTocChapter above.
-  const autoOpenItemsChapter = chapters.find((chapter) => notes.find((note) => note.id === chapter.chapterNoteId)?.isAutoOpenItems) ?? null
-  const reorderableChapters = chapters.filter((chapter) => (
-    chapter.chapterNoteId !== autoTocChapter?.chapterNoteId && chapter.chapterNoteId !== autoOpenItemsChapter?.chapterNoteId
-  ))
+  // The auto-generated Table of Contents and Open Items chapters (if they
+  // exist) always render pinned first, right after the parent tab -- not
+  // draggable, not reorder/promote drop targets, no chapterId to
+  // right-click-rename. Split out via the one shared, canonical rule
+  // (splitChapterFamily, also used by useNoteChapters.ts and mirrored on
+  // the main-process side by noteLifecycleService.ts's getRealChapterRows)
+  // rather than a locally re-derived filter. Every other chapter renders
+  // from `reorderableChapters` so drag-and-drop's index math
+  // (useNoteChapters.ts) never sees either of them.
+  const { autoTocChapter, autoOpenItemsChapter, realChapters: reorderableChapters } = splitChapterFamily(chapters, notes)
 
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)

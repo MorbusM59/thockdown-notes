@@ -1017,6 +1017,27 @@ function buildTabsBridge(storeRef: { current: BrowserMockStore }): NoteTabsApi {
 }
 
 /**
+ * Dev-mode mirror of noteLifecycleService.ts's `getRealChapterRows` -- the
+ * one canonical place in this file that decides "real chapter" for
+ * parentNoteId, by each chapter note's own isAutoToc/isAutoOpenItems flag
+ * and nothing else. Every store-mutating function below that needs "every
+ * real chapter, in bar order" (TOC regeneration, Open-Items family
+ * ordering, ...) MUST call this rather than re-deriving its own filter --
+ * that duplication (only excluding the TOC chapter, not also Open Items)
+ * is exactly the bug this replaces; see noteLifecycleService.ts's own doc
+ * comment on getRealChapterRows for the real-backend incident this mirrors.
+ */
+function getRealChapterRowsInStore(store: BrowserMockStore, parentNoteId: string): ChapterEntry[] {
+  return store.chapters
+    .filter((chapter) => chapter.parentNoteId === parentNoteId)
+    .sort((a, b) => a.position - b.position)
+    .filter((chapter) => {
+      const chapterNote = store.notes.find((note) => note.id === chapter.chapterNoteId)
+      return chapterNote ? !chapterNote.isAutoToc && !chapterNote.isAutoOpenItems : false
+    })
+}
+
+/**
  * Dev-mode mirror of noteLifecycleService.ts's regenerateAutoTocChapter --
  * see that method's own doc comment for what this actually does and why.
  * A no-op if `parentNoteId` has no auto-TOC chapter. Mutates `store`
@@ -1052,9 +1073,7 @@ function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string)
     lines.push(`  - [${heading.label}]($${parentAssignedId}#${heading.anchorId})`)
   }
 
-  const chapterRows = store.chapters
-    .filter((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId !== tocChapter.chapterNoteId)
-    .sort((a, b) => a.position - b.position)
+  const chapterRows = getRealChapterRowsInStore(store, parentNoteId)
 
   for (const row of chapterRows) {
     const chapterNote = store.notes.find((note) => note.id === row.chapterNoteId)
@@ -1102,14 +1121,7 @@ function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string)
 
 /** Dev-mode mirror of noteLifecycleService.ts's private openItemsFamilyOrder. */
 function openItemsFamilyOrderInStore(store: BrowserMockStore, parentNoteId: string): string[] {
-  const realChapterIds = store.chapters
-    .filter((chapter) => chapter.parentNoteId === parentNoteId)
-    .sort((a, b) => a.position - b.position)
-    .filter((chapter) => {
-      const chapterNote = store.notes.find((note) => note.id === chapter.chapterNoteId)
-      return chapterNote ? !chapterNote.isAutoToc && !chapterNote.isAutoOpenItems : false
-    })
-    .map((chapter) => chapter.chapterNoteId)
+  const realChapterIds = getRealChapterRowsInStore(store, parentNoteId).map((chapter) => chapter.chapterNoteId)
   return [parentNoteId, ...realChapterIds]
 }
 
