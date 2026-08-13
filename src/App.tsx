@@ -4855,7 +4855,7 @@ ${markdownHtml}
     if (noteTransitionLockRef.current) return
 
     const section = getActiveSection()
-    if (section?.isPreviewMode) {
+    if (section?.isPreviewMode && !section.isForcedPreviewNote) {
       section.toggleRenderViewMode()
     }
 
@@ -7335,6 +7335,8 @@ ${markdownHtml}
           return
         }
 
+        if (activeSection?.isForcedPreviewNote) return
+
         event.preventDefault()
         void activeSection?.toggleRenderViewMode()
       }
@@ -8234,7 +8236,7 @@ ${markdownHtml}
             <EditorToolbar
               isPreviewMode={activeSection?.isPreviewMode ?? false}
               activeNoteId={activeSection?.activeNoteId ?? null}
-              toggleRenderViewMode={activeSection?.toggleRenderViewMode ?? noopAsync}
+              toggleRenderViewMode={activeSection?.isForcedPreviewNote ? noopAsync : (activeSection?.toggleRenderViewMode ?? noopAsync)}
               createNote={createNote}
               spellCheckEditEnabled={spellCheckEditEnabled}
               spellCheckRenderEnabled={spellCheckRenderEnabled}

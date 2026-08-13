@@ -1,3 +1,5 @@
+import { stripMarkdownInlineFormatting } from './tableOfContentsText'
+
 export function getNoteTabLabel(assignedId: string | null | undefined): string {
   const trimmed = assignedId?.trim()
   return trimmed ? trimmed : '···'
@@ -9,7 +11,8 @@ export function getParentTabLabel(): string {
 
 function normalizeContentPreviewText(text: string): string {
   const firstLine = text.split(/\r?\n/, 1)[0] ?? ''
-  return firstLine.replace(/^#+\s*/, '').replace(/^\s+/, '').replace(/\s+/g, ' ').trim()
+  const withoutHeading = firstLine.replace(/^#+\s*/, '').trim()
+  return stripMarkdownInlineFormatting(withoutHeading).replace(/\s+/g, ' ').trim()
 }
 
 export function getChapterTabLabel(chapterId: string | null | undefined, chapterContentText?: string | null): string {

@@ -206,6 +206,7 @@ export function ChapterBar({
               const isEditing = editingChapterNoteId === chapter.chapterNoteId
               const isActive = chapter.chapterNoteId === activeNoteId
               const note = notes.find((entry) => entry.id === chapter.chapterNoteId)
+              const hasAssignedId = Boolean(chapter.chapterId?.trim())
               const label = getChapterTabLabel(chapter.chapterId, note?.contentText)
 
               if (isEditing) {
@@ -244,7 +245,7 @@ export function ChapterBar({
                   }}
                   data-tooltip={note?.title ?? 'Chapter'}
                 >
-                  <span className="tag-pill-label">{label}</span>
+                  <span className={`tag-pill-label${hasAssignedId ? '' : ' chapter-pill-label-unassigned'}`}>{label}</span>
                 </div>
               )
             })}

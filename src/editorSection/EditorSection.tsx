@@ -274,7 +274,14 @@ export function EditorSection({
     window.addEventListener('mousedown', handleWindowMouseDown)
     return () => window.removeEventListener('mousedown', handleWindowMouseDown)
   }, [isSectionPickerOpen])
-  const { isPreviewMode, setIsPreviewMode } = useDisplayedNoteRenderMode(sectionId)
+  const { isPreviewMode: persistedIsPreviewMode, setIsPreviewMode } = useDisplayedNoteRenderMode(sectionId)
+  // TOC/Open Items are synthetic, link-only notes -- raw markdown bracket
+  // syntax looks broken in edit mode there, so they're hard-locked to render
+  // view (no toggle at all), without touching the real per-section
+  // isPreviewMode toggle: leaving a forced note reveals whatever mode the
+  // user actually had it in.
+  const [isForcedPreviewNote, setIsForcedPreviewNote] = useState(false)
+  const isPreviewMode = isForcedPreviewNote || persistedIsPreviewMode
   const { activeNoteId, setActiveNoteId } = useActiveNoteId(sectionId)
   const {
     activeNoteText,
@@ -521,14 +528,16 @@ export function EditorSection({
       // so force preview mode on entry. Not restored on the way back out --
       // same as every other view-mode change, it's just where you land, not
       // a special saved/restored state.
-      setIsPreviewMode(true)
+      setIsForcedPreviewNote(true)
     } else if (loaded.isAutoOpenItems) {
       // Same "its own links look broken as raw bracket syntax in edit mode"
       // reasoning as the auto-TOC branch above, minus the regenerate-on-read
       // step -- Open Items is patched incrementally on specific write-time
       // triggers (noteLifecycleService.ts's saveNote checklist-diff hook),
       // never rescanned just because it's being viewed.
-      setIsPreviewMode(true)
+      setIsForcedPreviewNote(true)
+    } else {
+      setIsForcedPreviewNote(false)
     }
 
     const cacheRestoreStart = performance.now()
@@ -1239,6 +1248,7 @@ export function EditorSection({
     previewedSnapshotId,
     isPreviewMode,
     setIsPreviewMode,
+    isForcedPreviewNote,
     activateNote,
     activeDecorationFormats,
     activeHeadingLevel,

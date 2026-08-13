@@ -57,6 +57,8 @@ export interface SectionHandle extends
   editorSelection: EditorSelectionState
   previewedSnapshotId: number | null
   isPreviewMode: boolean
+  /** True while the active note is a synthetic auto-TOC/Open Items chapter -- hard-locked to render view, toggle disabled. */
+  isForcedPreviewNote: boolean
   setIsPreviewMode: Dispatch<SetStateAction<boolean>>
   setActiveNoteId: Dispatch<SetStateAction<string | null>>
   /** Switches which note this section shows -- the section's own, not a shared/parameterized one (see the handover doc's design decision). */
