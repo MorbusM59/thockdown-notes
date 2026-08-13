@@ -38,6 +38,8 @@ export interface UseNoteProtectionActionsOptions {
   externalNoteOriginalTextByIdRef: MutableRefObject<Map<string, string>>
   externalNoteOriginalHashByIdRef: MutableRefObject<Map<string, string>>
   setCurrentExternalNoteHash: (updater: string | null | ((current: string | null) => string | null)) => void
+  /** Called once a note is *permanently* removed from the DB (not archived/trashed) -- lets EditorSection.tsx evict any per-note-id caches (edit-mode restore snapshot, etc.) that would otherwise hold onto that id forever. */
+  onNotePermanentlyDeleted?: (noteId: string) => void
 }
 
 /**
@@ -66,6 +68,7 @@ export function useNoteProtectionActions({
   externalNoteOriginalTextByIdRef,
   externalNoteOriginalHashByIdRef,
   setCurrentExternalNoteHash,
+  onNotePermanentlyDeleted,
 }: UseNoteProtectionActionsOptions) {
   const [primedNoteActionState, setPrimedNoteActionState] = useState<{ noteId: string; action: NotePrimedAction } | null>(null)
   const noteArmTimerRef = useRef<{ noteId: string; button: 0 | 2; timeoutId: number; quickReleaseAction: ProtectedQuickReleaseAction | null } | null>(null)
@@ -322,6 +325,7 @@ export function useNoteProtectionActions({
 
       if (action === 'deletion' && isCurrentlyDeleted) {
         await window.thockdownNotes.deleteNote({ id: noteId })
+        onNotePermanentlyDeleted?.(noteId)
         await refreshNotes(activeNoteId === noteId ? null : activeNoteId)
 
         if (activeNoteId === noteId) {
@@ -348,7 +352,7 @@ export function useNoteProtectionActions({
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, setActiveNoteText])
+  }, [activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, setActiveNoteText, onNotePermanentlyDeleted])
 
   const applyQuickProtectedRightClickAction = useCallback(async (noteId: string, action: Exclude<ProtectedQuickReleaseAction, null>) => {
     if (!window.thockdownNotes) return
@@ -389,6 +393,7 @@ export function useNoteProtectionActions({
 
     try {
       await window.thockdownNotes.deleteNote({ id: noteId })
+      onNotePermanentlyDeleted?.(noteId)
       setNotes((previous) => previous.filter((note) => note.id !== noteId))
 
       if (activeNoteId === noteId) {
@@ -398,7 +403,7 @@ export function useNoteProtectionActions({
     } catch (error) {
       console.error('Failed to delete external temp note', error)
     }
-  }, [activeNoteId, cancelPendingSave, clearNoteArmTimer, externalNoteOriginalTextByIdRef, externalNoteOriginalHashByIdRef, setCurrentExternalNoteHash, setNotes, setActiveNoteId, setActiveNoteText])
+  }, [activeNoteId, cancelPendingSave, clearNoteArmTimer, externalNoteOriginalTextByIdRef, externalNoteOriginalHashByIdRef, setCurrentExternalNoteHash, setNotes, setActiveNoteId, setActiveNoteText, onNotePermanentlyDeleted])
 
   const handleNoteRightPressStart = useCallback((noteId: string, event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -542,6 +547,7 @@ export function useNoteProtectionActions({
 
       if (isCurrentlyDeleted) {
         await window.thockdownNotes.deleteNote({ id: noteId })
+        onNotePermanentlyDeleted?.(noteId)
       } else {
         await applyProtectedNoteDestination(noteId, 'deleted')
       }
@@ -556,7 +562,7 @@ export function useNoteProtectionActions({
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, setActiveNoteText])
+  }, [activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, setActiveNoteText, onNotePermanentlyDeleted])
 
   const purgeDeletedNotesPermanently = useCallback(async () => {
     if (!window.thockdownNotes) return
@@ -577,6 +583,7 @@ export function useNoteProtectionActions({
 
       for (const noteId of deletedNoteIds) {
         await window.thockdownNotes.deleteNote({ id: noteId })
+        onNotePermanentlyDeleted?.(noteId)
       }
 
       const activeDeleted = activeNoteId ? deletedNoteIds.includes(activeNoteId) : false
@@ -591,7 +598,7 @@ export function useNoteProtectionActions({
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [activeNoteId, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, setActiveNoteText])
+  }, [activeNoteId, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, setActiveNoteText, onNotePermanentlyDeleted])
 
   const handleTrashViewButtonMouseDown = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     if (event.button !== 2) return

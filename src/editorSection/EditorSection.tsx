@@ -393,6 +393,19 @@ export function EditorSection({
     latestEditorTextRef.current || activeNoteText
   ), [activeNoteText, latestEditorTextRef])
 
+  // A permanently-deleted note's id can never be loaded again, so any
+  // per-note-id cache keyed on it (unlike the note-switch caches these
+  // maps/sets otherwise exist for) is pure dead weight from this point on --
+  // evicted here rather than left to accumulate for the rest of the app
+  // session. externalNoteOriginalTextByIdRef/HashByIdRef already self-evict
+  // in closeExternalNoteWithoutSaving; this covers the other permanent-
+  // deletion paths (trash purge, chapter collapse/merge) that don't.
+  const evictPermanentlyDeletedNoteCaches = useCallback((noteId: string) => {
+    editModeSnapshotByNoteIdRef.current.delete(noteId)
+    externalNoteOriginalTextByIdRef.current.delete(noteId)
+    externalNoteOriginalHashByIdRef.current.delete(noteId)
+  }, [editModeSnapshotByNoteIdRef, externalNoteOriginalTextByIdRef, externalNoteOriginalHashByIdRef])
+
   useSnapshotFreeze({
     sectionId,
     activeSectionId,
@@ -755,6 +768,7 @@ export function EditorSection({
     editorSelection,
     applyProgrammaticEditorText,
     flushPendingSaveNow,
+    onNotePermanentlyDeleted: evictPermanentlyDeletedNoteCaches,
   })
 
   // Clicking the chapter bar's parent tab returns to the parent's own
@@ -840,6 +854,7 @@ export function EditorSection({
     externalNoteOriginalTextByIdRef,
     externalNoteOriginalHashByIdRef,
     setCurrentExternalNoteHash,
+    onNotePermanentlyDeleted: evictPermanentlyDeletedNoteCaches,
   })
 
   const activeNoteHasDebugTag = useMemo(() => {

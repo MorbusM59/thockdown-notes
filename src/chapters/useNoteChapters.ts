@@ -19,6 +19,8 @@ export interface UseNoteChaptersOptions {
   applyProgrammaticEditorText: (nextText: string, selectionStart?: number, selectionEnd?: number) => void
   /** Cancels any pending debounced autosave and writes immediately -- awaited after cutting a selection so the cut can't be lost to a crash/reload racing the normal 350ms debounce before the new chapter is created. */
   flushPendingSaveNow: () => Promise<void>
+  /** Called once a chapter note is permanently deleted (collapse/merge always deletes outright -- chapters have no independent trash state) -- lets EditorSection.tsx evict any per-note-id caches that would otherwise hold onto that id forever. */
+  onNotePermanentlyDeleted?: (noteId: string) => void
 }
 
 export interface UseNoteChaptersResult {
@@ -139,6 +141,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     editorSelection,
     applyProgrammaticEditorText,
     flushPendingSaveNow,
+    onNotePermanentlyDeleted,
   } = options
 
   const [chapters, setChapters] = useState<ChapterEntry[]>([])
@@ -271,12 +274,13 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     // state, and its content has already been moved into the destination
     // note above, not destroyed.
     await window.thockdownNotes.deleteNote({ id: currentChapterNoteId })
+    onNotePermanentlyDeleted?.(currentChapterNoteId)
 
     setChapters(updatedChapters)
     await refreshNotes(previousId)
     // Caret at the end of the merged note.
     await activateNote(previousId, mergedText.length)
-  }, [menuIdentityNoteId, activeNoteId, chapters, currentEditorText, refreshNotes, activateNote])
+  }, [menuIdentityNoteId, activeNoteId, chapters, currentEditorText, refreshNotes, activateNote, onNotePermanentlyDeleted])
 
   const handleChapterForwardSplitOrMerge = useCallback(async () => {
     if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId || !activeNoteId) return
@@ -324,10 +328,11 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
 
     const updatedChapters = await window.thockdownChapters.removeChapter(menuIdentityNoteId, nextChapterId)
     await window.thockdownNotes.deleteNote({ id: nextChapterId })
+    onNotePermanentlyDeleted?.(nextChapterId)
 
     setChapters(updatedChapters)
     await refreshNotes()
-  }, [menuIdentityNoteId, activeNoteId, chapters, currentEditorText, editorSelection, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes])
+  }, [menuIdentityNoteId, activeNoteId, chapters, currentEditorText, editorSelection, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, onNotePermanentlyDeleted])
 
   const handleChapterBackwardSplitOrMerge = useCallback(async () => {
     if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId || !activeNoteId) return
@@ -411,10 +416,11 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
 
     const updatedChapters = await window.thockdownChapters.removeChapter(menuIdentityNoteId, previousChapterId)
     await window.thockdownNotes.deleteNote({ id: previousChapterId })
+    onNotePermanentlyDeleted?.(previousChapterId)
 
     setChapters(updatedChapters)
     await refreshNotes()
-  }, [menuIdentityNoteId, activeNoteId, chapters, currentEditorText, editorSelection, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, activateNote])
+  }, [menuIdentityNoteId, activeNoteId, chapters, currentEditorText, editorSelection, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, activateNote, onNotePermanentlyDeleted])
 
   const handleChapterDragStart = useCallback((chapterNoteId: string) => {
     setDraggedChapterNoteId(chapterNoteId)
