@@ -107,6 +107,41 @@ describe('DatabaseService chapters', () => {
     expect(db.getChapterParent('parent-a')).toBe('chapter-2')
   })
 
+  it('promoting a chapter to parent migrates the old parent\'s tags onto it, leaving the old parent (now a chapter) with none', () => {
+    seedNote(db, 'parent-a')
+    seedNote(db, 'chapter-1')
+    seedNote(db, 'chapter-2')
+    db.setNoteChapterOnly('chapter-1', true)
+    db.setNoteChapterOnly('chapter-2', true)
+    db.addChapter('parent-a', 'chapter-1')
+    db.addChapter('parent-a', 'chapter-2')
+
+    db.addTagToNote('parent-a', 'project', 0)
+    db.addTagToNote('parent-a', 'urgent', 1)
+
+    db.promoteChapterToParent('parent-a', 'chapter-1')
+
+    expect(db.getNoteTags('chapter-1')).toEqual(['project', 'urgent'])
+    expect(db.getNoteTags('parent-a')).toEqual([])
+  })
+
+  it('promoting a chapter that already carries a stray tag merges it after the migrated ones instead of losing it', () => {
+    seedNote(db, 'parent-a')
+    seedNote(db, 'chapter-1')
+    db.setNoteChapterOnly('chapter-1', true)
+    db.addChapter('parent-a', 'chapter-1')
+
+    db.addTagToNote('parent-a', 'project', 0)
+    // Chapters aren't supposed to carry tags of their own, but defend
+    // against a leftover/legacy one rather than silently dropping it.
+    db.addTagToNote('chapter-1', 'stray', 0)
+
+    db.promoteChapterToParent('parent-a', 'chapter-1')
+
+    expect(db.getNoteTags('chapter-1')).toEqual(['stray', 'project'])
+    expect(db.getNoteTags('parent-a')).toEqual([])
+  })
+
   it('still rejects a note being a chapter of itself', () => {
     seedNote(db, 'note-a')
     expect(() => db.addChapter('note-a', 'note-a')).toThrow()

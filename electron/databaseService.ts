@@ -1567,6 +1567,23 @@ export class DatabaseService {
       db.prepare('UPDATE notes SET chapterOnly = 0 WHERE id = ?').run(chapterNoteId);
       db.prepare('UPDATE notes SET chapterOnly = 1 WHERE id = ?').run(parentNoteId);
 
+      // Chapters have no tag life of their own -- tags always belong to
+      // whichever note is currently playing the parent role (see
+      // migrateChapterTagsToParent's doc comment). Move the old parent's
+      // tags onto the newly-promoted note so the document keeps appearing
+      // under whatever it was filed/tagged as; merge rather than clobber in
+      // case the promoted note already had a stray tag of its own, then
+      // strip the old parent down to none, matching every other chapter.
+      const oldParentTagRows = db.prepare('SELECT tagId FROM note_tags WHERE noteId = ? ORDER BY position ASC').all(parentNoteId) as Array<{ tagId: number }>;
+      const insertOntoNewParentStmt = db.prepare(`
+        INSERT OR IGNORE INTO note_tags (noteId, tagId, position)
+        VALUES (?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM note_tags WHERE noteId = ?))
+      `);
+      for (const row of oldParentTagRows) {
+        insertOntoNewParentStmt.run(chapterNoteId, row.tagId, chapterNoteId);
+      }
+      db.prepare('DELETE FROM note_tags WHERE noteId = ?').run(parentNoteId);
+
       const insertionRows = [
         { parentNoteId: chapterNoteId, chapterNoteId: parentNoteId, chapterId: null },
         ...remaining.map((row) => ({ parentNoteId: chapterNoteId, chapterNoteId: row.chapterNoteId, chapterId: row.chapterId })),

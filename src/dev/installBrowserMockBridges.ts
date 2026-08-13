@@ -1141,6 +1141,17 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
         parentNote.chapterOnly = true
         parentNote.chapterParentId = chapterNoteId
 
+        // Chapters carry no tags of their own -- move the old parent's tags
+        // onto the newly-promoted note (merged, not clobbered, in case it
+        // already had a stray one of its own) and leave the old parent with
+        // none, matching every other chapter. Mirrors databaseService.ts's
+        // promoteChapterToParent.
+        chapterNote.tags = [
+          ...chapterNote.tags,
+          ...parentNote.tags.filter((tag) => !chapterNote.tags.includes(tag)),
+        ]
+        parentNote.tags = []
+
         const insertionRows = [
           { parentNoteId: chapterNoteId, chapterNoteId: parentNoteId, position: 0, chapterId: null },
           ...remaining.map((row) => ({ parentNoteId: chapterNoteId, chapterNoteId: row.chapterNoteId, position: 0, chapterId: row.chapterId })),

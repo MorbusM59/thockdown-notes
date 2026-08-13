@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { CSSProperties, MutableRefObject, ReactNode, RefObject } from 'react'
+import type { CSSProperties, DragEvent, MutableRefObject, ReactNode, RefObject } from 'react'
 import { CM6Editor } from '../components/CM6Editor'
 import { SnapshotTimelineSlider } from '../editor/SnapshotTimelineSlider'
 import { PresentStateCircle } from '../editor/PresentStateCircle'
@@ -67,8 +67,13 @@ export interface SectionEditorAreaProps {
   chapters: ChapterEntry[]
   onParentTabClick: () => void
   onChapterClick: (chapterNoteId: string) => void
-  onChapterDragStart: (chapterNoteId: string) => void
-  onChapterDrop: (targetIndex: number, draggedChapterNoteId: string) => void
+  onChapterDragStart: (event: DragEvent<HTMLDivElement>, index: number) => void
+  onChapterDragEnd: () => void
+  onChapterDrop: (event: DragEvent<HTMLDivElement>, targetIndex: number) => void
+  onChapterContainerDragOver: (event: DragEvent<HTMLDivElement>) => void
+  onChapterContainerDrop: (event: DragEvent<HTMLDivElement>) => void
+  onChapterPromoteDragOver: (event: DragEvent<HTMLDivElement>) => void
+  onChapterPromoteDrop: (event: DragEvent<HTMLDivElement>) => void
   editingChapterNoteId: string | null
   chapterIdDraft: string
   setChapterIdDraft: (value: string) => void
@@ -152,7 +157,12 @@ export function SectionEditorArea({
   onParentTabClick,
   onChapterClick,
   onChapterDragStart,
+  onChapterDragEnd,
   onChapterDrop,
+  onChapterContainerDragOver,
+  onChapterContainerDrop,
+  onChapterPromoteDragOver,
+  onChapterPromoteDrop,
   editingChapterNoteId,
   chapterIdDraft,
   setChapterIdDraft,
@@ -298,7 +308,12 @@ export function SectionEditorArea({
             onParentTabClick={onParentTabClick}
             onChapterClick={onChapterClick}
             onChapterDragStart={onChapterDragStart}
+            onChapterDragEnd={onChapterDragEnd}
             onChapterDrop={onChapterDrop}
+            onChapterContainerDragOver={onChapterContainerDragOver}
+            onChapterContainerDrop={onChapterContainerDrop}
+            onChapterPromoteDragOver={onChapterPromoteDragOver}
+            onChapterPromoteDrop={onChapterPromoteDrop}
             editingChapterNoteId={editingChapterNoteId}
             chapterIdDraft={chapterIdDraft}
             setChapterIdDraft={setChapterIdDraft}

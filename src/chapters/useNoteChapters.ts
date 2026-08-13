@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { DragEvent } from 'react'
 import type { ChapterEntry } from '../shared/chapters'
 import type { EditorSelectionState } from '../editor/EditorContract'
 import { collapseSurgerySite, trimBlankLines } from './chapterExtraction'
@@ -111,8 +112,24 @@ export interface UseNoteChaptersResult {
    *   (its "previous" is the parent, which can never be merged away).
    */
   handleChapterBackwardSplitOrMerge: () => Promise<void>
-  onChapterDragStart: (chapterNoteId: string) => void
-  onChapterDrop: (targetIndex: number, draggedChapterNoteId: string) => void
+  /**
+   * Chapter-pill drag-to-reorder, matching useSectionTabs.ts's own
+   * tab/tag-pill pattern exactly: the dragged item is tracked by *index*
+   * (`onChapterDragStart`), not by id -- reading the dragged chapter's id
+   * back off the drop target (as an earlier version of this did) is wrong,
+   * since the drop handler only ever sees whichever pill the drop *landed
+   * on*, not which one was picked up.
+   */
+  onChapterDragStart: (event: DragEvent<HTMLDivElement>, index: number) => void
+  onChapterDragEnd: () => void
+  /** Drop directly on another chapter pill -- reorders within the chapters list. */
+  onChapterDrop: (event: DragEvent<HTMLDivElement>, targetIndex: number) => void
+  /** Drop on the bar's own background (past the last pill) -- appends to the end, mirroring useSectionTabs.ts's container-level drop. */
+  onChapterContainerDragOver: (event: DragEvent<HTMLDivElement>) => void
+  onChapterContainerDrop: (event: DragEvent<HTMLDivElement>) => void
+  /** Drop on the parent tab itself -- promotes the dragged chapter to the parent slot (see handleChapterPromoteDrop's own doc comment). */
+  onChapterPromoteDragOver: (event: DragEvent<HTMLDivElement>) => void
+  onChapterPromoteDrop: (event: DragEvent<HTMLDivElement>) => void
   /** Which chapter pill (by chapterNoteId) is mid-inline-edit of its chapterId, if any. */
   editingChapterNoteId: string | null
   chapterIdDraft: string
@@ -145,7 +162,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
   } = options
 
   const [chapters, setChapters] = useState<ChapterEntry[]>([])
-  const [draggedChapterNoteId, setDraggedChapterNoteId] = useState<string | null>(null)
+  const [draggedChapterIndex, setDraggedChapterIndex] = useState<number | null>(null)
 
   useEffect(() => {
     if (!persistenceReady || !window.thockdownChapters || !menuIdentityNoteId) {
@@ -422,38 +439,116 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     await refreshNotes()
   }, [menuIdentityNoteId, activeNoteId, chapters, currentEditorText, editorSelection, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, activateNote, onNotePermanentlyDeleted])
 
-  const handleChapterDragStart = useCallback((chapterNoteId: string) => {
-    setDraggedChapterNoteId(chapterNoteId)
+  // Chapter-pill drag-to-reorder -- deliberately mirrors useSectionTabs.ts's
+  // handleTabDragStart/handleTabDrop/handleTabsContainerDrop pattern exactly
+  // (dragged item tracked by index in state, set on dragstart; drop splices
+  // that index out and back in at the target). An earlier version of this
+  // instead threaded the dragged chapter's id through the drop target's own
+  // event handler (`onChapterDrop(index, chapter.chapterNoteId)`), which
+  // always resolved to the *target* pill's own id, not whatever was actually
+  // picked up -- dropping on another pill silently no-op'd because the
+  // "dragged" id it computed always equaled the target's own id. Tracking by
+  // index in state (this hook already knows `chapters`) sidesteps that
+  // entirely, same as the tab/tag bar never had the bug in the first place.
+  const handleChapterDragStart = useCallback((event: DragEvent<HTMLDivElement>, index: number) => {
+    const chapter = chapters[index]
+    if (!chapter) return
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', chapter.chapterNoteId)
+    setDraggedChapterIndex(index)
+  }, [chapters])
+
+  const handleChapterDragEnd = useCallback(() => {
+    setDraggedChapterIndex(null)
   }, [])
 
-  const handleChapterDrop = useCallback(async (targetIndex: number, draggedChapterNoteIdLocal: string) => {
-    if (!window.thockdownChapters || !menuIdentityNoteId) return
-    const draggedId = draggedChapterNoteIdLocal || draggedChapterNoteId
-    if (!draggedId) return
+  const handleChapterDrop = useCallback(async (event: DragEvent<HTMLDivElement>, targetIndex: number) => {
+    if (draggedChapterIndex === null) return
+    event.preventDefault()
+    event.stopPropagation()
 
-    setDraggedChapterNoteId(null)
-
-    if (targetIndex === 0) {
-      const updatedChapters = await window.thockdownChapters.promoteChapterToParent(menuIdentityNoteId, draggedId)
-      setChapters(updatedChapters)
-      await refreshNotes(draggedId)
-      await activateNote(draggedId)
+    if (draggedChapterIndex === targetIndex || !window.thockdownChapters || !menuIdentityNoteId) {
+      setDraggedChapterIndex(null)
       return
     }
 
     const reordered = [...chapters]
-    const fromIndex = reordered.findIndex((chapter) => chapter.chapterNoteId === draggedId)
-    if (fromIndex < 0) return
-    if (fromIndex === targetIndex || fromIndex === targetIndex - 1) {
-      return
-    }
+    const [moved] = reordered.splice(draggedChapterIndex, 1)
+    setDraggedChapterIndex(null)
+    if (!moved) return
 
-    const [moved] = reordered.splice(fromIndex, 1)
     reordered.splice(targetIndex, 0, moved)
     const orderedChapterNoteIds = reordered.map((chapter) => chapter.chapterNoteId)
     const updatedChapters = await window.thockdownChapters.reorderChapters(menuIdentityNoteId, orderedChapterNoteIds)
     setChapters(updatedChapters)
-  }, [chapters, draggedChapterNoteId, menuIdentityNoteId, refreshNotes, activateNote])
+  }, [draggedChapterIndex, chapters, menuIdentityNoteId])
+
+  // Drop on the bar's own background, past the last pill -- appends to the
+  // end, mirroring useSectionTabs.ts's handleTabsContainerDrop/
+  // handleTagContainerDrop.
+  const handleChapterContainerDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (draggedChapterIndex === null) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'move'
+  }, [draggedChapterIndex])
+
+  const handleChapterContainerDrop = useCallback(async (event: DragEvent<HTMLDivElement>) => {
+    if (draggedChapterIndex === null) return
+    event.preventDefault()
+    event.stopPropagation()
+    if (!window.thockdownChapters || !menuIdentityNoteId) {
+      setDraggedChapterIndex(null)
+      return
+    }
+
+    const reordered = [...chapters]
+    const [moved] = reordered.splice(draggedChapterIndex, 1)
+    setDraggedChapterIndex(null)
+    if (!moved) return
+
+    reordered.push(moved)
+    const orderedChapterNoteIds = reordered.map((chapter) => chapter.chapterNoteId)
+    const updatedChapters = await window.thockdownChapters.reorderChapters(menuIdentityNoteId, orderedChapterNoteIds)
+    setChapters(updatedChapters)
+  }, [draggedChapterIndex, chapters, menuIdentityNoteId])
+
+  // Drop directly on the parent tab -- the one place chapter drag-and-drop
+  // diverges from a plain tab/tag reorder. The dragged chapter becomes the
+  // new parent (promoteChapterToParent handles tag migration -- chapters
+  // carry no tags of their own, see its own doc comment -- and the previous
+  // parent becomes the new first chapter). No explicit activateNote/note
+  // switch afterward: menuIdentityNoteId (EditorSection.tsx) is derived
+  // reactively from the active note's own chapterParentId, so once
+  // refreshNotes() lands the updated chapterOnly/chapterParentId flags, the
+  // bar's own active-pill highlighting and parent-tab identity resolve
+  // themselves on the next render regardless of which note was active when
+  // the drop happened -- forcing a navigation here would just be an
+  // unrequested side effect the tab/tag bar's own reorders never have either.
+  const handleChapterPromoteDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (draggedChapterIndex === null) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'move'
+  }, [draggedChapterIndex])
+
+  const handleChapterPromoteDrop = useCallback(async (event: DragEvent<HTMLDivElement>) => {
+    if (draggedChapterIndex === null) return
+    event.preventDefault()
+    event.stopPropagation()
+    if (!window.thockdownChapters || !menuIdentityNoteId) {
+      setDraggedChapterIndex(null)
+      return
+    }
+
+    const dragged = chapters[draggedChapterIndex]
+    setDraggedChapterIndex(null)
+    if (!dragged) return
+
+    const updatedChapters = await window.thockdownChapters.promoteChapterToParent(menuIdentityNoteId, dragged.chapterNoteId)
+    setChapters(updatedChapters)
+    await refreshNotes(activeNoteId)
+  }, [draggedChapterIndex, chapters, menuIdentityNoteId, refreshNotes, activeNoteId])
 
   const [editingChapterNoteId, setEditingChapterNoteId] = useState<string | null>(null)
   const [chapterIdDraft, setChapterIdDraft] = useState('')
@@ -493,7 +588,12 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     handleChapterForwardSplitOrMerge,
     handleChapterBackwardSplitOrMerge,
     onChapterDragStart: handleChapterDragStart,
+    onChapterDragEnd: handleChapterDragEnd,
     onChapterDrop: handleChapterDrop,
+    onChapterContainerDragOver: handleChapterContainerDragOver,
+    onChapterContainerDrop: handleChapterContainerDrop,
+    onChapterPromoteDragOver: handleChapterPromoteDragOver,
+    onChapterPromoteDrop: handleChapterPromoteDrop,
     editingChapterNoteId,
     chapterIdDraft,
     setChapterIdDraft,

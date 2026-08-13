@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { KeyboardEvent, WheelEvent as ReactWheelEvent } from 'react'
+import type { DragEvent, KeyboardEvent, WheelEvent as ReactWheelEvent } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { ChapterEntry } from '../shared/chapters'
 import { getChapterTabLabel, getParentTabLabel } from '../shared/tabLabels'
@@ -13,8 +13,13 @@ export interface ChapterBarProps {
   /** Switches back to the parent note's own content -- the first tab. */
   onParentTabClick: () => void
   onChapterClick: (chapterNoteId: string) => void
-  onChapterDragStart: (chapterNoteId: string) => void
-  onChapterDrop: (targetIndex: number, draggedChapterNoteId: string) => void
+  onChapterDragStart: (event: DragEvent<HTMLDivElement>, index: number) => void
+  onChapterDragEnd: () => void
+  onChapterDrop: (event: DragEvent<HTMLDivElement>, targetIndex: number) => void
+  onChapterContainerDragOver: (event: DragEvent<HTMLDivElement>) => void
+  onChapterContainerDrop: (event: DragEvent<HTMLDivElement>) => void
+  onChapterPromoteDragOver: (event: DragEvent<HTMLDivElement>) => void
+  onChapterPromoteDrop: (event: DragEvent<HTMLDivElement>) => void
   /** Which chapter pill (by chapterNoteId) is mid-inline-edit of its chapterId, if any. */
   editingChapterNoteId: string | null
   chapterIdDraft: string
@@ -47,10 +52,15 @@ export interface ChapterBarProps {
  * the bottom utility bar's "+" button) clones it into a brand-new last
  * chapter; dropping directly on an existing chapter pill (`.chapter-pill`,
  * matched via its `data-chapter-note-id`) clones it in *front* of that one
- * instead. Chapter pills themselves are also draggable so the user can
- * reorder them within the bar; dragging one to the first slot promotes it to
- * the parent note while retaining the previous parent as the new first
- * chapter.
+ * instead. That's a *different* drag (payload type `NOTE_DRAG_MIME_TYPE`,
+ * claimed in capture phase by EditorSection.tsx's section-wide drop handler
+ * before it ever reaches the handlers below) from the one this component
+ * owns directly: chapter pills are themselves draggable, exactly like
+ * useSectionTabs.ts's tab/tag pills, so the user can reorder them within the
+ * bar by dropping on another pill or on the bar's own background (past the
+ * last one, appends to the end). Dropping one directly on the *parent* tab
+ * instead promotes it to the parent note, demoting the previous parent to
+ * the new first chapter -- see useNoteChapters.ts's handleChapterPromoteDrop.
  */
 export function ChapterBar({
   parentNoteId,
@@ -60,7 +70,12 @@ export function ChapterBar({
   onParentTabClick,
   onChapterClick,
   onChapterDragStart,
+  onChapterDragEnd,
   onChapterDrop,
+  onChapterContainerDragOver,
+  onChapterContainerDrop,
+  onChapterPromoteDragOver,
+  onChapterPromoteDrop,
   editingChapterNoteId,
   chapterIdDraft,
   setChapterIdDraft,
@@ -133,10 +148,14 @@ export function ChapterBar({
             ref={scrollerRef}
             onScroll={updateScrollEdges}
             onWheel={handleWheel}
+            onDragOver={onChapterContainerDragOver}
+            onDrop={onChapterContainerDrop}
           >
             <div
               className={`tag-pill note-tab-pill chapter-parent-pill${isParentActive ? ' active' : ''}`}
               onClick={onParentTabClick}
+              onDragOver={onChapterPromoteDragOver}
+              onDrop={onChapterPromoteDrop}
               data-tooltip={parentNote?.title ?? 'Parent note'}
             >
               <span className="tag-pill-label">{parentLabel}</span>
@@ -168,21 +187,14 @@ export function ChapterBar({
                   className={`tag-pill note-tab-pill chapter-pill${isActive ? ' active' : ''}`}
                   data-chapter-note-id={chapter.chapterNoteId}
                   draggable
-                  onDragStart={(event) => {
-                    event.dataTransfer.effectAllowed = 'move'
-                    event.dataTransfer.setData('text/plain', chapter.chapterNoteId)
-                    onChapterDragStart(chapter.chapterNoteId)
-                  }}
+                  onDragStart={(event) => onChapterDragStart(event, index)}
+                  onDragEnd={onChapterDragEnd}
                   onDragOver={(event) => {
                     event.preventDefault()
                     event.stopPropagation()
                     event.dataTransfer.dropEffect = 'move'
                   }}
-                  onDrop={(event) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    onChapterDrop(index, chapter.chapterNoteId)
-                  }}
+                  onDrop={(event) => onChapterDrop(event, index)}
                   onClick={() => onChapterClick(chapter.chapterNoteId)}
                   onContextMenu={(event) => {
                     event.preventDefault()

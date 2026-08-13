@@ -55,7 +55,8 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'handleNavigateSnapshot' | 'handleBranchOpened' | 'handleBranchError' | 'timelineCurveConstant' | 'setTimelineCurveConstant'
   | 'setTimelineTrackLengthPx' | 'handleCreateManualSnapshot' | 'handleReturnToPresent' | 'handleMergeAdjacentSnapshots'
   | 'scrollbarHostEl' | 'setScrollbarHostEl' | 'notes' | 'menuIdentityNoteId' | 'chapters' | 'onParentTabClick' | 'onCreateChapter' | 'onChapterClick'
-  | 'onChapterDragStart' | 'onChapterDrop' | 'editingChapterNoteId' | 'chapterIdDraft' | 'setChapterIdDraft' | 'onStartEditingChapterId' | 'onCommitChapterIdEdit' | 'onCancelChapterIdEdit'
+  | 'onChapterDragStart' | 'onChapterDragEnd' | 'onChapterDrop' | 'onChapterContainerDragOver' | 'onChapterContainerDrop' | 'onChapterPromoteDragOver' | 'onChapterPromoteDrop'
+  | 'editingChapterNoteId' | 'chapterIdDraft' | 'setChapterIdDraft' | 'onStartEditingChapterId' | 'onCommitChapterIdEdit' | 'onCancelChapterIdEdit'
   | 'onCollapseChapterIntoPrevious' | 'onExtractSelectionToChapter'> {
   sectionId: string
   markSectionActive: (sectionId: string) => void
@@ -751,7 +752,12 @@ export function EditorSection({
     handleChapterForwardSplitOrMerge,
     handleChapterBackwardSplitOrMerge,
     onChapterDragStart,
+    onChapterDragEnd,
     onChapterDrop,
+    onChapterContainerDragOver,
+    onChapterContainerDrop,
+    onChapterPromoteDragOver,
+    onChapterPromoteDrop,
     editingChapterNoteId,
     chapterIdDraft,
     setChapterIdDraft,
@@ -1128,7 +1134,12 @@ export function EditorSection({
     handleChapterForwardSplitOrMerge,
     handleChapterBackwardSplitOrMerge,
     onChapterDragStart,
+    onChapterDragEnd,
     onChapterDrop,
+    onChapterContainerDragOver,
+    onChapterContainerDrop,
+    onChapterPromoteDragOver,
+    onChapterPromoteDrop,
     editingChapterNoteId,
     chapterIdDraft,
     setChapterIdDraft,
@@ -1534,7 +1545,12 @@ export function EditorSection({
         onParentTabClick={handleParentTabClick}
         onChapterClick={handleChapterClick}
         onChapterDragStart={onChapterDragStart}
+        onChapterDragEnd={onChapterDragEnd}
         onChapterDrop={onChapterDrop}
+        onChapterContainerDragOver={onChapterContainerDragOver}
+        onChapterContainerDrop={onChapterContainerDrop}
+        onChapterPromoteDragOver={onChapterPromoteDragOver}
+        onChapterPromoteDrop={onChapterPromoteDrop}
         editingChapterNoteId={editingChapterNoteId}
         chapterIdDraft={chapterIdDraft}
         setChapterIdDraft={setChapterIdDraft}
