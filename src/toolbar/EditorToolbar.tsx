@@ -3,6 +3,8 @@ import type { UseMarkdownFormattingToolbarResult } from '../editorSection/useMar
 
 export interface EditorToolbarProps extends UseMarkdownFormattingToolbarResult {
   isPreviewMode: boolean
+  /** True while the active note is an auto-TOC/auto-Open-Items chapter, which is always shown in render view and can't be switched to edit mode. Disables and relabels the edit/preview toggle instead of leaving it clickable-but-inert. */
+  isForcedPreview: boolean
   activeNoteId: string | null
   toggleRenderViewMode: () => void
   createNote: (initialText?: string) => Promise<void>
@@ -29,6 +31,7 @@ export interface EditorToolbarProps extends UseMarkdownFormattingToolbarResult {
  */
 export function EditorToolbar({
   isPreviewMode,
+  isForcedPreview,
   activeNoteId,
   toggleRenderViewMode,
   createNote,
@@ -72,9 +75,10 @@ export function EditorToolbar({
         <button
           className={`btn-icon ${!isPreviewMode ? 'active' : ''}`}
           type="button"
-          data-tooltip={isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)'}
-          aria-label={isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)'}
+          data-tooltip={isForcedPreview ? 'This chapter is always shown in render view' : (isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)')}
+          aria-label={isForcedPreview ? 'This chapter is always shown in render view' : (isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)')}
           onClick={toggleRenderViewMode}
+          disabled={isForcedPreview}
         >
           <span className="fa-solid fa-pen-to-square" aria-hidden="true" />
         </button>

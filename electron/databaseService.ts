@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
 import { deriveChapterContentSnippet } from '../src/shared/tabLabels';
+import { deriveDefaultAssignedIdBase, normalizeAssignedIdInput } from '../src/shared/assignedIds';
 import { ensureHelpNote } from './help/helpNote';
 import { shouldVacuumForBloat } from './databaseSanitationPolicy';
 import type { TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../src/shared/textures';
@@ -256,24 +257,13 @@ export type EditorSectionEntry = {
 /** The sole section that exists on a fresh install — also where sidebar note clicks always land. */
 export const DEFAULT_EDITOR_SECTION_ID = 'default';
 
-const NOTE_INTERNAL_ID_MAX_LEN = 8;
-
-/**
- * Normalizes user- or title-derived text into the tab-bar ID alphabet:
- * upper-cased, whitespace collapsed to single hyphens, anything else left
- * as-is (so punctuation the user deliberately typed survives).
- */
-export function normalizeAssignedIdInput(raw: string): string {
-  return raw.trim().toUpperCase().replace(/\s+/g, '-');
-}
-
-/** First 8 characters of the normalized title, trimmed of a trailing hyphen. */
-export function deriveDefaultAssignedIdBase(title: string): string {
-  const normalized = normalizeAssignedIdInput(title || 'NOTE');
-  const truncated = normalized.slice(0, NOTE_INTERNAL_ID_MAX_LEN);
-  const trimmed = truncated.replace(/-+$/, '');
-  return trimmed.length > 0 ? trimmed : 'NOTE';
-}
+// normalizeAssignedIdInput/deriveDefaultAssignedIdBase moved to
+// ../src/shared/assignedIds.ts (framework-free, so the renderer can reproduce
+// the same id derivation without an IPC round trip -- see
+// tabLabels.ts's resolveChapterLinkIds) -- re-exported here since every
+// existing call site in this file (and its own test suite) still imports
+// them from databaseService.ts.
+export { deriveDefaultAssignedIdBase, normalizeAssignedIdInput };
 
 export type ExternalSyncState = {
   isExternal: boolean;
@@ -1693,13 +1683,23 @@ export class DatabaseService {
   promoteChapterToParent(parentNoteId: string, chapterNoteId: string): ChapterEntry[] {
     const db = this.requireDb();
     const tx = db.transaction(() => {
-      const chapterRows = db.prepare('SELECT position, chapterNoteId, chapterId FROM chapters WHERE parentNoteId = ? ORDER BY position ASC').all(parentNoteId) as Array<{ position: number; chapterNoteId: string; chapterId: string | null }>;
+      const chapterRows = db.prepare(`
+        SELECT c.position, c.chapterNoteId, c.chapterId, n.isAutoToc, n.isAutoOpenItems
+        FROM chapters c
+        JOIN notes n ON n.id = c.chapterNoteId
+        WHERE c.parentNoteId = ?
+        ORDER BY c.position ASC
+      `).all(parentNoteId) as Array<{ position: number; chapterNoteId: string; chapterId: string | null; isAutoToc: number; isAutoOpenItems: number }>;
       const dragged = chapterRows.find((row) => row.chapterNoteId === chapterNoteId);
       if (!dragged) {
         throw new Error(`Chapter ${chapterNoteId} is not a chapter of ${parentNoteId}`);
       }
 
       const remaining = chapterRows.filter((row) => row.chapterNoteId !== chapterNoteId);
+      // Auto-TOC/auto-Open-Items stay pinned first (same invariant pinChapterToFront/
+      // pinChapterAfterAutoToc establish elsewhere), ahead of the demoted old parent.
+      const autoChapters = remaining.filter((row) => row.isAutoToc || row.isAutoOpenItems);
+      const realChapters = remaining.filter((row) => !row.isAutoToc && !row.isAutoOpenItems);
       db.prepare('DELETE FROM chapters WHERE parentNoteId = ?').run(parentNoteId);
 
       db.prepare('UPDATE notes SET chapterOnly = 0 WHERE id = ?').run(chapterNoteId);
@@ -1742,8 +1742,9 @@ export class DatabaseService {
       }
 
       const insertionRows = [
+        ...autoChapters.map((row) => ({ parentNoteId: chapterNoteId, chapterNoteId: row.chapterNoteId, chapterId: row.chapterId })),
         { parentNoteId: chapterNoteId, chapterNoteId: parentNoteId, chapterId: null },
-        ...remaining.map((row) => ({ parentNoteId: chapterNoteId, chapterNoteId: row.chapterNoteId, chapterId: row.chapterId })),
+        ...realChapters.map((row) => ({ parentNoteId: chapterNoteId, chapterNoteId: row.chapterNoteId, chapterId: row.chapterId })),
       ];
 
       insertionRows.forEach((row, index) => {

@@ -8235,6 +8235,7 @@ ${markdownHtml}
 
             <EditorToolbar
               isPreviewMode={activeSection?.isPreviewMode ?? false}
+              isForcedPreview={activeSection?.isForcedPreviewNote ?? false}
               activeNoteId={activeSection?.activeNoteId ?? null}
               toggleRenderViewMode={activeSection?.isForcedPreviewNote ? noopAsync : (activeSection?.toggleRenderViewMode ?? noopAsync)}
               createNote={createNote}

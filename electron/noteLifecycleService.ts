@@ -20,7 +20,8 @@ import type {
 } from '../src/shared/noteLifecycle';
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
 import { normalizeChapterHeadings } from '../src/shared/markdownHeadings';
-import { anchorizeHeadings, headingsChanged } from '../src/shared/tableOfContentsText';
+import { computeHeadingAnchors, formatHeadingAnchorFragment, headingsChanged } from '../src/shared/tableOfContentsText';
+import { resolveChapterLinkIds } from '../src/shared/tabLabels';
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, parseOpenItemsGroups } from '../src/shared/openItemsText';
 import type { ChapterEntry, DatabaseService, NoteRecord } from './databaseService';
 
@@ -382,27 +383,30 @@ export class NoteLifecycleService {
   // parent and every real chapter -- called right before the auto-TOC
   // chapter is actually displayed (EditorSection.tsx's activateNote), so
   // it's always accurate the moment it's looked at without ever being
-  // eagerly kept in sync in the background. Two things happen:
+  // eagerly kept in sync in the background.
   //
-  // 1. Every heading in the parent and each chapter gets anchor-linkified
-  //    (anchorizeHeadings, shared with the single-note TOC button) so the
-  //    generated links below have something to actually land on --
-  //    `$noteId#anchor-id` navigation requires a literal `[Label](#id)`
-  //    definition already sitting in the target note (see
-  //    PreviewMarkdown.tsx's own doc comment on internal links), it isn't
-  //    resolved from raw heading text on the fly. Idempotent: a note whose
-  //    headings are already anchored reproduces the same text, so it's only
-  //    ever actually re-saved when something changed since the last
-  //    regeneration -- the common case (nothing changed since the last
-  //    visit) costs a read per note, not a write.
-  // 2. The master index is rebuilt: the parent's own headings under a link
-  //    to the parent itself (`$parentAssignedId`), then each chapter's own
-  //    headings under a link to that chapter (`$parentAssignedId§chapterId`).
-  //    Chapters without a user-assigned chapterId get a live, unpersisted
-  //    content-snippet stand-in (getChapterLinkId) so the index can still
-  //    link somewhere -- unlike a note's own assignedId, this is never
-  //    written back; only the user explicitly assigning one (setChapterId)
-  //    ever does.
+  // The master index is rebuilt: the parent's own headings under a link to
+  // the parent itself (`$parentAssignedId`), then each chapter's own
+  // headings under a link to that chapter (`$parentAssignedId§chapterId`).
+  // Chapters without a user-assigned chapterId get a live, unpersisted
+  // content-snippet stand-in (resolveChapterLinkIds) so the index can still
+  // link somewhere -- unlike a note's own assignedId, this is never written
+  // back; only the user explicitly assigning one (setChapterId) ever does.
+  // The renderer's own link-click resolution (navigateToInternalPreviewLink)
+  // calls the exact same resolveChapterLinkIds to turn a `§chapterId`
+  // segment back into a chapterNoteId, so a stand-in id the TOC displays is
+  // always exactly the id clicking it resolves through -- see that
+  // function's own doc comment for why this has to be one shared function,
+  // not two independently-reasoned-about copies.
+  //
+  // Heading anchor ids are computed on the fly (computeHeadingAnchors) and
+  // wrapped in a `heading:` fragment (formatHeadingAnchorFragment) --
+  // deliberately NOT anchorizeHeadings, which would rewrite the parent's and
+  // every chapter's own heading source just because a second chapter came
+  // into existence. Neither the parent nor any chapter is ever read back
+  // through saveNote here; only the TOC chapter's own content changes. See
+  // computeHeadingAnchors's doc comment for the full split from the manual
+  // (visible, opt-in) anchor mechanism.
   async regenerateAutoTocChapter(parentNoteId: string): Promise<{ chapters: ChapterEntry[]; created: NoteDocument }> {
     const tocChapterNoteId = this.databaseService.getAutoTocChapterNoteId(parentNoteId);
     if (!tocChapterNoteId) {
@@ -416,39 +420,36 @@ export class NoteLifecycleService {
     const parentAssignedId = this.databaseService.ensureNoteAssignedId(parentNoteId, parentRecord.title);
 
     const parentDoc = await this.loadNote({ id: parentNoteId });
-    const anchoredParent = anchorizeHeadings(parentDoc.text);
-    if (anchoredParent.text !== parentDoc.text) {
-      await this.saveNote({ id: parentNoteId, text: anchoredParent.text }, { skipAutoChapterHooks: true });
-    }
+    const parentHeadings = computeHeadingAnchors(parentDoc.text);
 
     const lines = ['# Table of Contents', '', `- [${parentRecord.title || 'Untitled'}]($${parentAssignedId})`];
-    for (const heading of anchoredParent.headings) {
-      lines.push(`  - [${heading.label}]($${parentAssignedId}#${heading.anchorId})`);
+    for (const heading of parentHeadings) {
+      lines.push(`  - [${heading.label}]($${parentAssignedId}#${formatHeadingAnchorFragment(heading.anchorId)})`);
     }
 
     const chapterRows = this.getRealChapterRows(parentNoteId);
+    const chapterDocs = await Promise.all(chapterRows.map((row) => this.loadNote({ id: row.chapterNoteId })));
+    const chapterDocsById = new Map(chapterDocs.map((doc) => [doc.id, doc]));
 
-    // getChapterLinkId's own dedup only ever checks PERSISTED chapterIds
-    // (it never writes one for an unassigned chapter -- see its doc
-    // comment), so two unassigned siblings whose content happens to derive
-    // the same snippet-based id would otherwise collide within this one
-    // pass, silently pointing two different `§chapterId` links at the same
-    // target. Tracked locally, never persisted, same as the ids themselves.
-    const linkIdsUsedThisPass = new Set<string>();
+    // resolveChapterLinkIds is the single source of truth for what a
+    // chapter's own `§chapterId` link resolves to -- same function the
+    // renderer's navigateToInternalPreviewLink uses to resolve a click back
+    // to a chapterNoteId, so a chapter's TOC label and what clicking it
+    // actually lands on can never drift apart.
+    const chapterLinkIds = resolveChapterLinkIds(chapterRows.map((row) => ({
+      chapterNoteId: row.chapterNoteId,
+      chapterId: row.chapterId,
+      contentText: chapterDocsById.get(row.chapterNoteId)?.text ?? '',
+    })));
+
     for (const row of chapterRows) {
-      const chapterDoc = await this.loadNote({ id: row.chapterNoteId });
-      const anchoredChapter = anchorizeHeadings(chapterDoc.text);
-      if (anchoredChapter.text !== chapterDoc.text) {
-        await this.saveNote({ id: row.chapterNoteId, text: anchoredChapter.text }, { skipAutoChapterHooks: true });
-      }
+      const chapterDoc = chapterDocsById.get(row.chapterNoteId)!;
+      const chapterHeadings = computeHeadingAnchors(chapterDoc.text);
+      const chapterId = chapterLinkIds.get(row.chapterNoteId)!;
 
-      const chapterId = this.resolveUnusedLinkIdThisPass(
-        this.databaseService.getChapterLinkId(parentNoteId, row.chapterNoteId, chapterDoc.text),
-        linkIdsUsedThisPass,
-      );
       lines.push(`- [${chapterId}]($${parentAssignedId}§${chapterId})`);
-      for (const heading of anchoredChapter.headings) {
-        lines.push(`  - [${heading.label}]($${parentAssignedId}§${chapterId}#${heading.anchorId})`);
+      for (const heading of chapterHeadings) {
+        lines.push(`  - [${heading.label}]($${parentAssignedId}§${chapterId}#${formatHeadingAnchorFragment(heading.anchorId)})`);
       }
     }
 
@@ -463,16 +464,26 @@ export class NoteLifecycleService {
     return { chapters, created };
   }
 
-  /** Suffixes `candidateId` with `-2`, `-3`, ... until it's not already in `usedThisPass`, then records whichever id it settles on -- see regenerateAutoTocChapter's own comment on why this local, never-persisted dedup is needed on top of getChapterLinkId's own (DB-only) one. */
-  private resolveUnusedLinkIdThisPass(candidateId: string, usedThisPass: Set<string>): string {
-    let resolved = candidateId;
-    let attempt = 2;
-    while (usedThisPass.has(resolved)) {
-      resolved = `${candidateId}-${attempt}`;
-      attempt += 1;
-    }
-    usedThisPass.add(resolved);
-    return resolved;
+  // Resolves one chapter's own `§chapterId` link id via resolveChapterLinkIds
+  // -- used by regenerateOpenItemsGroup, which (unlike regenerateAutoTocChapter)
+  // only ever touches one changed chapter per call, not the whole family.
+  // Fast path when it's already explicitly assigned (no other chapter's data
+  // needed at all); falls back to a full family resolution -- exactly the
+  // same pass regenerateAutoTocChapter runs -- only when unassigned, so its
+  // live stand-in id is deduped against every sibling the same way, and an
+  // Open Items group link never resolves to a different chapter than the
+  // TOC's own entry for it would.
+  private async resolveChapterLinkIdForNote(parentNoteId: string, chapterNoteId: string, chapterContentText: string): Promise<string> {
+    const chapterRows = this.getRealChapterRows(parentNoteId);
+    const ownRow = chapterRows.find((row) => row.chapterNoteId === chapterNoteId);
+    if (ownRow?.chapterId) return ownRow.chapterId;
+
+    const inputs = await Promise.all(chapterRows.map(async (row) => ({
+      chapterNoteId: row.chapterNoteId,
+      chapterId: row.chapterId,
+      contentText: row.chapterNoteId === chapterNoteId ? chapterContentText : (await this.loadNote({ id: row.chapterNoteId })).text,
+    })));
+    return resolveChapterLinkIds(inputs).get(chapterNoteId)!;
   }
 
   // The single canonical source of "real" chapters for parentNoteId --
@@ -536,9 +547,10 @@ export class NoteLifecycleService {
   // own doc comment for exactly what does and doesn't count). Every other
   // note's already-correct group markdown is left untouched, which is what
   // makes this an incremental patch rather than a rescan of the whole
-  // chapter family: costs one read/write on the changed note (to anchor its
-  // headings, same as the auto-TOC chapter already does) and one read/write
-  // on the auto-Open-Items chapter itself.
+  // chapter family: costs one read on the changed note (buildOpenItemsGroupMarkdown
+  // derives its heading anchors on the fly, same as the auto-TOC chapter --
+  // the changed note's own content is never written back just to build this
+  // group) and one read/write on the auto-Open-Items chapter itself.
   //
   // Requires the auto-TOC chapter to already exist -- same "at least one
   // real chapter" precondition regenerateAutoTocChapter has, and TOC is
@@ -551,11 +563,6 @@ export class NoteLifecycleService {
     if (!this.databaseService.getAutoTocChapterNoteId(parentNoteId)) return;
 
     const changedDoc = await this.loadNote({ id: changedNoteId });
-    const anchored = anchorizeHeadings(changedDoc.text);
-    const changedText = anchored.text;
-    if (changedText !== changedDoc.text) {
-      await this.saveNote({ id: changedNoteId, text: changedText });
-    }
 
     let linkPrefix: string;
     // The parent has a real title (its own single-# first line); a chapter
@@ -570,12 +577,12 @@ export class NoteLifecycleService {
       const parentRecord = this.databaseService.getNoteRecord(parentNoteId);
       if (!parentRecord) return;
       const parentAssignedId = this.databaseService.ensureNoteAssignedId(parentNoteId, parentRecord.title);
-      const chapterId = this.databaseService.getChapterLinkId(parentNoteId, changedNoteId, changedDoc.text);
+      const chapterId = await this.resolveChapterLinkIdForNote(parentNoteId, changedNoteId, changedDoc.text);
       linkPrefix = `$${parentAssignedId}§${chapterId}`;
       groupLabel = chapterId;
     }
 
-    const newGroupMarkdown = buildOpenItemsGroupMarkdown(changedText, linkPrefix, groupLabel);
+    const newGroupMarkdown = buildOpenItemsGroupMarkdown(changedDoc.text, linkPrefix, groupLabel);
 
     let openItemsChapterNoteId = this.databaseService.getAutoOpenItemsChapterNoteId(parentNoteId);
 
@@ -712,14 +719,18 @@ export class NoteLifecycleService {
   }
 
   // `skipAutoChapterHooks` is internal-only (not part of the public
-  // SaveNoteInput IPC type) -- set by regenerateAutoTocChapter's own
-  // internal saveNote calls so persisting freshly-anchored heading text
-  // doesn't re-trigger the very heading-diff regen this save is already
-  // part of. Without it, anchorizing rewrites heading text, so the
-  // heading-diff block below would see a "change" and call
-  // regenerateAutoTocChapter again -- self-limiting via anchorizeHeadings'
-  // idempotency (the second pass reproduces identical text, so nothing
-  // saves and the recursion stops there), but wastefully.
+  // SaveNoteInput IPC type) -- set by regenerateAutoTocChapter's own save of
+  // the TOC chapter's own freshly-rebuilt text, belt-and-suspenders on top
+  // of the `isAutoChapter` gate a few lines below (which already excludes
+  // auto-chapters from the checklist-diff/heading-diff hooks entirely, since
+  // an auto-chapter's own content is generated output, not something a
+  // regeneration pass should ever react to as if the user had edited it).
+  // Neither hook ever mutates the parent's or a real chapter's own content
+  // any more -- both auto-TOC and auto-Open-Items generation compute their
+  // heading anchors on the fly (computeHeadingAnchors) instead of rewriting
+  // heading source the way the old anchorizeHeadings-based approach did, so
+  // there's no longer a write-triggers-another-write recursion risk here to
+  // guard against on that side either.
   async saveNote(input: SaveNoteInput, options?: { skipAutoChapterHooks?: boolean }): Promise<NoteSummary> {
     const record = this.databaseService.getNoteRecord(input.id);
     const filePath = record?.filePath ?? path.join(this.notesDir, idToFileName(input.id));

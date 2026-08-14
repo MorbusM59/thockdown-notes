@@ -4,6 +4,7 @@
 // to reason about the same format. Framework-free, mirrors
 // tableOfContentsText.ts's own "no DOM/React/Node dependency" discipline.
 import { normalizeInternalText } from '../editor/TextPolicy'
+import { computeHeadingAnchors, formatHeadingAnchorFragment } from './tableOfContentsText'
 
 const CHECKLIST_LINE_RE = /^\s*(?:>\s*)*[-*+]\s+\[([ xX])\]\s+(.*)$/
 
@@ -52,36 +53,41 @@ export interface OpenItemsHeadingBucket {
 }
 
 /**
- * Walks `anchoredText` (already run through tableOfContentsText.ts's
- * anchorizeHeadings, so every heading is `[Label](#id)`-wrapped) and groups
- * every *unchecked* checklist item under whichever heading most recently
- * preceded it. Buckets with zero items are dropped -- this is the "skip
- * branches without unchecked checkboxes" pruning the Open Items chapter is
- * built around.
+ * Walks `sourceText` -- the note's own, untouched content, heading source
+ * exactly as the user typed it -- and groups every *unchecked* checklist
+ * item under whichever heading most recently preceded it. Buckets with zero
+ * items are dropped -- this is the "skip branches without unchecked
+ * checkboxes" pruning the Open Items chapter is built around.
+ *
+ * Heading anchor ids are derived on the fly via `computeHeadingAnchors`
+ * (the same automatic, non-mutating mechanism the auto-TOC chapter uses),
+ * never by expecting the text to already be anchor-linkified -- a note's
+ * own headings are never rewritten just because this ran.
  */
-export function collectUncheckedItemsByHeading(anchoredText: string): OpenItemsHeadingBucket[] {
-  const lines = normalizeInternalText(anchoredText).split('\n')
+export function collectUncheckedItemsByHeading(sourceText: string): OpenItemsHeadingBucket[] {
+  const lines = normalizeInternalText(sourceText).split('\n')
+  const headingAnchorsByLine = new Map(computeHeadingAnchors(sourceText).map((heading) => [heading.lineIndex, heading]))
   const buckets: OpenItemsHeadingBucket[] = [{ anchorId: null, label: null, items: [] }]
   let inFence = false
 
-  for (const line of lines) {
+  lines.forEach((line, index) => {
     if (/^\s{0,3}(?:`{3,}|~{3,})/.test(line)) {
       inFence = !inFence
-      continue
+      return
     }
-    if (inFence) continue
+    if (inFence) return
 
-    const headingMatch = /^#{1,6}\s+\[([^\]]+)\]\(#([^)]+)\)\s*$/.exec(line.trim())
-    if (headingMatch) {
-      buckets.push({ anchorId: headingMatch[2], label: headingMatch[1], items: [] })
-      continue
+    const heading = headingAnchorsByLine.get(index)
+    if (heading) {
+      buckets.push({ anchorId: heading.anchorId, label: heading.label, items: [] })
+      return
     }
 
     const checklistMatch = CHECKLIST_LINE_RE.exec(line)
     if (checklistMatch && checklistMatch[1].toLowerCase() !== 'x') {
       buckets[buckets.length - 1].items.push(checklistMatch[2].trim())
     }
-  }
+  })
 
   return buckets.filter((bucket) => bucket.items.length > 0)
 }
@@ -90,21 +96,21 @@ export function collectUncheckedItemsByHeading(anchoredText: string): OpenItemsH
  * Builds one note's own Open Items group -- a top-level link to the note
  * itself (`linkPrefix`, e.g. `$BOOK` for the parent or `$BOOK§ch1` for a
  * chapter), with unchecked items nested under whichever of its headings
- * they belong to (reusing that heading's own existing anchor link, never
- * minting a new one), or directly under the top-level link if they appear
- * before any heading. Returns null when this note has no unchecked items at
- * all -- the caller drops the group entirely rather than showing an empty
- * entry, matching the TOC-style "skip branches with nothing in them" rule
- * this whole chapter is built around.
+ * they belong to (linking to that heading's own on-the-fly anchor id, never
+ * writing one into the note itself), or directly under the top-level link if
+ * they appear before any heading. Returns null when this note has no
+ * unchecked items at all -- the caller drops the group entirely rather than
+ * showing an empty entry, matching the TOC-style "skip branches with
+ * nothing in them" rule this whole chapter is built around.
  */
-export function buildOpenItemsGroupMarkdown(anchoredText: string, linkPrefix: string, titleLabel: string): string | null {
-  const buckets = collectUncheckedItemsByHeading(anchoredText)
+export function buildOpenItemsGroupMarkdown(sourceText: string, linkPrefix: string, titleLabel: string): string | null {
+  const buckets = collectUncheckedItemsByHeading(sourceText)
   if (buckets.length === 0) return null
 
   const lines = [`- [${titleLabel || 'Untitled'}](${linkPrefix})`]
   for (const bucket of buckets) {
     if (bucket.anchorId !== null && bucket.label !== null) {
-      lines.push(`  - [${bucket.label}](${linkPrefix}#${bucket.anchorId})`)
+      lines.push(`  - [${bucket.label}](${linkPrefix}#${formatHeadingAnchorFragment(bucket.anchorId)})`)
       for (const item of bucket.items) lines.push(`    - [ ] ${item}`)
     } else {
       for (const item of bucket.items) lines.push(`  - [ ] ${item}`)

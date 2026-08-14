@@ -107,6 +107,34 @@ describe('DatabaseService chapters', () => {
     expect(db.getChapterParent('parent-a')).toBe('chapter-2')
   })
 
+  it('promoting a chapter to parent keeps the auto-TOC/auto-Open-Items chapters pinned ahead of the demoted old parent', () => {
+    seedNote(db, 'parent-a')
+    seedNote(db, 'toc-chapter')
+    seedNote(db, 'open-items-chapter')
+    seedNote(db, 'chapter-1')
+    seedNote(db, 'chapter-2')
+    db.setNoteChapterOnly('chapter-1', true)
+    db.setNoteChapterOnly('chapter-2', true)
+    db.setNoteChapterOnly('toc-chapter', true)
+    db.setNoteChapterOnly('open-items-chapter', true)
+    db.setNoteAutoToc('toc-chapter', true)
+    db.setNoteAutoOpenItems('open-items-chapter', true)
+
+    db.addChapter('parent-a', 'toc-chapter')
+    db.addChapter('parent-a', 'open-items-chapter')
+    db.addChapter('parent-a', 'chapter-1')
+    db.addChapter('parent-a', 'chapter-2')
+
+    db.promoteChapterToParent('parent-a', 'chapter-1')
+
+    expect(db.listChaptersForNote('chapter-1').map((chapter) => chapter.chapterNoteId)).toEqual([
+      'toc-chapter',
+      'open-items-chapter',
+      'parent-a',
+      'chapter-2',
+    ])
+  })
+
   it('promoting a chapter to parent migrates the old parent\'s tags onto it, leaving the old parent (now a chapter) with none', () => {
     seedNote(db, 'parent-a')
     seedNote(db, 'chapter-1')

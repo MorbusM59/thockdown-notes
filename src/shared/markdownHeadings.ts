@@ -118,8 +118,15 @@ export interface HeadingLevelEdit {
  * synthesizes a heading where none exists and never touches a heading that
  * already satisfies the rule (a `####` stays `####`) -- it's meant to run on
  * every edit, so it must be a no-op on already-valid text.
+ *
+ * `skipLineIndex` (0-based) exempts one line from correction even if it
+ * currently violates the invariant -- the caller uses this for whichever
+ * line the caret is still actively editing, so backspacing a heading marker
+ * down through the minimum level (or all the way to plain text) isn't fought
+ * mid-edit; the exempted line is corrected normally as soon as the caret
+ * moves elsewhere.
  */
-export function clampChapterHeadlineLevels(text: string): { text: string; edits: HeadingLevelEdit[] } {
+export function clampChapterHeadlineLevels(text: string, skipLineIndex: number | null = null): { text: string; edits: HeadingLevelEdit[] } {
   const lines = text.split('\n')
   let inFence = false
   let offset = 0
@@ -134,6 +141,7 @@ export function clampChapterHeadlineLevels(text: string): { text: string; edits:
       return line
     }
     if (inFence) return line
+    if (index === skipLineIndex) return line
     if (!ATX_HEADING_LINE.test(line)) return line
 
     const oldLevel = line.match(/^#+/)?.[0].length ?? 0

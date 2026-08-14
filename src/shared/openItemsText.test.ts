@@ -52,22 +52,22 @@ describe('checklistStateChanged', () => {
 })
 
 describe('collectUncheckedItemsByHeading', () => {
-  it('attributes each unchecked item to the nearest preceding anchored heading, dropping checked items and empty buckets', () => {
+  it('attributes each unchecked item to the nearest preceding heading (plain, never-anchored source), dropping checked items and empty buckets', () => {
     const text = [
       '# Title',
       '',
       '- [ ] before any heading',
       '',
-      '## [Setting](#setting)',
+      '## Setting',
       '',
       '- [x] already done, skipped',
       '- [ ] world-building task',
       '',
-      '## [Empty Section](#empty-section)',
+      '## Empty Section',
       '',
       'Nothing to do here.',
       '',
-      '## [Plot](#plot)',
+      '## Plot',
       '',
       '- [ ] resolve the ending',
       '- [ ] fix the middle',
@@ -81,8 +81,15 @@ describe('collectUncheckedItemsByHeading', () => {
     ])
   })
 
+  it('tolerates already-anchored headings (e.g. from the manual single-note TOC toggle) with the same result', () => {
+    const text = '# Title\n\n## [Setting](#setting)\n\n- [ ] world-building task'
+    expect(collectUncheckedItemsByHeading(text)).toEqual([
+      { anchorId: 'setting', label: 'Setting', items: ['world-building task'] },
+    ])
+  })
+
   it('returns an empty array when there are no unchecked items anywhere', () => {
-    const text = '# Title\n\n## [Setting](#setting)\n\n- [x] done'
+    const text = '# Title\n\n## Setting\n\n- [x] done'
     expect(collectUncheckedItemsByHeading(text)).toEqual([])
   })
 
@@ -95,12 +102,12 @@ describe('collectUncheckedItemsByHeading', () => {
 })
 
 describe('buildOpenItemsGroupMarkdown', () => {
-  it('builds a title link plus nested heading links and plain item text, never minting new anchors', () => {
-    const text = '# Chapter One\n\n## [Setting](#setting)\n\n- [ ] world-building task'
+  it('builds a title link plus nested heading links (heading-anchor fragments) and plain item text, without touching the note\'s own heading source', () => {
+    const text = '# Chapter One\n\n## Setting\n\n- [ ] world-building task'
     const markdown = buildOpenItemsGroupMarkdown(text, '$BOOK§ch1', 'Chapter One')
     expect(markdown).toBe([
       '- [Chapter One]($BOOK§ch1)',
-      '  - [Setting]($BOOK§ch1#setting)',
+      '  - [Setting]($BOOK§ch1#heading:setting)',
       '    - [ ] world-building task',
     ].join('\n'))
   })

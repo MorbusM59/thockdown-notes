@@ -144,13 +144,18 @@
    indistinguishable text — the only feedback is a brief highlight fade
    when scrolled to. */
 .markdown-preview .note-anchor-marker {
-  cursor:        default;
-  border-radius: var(--border-radius-small);
-  transition:    background-color 0.8s ease;
+  cursor: default;
 }
 
+/* Shared scroll-target flash -- toggled onto a `.note-anchor-marker` span
+   (manual anchors) or directly onto a heading element (automatic,
+   on-the-fly heading anchors -- see scrollToHeadingAnchorInPreview), so the
+   transition/radius live on the flash class itself rather than a base class
+   only spans have. */
 .markdown-preview .note-anchor-marker-flash {
   background-color: var(--search-hit-color, rgba(255, 221, 105, 0.55));
+  border-radius:    var(--border-radius-small);
+  transition:        background-color 0.8s ease;
 }
 
 /* 11b. Markdown typography */

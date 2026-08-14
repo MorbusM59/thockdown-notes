@@ -19,6 +19,9 @@ import {
   createPreviewSourceAnchorRehypePlugin,
   PREVIEW_MARKDOWN_REMARK_PLUGINS,
 } from '../editor/PreviewMarkdown'
+import { findHeadingAnchorLine, parseHeadingAnchorFragment } from '../shared/tableOfContentsText'
+import { splitChapterFamily } from '../shared/chapters'
+import { resolveChapterLinkIds } from '../shared/tabLabels'
 import { splitMarkdownIntoPreviewBlocksIncremental, type PreviewBlockSplitCache } from '../editor/PreviewBlockSplit'
 import { resolvePreviewBlockIndexForSourceLine } from '../editor/PreviewBlockIndex'
 import { scrollToNonQuantizedSmooth } from '../editor/NonQuantizedSmoothScroll'
@@ -283,19 +286,22 @@ export function usePreviewMarkdownRendering({
     previewScrollToSourceLineRef.current = scrollPreviewToSourceLine
   }, [previewScrollToSourceLineRef, scrollPreviewToSourceLine])
 
-  // Scrolls the currently rendered preview to a `[Anchor Text](#anchor-id)`
-  // definition, if present. `waitForNoteSwitch` retries across a few
-  // animation frames since switching notes re-renders ReactMarkdown
-  // asynchronously -- the target span may not exist in the DOM yet on the
-  // frame this fires. `sourceLine` (from findAnchorDefinitionLine at the
-  // call site below), when known, is used to virtualizer-scroll to the
-  // anchor's own block *before* the DOM query -- without this, a `$anchor`
-  // link into a block outside the currently-mounted window would silently
-  // find nothing, since every block used to always be real DOM.
-  const scrollToAnchorInPreview = useCallback((anchorId: string, sourceLine: number | null, waitForNoteSwitch: boolean) => {
+  // Scrolls the currently rendered preview to a specific rendered element
+  // (resolved lazily by `findTargetElement`, re-tried across animation
+  // frames since switching notes re-renders ReactMarkdown asynchronously --
+  // the target may not exist in the DOM yet on the frame this fires) and
+  // flashes it. `sourceLine`, when known, is used to virtualizer-scroll to
+  // the target's own block *before* the DOM query -- without this, a jump
+  // into a block outside the currently-mounted window would silently find
+  // nothing, since every block used to always be real DOM. Shared by both of
+  // the app's two independent anchor mechanisms -- a manual
+  // `[Anchor Text](#id)` definition (an inert `.note-anchor-marker` span)
+  // and an automatic, on-the-fly heading anchor (the heading element itself,
+  // via `data-source-line-start`) -- see scrollToAnchorInPreview/
+  // scrollToHeadingAnchorInPreview below.
+  const scrollToRenderedElement = useCallback((findTargetElement: () => HTMLElement | null, sourceLine: number | null, waitForNoteSwitch: boolean) => {
     const attemptScroll = (attemptsLeft: number) => {
-      const candidates = Array.from(document.querySelectorAll<HTMLElement>('.note-anchor-marker'))
-      const target = candidates.find((el) => el.dataset.anchorId === anchorId)
+      const target = findTargetElement()
 
       if (target) {
         // Instant, not smooth -- the virtualizer scroll below already did
@@ -328,22 +334,68 @@ export function usePreviewMarkdownRendering({
     }
   }, [virtualizer])
 
+  // Scrolls to a manual `[Anchor Text](#anchor-id)` definition, rendered as
+  // an inert `.note-anchor-marker` span carrying the id verbatim.
+  const scrollToAnchorInPreview = useCallback((anchorId: string, sourceLine: number | null, waitForNoteSwitch: boolean) => {
+    scrollToRenderedElement(() => {
+      const candidates = Array.from(document.querySelectorAll<HTMLElement>('.note-anchor-marker'))
+      return candidates.find((el) => el.dataset.anchorId === anchorId) ?? null
+    }, sourceLine, waitForNoteSwitch)
+  }, [scrollToRenderedElement])
+
+  // Scrolls to an automatic, on-the-fly heading anchor -- there's no literal
+  // DOM marker to search for (the heading's own source was never rewritten),
+  // so the target is the heading element itself, found via the
+  // `data-source-line-start` attribute createPreviewSourceAnchorRehypePlugin
+  // already stamps on every heading.
+  const scrollToHeadingAnchorInPreview = useCallback((sourceLine: number, waitForNoteSwitch: boolean) => {
+    const selector = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']
+      .map((tag) => `${tag}[data-source-line-start="${sourceLine}"]`)
+      .join(', ')
+    scrollToRenderedElement(() => document.querySelector<HTMLElement>(selector), sourceLine, waitForNoteSwitch)
+  }, [scrollToRenderedElement])
+
+  // Resolves a raw href anchor fragment to whichever of the app's two
+  // independent anchor mechanisms it belongs to: an automatic, on-the-fly
+  // heading anchor (`heading:`-prefixed, per parseHeadingAnchorFragment --
+  // resolved by re-deriving the target note's headings fresh each time,
+  // never by scanning for literal markup) or a manual `[Anchor Text](#id)`
+  // definition (resolved the original way, by scanning for that literal
+  // markup). Both resolve to the same shape -- "given some text, which
+  // source line (if any) does this anchor land on" plus "how to scroll/flash
+  // that target once found" -- so every navigation call site below can stay
+  // anchor-mechanism-agnostic.
+  const resolveAnchorTarget = useCallback((anchorId: string) => {
+    const headingSlug = parseHeadingAnchorFragment(anchorId)
+    if (headingSlug !== null) {
+      return {
+        resolveLine: (text: string) => findHeadingAnchorLine(text, headingSlug),
+        scrollTo: (sourceLine: number, waitForNoteSwitch: boolean) => scrollToHeadingAnchorInPreview(sourceLine, waitForNoteSwitch),
+      }
+    }
+    return {
+      resolveLine: (text: string) => (noteContainsAnchorDefinition(text, anchorId) ? findAnchorDefinitionLine(text, anchorId) : null),
+      scrollTo: (sourceLine: number, waitForNoteSwitch: boolean) => scrollToAnchorInPreview(anchorId, sourceLine, waitForNoteSwitch),
+    }
+  }, [scrollToHeadingAnchorInPreview, scrollToAnchorInPreview])
+
   // Shared by both the direct-note and chapter branches of
   // navigateToInternalPreviewLink below: activates `targetNoteId` (unless
   // already active) then either scrolls to `anchorId` within it or, on a
   // genuine note switch with no anchor, resets to the top.
   const activateAndScroll = useCallback((targetNoteId: string, contentTextForExistenceCheck: string, anchorId: string | null) => {
     const isAlreadyActive = targetNoteId === activeNoteId
+    const anchorTarget = anchorId !== null ? resolveAnchorTarget(anchorId) : null
     const followUp = () => {
-      if (anchorId !== null) {
+      if (anchorTarget !== null) {
         // Once the target note is active, its own live text is what
         // previewBlocks actually reflects -- not the (possibly stale)
         // stored contentText used for the existence check at the call site.
         const anchorSourceText = isAlreadyActive
           ? (latestEditorTextRef.current || activeNoteTextRef.current)
           : contentTextForExistenceCheck
-        const sourceLine = findAnchorDefinitionLine(anchorSourceText, anchorId)
-        scrollToAnchorInPreview(anchorId, sourceLine, !isAlreadyActive)
+        const sourceLine = anchorTarget.resolveLine(anchorSourceText)
+        if (sourceLine !== null) anchorTarget.scrollTo(sourceLine, !isAlreadyActive)
       } else if (!isAlreadyActive) {
         // Already-active notes stay wherever the reader currently is —
         // only a genuine note switch resets to the top.
@@ -356,7 +408,7 @@ export function usePreviewMarkdownRendering({
     } else {
       void activateNote(targetNoteId, undefined).then(followUp)
     }
-  }, [activeNoteId, activateNote, scrollToAnchorInPreview, scrollPreviewToTop, latestEditorTextRef])
+  }, [activeNoteId, activateNote, resolveAnchorTarget, scrollPreviewToTop, latestEditorTextRef])
 
   // Resolves and follows a `$`, `$#anchor-id`, `$NOTE-ID`,
   // `$NOTE-ID#anchor-id`, `$NOTE-ID§CHAPTER-ID`, or
@@ -388,11 +440,24 @@ export function usePreviewMarkdownRendering({
       const parentNoteId = contextNote.id
       const normalizedChapterTarget = normalizeInternalIdForLookup(target.chapterIdRaw)
       void window.thockdownChapters.listChapters(parentNoteId).then((chapters) => {
-        const chapterEntry = chapters.find((entry) => entry.chapterId && normalizeInternalIdForLookup(entry.chapterId) === normalizedChapterTarget)
-        if (!chapterEntry) return
-        const chapterContentText = notesRef.current.find((note) => note.id === chapterEntry.chapterNoteId)?.contentText ?? ''
-        if (target.anchorId !== null && !noteContainsAnchorDefinition(chapterContentText, target.anchorId)) return
-        activateAndScroll(chapterEntry.chapterNoteId, chapterContentText, target.anchorId)
+        // resolveChapterLinkIds mirrors exactly what the TOC/Open-Items
+        // generation used to label this chapter with, including the live,
+        // never-persisted stand-in an unassigned chapter gets -- matching
+        // only against `entry.chapterId` (as this used to) can never find
+        // an unassigned chapter, since that field stays null until the user
+        // explicitly assigns one (setChapterId).
+        const { realChapters } = splitChapterFamily(chapters, notesRef.current)
+        const chapterLinkIds = resolveChapterLinkIds(realChapters.map((entry) => ({
+          chapterNoteId: entry.chapterNoteId,
+          chapterId: entry.chapterId,
+          contentText: notesRef.current.find((note) => note.id === entry.chapterNoteId)?.contentText,
+        })))
+        const matchedChapterNoteId = Array.from(chapterLinkIds.entries())
+          .find(([, linkId]) => normalizeInternalIdForLookup(linkId) === normalizedChapterTarget)?.[0]
+        if (!matchedChapterNoteId) return
+        const chapterContentText = notesRef.current.find((note) => note.id === matchedChapterNoteId)?.contentText ?? ''
+        if (target.anchorId !== null && resolveAnchorTarget(target.anchorId).resolveLine(chapterContentText) === null) return
+        activateAndScroll(matchedChapterNoteId, chapterContentText, target.anchorId)
       })
       return
     }
@@ -400,7 +465,7 @@ export function usePreviewMarkdownRendering({
     if (target.noteIdRaw !== null) {
       if (!contextNote) return
       const targetContentText = contextNote.contentText ?? ''
-      if (target.anchorId !== null && !noteContainsAnchorDefinition(targetContentText, target.anchorId)) return
+      if (target.anchorId !== null && resolveAnchorTarget(target.anchorId).resolveLine(targetContentText) === null) return
       activateAndScroll(contextNote.id, targetContentText, target.anchorId)
       return
     }
@@ -408,10 +473,11 @@ export function usePreviewMarkdownRendering({
     // No noteIdRaw and no chapterIdRaw means "this note" (a bare `$` or `$#anchor-id`).
     if (target.anchorId === null || !activeNoteId) return
     const currentText = latestEditorTextRef.current || activeNoteTextRef.current
-    if (!noteContainsAnchorDefinition(currentText, target.anchorId)) return
-    const sourceLine = findAnchorDefinitionLine(currentText, target.anchorId)
-    scrollToAnchorInPreview(target.anchorId, sourceLine, false)
-  }, [activeNoteId, activateAndScroll, scrollToAnchorInPreview, latestEditorTextRef])
+    const anchorTarget = resolveAnchorTarget(target.anchorId)
+    const sourceLine = anchorTarget.resolveLine(currentText)
+    if (sourceLine === null) return
+    anchorTarget.scrollTo(sourceLine, false)
+  }, [activeNoteId, activateAndScroll, resolveAnchorTarget, latestEditorTextRef])
 
   // navigateToInternalPreviewLink itself still isn't fully keystroke-stable
   // -- it depends (transitively, via `activateNote`) on other callbacks

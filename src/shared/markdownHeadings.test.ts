@@ -124,6 +124,44 @@ describe('clampChapterHeadlineLevels', () => {
     expect(result.text).toBe(text)
     expect(result.edits).toEqual([])
   })
+
+  it('leaves a violating heading alone when it is the exempted skipLineIndex, mid-edit', () => {
+    // Simulates backspacing '### Sub' down to '# Sub' one '#' at a time --
+    // each intermediate state (here, level 1, well under the level-3 floor)
+    // would normally get force-corrected right back, fighting the backspace.
+    const text = '## Title\n\n# Sub'
+    const result = clampChapterHeadlineLevels(text, 2)
+    expect(result.text).toBe(text)
+    expect(result.edits).toEqual([])
+  })
+
+  it('still exempts the skipped line even down to a bare, textless heading marker', () => {
+    const text = '## Title\n\n#'
+    const result = clampChapterHeadlineLevels(text, 2)
+    expect(result.text).toBe(text)
+    expect(result.edits).toEqual([])
+  })
+
+  it('corrects the previously-exempted line normally once it is no longer skipped', () => {
+    const text = '## Title\n\n# Sub'
+    const result = clampChapterHeadlineLevels(text, null)
+    expect(result.text).toBe('## Title\n\n### Sub')
+    expect(result.edits.length).toBe(1)
+  })
+
+  it('exempting one line does not stop other violating lines from being corrected', () => {
+    const text = '## Title\n\n# Sub\n\n## AlsoTooShallow'
+    const result = clampChapterHeadlineLevels(text, 2)
+    expect(result.text).toBe('## Title\n\n# Sub\n\n### AlsoTooShallow')
+    expect(result.edits.length).toBe(1)
+  })
+
+  it('the exempted first line is left alone even when it violates the level-2 rule', () => {
+    const text = '# Title\n\n### Sub'
+    const result = clampChapterHeadlineLevels(text, 0)
+    expect(result.text).toBe(text)
+    expect(result.edits).toEqual([])
+  })
 })
 
 describe('remapOffsetThroughHeadingLevelEdits', () => {

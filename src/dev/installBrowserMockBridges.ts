@@ -39,8 +39,9 @@ import { DEFAULT_EDITOR_SECTION_ID } from '../shared/sections'
 import type { ChapterEntry, ChaptersApi } from '../shared/chapters'
 import type { ReviewFlagEntry, ReviewFlagsApi } from '../shared/reviewFlags'
 import { normalizeChapterHeadings } from '../shared/markdownHeadings'
-import { deriveChapterContentSnippet } from '../shared/tabLabels'
-import { anchorizeHeadings } from '../shared/tableOfContentsText'
+import { resolveChapterLinkIds } from '../shared/tabLabels'
+import { computeHeadingAnchors, formatHeadingAnchorFragment } from '../shared/tableOfContentsText'
+import { deriveDefaultAssignedIdBase, normalizeAssignedIdInput } from '../shared/assignedIds'
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, parseOpenItemsGroups } from '../shared/openItemsText'
 
 const MOCK_STORAGE_KEY = 'thockdown-notes:browser-mock:v1'
@@ -144,18 +145,6 @@ function sortNotesDesc(notes: NoteDocument[]): NoteDocument[] {
   return notes
     .slice()
     .sort((a, b) => b.updatedAtMs - a.updatedAtMs || b.createdAtMs - a.createdAtMs || a.id.localeCompare(b.id))
-}
-
-const NOTE_INTERNAL_ID_MAX_LEN = 8
-
-function normalizeAssignedIdInput(raw: string): string {
-  return raw.trim().toUpperCase().replace(/\s+/g, '-')
-}
-
-function deriveDefaultAssignedIdBase(title: string): string {
-  const normalized = normalizeAssignedIdInput(title || 'NOTE')
-  const trimmed = normalized.slice(0, NOTE_INTERNAL_ID_MAX_LEN).replace(/-+$/, '')
-  return trimmed.length > 0 ? trimmed : 'NOTE'
 }
 
 function resolveUniqueAssignedId(notes: NoteDocument[], requestedBase: string, excludeNoteId: string): string {
@@ -1068,69 +1057,37 @@ function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string)
   }
   const parentAssignedId = parentNote.assignedId
 
-  const anchoredParent = anchorizeHeadings(parentNote.text)
-  if (anchoredParent.text !== parentNote.text) {
-    parentNote.text = anchoredParent.text
-    parentNote.updatedAtMs = Date.now()
-    parentNote.sizeBytes = anchoredParent.text.length
-    parentNote.title = deriveTitle(anchoredParent.text)
-  }
+  const parentHeadings = computeHeadingAnchors(parentNote.text)
 
   const lines = ['# Table of Contents', '', `- [${parentNote.title || 'Untitled'}]($${parentAssignedId})`]
-  for (const heading of anchoredParent.headings) {
-    lines.push(`  - [${heading.label}]($${parentAssignedId}#${heading.anchorId})`)
+  for (const heading of parentHeadings) {
+    lines.push(`  - [${heading.label}]($${parentAssignedId}#${formatHeadingAnchorFragment(heading.anchorId)})`)
   }
 
   const chapterRows = getRealChapterRowsInStore(store, parentNoteId)
 
-  // Two unassigned siblings whose content happens to derive the same
-  // snippet-based id would otherwise collide within this one pass (nothing
-  // persists, so the DB-backed `used` check below can't see an earlier
-  // sibling's derived id) -- tracked locally, never persisted, same as the
-  // ids themselves. Mirrors noteLifecycleService.ts's own linkIdsUsedThisPass.
-  const linkIdsUsedThisPass = new Set<string>()
+  // resolveChapterLinkIds is the single source of truth for what a
+  // chapter's own `§chapterId` link resolves to -- the real backend's
+  // regenerateAutoTocChapter and the renderer's own
+  // navigateToInternalPreviewLink both go through the exact same function,
+  // so this mock has to as well or a stand-in id it displays here could
+  // resolve to a different chapter (or nothing) when clicked.
+  const chapterLinkIds = resolveChapterLinkIds(chapterRows.map((row) => ({
+    chapterNoteId: row.chapterNoteId,
+    chapterId: row.chapterId,
+    contentText: store.notes.find((note) => note.id === row.chapterNoteId)?.text ?? '',
+  })))
 
   for (const row of chapterRows) {
     const chapterNote = store.notes.find((note) => note.id === row.chapterNoteId)
     if (!chapterNote) continue
 
-    const anchoredChapter = anchorizeHeadings(chapterNote.text)
-    if (anchoredChapter.text !== chapterNote.text) {
-      chapterNote.text = anchoredChapter.text
-      chapterNote.updatedAtMs = Date.now()
-      chapterNote.sizeBytes = anchoredChapter.text.length
-      chapterNote.title = deriveTitle(anchoredChapter.text)
-    }
-
-    // Chapters have no "title" concept -- an unassigned chapter's link id is
-    // a live, unpersisted stand-in seeded from the same content snippet its
-    // own pill falls back to displaying (see the real backend's
-    // getChapterLinkId doc comment). Only a user explicitly assigning a
-    // chapterId (setChapterId) ever writes `row.chapterId` -- this never
-    // does, so it's recomputed fresh here every time, same as the pill.
-    let linkChapterId = row.chapterId
-    if (!linkChapterId) {
-      const snippet = deriveChapterContentSnippet(chapterNote.text)
-      const base = deriveDefaultAssignedIdBase(snippet === '···' ? 'CHAPTER' : snippet)
-      const used = new Set([
-        ...store.chapters
-          .filter((c) => c.parentNoteId === parentNoteId && c.chapterNoteId !== row.chapterNoteId && c.chapterId)
-          .map((c) => c.chapterId as string),
-        ...linkIdsUsedThisPass,
-      ])
-      let resolved = base
-      let attempt = 2
-      while (used.has(resolved)) {
-        resolved = `${base}-${attempt}`
-        attempt += 1
-      }
-      linkChapterId = resolved
-    }
-    linkIdsUsedThisPass.add(linkChapterId)
+    const chapterHeadings = computeHeadingAnchors(chapterNote.text)
+    const linkChapterId = chapterLinkIds.get(row.chapterNoteId)!
 
     lines.push(`- [${linkChapterId}]($${parentAssignedId}§${linkChapterId})`)
-    for (const heading of anchoredChapter.headings) {
-      lines.push(`  - [${heading.label}]($${parentAssignedId}§${linkChapterId}#${heading.anchorId})`)
+    for (const heading of chapterHeadings) {
+      lines.push(`  - [${heading.label}]($${parentAssignedId}§${linkChapterId}#${formatHeadingAnchorFragment(heading.anchorId)})`)
     }
   }
 
@@ -1200,14 +1157,6 @@ function regenerateOpenItemsGroupInStore(store: BrowserMockStore, parentNoteId: 
   const parentNote = store.notes.find((note) => note.id === parentNoteId)
   if (!changedNote || !parentNote) return
 
-  const anchored = anchorizeHeadings(changedNote.text)
-  if (anchored.text !== changedNote.text) {
-    changedNote.text = anchored.text
-    changedNote.updatedAtMs = Date.now()
-    changedNote.sizeBytes = anchored.text.length
-    changedNote.title = deriveTitle(anchored.text)
-  }
-
   if (!parentNote.assignedId) {
     const base = deriveDefaultAssignedIdBase(parentNote.title)
     parentNote.assignedId = resolveUniqueAssignedId(store.notes, base, parentNote.id)
@@ -1225,24 +1174,19 @@ function regenerateOpenItemsGroupInStore(store: BrowserMockStore, parentNoteId: 
   } else {
     const chapterRow = store.chapters.find((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === changedNoteId)
     if (!chapterRow) return
-    // Live, unpersisted stand-in when unassigned -- never writes chapterRow.chapterId (see regenerateAutoTocInStore's own comment on this).
-    let linkChapterId = chapterRow.chapterId
-    if (!linkChapterId) {
-      const snippet = deriveChapterContentSnippet(changedNote.text)
-      const base = deriveDefaultAssignedIdBase(snippet === '···' ? 'CHAPTER' : snippet)
-      const used = new Set(
-        store.chapters
-          .filter((c) => c.parentNoteId === parentNoteId && c.chapterNoteId !== changedNoteId && c.chapterId)
-          .map((c) => c.chapterId as string),
-      )
-      let resolved = base
-      let attempt = 2
-      while (used.has(resolved)) {
-        resolved = `${base}-${attempt}`
-        attempt += 1
-      }
-      linkChapterId = resolved
-    }
+    // Live, unpersisted stand-in when unassigned -- never writes chapterRow.chapterId
+    // (see regenerateAutoTocInStore's own comment on this). Resolved via the
+    // same family-wide resolveChapterLinkIds pass regenerateAutoTocInStore
+    // uses, not a lone getChapterLinkId-style lookup -- otherwise an
+    // unassigned chapter's Open Items group link could resolve to a
+    // different id than its own TOC entry does.
+    const chapterRows = getRealChapterRowsInStore(store, parentNoteId)
+    const chapterLinkIds = resolveChapterLinkIds(chapterRows.map((row) => ({
+      chapterNoteId: row.chapterNoteId,
+      chapterId: row.chapterId,
+      contentText: row.chapterNoteId === changedNoteId ? changedNote.text : (store.notes.find((note) => note.id === row.chapterNoteId)?.text ?? ''),
+    })))
+    const linkChapterId = chapterLinkIds.get(changedNoteId)!
     linkPrefix = `$${parentAssignedId}§${linkChapterId}`
     groupLabel = linkChapterId
   }
@@ -1513,9 +1457,20 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           }
         }
 
+        // Auto-TOC/auto-Open-Items stay pinned first, ahead of the demoted old
+        // parent -- mirrors databaseService.ts's promoteChapterToParent.
+        const autoRemaining = remaining.filter((row) => {
+          const note = store.notes.find((entry) => entry.id === row.chapterNoteId)
+          return Boolean(note?.isAutoToc || note?.isAutoOpenItems)
+        })
+        const realRemaining = remaining.filter((row) => {
+          const note = store.notes.find((entry) => entry.id === row.chapterNoteId)
+          return !note?.isAutoToc && !note?.isAutoOpenItems
+        })
         const insertionRows = [
+          ...autoRemaining.map((row) => ({ parentNoteId: chapterNoteId, chapterNoteId: row.chapterNoteId, position: 0, chapterId: row.chapterId })),
           { parentNoteId: chapterNoteId, chapterNoteId: parentNoteId, position: 0, chapterId: null },
-          ...remaining.map((row) => ({ parentNoteId: chapterNoteId, chapterNoteId: row.chapterNoteId, position: 0, chapterId: row.chapterId })),
+          ...realRemaining.map((row) => ({ parentNoteId: chapterNoteId, chapterNoteId: row.chapterNoteId, position: 0, chapterId: row.chapterId })),
         ]
 
         for (let index = 0; index < insertionRows.length; index += 1) {

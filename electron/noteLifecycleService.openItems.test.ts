@@ -50,10 +50,15 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     expect(ch1Entry.chapterId).toBeNull()
     const chapterLinkId = deriveDefaultAssignedIdBase(deriveChapterContentSnippet('# Chapter One\n\n## Setting\n\n- [x] done already\n- [ ] world-building task'))
     expect(openItemsDoc.text).toContain(`[${chapterLinkId}]($${parentAssignedId}§${chapterLinkId})`)
-    expect(openItemsDoc.text).toContain(`[Setting]($${parentAssignedId}§${chapterLinkId}#setting)`)
+    expect(openItemsDoc.text).toContain(`[Setting]($${parentAssignedId}§${chapterLinkId}#heading:setting)`)
     expect(openItemsDoc.text).toContain('- [ ] world-building task')
     // Checked items are never listed.
     expect(openItemsDoc.text).not.toContain('done already')
+
+    // The chapter's own heading source is untouched -- no literal anchor
+    // definition was ever written into it just to build this group.
+    const ch1Doc = await lifecycle.loadNote({ id: ch1.id })
+    expect(ch1Doc.text).toBe('# Chapter One\n\n## Setting\n\n- [x] done already\n- [ ] world-building task')
   })
 
   it('groups the parent\'s own headless items directly under its title link', async () => {

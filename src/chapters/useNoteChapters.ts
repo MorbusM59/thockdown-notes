@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import type { ChapterEntry } from '../shared/chapters'
 import { splitChapterFamily } from '../shared/chapters'
@@ -183,12 +183,36 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
   // currently displayed text, only touch the editor when something actually
   // needs correcting. useLayoutEffect (not useEffect) so the correction lands
   // before paint, same timing as that TOC effect.
+  //
+  // The line the caret is still sitting on is exempted from correction (see
+  // `clampChapterHeadlineLevels`'s `skipLineIndex`) -- otherwise backspacing
+  // a heading's `#` run down through the level-3 floor (or clear off
+  // entirely, to turn a heading back into plain text) gets fought on every
+  // keystroke, since each intermediate state is itself a level-1/2 violation.
+  // `activeHeadingLineRef` remembers which line (and note) the caret was on
+  // last render; the moment either changes -- the caret moved to a different
+  // line, or a different note became active -- that line is fair game again,
+  // so leaving a heading with a stray low-level `#` run behind corrects it
+  // immediately on the way out.
+  const activeHeadingLineRef = useRef<{ noteId: string; lineIndex: number } | null>(null)
   useLayoutEffect(() => {
-    if (!activeNoteId) return
+    if (!activeNoteId) {
+      activeHeadingLineRef.current = null
+      return
+    }
     const activeNote = notes.find((note) => note.id === activeNoteId)
-    if (!activeNote?.chapterOnly || activeNote.isAutoToc || activeNote.isAutoOpenItems) return
+    if (!activeNote?.chapterOnly || activeNote.isAutoToc || activeNote.isAutoOpenItems) {
+      activeHeadingLineRef.current = null
+      return
+    }
 
-    const { text: clampedText, edits } = clampChapterHeadlineLevels(currentEditorText)
+    const focusOffset = Math.max(0, Math.min(editorSelection.focus, currentEditorText.length))
+    const caretLineIndex = currentEditorText.slice(0, focusOffset).split('\n').length - 1
+    const previous = activeHeadingLineRef.current
+    const stillOnSameLine = previous?.noteId === activeNoteId && previous.lineIndex === caretLineIndex
+    activeHeadingLineRef.current = { noteId: activeNoteId, lineIndex: caretLineIndex }
+
+    const { text: clampedText, edits } = clampChapterHeadlineLevels(currentEditorText, stillOnSameLine ? caretLineIndex : null)
     if (clampedText === currentEditorText) return
 
     const nextAnchor = remapOffsetThroughHeadingLevelEdits(editorSelection.anchor, edits)
