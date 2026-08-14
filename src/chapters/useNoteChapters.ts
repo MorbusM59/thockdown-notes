@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import type { ChapterEntry } from '../shared/chapters'
 import { splitChapterFamily } from '../shared/chapters'
@@ -239,10 +239,32 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
   // background, wherever the user already is/was headed (typically the real
   // chapter they just created or collapsed) is left alone.
   const reorderableChapterCount = reorderableChapters.length
+
+  // Guards the effect below against firing a second, redundant
+  // createAutoTocChapter call for the same parent while the first one is
+  // still in flight. `reorderableChapterCount > 0 && autoTocChapterNoteId
+  // === null` stays true for the effect's ENTIRE duration -- `chapters`
+  // state (and so `autoTocChapterNoteId`) only updates once the call
+  // resolves and setChapters runs -- so anything else that makes this
+  // effect re-run in the meantime (activeNoteId changing, e.g. because
+  // handleCreateChapter itself activates the freshly created chapter right
+  // after creating it; or a callback prop like refreshNotes/activateNote
+  // getting a new identity) would otherwise fire a second real IPC call
+  // before the first one has had a chance to update `chapters`. The
+  // cleanup's own `cancelled` flag only suppresses a stale call's effect on
+  // React state -- it was never enough on its own, since the underlying
+  // call had already gone out. Keyed by note id (not a bare boolean) so a
+  // call still pending for a DIFFERENT parent (e.g. the user switched away
+  // and back) doesn't block this one.
+  const pendingAutoTocCreateForNoteIdRef = useRef<string | null>(null)
+
   useEffect(() => {
     if (!persistenceReady || !window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId) return
 
     if (reorderableChapterCount > 0 && autoTocChapterNoteId === null) {
+      if (pendingAutoTocCreateForNoteIdRef.current === menuIdentityNoteId) return
+      pendingAutoTocCreateForNoteIdRef.current = menuIdentityNoteId
+
       let cancelled = false
       void window.thockdownChapters.createAutoTocChapter(menuIdentityNoteId)
         .then(async ({ chapters: updatedChapters }) => {
@@ -264,6 +286,11 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
           if (cancelled || !menuIdentityNoteId || !window.thockdownChapters) return
           const updatedChapters = await window.thockdownChapters.listChapters(menuIdentityNoteId)
           if (!cancelled) setChapters(updatedChapters)
+        })
+        .finally(() => {
+          if (pendingAutoTocCreateForNoteIdRef.current === menuIdentityNoteId) {
+            pendingAutoTocCreateForNoteIdRef.current = null
+          }
         })
       return () => {
         cancelled = true
