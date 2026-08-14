@@ -30,6 +30,7 @@ import { usePreviewMarkdownRendering } from './usePreviewMarkdownRendering'
 import { usePreviewScrollbar } from './usePreviewScrollbar'
 import { useDocumentFindNavigation } from './useDocumentFindNavigation'
 import { useMarkdownFormattingToolbar } from './useMarkdownFormattingToolbar'
+import { useHeadlineLevelGuard } from './useHeadlineLevelGuard'
 import { hashNormalizedText } from '../shared/hashText'
 import { restorePreviewBlockSplitCacheFromRanges } from '../editor/PreviewBlockSplit'
 import type { PreviewMarkdownBlock, PreviewBlockSplitCache } from '../editor/PreviewBlockSplit'
@@ -541,8 +542,8 @@ export function EditorSection({
     } else {
       setIsForcedPreviewNote(false)
 
-      // A real chapter's own live heading-level enforcement (useNoteChapters.ts's
-      // clampChapterHeadlineLevels effect) only ever clamps an EXISTING
+      // A real chapter's own live heading-level enforcement
+      // (useHeadlineLevelGuard.ts's effect) only ever clamps an EXISTING
       // first-line heading -- it deliberately never synthesizes one, since
       // doing that on every keystroke would forcibly prepend boilerplate
       // the instant the user starts typing plain text as a chapter's first
@@ -864,6 +865,15 @@ export function EditorSection({
     flushPendingSaveNow,
     onNotePermanentlyDeleted: evictPermanentlyDeletedNoteCaches,
   })
+
+  useHeadlineLevelGuard({
+    activeNoteId,
+    notes,
+    currentEditorText,
+    editorSelection,
+    applyProgrammaticEditorText,
+  })
+
   useEffect(() => {
     refreshChaptersRef.current = refreshChapters
   }, [refreshChapters])

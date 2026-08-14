@@ -110,14 +110,30 @@ export interface HeadingLevelEdit {
   newLevel: number
 }
 
+export interface HeadlineLevelRule {
+  /** Required level for the first line, if it's a heading. */
+  firstLineLevel: number
+  /** Minimum level every other heading must be at least as deep as. */
+  minOtherLevel: number
+}
+
+/** A real chapter's own invariant: first line exactly `##`, everything else `###` or deeper. */
+export const CHAPTER_HEADLINE_LEVEL_RULE: HeadlineLevelRule = { firstLineLevel: 2, minOtherLevel: 3 }
+
+/** A regular (non-chapter) note's invariant: first line exactly `#`, everything else `##` or deeper. */
+export const NOTE_HEADLINE_LEVEL_RULE: HeadlineLevelRule = { firstLineLevel: 1, minOtherLevel: 2 }
+
 /**
  * Live-editing counterpart to `normalizeChapterHeadings`: clamps (never
- * shifts) heading levels that violate a chapter's own invariant -- the first
- * line, if it's a heading, must be exactly level 2; every other heading must
- * be level 3 or deeper. Unlike `normalizeChapterHeadings`, this never
- * synthesizes a heading where none exists and never touches a heading that
- * already satisfies the rule (a `####` stays `####`) -- it's meant to run on
- * every edit, so it must be a no-op on already-valid text.
+ * shifts) heading levels that violate `rule` -- the first line, if it's a
+ * heading, must be exactly `rule.firstLineLevel`; every other heading must
+ * be `rule.minOtherLevel` or deeper. Unlike `normalizeChapterHeadings`, this
+ * never synthesizes a heading where none exists and never touches a heading
+ * that already satisfies the rule (a `####` stays `####`) -- it's meant to
+ * run on every edit, so it must be a no-op on already-valid text. Used both
+ * for a real chapter's own invariant (`CHAPTER_HEADLINE_LEVEL_RULE`) and a
+ * regular note's (`NOTE_HEADLINE_LEVEL_RULE`) -- see useHeadlineLevelGuard.ts,
+ * which picks the right one per note and runs this on every keystroke.
  *
  * `skipLineIndex` (0-based) exempts one line from correction even if it
  * currently violates the invariant -- the caller uses this for whichever
@@ -126,7 +142,7 @@ export interface HeadingLevelEdit {
  * mid-edit; the exempted line is corrected normally as soon as the caret
  * moves elsewhere.
  */
-export function clampChapterHeadlineLevels(text: string, skipLineIndex: number | null = null): { text: string; edits: HeadingLevelEdit[] } {
+export function clampHeadlineLevels(text: string, rule: HeadlineLevelRule, skipLineIndex: number | null = null): { text: string; edits: HeadingLevelEdit[] } {
   const lines = text.split('\n')
   let inFence = false
   let offset = 0
@@ -145,7 +161,7 @@ export function clampChapterHeadlineLevels(text: string, skipLineIndex: number |
     if (!ATX_HEADING_LINE.test(line)) return line
 
     const oldLevel = line.match(/^#+/)?.[0].length ?? 0
-    const newLevel = index === 0 ? 2 : Math.max(3, oldLevel)
+    const newLevel = index === 0 ? rule.firstLineLevel : Math.max(rule.minOtherLevel, oldLevel)
     if (newLevel === oldLevel) return line
 
     edits.push({ lineStart, markerStart: lineStart, oldLevel, newLevel })
@@ -157,12 +173,12 @@ export function clampChapterHeadlineLevels(text: string, skipLineIndex: number |
 
 /**
  * Remaps a single document offset across the corrections
- * `clampChapterHeadlineLevels` made -- an offset before a corrected marker
- * is untouched, one that fell inside the old `#` run clamps to the end of
- * the new one, and one after it shifts by that correction's own level
- * delta, with each earlier correction's delta accumulated first. `edits`
- * must be in ascending `lineStart` order, exactly as `clampChapterHeadlineLevels`
- * already returns them.
+ * `clampHeadlineLevels` made -- an offset before a corrected marker is
+ * untouched, one that fell inside the old `#` run clamps to the end of the
+ * new one, and one after it shifts by that correction's own level delta,
+ * with each earlier correction's delta accumulated first. `edits` must be
+ * in ascending `lineStart` order, exactly as `clampHeadlineLevels` already
+ * returns them.
  */
 export function remapOffsetThroughHeadingLevelEdits(offset: number, edits: HeadingLevelEdit[]): number {
   let result = offset

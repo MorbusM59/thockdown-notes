@@ -323,8 +323,8 @@ function checksumText(text: string): string {
 function titleFromText(text: string): string {
   const lines = normalizeText(text).split('\n');
   // Level 1 only -- a chapter's own first-line heading is always level 2
-  // (see markdownHeadings.ts's normalizeChapterHeadings/
-  // clampChapterHeadlineLevels) and deliberately does NOT count: chapters
+  // (see markdownHeadings.ts's normalizeChapterHeadings/clampHeadlineLevels
+  // with CHAPTER_HEADLINE_LEVEL_RULE) and deliberately does NOT count: chapters
   // have no "title" concept at all, only a chapterId (see this file's
   // getChapterLinkId / tabLabels.ts's getChapterTabLabel for the actual
   // chapter-identity logic; nothing chapter-facing should read `.title`).
