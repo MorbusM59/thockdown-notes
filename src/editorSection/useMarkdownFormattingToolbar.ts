@@ -23,8 +23,16 @@ function stripMarkdownInlineFormatting(text: string): string {
     .trim()
 }
 
+// Matches this feature's own generated heading -- plain text, no link
+// (see buildTableOfContentsInsertion's own doc comment for why it's plain).
+// The old `[Table of Contents](#toc)` linked form is also matched here so a
+// note written before that changed still gets recognized, cleaned up, and
+// regenerated in the new plain form the next time it's touched (toggling
+// off, or the live auto-refresh effect) -- not a format anyone has to
+// migrate by hand.
 function isTableOfContentsHeadingLine(line: string): boolean {
-  return /^#{2}\s+\[[^\]]+\]\(#toc\)\s*$/.test(line.trim())
+  const trimmed = line.trim()
+  return /^#{2}\s+Table of Contents\s*$/.test(trimmed) || /^#{2}\s+\[Table of Contents\]\(#toc\)\s*$/.test(trimmed)
 }
 
 function findTitleLineIndex(lines: string[]): number {
@@ -50,30 +58,11 @@ function noteHasTableOfContents(sourceText: string): boolean {
 
     const heading = parseMarkdownHeading(line)
     if (heading && heading.level === 2) {
-      return isTableOfContentsHeadingLine(line) || /\]\(#toc\)/.test(line)
+      return isTableOfContentsHeadingLine(line)
     }
   }
 
   return false
-}
-
-function makeAnchorHeadingLine(line: string, dedupeCounts: Map<string, number>): string {
-  const heading = parseMarkdownHeading(line)
-  if (!heading) return line
-
-  const label = stripMarkdownInlineFormatting(heading.text)
-  if (!label) return line
-
-  const baseId = slugifyAnchorId(label)
-  let anchorId = baseId
-  const seenCount = dedupeCounts.get(baseId) ?? 0
-  if (seenCount > 0) {
-    anchorId = `${baseId}-${seenCount}`
-  }
-  dedupeCounts.set(baseId, seenCount + 1)
-
-  const anchorLink = `[${label}](#${anchorId})`
-  return `${'#'.repeat(heading.level)} ${anchorLink}`
 }
 
 function trimTrailingBlankLines(lines: string[]): string[] {
@@ -92,17 +81,38 @@ function trimLeadingBlankLines(lines: string[]): string[] {
   return lines.slice(start)
 }
 
+// Matches a line the generated list can contain -- a plain `- Label` (the
+// current format) or, for a note written before that changed, the old
+// `- [Label]($#anchor-id)` linked form. Either way, any bullet line directly
+// under the TOC heading belongs to it and gets swallowed on removal.
 function isTableOfContentsListLine(line: string): boolean {
-  return /^\s*(?:[-*]\s+\[[^\]]+\]\(\$#.*\)|\s{2,}-\s+\[[^\]]+\]\(\$#.*\))\s*$/.test(line)
+  return /^\s*-\s+\S/.test(line)
 }
 
-function stripAnchorLinkFromHeadingText(text: string): string {
-  return stripMarkdownInlineFormatting(text).replace(/\[([^\]]+)\]\(#.*\)/g, '$1')
+/**
+ * Unwraps a heading previously anchor-linked by this feature's old
+ * `[Label](#anchor-id)` format back to plain text, or returns null if the
+ * heading was never wrapped in the first place -- lets the caller leave an
+ * untouched heading (and whatever bold/italic/code formatting is actually
+ * its own) completely alone, rather than reprocessing every heading in the
+ * note through a generic formatting-stripper regardless of whether it had
+ * anything to unwrap.
+ */
+function unwrapLegacyAnchorHeading(text: string): string | null {
+  const match = /^\[([^\]]+)\]\(#[^)]*\)$/.exec(text.trim())
+  return match ? match[1] : null
 }
 
+/**
+ * Removes the generated TOC block (current plain-list form or an older
+ * linked one) and un-wraps any heading the old format anchor-linked --
+ * leaves every other heading, and the rest of the note, untouched. The
+ * single cleanup/migration path for a note written before this feature
+ * stopped linking anything: toggling the TOC off, or the live auto-refresh
+ * effect while it's on, both route through this.
+ */
 export function removeTableOfContentsAndAnchors(sourceText: string): string {
   const lines = normalizeInternalText(sourceText).split('\n')
-  const titleIndex = findTitleLineIndex(lines)
   const nextLines: string[] = []
 
   for (let index = 0; index < lines.length; index += 1) {
@@ -118,12 +128,10 @@ export function removeTableOfContentsAndAnchors(sourceText: string): string {
     }
 
     const heading = parseMarkdownHeading(line)
-    if (heading && !(titleIndex !== null && index === titleIndex)) {
-      const label = stripAnchorLinkFromHeadingText(heading.text)
-      if (label) {
-        nextLines.push(`${'#'.repeat(heading.level)} ${label}`)
-        continue
-      }
+    const unwrapped = heading ? unwrapLegacyAnchorHeading(heading.text) : null
+    if (heading && unwrapped !== null) {
+      nextLines.push(`${'#'.repeat(heading.level)} ${unwrapped}`)
+      continue
     }
 
     nextLines.push(line)
@@ -157,6 +165,18 @@ function slugifyAnchorId(text: string): string {
     .replace(/^-|-$/g, '')
 }
 
+/**
+ * Inserts a plain-text outline of every heading right after the note's own
+ * title -- no links, in either direction: the list doesn't link to the
+ * headings, and the headings themselves are never rewritten. This is meant
+ * for a `.md` file exported and read outside the app (GitHub, a text
+ * editor, ...), where this app's in-app-only `$#anchor-id` link syntax
+ * wouldn't mean anything anyway -- a plain nested list reads correctly
+ * everywhere. In-app cross-note/cross-chapter navigation is a separate,
+ * unrelated mechanism (the "Set anchor" toolbar button, and the
+ * auto-generated cross-chapter Table of Contents chapter) that this
+ * single-note toggle has no bearing on.
+ */
 export function buildTableOfContentsInsertion(
   sourceText: string,
   selection: EditorSelectionState,
@@ -166,6 +186,7 @@ export function buildTableOfContentsInsertion(
 
   let titleIndex: number | null = null
   let inFence = false
+  const headings: Array<{ level: number; label: string }> = []
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index]
@@ -176,62 +197,30 @@ export function buildTableOfContentsInsertion(
     if (inFence) continue
 
     const heading = parseMarkdownHeading(line)
-    if (heading) {
+    if (!heading) continue
+
+    if (titleIndex === null) {
       titleIndex = index
-      break
-    }
-  }
-
-  const dedupeCounts = new Map<string, number>()
-  const anchoredLines = lines.map((line, index) => {
-    const heading = parseMarkdownHeading(line)
-    if (!heading) return line
-    if (titleIndex !== null && index === titleIndex) return line
-
-    const label = stripMarkdownInlineFormatting(heading.text)
-    if (!label) return line
-
-    return makeAnchorHeadingLine(line, dedupeCounts)
-  })
-
-  const insertionIndex = titleIndex === null ? 0 : titleIndex + 1
-  const beforeLines = trimTrailingBlankLines(anchoredLines.slice(0, insertionIndex))
-  const afterLines = trimLeadingBlankLines(anchoredLines.slice(insertionIndex))
-
-  const headings: Array<{ level: number; label: string; anchorId: string }> = []
-  const headingAnchorCounts = new Map<string, number>()
-  inFence = false
-
-  for (let index = 0; index < anchoredLines.length; index += 1) {
-    const line = anchoredLines[index]
-    if (/^\s{0,3}(?:`{3,}|~{3,})/.test(line)) {
-      inFence = !inFence
       continue
     }
-    if (inFence) continue
-
-    const heading = parseMarkdownHeading(line)
-    if (!heading) continue
-    if (titleIndex !== null && index === titleIndex) continue
 
     const label = stripMarkdownInlineFormatting(heading.text)
     if (!label || label.trim().toLowerCase() === 'table of contents') continue
-
-    const baseId = slugifyAnchorId(label)
-    const seenCount = headingAnchorCounts.get(baseId) ?? 0
-    const anchorId = seenCount > 0 ? `${baseId}-${seenCount}` : baseId
-    headingAnchorCounts.set(baseId, seenCount + 1)
-    headings.push({ level: heading.level, label, anchorId })
+    headings.push({ level: heading.level, label })
   }
 
+  const insertionIndex = titleIndex === null ? 0 : titleIndex + 1
+  const beforeLines = trimTrailingBlankLines(lines.slice(0, insertionIndex))
+  const afterLines = trimLeadingBlankLines(lines.slice(insertionIndex))
+
   const rootLevel = headings.length > 0 ? Math.min(...headings.map((heading) => heading.level)) : 2
-  const listLines = headings.map(({ level, label, anchorId }) => {
+  const listLines = headings.map(({ level, label }) => {
     const depth = Math.max(0, level - rootLevel)
-    return `${'  '.repeat(depth)}- [${label}]($#${anchorId})`
+    return `${'  '.repeat(depth)}- ${label}`
   })
 
   const insertedBlock = [
-    '## [Table of Contents](#toc)',
+    '## Table of Contents',
     '',
     ...listLines,
   ]
