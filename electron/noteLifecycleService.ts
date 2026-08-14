@@ -347,6 +347,35 @@ export class NoteLifecycleService {
     return this.loadNote({ id });
   }
 
+  // Every chapter-creation path shares the same shape: createNote() (which
+  // awaits at least once internally -- ensureNotesDir/fs.writeFile/fs.stat)
+  // followed by a synchronous link into parentNoteId's chapter list. That
+  // await gives a concurrent deletion of the same parent (e.g. the user
+  // deletes the whole chapter family from another section while this one's
+  // reactive "create the auto-TOC chapter" effect is still mid-flight) room
+  // to land first -- without this guard, the synchronous link step below
+  // would throw a raw SQLite FOREIGN KEY constraint error, and worse, leave
+  // the just-created note behind as a permanent, invisible orphan (a `notes`
+  // row and, for a non-external note, a file on disk nothing will ever
+  // reference or clean up again). Re-checks the parent still exists right
+  // before linking (nothing async happens between that check and `link()`,
+  // so no further interleaving is possible), and if it doesn't -- or `link`
+  // itself still throws for any other reason -- deletes `chapterNoteId`
+  // before surfacing the error, so a failed chapter-creation call never
+  // leaves debris behind.
+  private async linkChapterOrCleanUp<T>(parentNoteId: string, chapterNoteId: string, link: () => T): Promise<T> {
+    if (!this.databaseService.getNoteRecord(parentNoteId)) {
+      await this.deleteNote({ id: chapterNoteId }).catch(() => {});
+      throw new Error(`Parent note ${parentNoteId} not found`);
+    }
+    try {
+      return link();
+    } catch (error) {
+      await this.deleteNote({ id: chapterNoteId }).catch(() => {});
+      throw error;
+    }
+  }
+
   // Creates a fresh empty note marked chapterOnly and appends it as
   // parentNoteId's last chapter -- the chapter bar's "+" button. Chapters
   // are otherwise full, independent notes (own tags, own file, own
@@ -354,7 +383,7 @@ export class NoteLifecycleService {
   async createChapterNote(parentNoteId: string): Promise<NoteDocument> {
     const created = await this.createNote({});
     this.databaseService.setNoteChapterOnly(created.id, true);
-    this.databaseService.addChapter(parentNoteId, created.id);
+    await this.linkChapterOrCleanUp(parentNoteId, created.id, () => this.databaseService.addChapter(parentNoteId, created.id));
     return this.loadNote({ id: created.id });
   }
 
@@ -373,8 +402,10 @@ export class NoteLifecycleService {
     const created = await this.createNote({});
     this.databaseService.setNoteChapterOnly(created.id, true);
     this.databaseService.setNoteAutoToc(created.id, true);
-    this.databaseService.addChapter(parentNoteId, created.id);
-    this.databaseService.pinChapterToFront(parentNoteId, created.id);
+    await this.linkChapterOrCleanUp(parentNoteId, created.id, () => {
+      this.databaseService.addChapter(parentNoteId, created.id);
+      this.databaseService.pinChapterToFront(parentNoteId, created.id);
+    });
 
     return this.regenerateAutoTocChapter(parentNoteId);
   }
@@ -597,8 +628,10 @@ export class NoteLifecycleService {
       const created = await this.createNote({});
       this.databaseService.setNoteChapterOnly(created.id, true);
       this.databaseService.setNoteAutoOpenItems(created.id, true);
-      this.databaseService.addChapter(parentNoteId, created.id);
-      this.databaseService.pinChapterAfterAutoToc(parentNoteId, created.id);
+      await this.linkChapterOrCleanUp(parentNoteId, created.id, () => {
+        this.databaseService.addChapter(parentNoteId, created.id);
+        this.databaseService.pinChapterAfterAutoToc(parentNoteId, created.id);
+      });
       openItemsChapterNoteId = created.id;
     }
 
@@ -687,7 +720,7 @@ export class NoteLifecycleService {
     // the title instead.
     const created = await this.createNote({ initialText: normalizeChapterHeadings(source.text), title: source.title });
     this.databaseService.setNoteChapterOnly(created.id, true);
-    const chapters = this.databaseService.addChapter(parentNoteId, created.id);
+    const chapters = await this.linkChapterOrCleanUp(parentNoteId, created.id, () => this.databaseService.addChapter(parentNoteId, created.id));
     const createdDocument = await this.loadNote({ id: created.id });
     return { chapters, created: createdDocument };
   }
