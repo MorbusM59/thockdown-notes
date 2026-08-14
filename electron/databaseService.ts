@@ -3,7 +3,6 @@ import { existsSync, promises as fs } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
-import { deriveChapterContentSnippet } from '../src/shared/tabLabels';
 import { deriveDefaultAssignedIdBase, normalizeAssignedIdInput } from '../src/shared/assignedIds';
 import { ensureHelpNote } from './help/helpNote';
 import { shouldVacuumForBloat } from './databaseSanitationPolicy';
@@ -325,8 +324,8 @@ function titleFromText(text: string): string {
   // Level 1 only -- a chapter's own first-line heading is always level 2
   // (see markdownHeadings.ts's normalizeChapterHeadings/clampHeadlineLevels
   // with CHAPTER_HEADLINE_LEVEL_RULE) and deliberately does NOT count: chapters
-  // have no "title" concept at all, only a chapterId (see this file's
-  // ensureChapterId / tabLabels.ts's getChapterTabLabel for the actual
+  // have no "title" concept at all, only a chapterId, user-assigned or else
+  // never persisted (see tabLabels.ts's resolveIdentityLabel for the actual
   // chapter-identity logic; nothing chapter-facing should read `.title`).
   const heading = lines.find((line) => line.startsWith('# ') && line.trim().length > 2);
   if (heading) return truncateTitle(heading.slice(2).trim());
@@ -1299,22 +1298,6 @@ export class DatabaseService {
     return resolved;
   }
 
-  /**
-   * Returns the note's internal ID, assigning and persisting the default
-   * (first 8 chars of the title, de-duplicated) on first use if it doesn't
-   * have one yet.
-   */
-  ensureNoteAssignedId(noteId: string, currentTitle: string): string {
-    const db = this.requireDb();
-    const existing = db.prepare('SELECT assignedId FROM notes WHERE id = ?').get(noteId) as { assignedId: string | null } | undefined;
-    if (existing?.assignedId) return existing.assignedId;
-
-    const base = deriveDefaultAssignedIdBase(currentTitle);
-    const resolved = this.resolveUniqueAssignedId(base, noteId);
-    db.prepare('UPDATE notes SET assignedId = ? WHERE id = ?').run(resolved, noteId);
-    return resolved;
-  }
-
   // ── Editor sections (side-by-side panes) ────────────────────────────────
 
   listEditorSections(): EditorSectionEntry[] {
@@ -1587,38 +1570,6 @@ export class DatabaseService {
     const db = this.requireDb();
     const normalized = normalizeAssignedIdInput(requestedRaw);
     const resolved = normalized.length > 0 ? this.resolveUniqueChapterId(parentNoteId, normalized, chapterNoteId) : null;
-    db.prepare('UPDATE chapters SET chapterId = ? WHERE parentNoteId = ? AND chapterNoteId = ?').run(resolved, parentNoteId, chapterNoteId);
-    return resolved;
-  }
-
-  /**
-   * Returns the chapter's current chapterId if the user has explicitly
-   * assigned one (setChapterId), or otherwise -- mirroring
-   * ensureNoteAssignedId exactly -- lazily derives, PERSISTS, and returns a
-   * default the first time one is actually needed to build a
-   * `$parentId§chapterId` link target. A chapter has no "title" (see
-   * noteLifecycleService.ts's titleFromText doc comment) to derive from the
-   * way a note's assignedId does, so the fallback base is the same content
-   * snippet its own pill falls back to displaying when unassigned
-   * (tabLabels.ts's deriveChapterContentSnippet) -- but once used here,
-   * that snippet becomes a real, stable, persisted chapterId (the pill then
-   * displays it as such, same as a note's tab does once ensureNoteAssignedId
-   * gives it a real `$id`), not a value silently recomputed -- and
-   * potentially silently changing -- on every read. Because it's persisted
-   * immediately via the same DB-scoped resolveUniqueChapterId every
-   * explicit assignment goes through, two unassigned siblings processed in
-   * the same regeneration pass naturally dedupe against each other too --
-   * the first one's write is already visible to the second's own lookup, no
-   * separate in-pass tracking needed.
-   */
-  ensureChapterId(parentNoteId: string, chapterNoteId: string, contentText: string): string {
-    const db = this.requireDb();
-    const existing = db.prepare('SELECT chapterId FROM chapters WHERE parentNoteId = ? AND chapterNoteId = ?').get(parentNoteId, chapterNoteId) as { chapterId: string | null } | undefined;
-    if (existing?.chapterId) return existing.chapterId;
-
-    const snippet = deriveChapterContentSnippet(contentText);
-    const base = deriveDefaultAssignedIdBase(snippet === '···' ? 'CHAPTER' : snippet);
-    const resolved = this.resolveUniqueChapterId(parentNoteId, base, chapterNoteId);
     db.prepare('UPDATE chapters SET chapterId = ? WHERE parentNoteId = ? AND chapterNoteId = ?').run(resolved, parentNoteId, chapterNoteId);
     return resolved;
   }

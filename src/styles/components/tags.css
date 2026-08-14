@@ -169,6 +169,18 @@
   text-overflow: ellipsis;
 }
 
+/* A pill's label reads as "derived, not real" (italic) when it's showing a
+   live-computed fallback -- the entity's own content snippet -- rather than
+   an id the user actually assigned. An assigned id needs no matching rule
+   here: normalizeAssignedIdInput already upper-cases it at write time, so
+   "regular weight, all caps" is just what the stored value already looks
+   like. Shared by chapter pills and note tabs alike -- see tabLabels.ts's
+   resolveIdentityLabel, the one function that decides which of the two a
+   given label is. */
+.tag-pill-label-derived {
+  font-style: italic;
+}
+
 .tag-pill.active.protected {
   background: #eee;
 }

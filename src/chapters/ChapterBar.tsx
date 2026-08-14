@@ -3,7 +3,7 @@ import type { DragEvent, KeyboardEvent, WheelEvent as ReactWheelEvent } from 're
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { ChapterEntry } from '../shared/chapters'
 import { splitChapterFamily } from '../shared/chapters'
-import { getChapterTabLabel, getParentTabLabel } from '../shared/tabLabels'
+import { resolveIdentityLabel, getParentTabLabel } from '../shared/tabLabels'
 
 export interface ChapterBarProps {
   parentNoteId: string
@@ -206,8 +206,7 @@ export function ChapterBar({
               const isEditing = editingChapterNoteId === chapter.chapterNoteId
               const isActive = chapter.chapterNoteId === activeNoteId
               const note = notes.find((entry) => entry.id === chapter.chapterNoteId)
-              const hasAssignedId = Boolean(chapter.chapterId?.trim())
-              const label = getChapterTabLabel(chapter.chapterId, note?.contentText)
+              const { text: label, isAssigned } = resolveIdentityLabel(chapter.chapterId, note?.contentText)
 
               if (isEditing) {
                 return (
@@ -245,7 +244,7 @@ export function ChapterBar({
                   }}
                   data-tooltip={label}
                 >
-                  <span className={`tag-pill-label${hasAssignedId ? '' : ' chapter-pill-label-unassigned'}`}>{label}</span>
+                  <span className={`tag-pill-label${isAssigned ? '' : ' tag-pill-label-derived'}`}>{label}</span>
                 </div>
               )
             })}

@@ -24,7 +24,9 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
 
   it('is created lazily, pinned right after auto-TOC, once a checklist item is saved', async () => {
     const parent = await lifecycle.createNote({ initialText: '# The Book' })
+    db.setNoteAssignedId(parent.id, 'BOOK')
     const ch1 = await lifecycle.createChapterNote(parent.id)
+    const ch1LinkId = db.setChapterId(parent.id, ch1.id, 'CH1')!
     const { created: toc } = await lifecycle.createAutoTocChapter(parent.id)
 
     // No checklist content anywhere yet -- no auto-Open-Items chapter.
@@ -39,17 +41,10 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     expect(chapters[0].chapterNoteId).toBe(toc.id)
     expect(chapters[1].chapterNoteId).toBe(openItemsId)
 
-    const parentAssignedId = db.getNoteRecord(parent.id)!.assignedId!
-    const ch1Entry = chapters.find((c) => c.chapterNoteId === ch1.id)!
     const openItemsDoc = await lifecycle.loadNote({ id: openItemsId! })
 
-    // The chapter has no title concept -- its own group is labeled with a
-    // chapterId ensureChapterId persists the first time it's needed, same
-    // as the TOC's own chapter entries.
-    expect(ch1Entry.chapterId).toBeTruthy()
-    const chapterLinkId = ch1Entry.chapterId!
-    expect(openItemsDoc.text).toContain(`[${chapterLinkId}]($${parentAssignedId}§${chapterLinkId})`)
-    expect(openItemsDoc.text).toContain(`[Setting]($${parentAssignedId}§${chapterLinkId}#heading:setting)`)
+    expect(openItemsDoc.text).toContain(`[${ch1LinkId}]($BOOK§${ch1LinkId})`)
+    expect(openItemsDoc.text).toContain(`[Setting]($BOOK§${ch1LinkId}#heading:setting)`)
     expect(openItemsDoc.text).toContain('- [ ] world-building task')
     // Checked items are never listed.
     expect(openItemsDoc.text).not.toContain('done already')
@@ -60,8 +55,29 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     expect(ch1Doc.text).toBe('# Chapter One\n\n## Setting\n\n- [x] done already\n- [ ] world-building task')
   })
 
+  it('renders an unlinked, plain-text group when the note has no assigned id, instead of inventing one', async () => {
+    const parent = await lifecycle.createNote({ initialText: '# The Book' })
+    const ch1 = await lifecycle.createChapterNote(parent.id)
+    await lifecycle.createAutoTocChapter(parent.id)
+
+    await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n- [ ] world-building task' })
+
+    expect(db.getNoteRecord(parent.id)!.assignedId).toBeNull()
+    expect(db.listChaptersForNote(parent.id).find((c) => c.chapterNoteId === ch1.id)!.chapterId).toBeNull()
+
+    const openItemsId = db.getAutoOpenItemsChapterNoteId(parent.id)!
+    const openItemsDoc = await lifecycle.loadNote({ id: openItemsId })
+    // The group's own title falls back to the same derived snippet the
+    // chapter's own pill would show (resolveIdentityLabel), not "Chapter
+    // One" verbatim -- deriveContentSnippet truncates to a word boundary.
+    expect(openItemsDoc.text).toContain('- Chapter')
+    expect(openItemsDoc.text).toContain('- [ ] world-building task')
+    expect(openItemsDoc.text).not.toContain('](')
+  })
+
   it('groups the parent\'s own headless items directly under its title link', async () => {
     const parent = await lifecycle.createNote({ initialText: '# The Book' })
+    db.setNoteAssignedId(parent.id, 'BOOK')
     const ch1 = await lifecycle.createChapterNote(parent.id)
     await lifecycle.createAutoTocChapter(parent.id)
     await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One' })
@@ -69,14 +85,13 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     await lifecycle.saveNote({ id: parent.id, text: '# The Book\n\n- [ ] pick a title' })
 
     const openItemsId = db.getAutoOpenItemsChapterNoteId(parent.id)!
-    const parentAssignedId = db.getNoteRecord(parent.id)!.assignedId!
     const openItemsDoc = await lifecycle.loadNote({ id: openItemsId })
     expect(openItemsDoc.text).toBe(
       [
         '# Open Items',
         '',
         `[open-items-group:${parent.id}]`,
-        `- [The Book]($${parentAssignedId})`,
+        '- [The Book]($BOOK)',
         '  - [ ] pick a title',
         '',
       ].join('\n'),

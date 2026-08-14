@@ -39,7 +39,7 @@ import { DEFAULT_EDITOR_SECTION_ID } from '../shared/sections'
 import type { ChapterEntry, ChaptersApi } from '../shared/chapters'
 import type { ReviewFlagEntry, ReviewFlagsApi } from '../shared/reviewFlags'
 import { normalizeChapterHeadings } from '../shared/markdownHeadings'
-import { deriveChapterContentSnippet } from '../shared/tabLabels'
+import { resolveIdentityLabel } from '../shared/tabLabels'
 import { computeHeadingAnchors, formatHeadingAnchorFragment } from '../shared/tableOfContentsText'
 import { deriveDefaultAssignedIdBase, normalizeAssignedIdInput } from '../shared/assignedIds'
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, parseOpenItemsGroups } from '../shared/openItemsText'
@@ -558,17 +558,6 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
       })
     },
 
-    async ensureNoteAssignedId(input: { id: string }): Promise<string | null> {
-      return mutate((store) => {
-        const note = store.notes.find((entry) => entry.id === input.id)
-        if (!note) return null
-        if (note.assignedId) return note.assignedId
-        const base = deriveDefaultAssignedIdBase(note.title)
-        note.assignedId = resolveUniqueAssignedId(store.notes, base, note.id)
-        return note.assignedId
-      })
-    },
-
     async deleteNote(input: DeleteNoteInput): Promise<void> {
       mutate((store) => {
         // Chapters have no life outside their parent -- deleting a parent
@@ -1034,50 +1023,22 @@ function getRealChapterRowsInStore(store: BrowserMockStore, parentNoteId: string
     })
 }
 
-/** Dev-mode mirror of databaseService.ts's private resolveUniqueChapterId. */
-function resolveUniqueChapterIdInStore(store: BrowserMockStore, parentNoteId: string, requestedBase: string, excludeChapterNoteId: string): string {
-  const used = new Set(
-    store.chapters
-      .filter((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId !== excludeChapterNoteId && chapter.chapterId)
-      .map((chapter) => chapter.chapterId as string),
-  )
-  let resolved = requestedBase
-  let attempt = 2
-  while (used.has(resolved)) {
-    resolved = `${requestedBase}-${attempt}`
-    attempt += 1
-  }
-  return resolved
-}
-
 /**
- * Dev-mode mirror of databaseService.ts's ensureChapterId -- see that
- * method's own doc comment for the full reasoning (lazily derives,
- * PERSISTS, and returns a default chapterId the first time one is actually
- * needed, mirroring ensureNoteAssignedId, rather than a live stand-in
- * recomputed on every read).
+ * Dev-mode mirror of noteLifecycleService.ts's own module-level tocLine --
+ * a real link when `href` is available, plain non-clickable text otherwise
+ * (the target has no user-assigned id, and this never invents one).
  */
-function ensureChapterIdInStore(store: BrowserMockStore, parentNoteId: string, chapterNoteId: string, contentText: string): string {
-  const chapterRow = store.chapters.find((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === chapterNoteId)
-  if (chapterRow?.chapterId) return chapterRow.chapterId
-
-  const snippet = deriveChapterContentSnippet(contentText)
-  const base = deriveDefaultAssignedIdBase(snippet === '···' ? 'CHAPTER' : snippet)
-  const resolved = resolveUniqueChapterIdInStore(store, parentNoteId, base, chapterNoteId)
-
-  store.chapters = store.chapters.map((chapter) => (
-    chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === chapterNoteId
-      ? { ...chapter, chapterId: resolved }
-      : chapter
-  ))
-  return resolved
+function tocLineInStore(depth: number, label: string, href: string | null): string {
+  const indent = '  '.repeat(depth)
+  return href ? `${indent}- [${label}](${href})` : `${indent}- ${label}`
 }
 
 /**
  * Dev-mode mirror of noteLifecycleService.ts's regenerateAutoTocChapter --
- * see that method's own doc comment for what this actually does and why.
- * A no-op if `parentNoteId` has no auto-TOC chapter. Mutates `store`
- * directly rather than round-tripping through this file's own
+ * see that method's own doc comment for what this actually does and why,
+ * including the "no id is ever auto-assigned here, missing ones just render
+ * unlinked" rule. A no-op if `parentNoteId` has no auto-TOC chapter. Mutates
+ * `store` directly rather than round-tripping through this file's own
  * loadNote/saveNote bridge methods (unlike the real backend, which has to,
  * since chapters are file-backed there) -- the mock store has no such file
  * layer, so a direct in-place update is both sufficient and faithful to
@@ -1090,17 +1051,12 @@ function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string)
   ))
   if (!parentNote || !tocChapter) return
 
-  if (!parentNote.assignedId) {
-    const base = deriveDefaultAssignedIdBase(parentNote.title)
-    parentNote.assignedId = resolveUniqueAssignedId(store.notes, base, parentNote.id)
-  }
   const parentAssignedId = parentNote.assignedId
-
   const parentHeadings = computeHeadingAnchors(parentNote.text)
 
-  const lines = ['# Table of Contents', '', `- [${parentNote.title || 'Untitled'}]($${parentAssignedId})`]
+  const lines = ['# Table of Contents', '', tocLineInStore(0, parentNote.title || 'Untitled', parentAssignedId ? `$${parentAssignedId}` : null)]
   for (const heading of parentHeadings) {
-    lines.push(`  - [${heading.label}]($${parentAssignedId}#${formatHeadingAnchorFragment(heading.anchorId)})`)
+    lines.push(tocLineInStore(1, heading.label, parentAssignedId ? `$${parentAssignedId}#${formatHeadingAnchorFragment(heading.anchorId)}` : null))
   }
 
   const chapterRows = getRealChapterRowsInStore(store, parentNoteId)
@@ -1109,13 +1065,12 @@ function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string)
     const chapterNote = store.notes.find((note) => note.id === row.chapterNoteId)
     if (!chapterNote) continue
 
-    const linkChapterId = ensureChapterIdInStore(store, parentNoteId, row.chapterNoteId, chapterNote.text)
     const [rootHeading, ...restHeadings] = computeHeadingAnchors(chapterNote.text)
-
-    const rootLabel = rootHeading ? rootHeading.label : linkChapterId
-    lines.push(`- [${rootLabel}]($${parentAssignedId}§${linkChapterId})`)
+    const rootHref = parentAssignedId && row.chapterId ? `$${parentAssignedId}§${row.chapterId}` : null
+    const rootLabel = rootHeading ? rootHeading.label : resolveIdentityLabel(row.chapterId, chapterNote.text).text
+    lines.push(tocLineInStore(0, rootLabel, rootHref))
     for (const heading of restHeadings) {
-      lines.push(`  - [${heading.label}]($${parentAssignedId}§${linkChapterId}#${formatHeadingAnchorFragment(heading.anchorId)})`)
+      lines.push(tocLineInStore(1, heading.label, rootHref ? `${rootHref}#${formatHeadingAnchorFragment(heading.anchorId)}` : null))
     }
   }
 
@@ -1185,30 +1140,22 @@ function regenerateOpenItemsGroupInStore(store: BrowserMockStore, parentNoteId: 
   const parentNote = store.notes.find((note) => note.id === parentNoteId)
   if (!changedNote || !parentNote) return
 
-  if (!parentNote.assignedId) {
-    const base = deriveDefaultAssignedIdBase(parentNote.title)
-    parentNote.assignedId = resolveUniqueAssignedId(store.notes, base, parentNote.id)
-  }
   const parentAssignedId = parentNote.assignedId
 
-  let linkPrefix: string
+  let linkPrefix: string | null
   // The parent has a real title; a chapter has no title concept at all,
-  // only a chapterId -- same distinction the real backend's
-  // regenerateOpenItemsGroup makes.
+  // only a chapterId (or, unassigned, the same derived fallback its own
+  // pill shows) -- same distinction the real backend's
+  // regenerateOpenItemsGroup makes. Neither id is ever auto-assigned here.
   let groupLabel: string
   if (changedNoteId === parentNoteId) {
-    linkPrefix = `$${parentAssignedId}`
+    linkPrefix = parentAssignedId ? `$${parentAssignedId}` : null
     groupLabel = changedNote.title || 'Untitled'
   } else {
     const chapterRow = store.chapters.find((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === changedNoteId)
     if (!chapterRow) return
-    // ensureChapterIdInStore persists a real chapterId the first time one's
-    // needed (see its own doc comment) -- the same function
-    // regenerateAutoTocInStore uses, so an Open Items group link can never
-    // resolve to a different chapter than the TOC's own entry for it does.
-    const linkChapterId = ensureChapterIdInStore(store, parentNoteId, changedNoteId, changedNote.text)
-    linkPrefix = `$${parentAssignedId}§${linkChapterId}`
-    groupLabel = linkChapterId
+    linkPrefix = parentAssignedId && chapterRow.chapterId ? `$${parentAssignedId}§${chapterRow.chapterId}` : null
+    groupLabel = resolveIdentityLabel(chapterRow.chapterId, changedNote.text).text
   }
 
   const newGroupMarkdown = buildOpenItemsGroupMarkdown(changedNote.text, linkPrefix, groupLabel)

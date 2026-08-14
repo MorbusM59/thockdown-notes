@@ -92,25 +92,34 @@ export function collectUncheckedItemsByHeading(sourceText: string): OpenItemsHea
   return buckets.filter((bucket) => bucket.items.length > 0)
 }
 
+/** One line of a group's own outline, mirroring noteLifecycleService.ts's tocLine -- a real link when `href` is available, plain non-clickable text otherwise (the note/chapter it would point at has no user-assigned id). */
+function groupLine(depth: number, label: string, href: string | null): string {
+  const indent = '  '.repeat(depth)
+  return href ? `${indent}- [${label}](${href})` : `${indent}- ${label}`
+}
+
 /**
  * Builds one note's own Open Items group -- a top-level link to the note
  * itself (`linkPrefix`, e.g. `$BOOK` for the parent or `$BOOK§ch1` for a
- * chapter), with unchecked items nested under whichever of its headings
- * they belong to (linking to that heading's own on-the-fly anchor id, never
- * writing one into the note itself), or directly under the top-level link if
- * they appear before any heading. Returns null when this note has no
- * unchecked items at all -- the caller drops the group entirely rather than
- * showing an empty entry, matching the TOC-style "skip branches with
- * nothing in them" rule this whole chapter is built around.
+ * chapter, or null if that note/chapter has no user-assigned id to link
+ * through -- see noteLifecycleService.ts's regenerateAutoTocChapter for the
+ * full "no id, no link" rule this mirrors), with unchecked items nested
+ * under whichever of its headings they belong to (linking to that heading's
+ * own on-the-fly anchor id, never writing one into the note itself), or
+ * directly under the top-level link if they appear before any heading.
+ * Returns null when this note has no unchecked items at all -- the caller
+ * drops the group entirely rather than showing an empty entry, matching the
+ * TOC-style "skip branches with nothing in them" rule this whole chapter is
+ * built around.
  */
-export function buildOpenItemsGroupMarkdown(sourceText: string, linkPrefix: string, titleLabel: string): string | null {
+export function buildOpenItemsGroupMarkdown(sourceText: string, linkPrefix: string | null, titleLabel: string): string | null {
   const buckets = collectUncheckedItemsByHeading(sourceText)
   if (buckets.length === 0) return null
 
-  const lines = [`- [${titleLabel || 'Untitled'}](${linkPrefix})`]
+  const lines = [groupLine(0, titleLabel || 'Untitled', linkPrefix)]
   for (const bucket of buckets) {
     if (bucket.anchorId !== null && bucket.label !== null) {
-      lines.push(`  - [${bucket.label}](${linkPrefix}#${formatHeadingAnchorFragment(bucket.anchorId)})`)
+      lines.push(groupLine(1, bucket.label, linkPrefix ? `${linkPrefix}#${formatHeadingAnchorFragment(bucket.anchorId)}` : null))
       for (const item of bucket.items) lines.push(`    - [ ] ${item}`)
     } else {
       for (const item of bucket.items) lines.push(`  - [ ] ${item}`)

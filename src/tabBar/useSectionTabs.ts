@@ -540,21 +540,15 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   const pinNoteToTabs = useCallback(async (noteId: string) => {
     if (!window.thockdownTabs) return
 
-    // Make sure the tab has a label to show immediately, assigning the
-    // default (first 8 chars of the title) if the note doesn't have a
-    // custom $id yet.
-    if (window.thockdownNotes) {
-      const assignedId = await window.thockdownNotes.ensureNoteAssignedId({ id: noteId }).catch(() => null)
-      if (assignedId) {
-        updateNoteAssignedId(noteId, assignedId)
-      }
-    }
-
+    // No id is ever auto-assigned here -- pinning is not the same thing as
+    // the user explicitly typing a `$id`. An unpinned note's tab already
+    // shows a live-derived label (resolveIdentityLabel) when it has no
+    // assigned id; pinning doesn't change that, it just keeps the tab around.
     const updatedTabs = await window.thockdownTabs.addTab(sectionId, noteId).catch(() => null)
     if (updatedTabs) {
       setPinnedTabs(updatedTabs.filter((tab) => tab.sectionId === sectionId))
     }
-  }, [sectionId, updateNoteAssignedId])
+  }, [sectionId])
 
   // Removes a note's pinned tab. If that tab belonged to the currently
   // active note, the editor blanks out rather than jumping to a neighboring
@@ -584,13 +578,8 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   const pinNoteAsRightmostTab = useCallback(async (noteId: string) => {
     if (!window.thockdownTabs) return
 
-    if (window.thockdownNotes) {
-      const assignedId = await window.thockdownNotes.ensureNoteAssignedId({ id: noteId }).catch(() => null)
-      if (assignedId) {
-        updateNoteAssignedId(noteId, assignedId)
-      }
-    }
-
+    // Same as pinNoteToTabs -- no id auto-assigned just because this note
+    // got pinned.
     const afterAdd = await window.thockdownTabs.addTab(sectionId, noteId).catch(() => null)
     if (!afterAdd) return
     const currentOrder = afterAdd.filter((tab) => tab.sectionId === sectionId)
@@ -603,7 +592,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     if (afterReorder) {
       setPinnedTabs(afterReorder.filter((tab) => tab.sectionId === sectionId))
     }
-  }, [sectionId, updateNoteAssignedId])
+  }, [sectionId])
 
   // Dismissing the temp tab has nothing to persist-remove (it was never a
   // real note_tabs row) -- just blanks the editor, same as unpinning the

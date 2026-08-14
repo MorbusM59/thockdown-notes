@@ -24,7 +24,6 @@ export const NOTE_LIFECYCLE_CHANNELS = {
   getSnapshotAnchor: 'notes:get-snapshot-anchor',
   branchNoteFromSnapshot: 'notes:branch-from-snapshot',
   setAssignedId: 'notes:set-internal-id',
-  ensureAssignedId: 'notes:ensure-internal-id',
 } as const;
 
 export interface NoteSummary {
@@ -188,10 +187,8 @@ export interface NoteLifecycleApi {
   saveSnapshotAnchor(input: { snapshotId: number; anchorBlockIndex: number | null }): Promise<void>;
   getSnapshotAnchor(input: { snapshotId: number }): Promise<number>;
   branchNoteFromSnapshot(input: BranchNoteFromSnapshotInput): Promise<NoteDocument>;
-  /** Explicit `$id` assignment. Overwrites any existing ID; resolves collisions with a "-2", "-3", ... suffix. */
+  /** Explicit `$id` assignment. Overwrites any existing ID; resolves collisions with a "-2", "-3", ... suffix. The only way a note's assignedId is ever written -- never auto-assigned as a side effect of anything else (pinning a tab, the auto-generated TOC needing one to link through, ...). */
   setNoteAssignedId(input: { id: string; requestedId: string }): Promise<NoteSummary | null>;
-  /** Lazily assigns + returns the default ID (first 8 chars of title) if the note doesn't have one yet. */
-  ensureNoteAssignedId(input: { id: string }): Promise<string | null>;
 }
 
 export function isArchivedNote(note: NoteSummary): boolean {

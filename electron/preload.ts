@@ -83,7 +83,6 @@ const noteLifecycleApi: NoteLifecycleApi = {
   getSnapshotAnchor: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.getSnapshotAnchor, input),
   branchNoteFromSnapshot: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.branchNoteFromSnapshot, input),
   setNoteAssignedId: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.setAssignedId, input),
-  ensureNoteAssignedId: (input) => ipcRenderer.invoke(NOTE_LIFECYCLE_CHANNELS.ensureAssignedId, input),
 }
 
 contextBridge.exposeInMainWorld('thockdownNotes', noteLifecycleApi)

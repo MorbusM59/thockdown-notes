@@ -22,6 +22,7 @@ import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitizat
 import { normalizeChapterHeadings } from '../src/shared/markdownHeadings';
 import { computeHeadingAnchors, formatHeadingAnchorFragment, headingsChanged } from '../src/shared/tableOfContentsText';
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, parseOpenItemsGroups } from '../src/shared/openItemsText';
+import { resolveIdentityLabel } from '../src/shared/tabLabels';
 import type { ChapterEntry, DatabaseService, NoteRecord } from './databaseService';
 
 const NOTES_DIR_NAME = 'notes';
@@ -49,15 +50,26 @@ function checksumText(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
+/**
+ * One line of the auto-generated TOC/Open-Items outline, indented `depth`
+ * levels deep. Renders as a real `[label](href)` link when `href` is
+ * available, or as plain, non-clickable text when it's null -- the target
+ * is missing an id the user never assigned, and this never invents one just
+ * to make a link "work" (see regenerateAutoTocChapter's own doc comment).
+ */
+function tocLine(depth: number, label: string, href: string | null): string {
+  const indent = '  '.repeat(depth);
+  return href ? `${indent}- [${label}](${href})` : `${indent}- ${label}`;
+}
+
 function titleFromText(text: string): string {
   const lines = normalizeText(text).split('\n');
   // Level 1 only -- a chapter's own first-line heading is always level 2
   // (see markdownHeadings.ts's normalizeChapterHeadings/clampHeadlineLevels
   // with CHAPTER_HEADLINE_LEVEL_RULE) and deliberately does NOT count: chapters
-  // have no "title" concept at all, only a chapterId (see
-  // databaseService.ts's ensureChapterId / tabLabels.ts's getChapterTabLabel
-  // for the actual chapter-identity logic; nothing chapter-facing should
-  // read `.title`).
+  // have no "title" concept at all, only a chapterId, user-assigned or else
+  // never persisted (see tabLabels.ts's resolveIdentityLabel for the actual
+  // chapter-identity logic; nothing chapter-facing should read `.title`).
   const heading = lines.find((line) => line.startsWith('# ') && line.trim().length > 2);
   if (heading) return truncateTitle(heading.slice(2).trim());
 
@@ -419,26 +431,29 @@ export class NoteLifecycleService {
   // the parent itself (`$parentAssignedId`), then each chapter's own
   // headings under a link to that chapter (`$parentAssignedId§chapterId`).
   //
-  // A chapter's own entry is its own FIRST heading -- not a separate
-  // chapter-id-labeled line above it. That first heading is guaranteed to
-  // exist and be exactly level 2 (the chapter-heading-level invariant --
-  // see markdownHeadings.ts's CHAPTER_HEADLINE_LEVEL_RULE), which is
-  // exactly what makes a separate identity line redundant: opening the
-  // chapter from that entry already lands at the top, at that very heading.
-  // (A chapter with no heading at all yet -- an edge case the invariant
-  // doesn't prevent, since it only clamps existing headings, never
-  // synthesizes one -- falls back to its own chapterId as the entry label,
-  // same as before.) Every other heading nests one level under it, exactly
-  // as it did before minus the now-removed redundant first entry.
+  // Every id used here -- the parent's own assignedId, and each chapter's
+  // own chapterId -- is read as-is, NEVER auto-assigned or persisted just
+  // because the TOC needs one. That's a hard rule, not a convenience
+  // shortcut: an id only ever exists because the user explicitly set it
+  // (setNoteAssignedId / setChapterId). Whatever's missing an id simply
+  // can't be linked to -- its heading(s) render as plain, non-clickable
+  // text via `tocLine`'s own href-or-plain fallback -- rather than the TOC
+  // silently minting one on the user's behalf. Since a parent's own
+  // assignedId is what every chapter's link is built on TOP of
+  // (`$parentAssignedId§chapterId`), an unassigned parent means the ENTIRE
+  // TOC comes out unlinked, even for chapters that do have their own
+  // chapterId -- there's no way to construct a valid `$...` href without it.
   //
-  // `ensureChapterId` (mirroring ensureNoteAssignedId) is what supplies the
-  // chapterId in the link target for a chapter that's never had one
-  // explicitly assigned -- see its own doc comment for why this replaced
-  // the old live-recomputed-every-time stand-in: an id is now real and
-  // persisted (and the pill reflects it as such) the first time the TOC
-  // ever needs to link to that chapter, so the renderer's own click
-  // resolution can just match `chapters[].chapterId` directly, the same
-  // simple way it always could for an explicitly assigned one.
+  // A chapter's own entry is its own FIRST heading -- not a separate
+  // chapter-id-labeled line above it. Opening the chapter from that entry
+  // already lands at the top, at that very heading, which is what makes a
+  // separate identity line redundant. (A chapter with no heading at all yet
+  // -- an edge case the heading-level invariant doesn't prevent, since it
+  // only clamps existing headings, never synthesizes one -- falls back to
+  // the same identity label its own pill would show, via
+  // resolveIdentityLabel: its chapterId if assigned, otherwise a live
+  // content-derived snippet, same as always.) Every other heading nests one
+  // level under it.
   //
   // Heading anchor ids are computed on the fly (computeHeadingAnchors) and
   // wrapped in a `heading:` fragment (formatHeadingAnchorFragment) --
@@ -458,26 +473,27 @@ export class NoteLifecycleService {
     if (!parentRecord) {
       throw new Error(`Parent note ${parentNoteId} not found`);
     }
-    const parentAssignedId = this.databaseService.ensureNoteAssignedId(parentNoteId, parentRecord.title);
+    const parentAssignedId = parentRecord.assignedId;
 
     const parentDoc = await this.loadNote({ id: parentNoteId });
     const parentHeadings = computeHeadingAnchors(parentDoc.text);
 
-    const lines = ['# Table of Contents', '', `- [${parentRecord.title || 'Untitled'}]($${parentAssignedId})`];
+    const lines = ['# Table of Contents', '', tocLine(0, parentRecord.title || 'Untitled', parentAssignedId ? `$${parentAssignedId}` : null)];
     for (const heading of parentHeadings) {
-      lines.push(`  - [${heading.label}]($${parentAssignedId}#${formatHeadingAnchorFragment(heading.anchorId)})`);
+      lines.push(tocLine(1, heading.label, parentAssignedId ? `$${parentAssignedId}#${formatHeadingAnchorFragment(heading.anchorId)}` : null));
     }
 
     const chapterRows = this.getRealChapterRows(parentNoteId);
     for (const row of chapterRows) {
       const chapterDoc = await this.loadNote({ id: row.chapterNoteId });
-      const chapterId = this.databaseService.ensureChapterId(parentNoteId, row.chapterNoteId, chapterDoc.text);
+      const chapterId = row.chapterId;
       const [rootHeading, ...restHeadings] = computeHeadingAnchors(chapterDoc.text);
 
-      const rootLabel = rootHeading ? rootHeading.label : chapterId;
-      lines.push(`- [${rootLabel}]($${parentAssignedId}§${chapterId})`);
+      const rootHref = parentAssignedId && chapterId ? `$${parentAssignedId}§${chapterId}` : null;
+      const rootLabel = rootHeading ? rootHeading.label : resolveIdentityLabel(chapterId, chapterDoc.text).text;
+      lines.push(tocLine(0, rootLabel, rootHref));
       for (const heading of restHeadings) {
-        lines.push(`  - [${heading.label}]($${parentAssignedId}§${chapterId}#${formatHeadingAnchorFragment(heading.anchorId)})`);
+        lines.push(tocLine(1, heading.label, rootHref ? `${rootHref}#${formatHeadingAnchorFragment(heading.anchorId)}` : null));
       }
     }
 
@@ -569,23 +585,25 @@ export class NoteLifecycleService {
     if (!this.databaseService.getAutoTocChapterNoteId(parentNoteId)) return;
 
     const changedDoc = await this.loadNote({ id: changedNoteId });
+    const parentRecord = this.databaseService.getNoteRecord(parentNoteId);
+    if (!parentRecord) return;
+    const parentAssignedId = parentRecord.assignedId;
 
-    let linkPrefix: string;
+    let linkPrefix: string | null;
     // The parent has a real title (its own single-# first line); a chapter
-    // has no title concept at all, only a chapterId -- same distinction
-    // regenerateAutoTocChapter's own TOC-entry label makes.
+    // has no title concept at all, only a chapterId -- or, unassigned, the
+    // same derived fallback its own pill shows -- same distinction
+    // regenerateAutoTocChapter's own TOC-entry label makes. Neither id is
+    // ever auto-assigned here; see that method's own doc comment for the
+    // full "no id, no link" rule this mirrors.
     let groupLabel: string;
     if (changedNoteId === parentNoteId) {
-      const parentAssignedId = this.databaseService.ensureNoteAssignedId(parentNoteId, changedDoc.title);
-      linkPrefix = `$${parentAssignedId}`;
+      linkPrefix = parentAssignedId ? `$${parentAssignedId}` : null;
       groupLabel = changedDoc.title || 'Untitled';
     } else {
-      const parentRecord = this.databaseService.getNoteRecord(parentNoteId);
-      if (!parentRecord) return;
-      const parentAssignedId = this.databaseService.ensureNoteAssignedId(parentNoteId, parentRecord.title);
-      const chapterId = this.databaseService.ensureChapterId(parentNoteId, changedNoteId, changedDoc.text);
-      linkPrefix = `$${parentAssignedId}§${chapterId}`;
-      groupLabel = chapterId;
+      const chapterId = this.databaseService.listChaptersForNote(parentNoteId).find((row) => row.chapterNoteId === changedNoteId)?.chapterId ?? null;
+      linkPrefix = parentAssignedId && chapterId ? `$${parentAssignedId}§${chapterId}` : null;
+      groupLabel = resolveIdentityLabel(chapterId, changedDoc.text).text;
     }
 
     const newGroupMarkdown = buildOpenItemsGroupMarkdown(changedDoc.text, linkPrefix, groupLabel);
@@ -1046,19 +1064,6 @@ export class NoteLifecycleService {
     const record = this.databaseService.getNoteRecord(input.id);
     if (!record) return null;
     return this.readSummary(record);
-  }
-
-  /**
-   * Returns the note's internal ID, lazily assigning the default (first 8
-   * characters of the current title, de-duplicated) the first time one is
-   * needed — e.g. when the note is pinned to the tab bar.
-   */
-  async ensureNoteAssignedId(input: { id: string }): Promise<string | null> {
-    const record = this.databaseService.getNoteRecord(input.id);
-    if (!record) return null;
-    const summary = await this.readSummary(record);
-    const title = summary?.title ?? record.title;
-    return this.databaseService.ensureNoteAssignedId(input.id, title);
   }
 
   async listTags(): Promise<TagSummary[]> {

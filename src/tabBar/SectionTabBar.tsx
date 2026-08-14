@@ -2,7 +2,7 @@ import type { CSSProperties, MouseEvent, RefObject } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import { isArchivedNote, isDeletedNote } from '../shared/noteLifecycle'
 import { normalizeTagName, isProtectedTagName } from '../shared/tags'
-import { getNoteTabLabel } from '../shared/tabLabels'
+import { resolveIdentityLabel } from '../shared/tabLabels'
 import { TEMP_TAB_PIN_HOLD_MS, type UseSectionTabsResult } from './useSectionTabs'
 
 export interface SectionTabBarProps {
@@ -150,6 +150,8 @@ export function SectionTabBar({
     handleTabsContainerDrop,
   } = tabs
 
+  const activeNoteIdentityLabel = resolveIdentityLabel(activeNoteSummary?.assignedId, activeNoteSummary?.contentText)
+
   return (
     <section
       ref={tabbarGridRef}
@@ -238,8 +240,8 @@ export function SectionTabBar({
                 : 'Click to show suggested tags, right-click to assign this note\'s id'
             }
           >
-            <span className="tag-pill-label">
-              {tabBarMode === 'tabs' ? (sectionName ?? '···') : getNoteTabLabel(activeNoteSummary?.assignedId)}
+            <span className={tabBarMode === 'tabs' ? 'tag-pill-label' : `tag-pill-label${activeNoteIdentityLabel.isAssigned ? '' : ' tag-pill-label-derived'}`}>
+              {tabBarMode === 'tabs' ? (sectionName ?? '···') : activeNoteIdentityLabel.text}
             </span>
           </button>
         )}
@@ -292,7 +294,7 @@ export function SectionTabBar({
                 <>
                   {tempTabNoteId ? (() => {
                     const note = notes.find((entry) => entry.id === tempTabNoteId)
-                    const label = getNoteTabLabel(note?.assignedId)
+                    const { text: label, isAssigned } = resolveIdentityLabel(note?.assignedId, note?.contentText)
                     const isGhost = note ? (isArchivedNote(note) || isDeletedNote(note)) : true
                     const isPrimed = unpinPrimedTabNoteId === tempTabNoteId
                     const isArming = pinArmingTabNoteId === tempTabNoteId
@@ -315,13 +317,13 @@ export function SectionTabBar({
                             : `${note?.title ?? 'Open note'} — hold to pin`
                         }
                       >
-                        <span className="tag-pill-label">{label}</span>
+                        <span className={`tag-pill-label${isAssigned ? '' : ' tag-pill-label-derived'}`}>{label}</span>
                       </div>
                     )
                   })() : null}
                   {pinnedTabs.map((tab, index) => {
                     const note = notes.find((entry) => entry.id === tab.noteId)
-                    const label = getNoteTabLabel(note?.assignedId)
+                    const { text: label, isAssigned } = resolveIdentityLabel(note?.assignedId, note?.contentText)
                     const isGhost = note ? (isArchivedNote(note) || isDeletedNote(note)) : true
                     const isActive = tab.noteId === tabIdentityNoteId
                     const isPrimed = unpinPrimedTabNoteId === tab.noteId
@@ -342,7 +344,7 @@ export function SectionTabBar({
                             : (note?.title ?? 'Open note')
                         }
                       >
-                        <span className="tag-pill-label">{label}</span>
+                        <span className={`tag-pill-label${isAssigned ? '' : ' tag-pill-label-derived'}`}>{label}</span>
                       </div>
                     )
                   })}

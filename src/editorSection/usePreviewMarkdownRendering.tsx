@@ -438,13 +438,11 @@ export function usePreviewMarkdownRendering({
       const parentNoteId = contextNote.id
       const normalizedChapterTarget = normalizeInternalIdForLookup(target.chapterIdRaw)
       void window.thockdownChapters.listChapters(parentNoteId).then((chapters) => {
-        // Every chapter a generated link can point at has already had
-        // ensureChapterId (databaseService.ts) called on it by the time the
-        // link exists -- an id is real and persisted the moment the TOC/Open
-        // Items generation first needs to link to that chapter, not a value
-        // recomputed here -- so a direct match against the persisted
-        // chapterId is always correct, the same way it always was for one
-        // the user explicitly assigned.
+        // The auto-generated TOC/Open Items chapters never produce a link
+        // into a chapter that lacks an explicitly user-assigned chapterId
+        // (see noteLifecycleService.ts's regenerateAutoTocChapter -- no id
+        // is ever invented just to make a link "work"), so a direct match
+        // against `entry.chapterId` is always correct here.
         const chapterEntry = chapters.find((entry) => entry.chapterId && normalizeInternalIdForLookup(entry.chapterId) === normalizedChapterTarget)
         if (!chapterEntry) return
         const chapterContentText = notesRef.current.find((note) => note.id === chapterEntry.chapterNoteId)?.contentText ?? ''
