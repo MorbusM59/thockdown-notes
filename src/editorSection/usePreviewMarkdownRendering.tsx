@@ -20,8 +20,6 @@ import {
   PREVIEW_MARKDOWN_REMARK_PLUGINS,
 } from '../editor/PreviewMarkdown'
 import { findHeadingAnchorLine, parseHeadingAnchorFragment } from '../shared/tableOfContentsText'
-import { splitChapterFamily } from '../shared/chapters'
-import { resolveChapterLinkIds } from '../shared/tabLabels'
 import { splitMarkdownIntoPreviewBlocksIncremental, type PreviewBlockSplitCache } from '../editor/PreviewBlockSplit'
 import { resolvePreviewBlockIndexForSourceLine } from '../editor/PreviewBlockIndex'
 import { scrollToNonQuantizedSmooth } from '../editor/NonQuantizedSmoothScroll'
@@ -440,24 +438,18 @@ export function usePreviewMarkdownRendering({
       const parentNoteId = contextNote.id
       const normalizedChapterTarget = normalizeInternalIdForLookup(target.chapterIdRaw)
       void window.thockdownChapters.listChapters(parentNoteId).then((chapters) => {
-        // resolveChapterLinkIds mirrors exactly what the TOC/Open-Items
-        // generation used to label this chapter with, including the live,
-        // never-persisted stand-in an unassigned chapter gets -- matching
-        // only against `entry.chapterId` (as this used to) can never find
-        // an unassigned chapter, since that field stays null until the user
-        // explicitly assigns one (setChapterId).
-        const { realChapters } = splitChapterFamily(chapters, notesRef.current)
-        const chapterLinkIds = resolveChapterLinkIds(realChapters.map((entry) => ({
-          chapterNoteId: entry.chapterNoteId,
-          chapterId: entry.chapterId,
-          contentText: notesRef.current.find((note) => note.id === entry.chapterNoteId)?.contentText,
-        })))
-        const matchedChapterNoteId = Array.from(chapterLinkIds.entries())
-          .find(([, linkId]) => normalizeInternalIdForLookup(linkId) === normalizedChapterTarget)?.[0]
-        if (!matchedChapterNoteId) return
-        const chapterContentText = notesRef.current.find((note) => note.id === matchedChapterNoteId)?.contentText ?? ''
+        // Every chapter a generated link can point at has already had
+        // ensureChapterId (databaseService.ts) called on it by the time the
+        // link exists -- an id is real and persisted the moment the TOC/Open
+        // Items generation first needs to link to that chapter, not a value
+        // recomputed here -- so a direct match against the persisted
+        // chapterId is always correct, the same way it always was for one
+        // the user explicitly assigned.
+        const chapterEntry = chapters.find((entry) => entry.chapterId && normalizeInternalIdForLookup(entry.chapterId) === normalizedChapterTarget)
+        if (!chapterEntry) return
+        const chapterContentText = notesRef.current.find((note) => note.id === chapterEntry.chapterNoteId)?.contentText ?? ''
         if (target.anchorId !== null && resolveAnchorTarget(target.anchorId).resolveLine(chapterContentText) === null) return
-        activateAndScroll(matchedChapterNoteId, chapterContentText, target.anchorId)
+        activateAndScroll(chapterEntry.chapterNoteId, chapterContentText, target.anchorId)
       })
       return
     }

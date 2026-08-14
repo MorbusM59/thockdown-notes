@@ -1,11 +1,9 @@
-// Pure id-normalization helpers, shared between the main process
-// (databaseService.ts, where a note's/chapter's assignedId is actually
-// persisted) and anywhere else that needs to derive or reproduce the same
-// id from a title/snippet -- framework-free, no DOM/Node/DB dependency, so
-// the renderer can import it directly without an IPC round trip. Originally
-// lived only in databaseService.ts; extracted here so the renderer (see
-// tabLabels.ts's resolveChapterLinkIds) can reproduce the exact same
-// derivation when it needs to resolve an id it never persisted itself.
+// Pure id-normalization helpers, used wherever a note's or chapter's
+// default id needs to be derived from a title/snippet -- framework-free, no
+// DOM/Node/DB dependency. Originally lived only in databaseService.ts;
+// extracted here so the dev-mode browser mock (installBrowserMockBridges.ts)
+// could import the same implementation instead of maintaining its own
+// duplicate, rather than the two silently drifting apart.
 
 const NOTE_INTERNAL_ID_MAX_LEN = 8
 

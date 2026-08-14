@@ -39,7 +39,7 @@ import { DEFAULT_EDITOR_SECTION_ID } from '../shared/sections'
 import type { ChapterEntry, ChaptersApi } from '../shared/chapters'
 import type { ReviewFlagEntry, ReviewFlagsApi } from '../shared/reviewFlags'
 import { normalizeChapterHeadings } from '../shared/markdownHeadings'
-import { resolveChapterLinkIds } from '../shared/tabLabels'
+import { deriveChapterContentSnippet } from '../shared/tabLabels'
 import { computeHeadingAnchors, formatHeadingAnchorFragment } from '../shared/tableOfContentsText'
 import { deriveDefaultAssignedIdBase, normalizeAssignedIdInput } from '../shared/assignedIds'
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, parseOpenItemsGroups } from '../shared/openItemsText'
@@ -1034,6 +1034,45 @@ function getRealChapterRowsInStore(store: BrowserMockStore, parentNoteId: string
     })
 }
 
+/** Dev-mode mirror of databaseService.ts's private resolveUniqueChapterId. */
+function resolveUniqueChapterIdInStore(store: BrowserMockStore, parentNoteId: string, requestedBase: string, excludeChapterNoteId: string): string {
+  const used = new Set(
+    store.chapters
+      .filter((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId !== excludeChapterNoteId && chapter.chapterId)
+      .map((chapter) => chapter.chapterId as string),
+  )
+  let resolved = requestedBase
+  let attempt = 2
+  while (used.has(resolved)) {
+    resolved = `${requestedBase}-${attempt}`
+    attempt += 1
+  }
+  return resolved
+}
+
+/**
+ * Dev-mode mirror of databaseService.ts's ensureChapterId -- see that
+ * method's own doc comment for the full reasoning (lazily derives,
+ * PERSISTS, and returns a default chapterId the first time one is actually
+ * needed, mirroring ensureNoteAssignedId, rather than a live stand-in
+ * recomputed on every read).
+ */
+function ensureChapterIdInStore(store: BrowserMockStore, parentNoteId: string, chapterNoteId: string, contentText: string): string {
+  const chapterRow = store.chapters.find((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === chapterNoteId)
+  if (chapterRow?.chapterId) return chapterRow.chapterId
+
+  const snippet = deriveChapterContentSnippet(contentText)
+  const base = deriveDefaultAssignedIdBase(snippet === '···' ? 'CHAPTER' : snippet)
+  const resolved = resolveUniqueChapterIdInStore(store, parentNoteId, base, chapterNoteId)
+
+  store.chapters = store.chapters.map((chapter) => (
+    chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === chapterNoteId
+      ? { ...chapter, chapterId: resolved }
+      : chapter
+  ))
+  return resolved
+}
+
 /**
  * Dev-mode mirror of noteLifecycleService.ts's regenerateAutoTocChapter --
  * see that method's own doc comment for what this actually does and why.
@@ -1066,27 +1105,16 @@ function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string)
 
   const chapterRows = getRealChapterRowsInStore(store, parentNoteId)
 
-  // resolveChapterLinkIds is the single source of truth for what a
-  // chapter's own `§chapterId` link resolves to -- the real backend's
-  // regenerateAutoTocChapter and the renderer's own
-  // navigateToInternalPreviewLink both go through the exact same function,
-  // so this mock has to as well or a stand-in id it displays here could
-  // resolve to a different chapter (or nothing) when clicked.
-  const chapterLinkIds = resolveChapterLinkIds(chapterRows.map((row) => ({
-    chapterNoteId: row.chapterNoteId,
-    chapterId: row.chapterId,
-    contentText: store.notes.find((note) => note.id === row.chapterNoteId)?.text ?? '',
-  })))
-
   for (const row of chapterRows) {
     const chapterNote = store.notes.find((note) => note.id === row.chapterNoteId)
     if (!chapterNote) continue
 
-    const chapterHeadings = computeHeadingAnchors(chapterNote.text)
-    const linkChapterId = chapterLinkIds.get(row.chapterNoteId)!
+    const linkChapterId = ensureChapterIdInStore(store, parentNoteId, row.chapterNoteId, chapterNote.text)
+    const [rootHeading, ...restHeadings] = computeHeadingAnchors(chapterNote.text)
 
-    lines.push(`- [${linkChapterId}]($${parentAssignedId}§${linkChapterId})`)
-    for (const heading of chapterHeadings) {
+    const rootLabel = rootHeading ? rootHeading.label : linkChapterId
+    lines.push(`- [${rootLabel}]($${parentAssignedId}§${linkChapterId})`)
+    for (const heading of restHeadings) {
       lines.push(`  - [${heading.label}]($${parentAssignedId}§${linkChapterId}#${formatHeadingAnchorFragment(heading.anchorId)})`)
     }
   }
@@ -1174,19 +1202,11 @@ function regenerateOpenItemsGroupInStore(store: BrowserMockStore, parentNoteId: 
   } else {
     const chapterRow = store.chapters.find((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === changedNoteId)
     if (!chapterRow) return
-    // Live, unpersisted stand-in when unassigned -- never writes chapterRow.chapterId
-    // (see regenerateAutoTocInStore's own comment on this). Resolved via the
-    // same family-wide resolveChapterLinkIds pass regenerateAutoTocInStore
-    // uses, not a lone getChapterLinkId-style lookup -- otherwise an
-    // unassigned chapter's Open Items group link could resolve to a
-    // different id than its own TOC entry does.
-    const chapterRows = getRealChapterRowsInStore(store, parentNoteId)
-    const chapterLinkIds = resolveChapterLinkIds(chapterRows.map((row) => ({
-      chapterNoteId: row.chapterNoteId,
-      chapterId: row.chapterId,
-      contentText: row.chapterNoteId === changedNoteId ? changedNote.text : (store.notes.find((note) => note.id === row.chapterNoteId)?.text ?? ''),
-    })))
-    const linkChapterId = chapterLinkIds.get(changedNoteId)!
+    // ensureChapterIdInStore persists a real chapterId the first time one's
+    // needed (see its own doc comment) -- the same function
+    // regenerateAutoTocInStore uses, so an Open Items group link can never
+    // resolve to a different chapter than the TOC's own entry for it does.
+    const linkChapterId = ensureChapterIdInStore(store, parentNoteId, changedNoteId, changedNote.text)
     linkPrefix = `$${parentAssignedId}§${linkChapterId}`
     groupLabel = linkChapterId
   }

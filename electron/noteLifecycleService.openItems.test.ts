@@ -2,9 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { DatabaseService, deriveDefaultAssignedIdBase } from './databaseService'
+import { DatabaseService } from './databaseService'
 import { NoteLifecycleService } from './noteLifecycleService'
-import { deriveChapterContentSnippet } from '../src/shared/tabLabels'
 
 describe('NoteLifecycleService auto-Open-Items chapter', () => {
   let dataRoot: string
@@ -45,10 +44,10 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     const openItemsDoc = await lifecycle.loadNote({ id: openItemsId! })
 
     // The chapter has no title concept -- its own group is labeled with a
-    // live, unpersisted content-snippet link id, same as the TOC's own
-    // chapter entries. Never explicitly assigned, so it never persists.
-    expect(ch1Entry.chapterId).toBeNull()
-    const chapterLinkId = deriveDefaultAssignedIdBase(deriveChapterContentSnippet('# Chapter One\n\n## Setting\n\n- [x] done already\n- [ ] world-building task'))
+    // chapterId ensureChapterId persists the first time it's needed, same
+    // as the TOC's own chapter entries.
+    expect(ch1Entry.chapterId).toBeTruthy()
+    const chapterLinkId = ch1Entry.chapterId!
     expect(openItemsDoc.text).toContain(`[${chapterLinkId}]($${parentAssignedId}§${chapterLinkId})`)
     expect(openItemsDoc.text).toContain(`[Setting]($${parentAssignedId}§${chapterLinkId}#heading:setting)`)
     expect(openItemsDoc.text).toContain('- [ ] world-building task')

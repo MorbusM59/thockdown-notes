@@ -21,7 +21,6 @@ import type {
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
 import { normalizeChapterHeadings } from '../src/shared/markdownHeadings';
 import { computeHeadingAnchors, formatHeadingAnchorFragment, headingsChanged } from '../src/shared/tableOfContentsText';
-import { resolveChapterLinkIds } from '../src/shared/tabLabels';
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, parseOpenItemsGroups } from '../src/shared/openItemsText';
 import type { ChapterEntry, DatabaseService, NoteRecord } from './databaseService';
 
@@ -56,7 +55,7 @@ function titleFromText(text: string): string {
   // (see markdownHeadings.ts's normalizeChapterHeadings/clampHeadlineLevels
   // with CHAPTER_HEADLINE_LEVEL_RULE) and deliberately does NOT count: chapters
   // have no "title" concept at all, only a chapterId (see
-  // databaseService.ts's getChapterLinkId / tabLabels.ts's getChapterTabLabel
+  // databaseService.ts's ensureChapterId / tabLabels.ts's getChapterTabLabel
   // for the actual chapter-identity logic; nothing chapter-facing should
   // read `.title`).
   const heading = lines.find((line) => line.startsWith('# ') && line.trim().length > 2);
@@ -419,16 +418,27 @@ export class NoteLifecycleService {
   // The master index is rebuilt: the parent's own headings under a link to
   // the parent itself (`$parentAssignedId`), then each chapter's own
   // headings under a link to that chapter (`$parentAssignedId§chapterId`).
-  // Chapters without a user-assigned chapterId get a live, unpersisted
-  // content-snippet stand-in (resolveChapterLinkIds) so the index can still
-  // link somewhere -- unlike a note's own assignedId, this is never written
-  // back; only the user explicitly assigning one (setChapterId) ever does.
-  // The renderer's own link-click resolution (navigateToInternalPreviewLink)
-  // calls the exact same resolveChapterLinkIds to turn a `§chapterId`
-  // segment back into a chapterNoteId, so a stand-in id the TOC displays is
-  // always exactly the id clicking it resolves through -- see that
-  // function's own doc comment for why this has to be one shared function,
-  // not two independently-reasoned-about copies.
+  //
+  // A chapter's own entry is its own FIRST heading -- not a separate
+  // chapter-id-labeled line above it. That first heading is guaranteed to
+  // exist and be exactly level 2 (the chapter-heading-level invariant --
+  // see markdownHeadings.ts's CHAPTER_HEADLINE_LEVEL_RULE), which is
+  // exactly what makes a separate identity line redundant: opening the
+  // chapter from that entry already lands at the top, at that very heading.
+  // (A chapter with no heading at all yet -- an edge case the invariant
+  // doesn't prevent, since it only clamps existing headings, never
+  // synthesizes one -- falls back to its own chapterId as the entry label,
+  // same as before.) Every other heading nests one level under it, exactly
+  // as it did before minus the now-removed redundant first entry.
+  //
+  // `ensureChapterId` (mirroring ensureNoteAssignedId) is what supplies the
+  // chapterId in the link target for a chapter that's never had one
+  // explicitly assigned -- see its own doc comment for why this replaced
+  // the old live-recomputed-every-time stand-in: an id is now real and
+  // persisted (and the pill reflects it as such) the first time the TOC
+  // ever needs to link to that chapter, so the renderer's own click
+  // resolution can just match `chapters[].chapterId` directly, the same
+  // simple way it always could for an explicitly assigned one.
   //
   // Heading anchor ids are computed on the fly (computeHeadingAnchors) and
   // wrapped in a `heading:` fragment (formatHeadingAnchorFragment) --
@@ -459,27 +469,14 @@ export class NoteLifecycleService {
     }
 
     const chapterRows = this.getRealChapterRows(parentNoteId);
-    const chapterDocs = await Promise.all(chapterRows.map((row) => this.loadNote({ id: row.chapterNoteId })));
-    const chapterDocsById = new Map(chapterDocs.map((doc) => [doc.id, doc]));
-
-    // resolveChapterLinkIds is the single source of truth for what a
-    // chapter's own `§chapterId` link resolves to -- same function the
-    // renderer's navigateToInternalPreviewLink uses to resolve a click back
-    // to a chapterNoteId, so a chapter's TOC label and what clicking it
-    // actually lands on can never drift apart.
-    const chapterLinkIds = resolveChapterLinkIds(chapterRows.map((row) => ({
-      chapterNoteId: row.chapterNoteId,
-      chapterId: row.chapterId,
-      contentText: chapterDocsById.get(row.chapterNoteId)?.text ?? '',
-    })));
-
     for (const row of chapterRows) {
-      const chapterDoc = chapterDocsById.get(row.chapterNoteId)!;
-      const chapterHeadings = computeHeadingAnchors(chapterDoc.text);
-      const chapterId = chapterLinkIds.get(row.chapterNoteId)!;
+      const chapterDoc = await this.loadNote({ id: row.chapterNoteId });
+      const chapterId = this.databaseService.ensureChapterId(parentNoteId, row.chapterNoteId, chapterDoc.text);
+      const [rootHeading, ...restHeadings] = computeHeadingAnchors(chapterDoc.text);
 
-      lines.push(`- [${chapterId}]($${parentAssignedId}§${chapterId})`);
-      for (const heading of chapterHeadings) {
+      const rootLabel = rootHeading ? rootHeading.label : chapterId;
+      lines.push(`- [${rootLabel}]($${parentAssignedId}§${chapterId})`);
+      for (const heading of restHeadings) {
         lines.push(`  - [${heading.label}]($${parentAssignedId}§${chapterId}#${formatHeadingAnchorFragment(heading.anchorId)})`);
       }
     }
@@ -493,28 +490,6 @@ export class NoteLifecycleService {
     const chapters = this.databaseService.listChaptersForNote(parentNoteId);
     const created = await this.loadNote({ id: tocChapterNoteId });
     return { chapters, created };
-  }
-
-  // Resolves one chapter's own `§chapterId` link id via resolveChapterLinkIds
-  // -- used by regenerateOpenItemsGroup, which (unlike regenerateAutoTocChapter)
-  // only ever touches one changed chapter per call, not the whole family.
-  // Fast path when it's already explicitly assigned (no other chapter's data
-  // needed at all); falls back to a full family resolution -- exactly the
-  // same pass regenerateAutoTocChapter runs -- only when unassigned, so its
-  // live stand-in id is deduped against every sibling the same way, and an
-  // Open Items group link never resolves to a different chapter than the
-  // TOC's own entry for it would.
-  private async resolveChapterLinkIdForNote(parentNoteId: string, chapterNoteId: string, chapterContentText: string): Promise<string> {
-    const chapterRows = this.getRealChapterRows(parentNoteId);
-    const ownRow = chapterRows.find((row) => row.chapterNoteId === chapterNoteId);
-    if (ownRow?.chapterId) return ownRow.chapterId;
-
-    const inputs = await Promise.all(chapterRows.map(async (row) => ({
-      chapterNoteId: row.chapterNoteId,
-      chapterId: row.chapterId,
-      contentText: row.chapterNoteId === chapterNoteId ? chapterContentText : (await this.loadNote({ id: row.chapterNoteId })).text,
-    })));
-    return resolveChapterLinkIds(inputs).get(chapterNoteId)!;
   }
 
   // The single canonical source of "real" chapters for parentNoteId --
@@ -608,7 +583,7 @@ export class NoteLifecycleService {
       const parentRecord = this.databaseService.getNoteRecord(parentNoteId);
       if (!parentRecord) return;
       const parentAssignedId = this.databaseService.ensureNoteAssignedId(parentNoteId, parentRecord.title);
-      const chapterId = await this.resolveChapterLinkIdForNote(parentNoteId, changedNoteId, changedDoc.text);
+      const chapterId = this.databaseService.ensureChapterId(parentNoteId, changedNoteId, changedDoc.text);
       linkPrefix = `$${parentAssignedId}§${chapterId}`;
       groupLabel = chapterId;
     }
