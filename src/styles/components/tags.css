@@ -252,7 +252,7 @@
   justify-content: center;
   letter-spacing: 0.05em;
   border-radius: var(--border-radius-regular);
-  font-size: calc(16px * var(--ui-font-scale));
+  font-size: calc(1em * var(--ui-font-scale));
 }
 
 /* A few UI fonts (Options > UI Font) bake unusually tall ascent metrics into
@@ -265,20 +265,25 @@
    what makes the font selectable here. */
 [data-ui-font='alata'] .tag-pill.section-identity-tab .tag-pill-label,
 [data-ui-font='xkcd'] .tag-pill.section-identity-tab .tag-pill-label {
-  transform: translateY(-0.19em);
+  transform: translateY(calc(-2px * var(--ui-font-scale)));
 }
 
-[data-ui-font='ibmplexsans'] .tag-pill.section-identity-tab .tag-pill-label {
-  transform: translateY(-0.13em);
+[data-ui-font='ibmplexsans'] .tag-pill.section-identity-tab .tag-pill-label,
+[data-ui-font='novamono'] .tag-pill.section-identity-tab .tag-pill-label,
+[data-ui-font='vt323'] .tag-pill.section-identity-tab .tag-pill-label {
+  transform: translateY(calc(-1.5px * var(--ui-font-scale)));
 }
 
-[data-ui-font='novamono'] .tag-pill.section-identity-tab .tag-pill-label {
-  transform: translateY(-0.06em);
+[data-ui-font='cevicheone'] .tag-pill.section-identity-tab .tag-pill-label,
+[data-ui-font='sniglet'] .tag-pill.section-identity-tab .tag-pill-label,
+[data-ui-font='sourgummy'] .tag-pill.section-identity-tab .tag-pill-label,
+[data-ui-font='kellyslab'] .tag-pill.section-identity-tab .tag-pill-label {
+  transform: translateY(calc(-1px * var(--ui-font-scale)));
 }
 
 .tag-pill.section-identity-tab .tag-pill-label {
   overflow: visible;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.02em;
 }
 
 .section-identity-tab.is-active {
@@ -289,11 +294,10 @@
 .section-identity-input {
   min-width: 80px;
   max-width: 80px;
-  letter-spacing: 0em;
-  height:        100%;
   border:        1px solid var(--btn-border-default);
+  border-radius: var(--border-radius-regular);
   background:    var(--btn-bg-default);
-  font-size:     calc(11px * var(--ui-font-scale));
+  font-size:     calc(0.8em * var(--ui-font-scale));
   color:         var(--color-text-80);
   justify-content: center;
   text-align: center;
