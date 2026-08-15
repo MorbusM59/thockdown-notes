@@ -538,9 +538,9 @@
    * spacing-regular tuning reasonably well without being a hard duplicate. */
   --chapter-panel-clearance-estimate: calc(
     11px * var(--ui-font-scale) * var(--ui-pill-line-height)
-    + var(--spacing-regular)
+    + 2 * var(--spacing-small)
     + 2px
-    + var(--spacing-regular)
+    + 2 * var(--spacing-regular)
   );
   --note-list-row-content-height: var(--btn-square-regular-size);
   --wordcount-panel-width: 110px;
