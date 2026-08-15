@@ -256,14 +256,6 @@ export type EditorSectionEntry = {
 /** The sole section that exists on a fresh install — also where sidebar note clicks always land. */
 export const DEFAULT_EDITOR_SECTION_ID = 'default';
 
-// normalizeAssignedIdInput/deriveDefaultAssignedIdBase moved to
-// ../src/shared/assignedIds.ts (framework-free) so the dev-mode browser
-// mock (installBrowserMockBridges.ts) could import the same implementation
-// instead of maintaining its own duplicate -- re-exported here since every
-// existing call site in this file (and its own test suite) still imports
-// them from databaseService.ts.
-export { deriveDefaultAssignedIdBase, normalizeAssignedIdInput };
-
 export type ExternalSyncState = {
   isExternal: boolean;
   hasUnsavedChanges: boolean;

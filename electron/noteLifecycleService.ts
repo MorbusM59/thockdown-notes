@@ -20,7 +20,7 @@ import type {
 } from '../src/shared/noteLifecycle';
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
 import { normalizeChapterHeadings } from '../src/shared/markdownHeadings';
-import { computeHeadingAnchors, formatHeadingAnchorFragment, headingsChanged } from '../src/shared/tableOfContentsText';
+import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine, headingsChanged } from '../src/shared/tableOfContentsText';
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, parseOpenItemsGroups } from '../src/shared/openItemsText';
 import { resolveIdentityLabel } from '../src/shared/tabLabels';
 import { formatInternalNoteLink } from '../src/shared/internalNoteLinks';
@@ -49,20 +49,6 @@ function normalizeLineEndingsOnly(text: string): string {
 
 function checksumText(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
-}
-
-/**
- * One line of the auto-generated TOC/Open-Items outline, indented `depth`
- * levels deep. Renders as a real `[label](href)` link when `href` is
- * available, or as plain, non-clickable text when it's null. In practice
- * `href` is always a real formatInternalNoteLink address -- every note has
- * a real internal id the instant it's created -- so the plain-text branch
- * is purely a defensive fallback, not something the "no assigned id"
- * case ever hits anymore (see regenerateAutoTocChapter's own doc comment).
- */
-function tocLine(depth: number, label: string, href: string | null): string {
-  const indent = '  '.repeat(depth);
-  return href ? `${indent}- [${label}](${href})` : `${indent}- ${label}`;
 }
 
 function titleFromText(text: string): string {
@@ -460,12 +446,11 @@ export class NoteLifecycleService {
   //
   // Heading anchor ids are computed on the fly (computeHeadingAnchors) and
   // wrapped in a `heading:` fragment (formatHeadingAnchorFragment) --
-  // deliberately NOT anchorizeHeadings, which would rewrite the parent's and
-  // every chapter's own heading source just because a second chapter came
-  // into existence. Neither the parent nor any chapter is ever read back
-  // through saveNote here; only the TOC chapter's own content changes. See
-  // computeHeadingAnchors's doc comment for the full split from the manual
-  // (visible, opt-in) anchor mechanism.
+  // deliberately never rewriting the parent's or any chapter's own heading
+  // source just because a second chapter came into existence. Neither the
+  // parent nor any chapter is ever read back through saveNote here; only the
+  // TOC chapter's own content changes. See computeHeadingAnchors's doc
+  // comment for the full rationale.
   async regenerateAutoTocChapter(parentNoteId: string): Promise<{ chapters: ChapterEntry[]; created: NoteDocument }> {
     const tocChapterNoteId = this.databaseService.getAutoTocChapterNoteId(parentNoteId);
     if (!tocChapterNoteId) {
@@ -481,9 +466,9 @@ export class NoteLifecycleService {
     const parentHeadings = computeHeadingAnchors(parentDoc.text);
     const parentHref = formatInternalNoteLink(parentNoteId);
 
-    const lines = ['# Table of Contents', '', tocLine(0, parentRecord.title || 'Untitled', parentHref)];
+    const lines = ['# Table of Contents', '', formatOutlineEntryLine(0, parentRecord.title || 'Untitled', parentHref)];
     for (const heading of parentHeadings) {
-      lines.push(tocLine(1, heading.label, formatInternalNoteLink(parentNoteId, formatHeadingAnchorFragment(heading.anchorId))));
+      lines.push(formatOutlineEntryLine(1, heading.label, formatInternalNoteLink(parentNoteId, formatHeadingAnchorFragment(heading.anchorId))));
     }
 
     const chapterRows = this.getRealChapterRows(parentNoteId);
@@ -493,9 +478,9 @@ export class NoteLifecycleService {
 
       const rootHref = formatInternalNoteLink(row.chapterNoteId);
       const rootLabel = rootHeading ? rootHeading.label : resolveIdentityLabel(row.chapterId, chapterDoc.text).text;
-      lines.push(tocLine(0, rootLabel, rootHref));
+      lines.push(formatOutlineEntryLine(0, rootLabel, rootHref));
       for (const heading of restHeadings) {
-        lines.push(tocLine(1, heading.label, formatInternalNoteLink(row.chapterNoteId, formatHeadingAnchorFragment(heading.anchorId))));
+        lines.push(formatOutlineEntryLine(1, heading.label, formatInternalNoteLink(row.chapterNoteId, formatHeadingAnchorFragment(heading.anchorId))));
       }
     }
 
@@ -752,11 +737,10 @@ export class NoteLifecycleService {
   // an auto-chapter's own content is generated output, not something a
   // regeneration pass should ever react to as if the user had edited it).
   // Neither hook ever mutates the parent's or a real chapter's own content
-  // any more -- both auto-TOC and auto-Open-Items generation compute their
-  // heading anchors on the fly (computeHeadingAnchors) instead of rewriting
-  // heading source the way the old anchorizeHeadings-based approach did, so
-  // there's no longer a write-triggers-another-write recursion risk here to
-  // guard against on that side either.
+  // -- both auto-TOC and auto-Open-Items generation compute their heading
+  // anchors on the fly (computeHeadingAnchors) instead of rewriting heading
+  // source into the note itself, so there's no write-triggers-another-write
+  // recursion risk here to guard against on that side either.
   async saveNote(input: SaveNoteInput, options?: { skipAutoChapterHooks?: boolean }): Promise<NoteSummary> {
     const record = this.databaseService.getNoteRecord(input.id);
     const filePath = record?.filePath ?? path.join(this.notesDir, idToFileName(input.id));

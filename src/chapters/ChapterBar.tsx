@@ -3,7 +3,7 @@ import type { DragEvent, KeyboardEvent, WheelEvent as ReactWheelEvent } from 're
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { ChapterEntry } from '../shared/chapters'
 import { splitChapterFamily } from '../shared/chapters'
-import { resolveIdentityLabel, getParentTabLabel } from '../shared/tabLabels'
+import { resolveIdentityLabel } from '../shared/tabLabels'
 
 export interface ChapterBarProps {
   parentNoteId: string
@@ -87,7 +87,6 @@ export function ChapterBar({
   onExtractSelectionToChapter,
 }: ChapterBarProps) {
   const parentNote = notes.find((note) => note.id === parentNoteId)
-  const parentLabel = getParentTabLabel()
   const isParentActive = activeNoteId === parentNoteId
   const hasCurrentChapter = !isParentActive
 
@@ -164,11 +163,11 @@ export function ChapterBar({
             onDrop={onChapterContainerDrop}
           >
             <div
-              className={`tag-pill note-tab-pill chapter-pill chapter-parent-pill${isParentActive ? ' active' : ''}`}
+              className={`tag-pill note-tab-pill chapter-pill${isParentActive ? ' active' : ''}`}
               onClick={onParentTabClick}
               onDragOver={onChapterPromoteDragOver}
               onDrop={onChapterPromoteDrop}
-              data-tooltip={parentNote?.title ?? parentLabel}
+              data-tooltip={parentNote?.title ?? 'INTRO'}
             >
               <span className="fa-solid fa-book" aria-hidden="true" />
             </div>
@@ -178,7 +177,7 @@ export function ChapterBar({
               return (
                 <div
                   key={autoTocChapter.chapterNoteId}
-                  className={`tag-pill note-tab-pill chapter-pill chapter-auto-toc-pill${isActive ? ' active' : ''}`}
+                  className={`tag-pill note-tab-pill chapter-pill${isActive ? ' active' : ''}`}
                   data-chapter-note-id={autoTocChapter.chapterNoteId}
                   onClick={() => onChapterClick(autoTocChapter.chapterNoteId)}
                   data-tooltip={note?.title ?? 'Table of Contents'}
@@ -193,7 +192,7 @@ export function ChapterBar({
               return (
                 <div
                   key={autoOpenItemsChapter.chapterNoteId}
-                  className={`tag-pill note-tab-pill chapter-pill chapter-auto-open-items-pill${isActive ? ' active' : ''}`}
+                  className={`tag-pill note-tab-pill chapter-pill${isActive ? ' active' : ''}`}
                   data-chapter-note-id={autoOpenItemsChapter.chapterNoteId}
                   onClick={() => onChapterClick(autoOpenItemsChapter.chapterNoteId)}
                   data-tooltip={note?.title ?? 'Open Items'}

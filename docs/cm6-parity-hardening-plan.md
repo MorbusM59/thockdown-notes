@@ -2295,3 +2295,67 @@ real note switch into and out of a read-only note, confirming `contenteditable` 
 this doc's own full CM6 regression-script suite -- this change doesn't touch caret/selection/scroll
 arithmetic at all, just editability reconfiguration, so that tier was judged disproportionate; flag
 for a fuller pass if a future session touches this same compartment again.
+
+## Chapter/TOC/heading-ID cohesion audit + fixes -- the single-note TOC toolbar button never worked on a chapter note
+
+**Not part of this doc's own tracked effort** -- recorded here per this file's "keep it current"
+rule since it's a genuine editorSection correctness fix, adjacent to the `editorReadOnly` entry
+above (also surfaced by chapter/TOC work, not this doc's own scroll/caret focus).
+
+**Context**: an audit of the just-shipped chapter/heading-ID/TOC/tab-label consolidation
+(`assignedIds.ts`, `tabLabels.ts`'s `resolveIdentityLabel`, `tableOfContentsText.ts`'s
+`computeHeadingAnchors`, `internalNoteLinks.ts`) found the new layer itself genuinely coherent --
+one shared definition per concept, consistently consumed -- but turned up one real, live bug plus
+several dead-code/duplication leftovers from the exploratory commits that built it.
+
+**Bug (fixed)**: `useHeadlineLevelGuard.ts` enforces `CHAPTER_HEADLINE_LEVEL_RULE` on any chapter
+note -- first line forced to level 2, every other heading clamped to level 3+ -- but the
+single-note Table of Contents toolbar button (`useMarkdownFormattingToolbar.ts`) hardcoded its
+generated block, and the title line it inserts after, at level 1/2 regardless of note type. On a
+chapter, the guard silently demoted the inserted `## Table of Contents` to `###` on the very next
+render, and because recognition was *also* hardcoded to level 2, the button could never recognize
+its own (demoted) output as active -- `isTableOfContentsActive` stayed permanently `false` on any
+chapter note, so every click inserted an unrecognized block instead of toggling one off, silently
+accumulating orphaned, un-removable blocks with repeated clicks.
+
+**Fix**: `useMarkdownFormattingToolbar.ts` now takes a `headlineRule: HeadlineLevelRule | null`
+option (computed in `EditorSection.tsx` as `activeHeadlineRule`, mirroring
+`useHeadlineLevelGuard.ts`'s own `chapterOnly ? CHAPTER_HEADLINE_LEVEL_RULE :
+NOTE_HEADLINE_LEVEL_RULE` exemption logic verbatim so the two can't drift). Both title detection
+(`findOwnTitleLineIndex`, new) and TOC-block level (`noteHasTableOfContents`,
+`buildTableOfContentsInsertion`, `removeTableOfContentsAndAnchors`) now key off that rule's
+`firstLineLevel`/`minOtherLevel` instead of hardcoded 1/2 -- `null` (external notes, and the
+auto-TOC/auto-Open-Items synthetic chapters, which never reach this toolbar) falls back to the
+exact pre-fix behavior (title = first heading of any level, block always `##`), so regular notes
+are unaffected. Also folded in, while touching this file: the three duplicated helpers
+(`parseMarkdownHeading`, `stripMarkdownInlineFormatting`, `slugifyAnchorId`) now import from
+`tableOfContentsText.ts` instead of keeping byte-identical local copies -- the file's own header
+comment already claimed this extraction had happened; it hadn't, for this file.
+
+**Also cleaned up in the same pass** (all low-risk, verified independently): removed dead exports
+with zero production callers (`increaseHeadingLevels`, `anchorizeHeadings` -- the latter's own doc
+comment described a manual-anchor code path that no longer exists, both callers having moved to
+`buildTableOfContentsInsertion`'s plain-list form and `slugifyAnchorId` respectively), a provably
+unreachable branch in `tabLabels.ts`'s `deriveContentSnippet`, a zero-argument
+`getParentTabLabel()` wrapper around a literal constant, three CSS class hooks on `ChapterBar.tsx`
+pills with no matching selector anywhere, and a stale re-export in `databaseService.ts` whose own
+justifying comment ("every existing call site... still imports them from databaseService.ts") no
+longer matched reality. Consolidated three byte-identical `tocLine`/`groupLine`/`tocLineInStore`
+outline-formatting duplicates (one per process/mock boundary: `noteLifecycleService.ts`,
+`openItemsText.ts`, `installBrowserMockBridges.ts`) into one shared `formatOutlineEntryLine`
+(`tableOfContentsText.ts`).
+
+**Verification**: `tsc --noEmit` and `npm run lint` clean; full `npm test` suite 443/443 both
+before and after, plus four new unit tests in `useMarkdownFormattingToolbar.test.ts` exercising the
+chapter-level (`###`) TOC path specifically. A/B-verified twice that the fix's own tests actually
+fail without it: once via `git stash` on the four new unit tests against the pre-fix file (all four
+failed as expected), and once against a new permanent live-browser regression script
+(`scripts/perf/verifyChapterTocButtonFix.mjs`) that drives the real toolbar button end-to-end --
+create parent note + real chapter with headings, click insert (asserts `###`, not the colliding
+`##`), click again (asserts full removal, not a second orphaned insert), click a third time and
+reload the page (asserts the block and the button's active-state both survive reopening the note),
+then a sanity pass confirming a regular (non-chapter) note still gets the original, unchanged
+`##` behavior. All 17 checks pass with the fix in place; the same script reproduces the exact bug
+(button never flips to "Remove table of contents") when run against the pre-fix file. This
+change doesn't touch caret/selection/scroll arithmetic, so the doc's own full CM6
+`verifyCM6*.mjs` suite was judged out of scope and not run.

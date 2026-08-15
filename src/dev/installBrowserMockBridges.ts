@@ -40,7 +40,7 @@ import type { ChapterEntry, ChaptersApi } from '../shared/chapters'
 import type { ReviewFlagEntry, ReviewFlagsApi } from '../shared/reviewFlags'
 import { normalizeChapterHeadings } from '../shared/markdownHeadings'
 import { resolveIdentityLabel } from '../shared/tabLabels'
-import { computeHeadingAnchors, formatHeadingAnchorFragment } from '../shared/tableOfContentsText'
+import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine } from '../shared/tableOfContentsText'
 import { formatInternalNoteLink } from '../shared/internalNoteLinks'
 import { deriveDefaultAssignedIdBase, normalizeAssignedIdInput } from '../shared/assignedIds'
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, parseOpenItemsGroups } from '../shared/openItemsText'
@@ -1025,17 +1025,6 @@ function getRealChapterRowsInStore(store: BrowserMockStore, parentNoteId: string
 }
 
 /**
- * Dev-mode mirror of noteLifecycleService.ts's own module-level tocLine --
- * a real link when `href` is available, plain non-clickable text otherwise
- * (defensive fallback only; in practice every note/chapter has a real
- * internal id to link through via formatInternalNoteLink).
- */
-function tocLineInStore(depth: number, label: string, href: string | null): string {
-  const indent = '  '.repeat(depth)
-  return href ? `${indent}- [${label}](${href})` : `${indent}- ${label}`
-}
-
-/**
  * Dev-mode mirror of noteLifecycleService.ts's regenerateAutoTocChapter --
  * see that method's own doc comment for what this actually does and why,
  * including why every link is built with the internal-only `@noteId` scheme
@@ -1057,9 +1046,9 @@ function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string)
   const parentHeadings = computeHeadingAnchors(parentNote.text)
   const parentHref = formatInternalNoteLink(parentNoteId)
 
-  const lines = ['# Table of Contents', '', tocLineInStore(0, parentNote.title || 'Untitled', parentHref)]
+  const lines = ['# Table of Contents', '', formatOutlineEntryLine(0, parentNote.title || 'Untitled', parentHref)]
   for (const heading of parentHeadings) {
-    lines.push(tocLineInStore(1, heading.label, formatInternalNoteLink(parentNoteId, formatHeadingAnchorFragment(heading.anchorId))))
+    lines.push(formatOutlineEntryLine(1, heading.label, formatInternalNoteLink(parentNoteId, formatHeadingAnchorFragment(heading.anchorId))))
   }
 
   const chapterRows = getRealChapterRowsInStore(store, parentNoteId)
@@ -1071,9 +1060,9 @@ function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string)
     const [rootHeading, ...restHeadings] = computeHeadingAnchors(chapterNote.text)
     const rootHref = formatInternalNoteLink(row.chapterNoteId)
     const rootLabel = rootHeading ? rootHeading.label : resolveIdentityLabel(row.chapterId, chapterNote.text).text
-    lines.push(tocLineInStore(0, rootLabel, rootHref))
+    lines.push(formatOutlineEntryLine(0, rootLabel, rootHref))
     for (const heading of restHeadings) {
-      lines.push(tocLineInStore(1, heading.label, formatInternalNoteLink(row.chapterNoteId, formatHeadingAnchorFragment(heading.anchorId))))
+      lines.push(formatOutlineEntryLine(1, heading.label, formatInternalNoteLink(row.chapterNoteId, formatHeadingAnchorFragment(heading.anchorId))))
     }
   }
 

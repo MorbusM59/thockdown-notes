@@ -5,7 +5,7 @@ import { isExternalNote } from '../shared/noteLifecycle'
 import type { PersistedViewportState } from '../shared/appState'
 import { NOTE_DRAG_MIME_TYPE, parseNoteDragPayload } from '../shared/noteDrag'
 import { normalizeInternalText } from '../editor/TextPolicy'
-import { normalizeChapterHeadings } from '../shared/markdownHeadings'
+import { normalizeChapterHeadings, CHAPTER_HEADLINE_LEVEL_RULE, NOTE_HEADLINE_LEVEL_RULE } from '../shared/markdownHeadings'
 import { parseMarkdownHeading } from '../shared/tableOfContentsText'
 import { countWords, trackWordCount } from '../editor/WordCount'
 import { buildEditRestoreSnapshotFromUiState } from '../editor/EditRestoreMath'
@@ -1130,6 +1130,18 @@ export function EditorSection({
     applyProgrammaticEditorText,
   })
 
+  // Same exemption useHeadlineLevelGuard.ts's own effect applies (the guard
+  // this rule has to stay in lockstep with -- see
+  // UseMarkdownFormattingToolbarOptions' headlineRule doc comment for why):
+  // an external note's structure isn't this app's to enforce, and the
+  // auto-TOC/auto-Open-Items synthetic chapters are generated, read-only
+  // output this toolbar never actually reaches.
+  const activeHeadlineRule = useMemo(() => {
+    if (!activeNoteSummary) return null
+    if (activeNoteSummary.isAutoToc || activeNoteSummary.isAutoOpenItems || isExternalNote(activeNoteSummary)) return null
+    return activeNoteSummary.chapterOnly ? CHAPTER_HEADLINE_LEVEL_RULE : NOTE_HEADLINE_LEVEL_RULE
+  }, [activeNoteSummary])
+
   const {
     activeDecorationFormats,
     activeHeadingLevel,
@@ -1167,6 +1179,7 @@ export function EditorSection({
     buildToggleNumberedListTransformRef,
     getLinkTargetPrefill,
     onAnchorCreated: handleAnchorCreated,
+    headlineRule: activeHeadlineRule,
   })
 
   const currentSectionHandle: SectionHandle = {

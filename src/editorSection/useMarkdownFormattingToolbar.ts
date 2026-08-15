@@ -3,24 +3,40 @@ import type { MutableRefObject } from 'react'
 import { resolveMarkdownSelectionContext, resolveMarkdownSelectionContextIncremental, type InlineStateLineCache } from '../editor/MarkdownContext'
 import { normalizeInternalText } from '../editor/TextPolicy'
 import type { EditorSelectionState } from '../editor/EditorContract'
+import { parseMarkdownHeading, slugifyAnchorId, stripMarkdownInlineFormatting } from '../shared/tableOfContentsText'
+import { NOTE_HEADLINE_LEVEL_RULE, type HeadlineLevelRule } from '../shared/markdownHeadings'
 
 export type TextDecorationFormat = 'bold' | 'italic' | 'strikethrough'
 
-function parseMarkdownHeading(line: string): { level: number; text: string } | null {
-  const match = /^#{1,6}\s+(.*)$/.exec(line.trimStart())
-  if (!match) return null
-  const level = match[0].match(/^#+/)?.[0].length ?? 0
-  if (level < 1 || level > 6) return null
-  return { level, text: match[1].trim() }
-}
+// This feature's own notion of "the note's title line" is deliberately
+// separate from tableOfContentsText.ts's findTitleLineIndex: that one is
+// hardcoded to level 1 because it means "the parent's own title, excluded
+// from the auto-generated cross-chapter TOC" -- a concept that only ever
+// applies to a parent note, never a chapter (a chapter has no title concept
+// at all, see markdownHeadings.ts's CHAPTER_HEADLINE_LEVEL_RULE). This
+// single-note toggle runs on ANY note, chapter or not, so "the title" here
+// means whatever `titleLevel` the caller resolved for the active note's own
+// HeadlineLevelRule (see resolveHeadlineLevelDetails below) -- level 1 for a
+// regular note, level 2 for a chapter. `titleLevel: null` (an external note,
+// exempt from any enforced rule -- see useHeadlineLevelGuard.ts) falls back
+// to the pre-chapters behavior: the first heading of ANY level, since an
+// external file's own structure isn't something this app enforces or can
+// assume.
+function findOwnTitleLineIndex(lines: string[], titleLevel: number | null): number {
+  let inFence = false
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    if (/^\s{0,3}(?:`{3,}|~{3,})/.test(line)) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence) continue
 
-function stripMarkdownInlineFormatting(text: string): string {
-  return text
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/[*_~]/g, '')
-    .trim()
+    const heading = parseMarkdownHeading(line)
+    if (!heading) continue
+    if (titleLevel === null || heading.level === titleLevel) return index
+  }
+  return -1
 }
 
 // Matches this feature's own generated heading -- plain text, no link
@@ -29,23 +45,22 @@ function stripMarkdownInlineFormatting(text: string): string {
 // note written before that changed still gets recognized, cleaned up, and
 // regenerated in the new plain form the next time it's touched (toggling
 // off, or the live auto-refresh effect) -- not a format anyone has to
-// migrate by hand.
-function isTableOfContentsHeadingLine(line: string): boolean {
-  const trimmed = line.trim()
-  return /^#{2}\s+Table of Contents\s*$/.test(trimmed) || /^#{2}\s+\[Table of Contents\]\(#toc\)\s*$/.test(trimmed)
+// migrate by hand. `tocLevel` is the active note's own required level (see
+// resolveHeadlineLevelDetails): 2 for a regular note, 3 for a chapter (one
+// level under its own forced-level-2 title, same relationship
+// useHeadlineLevelGuard.ts's CHAPTER_HEADLINE_LEVEL_RULE enforces for every
+// other heading) -- a chapter's generated block has to honor that same
+// invariant, or useHeadlineLevelGuard immediately reclamps it out from under
+// this feature on the very next render.
+function isTableOfContentsHeadingLine(line: string, tocLevel: number): boolean {
+  const heading = parseMarkdownHeading(line)
+  if (!heading || heading.level !== tocLevel) return false
+  return heading.text === 'Table of Contents' || heading.text === '[Table of Contents](#toc)'
 }
 
-function findTitleLineIndex(lines: string[]): number {
-  for (let index = 0; index < lines.length; index += 1) {
-    const heading = parseMarkdownHeading(lines[index])
-    if (heading && heading.level === 1) return index
-  }
-  return -1
-}
-
-function noteHasTableOfContents(sourceText: string): boolean {
+function noteHasTableOfContents(sourceText: string, titleLevel: number | null, tocLevel: number): boolean {
   const lines = normalizeInternalText(sourceText).split('\n')
-  const titleIndex = findTitleLineIndex(lines)
+  const titleIndex = findOwnTitleLineIndex(lines, titleLevel)
   let inFence = false
 
   for (let index = titleIndex >= 0 ? titleIndex + 1 : 0; index < lines.length; index += 1) {
@@ -57,8 +72,8 @@ function noteHasTableOfContents(sourceText: string): boolean {
     if (inFence) continue
 
     const heading = parseMarkdownHeading(line)
-    if (heading && heading.level === 2) {
-      return isTableOfContentsHeadingLine(line)
+    if (heading && heading.level === tocLevel) {
+      return isTableOfContentsHeadingLine(line, tocLevel)
     }
   }
 
@@ -109,16 +124,18 @@ function unwrapLegacyAnchorHeading(text: string): string | null {
  * leaves every other heading, and the rest of the note, untouched. The
  * single cleanup/migration path for a note written before this feature
  * stopped linking anything: toggling the TOC off, or the live auto-refresh
- * effect while it's on, both route through this.
+ * effect while it's on, both route through this. `tocLevel` defaults to a
+ * regular note's level (2) so existing callers/tests written before chapters
+ * got their own level (3) keep working unchanged.
  */
-export function removeTableOfContentsAndAnchors(sourceText: string): string {
+export function removeTableOfContentsAndAnchors(sourceText: string, tocLevel: number = NOTE_HEADLINE_LEVEL_RULE.minOtherLevel): string {
   const lines = normalizeInternalText(sourceText).split('\n')
   const nextLines: string[] = []
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index]
 
-    if (isTableOfContentsHeadingLine(line)) {
+    if (isTableOfContentsHeadingLine(line, tocLevel)) {
       index += 1
       while (index < lines.length && (lines[index] === '' || isTableOfContentsListLine(lines[index]))) {
         index += 1
@@ -147,25 +164,6 @@ const TEXT_DECORATION_MARKERS: Record<TextDecorationFormat, { open: string; clos
 }
 
 /**
- * Derives an anchor id from the selection applyAnchor is wrapping, e.g.
- * "two words" -> "two-words". Lowercased, whitespace runs collapsed to a
- * single `-`, and anything else stripped that would either break the `[label
- * (#anchor-id)` syntax outright (parens, brackets, `#`) or just be visual
- * noise in an id -- deliberately not deduped/disambiguated against existing
- * anchors elsewhere in the document; that's left to the user, same as a
- * manually-typed anchor id always has been.
- */
-function slugifyAnchorId(text: string): string {
-  return text
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-}
-
-/**
  * Inserts a plain-text outline of every heading right after the note's own
  * title -- no links, in either direction: the list doesn't link to the
  * headings, and the headings themselves are never rewritten. This is meant
@@ -176,15 +174,23 @@ function slugifyAnchorId(text: string): string {
  * unrelated mechanism (the "Set anchor" toolbar button, and the
  * auto-generated cross-chapter Table of Contents chapter) that this
  * single-note toggle has no bearing on.
+ *
+ * `titleLevel`/`tocLevel` default to a regular note's own levels (1/2) so
+ * existing callers/tests keep working unchanged; a chapter passes
+ * CHAPTER_HEADLINE_LEVEL_RULE's own levels (2/3) instead -- see
+ * resolveHeadlineLevelDetails below for why this has to track
+ * useHeadlineLevelGuard.ts's own per-note rule, not a hardcoded level 2.
  */
 export function buildTableOfContentsInsertion(
   sourceText: string,
   selection: EditorSelectionState,
+  titleLevel: number | null = NOTE_HEADLINE_LEVEL_RULE.firstLineLevel,
+  tocLevel: number = NOTE_HEADLINE_LEVEL_RULE.minOtherLevel,
 ): { text: string; selection: EditorSelectionState } {
   const normalizedText = normalizeInternalText(sourceText)
   const lines = normalizedText.split('\n')
+  const titleIndex = findOwnTitleLineIndex(lines, titleLevel)
 
-  let titleIndex: number | null = null
   let inFence = false
   const headings: Array<{ level: number; label: string }> = []
 
@@ -195,14 +201,10 @@ export function buildTableOfContentsInsertion(
       continue
     }
     if (inFence) continue
+    if (index === titleIndex) continue
 
     const heading = parseMarkdownHeading(line)
     if (!heading) continue
-
-    if (titleIndex === null) {
-      titleIndex = index
-      continue
-    }
 
     const label = stripMarkdownInlineFormatting(heading.text)
     if (!label || label.trim().toLowerCase() === 'table of contents') continue
@@ -220,7 +222,7 @@ export function buildTableOfContentsInsertion(
   })
 
   const insertedBlock = [
-    '## Table of Contents',
+    `${'#'.repeat(tocLevel)} Table of Contents`,
     '',
     ...listLines,
   ]
@@ -259,6 +261,22 @@ export interface UseMarkdownFormattingToolbarOptions {
   getLinkTargetPrefill?: () => string
   /** Fired with the freshly-generated anchor id whenever applyAnchor sets one, so the caller can remember where it lives for later link prefills. */
   onAnchorCreated?: (anchorId: string) => void
+  /**
+   * The active note's own HeadlineLevelRule -- CHAPTER_HEADLINE_LEVEL_RULE
+   * for a chapter, NOTE_HEADLINE_LEVEL_RULE for a regular note, or `null`
+   * for anything useHeadlineLevelGuard.ts itself exempts (an external note,
+   * or the auto-TOC/auto-Open-Items synthetic chapters, which never reach
+   * this toolbar anyway). The single-note TOC block's own heading level and
+   * title detection MUST track this: it's inserted right after the note's
+   * title, and if it doesn't land on the same level useHeadlineLevelGuard
+   * enforces for "every other heading," that hook immediately reclamps it
+   * out from under this feature on the very next render (the bug this
+   * option exists to fix -- a chapter's forced level-2 title meant a
+   * hardcoded `## Table of Contents` collided with the chapter's own
+   * `minOtherLevel: 3`). `null` falls back to the pre-chapters behavior:
+   * title is the first heading of any level, TOC block is always `##`.
+   */
+  headlineRule: HeadlineLevelRule | null
 }
 
 export interface UseMarkdownFormattingToolbarResult {
@@ -309,8 +327,11 @@ export function useMarkdownFormattingToolbar({
   buildToggleNumberedListTransformRef,
   getLinkTargetPrefill,
   onAnchorCreated,
+  headlineRule,
 }: UseMarkdownFormattingToolbarOptions): UseMarkdownFormattingToolbarResult {
   const lastHeadlineLevelRef = useRef<1 | 2 | 3 | 4 | 5 | 6>(1)
+  const tocTitleLevel = headlineRule?.firstLineLevel ?? null
+  const tocLevel = headlineRule?.minOtherLevel ?? NOTE_HEADLINE_LEVEL_RULE.minOtherLevel
 
   const isSelectionWrappedBy = useCallback((text: string, selection: EditorSelectionState, open: string, close: string) => {
     const start = Math.max(0, Math.min(selection.start, text.length))
@@ -979,22 +1000,25 @@ export function useMarkdownFormattingToolbar({
     applyProgrammaticEditorText(nextText, cursor, cursor)
   }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, resolveSelectionBounds])
 
-  const isTableOfContentsActive = useMemo(() => noteHasTableOfContents(currentEditorText), [currentEditorText])
+  const isTableOfContentsActive = useMemo(
+    () => noteHasTableOfContents(currentEditorText, tocTitleLevel, tocLevel),
+    [currentEditorText, tocTitleLevel, tocLevel],
+  )
 
   const toggleTableOfContents = useCallback(() => {
     if (!activeNoteId) return
 
     const sourceText = normalizeInternalText(currentEditorText)
-    if (noteHasTableOfContents(sourceText)) {
-      const nextText = removeTableOfContentsAndAnchors(sourceText)
+    if (noteHasTableOfContents(sourceText, tocTitleLevel, tocLevel)) {
+      const nextText = removeTableOfContentsAndAnchors(sourceText, tocLevel)
       const nextSelection = latestEditorSelectionRef.current
       applyProgrammaticEditorText(nextText, nextSelection.anchor, nextSelection.focus)
       return
     }
 
-    const next = buildTableOfContentsInsertion(sourceText, latestEditorSelectionRef.current)
+    const next = buildTableOfContentsInsertion(sourceText, latestEditorSelectionRef.current, tocTitleLevel, tocLevel)
     applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
-  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, latestEditorSelectionRef])
+  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, latestEditorSelectionRef, tocTitleLevel, tocLevel])
 
   const insertTableOfContents = useCallback(() => {
     if (!activeNoteId) return
@@ -1004,21 +1028,21 @@ export function useMarkdownFormattingToolbar({
       return
     }
 
-    const next = buildTableOfContentsInsertion(currentEditorText, latestEditorSelectionRef.current)
+    const next = buildTableOfContentsInsertion(currentEditorText, latestEditorSelectionRef.current, tocTitleLevel, tocLevel)
     applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
-  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, isTableOfContentsActive, latestEditorSelectionRef, toggleTableOfContents])
+  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, isTableOfContentsActive, latestEditorSelectionRef, toggleTableOfContents, tocTitleLevel, tocLevel])
 
   useLayoutEffect(() => {
     if (!activeNoteId || !isTableOfContentsActive) return
 
-    const stripped = removeTableOfContentsAndAnchors(currentEditorText)
-    const canonical = buildTableOfContentsInsertion(stripped, latestEditorSelectionRef.current)
+    const stripped = removeTableOfContentsAndAnchors(currentEditorText, tocLevel)
+    const canonical = buildTableOfContentsInsertion(stripped, latestEditorSelectionRef.current, tocTitleLevel, tocLevel)
     const nextText = canonical.text
 
     if (nextText !== currentEditorText) {
       applyProgrammaticEditorText(nextText, latestEditorSelectionRef.current.anchor, latestEditorSelectionRef.current.focus)
     }
-  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, isTableOfContentsActive, latestEditorSelectionRef])
+  }, [activeNoteId, applyProgrammaticEditorText, currentEditorText, isTableOfContentsActive, latestEditorSelectionRef, tocTitleLevel, tocLevel])
 
   return {
     activeDecorationFormats,

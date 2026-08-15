@@ -4,7 +4,7 @@
 // to reason about the same format. Framework-free, mirrors
 // tableOfContentsText.ts's own "no DOM/React/Node dependency" discipline.
 import { normalizeInternalText } from '../editor/TextPolicy'
-import { computeHeadingAnchors, formatHeadingAnchorFragment } from './tableOfContentsText'
+import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine } from './tableOfContentsText'
 
 const CHECKLIST_LINE_RE = /^\s*(?:>\s*)*[-*+]\s+\[([ xX])\]\s+(.*)$/
 
@@ -92,12 +92,6 @@ export function collectUncheckedItemsByHeading(sourceText: string): OpenItemsHea
   return buckets.filter((bucket) => bucket.items.length > 0)
 }
 
-/** One line of a group's own outline, mirroring noteLifecycleService.ts's tocLine -- a real link when `href` is available, plain non-clickable text otherwise (defensive fallback only; in practice every note/chapter has a real internal id to link through). */
-function groupLine(depth: number, label: string, href: string | null): string {
-  const indent = '  '.repeat(depth)
-  return href ? `${indent}- [${label}](${href})` : `${indent}- ${label}`
-}
-
 /**
  * Builds one note's own Open Items group -- a top-level link to the note
  * itself (`linkPrefix`, e.g. `@a1b2c3` for the parent or `@d4e5f6` for a
@@ -118,10 +112,10 @@ export function buildOpenItemsGroupMarkdown(sourceText: string, linkPrefix: stri
   const buckets = collectUncheckedItemsByHeading(sourceText)
   if (buckets.length === 0) return null
 
-  const lines = [groupLine(0, titleLabel || 'Untitled', linkPrefix)]
+  const lines = [formatOutlineEntryLine(0, titleLabel || 'Untitled', linkPrefix)]
   for (const bucket of buckets) {
     if (bucket.anchorId !== null && bucket.label !== null) {
-      lines.push(groupLine(1, bucket.label, linkPrefix ? `${linkPrefix}#${formatHeadingAnchorFragment(bucket.anchorId)}` : null))
+      lines.push(formatOutlineEntryLine(1, bucket.label, linkPrefix ? `${linkPrefix}#${formatHeadingAnchorFragment(bucket.anchorId)}` : null))
       for (const item of bucket.items) lines.push(`    - [ ] ${item}`)
     } else {
       for (const item of bucket.items) lines.push(`  - [ ] ${item}`)

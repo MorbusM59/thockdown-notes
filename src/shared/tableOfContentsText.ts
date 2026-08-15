@@ -54,20 +54,12 @@ export function findTitleLineIndex(lines: string[]): number {
   return -1
 }
 
-export interface AnchoredHeading {
-  level: number
-  label: string
-  anchorId: string
-}
-
 /**
  * Walks `lines` outside fenced code blocks, finds every heading except
  * `titleIndex` (the note's own title, excluded the same way in every
  * caller), and reports each one's derived anchor id -- lowercased,
  * de-duplicated with a `-2`/`-3`/... suffix on repeat labels, in document
- * order. Shared by `anchorizeHeadings` (which also rewrites the source) and
- * `computeHeadingAnchors` (which never does) so the two id-derivation rules
- * can't drift apart from each other.
+ * order.
  */
 function scanHeadingAnchors(
   lines: string[],
@@ -101,77 +93,31 @@ function scanHeadingAnchors(
   })
 }
 
-/**
- * Rewrites every heading in `sourceText` except the first H1 (treated as the
- * note's own title, same convention the single-note TOC button already
- * uses) into a `[Label](#anchor-id)` anchor-definition heading, and returns
- * both the rewritten text and the resulting heading list in document order
- * -- callers building an index elsewhere read anchor ids straight off this
- * return value rather than re-deriving them through a second call, so the
- * two can't drift apart.
- *
- * Deterministic and idempotent: an already-anchored heading's label (once
- * `stripMarkdownInlineFormatting` strips its existing `[Label](#id)` wrapper
- * back to plain text) reslugifies to the same id as before, provided the
- * label text itself hasn't changed -- so callers can always call this
- * unconditionally on any note's current text and just compare the result to
- * the original to know whether a save is actually needed, with no separate
- * "is this already anchorized" detection required.
- *
- * This is the MANUAL half of the app's two independent anchor mechanisms --
- * it visibly rewrites the user's own source, so it's only ever invoked by an
- * explicit user action (the single-note Table of Contents toolbar button,
- * the "Set anchor" button). The automatic cross-chapter TOC/Open-Items
- * chapters use `computeHeadingAnchors` instead, which never touches a note's
- * content -- see that function's own doc comment for why the two had to be
- * split apart.
- */
-export function anchorizeHeadings(sourceText: string): { text: string; headings: AnchoredHeading[] } {
-  const lines = normalizeInternalText(sourceText).split('\n')
-  const titleIndex = findTitleLineIndex(lines)
-
-  const headings: AnchoredHeading[] = []
-  const editByLine = new Map<number, { level: number; label: string; anchorId: string }>()
-  scanHeadingAnchors(lines, titleIndex, (lineIndex, level, label, anchorId) => {
-    headings.push({ level, label, anchorId })
-    editByLine.set(lineIndex, { level, label, anchorId })
-  })
-
-  const nextLines = lines.map((line, index) => {
-    const edit = editByLine.get(index)
-    if (!edit) return line
-    return `${'#'.repeat(edit.level)} [${edit.label}](#${edit.anchorId})`
-  })
-
-  return { text: nextLines.join('\n'), headings }
-}
-
-export interface HeadingAnchor extends AnchoredHeading {
+export interface HeadingAnchor {
+  level: number
+  label: string
+  anchorId: string
   /** 0-indexed source line the heading itself sits on. */
   lineIndex: number
 }
 
 /**
- * The AUTOMATIC, invisible-to-the-user half of anchor derivation:
- * non-mutating counterpart to `anchorizeHeadings` that computes the exact
- * same {level, label, anchorId} sequence (via the same shared
- * `scanHeadingAnchors` id-derivation rule, so the two can never disagree on
- * what a given heading's anchor id is) plus each heading's own source line
- * -- without ever rewriting the text it reads.
+ * Non-mutating heading/anchor-id derivation: computes each heading's
+ * {level, label, anchorId} plus its own source line, without ever rewriting
+ * the text it reads.
  *
  * The auto-generated cross-chapter Table of Contents and Open Items
  * chapters are built entirely from this: every real chapter and the parent
  * keep their own heading source exactly as the user typed it, forever --
  * creating a second chapter (or checking off a checklist item) never
- * silently rewrites a `## My Heading` into `## [My Heading](#my-heading)`
- * the way the single-note TOC toggle's `anchorizeHeadings` deliberately
- * still does for its own, explicit, user-triggered case. Navigation into a
- * heading-derived anchor is resolved the same way, on the fly, at click
- * time -- see `findHeadingAnchorLine` and usePreviewMarkdownRendering.tsx's
- * heading-anchor branch, which locates the rendered heading element via the
- * source-line data attributes every preview block already carries
- * (createPreviewSourceAnchorRehypePlugin), rather than a literal
- * `[Label](#id)` DOM marker the way a manual anchor does.
+ * silently rewrites a `## My Heading` into `## [My Heading](#my-heading)`.
+ * Navigation into a heading-derived anchor is resolved the same way, on the
+ * fly, at click time -- see `findHeadingAnchorLine` and
+ * usePreviewMarkdownRendering.tsx's heading-anchor branch, which locates the
+ * rendered heading element via the source-line data attributes every
+ * preview block already carries (createPreviewSourceAnchorRehypePlugin),
+ * rather than a literal `[Label](#id)` DOM marker the way a manual
+ * ("Set anchor" toolbar button) anchor does.
  */
 export function computeHeadingAnchors(sourceText: string): HeadingAnchor[] {
   const lines = normalizeInternalText(sourceText).split('\n')
@@ -208,6 +154,24 @@ export function formatHeadingAnchorFragment(anchorId: string): string {
 /** Strips the heading-anchor prefix back off, or returns null if `rawAnchorId` isn't one -- the read side of `formatHeadingAnchorFragment`, used to route navigation to the on-the-fly heading resolver instead of the manual anchor-definition scan. */
 export function parseHeadingAnchorFragment(rawAnchorId: string): string | null {
   return rawAnchorId.startsWith(HEADING_ANCHOR_PREFIX) ? rawAnchorId.slice(HEADING_ANCHOR_PREFIX.length) : null
+}
+
+/**
+ * One line of an auto-generated outline (the cross-chapter Table of
+ * Contents and Open Items chapters share this exact format), indented
+ * `depth` levels deep -- a real `[label](href)` link when `href` is
+ * available, or plain non-clickable text otherwise. In practice `href` is
+ * always a real formatInternalNoteLink address (internalNoteLinks.ts) --
+ * every note has a real internal id the instant it's created -- so the
+ * plain-text branch is purely a defensive fallback. Shared by
+ * noteLifecycleService.ts (the real backend), openItemsText.ts (Open
+ * Items' own per-note group), and installBrowserMockBridges.ts (the
+ * dev-mode mirror) so the three can't drift into three different outline
+ * line formats.
+ */
+export function formatOutlineEntryLine(depth: number, label: string, href: string | null): string {
+  const indent = '  '.repeat(depth)
+  return href ? `${indent}- [${label}](${href})` : `${indent}- ${label}`
 }
 
 /**

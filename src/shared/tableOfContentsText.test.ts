@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  anchorizeHeadings,
   computeHeadingAnchors,
   findHeadingAnchorLine,
   formatHeadingAnchorFragment,
@@ -52,22 +51,21 @@ describe('headingsChanged', () => {
 })
 
 describe('computeHeadingAnchors', () => {
-  it('derives the same ids anchorizeHeadings would, plus each heading\'s own source line, without rewriting anything', () => {
+  it('derives a dedupe-suffixed anchor id for a repeated label, plus each heading\'s own source line, without rewriting anything', () => {
     const text = '# Title\n\n## Setting\n\nbody\n\n## Setting'
     const anchors = computeHeadingAnchors(text)
-    const anchorized = anchorizeHeadings(text)
     expect(anchors).toEqual([
       { level: 2, label: 'Setting', anchorId: 'setting', lineIndex: 2 },
       { level: 2, label: 'Setting', anchorId: 'setting-1', lineIndex: 6 },
     ])
-    expect(anchors.map(({ level, label, anchorId }) => ({ level, label, anchorId }))).toEqual(anchorized.headings)
+    expect(text).toBe('# Title\n\n## Setting\n\nbody\n\n## Setting') // unchanged -- never rewrites source
   })
 
-  it('excludes the first H1 (the note\'s own title), same as anchorizeHeadings', () => {
+  it('excludes the first H1 (the note\'s own title)', () => {
     expect(computeHeadingAnchors('# Title\n\nbody')).toEqual([])
   })
 
-  it('never touches already-anchored heading source (idempotent with anchorizeHeadings\' own output)', () => {
+  it('correctly re-derives the anchor id of a heading that already looks manually anchor-linked', () => {
     const text = '# Title\n\n## [Setting](#setting)'
     expect(computeHeadingAnchors(text)).toEqual([{ level: 2, label: 'Setting', anchorId: 'setting', lineIndex: 2 }])
   })

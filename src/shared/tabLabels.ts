@@ -1,9 +1,5 @@
 import { stripMarkdownInlineFormatting } from './tableOfContentsText'
 
-export function getParentTabLabel(): string {
-  return 'INTRO'
-}
-
 function normalizeContentPreviewText(text: string): string {
   const firstLine = text.split(/\r?\n/, 1)[0] ?? ''
   const withoutHeading = firstLine.replace(/^#+\s*/, '').trim()
@@ -26,9 +22,6 @@ export function deriveContentSnippet(contentText: string | null | undefined): st
   if (!fallbackText) return '···'
 
   let n = Math.min(fallbackText.length, 12)
-  if (n < 6) {
-    n = fallbackText.length
-  }
 
   const maxPosition = Math.min(fallbackText.length, 12)
   for (let position = 7; position <= maxPosition; position += 1) {

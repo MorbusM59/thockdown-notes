@@ -1,15 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { resolveIdentityLabel, getParentTabLabel } from './tabLabels'
+import { resolveIdentityLabel } from './tabLabels'
 import { getChapterNoteListMetaLabel, getNoteListMetaKind, type NoteListMetaCandidate } from './noteListMeta'
 
 describe('tab label display', () => {
   it('shows bare assigned IDs without a $ prefix, marked as assigned', () => {
     expect(resolveIdentityLabel('NOTE-42', null)).toEqual({ text: 'NOTE-42', isAssigned: true })
     expect(resolveIdentityLabel(null, null)).toEqual({ text: '···', isAssigned: false })
-  })
-
-  it('uses the parent label for the chapter bar root tab', () => {
-    expect(getParentTabLabel()).toBe('INTRO')
   })
 
   it('uses the assigned id when present, otherwise a compact preview of the content -- same rule for a note or a chapter', () => {
