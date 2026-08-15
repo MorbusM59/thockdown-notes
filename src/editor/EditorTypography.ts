@@ -127,7 +127,7 @@ function getGlyphMeasureContext(): CanvasRenderingContext2D | null {
   return glyphMeasureContext;
 }
 
-function measureMonospaceGlyphWidthPx(fontFamily: string, fontSizePx: number): number | null {
+export function measureMonospaceGlyphWidthPx(fontFamily: string, fontSizePx: number): number | null {
   const context = getGlyphMeasureContext();
   if (!context) return null;
 
@@ -177,4 +177,16 @@ export function resolveEditorRuntimeMetrics(
     glyphWidthPx,
     cellWidthPx,
   };
+}
+
+// Same measure-with-fallback logic as resolveEditorRuntimeMetrics's own
+// glyphWidthPx, factored out so a *different* font size (e.g. the gutter's
+// smaller line-number glyphs) can be measured against the same font family
+// without re-deriving cellWidthPx/lineHeightPx for it -- callers that
+// already know the real fontFamily string (not just the style key) use this
+// directly.
+export function resolveGlyphWidthPx(fontFamily: string, fontSizePx: number): number {
+  const fallbackGlyphWidthPx = Math.max(1, fontSizePx * FALLBACK_GLYPH_WIDTH_RATIO);
+  const measuredGlyphWidthPx = measureMonospaceGlyphWidthPx(fontFamily, fontSizePx);
+  return Math.max(1, measuredGlyphWidthPx ?? fallbackGlyphWidthPx);
 }

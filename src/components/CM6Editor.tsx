@@ -34,6 +34,7 @@ import type {
   EditorViewportLines,
   EditorViewportState,
 } from '../editor/EditorContract';
+import { resolveGlyphWidthPx } from '../editor/EditorTypography';
 
 /**
  * Phase 2, slice 1 of the CM6 migration spike (see
@@ -1151,6 +1152,19 @@ export function CM6Editor({
   // half, so rounding costs nothing and keeps every grid line equally crisp.
   const halfCellWidthPx = Math.round(cellWidthPx / 2);
   const halfLineHeightPx = Math.round(lineHeightPx / 2);
+  // Line-number glyphs render smaller than the body text (see the gutter
+  // JSX below) but still have to land one-per-box in the same cellWidthPx
+  // grid column as everything else -- the same x-box letter-spacing +
+  // translateX centering trick .editor-text uses for the body text
+  // (index.css), just re-derived against the smaller font's OWN measured
+  // glyph width instead of the body glyph's. Re-measuring per render is
+  // cheap (a single canvas measureText call) and avoids a second metrics
+  // pipeline; memoizing on fontFamily/fontSizePx would save nothing since
+  // both already only change when the user edits typography settings,
+  // which re-renders this component regardless.
+  const lineNumberFontSizePx = Math.max(1, Math.round(fontSizePx * 0.67));
+  const lineNumberGlyphWidthPx = resolveGlyphWidthPx(fontFamily, lineNumberFontSizePx);
+  const lineNumberLetterSpacingPx = cellWidthPx - lineNumberGlyphWidthPx;
   // Review gutter widths: one grid cell reserved per digit of the highest
   // line number currently in the document (dynamically reserved, per the
   // spec) for the line-number column, plus exactly one cell for the single
@@ -4272,6 +4286,21 @@ export function CM6Editor({
                 // shadowed glyph as one unit and fades that.
                 color: 'var(--color-line-number)',
                 opacity: 'var(--line-number-opacity)',
+                // Smaller than the body text, deliberately overriding
+                // editor-text's own font-size/letter-spacing/transform --
+                // those three are calibrated for the full-size body glyph
+                // width and wrong at a different size (see editor-text's
+                // doc comment in index.css). lineNumberLetterSpacingPx/
+                // lineNumberGlyphWidthPx above re-derive the same x-box
+                // spacing trick against this smaller font's own measured
+                // glyph width instead, so each digit still fills exactly
+                // one cellWidthPx grid box like the body text's glyphs do.
+                // The line-height above still spans the full row's box
+                // height, so the smaller glyph still centers vertically
+                // too.
+                fontSize: `${lineNumberFontSizePx}px`,
+                letterSpacing: `${lineNumberLetterSpacingPx}px`,
+                transform: `translateX(${lineNumberLetterSpacingPx / 2}px)`,
               }}
             >
               {row.line}

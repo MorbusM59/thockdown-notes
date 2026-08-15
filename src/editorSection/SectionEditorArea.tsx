@@ -353,7 +353,7 @@ export function SectionEditorArea({
               onToggleReviewFlags()
             }}
           >
-            <span className="fa-solid fa-list-ol" aria-hidden="true" />
+            <span className="fa-solid fa-hashtag" aria-hidden="true" />
           </button>
         </div>
         <div className="wordcount-panel" aria-live="polite">
