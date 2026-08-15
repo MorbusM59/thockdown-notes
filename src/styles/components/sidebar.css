@@ -223,7 +223,7 @@
 }
 
 .notes-sidebar .view-toggle .icon-btn.is-active {
-  box-shadow: var(--box-shadow-inverted-harsh);
+  box-shadow: var(--box-shadow-inverted-harsh-active);
 }
 
 .notes-sidebar .view-toggle .icon-btn.btn-date::before,
@@ -366,7 +366,7 @@
   width: 10px;
   height: 10px;
   border: 1px none var(--color-border-light-70);
-  box-shadow: var(--box-shadow-inverted-harsh);
+  box-shadow: var(--box-shadow-inverted-harsh-active);
 }
 
 .notes-list.is-filtered.tree-view .note-list-item.is-active::after {
@@ -375,7 +375,7 @@
   width: 10px;
   height: 10px;
   border: 1px none var(--color-border-light-70);
-  box-shadow: var(--box-shadow-inverted-harsh);
+  box-shadow: var(--box-shadow-inverted-harsh-active);
 }
 
 .notes-list.date-view  { overflow-y: hidden; }
@@ -656,7 +656,7 @@
 }
 
 .note-list-item.is-active .note-list-column.note-list-column-primary {
-  box-shadow: var(--box-shadow-inverted-harsh);
+  box-shadow: var(--box-shadow-inverted-harsh-active);
   border: 1px solid var(--color-border-light-30);
 }
 
@@ -674,7 +674,7 @@
 }
 
 .note-list-column.note-list-column-action .note-list-action-button:active {
-  box-shadow: var(--box-shadow-inverted-harsh);
+  box-shadow: var(--box-shadow-inverted-harsh-active);
   border: 1px solid var(--color-border-light-70)
 }
 
@@ -759,7 +759,7 @@
 
 .note-list-item.is-tree-card.is-active{
   border: 1px solid var(--color-border-dark-40);
-  box-shadow: var(--box-shadow-inverted);
+  box-shadow: var(--box-shadow-inverted-active);
   background: rgba(255, 255, 255, 0.2);
 }
 

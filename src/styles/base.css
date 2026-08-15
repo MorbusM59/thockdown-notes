@@ -101,16 +101,14 @@ button:active,
 .ui-btn:active {
   background: var(--btn-bg-pressed);
   border-color: var(--btn-border-active);
-  box-shadow:   var(--box-shadow-inverted-harsh);
+  box-shadow:   var(--box-shadow-inverted-harsh-active);
 }
 
 button.is-active,
-button.active,
 .ui-btn.is-active,
-.ui-btn.active,
-.btn-icon.active {
+.btn-icon.is-active {
   border-color: var(--btn-border-active);
-  box-shadow:   var(--box-shadow-inverted-harsh);
+  box-shadow:   var(--box-shadow-inverted-harsh-active);
 }
 
 /* Square icon buttons */

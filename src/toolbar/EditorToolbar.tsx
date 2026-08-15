@@ -73,7 +73,7 @@ export function EditorToolbar({
     <section className="toolbar-grid" style={{ gridArea: 'toolbar' }} aria-label="Editor toolbar">
       <div className="note-tools">
         <button
-          className={`btn-icon ${!isPreviewMode ? 'active' : ''}`}
+          className={`btn-icon ${!isPreviewMode ? 'is-active' : ''}`}
           type="button"
           data-tooltip={isForcedPreview ? 'This chapter is always shown in render view' : (isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)')}
           aria-label={isForcedPreview ? 'This chapter is always shown in render view' : (isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)')}
@@ -94,7 +94,7 @@ export function EditorToolbar({
           <span className="fa-solid fa-file" aria-hidden="true" />
         </button>
         <button
-          className={`btn-icon ${(isPreviewMode ? spellCheckRenderEnabled : spellCheckEditEnabled) ? 'active' : ''}`}
+          className={`btn-icon ${(isPreviewMode ? spellCheckRenderEnabled : spellCheckEditEnabled) ? 'is-active' : ''}`}
           type="button"
           data-tooltip={
             isPreviewMode
@@ -159,7 +159,7 @@ export function EditorToolbar({
             <div className="toolbar-group">
               <button
                 type="button"
-                className={`btn-icon ${activeDecorationFormats.has('bold') ? 'active' : ''}`}
+                className={`btn-icon ${activeDecorationFormats.has('bold') ? 'is-active' : ''}`}
                 onClick={() => applyTextDecoration('bold')}
                 data-tooltip="Bold"
                 aria-label="Bold"
@@ -169,7 +169,7 @@ export function EditorToolbar({
               </button>
               <button
                 type="button"
-                className={`btn-icon ${activeDecorationFormats.has('italic') ? 'active' : ''}`}
+                className={`btn-icon ${activeDecorationFormats.has('italic') ? 'is-active' : ''}`}
                 onClick={() => applyTextDecoration('italic')}
                 data-tooltip="Italic"
                 aria-label="Italic"
@@ -179,7 +179,7 @@ export function EditorToolbar({
               </button>
               <button
                 type="button"
-                className={`btn-icon ${activeDecorationFormats.has('strikethrough') ? 'active' : ''}`}
+                className={`btn-icon ${activeDecorationFormats.has('strikethrough') ? 'is-active' : ''}`}
                 onClick={() => applyTextDecoration('strikethrough')}
                 data-tooltip="Strikethrough"
                 aria-label="Strikethrough"
@@ -190,21 +190,21 @@ export function EditorToolbar({
             </div>
 
             <div className="toolbar-group">
-              <button type="button" className={`btn-icon ${activeHeadingLevel === 1 ? 'active' : ''}`} data-tooltip="Heading 1" onClick={() => applyHeading(1)} disabled={!activeNoteId}>H1</button>
-              <button type="button" className={`btn-icon ${activeHeadingLevel === 2 ? 'active' : ''}`} data-tooltip="Heading 2" onClick={() => applyHeading(2)} disabled={!activeNoteId}>H2</button>
-              <button type="button" className={`btn-icon ${activeHeadingLevel === 3 ? 'active' : ''}`} data-tooltip="Heading 3" onClick={() => applyHeading(3)} disabled={!activeNoteId}>H3</button>
+              <button type="button" className={`btn-icon ${activeHeadingLevel === 1 ? 'is-active' : ''}`} data-tooltip="Heading 1" onClick={() => applyHeading(1)} disabled={!activeNoteId}>H1</button>
+              <button type="button" className={`btn-icon ${activeHeadingLevel === 2 ? 'is-active' : ''}`} data-tooltip="Heading 2" onClick={() => applyHeading(2)} disabled={!activeNoteId}>H2</button>
+              <button type="button" className={`btn-icon ${activeHeadingLevel === 3 ? 'is-active' : ''}`} data-tooltip="Heading 3" onClick={() => applyHeading(3)} disabled={!activeNoteId}>H3</button>
             </div>
 
             <div className="toolbar-group">
-              <button type="button" className={`btn-icon ${isBulletedListActive ? 'active' : ''}`} data-tooltip="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>≡</button>
-              <button type="button" className={`btn-icon ${isNumberedListActive ? 'active' : ''}`} data-tooltip="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>#</button>
-              <button type="button" className={`btn-icon ${isChecklistActive ? 'active' : ''}`} data-tooltip="Checklist" onClick={toggleChecklistList} disabled={!activeNoteId}>☐</button>
+              <button type="button" className={`btn-icon ${isBulletedListActive ? 'is-active' : ''}`} data-tooltip="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>≡</button>
+              <button type="button" className={`btn-icon ${isNumberedListActive ? 'is-active' : ''}`} data-tooltip="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>#</button>
+              <button type="button" className={`btn-icon ${isChecklistActive ? 'is-active' : ''}`} data-tooltip="Checklist" onClick={toggleChecklistList} disabled={!activeNoteId}>☐</button>
             </div>
 
             <div className="toolbar-group">
-              <button type="button" className={`btn-icon ${isBlockquoteActive ? 'active' : ''}`} data-tooltip="Blockquote" onClick={toggleBlockquote} disabled={!activeNoteId}>&quot;</button>
-              <button type="button" className={`btn-icon ${isCodeBlockActive ? 'active' : ''}`} data-tooltip="Code block" onClick={applyCodeBlock} disabled={!activeNoteId}>{'{ }'}</button>
-              <button type="button" className={`btn-icon ${isInlineCodeActive ? 'active' : ''}`} data-tooltip="Inline code" onClick={applyInlineCode} disabled={!activeNoteId}>{'<>'}</button>
+              <button type="button" className={`btn-icon ${isBlockquoteActive ? 'is-active' : ''}`} data-tooltip="Blockquote" onClick={toggleBlockquote} disabled={!activeNoteId}>&quot;</button>
+              <button type="button" className={`btn-icon ${isCodeBlockActive ? 'is-active' : ''}`} data-tooltip="Code block" onClick={applyCodeBlock} disabled={!activeNoteId}>{'{ }'}</button>
+              <button type="button" className={`btn-icon ${isInlineCodeActive ? 'is-active' : ''}`} data-tooltip="Inline code" onClick={applyInlineCode} disabled={!activeNoteId}>{'<>'}</button>
             </div>
 
             <div className="toolbar-group">
@@ -215,7 +215,7 @@ export function EditorToolbar({
             <div className="toolbar-group chapter-group">
               <button
                 type="button"
-                className={`btn-icon ${isTableOfContentsActive ? 'active' : ''}`}
+                className={`btn-icon ${isTableOfContentsActive ? 'is-active' : ''}`}
                 data-tooltip={isTableOfContentsActive ? 'Remove table of contents' : 'Insert table of contents'}
                 aria-label={isTableOfContentsActive ? 'Remove table of contents' : 'Insert table of contents'}
                 disabled={!activeNoteId}

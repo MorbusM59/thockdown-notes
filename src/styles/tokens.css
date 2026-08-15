@@ -180,6 +180,50 @@
     inset 0 0 2px rgba(0, 0, 0, 0.8),
     inset 0 0 12px rgba(0, 0, 0, 0.15);
 
+  /* Active-state variants: same lineup as above, isolated so active elements
+     (.is-active, :active) can be tuned separately from resting-state shadows
+     without losing distinguishability once shadow-flip inverts dark mode. */
+
+  --box-shadow-regular-light-active:
+    0 0 2px rgba(0, 0, 0, 0.3),
+    0 0 6px rgba(0, 0, 0, 0.1),
+    inset 0 0 2px rgba(255, 255, 255, 0.3);
+
+  --box-shadow-inverted-light-active:
+    inset 0 0 2px rgba(0, 0, 0, 0.3),
+    inset 0 0 6px rgba(0, 0, 0, 0.1),
+    0 0 2px rgba(255, 255, 255, 0.3);
+
+  --box-shadow-regular-active:
+    0 0 2px rgba(0, 0, 0, 0.5),
+    0 0 6px rgba(0, 0, 0, 0.2),
+    inset 0 0 2px rgba(255, 255, 255, 0.6);
+
+  --box-shadow-inverted-active:
+    inset 0 0 2px rgba(0, 0, 0, 0.5),
+    inset 0 0 6px rgba(0, 0, 0, 0.2),
+    0 0 2px rgba(255, 255, 255, 0.6);
+
+  --box-shadow-regular-harsh-active:
+    0 0 2px rgba(0, 0, 0, 1),
+    0 0 6px rgba(0, 0, 0, 0.5),
+    inset 0 0 2px rgba(255, 255, 255, 0.9);
+
+  --box-shadow-inverted-harsh-active:
+    inset 0 0 2px rgba(0, 0, 0, 1),
+    inset 0 0 6px rgba(0, 0, 0, 0.5),
+    0 0 2px rgba(255, 255, 255, 0.9);
+
+  --box-shadow-regular-filtered-active:
+    0 0 2px rgba(0, 0, 0, 1),
+    0 0 6px rgba(0, 0, 0, 0.2),
+    inset 0 0 2px rgba(255, 255, 255, 0.9);
+
+  --box-shadow-inverted-filtered-active:
+    inset 0 0 2px rgba(0, 0, 0, 1),
+    inset 0 0 6px rgba(0, 0, 0, 0.2),
+    0 0 2px rgba(255, 255, 255, 0.9);
+
   /* Flip variants: swap black for white and white for black, direction unchanged. */
 
   --box-shadow-regular-light-flip:
@@ -225,6 +269,46 @@
   --box-shadow-active-editor-flip:
     inset 0 0 12px rgba(255, 255, 255, 0.5),
     inset 0 0 32px rgba(0, 0, 0, 0.05);
+
+  --box-shadow-regular-light-active-flip:
+    0 0 2px rgba(255, 255, 255, 0.8),
+    0 0 12px rgba(255, 255, 255, 0.5),
+    inset 0 0 1px rgba(0, 0, 0, 0.3);
+
+  --box-shadow-inverted-light-active-flip:
+    inset 0 0 2px rgba(255, 255, 255, 0.8),
+    inset 0 0 12px rgba(255, 255, 255, 0.5),
+    0 0 1px rgba(0, 0, 0, 0.3);
+
+  --box-shadow-regular-active-flip:
+    0 0 2px rgba(255, 255, 255, 0.8),
+    0 0 12px rgba(255, 255, 255, 0.5),
+    inset 0 0 1px rgba(0, 0, 0, 0.6);
+
+  --box-shadow-inverted-active-flip:
+    inset 0 0 2px rgba(255, 255, 255, 0.8),
+    inset 0 0 12px rgba(255, 255, 255, 0.5),
+    0 0 1px rgba(0, 0, 0, 0.6);
+
+  --box-shadow-regular-harsh-active-flip:
+    0 0 2px rgba(255, 255, 255, 0.8),
+    0 0 12px rgba(255, 255, 255, 0.5),
+    inset 0 0 1px rgba(0, 0, 0, 0.9);
+
+  --box-shadow-inverted-harsh-active-flip:
+    inset 0 0 2px rgba(255, 255, 255, 0.8),
+    inset 0 0 12px rgba(255, 255, 255, 0.5),
+    0 0 1px rgba(0, 0, 0, 0.9);
+
+  --box-shadow-regular-filtered-active-flip:
+    0 0 6px rgba(255, 255, 255, 0.8),
+    0 0 24px rgba(255, 255, 255, 0.5),
+    inset 0 0 1px rgba(0, 0, 0, 0.6);
+
+  --box-shadow-inverted-filtered-active-flip:
+    inset 0 0 6px rgba(255, 255, 255, 0.8),
+    inset 0 0 24px rgba(255, 255, 255, 0.6),
+    0 0 1px rgba(0, 0, 0, 0.6);
 
   /* ---------------------------------------------------------------------------
      1c. Typography
@@ -441,6 +525,16 @@
   --box-shadow-inverted-harsh: var(--box-shadow-inverted-harsh-flip);
   --box-shadow-regular-filtered: var(--box-shadow-regular-filtered-flip);
   --box-shadow-inverted-filtered: var(--box-shadow-inverted-filtered-flip);
+
+  --box-shadow-regular-light-active: var(--box-shadow-regular-light-active-flip);
+  --box-shadow-inverted-light-active: var(--box-shadow-inverted-light-active-flip);
+  --box-shadow-regular-active: var(--box-shadow-regular-active-flip);
+  --box-shadow-inverted-active: var(--box-shadow-inverted-active-flip);
+  --box-shadow-regular-harsh-active: var(--box-shadow-regular-harsh-active-flip);
+  --box-shadow-inverted-harsh-active: var(--box-shadow-inverted-harsh-active-flip);
+  --box-shadow-regular-filtered-active: var(--box-shadow-regular-filtered-active-flip);
+  --box-shadow-inverted-filtered-active: var(--box-shadow-inverted-filtered-active-flip);
+
   --box-shadow-active-editor: var(--box-shadow-active-editor-flip);
 
   --color-border-dark-10:  var(--color-border-dark-10-flip);

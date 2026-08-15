@@ -163,7 +163,7 @@ export function ChapterBar({
             onDrop={onChapterContainerDrop}
           >
             <div
-              className={`tag-pill note-tab-pill chapter-pill${isParentActive ? ' active' : ''}`}
+              className={`tag-pill note-tab-pill chapter-pill${isParentActive ? ' is-active' : ''}`}
               onClick={onParentTabClick}
               onDragOver={onChapterPromoteDragOver}
               onDrop={onChapterPromoteDrop}
@@ -177,7 +177,7 @@ export function ChapterBar({
               return (
                 <div
                   key={autoTocChapter.chapterNoteId}
-                  className={`tag-pill note-tab-pill chapter-pill${isActive ? ' active' : ''}`}
+                  className={`tag-pill note-tab-pill chapter-pill${isActive ? ' is-active' : ''}`}
                   data-chapter-note-id={autoTocChapter.chapterNoteId}
                   onClick={() => onChapterClick(autoTocChapter.chapterNoteId)}
                   data-tooltip={note?.title ?? 'Table of Contents'}
@@ -192,7 +192,7 @@ export function ChapterBar({
               return (
                 <div
                   key={autoOpenItemsChapter.chapterNoteId}
-                  className={`tag-pill note-tab-pill chapter-pill${isActive ? ' active' : ''}`}
+                  className={`tag-pill note-tab-pill chapter-pill${isActive ? ' is-active' : ''}`}
                   data-chapter-note-id={autoOpenItemsChapter.chapterNoteId}
                   onClick={() => onChapterClick(autoOpenItemsChapter.chapterNoteId)}
                   data-tooltip={note?.title ?? 'Open Items'}
@@ -225,7 +225,7 @@ export function ChapterBar({
               return (
                 <div
                   key={chapter.chapterNoteId}
-                  className={`tag-pill note-tab-pill chapter-pill${isActive ? ' active' : ''}`}
+                  className={`tag-pill note-tab-pill chapter-pill${isActive ? ' is-active' : ''}`}
                   data-chapter-note-id={chapter.chapterNoteId}
                   draggable
                   onDragStart={(event) => onChapterDragStart(event, index)}

@@ -181,27 +181,27 @@
   font-style: italic;
 }
 
-.tag-pill.active.protected {
+.tag-pill.is-active.protected {
   background: #eee;
 }
 
-.tag-pill.active.protected.deleted {
+.tag-pill.is-active.protected.deleted {
   color:      var(--color-danger);
   border:     1px solid var(--color-danger-border);
   box-shadow: inset 0 0 3px #00000055, inset 0 0 12px var(--color-danger-glow);
 }
 
-.tag-pill.active.protected.archived {
+.tag-pill.is-active.protected.archived {
   color:      var(--color-archive);
   border:     1px solid var(--color-archive-border);
   box-shadow: inset 0 0 3px #00000055, inset 0 0 12px var(--color-archive-glow);
 }
 
-.tag-pill.active.protected[draggable='false'] {
+.tag-pill.is-active.protected[draggable='false'] {
   cursor: default;
 }
 
-.tag-pill.active.primed {
+.tag-pill.is-active.primed {
   filter: var(--filter-primed-delete);
 }
 
@@ -271,9 +271,9 @@
   border-radius: var(--border-radius-regular);
 }
 
-.section-identity-tab.active {
+.section-identity-tab.is-active {
   border: 1px solid var(--color-border-light-30);
-  box-shadow: var(--box-shadow-inverted-harsh);
+  box-shadow: var(--box-shadow-inverted-harsh-active);
 }
 
 .section-identity-input {
@@ -394,14 +394,14 @@
 .note-tab-pill:hover  { background: var(--btn-bg-hover); }
 .note-tab-pill:active { background: var(--btn-bg-pressed); }
 
-.note-tab-pill.active {
+.note-tab-pill.is-active {
   border: 1px solid var(--color-border-light-30);
-  box-shadow: var(--box-shadow-inverted-harsh);
+  box-shadow: var(--box-shadow-inverted-harsh-active);
 }
 
 /* Archived/trashed note whose tab is still pinned — dimmed, purely informational. */
 .note-tab-pill.ghost,
-.note-tab-pill.ghost.active {
+.note-tab-pill.ghost.is-active {
   opacity: 50%;
   letter-spacing: -0.05em;
   text-shadow: none;

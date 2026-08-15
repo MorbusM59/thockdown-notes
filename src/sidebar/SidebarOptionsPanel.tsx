@@ -925,7 +925,7 @@ export function SidebarOptionsPanel({
               <button
                 key={option.key}
                 type="button"
-                className={`btn-icon typography-font-btn${viewStyle === option.key ? ' active' : ''}`}
+                className={`btn-icon typography-font-btn${viewStyle === option.key ? ' is-active' : ''}`}
                 data-tooltip={option.label}
                 aria-label={option.label}
                 aria-pressed={viewStyle === option.key}
@@ -991,7 +991,7 @@ export function SidebarOptionsPanel({
               <button
                 key={option.key}
                 type="button"
-                className={`btn-icon typography-font-btn${editorStyle === option.key ? ' active' : ''}`}
+                className={`btn-icon typography-font-btn${editorStyle === option.key ? ' is-active' : ''}`}
                 data-tooltip={option.label}
                 aria-label={option.label}
                 aria-pressed={editorStyle === option.key}
@@ -1079,7 +1079,7 @@ export function SidebarOptionsPanel({
               <button
                 key={`preset-${entry.id}`}
                 type="button"
-                className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}`}
+                className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' is-active' : ''}`}
                 data-tooltip={theme}
                 aria-label={theme}
                 onClick={() => void selectLoadoutPreset(entry.id)}
@@ -1090,7 +1090,7 @@ export function SidebarOptionsPanel({
           })}
           <button
             type="button"
-            className={`btn-icon options-color-swatch options-loadout-btn${isDynamicCustomPresetActive ? ' active' : ''}`}
+            className={`btn-icon options-color-swatch options-loadout-btn${isDynamicCustomPresetActive ? ' is-active' : ''}`}
             data-tooltip="Custom"
             aria-label="Custom Layout"
             onClick={selectDynamicCustomPreset}
@@ -1112,7 +1112,7 @@ export function SidebarOptionsPanel({
             <button
               key={`custom-${entry.id}`}
               type="button"
-              className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' active' : ''}${primedCustomLayoutId === entry.id ? ' primed' : ''}`}
+              className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' is-active' : ''}${primedCustomLayoutId === entry.id ? ' primed' : ''}`}
               data-tooltip={`Custom Layout ${Math.abs(entry.id) - LOADOUT_FACTORY_PRESET_COUNT - 2}\nClick RMB to mark for deletion. \nHold RMB to export.`}
               onClick={() => {
                 handleCustomLoadoutSlotClick(entry.id)
@@ -1134,7 +1134,7 @@ export function SidebarOptionsPanel({
 
           <button
             type="button"
-            className={`btn-icon options-color-swatch options-loadout-btn options-loadout-plus${hasUnsavedUiLoadoutChanges ? ' active' : ''}`}
+            className={`btn-icon options-color-swatch options-loadout-btn options-loadout-plus${hasUnsavedUiLoadoutChanges ? ' is-active' : ''}`}
             data-tooltip="Save current settings as a new custom layout"
             aria-label="Save current settings as a new custom layout"
             onClick={() => void saveCustomLoadout()}
@@ -1166,7 +1166,7 @@ export function SidebarOptionsPanel({
           <div className="options-color-grid options-hsva-grid" role="group" aria-label="HSVA value controls">
             <button
               type="button"
-              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'h' ? ' is-dragging' : ''}${primedColorSource.kind === 'hsva' && primedColorSource.key === 'h' ? ' active' : ''}`}
+              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'h' ? ' is-dragging' : ''}${primedColorSource.kind === 'hsva' && primedColorSource.key === 'h' ? ' is-active' : ''}`}
               style={{ background: hsvaDisplayColors.hColor }}
               data-live-tooltip={`Hue: ${Math.round(activeColorHsva.h)}\n${activeColorHex}`}
               onPointerDown={(event) => {
@@ -1203,7 +1203,7 @@ export function SidebarOptionsPanel({
             ><span className="options-hsva-glyph fa-solid fa-rainbow" aria-hidden="true" /></button>
             <button
               type="button"
-              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 's' ? ' is-dragging' : ''}${primedColorSource.kind === 'hsva' && primedColorSource.key === 's' ? ' active' : ''}`}
+              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 's' ? ' is-dragging' : ''}${primedColorSource.kind === 'hsva' && primedColorSource.key === 's' ? ' is-active' : ''}`}
               style={{ background: hsvaDisplayColors.sColor }}
               data-live-tooltip={`Saturation: ${Math.round(activeColorHsva.s * 255)}\n${activeColorHex}`}
               onPointerDown={(event) => {
@@ -1240,7 +1240,7 @@ export function SidebarOptionsPanel({
             ><span className="options-hsva-glyph fa-solid fa-droplet" aria-hidden="true" /></button>
             <button
               type="button"
-              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'v' ? ' is-dragging' : ''}${primedColorSource.kind === 'hsva' && primedColorSource.key === 'v' ? ' active' : ''}`}
+              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'v' ? ' is-dragging' : ''}${primedColorSource.kind === 'hsva' && primedColorSource.key === 'v' ? ' is-active' : ''}`}
               style={{ background: hsvaDisplayColors.vColor }}
               data-live-tooltip={`Value: ${Math.round(activeColorHsva.v * 255)}\n${activeColorHex}`}
               onPointerDown={(event) => {
@@ -1283,7 +1283,7 @@ export function SidebarOptionsPanel({
                 'options-hsva-control',
                 'options-hsva-alpha',
                 hsvaDragState?.control === 'a' ? 'is-dragging' : '',
-                primedColorSource.kind === 'hsva' && primedColorSource.key === 'a' ? 'active' : '',
+                primedColorSource.kind === 'hsva' && primedColorSource.key === 'a' ? 'is-active' : '',
               ]
                 .filter(Boolean)
                 .join(' ')}
@@ -1323,7 +1323,7 @@ export function SidebarOptionsPanel({
             ><span className="options-hsva-glyph fa-solid fa-eye" aria-hidden="true" /></button>
             <button
               type="button"
-              className={`btn-icon options-color-swatch options-active-color${primedColorSource.kind === 'active-color' ? ' active' : ''}`}
+              className={`btn-icon options-color-swatch options-active-color${primedColorSource.kind === 'active-color' ? ' is-active' : ''}`}
               data-tooltip={`Active color:\n${activeColorHex}`}
               style={{ background: `linear-gradient(${activeColorCss}, ${activeColorCss}), var(--color-background-light)` }}
               onMouseDown={(event) => {
@@ -1346,7 +1346,7 @@ export function SidebarOptionsPanel({
             <div className="options-texture-preview-row">
               <button
                 type="button"
-                className={`btn-icon options-color-swatch options-active-color options-texture-preview${primedColorSource.kind === 'texture-preview' ? ' active' : ''}`}
+                className={`btn-icon options-color-swatch options-active-color options-texture-preview${primedColorSource.kind === 'texture-preview' ? ' is-active' : ''}`}
                 data-tooltip={`Texture preview: ${texturePreviewHex}`}
                 style={{
                   '--texture-preview-color': texturePreviewTintCss,
@@ -1650,7 +1650,7 @@ export function SidebarOptionsPanel({
           <div className="options-glaze-cell options-glaze-cell-span-2 options-glaze-top-center">
             <button
               type="button"
-              className={`btn-icon options-color-swatch options-glaze-layer-order-btn${glazeSettings.radialAboveLinear ? ' active' : ''}`}
+              className={`btn-icon options-color-swatch options-glaze-layer-order-btn${glazeSettings.radialAboveLinear ? ' is-active' : ''}`}
               aria-label={glazeSettings.radialAboveLinear ? 'Display flair above glare.' : 'Display flair above glare.'}
               data-tooltip={glazeSettings.radialAboveLinear ? 'Display flair above glare.' : 'Display flair above glare.'}
               onClick={() => {

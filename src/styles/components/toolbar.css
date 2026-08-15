@@ -35,10 +35,10 @@
   font-size: var(--btn-large-icon-size);
 }
 
-.note-tools > .btn-icon.active
+.note-tools > .btn-icon.is-active
 {
   border-color: var(--btn-border-active);
-  box-shadow:   var(--box-shadow-inverted-harsh);
+  box-shadow:   var(--box-shadow-inverted-harsh-active);
 }
 
 .toolbar-grid {
@@ -307,9 +307,9 @@
   overflow: hidden;
 }
 
-.typography-font-btn.active {
+.typography-font-btn.is-active {
   border-color: var(--btn-border-active);
-  box-shadow: var(--box-shadow-inverted);
+  box-shadow: var(--box-shadow-inverted-active);
 }
 
 .typography-font-glyph {
@@ -486,11 +486,11 @@
    color layers above (::before/::after) paint on top of it and hide it.
    Re-apply the shadow on ::after, the topmost of the two layers, so it
    remains visible over the swatch color. */
-.options-element-grid .options-color-swatch.active::after,
+.options-element-grid .options-color-swatch.is-active::after,
 .options-element-grid .options-color-swatch:active::after,
-.options-texture-grid .options-color-swatch.active::after,
+.options-texture-grid .options-color-swatch.is-active::after,
 .options-texture-grid .options-color-swatch:active::after {
-  box-shadow: var(--box-shadow-inverted-harsh);
+  box-shadow: var(--box-shadow-inverted-harsh-active);
 }
 
 .options-element-grid .options-color-swatch > *,
@@ -807,9 +807,9 @@
   background: none;
 }
 
-.options-texture-preview.active {
+.options-texture-preview.is-active {
   border-color: var(--btn-border-active);
-  box-shadow:   var(--box-shadow-inverted-harsh);
+  box-shadow:   var(--box-shadow-inverted-harsh-active);
 }
 
 .options-texture-preview::before,

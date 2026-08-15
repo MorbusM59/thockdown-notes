@@ -183,7 +183,7 @@ export function SectionTabBar({
 
       <button
         type="button"
-        className={`btn-icon tagbar-toggle${tabBarMode === 'tags' ? ' active' : ''}`}
+        className={`btn-icon tagbar-toggle${tabBarMode === 'tags' ? ' is-active' : ''}`}
         data-tooltip={tabBarMode === 'tags' ? 'Show tabs' : 'Show tags'}
         aria-label={tabBarMode === 'tags' ? 'Show tabs' : 'Show tags'}
         onClick={toggleTabBarMode}
@@ -231,7 +231,7 @@ export function SectionTabBar({
         ) : (
           <button
             type="button"
-            className={`tag-pill section-identity-tab${(isSectionPickerOpen || isSuggestedTagsExpanded) ? ' active' : ''}`}
+            className={`tag-pill section-identity-tab${(isSectionPickerOpen || isSuggestedTagsExpanded) ? ' is-active' : ''}`}
             onClick={onIdentityClick}
             onContextMenu={onIdentityContextMenu}
             data-tooltip={
@@ -301,7 +301,7 @@ export function SectionTabBar({
                     return (
                       <div
                         key={tempTabNoteId}
-                        className={`tag-pill note-tab-pill temp active${isGhost ? ' ghost' : ''}${isPrimed ? ' unpin-primed' : ''}${isArming ? ' pin-arming' : ''}`}
+                        className={`tag-pill note-tab-pill temp is-active${isGhost ? ' ghost' : ''}${isPrimed ? ' unpin-primed' : ''}${isArming ? ' pin-arming' : ''}`}
                         style={{ '--temp-tab-pin-hold-ms': `${TEMP_TAB_PIN_HOLD_MS}ms` } as CSSProperties}
                         onClick={() => handleTabClick(tempTabNoteId)}
                         onContextMenu={(event) => handleTabContextMenu(event, tempTabNoteId)}
@@ -330,7 +330,7 @@ export function SectionTabBar({
                     return (
                       <div
                         key={tab.noteId}
-                        className={`tag-pill note-tab-pill${isActive ? ' active' : ''}${isGhost ? ' ghost' : ''}${isPrimed ? ' unpin-primed' : ''}`}
+                        className={`tag-pill note-tab-pill${isActive ? ' is-active' : ''}${isGhost ? ' ghost' : ''}${isPrimed ? ' unpin-primed' : ''}`}
                         draggable
                         onDragStart={(event) => handleTabDragStart(event, index)}
                         onDragEnd={handleTabDragEnd}
@@ -417,7 +417,7 @@ export function SectionTabBar({
                   return (
                     <div
                       key={tagName}
-                      className={`tag-pill active${deletePrimedTagName === tagName ? ' primed' : ''}${isProtected ? ` protected ${normalized}` : ''}`}
+                      className={`tag-pill is-active${deletePrimedTagName === tagName ? ' primed' : ''}${isProtected ? ` protected ${normalized}` : ''}`}
                       draggable={!isProtected}
                       onDragStart={(event) => handleTagDragStart(event, index)}
                       onDragEnd={handleTagDragEnd}
