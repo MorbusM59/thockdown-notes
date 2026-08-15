@@ -892,50 +892,43 @@ export function SidebarOptionsPanel({
       className={`options-content sidebar-options-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`}
       aria-label="Settings panel"
     >
-      <AccordionSection
-        className="sidebar-options-section-music"
-        ariaLabel="Music"
-        heading="Music"
-        forceOpenNonce={musicAccordionNonce}
-      >
-        <div className="utility-setting-slider-stack" aria-label="Music player controls">
-          <CompactScrollbarSlider
-            id="music-volume"
-            min={0}
-            max={1}
-            step={0.01}
-            value={musicVolume}
-            trackLabel="volume"
-            ariaLabel="Music volume"
-            defaultValue={0.8}
-            onCommit={(value) => setMusicVolume(clamp(value, 0, 1))}
-          />
-          <CompactScrollbarSlider
-            id="music-reverb-amount"
-            min={0}
-            max={1}
-            step={0.01}
-            value={musicReverbAmount}
-            trackLabel="reverb"
-            ariaLabel="Music reverb amount"
-            defaultValue={0}
-            onCommit={(value) => setMusicReverbAmount(clamp(value, 0, 1))}
-          />
-          <CompactScrollbarSlider
-            id="music-reverb-room"
-            min={0}
-            max={1}
-            step={0.01}
-            value={musicReverbRoom}
-            trackLabel="room"
-            ariaLabel="Music reverb room size"
-            defaultValue={0.3}
-            onCommit={(value) => setMusicReverbRoom(clamp(value, 0, 1))}
-          />
+      <div className="preset-section">
+        <div className="options-loadout-grid" role="group" aria-label="UI mode presets">
+          {factoryPresetEntriesForCurrentMode.map((entry) => {
+            const presetIcons = uiMode === 'dark' ? DARK_PRESET_ICONS : LIGHT_PRESET_ICONS
+            const presetThemes = uiMode === 'dark' ? DARK_PRESET_THEMES : LIGHT_PRESET_THEMES
+            const icon = presetIcons[Math.abs(entry.id) - 1] ?? 'fa-solid fa-circle'
+            const theme = presetThemes[Math.abs(entry.id) - 1] ?? 'None'
+            return (
+              <button
+                key={`preset-${entry.id}`}
+                type="button"
+                className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' is-active' : ''}`}
+                data-tooltip={theme}
+                aria-label={theme}
+                onClick={() => void selectLoadoutPreset(entry.id)}
+              >
+                <span className={icon} aria-hidden="true" />
+              </button>
+            )
+          })}
+          <button
+            type="button"
+            className={`btn-icon options-color-swatch options-loadout-btn${isDynamicCustomPresetActive ? ' is-active' : ''}`}
+            data-tooltip="Custom"
+            aria-label="Custom Layout"
+            onClick={selectDynamicCustomPreset}
+          >
+            <span className="fa-solid fa-marker" aria-hidden="true" />
+          </button>
         </div>
-      </AccordionSection>
-
-      <div className="typography-section">
+      </div>
+      <AccordionGroup>
+      <AccordionSection
+        className="sidebar-options-section-editor-font"
+        ariaLabel="Editor Font"
+        heading="Editor Font"
+      >
         {isPreviewMode ? (
           <div className="typography-grid" role="group" aria-label="Render typography">
             {VIEW_STYLE_OPTIONS.map((option) => (
@@ -1084,39 +1077,47 @@ export function SidebarOptionsPanel({
             </div>
           </div>
         ) : null}
-      </div>
-      <div className="preset-section">
-        <div className="options-loadout-grid" role="group" aria-label="UI mode presets">
-          {factoryPresetEntriesForCurrentMode.map((entry) => {
-            const presetIcons = uiMode === 'dark' ? DARK_PRESET_ICONS : LIGHT_PRESET_ICONS
-            const presetThemes = uiMode === 'dark' ? DARK_PRESET_THEMES : LIGHT_PRESET_THEMES
-            const icon = presetIcons[Math.abs(entry.id) - 1] ?? 'fa-solid fa-circle'
-            const theme = presetThemes[Math.abs(entry.id) - 1] ?? 'None'
-            return (
-              <button
-                key={`preset-${entry.id}`}
-                type="button"
-                className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' is-active' : ''}`}
-                data-tooltip={theme}
-                aria-label={theme}
-                onClick={() => void selectLoadoutPreset(entry.id)}
-              >
-                <span className={icon} aria-hidden="true" />
-              </button>
-            )
-          })}
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-loadout-btn${isDynamicCustomPresetActive ? ' is-active' : ''}`}
-            data-tooltip="Custom"
-            aria-label="Custom Layout"
-            onClick={selectDynamicCustomPreset}
-          >
-            <span className="fa-solid fa-marker" aria-hidden="true" />
-          </button>
+      </AccordionSection>
+
+      <AccordionSection
+        className="sidebar-options-section-ui-font"
+        ariaLabel="UI Font"
+        heading="UI Font"
+      >
+        <div className="typography-grid" role="group" aria-label="UI font family">
+          {UI_FONT_OPTIONS.map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              className={`btn-icon typography-font-btn${uiFontStyle === option.key ? ' is-active' : ''}`}
+              data-tooltip={option.label}
+              aria-label={option.label}
+              aria-pressed={uiFontStyle === option.key}
+              onClick={() => setUiFontStyle(option.key)}
+            >
+              <span className="typography-font-glyph" style={{ fontFamily: option.family }} aria-hidden="true">Aa</span>
+            </button>
+          ))}
         </div>
-      </div>
-      <AccordionGroup>
+        <div className="typography-sliders">
+          <div className="typography-slider">
+            <CompactScrollbarSlider
+              id="ui-font-scale"
+              min={UI_FONT_SCALE_MIN}
+              max={UI_FONT_SCALE_MAX}
+              step={UI_FONT_SCALE_STEP}
+              value={uiFontScale}
+              trackLabel="size"
+              ariaLabel="UI font size"
+              defaultValue={DEFAULT_UI_FONT_SCALE}
+              onCommit={(value) => setUiFontScale(
+                clamp(roundUiFontScale(value), UI_FONT_SCALE_MIN, UI_FONT_SCALE_MAX),
+              )}
+            />
+          </div>
+        </div>
+      </AccordionSection>
+
       <AccordionSection
         className="sidebar-options-section-layouts"
         ariaLabel="Custom Layouts"
@@ -2021,47 +2022,6 @@ export function SidebarOptionsPanel({
       </AccordionSection>
 
       <AccordionSection
-        className="sidebar-options-section-ui-font"
-        ariaLabel="UI Font"
-        heading="UI Font"
-        iconClass="fa-font"
-        iconTooltip="These settings are global and persist across layouts."
-      >
-        <div className="typography-grid" role="group" aria-label="UI font family">
-          {UI_FONT_OPTIONS.map((option) => (
-            <button
-              key={option.key}
-              type="button"
-              className={`btn-icon typography-font-btn${uiFontStyle === option.key ? ' is-active' : ''}`}
-              data-tooltip={option.label}
-              aria-label={option.label}
-              aria-pressed={uiFontStyle === option.key}
-              onClick={() => setUiFontStyle(option.key)}
-            >
-              <span className="typography-font-glyph" style={{ fontFamily: option.family }} aria-hidden="true">Aa</span>
-            </button>
-          ))}
-        </div>
-        <div className="typography-sliders">
-          <div className="typography-slider">
-            <CompactScrollbarSlider
-              id="ui-font-scale"
-              min={UI_FONT_SCALE_MIN}
-              max={UI_FONT_SCALE_MAX}
-              step={UI_FONT_SCALE_STEP}
-              value={uiFontScale}
-              trackLabel="size"
-              ariaLabel="UI font size"
-              defaultValue={DEFAULT_UI_FONT_SCALE}
-              onCommit={(value) => setUiFontScale(
-                clamp(roundUiFontScale(value), UI_FONT_SCALE_MIN, UI_FONT_SCALE_MAX),
-              )}
-            />
-          </div>
-        </div>
-      </AccordionSection>
-
-      <AccordionSection
         className="sidebar-options-section-mouse"
         ariaLabel="Mouse Options"
         heading="Mouse Options"
@@ -2535,6 +2495,49 @@ export function SidebarOptionsPanel({
               setPitchJitterAmount(nextValue)
               typingSoundManager.setPitchJitterAmount(nextValue)
             }}
+          />
+        </div>
+      </AccordionSection>
+
+      <AccordionSection
+        className="sidebar-options-section-music"
+        ariaLabel="Music"
+        heading="Music"
+        forceOpenNonce={musicAccordionNonce}
+      >
+        <div className="utility-setting-slider-stack" aria-label="Music player controls">
+          <CompactScrollbarSlider
+            id="music-volume"
+            min={0}
+            max={1}
+            step={0.01}
+            value={musicVolume}
+            trackLabel="volume"
+            ariaLabel="Music volume"
+            defaultValue={0.8}
+            onCommit={(value) => setMusicVolume(clamp(value, 0, 1))}
+          />
+          <CompactScrollbarSlider
+            id="music-reverb-amount"
+            min={0}
+            max={1}
+            step={0.01}
+            value={musicReverbAmount}
+            trackLabel="reverb"
+            ariaLabel="Music reverb amount"
+            defaultValue={0}
+            onCommit={(value) => setMusicReverbAmount(clamp(value, 0, 1))}
+          />
+          <CompactScrollbarSlider
+            id="music-reverb-room"
+            min={0}
+            max={1}
+            step={0.01}
+            value={musicReverbRoom}
+            trackLabel="room"
+            ariaLabel="Music reverb room size"
+            defaultValue={0.3}
+            onCommit={(value) => setMusicReverbRoom(clamp(value, 0, 1))}
           />
         </div>
       </AccordionSection>

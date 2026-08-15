@@ -623,10 +623,10 @@ Every feature in the app, described individually: where to find it, what it does
 - Most controls apply live, and separately to edit mode and preview mode where the two differ (e.g. typography, text color).
 - Every slider, and the draggable H/S/V/A and texture-control swatches, can also be adjusted by scrolling the mouse wheel over them — each notch moves the value by exactly one step. Hovering any of them shows a tooltip with the current value; it stays open and updates live as you scroll or drag, and only closes once the cursor actually leaves the control.
 
-### [Typography](#typography)
+### [Editor Font](#editor-font)
 
 > **Where?**
-> Settings panel, below Music, above the presets.
+> Settings panel, directly below the theme presets.
 
 *Font family, size, spacing, and padding for the editor and the rendered preview.*
 
@@ -635,7 +635,7 @@ Every feature in the app, described individually: where to find it, what it does
 ### [Presets](#presets)
 
 > **Where?**
-> Settings panel, directly below Typography.
+> Settings panel, at the very top.
 
 *A row of built-in light and dark theme presets.*
 
@@ -672,7 +672,7 @@ Every feature in the app, described individually: where to find it, what it does
 > **Where?**
 > Settings panel → UI Font.
 
-*Font family and size for the app's own chrome — sidebar, buttons, tags, tooltips — separate from the editor/preview content fonts under [Typography]($#typography).*
+*Font family and size for the app's own chrome — sidebar, buttons, tags, tooltips — separate from the editor/preview content fonts under [Editor Font]($#editor-font).*
 
 - Six bundled UI fonts, including Atkinson Hyperlegible (designed for low-vision readability) alongside the app's default system font.
 - The size slider scales UI text only; icons and button sizing stay fixed.
