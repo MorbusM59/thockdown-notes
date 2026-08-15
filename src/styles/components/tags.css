@@ -26,7 +26,7 @@
   flex-direction: row;
   align-items:    center;
   gap:            var(--spacing-small);
-  padding:        calc(var(--spacing-regular) - 2px);
+  padding:        var(--spacing-small);
   flex:           1 1 auto;
   width:          auto;
   height: auto;
@@ -315,9 +315,10 @@
   filter: var(--filter-primed-delete);
 }
 
-/* Tab mode: pinned note pills fill the whole bar */
+/* Tab mode: pinned note pills fill the whole bar. Padding is inherited
+   unchanged from .tab-mode-shell -- tab and tag mode share the same well
+   spacing, see spacing-small there. */
 .tab-mode-shell.tabs-mode {
-  padding: var(--spacing-regular);
   overflow: hidden;
 }
 

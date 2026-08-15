@@ -519,15 +519,17 @@
   --bottom-utility-bar-content-height: 16px;
   --bottom-utility-bar-height: calc(var(--bottom-utility-bar-content-height) + var(--spacing-regular) + var(--spacing-large));
 
-  --chapter-panel-content-height: 24px;
+  --chapter-panel-content-height: calc(24px * var(--ui-font-scale));
   --chapter-panel-height: calc(var(--chapter-panel-content-height) + var(--spacing-regular));
   /* The tab bar row nests two nested paddings on the way down to the actual
    * tab/tag pills: .tabbar-grid's own (top+bottom = 2 * spacing-regular), then
-   * .tab-mode-shell's own pill "well" padding inside it (also top+bottom =
-   * 2 * spacing-regular). Both have to be added back on top of the pill
-   * content height, or the pills shrink as spacing-regular grows even though
-   * the outer bar itself is now sized correctly. */
-  --tab-bar-content-height: 20px;
+   * .tab-mode-shell's own pill "well" padding inside it (top+bottom =
+   * 2 * spacing-small -- unified with the tag well's spacing, see
+   * .tab-mode-shell in tags.css). Both have to be added back on top of the
+   * pill content height, or the pills shrink as spacing-regular grows even
+   * though the outer bar itself is now sized correctly. Content height
+   * itself scales with --ui-font-scale so pills keep pace with UI text size. */
+  --tab-bar-content-height: calc(20px * var(--ui-font-scale));
   --note-list-row-content-height: var(--btn-square-regular-size);
   --wordcount-panel-width: 110px;
 }
