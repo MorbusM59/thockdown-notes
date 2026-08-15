@@ -4,6 +4,7 @@ import type { NoteSummary } from '../shared/noteLifecycle'
 import type { NoteTabEntry } from '../shared/tabs'
 import { PROTECTED_TAGS, normalizeTagName, isProtectedTagName, isExternalTagName } from '../shared/tags'
 import { NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload } from '../shared/noteDrag'
+import { useInlinePillEdit } from '../shared/useInlinePillEdit'
 
 /** How long the temp tab must be held down (left mouse button) before it's promoted to a permanent pinned tab. */
 export const TEMP_TAB_PIN_HOLD_MS = 500
@@ -50,6 +51,10 @@ export interface UseSectionTabsResult {
   suggestedTags: string[]
   deletePrimedTagName: string | null
   renamingTagName: string | null
+  tagRenameDraft: string
+  setTagRenameDraft: Dispatch<SetStateAction<string>>
+  commitTagRename: () => void
+  cancelTagRename: () => void
   isTagMutationPending: boolean
   activeNoteIsExternal: boolean
   handleTagInputKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void
@@ -81,13 +86,24 @@ export interface UseSectionTabsResult {
   activeNoteIsPinned: boolean
   tempTabNoteId: string | null
   pinArmingTabNoteId: string | null
+  /** Which tab pill (if any) is mid in-place id edit -- chapter-pill style, entered via a quick right-click. */
+  editingTabNoteId: string | null
+  tabIdDraft: string
+  setTabIdDraft: Dispatch<SetStateAction<string>>
+  commitTabIdEdit: () => void
+  cancelTabIdEdit: () => void
+  /** Which tab pill (if any) is mid held-right-click, arming for unpin -- distinct from unpinPrimedTabNoteId, which is the post-arm "click again to confirm" state. */
+  unpinArmingTabNoteId: string | null
   tabsScrollerRef: RefObject<HTMLDivElement>
   tabsCanScrollLeft: boolean
   tabsCanScrollRight: boolean
   handleAddCurrentNoteToTabs: () => Promise<void>
-  handleTabContextMenu: (event: MouseEvent<HTMLDivElement>, noteId: string) => void
+  handleTabContextMenu: (event: MouseEvent<HTMLDivElement>) => void
   handleTabMouseLeave: (noteId: string) => void
   handleTabClick: (noteId: string) => void
+  handleTabMouseDown: (event: MouseEvent<HTMLDivElement>, noteId: string) => void
+  handleTabMouseUp: (event: MouseEvent<HTMLDivElement>, noteId: string) => void
+  clearTabHoldTimer: () => void
   handleTempTabMouseDown: (event: MouseEvent<HTMLDivElement>, noteId: string) => void
   clearTempTabHoldTimer: () => void
   updateTabsScrollEdges: () => void
@@ -135,7 +151,6 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   const [tagInputValue, setTagInputValue] = useState('')
   const [isTagMutationPending, setIsTagMutationPending] = useState(false)
   const [deletePrimedTagName, setDeletePrimedTagName] = useState<string | null>(null)
-  const [renamingTagName, setRenamingTagName] = useState<string | null>(null)
   const [draggedTagIndex, setDraggedTagIndex] = useState<number | null>(null)
 
   // Tags always belong to `tabIdentityNoteId` (the parent, when a chapter is
@@ -218,7 +233,6 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     const rawInput = tagInputValue.trim()
     if (rawInput.startsWith('$')) {
       const requestedId = rawInput.slice(1)
-      setRenamingTagName(null)
       setTagInputValue('')
       if (!window.thockdownNotes) return
 
@@ -238,41 +252,6 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
 
     const normalized = normalizeTagName(tagInputValue)
     if (!normalized) return
-
-    if (renamingTagName) {
-      const fromName = normalizeTagName(renamingTagName)
-      const toName = normalized
-      setRenamingTagName(null)
-      setTagInputValue('')
-
-      if (fromName === toName) {
-        return
-      }
-
-      if (isProtectedTagName(fromName)) {
-        return
-      }
-
-      if (!window.thockdownNotes) return
-      if (noteTransitionLockRef.current) return
-
-      noteTransitionLockRef.current = true
-      setIsTagMutationPending(true)
-      void (async () => {
-        try {
-          await flushPendingSaveNow()
-          await window.thockdownNotes!.renameTag({ fromName, toName })
-          await refreshNotes(activeNoteId)
-          await activateNote(activeNoteId)
-        } catch (error) {
-          console.error('Failed to rename tag', error)
-        } finally {
-          setIsTagMutationPending(false)
-          noteTransitionLockRef.current = false
-        }
-      })()
-      return
-    }
 
     if (isProtectedTagName(normalized)) {
       setTagInputValue('')
@@ -294,13 +273,8 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     setTagInputValue('')
   }, [
     activeNoteId,
-    activateNote,
-    flushPendingSaveNow,
-    noteTransitionLockRef,
     orderedActiveTags,
     persistenceReady,
-    refreshNotes,
-    renamingTagName,
     runActiveNoteTagMutation,
     tagInputValue,
     activeNoteIsExternal,
@@ -316,22 +290,14 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     }
     if (event.key === 'Escape') {
       event.preventDefault()
-      if (renamingTagName) {
-        setRenamingTagName(null)
-        setTagInputValue('')
-      }
       scheduleFocusEditorInEditMode()
       return
     }
     if (event.key === 'Tab') {
       event.preventDefault()
-      if (renamingTagName) {
-        setRenamingTagName(null)
-        setTagInputValue('')
-      }
       scheduleFocusEditorInEditMode()
     }
-  }, [handleTagInputEnter, renamingTagName, scheduleFocusEditorInEditMode])
+  }, [handleTagInputEnter, scheduleFocusEditorInEditMode])
 
   const handleTagChipClick = useCallback((tagName: string) => {
     if (deletePrimedTagName === tagName) {
@@ -426,13 +392,51 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     })
   }, [draggedTagIndex, orderedActiveTags, runActiveNoteTagMutation])
 
+  // Ported from the old handleTagInputEnter rename branch, now keyed off
+  // the pill's own draft instead of the shared add-tag input's value.
+  const commitTagRenameValue = useCallback(async (fromName: string, draft: string) => {
+    if (!activeNoteId) return
+
+    const normalizedFrom = normalizeTagName(fromName)
+    const toName = normalizeTagName(draft)
+    if (!toName || normalizedFrom === toName) return
+    if (isProtectedTagName(normalizedFrom)) return
+    if (!window.thockdownNotes) return
+    if (noteTransitionLockRef.current) return
+
+    noteTransitionLockRef.current = true
+    setIsTagMutationPending(true)
+    try {
+      await flushPendingSaveNow()
+      await window.thockdownNotes.renameTag({ fromName: normalizedFrom, toName })
+      await refreshNotes(activeNoteId)
+      await activateNote(activeNoteId)
+    } catch (error) {
+      console.error('Failed to rename tag', error)
+    } finally {
+      setIsTagMutationPending(false)
+      noteTransitionLockRef.current = false
+    }
+  }, [activeNoteId, activateNote, flushPendingSaveNow, noteTransitionLockRef, refreshNotes])
+
+  const tagRenameKeyExists = useCallback((tagName: string) => (
+    orderedActiveTags.includes(tagName)
+  ), [orderedActiveTags])
+
+  const {
+    editingKey: renamingTagName,
+    draft: tagRenameDraft,
+    setDraft: setTagRenameDraft,
+    start: startRenamingTag,
+    cancel: cancelTagRename,
+    commit: commitTagRename,
+  } = useInlinePillEdit<string>({ commit: commitTagRenameValue, keyExists: tagRenameKeyExists })
+
   const handleTagContextMenu = useCallback((event: MouseEvent<HTMLDivElement>, tagName: string) => {
     event.preventDefault()
     if (isProtectedTagName(tagName)) return
-
-    setRenamingTagName(tagName)
-    setTagInputValue(tagName)
-  }, [])
+    startRenamingTag(tagName, tagName)
+  }, [startRenamingTag])
 
   // ── Tab bar state ──────────────────────────────────────────────────────
 
@@ -537,6 +541,14 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   const activeNoteIsPinned = tabIdentityNoteId ? pinnedTabs.some((tab) => tab.noteId === tabIdentityNoteId) : false
   const tempTabNoteId = tabIdentityNoteId && !activeNoteIsPinned ? tabIdentityNoteId : null
 
+  // A tab mid in-place id edit can vanish out from under the input (hard
+  // delete, or the pruning effect above dropping it) -- the input just
+  // unmounts, no blur fires, so this is passed as useInlinePillEdit's
+  // keyExists below rather than left to dangle forever.
+  const editingTabNoteIdExists = useCallback((noteId: string) => (
+    noteId === tempTabNoteId || pinnedTabs.some((tab) => tab.noteId === noteId)
+  ), [pinnedTabs, tempTabNoteId])
+
   const pinNoteToTabs = useCallback(async (noteId: string) => {
     if (!window.thockdownTabs) return
 
@@ -613,19 +625,75 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     }
   }, [tabIdentityNoteId, persistenceReady, activeNoteIsPinned, unpinNoteTab, pinNoteToTabs])
 
-  // Right-click primes a tab for unpinning — the tab-bar equivalent of
-  // closing it (same end result as Ctrl+T on an already-pinned note). A
-  // left-click while primed confirms the close; anything else (mouse
-  // leaving, clicking a different tab) cancels the priming. Works the same
-  // way for the temp tab, which just has nothing to persist-remove.
-  const handleTabContextMenu = useCallback((event: MouseEvent<HTMLDivElement>, noteId: string) => {
+  // Holding the RIGHT mouse button on any tab (temp or pinned) for
+  // TEMP_TAB_PIN_HOLD_MS arms it for unpin, same end state as the old
+  // immediate-right-click behavior. Released early -- a quick right-click --
+  // it starts an in-place id edit instead (startEditingTabId below). Kept
+  // as its own ref/state pair, separate from the left-button pin-hold
+  // (tempTabHoldTimerRef/pinArmingTabNoteId, further down), since the temp
+  // tab can have both gestures live on it at once.
+  const tabHoldTimerRef = useRef<number | null>(null)
+  const [unpinArmingTabNoteId, setUnpinArmingTabNoteId] = useState<string | null>(null)
+
+  const clearTabHoldTimer = useCallback(() => {
+    if (tabHoldTimerRef.current !== null) {
+      window.clearTimeout(tabHoldTimerRef.current)
+      tabHoldTimerRef.current = null
+    }
+    setUnpinArmingTabNoteId(null)
+  }, [])
+
+  useEffect(() => () => clearTabHoldTimer(), [clearTabHoldTimer])
+
+  // A quick right-click starts an in-place id edit (chapter-pill style); a
+  // held right-click instead primes the tab for unpinning -- the tab-bar
+  // equivalent of closing it (same end result as Ctrl+T on an already-
+  // pinned note). See handleTabMouseDown/handleTabMouseUp below for the
+  // hold-vs-quick-click split. A left-click while primed confirms the
+  // close; anything else (mouse leaving, clicking a different tab) cancels
+  // the priming. Works the same way for the temp tab, which just has
+  // nothing to persist-remove.
+  const handleTabContextMenu = useCallback((event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()
-    setUnpinPrimedTabNoteId(noteId)
   }, [])
 
   const handleTabMouseLeave = useCallback((noteId: string) => {
     setUnpinPrimedTabNoteId((previous) => (previous === noteId ? null : previous))
-  }, [])
+    clearTabHoldTimer()
+  }, [clearTabHoldTimer])
+
+  const commitTabIdEditValue = useCallback(async (noteId: string, draft: string) => {
+    if (!window.thockdownNotes) return
+    const trimmed = draft.trim()
+    const note = notes.find((entry) => entry.id === noteId)
+    if (trimmed === (note?.assignedId ?? '')) return
+
+    try {
+      const updated = await window.thockdownNotes.setNoteAssignedId({ id: noteId, requestedId: trimmed })
+      if (updated?.assignedId) {
+        updateNoteAssignedId(noteId, updated.assignedId)
+      }
+    } catch (error) {
+      console.error('Failed to set note internal ID', error)
+    }
+  }, [notes, updateNoteAssignedId])
+
+  const {
+    editingKey: editingTabNoteId,
+    draft: tabIdDraft,
+    setDraft: setTabIdDraft,
+    start: startTabIdEdit,
+    cancel: cancelTabIdEdit,
+    commit: commitTabIdEdit,
+  } = useInlinePillEdit<string>({ commit: commitTabIdEditValue, keyExists: editingTabNoteIdExists })
+
+  const startEditingTabId = useCallback((noteId: string) => {
+    const note = notes.find((entry) => entry.id === noteId)
+    startTabIdEdit(noteId, note?.assignedId ?? '')
+    // Defensive: a tab already primed for unpin (from a previous hold)
+    // shouldn't resurface that styling/confirm-click right after a rename.
+    setUnpinPrimedTabNoteId((previous) => (previous === noteId ? null : previous))
+  }, [notes, startTabIdEdit])
 
   const handleTabClick = useCallback((noteId: string) => {
     const wasPrimed = unpinPrimedTabNoteId === noteId
@@ -677,6 +745,28 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   }, [clearTempTabHoldTimer, pinNoteToTabs])
 
   useEffect(() => () => clearTempTabHoldTimer(), [clearTempTabHoldTimer])
+
+  // Held-right-click state/timer (see the block above handleTabContextMenu
+  // for tabHoldTimerRef/unpinArmingTabNoteId/clearTabHoldTimer themselves).
+  const handleTabMouseDown = useCallback((event: MouseEvent<HTMLDivElement>, noteId: string) => {
+    if (event.button !== 2) return
+    clearTabHoldTimer()
+    setUnpinArmingTabNoteId(noteId)
+    tabHoldTimerRef.current = window.setTimeout(() => {
+      tabHoldTimerRef.current = null
+      setUnpinArmingTabNoteId(null)
+      setUnpinPrimedTabNoteId(noteId)
+    }, TEMP_TAB_PIN_HOLD_MS)
+  }, [clearTabHoldTimer])
+
+  const handleTabMouseUp = useCallback((event: MouseEvent<HTMLDivElement>, noteId: string) => {
+    if (event.button !== 2) return
+    const wasQuickClick = tabHoldTimerRef.current !== null
+    clearTabHoldTimer()
+    if (wasQuickClick) {
+      startEditingTabId(noteId)
+    }
+  }, [clearTabHoldTimer, startEditingTabId])
 
   // ── Tab bar horizontal scrolling (fixed-width tabs, wheel-scroll, edge fades) ──
 
@@ -796,6 +886,10 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     suggestedTags,
     deletePrimedTagName,
     renamingTagName,
+    tagRenameDraft,
+    setTagRenameDraft,
+    commitTagRename,
+    cancelTagRename,
     isTagMutationPending,
     activeNoteIsExternal,
     handleTagInputKeyDown,
@@ -824,6 +918,12 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     activeNoteIsPinned,
     tempTabNoteId,
     pinArmingTabNoteId,
+    editingTabNoteId,
+    tabIdDraft,
+    setTabIdDraft,
+    commitTabIdEdit,
+    cancelTabIdEdit,
+    unpinArmingTabNoteId,
     tabsScrollerRef,
     tabsCanScrollLeft,
     tabsCanScrollRight,
@@ -831,6 +931,9 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     handleTabContextMenu,
     handleTabMouseLeave,
     handleTabClick,
+    handleTabMouseDown,
+    handleTabMouseUp,
+    clearTabHoldTimer,
     handleTempTabMouseDown,
     clearTempTabHoldTimer,
     updateTabsScrollEdges,

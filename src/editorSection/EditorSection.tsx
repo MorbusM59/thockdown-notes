@@ -211,14 +211,14 @@ export function EditorSection({
   // last-mounted one's custom scrollbar pointing at the wrong DOM node.
   const [scrollbarHostEl, setScrollbarHostEl] = useState<HTMLDivElement | null>(null)
 
-  // Identity-tab UI state: renaming this section, editing the active note's
-  // assigned id, and the right-click section-picker that takes over the tab
-  // bar's pill area to offer a swap. Purely transient chrome, not section
-  // content -- stays local rather than round-tripping to App.tsx.
+  // Identity-tab UI state: renaming this section, and the right-click
+  // section-picker that takes over the tab bar's pill area to offer a swap.
+  // Purely transient chrome, not section content -- stays local rather than
+  // round-tripping to App.tsx. (Editing a note's own assigned id now
+  // happens by right-clicking its tab pill directly, see useSectionTabs.ts's
+  // editingTabNoteId -- the identity tab no longer has a tag-bar-mode role.)
   const [isEditingSectionName, setIsEditingSectionName] = useState(false)
   const [sectionNameDraft, setSectionNameDraft] = useState('')
-  const [isEditingNoteId, setIsEditingNoteId] = useState(false)
-  const [noteIdDraft, setNoteIdDraft] = useState('')
   const [isSectionPickerOpen, setIsSectionPickerOpen] = useState(false)
   const [swapCandidates, setSwapCandidates] = useState<{ id: string; name: string }[]>([])
   /** Right-click on a picker candidate pill arms it for deletion; a left-click while armed confirms. Anything else (mouse leaving, picking a different candidate) disarms it. */
@@ -767,6 +767,10 @@ export function EditorSection({
     suggestedTags,
     deletePrimedTagName,
     renamingTagName,
+    tagRenameDraft,
+    setTagRenameDraft,
+    commitTagRename,
+    cancelTagRename,
     isTagMutationPending,
     activeNoteIsExternal,
     handleTagInputKeyDown,
@@ -794,6 +798,12 @@ export function EditorSection({
     activeNoteIsPinned,
     tempTabNoteId,
     pinArmingTabNoteId,
+    editingTabNoteId,
+    tabIdDraft,
+    setTabIdDraft,
+    commitTabIdEdit,
+    cancelTabIdEdit,
+    unpinArmingTabNoteId,
     tabsScrollerRef,
     tabsCanScrollLeft,
     tabsCanScrollRight,
@@ -801,6 +811,9 @@ export function EditorSection({
     handleTabContextMenu,
     handleTabMouseLeave,
     handleTabClick,
+    handleTabMouseDown,
+    handleTabMouseUp,
+    clearTabHoldTimer,
     handleTempTabMouseDown,
     clearTempTabHoldTimer,
     updateTabsScrollEdges,
@@ -1194,6 +1207,10 @@ export function EditorSection({
     suggestedTags,
     deletePrimedTagName,
     renamingTagName,
+    tagRenameDraft,
+    setTagRenameDraft,
+    commitTagRename,
+    cancelTagRename,
     isTagMutationPending,
     activeNoteIsExternal,
     handleTagInputKeyDown,
@@ -1221,6 +1238,12 @@ export function EditorSection({
     activeNoteIsPinned,
     tempTabNoteId,
     pinArmingTabNoteId,
+    editingTabNoteId,
+    tabIdDraft,
+    setTabIdDraft,
+    commitTabIdEdit,
+    cancelTabIdEdit,
+    unpinArmingTabNoteId,
     tabsScrollerRef,
     tabsCanScrollLeft,
     tabsCanScrollRight,
@@ -1228,6 +1251,9 @@ export function EditorSection({
     handleTabContextMenu,
     handleTabMouseLeave,
     handleTabClick,
+    handleTabMouseDown,
+    handleTabMouseUp,
+    clearTabHoldTimer,
     handleTempTabMouseDown,
     clearTempTabHoldTimer,
     updateTabsScrollEdges,
@@ -1432,62 +1458,25 @@ export function EditorSection({
     reportSectionHandle(sectionId, currentSectionHandle)
   })
 
-  // The identity button's meaning depends on which bar is showing: in
-  // tab-bar mode it's the section id, left-click opens the section-picker
-  // (this slot's swap targets, rendered into the tab bar's own pill area);
-  // in tag-bar mode it's the active note's assigned id, left-click toggles
-  // the suggested-tags-expanded view. The tag/tab bar mode switch itself now
-  // lives on its own dedicated button (see the tags-toggle button), freeing
-  // up the identity button's left-click for both of these. Right-click still
-  // depends on which bar is showing: assign the active note's id in tag-bar
-  // mode, or rename this section in tab-bar mode.
-  const startEditingNoteId = useCallback(() => {
-    setNoteIdDraft(activeNoteSummary?.assignedId ?? '')
-    setIsEditingNoteId(true)
-  }, [activeNoteSummary])
-
-  const commitNoteIdEdit = useCallback(() => {
-    setIsEditingNoteId(false)
-    const trimmed = noteIdDraft.trim()
-    if (!activeNoteId || !window.thockdownNotes) return
-    if (trimmed === (activeNoteSummary?.assignedId ?? '')) return
-    const noteId = activeNoteId
-    void (async () => {
-      try {
-        const updated = await window.thockdownNotes!.setNoteAssignedId({ id: noteId, requestedId: trimmed })
-        if (updated?.assignedId) {
-          updateNoteAssignedId(noteId, updated.assignedId)
-        }
-      } catch (error) {
-        console.error('Failed to set note internal ID', error)
-      }
-    })()
-  }, [activeNoteId, activeNoteSummary, noteIdDraft, updateNoteAssignedId])
-
-  const cancelNoteIdEdit = useCallback(() => {
-    setIsEditingNoteId(false)
-  }, [])
-
+  // The identity button only shows/does anything in tab-bar mode now: it's
+  // the section id, left-click opens the section-picker (this slot's swap
+  // targets, rendered into the tab bar's own pill area), right-click renames
+  // this section. It doesn't render at all in tag-bar mode (SectionTabBar.tsx
+  // hides it there) -- editing a note's own id moved to right-clicking its
+  // tab pill directly, and the suggested-tags-expand toggle moved to
+  // right-clicking the tag input.
   const handleIdentityClick = useCallback(() => {
-    if (tabBarMode === 'tabs') {
-      if (isSectionPickerOpen) {
-        closeSectionPicker()
-      } else {
-        void openSectionPicker()
-      }
-      return
+    if (isSectionPickerOpen) {
+      closeSectionPicker()
+    } else {
+      void openSectionPicker()
     }
-    toggleSuggestedTagsExpanded()
-  }, [tabBarMode, isSectionPickerOpen, closeSectionPicker, openSectionPicker, toggleSuggestedTagsExpanded])
+  }, [isSectionPickerOpen, closeSectionPicker, openSectionPicker])
 
   const handleIdentityContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
-    if (tabBarMode === 'tabs') {
-      startRenamingSection()
-    } else {
-      startEditingNoteId()
-    }
-  }, [tabBarMode, startRenamingSection, startEditingNoteId])
+    startRenamingSection()
+  }, [startRenamingSection])
 
   const handleSectionPickerCandidateClick = useCallback((candidateId: string) => {
     if (deletionPrimedSectionId === candidateId) {
@@ -1523,6 +1512,10 @@ export function EditorSection({
           suggestedTags,
           deletePrimedTagName,
           renamingTagName,
+          tagRenameDraft,
+          setTagRenameDraft,
+          commitTagRename,
+          cancelTagRename,
           isTagMutationPending,
           activeNoteIsExternal,
           handleTagInputKeyDown,
@@ -1550,6 +1543,12 @@ export function EditorSection({
           activeNoteIsPinned,
           tempTabNoteId,
           pinArmingTabNoteId,
+          editingTabNoteId,
+          tabIdDraft,
+          setTabIdDraft,
+          commitTabIdEdit,
+          cancelTabIdEdit,
+          unpinArmingTabNoteId,
           tabsScrollerRef,
           tabsCanScrollLeft,
           tabsCanScrollRight,
@@ -1557,6 +1556,9 @@ export function EditorSection({
           handleTabContextMenu,
           handleTabMouseLeave,
           handleTabClick,
+          handleTabMouseDown,
+          handleTabMouseUp,
+          clearTabHoldTimer,
           handleTempTabMouseDown,
           clearTempTabHoldTimer,
           updateTabsScrollEdges,
@@ -1575,7 +1577,6 @@ export function EditorSection({
         activeNoteId={activeNoteId}
         tabIdentityNoteId={menuIdentityNoteId}
         notes={notes}
-        activeNoteSummary={activeNoteSummary}
         isLeftmostSection={isLeftmostSection}
         canCreateSection={canCreateSection}
         onCreateSection={onCreateSection}
@@ -1586,11 +1587,6 @@ export function EditorSection({
         setSectionNameDraft={setSectionNameDraft}
         onCommitSectionRename={commitSectionRename}
         onCancelSectionRename={cancelSectionRename}
-        isEditingNoteId={isEditingNoteId}
-        noteIdDraft={noteIdDraft}
-        setNoteIdDraft={setNoteIdDraft}
-        onCommitNoteIdEdit={commitNoteIdEdit}
-        onCancelNoteIdEdit={cancelNoteIdEdit}
         onIdentityClick={handleIdentityClick}
         onIdentityContextMenu={handleIdentityContextMenu}
         isSectionPickerOpen={isSectionPickerOpen}

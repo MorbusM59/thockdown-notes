@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { DragEvent, KeyboardEvent, WheelEvent as ReactWheelEvent } from 'react'
+import type { DragEvent, WheelEvent as ReactWheelEvent } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { ChapterEntry } from '../shared/chapters'
 import { splitChapterFamily } from '../shared/chapters'
 import { resolveIdentityLabel } from '../shared/tabLabels'
+import { InlinePillOrInput } from '../shared/InlinePillOrInput'
 
 export interface ChapterBarProps {
   parentNoteId: string
@@ -134,16 +135,6 @@ export function ChapterBar({
     event.currentTarget.scrollLeft += event.deltaY
   }, [])
 
-  const handleChapterIdInputKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      onCommitChapterIdEdit()
-    } else if (event.key === 'Escape') {
-      event.preventDefault()
-      onCancelChapterIdEdit()
-    }
-  }, [onCommitChapterIdEdit, onCancelChapterIdEdit])
-
   return (
     <div className="chapter-bar-row">
       {autoOpenItemsChapter ? (() => {
@@ -204,44 +195,39 @@ export function ChapterBar({
               const note = notes.find((entry) => entry.id === chapter.chapterNoteId)
               const { text: label, isAssigned } = resolveIdentityLabel(chapter.chapterId, note?.contentText)
 
-              if (isEditing) {
-                return (
-                  <input
-                    key={chapter.chapterNoteId}
-                    className="tag-pill note-tab-pill chapter-pill chapter-id-input"
-                    value={chapterIdDraft}
-                    autoFocus
-                    onChange={(event) => setChapterIdDraft(event.target.value)}
-                    onBlur={onCommitChapterIdEdit}
-                    onKeyDown={handleChapterIdInputKeyDown}
-                    aria-label={`Chapter ${index + 1} id`}
-                  />
-                )
-              }
-
               return (
-                <div
+                <InlinePillOrInput
                   key={chapter.chapterNoteId}
-                  className={`tag-pill note-tab-pill chapter-pill${isActive ? ' is-active' : ''}`}
-                  data-chapter-note-id={chapter.chapterNoteId}
-                  draggable
-                  onDragStart={(event) => onChapterDragStart(event, index)}
-                  onDragEnd={onChapterDragEnd}
-                  onDragOver={(event) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    event.dataTransfer.dropEffect = 'move'
-                  }}
-                  onDrop={(event) => onChapterDrop(event, index)}
-                  onClick={() => onChapterClick(chapter.chapterNoteId)}
-                  onContextMenu={(event) => {
-                    event.preventDefault()
-                    onStartEditingChapterId(chapter.chapterNoteId)
-                  }}
-                  data-tooltip={label}
+                  isEditing={isEditing}
+                  value={chapterIdDraft}
+                  onChange={setChapterIdDraft}
+                  onCommit={onCommitChapterIdEdit}
+                  onCancel={onCancelChapterIdEdit}
+                  className="tag-pill note-tab-pill chapter-pill chapter-id-input"
+                  ariaLabel={`Chapter ${index + 1} id`}
                 >
-                  <span className={`tag-pill-label${isAssigned ? '' : ' tag-pill-label-derived'}`}>{label}</span>
-                </div>
+                  <div
+                    className={`tag-pill note-tab-pill chapter-pill${isActive ? ' is-active' : ''}`}
+                    data-chapter-note-id={chapter.chapterNoteId}
+                    draggable
+                    onDragStart={(event) => onChapterDragStart(event, index)}
+                    onDragEnd={onChapterDragEnd}
+                    onDragOver={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      event.dataTransfer.dropEffect = 'move'
+                    }}
+                    onDrop={(event) => onChapterDrop(event, index)}
+                    onClick={() => onChapterClick(chapter.chapterNoteId)}
+                    onContextMenu={(event) => {
+                      event.preventDefault()
+                      onStartEditingChapterId(chapter.chapterNoteId)
+                    }}
+                    data-tooltip={label}
+                  >
+                    <span className={`tag-pill-label${isAssigned ? '' : ' tag-pill-label-derived'}`}>{label}</span>
+                  </div>
+                </InlinePillOrInput>
               )
             })}
           </div>

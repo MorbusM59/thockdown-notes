@@ -194,7 +194,7 @@ Every feature in the app, described individually: where to find it, what it does
 ### [Assigning a Note Id](#assigning-a-note-id)
 
 > **Where?**
-> The tab bar's identity tab — switch it to tag mode (tag icon), then right-click it.
+> A quick right-click on any note tab in the tab bar (tabs mode) — the active note's own tab, or any other pinned tab.
 
 *Gives a note a short, memorable id (shown as \`$id\`) so other notes can link straight to it.*
 
@@ -236,6 +236,7 @@ Every feature in the app, described individually: where to find it, what it does
 *Removes or reorders the tags already on a note.*
 
 - Click a tag once to arm it for deletion (it highlights); click it again to delete, or move the pointer away to cancel.
+- Right-click a tag to rename it in place — the pill itself becomes an editable field, renaming the tag everywhere it's used (not just on this note). Enter or clicking away commits, Escape cancels. Protected tags can't be renamed this way.
 - Drag a tag left or right to reorder it relative to the others.
 
 ### [Suggested Tags](#suggested-tags)
@@ -247,6 +248,7 @@ Every feature in the app, described individually: where to find it, what it does
 
 - Click a suggested tag to add it instantly to the current note.
 - Tags already on the note, and protected tags, are excluded from suggestions.
+- Right-click the tag input field to expand the suggested list to fill the whole bar; right-click again (anywhere in the expanded view) to collapse it back.
 
 ### [Protected Tags](#protected-tags)
 
@@ -333,7 +335,7 @@ Every feature in the app, described individually: where to find it, what it does
 
 *Switches a section's identity strip between showing its open-note tabs and its tag editor.*
 
-- In tag mode, the identity tab itself displays — and lets you assign — the active note's \`$id\` (see [Assigning a Note Id]($#assigning-a-note-id)).
+- The identity tab (section name / picker) only shows in tabs mode — tag mode uses that space for the tag input and assigned tags instead. To give the active note an id while in tag mode, switch back to tabs mode and right-click its tab (see [Assigning a Note Id]($#assigning-a-note-id)).
 
 ### [Pinned and Temporary Tabs](#pinned-and-temporary-tabs)
 
@@ -344,7 +346,7 @@ Every feature in the app, described individually: where to find it, what it does
 
 - Clicking a note in the sidebar opens it as a single temporary tab (replacing any previous one). Its label is the note's own \`$id\` if you've assigned one (shown upright), or otherwise a short preview pulled live from the note's own first line (shown in italics, so the two never look alike) — never a placeholder minted on your behalf.
 - Holding the click past a short threshold pins it as a permanent tab instead, which stays open alongside others — pinning doesn't assign an id either, it's still whichever of the two labels above already applied.
-- Right-click a pinned tab, or hold-click it, to unpin/close it.
+- A quick right-click on any tab (pinned or temporary) turns it into an editable field for that note's \`$id\` — same as [Assigning a Note Id]($#assigning-a-note-id). Holding the right-click past a short threshold arms it for unpin/close instead; release early and it's a rename, hold it and a follow-up left-click confirms the close (move the pointer away to cancel either way).
 - Drag tabs to reorder them; drag a note from the sidebar directly into a tab bar to open it there.
 
 ### [Chapters](#chapters)

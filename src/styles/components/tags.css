@@ -182,6 +182,12 @@
   filter: var(--filter-primed-delete);
 }
 
+/* In-place tag rename (right-click an assigned tag pill), chapter-pill style. */
+.tag-rename-input {
+  text-align: center;
+  outline: none;
+}
+
 .tag-pill.suggested {
   cursor: default;
 }
@@ -416,13 +422,16 @@
 }
 
 /* Temp/preview tab for the current unpinned note — italic to read as
-   provisional, plus a fill bar while being held down for promotion. */
+   provisional. */
 .note-tab-pill.temp {
   color: var(--color-text-10);
   text-shadow: none;
 }
 
-.note-tab-pill.temp::after {
+/* Fill bar shared by both hold gestures (left-hold-to-pin, temp tab only;
+   right-hold-to-unpin, any tab) -- base geometry lives on every note-tab
+   pill so the unpin-arm variant works on pinned tabs too, not just .temp. */
+.note-tab-pill::after {
   content:    '';
   position:   absolute;
   left:       0;
@@ -436,4 +445,18 @@
 .note-tab-pill.temp.pin-arming::after {
   width:      100%;
   transition: width var(--temp-tab-pin-hold-ms, 500ms) linear;
+}
+
+.note-tab-pill.unpin-arming::after {
+  width:      100%;
+  background: var(--color-danger);
+  transition: width var(--temp-tab-pin-hold-ms, 500ms) linear;
+}
+
+/* In-place note id edit (quick right-click a tab), chapter-pill style. */
+.note-tab-id-input {
+  height: 100%;
+  text-align: center;
+  outline: none;
+  letter-spacing: 0.1em;
 }

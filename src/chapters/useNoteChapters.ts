@@ -6,6 +6,7 @@ import type { NoteSummary } from '../shared/noteLifecycle'
 import type { EditorSelectionState } from '../editor/EditorContract'
 import { collapseSurgerySite, trimBlankLines } from './chapterExtraction'
 import { normalizeChapterHeadings } from '../shared/markdownHeadings'
+import { useInlinePillEdit } from '../shared/useInlinePillEdit'
 
 export interface UseNoteChaptersOptions {
   /** The note identity the chapter bar shows chapters *of* -- the chapter-aware "menu identity" (see EditorSection.tsx's `menuIdentityNoteId`), never a chapter's own id (chapters can't have chapters in this UI). */
@@ -142,7 +143,7 @@ export interface UseNoteChaptersResult {
   chapterIdDraft: string
   setChapterIdDraft: (value: string) => void
   startEditingChapterId: (chapterNoteId: string) => void
-  commitChapterIdEdit: () => Promise<void>
+  commitChapterIdEdit: () => void
   cancelChapterIdEdit: () => void
 }
 
@@ -762,33 +763,36 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
   }, [draggedChapterIndex, reorderableChapters, menuIdentityNoteId, refreshNotes, activeNoteId])
 
 
-  const [editingChapterNoteId, setEditingChapterNoteId] = useState<string | null>(null)
-  const [chapterIdDraft, setChapterIdDraft] = useState('')
-
-  const startEditingChapterId = useCallback((chapterNoteId: string) => {
-    const current = chapters.find((chapter) => chapter.chapterNoteId === chapterNoteId)
-    setChapterIdDraft(current?.chapterId ?? '')
-    setEditingChapterNoteId(chapterNoteId)
-  }, [chapters])
-
-  const cancelChapterIdEdit = useCallback(() => {
-    setEditingChapterNoteId(null)
-  }, [])
-
-  const commitChapterIdEdit = useCallback(async () => {
-    const chapterNoteId = editingChapterNoteId
-    setEditingChapterNoteId(null)
-    if (!chapterNoteId || !menuIdentityNoteId || !window.thockdownChapters) return
+  const commitChapterIdEditValue = useCallback(async (chapterNoteId: string, draft: string) => {
+    if (!menuIdentityNoteId || !window.thockdownChapters) return
 
     const current = chapters.find((chapter) => chapter.chapterNoteId === chapterNoteId)
-    const trimmed = chapterIdDraft.trim()
+    const trimmed = draft.trim()
     if (trimmed === (current?.chapterId ?? '')) return
 
     const resolved = await window.thockdownChapters.setChapterId(menuIdentityNoteId, chapterNoteId, trimmed)
     setChapters((previous) => previous.map((chapter) => (
       chapter.chapterNoteId === chapterNoteId ? { ...chapter, chapterId: resolved } : chapter
     )))
-  }, [editingChapterNoteId, menuIdentityNoteId, chapters, chapterIdDraft])
+  }, [menuIdentityNoteId, chapters])
+
+  const chapterIdEditKeyExists = useCallback((chapterNoteId: string) => (
+    chapters.some((chapter) => chapter.chapterNoteId === chapterNoteId)
+  ), [chapters])
+
+  const {
+    editingKey: editingChapterNoteId,
+    draft: chapterIdDraft,
+    setDraft: setChapterIdDraft,
+    start: startChapterIdEdit,
+    cancel: cancelChapterIdEdit,
+    commit: commitChapterIdEdit,
+  } = useInlinePillEdit<string>({ commit: commitChapterIdEditValue, keyExists: chapterIdEditKeyExists })
+
+  const startEditingChapterId = useCallback((chapterNoteId: string) => {
+    const current = chapters.find((chapter) => chapter.chapterNoteId === chapterNoteId)
+    startChapterIdEdit(chapterNoteId, current?.chapterId ?? '')
+  }, [chapters, startChapterIdEdit])
 
   return {
     chapters,

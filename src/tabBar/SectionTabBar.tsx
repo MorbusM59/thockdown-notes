@@ -3,6 +3,7 @@ import type { NoteSummary } from '../shared/noteLifecycle'
 import { isArchivedNote, isDeletedNote } from '../shared/noteLifecycle'
 import { normalizeTagName, isProtectedTagName } from '../shared/tags'
 import { resolveIdentityLabel } from '../shared/tabLabels'
+import { InlinePillOrInput } from '../shared/InlinePillOrInput'
 import { TEMP_TAB_PIN_HOLD_MS, type UseSectionTabsResult } from './useSectionTabs'
 
 export interface SectionTabBarProps {
@@ -17,7 +18,6 @@ export interface SectionTabBarProps {
   /** Which pinned-tab pill to highlight as active -- the chapter-aware identity (see useSectionTabs.ts's `tabIdentityNoteId`), not necessarily `activeNoteId` itself. */
   tabIdentityNoteId: string | null
   notes: NoteSummary[]
-  activeNoteSummary: NoteSummary | null
   /** The leftmost section keeps the sidebar toggle at the left edge; every other section shows a close button there instead. */
   isLeftmostSection: boolean
   /** Whether there's room for one more 300px-minimum section -- hides the "+" button when there isn't. */
@@ -35,14 +35,7 @@ export interface SectionTabBarProps {
   onCommitSectionRename: () => void
   onCancelSectionRename: () => void
 
-  /** The active note's assigned id, mid-edit via the identity tab's tag-bar-mode right-click. */
-  isEditingNoteId: boolean
-  noteIdDraft: string
-  setNoteIdDraft: (value: string) => void
-  onCommitNoteIdEdit: () => void
-  onCancelNoteIdEdit: () => void
-
-  /** Left-click: in tab-bar mode, opens (or closes) the section picker; in tag-bar mode, toggles the suggested-tags-expanded view. Right-click: assign a note id (tag bar) or rename this section (tab bar). */
+  /** Left-click: opens (or closes) the section picker. Right-click: rename this section. Tab-bar mode only -- the identity tab doesn't render in tag-bar mode (note renaming happens by right-clicking the note's own tab now, and the suggested-tags-expand toggle moved to the tag input). */
   onIdentityClick: () => void
   onIdentityContextMenu: (event: MouseEvent<HTMLButtonElement>) => void
 
@@ -75,7 +68,6 @@ export function SectionTabBar({
   activeNoteId,
   tabIdentityNoteId,
   notes,
-  activeNoteSummary,
   isLeftmostSection,
   canCreateSection,
   onCreateSection,
@@ -86,11 +78,6 @@ export function SectionTabBar({
   setSectionNameDraft,
   onCommitSectionRename,
   onCancelSectionRename,
-  isEditingNoteId,
-  noteIdDraft,
-  setNoteIdDraft,
-  onCommitNoteIdEdit,
-  onCancelNoteIdEdit,
   onIdentityClick,
   onIdentityContextMenu,
   isSectionPickerOpen,
@@ -109,6 +96,10 @@ export function SectionTabBar({
     suggestedTags,
     deletePrimedTagName,
     renamingTagName,
+    tagRenameDraft,
+    setTagRenameDraft,
+    commitTagRename,
+    cancelTagRename,
     isTagMutationPending,
     activeNoteIsExternal,
     handleTagInputKeyDown,
@@ -122,6 +113,7 @@ export function SectionTabBar({
     handleTagContainerDrop,
     handleTagContextMenu,
     isSuggestedTagsExpanded,
+    toggleSuggestedTagsExpanded,
     suggestedTagsScrollerRef,
     suggestedTagsCanScrollLeft,
     suggestedTagsCanScrollRight,
@@ -133,12 +125,20 @@ export function SectionTabBar({
     unpinPrimedTabNoteId,
     tempTabNoteId,
     pinArmingTabNoteId,
+    editingTabNoteId,
+    tabIdDraft,
+    setTabIdDraft,
+    commitTabIdEdit,
+    cancelTabIdEdit,
+    unpinArmingTabNoteId,
     tabsScrollerRef,
     tabsCanScrollLeft,
     tabsCanScrollRight,
     handleTabContextMenu,
     handleTabMouseLeave,
     handleTabClick,
+    handleTabMouseDown,
+    handleTabMouseUp,
     handleTempTabMouseDown,
     clearTempTabHoldTimer,
     updateTabsScrollEdges,
@@ -149,8 +149,6 @@ export function SectionTabBar({
     handleTabsContainerDragOver,
     handleTabsContainerDrop,
   } = tabs
-
-  const activeNoteIdentityLabel = resolveIdentityLabel(activeNoteSummary?.assignedId, activeNoteSummary?.contentText)
 
   return (
     <section
@@ -190,61 +188,43 @@ export function SectionTabBar({
         <span className="fa-solid fa-tags" aria-hidden="true" />
       </button>
 
-      <div className="section-identity-tab-shell">
-        {isEditingSectionName ? (
-          <input
-            className="tag-pill section-identity-input"
-            value={sectionNameDraft}
-            autoFocus
-            onChange={(event) => setSectionNameDraft(event.target.value)}
-            onBlur={onCommitSectionRename}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                onCommitSectionRename()
-              } else if (event.key === 'Escape') {
-                event.preventDefault()
-                onCancelSectionRename()
+      {tabBarMode === 'tabs' ? (
+        <div className="section-identity-tab-shell">
+          {isEditingSectionName ? (
+            <input
+              className="tag-pill section-identity-input"
+              value={sectionNameDraft}
+              autoFocus
+              onChange={(event) => setSectionNameDraft(event.target.value)}
+              onBlur={onCommitSectionRename}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  onCommitSectionRename()
+                } else if (event.key === 'Escape') {
+                  event.preventDefault()
+                  onCancelSectionRename()
+                }
+              }}
+              aria-label="Section name"
+            />
+          ) : (
+            <button
+              type="button"
+              className={`tag-pill section-identity-tab${isSectionPickerOpen ? ' is-active' : ''}`}
+              onClick={onIdentityClick}
+              onContextMenu={onIdentityContextMenu}
+              data-tooltip={
+                sectionName
+                  ? `Section: ${sectionName} -- click to swap in another named section, right-click to rename`
+                  : 'Unnamed section -- click to swap in a named section, right-click to name this section'
               }
-            }}
-            aria-label="Section name"
-          />
-        ) : isEditingNoteId ? (
-          <input
-            className="tag-pill section-identity-input"
-            value={noteIdDraft}
-            autoFocus
-            onChange={(event) => setNoteIdDraft(event.target.value)}
-            onBlur={onCommitNoteIdEdit}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                onCommitNoteIdEdit()
-              } else if (event.key === 'Escape') {
-                event.preventDefault()
-                onCancelNoteIdEdit()
-              }
-            }}
-            aria-label="Note id"
-          />
-        ) : (
-          <button
-            type="button"
-            className={`tag-pill section-identity-tab${(isSectionPickerOpen || isSuggestedTagsExpanded) ? ' is-active' : ''}`}
-            onClick={onIdentityClick}
-            onContextMenu={onIdentityContextMenu}
-            data-tooltip={
-              tabBarMode === 'tabs'
-                ? (sectionName ? `Section: ${sectionName} -- click to swap in another named section, right-click to rename` : 'Unnamed section -- click to swap in a named section, right-click to name this section')
-                : 'Click to show suggested tags, right-click to assign this note\'s id'
-            }
-          >
-            <span className={tabBarMode === 'tabs' ? 'tag-pill-label' : `tag-pill-label${activeNoteIdentityLabel.isAssigned ? '' : ' tag-pill-label-derived'}`}>
-              {tabBarMode === 'tabs' ? (sectionName ?? '···') : activeNoteIdentityLabel.text}
-            </span>
-          </button>
-        )}
-      </div>
+            >
+              <span className="tag-pill-label">{sectionName ?? '···'}</span>
+            </button>
+          )}
+        </div>
+      ) : null}
 
       {tabBarMode === 'tabs' ? (
         <div className="tab-mode-shell tabs-mode" role="group" aria-label="Note tabs">
@@ -296,28 +276,46 @@ export function SectionTabBar({
                     const { text: label, isAssigned } = resolveIdentityLabel(note?.assignedId, note?.contentText)
                     const isGhost = note ? (isArchivedNote(note) || isDeletedNote(note)) : true
                     const isPrimed = unpinPrimedTabNoteId === tempTabNoteId
-                    const isArming = pinArmingTabNoteId === tempTabNoteId
+                    const isPinArming = pinArmingTabNoteId === tempTabNoteId
+                    const isUnpinArming = unpinArmingTabNoteId === tempTabNoteId
+
                     return (
-                      <div
+                      <InlinePillOrInput
                         key={tempTabNoteId}
-                        className={`tag-pill note-tab-pill temp is-active${isGhost ? ' ghost' : ''}${isPrimed ? ' unpin-primed' : ''}${isArming ? ' pin-arming' : ''}`}
-                        style={{ '--temp-tab-pin-hold-ms': `${TEMP_TAB_PIN_HOLD_MS}ms` } as CSSProperties}
-                        onClick={() => handleTabClick(tempTabNoteId)}
-                        onContextMenu={(event) => handleTabContextMenu(event, tempTabNoteId)}
-                        onMouseDown={(event) => handleTempTabMouseDown(event, tempTabNoteId)}
-                        onMouseUp={clearTempTabHoldTimer}
-                        onMouseLeave={() => {
-                          handleTabMouseLeave(tempTabNoteId)
-                          clearTempTabHoldTimer()
-                        }}
-                        data-tooltip={
-                          isPrimed
-                            ? 'Click again to close, or move cursor away to cancel'
-                            : `${note?.title ?? 'Open note'} — hold to pin`
-                        }
+                        isEditing={editingTabNoteId === tempTabNoteId}
+                        value={tabIdDraft}
+                        onChange={setTabIdDraft}
+                        onCommit={commitTabIdEdit}
+                        onCancel={cancelTabIdEdit}
+                        className="tag-pill note-tab-pill temp is-active note-tab-id-input"
+                        ariaLabel="Note id"
                       >
-                        <span className={`tag-pill-label${isAssigned ? '' : ' tag-pill-label-derived'}`}>{label}</span>
-                      </div>
+                        <div
+                          className={`tag-pill note-tab-pill temp is-active${isGhost ? ' ghost' : ''}${isPrimed ? ' unpin-primed' : ''}${isPinArming ? ' pin-arming' : ''}${isUnpinArming ? ' unpin-arming' : ''}`}
+                          style={{ '--temp-tab-pin-hold-ms': `${TEMP_TAB_PIN_HOLD_MS}ms` } as CSSProperties}
+                          onClick={() => handleTabClick(tempTabNoteId)}
+                          onContextMenu={handleTabContextMenu}
+                          onMouseDown={(event) => {
+                            handleTempTabMouseDown(event, tempTabNoteId)
+                            handleTabMouseDown(event, tempTabNoteId)
+                          }}
+                          onMouseUp={(event) => {
+                            clearTempTabHoldTimer()
+                            handleTabMouseUp(event, tempTabNoteId)
+                          }}
+                          onMouseLeave={() => {
+                            handleTabMouseLeave(tempTabNoteId)
+                            clearTempTabHoldTimer()
+                          }}
+                          data-tooltip={
+                            isPrimed
+                              ? 'Click again to close, or move cursor away to cancel'
+                              : `${note?.title ?? 'Open note'} — hold left to pin, right-click to rename`
+                          }
+                        >
+                          <span className={`tag-pill-label${isAssigned ? '' : ' tag-pill-label-derived'}`}>{label}</span>
+                        </div>
+                      </InlinePillOrInput>
                     )
                   })() : null}
                   {pinnedTabs.map((tab, index) => {
@@ -326,25 +324,39 @@ export function SectionTabBar({
                     const isGhost = note ? (isArchivedNote(note) || isDeletedNote(note)) : true
                     const isActive = tab.noteId === tabIdentityNoteId
                     const isPrimed = unpinPrimedTabNoteId === tab.noteId
+                    const isUnpinArming = unpinArmingTabNoteId === tab.noteId
+
                     return (
-                      <div
+                      <InlinePillOrInput
                         key={tab.noteId}
-                        className={`tag-pill note-tab-pill${isActive ? ' is-active' : ''}${isGhost ? ' ghost' : ''}${isPrimed ? ' unpin-primed' : ''}`}
-                        draggable
-                        onDragStart={(event) => handleTabDragStart(event, index)}
-                        onDragEnd={handleTabDragEnd}
-                        onDrop={(event) => handleTabDrop(event, index)}
-                        onClick={() => handleTabClick(tab.noteId)}
-                        onContextMenu={(event) => handleTabContextMenu(event, tab.noteId)}
-                        onMouseLeave={() => handleTabMouseLeave(tab.noteId)}
-                        data-tooltip={
-                          isPrimed
-                            ? 'Click again to unpin, or move cursor away to cancel'
-                            : (note?.title ?? 'Open note')
-                        }
+                        isEditing={editingTabNoteId === tab.noteId}
+                        value={tabIdDraft}
+                        onChange={setTabIdDraft}
+                        onCommit={commitTabIdEdit}
+                        onCancel={cancelTabIdEdit}
+                        className={`tag-pill note-tab-pill note-tab-id-input${isActive ? ' is-active' : ''}`}
+                        ariaLabel={`Tab ${index + 1} note id`}
                       >
-                        <span className={`tag-pill-label${isAssigned ? '' : ' tag-pill-label-derived'}`}>{label}</span>
-                      </div>
+                        <div
+                          className={`tag-pill note-tab-pill${isActive ? ' is-active' : ''}${isGhost ? ' ghost' : ''}${isPrimed ? ' unpin-primed' : ''}${isUnpinArming ? ' unpin-arming' : ''}`}
+                          draggable
+                          onDragStart={(event) => handleTabDragStart(event, index)}
+                          onDragEnd={handleTabDragEnd}
+                          onDrop={(event) => handleTabDrop(event, index)}
+                          onClick={() => handleTabClick(tab.noteId)}
+                          onContextMenu={handleTabContextMenu}
+                          onMouseDown={(event) => handleTabMouseDown(event, tab.noteId)}
+                          onMouseUp={(event) => handleTabMouseUp(event, tab.noteId)}
+                          onMouseLeave={() => handleTabMouseLeave(tab.noteId)}
+                          data-tooltip={
+                            isPrimed
+                              ? 'Click again to unpin, or move cursor away to cancel'
+                              : `${note?.title ?? 'Open note'} — hold right to unpin, quick right-click to rename`
+                          }
+                        >
+                          <span className={`tag-pill-label${isAssigned ? '' : ' tag-pill-label-derived'}`}>{label}</span>
+                        </div>
+                      </InlinePillOrInput>
                     )
                   })}
                 </>
@@ -355,7 +367,13 @@ export function SectionTabBar({
       ) : (
       <div className="tab-mode-shell" role="group" aria-label="Tag manager">
         {isSuggestedTagsExpanded ? (
-          <div className={`tabbar-tabs-scroll-shell${suggestedTagsCanScrollLeft ? ' fade-left' : ''}${suggestedTagsCanScrollRight ? ' fade-right' : ''}`}>
+          <div
+            className={`tabbar-tabs-scroll-shell${suggestedTagsCanScrollLeft ? ' fade-left' : ''}${suggestedTagsCanScrollRight ? ' fade-right' : ''}`}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              toggleSuggestedTagsExpanded()
+            }}
+          >
             <div
               className="tabbar-suggested-tags-expanded"
               aria-live="polite"
@@ -382,17 +400,20 @@ export function SectionTabBar({
           </div>
         ) : (
           <>
-            <div className="tabbar-tag-input">
+            <div
+              className="tabbar-tag-input"
+              onContextMenu={(event) => {
+                event.preventDefault()
+                toggleSuggestedTagsExpanded()
+              }}
+              data-tooltip="Right-click to show suggested tags"
+            >
               <input
                 ref={tagInputRef}
                 className="tabbar-tag-input-field"
                 type="text"
                 value={tagInputValue}
-                placeholder={
-                  !activeNoteId
-                    ? (notes.length > 0 ? '...' : '...')
-                    : (renamingTagName ? 'Edit...' : '···')
-                }
+                placeholder={!activeNoteId ? '...' : '···'}
                 onChange={(event) => setTagInputValue(event.target.value)}
                 onKeyDown={handleTagInputKeyDown}
                 disabled={!persistenceReady || !activeNoteId || isTagMutationPending || activeNoteIsExternal}
@@ -413,26 +434,37 @@ export function SectionTabBar({
                 orderedActiveTags.map((tagName, index) => {
                   const normalized = normalizeTagName(tagName)
                   const isProtected = isProtectedTagName(tagName)
+
                   return (
-                    <div
+                    <InlinePillOrInput
                       key={tagName}
-                      className={`tag-pill is-active${deletePrimedTagName === tagName ? ' primed' : ''}${isProtected ? ` protected ${normalized}` : ''}`}
-                      draggable={!isProtected}
-                      onDragStart={(event) => handleTagDragStart(event, index)}
-                      onDragEnd={handleTagDragEnd}
-                      onDragOver={(event) => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                        event.dataTransfer.dropEffect = 'move'
-                      }}
-                      onDrop={(event) => handleTagDrop(event, index)}
-                      onClick={() => handleTagChipClick(tagName)}
-                      onContextMenu={(event) => handleTagContextMenu(event, tagName)}
-                      onMouseLeave={() => handleTagChipMouseLeave(tagName)}
-                      data-tooltip={deletePrimedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion'}
+                      isEditing={renamingTagName === tagName}
+                      value={tagRenameDraft}
+                      onChange={setTagRenameDraft}
+                      onCommit={commitTagRename}
+                      onCancel={cancelTagRename}
+                      className="tag-pill is-active tag-rename-input"
+                      ariaLabel={`Rename tag ${tagName}`}
                     >
-                      <span className="tag-pill-label">{tagName}</span>
-                    </div>
+                      <div
+                        className={`tag-pill is-active${deletePrimedTagName === tagName ? ' primed' : ''}${isProtected ? ` protected ${normalized}` : ''}`}
+                        draggable={!isProtected}
+                        onDragStart={(event) => handleTagDragStart(event, index)}
+                        onDragEnd={handleTagDragEnd}
+                        onDragOver={(event) => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          event.dataTransfer.dropEffect = 'move'
+                        }}
+                        onDrop={(event) => handleTagDrop(event, index)}
+                        onClick={() => handleTagChipClick(tagName)}
+                        onContextMenu={(event) => handleTagContextMenu(event, tagName)}
+                        onMouseLeave={() => handleTagChipMouseLeave(tagName)}
+                        data-tooltip={deletePrimedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion, right-click to rename'}
+                      >
+                        <span className="tag-pill-label">{tagName}</span>
+                      </div>
+                    </InlinePillOrInput>
                   )
                 })
               )}
