@@ -626,7 +626,13 @@
 }
 
 .note-list-columns:hover .note-list-meta-right {
-  display: none;
+  /* visibility, not display: none -- this row's title+meta stack is
+   * vertically centered as one block (.note-list-column's
+   * align-items: center), so removing this element from flow on hover
+   * shrinks that block by a hair and re-centers it, nudging the title down.
+   * Keeping the box in layout (just invisible) holds the block's height
+   * steady across hover. */
+  visibility: hidden;
 }
 
 .note-list-columns:hover .note-list-column-action,
