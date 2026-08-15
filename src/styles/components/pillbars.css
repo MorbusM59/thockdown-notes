@@ -37,12 +37,16 @@
   align-items: stretch;
 }
 
-/* Pill well -- the bordered box holding the pill strip. */
+/* Pill well -- the bordered box holding the pill strip. align-items:
+   stretch (not center) so every child -- the pill/scroll-shell row, and in
+   tag mode the sibling .tabbar-tag-input field -- tracks the well's real
+   (pill-driven) height via height: 100%, instead of sizing to its own
+   unrelated intrinsic height and looking mismatched next to the pills. */
 .tab-mode-shell,
 .chapter-tab-mode-shell {
   display: flex;
   flex-direction: row;
-  align-items: center;
+  align-items: stretch;
   gap: var(--spacing-small);
   padding: var(--spacing-small);
   flex: 1 1 auto;
@@ -97,4 +101,22 @@
   padding: var(--spacing-small) var(--spacing-regular);
   line-height: var(--ui-pill-line-height);
   height: auto;
+}
+
+/* Flanking icon buttons -- square, matching whatever height align-items:
+   stretch (on the bar row, above) gives them. Deliberately no height here:
+   stretch only stretches items whose cross-size is auto, so a competing
+   height (even 100%, which doesn't resolve usefully against an auto-height
+   row) silently defeats it and the button collapses -- this combined rule
+   exists because that exact bug was fixed separately in two places before
+   converging here. */
+.sidebar-toggle,
+.section-close-toggle,
+.tagbar-toggle,
+.section-create-toggle,
+.chapter-collapse-button,
+.chapter-extract-button,
+.chapter-auto-button {
+  min-width: 0;
+  aspect-ratio: 1;
 }
