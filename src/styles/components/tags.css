@@ -413,6 +413,7 @@
    provisional, plus a fill bar while being held down for promotion. */
 .note-tab-pill.temp {
   opacity: 70%;
+  color: #00000000;
 }
 
 .note-tab-pill.temp::after {

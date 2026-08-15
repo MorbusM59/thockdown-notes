@@ -1309,7 +1309,15 @@ export function CM6Editor({
 
   useEffect(() => {
     syncCustomScrollbar();
-  }, [syncCustomScrollbar, scrollerClientHeightPx, initialText, topBoundaryPxDisplay, bottomBoundaryPxDisplay]);
+    // hasViewportLines/isSnapshotRestorePending are deliberately deps here,
+    // not just refs read inside isEditScrollInteractionBlocked: the passive
+    // rAF loop below only re-syncs when raw scroll metrics (scrollTop/
+    // scrollHeight/clientHeight/trackHeight) change, so if this gate lifts
+    // (large-note hydration finishing) while those metrics happen to be
+    // unchanged, the thumb would otherwise stay hidden at 0/0 until some
+    // unrelated event nudges a metric. This effect closes that race by
+    // re-syncing the moment the gate itself flips.
+  }, [syncCustomScrollbar, scrollerClientHeightPx, initialText, topBoundaryPxDisplay, bottomBoundaryPxDisplay, hasViewportLines, isSnapshotRestorePending]);
 
   useEffect(() => {
     let rafId: number | null = null;
