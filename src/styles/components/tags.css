@@ -255,6 +255,27 @@
   font-size: calc(16px * var(--ui-font-scale));
 }
 
+/* A few UI fonts (Options > UI Font) bake unusually tall ascent metrics into
+   their em-box, so even though flexbox correctly centers the box itself,
+   the glyphs render visibly low inside it -- worse at this pill's larger
+   font-size. Measured live per font at 16px * --ui-font-scale (most fonts
+   needed no correction at all, so only the offenders are listed); values
+   are in em so they track font-size/scale instead of going stale at other
+   sizes. document.documentElement's data-ui-font attribute (App.tsx) is
+   what makes the font selectable here. */
+[data-ui-font='alata'] .tag-pill.section-identity-tab .tag-pill-label,
+[data-ui-font='xkcd'] .tag-pill.section-identity-tab .tag-pill-label {
+  transform: translateY(-0.19em);
+}
+
+[data-ui-font='ibmplexsans'] .tag-pill.section-identity-tab .tag-pill-label {
+  transform: translateY(-0.13em);
+}
+
+[data-ui-font='novamono'] .tag-pill.section-identity-tab .tag-pill-label {
+  transform: translateY(-0.06em);
+}
+
 .tag-pill.section-identity-tab .tag-pill-label {
   overflow: visible;
   letter-spacing: -0.05em;

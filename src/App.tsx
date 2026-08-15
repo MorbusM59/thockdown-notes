@@ -4413,6 +4413,7 @@ function App() {
     const rootStyle = document.documentElement.style
     rootStyle.setProperty('--ui-font-family', resolveUiFontFamily(uiFontStyle))
     rootStyle.setProperty('--ui-font-scale', String(uiFontScale))
+    document.documentElement.dataset.uiFont = uiFontStyle
   }, [uiFontStyle, uiFontScale])
 
   // Base (un-scaled) value of each border/box-shadow token, captured the
