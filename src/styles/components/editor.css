@@ -35,7 +35,7 @@
   left: 0;
   right: calc(var(--canonical-scroll-thickness) + var(--spacing-regular));
   bottom: var(--bottom-utility-bar-height);
-  height: var(--chapter-panel-height);
+  height: auto;
   pointer-events: none;
   padding: var(--spacing-regular) 0 0 var(--spacing-regular);
   z-index: 5;
@@ -50,37 +50,33 @@
    current chapter into the previous one), the boxed tab strip, then a right
    mini icon button (cut the current selection into a new chapter) -- same
    flanking-buttons shape as the regular tab bar's own
-   tagbar-toggle/section-create-toggle around .tab-mode-shell. */
+   tagbar-toggle/section-create-toggle around .tab-mode-shell. Geometry
+   (display/align-items/height) lives in pillbars.css, combined with
+   .tabbar-grid. */
 .chapter-bar-row {
-  display: flex;
-  align-items: center;
   gap: var(--spacing-regular);
   width: 100%;
-  height: var(--chapter-panel-content-height);
   padding: 0 var(--spacing-regular);
 }
 
 /* The visible tab-strip container -- deliberately the same box treatment as
    .tab-mode-shell (tags.css), so the chapter bar reads as "the same kind of
-   thing" as the regular tab bar, just one row down. */
+   thing" as the regular tab bar, just one row down. Geometry lives in
+   pillbars.css, combined with .tab-mode-shell. */
 .chapter-tab-mode-shell {
   background:     var(--color-input-backdrop);
   border:         1px solid var(--color-border-light-70);
   box-shadow:     var(--box-shadow-inverted);
   border-radius:  var(--border-radius-regular);
-  padding:        var(--spacing-small);
-  flex:           1 1 auto;
-  min-width:      0;
-  height:         100%;
 }
 
 /* Fade mask + horizontal scroll: identical technique to .tabbar-tabs-scroll-shell
    (tags.css) -- same --tab-fade-left-w/--tab-fade-right-w registered custom
-   properties, so the fade transitions smoothly there too. */
+   properties, so the fade transitions smoothly there too. Geometry
+   (flex/min-width/height) lives in pillbars.css, combined with
+   .tabbar-tabs-scroll-shell. */
 .chapter-bar-scroll-shell {
   position:  relative;
-  width:     100%;
-  height:    100%;
   overflow:  hidden;
   -webkit-mask-image: linear-gradient(
     to right,
@@ -114,12 +110,7 @@
 }
 
 .chapter-bar-display {
-  display:     flex;
-  flex-wrap:   nowrap;
-  align-items: center;
-  gap:         var(--spacing-small);
   width:       100%;
-  height:      100%;
   overflow-x:  auto;
   overflow-y:  hidden;
   scrollbar-width: none;      /* Firefox */
@@ -128,15 +119,6 @@
 
 .chapter-bar-display::-webkit-scrollbar {
   display: none;               /* Chromium / Electron */
-}
-
-/* Chapter tabs get a wider, uniform width (long ids need more room than a
-   note tab's assigned id) -- the parent tab keeps its normal .note-tab-pill
-   sizing. */
-.note-tab-pill.chapter-pill {
-  flex:  0 0 auto;
-  max-width: 120px;
-  width: fit-content;
 }
 
 .chapter-id-input {
@@ -323,7 +305,7 @@
 }
 
 .editor-shell.chapter-panel-is-open{
-  margin: 0 0 calc(var(--bottom-utility-bar-height) + var(--chapter-panel-height)) var(--spacing-large);
+  margin: 0 0 calc(var(--bottom-utility-bar-height) + var(--chapter-panel-clearance-estimate)) var(--spacing-large);
   transition: ease-in margin 150ms;
 }
 

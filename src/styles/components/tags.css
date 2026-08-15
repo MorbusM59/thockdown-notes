@@ -17,20 +17,14 @@
   initial-value: 0px;
 }
 
+/* Geometry (display/flex-direction/align-items/gap/padding/flex/width/
+   height/min-width) lives in pillbars.css, combined with
+   .chapter-tab-mode-shell -- this rule only owns the well's look. */
 .tab-mode-shell {
   background: var(--color-input-backdrop);
   border:        1px solid var(--color-border-light-70);
   box-shadow:    var(--box-shadow-inverted);
   border-radius: var(--border-radius-regular);
-  display:        flex;
-  flex-direction: row;
-  align-items:    center;
-  gap:            var(--spacing-small);
-  padding:        var(--spacing-small);
-  flex:           1 1 auto;
-  width:          auto;
-  height: auto;
-  min-width:      0;
 }
 
 .tabbar-tag-input {
@@ -70,11 +64,6 @@
 }
 
 .tabbar-tags-display {
-  display:     flex;
-  flex-wrap:   nowrap;
-  align-items: center;
-  gap:         var(--spacing-small);
-  height:      100%;
   overflow:    hidden;
 }
 
@@ -89,20 +78,16 @@
 }
 
 .tabbar-suggested-tags {
-  display:     flex;
-  flex-wrap:   wrap;
+  flex-wrap: wrap;
   flex-direction: row;
   justify-content: flex-end;
-  align-items: center;
   padding: 0;
   padding-left: 30px;
-  gap:         var(--spacing-small);
   flex:        1 1 auto;
   min-width:   0;
   overflow:    hidden;
   font-style: italic;
   opacity: 75%;
-  height:      100%;
   container-name: suggestedTags;
   container-type: size;
 }
@@ -119,13 +104,8 @@
    as the tab bar's own tab strip, via the shared .tabbar-tabs-scroll-shell
    fade-mask classes. */
 .tabbar-suggested-tags-expanded {
-  display:     flex;
-  flex-wrap:   nowrap;
-  align-items: center;
   padding: 0;
-  gap:         var(--spacing-small);
   width:       100%;
-  height:      100%;
   overflow-x:  auto;
   overflow-y:  hidden;
   font-style: italic;
@@ -159,9 +139,6 @@
   transition:       all 0.2s;
   white-space:      nowrap;
   overflow:         hidden;
-  padding:          0 var(--spacing-regular);
-  flex: 0 0 auto;
-  height: 100%;
 }
 
 .tag-pill-label {
@@ -331,9 +308,6 @@
    scrolled away from), driven by the .fade-left / .fade-right modifiers. */
 .tabbar-tabs-scroll-shell {
   position:  relative;
-  flex:      1 1 auto;
-  min-width: 0;
-  height:    100%;
   overflow:  hidden;
   -webkit-mask-image: linear-gradient(
     to right,
@@ -368,12 +342,7 @@
 
 .tabbar-tabs-display {
   padding: 1px;
-  display:     flex;
-  flex-wrap:   nowrap;
-  align-items: center;
-  gap:         var(--spacing-small);
   width:       100%;
-  height:      100%;
   overflow-x:  auto;
   overflow-y:  hidden;
   scrollbar-width: none;      /* Firefox */
@@ -386,8 +355,6 @@
 
 .note-tab-pill {
   cursor:   default;
-  flex:     0 0 var(--tab-width);
-  width:    var(--tab-width);
   justify-content: center;
   position: relative;
   overflow: hidden;

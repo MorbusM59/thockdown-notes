@@ -1,0 +1,100 @@
+/* =============================================================================
+   Pill Bars: tab bar, tag bar, chapter bar
+   ============================================================================= */
+/* Tab bar and tag bar are one physical container (.tabbar-grid), toggling
+   between .tab-mode-shell and .tab-mode-shell.tabs-mode; the chapter bar
+   (.chapter-bar-row / .chapter-tab-mode-shell) is a second, separate bar one
+   row down. All three render pill strips that must look pixel-identical, so
+   every geometry-affecting property (height, width, flex, padding, margin,
+   gap) for the well -> scroll-shell -> display-row -> pill chain lives here,
+   combined across all three bars, instead of parallel copies that have to be
+   hand-kept in sync (drift here has caused real bugs more than once -- see
+   git history). Non-geometry styling (color, border, box-shadow, cursor,
+   transitions, etc.) for these same elements stays in tags.css/editor.css,
+   where it always lived.
+
+   Sizing model: nothing here is a fixed height. The pill's own line-height
+   (--ui-pill-line-height, tokens.css) plus its padding is the only source of
+   truth; every wrapping layer just sizes to fit its content, so there's
+   nothing to keep in sync by hand when spacing/font-scale/line-height change. */
+
+/* Bar row -- the outermost strip, sized to whatever the well inside it
+   needs. .tabbar-grid is a flex item of a column layout (flex controls its
+   height there); .chapter-bar-row is a plain block child of the
+   absolutely-positioned .chapter-panel (height controls it there directly).
+   Both use align-items: stretch so their flanking icon buttons track
+   whatever height the well ends up being, instead of needing a fixed height
+   of their own. */
+.tabbar-grid {
+  height: auto;
+  flex: 0 0 auto;
+  align-items: stretch;
+}
+
+.chapter-bar-row {
+  display: flex;
+  height: auto;
+  align-items: stretch;
+}
+
+/* Pill well -- the bordered box holding the pill strip. */
+.tab-mode-shell,
+.chapter-tab-mode-shell {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--spacing-small);
+  padding: var(--spacing-small);
+  flex: 1 1 auto;
+  width: auto;
+  height: auto;
+  min-width: 0;
+}
+
+/* Scroll shell -- fade-masked horizontal scroller wrapping the display row.
+   Each is the well's sole child, so flex: 1 1 auto fills it exactly like an
+   explicit width: 100% would, but participates correctly in the well's own
+   flex layout. */
+.tabbar-tabs-scroll-shell,
+.chapter-bar-scroll-shell {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: auto;
+}
+
+/* Pill display row -- the flex row the pills actually sit in. Width is
+   deliberately NOT unified here: .tabbar-tags-display shares its well with
+   a sibling (the tag input field) and needs flex: 1 1 auto to divide space
+   with it, while the others are sole children of their scroll-shell and use
+   width: 100% -- that's a real structural difference, not drift. */
+.tabbar-tabs-display,
+.tabbar-tags-display,
+.tabbar-suggested-tags-expanded,
+.chapter-bar-display {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--spacing-small);
+  height: auto;
+}
+
+/* .tabbar-suggested-tags (the compact, non-expanded suggested-tags row next
+   to .tabbar-tags-display) wraps to multiple lines instead of scrolling, so
+   flex-wrap stays its own in tags.css -- everything else about its pill row
+   is still shared. */
+.tabbar-suggested-tags {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-small);
+  height: auto;
+}
+
+/* The pill itself -- text scales via --ui-font-scale (font-size, set per
+   pill type in tags.css); line-height is the one number that then decides
+   every pill's height in all three bars together. */
+.tag-pill {
+  flex: 0 0 auto;
+  padding: var(--spacing-small) var(--spacing-regular);
+  line-height: var(--ui-pill-line-height);
+  height: auto;
+}

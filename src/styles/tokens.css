@@ -378,6 +378,14 @@
   --ui-font-family: system-ui, -apple-system, sans-serif;
   --ui-font-scale:  1;
 
+  /* Tab/tag/chapter-bar pills (pillbars.css) size themselves purely from
+   * their own content: this line-height (unitless, like the root's own)
+   * plus the pill's padding. There's no separate bar-height constant to
+   * keep in sync anymore -- every wrapping layer just auto-sizes to fit the
+   * pill, so this is the one number that controls how tall every pill in
+   * all three bars is. */
+  --ui-pill-line-height: 1.4;
+
   /* The one UI-chrome padding that hugs glyphs directly with no --spacing-*
      token in between (the tooltip bubble) -- scaled so it doesn't feel
      cramped as --ui-font-scale grows. Most other chrome already derives its
@@ -399,9 +407,6 @@
 
   --border-radius-regular: 6px;
   --border-radius-small:   3px;
-
-  /* Tab bar */
-  --tab-width: 80px;
 
   /* ---------------------------------------------------------------------------
      1f. Texture System
@@ -519,17 +524,24 @@
   --bottom-utility-bar-content-height: 16px;
   --bottom-utility-bar-height: calc(var(--bottom-utility-bar-content-height) + var(--spacing-regular) + var(--spacing-large));
 
-  --chapter-panel-content-height: calc(24px * var(--ui-font-scale));
-  --chapter-panel-height: calc(var(--chapter-panel-content-height) + var(--spacing-regular));
-  /* The tab bar row nests two nested paddings on the way down to the actual
-   * tab/tag pills: .tabbar-grid's own (top+bottom = 2 * spacing-regular), then
-   * .tab-mode-shell's own pill "well" padding inside it (top+bottom =
-   * 2 * spacing-small -- unified with the tag well's spacing, see
-   * .tab-mode-shell in tags.css). Both have to be added back on top of the
-   * pill content height, or the pills shrink as spacing-regular grows even
-   * though the outer bar itself is now sized correctly. Content height
-   * itself scales with --ui-font-scale so pills keep pace with UI text size. */
-  --tab-bar-content-height: calc(20px * var(--ui-font-scale));
+  /* Tab bar, tag bar, and chapter bar heights are no longer separate
+   * constants that have to be hand-kept in sync with padding elsewhere --
+   * see pillbars.css, which sizes every layer of all three bars to its
+   * content, driven purely by --ui-pill-line-height above and the pill's
+   * own padding. The one place a number is still needed is
+   * .editor-shell.chapter-panel-is-open (editor.css), which grows the
+   * document's own bottom margin so text doesn't sit under the (now
+   * content-sized) floating chapter panel -- that's a different element
+   * entirely, so it can't just read the panel's rendered height in CSS.
+   * This estimates it from the same primitives pillbars.css actually builds
+   * the panel from, so it tracks --ui-pill-line-height/--ui-font-scale/
+   * spacing-regular tuning reasonably well without being a hard duplicate. */
+  --chapter-panel-clearance-estimate: calc(
+    11px * var(--ui-font-scale) * var(--ui-pill-line-height)
+    + var(--spacing-regular)
+    + 2px
+    + var(--spacing-regular)
+  );
   --note-list-row-content-height: var(--btn-square-regular-size);
   --wordcount-panel-width: 110px;
 }
