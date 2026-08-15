@@ -384,7 +384,7 @@
    * keep in sync anymore -- every wrapping layer just auto-sizes to fit the
    * pill, so this is the one number that controls how tall every pill in
    * all three bars is. */
-  --ui-pill-line-height: 1.4;
+  --ui-pill-line-height: 1;
 
   /* The well (.tab-mode-shell/.chapter-tab-mode-shell) auto-sizes correctly
    * from its pill content via align-items: stretch -- verified live. Their

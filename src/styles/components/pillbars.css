@@ -103,6 +103,18 @@
   height: auto;
 }
 
+/* Icon-only pill content (e.g. the chapter bar's "parent note" pill, which
+   is a bare fa-solid icon instead of a .tag-pill-label). FontAwesome's own
+   icon classes set line-height: 1, shorter than the pill's own line-height
+   -- confirmed live: this collapsed that one pill to 17px against every
+   text-bearing sibling's 21.4px. Restoring the inherited line-height here
+   keeps every pill, icon-only or not, exactly the same height. */
+.tag-pill > .fa-solid,
+.tag-pill > .fa-regular,
+.tag-pill > .fa-brands {
+  line-height: inherit;
+}
+
 /* Flanking icon buttons -- square, matching the well's real content height
    (--ui-pill-bar-size, tokens.css). These carry .btn-icon too, which sets
    its own fixed min-width and height: var(--btn-square-regular-size) --
