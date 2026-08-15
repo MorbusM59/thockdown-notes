@@ -6139,14 +6139,26 @@ ${markdownHtml}
   }, [applyResolvedSections, editorSections])
 
   useEffect(() => {
-    void typingSoundManager.load()
+    // Prime immediately once assets are loaded, not just on a later user
+    // gesture (see the effect below): Electron's default autoplay policy is
+    // no-user-gesture-required, so there's nothing to wait for, and if the
+    // user's first action after launch is typing rather than clicking, the
+    // pointerdown/focus listeners below would never have fired before that
+    // first keystroke -- leaving the ~100-300ms hardware spin-up to land on
+    // it anyway.
+    void typingSoundManager.load().then(() => {
+      typingSoundManager.primeAudioContext()
+    })
   }, [])
 
   useEffect(() => {
-    // Resume the AudioContext on the earliest real user gesture (window
-    // focus, first pointer press) rather than waiting for the first
-    // keystroke, so the ~100-300ms hardware spin-up doesn't land on the
-    // user's first typing sound.
+    // Belt-and-suspenders fallback for contexts where the eager prime above
+    // couldn't run (resume() rejected, or load() still in flight when a
+    // gesture happens first anyway) -- resume the AudioContext on the
+    // earliest real user gesture (window focus, first pointer press) rather
+    // than waiting for the first keystroke. primeAudioContext()'s own
+    // ensureContextRunning() no-ops once the context is already running, so
+    // this is safe to fire alongside the eager prime above.
     const primeAudio = () => {
       typingSoundManager.primeAudioContext()
     }

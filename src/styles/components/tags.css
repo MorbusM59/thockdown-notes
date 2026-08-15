@@ -400,9 +400,11 @@
 }
 
 /* Archived/trashed note whose tab is still pinned — dimmed, purely informational. */
-.note-tab-pill.ghost {
-  opacity: 0.45;
-  font-style: italic;
+.note-tab-pill.ghost,
+.note-tab-pill.ghost.active {
+  opacity: 50%;
+  letter-spacing: -0.05em;
+  text-shadow: none;
 }
 
 .note-tab-pill.unpin-primed {
@@ -412,8 +414,8 @@
 /* Temp/preview tab for the current unpinned note — italic to read as
    provisional, plus a fill bar while being held down for promotion. */
 .note-tab-pill.temp {
-  opacity: 70%;
-  color: #00000000;
+  color: var(--color-text-10);
+  text-shadow: none;
 }
 
 .note-tab-pill.temp::after {
