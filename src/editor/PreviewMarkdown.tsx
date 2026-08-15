@@ -8,6 +8,7 @@ import type { Root } from 'hast'
 import { visit } from 'unist-util-visit'
 import remarkGfm from 'remark-gfm'
 import { parseInternalNoteLink, type ParsedInternalNoteLink } from '../shared/internalNoteLinks'
+import { GROUP_MARKER_PREFIX, GROUP_MARKER_SUFFIX } from '../shared/openItemsText'
 
 // The rehype plugins below walk/splice hast trees generically across
 // root/element/text nodes without narrowing to hast's discriminated union,
@@ -162,11 +163,39 @@ export const PREVIEW_MARKDOWN_REMARK_PLUGINS = [remarkGfm]
 // events, so it gets a no-op navigator instead of threading live app state
 // into a static export.
 export const PREVIEW_MARKDOWN_NOOP_NAVIGATE = (): void => {}
+
+/** Flattens a react-markdown children tree down to its plain text -- used only to recognize the Open Items marker line below, which is always a lone text node. */
+function extractPlainText(node: ReactNode): string {
+  if (typeof node === 'string') return node
+  if (typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(extractPlainText).join('')
+  return ''
+}
+
+// The Open Items chapter (openItemsText.ts's assembleOpenItemsText) writes a
+// `[open-items-group:noteId]` marker line ahead of each note's own group, so
+// parseOpenItemsGroups can patch/reorder one note's group without
+// re-deriving every other note's. It has to be real document text (not an
+// HTML comment) to survive textSanitization.ts's sanitizeDocumentText -- see
+// openItemsText.ts's own comment on GROUP_MARKER_PREFIX for why -- but it's
+// never meant for a reader to see, so it's rendered as nothing here rather
+// than as a stray "[open-items-group:...]" line under every heading.
+function isOpenItemsGroupMarkerText(text: string): boolean {
+  const trimmed = text.trim()
+  return trimmed.startsWith(GROUP_MARKER_PREFIX) && trimmed.endsWith(GROUP_MARKER_SUFFIX)
+}
+
 export function createPreviewMarkdownComponents(
   navigateToInternalLink: (target: ParsedInternalPreviewLink) => void,
   navigateToInternalNoteLink: (target: ParsedInternalNoteLink) => void,
 ) {
   return {
+    p: ({ children }: { children?: ReactNode }) => {
+      if (isOpenItemsGroupMarkerText(extractPlainText(children))) {
+        return null
+      }
+      return <p>{children}</p>
+    },
     a: ({ children, href }: { children?: ReactNode; href?: string }) => {
       const normalizedHref = typeof href === 'string' ? href : undefined
 

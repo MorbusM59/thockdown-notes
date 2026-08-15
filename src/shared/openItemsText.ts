@@ -130,8 +130,10 @@ export function buildOpenItemsGroupMarkdown(sourceText: string, linkPrefix: stri
 // would be silently deleted on the very next save, losing every other
 // note's already-correct group the moment a second one was written. This
 // bracket form contains no `<`/`>` at all, so it survives untouched.
-const GROUP_MARKER_PREFIX = '[open-items-group:'
-const GROUP_MARKER_SUFFIX = ']'
+// Exported so PreviewMarkdown.tsx can recognize and hide these marker lines
+// when rendering the Open Items chapter, without duplicating the literal.
+export const GROUP_MARKER_PREFIX = '[open-items-group:'
+export const GROUP_MARKER_SUFFIX = ']'
 
 function groupMarkerLine(noteId: string): string {
   return `${GROUP_MARKER_PREFIX}${noteId}${GROUP_MARKER_SUFFIX}`
