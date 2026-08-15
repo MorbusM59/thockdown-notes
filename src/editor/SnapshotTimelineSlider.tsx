@@ -65,9 +65,25 @@ function formatSnapshotTooltip(record: NoteSnapshotRecord): string {
 
 const MINUTES_PER_HOUR = 60
 const MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR
+const MINUTES_PER_MONTH = 30 * MINUTES_PER_DAY
+const MINUTES_PER_YEAR = 12 * MINUTES_PER_MONTH
 
 function formatTimescaleLabel(curveConstant: number): string {
   const timescaleMinutes = Math.pow(2, curveConstant)
+
+  // Each unit hands off to the next once the value reaches double the next
+  // unit's own conversion factor (e.g. 2 days = 48 hours, 2 months = 60
+  // days, 2 years = 24 months) -- the same "switch once you'd otherwise show
+  // a number >= 2 of the next unit" rule at every step.
+  if (timescaleMinutes >= 2 * MINUTES_PER_YEAR) {
+    const years = Math.round(timescaleMinutes / MINUTES_PER_YEAR)
+    return `${years} year${years === 1 ? '' : 's'}`
+  }
+
+  if (timescaleMinutes >= 2 * MINUTES_PER_MONTH) {
+    const months = Math.round(timescaleMinutes / MINUTES_PER_MONTH)
+    return `${months} month${months === 1 ? '' : 's'}`
+  }
 
   if (timescaleMinutes >= 2 * MINUTES_PER_DAY) {
     const days = Math.round(timescaleMinutes / MINUTES_PER_DAY)
