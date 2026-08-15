@@ -275,6 +275,15 @@
   letter-spacing: 0.05em;
   border-radius: var(--border-radius-regular);
   font-size: calc(1em * var(--ui-font-scale));
+  /* This pill's own font-size formula is independent of --ui-pill-bar-size
+     (the fixed height the flanking sidebar-toggle/tagbar-toggle icon
+     buttons use), so its natural content-driven height only nearly
+     matches theirs by coincidence -- confirmed live, off by a fraction of
+     a px, enough to visibly misalign one border by a device pixel after
+     rounding. min-height (not height) so it still grows past that floor
+     rather than clipping if a future font/scale combo genuinely needs
+     more room than --ui-pill-bar-size provides. */
+  min-height: var(--ui-pill-bar-size);
 }
 
 /* A few UI fonts (Options > UI Font) bake unusually tall ascent metrics into
@@ -313,9 +322,20 @@
   box-shadow: var(--box-shadow-inverted-harsh-active);
 }
 
-.section-identity-input {
+/* The .tag-pill prefix (not just .section-identity-input) is load-bearing:
+   base .tag-pill (pillbars.css) sets height: auto at equal specificity
+   (one class each), so whichever rule the bundler happens to emit last
+   wins the tie -- same root cause as .note-tab-id-input (tags.css), which
+   has the full writeup. Unlike that fix, min-height wouldn't have worked
+   here: confirmed live that height: auto on this input resolves to the
+   browser's own native single-line-field height regardless of min-height,
+   since that's already taller than --ui-pill-bar-size at this font-size --
+   only an explicit height (not min-height) actually overrides it. */
+.tag-pill.section-identity-input {
   min-width: 120px;
   max-width: 120px;
+  height: var(--ui-pill-bar-size);
+  field-sizing: content;
   border:        1px solid var(--btn-border-default);
   border-radius: var(--border-radius-regular);
   background:    var(--btn-bg-default);
