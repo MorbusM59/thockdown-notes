@@ -68,6 +68,14 @@ const MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR
 const MINUTES_PER_MONTH = 30 * MINUTES_PER_DAY
 const MINUTES_PER_YEAR = 12 * MINUTES_PER_MONTH
 
+// The wheel-zoom range for the timeline's cut-off: 30 minutes at the
+// narrowest, 10 years at the widest. curveConstant is a log2(minutes)
+// exponent (see SnapshotTimelineCurve.ts), so these are derived rather than
+// separately hand-picked, to stay exactly in sync with whatever the minute
+// conversion constants above say a "minute" is.
+const MIN_CURVE_CONSTANT = Math.log2(30)
+const MAX_CURVE_CONSTANT = Math.log2(10 * MINUTES_PER_YEAR)
+
 function formatTimescaleLabel(curveConstant: number): string {
   const timescaleMinutes = Math.pow(2, curveConstant)
 
@@ -227,7 +235,7 @@ export function SnapshotTimelineSlider({
       if (delta === 0) return
 
       const nextCurveConstant = delta < 0 ? curveConstant / 1.1 : curveConstant * 1.1
-      onCurveConstantChange(Math.min(25,Math.max(6, nextCurveConstant)))
+      onCurveConstantChange(Math.min(MAX_CURVE_CONSTANT, Math.max(MIN_CURVE_CONSTANT, nextCurveConstant)))
     },
     [curveConstant, onCurveConstantChange],
   )
