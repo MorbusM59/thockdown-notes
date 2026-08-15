@@ -181,4 +181,11 @@ export interface EditorBindings {
     text: string;
     selection: EditorSelectionState;
   } | null;
+  onCaretClickTransform?: (event: {
+    text: string;
+    selection: EditorSelectionState;
+  }) => {
+    text: string;
+    selection: EditorSelectionState;
+  } | null;
 }

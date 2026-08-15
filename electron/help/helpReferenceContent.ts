@@ -477,6 +477,7 @@ Every feature in the app, described individually: where to find it, what it does
 - Bold, italic, strikethrough; heading levels H1–H3; bulleted, numbered, and checklist lists; blockquote; code block and inline code; horizontal rule; link insertion.
 - Each button reflects whether the current selection or line already has that formatting applied.
 - Most double as the keyboard shortcuts listed in [Keyboard Shortcuts]($#keyboard-shortcuts).
+- A checklist item's box (\`- [ ]\`) can be toggled two ways once the caret sits between its brackets: type any character to check it off with that character (type a space to uncheck it again), or click the caret itself — with the caret already there and not moving — to flip \`[ ]\`/\`[X]\` without touching the keyboard.
 
 ## Find & Replace
 

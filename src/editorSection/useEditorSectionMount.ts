@@ -40,6 +40,7 @@ import {
 } from '../editor/MarkdownContext'
 import { resolveMarkdownEnterTransform } from '../editor/EnterTransformPolicy'
 import { resolveMarkdownChecklistTypeoverTransform } from '../editor/ChecklistTypingTransformPolicy'
+import { resolveMarkdownChecklistCaretClickToggleTransform } from '../editor/ChecklistCaretClickTogglePolicy'
 import {
   shouldSuppressPlainTypingSoundForInsertion,
   suppressNextPlainTypingSoundOnce,
@@ -1502,6 +1503,30 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       const sourceText = normalizeInternalText(text)
       const next = resolveMarkdownChecklistTypeoverTransform({
         char,
+        text: sourceText,
+        selection,
+      })
+      if (!next) {
+        return null
+      }
+
+      latestEditorTextRef.current = next.text
+      setActiveNoteText(next.text)
+      setEditorTextVersion((previous) => previous + 1)
+      updateActiveNoteTitlePreview(next.text)
+      queueSave(next.text, next.selection.end)
+      latestEditorSelectionRef.current = next.selection
+      setEditorSelection(next.selection)
+      return next
+    },
+    onCaretClickTransform: ({ text, selection }) => {
+      if (previewedSnapshotId !== null) {
+        return null
+      }
+      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+
+      const sourceText = normalizeInternalText(text)
+      const next = resolveMarkdownChecklistCaretClickToggleTransform({
         text: sourceText,
         selection,
       })

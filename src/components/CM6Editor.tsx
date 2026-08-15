@@ -301,8 +301,8 @@ function commonSuffixLen(a: string, b: string, maxLen: number): number {
  * canonicalizeParagraphSegmentsIncremental already use elsewhere in this
  * codebase), not a blanket `{from: 0, to: doc.length}` replace of the whole
  * document. The EditorBindings transform contract (onTabIndentTransform/
- * onEnterTransform/onMarkdownShortcutTransform/onCharacterInsertTransform)
- * only ever changes a small localized region -- a full-document replace on
+ * onEnterTransform/onMarkdownShortcutTransform/onCharacterInsertTransform/
+ * onCaretClickTransform) only ever changes a small localized region -- a full-document replace on
  * every Tab/Enter/formatting-shortcut keystroke forced CM6 to treat the
  * entire document as changed (undo-history entry size, decoration/measure
  * invalidation) regardless of how small the actual edit was, on every one of
@@ -2816,9 +2816,32 @@ export function CM6Editor({
         // plain left-click collapses the selection, but this matches the
         // Lexical behavior exactly rather than relying on that as an
         // implicit side effect.)
-        mousedown: (event) => {
+        mousedown: (event, view) => {
           if (event.button === 0) {
             rightClickCycleRef.current = null;
+
+            // Checkbox caret-click toggle: only fires when the click lands
+            // exactly on the caret's own current offset (i.e. the caret was
+            // already sitting there, not being moved by this click) -- see
+            // ChecklistCaretClickTogglePolicy.ts for the narrow markdown-
+            // checkbox pattern match.
+            const toggleCallback = bindingsRef.current?.onCaretClickTransform;
+            if (toggleCallback) {
+              const currentSelection = view.state.selection.main;
+              if (currentSelection.from === currentSelection.to) {
+                const clickOffset = view.posAtCoords({ x: event.clientX, y: event.clientY });
+                if (clickOffset === currentSelection.head) {
+                  const text = previousTextRef.current;
+                  const selection = toSelectionState(currentSelection);
+                  const next = toggleCallback({ text, selection });
+                  if (next) {
+                    event.preventDefault();
+                    applyTransformResult(view, text, next);
+                    return true;
+                  }
+                }
+              }
+            }
           }
           return false;
         },
