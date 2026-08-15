@@ -59,12 +59,18 @@ export interface PersistedMenuState {
   editorGlyphPaddingPx?: number;
   uiFontStyle?:
     | 'system'
-    | 'atkinson'
-    | 'inter'
     | 'ibmplexsans'
-    | 'nunitosans'
-    | 'publicsans'
-    | 'carlito';
+    | 'alata'
+    | 'geo'
+    | 'carterone'
+    | 'cevicheone'
+    | 'unicaone'
+    | 'sniglet'
+    | 'kellyslab'
+    | 'novamono'
+    | 'vt323'
+    | 'xkcd'
+    | 'sourgummy';
   uiFontScale?: number;
   borderRadiusRegularPx?: number;
   spacingRegularPx?: number;

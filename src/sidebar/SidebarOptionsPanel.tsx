@@ -191,11 +191,11 @@ type ElementPreviewCopySource =
 // also needs for the editor itself).
 
 const VIEW_STYLE_OPTIONS: Array<{ key: ViewStyleKey; label: string; family: string }> = [
-  { key: 'modern', label: 'Modern', family: "'Quicksand', 'Segoe UI', sans-serif" },
-  { key: 'narrow', label: 'Narrow', family: "'Roboto Condensed', 'Segoe UI', sans-serif" },
-  { key: 'cute', label: 'Cute', family: "'Sour Gummy', 'Quicksand', 'Segoe UI', sans-serif" },
+  { key: 'modern', label: 'Quicksand', family: "'Quicksand', 'Segoe UI', sans-serif" },
+  { key: 'narrow', label: 'Roboto Condensed', family: "'Roboto Condensed', 'Segoe UI', sans-serif" },
+  { key: 'cute', label: 'Sour Gummy', family: "'Sour Gummy', 'Quicksand', 'Segoe UI', sans-serif" },
   { key: 'xkcd', label: 'xkcd', family: "'xkcd', 'Comic Sans MS', 'Chalkboard SE', cursive" },
-  { key: 'print', label: 'Print', family: "'Big Shoulders', 'Times New Roman', Georgia, serif" },
+  { key: 'print', label: 'Big Shoulders', family: "'Big Shoulders', 'Times New Roman', Georgia, serif" },
   { key: 'calibrilight', label: 'Calibri Light (Carlito)', family: "'Carlito', 'Calibri Light', 'Segoe UI', sans-serif" },
   { key: 'opensans', label: 'Open Sans', family: "'Open Sans', 'Segoe UI', sans-serif" },
   { key: 'notoserif', label: 'Noto Serif', family: "'Noto Serif', Georgia, serif" },
