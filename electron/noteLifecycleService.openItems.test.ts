@@ -43,8 +43,8 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
 
     const openItemsDoc = await lifecycle.loadNote({ id: openItemsId! })
 
-    expect(openItemsDoc.text).toContain(`[${ch1LinkId}]($BOOK§${ch1LinkId})`)
-    expect(openItemsDoc.text).toContain(`[Setting]($BOOK§${ch1LinkId}#heading:setting)`)
+    expect(openItemsDoc.text).toContain(`[${ch1LinkId}](@${ch1.id})`)
+    expect(openItemsDoc.text).toContain(`[Setting](@${ch1.id}#heading:setting)`)
     expect(openItemsDoc.text).toContain('- [ ] world-building task')
     // Checked items are never listed.
     expect(openItemsDoc.text).not.toContain('done already')
@@ -55,7 +55,7 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     expect(ch1Doc.text).toBe('# Chapter One\n\n## Setting\n\n- [x] done already\n- [ ] world-building task')
   })
 
-  it('renders an unlinked, plain-text group when the note has no assigned id, instead of inventing one', async () => {
+  it('still produces a fully linked group when the note has no assigned id -- internal navigation never needs one', async () => {
     const parent = await lifecycle.createNote({ initialText: '# The Book' })
     const ch1 = await lifecycle.createChapterNote(parent.id)
     await lifecycle.createAutoTocChapter(parent.id)
@@ -70,14 +70,14 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     // The group's own title falls back to the same derived snippet the
     // chapter's own pill would show (resolveIdentityLabel), not "Chapter
     // One" verbatim -- deriveContentSnippet truncates to a word boundary.
-    expect(openItemsDoc.text).toContain('- Chapter')
+    // The link itself is still present, addressed by the chapter's own
+    // real internal note id.
+    expect(openItemsDoc.text).toContain(`[Chapter](@${ch1.id})`)
     expect(openItemsDoc.text).toContain('- [ ] world-building task')
-    expect(openItemsDoc.text).not.toContain('](')
   })
 
   it('groups the parent\'s own headless items directly under its title link', async () => {
     const parent = await lifecycle.createNote({ initialText: '# The Book' })
-    db.setNoteAssignedId(parent.id, 'BOOK')
     const ch1 = await lifecycle.createChapterNote(parent.id)
     await lifecycle.createAutoTocChapter(parent.id)
     await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One' })
@@ -91,7 +91,7 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
         '# Open Items',
         '',
         `[open-items-group:${parent.id}]`,
-        '- [The Book]($BOOK)',
+        `- [The Book](@${parent.id})`,
         '  - [ ] pick a title',
         '',
       ].join('\n'),

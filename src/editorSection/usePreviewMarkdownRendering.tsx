@@ -20,6 +20,7 @@ import {
   PREVIEW_MARKDOWN_REMARK_PLUGINS,
 } from '../editor/PreviewMarkdown'
 import { findHeadingAnchorLine, parseHeadingAnchorFragment } from '../shared/tableOfContentsText'
+import type { ParsedInternalNoteLink } from '../shared/internalNoteLinks'
 import { splitMarkdownIntoPreviewBlocksIncremental, type PreviewBlockSplitCache } from '../editor/PreviewBlockSplit'
 import { resolvePreviewBlockIndexForSourceLine } from '../editor/PreviewBlockIndex'
 import { scrollToNonQuantizedSmooth } from '../editor/NonQuantizedSmoothScroll'
@@ -438,11 +439,13 @@ export function usePreviewMarkdownRendering({
       const parentNoteId = contextNote.id
       const normalizedChapterTarget = normalizeInternalIdForLookup(target.chapterIdRaw)
       void window.thockdownChapters.listChapters(parentNoteId).then((chapters) => {
-        // The auto-generated TOC/Open Items chapters never produce a link
-        // into a chapter that lacks an explicitly user-assigned chapterId
-        // (see noteLifecycleService.ts's regenerateAutoTocChapter -- no id
-        // is ever invented just to make a link "work"), so a direct match
-        // against `entry.chapterId` is always correct here.
+        // This `$NOTE-ID§CHAPTER-ID` scheme is purely for hand-typed,
+        // user-facing links -- matches only an explicitly user-assigned
+        // chapterId (setChapterId). The auto-generated TOC/Open Items
+        // chapters never produce one of these at all; they use the
+        // separate, internal-only `@noteId` scheme instead (see
+        // internalNoteLinks.ts and navigateToInternalNoteLink below), which
+        // needs no assigned id and so has no business here.
         const chapterEntry = chapters.find((entry) => entry.chapterId && normalizeInternalIdForLookup(entry.chapterId) === normalizedChapterTarget)
         if (!chapterEntry) return
         const chapterContentText = notesRef.current.find((note) => note.id === chapterEntry.chapterNoteId)?.contentText ?? ''
@@ -469,6 +472,26 @@ export function usePreviewMarkdownRendering({
     anchorTarget.scrollTo(sourceLine, false)
   }, [activeNoteId, activateAndScroll, resolveAnchorTarget, latestEditorTextRef])
 
+  // Resolves and follows an `@noteId[#fragment]` internal-only link -- the
+  // auto-generated TOC/Open Items chapters' own addressing scheme
+  // (internalNoteLinks.ts), entirely separate from navigateToInternalPreviewLink
+  // above: the target note is identified directly by its own real,
+  // permanent id, no assignedId/chapterId lookup involved at all, so it
+  // never fails just because the user hasn't assigned one. A fragment, if
+  // present, is always a heading-derived anchor -- this scheme has no
+  // manual-anchor equivalent, since a manual anchor is something a user
+  // types, and nothing produced here is ever user-typed.
+  const navigateToInternalNoteLink = useCallback((target: ParsedInternalNoteLink) => {
+    const targetContentText = notesRef.current.find((note) => note.id === target.noteId)?.contentText ?? ''
+    if (target.fragment === null) {
+      activateAndScroll(target.noteId, targetContentText, null)
+      return
+    }
+    const headingSlug = parseHeadingAnchorFragment(target.fragment)
+    if (headingSlug === null || findHeadingAnchorLine(targetContentText, headingSlug) === null) return
+    activateAndScroll(target.noteId, targetContentText, target.fragment)
+  }, [activateAndScroll])
+
   // navigateToInternalPreviewLink itself still isn't fully keystroke-stable
   // -- it depends (transitively, via `activateNote`) on other callbacks
   // elsewhere in the section that legitimately need the latest
@@ -483,8 +506,16 @@ export function usePreviewMarkdownRendering({
     navigateToInternalPreviewLinkRef.current = navigateToInternalPreviewLink
   }, [navigateToInternalPreviewLink])
 
+  const navigateToInternalNoteLinkRef = useRef(navigateToInternalNoteLink)
+  useEffect(() => {
+    navigateToInternalNoteLinkRef.current = navigateToInternalNoteLink
+  }, [navigateToInternalNoteLink])
+
   const previewMarkdownComponents = useMemo(
-    () => createPreviewMarkdownComponents((target) => navigateToInternalPreviewLinkRef.current(target)),
+    () => createPreviewMarkdownComponents(
+      (target) => navigateToInternalPreviewLinkRef.current(target),
+      (target) => navigateToInternalNoteLinkRef.current(target),
+    ),
     [],
   )
 

@@ -4662,7 +4662,7 @@ function App() {
         <div className={`pdf-exporter-markdown-preview markdown-preview style-${viewStyle}`}>
           <ReactMarkdown
             remarkPlugins={PREVIEW_MARKDOWN_REMARK_PLUGINS}
-            components={createPreviewMarkdownComponents(PREVIEW_MARKDOWN_NOOP_NAVIGATE)}
+            components={createPreviewMarkdownComponents(PREVIEW_MARKDOWN_NOOP_NAVIGATE, PREVIEW_MARKDOWN_NOOP_NAVIGATE)}
           >
             {currentEditorText}
           </ReactMarkdown>

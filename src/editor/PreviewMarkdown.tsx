@@ -7,6 +7,7 @@ import type { ReactNode } from 'react'
 import type { Root } from 'hast'
 import { visit } from 'unist-util-visit'
 import remarkGfm from 'remark-gfm'
+import { parseInternalNoteLink, type ParsedInternalNoteLink } from '../shared/internalNoteLinks'
 
 // The rehype plugins below walk/splice hast trees generically across
 // root/element/text nodes without narrowing to hast's discriminated union,
@@ -161,10 +162,32 @@ export const PREVIEW_MARKDOWN_REMARK_PLUGINS = [remarkGfm]
 // events, so it gets a no-op navigator instead of threading live app state
 // into a static export.
 export const PREVIEW_MARKDOWN_NOOP_NAVIGATE = (): void => {}
-export function createPreviewMarkdownComponents(navigateToInternalLink: (target: ParsedInternalPreviewLink) => void) {
+export function createPreviewMarkdownComponents(
+  navigateToInternalLink: (target: ParsedInternalPreviewLink) => void,
+  navigateToInternalNoteLink: (target: ParsedInternalNoteLink) => void,
+) {
   return {
     a: ({ children, href }: { children?: ReactNode; href?: string }) => {
       const normalizedHref = typeof href === 'string' ? href : undefined
+
+      // `@noteId[#fragment]` -- the internal-only auto-TOC/Open-Items
+      // addressing scheme (internalNoteLinks.ts), entirely separate from
+      // the `$NOTE-ID§CHAPTER-ID` scheme below: never user-typed, never
+      // gated on an assigned id. Checked first since its `@` sigil can
+      // never collide with either of the user-facing forms.
+      const internalNoteTarget = normalizedHref ? parseInternalNoteLink(normalizedHref) : null
+      if (internalNoteTarget) {
+        const handleInternalNoteLinkClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+          event.preventDefault()
+          navigateToInternalNoteLink(internalNoteTarget)
+        }
+        return (
+          <a href={normalizedHref} rel="noopener noreferrer" onClick={handleInternalNoteLinkClick}>
+            {children}
+          </a>
+        )
+      }
+
       const parsedHref = normalizedHref ? parseInternalPreviewHref(normalizedHref) : null
 
       // `[Anchor Text](#anchor-id)` — a definition, never clickable. Rendered

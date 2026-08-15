@@ -92,7 +92,7 @@ export function collectUncheckedItemsByHeading(sourceText: string): OpenItemsHea
   return buckets.filter((bucket) => bucket.items.length > 0)
 }
 
-/** One line of a group's own outline, mirroring noteLifecycleService.ts's tocLine -- a real link when `href` is available, plain non-clickable text otherwise (the note/chapter it would point at has no user-assigned id). */
+/** One line of a group's own outline, mirroring noteLifecycleService.ts's tocLine -- a real link when `href` is available, plain non-clickable text otherwise (defensive fallback only; in practice every note/chapter has a real internal id to link through). */
 function groupLine(depth: number, label: string, href: string | null): string {
   const indent = '  '.repeat(depth)
   return href ? `${indent}- [${label}](${href})` : `${indent}- ${label}`
@@ -100,10 +100,12 @@ function groupLine(depth: number, label: string, href: string | null): string {
 
 /**
  * Builds one note's own Open Items group -- a top-level link to the note
- * itself (`linkPrefix`, e.g. `$BOOK` for the parent or `$BOOK§ch1` for a
- * chapter, or null if that note/chapter has no user-assigned id to link
- * through -- see noteLifecycleService.ts's regenerateAutoTocChapter for the
- * full "no id, no link" rule this mirrors), with unchecked items nested
+ * itself (`linkPrefix`, e.g. `@a1b2c3` for the parent or `@d4e5f6` for a
+ * chapter -- the internal-only `@noteId` scheme from internalNoteLinks.ts,
+ * addressed by real internal note ids, never a user-assigned id; see
+ * noteLifecycleService.ts's regenerateAutoTocChapter for the full rationale
+ * this mirrors. `linkPrefix` stays nullable defensively, but callers always
+ * pass a real link in practice), with unchecked items nested
  * under whichever of its headings they belong to (linking to that heading's
  * own on-the-fly anchor id, never writing one into the note itself), or
  * directly under the top-level link if they appear before any heading.

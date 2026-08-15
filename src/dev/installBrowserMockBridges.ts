@@ -41,6 +41,7 @@ import type { ReviewFlagEntry, ReviewFlagsApi } from '../shared/reviewFlags'
 import { normalizeChapterHeadings } from '../shared/markdownHeadings'
 import { resolveIdentityLabel } from '../shared/tabLabels'
 import { computeHeadingAnchors, formatHeadingAnchorFragment } from '../shared/tableOfContentsText'
+import { formatInternalNoteLink } from '../shared/internalNoteLinks'
 import { deriveDefaultAssignedIdBase, normalizeAssignedIdInput } from '../shared/assignedIds'
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, parseOpenItemsGroups } from '../shared/openItemsText'
 
@@ -1026,7 +1027,8 @@ function getRealChapterRowsInStore(store: BrowserMockStore, parentNoteId: string
 /**
  * Dev-mode mirror of noteLifecycleService.ts's own module-level tocLine --
  * a real link when `href` is available, plain non-clickable text otherwise
- * (the target has no user-assigned id, and this never invents one).
+ * (defensive fallback only; in practice every note/chapter has a real
+ * internal id to link through via formatInternalNoteLink).
  */
 function tocLineInStore(depth: number, label: string, href: string | null): string {
   const indent = '  '.repeat(depth)
@@ -1036,13 +1038,14 @@ function tocLineInStore(depth: number, label: string, href: string | null): stri
 /**
  * Dev-mode mirror of noteLifecycleService.ts's regenerateAutoTocChapter --
  * see that method's own doc comment for what this actually does and why,
- * including the "no id is ever auto-assigned here, missing ones just render
- * unlinked" rule. A no-op if `parentNoteId` has no auto-TOC chapter. Mutates
- * `store` directly rather than round-tripping through this file's own
- * loadNote/saveNote bridge methods (unlike the real backend, which has to,
- * since chapters are file-backed there) -- the mock store has no such file
- * layer, so a direct in-place update is both sufficient and faithful to
- * what those calls would produce.
+ * including why every link is built with the internal-only `@noteId` scheme
+ * (formatInternalNoteLink) rather than the user-facing assignedId-based one.
+ * A no-op if `parentNoteId` has no auto-TOC chapter. Mutates `store` directly
+ * rather than round-tripping through this file's own loadNote/saveNote
+ * bridge methods (unlike the real backend, which has to, since chapters are
+ * file-backed there) -- the mock store has no such file layer, so a direct
+ * in-place update is both sufficient and faithful to what those calls would
+ * produce.
  */
 function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string): void {
   const parentNote = store.notes.find((note) => note.id === parentNoteId)
@@ -1051,12 +1054,12 @@ function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string)
   ))
   if (!parentNote || !tocChapter) return
 
-  const parentAssignedId = parentNote.assignedId
   const parentHeadings = computeHeadingAnchors(parentNote.text)
+  const parentHref = formatInternalNoteLink(parentNoteId)
 
-  const lines = ['# Table of Contents', '', tocLineInStore(0, parentNote.title || 'Untitled', parentAssignedId ? `$${parentAssignedId}` : null)]
+  const lines = ['# Table of Contents', '', tocLineInStore(0, parentNote.title || 'Untitled', parentHref)]
   for (const heading of parentHeadings) {
-    lines.push(tocLineInStore(1, heading.label, parentAssignedId ? `$${parentAssignedId}#${formatHeadingAnchorFragment(heading.anchorId)}` : null))
+    lines.push(tocLineInStore(1, heading.label, formatInternalNoteLink(parentNoteId, formatHeadingAnchorFragment(heading.anchorId))))
   }
 
   const chapterRows = getRealChapterRowsInStore(store, parentNoteId)
@@ -1066,11 +1069,11 @@ function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string)
     if (!chapterNote) continue
 
     const [rootHeading, ...restHeadings] = computeHeadingAnchors(chapterNote.text)
-    const rootHref = parentAssignedId && row.chapterId ? `$${parentAssignedId}§${row.chapterId}` : null
+    const rootHref = formatInternalNoteLink(row.chapterNoteId)
     const rootLabel = rootHeading ? rootHeading.label : resolveIdentityLabel(row.chapterId, chapterNote.text).text
     lines.push(tocLineInStore(0, rootLabel, rootHref))
     for (const heading of restHeadings) {
-      lines.push(tocLineInStore(1, heading.label, rootHref ? `${rootHref}#${formatHeadingAnchorFragment(heading.anchorId)}` : null))
+      lines.push(tocLineInStore(1, heading.label, formatInternalNoteLink(row.chapterNoteId, formatHeadingAnchorFragment(heading.anchorId))))
     }
   }
 
@@ -1140,21 +1143,16 @@ function regenerateOpenItemsGroupInStore(store: BrowserMockStore, parentNoteId: 
   const parentNote = store.notes.find((note) => note.id === parentNoteId)
   if (!changedNote || !parentNote) return
 
-  const parentAssignedId = parentNote.assignedId
-
-  let linkPrefix: string | null
-  // The parent has a real title; a chapter has no title concept at all,
-  // only a chapterId (or, unassigned, the same derived fallback its own
-  // pill shows) -- same distinction the real backend's
-  // regenerateOpenItemsGroup makes. Neither id is ever auto-assigned here.
+  // Same internal-only `@noteId` addressing regenerateAutoTocInStore uses --
+  // see the real backend's regenerateOpenItemsGroup for the full rationale.
+  // The label shown is a separate, purely cosmetic concern.
+  const linkPrefix = formatInternalNoteLink(changedNoteId)
   let groupLabel: string
   if (changedNoteId === parentNoteId) {
-    linkPrefix = parentAssignedId ? `$${parentAssignedId}` : null
     groupLabel = changedNote.title || 'Untitled'
   } else {
     const chapterRow = store.chapters.find((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === changedNoteId)
     if (!chapterRow) return
-    linkPrefix = parentAssignedId && chapterRow.chapterId ? `$${parentAssignedId}§${chapterRow.chapterId}` : null
     groupLabel = resolveIdentityLabel(chapterRow.chapterId, changedNote.text).text
   }
 
