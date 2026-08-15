@@ -8,6 +8,8 @@ const isWhitespace = (char: string) => /\s/u.test(char);
 
 const isSentenceBoundary = (char: string) => char === '\n' || SENTENCE_ENDING_PUNCTUATION.has(char);
 
+const isWordBoundary = (char: string) => char === ',' || isSentenceBoundary(char);
+
 const trimWhitespaceRange = (text: string, start: number, end: number) => {
   let nextStart = start;
   let nextEnd = end;
@@ -310,7 +312,7 @@ export const resolveWordRange = (
     return { start: 0, end: 0 };
   }
 
-  const boundary = (char: string) => isWhitespace(char) || isSentenceBoundary(char);
+  const boundary = (char: string) => isWhitespace(char) || isWordBoundary(char);
   const anchor = normalizeAnchor(text, offset, boundary);
   if (anchor >= safeLength) {
     return { start: safeLength, end: safeLength };
@@ -345,7 +347,7 @@ export const resolveWordRange = (
   return regularRange;
 };
 
-export type SelectionScope = 'word' | 'sentence' | 'line' | 'block';
+export type SelectionScope = 'word' | 'clause' | 'sentence' | 'line' | 'block';
 
 const resolveSentenceRange = (
   text: string,
@@ -484,6 +486,51 @@ const resolvePureSentenceRange = (text: string, offset: number) => {
   return trimWhitespaceRange(text, start, end);
 };
 
+const findEnclosingPairInterior = (text: string, anchor: number) => {
+  for (let index = anchor - 1; index >= 0; index -= 1) {
+    const char = text[index];
+    if (!isPairOpener(char)) {
+      continue;
+    }
+
+    const closerIndex = findMatchingCloser(text, index, PAIR_OPENERS[char]);
+    if (closerIndex !== null && closerIndex > anchor) {
+      return { start: index + 1, end: closerIndex };
+    }
+  }
+  return null;
+};
+
+// 'clause' scope: the comma-delimited segment around the click, without
+// crossing an enclosing bracket pair or the current sentence's own
+// boundaries. Deliberately entered only immediately after 'word' scope (see
+// resolveNextRightClickScope in CM6Editor.tsx) and computed fresh from the
+// click offset every time rather than incrementally from currentSelection --
+// a single stateless hop, not a scope that re-derives itself relative to a
+// growing selection the way 'sentence'/'line' do. Layering comma-awareness
+// onto resolveSentenceRange's own multi-click bracket-walk machinery
+// (guardOpener/rightGuard/pairSearchWindow, all tuned against many specific
+// regressions -- see trimStrayBoundingCharacters above) was evaluated and
+// rejected as too risky to attempt blindly; this narrower version is the
+// safely-achievable subset.
+const resolveClauseRange = (text: string, offset: number) => {
+  const safeLength = text.length;
+  if (safeLength === 0) {
+    return { start: 0, end: 0 };
+  }
+
+  const anchor = clamp(normalizeAnchor(text, offset, isWhitespace), 0, Math.max(0, safeLength - 1));
+  const window = findEnclosingPairInterior(text, anchor) ?? resolvePureSentenceRange(text, offset);
+
+  const leftComma = text.lastIndexOf(',', anchor - 1);
+  const start = leftComma >= window.start ? leftComma + 1 : window.start;
+
+  const rightComma = text.indexOf(',', anchor);
+  const end = rightComma !== -1 && rightComma < window.end ? rightComma : window.end;
+
+  return trimWhitespaceRange(text, start, end);
+};
+
 const resolveLineRange = (text: string, offset: number) => {
   const safeLength = text.length;
   if (safeLength === 0) {
@@ -597,6 +644,9 @@ export const resolveScopeRange = (
   if (scope === 'word') {
     regularRange = resolveWordRange(text, offset, currentSelection ?? undefined);
     pairSearchWindow = regularRange;
+  } else if (scope === 'clause') {
+    regularRange = resolveClauseRange(text, offset);
+    pairSearchWindow = regularRange;
   } else if (scope === 'sentence') {
     regularRange = resolveSentenceRange(text, offset, currentSelection ?? undefined);
 
@@ -639,7 +689,14 @@ export const resolveScopeRange = (
     pairSearchWindow = regularRange;
   }
 
-  const pairAware = resolvePairAwareRange(text, pairSearchWindow, currentSelection ?? undefined);
+  // 'clause' deliberately opts out of the generic pair-aware pass below --
+  // resolveClauseRange already stops at an enclosing pair's own interior, and
+  // this scope is meant to be a narrow, deterministic single hop (see its
+  // definition above), not subject to the same nested-bracket walk-out
+  // machinery that 'word'/'sentence' rely on across multiple clicks.
+  const pairAware = scope === 'clause'
+    ? null
+    : resolvePairAwareRange(text, pairSearchWindow, currentSelection ?? undefined);
   let range = pairAware ?? regularRange;
 
   // resolveSentenceRange's own guard only ever "sees" the single nearest

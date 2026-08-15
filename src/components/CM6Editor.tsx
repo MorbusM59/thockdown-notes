@@ -2368,10 +2368,14 @@ export function CM6Editor({
     let isApplyingDragQuantizedCorrection = false;
     let dragCorrectionFrame: number | null = null;
 
-    // Mirrors ContractBridgePlugin.tsx's (Lexical) resolveNextScope exactly --
-    // see the contextmenu handler below.
+    // Originally mirrored ContractBridgePlugin.tsx's (Lexical) resolveNextScope
+    // exactly; now diverges by one step -- 'clause' (comma/pair-bounded
+    // segment, see resolveClauseRange in ContractBridgeRangeUtils.ts) is a
+    // CM6-only addition inserted between 'word' and 'sentence'. See the
+    // contextmenu handler below.
     const resolveNextRightClickScope = (current: SelectionScope): SelectionScope => {
-      if (current === 'word') return 'sentence';
+      if (current === 'word') return 'clause';
+      if (current === 'clause') return 'sentence';
       if (current === 'sentence') return 'line';
       if (current === 'line') return 'block';
       return 'block';
@@ -2739,9 +2743,11 @@ export function CM6Editor({
         return true;
       }),
       EditorView.domEventHandlers({
-        // Right-click selection-scope cycling (word -> sentence -> line ->
-        // block on repeated right-clicks in the same spot) -- ported from
-        // ContractBridgePlugin.tsx's (Lexical) handleContextMenu. Reuses
+        // Right-click selection-scope cycling (word -> clause -> sentence ->
+        // line -> block on repeated right-clicks in the same spot) -- ported
+        // from ContractBridgePlugin.tsx's (Lexical) handleContextMenu, with
+        // 'clause' since added as a CM6-only step (see
+        // resolveNextRightClickScope above). Reuses
         // resolveScopeRange/isSameRange unchanged (pure text+offset
         // functions, no Lexical dependency); only the "read current
         // selection/offset" and "apply the result" steps are CM6-native

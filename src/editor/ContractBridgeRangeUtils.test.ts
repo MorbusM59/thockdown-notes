@@ -245,3 +245,64 @@ describe('line scope respects sentence boundaries (bug regression)', () => {
     ]);
   });
 });
+
+describe('word scope excludes commas', () => {
+  it('does not include a trailing comma in the word range', () => {
+    const text = 'This is, by all means, a sentence.';
+    const range = resolveWordRange(text, text.indexOf('means') + 2);
+
+    expect(text.slice(range.start, range.end)).toBe('means');
+  });
+
+  it('does not include a leading comma-adjacent word past the comma', () => {
+    const text = 'even though, right';
+    const range = resolveWordRange(text, text.indexOf('right') + 2);
+
+    expect(text.slice(range.start, range.end)).toBe('right');
+  });
+});
+
+describe('clause scope (comma-bounded expansion from word scope)', () => {
+  it('expands a word to the comma-delimited clause around it', () => {
+    const text = 'This is, by all means, a sentence that we can use for testing.';
+    const offset = text.indexOf('means') + 2;
+
+    const result = resolveScopeRange('clause', text, offset, null);
+
+    expect(text.slice(result.range.start, result.range.end)).toBe('by all means');
+  });
+
+  it('does not cross an enclosing bracket pair when no comma stops it first', () => {
+    const text = "This is, according to a few people (that I asked, even though I shouldn't have) in my town, a sentence that we can use for testing.";
+    const offset = text.indexOf('though') + 2;
+
+    const result = resolveScopeRange('clause', text, offset, null);
+
+    expect(text.slice(result.range.start, result.range.end)).toBe("even though I shouldn't have");
+  });
+
+  it('falls back to the sentence boundary when no comma or bracket is nearby', () => {
+    const text = 'The quick brown fox jumps. Over the lazy dog!';
+    const offset = text.indexOf('fox') + 1;
+
+    const result = resolveScopeRange('clause', text, offset, null);
+
+    expect(text.slice(result.range.start, result.range.end)).toBe('The quick brown fox jumps.');
+  });
+
+  it('reproduces the full word -> clause -> sentence click sequence', () => {
+    const text = 'This is, by all means, a sentence that we can use for testing.';
+    const offset = text.indexOf('means') + 2;
+
+    const wordResult = resolveScopeRange('word', text, offset, null);
+    expect(text.slice(wordResult.range.start, wordResult.range.end)).toBe('means');
+
+    const clauseSelection = { anchor: wordResult.range.start, focus: wordResult.range.end, start: wordResult.range.start, end: wordResult.range.end, isCollapsed: false };
+    const clauseResult = resolveScopeRange('clause', text, offset, clauseSelection);
+    expect(text.slice(clauseResult.range.start, clauseResult.range.end)).toBe('by all means');
+
+    const sentenceSelection = { anchor: clauseResult.range.start, focus: clauseResult.range.end, start: clauseResult.range.start, end: clauseResult.range.end, isCollapsed: false };
+    const sentenceResult = resolveScopeRange('sentence', text, offset, sentenceSelection);
+    expect(text.slice(sentenceResult.range.start, sentenceResult.range.end)).toBe(text);
+  });
+});
