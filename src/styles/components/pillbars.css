@@ -98,7 +98,7 @@
    every pill's height in all three bars together. */
 .tag-pill {
   flex: 0 0 auto;
-  padding: var(--spacing-small) var(--spacing-regular);
+  padding: var(--spacing-regular) var(--spacing-large);
   line-height: var(--ui-pill-line-height);
   height: auto;
 }

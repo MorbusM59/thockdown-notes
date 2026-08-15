@@ -397,12 +397,15 @@
    * has no stretched height yet to derive width from -- confirmed live: the
    * buttons stretched to the correct height but stayed at their icon's
    * intrinsic content width instead of squaring up. This recomputes the
-   * well's content height (pill line box + pill padding/border + well
-   * padding/border) as an explicit number so it can be set as both width
-   * and height directly, sidestepping aspect-ratio entirely. */
+   * well's content height -- pill line box, the pill's own top/bottom
+   * padding (--spacing-regular, pillbars.css's .tag-pill), the well's own
+   * top/bottom padding (--spacing-small), and both their borders -- as an
+   * explicit number so it can be set as both width and height directly,
+   * sidestepping aspect-ratio entirely. */
   --ui-pill-bar-size: calc(
     11px * var(--ui-font-scale) * var(--ui-pill-line-height)
-    + 4 * var(--spacing-small)
+    + 2 * var(--spacing-regular)
+    + 2 * var(--spacing-small)
     + 4px
   );
 
@@ -553,14 +556,17 @@
    * document's own bottom margin so text doesn't sit under the (now
    * content-sized) floating chapter panel -- that's a different element
    * entirely, so it can't just read the panel's rendered height in CSS.
-   * This estimates it from the same primitives pillbars.css actually builds
-   * the panel from, so it tracks --ui-pill-line-height/--ui-font-scale/
-   * spacing-regular tuning reasonably well without being a hard duplicate. */
+   * This rebuilds that height from the same primitives pillbars.css/.tag-
+   * pill actually use, term for term: pill line box, the pill's own
+   * top/bottom padding (--spacing-regular), the well's own top/bottom
+   * padding (--spacing-small), both their borders, and .chapter-panel's own
+   * top padding (--spacing-regular) -- so it tracks tuning to any of those
+   * exactly rather than drifting out of sync again. */
   --chapter-panel-clearance-estimate: calc(
     11px * var(--ui-font-scale) * var(--ui-pill-line-height)
+    + 3 * var(--spacing-regular)
     + 2 * var(--spacing-small)
-    + 2px
-    + 2 * var(--spacing-regular)
+    + 4px
   );
   --note-list-row-content-height: var(--btn-square-regular-size);
   --wordcount-panel-width: 110px;
