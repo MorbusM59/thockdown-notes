@@ -234,6 +234,13 @@
   display: flex;
   position:     relative;
   flex:         0 0 auto;
+  /* .tabbar-grid stretches every child to the row's height, which is set by
+     the flanking icon buttons' fixed --ui-pill-bar-size (itself computed
+     from the *base* 11px pill font, tokens.css). This pill runs a larger
+     font than that baseline, so opting out of stretch and centering instead
+     keeps it sized to its own content -- otherwise it gets squashed to the
+     shorter row height and its larger text clips against overflow: hidden. */
+  align-self: center;
   margin-right: var(--spacing-regular);
 }
 
@@ -245,6 +252,12 @@
   justify-content: center;
   letter-spacing: 0.05em;
   border-radius: var(--border-radius-regular);
+  font-size: calc(14px * var(--ui-font-scale));
+}
+
+.tag-pill.section-identity-tab .tag-pill-label {
+  overflow: visible;
+  letter-spacing: -0.05em;
 }
 
 .section-identity-tab.is-active {
