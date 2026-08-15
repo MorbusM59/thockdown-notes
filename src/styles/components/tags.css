@@ -183,8 +183,23 @@
   filter: var(--filter-primed-delete);
 }
 
-/* In-place tag rename (right-click an assigned tag pill), chapter-pill style. */
-.tag-rename-input {
+/* In-place tag rename (right-click an assigned tag pill), chapter-pill
+   style. field-sizing: content keeps the input's width tied to its actual
+   value instead of the browser's intrinsic input-width default -- see
+   .chapter-id-input (editor.css) for the full explanation.
+
+   The .tag-pill prefix (not just .tag-rename-input) is load-bearing: base
+   .tag-pill (pillbars.css) sets height: auto at equal specificity (one
+   class each), so whichever rule the bundler happens to emit last wins the
+   tie -- confirmed live that auto was winning, and auto + field-sizing:
+   content on a real <input> resolves to the browser's own native
+   single-line-field height (27px here), completely ignoring line-height/
+   padding math. Explicit height (matching .tag-pill's own line-height +
+   padding + the 1px border on each side) only actually takes effect once
+   it can't lose that specificity tie. */
+.tag-pill.tag-rename-input {
+  height: calc(1em * var(--ui-pill-line-height) + 2 * var(--spacing-regular) + 2px);
+  field-sizing: content;
   text-align: center;
   outline: none;
 }
@@ -454,9 +469,28 @@
   transition: width var(--temp-tab-pin-hold-ms, 500ms) linear;
 }
 
-/* In-place note id edit (quick right-click a tab), chapter-pill style. */
-.note-tab-id-input {
-  height: 100%;
+/* In-place note id edit (quick right-click a tab), chapter-pill style.
+   field-sizing: content keeps the input's width tied to its actual value
+   instead of the browser's intrinsic input-width default -- see
+   .chapter-id-input (editor.css) for the full explanation.
+
+   The .tag-pill prefix (not just .note-tab-id-input) is load-bearing: base
+   .tag-pill (pillbars.css) sets height: auto at equal specificity (one
+   class each), so whichever rule the bundler happens to emit last wins the
+   tie -- confirmed live that auto was winning here, and auto + field-
+   sizing: content on a real <input> resolves to the browser's own native
+   single-line-field height (27px), completely ignoring line-height/
+   padding math (worse still, that 27px happened to match this bar's own
+   row height, driven by the flanking icon buttons' fixed --ui-pill-bar-
+   size, which made it *look* like a height: 100%-style row-stretch bug
+   right up until forcing the specificity tie proved it wasn't). Explicit
+   height (matching .tag-pill's own line-height + padding + the 1px border
+   on each side) only actually takes effect once it can't lose that tie --
+   verified live, this now lines up with the display div's own rendered
+   height to sub-pixel rounding. */
+.tag-pill.note-tab-id-input {
+  height: calc(1em * var(--ui-pill-line-height) + 2 * var(--spacing-regular) + 2px);
+  field-sizing: content;
   text-align: center;
   outline: none;
   letter-spacing: 0.1em;

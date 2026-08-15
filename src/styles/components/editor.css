@@ -121,8 +121,26 @@
   display: none;               /* Chromium / Electron */
 }
 
-.chapter-id-input {
-  height: 100%;
+/* A bare <input> doesn't shrink-to-fit its value the way the display <div>
+   shrinks-to-fit its label text -- without this it falls back to a
+   browser-intrinsic default width (~20 characters) unrelated to the actual
+   content, which visibly busts the pill's dimensions the moment you start
+   editing. field-sizing: content (Chromium 123+; this app ships Electron
+   30 / Chromium 124) makes the input auto-size the same way the div does.
+
+   The .tag-pill prefix (not just .chapter-id-input) is load-bearing: base
+   .tag-pill (pillbars.css) sets height: auto at equal specificity (one
+   class each), so whichever rule the bundler happens to emit last wins the
+   tie. auto + field-sizing: content on a real <input> resolves to the
+   browser's own native single-line-field height, completely ignoring
+   line-height/padding math -- see .note-tab-id-input (tags.css) for the
+   live-confirmed writeup; same root cause here, fixed the same way so it
+   can't depend on file/bundle order. Explicit height (matching .tag-pill's
+   own line-height + padding + the 1px border on each side) lines up with
+   the display div's own rendered height once it can't lose that tie. */
+.tag-pill.chapter-id-input {
+  height: calc(1em * var(--ui-pill-line-height) + 2 * var(--spacing-regular) + 2px);
+  field-sizing: content;
   text-align: center;
   justify-content: center;
   outline: none;
