@@ -147,11 +147,14 @@
   letter-spacing: 0.1em;
 }
 
-/* Left/right flanking mini buttons -- same sizing convention as
+/* Flanking mini buttons -- same sizing convention as
    .tagbar-toggle/.section-create-toggle (tags.css): square, sized to the
-   row's own height. */
+   row's own height. .chapter-auto-button is the Open Items / Table of
+   Contents pair, pinned to the left of the tab strip; .chapter-collapse-button
+   and .chapter-extract-button flank the tab strip's right side. */
 .chapter-collapse-button,
-.chapter-extract-button {
+.chapter-extract-button,
+.chapter-auto-button {
   flex: 0 0 auto;
   height: 100%;
   aspect-ratio: 1;

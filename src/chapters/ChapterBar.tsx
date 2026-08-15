@@ -28,26 +28,33 @@ export interface ChapterBarProps {
   onStartEditingChapterId: (chapterNoteId: string) => void
   onCommitChapterIdEdit: () => void
   onCancelChapterIdEdit: () => void
-  /** Left mini button: cuts the current chapter's content, appends it to the previous chapter (or the parent, if this is the first chapter), and deletes the now-empty chapter. Disabled while viewing the parent directly -- there's no "current chapter" to collapse. */
+  /** Mini button flanking the tab strip's right side (left of the extract button): cuts the current chapter's content, appends it to the previous chapter (or the parent, if this is the first chapter), and deletes the now-empty chapter. Disabled while viewing the parent directly -- there's no "current chapter" to collapse. */
   onCollapseChapterIntoPrevious: () => void
-  /** Right mini button: cuts the current editor selection out of whatever's active (parent or a chapter) into a brand-new chapter. A no-op (not disabled) when there's nothing selected -- see useNoteChapters.ts. */
+  /** Rightmost mini button: cuts the current editor selection out of whatever's active (parent or a chapter) into a brand-new chapter. A no-op (not disabled) when there's nothing selected -- see useNoteChapters.ts. */
   onExtractSelectionToChapter: () => void
 }
 
 /**
- * The chapter-display bar inside the chapter-panel placeholder. Order: a
- * left mini icon button (collapse the current chapter back into the
- * previous one), the tab strip itself -- boxed the same way the tab mode
- * tab-display bar is (.tab-mode-shell), the parent note's own tab first
- * (click to return to its own content) then every chapter in order -- and a
- * right mini icon button (extract the current selection into a new
- * chapter), mirroring the regular tab bar's own
- * tagbar-toggle/section-create-toggle flanking buttons. Shown identically
- * in both edit and render view, since it lives outside the editor/preview
- * split in SectionEditorArea.tsx. The panel itself only ever appears when
- * there's at least one chapter -- see SectionEditorArea.tsx's derived
- * `isChapterPanelOpen`; new chapters are created from the bottom utility
- * bar's "+" button instead of from inside this bar.
+ * The chapter-display bar inside the chapter-panel placeholder. Order,
+ * left to right: the Open Items mini icon button, then the Table of
+ * Contents mini icon button (each only rendered when that auto-generated
+ * chapter exists -- see splitChapterFamily), then the tab strip itself --
+ * boxed the same way the tab mode tab-display bar is (.tab-mode-shell), the
+ * parent note's own tab first (click to return to its own content) then
+ * every real chapter in order -- then the collapse-into-previous mini icon
+ * button, then the extract-selection-into-new-chapter mini icon button,
+ * mirroring the regular tab bar's own tagbar-toggle/section-create-toggle
+ * flanking buttons. The Open Items/TOC buttons behave like any other
+ * chapter tab (onChapterClick navigates the editor to that chapter's
+ * content) but are *not* rendered as pills inside the scrollable tab strip:
+ * they're standalone `.chapter-auto-button`s outside it, toggled visually
+ * via the shared `.is-active` convention when their chapter is the one
+ * currently loaded, exactly like a pill's own `.is-active` state. Shown
+ * identically in both edit and render view, since it lives outside the
+ * editor/preview split in SectionEditorArea.tsx. The panel itself only ever
+ * appears when there's at least one chapter -- see SectionEditorArea.tsx's
+ * derived `isChapterPanelOpen`; new chapters are created from the bottom
+ * utility bar's "+" button instead of from inside this bar.
  *
  * Dropping a note dragged in from the sidebar onto this bar's background (or
  * the bottom utility bar's "+" button) clones it into a brand-new last
@@ -91,14 +98,14 @@ export function ChapterBar({
   const hasCurrentChapter = !isParentActive
 
   // The auto-generated Table of Contents and Open Items chapters (if they
-  // exist) always render pinned first, right after the parent tab -- not
-  // draggable, not reorder/promote drop targets, no chapterId to
-  // right-click-rename. Split out via the one shared, canonical rule
-  // (splitChapterFamily, also used by useNoteChapters.ts and mirrored on
-  // the main-process side by noteLifecycleService.ts's getRealChapterRows)
-  // rather than a locally re-derived filter. Every other chapter renders
-  // from `reorderableChapters` so drag-and-drop's index math
-  // (useNoteChapters.ts) never sees either of them.
+  // exist) render as standalone mini buttons outside the tab strip, not as
+  // pills inside it -- not draggable, not reorder/promote drop targets, no
+  // chapterId to right-click-rename. Split out via the one shared, canonical
+  // rule (splitChapterFamily, also used by useNoteChapters.ts and mirrored
+  // on the main-process side by noteLifecycleService.ts's
+  // getRealChapterRows) rather than a locally re-derived filter. Every
+  // other chapter renders from `reorderableChapters` so drag-and-drop's
+  // index math (useNoteChapters.ts) never sees either of them.
   const { autoTocChapter, autoOpenItemsChapter, realChapters: reorderableChapters } = splitChapterFamily(chapters, notes)
 
   const scrollerRef = useRef<HTMLDivElement | null>(null)
@@ -139,16 +146,36 @@ export function ChapterBar({
 
   return (
     <div className="chapter-bar-row">
-      <button
-        type="button"
-        className="btn-icon chapter-collapse-button"
-        data-tooltip="Collapse this chapter into the previous one"
-        aria-label="Collapse this chapter into the previous one"
-        disabled={!hasCurrentChapter}
-        onClick={onCollapseChapterIntoPrevious}
-      >
-        <span className="fa-solid fa-code-merge" aria-hidden="true" />
-      </button>
+      {autoOpenItemsChapter ? (() => {
+        const isActive = autoOpenItemsChapter.chapterNoteId === activeNoteId
+        const note = notes.find((entry) => entry.id === autoOpenItemsChapter.chapterNoteId)
+        return (
+          <button
+            type="button"
+            className={`btn-icon chapter-auto-button${isActive ? ' is-active' : ''}`}
+            data-tooltip={note?.title ?? 'Open Items'}
+            aria-label={note?.title ?? 'Open Items'}
+            onClick={() => onChapterClick(autoOpenItemsChapter.chapterNoteId)}
+          >
+            <span className="fa-solid fa-square-check" aria-hidden="true" />
+          </button>
+        )
+      })() : null}
+      {autoTocChapter ? (() => {
+        const isActive = autoTocChapter.chapterNoteId === activeNoteId
+        const note = notes.find((entry) => entry.id === autoTocChapter.chapterNoteId)
+        return (
+          <button
+            type="button"
+            className={`btn-icon chapter-auto-button${isActive ? ' is-active' : ''}`}
+            data-tooltip={note?.title ?? 'Table of Contents'}
+            aria-label={note?.title ?? 'Table of Contents'}
+            onClick={() => onChapterClick(autoTocChapter.chapterNoteId)}
+          >
+            <span className="fa-solid fa-bookmark" aria-hidden="true" />
+          </button>
+        )
+      })() : null}
 
       <div className="chapter-tab-mode-shell">
         <div className={`chapter-bar-scroll-shell${canScrollLeft ? ' fade-left' : ''}${canScrollRight ? ' fade-right' : ''}`}>
@@ -171,36 +198,6 @@ export function ChapterBar({
             >
               <span className="fa-solid fa-book" aria-hidden="true" />
             </div>
-            {autoTocChapter ? (() => {
-              const isActive = autoTocChapter.chapterNoteId === activeNoteId
-              const note = notes.find((entry) => entry.id === autoTocChapter.chapterNoteId)
-              return (
-                <div
-                  key={autoTocChapter.chapterNoteId}
-                  className={`tag-pill note-tab-pill chapter-pill${isActive ? ' is-active' : ''}`}
-                  data-chapter-note-id={autoTocChapter.chapterNoteId}
-                  onClick={() => onChapterClick(autoTocChapter.chapterNoteId)}
-                  data-tooltip={note?.title ?? 'Table of Contents'}
-                >
-                  <span className="fa-solid fa-bookmark" aria-hidden="true" />
-                </div>
-              )
-            })() : null}
-            {autoOpenItemsChapter ? (() => {
-              const isActive = autoOpenItemsChapter.chapterNoteId === activeNoteId
-              const note = notes.find((entry) => entry.id === autoOpenItemsChapter.chapterNoteId)
-              return (
-                <div
-                  key={autoOpenItemsChapter.chapterNoteId}
-                  className={`tag-pill note-tab-pill chapter-pill${isActive ? ' is-active' : ''}`}
-                  data-chapter-note-id={autoOpenItemsChapter.chapterNoteId}
-                  onClick={() => onChapterClick(autoOpenItemsChapter.chapterNoteId)}
-                  data-tooltip={note?.title ?? 'Open Items'}
-                >
-                  <span className="fa-solid fa-square-check" aria-hidden="true" />
-                </div>
-              )
-            })() : null}
             {reorderableChapters.map((chapter, index) => {
               const isEditing = editingChapterNoteId === chapter.chapterNoteId
               const isActive = chapter.chapterNoteId === activeNoteId
@@ -250,6 +247,17 @@ export function ChapterBar({
           </div>
         </div>
       </div>
+
+      <button
+        type="button"
+        className="btn-icon chapter-collapse-button"
+        data-tooltip="Collapse this chapter into the previous one"
+        aria-label="Collapse this chapter into the previous one"
+        disabled={!hasCurrentChapter}
+        onClick={onCollapseChapterIntoPrevious}
+      >
+        <span className="fa-solid fa-code-merge" aria-hidden="true" />
+      </button>
 
       <button
         type="button"
