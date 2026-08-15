@@ -338,7 +338,7 @@
 }
 
 .editor-section-column.is-active .editor-shell::after {
-  box-shadow: var(--box-shadow-inverted-active);
+  box-shadow: var(--box-shadow-active-editor);
 }
 
 .editor-scrollbar-slot {

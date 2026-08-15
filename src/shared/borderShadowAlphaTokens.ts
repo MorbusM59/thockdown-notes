@@ -64,7 +64,7 @@ export const BOX_SHADOW_ALPHA_TOKENS: readonly string[] = [
   '--box-shadow-inverted-harsh',
   '--box-shadow-regular-filtered',
   '--box-shadow-inverted-filtered',
-  '--box-shadow-inverted-active',
+  '--box-shadow-active-editor',
   '--box-shadow-regular-light-flip',
   '--box-shadow-inverted-light-flip',
   '--box-shadow-regular-flip',
@@ -73,7 +73,7 @@ export const BOX_SHADOW_ALPHA_TOKENS: readonly string[] = [
   '--box-shadow-inverted-harsh-flip',
   '--box-shadow-regular-filtered-flip',
   '--box-shadow-inverted-filtered-flip',
-  '--box-shadow-inverted-active-flip',
+  '--box-shadow-active-editor-flip',
   '--btn-shadow-active',
   '--canonical-handle-shadow',
 ]
