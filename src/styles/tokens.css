@@ -266,49 +266,53 @@
     inset 0 0 24px rgba(255, 255, 255, 0.6),
     0 0 1px rgba(0, 0, 0, 0.6);
 
-  --box-shadow-active-editor-flip:
+  /* Hand-rolled active editor section styling. */
+
+    --box-shadow-active-editor-flip:
     inset 0 0 12px rgba(255, 255, 255, 0.5),
     inset 0 0 32px rgba(0, 0, 0, 0.05);
 
+  /* Active element styling is truly inverted but with weaker effect. */
+
   --box-shadow-regular-light-active-flip:
-    0 0 2px rgba(255, 255, 255, 0.8),
-    0 0 12px rgba(255, 255, 255, 0.5),
-    inset 0 0 1px rgba(0, 0, 0, 0.3);
+    0 0 2px rgba(0, 0, 0, 0.2),
+    0 0 6px rgba(0, 0, 0, 0.1),
+    inset 0 0 2px rgba(255, 255, 255, 0.3);
 
   --box-shadow-inverted-light-active-flip:
-    inset 0 0 2px rgba(255, 255, 255, 0.8),
-    inset 0 0 12px rgba(255, 255, 255, 0.5),
-    0 0 1px rgba(0, 0, 0, 0.3);
+    inset 0 0 2px rgba(0, 0, 0, 0.2),
+    inset 0 0 6px rgba(0, 0, 0, 0.1),
+    0 0 2px rgba(255, 255, 255, 0.3);
 
   --box-shadow-regular-active-flip:
-    0 0 2px rgba(255, 255, 255, 0.8),
-    0 0 12px rgba(255, 255, 255, 0.5),
-    inset 0 0 1px rgba(0, 0, 0, 0.6);
+    0 0 2px rgba(0, 0, 0, 0.4),
+    0 0 6px rgba(0, 0, 0, 0.2),
+    inset 0 0 2px rgba(255, 255, 255, 0.6);
 
   --box-shadow-inverted-active-flip:
-    inset 0 0 2px rgba(255, 255, 255, 0.8),
-    inset 0 0 12px rgba(255, 255, 255, 0.5),
-    0 0 1px rgba(0, 0, 0, 0.6);
+    inset 0 0 2px rgba(0, 0, 0, 0.4),
+    inset 0 0 6px rgba(0, 0, 0, 0.2),
+    0 0 2px rgba(255, 255, 255, 0.6);
 
   --box-shadow-regular-harsh-active-flip:
-    0 0 2px rgba(255, 255, 255, 0.8),
-    0 0 12px rgba(255, 255, 255, 0.5),
-    inset 0 0 1px rgba(0, 0, 0, 0.9);
+    0 0 2px rgba(0, 0, 0, 0.7),
+    0 0 6px rgba(0, 0, 0, 0.4),
+    inset 0 0 2px rgba(255, 255, 255, 0.9);
 
   --box-shadow-inverted-harsh-active-flip:
-    inset 0 0 2px rgba(255, 255, 255, 0.8),
-    inset 0 0 12px rgba(255, 255, 255, 0.5),
-    0 0 1px rgba(0, 0, 0, 0.9);
+    inset 0 0 2px rgba(0, 0, 0, 0.7),
+    inset 0 0 6px rgba(0, 0, 0, 0.4),
+    0 0 2px rgba(255, 255, 255, 0.9);
 
   --box-shadow-regular-filtered-active-flip:
-    0 0 6px rgba(255, 255, 255, 0.8),
-    0 0 24px rgba(255, 255, 255, 0.5),
-    inset 0 0 1px rgba(0, 0, 0, 0.6);
+    0 0 2px rgba(0, 0, 0, 0.5),
+    0 0 6px rgba(0, 0, 0, 0.2),
+    inset 0 0 2px rgba(255, 255, 255, 0.9);
 
   --box-shadow-inverted-filtered-active-flip:
-    inset 0 0 6px rgba(255, 255, 255, 0.8),
-    inset 0 0 24px rgba(255, 255, 255, 0.6),
-    0 0 1px rgba(0, 0, 0, 0.6);
+    inset 0 0 2px rgba(0, 0, 0, 0.5),
+    inset 0 0 6px rgba(0, 0, 0, 0.2),
+    0 0 2px rgba(255, 255, 255, 0.9);
 
   /* ---------------------------------------------------------------------------
      1c. Typography
