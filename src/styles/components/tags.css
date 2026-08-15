@@ -335,6 +335,19 @@
   min-width: 120px;
   max-width: 120px;
   height: var(--ui-pill-bar-size);
+  /* --ui-pill-bar-size is taller than this text's own single-line content
+     needs (it's sized for the flanking icon buttons, not this pill's own
+     font). The button neighbor centers its label within that extra room
+     via flexbox, but a native <input> doesn't do the equivalent -- text
+     stayed pinned near the top instead of centering as height grew,
+     confirmed live by comparing an auto/content-sized input (zero extra
+     room, so nothing to redistribute) against this explicit taller one:
+     the text sat at the same spot either way. Setting line-height to the
+     same value as height is the standard, deterministic single-line
+     vertical-centering trick -- unlike relying on the input's own auto
+     centering, this reliably lines it up with the button's flex-centered
+     text regardless of that quirk. */
+  line-height: var(--ui-pill-bar-size);
   field-sizing: content;
   border:        1px solid var(--btn-border-default);
   border-radius: var(--border-radius-regular);
@@ -352,7 +365,6 @@
   text-align: center;
   align-items: center;
   outline: none;
-  padding-bottom: 1px;
 }
 
 /* Section picker: takes over the tab bar's own pill area (in place of the
