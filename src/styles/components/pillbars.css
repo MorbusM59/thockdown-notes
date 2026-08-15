@@ -103,13 +103,18 @@
   height: auto;
 }
 
-/* Flanking icon buttons -- square, matching whatever height align-items:
-   stretch (on the bar row, above) gives them. Deliberately no height here:
-   stretch only stretches items whose cross-size is auto, so a competing
-   height (even 100%, which doesn't resolve usefully against an auto-height
-   row) silently defeats it and the button collapses -- this combined rule
-   exists because that exact bug was fixed separately in two places before
-   converging here. */
+/* Flanking icon buttons -- square, matching the well's real content height
+   (--ui-pill-bar-size, tokens.css). These carry .btn-icon too, which sets
+   its own fixed min-width and height: var(--btn-square-regular-size) --
+   both explicitly overridden here. width/height are set directly rather
+   than via align-items: stretch + aspect-ratio: that combination doesn't
+   work for a flex item's main-axis size (width, in these row containers),
+   since stretch resolves the cross-axis size in a later pass of the
+   algorithm than aspect-ratio needs it -- confirmed live, the buttons
+   stretched to the right height but kept their icon's intrinsic content
+   width instead of squaring up. This combined rule exists because the
+   underlying height bug (a stray fixed height silently defeating stretch)
+   was fixed piecemeal, in the wrong place, twice before converging here. */
 .sidebar-toggle,
 .section-close-toggle,
 .tagbar-toggle,
@@ -118,5 +123,6 @@
 .chapter-extract-button,
 .chapter-auto-button {
   min-width: 0;
-  aspect-ratio: 1;
+  width: var(--ui-pill-bar-size);
+  height: var(--ui-pill-bar-size);
 }

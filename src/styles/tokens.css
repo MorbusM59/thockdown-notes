@@ -386,6 +386,26 @@
    * all three bars is. */
   --ui-pill-line-height: 1.4;
 
+  /* The well (.tab-mode-shell/.chapter-tab-mode-shell) auto-sizes correctly
+   * from its pill content via align-items: stretch -- verified live. Their
+   * flanking icon buttons (sidebar-toggle/tagbar-toggle/.../chapter-auto-
+   * button) are siblings of the well, not children of it, and need to
+   * independently match that same height while staying square. Flexbox
+   * cannot do this with align-items: stretch + aspect-ratio: the item's
+   * main-axis size (width, in these row containers) is resolved in an
+   * earlier pass of the algorithm than cross-axis stretch, so aspect-ratio
+   * has no stretched height yet to derive width from -- confirmed live: the
+   * buttons stretched to the correct height but stayed at their icon's
+   * intrinsic content width instead of squaring up. This recomputes the
+   * well's content height (pill line box + pill padding/border + well
+   * padding/border) as an explicit number so it can be set as both width
+   * and height directly, sidestepping aspect-ratio entirely. */
+  --ui-pill-bar-size: calc(
+    11px * var(--ui-font-scale) * var(--ui-pill-line-height)
+    + 4 * var(--spacing-small)
+    + 4px
+  );
+
   /* The one UI-chrome padding that hugs glyphs directly with no --spacing-*
      token in between (the tooltip bubble) -- scaled so it doesn't feel
      cramped as --ui-font-scale grows. Most other chrome already derives its
