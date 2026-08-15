@@ -339,7 +339,14 @@
   border:        1px solid var(--btn-border-default);
   border-radius: var(--border-radius-regular);
   background:    var(--btn-bg-default);
-  font-size:     calc(0.8em * var(--ui-font-scale));
+  /* Matches .tag-pill.section-identity-tab's own font-size formula, and
+     .tag-pill-label's letter-spacing (the label, not the button itself --
+     the button carries a different, wider letter-spacing of its own that
+     only the label overrides) -- confirmed live these two were previously
+     18.4px/-0.02em vs 14.72px/normal (this rule's old 0.8em and unset
+     letter-spacing), a visible mismatch between display and edit mode. */
+  font-size:     calc(1em * var(--ui-font-scale));
+  letter-spacing: -0.02em;
   color:         var(--color-text-80);
   justify-content: center;
   text-align: center;
