@@ -157,7 +157,9 @@
 .chapter-auto-button {
   flex: 0 0 auto;
   height: 100%;
+  min-width: 0;
   aspect-ratio: 1;
+  font-size: calc(var(--btn-icon-size) - 4px);
 }
 
 .chapter-toggle-panel {

@@ -157,7 +157,7 @@ export function ChapterBar({
             aria-label={note?.title ?? 'Open Items'}
             onClick={() => onChapterClick(autoOpenItemsChapter.chapterNoteId)}
           >
-            <span className="fa-solid fa-square-check" aria-hidden="true" />
+            <span className="fa-solid fa-list" aria-hidden="true" />
           </button>
         )
       })() : null}
