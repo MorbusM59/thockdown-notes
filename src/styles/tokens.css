@@ -367,7 +367,23 @@
     0 0 2px #FFFFFF44,
     0 1px 0 #FFFFFF44;
 
-  --text-info-size:  12px;
+  --text-info-size:  calc(12px * var(--ui-font-scale));
+
+  /* UI chrome font (Options > UI Font) -- distinct from --editor-font/preview
+     fonts above, which are for note content. --ui-font-scale is a unitless
+     multiplier: every UI font-size declaration in styles/ wraps its literal
+     px value in calc(Npx * var(--ui-font-scale)) rather than switching to
+     rem, so the existing hand-tuned ratios between e.g. a 10px label and a
+     14px button stay intact as the whole scale grows or shrinks together. */
+  --ui-font-family: system-ui, -apple-system, sans-serif;
+  --ui-font-scale:  1;
+
+  /* The one UI-chrome padding that hugs glyphs directly with no --spacing-*
+     token in between (the tooltip bubble) -- scaled so it doesn't feel
+     cramped as --ui-font-scale grows. Most other chrome already derives its
+     padding from --spacing-regular, which the existing Borders & Spacing
+     slider covers. */
+  --ui-text-padding: calc(4px * var(--ui-font-scale));
 
   /* ---------------------------------------------------------------------------
      1d. Spacing

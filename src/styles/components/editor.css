@@ -21,7 +21,7 @@
   align-items:    center;
   gap:            var(--spacing-regular);
   padding:        var(--spacing-regular) var(--spacing-regular) var(--spacing-large) var(--spacing-large);
-  font-size:      9px;
+  font-size:      calc(9px * var(--ui-font-scale));
   letter-spacing: 0.02em;
   color:          var(--color-text-60);
   text-shadow:    var(--text-shadow-emboss-ui);
@@ -176,7 +176,7 @@
   min-height: var(--canonical-scroll-thickness);
   padding: 0;
   margin: 0;
-  font-size: 10px;
+  font-size: 10px; /* icon glyph, fixed box -- see --ui-font-scale's scope note in tokens.css */
 }
 
 .btn-icon.chapter-toggle-button.is-active {
@@ -194,7 +194,7 @@
   box-shadow:     var(--box-shadow-inverted-light);
   background:     var(--canonical-scroll-track-bg);
   color:          var(--color-text-80);
-  font-size:      9px;
+  font-size:      calc(9px * var(--ui-font-scale));
   letter-spacing: 0.02em;
   text-shadow:    none;
   pointer-events: none;

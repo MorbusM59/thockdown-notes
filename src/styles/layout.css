@@ -131,7 +131,7 @@
  * glyph's fa-turn-down variant survives here, since it's not redefined
  * there and wins on its own higher specificity regardless of import order. */
 .window-control-glyph.fa-turn-down {
-  font-size:   15px;
+  font-size:   15px; /* icon glyph, fixed box -- see --ui-font-scale's scope note in tokens.css */
   padding-left: 1px;
 }
 
@@ -140,7 +140,7 @@
 .ui-btn--mini,
 .date-filter-chip {
   border-radius: var(--border-radius-small);
-  font-size:     10px;
+  font-size:     calc(10px * var(--ui-font-scale));
   font-weight:   300;
 }
 

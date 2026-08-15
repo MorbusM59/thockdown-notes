@@ -79,7 +79,7 @@ button,
   background:    var(--btn-bg-default);
   color:         inherit;
   border-radius: var(--border-radius-regular);
-  font-size:     14px;
+  font-size:     calc(14px * var(--ui-font-scale));
   transition:    all 0.2s;
   cursor:        default;
 }
@@ -134,6 +134,6 @@ button.is-active,
 .ui-btn--mini,
 .date-filter-chip {
   border-radius: var(--border-radius-small);
-  font-size:     10px;
+  font-size:     calc(10px * var(--ui-font-scale));
   font-weight:   300;
 }

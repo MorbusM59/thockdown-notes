@@ -57,6 +57,15 @@ export interface PersistedMenuState {
   editorFontSize?: number;
   editorSpacing?: number;
   editorGlyphPaddingPx?: number;
+  uiFontStyle?:
+    | 'system'
+    | 'atkinson'
+    | 'inter'
+    | 'ibmplexsans'
+    | 'nunitosans'
+    | 'publicsans'
+    | 'carlito';
+  uiFontScale?: number;
   borderRadiusRegularPx?: number;
   spacingRegularPx?: number;
   borderAlphaPercent?: number;

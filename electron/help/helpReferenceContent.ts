@@ -667,6 +667,16 @@ Every feature in the app, described individually: where to find it, what it does
 
 *Fine control over border widths, corner radii, and layout spacing throughout the UI.*
 
+### [UI Font](#ui-font)
+
+> **Where?**
+> Settings panel → UI Font.
+
+*Font family and size for the app's own chrome — sidebar, buttons, tags, tooltips — separate from the editor/preview content fonts under [Typography]($#typography).*
+
+- Six bundled UI fonts, including Atkinson Hyperlegible (designed for low-vision readability) alongside the app's default system font.
+- The size slider scales UI text only; icons and button sizing stay fixed.
+
 ### [Glaze](#glaze)
 
 > **Where?**

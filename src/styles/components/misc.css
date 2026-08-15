@@ -62,7 +62,7 @@
   border-radius: var(--border-radius-regular);
   box-shadow:    var(--box-shadow-regular-harsh);
   color:         var(--color-text-base);
-  font-size:     12px;
+  font-size:     calc(12px * var(--ui-font-scale));
   font-weight:   500;
   line-height:   1.4;
   pointer-events: auto;
@@ -84,7 +84,7 @@
   border-radius: var(--border-radius-regular);
   background:    rgba(255, 255, 255, 0.45);
   color:         var(--color-text-60);
-  font-size:     12px;
+  font-size:     calc(12px * var(--ui-font-scale));
   padding:       calc(var(--spacing-regular) * 3) var(--spacing-large);
   text-align:    center;
 }

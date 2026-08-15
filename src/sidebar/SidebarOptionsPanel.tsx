@@ -51,6 +51,15 @@ import {
   EDITOR_STYLE_OPTIONS,
   type EditorStyleKey,
 } from '../editor/EditorTypography'
+import {
+  UI_FONT_OPTIONS,
+  UI_FONT_SCALE_MIN,
+  UI_FONT_SCALE_MAX,
+  UI_FONT_SCALE_STEP,
+  DEFAULT_UI_FONT_SCALE,
+  roundUiFontScale,
+  type UiFontKey,
+} from '../shared/UiTypography'
 import { RENDER_SCROLL_SKEW_MIN, RENDER_SCROLL_SKEW_MAX } from '../editor/NonQuantizedSmoothScroll'
 import {
   CURSOR_DOT_COUNT_MIN,
@@ -332,6 +341,10 @@ export interface SidebarOptionsPanelProps {
   editorSpacing: number
   setEditorSpacing: (multiplier: number) => void
   scheduleFocusEditorInEditMode: () => void
+  uiFontStyle: UiFontKey
+  setUiFontStyle: (key: UiFontKey) => void
+  uiFontScale: number
+  setUiFontScale: (scale: number) => void
 
   factoryPresetEntriesForCurrentMode: UiLoadoutEntry[]
   activeEntryForCurrentMode: UiLoadoutEntry | null
@@ -572,6 +585,10 @@ export function SidebarOptionsPanel({
   editorSpacing,
   setEditorSpacing,
   scheduleFocusEditorInEditMode,
+  uiFontStyle,
+  setUiFontStyle,
+  uiFontScale,
+  setUiFontScale,
   factoryPresetEntriesForCurrentMode,
   activeEntryForCurrentMode,
   selectLoadoutPreset,
@@ -2000,6 +2017,47 @@ export function SidebarOptionsPanel({
               ),
             )}
           />
+        </div>
+      </AccordionSection>
+
+      <AccordionSection
+        className="sidebar-options-section-ui-font"
+        ariaLabel="UI Font"
+        heading="UI Font"
+        iconClass="fa-font"
+        iconTooltip="These settings are global and persist across layouts."
+      >
+        <div className="typography-grid" role="group" aria-label="UI font family">
+          {UI_FONT_OPTIONS.map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              className={`btn-icon typography-font-btn${uiFontStyle === option.key ? ' is-active' : ''}`}
+              data-tooltip={option.label}
+              aria-label={option.label}
+              aria-pressed={uiFontStyle === option.key}
+              onClick={() => setUiFontStyle(option.key)}
+            >
+              <span className="typography-font-glyph" style={{ fontFamily: option.family }} aria-hidden="true">Aa</span>
+            </button>
+          ))}
+        </div>
+        <div className="typography-sliders">
+          <div className="typography-slider">
+            <CompactScrollbarSlider
+              id="ui-font-scale"
+              min={UI_FONT_SCALE_MIN}
+              max={UI_FONT_SCALE_MAX}
+              step={UI_FONT_SCALE_STEP}
+              value={uiFontScale}
+              trackLabel="size"
+              ariaLabel="UI font size"
+              defaultValue={DEFAULT_UI_FONT_SCALE}
+              onCommit={(value) => setUiFontScale(
+                clamp(roundUiFontScale(value), UI_FONT_SCALE_MIN, UI_FONT_SCALE_MAX),
+              )}
+            />
+          </div>
         </div>
       </AccordionSection>
 

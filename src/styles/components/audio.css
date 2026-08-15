@@ -29,14 +29,14 @@
   border-radius:      var(--border-radius-small);
   background:         var(--btn-bg-default);
   color:              var(--color-text-60);
-  font-size:          10px;
+  font-size:          10px; /* icon glyph, fixed box -- see --ui-font-scale's scope note in tokens.css */
   cursor:             default;
   overflow:           hidden;
   transition:         background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .audio-playlist-btn {
-  font-size:          14px;
+  font-size:          14px; /* icon glyph, fixed box -- see --ui-font-scale's scope note in tokens.css */
 }
 
 .audio-ctrl-btn:hover {
@@ -62,11 +62,11 @@
 .audio-play-btn {
   justify-content: center;
   min-width: 0;
-  font-size: 12px;
+  font-size: 12px; /* icon glyph, fixed box -- see --ui-font-scale's scope note in tokens.css */
 }
 
 .audio-song-label {
-  font-size:     9px;
+  font-size:     calc(9px * var(--ui-font-scale));
   white-space:   nowrap;
   overflow:      hidden;
   text-overflow: ellipsis;

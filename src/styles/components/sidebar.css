@@ -142,7 +142,7 @@
   border:         1px solid var(--color-border-light-70);
   border-radius:  var(--border-radius-regular);
   box-shadow:     var(--box-shadow-inverted);
-  font-size:      14px;
+  font-size:      calc(14px * var(--ui-font-scale));
   outline:        none;
   background:     var(--color-input-backdrop);
   transition:     border-color 0.2s;
@@ -391,7 +391,7 @@
   background: #ffffff9e;
   color: var(--color-text-base);
   text-align: left;
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-font-scale));
   line-height: 1.45;
 }
 .find-hit-item:hover {
@@ -428,7 +428,7 @@
   height:        20px;
   padding:       0 var(--spacing-regular);
   border-radius: var(--border-radius-small);
-  font-size:     10px;
+  font-size:     calc(10px * var(--ui-font-scale));
   font-weight:   500;
   aspect-ratio:  auto;
   color:         var(--color-text-60);
@@ -458,7 +458,7 @@
 
 .sidebar-page-number-display {
   color:       var(--color-text-80);
-  font-size:   10px;
+  font-size:   calc(10px * var(--ui-font-scale));
   font-weight: 600;
   cursor:      text;
 }
@@ -470,7 +470,7 @@
   border:      none;
   background:  transparent;
   color:       var(--color-text-80);
-  font-size:   10px;
+  font-size:   calc(10px * var(--ui-font-scale));
   font-weight: 600;
   text-align:  center;
   outline:     none;
@@ -786,7 +786,7 @@
 }
 
 .note-list-title {
-  font-size:     12px;
+  font-size:     calc(12px * var(--ui-font-scale));
   color:         var(--color-text-base);
   font-weight:   600;
   white-space:   nowrap;
@@ -801,7 +801,7 @@
   align-items:     center;
   justify-content: space-between;
   gap:             var(--spacing-large);
-  font-size:       10px;
+  font-size:       calc(10px * var(--ui-font-scale));
   color:           var(--color-text-60);
   font-weight:     800;
 }
@@ -861,7 +861,7 @@
   cursor:         default;
   padding:        var(--spacing-regular);
   color:          var(--color-text-60);
-  font-size:      10px;
+  font-size:      calc(10px * var(--ui-font-scale));
   font-weight:    900;
   text-transform: uppercase;
   letter-spacing: 0.2em;
@@ -875,7 +875,7 @@
   margin:           0;
   padding:          var(--spacing-small) var(--spacing-regular);
   color:            var(--color-text-60);
-  font-size:        10px;
+  font-size:        calc(10px * var(--ui-font-scale));
   font-weight:      700;
   text-transform:   uppercase;
   letter-spacing:   0.1em;

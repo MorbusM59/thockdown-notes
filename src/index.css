@@ -235,6 +235,79 @@
   font-style: normal;
 }
 
+/* UI chrome fonts (Options > UI Font) -- distinct from the content fonts
+   above, which are for editor/render text only. See src/shared/UiTypography.ts. */
+
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  src: url('./fonts/AtkinsonHyperlegible-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  src: url('./fonts/AtkinsonHyperlegible-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: url('./fonts/Inter-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: url('./fonts/Inter-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  src: url('./fonts/IBMPlexSans-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  src: url('./fonts/IBMPlexSans-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Nunito Sans';
+  src: url('./fonts/NunitoSans-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Nunito Sans';
+  src: url('./fonts/NunitoSans-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Public Sans';
+  src: url('./fonts/PublicSans-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Public Sans';
+  src: url('./fonts/PublicSans-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+}
+
 :root {
   /* Core Editor Variables */
   --editor-font: 'Syne Mono', monospace;
@@ -273,8 +346,9 @@ body {
   overflow: hidden;
   width: 100vw;
   height: 100vh;
-  /* Use system font for UI, but editor uses custom font */
-  font-family: system-ui, -apple-system, sans-serif; 
+  /* UI chrome font (Options > UI Font) -- editor/render text sets its own
+     font-family explicitly further down, so it's unaffected by this. */
+  font-family: var(--ui-font-family);
 }
 #root {
   width: 100%;

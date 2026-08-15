@@ -126,6 +126,15 @@ import {
   resolveEditorRuntimeMetrics,
   type EditorStyleKey,
 } from './editor/EditorTypography'
+import {
+  DEFAULT_UI_FONT_KEY,
+  DEFAULT_UI_FONT_SCALE,
+  UI_FONT_SCALE_MIN,
+  UI_FONT_SCALE_MAX,
+  roundUiFontScale,
+  resolveUiFontFamily,
+  type UiFontKey,
+} from './shared/UiTypography'
 import { getActiveSectionHandle, type SectionHandle } from './editorSection/sectionRegistry'
 import { type TextDecorationFormat } from './editorSection/useMarkdownFormattingToolbar'
 import {
@@ -1729,6 +1738,8 @@ function App() {
   const [editorFontSize, setEditorFontSize] = useState<number>(DEFAULT_EDITOR_FONT_SIZE_PX)
   const [editorSpacing, setEditorSpacing] = useState<number>(DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER)
   const [editorGlyphPaddingPx, setEditorGlyphPaddingPx] = useState<number>(DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX)
+  const [uiFontStyle, setUiFontStyle] = useState<UiFontKey>(DEFAULT_UI_FONT_KEY)
+  const [uiFontScale, setUiFontScale] = useState<number>(DEFAULT_UI_FONT_SCALE)
   const [borderRadiusRegularPx, setBorderRadiusRegularPx] = useState<number>(DEFAULT_BORDER_RADIUS_REGULAR_PX)
   const [spacingRegularPx, setSpacingRegularPx] = useState<number>(DEFAULT_SPACING_REGULAR_PX)
   const [borderAlphaPercent, setBorderAlphaPercent] = useState<number>(DEFAULT_BORDER_ALPHA_PERCENT)
@@ -3553,6 +3564,8 @@ function App() {
       editorFontSize,
       editorSpacing,
       editorGlyphPaddingPx,
+      uiFontStyle,
+      uiFontScale,
       borderRadiusRegularPx,
       spacingRegularPx,
       borderAlphaPercent,
@@ -3661,6 +3674,8 @@ function App() {
     deferPreviewOnRapidInput,
     editorFontSize,
     editorGlyphPaddingPx,
+    uiFontStyle,
+    uiFontScale,
     borderRadiusRegularPx,
     spacingRegularPx,
     borderAlphaPercent,
@@ -4393,6 +4408,12 @@ function App() {
   useEffect(() => {
     document.documentElement.style.setProperty('--spacing-regular', `${spacingRegularPx}px`)
   }, [spacingRegularPx])
+
+  useEffect(() => {
+    const rootStyle = document.documentElement.style
+    rootStyle.setProperty('--ui-font-family', resolveUiFontFamily(uiFontStyle))
+    rootStyle.setProperty('--ui-font-scale', String(uiFontScale))
+  }, [uiFontStyle, uiFontScale])
 
   // Base (un-scaled) value of each border/box-shadow token, captured the
   // first time it's read -- i.e. from tokens.css, before this effect ever
@@ -5198,6 +5219,14 @@ ${markdownHtml}
                 roundEditorGlyphPaddingPx(appState.menu.editorGlyphPaddingPx ?? DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX),
                 EDITOR_GLYPH_PADDING_MIN_PX,
                 EDITOR_GLYPH_PADDING_MAX_PX,
+              ),
+            )
+            setUiFontStyle(appState.menu.uiFontStyle ?? DEFAULT_UI_FONT_KEY)
+            setUiFontScale(
+              clamp(
+                roundUiFontScale(appState.menu.uiFontScale ?? DEFAULT_UI_FONT_SCALE),
+                UI_FONT_SCALE_MIN,
+                UI_FONT_SCALE_MAX,
               ),
             )
             setBorderRadiusRegularPx(
@@ -7784,6 +7813,10 @@ ${markdownHtml}
                         editorSpacing={editorSpacing}
                         setEditorSpacing={setEditorSpacing}
                         scheduleFocusEditorInEditMode={() => getActiveSection()?.scheduleFocusEditorInEditMode()}
+                        uiFontStyle={uiFontStyle}
+                        setUiFontStyle={setUiFontStyle}
+                        uiFontScale={uiFontScale}
+                        setUiFontScale={setUiFontScale}
                         factoryPresetEntriesForCurrentMode={factoryPresetEntriesForCurrentMode}
                         activeEntryForCurrentMode={activeEntryForCurrentMode}
                         selectLoadoutPreset={selectLoadoutPreset}
