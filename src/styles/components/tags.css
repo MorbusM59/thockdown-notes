@@ -124,6 +124,7 @@
   white-space: nowrap;
   overflow:    hidden;
   text-overflow: ellipsis;
+  margin: var(--spacing-small) var(--spacing-large);
 }
 
 /* Tag pills */
