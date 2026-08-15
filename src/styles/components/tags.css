@@ -246,8 +246,8 @@
 
 .tag-pill.section-identity-tab {
   position:  relative;
-  min-width: 80px;
-  max-width: 80px;
+  min-width: 120px;
+  max-width: 120px;
   overflow:  hidden;
   justify-content: center;
   letter-spacing: 0.05em;
@@ -292,8 +292,8 @@
 }
 
 .section-identity-input {
-  min-width: 80px;
-  max-width: 80px;
+  min-width: 120px;
+  max-width: 120px;
   border:        1px solid var(--btn-border-default);
   border-radius: var(--border-radius-regular);
   background:    var(--btn-bg-default);
