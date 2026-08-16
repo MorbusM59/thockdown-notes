@@ -483,6 +483,11 @@ function registerIpcHandlers() {
     }
   })
 
+  ipcMain.handle(FILE_SYNC_CHANNELS.openNotesFolder, async () => {
+    if (!databaseService) return
+    await shell.openPath(databaseService.getNotesDir())
+  })
+
   ipcMain.on('window-control', (_event, action: string) => {
     if (!win || win.isDestroyed()) return
 

@@ -499,6 +499,7 @@ export interface SidebarOptionsPanelProps {
 
   syncExistingNotes: () => void
   importNotes: () => void
+  openNotesFolder: () => void
   exportLayoutsTdl: () => Promise<void>
   importLayoutsTdl: () => Promise<void>
 
@@ -733,6 +734,7 @@ export function SidebarOptionsPanel({
   setEditorGlyphPaddingPx,
   syncExistingNotes,
   importNotes,
+  openNotesFolder,
   exportLayoutsTdl,
   importLayoutsTdl,
   debuggingEnabled,
@@ -2678,6 +2680,15 @@ export function SidebarOptionsPanel({
             aria-label="Import notes from files or folders"
           >
             <span className="fa-solid fa-file-import" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="btn-icon options-color-swatch options-loadout-btn"
+            onClick={openNotesFolder}
+            data-tooltip="Open notes folder in file explorer"
+            aria-label="Open notes folder in file explorer"
+          >
+            <span className="fa-solid fa-folder" aria-hidden="true" />
           </button>
           <button
             type="button"

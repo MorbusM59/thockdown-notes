@@ -195,6 +195,7 @@ contextBridge.exposeInMainWorld('thockdownLoadouts', uiLoadoutApi)
 const fileSyncApi: FileSyncApi = {
   syncExistingNotes: () => ipcRenderer.invoke(FILE_SYNC_CHANNELS.syncExistingNotes),
   importNotes: () => ipcRenderer.invoke(FILE_SYNC_CHANNELS.importNotes),
+  openNotesFolder: () => ipcRenderer.invoke(FILE_SYNC_CHANNELS.openNotesFolder),
 }
 
 contextBridge.exposeInMainWorld('thockdownFileSync', fileSyncApi)

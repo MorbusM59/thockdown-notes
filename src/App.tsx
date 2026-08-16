@@ -4768,6 +4768,12 @@ ${markdownHtml}
     }
   }, [persistenceReady, refreshNotes])
 
+  const openNotesFolder = useCallback(async () => {
+    const fileSyncApi = window.thockdownFileSync
+    if (!fileSyncApi) return
+    await fileSyncApi.openNotesFolder()
+  }, [])
+
   const selectNote = useCallback(async (noteId: string, options?: { forceReload?: boolean }) => {
     if (!window.thockdownNotes) return
     if (!persistenceReady) return
@@ -7962,6 +7968,7 @@ ${markdownHtml}
                         setEditorGlyphPaddingPx={setEditorGlyphPaddingPx}
                         syncExistingNotes={syncExistingNotes}
                         importNotes={importNotes}
+                        openNotesFolder={openNotesFolder}
                         exportLayoutsTdl={exportLayoutsTdl}
                         importLayoutsTdl={importLayoutsTdl}
                         debuggingEnabled={debuggingEnabled}

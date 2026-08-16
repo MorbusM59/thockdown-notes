@@ -1,6 +1,7 @@
 export const FILE_SYNC_CHANNELS = {
   syncExistingNotes: 'file-sync:sync-existing-notes',
   importNotes: 'file-sync:import-notes',
+  openNotesFolder: 'file-sync:open-notes-folder',
 } as const;
 
 export type SyncResult = {
@@ -18,4 +19,5 @@ export type ImportResult = {
 export type FileSyncApi = {
   syncExistingNotes(): Promise<SyncResult>;
   importNotes(): Promise<ImportResult>;
+  openNotesFolder(): Promise<void>;
 };

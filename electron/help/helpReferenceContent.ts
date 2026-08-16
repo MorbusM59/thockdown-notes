@@ -547,6 +547,13 @@ Every feature in the app, described individually: where to find it, what it does
 
 - Opens a file/folder picker; you choose exactly what gets imported.
 
+### [Open Notes Folder](#open-notes-folder)
+
+> **Where?**
+> Settings → Data Synchronization → the folder icon.
+
+*Opens the app's own notes folder (where your \`.md\` files live on disk) in your system file explorer.*
+
 ## Export
 
 ### [Export to PDF](#export-to-pdf)
@@ -744,7 +751,7 @@ Every feature in the app, described individually: where to find it, what it does
 
 *Note sync/import, and exporting or importing your whole appearance setup.*
 
-- [Sync]($#sync) and [Import]($#import) buttons for notes.
+- [Sync]($#sync), [Import]($#import), and [Open Notes Folder]($#open-notes-folder) buttons for notes.
 - Export or import your custom appearance presets as a \`.tdl\` file, so you can carry your look between machines.
 
 ### [Performance](#performance)

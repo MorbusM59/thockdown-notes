@@ -944,6 +944,7 @@ function buildFileSyncBridge(): FileSyncApi {
     async importNotes() {
       return { imported: 0, createdNoteIds: [], errors: ['File sync is not available in browser dev.'] }
     },
+    async openNotesFolder() {},
   }
 }
 
