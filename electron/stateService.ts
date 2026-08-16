@@ -10,6 +10,7 @@ import type {
 } from '../src/shared/appState';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '../src/shared/glaze';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureColorHsva, type TextureMaterialSettings, type TextureMaterialsBySurface, type TextureSurfaceKey } from '../src/textures/types';
+import { DEFAULT_UI_FONT_KEY, DEFAULT_UI_FONT_SCALE, UI_FONT_OPTIONS, UI_FONT_SCALE_MIN, UI_FONT_SCALE_MAX, roundUiFontScale, type UiFontKey } from '../src/shared/UiTypography';
 
 const APP_STATE_FILE = 'app-state.json';
 const WINDOW_STATE_FILE = 'window-state.json';
@@ -32,6 +33,8 @@ const DEFAULT_APP_STATE: AppState = {
     editorFontSize: 16,
     editorSpacing: 1.6,
     editorGlyphPaddingPx: 1,
+    uiFontStyle: DEFAULT_UI_FONT_KEY,
+    uiFontScale: DEFAULT_UI_FONT_SCALE,
     borderRadiusRegularPx: 6,
     highlightGridOutlineColor: '#00000022',
     textureEnabled: false,
@@ -109,6 +112,22 @@ function sanitizeEditorStyle(input: unknown): (typeof VALID_EDITOR_STYLES)[numbe
     return input as (typeof VALID_EDITOR_STYLES)[number];
   }
   return DEFAULT_APP_STATE.menu!.editorStyle ?? 'syne';
+}
+
+const VALID_UI_FONT_KEYS = [DEFAULT_UI_FONT_KEY, ...UI_FONT_OPTIONS.map((option) => option.key)] as const;
+
+function sanitizeUiFontStyle(input: unknown): UiFontKey {
+  if ((VALID_UI_FONT_KEYS as readonly unknown[]).includes(input)) {
+    return input as UiFontKey;
+  }
+  return DEFAULT_APP_STATE.menu!.uiFontStyle ?? DEFAULT_UI_FONT_KEY;
+}
+
+function sanitizeUiFontScale(input: unknown): number {
+  if (typeof input === 'number' && Number.isFinite(input)) {
+    return Math.max(UI_FONT_SCALE_MIN, Math.min(UI_FONT_SCALE_MAX, roundUiFontScale(input)));
+  }
+  return DEFAULT_APP_STATE.menu!.uiFontScale ?? DEFAULT_UI_FONT_SCALE;
 }
 
 function sanitizeUiMode(input: unknown): 'light' | 'dark' {
@@ -378,6 +397,8 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
       4,
       DEFAULT_APP_STATE.menu!.editorGlyphPaddingPx ?? 1,
     ),
+    uiFontStyle: sanitizeUiFontStyle(input?.uiFontStyle),
+    uiFontScale: sanitizeUiFontScale(input?.uiFontScale),
     borderRadiusRegularPx: sanitizeIntegerInRange(
       input?.borderRadiusRegularPx,
       0,
