@@ -8293,7 +8293,10 @@ ${markdownHtml}
                     aria-label={windowIsCollapsed ? 'Exit mini mode' : 'Enter mini mode'}
                     onClick={handleWindowUtilityCollapseToggle}
                   >
-                    <span className={`fa-solid ${windowIsCollapsed ? 'fa-arrows-left-right' : 'fa-caret-up'}`} aria-hidden="true" />
+                    <span
+                      className={windowIsCollapsed ? 'diagonal-arrow-glyph fa-solid fa-up-right-and-down-left-from-center' : 'fa-solid fa-caret-up'}
+                      aria-hidden="true"
+                    />
                   </button>
                   <button
                     type="button"
@@ -8314,7 +8317,7 @@ ${markdownHtml}
                     onClick={handleWindowToggleMaximize}
                   >
                     <span
-                      className={`window-maximize-glyph fa-solid ${windowIsMaximized ? 'fa-down-left-and-up-right-to-center' : 'fa-up-right-and-down-left-from-center'}`}
+                      className={`diagonal-arrow-glyph fa-solid ${windowIsMaximized ? 'fa-down-left-and-up-right-to-center' : 'fa-up-right-and-down-left-from-center'}`}
                       aria-hidden="true"
                     />
                   </button>

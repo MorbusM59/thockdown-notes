@@ -277,8 +277,10 @@
 
 /* The maximize/restore glyphs are diagonal double-headed arrows sized for a
    square button -- rotated 45deg CW here so their diagonal reads as
-   horizontal, which is what actually fits inside this half-height box. */
-.window-maximize-glyph {
+   horizontal, which is what actually fits inside a half-height split-button
+   box. Shared by the maximize button and the mini-mode restore button (both
+   sit in a split button of this same shape). */
+.diagonal-arrow-glyph {
   display: inline-block;
   transform: rotate(45deg);
 }
