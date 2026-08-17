@@ -390,18 +390,19 @@
    * from its pill content via align-items: stretch -- verified live. Their
    * flanking icon buttons (sidebar-toggle/tagbar-toggle/.../chapter-auto-
    * button) are siblings of the well, not children of it, and need to
-   * independently match that same height while staying square. Flexbox
-   * cannot do this with align-items: stretch + aspect-ratio: the item's
-   * main-axis size (width, in these row containers) is resolved in an
-   * earlier pass of the algorithm than cross-axis stretch, so aspect-ratio
-   * has no stretched height yet to derive width from -- confirmed live: the
-   * buttons stretched to the correct height but stayed at their icon's
-   * intrinsic content width instead of squaring up. This recomputes the
-   * well's content height -- pill line box, the pill's own top/bottom
-   * padding (--spacing-regular, pillbars.css's .tag-pill), the well's own
-   * top/bottom padding (--spacing-small), and both their borders -- as an
-   * explicit number so it can be set as both width and height directly,
-   * sidestepping aspect-ratio entirely. */
+   * independently match that same height while staying square. They can't
+   * just join the stretch themselves and derive width from that via
+   * aspect-ratio -- the item's main-axis size (width, in these row
+   * containers) is resolved in an earlier pass of the algorithm than
+   * cross-axis stretch, so aspect-ratio would have no stretched height yet
+   * to derive width from (confirmed live: buttons stretched to the correct
+   * height but stayed at their icon's intrinsic content width instead of
+   * squaring up). So instead this recomputes the well's content height --
+   * pill line box, the pill's own top/bottom padding (--spacing-regular,
+   * pillbars.css's .tag-pill), the well's own top/bottom padding
+   * (--spacing-small), and both their borders -- as an explicit number the
+   * buttons can set directly as height, with aspect-ratio (not a second
+   * hardcoded width) deriving width from *that* -- see pillbars.css. */
   --ui-pill-bar-size: calc(
     11px * var(--ui-font-scale) * var(--ui-pill-line-height)
     + 2 * var(--spacing-regular)

@@ -118,15 +118,20 @@
 /* Flanking icon buttons -- square, matching the well's real content height
    (--ui-pill-bar-size, tokens.css). These carry .btn-icon too, which sets
    its own fixed min-width and height: var(--btn-square-regular-size) --
-   both explicitly overridden here. width/height are set directly rather
-   than via align-items: stretch + aspect-ratio: that combination doesn't
-   work for a flex item's main-axis size (width, in these row containers),
-   since stretch resolves the cross-axis size in a later pass of the
-   algorithm than aspect-ratio needs it -- confirmed live, the buttons
-   stretched to the right height but kept their icon's intrinsic content
-   width instead of squaring up. This combined rule exists because the
-   underlying height bug (a stray fixed height silently defeating stretch)
-   was fixed piecemeal, in the wrong place, twice before converging here. */
+   both explicitly overridden here. Height is the one explicit number;
+   width derives from it via aspect-ratio rather than a second hardcoded
+   value, so the two can never drift apart. (aspect-ratio can't derive
+   width from a *stretched* height -- align-items: stretch resolves the
+   cross-axis size in a later pass of the algorithm than aspect-ratio needs
+   it, confirmed live elsewhere in this file -- but that doesn't apply
+   here: height is set directly, not left to stretch, so aspect-ratio has
+   a real number to work from.) flex: 0 0 auto is load-bearing: without a
+   flex-shrink override these buttons are ordinary row children and get
+   squeezed narrower than their own height once enough tabs push the row
+   past the available width -- confirmed live, they visibly stopped being
+   square. min-width: 0 only clears .btn-icon's own min-width floor, which
+   doesn't matter now that shrinking is disabled outright, but stays since
+   the two rules serve different purposes. */
 .sidebar-toggle,
 .section-close-toggle,
 .tagbar-toggle,
@@ -134,7 +139,8 @@
 .chapter-collapse-button,
 .chapter-extract-button,
 .chapter-auto-button {
+  flex: 0 0 auto;
   min-width: 0;
-  width: var(--ui-pill-bar-size);
   height: var(--ui-pill-bar-size);
+  aspect-ratio: 1 / 1;
 }

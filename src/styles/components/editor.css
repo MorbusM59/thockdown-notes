@@ -152,12 +152,11 @@
    row's own height. .chapter-auto-button is the Open Items / Table of
    Contents pair, pinned to the left of the tab strip; .chapter-collapse-button
    and .chapter-extract-button flank the tab strip's right side. */
-/* min-width/aspect-ratio live in pillbars.css, combined with the tab bar's
-   flanking buttons. */
+/* flex/min-width/aspect-ratio live in pillbars.css, combined with the tab
+   bar's flanking buttons. */
 .chapter-collapse-button,
 .chapter-extract-button,
 .chapter-auto-button {
-  flex: 0 0 auto;
   font-size: calc(var(--btn-icon-size) - 4px);
 }
 
