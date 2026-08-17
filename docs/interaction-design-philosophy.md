@@ -1,14 +1,15 @@
 # Interaction Design Philosophy
 
 ## Purpose
-This document defines how input, caret, scroll, and note activation behavior must be implemented across the editor stack.
+This document defines how input, caret, scroll, note activation, and render/state-update scope must be implemented across the app.
 
-The goal is deterministic behavior with one source of truth per interaction phase.
+The goal is deterministic behavior with one source of truth per interaction phase, and a render footprint that never exceeds what actually changed.
 
 ## Quality Bar
 - Interactions must feel crisp, predictable, and immediate.
 - Any tolerance, smoothing, or fudge factor must be deliberate, documented, and tied to a clear UX rationale.
 - Hidden leeway that can blur correctness boundaries is not acceptable.
+- No unnecessary re-renders or flicker: only what changed should redraw. This is treated as a correctness bar, not a cosmetic nice-to-have.
 
 ## Core Principles
 
@@ -57,6 +58,12 @@ The goal is deterministic behavior with one source of truth per interaction phas
 - If a workaround is temporarily required, it must be time-boxed, documented, and removed after root-cause fix lands.
 - Every corrective patch should state what vulnerability was removed from the core path.
 
+### 10. Surgical rendering, never blanket updates
+- Every state update must be scoped to exactly the entities that changed. Before writing one, identify precisely what's affected -- don't reach for "just replace the whole list/array/object" as a default because the real scope wasn't analyzed.
+- Unaffected siblings must keep stable object identity (same reference, not a re-created equal copy) so they don't re-render alongside the thing that actually changed.
+- A blanket update is acceptable only when the entire scope genuinely did change -- never as a shortcut that saves having to figure out what did.
+- This is the default impulse for every state-touching change, not a special-case optimization reached for only when profiling flags it. Unnecessary re-renders and flicker are a broken-feeling product, not a cosmetic detail: nothing undermines a premium, physical-object feel like parts of the UI visibly redrawing themselves for no reason. We're building something that feels like a rock, not a mirage.
+
 ## Input Phase Contract
 
 ### Key press phase
@@ -94,3 +101,4 @@ Before shipping an interaction change, verify:
 - No blanket fail safe was introduced to hide unresolved behavior.
 - Any fallback path is deterministic, bounded, and justified by a documented edge case.
 - The patch removes or narrows a concrete root vulnerability instead of broadening tolerance.
+- Every state update touches only the entities that actually changed; unaffected siblings keep stable object identity instead of being blanket-recreated.
