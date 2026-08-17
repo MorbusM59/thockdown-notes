@@ -9,6 +9,58 @@ import type { AudioBounceCacheHit } from '../shared/audioBounceCache'
 const PREWARM_CHARSET = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,!?;:\'"-_()[]{}/\\@#$%^&*+=<>~`|'
 const PREWARM_CHAR_KEY_IDS: string[] = Array.from(new Set(PREWARM_CHARSET.split(''))).map((char) => `key:${char}`)
 
+// Physical left-to-right position (-1 leftmost .. 1 rightmost) of every key
+// in the standard alphanumeric block, for the spatial slider's mode A
+// (keyboard-position panning) -- keyed by KeyboardEvent.code, NOT by the
+// character it produces. `code` identifies a physical key position and is
+// the same regardless of the OS keyboard layout/language active (a US
+// layout and a German QWERTZ layout both report `code: "KeyY"` for the key
+// physically located where a US keyboard's Y sits, even though QWERTZ
+// produces the character "Z" there). Keying this table by produced
+// character instead would put e.g. German Z/Y panning on the wrong side
+// (QWERTZ swaps their physical positions relative to QWERTY), and would
+// have no entry at all for layout-specific keys like a German keyboard's
+// dedicated Ä/Ö/Ü/ß keys. Row stagger is ignored -- only left-to-right
+// order within a row matters for a pan value.
+//
+// IntlBackslash (the extra key ISO/European keyboards, including German,
+// have between left Shift and Z -- absent on US ANSI keyboards) is
+// included as the leftmost of the bottom row so it doesn't collapse onto
+// KeyZ's position for the keyboards that do have it.
+const KEYBOARD_PAN_ROWS_BY_CODE: string[][] = [
+  ['Backquote', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0', 'Minus', 'Equal'],
+  ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY', 'KeyU', 'KeyI', 'KeyO', 'KeyP', 'BracketLeft', 'BracketRight', 'Backslash'],
+  ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'Semicolon', 'Quote'],
+  ['IntlBackslash', 'KeyZ', 'KeyX', 'KeyC', 'KeyV', 'KeyB', 'KeyN', 'KeyM', 'Comma', 'Period', 'Slash'],
+]
+
+function buildKeyboardPanByCode(): ReadonlyMap<string, number> {
+  const table = new Map<string, number>()
+  for (const row of KEYBOARD_PAN_ROWS_BY_CODE) {
+    const columnCount = row.length
+    for (let index = 0; index < columnCount; index += 1) {
+      const pan = columnCount > 1 ? (index / (columnCount - 1)) * 2 - 1 : 0
+      table.set(row[index], pan)
+    }
+  }
+  table.set('Space', 0)
+  return table
+}
+
+const KEYBOARD_PAN_BY_CODE = buildKeyboardPanByCode()
+
+// Exported standalone (rather than kept private on the class) so it's
+// testable without an AudioContext, matching this file's existing pattern
+// for pure decision logic (shouldSuppressPlainTypingSoundForInsertion,
+// shouldBakeReverbIntoTransient). Purely a function of the physical key
+// code, so mode A needs no per-locale table -- non-character keys (Tab,
+// ArrowLeft, Backspace, ...) are simply absent from KEYBOARD_PAN_BY_CODE
+// and resolve to center, matching "non character keys are centered".
+export function resolveKeyboardPanForCode(physicalKeyCode?: string): number {
+  if (!physicalKeyCode) return 0
+  return KEYBOARD_PAN_BY_CODE.get(physicalKeyCode) ?? 0
+}
+
 type IdleRequestWindow = Window & {
   requestIdleCallback?: (callback: (deadline: { didTimeout: boolean; timeRemaining: () => number }) => void, options?: { timeout: number }) => number
 }
@@ -47,6 +99,20 @@ export interface TypingSoundPlayOptions {
   echo?: TypingSoundEchoOptions
   frequencyScale?: number
   flipChannels?: boolean
+  // Caller-supplied spatial-mode-B position (-1 leftmost .. 1 rightmost),
+  // e.g. from EditorAdapter.resolveCaretHorizontalWrapRatio(). Only
+  // consulted when the spatial slider is dialed towards mode B -- see
+  // resolveEffectivePan. Never baked into a bounce (like pitch jitter): it
+  // legitimately varies press to press for the same keyId.
+  pan?: number
+  // The physical key (KeyboardEvent.code) that produced this press, for
+  // spatial-mode-A (keyboard-position) panning -- see
+  // resolveKeyboardPanForCode's doc comment for why this must be the
+  // layout-independent physical code, not keyId's produced character.
+  // Optional: callers that can't easily obtain it (e.g. programmatic
+  // triggers) just get centered mode-A panning for that press, same as any
+  // other non-character key.
+  physicalKeyCode?: string
 }
 
 interface TypingSoundHistoryEntry {
@@ -131,6 +197,11 @@ export class TypingSoundManager {
   private keyVariance = 0
   private pitch = 0
   private pitchJitterAmount = 0
+  // -1..1. Negative dials in mode A (keyboard-position pan) by |amount|;
+  // positive dials in mode B (caret-position pan, supplied per-call via
+  // TypingSoundPlayOptions.pan) by amount; 0 is the pre-existing neutral
+  // (unpanned) behavior. See resolveEffectivePan.
+  private spatialAmount = 0
   private recentKeySoundHistory: TypingSoundHistoryEntry[] = []
   // Per-key bounced (OfflineAudioContext-rendered) buffers -- see E1 in the
   // performance review. Keyed by keyId; a hit turns playback into a single
@@ -409,7 +480,7 @@ export class TypingSoundManager {
     if (!this.isAnyLayerAudible()) return
 
     const keyId = options?.keyId
-    if (keyId && (await this.tryPlayBoundBuffer(keyId))) {
+    if (keyId && (await this.tryPlayBoundBuffer(keyId, options))) {
       return
     }
 
@@ -483,6 +554,23 @@ export class TypingSoundManager {
     this.pitchJitterAmount = Math.max(0, Math.min(0.5, amount))
   }
 
+  // Takes the same -100..100 UI range as setTypingSoundPitch (the slider
+  // this sits next to); stored internally as -1..1 to multiply directly
+  // against pan values. Never baked/invalidates no caches -- like pitch
+  // jitter, pan is applied live at playback time (see resolveEffectivePan),
+  // never into a bounce.
+  setSpatialAmount(amount: number): void {
+    this.spatialAmount = Math.max(-100, Math.min(100, amount)) / 100
+  }
+
+  // Lets callers (e.g. useEditorSectionMount) cheaply check whether mode B
+  // is active before doing any work to compute a caret-position pan value
+  // for TypingSoundPlayOptions.pan -- avoids that cost entirely when the
+  // slider is neutral or in mode A.
+  getSpatialAmount(): number {
+    return this.spatialAmount
+  }
+
   setTypingSoundSet(setId: TypingSoundSetId): void {
     if (this.activeKeySet !== setId) {
       this.invalidateKeySoundCaches()
@@ -520,6 +608,36 @@ export class TypingSoundManager {
 
   private getRandomLayerDetune(): number {
     return Math.floor(Math.random() * 601) - 300
+  }
+
+  // Single source of truth for both the live-synthesis path (playLayer) and
+  // the bounced fast-path (tryPlayBoundBuffer) so they always agree. Returns
+  // 0 (no panner node needed at all -- see panIfNeeded) whenever the slider
+  // is neutral, mode A has no opinion on this key, or mode B is active but
+  // the caller didn't supply a position.
+  private resolveEffectivePan(physicalKeyCode: string | undefined, explicitPan: number | undefined): number {
+    if (this.spatialAmount === 0) return 0
+    if (this.spatialAmount < 0) {
+      const keyboardPan = resolveKeyboardPanForCode(physicalKeyCode)
+      return keyboardPan === 0 ? 0 : keyboardPan * -this.spatialAmount
+    }
+    if (explicitPan === undefined) return 0
+    return Math.max(-1, Math.min(1, explicitPan)) * this.spatialAmount
+  }
+
+  // Skips creating a StereoPannerNode entirely when pan is 0 (the default,
+  // and the common case whenever the spatial slider is neutral or a
+  // non-character key is pressed) -- same "skip work that wouldn't change
+  // the output" philosophy as effectiveGain's early-return above. Applied
+  // strictly downstream of the flip-channels buffer choice (see
+  // getLayerBuffer/bounceKeySound): flip is the statistical L/R centering
+  // baked per key, pan is the deliberate live positioning layered on top.
+  private panIfNeeded(input: GainNode, pan: number): AudioNode {
+    if (pan === 0 || !this.audioContext) return input
+    const panner = this.audioContext.createStereoPanner()
+    panner.pan.value = Math.max(-1, Math.min(1, pan))
+    input.connect(panner)
+    return panner
   }
 
   private async playLayer(layerId: string, options?: TypingSoundPlayOptions): Promise<void> {
@@ -573,20 +691,24 @@ export class TypingSoundManager {
       source.detune.value = options.detune
     }
 
+    const pan = this.resolveEffectivePan(options?.physicalKeyCode, options?.pan)
+
     const gainNode = this.audioContext.createGain()
     gainNode.gain.value = effectiveGain
     source.connect(gainNode)
+    const panNode = this.panIfNeeded(gainNode, pan)
 
     if (this.reverbDryGain && this.reverbNode) {
-      gainNode.connect(this.reverbDryGain)
-      gainNode.connect(this.reverbNode)
+      panNode.connect(this.reverbDryGain)
+      panNode.connect(this.reverbNode)
     } else if (this.masterGain) {
-      gainNode.connect(this.masterGain)
+      panNode.connect(this.masterGain)
     }
 
     source.onended = () => {
       this.safeDisconnect(source)
       this.safeDisconnect(gainNode)
+      if (panNode !== gainNode) this.safeDisconnect(panNode)
     }
 
     const echoSources: Array<{ source: AudioBufferSourceNode; gainNode: GainNode; delayMs: number }> = []
@@ -605,16 +727,19 @@ export class TypingSoundManager {
 
         const echoGainNode = this.audioContext.createGain()
         echoGainNode.gain.value = effectiveGain * Math.pow(decay, i)
+        const echoPanNode = this.panIfNeeded(echoGainNode, pan)
         if (this.reverbDryGain && this.reverbNode) {
           echoSource.connect(echoGainNode)
-          echoGainNode.connect(this.reverbDryGain)
-          echoGainNode.connect(this.reverbNode)
+          echoPanNode.connect(this.reverbDryGain)
+          echoPanNode.connect(this.reverbNode)
         } else {
-          echoSource.connect(echoGainNode).connect(this.masterGain)
+          echoSource.connect(echoGainNode)
+          echoPanNode.connect(this.masterGain)
         }
         echoSource.onended = () => {
           this.safeDisconnect(echoSource)
           this.safeDisconnect(echoGainNode)
+          if (echoPanNode !== echoGainNode) this.safeDisconnect(echoPanNode)
         }
         echoSources.push({ source: echoSource, gainNode: echoGainNode, delayMs: delayMs * i })
       }
@@ -698,7 +823,7 @@ export class TypingSoundManager {
   // this key, if one exists -- a single source.start() instead of rebuilding
   // the full layer/gain/convolver graph. Returns false (no-op) on a cache
   // miss so the caller can fall back to live synthesis.
-  private async tryPlayBoundBuffer(keyId: string): Promise<boolean> {
+  private async tryPlayBoundBuffer(keyId: string, options?: TypingSoundPlayOptions): Promise<boolean> {
     const buffer = this.boundKeyBuffers.get(keyId)
     if (!buffer || !this.audioContext || !this.masterGain) return false
 
@@ -716,17 +841,23 @@ export class TypingSoundManager {
     const gainNode = this.audioContext.createGain()
     gainNode.gain.value = 1
     source.connect(gainNode)
+    // Pan is likewise never baked (see resolveEffectivePan/panIfNeeded) --
+    // the bounced buffer already has flip-channels baked in from its
+    // original press; pan is layered on live, on every press, same as the
+    // live-synthesis path in playLayer.
+    const panNode = this.panIfNeeded(gainNode, this.resolveEffectivePan(options?.physicalKeyCode, options?.pan))
 
     if (this.reverbDryGain && this.reverbNode) {
-      gainNode.connect(this.reverbDryGain)
-      gainNode.connect(this.reverbNode)
+      panNode.connect(this.reverbDryGain)
+      panNode.connect(this.reverbNode)
     } else {
-      gainNode.connect(this.masterGain)
+      panNode.connect(this.masterGain)
     }
 
     source.onended = () => {
       this.safeDisconnect(source)
       this.safeDisconnect(gainNode)
+      if (panNode !== gainNode) this.safeDisconnect(panNode)
     }
     source.start()
     return true

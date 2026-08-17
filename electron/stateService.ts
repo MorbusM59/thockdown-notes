@@ -486,6 +486,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     audioReverbSpace: sanitizeOptionalNumber(input?.audioReverbSpace),
     audioReverbAmount: sanitizeOptionalNumber(input?.audioReverbAmount),
     pitchJitterAmount: sanitizeOptionalNumber(input?.pitchJitterAmount),
+    audioSpatial: sanitizeOptionalNumber(input?.audioSpatial),
     reduceVisualEffects: Boolean(input?.reduceVisualEffects),
     reducedCaretAnimation: Boolean(input?.reducedCaretAnimation),
     deferPreviewOnRapidInput: Boolean(input?.deferPreviewOnRapidInput),

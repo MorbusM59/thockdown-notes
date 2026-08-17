@@ -731,6 +731,15 @@ export function CM6Editor({
   ).current;
   const debugLastKeydownAtRef = useRef<number | null>(null);
   const debugLastKeyRef = useRef<string | null>(null);
+  // The physical key (KeyboardEvent.code) behind the most recent keydown,
+  // for the spatial slider's mode-A (keyboard-position) panning -- see
+  // TypingSoundManager's resolveKeyboardPanForCode for why `code` (layout-
+  // independent) is used instead of the produced character. Set on every
+  // keydown below, read and cleared the moment the resulting docChanged
+  // update reaches the shared updateListener further down, so a change with
+  // no immediately-preceding keydown (undo/redo, programmatic edits) never
+  // inherits a stale code from an unrelated earlier keystroke.
+  const lastPhysicalKeyCodeRef = useRef<string | null>(null);
   // TEMP, read-only diagnostic for the Phase-4 arrow-up chunk-boundary drift
   // investigation (docs/cm6-parity-hardening-plan.md lead #4) -- opt-in via
   // localStorage.setItem('thockdown:debug-cage-state', '1'). Exposes a pure
@@ -2681,6 +2690,7 @@ export function CM6Editor({
       // CM6Editor already calls -- so they work automatically.
       EditorView.domEventObservers({
         keydown: (event) => {
+          lastPhysicalKeyCodeRef.current = event.code;
           if (debugInputLagEnabled) {
             debugLastKeydownAtRef.current = performance.now();
             debugLastKeyRef.current = event.key;
@@ -2993,11 +3003,15 @@ export function CM6Editor({
           // keystroke -- see ProgrammaticHydrationAnnotation's doc comment.
           const isProgrammaticHydration = update.transactions.some((tr) => tr.annotation(ProgrammaticHydrationAnnotation));
 
+          const physicalKeyCode = lastPhysicalKeyCodeRef.current ?? undefined;
+          lastPhysicalKeyCodeRef.current = null;
+
           const event: EditorTextChangeEvent = {
             source: isProgrammaticHydration ? 'initial-load' : 'user-input',
             text: nextText,
             previousText,
             selection: nextSelection,
+            physicalKeyCode,
           };
           debugCheckpoint('before bindings.onTextChange');
           bindingsRef.current?.onTextChange?.(event);
@@ -4009,6 +4023,44 @@ export function CM6Editor({
         const clampedLine1 = Math.max(1, Math.min(view.state.doc.lines, Math.round(sourceLine) + 1));
         const pos = view.state.doc.line(clampedLine1).from;
         return view.lineBlockAt(pos).top;
+      },
+      // CM6's own wrap-aware primitive, moveToLineBoundary(..., true), was
+      // tried here first and rejected: it can only find a wrap point where
+      // content already exists past the caret. While typing forward (the
+      // overwhelmingly common case -- nothing typed yet past the caret),
+      // there is no such point yet, so it silently degenerates to "boundary
+      // equals caret", which reads as "at the far end of the row" on every
+      // single keystroke regardless of true position -- confirmed live:
+      // typing a fresh line pinned this at 1.0 for every press.
+      //
+      // Computed predictively instead, with no DOM measurement and no
+      // dependency on content past the caret: this editor is a fixed-width
+      // glyph grid (cellWidthPxRef -- see glyphWidthPx/cellWidthPx), so the
+      // number of columns that fit before an automatic wrap is knowable
+      // directly from the content box's pixel width. columnFromLineStart
+      // mod columnsPerRow gives the column within whichever visual row the
+      // caret is currently on, generalizing to a logical line that's
+      // already wrapped many times over. This is an estimate, not an exact
+      // mirror of the browser's real word-boundary wrapping (a long word
+      // can trigger an earlier real wrap than this column count predicts,
+      // drifting the two out of sync a little further into a long
+      // paragraph) -- acceptable for an ambient spatial cue, not worth
+      // reimplementing text layout for.
+      resolveCaretHorizontalWrapRatio(): number | null {
+        const view = viewRef.current;
+        if (!view) return null;
+        const cellWidthPxNow = cellWidthPxRef.current;
+        if (!cellWidthPxNow || cellWidthPxNow <= 0) return null;
+        const contentDOM = view.contentDOM;
+        const paddingLeftPx = Number.parseFloat(contentDOM.style.paddingLeft) || 0;
+        const paddingRightPx = Number.parseFloat(contentDOM.style.paddingRight) || 0;
+        const usableWidthPx = Math.max(0, contentDOM.clientWidth - paddingLeftPx - paddingRightPx);
+        const columnsPerRow = Math.max(1, Math.floor(usableWidthPx / cellWidthPxNow));
+        const head = view.state.selection.main.head;
+        const line = view.state.doc.lineAt(head);
+        const columnFromLineStart = head - line.from;
+        const columnWithinRow = columnFromLineStart % columnsPerRow;
+        return Math.max(0, Math.min(1, columnWithinRow / columnsPerRow));
       },
     };
 

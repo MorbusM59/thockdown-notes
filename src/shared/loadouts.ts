@@ -26,6 +26,7 @@ export type UiLayoutLoadout = {
   audioReverbStrength: number;
   audioReverbSpace: number;
   pitchJitterAmount: number;
+  audioSpatial: number;
   typingSoundEnabled: boolean;
   typingSoundSet: 'A' | 'B' | 'C' | 'D';
   // Scroll curve tuning (Options > Scrolling Behavior) is deliberately NOT

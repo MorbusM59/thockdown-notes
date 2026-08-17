@@ -911,6 +911,7 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     audioReverbStrength: clamp(toFiniteNumber(source.audioReverbStrength ?? source.audioReverbAmount, 0), 0, 1),
     audioReverbSpace: clamp(toFiniteNumber(source.audioReverbSpace, 0), 0, 1),
     pitchJitterAmount: clamp(toFiniteNumber(source.pitchJitterAmount, 0), 0, 0.5),
+    audioSpatial: clamp(toFiniteNumber(source.audioSpatial, 0), -100, 100),
     typingSoundEnabled: source.typingSoundEnabled === true,
     typingSoundSet: source.typingSoundSet === 'A' || source.typingSoundSet === 'B' || source.typingSoundSet === 'C' || source.typingSoundSet === 'D'
       ? source.typingSoundSet
@@ -2070,6 +2071,7 @@ function App() {
   const [audioReverbStrength, setAudioReverbStrength] = useState(0)
   const [audioReverbSpace, setAudioReverbSpace] = useState(0)
   const [pitchJitterAmount, setPitchJitterAmount] = useState(0)
+  const [audioSpatial, setAudioSpatial] = useState(0)
   const [reduceVisualEffects, setReduceVisualEffects] = useState(false)
   const [reducedCaretAnimation, setReducedCaretAnimation] = useState(false)
   const [deferPreviewOnRapidInput, setDeferPreviewOnRapidInput] = useState(false)
@@ -2489,6 +2491,7 @@ function App() {
       audioReverbStrength,
       audioReverbSpace,
       pitchJitterAmount,
+      audioSpatial,
       typingSoundEnabled,
       typingSoundSet,
       glaze: glazeSettings,
@@ -2577,6 +2580,7 @@ function App() {
     audioReverbStrength,
     audioReverbSpace,
     pitchJitterAmount,
+    audioSpatial,
     typingSoundEnabled,
     typingSoundSet,
     textureMaterials,
@@ -2643,6 +2647,7 @@ function App() {
     setAudioReverbStrength(clamp(loadout.audioReverbStrength, 0, 1))
     setAudioReverbSpace(clamp(loadout.audioReverbSpace, 0, 1))
     setPitchJitterAmount(clamp(loadout.pitchJitterAmount, 0, 0.5))
+    setAudioSpatial(clamp(loadout.audioSpatial, -100, 100))
     setTypingSoundEnabled(loadout.typingSoundEnabled)
     setTypingSoundSet(loadout.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
     setGlazeSettings(sanitizeGlazeSettings(loadout.glaze, DEFAULT_GLAZE_SETTINGS))
@@ -5343,6 +5348,7 @@ ${markdownHtml}
             setAudioReverbStrength(appState.menu.audioReverbStrength ?? appState.menu.audioReverbAmount ?? 0)
             setAudioReverbSpace(appState.menu.audioReverbSpace ?? 0)
             setPitchJitterAmount(appState.menu.pitchJitterAmount ?? 0)
+            setAudioSpatial(appState.menu.audioSpatial ?? 0)
             setReduceVisualEffects(appState.menu.reduceVisualEffects ?? false)
             setReducedCaretAnimation(appState.menu.reducedCaretAnimation ?? false)
             setDeferPreviewOnRapidInput(appState.menu.deferPreviewOnRapidInput ?? false)
@@ -6355,6 +6361,10 @@ ${markdownHtml}
   useEffect(() => {
     typingSoundManager.setPitchJitterAmount(pitchJitterAmount)
   }, [pitchJitterAmount])
+
+  useEffect(() => {
+    typingSoundManager.setSpatialAmount(audioSpatial)
+  }, [audioSpatial])
 
   useEffect(() => {
     // The blink animation keeps the compositor busy indefinitely while the
@@ -8057,6 +8067,8 @@ ${markdownHtml}
                         setAudioReverbSpace={setAudioReverbSpace}
                         pitchJitterAmount={pitchJitterAmount}
                         setPitchJitterAmount={setPitchJitterAmount}
+                        audioSpatial={audioSpatial}
+                        setAudioSpatial={setAudioSpatial}
                         reduceVisualEffects={reduceVisualEffects}
                         setReduceVisualEffects={setReduceVisualEffects}
                         reducedCaretAnimation={reducedCaretAnimation}

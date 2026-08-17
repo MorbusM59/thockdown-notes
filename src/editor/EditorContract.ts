@@ -45,6 +45,14 @@ export interface EditorTextChangeEvent {
   text: string;
   previousText: string;
   selection: EditorSelectionState;
+  // KeyboardEvent.code of the keydown immediately preceding this change, if
+  // any (undefined for undo/redo, programmatic edits, or anything else not
+  // directly driven by a fresh keydown). Backs the keystroke-sound spatial
+  // slider's keyboard-position mode (TypingSoundManager) -- `code` is a
+  // layout-independent physical key identifier, unlike the character the
+  // change actually inserted, which depends on the active OS keyboard
+  // layout (e.g. QWERTY vs QWERTZ).
+  physicalKeyCode?: string;
 }
 
 export interface EditorSelectionChangeEvent {
@@ -138,6 +146,15 @@ export interface EditorAdapter {
   // sync can't happen right now," never as a resolved answer of 0.
   resolveSourceLineAtHeight(heightPx: number): number | null;
   resolveHeightForSourceLine(sourceLine: number): number | null;
+  // Where the caret currently sits across the *visual* (wrapped) row it's
+  // on: 0 at the row's start, 1 at its last column before an automatic
+  // line-wrap (or the logical line end, whichever comes first). Backs the
+  // keystroke-sound spatial slider's caret-position mode (TypingSoundManager)
+  // -- an adapter primitive rather than a caller-side DOM measurement for
+  // the same reason as the pair above: correctly finding "the current
+  // wrapped row's bounds" depends on line-wrapping layout only the editor
+  // can reason about. Returns null when the adapter can't currently answer.
+  resolveCaretHorizontalWrapRatio(): number | null;
 }
 
 export interface EditorBindings {

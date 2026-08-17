@@ -471,6 +471,8 @@ export interface SidebarOptionsPanelProps {
   setAudioReverbSpace: (value: number) => void
   pitchJitterAmount: number
   setPitchJitterAmount: (value: number) => void
+  audioSpatial: number
+  setAudioSpatial: (value: number) => void
   reduceVisualEffects: boolean
   setReduceVisualEffects: (value: boolean) => void
   reducedCaretAnimation: boolean
@@ -709,6 +711,8 @@ export function SidebarOptionsPanel({
   setAudioReverbSpace,
   pitchJitterAmount,
   setPitchJitterAmount,
+  audioSpatial,
+  setAudioSpatial,
   reduceVisualEffects,
   setReduceVisualEffects,
   reducedCaretAnimation,
@@ -2496,6 +2500,21 @@ export function SidebarOptionsPanel({
               const nextValue = clamp(value, 0, 0.5)
               setPitchJitterAmount(nextValue)
               typingSoundManager.setPitchJitterAmount(nextValue)
+            }}
+          />
+          <CompactScrollbarSlider
+            id="audio-spatial"
+            min={-100}
+            max={100}
+            step={1}
+            value={audioSpatial}
+            trackLabel="spatial"
+            ariaLabel="Stereo spatial mode: left of center pans by keyboard key position, right of center pans by caret position on the line"
+            defaultValue={0}
+            onCommit={(value) => {
+              const nextValue = clamp(value, -100, 100)
+              setAudioSpatial(nextValue)
+              typingSoundManager.setSpatialAmount(nextValue)
             }}
           />
         </div>

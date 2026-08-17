@@ -1201,6 +1201,18 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     return undefined
   }, [])
 
+  // Only computed when the spatial slider is actually dialed towards mode B
+  // (caret-position panning) -- resolveCaretHorizontalWrapRatio does real
+  // editor-layout work, so this avoids paying for it on every keystroke when
+  // the slider is neutral or in mode A (keyboard-position panning, which
+  // TypingSoundManager derives entirely from keyId on its own).
+  const resolveTypingSoundSpatialPan = useCallback((): number | undefined => {
+    if (typingSoundManager.getSpatialAmount() <= 0) return undefined
+    const ratio = adapterRef.current?.resolveCaretHorizontalWrapRatio()
+    if (ratio === null || ratio === undefined) return undefined
+    return ratio * 2 - 1
+  }, [])
+
   const bindings = useMemo<EditorBindings>(() => ({
     onLifecycle: (event) => {
       if (event.phase !== 'ready') return
@@ -1245,9 +1257,9 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       const keyId = deriveTypingSoundKeyId(event)
       debugLogCheckpoint('after deriveTypingSoundKeyId')
       if (shouldPlayTypingSound(event)) {
-        void typingSoundManager.playRandomClick({ keyId })
+        void typingSoundManager.playRandomClick({ keyId, physicalKeyCode: event.physicalKeyCode, pan: resolveTypingSoundSpatialPan() })
       } else if (shouldPlayReverseTypingSound(event)) {
-        void typingSoundManager.playRandomClick({ keyId, reverse: true, detune: 600 })
+        void typingSoundManager.playRandomClick({ keyId, physicalKeyCode: event.physicalKeyCode, reverse: true, detune: 600, pan: resolveTypingSoundSpatialPan() })
       }
       debugLogCheckpoint('after typing sound dispatch')
 
@@ -1688,6 +1700,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     cancelPendingPreviewFrame,
     scheduleCoalescedPreviewCommit,
     deriveTypingSoundKeyId,
+    resolveTypingSoundSpatialPan,
     externalNoteOriginalTextByIdRef,
     isApplyingInitialViewportRef,
     latestEditorSelectionRef,

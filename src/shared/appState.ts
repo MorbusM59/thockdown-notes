@@ -141,6 +141,7 @@ export interface PersistedMenuState {
   audioReverbSpace?: number;
   audioReverbAmount?: number;
   pitchJitterAmount?: number;
+  audioSpatial?: number;
   reduceVisualEffects?: boolean;
   reducedCaretAnimation?: boolean;
   deferPreviewOnRapidInput?: boolean;

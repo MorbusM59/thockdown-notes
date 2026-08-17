@@ -735,7 +735,8 @@ Every feature in the app, described individually: where to find it, what it does
 
 *Optional mechanical-keyboard sound effects on typing, undo/redo, and navigation.*
 
-- Three sound sets — Pops, Pins, Creamy — plus volume, per-key pitch variance, global pitch, bass/treble mix, and reverb controls.
+- Four sound sets — Pops, Pins, Creamy, Forge — plus volume, per-key pitch variance, global pitch, bass/treble mix, reverb, and pitch jitter controls.
+- **Spatial** slider adds stereo panning, centered (off) by default. Left of center pans by keyboard key position (left-hand keys sound from the left, right-hand keys from the right, non-character keys like arrows/Tab/Backspace stay centered); right of center pans by where the caret sits on the current line (line start sounds left, the far edge before an automatic wrap sounds right). The two modes don't blend — the slider picks one or the other by which side of center it's on, with distance from center setting how strong the effect is.
 
 ### [Music Settings](#music-settings)
 

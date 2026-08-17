@@ -90,6 +90,7 @@ export const NEUTRAL_BASE: UiLayoutLoadout = {
   audioReverbStrength: 0,
   audioReverbSpace: 0,
   pitchJitterAmount: 0,
+  audioSpatial: 0,
   typingSoundEnabled: false,
   typingSoundSet: 'A',
   glaze: DEFAULT_GLAZE_SETTINGS,

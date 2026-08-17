@@ -95,6 +95,7 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   audioReverbStrength: 0,
   audioReverbSpace: 0,
   pitchJitterAmount: 0,
+  audioSpatial: 0,
   typingSoundEnabled: false,
   typingSoundSet: 'A',
   glaze: DEFAULT_GLAZE_SETTINGS,
@@ -499,6 +500,7 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
     audioReverbStrength: clampNumber(source.audioReverbStrength, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.audioReverbStrength),
     audioReverbSpace: clampNumber(source.audioReverbSpace, 0, 1, DEFAULT_UI_LAYOUT_LOADOUT.audioReverbSpace),
     pitchJitterAmount: clampNumber(source.pitchJitterAmount, 0, 0.05, DEFAULT_UI_LAYOUT_LOADOUT.pitchJitterAmount),
+    audioSpatial: clampNumber(source.audioSpatial, -100, 100, DEFAULT_UI_LAYOUT_LOADOUT.audioSpatial),
     typingSoundEnabled: typeof source.typingSoundEnabled === 'boolean' ? source.typingSoundEnabled : DEFAULT_UI_LAYOUT_LOADOUT.typingSoundEnabled,
     typingSoundSet: source.typingSoundSet === 'A' || source.typingSoundSet === 'B' || source.typingSoundSet === 'C'
       ? source.typingSoundSet
@@ -581,7 +583,7 @@ function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null {
 const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
   'borderRadiusRegularPx',
   'spacingRegularPx', 'borderAlphaPercent', 'boxShadowAlphaPercent',
-  'audioKeyVolume', 'audioKeyVariance', 'audioPitch', 'audioBassVolume', 'audioTrebleVolume', 'audioReverbStrength', 'audioReverbSpace', 'pitchJitterAmount',
+  'audioKeyVolume', 'audioKeyVariance', 'audioPitch', 'audioBassVolume', 'audioTrebleVolume', 'audioReverbStrength', 'audioReverbSpace', 'pitchJitterAmount', 'audioSpatial',
   'typingSoundEnabled', 'typingSoundSet',
   'darkMode',
   'filterInvert', 'filterSepia', 'filterHueRotate', 'filterBrightness',
