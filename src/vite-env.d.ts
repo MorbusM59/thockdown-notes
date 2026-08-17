@@ -25,6 +25,7 @@ interface Window {
 		reportBackgroundColor: (hex: string) => void;
 		setSidebarVisible: (visible: boolean) => void;
 		setSectionCount: (count: number) => void;
+		setDoubleSizeMode: (enabled: boolean) => void;
 		startWindowDrag: (screenX: number, screenY: number) => void;
 		moveWindowDrag: (screenX: number, screenY: number) => void;
 		endWindowDrag: () => void;

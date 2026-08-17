@@ -168,6 +168,8 @@ export interface PersistedMenuState {
   tabBarMode?: 'tags' | 'tabs';
   /** Whether the sidebar is visible (not part of layout widths). */
   isSidebarVisible?: boolean;
+  /** Whether "double size" mode (2x page zoom + doubled window minimum) is on. See App.tsx's isDoubleSizeMode. */
+  isDoubleSizeMode?: boolean;
   /**
    * Whether the custom animated mouse cursor overlay is on (Options > Mouse
    * options). Deliberately kept out of UiLayoutLoadout and always defaults

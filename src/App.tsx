@@ -1816,6 +1816,9 @@ function App() {
   const [persistenceReady, setPersistenceReady] = useState(false)
   const [appShellWidthPx, setAppShellWidthPx] = useState(APP_WINDOW_MIN_WIDTH_PX)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
+  // "Double size" mode: 2x page zoom paired with a doubled window minimum --
+  // see the window-control:double-size-mode handler in electron/main.ts.
+  const [isDoubleSizeMode, setIsDoubleSizeMode] = useState(false)
   // Line-number gutter visibility, keyed per editor slot (sectionId) -- not
   // per note/chapter, so switching which note a slot shows leaves the toggle
   // alone. Absent key = off (a freshly created slot starts with the gutter
@@ -1993,6 +1996,38 @@ function App() {
     // the array itself is evaluated eagerly, before those consts exist.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getActiveSection, persistenceReady, sidebarMode, lastSidebarModeBeforeOptions])
+
+  const handleToggleDoubleSizeMode = useCallback(() => {
+    setIsDoubleSizeMode((previous) => {
+      const next = !previous
+      // Notify main process so it can apply page zoom + the doubled window minimum immediately
+      try {
+        window.windowControls?.setDoubleSizeMode?.(next)
+      } catch (e) {
+        // ignore
+      }
+
+      // Persist app state menu snapshot with updated double-size mode
+      if (window.thockdownState && persistenceReady) {
+        const snapshot = buildMenuStateSnapshot({ isDoubleSizeMode: next })
+        const section = getActiveSection()
+        void window.thockdownState.saveAppState({
+          selectedNoteId: section?.activeNoteId ?? null,
+          viewport: section?.latestViewportRef.current ?? undefined,
+          menu: snapshot,
+        })
+      }
+
+      return next
+    })
+    // buildMenuStateSnapshot is declared later in this component (via
+    // useCallback further down), so listing it here would throw a TDZ
+    // ReferenceError the moment this dependency array is evaluated during
+    // render -- referencing it inside the callback *body* is fine (see the
+    // identical note on toggleSidebarVisible above).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [getActiveSection, persistenceReady])
+
   const [renderScrollDynamic, setRenderScrollDynamic] = useState(() => getRenderScrollDynamic())
   const renderScrollResponsiveness = deriveRenderScrollResponsivenessFromDynamic(renderScrollDynamic)
   const [renderScrollTotalTimeSec, setRenderScrollTotalTimeSec] = useState(() => getRenderScrollTotalTimeSec())
@@ -3543,6 +3578,7 @@ function App() {
     sidebarMode?: SidebarMode
     sidebarViewStateByMode?: SidebarViewStateByMode
     isSidebarVisible?: boolean
+    isDoubleSizeMode?: boolean
     reviewGutterVisibleBySection?: Record<string, boolean>
     reviewFlagsVisibleBySection?: Record<string, boolean>
   }): PersistedMenuState => {
@@ -3650,6 +3686,7 @@ function App() {
       spellCheckRenderEnabled,
       tabBarMode: tabBarModeRef.current,
       isSidebarVisible: overrides?.isSidebarVisible ?? isSidebarVisible,
+      isDoubleSizeMode: overrides?.isDoubleSizeMode ?? isDoubleSizeMode,
       reviewGutterVisibleBySection: overrides?.reviewGutterVisibleBySection ?? reviewGutterVisibleBySection,
       reviewFlagsVisibleBySection: overrides?.reviewFlagsVisibleBySection ?? reviewFlagsVisibleBySection,
       // Machine-level performance prefs, deliberately NOT part of
@@ -3720,6 +3757,7 @@ function App() {
     sidebarMode,
     sidebarViewStateByMode,
     isSidebarVisible,
+    isDoubleSizeMode,
     reviewGutterVisibleBySection,
     reviewFlagsVisibleBySection,
     viewFontSize,
@@ -5377,6 +5415,11 @@ ${markdownHtml}
 
             // Restore persisted sidebar visibility
             setIsSidebarVisible(appState.menu.isSidebarVisible ?? true)
+            // Restore persisted double-size mode. Main process already applied
+            // the zoom/minimum-size at boot from its own copy of this same
+            // saved state (see electron/main.ts's createWindow) -- this just
+            // syncs the renderer's own toggle/button state to match.
+            setIsDoubleSizeMode(appState.menu.isDoubleSizeMode ?? false)
             const restoredReviewGutterVisibleBySection = appState.menu.reviewGutterVisibleBySection ?? {}
             setReviewGutterVisibleBySection(restoredReviewGutterVisibleBySection)
             // Legacy migration: states saved before the line-number/review-flag
@@ -8262,18 +8305,29 @@ ${markdownHtml}
                     <span className="fa-solid fa-caret-down" aria-hidden="true" />
                   </button>
                 </div>
-                <button
-                  type="button"
-                  className="window-control-btn btn-icon maximize-btn"
-                  data-tooltip={windowIsMaximized ? 'Restore' : 'Maximize'}
-                  aria-label={windowIsMaximized ? 'Restore window' : 'Maximize window'}
-                  onClick={handleWindowToggleMaximize}
-                >
-                  <span
-                    className={`fa-solid ${windowIsMaximized ? 'fa-down-left-and-up-right-to-center' : 'fa-up-right-and-down-left-from-center'}`}
-                    aria-hidden="true"
-                  />
-                </button>
+                <div className="window-maximize-split" role="group" aria-label="Maximize and double size controls">
+                  <button
+                    type="button"
+                    className="window-control-btn btn-icon window-maximize-split-btn maximize"
+                    data-tooltip={windowIsMaximized ? 'Restore' : 'Maximize'}
+                    aria-label={windowIsMaximized ? 'Restore window' : 'Maximize window'}
+                    onClick={handleWindowToggleMaximize}
+                  >
+                    <span
+                      className={`window-maximize-glyph fa-solid ${windowIsMaximized ? 'fa-down-left-and-up-right-to-center' : 'fa-up-right-and-down-left-from-center'}`}
+                      aria-hidden="true"
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    className={`window-control-btn btn-icon window-maximize-split-btn double-size${isDoubleSizeMode ? ' is-active' : ''}`}
+                    data-tooltip={isDoubleSizeMode ? 'Exit double size' : 'Double size'}
+                    aria-label={isDoubleSizeMode ? 'Exit double size mode' : 'Enable double size mode'}
+                    onClick={handleToggleDoubleSizeMode}
+                  >
+                    <span className="window-control-text-glyph" aria-hidden="true">2x</span>
+                  </button>
+                </div>
                 <button
                   type="button"
                   className="window-control-btn btn-icon close-btn"

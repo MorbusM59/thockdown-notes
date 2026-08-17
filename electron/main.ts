@@ -144,6 +144,11 @@ const EDITOR_SECTION_MIN_WIDTH_PX = 300;
 // effect on the next resize event.
 let currentSidebarVisible = true;
 let currentSectionCount = 1;
+// "Double size" mode: 2x Chromium page zoom (webContents.setZoomFactor) paired
+// with a doubled window minimum, so content renders twice as big without
+// squeezing sections/sidebar into less room than they'd get at 1x. See
+// 'window-control:double-size-mode' below.
+let currentDoubleSizeMode = false;
 
 function computeAppWindowMinWidthPx(sidebarVisible: boolean, sectionCount: number): number {
   // Two independent constraints; the window minimum is whichever is larger:
@@ -166,12 +171,29 @@ function computeAppWindowMinWidthPx(sidebarVisible: boolean, sectionCount: numbe
   return Math.max(chromeMinWidth, sidebarColumnsPx + sectionsRowMinWidthPx);
 }
 
-/** Grows the window's current bounds if they're now narrower than `minWidth` -- never shrinks it. */
-function growWindowToMinimumWidthIfNeeded(windowRef: BrowserWindow, minWidth: number): void {
+/**
+ * The window's minimum size, factoring in the sidebar/section-count floor
+ * (computeAppWindowMinWidthPx) and, on top of that, double-size mode --
+ * which doubles both dimensions so 2x-zoomed content never gets squeezed
+ * into less visual room than it had at 1x.
+ */
+function computeEffectiveMinSize(): { width: number; height: number } {
+  const multiplier = currentDoubleSizeMode ? 2 : 1;
+  return {
+    width: computeAppWindowMinWidthPx(currentSidebarVisible, currentSectionCount) * multiplier,
+    height: APP_WINDOW_MIN_HEIGHT_PX * multiplier,
+  };
+}
+
+/** Grows the window's current bounds if they're now smaller than minWidth/minHeight -- never shrinks it. */
+function growWindowToMinimumSizeIfNeeded(windowRef: BrowserWindow, minWidth: number, minHeight: number): void {
   const bounds = windowRef.getBounds();
-  if (bounds.width >= minWidth) return;
-  const nextX = bounds.x - (minWidth - bounds.width);
-  windowRef.setBounds({ x: Math.max(0, nextX), y: bounds.y, width: minWidth, height: bounds.height });
+  const nextWidth = Math.max(bounds.width, minWidth);
+  const nextHeight = Math.max(bounds.height, minHeight);
+  if (nextWidth === bounds.width && nextHeight === bounds.height) return;
+  const nextX = bounds.x - (nextWidth - bounds.width);
+  const nextY = bounds.y - (nextHeight - bounds.height);
+  windowRef.setBounds({ x: Math.max(0, nextX), y: Math.max(0, nextY), width: nextWidth, height: nextHeight });
 }
 
 // Matches the renderer's DEFAULT_BASE_PALETTE_COLOR (src/App.tsx). Used as the
@@ -615,13 +637,13 @@ function registerIpcHandlers() {
     try {
       if (!win || win.isDestroyed()) return
       currentSidebarVisible = Boolean(visible)
-      const minWidth = computeAppWindowMinWidthPx(currentSidebarVisible, currentSectionCount)
-      win.setMinimumSize(minWidth, APP_WINDOW_MIN_HEIGHT_PX)
+      const { width: minWidth, height: minHeight } = computeEffectiveMinSize()
+      win.setMinimumSize(minWidth, minHeight)
 
       // If enabling the sidebar and the current width is smaller than the new minimum,
       // expand the window so the toolbar and other content meet the min width.
       if (currentSidebarVisible) {
-        growWindowToMinimumWidthIfNeeded(win, minWidth)
+        growWindowToMinimumSizeIfNeeded(win, minWidth, minHeight)
       }
     } catch (error) {
       console.warn('Failed to apply sidebar-visibility window constraints', error)
@@ -638,11 +660,31 @@ function registerIpcHandlers() {
       if (!win || win.isDestroyed()) return
       const parsedCount = Number(sectionCount)
       currentSectionCount = Number.isFinite(parsedCount) ? Math.max(1, Math.round(parsedCount)) : 1
-      const minWidth = computeAppWindowMinWidthPx(currentSidebarVisible, currentSectionCount)
-      win.setMinimumSize(minWidth, APP_WINDOW_MIN_HEIGHT_PX)
-      growWindowToMinimumWidthIfNeeded(win, minWidth)
+      const { width: minWidth, height: minHeight } = computeEffectiveMinSize()
+      win.setMinimumSize(minWidth, minHeight)
+      growWindowToMinimumSizeIfNeeded(win, minWidth, minHeight)
     } catch (error) {
       console.warn('Failed to apply section-count window constraints', error)
+    }
+  })
+
+  // Toggles "double size" mode: 2x Chromium page zoom paired with a doubled
+  // window minimum (see computeEffectiveMinSize), so 2x content gets 2x room
+  // instead of being squeezed the way plain browser zoom would squeeze it.
+  // Disabling relaxes the minimum back down but -- consistent with the
+  // sidebar/section-count handlers above -- never shrinks the window itself.
+  ipcMain.on('window-control:double-size-mode', (_event, enabled: unknown) => {
+    try {
+      if (!win || win.isDestroyed()) return
+      currentDoubleSizeMode = Boolean(enabled)
+      win.webContents.setZoomFactor(currentDoubleSizeMode ? 2 : 1)
+      const { width: minWidth, height: minHeight } = computeEffectiveMinSize()
+      win.setMinimumSize(minWidth, minHeight)
+      if (currentDoubleSizeMode) {
+        growWindowToMinimumSizeIfNeeded(win, minWidth, minHeight)
+      }
+    } catch (error) {
+      console.warn('Failed to apply double-size-mode window constraints', error)
     }
   })
 
@@ -1112,7 +1154,8 @@ function applyUtilityCollapseWindowConstraints(windowRef: BrowserWindow): void {
 
 function applyNormalWindowConstraints(windowRef: BrowserWindow): void {
   windowRef.setResizable(true);
-  windowRef.setMinimumSize(computeAppWindowMinWidthPx(currentSidebarVisible, currentSectionCount), APP_WINDOW_MIN_HEIGHT_PX);
+  const { width, height } = computeEffectiveMinSize();
+  windowRef.setMinimumSize(width, height);
 }
 
 function collapseWindowToUtilityGrid(targetSize: { width: number; height: number }): boolean {
@@ -1201,7 +1244,8 @@ async function createWindow() {
   // renderer -- so this starts at the default of 1 and the renderer corrects
   // it via 'window-control:section-count' shortly after bootstrap resolves.
   currentSidebarVisible = initialSidebarVisible;
-  const initialMinWidth = computeAppWindowMinWidthPx(currentSidebarVisible, currentSectionCount);
+  currentDoubleSizeMode = savedAppState?.menu?.isDoubleSizeMode ?? false;
+  const initialMinSize = computeEffectiveMinSize();
   windowIsUtilityCollapsed = false;
   utilityCollapseRestoreState = null;
   alwaysOnTopBeforeUtilityCollapse = null;
@@ -1221,8 +1265,8 @@ async function createWindow() {
   height: savedWindowState.isMaximized ? APP_WINDOW_DEFAULT_HEIGHT_PX : savedWindowState.height,
   x: savedWindowState.isMaximized ? undefined : savedWindowState.x,
   y: savedWindowState.isMaximized ? undefined : savedWindowState.y,
-  minWidth: initialMinWidth,
-  minHeight: APP_WINDOW_MIN_HEIGHT_PX,
+  minWidth: initialMinSize.width,
+  minHeight: initialMinSize.height,
   frame: false,
   titleBarStyle: 'hidden',
   autoHideMenuBar: true,
@@ -1285,6 +1329,9 @@ async function createWindow() {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
     win?.webContents.send('window-maximize-state', win.isMaximized())
     win?.webContents.send('window-collapsed-state', windowIsUtilityCollapsed)
+    if (currentDoubleSizeMode) {
+      win?.webContents.setZoomFactor(2)
+    }
   })
 
   if (VITE_DEV_SERVER_URL) {

@@ -107,6 +107,7 @@ const windowControls = {
     ipcRenderer.send('window-control:report-background-color', hex),
   setSidebarVisible: (visible: boolean) => ipcRenderer.send('window-control:sidebar-visibility', visible),
   setSectionCount: (count: number) => ipcRenderer.send('window-control:section-count', count),
+  setDoubleSizeMode: (enabled: boolean) => ipcRenderer.send('window-control:double-size-mode', enabled),
   startWindowDrag: (screenX: number, screenY: number) =>
     ipcRenderer.send(WINDOW_DRAG_CHANNELS.start, { screenX, screenY }),
   moveWindowDrag: (screenX: number, screenY: number) =>

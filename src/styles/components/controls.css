@@ -15,7 +15,7 @@
   background:       var(--color-input-backdrop);
 }
 
-.window-controls-grid.is-collapsed .maximize-btn, 
+.window-controls-grid.is-collapsed .window-maximize-split,
 .window-controls-grid.is-collapsed .close-btn {
   display:         none;
 }
@@ -248,6 +248,53 @@
 .window-minimize-split-btn.minimize {
   border-radius: var(--border-radius-small) var(--border-radius-small) var(--border-radius-regular) var(--border-radius-regular);
   padding: 0 0 var(--spacing-small) 0;
+}
+
+.window-maximize-split {
+  width: var(--btn-square-large-size);
+  height: var(--btn-square-large-size);
+  min-width: var(--btn-square-large-size);
+  min-height: var(--btn-square-large-size);
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--spacing-small);
+}
+
+.window-control-btn.window-maximize-split-btn {
+  width: 100%;
+  min-width: 0;
+  height: calc((var(--btn-square-large-size) - 2px) / 2);
+  min-height: 0;
+  aspect-ratio: auto;
+  border-radius: var(--border-radius-small);
+  font-size: var(--btn-icon-size);
+}
+
+.window-maximize-split-btn.maximize {
+  border-radius: var(--border-radius-regular) var(--border-radius-regular) var(--border-radius-small) var(--border-radius-small);
+  padding: 0;
+}
+
+/* The maximize/restore glyphs are diagonal double-headed arrows sized for a
+   square button -- rotated 45deg CW here so their diagonal reads as
+   horizontal, which is what actually fits inside this half-height box. */
+.window-maximize-glyph {
+  display: inline-block;
+  transform: rotate(45deg);
+}
+
+.window-maximize-split-btn.double-size {
+  border-radius: var(--border-radius-small) var(--border-radius-small) var(--border-radius-regular) var(--border-radius-regular);
+  padding: 0;
+}
+
+.window-control-text-glyph {
+  display:     block;
+  font-size:   calc(var(--btn-icon-size) * 0.85);
+  font-weight: 600;
+  line-height: 1;
+  color:       var(--color-text-80);
+  text-shadow: var(--text-shadow-icon);
 }
 
 .window-control-btn {

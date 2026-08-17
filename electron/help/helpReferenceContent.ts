@@ -82,7 +82,7 @@ See the full [Keyboard Shortcuts]($#keyboard-shortcuts) table.
 
 ### Window controls
 
-- Top bar: dark mode, settings, the music player, mini mode, minimize, maximize, close. The window is frameless — there's no OS menu bar.
+- Top bar: dark mode, settings, the music player, mini mode, minimize, maximize/double size (split button), close. The window is frameless — there's no OS menu bar.
 
 ---
 
@@ -619,6 +619,7 @@ Every feature in the app, described individually: where to find it, what it does
 - **Music player** — see [Music Player]($#music-player).
 - **Mini mode** — collapses the window into a compact strip; while collapsed, the music player's options button is disabled.
 - **Minimize / Maximize–Restore / Close** — standard window controls.
+- **Double size (2x)** — the lower half of the split maximize button. Doubles the app's page zoom and, to match, the window's minimum size, so 2x content gets 2x room instead of being squeezed into the same space. Toggling off relaxes the minimum again but doesn't shrink a window you've since resized larger. Persists across restarts.
 - **Drag the toolbar or this top bar to move the window; double-click either to maximize/restore.** Dragging a maximized window from these areas restores it, ending up positioned under the cursor as if the drag had been followed the whole way. Dragging elsewhere in the app also moves the window, but won't restore it from maximized.
 
 ## Appearance & Settings
