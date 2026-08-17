@@ -6271,12 +6271,17 @@ ${markdownHtml}
       return next
     })
 
-    const fractionById = new Map(widths.map(({ id, widthFraction }) => [id, widthFraction]))
-    setEditorSections((previous) => previous.map((entry) => (
-      fractionById.has(entry.id)
-        ? { ...entry, widthFraction: fractionById.get(entry.id) ?? entry.widthFraction }
-        : entry
-    )))
+    // Only the two flanking sections' fractions actually change value here
+    // (redistributing between just them, off an unchanged total) -- touching
+    // just their entries, not the rest, keeps every other section's object
+    // reference stable so it doesn't re-render along with them.
+    const leftWidthFraction = nextLeftWidthPx / totalWidthPx
+    const rightWidthFraction = nextRightWidthPx / totalWidthPx
+    setEditorSections((previous) => previous.map((entry) => {
+      if (entry.id === leftSectionId) return { ...entry, widthFraction: leftWidthFraction }
+      if (entry.id === rightSectionId) return { ...entry, widthFraction: rightWidthFraction }
+      return entry
+    }))
 
     void window.thockdownSections?.updateSectionWidths(widths).then((updated) => {
       applyResolvedSections(updated)
