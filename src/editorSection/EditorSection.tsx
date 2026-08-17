@@ -11,6 +11,7 @@ import { countWords, trackWordCount } from '../editor/WordCount'
 import { buildEditRestoreSnapshotFromUiState } from '../editor/EditRestoreMath'
 import type { EditorRuntimeMetrics } from '../editor/EditorTypography'
 import type { UseSectionTabsResult } from '../tabBar/useSectionTabs'
+import type { NoteTabEntry } from '../shared/tabs'
 import { SectionTabBar } from '../tabBar/SectionTabBar'
 import { SectionEditorArea, type SectionEditorAreaProps } from './SectionEditorArea'
 import { useDisplayedNoteRenderMode } from './useDisplayedNoteRenderMode'
@@ -332,6 +333,16 @@ export function EditorSection({
   // kept current by the effect right after useNoteChapters below, same
   // pattern as activeNoteTextRef above.
   const refreshChaptersRef = useRef<() => Promise<void>>(async () => {})
+  // useSectionTabs (which owns pinnedTabs) is declared further down this
+  // function than activateNote needs it -- routed through a ref, same
+  // pattern as refreshChaptersRef just above. activateNote is the single
+  // choke point every note switch funnels through, including chapter-bar
+  // navigation that never goes through useSectionTabs' own handleTabClick,
+  // so it's the one place that must independently keep this section's
+  // cached pinnedTabs in sync after writing lastActiveChapterNoteId out of
+  // band (otherwise the local cache would silently go stale the moment a
+  // chapter is opened, since nothing else ever re-fetches it).
+  const applyPinnedTabsUpdateRef = useRef<(tabs: NoteTabEntry[]) => void>(() => {})
   // Stable identity (empty deps -- only ever reads the ref) so it doesn't
   // recreate useNoteSaveQueue's own memoized callbacks on every render; an
   // inline arrow here previously did exactly that, cascading into an
@@ -665,6 +676,19 @@ export function EditorSection({
     logStep('state updates + save selected note', stateUpdateStart)
     logStep('total activateNote', activateStart)
     void window.thockdownSections?.setActiveNote(sectionId, loaded.id)
+    // Every note activation (not just tab clicks) records itself as this
+    // tab's last-shown chapter -- a chapter records itself against its
+    // parent's tab; the base note records a null (viewing the base) against
+    // its own tab. A no-op in the DB if `noteId` here isn't actually pinned
+    // as a tab in this section (see setNoteTabLastActiveChapter's own doc
+    // comment) -- this is the single choke point every activation funnels
+    // through, so it's simpler to always call it than to first check whether
+    // it's tabbed.
+    const chapterTabNoteId = loaded.chapterOnly && loaded.chapterParentId ? loaded.chapterParentId : loaded.id
+    const chapterNoteIdForTab = loaded.chapterOnly && loaded.chapterParentId ? loaded.id : null
+    void window.thockdownTabs?.setLastActiveChapter(sectionId, chapterTabNoteId, chapterNoteIdForTab).then((updatedTabs) => {
+      applyPinnedTabsUpdateRef.current(updatedTabs)
+    })
   }, [
     activeNoteId,
     captureCurrentAnchorBlockIndex,
@@ -825,6 +849,7 @@ export function EditorSection({
     handleTabsContainerDrop,
     unpinNoteTab,
     pinNoteAsRightmostTab,
+    applyTabsUpdate,
   }: UseSectionTabsResult = useSectionTabs({
     sectionId,
     activeNoteId,
@@ -841,6 +866,10 @@ export function EditorSection({
     updateNoteAssignedId,
     initialTabBarMode: restoredTabBarMode,
   })
+
+  useEffect(() => {
+    applyPinnedTabsUpdateRef.current = applyTabsUpdate
+  }, [applyTabsUpdate])
 
   const {
     chapters,
@@ -1265,6 +1294,7 @@ export function EditorSection({
     handleTabsContainerDrop,
     unpinNoteTab,
     pinNoteAsRightmostTab,
+    applyTabsUpdate,
     chapters,
     refreshChapters,
     handleCreateChapter,
@@ -1570,6 +1600,7 @@ export function EditorSection({
           handleTabsContainerDrop,
           unpinNoteTab,
           pinNoteAsRightmostTab,
+          applyTabsUpdate,
         }}
         isSidebarVisible={isSidebarVisible}
         toggleSidebarVisible={toggleSidebarVisible}

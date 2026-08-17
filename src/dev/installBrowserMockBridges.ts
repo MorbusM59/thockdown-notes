@@ -310,6 +310,7 @@ function loadStore(): BrowserMockStore {
               noteId: entry.noteId,
               position: Number.isFinite(entry.position) ? entry.position : index,
               addedAtMs: Number.isFinite(entry.addedAtMs) ? entry.addedAtMs : Date.now(),
+              lastActiveChapterNoteId: typeof entry.lastActiveChapterNoteId === 'string' ? entry.lastActiveChapterNoteId : null,
             }))
         : [],
       editorSections: Array.isArray(parsed.editorSections) && parsed.editorSections.length > 0
@@ -958,10 +959,19 @@ function buildTabsBridge(storeRef: { current: BrowserMockStore }): NoteTabsApi {
   // Excludes any note that's currently chapterOnly -- mirrors the real
   // backend's listNoteTabs doc comment: a chapter has no tab-bar identity of
   // its own, so this is the root-cause filter, not just a display nicety.
+  // Also re-validates lastActiveChapterNoteId against the live chapters list
+  // on every read, same as the real backend's LEFT JOIN -- a stale/foreign
+  // reference reads back as null rather than trusted as-is.
   const sorted = (store: BrowserMockStore): NoteTabEntry[] => {
     const chapterOnlyNoteIds = new Set(store.notes.filter((note) => note.chapterOnly).map((note) => note.id))
     return store.noteTabs
       .filter((tab) => !chapterOnlyNoteIds.has(tab.noteId))
+      .map((tab) => {
+        const stillValid = tab.lastActiveChapterNoteId
+          ? store.chapters.some((chapter) => chapter.parentNoteId === tab.noteId && chapter.chapterNoteId === tab.lastActiveChapterNoteId)
+          : false
+        return stillValid ? tab : { ...tab, lastActiveChapterNoteId: null }
+      })
       .sort((a, b) => a.sectionId.localeCompare(b.sectionId) || a.position - b.position)
   }
 
@@ -977,7 +987,7 @@ function buildTabsBridge(storeRef: { current: BrowserMockStore }): NoteTabsApi {
           store.noteTabs = store.noteTabs.map((tab) => (
             tab.sectionId === sectionId ? { ...tab, position: tab.position + 1 } : tab
           ))
-          store.noteTabs.push({ sectionId, noteId, position: 0, addedAtMs: Date.now() })
+          store.noteTabs.push({ sectionId, noteId, position: 0, addedAtMs: Date.now(), lastActiveChapterNoteId: null })
         }
         return sorted(store)
       })
@@ -996,6 +1006,17 @@ function buildTabsBridge(storeRef: { current: BrowserMockStore }): NoteTabsApi {
         store.noteTabs = store.noteTabs.map((tab) => (
           tab.sectionId === sectionId
             ? { ...tab, position: positionByNoteId.get(tab.noteId) ?? tab.position }
+            : tab
+        ))
+        return sorted(store)
+      })
+    },
+
+    async setLastActiveChapter(sectionId: string, noteId: string, chapterNoteId: string | null): Promise<NoteTabEntry[]> {
+      return mutate((store) => {
+        store.noteTabs = store.noteTabs.map((tab) => (
+          tab.sectionId === sectionId && tab.noteId === noteId
+            ? { ...tab, lastActiveChapterNoteId: chapterNoteId }
             : tab
         ))
         return sorted(store)
@@ -1406,8 +1427,19 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           if (collides) {
             store.noteTabs = store.noteTabs.filter((tab) => !(tab.sectionId === sectionId && tab.noteId === parentNoteId))
           } else {
+            // Carry over lastActiveChapterNoteId as-is -- its chapters row
+            // was just re-parented onto chapterNoteId above, same id, so it's
+            // still valid -- EXCEPT a self-reference (this tab had last
+            // drilled into the very chapter now becoming the parent), which
+            // resets to null. Mirrors databaseService.ts's promoteChapterToParent.
             store.noteTabs = store.noteTabs.map((tab) => (
-              tab.sectionId === sectionId && tab.noteId === parentNoteId ? { ...tab, noteId: chapterNoteId } : tab
+              tab.sectionId === sectionId && tab.noteId === parentNoteId
+                ? {
+                    ...tab,
+                    noteId: chapterNoteId,
+                    lastActiveChapterNoteId: tab.lastActiveChapterNoteId === chapterNoteId ? null : tab.lastActiveChapterNoteId,
+                  }
+                : tab
             ))
           }
         }

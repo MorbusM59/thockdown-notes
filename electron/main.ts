@@ -956,6 +956,10 @@ function registerIpcHandlers() {
     return databaseService!.reorderNoteTabs(sectionId, orderedNoteIds);
   });
 
+  ipcMain.handle(NOTE_TABS_CHANNELS.setLastActiveChapter, async (_event, sectionId: string, noteId: string, chapterNoteId: string | null) => {
+    return databaseService!.setNoteTabLastActiveChapter(sectionId, noteId, chapterNoteId);
+  });
+
   ipcMain.handle(EDITOR_SECTIONS_CHANNELS.list, async () => {
     return databaseService!.listEditorSections();
   });

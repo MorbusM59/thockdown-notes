@@ -348,6 +348,7 @@ Every feature in the app, described individually: where to find it, what it does
 - Holding the click past a short threshold pins it as a permanent tab instead, which stays open alongside others — pinning doesn't assign an id either, it's still whichever of the two labels above already applied.
 - A quick right-click on any tab (pinned or temporary) turns it into an editable field for that note's \`$id\` — same as [Assigning a Note Id]($#assigning-a-note-id). Holding the right-click past a short threshold arms it for unpin/close instead; release early and it's a rename, hold it and a follow-up left-click confirms the close (move the pointer away to cancel either way).
 - Drag tabs to reorder them; drag a note from the sidebar directly into a tab bar to open it there.
+- Each tab remembers which chapter of its note you last had open, per section — switching away and clicking back returns you to that chapter, not always the parent's own base content. This is remembered per tab, not per note, so the same note pinned as a tab in two different sections can be resting on two different chapters at once.
 
 ### [Chapters](#chapters)
 

@@ -117,6 +117,8 @@ export interface UseSectionTabsResult {
   unpinNoteTab: (noteId: string) => Promise<void>
   /** Pins `noteId` to this section (if not already pinned) and moves it to the rightmost position -- used by section-wide drop targets (cross-section tab moves, sidebar note drops). */
   pinNoteAsRightmostTab: (noteId: string) => Promise<void>
+  /** Lets a caller outside this hook (EditorSection.tsx's activateNote, routed through a ref -- see its own doc comment) hand back a fresh tab list after its own out-of-band write (recording a tab's last-active chapter) so this section's locally cached pinnedTabs doesn't go stale until the next full remount. */
+  applyTabsUpdate: (tabs: NoteTabEntry[]) => void
 }
 
 /**
@@ -472,12 +474,27 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   // that list, so they're untouched; only a true `deleteNote` makes a note
   // vanish from it). Gated on persistenceReady since `notes` starts empty
   // before the initial load resolves.
+  //
+  // Also nulls out any tab's lastActiveChapterNoteId that's gone the same
+  // way -- e.g. a *different* section collapsed/merged that chapter out from
+  // under a note pinned in both. The backend already re-validates this on
+  // every fresh listTabs() fetch, but this section's local pinnedTabs is
+  // otherwise never told about a deletion that happened elsewhere, so
+  // without this it would keep offering a dead chapter id to handleTabClick
+  // below until the next full refetch (e.g. a remount).
   useEffect(() => {
     if (!persistenceReady) return
     const noteIds = new Set(notes.map((note) => note.id))
     setPinnedTabs((previous) => {
-      const stillPresent = previous.filter((tab) => noteIds.has(tab.noteId))
-      return stillPresent.length === previous.length ? previous : stillPresent
+      const next = previous
+        .filter((tab) => noteIds.has(tab.noteId))
+        .map((tab) => (
+          tab.lastActiveChapterNoteId && !noteIds.has(tab.lastActiveChapterNoteId)
+            ? { ...tab, lastActiveChapterNoteId: null }
+            : tab
+        ))
+      const unchanged = next.length === previous.length && next.every((tab, index) => tab === previous[index])
+      return unchanged ? previous : next
     })
     if (tabIdentityNoteId && !noteIds.has(tabIdentityNoteId)) {
       void clearActiveNote()
@@ -717,8 +734,17 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
       return
     }
 
-    void activateNote(noteId)
-  }, [unpinPrimedTabNoteId, pinnedTabs, unpinNoteTab, dismissTempTab, activeNoteId, revealNoteInMenu, activateNote])
+    // Resume whichever chapter this tab last showed, not always its base
+    // note -- but only if it's still live in `notes` (belt-and-suspenders on
+    // top of the backend's own re-validation on every fetch; see the pruning
+    // effect above for why a locally-cached stale id can otherwise persist
+    // between refetches).
+    const tab = pinnedTabs.find((entry) => entry.noteId === noteId)
+    const targetNoteId = tab?.lastActiveChapterNoteId && notes.some((note) => note.id === tab.lastActiveChapterNoteId)
+      ? tab.lastActiveChapterNoteId
+      : noteId
+    void activateNote(targetNoteId)
+  }, [unpinPrimedTabNoteId, pinnedTabs, unpinNoteTab, dismissTempTab, activeNoteId, revealNoteInMenu, activateNote, notes])
 
   // Holding the left mouse button on the temp tab for TEMP_TAB_PIN_HOLD_MS
   // promotes it to a real, permanent pinned tab.
@@ -878,6 +904,10 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     void reorderPinnedTabsTo(reordered)
   }, [draggedTabIndex, pinnedTabs, reorderPinnedTabsTo])
 
+  const applyTabsUpdate = useCallback((tabs: NoteTabEntry[]) => {
+    setPinnedTabs(tabs.filter((tab) => tab.sectionId === sectionId))
+  }, [sectionId])
+
   return {
     tagInputRef,
     tagInputValue,
@@ -945,5 +975,6 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     handleTabsContainerDrop,
     unpinNoteTab,
     pinNoteAsRightmostTab,
+    applyTabsUpdate,
   }
 }

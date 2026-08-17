@@ -1453,14 +1453,36 @@ export class DatabaseService {
    */
   listNoteTabs(): NoteTabEntry[] {
     const db = this.requireDb();
+    // The LEFT JOIN to `chapters` re-validates lastActiveChapterNoteId on
+    // every read, on top of the column's own ON DELETE SET NULL FK -- belt
+    // and suspenders against it pointing at a note that still exists but
+    // isn't (or is no longer) actually a chapter of this tab's noteId (e.g.
+    // promoteChapterToParent re-parenting chapters elsewhere). `c.chapterNoteId`
+    // is only non-null when that's still true, so it's used as the emitted
+    // value instead of the raw column.
     const rows = db.prepare(`
-      SELECT nt.sectionId AS sectionId, nt.noteId AS noteId, nt.position AS position, nt.addedAt AS addedAt
+      SELECT nt.sectionId AS sectionId, nt.noteId AS noteId, nt.position AS position, nt.addedAt AS addedAt,
+             c.chapterNoteId AS lastActiveChapterNoteId
       FROM note_tabs nt
       JOIN notes n ON n.id = nt.noteId
+      LEFT JOIN chapters c ON c.parentNoteId = nt.noteId AND c.chapterNoteId = nt.lastActiveChapterNoteId
       WHERE n.chapterOnly = 0
       ORDER BY nt.sectionId ASC, nt.position ASC
-    `).all() as Array<{ sectionId: string; noteId: string; position: number; addedAt: number }>;
-    return rows.map((row) => ({ sectionId: row.sectionId, noteId: row.noteId, position: row.position, addedAtMs: row.addedAt }));
+    `).all() as Array<{ sectionId: string; noteId: string; position: number; addedAt: number; lastActiveChapterNoteId: string | null }>;
+    return rows.map((row) => ({
+      sectionId: row.sectionId,
+      noteId: row.noteId,
+      position: row.position,
+      addedAtMs: row.addedAt,
+      lastActiveChapterNoteId: row.lastActiveChapterNoteId,
+    }));
+  }
+
+  /** Records which chapter of `noteId` (or null, for the base note) this section's tab last showed -- called on every note activation, not just tab clicks, so switching tabs and back resumes wherever the user actually left off. A no-op if `noteId` isn't currently pinned as a tab in `sectionId` (no matching row to update). */
+  setNoteTabLastActiveChapter(sectionId: string, noteId: string, chapterNoteId: string | null): NoteTabEntry[] {
+    const db = this.requireDb();
+    db.prepare('UPDATE note_tabs SET lastActiveChapterNoteId = ? WHERE sectionId = ? AND noteId = ?').run(chapterNoteId, sectionId, noteId);
+    return this.listNoteTabs();
   }
 
   /** Newly-pinned tabs join at the left edge, ahead of every existing tab -- not appended at the right. */
@@ -1686,7 +1708,19 @@ export class DatabaseService {
         if (collision) {
           db.prepare('DELETE FROM note_tabs WHERE sectionId = ? AND noteId = ?').run(row.sectionId, parentNoteId);
         } else {
-          db.prepare('UPDATE note_tabs SET noteId = ? WHERE sectionId = ? AND noteId = ?').run(chapterNoteId, row.sectionId, parentNoteId);
+          // Whatever chapter this tab last had open carries over as-is (its
+          // chapters row was just re-parented onto chapterNoteId above, same
+          // note id, so it's still valid) -- EXCEPT if that chapter was
+          // chapterNoteId itself, i.e. this section had last drilled into the
+          // very chapter now becoming the parent. "Last active chapter of
+          // itself" is meaningless post-promotion, so that one case resets to
+          // null (show the new base) instead of carrying a self-reference.
+          db.prepare(`
+            UPDATE note_tabs
+            SET noteId = ?,
+                lastActiveChapterNoteId = CASE WHEN lastActiveChapterNoteId = ? THEN NULL ELSE lastActiveChapterNoteId END
+            WHERE sectionId = ? AND noteId = ?
+          `).run(chapterNoteId, chapterNoteId, row.sectionId, parentNoteId);
         }
       }
 
@@ -3354,6 +3388,12 @@ export class DatabaseService {
         noteId    TEXT    NOT NULL,
         position  INTEGER NOT NULL,
         addedAt   INTEGER NOT NULL,
+        -- Which chapter of noteId this tab last showed, so switching back
+        -- to it resumes that chapter instead of always landing on the base
+        -- note -- see ensureNoteTabsColumn's call site below for why this is
+        -- an ALTER TABLE migration rather than added here directly. Null
+        -- means "last showed the base note itself".
+        lastActiveChapterNoteId TEXT REFERENCES notes(id) ON DELETE SET NULL,
         UNIQUE (sectionId, noteId),
         FOREIGN KEY (sectionId) REFERENCES editor_sections(id) ON DELETE CASCADE,
         FOREIGN KEY (noteId)    REFERENCES notes(id)            ON DELETE CASCADE
@@ -3490,6 +3530,7 @@ export class DatabaseService {
     this.ensureEditorSectionsColumn('lastActiveNoteId', 'TEXT REFERENCES notes(id) ON DELETE SET NULL');
     this.ensureEditorSectionsColumn('fixedWidthPx', 'REAL');
     this.ensureEditorSectionsColumn('noteSlotInitialized', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureNoteTabsColumn('lastActiveChapterNoteId', 'TEXT REFERENCES notes(id) ON DELETE SET NULL');
 
     this.requireDb().exec(`
       CREATE INDEX IF NOT EXISTS idx_notes_internal_id ON notes(assignedId);
@@ -3514,6 +3555,16 @@ export class DatabaseService {
     }
 
     db.exec(`ALTER TABLE editor_sections ADD COLUMN ${columnName} ${columnDefinition}`);
+  }
+
+  private ensureNoteTabsColumn(columnName: string, columnDefinition: string): void {
+    const db = this.requireDb();
+    const columns = db.prepare('PRAGMA table_info(note_tabs)').all() as Array<{ name: string }>;
+    if (columns.some((column) => column.name === columnName)) {
+      return;
+    }
+
+    db.exec(`ALTER TABLE note_tabs ADD COLUMN ${columnName} ${columnDefinition}`);
   }
 
   private ensureNoteSnapshotsColumn(columnName: string, columnDefinition: string): void {

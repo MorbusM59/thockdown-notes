@@ -224,6 +224,7 @@ const noteTabsApi: NoteTabsApi = {
   addTab:      (sectionId, noteId) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.add, sectionId, noteId),
   removeTab:   (sectionId, noteId) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.remove, sectionId, noteId),
   reorderTabs: (sectionId, orderedNoteIds) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.reorder, sectionId, orderedNoteIds),
+  setLastActiveChapter: (sectionId, noteId, chapterNoteId) => ipcRenderer.invoke(NOTE_TABS_CHANNELS.setLastActiveChapter, sectionId, noteId, chapterNoteId),
 }
 
 contextBridge.exposeInMainWorld('thockdownTabs', noteTabsApi)
