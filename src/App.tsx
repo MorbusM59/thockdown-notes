@@ -6224,6 +6224,65 @@ ${markdownHtml}
     window.addEventListener('mouseup', handleMouseUp)
   }, [applyResolvedSections, editorSections])
 
+  // Right-click a divider to instantly equalize its two flanking sections'
+  // widths, rather than dragging to eyeball it. Shares its commit shape with
+  // handleDividerMouseDown's mouseup (final width -> widthFraction, then
+  // classify each side fixed/flexible by comparing against its start width)
+  // so an equalizing click behaves exactly like a drag dropped dead center.
+  const handleDividerContextMenu = useCallback((leftSectionId: string, rightSectionId: string) => (
+    event: MouseEvent<HTMLDivElement>,
+  ) => {
+    event.preventDefault()
+
+    const widthsPx = editorSections.map((entry) => {
+      const el = sectionSlotElByIdRef.current.get(entry.id)
+      return { id: entry.id, widthPx: el ? el.getBoundingClientRect().width : 0 }
+    })
+    const startLeftWidthPx = widthsPx.find((entry) => entry.id === leftSectionId)?.widthPx ?? 0
+    const startRightWidthPx = widthsPx.find((entry) => entry.id === rightSectionId)?.widthPx ?? 0
+    const combinedWidthPx = startLeftWidthPx + startRightWidthPx
+    if (combinedWidthPx <= 0) return
+
+    const nextLeftWidthPx = clamp(combinedWidthPx / 2, SECTION_MIN_WIDTH_PX, combinedWidthPx - SECTION_MIN_WIDTH_PX)
+    const nextRightWidthPx = combinedWidthPx - nextLeftWidthPx
+
+    const finalWidthsPx = widthsPx.map((entry) => {
+      if (entry.id === leftSectionId) return { id: entry.id, widthPx: nextLeftWidthPx }
+      if (entry.id === rightSectionId) return { id: entry.id, widthPx: nextRightWidthPx }
+      return entry
+    })
+    const totalWidthPx = finalWidthsPx.reduce((sum, { widthPx }) => sum + widthPx, 0) || 1
+    const widths = finalWidthsPx.map(({ id, widthPx }) => ({ id, widthFraction: widthPx / totalWidthPx }))
+
+    const finalWidthById = new Map(finalWidthsPx.map(({ id, widthPx }) => [id, widthPx]))
+    setFixedWidthPxBySectionId((previous) => {
+      const next = new Map(previous)
+      const classify = (id: string, startPx: number) => {
+        const finalPx = finalWidthById.get(id)
+        if (finalPx === undefined) return
+        if (finalPx < startPx - 0.5) {
+          next.set(id, finalPx)
+        } else if (finalPx > startPx + 0.5) {
+          next.delete(id)
+        }
+      }
+      classify(leftSectionId, startLeftWidthPx)
+      classify(rightSectionId, startRightWidthPx)
+      return next
+    })
+
+    const fractionById = new Map(widths.map(({ id, widthFraction }) => [id, widthFraction]))
+    setEditorSections((previous) => previous.map((entry) => (
+      fractionById.has(entry.id)
+        ? { ...entry, widthFraction: fractionById.get(entry.id) ?? entry.widthFraction }
+        : entry
+    )))
+
+    void window.thockdownSections?.updateSectionWidths(widths).then((updated) => {
+      applyResolvedSections(updated)
+    })
+  }, [applyResolvedSections, editorSections])
+
   useEffect(() => {
     // Prime immediately once assets are loaded, not just on a later user
     // gesture (see the effect below): Electron's default autoplay policy is
@@ -8399,6 +8458,8 @@ ${markdownHtml}
                   <div
                     className="editor-section-divider"
                     onMouseDown={handleDividerMouseDown(editorSections[index - 1].id, entry.id)}
+                    onContextMenu={handleDividerContextMenu(editorSections[index - 1].id, entry.id)}
+                    data-tooltip="Drag to resize -- right-click to split evenly"
                   />
                 ) : null}
                 <div
