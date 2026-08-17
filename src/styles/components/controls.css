@@ -290,13 +290,8 @@
   padding: 0;
 }
 
-.window-control-text-glyph {
-  display:     block;
-  font-size:   calc(var(--btn-icon-size) * 0.85);
-  font-weight: 600;
-  line-height: 1;
-  color:       var(--color-text-80);
-  text-shadow: var(--text-shadow-icon);
+.double-size-glyph {
+  font-size: calc(var(--btn-icon-size) - 3px);
 }
 
 .window-control-btn {

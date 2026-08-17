@@ -8335,7 +8335,7 @@ ${markdownHtml}
                     aria-label={isDoubleSizeMode ? 'Exit double size mode' : 'Enable double size mode'}
                     onClick={handleToggleDoubleSizeMode}
                   >
-                    <span className="window-control-text-glyph" aria-hidden="true">2x</span>
+                    <span className="double-size-glyph fa-solid fa-eye" aria-hidden="true" />
                   </button>
                 </div>
                 <button
