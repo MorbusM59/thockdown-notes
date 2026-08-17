@@ -8204,7 +8204,7 @@ ${markdownHtml}
                   onClick={toggleUiMode}
                 >
                   <span
-                    className={`window-control-glyph fa-solid ${uiMode === 'dark' ? 'fa-sun' : 'fa-moon'}`}
+                    className="window-control-glyph fa-solid fa-moon"
                     aria-hidden="true"
                   />
                 </button>
