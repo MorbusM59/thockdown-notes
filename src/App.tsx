@@ -4030,8 +4030,15 @@ function App() {
     const probeRect = probe.getBoundingClientRect()
     probe.remove()
 
-    const targetWidth = Math.max(96, windowControlsCollapsedWidthPx)
-    const targetHeight = Math.max(40, Math.ceil(probeRect.height || 160))
+    // windowControlsCollapsedWidthPx/probeRect are both measured in CSS px,
+    // which page zoom leaves untouched (zoom shrinks the viewport, not fixed
+    // CSS lengths) -- but win.setBounds() sizes the *native* window, which
+    // does need to be 2x bigger to still contain content that's rendering at
+    // 2x its CSS size on screen. Same reasoning as computeEffectiveMinSize()
+    // in electron/main.ts for the normal (non-collapsed) window minimum.
+    const doubleSizeMultiplier = isDoubleSizeMode ? 2 : 1
+    const targetWidth = Math.max(96, windowControlsCollapsedWidthPx) * doubleSizeMultiplier
+    const targetHeight = Math.max(40, Math.ceil(probeRect.height || 160)) * doubleSizeMultiplier
 
     // Ensure overlay is committed in the same event turn before native resize.
     flushSync(() => {
@@ -4048,7 +4055,7 @@ function App() {
     }
 
     void toggleAfterOverlayFrame()
-  }, [windowControlsCollapsedWidthPx])
+  }, [windowControlsCollapsedWidthPx, isDoubleSizeMode])
 
   const handleWindowToggleMaximize = useCallback(() => {
     window.windowControls?.toggleMaximize?.()
