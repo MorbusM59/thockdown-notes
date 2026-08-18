@@ -1556,6 +1556,15 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
         return { chapters: sorted(store, parentNoteId), created: clone(refreshed) }
       })
     },
+
+    async regenerateAllOpenItems(parentNoteId: string): Promise<void> {
+      return mutate((store) => {
+        const familyOrder = openItemsFamilyOrderInStore(store, parentNoteId)
+        for (const noteId of familyOrder) {
+          regenerateOpenItemsGroupInStore(store, parentNoteId, noteId)
+        }
+      })
+    },
   }
 }
 

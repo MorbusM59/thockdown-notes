@@ -1011,6 +1011,15 @@ export function EditorSection({
   }, [activeNoteSummary])
   activeNoteHasDebugTagRef.current = activeNoteHasDebugTag
 
+  // The auto-TOC and auto-Open-Items chapters are materialized views,
+  // regenerated from live state rather than typed into -- a snapshot
+  // history for either is meaningless, so the whole Time Machine timeline
+  // is suppressed while viewing one (see useNoteSnapshotTimeline.ts's
+  // isViewingEphemeralAutoChapter doc comment). The manual-save button
+  // stays live for these, just rewired below (handleManualSaveOrRefresh) to
+  // trigger a regeneration instead of a snapshot.
+  const isViewingEphemeralAutoChapter = Boolean(activeNoteSummary?.isAutoToc || activeNoteSummary?.isAutoOpenItems)
+
   const {
     noteSnapshots,
     timelineCurveConstant,
@@ -1040,7 +1049,38 @@ export function EditorSection({
     refreshNotes,
     activateNote,
     isFrozenSectionPreviewRef,
+    isViewingEphemeralAutoChapter,
   })
+
+  // The manual-save button's actual click handler: for a real note, this is
+  // just handleCreateManualSnapshot (a Time Machine save point). For the
+  // auto-TOC/auto-Open-Items chapters, the button means something different
+  // -- there's no snapshot to take, so it instead re-runs that chapter's own
+  // regeneration pass against current live state and pushes the refreshed
+  // text into the (read-only) editor without a full note-switch. TOC
+  // regeneration already happens on every view (EditorSection.tsx's
+  // activateNote above); Open Items never does (only incrementally, on a
+  // checklist-changing save elsewhere) -- see noteLifecycleService.ts's
+  // regenerateAllOpenItems doc comment.
+  const handleManualSaveOrRefresh = useCallback(async () => {
+    const parentNoteId = activeNoteSummary?.chapterParentId ?? null
+    if (!parentNoteId || !window.thockdownChapters || (!activeNoteSummary?.isAutoToc && !activeNoteSummary?.isAutoOpenItems)) {
+      await handleCreateManualSnapshot()
+      return
+    }
+
+    if (activeNoteSummary.isAutoToc) {
+      await window.thockdownChapters.regenerateAutoTocChapter(parentNoteId)
+    } else {
+      await window.thockdownChapters.regenerateAllOpenItems(parentNoteId)
+    }
+
+    if (!activeNoteId || !window.thockdownNotes) return
+    const refreshed = await window.thockdownNotes.loadNote({ id: activeNoteId })
+    const hydratedText = normalizeInternalText(refreshed.text)
+    latestEditorTextRef.current = hydratedText
+    setActiveNoteText(hydratedText)
+  }, [activeNoteSummary, activeNoteId, handleCreateManualSnapshot, latestEditorTextRef, setActiveNoteText])
 
   // See useEditorSectionMount's UseEditorSectionMountOptions doc comment --
   // a plain render-time ref mutation (not an effect) so this hook's own
@@ -1679,7 +1719,7 @@ export function EditorSection({
         timelineCurveConstant={timelineCurveConstant}
         setTimelineCurveConstant={setTimelineCurveConstant}
         setTimelineTrackLengthPx={setTimelineTrackLengthPx}
-        handleCreateManualSnapshot={handleCreateManualSnapshot}
+        handleCreateManualSnapshot={handleManualSaveOrRefresh}
         handleReturnToPresent={handleReturnToPresent}
         handleMergeAdjacentSnapshots={handleMergeAdjacentSnapshots}
         notes={notes}

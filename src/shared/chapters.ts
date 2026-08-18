@@ -10,6 +10,7 @@ export const CHAPTER_CHANNELS = {
   setChapterId: 'chapters:set-chapter-id',
   createAutoToc: 'chapters:create-auto-toc',
   regenerateAutoToc: 'chapters:regenerate-auto-toc',
+  regenerateAutoOpenItems: 'chapters:regenerate-auto-open-items',
 } as const;
 
 /** One chapter: `chapterNoteId` is itself a full note, ordered (gapless, 0-indexed) among `parentNoteId`'s other chapters. A chapter note belongs to exactly one parent, ever. `chapterId` is a user-assignable label (chapter bar right-click, or `$noteid§chapterid` links), unique per parentNoteId; null until first assigned. */
@@ -84,4 +85,6 @@ export interface ChaptersApi {
   createAutoTocChapter(parentNoteId: string): Promise<{ chapters: ChapterEntry[]; created: NoteDocument }>;
   /** Refreshes the auto-TOC chapter's content from the current state of the parent and every real chapter -- see noteLifecycleService.ts's own doc comment for exactly what this does (anchor-linkifying headings that need it, rebuilding the master index). Throws if this parent has no auto-TOC chapter. */
   regenerateAutoTocChapter(parentNoteId: string): Promise<{ chapters: ChapterEntry[]; created: NoteDocument }>;
+  /** Full-rescan refresh of the auto-Open-Items chapter: re-derives every family member's (parent + each real chapter's) own group from its current live checklist state, unlike the incremental single-note patch saveNote's checklist-diff hook normally applies. The Open Items manual-save-button's own refresh action. No-op if this parent has no auto-TOC chapter yet (regenerateOpenItemsGroup's own precondition). */
+  regenerateAllOpenItems(parentNoteId: string): Promise<void>;
 }

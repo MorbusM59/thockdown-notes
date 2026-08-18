@@ -15,6 +15,8 @@ export type PresentStateCircleProps = {
   onMergeAdjacentSnapshots?: () => void
   isPresent?: boolean
   disabled?: boolean
+  /** Overrides the default "create a manual save point" aria-label/tooltip -- used when this button doesn't mean "take a snapshot" at all (the auto-TOC/auto-Open-Items chapters, where it means "regenerate from live state"). */
+  pendingActionLabel?: string
 }
 
 export function PresentStateCircle({
@@ -24,6 +26,7 @@ export function PresentStateCircle({
   onMergeAdjacentSnapshots,
   isPresent = true,
   disabled,
+  pendingActionLabel = 'Create a manual save point',
 }: PresentStateCircleProps) {
   const doMerge = useCallback(() => {
     onMergeAdjacentSnapshots?.()
@@ -64,12 +67,12 @@ export function PresentStateCircle({
       aria-pressed={!hasPendingManualChanges}
       aria-label={
         hasPendingManualChanges
-          ? 'Create a manual save point'
+          ? pendingActionLabel
           : 'Current text matches your last manual save'
       }
       data-tooltip={
         hasPendingManualChanges
-          ? 'Create a manual save point'
+          ? pendingActionLabel
           : 'On your last manual save'
       }
       onClick={() => {

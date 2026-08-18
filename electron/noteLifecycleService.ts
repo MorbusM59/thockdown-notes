@@ -626,6 +626,23 @@ export class NoteLifecycleService {
     }
   }
 
+  // Full-rescan refresh of the auto-Open-Items chapter -- the Open Items
+  // manual-save-button's own refresh action (see EditorSection.tsx's
+  // handleManualSaveOrRefresh), for a user who wants the list caught up with
+  // live checklist state without waiting for the next individual checklist
+  // edit to trigger regenerateOpenItemsGroup's usual incremental patch.
+  // Simply re-runs that same per-member patch for every family member in
+  // turn (openItemsFamilyOrder) rather than duplicating its
+  // build/merge/sort logic -- a no-op for any member whose group is already
+  // up to date, since regenerateOpenItemsGroup itself only writes when the
+  // text actually changed.
+  async regenerateAllOpenItems(parentNoteId: string): Promise<void> {
+    const familyOrder = this.openItemsFamilyOrder(parentNoteId);
+    for (const noteId of familyOrder) {
+      await this.regenerateOpenItemsGroup(parentNoteId, noteId);
+    }
+  }
+
   // Re-sorts the auto-Open-Items chapter's already-correct groups to match a
   // fresh chapter order with no text regeneration at all -- the "reorder
   // reorders the list without a rescan" half of the Open Items contract.

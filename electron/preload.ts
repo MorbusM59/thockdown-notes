@@ -255,6 +255,7 @@ const chaptersApi: ChaptersApi = {
   setChapterId:      (parentNoteId, chapterNoteId, requestedId) => ipcRenderer.invoke(CHAPTER_CHANNELS.setChapterId, parentNoteId, chapterNoteId, requestedId),
   createAutoTocChapter: (parentNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.createAutoToc, parentNoteId),
   regenerateAutoTocChapter: (parentNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.regenerateAutoToc, parentNoteId),
+  regenerateAllOpenItems: (parentNoteId) => ipcRenderer.invoke(CHAPTER_CHANNELS.regenerateAutoOpenItems, parentNoteId),
 }
 
 contextBridge.exposeInMainWorld('thockdownChapters', chaptersApi)

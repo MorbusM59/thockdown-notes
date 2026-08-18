@@ -58,6 +58,7 @@ export interface SectionEditorAreaProps {
   timelineCurveConstant: number
   setTimelineCurveConstant: (value: number) => void
   setTimelineTrackLengthPx: (value: number) => void
+  /** The manual-save button's click handler -- creates a Time Machine save point for a real note, or (while isViewingAutoTocChapter/isViewingAutoOpenItemsChapter) regenerates that auto-chapter from live state instead. See EditorSection.tsx's handleManualSaveOrRefresh. */
   handleCreateManualSnapshot: () => void | Promise<void>
   handleReturnToPresent: () => void
   handleMergeAdjacentSnapshots: () => void
@@ -362,7 +363,7 @@ export function SectionEditorArea({
           )}
         </div>
         <div className="timeline-panel">
-        {activeNoteId ? (
+        {activeNoteId && !isViewingAutoTocChapter && !isViewingAutoOpenItemsChapter ? (
           <SnapshotTimelineSlider
             sourceNoteId={activeNoteId}
             placements={noteSnapshots.placements}
@@ -384,12 +385,19 @@ export function SectionEditorArea({
         </div>
         <div className="manual-snapshot-panel">
           <PresentStateCircle
-            hasPendingManualChanges={activeNoteId ? noteSnapshots.hasPendingManualChanges : false}
+            hasPendingManualChanges={activeNoteId ? ((isViewingAutoTocChapter || isViewingAutoOpenItemsChapter) ? true : noteSnapshots.hasPendingManualChanges) : false}
             onCreateManualSnapshot={() => { void handleCreateManualSnapshot() }}
             onGoToPresent={activeNoteId ? handleReturnToPresent : undefined}
-            onMergeAdjacentSnapshots={activeNoteId ? handleMergeAdjacentSnapshots : undefined}
+            onMergeAdjacentSnapshots={activeNoteId && !isViewingAutoTocChapter && !isViewingAutoOpenItemsChapter ? handleMergeAdjacentSnapshots : undefined}
             isPresent={previewedSnapshotId === null}
             disabled={!activeNoteId}
+            pendingActionLabel={
+              isViewingAutoTocChapter
+                ? 'Refresh table of contents from live state'
+                : isViewingAutoOpenItemsChapter
+                  ? 'Refresh open items from live state'
+                  : undefined
+            }
           />
         </div>
       </div>

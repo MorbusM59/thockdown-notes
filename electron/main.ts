@@ -1080,6 +1080,10 @@ function registerIpcHandlers() {
     return noteLifecycleService!.regenerateAutoTocChapter(parentNoteId);
   });
 
+  ipcMain.handle(CHAPTER_CHANNELS.regenerateAutoOpenItems, async (_event, parentNoteId: string) => {
+    return noteLifecycleService!.regenerateAllOpenItems(parentNoteId);
+  });
+
   ipcMain.handle(REVIEW_FLAG_CHANNELS.list, async (_event, noteId: string) => {
     return databaseService!.listReviewFlags(noteId);
   });
