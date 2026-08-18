@@ -79,6 +79,12 @@ export function collectUncheckedItemsByHeading(sourceText: string): OpenItemsHea
 
     const heading = headingAnchorsByLine.get(index)
     if (heading) {
+      // The chapter/note title is already the top-level node in the generated
+      // Open Items list. Ignore a source H2 heading so a chapter title that is
+      // immediately followed by checklist items does not create a duplicate
+      // nested title node. Deeper headings (H3+) remain valid nested buckets.
+      if (heading.level === 2) return
+
       buckets.push({ anchorId: heading.anchorId, label: heading.label, items: [] })
       return
     }

@@ -78,14 +78,35 @@ describe('collectUncheckedItemsByHeading', () => {
 
     const buckets = collectUncheckedItemsByHeading(text)
     expect(buckets).toEqual([
-      { anchorId: null, label: null, items: ['before any heading'] },
-      { anchorId: 'setting', label: 'Setting', items: ['world-building task'] },
-      { anchorId: 'plot', label: 'Plot', items: ['resolve the ending', 'fix the middle'] },
+      { anchorId: null, label: null, items: ['before any heading', 'world-building task', 'resolve the ending', 'fix the middle'] },
     ])
   })
 
-  it('tolerates already-anchored headings (e.g. from the manual single-note TOC toggle) with the same result', () => {
+  it('tolerates already-anchored H2 headings by ignoring them as nested buckets', () => {
     const text = '# Title\n\n## [Setting](#setting)\n\n- [ ] world-building task'
+    expect(collectUncheckedItemsByHeading(text)).toEqual([
+      { anchorId: null, label: null, items: ['world-building task'] },
+    ])
+  })
+
+  it('ignores H2 section headings so their unchecked items stay directly under the title', () => {
+    const text = [
+      '# Title',
+      '',
+      '## Setting',
+      '',
+      '- [ ] world-building task',
+      '',
+      '- [ ] another task',
+    ].join('\n')
+
+    expect(collectUncheckedItemsByHeading(text)).toEqual([
+      { anchorId: null, label: null, items: ['world-building task', 'another task'] },
+    ])
+  })
+
+  it('keeps deeper headings as nested buckets when they are below the title', () => {
+    const text = '# Title\n\n### Setting\n\n- [ ] world-building task'
     expect(collectUncheckedItemsByHeading(text)).toEqual([
       { anchorId: 'setting', label: 'Setting', items: ['world-building task'] },
     ])
@@ -105,13 +126,22 @@ describe('collectUncheckedItemsByHeading', () => {
 })
 
 describe('buildOpenItemsGroupMarkdown', () => {
-  it('builds a title link plus nested heading links (heading-anchor fragments) and plain item text, without touching the note\'s own heading source', () => {
-    const text = '# Chapter One\n\n## Setting\n\n- [ ] world-building task'
+  it('builds a title link plus nested heading links for deeper H3+ headings while ignoring H2 section headings', () => {
+    const text = '# Chapter One\n\n### Setting\n\n- [ ] world-building task'
     const markdown = buildOpenItemsGroupMarkdown(text, '$BOOK§ch1', 'Chapter One')
     expect(markdown).toBe([
       '- [Chapter One]($BOOK§ch1)',
       '  - [Setting]($BOOK§ch1#heading:setting)',
       '    - [ ] world-building task',
+    ].join('\n'))
+  })
+
+  it('keeps H2-only bucket items directly under the title link instead of creating a duplicate nested title node', () => {
+    const text = '# Chapter One\n\n## Setting\n\n- [ ] world-building task'
+    const markdown = buildOpenItemsGroupMarkdown(text, '$BOOK§ch1', 'Chapter One')
+    expect(markdown).toBe([
+      '- [Chapter One]($BOOK§ch1)',
+      '  - [ ] world-building task',
     ].join('\n'))
   })
 
@@ -159,7 +189,7 @@ describe('findOpenItemSourceAtLine', () => {
     expect(findOpenItemSourceAtLine(text, lineIndex)).toEqual({ noteId: 'parent-1', itemText: 'intro task' })
   })
 
-  it("resolves a headed item's line to its own group noteId (a later group in the same document), not an earlier one", () => {
+  it("resolves a deeper headed item's line to its own group noteId (a later group in the same document), not an earlier one", () => {
     const lineIndex = lines.indexOf('    - [ ] world-building task')
     expect(findOpenItemSourceAtLine(text, lineIndex)).toEqual({ noteId: 'chapter-1', itemText: 'world-building task' })
   })
