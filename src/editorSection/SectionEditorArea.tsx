@@ -90,6 +90,16 @@ export interface SectionEditorAreaProps {
   showReviewFlags: boolean
   onToggleReviewGutter: () => void
   onToggleReviewFlags: () => void
+  /**
+   * Computed once in EditorSection.tsx off the same activeNoteSummary every
+   * other per-render fact about the active note goes through, rather than
+   * this component deriving its own copy via a fresh notes.find(...) --
+   * see EditorSection.tsx's own comment on why that's the single source of
+   * truth. isViewingAutoTocChapter/isViewingAutoOpenItemsChapter each gate
+   * this note type's own read-only editing and Time Machine suppression.
+   */
+  isViewingAutoTocChapter: boolean
+  isViewingAutoOpenItemsChapter: boolean
 }
 
 /**
@@ -168,6 +178,8 @@ export function SectionEditorArea({
   showReviewFlags,
   onToggleReviewGutter,
   onToggleReviewFlags,
+  isViewingAutoTocChapter,
+  isViewingAutoOpenItemsChapter,
 }: SectionEditorAreaProps) {
   const setStageEl = useCallback((el: HTMLDivElement | null) => {
     (editorStageRef as MutableRefObject<HTMLDivElement | null>).current = el
@@ -202,20 +214,19 @@ export function SectionEditorArea({
   // button below, which opens the panel as a side effect of chapters.length
   // becoming positive, not by toggling visibility directly.
   const isChapterPanelOpen = chapters.length > 0
-  // Read-only: it's regenerated (overwritten) the instant it's next viewed
-  // (EditorSection.tsx's activateNote), so nothing typed here would survive
-  // a round trip away and back -- same editorReadOnly mechanism
-  // (EditorView.editable) already used for Time Machine snapshot preview,
-  // not a new one.
-  const isViewingAutoTocChapter = notes.find((note) => note.id === activeNoteId)?.isAutoToc ?? false
-  // Also read-only, for a different reason: it's not regenerated on every
-  // view like the TOC chapter above (see noteLifecycleService.ts's
-  // regenerateOpenItemsGroup), but it exists purely to be a read/click-
-  // through view of state you manage in the corresponding chapter, not a
-  // place to edit directly -- any edit made here would just be silently
-  // overwritten (or left stale) by the next real checklist change anywhere
-  // in the family, which would be a confusing way to lose typed text.
-  const isViewingAutoOpenItemsChapter = notes.find((note) => note.id === activeNoteId)?.isAutoOpenItems ?? false
+  // isViewingAutoTocChapter/isViewingAutoOpenItemsChapter (props -- see
+  // their own doc comment) each make the editor read-only below, for
+  // different reasons. TOC: it's regenerated (overwritten) the instant it's
+  // next viewed (EditorSection.tsx's activateNote), so nothing typed here
+  // would survive a round trip away and back -- same editorReadOnly
+  // mechanism (EditorView.editable) already used for Time Machine snapshot
+  // preview, not a new one. Open Items: it's not regenerated on every view
+  // like the TOC (see noteLifecycleService.ts's regenerateOpenItemsGroup),
+  // but it exists purely to be a read/click-through view of state you
+  // manage in the corresponding chapter, not a place to edit directly --
+  // any edit made here would just be silently overwritten (or left stale)
+  // by the next real checklist change anywhere in the family, which would
+  // be a confusing way to lose typed text.
   return (
     <div
       className="editor-viewer-frame"

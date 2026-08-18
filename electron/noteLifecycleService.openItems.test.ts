@@ -91,9 +91,11 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     const openItemsId = db.getAutoOpenItemsChapterNoteId(parent.id)!
     const openItemsDoc = await lifecycle.loadNote({ id: openItemsId })
     // Same fallback the chapter's own pill would show (resolveIdentityLabel):
-    // no assigned chapterId, so a derived content snippet from the first
-    // line instead -- truncated to a word boundary by deriveContentSnippet.
-    expect(openItemsDoc.text).toContain(`[Just some](@${ch1.id})`)
+    // no assigned chapterId and no heading-prefixed first line, so its own
+    // "Missing title" fallback -- resolveIdentityLabel only derives a
+    // content snippet from a line that actually starts with the expected
+    // heading marker, never from arbitrary body text.
+    expect(openItemsDoc.text).toContain(`[Missing title](@${ch1.id})`)
     expect(openItemsDoc.text).toContain('- [ ] a stray task')
   })
 
@@ -227,6 +229,30 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
       const ch1After = await lifecycle.loadNote({ id: ch1.id })
       expect(ch1After.text).toBe('# Chapter One\n\n- [ ] world-building task')
       expect((await lifecycle.loadNote({ id: openItemsId })).text).toBe(openItemsDoc.text)
+    })
+
+    it('serializes two concurrent toggles on the same line so a rapid double-click does not lose the second click', async () => {
+      const parent = await lifecycle.createNote({ initialText: '# The Book' })
+      const ch1 = await lifecycle.createChapterNote(parent.id)
+      await lifecycle.createAutoTocChapter(parent.id)
+      await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n- [ ] world-building task' })
+
+      const openItemsId = db.getAutoOpenItemsChapterNoteId(parent.id)!
+      const openItemsDoc = await lifecycle.loadNote({ id: openItemsId })
+      const lineIndex = openItemsDoc.text.split('\n').findIndex((line) => line.includes('world-building task'))
+
+      // Fired concurrently, not awaited one at a time -- without
+      // per-line serialization, both would read the same pre-toggle text
+      // and both would write "checked", losing the second (uncheck) click.
+      const [first, second] = await Promise.all([
+        lifecycle.toggleOpenItemCheckedState(openItemsId, lineIndex),
+        lifecycle.toggleOpenItemCheckedState(openItemsId, lineIndex),
+      ])
+      expect(first).toBe(true)
+      expect(second).toBe(true)
+
+      const ch1After = await lifecycle.loadNote({ id: ch1.id })
+      expect(ch1After.text).toBe('# Chapter One\n\n- [ ] world-building task')
     })
 
     it('returns false and changes nothing for a line that is not a real checklist item', async () => {

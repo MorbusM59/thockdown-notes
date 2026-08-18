@@ -156,6 +156,18 @@ export function parseHeadingAnchorFragment(rawAnchorId: string): string | null {
   return rawAnchorId.startsWith(HEADING_ANCHOR_PREFIX) ? rawAnchorId.slice(HEADING_ANCHOR_PREFIX.length) : null
 }
 
+// Escapes the two characters that would otherwise break out of a
+// `[label](href)` link's own bracket span -- a title/heading is free-form
+// user text (unlike `href`, which is always one of this app's own
+// internally-built addresses), so an unescaped literal `[` or `]` inside it
+// would prematurely close or corrupt the generated link's label the moment
+// it's rendered. Nothing else needs escaping here: everything else that can
+// appear in `label` is ordinary inline content CommonMark accepts as-is
+// inside link text.
+function escapeMarkdownLinkLabel(label: string): string {
+  return label.replace(/[[\]]/g, '\\$&')
+}
+
 /**
  * One line of an auto-generated outline (the cross-chapter Table of
  * Contents and Open Items chapters share this exact format), indented
@@ -171,7 +183,7 @@ export function parseHeadingAnchorFragment(rawAnchorId: string): string | null {
  */
 export function formatOutlineEntryLine(depth: number, label: string, href: string | null): string {
   const indent = '  '.repeat(depth)
-  return href ? `${indent}- [${label}](${href})` : `${indent}- ${label}`
+  return href ? `${indent}- [${escapeMarkdownLinkLabel(label)}](${href})` : `${indent}- ${label}`
 }
 
 /**

@@ -145,6 +145,12 @@ function groupMarkerLine(noteId: string): string {
   return `${GROUP_MARKER_PREFIX}${noteId}${GROUP_MARKER_SUFFIX}`
 }
 
+/** Extracts a group marker line's own noteId, or null if `line` isn't one -- the one place both parseOpenItemsGroups and findOpenItemSourceAtLine recognize/decode a marker, so the two can never disagree on the format. */
+function parseGroupMarkerNoteId(line: string): string | null {
+  if (!line.startsWith(GROUP_MARKER_PREFIX) || !line.endsWith(GROUP_MARKER_SUFFIX)) return null
+  return line.slice(GROUP_MARKER_PREFIX.length, -GROUP_MARKER_SUFFIX.length)
+}
+
 export interface OpenItemsGroup {
   noteId: string
   /** This note's own buildOpenItemsGroupMarkdown() output, marker line excluded. */
@@ -168,9 +174,10 @@ export function parseOpenItemsGroups(text: string): OpenItemsGroup[] {
   }
 
   for (const line of lines) {
-    if (line.startsWith(GROUP_MARKER_PREFIX) && line.endsWith(GROUP_MARKER_SUFFIX)) {
+    const markerNoteId = parseGroupMarkerNoteId(line)
+    if (markerNoteId !== null) {
       flush()
-      current = { noteId: line.slice(GROUP_MARKER_PREFIX.length, -GROUP_MARKER_SUFFIX.length), lines: [] }
+      current = { noteId: markerNoteId, lines: [] }
       continue
     }
     if (current) current.lines.push(line)
@@ -201,24 +208,40 @@ export function assembleOpenItemsText(groups: OpenItemsGroup[]): string | null {
  * Returns null if `lineIndex` doesn't land on an actual checklist line (a
  * stale click after the chapter's shape changed under it, or one that
  * landed on a marker/heading-link line instead).
+ *
+ * `occurrenceIndex` disambiguates two items in the same source note that
+ * happen to share identical wording (e.g. "Review" under two different
+ * headings) -- it's this line's 0-indexed position among every checklist
+ * line with the SAME itemText within this same group, so
+ * toggleChecklistItemByText can flip the one actually clicked instead of
+ * always the first match.
  */
-export function findOpenItemSourceAtLine(openItemsText: string, lineIndex: number): { noteId: string; itemText: string } | null {
+export function findOpenItemSourceAtLine(openItemsText: string, lineIndex: number): { noteId: string; itemText: string; occurrenceIndex: number } | null {
   const lines = normalizeInternalText(openItemsText).split('\n')
   if (lineIndex < 0 || lineIndex >= lines.length) return null
 
+  const match = CHECKLIST_LINE_RE.exec(lines[lineIndex])
+  if (!match) return null
+  const itemText = match[2].trim()
+
   let currentGroupNoteId: string | null = null
+  let groupStartIndex = 0
   for (let index = 0; index <= lineIndex; index += 1) {
-    const line = lines[index]
-    if (line.startsWith(GROUP_MARKER_PREFIX) && line.endsWith(GROUP_MARKER_SUFFIX)) {
-      currentGroupNoteId = line.slice(GROUP_MARKER_PREFIX.length, -GROUP_MARKER_SUFFIX.length)
+    const markerNoteId = parseGroupMarkerNoteId(lines[index])
+    if (markerNoteId !== null) {
+      currentGroupNoteId = markerNoteId
+      groupStartIndex = index + 1
     }
   }
   if (currentGroupNoteId === null) return null
 
-  const match = CHECKLIST_LINE_RE.exec(lines[lineIndex])
-  if (!match) return null
+  let occurrenceIndex = 0
+  for (let index = groupStartIndex; index < lineIndex; index += 1) {
+    const earlierMatch = CHECKLIST_LINE_RE.exec(lines[index])
+    if (earlierMatch && earlierMatch[2].trim() === itemText) occurrenceIndex += 1
+  }
 
-  return { noteId: currentGroupNoteId, itemText: match[2].trim() }
+  return { noteId: currentGroupNoteId, itemText, occurrenceIndex }
 }
 
 // Same shape as CHECKLIST_LINE_RE but with the marker split into its own
@@ -238,24 +261,34 @@ export function toggleChecklistLineMark(line: string): string | null {
 }
 
 /**
- * Finds the first checklist line in `sourceText` whose own item text
- * matches `itemText` verbatim (regardless of its current checked state --
- * a second click, unchecking what the first one just checked, needs to
- * match the very same line even though its marker has since flipped) and
- * flips its `[ ]`/`[x]` marker. The item-text-based lookup findOpenItemSourceAtLine
- * needs, since a group only remembers its item's text, never where it
- * lives in its source note. Returns null if no line matches -- the item
- * was edited or removed since the Open Items chapter was last generated;
- * a silent no-op at the call site, the same staleness tolerance the rest
- * of this feature already has (see regenerateOpenItemsGroup's own
- * "best-effort" callers).
+ * Finds the `occurrenceIndex`-th checklist line in `sourceText` whose own
+ * item text matches `itemText` verbatim (regardless of its current checked
+ * state -- a second click, unchecking what the first one just checked,
+ * needs to match the very same line even though its marker has since
+ * flipped) and flips its `[ ]`/`[x]` marker. `occurrenceIndex` is
+ * findOpenItemSourceAtLine's own disambiguator, needed because a group only
+ * remembers its item's text (and how many same-text siblings came before
+ * it), never a line number in its source note -- without it, two items
+ * sharing identical wording would be indistinguishable and the wrong one
+ * could get toggled. Returns null if fewer than `occurrenceIndex + 1`
+ * matching lines exist -- the item was edited/removed since the Open Items
+ * chapter was last generated, or a same-text sibling was; a silent no-op at
+ * the call site, the same staleness tolerance the rest of this feature
+ * already has (see regenerateOpenItemsGroup's own "best-effort" callers).
  */
-export function toggleChecklistItemByText(sourceText: string, itemText: string): string | null {
+export function toggleChecklistItemByText(sourceText: string, itemText: string, occurrenceIndex: number): string | null {
   const lines = normalizeInternalText(sourceText).split('\n')
-  const targetIndex = lines.findIndex((line) => {
-    const match = CHECKLIST_LINE_RE.exec(line)
-    return match !== null && match[2].trim() === itemText
-  })
+  let seen = 0
+  let targetIndex = -1
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = CHECKLIST_LINE_RE.exec(lines[index])
+    if (!match || match[2].trim() !== itemText) continue
+    if (seen === occurrenceIndex) {
+      targetIndex = index
+      break
+    }
+    seen += 1
+  }
   if (targetIndex === -1) return null
 
   const flippedLine = toggleChecklistLineMark(lines[targetIndex])

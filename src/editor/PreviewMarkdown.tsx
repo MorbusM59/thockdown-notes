@@ -3,7 +3,7 @@
    ReactMarkdown component-renderer factory) shared with the PDF/MD export
    path; none of the top-level exports is itself a component, so there's
    nothing here for Fast Refresh to preserve state across. */
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { Root } from 'hast'
 import { visit } from 'unist-util-visit'
 import remarkGfm from 'remark-gfm'
@@ -187,8 +187,10 @@ function isOpenItemsGroupMarkerText(text: string): boolean {
 
 /** Only ever passed while the note being rendered is the auto-Open-Items chapter -- see OpenItemCheckbox's own doc comment for what clicking one does. */
 export interface OpenItemsToggleHandlers {
-  /** Whether `sourceLine`'s own checkbox has been toggled this viewing session -- state the CALLER owns (usePreviewMarkdownRendering.tsx), not this component: react-virtual unmounts/remounts blocks that scroll out of and back into view, so any state kept here in a per-checkbox useState would silently reset on scroll even though the real source-note edit had already gone through. */
+  /** Whether `sourceLine`'s own checkbox has been toggled this viewing session -- state the CALLER owns (usePreviewMarkdownRendering.tsx's OpenItemsToggleStore), not this component: react-virtual unmounts/remounts blocks that scroll out of and back into view, so any state kept here in a per-checkbox useState would silently reset on scroll even though the real source-note edit had already gone through. */
   isChecked: (sourceLine: number) => boolean
+  /** Subscribes to just `sourceLine`'s own checked-state changes, useSyncExternalStore-style -- lets one checkbox re-render on its own toggle without the caller's own memo (shared by every rendered block) needing to change identity for it. */
+  subscribe: (sourceLine: number, listener: () => void) => () => void
   onToggle: (sourceLine: number) => void
 }
 
@@ -238,7 +240,25 @@ function OpenItemCheckbox({
   }, [])
 
   const canToggle = toggle !== undefined && sourceLine !== null
-  const isChecked = canToggle ? toggle.isChecked(sourceLine) : Boolean(checked)
+
+  // Subscribed rather than read directly: toggle.isChecked(sourceLine)'s own
+  // underlying store never triggers a React re-render on its own (see
+  // usePreviewMarkdownRendering.tsx's OpenItemsToggleStore) -- this is what
+  // makes THIS ONE checkbox re-render on its own toggle without forcing
+  // every other mounted block to. Always called (never behind `canToggle`,
+  // which depends on state resolved after mount) to keep this component's
+  // hook order unconditional; subscribe/getSnapshot are no-ops until
+  // sourceLine resolves.
+  const storeChecked = useSyncExternalStore(
+    useCallback((listener) => (
+      canToggle ? toggle.subscribe(sourceLine, listener) : () => {}
+    ), [canToggle, toggle, sourceLine]),
+    useCallback(() => (
+      canToggle ? toggle.isChecked(sourceLine) : false
+    ), [canToggle, toggle, sourceLine]),
+  )
+
+  const isChecked = canToggle ? storeChecked : Boolean(checked)
 
   const mergedClassName = [
     className,

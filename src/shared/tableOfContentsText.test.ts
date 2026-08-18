@@ -3,9 +3,25 @@ import {
   computeHeadingAnchors,
   findHeadingAnchorLine,
   formatHeadingAnchorFragment,
+  formatOutlineEntryLine,
   headingsChanged,
   parseHeadingAnchorFragment,
 } from './tableOfContentsText'
+
+describe('formatOutlineEntryLine', () => {
+  it('builds a plain [label](href) link at the given indent depth', () => {
+    expect(formatOutlineEntryLine(0, 'Chapter One', '@ch1')).toBe('- [Chapter One](@ch1)')
+    expect(formatOutlineEntryLine(2, 'Setting', '@ch1#heading:setting')).toBe('    - [Setting](@ch1#heading:setting)')
+  })
+
+  it('falls back to plain non-clickable text when href is null', () => {
+    expect(formatOutlineEntryLine(0, 'Untitled', null)).toBe('- Untitled')
+  })
+
+  it('escapes literal [ and ] in the label so they can\'t break out of the link\'s own bracket span', () => {
+    expect(formatOutlineEntryLine(0, 'Fix bug [WIP]', '@ch1')).toBe('- [Fix bug \\[WIP\\]](@ch1)')
+  })
+})
 
 describe('headingsChanged', () => {
   it('is false when nothing changed', () => {

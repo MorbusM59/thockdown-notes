@@ -177,21 +177,34 @@ describe('parseOpenItemsGroups / assembleOpenItemsText round trip', () => {
 
 describe('findOpenItemSourceAtLine', () => {
   const parentMarkdown = buildOpenItemsGroupMarkdown('# The Book\n\n- [ ] intro task', '@parent-1', 'The Book')!
-  const chapterMarkdown = buildOpenItemsGroupMarkdown('# Chapter One\n\n## Setting\n\n- [ ] world-building task', '@chapter-1', 'Chapter One')!
+  // H3, not H2: collectUncheckedItemsByHeading treats a chapter's H2 as its
+  // own (excluded) title-level heading, so an H2 here wouldn't create a
+  // nested bucket at all -- H3+ is the shallowest level that still does.
+  const chapterMarkdown = buildOpenItemsGroupMarkdown('# Chapter One\n\n### Setting\n\n- [ ] world-building task', '@chapter-1', 'Chapter One')!
   const text = assembleOpenItemsText([
     { noteId: 'parent-1', markdown: parentMarkdown },
     { noteId: 'chapter-1', markdown: chapterMarkdown },
   ])!
   const lines = text.split('\n')
 
-  it("resolves a headless item's line to its own group noteId and item text", () => {
+  it("resolves a headless item's line to its own group noteId, item text, and a zero occurrenceIndex (the only match)", () => {
     const lineIndex = lines.indexOf('  - [ ] intro task')
-    expect(findOpenItemSourceAtLine(text, lineIndex)).toEqual({ noteId: 'parent-1', itemText: 'intro task' })
+    expect(findOpenItemSourceAtLine(text, lineIndex)).toEqual({ noteId: 'parent-1', itemText: 'intro task', occurrenceIndex: 0 })
   })
 
   it("resolves a deeper headed item's line to its own group noteId (a later group in the same document), not an earlier one", () => {
     const lineIndex = lines.indexOf('    - [ ] world-building task')
-    expect(findOpenItemSourceAtLine(text, lineIndex)).toEqual({ noteId: 'chapter-1', itemText: 'world-building task' })
+    expect(findOpenItemSourceAtLine(text, lineIndex)).toEqual({ noteId: 'chapter-1', itemText: 'world-building task', occurrenceIndex: 0 })
+  })
+
+  it('counts occurrenceIndex among same-text siblings within the SAME group only, not across the whole document', () => {
+    const dupeMarkdown = buildOpenItemsGroupMarkdown('# Dupes\n\n### A\n\n- [ ] Review\n\n### B\n\n- [ ] Review', '@dupes-1', 'Dupes')!
+    const dupeText = assembleOpenItemsText([{ noteId: 'dupes-1', markdown: dupeMarkdown }])!
+    const dupeLines = dupeText.split('\n')
+    const firstIndex = dupeLines.indexOf('    - [ ] Review')
+    const secondIndex = dupeLines.indexOf('    - [ ] Review', firstIndex + 1)
+    expect(findOpenItemSourceAtLine(dupeText, firstIndex)).toEqual({ noteId: 'dupes-1', itemText: 'Review', occurrenceIndex: 0 })
+    expect(findOpenItemSourceAtLine(dupeText, secondIndex)).toEqual({ noteId: 'dupes-1', itemText: 'Review', occurrenceIndex: 1 })
   })
 
   it('returns null for a non-checklist line (the marker or a heading-link line)', () => {
@@ -224,18 +237,27 @@ describe('toggleChecklistLineMark', () => {
 })
 
 describe('toggleChecklistItemByText', () => {
-  it("flips the first checklist line whose own item text matches, regardless of its current checked state", () => {
+  it("flips the checklist line at occurrenceIndex whose own item text matches, regardless of its current checked state", () => {
     const source = '# Chapter One\n\n- [ ] buy milk\n- [ ] buy eggs'
-    expect(toggleChecklistItemByText(source, 'buy eggs')).toBe('# Chapter One\n\n- [ ] buy milk\n- [x] buy eggs')
+    expect(toggleChecklistItemByText(source, 'buy eggs', 0)).toBe('# Chapter One\n\n- [ ] buy milk\n- [x] buy eggs')
   })
 
-  it('round-trips: toggling the same item text twice restores the original line', () => {
+  it('round-trips: toggling the same item text and occurrenceIndex twice restores the original line', () => {
     const source = '- [ ] buy milk'
-    const once = toggleChecklistItemByText(source, 'buy milk')!
-    expect(toggleChecklistItemByText(once, 'buy milk')).toBe(source)
+    const once = toggleChecklistItemByText(source, 'buy milk', 0)!
+    expect(toggleChecklistItemByText(once, 'buy milk', 0)).toBe(source)
   })
 
   it('returns null when no checklist line matches the given item text', () => {
-    expect(toggleChecklistItemByText('- [ ] buy milk', 'buy eggs')).toBeNull()
+    expect(toggleChecklistItemByText('- [ ] buy milk', 'buy eggs', 0)).toBeNull()
+  })
+
+  it('flips the SECOND occurrence of duplicate item text, leaving the first untouched, when occurrenceIndex is 1', () => {
+    const source = '## A\n- [ ] Review\n## B\n- [ ] Review'
+    expect(toggleChecklistItemByText(source, 'Review', 1)).toBe('## A\n- [ ] Review\n## B\n- [x] Review')
+  })
+
+  it('returns null when occurrenceIndex is beyond how many matching lines actually exist', () => {
+    expect(toggleChecklistItemByText('- [ ] buy milk', 'buy milk', 1)).toBeNull()
   })
 })

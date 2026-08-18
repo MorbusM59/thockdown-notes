@@ -28,6 +28,18 @@ export interface UseSnapshotFreezeOptions {
    * Time Machine (start from the top). See that ref's own doc comment.
    */
   isFrozenSectionPreviewRef: MutableRefObject<boolean>
+  /**
+   * True while `noteId` is the auto-TOC/auto-Open-Items chapter -- a
+   * materialized view regenerated from live state, not something a person
+   * edits, so it has no Time Machine snapshot history of its own (see
+   * useNoteSnapshotTimeline.ts's isViewingEphemeralAutoChapter, which
+   * suppresses this same automatic-snapshot behavior for the section that's
+   * actually showing it). Without this, hibernating one of two sections
+   * that both have the same ephemeral chapter open would still snapshot and
+   * freeze the inactive one, silently reintroducing the very snapshot
+   * history this note type is meant to never have.
+   */
+  skipFreeze: boolean
 }
 
 /**
@@ -62,6 +74,7 @@ export function useSnapshotFreeze(options: UseSnapshotFreezeOptions): void {
     isNoteOpenInOtherSection,
     captureEditModeSnapshotFromEditor,
     isFrozenSectionPreviewRef,
+    skipFreeze,
   } = options
 
   const isActiveSection = sectionId === activeSectionId
@@ -74,6 +87,12 @@ export function useSnapshotFreeze(options: UseSnapshotFreezeOptions): void {
 
     if (wasActive && !isActiveSection) {
       // Just lost active-section status.
+      if (skipFreeze) {
+        // This note has no Time Machine history of its own -- see
+        // skipFreeze's own doc comment. Leave it live and unfrozen.
+        wasLiveWhenLastActiveRef.current = true
+        return
+      }
       if (previewedSnapshotId !== null) {
         // Already showing a specific historical snapshot -- nothing to
         // freeze, and reactivating should leave it exactly where it is.
@@ -119,5 +138,5 @@ export function useSnapshotFreeze(options: UseSnapshotFreezeOptions): void {
         setPreviewedSnapshotId(null)
       }
     }
-  }, [isActiveSection, noteId, previewedSnapshotId, setPreviewedSnapshotId, getLiveText, flushPendingSaveNow, isNoteOpenInOtherSection, captureEditModeSnapshotFromEditor, isFrozenSectionPreviewRef, sectionId])
+  }, [isActiveSection, noteId, previewedSnapshotId, setPreviewedSnapshotId, getLiveText, flushPendingSaveNow, isNoteOpenInOtherSection, captureEditModeSnapshotFromEditor, isFrozenSectionPreviewRef, sectionId, skipFreeze])
 }

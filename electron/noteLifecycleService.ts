@@ -668,13 +668,41 @@ export class NoteLifecycleService {
   // -- actually drops a checked-off item from the list. Best-effort: a
   // stale click (the chapter's shape changed, or the matching item text no
   // longer exists in its source note) just silently no-ops.
+  //
+  // Serialized per (openItemsChapterNoteId, openItemsLineIndex) via
+  // openItemToggleQueues: without this, two toggles issued close together
+  // on the same checkbox (a rapid double-click, or check-then-immediately-
+  // uncheck) would both load the same pre-toggle source text and both write
+  // the same resulting state, silently losing whichever click happened
+  // second. Chaining onto the previous call for the same key (rather than a
+  // single hold-open lock) means an unrelated checkbox's own toggle is
+  // never blocked waiting on this one.
+  private readonly openItemToggleQueues = new Map<string, Promise<boolean>>();
+
   async toggleOpenItemCheckedState(openItemsChapterNoteId: string, openItemsLineIndex: number): Promise<boolean> {
+    const queueKey = `${openItemsChapterNoteId}:${openItemsLineIndex}`;
+    const previous = this.openItemToggleQueues.get(queueKey) ?? Promise.resolve(false);
+    const run = previous.catch(() => false).then(() => (
+      this.performOpenItemToggle(openItemsChapterNoteId, openItemsLineIndex)
+    ));
+    this.openItemToggleQueues.set(queueKey, run);
+
+    try {
+      return await run;
+    } finally {
+      if (this.openItemToggleQueues.get(queueKey) === run) {
+        this.openItemToggleQueues.delete(queueKey);
+      }
+    }
+  }
+
+  private async performOpenItemToggle(openItemsChapterNoteId: string, openItemsLineIndex: number): Promise<boolean> {
     const openItemsDoc = await this.loadNote({ id: openItemsChapterNoteId });
     const resolved = findOpenItemSourceAtLine(openItemsDoc.text, openItemsLineIndex);
     if (!resolved) return false;
 
     const sourceDoc = await this.loadNote({ id: resolved.noteId });
-    const nextText = toggleChecklistItemByText(sourceDoc.text, resolved.itemText);
+    const nextText = toggleChecklistItemByText(sourceDoc.text, resolved.itemText, resolved.occurrenceIndex);
     if (nextText === null) return false;
 
     await this.saveNote({ id: resolved.noteId, text: nextText }, { skipAutoChapterHooks: true });

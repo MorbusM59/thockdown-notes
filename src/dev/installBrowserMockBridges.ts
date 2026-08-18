@@ -1496,7 +1496,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
         const sourceNote = store.notes.find((note) => note.id === resolved.noteId)
         if (!sourceNote) return false
 
-        const nextText = toggleChecklistItemByText(sourceNote.text, resolved.itemText)
+        const nextText = toggleChecklistItemByText(sourceNote.text, resolved.itemText, resolved.occurrenceIndex)
         if (nextText === null) return false
 
         // Deliberately skip regenerateOpenItemsGroupInStore -- same

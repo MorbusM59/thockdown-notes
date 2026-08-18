@@ -3,7 +3,7 @@
    component memoized for the preview pane's per-block rendering (see its
    own comment below); it isn't part of this module's public API, so
    there's nothing here for Fast Refresh to preserve identity of. */
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { MutableRefObject, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useVirtualizer, type VirtualizerOptions } from '@tanstack/react-virtual'
@@ -35,6 +35,60 @@ const PREVIEW_BLOCK_ESTIMATED_HEIGHT_PX = 56
 // A modest buffer of blocks mounted above/below the visible window so
 // scrolling doesn't visibly pop content in at the viewport edge.
 const PREVIEW_BLOCK_OVERSCAN = 6
+
+interface OpenItemsToggleStore {
+  isChecked: (sourceLine: number) => boolean
+  subscribeToLine: (sourceLine: number, listener: () => void) => () => void
+  toggle: (sourceLine: number) => void
+  reset: () => void
+}
+
+/**
+ * Per-line checked/unchecked state for the Open Items chapter's own
+ * checkboxes, with per-line subscriptions -- an external store consumed via
+ * useSyncExternalStore in PreviewMarkdown.tsx's OpenItemCheckbox, not React
+ * state, specifically so toggling one checkbox only re-renders that one
+ * checkbox instead of forcing previewMarkdownComponents' memo (shared by
+ * every mounted block) to change identity. See this store's own call site
+ * below for the full rationale.
+ */
+function createOpenItemsToggleStore(): OpenItemsToggleStore {
+  const checkedLines = new Set<number>()
+  const listenersByLine = new Map<number, Set<() => void>>()
+
+  const notify = (sourceLine: number) => {
+    listenersByLine.get(sourceLine)?.forEach((listener) => listener())
+  }
+
+  return {
+    isChecked: (sourceLine) => checkedLines.has(sourceLine),
+    subscribeToLine: (sourceLine, listener) => {
+      let listeners = listenersByLine.get(sourceLine)
+      if (!listeners) {
+        listeners = new Set()
+        listenersByLine.set(sourceLine, listeners)
+      }
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+        if (listeners.size === 0) listenersByLine.delete(sourceLine)
+      }
+    },
+    toggle: (sourceLine) => {
+      if (checkedLines.has(sourceLine)) {
+        checkedLines.delete(sourceLine)
+      } else {
+        checkedLines.add(sourceLine)
+      }
+      notify(sourceLine)
+    },
+    reset: () => {
+      const affected = Array.from(checkedLines)
+      checkedLines.clear()
+      affected.forEach(notify)
+    },
+  }
+}
 
 /**
  * Scrolls the preview pane so the block covering `sourceLine` is mounted and
@@ -73,6 +127,18 @@ export interface UsePreviewMarkdownRenderingOptions {
    * first full remark parse and reuses the already-computed blocks + ranges.
    */
   previewBlockSplitCacheRef?: MutableRefObject<PreviewBlockSplitCache | null>
+  /**
+   * Whether the note currently being rendered is the auto-Open-Items
+   * chapter -- computed once in EditorSection.tsx off the same
+   * activeNoteSummary every other per-render fact about the active note
+   * goes through, rather than this hook deriving its own copy via a fresh
+   * notes.find(...) on every render (see EditorSection.tsx's own comment on
+   * why that's the single source of truth). Only ever true does its
+   * checkbox glyphs become genuinely clickable -- see
+   * createPreviewMarkdownComponents' openItemsToggle param and
+   * PreviewMarkdown.tsx's OpenItemCheckbox.
+   */
+  isViewingAutoOpenItemsChapter: boolean
 }
 
 export interface UsePreviewMarkdownRenderingResult {
@@ -139,6 +205,7 @@ export function usePreviewMarkdownRendering({
   renderedDisplayText,
   previewScrollToSourceLineRef,
   previewBlockSplitCacheRef,
+  isViewingAutoOpenItemsChapter,
 }: UsePreviewMarkdownRenderingOptions): UsePreviewMarkdownRenderingResult {
   // Mirrors `notes`/`activeNoteText` for navigateToInternalPreviewLink's
   // call-time-only reads below, so that callback's identity -- and in turn
@@ -153,72 +220,69 @@ export function usePreviewMarkdownRendering({
     notesRef.current = notes
   }, [notes])
 
-  // True while the note currently being rendered is the auto-Open-Items
-  // chapter -- only then do its checkbox glyphs become genuinely clickable
-  // (see createPreviewMarkdownComponents' openItemsToggle param and
-  // PreviewMarkdown.tsx's OpenItemCheckbox). A plain boolean, not the ref
-  // above: it's this VALUE (not `notes`' own churny reference) that feeds
-  // previewMarkdownComponents' memo below, and a boolean's value-equality
-  // is what keeps that memo from recomputing on every keystroke even
-  // though this line itself re-evaluates on every render.
-  const isViewingAutoOpenItemsChapter = Boolean(notes.find((note) => note.id === activeNoteId)?.isAutoOpenItems)
-
   // Which of the Open Items chapter's own checkboxes (keyed by their own
   // line within its CURRENT text -- see toggleOpenItemCheckedState) have
-  // been toggled this viewing session. Deliberately owned HERE, not inside
-  // OpenItemCheckbox's own component state: PreviewMarkdownBlock is
-  // virtualized (react-virtual unmounts blocks once they scroll far enough
-  // out of view, per PREVIEW_BLOCK_OVERSCAN), so a checkbox's own local
-  // state would silently reset to unchecked the moment it scrolled back
-  // into view again, even though the real edit had already gone through on
-  // the source note -- this Set lives above the virtualized block tree, so
-  // it survives that.
+  // been toggled this viewing session. An external store (subscribe/
+  // getSnapshot, consumed via useSyncExternalStore in OpenItemCheckbox),
+  // not React state: a plain useState<Set<number>> here would mean every
+  // toggle produces a new Set reference, which -- once fed into
+  // previewMarkdownComponents' memo below -- forces every currently-
+  // mounted/overscanned PreviewMarkdownBlock to treat `components` as
+  // changed and fully re-parse+re-render, not just the one checkbox that
+  // actually changed (and tears down/rebuilds focused DOM mid-keyboard-
+  // toggle in the process). Individual checkboxes subscribing directly to
+  // just their own line's changes avoids that entirely -- the store's own
+  // reference stays perfectly stable across toggles.
+  //
+  // Deliberately owned HERE, not inside OpenItemCheckbox's own component
+  // state, for the same virtualization reason as before: PreviewMarkdownBlock
+  // is virtualized (react-virtual unmounts blocks once they scroll far
+  // enough out of view, per PREVIEW_BLOCK_OVERSCAN), so a checkbox's own
+  // local state would silently reset to unchecked the moment it scrolled
+  // back into view again, even though the real edit had already gone
+  // through on the source note -- this store lives above the virtualized
+  // block tree, so it survives that.
   //
   // Reset whenever `renderedDisplayText` itself changes, not just on note
   // switch: a manual refresh (the present-state circle's regenerateAllOpenItems)
   // rewrites this very note's own text WITHOUT switching notes, dropping
   // whatever lines got checked off -- but every OTHER line's own line
-  // number shifts up to fill the gap. A Set of stale line numbers left over
+  // number shifts up to fill the gap. Stale line-number entries left over
   // from before the rewrite would then point at the *next* item down,
-  // making it look checked even though nobody touched it. Content-keyed
-  // (line number only means anything against the text it was resolved
-  // against), so any text change invalidates the whole set, not just
-  // whichever entry the change would find.
-  //
-  // The functional-updater bail-out (returning the same `previous`
-  // reference when already empty) matters here: `renderedDisplayText`
-  // changes on every keystroke for whatever note is active, in ANY
-  // section, not just Open Items -- without it, this would force an extra
-  // render on every keystroke everywhere, not just here.
-  const [toggledOpenItemLines, setToggledOpenItemLines] = useState<Set<number>>(() => new Set())
+  // making it look checked even though nobody touched it. A line number
+  // only ever means anything against the specific text it was resolved
+  // from, so any text change invalidates every entry wholesale, not just
+  // whichever one the change would find.
+  const openItemsToggleStoreRef = useRef<OpenItemsToggleStore | null>(null)
+  if (openItemsToggleStoreRef.current === null) {
+    openItemsToggleStoreRef.current = createOpenItemsToggleStore()
+  }
   useEffect(() => {
-    setToggledOpenItemLines((previous) => (previous.size === 0 ? previous : new Set()))
+    openItemsToggleStoreRef.current?.reset()
   }, [activeNoteId, renderedDisplayText])
 
   // Fires the actual checkbox-click side effect -- see
-  // noteLifecycleService.ts's toggleOpenItemCheckedState for what this
-  // does and why it never touches what's currently on screen. Ref-forwarded
-  // the same way the navigation callbacks below are, so its own
-  // `activeNoteId` dependency can't destabilize previewMarkdownComponents'
-  // identity either.
+  // noteLifecycleService.ts's toggleOpenItemCheckedState for what this does
+  // and why it never touches what's currently on screen. Awaited (not a
+  // bare `void` fire-and-forget) so a stale click -- the backend resolving
+  // `false` because the matching item text no longer exists, or the IPC
+  // call rejecting outright -- rolls the optimistic store flip back instead
+  // of leaving the checkbox looking checked for something that was never
+  // actually written.
   const handleToggleOpenItem = useCallback((sourceLine: number) => {
     if (!activeNoteId || !window.thockdownChapters) return
-    setToggledOpenItemLines((previous) => {
-      const next = new Set(previous)
-      if (next.has(sourceLine)) {
-        next.delete(sourceLine)
-      } else {
-        next.add(sourceLine)
-      }
-      return next
-    })
+    const store = openItemsToggleStoreRef.current
+    if (!store) return
+    store.toggle(sourceLine)
     void window.thockdownChapters.toggleOpenItem(activeNoteId, sourceLine)
+      .then((succeeded) => {
+        if (!succeeded) store.toggle(sourceLine)
+      })
+      .catch((error) => {
+        console.error('[open-items] failed to toggle checklist item', error)
+        store.toggle(sourceLine)
+      })
   }, [activeNoteId])
-
-  const handleToggleOpenItemRef = useRef(handleToggleOpenItem)
-  useEffect(() => {
-    handleToggleOpenItemRef.current = handleToggleOpenItem
-  }, [handleToggleOpenItem])
 
   const activeNoteTextRef = useRef(activeNoteText)
   useEffect(() => {
@@ -578,21 +642,26 @@ export function usePreviewMarkdownRendering({
     navigateToInternalNoteLinkRef.current = navigateToInternalNoteLink
   }, [navigateToInternalNoteLink])
 
-  // Recomputes (and so re-renders every currently-mounted block) whenever
-  // isViewingAutoOpenItemsChapter flips or a checkbox is actually toggled --
-  // both rare, user-driven transitions rather than per-keystroke churn, so
-  // this doesn't undermine the keystroke-stability the ref-forwarding above
-  // exists for.
+  // Recomputes only when isViewingAutoOpenItemsChapter flips or the active
+  // note switches (handleToggleOpenItem's own identity only changes with
+  // activeNoteId) -- never on an individual checkbox toggle, since the
+  // toggle store's own reference never changes and its per-line
+  // subscriptions (see OpenItemCheckbox) are what actually propagate a
+  // toggle to the screen. No ref-forwarding needed for handleToggleOpenItem
+  // the way the navigation callbacks above need it: that pattern exists
+  // specifically to keep a memo stable across per-keystroke churn, and
+  // nothing here changes on a keystroke.
   const previewMarkdownComponents = useMemo(
     () => createPreviewMarkdownComponents(
       (target) => navigateToInternalPreviewLinkRef.current(target),
       (target) => navigateToInternalNoteLinkRef.current(target),
       isViewingAutoOpenItemsChapter ? {
-        isChecked: (sourceLine: number) => toggledOpenItemLines.has(sourceLine),
-        onToggle: (sourceLine: number) => handleToggleOpenItemRef.current(sourceLine),
+        isChecked: openItemsToggleStoreRef.current!.isChecked,
+        subscribe: openItemsToggleStoreRef.current!.subscribeToLine,
+        onToggle: handleToggleOpenItem,
       } : undefined,
     ),
-    [isViewingAutoOpenItemsChapter, toggledOpenItemLines],
+    [isViewingAutoOpenItemsChapter, handleToggleOpenItem],
   )
 
   const previewSearchHighlightPlugin = useMemo(

@@ -59,7 +59,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'scrollbarHostEl' | 'setScrollbarHostEl' | 'notes' | 'menuIdentityNoteId' | 'chapters' | 'onParentTabClick' | 'onCreateChapter' | 'onChapterClick'
   | 'onChapterDragStart' | 'onChapterDragEnd' | 'onChapterDrop'
   | 'editingChapterNoteId' | 'chapterIdDraft' | 'setChapterIdDraft' | 'onStartEditingChapterId' | 'onCommitChapterIdEdit' | 'onCancelChapterIdEdit'
-  | 'onCollapseChapterIntoPrevious' | 'onExtractSelectionToChapter'> {
+  | 'onCollapseChapterIntoPrevious' | 'onExtractSelectionToChapter' | 'isViewingAutoTocChapter' | 'isViewingAutoOpenItemsChapter'> {
   sectionId: string
   markSectionActive: (sectionId: string) => void
   isSidebarVisible: boolean
@@ -440,6 +440,15 @@ export function EditorSection({
     externalNoteOriginalHashByIdRef.current.delete(noteId)
   }, [editModeSnapshotByNoteIdRef, externalNoteOriginalTextByIdRef, externalNoteOriginalHashByIdRef])
 
+  // Local, not activeNoteSummary (computed further below, after this hook
+  // call): the auto-TOC/auto-Open-Items chapter has no Time Machine history
+  // of its own, so hibernating a section showing one must never snapshot it
+  // -- see useSnapshotFreeze's own skipFreeze doc comment.
+  const isHibernatingNoteEphemeralAutoChapter = useMemo(() => {
+    const note = notes.find((candidate) => candidate.id === activeNoteId)
+    return Boolean(note?.isAutoToc || note?.isAutoOpenItems)
+  }, [notes, activeNoteId])
+
   useSnapshotFreeze({
     sectionId,
     activeSectionId,
@@ -451,6 +460,7 @@ export function EditorSection({
     isNoteOpenInOtherSection,
     captureEditModeSnapshotFromEditor: (id) => { captureEditModeSnapshotFromEditor(id) },
     isFrozenSectionPreviewRef,
+    skipFreeze: isHibernatingNoteEphemeralAutoChapter,
   })
 
   const activateNote = useCallback(async (noteId: string, overrideCursorPos?: number) => {
@@ -989,7 +999,17 @@ export function EditorSection({
   // isViewingEphemeralAutoChapter doc comment). The manual-save button
   // stays live for these, just rewired below (handleManualSaveOrRefresh) to
   // trigger a regeneration instead of a snapshot.
-  const isViewingEphemeralAutoChapter = Boolean(activeNoteSummary?.isAutoToc || activeNoteSummary?.isAutoOpenItems)
+  //
+  // The single source of truth for "is the active note this kind of
+  // auto-chapter" -- computed once here, off the same activeNoteSummary
+  // every other per-render fact about the active note already goes through,
+  // and threaded down as props/options to SectionEditorArea and
+  // usePreviewMarkdownRendering instead of each of them re-deriving its own
+  // copy via a fresh notes.find(...). A third auto-chapter kind, if one is
+  // ever added, only needs updating here.
+  const isViewingAutoTocChapter = Boolean(activeNoteSummary?.isAutoToc)
+  const isViewingAutoOpenItemsChapter = Boolean(activeNoteSummary?.isAutoOpenItems)
+  const isViewingEphemeralAutoChapter = isViewingAutoTocChapter || isViewingAutoOpenItemsChapter
 
   const {
     noteSnapshots,
@@ -1023,6 +1043,15 @@ export function EditorSection({
     isViewingEphemeralAutoChapter,
   })
 
+  // Plain render-time mutation, not an effect (same idiom as
+  // activeNoteHasDebugTagRef.current's own assignment below) -- lets
+  // handleManualSaveOrRefresh's own async closure below check, once its
+  // awaits resolve, whether this section has since switched to a different
+  // note, without needing activeNoteId in its own dependency array to stay
+  // fresh.
+  const activeNoteIdRef = useRef(activeNoteId)
+  activeNoteIdRef.current = activeNoteId
+
   // The manual-save button's actual click handler: for a real note, this is
   // just handleCreateManualSnapshot (a Time Machine save point). For the
   // auto-TOC/auto-Open-Items chapters, the button means something different
@@ -1035,23 +1064,29 @@ export function EditorSection({
   // regenerateAllOpenItems doc comment.
   const handleManualSaveOrRefresh = useCallback(async () => {
     const parentNoteId = activeNoteSummary?.chapterParentId ?? null
-    if (!parentNoteId || !window.thockdownChapters || (!activeNoteSummary?.isAutoToc && !activeNoteSummary?.isAutoOpenItems)) {
+    const noteIdAtClick = activeNoteId
+    if (!parentNoteId || !window.thockdownChapters || (!isViewingAutoTocChapter && !isViewingAutoOpenItemsChapter)) {
       await handleCreateManualSnapshot()
       return
     }
 
-    if (activeNoteSummary.isAutoToc) {
+    if (isViewingAutoTocChapter) {
       await window.thockdownChapters.regenerateAutoTocChapter(parentNoteId)
     } else {
       await window.thockdownChapters.regenerateAllOpenItems(parentNoteId)
     }
 
-    if (!activeNoteId || !window.thockdownNotes) return
-    const refreshed = await window.thockdownNotes.loadNote({ id: activeNoteId })
+    if (!noteIdAtClick || !window.thockdownNotes) return
+    const refreshed = await window.thockdownNotes.loadNote({ id: noteIdAtClick })
+    // The section may have switched to a different note while the two
+    // awaits above were in flight -- only commit the regenerated text if
+    // it's still the note actually on screen, otherwise this would
+    // silently overwrite whatever the user has since navigated to.
+    if (activeNoteIdRef.current !== noteIdAtClick) return
     const hydratedText = normalizeInternalText(refreshed.text)
     latestEditorTextRef.current = hydratedText
     setActiveNoteText(hydratedText)
-  }, [activeNoteSummary, activeNoteId, handleCreateManualSnapshot, latestEditorTextRef, setActiveNoteText])
+  }, [activeNoteSummary, activeNoteId, isViewingAutoTocChapter, isViewingAutoOpenItemsChapter, handleCreateManualSnapshot, latestEditorTextRef, setActiveNoteText])
 
   // See useEditorSectionMount's UseEditorSectionMountOptions doc comment --
   // a plain render-time ref mutation (not an effect) so this hook's own
@@ -1135,6 +1170,7 @@ export function EditorSection({
     renderedDisplayText,
     previewScrollToSourceLineRef: editorSectionMountRest.previewScrollToSourceLineRef,
     previewBlockSplitCacheRef,
+    isViewingAutoOpenItemsChapter,
   })
 
   const {
@@ -1668,6 +1704,8 @@ export function EditorSection({
         showReviewFlags={showReviewFlags}
         onToggleReviewGutter={onToggleReviewGutter}
         onToggleReviewFlags={onToggleReviewFlags}
+        isViewingAutoTocChapter={isViewingAutoTocChapter}
+        isViewingAutoOpenItemsChapter={isViewingAutoOpenItemsChapter}
         spellCheckRenderEnabled={spellCheckRenderEnabled}
         blockPreviewEditMutation={blockPreviewEditMutation}
         previewMarkdownElement={previewMarkdownElement}
