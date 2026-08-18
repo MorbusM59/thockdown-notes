@@ -43,7 +43,7 @@ import { resolveIdentityLabel } from '../shared/tabLabels'
 import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine, parseMarkdownHeading, stripMarkdownInlineFormatting } from '../shared/tableOfContentsText'
 import { formatInternalNoteLink } from '../shared/internalNoteLinks'
 import { deriveDefaultAssignedIdBase, normalizeAssignedIdInput } from '../shared/assignedIds'
-import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, parseOpenItemsGroups } from '../shared/openItemsText'
+import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, findOpenItemSourceAtLine, parseOpenItemsGroups, toggleChecklistItemByText } from '../shared/openItemsText'
 
 const MOCK_STORAGE_KEY = 'thockdown-notes:browser-mock:v1'
 
@@ -1575,6 +1575,32 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
         for (const noteId of familyOrder) {
           regenerateOpenItemsGroupInStore(store, parentNoteId, noteId)
         }
+      })
+    },
+
+    async toggleOpenItem(openItemsChapterNoteId: string, openItemsLineIndex: number): Promise<boolean> {
+      return mutate((store) => {
+        const openItemsNote = store.notes.find((note) => note.id === openItemsChapterNoteId)
+        if (!openItemsNote) return false
+
+        const resolved = findOpenItemSourceAtLine(openItemsNote.text, openItemsLineIndex)
+        if (!resolved) return false
+
+        const sourceNote = store.notes.find((note) => note.id === resolved.noteId)
+        if (!sourceNote) return false
+
+        const nextText = toggleChecklistItemByText(sourceNote.text, resolved.itemText)
+        if (nextText === null) return false
+
+        // Deliberately skip regenerateOpenItemsGroupInStore -- same
+        // skipAutoChapterHooks behavior as the real backend, so the Open
+        // Items chapter currently on screen doesn't change out from under
+        // the click.
+        sourceNote.text = nextText
+        sourceNote.updatedAtMs = Date.now()
+        sourceNote.sizeBytes = nextText.length
+        sourceNote.title = deriveTitle(nextText)
+        return true
       })
     },
   }

@@ -3,7 +3,7 @@
    ReactMarkdown component-renderer factory) shared with the PDF/MD export
    path; none of the top-level exports is itself a component, so there's
    nothing here for Fast Refresh to preserve state across. */
-import type { ReactNode } from 'react'
+import { useCallback, useState, type ReactNode } from 'react'
 import type { Root } from 'hast'
 import { visit } from 'unist-util-visit'
 import remarkGfm from 'remark-gfm'
@@ -185,9 +185,107 @@ function isOpenItemsGroupMarkerText(text: string): boolean {
   return trimmed.startsWith(GROUP_MARKER_PREFIX) && trimmed.endsWith(GROUP_MARKER_SUFFIX)
 }
 
+/** Only ever passed while the note being rendered is the auto-Open-Items chapter -- see OpenItemCheckbox's own doc comment for what clicking one does. */
+export interface OpenItemsToggleHandlers {
+  /** Whether `sourceLine`'s own checkbox has been toggled this viewing session -- state the CALLER owns (usePreviewMarkdownRendering.tsx), not this component: react-virtual unmounts/remounts blocks that scroll out of and back into view, so any state kept here in a per-checkbox useState would silently reset on scroll even though the real source-note edit had already gone through. */
+  isChecked: (sourceLine: number) => boolean
+  onToggle: (sourceLine: number) => void
+}
+
+// The checkbox glyph for one Open Items entry, interactive only while
+// `toggle` is provided. Open Items' own generated markdown only ever
+// contains UNCHECKED items to begin with (collectUncheckedItemsByHeading
+// drops checked ones entirely), so the parsed-markdown `checked` prop is
+// always false here -- toggle.isChecked(sourceLine) is the only thing that
+// can ever make the glyph look checked, and it's deliberately never synced
+// back into the Open Items chapter's own text: the actual toggle write
+// (toggle.onToggle) goes straight to the real source note with
+// skipAutoChapterHooks, so the Open Items chapter stays exactly as it was
+// while this view is open, letting the click be undone by clicking again.
+// Only a real refresh (the manual-save button's regenerateAllOpenItems)
+// drops a checked-off item from the list for real.
+//
+// Resolves its own `sourceLine` from the DOM (the nearest ancestor `<li
+// data-source-line="N">`, tagged by createPreviewSourceAnchorRehypePlugin)
+// rather than taking it as a prop computed from the checkbox's own hast
+// node: remark-gfm's task-list checkbox `<input>` is *synthesized* during
+// the mdast-to-hast conversion from the enclosing list item's own `checked`
+// property, not parsed as its own node with source position -- so it never
+// carries a `position`, and any attempt to tag it directly (as this once
+// did) silently never fires. The parent `<li>` is a real parsed node and
+// reliably has one.
+function OpenItemCheckbox({
+  checked,
+  className,
+  toggle,
+}: {
+  checked?: boolean
+  className?: string
+  toggle?: OpenItemsToggleHandlers
+}) {
+  const [sourceLine, setSourceLine] = useState<number | null>(null)
+
+  // A callback ref (not useLayoutEffect) so this re-resolves every time the
+  // span itself (re)mounts -- including after react-virtual remounts a
+  // scrolled-back-into-view block -- always finding the same line, since
+  // Open Items' own text never changes while this view stays open.
+  const resolveSourceLineRef = useCallback((node: HTMLSpanElement | null) => {
+    if (!node) return
+    const li = node.closest('li[data-source-line]')
+    const raw = li?.getAttribute('data-source-line')
+    const parsed = raw !== null && raw !== undefined ? Number(raw) : NaN
+    setSourceLine(Number.isNaN(parsed) ? null : parsed)
+  }, [])
+
+  const canToggle = toggle !== undefined && sourceLine !== null
+  const isChecked = canToggle ? toggle.isChecked(sourceLine) : Boolean(checked)
+
+  const mergedClassName = [
+    className,
+    'markdown-task-checkbox-icon',
+    isChecked ? 'markdown-task-checkbox-checked' : 'markdown-task-checkbox-unchecked',
+    canToggle ? 'markdown-task-checkbox-interactive' : '',
+  ]
+    .filter((value) => typeof value === 'string' && value.length > 0)
+    .join(' ')
+
+  if (!toggle) {
+    return (
+      <span className={mergedClassName} aria-hidden="true">
+        {isChecked ? '☑' : '☐'}
+      </span>
+    )
+  }
+
+  const activate = () => {
+    if (sourceLine === null) return
+    toggle.onToggle(sourceLine)
+  }
+
+  return (
+    <span
+      ref={resolveSourceLineRef}
+      className={mergedClassName}
+      role="checkbox"
+      aria-checked={isChecked}
+      tabIndex={0}
+      onClick={activate}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        activate()
+      }}
+    >
+      {isChecked ? '☑' : '☐'}
+    </span>
+  )
+}
+
 export function createPreviewMarkdownComponents(
   navigateToInternalLink: (target: ParsedInternalPreviewLink) => void,
   navigateToInternalNoteLink: (target: ParsedInternalNoteLink) => void,
+  /** Only ever passed while the note being rendered is the auto-Open-Items chapter -- see OpenItemCheckbox's own doc comment for what clicking one does. */
+  openItemsToggle?: OpenItemsToggleHandlers,
 ) {
   return {
     p: ({ children }: { children?: ReactNode }) => {
@@ -286,18 +384,12 @@ export function createPreviewMarkdownComponents(
         return null
       }
 
-      const mergedClassName = [
-        className,
-        'markdown-task-checkbox-icon',
-        checked ? 'markdown-task-checkbox-checked' : 'markdown-task-checkbox-unchecked',
-      ]
-        .filter((value) => typeof value === 'string' && value.length > 0)
-        .join(' ')
-
       return (
-        <span className={mergedClassName} aria-hidden="true">
-          {checked ? '☑' : '☐'}
-        </span>
+        <OpenItemCheckbox
+          checked={checked}
+          className={className}
+          toggle={openItemsToggle}
+        />
       )
     },
   } as const

@@ -21,7 +21,7 @@ import type {
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
 import { normalizeChapterHeadings } from '../src/shared/markdownHeadings';
 import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine, headingsChanged, parseMarkdownHeading, stripMarkdownInlineFormatting } from '../src/shared/tableOfContentsText';
-import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, parseOpenItemsGroups } from '../src/shared/openItemsText';
+import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, findOpenItemSourceAtLine, parseOpenItemsGroups, toggleChecklistItemByText } from '../src/shared/openItemsText';
 import { resolveIdentityLabel } from '../src/shared/tabLabels';
 import { formatInternalNoteLink } from '../src/shared/internalNoteLinks';
 import type { ChapterEntry, DatabaseService, NoteRecord } from './databaseService';
@@ -660,6 +660,35 @@ export class NoteLifecycleService {
     for (const noteId of familyOrder) {
       await this.regenerateOpenItemsGroup(parentNoteId, noteId);
     }
+  }
+
+  // Flips one checklist item's real checked state, addressed indirectly via
+  // a click on its own (always-unchecked) rendering inside the auto-Open-
+  // Items chapter -- `openItemsLineIndex` is that checkbox's own line
+  // within the chapter's CURRENT text (PreviewMarkdown.tsx's
+  // OpenItemCheckbox reads it off `data-source-line`). Resolves which
+  // family member and item that line stands for (findOpenItemSourceAtLine),
+  // then writes the flip straight to that source note with
+  // skipAutoChapterHooks -- deliberately bypassing the usual checklist-diff
+  // hook (regenerateOpenItemsGroup) so the Open Items chapter itself is
+  // untouched by this. That's the whole point: checking an item off here
+  // doesn't make it vanish out from under the person looking at the list,
+  // and clicking it again un-checks the very same source line right back.
+  // Only a real refresh -- the manual-save button's regenerateAllOpenItems
+  // -- actually drops a checked-off item from the list. Best-effort: a
+  // stale click (the chapter's shape changed, or the matching item text no
+  // longer exists in its source note) just silently no-ops.
+  async toggleOpenItemCheckedState(openItemsChapterNoteId: string, openItemsLineIndex: number): Promise<boolean> {
+    const openItemsDoc = await this.loadNote({ id: openItemsChapterNoteId });
+    const resolved = findOpenItemSourceAtLine(openItemsDoc.text, openItemsLineIndex);
+    if (!resolved) return false;
+
+    const sourceDoc = await this.loadNote({ id: resolved.noteId });
+    const nextText = toggleChecklistItemByText(sourceDoc.text, resolved.itemText);
+    if (nextText === null) return false;
+
+    await this.saveNote({ id: resolved.noteId, text: nextText }, { skipAutoChapterHooks: true });
+    return true;
   }
 
   // Re-sorts the auto-Open-Items chapter's already-correct groups to match a

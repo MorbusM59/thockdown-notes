@@ -11,6 +11,7 @@ export const CHAPTER_CHANNELS = {
   createAutoToc: 'chapters:create-auto-toc',
   regenerateAutoToc: 'chapters:regenerate-auto-toc',
   regenerateAutoOpenItems: 'chapters:regenerate-auto-open-items',
+  toggleOpenItem: 'chapters:toggle-open-item',
 } as const;
 
 /** One chapter: `chapterNoteId` is itself a full note, ordered (gapless, 0-indexed) among `parentNoteId`'s other chapters. A chapter note belongs to exactly one parent, ever. `chapterId` is a user-assignable label (chapter bar right-click, or `$noteid§chapterid` links), unique per parentNoteId; null until first assigned. */
@@ -87,4 +88,6 @@ export interface ChaptersApi {
   regenerateAutoTocChapter(parentNoteId: string): Promise<{ chapters: ChapterEntry[]; created: NoteDocument }>;
   /** Full-rescan refresh of the auto-Open-Items chapter: re-derives every family member's (parent + each real chapter's) own group from its current live checklist state, unlike the incremental single-note patch saveNote's checklist-diff hook normally applies. The Open Items manual-save-button's own refresh action. No-op if this parent has no auto-TOC chapter yet (regenerateOpenItemsGroup's own precondition). */
   regenerateAllOpenItems(parentNoteId: string): Promise<void>;
+  /** Flips the real checklist item a click on one of the auto-Open-Items chapter's own (always-unchecked) checkboxes stands for -- `openItemsLineIndex` is that checkbox's own line within the chapter's current text. Writes straight to the source note without touching the Open Items chapter itself, so the list on screen doesn't change out from under the click; see noteLifecycleService.ts's own doc comment. Resolves to false (a silent no-op) if the click no longer resolves to a real item. */
+  toggleOpenItem(openItemsChapterNoteId: string, openItemsLineIndex: number): Promise<boolean>;
 }

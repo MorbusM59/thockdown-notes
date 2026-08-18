@@ -185,4 +185,66 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     await lifecycle.removeChapterAndSyncOpenItems(parent.id, ch2.id)
     expect(db.getAutoOpenItemsChapterNoteId(parent.id)).toBeNull()
   })
+
+  describe('toggleOpenItemCheckedState', () => {
+    it("checks the real item off in its own source chapter, without changing the Open Items chapter's own text at all", async () => {
+      const parent = await lifecycle.createNote({ initialText: '# The Book' })
+      const ch1 = await lifecycle.createChapterNote(parent.id)
+      await lifecycle.createAutoTocChapter(parent.id)
+      await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n- [ ] world-building task' })
+
+      const openItemsId = db.getAutoOpenItemsChapterNoteId(parent.id)!
+      const before = await lifecycle.loadNote({ id: openItemsId })
+      const lineIndex = before.text.split('\n').findIndex((line) => line.includes('world-building task'))
+      expect(lineIndex).toBeGreaterThanOrEqual(0)
+
+      const toggled = await lifecycle.toggleOpenItemCheckedState(openItemsId, lineIndex)
+      expect(toggled).toBe(true)
+
+      const ch1After = await lifecycle.loadNote({ id: ch1.id })
+      expect(ch1After.text).toBe('# Chapter One\n\n- [x] world-building task')
+
+      // The whole point: the list on screen doesn't change out from under
+      // the click -- skipAutoChapterHooks kept the checklist-diff hook from
+      // firing, so the item is still listed even though it's now checked.
+      const openItemsAfter = await lifecycle.loadNote({ id: openItemsId })
+      expect(openItemsAfter.text).toBe(before.text)
+    })
+
+    it('un-checks it again on a second click at the same line, still without touching the Open Items chapter', async () => {
+      const parent = await lifecycle.createNote({ initialText: '# The Book' })
+      const ch1 = await lifecycle.createChapterNote(parent.id)
+      await lifecycle.createAutoTocChapter(parent.id)
+      await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n- [ ] world-building task' })
+
+      const openItemsId = db.getAutoOpenItemsChapterNoteId(parent.id)!
+      const openItemsDoc = await lifecycle.loadNote({ id: openItemsId })
+      const lineIndex = openItemsDoc.text.split('\n').findIndex((line) => line.includes('world-building task'))
+
+      await lifecycle.toggleOpenItemCheckedState(openItemsId, lineIndex)
+      await lifecycle.toggleOpenItemCheckedState(openItemsId, lineIndex)
+
+      const ch1After = await lifecycle.loadNote({ id: ch1.id })
+      expect(ch1After.text).toBe('# Chapter One\n\n- [ ] world-building task')
+      expect((await lifecycle.loadNote({ id: openItemsId })).text).toBe(openItemsDoc.text)
+    })
+
+    it('returns false and changes nothing for a line that is not a real checklist item', async () => {
+      const parent = await lifecycle.createNote({ initialText: '# The Book' })
+      const ch1 = await lifecycle.createChapterNote(parent.id)
+      await lifecycle.createAutoTocChapter(parent.id)
+      await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n- [ ] world-building task' })
+
+      const openItemsId = db.getAutoOpenItemsChapterNoteId(parent.id)!
+      const before = await lifecycle.loadNote({ id: openItemsId })
+
+      // Line 0 is "# Open Items" -- a heading, not a checklist item.
+      const toggled = await lifecycle.toggleOpenItemCheckedState(openItemsId, 0)
+      expect(toggled).toBe(false)
+
+      const ch1After = await lifecycle.loadNote({ id: ch1.id })
+      expect(ch1After.text).toBe('# Chapter One\n\n- [ ] world-building task')
+      expect((await lifecycle.loadNote({ id: openItemsId })).text).toBe(before.text)
+    })
+  })
 })

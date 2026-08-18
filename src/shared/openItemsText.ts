@@ -184,3 +184,77 @@ export function assembleOpenItemsText(groups: OpenItemsGroup[]): string | null {
   }
   return lines.join('\n').replace(/\n+$/, '\n')
 }
+
+/**
+ * Given the auto-Open-Items chapter's own current text and a 0-indexed line
+ * within it (PreviewMarkdown.tsx's OpenItemCheckbox reads this off the
+ * clicked checkbox's own `data-source-line`), resolves which family
+ * member's group that line belongs to and that item's own text -- the
+ * reverse-lookup a checkbox click needs, since a group only ever remembers
+ * its member's noteId (the marker line), never a per-item line reference.
+ * Returns null if `lineIndex` doesn't land on an actual checklist line (a
+ * stale click after the chapter's shape changed under it, or one that
+ * landed on a marker/heading-link line instead).
+ */
+export function findOpenItemSourceAtLine(openItemsText: string, lineIndex: number): { noteId: string; itemText: string } | null {
+  const lines = normalizeInternalText(openItemsText).split('\n')
+  if (lineIndex < 0 || lineIndex >= lines.length) return null
+
+  let currentGroupNoteId: string | null = null
+  for (let index = 0; index <= lineIndex; index += 1) {
+    const line = lines[index]
+    if (line.startsWith(GROUP_MARKER_PREFIX) && line.endsWith(GROUP_MARKER_SUFFIX)) {
+      currentGroupNoteId = line.slice(GROUP_MARKER_PREFIX.length, -GROUP_MARKER_SUFFIX.length)
+    }
+  }
+  if (currentGroupNoteId === null) return null
+
+  const match = CHECKLIST_LINE_RE.exec(lines[lineIndex])
+  if (!match) return null
+
+  return { noteId: currentGroupNoteId, itemText: match[2].trim() }
+}
+
+// Same shape as CHECKLIST_LINE_RE but with the marker split into its own
+// capture group (surrounded by the prefix/suffix around it) rather than
+// just detected, so toggleChecklistLineMark can flip only that one
+// character and reassemble everything else -- indentation, blockquote
+// prefix, list-marker character, item text -- completely untouched.
+const CHECKLIST_LINE_TOGGLE_RE = /^(\s*(?:>\s*)*[-*+]\s+\[)([ xX])(\]\s+.*)$/
+
+/** Flips one checklist line's own `[ ]`/`[x]` marker in place. Returns null if `line` isn't a checklist line at all. */
+export function toggleChecklistLineMark(line: string): string | null {
+  const match = CHECKLIST_LINE_TOGGLE_RE.exec(line)
+  if (!match) return null
+  const [, prefix, mark, suffix] = match
+  const flipped = mark.toLowerCase() === 'x' ? ' ' : 'x'
+  return `${prefix}${flipped}${suffix}`
+}
+
+/**
+ * Finds the first checklist line in `sourceText` whose own item text
+ * matches `itemText` verbatim (regardless of its current checked state --
+ * a second click, unchecking what the first one just checked, needs to
+ * match the very same line even though its marker has since flipped) and
+ * flips its `[ ]`/`[x]` marker. The item-text-based lookup findOpenItemSourceAtLine
+ * needs, since a group only remembers its item's text, never where it
+ * lives in its source note. Returns null if no line matches -- the item
+ * was edited or removed since the Open Items chapter was last generated;
+ * a silent no-op at the call site, the same staleness tolerance the rest
+ * of this feature already has (see regenerateOpenItemsGroup's own
+ * "best-effort" callers).
+ */
+export function toggleChecklistItemByText(sourceText: string, itemText: string): string | null {
+  const lines = normalizeInternalText(sourceText).split('\n')
+  const targetIndex = lines.findIndex((line) => {
+    const match = CHECKLIST_LINE_RE.exec(line)
+    return match !== null && match[2].trim() === itemText
+  })
+  if (targetIndex === -1) return null
+
+  const flippedLine = toggleChecklistLineMark(lines[targetIndex])
+  if (flippedLine === null) return null
+
+  lines[targetIndex] = flippedLine
+  return lines.join('\n')
+}

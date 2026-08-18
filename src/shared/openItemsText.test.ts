@@ -5,7 +5,10 @@ import {
   checklistStateChanged,
   collectUncheckedItemsByHeading,
   extractChecklistCheckedStates,
+  findOpenItemSourceAtLine,
   parseOpenItemsGroups,
+  toggleChecklistItemByText,
+  toggleChecklistLineMark,
 } from './openItemsText'
 
 describe('extractChecklistCheckedStates', () => {
@@ -139,5 +142,70 @@ describe('parseOpenItemsGroups / assembleOpenItemsText round trip', () => {
 
   it('parses zero groups back out of a null-assembled (never-written) text', () => {
     expect(parseOpenItemsGroups('# Open Items\n')).toEqual([])
+  })
+})
+
+describe('findOpenItemSourceAtLine', () => {
+  const parentMarkdown = buildOpenItemsGroupMarkdown('# The Book\n\n- [ ] intro task', '@parent-1', 'The Book')!
+  const chapterMarkdown = buildOpenItemsGroupMarkdown('# Chapter One\n\n## Setting\n\n- [ ] world-building task', '@chapter-1', 'Chapter One')!
+  const text = assembleOpenItemsText([
+    { noteId: 'parent-1', markdown: parentMarkdown },
+    { noteId: 'chapter-1', markdown: chapterMarkdown },
+  ])!
+  const lines = text.split('\n')
+
+  it("resolves a headless item's line to its own group noteId and item text", () => {
+    const lineIndex = lines.indexOf('  - [ ] intro task')
+    expect(findOpenItemSourceAtLine(text, lineIndex)).toEqual({ noteId: 'parent-1', itemText: 'intro task' })
+  })
+
+  it("resolves a headed item's line to its own group noteId (a later group in the same document), not an earlier one", () => {
+    const lineIndex = lines.indexOf('    - [ ] world-building task')
+    expect(findOpenItemSourceAtLine(text, lineIndex)).toEqual({ noteId: 'chapter-1', itemText: 'world-building task' })
+  })
+
+  it('returns null for a non-checklist line (the marker or a heading-link line)', () => {
+    expect(findOpenItemSourceAtLine(text, lines.indexOf('[open-items-group:parent-1]'))).toBeNull()
+    expect(findOpenItemSourceAtLine(text, lines.indexOf('- [Chapter One](@chapter-1)'))).toBeNull()
+  })
+
+  it('returns null for an out-of-range line index', () => {
+    expect(findOpenItemSourceAtLine(text, -1)).toBeNull()
+    expect(findOpenItemSourceAtLine(text, lines.length)).toBeNull()
+  })
+})
+
+describe('toggleChecklistLineMark', () => {
+  it('flips an unchecked item to checked, preserving indentation and item text exactly', () => {
+    expect(toggleChecklistLineMark('    - [ ] world-building task')).toBe('    - [x] world-building task')
+  })
+
+  it('flips a checked item back to unchecked, tolerating an uppercase X', () => {
+    expect(toggleChecklistLineMark('- [X] done already')).toBe('- [ ] done already')
+  })
+
+  it('preserves a blockquote prefix and a non-hyphen list marker', () => {
+    expect(toggleChecklistLineMark('> * [ ] quoted task')).toBe('> * [x] quoted task')
+  })
+
+  it('returns null for a line that is not a checklist item at all', () => {
+    expect(toggleChecklistLineMark('- just a bullet, no checkbox')).toBeNull()
+  })
+})
+
+describe('toggleChecklistItemByText', () => {
+  it("flips the first checklist line whose own item text matches, regardless of its current checked state", () => {
+    const source = '# Chapter One\n\n- [ ] buy milk\n- [ ] buy eggs'
+    expect(toggleChecklistItemByText(source, 'buy eggs')).toBe('# Chapter One\n\n- [ ] buy milk\n- [x] buy eggs')
+  })
+
+  it('round-trips: toggling the same item text twice restores the original line', () => {
+    const source = '- [ ] buy milk'
+    const once = toggleChecklistItemByText(source, 'buy milk')!
+    expect(toggleChecklistItemByText(once, 'buy milk')).toBe(source)
+  })
+
+  it('returns null when no checklist line matches the given item text', () => {
+    expect(toggleChecklistItemByText('- [ ] buy milk', 'buy eggs')).toBeNull()
   })
 })

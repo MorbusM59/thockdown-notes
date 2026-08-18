@@ -1084,6 +1084,10 @@ function registerIpcHandlers() {
     return noteLifecycleService!.regenerateAllOpenItems(parentNoteId);
   });
 
+  ipcMain.handle(CHAPTER_CHANNELS.toggleOpenItem, async (_event, openItemsChapterNoteId: string, openItemsLineIndex: number) => {
+    return noteLifecycleService!.toggleOpenItemCheckedState(openItemsChapterNoteId, openItemsLineIndex);
+  });
+
   ipcMain.handle(REVIEW_FLAG_CHANNELS.list, async (_event, noteId: string) => {
     return databaseService!.listReviewFlags(noteId);
   });
