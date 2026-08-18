@@ -66,6 +66,14 @@
   font-synthesis: style;
   position:       relative;
   z-index:        2;
+  /* Render mode is a read-only view -- no text-edit caret (even though the
+     pane is conditionally contentEditable for spellcheck) and no
+     link/checkbox pointer hand. Overrides the browser's own contentEditable
+     text-cursor heuristic and every clickable element's UA/author default
+     below (links, the Open Items checkboxes) via the cascade, not
+     `!important` -- see the more specific rules on `a` and
+     `.markdown-task-checkbox-interactive`. */
+  cursor: default;
 }
 
 .render-container {
@@ -190,6 +198,7 @@
   color:                var(--color-text-link);
   text-decoration:      underline;
   text-underline-offset: 2px;
+  cursor: default;
 }
 
 .markdown-preview em,
@@ -276,9 +285,11 @@
 
 /* Only the auto-Open-Items chapter's own checkboxes get this -- clicking one
    toggles the real checklist item in its source chapter without changing
-   what's on screen here (see PreviewMarkdown.tsx's OpenItemCheckbox). */
+   what's on screen here (see PreviewMarkdown.tsx's OpenItemCheckbox).
+   Cursor stays the render pane's default (no pointer hand) -- the hover/
+   focus feedback below is the only affordance that it's clickable. */
 .markdown-preview li.task-list-item > .markdown-task-checkbox-icon.markdown-task-checkbox-interactive {
-  cursor: pointer;
+  cursor: default;
 }
 
 .markdown-preview li.task-list-item > .markdown-task-checkbox-icon.markdown-task-checkbox-interactive:hover {
