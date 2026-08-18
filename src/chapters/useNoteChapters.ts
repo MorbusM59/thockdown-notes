@@ -129,11 +129,8 @@ export interface UseNoteChaptersResult {
    */
   onChapterDragStart: (event: DragEvent<HTMLDivElement>, index: number) => void
   onChapterDragEnd: () => void
-  /** Drop directly on another chapter pill -- reorders within the chapters list. */
+  /** Drop directly on another chapter pill -- reorders within the chapters list. Any other target is ignored. */
   onChapterDrop: (event: DragEvent<HTMLDivElement>, targetIndex: number) => void
-  /** Drop on the bar's own background (past the last pill) -- appends to the end, mirroring useSectionTabs.ts's container-level drop. */
-  onChapterContainerDragOver: (event: DragEvent<HTMLDivElement>) => void
-  onChapterContainerDrop: (event: DragEvent<HTMLDivElement>) => void
   /** Which chapter pill (by chapterNoteId) is mid-inline-edit of its chapterId, if any. */
   editingChapterNoteId: string | null
   chapterIdDraft: string
@@ -640,17 +637,10 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     await refreshNotes()
   }, [menuIdentityNoteId, activeNoteId, autoTocChapterNoteId, autoOpenItemsChapterNoteId, reorderableChapters, currentEditorText, editorSelection, applyProgrammaticEditorText, flushPendingSaveNow, refreshNotes, activateNote, onNotePermanentlyDeleted])
 
-  // Chapter-pill drag-to-reorder -- deliberately mirrors useSectionTabs.ts's
-  // handleTabDragStart/handleTabDrop/handleTabsContainerDrop pattern exactly
-  // (dragged item tracked by index in state, set on dragstart; drop splices
-  // that index out and back in at the target). An earlier version of this
-  // instead threaded the dragged chapter's id through the drop target's own
-  // event handler (`onChapterDrop(index, chapter.chapterNoteId)`), which
-  // always resolved to the *target* pill's own id, not whatever was actually
-  // picked up -- dropping on another pill silently no-op'd because the
-  // "dragged" id it computed always equaled the target's own id. Tracking by
-  // index in state (this hook already knows `chapters`) sidesteps that
-  // entirely, same as the tab/tag bar never had the bug in the first place.
+  // Chapter-pill drag-to-reorder only accepts drops onto actual chapter pills.
+  // Any other drag target (the parent tab, the bar background, or any
+  // non-chapter element) is deliberately ignored as a no-op; the chapter bar
+  // no longer has a background-append drop path at all.
   const handleChapterDragStart = useCallback((event: DragEvent<HTMLDivElement>, index: number) => {
     const chapter = reorderableChapters[index]
     if (!chapter) return
@@ -694,34 +684,6 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     if (!moved) return
 
     reordered.splice(targetIndex, 0, moved)
-    await persistReorderedChapters(reordered)
-  }, [draggedChapterIndex, reorderableChapters, menuIdentityNoteId, persistReorderedChapters])
-
-  // Drop on the bar's own background, past the last pill -- appends to the
-  // end, mirroring useSectionTabs.ts's handleTabsContainerDrop/
-  // handleTagContainerDrop.
-  const handleChapterContainerDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (draggedChapterIndex === null) return
-    event.preventDefault()
-    event.stopPropagation()
-    event.dataTransfer.dropEffect = 'move'
-  }, [draggedChapterIndex])
-
-  const handleChapterContainerDrop = useCallback(async (event: DragEvent<HTMLDivElement>) => {
-    if (draggedChapterIndex === null) return
-    event.preventDefault()
-    event.stopPropagation()
-    if (!window.thockdownChapters || !menuIdentityNoteId) {
-      setDraggedChapterIndex(null)
-      return
-    }
-
-    const reordered = [...reorderableChapters]
-    const [moved] = reordered.splice(draggedChapterIndex, 1)
-    setDraggedChapterIndex(null)
-    if (!moved) return
-
-    reordered.push(moved)
     await persistReorderedChapters(reordered)
   }, [draggedChapterIndex, reorderableChapters, menuIdentityNoteId, persistReorderedChapters])
 
@@ -769,8 +731,6 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     onChapterDragStart: handleChapterDragStart,
     onChapterDragEnd: handleChapterDragEnd,
     onChapterDrop: handleChapterDrop,
-    onChapterContainerDragOver: handleChapterContainerDragOver,
-    onChapterContainerDrop: handleChapterContainerDrop,
     editingChapterNoteId,
     chapterIdDraft,
     setChapterIdDraft,

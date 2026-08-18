@@ -71,8 +71,6 @@ export interface SectionEditorAreaProps {
   onChapterDragStart: (event: DragEvent<HTMLDivElement>, index: number) => void
   onChapterDragEnd: () => void
   onChapterDrop: (event: DragEvent<HTMLDivElement>, targetIndex: number) => void
-  onChapterContainerDragOver: (event: DragEvent<HTMLDivElement>) => void
-  onChapterContainerDrop: (event: DragEvent<HTMLDivElement>) => void
   editingChapterNoteId: string | null
   chapterIdDraft: string
   setChapterIdDraft: (value: string) => void
@@ -158,8 +156,6 @@ export function SectionEditorArea({
   onChapterDragStart,
   onChapterDragEnd,
   onChapterDrop,
-  onChapterContainerDragOver,
-  onChapterContainerDrop,
   editingChapterNoteId,
   chapterIdDraft,
   setChapterIdDraft,
@@ -321,8 +317,6 @@ export function SectionEditorArea({
             onChapterDragStart={onChapterDragStart}
             onChapterDragEnd={onChapterDragEnd}
             onChapterDrop={onChapterDrop}
-            onChapterContainerDragOver={onChapterContainerDragOver}
-            onChapterContainerDrop={onChapterContainerDrop}
             editingChapterNoteId={editingChapterNoteId}
             chapterIdDraft={chapterIdDraft}
             setChapterIdDraft={setChapterIdDraft}

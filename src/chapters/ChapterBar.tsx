@@ -18,8 +18,6 @@ export interface ChapterBarProps {
   onChapterDragStart: (event: DragEvent<HTMLDivElement>, index: number) => void
   onChapterDragEnd: () => void
   onChapterDrop: (event: DragEvent<HTMLDivElement>, targetIndex: number) => void
-  onChapterContainerDragOver: (event: DragEvent<HTMLDivElement>) => void
-  onChapterContainerDrop: (event: DragEvent<HTMLDivElement>) => void
   /** Which chapter pill (by chapterNoteId) is mid-inline-edit of its chapterId, if any. */
   editingChapterNoteId: string | null
   chapterIdDraft: string
@@ -77,8 +75,6 @@ export function ChapterBar({
   onChapterDragStart,
   onChapterDragEnd,
   onChapterDrop,
-  onChapterContainerDragOver,
-  onChapterContainerDrop,
   editingChapterNoteId,
   chapterIdDraft,
   setChapterIdDraft,
@@ -171,8 +167,6 @@ export function ChapterBar({
             ref={scrollerRef}
             onScroll={updateScrollEdges}
             onWheel={handleWheel}
-            onDragOver={onChapterContainerDragOver}
-            onDrop={onChapterContainerDrop}
           >
             <div
               className={`tag-pill note-tab-pill chapter-pill${isParentActive ? ' is-active' : ''}`}
