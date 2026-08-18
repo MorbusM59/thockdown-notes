@@ -5171,7 +5171,7 @@ ${markdownHtml}
 
   const getLinkTargetPrefill = useCallback(() => {
     const { noteId, chapterId, anchorId } = lastAnchorRef.current
-    return `$${noteId}Â§${chapterId}#${anchorId}`
+    return `$${noteId}§${chapterId}#${anchorId}`
   }, [])
 
   const handleViewModeButtonClick = useCallback((mode: SidebarMode) => {
