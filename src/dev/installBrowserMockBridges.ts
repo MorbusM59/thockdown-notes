@@ -40,7 +40,7 @@ import type { ChapterEntry, ChaptersApi } from '../shared/chapters'
 import type { ReviewFlagEntry, ReviewFlagsApi } from '../shared/reviewFlags'
 import { normalizeChapterHeadings } from '../shared/markdownHeadings'
 import { resolveIdentityLabel } from '../shared/tabLabels'
-import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine } from '../shared/tableOfContentsText'
+import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine, parseMarkdownHeading, stripMarkdownInlineFormatting } from '../shared/tableOfContentsText'
 import { formatInternalNoteLink } from '../shared/internalNoteLinks'
 import { deriveDefaultAssignedIdBase, normalizeAssignedIdInput } from '../shared/assignedIds'
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, parseOpenItemsGroups } from '../shared/openItemsText'
@@ -1156,15 +1156,27 @@ function regenerateOpenItemsGroupInStore(store: BrowserMockStore, parentNoteId: 
 
   // Same internal-only `@noteId` addressing regenerateAutoTocInStore uses --
   // see the real backend's regenerateOpenItemsGroup for the full rationale.
-  // The label shown is a separate, purely cosmetic concern.
+  // The label shown is a separate, purely cosmetic concern: a chapter's own
+  // title -- its literal first line, heading markers stripped -- never the
+  // chapterId. Deliberately reads the first line directly rather than going
+  // through computeHeadingAnchors' root-heading resolution (the TOC's own
+  // approach), which treats a lone leading h1 as the note's own excluded
+  // "title" and would skip to a body heading below it instead. Only falls
+  // back to the chapterId/derived-snippet label for a chapter with no
+  // heading at all yet.
   const linkPrefix = formatInternalNoteLink(changedNoteId)
   let groupLabel: string
   if (changedNoteId === parentNoteId) {
     groupLabel = changedNote.title || 'Untitled'
   } else {
-    const chapterRow = store.chapters.find((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === changedNoteId)
-    if (!chapterRow) return
-    groupLabel = resolveIdentityLabel(chapterRow.chapterId, changedNote.text).text
+    const firstLineHeading = parseMarkdownHeading(changedNote.text.split('\n', 1)[0] ?? '')
+    if (firstLineHeading) {
+      groupLabel = stripMarkdownInlineFormatting(firstLineHeading.text)
+    } else {
+      const chapterRow = store.chapters.find((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === changedNoteId)
+      if (!chapterRow) return
+      groupLabel = resolveIdentityLabel(chapterRow.chapterId, changedNote.text).text
+    }
   }
 
   const newGroupMarkdown = buildOpenItemsGroupMarkdown(changedNote.text, linkPrefix, groupLabel)

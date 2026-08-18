@@ -26,7 +26,7 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     const parent = await lifecycle.createNote({ initialText: '# The Book' })
     db.setNoteAssignedId(parent.id, 'BOOK')
     const ch1 = await lifecycle.createChapterNote(parent.id)
-    const ch1LinkId = db.setChapterId(parent.id, ch1.id, 'CH1')!
+    db.setChapterId(parent.id, ch1.id, 'CH1')
     const { created: toc } = await lifecycle.createAutoTocChapter(parent.id)
 
     // No checklist content anywhere yet -- no auto-Open-Items chapter.
@@ -43,7 +43,10 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
 
     const openItemsDoc = await lifecycle.loadNote({ id: openItemsId! })
 
-    expect(openItemsDoc.text).toContain(`[${ch1LinkId}](@${ch1.id})`)
+    // The group's own label is the chapter's title -- its literal first
+    // line -- never its assigned chapterId ("CH1"): a chapter is recognized
+    // by what it's titled, not by whatever short id it's linked with.
+    expect(openItemsDoc.text).toContain(`[Chapter One](@${ch1.id})`)
     expect(openItemsDoc.text).toContain(`[Setting](@${ch1.id}#heading:setting)`)
     expect(openItemsDoc.text).toContain('- [ ] world-building task')
     // Checked items are never listed.
@@ -67,13 +70,31 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
 
     const openItemsId = db.getAutoOpenItemsChapterNoteId(parent.id)!
     const openItemsDoc = await lifecycle.loadNote({ id: openItemsId })
-    // The group's own title falls back to the same derived snippet the
-    // chapter's own pill would show (resolveIdentityLabel), not "Chapter
-    // One" verbatim -- deriveContentSnippet truncates to a word boundary.
-    // The link itself is still present, addressed by the chapter's own
-    // real internal note id.
-    expect(openItemsDoc.text).toContain(`[Chapter](@${ch1.id})`)
+    // The group's own label is the chapter's title in full ("Chapter One"),
+    // not the truncated derived-snippet fallback (deriveContentSnippet) an
+    // unassigned chapter's own pill/tab label would show -- the title-based
+    // label has no dependency on an assigned id at all. The link itself is
+    // still present, addressed by the chapter's own real internal note id.
+    expect(openItemsDoc.text).toContain(`[Chapter One](@${ch1.id})`)
     expect(openItemsDoc.text).toContain('- [ ] world-building task')
+  })
+
+  it('falls back to the derived-snippet label for a chapter with no heading at all yet', async () => {
+    const parent = await lifecycle.createNote({ initialText: '# The Book' })
+    const ch1 = await lifecycle.createChapterNote(parent.id)
+    await lifecycle.createAutoTocChapter(parent.id)
+
+    // No heading anywhere in the chapter's own text -- same plain-text
+    // first line as the equivalent auto-TOC fallback test.
+    await lifecycle.saveNote({ id: ch1.id, text: 'Just some plain text, no heading yet.\n\n- [ ] a stray task' })
+
+    const openItemsId = db.getAutoOpenItemsChapterNoteId(parent.id)!
+    const openItemsDoc = await lifecycle.loadNote({ id: openItemsId })
+    // Same fallback the chapter's own pill would show (resolveIdentityLabel):
+    // no assigned chapterId, so a derived content snippet from the first
+    // line instead -- truncated to a word boundary by deriveContentSnippet.
+    expect(openItemsDoc.text).toContain(`[Just some](@${ch1.id})`)
+    expect(openItemsDoc.text).toContain('- [ ] a stray task')
   })
 
   it('groups the parent\'s own headless items directly under its title link', async () => {

@@ -20,7 +20,7 @@ import type {
 } from '../src/shared/noteLifecycle';
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
 import { normalizeChapterHeadings } from '../src/shared/markdownHeadings';
-import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine, headingsChanged } from '../src/shared/tableOfContentsText';
+import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine, headingsChanged, parseMarkdownHeading, stripMarkdownInlineFormatting } from '../src/shared/tableOfContentsText';
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, parseOpenItemsGroups } from '../src/shared/openItemsText';
 import { resolveIdentityLabel } from '../src/shared/tabLabels';
 import { formatInternalNoteLink } from '../src/shared/internalNoteLinks';
@@ -580,15 +580,34 @@ export class NoteLifecycleService {
     // is always exactly as clickable as the TOC's own entry for the same
     // note/chapter, with or without any user-assigned id. The label shown
     // (groupLabel) is a separate, purely cosmetic concern: the parent's own
-    // title, or a chapter's chapterId/derived-snippet via resolveIdentityLabel,
-    // same as regenerateAutoTocChapter's own TOC-entry label.
+    // title, or a chapter's own title -- its literal first line, heading
+    // markers stripped -- deliberately never the chapterId, unlike the
+    // pill/tab-label convention (resolveIdentityLabel) used everywhere else.
+    // A person recognizes a chapter by what it's titled, not by whatever
+    // short id they happened to assign it for linking purposes; those can
+    // easily diverge (a chapter titled "The Garden Party" might be linked as
+    // `$BOOK§CH7`), and this list is read, not navigated by id. Only falls
+    // back to the chapterId/derived-snippet label (resolveIdentityLabel) for
+    // a chapter with no heading at all yet -- deliberately NOT
+    // computeHeadingAnchors' root-heading resolution (regenerateAutoTocChapter's
+    // own approach): that helper treats a lone leading `#` (h1) line as the
+    // note's own excluded "title," which would skip straight to a body
+    // heading below it. A chapter's first line is its title regardless of
+    // what level it happens to be (chapters are only ever *supposed* to
+    // start at h2+, but nothing here should silently mislabel one that
+    // doesn't), so this reads that line directly instead.
     const linkPrefix = formatInternalNoteLink(changedNoteId);
     let groupLabel: string;
     if (changedNoteId === parentNoteId) {
       groupLabel = changedDoc.title || 'Untitled';
     } else {
-      const chapterId = this.databaseService.listChaptersForNote(parentNoteId).find((row) => row.chapterNoteId === changedNoteId)?.chapterId ?? null;
-      groupLabel = resolveIdentityLabel(chapterId, changedDoc.text).text;
+      const firstLineHeading = parseMarkdownHeading(changedDoc.text.split('\n', 1)[0] ?? '');
+      if (firstLineHeading) {
+        groupLabel = stripMarkdownInlineFormatting(firstLineHeading.text);
+      } else {
+        const chapterId = this.databaseService.listChaptersForNote(parentNoteId).find((row) => row.chapterNoteId === changedNoteId)?.chapterId ?? null;
+        groupLabel = resolveIdentityLabel(chapterId, changedDoc.text).text;
+      }
     }
 
     const newGroupMarkdown = buildOpenItemsGroupMarkdown(changedDoc.text, linkPrefix, groupLabel);
