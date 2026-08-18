@@ -4199,22 +4199,6 @@ export function CM6Editor({
           visibility: hasViewportLines && fontReady ? 'visible' : 'hidden',
         }}
       />
-      {/* Empty-note placeholder -- Editor.tsx's RichTextPlugin shows/hides
-          this automatically based on Lexical's own root-empty check; CM6 has
-          no built-in equivalent, so isDocEmpty tracks it explicitly (see its
-          own declaration above). Positioned to match the real content's own
-          padding (topBoundaryVisualPx, halfCellWidthPx) so the text lines up
-          with the grid exactly like typed text would; zIndex matches the
-          content layer so it paints over the grid/boundary zones the same
-          way real glyphs do. */}
-      {hasViewportLines && fontReady && isDocEmpty && (
-        <div
-          className="absolute pointer-events-none select-none editor-text"
-          style={{ top: topBoundaryVisualPx, left: halfCellWidthPx, zIndex: 10 }}
-        >
-          Jot down a thockdown note...
-        </div>
-      )}
       {/* The box grid -- ported from Editor.tsx verbatim (same classes, same
           CSS in index.css, now correctly keyed off the real --editor-cell-
           width/--editor-line-height vars set on the layer above). inset is
