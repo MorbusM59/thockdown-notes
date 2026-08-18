@@ -541,12 +541,14 @@ export function EditorSection({
       // same as every other view-mode change, it's just where you land, not
       // a special saved/restored state.
       setIsForcedPreviewNote(true)
-    } else if (loaded.isAutoOpenItems) {
+    } else if (loaded.isAutoOpenItems && loaded.chapterParentId && window.thockdownChapters) {
       // Same "its own links look broken as raw bracket syntax in edit mode"
-      // reasoning as the auto-TOC branch above, minus the regenerate-on-read
-      // step -- Open Items is patched incrementally on specific write-time
-      // triggers (noteLifecycleService.ts's saveNote checklist-diff hook),
-      // never rescanned just because it's being viewed.
+      // reasoning as the auto-TOC branch above, but Open Items also needs a
+      // pre-render refresh: it is materialized from live checklist state, not
+      // persisted as its own source of truth, so opening it must regenerate
+      // before the editor paints any stale version.
+      await window.thockdownChapters.regenerateAllOpenItems(loaded.chapterParentId)
+      loaded = await window.thockdownNotes.loadNote({ id: noteId })
       setIsForcedPreviewNote(true)
     } else {
       setIsForcedPreviewNote(false)
