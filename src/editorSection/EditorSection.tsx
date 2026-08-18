@@ -5,8 +5,7 @@ import { isExternalNote } from '../shared/noteLifecycle'
 import type { PersistedViewportState } from '../shared/appState'
 import { NOTE_DRAG_MIME_TYPE, parseNoteDragPayload } from '../shared/noteDrag'
 import { normalizeInternalText } from '../editor/TextPolicy'
-import { normalizeChapterHeadings, CHAPTER_HEADLINE_LEVEL_RULE, NOTE_HEADLINE_LEVEL_RULE } from '../shared/markdownHeadings'
-import { parseMarkdownHeading } from '../shared/tableOfContentsText'
+import { CHAPTER_HEADLINE_LEVEL_RULE, NOTE_HEADLINE_LEVEL_RULE } from '../shared/markdownHeadings'
 import { countWords, trackWordCount } from '../editor/WordCount'
 import { buildEditRestoreSnapshotFromUiState } from '../editor/EditRestoreMath'
 import type { EditorRuntimeMetrics } from '../editor/EditorTypography'
@@ -31,7 +30,6 @@ import { usePreviewMarkdownRendering } from './usePreviewMarkdownRendering'
 import { usePreviewScrollbar } from './usePreviewScrollbar'
 import { useDocumentFindNavigation } from './useDocumentFindNavigation'
 import { useMarkdownFormattingToolbar } from './useMarkdownFormattingToolbar'
-import { useHeadlineLevelGuard } from './useHeadlineLevelGuard'
 import { hashNormalizedText } from '../shared/hashText'
 import { restorePreviewBlockSplitCacheFromRanges } from '../editor/PreviewBlockSplit'
 import type { PreviewMarkdownBlock, PreviewBlockSplitCache } from '../editor/PreviewBlockSplit'
@@ -552,24 +550,6 @@ export function EditorSection({
       setIsForcedPreviewNote(true)
     } else {
       setIsForcedPreviewNote(false)
-
-      // A real chapter's own live heading-level enforcement
-      // (useHeadlineLevelGuard.ts's effect) only ever clamps an EXISTING
-      // first-line heading -- it deliberately never synthesizes one, since
-      // doing that on every keystroke would forcibly prepend boilerplate
-      // the instant the user starts typing plain text as a chapter's first
-      // line, before they've had a chance to type a heading at all. Missing
-      // titles are instead backfilled once, right here, at the one choke
-      // point every note activation already funnels through -- the same
-      // `## Unnamed Chapter` insertion normalizeChapterHeadings applies at
-      // chapter-creation time, just re-applied lazily for chapters that
-      // predate that logic (or otherwise lost their first line) rather than
-      // left permanently titleless.
-      if (loaded.chapterOnly && loaded.chapterParentId && !parseMarkdownHeading(loaded.text.split('\n', 1)[0] ?? '')) {
-        const normalizedText = normalizeChapterHeadings(loaded.text)
-        await window.thockdownNotes.saveNote({ id: loaded.id, text: normalizedText })
-        loaded = await window.thockdownNotes.loadNote({ id: noteId })
-      }
     }
 
     const cacheRestoreStart = performance.now()
@@ -908,13 +888,6 @@ export function EditorSection({
     onNotePermanentlyDeleted: evictPermanentlyDeletedNoteCaches,
   })
 
-  useHeadlineLevelGuard({
-    activeNoteId,
-    notes,
-    currentEditorText,
-    editorSelection,
-    applyProgrammaticEditorText,
-  })
 
   useEffect(() => {
     refreshChaptersRef.current = refreshChapters

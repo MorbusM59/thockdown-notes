@@ -193,7 +193,7 @@ export function ChapterBar({
               const isEditing = editingChapterNoteId === chapter.chapterNoteId
               const isActive = chapter.chapterNoteId === activeNoteId
               const note = notes.find((entry) => entry.id === chapter.chapterNoteId)
-              const { text: label, isAssigned } = resolveIdentityLabel(chapter.chapterId, note?.contentText)
+              const { text: label, isAssigned } = resolveIdentityLabel(chapter.chapterId, note?.contentText, 'chapter')
 
               return (
                 <InlinePillOrInput

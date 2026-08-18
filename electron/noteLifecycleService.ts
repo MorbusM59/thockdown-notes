@@ -52,21 +52,12 @@ function checksumText(text: string): string {
 }
 
 function titleFromText(text: string): string {
-  const lines = normalizeText(text).split('\n');
-  // Level 1 only -- a chapter's own first-line heading is always level 2
-  // (see markdownHeadings.ts's normalizeChapterHeadings/clampHeadlineLevels
-  // with CHAPTER_HEADLINE_LEVEL_RULE) and deliberately does NOT count: chapters
-  // have no "title" concept at all, only a chapterId, user-assigned or else
-  // never persisted (see tabLabels.ts's resolveIdentityLabel for the actual
-  // chapter-identity logic; nothing chapter-facing should read `.title`).
-  const heading = lines.find((line) => line.startsWith('# ') && line.trim().length > 2);
-  if (heading) return truncateTitle(heading.slice(2).trim());
+  const firstLine = normalizeText(text).split('\n', 1)[0] ?? '';
+  if (firstLine.startsWith('# ')) {
+    return truncateTitle(firstLine.slice(2).trim());
+  }
 
-  const firstContent = lines.find((line) => {
-    const trimmed = line.trim();
-    return trimmed.length > 0 && trimmed !== '#';
-  });
-  return truncateTitle(firstContent?.trim() ?? 'Untitled');
+  return 'Missing title';
 }
 
 function parseNoteMetadata(rawText: string, sanitize: boolean): ParsedNoteMetadata {
@@ -381,7 +372,7 @@ export class NoteLifecycleService {
   // are otherwise full, independent notes (own tags, own file, own
   // snapshots); chapterOnly only controls menu-view visibility.
   async createChapterNote(parentNoteId: string): Promise<NoteDocument> {
-    const created = await this.createNote({});
+    const created = await this.createNote({ initialText: '## ' });
     this.databaseService.setNoteChapterOnly(created.id, true);
     await this.linkChapterOrCleanUp(parentNoteId, created.id, () => this.databaseService.addChapter(parentNoteId, created.id));
     return this.loadNote({ id: created.id });
@@ -757,11 +748,7 @@ export class NoteLifecycleService {
     }
 
     const source = await this.loadNote({ id: sourceNoteId });
-    // title explicit, not re-derived from the shifted text: titleFromText
-    // only recognizes a level-1 "# " heading, so a shifted "## Title" would
-    // otherwise fall through to using that whole line (hashes and all) as
-    // the title instead.
-    const created = await this.createNote({ initialText: normalizeChapterHeadings(source.text), title: source.title });
+    const created = await this.createNote({ initialText: source.text, title: source.title });
     this.databaseService.setNoteChapterOnly(created.id, true);
     const chapters = await this.linkChapterOrCleanUp(parentNoteId, created.id, () => this.databaseService.addChapter(parentNoteId, created.id));
     const createdDocument = await this.loadNote({ id: created.id });

@@ -8,13 +8,12 @@ describe('tab label display', () => {
     expect(resolveIdentityLabel(null, null)).toEqual({ text: '···', isAssigned: false })
   })
 
-  it('uses the assigned id when present, otherwise a compact preview of the content -- same rule for a note or a chapter', () => {
+  it('uses the assigned id when present, otherwise the first heading title for a note or chapter', () => {
     expect(resolveIdentityLabel('AGENDA', null)).toEqual({ text: 'AGENDA', isAssigned: true })
-    expect(resolveIdentityLabel(null, 'chapter one intro')).toEqual({ text: 'chapter', isAssigned: false })
-    expect(resolveIdentityLabel(null, 'hello world from the chapter')).toEqual({ text: 'hello world', isAssigned: false })
-    expect(resolveIdentityLabel(null, 'this is a much longer chapter preview')).toEqual({ text: 'this is', isAssigned: false })
-    expect(resolveIdentityLabel(null, 'abcdef')).toEqual({ text: 'abcdef', isAssigned: false })
-    expect(resolveIdentityLabel(null, 'abcdefghijkl')).toEqual({ text: 'abcdefghijkl', isAssigned: false })
+    expect(resolveIdentityLabel(null, '# chapter one intro', 'note')).toEqual({ text: 'chapter one intro', isAssigned: false })
+    expect(resolveIdentityLabel(null, '## chapter one intro', 'chapter')).toEqual({ text: 'chapter one intro', isAssigned: false })
+    expect(resolveIdentityLabel(null, 'plain intro', 'note')).toEqual({ text: 'Missing title', isAssigned: false })
+    expect(resolveIdentityLabel(null, 'plain intro', 'chapter')).toEqual({ text: 'Missing title', isAssigned: false })
     expect(resolveIdentityLabel(null, null)).toEqual({ text: '···', isAssigned: false })
   })
 })

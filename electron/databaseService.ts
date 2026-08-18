@@ -313,22 +313,12 @@ function checksumText(text: string): string {
 }
 
 function titleFromText(text: string): string {
-  const lines = normalizeText(text).split('\n');
-  // Level 1 only -- a chapter's own first-line heading is always level 2
-  // (see markdownHeadings.ts's normalizeChapterHeadings/clampHeadlineLevels
-  // with CHAPTER_HEADLINE_LEVEL_RULE) and deliberately does NOT count: chapters
-  // have no "title" concept at all, only a chapterId, user-assigned or else
-  // never persisted (see tabLabels.ts's resolveIdentityLabel for the actual
-  // chapter-identity logic; nothing chapter-facing should read `.title`).
-  const heading = lines.find((line) => line.startsWith('# ') && line.trim().length > 2);
-  if (heading) return truncateTitle(heading.slice(2).trim());
+  const firstLine = normalizeText(text).split('\n', 1)[0] ?? '';
+  if (firstLine.startsWith('# ')) {
+    return truncateTitle(firstLine.slice(2).trim());
+  }
 
-  const firstContent = lines.find((line) => {
-    const trimmed = line.trim();
-    return trimmed.length > 0 && trimmed !== '#';
-  });
-
-  return truncateTitle(firstContent?.trim() ?? 'Untitled');
+  return 'Missing title';
 }
 
 function parseIsoToMs(value: string): number {

@@ -339,7 +339,7 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
   const handleCreateChapter = useCallback(async () => {
     if (!window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId) return
     const { chapters: updatedChapters, created } = await window.thockdownChapters.createChapter(menuIdentityNoteId)
-    const initialText = normalizeChapterHeadings('')
+    const initialText = '## '
     await window.thockdownNotes.saveNote({ id: created.id, text: initialText })
     setChapters(updatedChapters)
     await refreshNotes(created.id)
@@ -411,7 +411,8 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     await flushPendingSaveNow()
 
     const { chapters: createdChapters, created } = await window.thockdownChapters.createChapter(menuIdentityNoteId)
-    await window.thockdownNotes.saveNote({ id: created.id, text: normalizeChapterHeadings(extractedText) })
+    const initialText = extractedText ? `## \n\n${extractedText}` : '## '
+    await window.thockdownNotes.saveNote({ id: created.id, text: initialText })
 
     // createChapter appends the new chapter as the last one -- move it to
     // sit directly behind whichever chapter (or the parent, if there's no
@@ -491,7 +492,8 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
       await flushPendingSaveNow()
 
       const { created } = await window.thockdownChapters.createChapter(menuIdentityNoteId)
-      await window.thockdownNotes.saveNote({ id: created.id, text: normalizeChapterHeadings(extractedText) })
+      const initialText = extractedText ? `## \n\n${extractedText}` : '## '
+      await window.thockdownNotes.saveNote({ id: created.id, text: initialText })
 
       // Reinsert relative to the reorderable subset only, then re-prepend
       // the pinned auto-chapters (if any) before persisting -- reorderChapters
@@ -567,7 +569,8 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
         await flushPendingSaveNow()
 
         const { created } = await window.thockdownChapters.createChapter(menuIdentityNoteId)
-        await window.thockdownNotes.saveNote({ id: created.id, text: normalizeChapterHeadings(cutText) })
+        const initialText = cutText ? `## \n\n${cutText}` : '## '
+        await window.thockdownNotes.saveNote({ id: created.id, text: initialText })
 
         // "New first chapter" means first among the *real* chapters -- right
         // after the pinned auto-chapters (if any), never displacing them
@@ -598,7 +601,8 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
       await flushPendingSaveNow()
 
       const { chapters: createdChapters, created } = await window.thockdownChapters.createChapter(menuIdentityNoteId)
-      await window.thockdownNotes.saveNote({ id: created.id, text: normalizeChapterHeadings(extractedText) })
+      const initialText = extractedText ? `## \n\n${extractedText}` : '## '
+      await window.thockdownNotes.saveNote({ id: created.id, text: initialText })
 
       const currentIndex = createdChapters.findIndex((chapter) => chapter.chapterNoteId === activeNoteId)
       const insertAt = currentIndex >= 0 ? currentIndex : 0

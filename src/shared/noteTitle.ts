@@ -11,18 +11,12 @@ import { truncateTitle } from './textSanitization'
  * and as ground truth for the fuzz test.
  */
 export function deriveNoteTitleFromText(text: string): string {
-  const lines = normalizeInternalText(text).split('\n')
-  const heading = lines.find((line) => line.startsWith('# ') && line.trim().length > 2)
-  if (heading) {
-    return truncateTitle(heading.slice(2).trim())
+  const firstLine = normalizeInternalText(text).split('\n', 1)[0] ?? ''
+  if (firstLine.startsWith('# ')) {
+    return truncateTitle(firstLine.slice(2).trim()) || 'Missing title'
   }
 
-  const firstContent = lines.find((line) => {
-    const trimmed = line.trim()
-    return trimmed.length > 0 && trimmed !== '#'
-  })
-
-  return truncateTitle(firstContent?.trim() ?? 'Untitled')
+  return 'Missing title'
 }
 
 interface FirstMatchCache {
@@ -47,12 +41,11 @@ export interface NoteTitleCache {
 }
 
 function isHeadingLine(line: string): boolean {
-  return line.startsWith('# ') && line.trim().length > 2
+  return line.startsWith('# ')
 }
 
-function isContentLine(line: string): boolean {
-  const trimmed = line.trim()
-  return trimmed.length > 0 && trimmed !== '#'
+function isContentLine(_line: string): boolean {
+  return false
 }
 
 function findFirstMatchIndex(lines: string[], predicate: (line: string) => boolean, start: number, end: number): number | null {
@@ -172,21 +165,15 @@ function updateFirstMatchIncremental(
  */
 export function deriveNoteTitleIncremental(text: string, previous: NoteTitleCache | null): { title: string; cache: NoteTitleCache } {
   const lines = text.split('\n')
+  const firstLine = lines[0] ?? ''
 
-  const headingMatch = updateFirstMatchIncremental(lines, previous?.headingMatch ?? null, isHeadingLine)
-  if (headingMatch.index !== null) {
-    const headingLine = lines[headingMatch.index]
-    return {
-      title: truncateTitle(headingLine.slice(2).trim()),
-      cache: { headingMatch, contentMatch: previous?.contentMatch ?? null },
-    }
-  }
+  const headingMatch = firstLine.startsWith('# ')
+    ? { lines, index: 0 }
+    : { lines, index: null }
 
-  const contentMatch = updateFirstMatchIncremental(lines, previous?.contentMatch ?? null, isContentLine)
-  const firstContent = contentMatch.index !== null ? lines[contentMatch.index] : undefined
-
+  const title = firstLine.startsWith('# ') ? truncateTitle(firstLine.slice(2).trim()) || 'Missing title' : 'Missing title'
   return {
-    title: truncateTitle(firstContent?.trim() ?? 'Untitled'),
-    cache: { headingMatch, contentMatch },
+    title,
+    cache: { headingMatch, contentMatch: previous?.contentMatch ?? null },
   }
 }

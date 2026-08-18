@@ -52,8 +52,23 @@ export interface IdentityLabel {
  * chapter -- both are the same "null until the user explicitly sets one"
  * shape, which is what makes one shared function correct for both.
  */
-export function resolveIdentityLabel(assignedId: string | null | undefined, contentText: string | null | undefined): IdentityLabel {
+export function resolveIdentityLabel(
+  assignedId: string | null | undefined,
+  contentText: string | null | undefined,
+  kind: 'note' | 'chapter' = 'note',
+): IdentityLabel {
   const trimmed = assignedId?.trim()
   if (trimmed) return { text: trimmed, isAssigned: true }
-  return { text: deriveContentSnippet(contentText), isAssigned: false }
+
+  const normalized = (contentText ?? '').trim()
+  if (!normalized) return { text: '···', isAssigned: false }
+
+  const expectedPrefix = kind === 'chapter' ? '## ' : '# '
+  const firstLine = (contentText ?? '').split(/\r?\n/, 1)[0] ?? ''
+  if (!firstLine.startsWith(expectedPrefix)) {
+    return { text: 'Missing title', isAssigned: false }
+  }
+
+  const title = firstLine.replace(new RegExp(`^${expectedPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`), '').trim()
+  return { text: title || 'Missing title', isAssigned: false }
 }
