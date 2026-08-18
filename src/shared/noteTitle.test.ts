@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deriveNoteTitleFromText, deriveNoteTitleIncremental, type NoteTitleCache } from './noteTitle'
+import { deriveNoteTitleFromText, deriveNoteTitleIncremental } from './noteTitle'
 
 describe('deriveNoteTitleIncremental', () => {
   function expectMatchesFullScan(text: string, result: { title: string }) {

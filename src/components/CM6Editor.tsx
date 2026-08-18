@@ -838,12 +838,8 @@ export function CM6Editor({
   const isSnapshotRestorePendingRef = useRef(isSnapshotRestorePending);
   const snapshotRestoreRafRef = useRef<number | null>(null);
   const caretHidden = isSnapshotRestorePending || caretSuspended;
-  // Editor.tsx's RichTextPlugin shows/hides its placeholder automatically
-  // based on whether Lexical's root node is empty; CM6 has no equivalent
-  // built-in behavior, so this is tracked explicitly -- updated wherever the
-  // document can change (the updateListener's docChanged branch, and the
-  // note-switch hydration effect).
-  const [isDocEmpty, setIsDocEmpty] = useState(() => initialText.length === 0);
+  // Placeholder emptiness tracking is unnecessary here; the CM6 view itself
+  // manages empty-document UX without a separate React state mirror.
   const [isDraggingTop, setIsDraggingTop] = useState(false);
   const [isDraggingBottom, setIsDraggingBottom] = useState(false);
   const [isCtrlHeldForBoundaryDrag, setIsCtrlHeldForBoundaryDrag] = useState(false);
@@ -2994,7 +2990,6 @@ export function CM6Editor({
           const nextSelection = toSelectionState(update.state.selection.main);
           previousTextRef.current = nextText;
           previousSelectionRef.current = nextSelection;
-          setIsDocEmpty(nextText.length === 0);
 
           // The note-switch hydration effect's own dispatches are real
           // `docChanged` transactions too (even a full replace with

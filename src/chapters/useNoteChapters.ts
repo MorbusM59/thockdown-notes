@@ -5,7 +5,6 @@ import { splitChapterFamily } from '../shared/chapters'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { EditorSelectionState } from '../editor/EditorContract'
 import { collapseSurgerySite, trimBlankLines } from './chapterExtraction'
-import { normalizeChapterHeadings } from '../shared/markdownHeadings'
 import { useInlinePillEdit } from '../shared/useInlinePillEdit'
 
 export interface UseNoteChaptersOptions {
@@ -135,9 +134,6 @@ export interface UseNoteChaptersResult {
   /** Drop on the bar's own background (past the last pill) -- appends to the end, mirroring useSectionTabs.ts's container-level drop. */
   onChapterContainerDragOver: (event: DragEvent<HTMLDivElement>) => void
   onChapterContainerDrop: (event: DragEvent<HTMLDivElement>) => void
-  /** Drop on the parent tab itself -- promotes the dragged chapter to the parent slot (see handleChapterPromoteDrop's own doc comment). */
-  onChapterPromoteDragOver: (event: DragEvent<HTMLDivElement>) => void
-  onChapterPromoteDrop: (event: DragEvent<HTMLDivElement>) => void
   /** Which chapter pill (by chapterNoteId) is mid-inline-edit of its chapterId, if any. */
   editingChapterNoteId: string | null
   chapterIdDraft: string
@@ -729,44 +725,6 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     await persistReorderedChapters(reordered)
   }, [draggedChapterIndex, reorderableChapters, menuIdentityNoteId, persistReorderedChapters])
 
-  // Drop directly on the parent tab -- the one place chapter drag-and-drop
-  // diverges from a plain tab/tag reorder. The dragged chapter becomes the
-  // new parent (promoteChapterToParent handles tag migration -- chapters
-  // carry no tags of their own, see its own doc comment -- and the previous
-  // parent becomes the new first chapter). No explicit activateNote/note
-  // switch afterward: menuIdentityNoteId (EditorSection.tsx) is derived
-  // reactively from the active note's own chapterParentId, so once
-  // refreshNotes() lands the updated chapterOnly/chapterParentId flags, the
-  // bar's own active-pill highlighting and parent-tab identity resolve
-  // themselves on the next render regardless of which note was active when
-  // the drop happened -- forcing a navigation here would just be an
-  // unrequested side effect the tab/tag bar's own reorders never have either.
-  const handleChapterPromoteDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (draggedChapterIndex === null) return
-    event.preventDefault()
-    event.stopPropagation()
-    event.dataTransfer.dropEffect = 'move'
-  }, [draggedChapterIndex])
-
-  const handleChapterPromoteDrop = useCallback(async (event: DragEvent<HTMLDivElement>) => {
-    if (draggedChapterIndex === null) return
-    event.preventDefault()
-    event.stopPropagation()
-    if (!window.thockdownChapters || !menuIdentityNoteId) {
-      setDraggedChapterIndex(null)
-      return
-    }
-
-    const dragged = reorderableChapters[draggedChapterIndex]
-    setDraggedChapterIndex(null)
-    if (!dragged) return
-
-    const updatedChapters = await window.thockdownChapters.promoteChapterToParent(menuIdentityNoteId, dragged.chapterNoteId)
-    setChapters(updatedChapters)
-    await refreshNotes(activeNoteId)
-  }, [draggedChapterIndex, reorderableChapters, menuIdentityNoteId, refreshNotes, activeNoteId])
-
-
   const commitChapterIdEditValue = useCallback(async (chapterNoteId: string, draft: string) => {
     if (!menuIdentityNoteId || !window.thockdownChapters) return
 
@@ -813,8 +771,6 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
     onChapterDrop: handleChapterDrop,
     onChapterContainerDragOver: handleChapterContainerDragOver,
     onChapterContainerDrop: handleChapterContainerDrop,
-    onChapterPromoteDragOver: handleChapterPromoteDragOver,
-    onChapterPromoteDrop: handleChapterPromoteDrop,
     editingChapterNoteId,
     chapterIdDraft,
     setChapterIdDraft,

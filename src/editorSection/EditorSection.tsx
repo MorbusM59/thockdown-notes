@@ -57,7 +57,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'handleNavigateSnapshot' | 'handleBranchOpened' | 'handleBranchError' | 'timelineCurveConstant' | 'setTimelineCurveConstant'
   | 'setTimelineTrackLengthPx' | 'handleCreateManualSnapshot' | 'handleReturnToPresent' | 'handleMergeAdjacentSnapshots'
   | 'scrollbarHostEl' | 'setScrollbarHostEl' | 'notes' | 'menuIdentityNoteId' | 'chapters' | 'onParentTabClick' | 'onCreateChapter' | 'onChapterClick'
-  | 'onChapterDragStart' | 'onChapterDragEnd' | 'onChapterDrop' | 'onChapterContainerDragOver' | 'onChapterContainerDrop' | 'onChapterPromoteDragOver' | 'onChapterPromoteDrop'
+  | 'onChapterDragStart' | 'onChapterDragEnd' | 'onChapterDrop' | 'onChapterContainerDragOver' | 'onChapterContainerDrop'
   | 'editingChapterNoteId' | 'chapterIdDraft' | 'setChapterIdDraft' | 'onStartEditingChapterId' | 'onCommitChapterIdEdit' | 'onCancelChapterIdEdit'
   | 'onCollapseChapterIntoPrevious' | 'onExtractSelectionToChapter'> {
   sectionId: string
@@ -868,8 +868,6 @@ export function EditorSection({
     onChapterDrop,
     onChapterContainerDragOver,
     onChapterContainerDrop,
-    onChapterPromoteDragOver,
-    onChapterPromoteDrop,
     editingChapterNoteId,
     chapterIdDraft,
     setChapterIdDraft,
@@ -1324,8 +1322,6 @@ export function EditorSection({
     onChapterDrop,
     onChapterContainerDragOver,
     onChapterContainerDrop,
-    onChapterPromoteDragOver,
-    onChapterPromoteDrop,
     editingChapterNoteId,
     chapterIdDraft,
     setChapterIdDraft,
@@ -1707,8 +1703,6 @@ export function EditorSection({
         onChapterDrop={onChapterDrop}
         onChapterContainerDragOver={onChapterContainerDragOver}
         onChapterContainerDrop={onChapterContainerDrop}
-        onChapterPromoteDragOver={onChapterPromoteDragOver}
-        onChapterPromoteDrop={onChapterPromoteDrop}
         editingChapterNoteId={editingChapterNoteId}
         chapterIdDraft={chapterIdDraft}
         setChapterIdDraft={setChapterIdDraft}

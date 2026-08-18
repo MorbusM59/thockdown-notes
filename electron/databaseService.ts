@@ -1434,24 +1434,16 @@ export class DatabaseService {
    * has no tab-bar identity of its own; only its parent's pill is
    * pinnable/tabbable) -- a single, root-cause filter here rather than
    * trusting every write path to keep note_tabs and a note's chapterOnly
-   * status in sync. Chapters are always brand-new notes with no pre-existing
-   * tab row, EXCEPT one path: promoteChapterToParent demotes the *old*
-   * parent to chapterOnly, and that note could easily have had pinned tabs
-   * from its life as a regular note -- this filter is what actually hides
-   * them (promoteChapterToParent also hands that row over to the newly-
-   * promoted note in place, but this is the backstop for any row that
-   * somehow survives unclaimed, including in a database that predates that
-   * handoff).
+   * status in sync.
    */
   listNoteTabs(): NoteTabEntry[] {
     const db = this.requireDb();
     // The LEFT JOIN to `chapters` re-validates lastActiveChapterNoteId on
     // every read, on top of the column's own ON DELETE SET NULL FK -- belt
     // and suspenders against it pointing at a note that still exists but
-    // isn't (or is no longer) actually a chapter of this tab's noteId (e.g.
-    // promoteChapterToParent re-parenting chapters elsewhere). `c.chapterNoteId`
-    // is only non-null when that's still true, so it's used as the emitted
-    // value instead of the raw column.
+    // isn't (or is no longer) actually a chapter of this tab's noteId.
+    // `c.chapterNoteId` is only non-null when that's still true, so it's
+    // used as the emitted value instead of the raw column.
     const rows = db.prepare(`
       SELECT nt.sectionId AS sectionId, nt.noteId AS noteId, nt.position AS position, nt.addedAt AS addedAt,
              c.chapterNoteId AS lastActiveChapterNoteId
@@ -1640,95 +1632,6 @@ export class DatabaseService {
     });
     tx();
     return this.listChaptersForNote(parentNoteId);
-  }
-
-  /** Re-parents the active note tree by promoting the dragged chapter to the root and converting the previous parent into its first chapter. */
-  promoteChapterToParent(parentNoteId: string, chapterNoteId: string): ChapterEntry[] {
-    const db = this.requireDb();
-    const tx = db.transaction(() => {
-      const chapterRows = db.prepare(`
-        SELECT c.position, c.chapterNoteId, c.chapterId, n.isAutoToc, n.isAutoOpenItems
-        FROM chapters c
-        JOIN notes n ON n.id = c.chapterNoteId
-        WHERE c.parentNoteId = ?
-        ORDER BY c.position ASC
-      `).all(parentNoteId) as Array<{ position: number; chapterNoteId: string; chapterId: string | null; isAutoToc: number; isAutoOpenItems: number }>;
-      const dragged = chapterRows.find((row) => row.chapterNoteId === chapterNoteId);
-      if (!dragged) {
-        throw new Error(`Chapter ${chapterNoteId} is not a chapter of ${parentNoteId}`);
-      }
-
-      const remaining = chapterRows.filter((row) => row.chapterNoteId !== chapterNoteId);
-      // Auto-TOC/auto-Open-Items stay pinned first (same invariant pinChapterToFront/
-      // pinChapterAfterAutoToc establish elsewhere), ahead of the demoted old parent.
-      const autoChapters = remaining.filter((row) => row.isAutoToc || row.isAutoOpenItems);
-      const realChapters = remaining.filter((row) => !row.isAutoToc && !row.isAutoOpenItems);
-      db.prepare('DELETE FROM chapters WHERE parentNoteId = ?').run(parentNoteId);
-
-      db.prepare('UPDATE notes SET chapterOnly = 0 WHERE id = ?').run(chapterNoteId);
-      db.prepare('UPDATE notes SET chapterOnly = 1 WHERE id = ?').run(parentNoteId);
-
-      // Chapters have no tag life of their own -- tags always belong to
-      // whichever note is currently playing the parent role (see
-      // migrateChapterTagsToParent's doc comment). Move the old parent's
-      // tags onto the newly-promoted note so the document keeps appearing
-      // under whatever it was filed/tagged as; merge rather than clobber in
-      // case the promoted note already had a stray tag of its own, then
-      // strip the old parent down to none, matching every other chapter.
-      const oldParentTagRows = db.prepare('SELECT tagId FROM note_tags WHERE noteId = ? ORDER BY position ASC').all(parentNoteId) as Array<{ tagId: number }>;
-      const insertOntoNewParentStmt = db.prepare(`
-        INSERT OR IGNORE INTO note_tags (noteId, tagId, position)
-        VALUES (?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM note_tags WHERE noteId = ?))
-      `);
-      for (const row of oldParentTagRows) {
-        insertOntoNewParentStmt.run(chapterNoteId, row.tagId, chapterNoteId);
-      }
-      db.prepare('DELETE FROM note_tags WHERE noteId = ?').run(parentNoteId);
-
-      // The newly-promoted note takes over the old parent's exact tab-bar
-      // spot (same section, same position) rather than the old parent's
-      // pins just vanishing -- a chapter has no tab-bar identity of its
-      // own, so whichever note is playing the parent role now is the one
-      // that spot belongs to, same as tags just above. Falls back to a
-      // plain delete only if the promoted note somehow already has its own
-      // row in that section (it shouldn't -- chapters are never tabbable --
-      // but the UNIQUE(sectionId, noteId) constraint would reject the
-      // UPDATE otherwise).
-      const oldParentTabRows = db.prepare('SELECT sectionId FROM note_tabs WHERE noteId = ?').all(parentNoteId) as Array<{ sectionId: string }>;
-      for (const row of oldParentTabRows) {
-        const collision = db.prepare('SELECT 1 FROM note_tabs WHERE sectionId = ? AND noteId = ?').get(row.sectionId, chapterNoteId);
-        if (collision) {
-          db.prepare('DELETE FROM note_tabs WHERE sectionId = ? AND noteId = ?').run(row.sectionId, parentNoteId);
-        } else {
-          // Whatever chapter this tab last had open carries over as-is (its
-          // chapters row was just re-parented onto chapterNoteId above, same
-          // note id, so it's still valid) -- EXCEPT if that chapter was
-          // chapterNoteId itself, i.e. this section had last drilled into the
-          // very chapter now becoming the parent. "Last active chapter of
-          // itself" is meaningless post-promotion, so that one case resets to
-          // null (show the new base) instead of carrying a self-reference.
-          db.prepare(`
-            UPDATE note_tabs
-            SET noteId = ?,
-                lastActiveChapterNoteId = CASE WHEN lastActiveChapterNoteId = ? THEN NULL ELSE lastActiveChapterNoteId END
-            WHERE sectionId = ? AND noteId = ?
-          `).run(chapterNoteId, chapterNoteId, row.sectionId, parentNoteId);
-        }
-      }
-
-      const insertionRows = [
-        ...autoChapters.map((row) => ({ parentNoteId: chapterNoteId, chapterNoteId: row.chapterNoteId, chapterId: row.chapterId })),
-        { parentNoteId: chapterNoteId, chapterNoteId: parentNoteId, chapterId: null },
-        ...realChapters.map((row) => ({ parentNoteId: chapterNoteId, chapterNoteId: row.chapterNoteId, chapterId: row.chapterId })),
-      ];
-
-      insertionRows.forEach((row, index) => {
-        db.prepare('INSERT INTO chapters (parentNoteId, position, chapterNoteId, chapterId) VALUES (?, ?, ?, ?)')
-          .run(row.parentNoteId, index, row.chapterNoteId, row.chapterId);
-      });
-    });
-    tx();
-    return this.listChaptersForNote(chapterNoteId);
   }
 
   getNoteContentSnapshot(noteId: string): string | null {
@@ -3472,8 +3375,8 @@ export class DatabaseService {
     this.ensureNotesColumn('chapterOnly', 'INTEGER NOT NULL DEFAULT 0');
     // Marks the one chapter (if any) that's the auto-generated table of
     // contents for its parent's whole chapter family -- see
-    // promoteChapterToParent's neighbor, regenerateAutoTocChapter, for what
-    // populates it. A dedicated flag rather than reusing chapterId (e.g. a
+    // regenerateAutoTocChapter, for what populates it. A dedicated flag
+    // rather than reusing chapterId (e.g. a reserved "TOC" label) deliberately:
     // reserved "TOC" label) deliberately: chapterId is user-editable text
     // (right-click any chapter to retype it), so a reserved string could
     // collide with something a user typed themselves, silently reassigning

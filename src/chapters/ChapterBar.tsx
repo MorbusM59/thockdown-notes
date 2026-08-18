@@ -20,8 +20,6 @@ export interface ChapterBarProps {
   onChapterDrop: (event: DragEvent<HTMLDivElement>, targetIndex: number) => void
   onChapterContainerDragOver: (event: DragEvent<HTMLDivElement>) => void
   onChapterContainerDrop: (event: DragEvent<HTMLDivElement>) => void
-  onChapterPromoteDragOver: (event: DragEvent<HTMLDivElement>) => void
-  onChapterPromoteDrop: (event: DragEvent<HTMLDivElement>) => void
   /** Which chapter pill (by chapterNoteId) is mid-inline-edit of its chapterId, if any. */
   editingChapterNoteId: string | null
   chapterIdDraft: string
@@ -67,9 +65,7 @@ export interface ChapterBarProps {
  * owns directly: chapter pills are themselves draggable, exactly like
  * useSectionTabs.ts's tab/tag pills, so the user can reorder them within the
  * bar by dropping on another pill or on the bar's own background (past the
- * last one, appends to the end). Dropping one directly on the *parent* tab
- * instead promotes it to the parent note, demoting the previous parent to
- * the new first chapter -- see useNoteChapters.ts's handleChapterPromoteDrop.
+ * last one, appends to the end).
  */
 export function ChapterBar({
   parentNoteId,
@@ -83,8 +79,6 @@ export function ChapterBar({
   onChapterDrop,
   onChapterContainerDragOver,
   onChapterContainerDrop,
-  onChapterPromoteDragOver,
-  onChapterPromoteDrop,
   editingChapterNoteId,
   chapterIdDraft,
   setChapterIdDraft,
@@ -183,8 +177,6 @@ export function ChapterBar({
             <div
               className={`tag-pill note-tab-pill chapter-pill${isParentActive ? ' is-active' : ''}`}
               onClick={onParentTabClick}
-              onDragOver={onChapterPromoteDragOver}
-              onDrop={onChapterPromoteDrop}
               data-tooltip={parentNote?.title ?? 'INTRO'}
             >
               <span className="fa-solid fa-book" aria-hidden="true" />

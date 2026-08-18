@@ -19,7 +19,6 @@ import type {
   TagSummary,
 } from '../src/shared/noteLifecycle';
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
-import { normalizeChapterHeadings } from '../src/shared/markdownHeadings';
 import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine, headingsChanged, parseMarkdownHeading, stripMarkdownInlineFormatting } from '../src/shared/tableOfContentsText';
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, findOpenItemSourceAtLine, parseOpenItemsGroups, toggleChecklistItemByText } from '../src/shared/openItemsText';
 import { resolveIdentityLabel } from '../src/shared/tabLabels';
