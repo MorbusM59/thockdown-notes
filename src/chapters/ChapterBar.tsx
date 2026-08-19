@@ -90,6 +90,20 @@ export interface ChapterBarProps {
  * whole wrapper (mouseleave, which doesn't fire when crossing between the
  * wrapper's own children) reverts to the plain pill instead. All of the
  * timing/state for this lives in useChapterPillActions.ts, not here.
+ *
+ * The split wrapper and the plain pill each carry an explicit, distinct
+ * `key` ("split"/"pill") even though this is a plain ternary, not a list --
+ * without it, confirmed live, reverting from the split caused the chapter
+ * bar to visibly grow taller for ~200ms before snapping back. Both branches
+ * are a bare `<div>` at the same JSX position, so with no key React
+ * reconciles them as the *same* host node and just patches its className --
+ * and since `.tag-pill` (tags.css) declares `transition: all 0.2s` while
+ * `.chapter-pill-split` has no padding/border of its own, that patch reads
+ * as a live style change on one persistent element, so the newly-applied
+ * transition animates padding/border-width in from 0 on that same node,
+ * visibly inflating it until the transition finishes. A key forces React to
+ * unmount/remount instead of patching in place, so the plain pill's final
+ * style is just painted once, correctly, with nothing to transition from.
  */
 export function ChapterBar({
   parentNoteId,
@@ -227,6 +241,7 @@ export function ChapterBar({
                 >
                   {isSplitArmed ? (
                     <div
+                      key="split"
                       className="chapter-pill-split"
                       style={{ width: `${splitArmedChapter!.widthPx}px` }}
                       onMouseLeave={() => onChapterPillMouseLeave(chapter.chapterNoteId)}
@@ -248,6 +263,7 @@ export function ChapterBar({
                     </div>
                   ) : (
                     <div
+                      key="pill"
                       className={`tag-pill note-tab-pill chapter-pill${isActive ? ' is-active' : ''}`}
                       data-chapter-note-id={chapter.chapterNoteId}
                       draggable

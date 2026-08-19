@@ -628,3 +628,20 @@
   -webkit-mask-image: url('/assets/buttons/deleted.png');
   mask-image: url('/assets/buttons/deleted.png');
 }
+
+/* Square off the two mini pills' facing inner corners (archive's right
+   side, delete's left side) so the seam at the gap reads as one pill split
+   down the middle, rather than two independently-rounded pills sitting
+   next to each other. Outer corners keep .tag-pill's own border-radius
+   (inherited, untouched). The .tag-pill prefix matches every other
+   override in this file that needs to beat .tag-pill's own equal-
+   specificity border-radius declaration. */
+.tag-pill.chapter-pill-mini-archive {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.tag-pill.chapter-pill-mini-delete {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
