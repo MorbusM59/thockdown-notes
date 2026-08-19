@@ -33,6 +33,8 @@ export interface SectionEditorAreaProps {
   activeNoteHasDebugTag: boolean
   isPreviewingSnapshot: boolean
   isCaretSuspended: boolean
+  isEscapeHoldPanelOpen: boolean
+  onEscapeHoldPanelClose: () => void
   spellCheckEditEnabled: boolean
   previewTextureRef: RefObject<HTMLDivElement>
   previewScrollRef: RefObject<HTMLDivElement>
@@ -137,6 +139,8 @@ export function SectionEditorArea({
   activeNoteHasDebugTag,
   isPreviewingSnapshot,
   isCaretSuspended,
+  isEscapeHoldPanelOpen,
+  onEscapeHoldPanelClose,
   spellCheckEditEnabled,
   previewTextureRef,
   previewScrollRef,
@@ -263,6 +267,25 @@ export function SectionEditorArea({
       <main className={`editor-shell${isChapterPanelOpen ? ' chapter-panel-is-open' : ''}`}>
         <div className="editor-background">
           <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}`}>
+            {isEscapeHoldPanelOpen && isSectionActive && activeNoteId ? (
+              <div
+                className="editor-escape-hold-overlay"
+                role="dialog"
+                aria-label="Quick note panel"
+                onClick={onEscapeHoldPanelClose}
+              >
+                <div
+                  className="editor-escape-hold-panel"
+                  onClick={(event) => event.stopPropagation()}
+                  aria-live="polite"
+                >
+                  <div className="editor-escape-hold-panel-inner">
+                    <div className="editor-escape-hold-panel-title">Hold Escape</div>
+                    <div className="editor-escape-hold-panel-hint">Quick note panel</div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
             <div className={`edit-container${isPreviewMode ? ' is-pane-hidden' : ''}`}>
               <div className="markdown-editor-texture" />
               {activeNoteId ? (

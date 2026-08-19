@@ -194,6 +194,8 @@ export function EditorSection({
   showReviewFlags,
   onToggleReviewGutter,
   onToggleReviewFlags,
+  isEscapeHoldPanelOpen,
+  onEscapeHoldPanelClose,
   isLeftmostSection,
   canCreateSection,
   onCreateSection,
@@ -1717,6 +1719,8 @@ export function EditorSection({
         activeNoteHasDebugTag={activeNoteHasDebugTag}
         isPreviewingSnapshot={isPreviewingSnapshot}
         isCaretSuspended={isCaretSuspended}
+        isEscapeHoldPanelOpen={isEscapeHoldPanelOpen}
+        onEscapeHoldPanelClose={onEscapeHoldPanelClose}
         spellCheckEditEnabled={spellCheckEditEnabled}
         previewTextureRef={previewTextureRef}
         previewScrollRef={previewScrollRef}

@@ -147,6 +147,7 @@ import { normalizeInternalText } from './editor/TextPolicy'
 import { truncateTitle } from './shared/textSanitization'
 import { deriveNoteTitleFromText, deriveNoteTitleIncremental, type NoteTitleCache } from './shared/noteTitle'
 import { isNoteSearchQueryActive, matchesNoteSearchQuery } from './shared/noteSearch'
+import { ESCAPE_HOLD_MS, didEscapeHoldTrigger } from './shared/escapeHold'
 import {
   deriveRenderScrollDynamicFromResponsiveness,
   deriveRenderScrollResponsivenessFromDynamic,
@@ -1831,6 +1832,22 @@ function App() {
   const [persistenceReady, setPersistenceReady] = useState(false)
   const [appShellWidthPx, setAppShellWidthPx] = useState(APP_WINDOW_MIN_WIDTH_PX)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
+  const [isEscapeHoldPanelOpen, setIsEscapeHoldPanelOpen] = useState(false)
+  const escapeHoldTimerRef = useRef<number | null>(null)
+  const escapeHoldTriggeredRef = useRef(false)
+  const escapeFreshCycleWhilePanelOpenRef = useRef(false)
+  const clearEscapeHoldTimer = useCallback(() => {
+    if (escapeHoldTimerRef.current !== null) {
+      window.clearTimeout(escapeHoldTimerRef.current)
+      escapeHoldTimerRef.current = null
+    }
+  }, [])
+  const handleEscapeHoldPanelClose = useCallback(() => {
+    setIsEscapeHoldPanelOpen(false)
+    clearEscapeHoldTimer()
+    escapeHoldTriggeredRef.current = false
+    escapeFreshCycleWhilePanelOpenRef.current = false
+  }, [clearEscapeHoldTimer])
   // "Double size" mode: 2x page zoom paired with a doubled window minimum --
   // see the window-control:double-size-mode handler in electron/main.ts.
   const [isDoubleSizeMode, setIsDoubleSizeMode] = useState(false)
@@ -7581,22 +7598,74 @@ ${markdownHtml}
           return
         }
 
+        if (isEscapeHoldPanelOpen) {
+          if (!event.repeat) {
+            escapeFreshCycleWhilePanelOpenRef.current = true
+          }
+          event.preventDefault()
+          return
+        }
+
         if (activeSection?.isForcedPreviewNote) return
 
-        event.preventDefault()
-        void activeSection?.toggleRenderViewMode()
+        if (event.repeat) return
+
+        clearEscapeHoldTimer()
+        escapeHoldTriggeredRef.current = false
+        escapeFreshCycleWhilePanelOpenRef.current = false
+        escapeHoldTimerRef.current = window.setTimeout(() => {
+          escapeHoldTriggeredRef.current = true
+          setIsEscapeHoldPanelOpen(true)
+        }, ESCAPE_HOLD_MS)
       }
     }
 
+    const onKeyUp = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+
+      clearEscapeHoldTimer()
+
+      if (escapeHoldTriggeredRef.current) {
+        escapeHoldTriggeredRef.current = false
+        event.preventDefault()
+        return
+      }
+
+      if (escapeFreshCycleWhilePanelOpenRef.current) {
+        escapeFreshCycleWhilePanelOpenRef.current = false
+        event.preventDefault()
+        handleEscapeHoldPanelClose()
+        return
+      }
+
+      if (isEscapeHoldPanelOpen) {
+        event.preventDefault()
+        return
+      }
+
+      if (activeSection?.isForcedPreviewNote) return
+
+      event.preventDefault()
+      void activeSection?.toggleRenderViewMode()
+    }
+
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      clearEscapeHoldTimer()
+    }
   }, [
     activeSection,
     activeSectionId,
+    clearEscapeHoldTimer,
     createNote,
     createNoteFromClipboardTitle,
     editorSections,
     getActiveSection,
+    handleEscapeHoldPanelClose,
+    isEscapeHoldPanelOpen,
     isFindMode,
     isReplaceMode,
     markSectionActive,
@@ -8642,6 +8711,8 @@ ${markdownHtml}
                   spellCheckEditEnabled={spellCheckEnabled}
                   spellCheckRenderEnabled={spellCheckEnabled}
                   highlightSearchColor={highlightColors.search}
+                  isEscapeHoldPanelOpen={isEscapeHoldPanelOpen}
+                  onEscapeHoldPanelClose={handleEscapeHoldPanelClose}
                   showLineNumbers={reviewGutterVisibleBySection[entry.id] ?? false}
                   showReviewFlags={reviewFlagsVisibleBySection[entry.id] ?? false}
                   onToggleReviewGutter={() => handleToggleReviewGutter(entry.id)}
