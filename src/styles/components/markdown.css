@@ -167,14 +167,18 @@
 }
 
 /* 11b. Markdown typography */
+.markdown-preview > div > div:first-child > h1 {
+  margin-top: 0;
+}
+
 .markdown-preview h1,
 .markdown-preview h2,
 .markdown-preview h3,
 .markdown-preview h4,
 .markdown-preview h5,
 .markdown-preview h6 {
-  margin:      0.75em 0 0.45em;
-  line-height: 1.25;
+  margin:      0.5em 0 0 0;
+  line-height: 1.2;
   color:       inherit;
   text-shadow: var(--text-shadow-emboss-heading-glow);
 }
