@@ -1750,11 +1750,29 @@ export class DatabaseService {
     };
   }
 
-  /** Permanently deletes a note. If it's a parent, its chapters cascade-delete with it -- chapters have no life outside their parent (see `chapters` table doc), so `ON DELETE CASCADE` alone isn't enough: it only removes the `chapters` join row, not the chapter's own `notes` row. One level only -- chapters can't have sub-chapters. */
+  /**
+   * Permanently deletes a note. If it's a parent, every one of its chapters
+   * cascade-deletes with it -- chapters have no life outside their parent
+   * (see `chapters` table doc) -- regardless of that chapter's own
+   * archived/deleted status: a chapter currently attached (live, or
+   * carrying its own `archived`/`deleted` tag but not yet detached) is
+   * swept via the `chapters` table; a chapter currently DETACHED (sitting
+   * in Trash via detachChapterForTrash, no `chapters` row any more) is
+   * swept via its own `detachedChapterParentId`, or it would otherwise be
+   * left behind as an orphaned note nothing can ever reach again (no
+   * `chapters` row to show it in a chapter bar, no live parent to restore
+   * it to). `ON DELETE CASCADE` alone isn't enough for either case: it only
+   * removes the `chapters` join row, not the chapter's own `notes` row, and
+   * has no bearing on `detachedChapterParentId` at all (a plain column, not
+   * a foreign key). One level only -- chapters can't have sub-chapters.
+   */
   deleteNote(id: string): void {
     const db = this.requireDb();
-    const chapterNoteIds = (db.prepare('SELECT chapterNoteId FROM chapters WHERE parentNoteId = ?').all(id) as Array<{ chapterNoteId: string }>)
+    const attachedChapterNoteIds = (db.prepare('SELECT chapterNoteId FROM chapters WHERE parentNoteId = ?').all(id) as Array<{ chapterNoteId: string }>)
       .map((row) => row.chapterNoteId);
+    const detachedChapterNoteIds = (db.prepare('SELECT id FROM notes WHERE chapterOnly = 1 AND detachedChapterParentId = ?').all(id) as Array<{ id: string }>)
+      .map((row) => row.id);
+    const chapterNoteIds = [...new Set([...attachedChapterNoteIds, ...detachedChapterNoteIds])];
 
     const tx = db.transaction(() => {
       for (const chapterNoteId of chapterNoteIds) {
@@ -3638,14 +3656,31 @@ export class DatabaseService {
     tx();
   }
 
-  /** A `chapterOnly` note with no `chapters` row at all can't be reached from anywhere -- it isn't shown in any menu view, and it isn't anyone's chapter. Cleans up leftovers from prior states/bugs rather than leaving them permanently invisible. */
+  /**
+   * A `chapterOnly` note with no `chapters` row and no live remembered
+   * parent can't be reached from anywhere -- it isn't shown in any menu
+   * view, it isn't anyone's chapter, and nothing can ever restore it.
+   * Cleans up leftovers from prior states/bugs rather than leaving them
+   * permanently invisible. A chapter currently DETACHED (sitting in Trash
+   * via detachChapterForTrash) also has no `chapters` row, by design --
+   * but that's a legitimate, restorable state, not orphan garbage, as long
+   * as `detachedChapterParentId` still points at a note that exists
+   * (deleteNote purges a parent's detached chapters right alongside its
+   * attached ones, so this should be rare -- but old data, or a bug
+   * elsewhere leaving a stale pointer, are exactly what this sweep exists
+   * to catch).
+   */
   private purgeParentlessChapters(): void {
     const db = this.requireDb();
     db.exec(`
       DELETE FROM notes_fts WHERE noteId IN (
-        SELECT id FROM notes WHERE chapterOnly = 1 AND id NOT IN (SELECT chapterNoteId FROM chapters)
+        SELECT id FROM notes WHERE chapterOnly = 1
+          AND id NOT IN (SELECT chapterNoteId FROM chapters)
+          AND (detachedChapterParentId IS NULL OR detachedChapterParentId NOT IN (SELECT id FROM notes))
       );
-      DELETE FROM notes WHERE chapterOnly = 1 AND id NOT IN (SELECT chapterNoteId FROM chapters);
+      DELETE FROM notes WHERE chapterOnly = 1
+        AND id NOT IN (SELECT chapterNoteId FROM chapters)
+        AND (detachedChapterParentId IS NULL OR detachedChapterParentId NOT IN (SELECT id FROM notes));
     `);
   }
 

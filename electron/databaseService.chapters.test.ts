@@ -161,6 +161,30 @@ describe('DatabaseService chapters', () => {
     expect(db.getNoteRecord('chapter-2')).toBeNull()
   })
 
+  it('deleting a parent note also purges chapters currently detached (sitting in trash), regardless of attached/detached status', () => {
+    seedNote(db, 'parent-a')
+    seedNote(db, 'chapter-1')
+    seedNote(db, 'chapter-2')
+    seedNote(db, 'chapter-3')
+    db.addChapter('parent-a', 'chapter-1')
+    db.addChapter('parent-a', 'chapter-2')
+    db.addChapter('parent-a', 'chapter-3')
+    db.setNoteChapterOnly('chapter-2', true)
+
+    // chapter-1 stays attached; chapter-2 is detached (trashed) but its
+    // parent is still alive, so it's mid-flight, restorable state right up
+    // until the parent itself is purged.
+    db.detachChapterForTrash('parent-a', 'chapter-2')
+    expect(db.getNoteRecord('chapter-2')?.detachedChapterParentId).toBe('parent-a')
+
+    db.deleteNote('parent-a')
+
+    expect(db.getNoteRecord('parent-a')).toBeNull()
+    expect(db.getNoteRecord('chapter-1')).toBeNull()
+    expect(db.getNoteRecord('chapter-2')).toBeNull()
+    expect(db.getNoteRecord('chapter-3')).toBeNull()
+  })
+
   it('deleting a note with no chapters only deletes that note', () => {
     seedNote(db, 'parent-a')
     seedNote(db, 'unrelated')
@@ -229,14 +253,62 @@ describe('DatabaseService chapters', () => {
     })
 
     it('restoring a chapter whose remembered parent no longer exists is a no-op, not a crash', () => {
+      // deleteNote now purges a parent's detached chapters right alongside
+      // it (see the "also purges chapters currently detached" test above),
+      // so a genuinely dangling detachedChapterParentId -- the chapter's
+      // own note row surviving while its remembered parent's doesn't --
+      // can no longer arise through the public API in normal operation.
+      // This is now purely a defensive/legacy-data path (upgrading from a
+      // build that predates that cascade, or a future bug elsewhere), so
+      // the dangling state has to be constructed directly against the
+      // underlying SQLite file. A second raw connection to the same file
+      // (WAL mode, so this is a safe concurrent write) rather than
+      // restarting the DatabaseService itself, so as not to trigger
+      // purgeParentlessChapters' own boot-time sweep first and mask which
+      // code path actually no-ops here -- that sweep gets its own test below.
       seedNote(db, 'parent-a')
       seedNote(db, 'chapter-1')
       db.addChapter('parent-a', 'chapter-1')
-
       db.detachChapterForTrash('parent-a', 'chapter-1')
-      db.deleteNote('parent-a')
+
+      const rawDb = new BetterSqlite3(path.join(dataRoot, 'thockdown-notes.db'))
+      rawDb.prepare('DELETE FROM notes WHERE id = ?').run('parent-a')
+      rawDb.close()
 
       expect(db.restoreDetachedChapter('chapter-1')).toBeNull()
+      // Self-heals the dangling pointer rather than leaving it forever.
+      expect(db.getNoteRecord('chapter-1')?.detachedChapterParentId ?? null).toBeNull()
+    })
+
+    it('a chapter detached with a live parent survives an app restart; one whose parent is truly gone is purged on the next boot', async () => {
+      seedNote(db, 'parent-a')
+      seedNote(db, 'chapter-1')
+      seedNote(db, 'chapter-2')
+      db.addChapter('parent-a', 'chapter-1')
+      db.addChapter('parent-a', 'chapter-2')
+      db.setNoteChapterOnly('chapter-1', true)
+      db.setNoteChapterOnly('chapter-2', true)
+      db.detachChapterForTrash('parent-a', 'chapter-1')
+      db.detachChapterForTrash('parent-a', 'chapter-2')
+
+      // Construct chapter-2's dangling pointer the same way as the test
+      // above -- deleteNote's own cascade is exactly what makes this
+      // otherwise unreachable in normal use.
+      const rawDb = new BetterSqlite3(path.join(dataRoot, 'thockdown-notes.db'))
+      rawDb.prepare("UPDATE notes SET detachedChapterParentId = 'nonexistent-parent' WHERE id = 'chapter-2'").run()
+      rawDb.close()
+
+      db.close()
+      db = new DatabaseService(dataRoot)
+      await db.initialize()
+
+      // chapter-1's parent is alive -- still detached, still restorable,
+      // not orphan garbage.
+      expect(db.getNoteRecord('chapter-1')).not.toBeNull()
+      expect(db.getNoteRecord('chapter-1')?.detachedChapterParentId).toBe('parent-a')
+      // chapter-2's remembered parent doesn't exist -- genuinely orphaned,
+      // purged on this boot.
+      expect(db.getNoteRecord('chapter-2')).toBeNull()
     })
 
     it('detaching a chapter that is not currently attached is a no-op, returning the unchanged list', () => {
