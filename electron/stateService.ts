@@ -509,6 +509,19 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     spellCheckRenderEnabled: Boolean(input?.spellCheckRenderEnabled),
     tabBarMode: sanitizeTabBarMode(input?.tabBarMode),
     isSidebarVisible: typeof input?.isSidebarVisible === 'boolean' ? input.isSidebarVisible : true,
+    // Was missing entirely until this line -- sanitizeMenu (routed through
+    // by both loadAppState and saveAppState) silently dropped this field on
+    // every real read/write, so it could never actually round-trip no
+    // matter how correctly the renderer sent it. This was the true root
+    // cause of double-size mode not surviving a real app restart -- the
+    // renderer-side persistedMenuStateRef fix (App.tsx) was real and
+    // necessary but insufficient on its own, since it was verified only
+    // against the browser-mode mock (installBrowserMockBridges.ts), which
+    // clones state verbatim and never exercises sanitizeMenu at all. Any
+    // future field added to PersistedMenuState (shared/appState.ts) needs a
+    // matching line here, or it silently never persists in the real app
+    // regardless of how correct the renderer-side code is.
+    isDoubleSizeMode: Boolean(input?.isDoubleSizeMode),
     customCursorEnabled: Boolean(input?.customCursorEnabled),
     reviewGutterVisibleBySection: sanitizeReviewGutterVisibleBySection(input?.reviewGutterVisibleBySection),
     reviewFlagsVisibleBySection: sanitizeReviewGutterVisibleBySection(input?.reviewFlagsVisibleBySection),
