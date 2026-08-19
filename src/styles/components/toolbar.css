@@ -131,6 +131,18 @@
   font-size: 12px; /* icon glyph, fixed box -- see --ui-font-scale's scope note in tokens.css */
 }
 
+.markdown-toolbar .toolbar-heading-icon--h1 {
+  font-size: 12px;
+}
+
+.markdown-toolbar .toolbar-heading-icon--h2 {
+  font-size: 10px;
+}
+
+.markdown-toolbar .toolbar-heading-icon--h3 {
+  font-size: 8px;
+}
+
 .window-control-btn {
   width:           var(--btn-square-regular-size);
   height:          var(--btn-square-regular-size);

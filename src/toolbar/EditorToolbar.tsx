@@ -165,7 +165,7 @@ export function EditorToolbar({
                 aria-label="Bold"
                 disabled={!activeNoteId}
               >
-                <strong>B</strong>
+                <span className="fa-solid fa-bold" aria-hidden="true" />
               </button>
               <button
                 type="button"
@@ -175,7 +175,7 @@ export function EditorToolbar({
                 aria-label="Italic"
                 disabled={!activeNoteId}
               >
-                <em>I</em>
+                <span className="fa-solid fa-italic" aria-hidden="true" />
               </button>
               <button
                 type="button"
@@ -185,30 +185,50 @@ export function EditorToolbar({
                 aria-label="Strikethrough"
                 disabled={!activeNoteId}
               >
-                <span style={{ textDecoration: 'line-through' }}>S</span>
+                <span className="fa-solid fa-strikethrough" aria-hidden="true" />
               </button>
             </div>
 
             <div className="toolbar-group">
-              <button type="button" className={`btn-icon ${activeHeadingLevel === 1 ? 'is-active' : ''}`} data-tooltip="Heading 1" onClick={() => applyHeading(1)} disabled={!activeNoteId}>H1</button>
-              <button type="button" className={`btn-icon ${activeHeadingLevel === 2 ? 'is-active' : ''}`} data-tooltip="Heading 2" onClick={() => applyHeading(2)} disabled={!activeNoteId}>H2</button>
-              <button type="button" className={`btn-icon ${activeHeadingLevel === 3 ? 'is-active' : ''}`} data-tooltip="Heading 3" onClick={() => applyHeading(3)} disabled={!activeNoteId}>H3</button>
+              <button type="button" className={`btn-icon ${activeHeadingLevel === 1 ? 'is-active' : ''}`} data-tooltip="Heading 1" aria-label="Heading 1" onClick={() => applyHeading(1)} disabled={!activeNoteId}>
+                <span className="fa-solid fa-heading toolbar-heading-icon toolbar-heading-icon--h1" aria-hidden="true" />
+              </button>
+              <button type="button" className={`btn-icon ${activeHeadingLevel === 2 ? 'is-active' : ''}`} data-tooltip="Heading 2" aria-label="Heading 2" onClick={() => applyHeading(2)} disabled={!activeNoteId}>
+                <span className="fa-solid fa-heading toolbar-heading-icon toolbar-heading-icon--h2" aria-hidden="true" />
+              </button>
+              <button type="button" className={`btn-icon ${activeHeadingLevel === 3 ? 'is-active' : ''}`} data-tooltip="Heading 3" aria-label="Heading 3" onClick={() => applyHeading(3)} disabled={!activeNoteId}>
+                <span className="fa-solid fa-heading toolbar-heading-icon toolbar-heading-icon--h3" aria-hidden="true" />
+              </button>
             </div>
 
             <div className="toolbar-group">
-              <button type="button" className={`btn-icon ${isBulletedListActive ? 'is-active' : ''}`} data-tooltip="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>≡</button>
-              <button type="button" className={`btn-icon ${isNumberedListActive ? 'is-active' : ''}`} data-tooltip="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>#</button>
-              <button type="button" className={`btn-icon ${isChecklistActive ? 'is-active' : ''}`} data-tooltip="Checklist" onClick={toggleChecklistList} disabled={!activeNoteId}>☐</button>
+              <button type="button" className={`btn-icon ${isBulletedListActive ? 'is-active' : ''}`} data-tooltip="Bulleted list" aria-label="Bulleted list" onClick={toggleBulletedList} disabled={!activeNoteId}>
+                <span className="fa-solid fa-list" aria-hidden="true" />
+              </button>
+              <button type="button" className={`btn-icon ${isNumberedListActive ? 'is-active' : ''}`} data-tooltip="Numbered list" aria-label="Numbered list" onClick={toggleNumberedList} disabled={!activeNoteId}>
+                <span className="fa-solid fa-list-ol" aria-hidden="true" />
+              </button>
+              <button type="button" className={`btn-icon ${isChecklistActive ? 'is-active' : ''}`} data-tooltip="Checklist" aria-label="Checklist" onClick={toggleChecklistList} disabled={!activeNoteId}>
+                <span className="fa-solid fa-square-check" aria-hidden="true" />
+              </button>
             </div>
 
             <div className="toolbar-group">
-              <button type="button" className={`btn-icon ${isBlockquoteActive ? 'is-active' : ''}`} data-tooltip="Blockquote" onClick={toggleBlockquote} disabled={!activeNoteId}>&quot;</button>
-              <button type="button" className={`btn-icon ${isCodeBlockActive ? 'is-active' : ''}`} data-tooltip="Code block" onClick={applyCodeBlock} disabled={!activeNoteId}>{'{ }'}</button>
-              <button type="button" className={`btn-icon ${isInlineCodeActive ? 'is-active' : ''}`} data-tooltip="Inline code" onClick={applyInlineCode} disabled={!activeNoteId}>{'<>'}</button>
+              <button type="button" className={`btn-icon ${isBlockquoteActive ? 'is-active' : ''}`} data-tooltip="Blockquote" aria-label="Blockquote" onClick={toggleBlockquote} disabled={!activeNoteId}>
+                <span className="fa-solid fa-quote-left" aria-hidden="true" />
+              </button>
+              <button type="button" className={`btn-icon ${isCodeBlockActive ? 'is-active' : ''}`} data-tooltip="Code block" aria-label="Code block" onClick={applyCodeBlock} disabled={!activeNoteId}>
+                <span className="fa-solid fa-terminal" aria-hidden="true" />
+              </button>
+              <button type="button" className={`btn-icon ${isInlineCodeActive ? 'is-active' : ''}`} data-tooltip="Inline code" aria-label="Inline code" onClick={applyInlineCode} disabled={!activeNoteId}>
+                <span className="fa-solid fa-code" aria-hidden="true" />
+              </button>
             </div>
 
             <div className="toolbar-group">
-              <button type="button" className="btn-icon" data-tooltip="Horizontal rule" onClick={insertHorizontalRule} disabled={!activeNoteId}>—</button>
+              <button type="button" className="btn-icon" data-tooltip="Horizontal rule" aria-label="Horizontal rule" onClick={insertHorizontalRule} disabled={!activeNoteId}>
+                <span className="fa-solid fa-window-minimize" aria-hidden="true" />
+              </button>
               <button type="button" className="btn-icon" data-tooltip="Link (Ctrl+L)" onClick={applyLink} disabled={!activeNoteId}><span className="fa-solid fa-link" aria-hidden="true" /></button>
               <button type="button" className="btn-icon" data-tooltip="Set anchor (Shift+Ctrl+L)" onClick={applyAnchor} disabled={!activeNoteId}><span className="fa-solid fa-anchor" aria-hidden="true" /></button>
             </div>
