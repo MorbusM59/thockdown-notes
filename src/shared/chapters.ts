@@ -6,6 +6,8 @@ export const CHAPTER_CHANNELS = {
   cloneFromNote: 'chapters:clone-from-note',
   reorder: 'chapters:reorder',
   remove: 'chapters:remove',
+  detachForTrash: 'chapters:detach-for-trash',
+  restoreDetached: 'chapters:restore-detached',
   setChapterId: 'chapters:set-chapter-id',
   createAutoToc: 'chapters:create-auto-toc',
   regenerateAutoToc: 'chapters:regenerate-auto-toc',
@@ -77,6 +79,10 @@ export interface ChaptersApi {
   cloneNoteAsChapter(parentNoteId: string, sourceNoteId: string): Promise<{ chapters: ChapterEntry[]; created: NoteDocument }>;
   reorderChapters(parentNoteId: string, orderedChapterNoteIds: string[]): Promise<ChapterEntry[]>;
   removeChapter(parentNoteId: string, chapterNoteId: string): Promise<ChapterEntry[]>;
+  /** Deletes-to-trash: tags `chapterNoteId` 'deleted' and detaches it from `parentNoteId`'s chapters table (closing the position gap, like removeChapter), remembering its parent + position so restoreDetachedChapter can put it back. */
+  detachChapterForTrash(parentNoteId: string, chapterNoteId: string): Promise<ChapterEntry[]>;
+  /** Reverses detachChapterForTrash: reattaches the chapter to its remembered parent at its remembered (clamped) position, shifting that position and everything after it forward to make room. Returns null if the chapter has no remembered detachment (e.g. already restored, or never a chapter). */
+  restoreDetachedChapter(chapterNoteId: string): Promise<{ parentNoteId: string; chapters: ChapterEntry[] } | null>;
   /** Assigns (or, given an empty string, clears) one chapter's label. Returns the final, collision-resolved id actually stored, or null if cleared. */
   setChapterId(parentNoteId: string, chapterNoteId: string, requestedId: string): Promise<string | null>;
   /** Creates the auto-generated Table of Contents chapter, pinned to position 0, populated by the same regeneration pass regenerateAutoTocChapter uses. Throws if one already exists for this parent. */

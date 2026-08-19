@@ -1064,6 +1064,14 @@ function registerIpcHandlers() {
     return noteLifecycleService!.removeChapterAndSyncOpenItems(parentNoteId, chapterNoteId);
   });
 
+  ipcMain.handle(CHAPTER_CHANNELS.detachForTrash, async (_event, parentNoteId: string, chapterNoteId: string) => {
+    return noteLifecycleService!.detachChapterForTrash(parentNoteId, chapterNoteId);
+  });
+
+  ipcMain.handle(CHAPTER_CHANNELS.restoreDetached, async (_event, chapterNoteId: string) => {
+    return noteLifecycleService!.restoreDetachedChapter(chapterNoteId);
+  });
+
   ipcMain.handle(CHAPTER_CHANNELS.setChapterId, async (_event, parentNoteId: string, chapterNoteId: string, requestedId: string) => {
     return databaseService!.setChapterId(parentNoteId, chapterNoteId, requestedId);
   });

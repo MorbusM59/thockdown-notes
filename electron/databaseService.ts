@@ -1590,6 +1590,76 @@ export class DatabaseService {
     return this.listChaptersForNote(parentNoteId);
   }
 
+  /**
+   * Detaches a chapter from its parent's chapter list -- closing the gap
+   * exactly like removeChapter -- but, unlike removeChapter, doesn't touch
+   * the note itself: records the parent + position being left behind
+   * (detachedChapterParentId/Position, on the note row) so
+   * restoreDetachedChapter can put it back exactly where it was. This is
+   * chapter delete's own mechanic (the note keeps existing, tagged
+   * 'deleted', reachable through trash) -- never used for a genuinely
+   * permanent removal (handleCollapseChapterIntoPrevious and friends still
+   * call plain removeChapter, immediately followed by deleteNote). A no-op,
+   * returning the unchanged chapter list, if `chapterNoteId` isn't
+   * currently attached to `parentNoteId`.
+   */
+  detachChapterForTrash(parentNoteId: string, chapterNoteId: string): ChapterEntry[] {
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      const removed = db.prepare('SELECT position FROM chapters WHERE parentNoteId = ? AND chapterNoteId = ?').get(parentNoteId, chapterNoteId) as { position: number } | undefined;
+      if (!removed) return;
+      db.prepare('DELETE FROM chapters WHERE parentNoteId = ? AND chapterNoteId = ?').run(parentNoteId, chapterNoteId);
+      db.prepare('UPDATE chapters SET position = position - 1 WHERE parentNoteId = ? AND position > ?').run(parentNoteId, removed.position);
+      db.prepare('UPDATE notes SET detachedChapterParentId = ?, detachedChapterPosition = ? WHERE id = ?').run(parentNoteId, removed.position, chapterNoteId);
+    });
+    tx();
+    return this.listChaptersForNote(parentNoteId);
+  }
+
+  /**
+   * The other half of detachChapterForTrash: reattaches a chapter at its
+   * remembered position, shifting every chapter at/after that position back
+   * by one to make room (same "insert with shift" shape as
+   * pinChapterToFront/pinChapterAfterAutoToc, just at an arbitrary
+   * position instead of a hardcoded one). The remembered position is
+   * clamped to the parent's *current* chapter count first, in case other
+   * chapters were added or removed while this one sat in trash -- otherwise
+   * a stale position past the current end would leave a gap instead of
+   * cleanly appending.
+   *
+   * Returns null (a no-op) if this note has no recorded detachment, or if
+   * its remembered parent no longer exists -- in the latter case the
+   * dangling pointer is cleared but the note is left detached (still
+   * `chapterOnly`, no `chapters` row); it's genuinely unreachable as a
+   * chapter at that point, same as any other orphaned chapter
+   * (purgeParentlessChapters cleans those up on the next boot).
+   */
+  restoreDetachedChapter(chapterNoteId: string): { parentNoteId: string; chapters: ChapterEntry[] } | null {
+    const db = this.requireDb();
+    const note = db.prepare('SELECT detachedChapterParentId, detachedChapterPosition FROM notes WHERE id = ?').get(chapterNoteId) as { detachedChapterParentId: string | null; detachedChapterPosition: number | null } | undefined;
+    if (!note?.detachedChapterParentId || note.detachedChapterPosition === null) return null;
+
+    const parentNoteId = note.detachedChapterParentId;
+    const parentExists = db.prepare('SELECT 1 FROM notes WHERE id = ?').get(parentNoteId);
+    if (!parentExists) {
+      db.prepare('UPDATE notes SET detachedChapterParentId = NULL, detachedChapterPosition = NULL WHERE id = ?').run(chapterNoteId);
+      return null;
+    }
+
+    const chapters = db.transaction(() => {
+      const { maxPosition } = db.prepare('SELECT MAX(position) AS maxPosition FROM chapters WHERE parentNoteId = ?').get(parentNoteId) as { maxPosition: number | null };
+      const insertPosition = Math.min(note.detachedChapterPosition!, (maxPosition ?? -1) + 1);
+
+      db.prepare('UPDATE chapters SET position = position + 1 WHERE parentNoteId = ? AND position >= ?').run(parentNoteId, insertPosition);
+      db.prepare('INSERT INTO chapters (parentNoteId, position, chapterNoteId) VALUES (?, ?, ?)').run(parentNoteId, insertPosition, chapterNoteId);
+      db.prepare('UPDATE notes SET detachedChapterParentId = NULL, detachedChapterPosition = NULL WHERE id = ?').run(chapterNoteId);
+
+      return this.listChaptersForNote(parentNoteId);
+    })();
+
+    return { parentNoteId, chapters };
+  }
+
   /** Rewrites every chapter's position from an explicit final order -- used for drag-reorder. No UNIQUE(parentNoteId, position) constraint (mirroring reorderNoteTabs) since a straight per-row position rewrite can transiently collide mid-transaction otherwise. */
   reorderChapters(parentNoteId: string, orderedChapterNoteIds: string[]): ChapterEntry[] {
     const db = this.requireDb();
@@ -3395,6 +3465,19 @@ export class DatabaseService {
     // neighbors. Same "dedicated flag, not a reserved chapterId" reasoning
     // as isAutoToc just above.
     this.ensureNotesColumn('isAutoOpenItems', 'INTEGER NOT NULL DEFAULT 0');
+    // Where a chapter was detached FROM, while it's sitting in trash (its own
+    // 'deleted' protected tag applied) -- see detachChapterForTrash's own
+    // doc comment for why this can't just live in the `chapters` table
+    // itself (a detached chapter has no row there at all, by design: it
+    // needs to be invisible to every single one of the many call sites that
+    // already treat "has a chapters row" as "is a live chapter of this
+    // parent" -- getChapterParent, listChaptersForNote, TOC/Open-Items
+    // generation, ... -- rather than requiring every one of them to also
+    // remember to check a tag). Both null except during that detached
+    // window; restoreDetachedChapter clears them back to null once it
+    // reattaches.
+    this.ensureNotesColumn('detachedChapterParentId', 'TEXT');
+    this.ensureNotesColumn('detachedChapterPosition', 'INTEGER');
     this.ensureChaptersColumn('chapterId', 'TEXT');
     // Deliberately after ensureChaptersColumn, not inside the CREATE TABLE
     // block above: on a database that already had a `chapters` table before

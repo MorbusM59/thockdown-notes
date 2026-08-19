@@ -909,6 +909,15 @@ export function EditorSection({
     handleDeleteChapterClick,
   } = useChapterPillActions({
     chapters,
+    notes,
+    menuIdentityNoteId,
+    activeNoteId,
+    activateNote,
+    refreshNotes,
+    refreshChapters,
+    flushPendingSaveNow,
+    persistenceReady,
+    noteTransitionLockRef,
     startEditingChapterId,
   })
 
@@ -1000,6 +1009,8 @@ export function EditorSection({
     externalNoteOriginalHashByIdRef,
     setCurrentExternalNoteHash,
     onNotePermanentlyDeleted: evictPermanentlyDeletedNoteCaches,
+    menuIdentityNoteId,
+    refreshChapters,
   })
 
   const activeNoteHasDebugTag = useMemo(() => {

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { MouseEvent } from 'react'
+import type { MouseEvent, MutableRefObject } from 'react'
 import type { ChapterEntry } from '../shared/chapters'
+import type { NoteSummary } from '../shared/noteLifecycle'
+import { applyProtectedTagDestination } from '../shared/protectedTagActions'
 
 /** Matches the sidebar's own right-click-hold gesture (useNoteProtectionActions.ts's NOTE_RIGHT_CLICK_HOLD_MS) -- same duration, so the two gestures feel identical even though this one shows both options at once instead of escalating a single primed action. */
 const CHAPTER_PILL_SPLIT_HOLD_MS = 200
@@ -13,6 +15,16 @@ export interface ChapterPillSplitArm {
 
 export interface UseChapterPillActionsOptions {
   chapters: ChapterEntry[]
+  notes: NoteSummary[]
+  /** The chapter-aware "menu identity" note -- every chapter this hook ever acts on belongs to it (a chapter has exactly one parent, ever), see useNoteChapters.ts's own doc comment. */
+  menuIdentityNoteId: string | null
+  activeNoteId: string | null
+  activateNote: (noteId: string, overrideCursorPos?: number) => Promise<void>
+  refreshNotes: (preferredId?: string | null) => Promise<string | null>
+  refreshChapters: () => Promise<void>
+  flushPendingSaveNow: () => Promise<void>
+  persistenceReady: boolean
+  noteTransitionLockRef: MutableRefObject<boolean>
   /** Same handler the existing quick-right-click rename already calls -- a hold released before CHAPTER_PILL_SPLIT_HOLD_MS falls through to it unchanged. */
   startEditingChapterId: (chapterNoteId: string) => void
 }
@@ -43,13 +55,24 @@ export interface UseChapterPillActionsResult {
  * A release before the hold completes is a quick right-click, which still
  * starts the existing chapterId rename (startEditingChapterId), unchanged.
  *
- * Only the gesture and its resulting armed/unarmed state live here --
- * handleArchiveChapterClick/handleDeleteChapterClick are wired to real
- * archive/delete mutations in a later change; for now they just clear the
- * armed state.
+ * handleDeleteChapterClick is wired to the real delete-to-trash mutation
+ * (tag the chapter 'deleted', detach it from menuIdentityNoteId's chapters
+ * table via detachChapterForTrash -- see that method's own doc comment for
+ * why detach rather than leave-and-filter); handleArchiveChapterClick is
+ * still a stub, just clearing the armed state, pending archiving chapters'
+ * own mechanics.
  */
 export function useChapterPillActions({
   chapters,
+  notes,
+  menuIdentityNoteId,
+  activeNoteId,
+  activateNote,
+  refreshNotes,
+  refreshChapters,
+  flushPendingSaveNow,
+  persistenceReady,
+  noteTransitionLockRef,
   startEditingChapterId,
 }: UseChapterPillActionsOptions): UseChapterPillActionsResult {
   const [splitArmedChapter, setSplitArmedChapter] = useState<ChapterPillSplitArm | null>(null)
@@ -117,9 +140,37 @@ export function useChapterPillActions({
     setSplitArmedChapter(null)
   }, [])
 
-  const handleDeleteChapterClick = useCallback((_chapterNoteId: string) => {
+  const handleDeleteChapterClick = useCallback((chapterNoteId: string) => {
     setSplitArmedChapter(null)
-  }, [])
+    if (!window.thockdownChapters || !persistenceReady || !menuIdentityNoteId) return
+    if (noteTransitionLockRef.current) return
+
+    noteTransitionLockRef.current = true
+    void (async () => {
+      try {
+        await flushPendingSaveNow()
+
+        const summary = notes.find((note) => note.id === chapterNoteId)
+        await applyProtectedTagDestination(chapterNoteId, summary?.tags ?? [], 'deleted')
+        await window.thockdownChapters!.detachChapterForTrash(menuIdentityNoteId, chapterNoteId)
+
+        await refreshChapters()
+        const wasActive = activeNoteId === chapterNoteId
+        await refreshNotes(wasActive ? menuIdentityNoteId : activeNoteId)
+
+        // The deleted chapter can no longer be displayed -- fall back to its
+        // parent, same as handleCollapseChapterIntoPrevious's own "nothing
+        // left to show, go to the parent" landing spot.
+        if (wasActive) {
+          await activateNote(menuIdentityNoteId)
+        }
+      } catch (error) {
+        console.error('Failed to delete chapter', error)
+      } finally {
+        noteTransitionLockRef.current = false
+      }
+    })()
+  }, [persistenceReady, menuIdentityNoteId, noteTransitionLockRef, flushPendingSaveNow, notes, refreshChapters, refreshNotes, activeNoteId, activateNote])
 
   return {
     splitArmedChapter,

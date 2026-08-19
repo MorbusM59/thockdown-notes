@@ -171,6 +171,93 @@ describe('DatabaseService chapters', () => {
     expect(db.getNoteRecord('parent-a')).not.toBeNull()
   })
 
+  describe('detachChapterForTrash / restoreDetachedChapter', () => {
+    it('detaching a middle chapter closes the gap, and restoring puts it back at its original index, shifting later chapters forward again', () => {
+      seedNote(db, 'parent-a')
+      seedNote(db, 'chapter-1')
+      seedNote(db, 'chapter-2')
+      seedNote(db, 'chapter-3')
+      db.addChapter('parent-a', 'chapter-1')
+      db.addChapter('parent-a', 'chapter-2')
+      db.addChapter('parent-a', 'chapter-3')
+
+      const afterDetach = db.detachChapterForTrash('parent-a', 'chapter-2')
+      expect(afterDetach.map((c) => c.chapterNoteId)).toEqual(['chapter-1', 'chapter-3'])
+      expect(afterDetach.map((c) => c.position)).toEqual([0, 1])
+      expect(db.getChapterParent('chapter-2')).toBeNull()
+
+      const restored = db.restoreDetachedChapter('chapter-2')
+      expect(restored?.parentNoteId).toBe('parent-a')
+      expect(restored?.chapters.map((c) => c.chapterNoteId)).toEqual(['chapter-1', 'chapter-2', 'chapter-3'])
+      expect(restored?.chapters.map((c) => c.position)).toEqual([0, 1, 2])
+      expect(db.getChapterParent('chapter-2')).toBe('parent-a')
+    })
+
+    it('restoring a chapter detached from the front or back lands it back exactly where it was', () => {
+      seedNote(db, 'parent-a')
+      seedNote(db, 'chapter-1')
+      seedNote(db, 'chapter-2')
+      seedNote(db, 'chapter-3')
+      db.addChapter('parent-a', 'chapter-1')
+      db.addChapter('parent-a', 'chapter-2')
+      db.addChapter('parent-a', 'chapter-3')
+
+      db.detachChapterForTrash('parent-a', 'chapter-1')
+      const restoredFront = db.restoreDetachedChapter('chapter-1')
+      expect(restoredFront?.chapters.map((c) => c.chapterNoteId)).toEqual(['chapter-1', 'chapter-2', 'chapter-3'])
+
+      db.detachChapterForTrash('parent-a', 'chapter-3')
+      const restoredBack = db.restoreDetachedChapter('chapter-3')
+      expect(restoredBack?.chapters.map((c) => c.chapterNoteId)).toEqual(['chapter-1', 'chapter-2', 'chapter-3'])
+    })
+
+    it('restoring a chapter whose parent gained new chapters in the meantime clamps to the end instead of throwing', () => {
+      seedNote(db, 'parent-a')
+      seedNote(db, 'chapter-1')
+      seedNote(db, 'chapter-2')
+      db.addChapter('parent-a', 'chapter-1')
+      db.addChapter('parent-a', 'chapter-2')
+
+      db.detachChapterForTrash('parent-a', 'chapter-2')
+
+      // Its remembered position (1) no longer exists once chapter-1 alone
+      // remains -- restoring should clamp to the end, not throw or corrupt
+      // positions.
+      const restored = db.restoreDetachedChapter('chapter-2')
+      expect(restored?.chapters.map((c) => c.chapterNoteId)).toEqual(['chapter-1', 'chapter-2'])
+      expect(restored?.chapters.map((c) => c.position)).toEqual([0, 1])
+    })
+
+    it('restoring a chapter whose remembered parent no longer exists is a no-op, not a crash', () => {
+      seedNote(db, 'parent-a')
+      seedNote(db, 'chapter-1')
+      db.addChapter('parent-a', 'chapter-1')
+
+      db.detachChapterForTrash('parent-a', 'chapter-1')
+      db.deleteNote('parent-a')
+
+      expect(db.restoreDetachedChapter('chapter-1')).toBeNull()
+    })
+
+    it('detaching a chapter that is not currently attached is a no-op, returning the unchanged list', () => {
+      seedNote(db, 'parent-a')
+      seedNote(db, 'chapter-1')
+      seedNote(db, 'chapter-2')
+      db.addChapter('parent-a', 'chapter-1')
+
+      const result = db.detachChapterForTrash('parent-a', 'chapter-2')
+      expect(result.map((c) => c.chapterNoteId)).toEqual(['chapter-1'])
+    })
+
+    it('restoring a chapter with no remembered detachment is a no-op', () => {
+      seedNote(db, 'parent-a')
+      seedNote(db, 'chapter-1')
+      db.addChapter('parent-a', 'chapter-1')
+
+      expect(db.restoreDetachedChapter('chapter-1')).toBeNull()
+    })
+  })
+
   describe('setChapterId', () => {
     it('assigns and normalizes a chapterId, defaulting to unassigned (null)', () => {
       seedNote(db, 'parent-a')

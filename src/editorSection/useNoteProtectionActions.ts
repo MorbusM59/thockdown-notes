@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent, MutableRefObject } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from '../shared/noteLifecycle'
-import { normalizeTagName } from '../shared/tags'
+import { applyProtectedTagDestination } from '../shared/protectedTagActions'
 import { normalizeInternalText } from '../editor/TextPolicy'
 
 const NOTE_RIGHT_CLICK_HOLD_MS = 200
@@ -40,6 +40,10 @@ export interface UseNoteProtectionActionsOptions {
   setCurrentExternalNoteHash: (updater: string | null | ((current: string | null) => string | null)) => void
   /** Called once a note is *permanently* removed from the DB (not archived/trashed) -- lets EditorSection.tsx evict any per-note-id caches (edit-mode restore snapshot, etc.) that would otherwise hold onto that id forever. */
   onNotePermanentlyDeleted?: (noteId: string) => void
+  /** The chapter-aware "menu identity" note currently open in this section -- see useNoteChapters.ts's own doc comment. Used only to know whether a just-restored chapter's parent is the family currently on screen, so its chapter bar can be refreshed. */
+  menuIdentityNoteId: string | null
+  /** useNoteChapters.ts's own re-fetch -- called after restoring a deleted chapter whose parent is menuIdentityNoteId, so the chapter bar picks up the reattached chapter without waiting for an unrelated refresh. */
+  refreshChapters: () => Promise<void>
 }
 
 /**
@@ -69,6 +73,8 @@ export function useNoteProtectionActions({
   externalNoteOriginalHashByIdRef,
   setCurrentExternalNoteHash,
   onNotePermanentlyDeleted,
+  menuIdentityNoteId,
+  refreshChapters,
 }: UseNoteProtectionActionsOptions) {
   const [primedNoteActionState, setPrimedNoteActionState] = useState<{ noteId: string; action: NotePrimedAction } | null>(null)
   const noteArmTimerRef = useRef<{ noteId: string; button: 0 | 2; timeoutId: number; quickReleaseAction: ProtectedQuickReleaseAction | null } | null>(null)
@@ -96,36 +102,8 @@ export function useNoteProtectionActions({
   }, [])
 
   const applyProtectedNoteDestination = useCallback(async (noteId: string, destination: 'archived' | 'deleted') => {
-    if (!window.thockdownNotes) return
-
     const summary = notes.find((note) => note.id === noteId)
-    const existingTags = summary?.tags ?? []
-    const opposite = destination === 'archived' ? 'deleted' : 'archived'
-
-    const hasDestination = existingTags.some((tag) => normalizeTagName(tag) === destination)
-    const hasOpposite = existingTags.some((tag) => normalizeTagName(tag) === opposite)
-
-    if (hasOpposite) {
-      await window.thockdownNotes.removeTagFromNote({ id: noteId, tagName: opposite })
-    }
-
-    if (!hasDestination) {
-      await window.thockdownNotes.addTagToNote({
-        id: noteId,
-        tagName: destination,
-        position: 0,
-      })
-    }
-
-    const reordered = [
-      destination,
-      ...existingTags.filter((tag) => {
-        const normalized = normalizeTagName(tag)
-        return normalized !== destination && normalized !== opposite
-      }),
-    ]
-
-    await window.thockdownNotes.reorderNoteTags({ id: noteId, tagNames: reordered })
+    await applyProtectedTagDestination(noteId, summary?.tags ?? [], destination)
   }, [notes])
 
   const saveExternalNoteToFile = useCallback(async (noteId: string) => {
@@ -367,6 +345,15 @@ export function useNoteProtectionActions({
         await window.thockdownNotes.removeTagFromNote({ id: noteId, tagName: 'archived' })
       } else {
         await window.thockdownNotes.removeTagFromNote({ id: noteId, tagName: 'deleted' })
+
+        const summary = notes.find((note) => note.id === noteId)
+        const isChapterOnly = summary ? isChapterOnlyNote(summary) : false
+        if (isChapterOnly && window.thockdownChapters) {
+          const restored = await window.thockdownChapters.restoreDetachedChapter(noteId)
+          if (restored && restored.parentNoteId === menuIdentityNoteId) {
+            await refreshChapters()
+          }
+        }
       }
 
       await refreshNotes(activeNoteId ?? noteId)
@@ -378,7 +365,7 @@ export function useNoteProtectionActions({
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [activateNote, activeNoteId, flushPendingSaveNow, persistenceReady, refreshNotes, noteTransitionLockRef])
+  }, [activateNote, activeNoteId, flushPendingSaveNow, persistenceReady, refreshNotes, noteTransitionLockRef, notes, menuIdentityNoteId, refreshChapters])
 
   const closeExternalNoteWithoutSaving = useCallback(async (noteId: string) => {
     if (!window.thockdownNotes) return
@@ -410,18 +397,21 @@ export function useNoteProtectionActions({
 
     const summary = notes.find((note) => note.id === noteId)
     const isExternal = summary ? isExternalNote(summary) : false
+    const isNoteDeleted = summary ? isDeletedNote(summary) : false
     // Chapters have no tag life of their own -- archiving/deleting only
     // makes sense on their parent note (see the tag-bar identity comment in
-    // useSectionTabs.ts). They can still surface here via search results.
+    // useSectionTabs.ts). The one exception is a chapter already sitting in
+    // Trash: it needs the same quick-right-click restore gesture a deleted
+    // note gets, so only block chapters that aren't already deleted. A
+    // non-deleted chapter can still surface here via search results.
     const isChapterOnly = summary ? isChapterOnlyNote(summary) : false
-    if (isExternal || isChapterOnly) {
+    if (isExternal || (isChapterOnly && !isNoteDeleted)) {
       return
     }
 
     clearNoteArmTimer()
 
     const isNoteArchived = summary ? isArchivedNote(summary) : false
-    const isNoteDeleted = summary ? isDeletedNote(summary) : false
     if (isNoteArchived || isNoteDeleted) {
       setPrimedNoteActionState(null)
     } else {

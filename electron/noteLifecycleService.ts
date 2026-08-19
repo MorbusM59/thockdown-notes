@@ -759,6 +759,37 @@ export class NoteLifecycleService {
     return this.databaseService.removeChapter(parentNoteId, chapterNoteId);
   }
 
+  // Chapter delete's own mechanic (its own 'deleted' protected tag, applied
+  // by the caller alongside this -- see ChapterBar.tsx's split pill):
+  // detaches rather than truly removing (databaseService.detachChapterForTrash
+  // keeps the note and remembers where it was, for restoreDetachedChapter
+  // below to undo). Same Open Items "smart delete" sync as
+  // removeChapterAndSyncOpenItems above and for the same reason: a chapter
+  // sitting in trash shouldn't keep cluttering the live aggregated list.
+  async detachChapterForTrash(parentNoteId: string, chapterNoteId: string): Promise<ChapterEntry[]> {
+    const openItemsChapterNoteId = this.databaseService.getAutoOpenItemsChapterNoteId(parentNoteId);
+    if (openItemsChapterNoteId && openItemsChapterNoteId !== chapterNoteId) {
+      await this.dropOpenItemsGroup(parentNoteId, openItemsChapterNoteId, chapterNoteId);
+    }
+    return this.databaseService.detachChapterForTrash(parentNoteId, chapterNoteId);
+  }
+
+  // The restore half: reattaches (databaseService.restoreDetachedChapter),
+  // then re-derives the chapter's own Open Items group from its current
+  // live checklist state -- regenerateAllOpenItems is a full family rescan,
+  // so simply being back in the family (getRealChapterRows, via
+  // openItemsFamilyOrder) is enough to pick it back up, no separate "add it
+  // back" call needed. Returns null (a no-op) if there was nothing to
+  // restore -- see databaseService.restoreDetachedChapter's own doc comment
+  // for when that happens (never detached in the first place, or its
+  // remembered parent no longer exists).
+  async restoreDetachedChapter(chapterNoteId: string): Promise<{ parentNoteId: string; chapters: ChapterEntry[] } | null> {
+    const result = this.databaseService.restoreDetachedChapter(chapterNoteId);
+    if (!result) return null;
+    await this.regenerateAllOpenItems(result.parentNoteId);
+    return result;
+  }
+
   // Dragging a note from the sidebar onto a chapter bar: clones the dragged
   // note's content into a brand-new chapterOnly note and appends that as
   // parentNoteId's last chapter. The dragged note itself is never touched,

@@ -60,6 +60,8 @@ type BrowserMockStore = {
   noteTabs: NoteTabEntry[]
   editorSections: EditorSectionEntry[]
   chapters: ChapterEntry[]
+  /** Mirrors databaseService.ts's notes.detachedChapterParentId/Position columns -- where a chapter was detached from while it's sitting in trash. Keyed by chapterNoteId, since NoteDocument itself carries no such fields. */
+  detachedChapters: Record<string, { parentNoteId: string; position: number }>
   reviewFlags: ReviewFlagEntry[]
   nextReviewFlagId: number
 }
@@ -246,6 +248,7 @@ function loadStore(): BrowserMockStore {
         noteTabs: [],
         editorSections: createDefaultEditorSections(),
         chapters: [],
+        detachedChapters: {},
         reviewFlags: [],
         nextReviewFlagId: 1,
       }
@@ -342,6 +345,13 @@ function loadStore(): BrowserMockStore {
               chapterId: typeof entry.chapterId === 'string' ? entry.chapterId : null,
             }))
         : [],
+      detachedChapters: parsed.detachedChapters && typeof parsed.detachedChapters === 'object'
+        ? Object.fromEntries(
+            Object.entries(parsed.detachedChapters as Record<string, { parentNoteId?: string; position?: number }>)
+              .filter(([, value]) => typeof value?.parentNoteId === 'string' && Number.isFinite(value?.position))
+              .map(([key, value]) => [key, { parentNoteId: value.parentNoteId as string, position: Number(value.position) }]),
+          )
+        : {},
       reviewFlags: Array.isArray(parsed.reviewFlags)
         ? (parsed.reviewFlags as ReviewFlagEntry[])
             .filter((entry) => typeof entry?.noteId === 'string' && Number.isFinite(entry?.id))
@@ -369,6 +379,7 @@ function loadStore(): BrowserMockStore {
       noteTabs: [],
       editorSections: createDefaultEditorSections(),
       chapters: [],
+      detachedChapters: {},
       reviewFlags: [],
       nextReviewFlagId: 1,
     }
@@ -1433,6 +1444,67 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           }
         }
         return sorted(store, parentNoteId)
+      })
+    },
+
+    async detachChapterForTrash(parentNoteId: string, chapterNoteId: string): Promise<ChapterEntry[]> {
+      return mutate((store) => {
+        const openItemsChapter = findOpenItemsChapterInStore(store, parentNoteId)
+        if (openItemsChapter && openItemsChapter.chapterNoteId !== chapterNoteId) {
+          dropOpenItemsGroupInStore(store, parentNoteId, openItemsChapter.chapterNoteId, chapterNoteId)
+        }
+
+        const removed = store.chapters.find((chapter) => chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === chapterNoteId)
+        if (removed) {
+          store.chapters = store.chapters
+            .filter((chapter) => !(chapter.parentNoteId === parentNoteId && chapter.chapterNoteId === chapterNoteId))
+            .map((chapter) => (
+              chapter.parentNoteId === parentNoteId && chapter.position > removed.position
+                ? { ...chapter, position: chapter.position - 1 }
+                : chapter
+            ))
+          store.detachedChapters[chapterNoteId] = { parentNoteId, position: removed.position }
+        }
+        return sorted(store, parentNoteId)
+      })
+    },
+
+    async restoreDetachedChapter(chapterNoteId: string): Promise<{ parentNoteId: string; chapters: ChapterEntry[] } | null> {
+      return mutate((store) => {
+        const detached = store.detachedChapters[chapterNoteId]
+        if (!detached) return null
+
+        const parentExists = store.notes.some((note) => note.id === detached.parentNoteId)
+        if (!parentExists) {
+          delete store.detachedChapters[chapterNoteId]
+          return null
+        }
+
+        const parentNoteId = detached.parentNoteId
+        const maxPosition = store.chapters
+          .filter((chapter) => chapter.parentNoteId === parentNoteId)
+          .reduce((max, chapter) => Math.max(max, chapter.position), -1)
+        const insertPosition = Math.min(detached.position, maxPosition + 1)
+
+        store.chapters = store.chapters.map((chapter) => (
+          chapter.parentNoteId === parentNoteId && chapter.position >= insertPosition
+            ? { ...chapter, position: chapter.position + 1 }
+            : chapter
+        ))
+        store.chapters.push({ parentNoteId, chapterNoteId, position: insertPosition, chapterId: null })
+        delete store.detachedChapters[chapterNoteId]
+
+        const note = store.notes.find((entry) => entry.id === chapterNoteId)
+        if (note) {
+          note.chapterParentId = parentNoteId
+        }
+
+        const familyOrder = openItemsFamilyOrderInStore(store, parentNoteId)
+        for (const noteId of familyOrder) {
+          regenerateOpenItemsGroupInStore(store, parentNoteId, noteId)
+        }
+
+        return { parentNoteId, chapters: sorted(store, parentNoteId) }
       })
     },
 
