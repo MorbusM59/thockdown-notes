@@ -112,7 +112,8 @@
 .tag-pill > .fa-solid,
 .tag-pill > .fa-regular,
 .tag-pill > .fa-brands {
-  line-height: inherit;
+  line-height: 11px;
+  font-size: 13px;
 }
 
 /* Flanking icon buttons -- square, matching the well's real content height
