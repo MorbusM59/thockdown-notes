@@ -33,6 +33,9 @@ export function InlinePillOrInput({
       className={className}
       value={value}
       autoFocus
+      spellCheck={false}
+      autoCorrect="off"
+      autoCapitalize="off"
       onChange={(event) => onChange(event.target.value)}
       onBlur={onCommit}
       onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {

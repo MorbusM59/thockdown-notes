@@ -7785,6 +7785,9 @@ ${markdownHtml}
                       className="search-input-field"
                       ref={sidebarSearchInputRef}
                       type="text"
+                      spellCheck={false}
+                      autoCorrect="off"
+                      autoCapitalize="off"
                       placeholder="Find..."
                       value={activeSection?.documentFindQuery ?? ''}
                       onChange={(event) => getActiveSection()?.setDocumentFindQuery(event.target.value)}
@@ -7802,6 +7805,9 @@ ${markdownHtml}
                   className="search-input-field has-case-toggle"
                   ref={sidebarSearchInputRef}
                   type="text"
+                  spellCheck={false}
+                  autoCorrect="off"
+                  autoCapitalize="off"
                   placeholder={isFindMode ? 'Find in current note...' : 'Search for content or #tag...'}
                   value={isFindMode ? (activeSection?.documentFindQuery ?? '') : searchQuery}
                   onChange={(event) => {
@@ -7827,6 +7833,9 @@ ${markdownHtml}
                       className="search-input-field has-case-toggle"
                       ref={documentReplaceInputRef}
                       type="text"
+                      spellCheck={false}
+                      autoCorrect="off"
+                      autoCapitalize="off"
                       placeholder="Replace..."
                       value={activeSection?.documentReplaceQuery ?? ''}
                       onChange={(event) => getActiveSection()?.setDocumentReplaceQuery(event.target.value)}

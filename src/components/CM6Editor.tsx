@@ -704,6 +704,7 @@ export function CM6Editor({
   // not per-render) so reconfigure() calls target the same slot the mount
   // effect originally installed via `readOnlyCompartmentRef.current.of(...)`.
   const readOnlyCompartmentRef = useRef(new Compartment());
+  const spellCheckCompartmentRef = useRef(new Compartment());
   // Bridges reconcileSelectionJumpScroll (defined inside the CM6 mount
   // effect, below) out to the separate adapterRef-assignment effect's
   // applySnapshot, which needs to center a newly-applied selection (search
@@ -2392,6 +2393,7 @@ export function CM6Editor({
       lineTokenPlugin,
       EditorView.lineWrapping,
       readOnlyCompartmentRef.current.of(EditorView.editable.of(!editorReadOnly)),
+      spellCheckCompartmentRef.current.of(EditorView.contentAttributes.of({ class: 'editor-text', spellcheck: String(spellCheckEnabled) })),
       // CM6's own drawSelection() extension is deliberately NOT included --
       // both the cursor (block-grid caret overlay below) and the
       // non-collapsed selection background (highlightRects overlay below)
@@ -2408,7 +2410,8 @@ export function CM6Editor({
       // `.editor-text[contenteditable]` DOM shape. This is the correct
       // target class going forward, not a workaround -- this element really
       // is "the editor text surface" other app code should find.
-      EditorView.contentAttributes.of({ class: 'editor-text', spellcheck: String(spellCheckEnabled) }),
+      // Spellcheck is wired through a Compartment below so toggles can
+      // reconfigure the live editor without remounting.
       // CM6's own base theme sets `.cm-scroller { height: 100% }`, which
       // resolves against `.cm-editor`'s height -- and `.cm-editor` itself
       // has no explicit height in that base theme, so by default it just
@@ -3454,6 +3457,16 @@ export function CM6Editor({
     if (!view) return;
     view.dispatch({ effects: readOnlyCompartmentRef.current.reconfigure(EditorView.editable.of(!editorReadOnly)) });
   }, [editorReadOnly]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: spellCheckCompartmentRef.current.reconfigure(
+        EditorView.contentAttributes.of({ class: 'editor-text', spellcheck: String(spellCheckEnabled) }),
+      ),
+    });
+  }, [spellCheckEnabled]);
 
   // Note-switch hydration: replace the whole document when noteId changes.
   // For a genuine note switch this stays a full replace (Slice-1

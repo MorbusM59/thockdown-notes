@@ -10,6 +10,7 @@ import type { UseNoteSnapshotsResult } from '../editor/useNoteSnapshots'
 import { resolvePreviewEdgePaddingPx } from '../exportStyles'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { ChapterEntry } from '../shared/chapters'
+import { resolveSpellCheckSurfaceState } from '../shared/spellCheckPolicy'
 import { ChapterBar } from '../chapters/ChapterBar'
 import type { ChapterPillSplitArm } from '../chapters/useChapterPillActions'
 
@@ -219,6 +220,19 @@ export function SectionEditorArea({
     </div>
   )
 
+  const editorSpellCheckEnabled = resolveSpellCheckSurfaceState({
+    globalToggleEnabled: spellCheckEditEnabled,
+    isEditorSurface: true,
+    isActiveEditor: isSectionActive,
+    isInputField: false,
+  })
+  const previewSpellCheckEnabled = resolveSpellCheckSurfaceState({
+    globalToggleEnabled: spellCheckRenderEnabled,
+    isEditorSurface: true,
+    isActiveEditor: isSectionActive,
+    isInputField: false,
+  })
+
   // Smart-toggled, not manually: the panel shows itself exactly when the
   // current note (or its own currently-open chapter) actually has chapters,
   // and hides itself the moment the last one collapses back into its
@@ -265,7 +279,7 @@ export function SectionEditorArea({
                   glyphWidthPx={editorRuntimeMetrics.glyphWidthPx}
                   cellWidthPx={editorRuntimeMetrics.cellWidthPx}
                   editorReadOnly={activeNoteHasDebugTag || isPreviewingSnapshot || isViewingAutoTocChapter || isViewingAutoOpenItemsChapter}
-                  spellCheckEnabled={spellCheckEditEnabled}
+                  spellCheckEnabled={editorSpellCheckEnabled}
                   fontReady={editorFontLoadVersion > 0}
                   caretSuspended={isCaretSuspended}
                   showLineNumbers={showLineNumbers}
@@ -286,13 +300,13 @@ export function SectionEditorArea({
                   lineHeight: viewSpacing,
                   letterSpacing: `${viewLetterSpacingEm}em`,
                 } as CSSProperties}
-                contentEditable={spellCheckRenderEnabled}
-                suppressContentEditableWarning={spellCheckRenderEnabled}
-                spellCheck={spellCheckRenderEnabled}
-                onBeforeInput={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
-                onPaste={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
-                onCut={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
-                onDrop={spellCheckRenderEnabled ? blockPreviewEditMutation : undefined}
+                contentEditable={previewSpellCheckEnabled}
+                suppressContentEditableWarning={previewSpellCheckEnabled}
+                spellCheck={previewSpellCheckEnabled}
+                onBeforeInput={previewSpellCheckEnabled ? blockPreviewEditMutation : undefined}
+                onPaste={previewSpellCheckEnabled ? blockPreviewEditMutation : undefined}
+                onCut={previewSpellCheckEnabled ? blockPreviewEditMutation : undefined}
+                onDrop={previewSpellCheckEnabled ? blockPreviewEditMutation : undefined}
               >
                 {activeNoteId ? previewMarkdownElement : emptyState}
               </div>

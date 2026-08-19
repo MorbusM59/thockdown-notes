@@ -1405,6 +1405,9 @@ export function SidebarOptionsPanel({
                       max={1000000}
                       step={1}
                       inputMode="numeric"
+                      spellCheck={false}
+                      autoCorrect="off"
+                      autoCapitalize="off"
                       className="sidebar-page-number-input sidebar-page-number-input--edit"
                       value={textureSeedInput}
                       onChange={(event) => {
@@ -1625,6 +1628,9 @@ export function SidebarOptionsPanel({
                     max={1000000}
                     step={1}
                     inputMode="numeric"
+                    spellCheck={false}
+                    autoCorrect="off"
+                    autoCapitalize="off"
                     className="sidebar-page-number-input sidebar-page-number-input--edit"
                     value={glazeLinearSeedInput}
                     onChange={(event) => {
@@ -1698,6 +1704,9 @@ export function SidebarOptionsPanel({
                     max={1000000}
                     step={1}
                     inputMode="numeric"
+                    spellCheck={false}
+                    autoCorrect="off"
+                    autoCapitalize="off"
                     className="sidebar-page-number-input sidebar-page-number-input--edit"
                     value={glazeRadialSeedInput}
                     onChange={(event) => {

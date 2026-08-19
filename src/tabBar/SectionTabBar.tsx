@@ -195,6 +195,9 @@ export function SectionTabBar({
               className="tag-pill section-identity-input"
               value={sectionNameDraft}
               autoFocus
+              spellCheck={false}
+              autoCorrect="off"
+              autoCapitalize="off"
               onChange={(event) => setSectionNameDraft(event.target.value)}
               onBlur={onCommitSectionRename}
               onKeyDown={(event) => {
