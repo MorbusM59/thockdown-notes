@@ -14,6 +14,7 @@ function baseSummary(overrides: Partial<NoteSummary> = {}): NoteSummary {
     isAutoToc: false,
     isAutoOpenItems: false,
     chapterParentId: null,
+    chapterId: null,
     ...overrides,
   }
 }
@@ -50,6 +51,12 @@ describe('isSameNoteSummary', () => {
   it('detects a chapterParentId-only change', () => {
     const a = baseSummary({ chapterParentId: null })
     const b = baseSummary({ chapterParentId: 'parent-1' })
+    expect(isSameNoteSummary(a, b)).toBe(false)
+  })
+
+  it('detects a chapterId-only change', () => {
+    const a = baseSummary({ chapterId: null })
+    const b = baseSummary({ chapterId: 'INTRO' })
     expect(isSameNoteSummary(a, b)).toBe(false)
   })
 })

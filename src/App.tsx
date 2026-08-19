@@ -34,7 +34,8 @@ import {
 } from './shared/loadouts'
 import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
-import { getChapterNoteListMetaLabel, getNoteListMetaKind } from './shared/noteListMeta'
+import { getNoteListMetaKind } from './shared/noteListMeta'
+import { resolveIdentityLabel } from './shared/tabLabels'
 import { NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload } from './shared/noteDrag'
 import {
   type RgbaColor,
@@ -1084,9 +1085,8 @@ type NoteListItemProps = {
   onMouseLeave?: (noteId: string) => void
   isTrashMode?: boolean
   variant?: 'default' | 'tree'
-  /** Set only for a chapter surfaced via search -- shown instead of the chapter's own title, since it's meaningless out of its parent's context. */
+  /** Set for a chapter (surfaced via search, or -- now that a chapter can carry its own 'archived'/'deleted' protected tag -- via trash/archive): the parent's own title, shown in the meta-left slot as "$ <parent title>" in place of the created-date/assignedId a regular note shows there, since a bare date is far less useful than knowing which note this chapter belongs to. */
   chapterParentTitle?: string
-  chapterParentAssignedId?: string | null
 }
 
 const NoteListItem = memo(function NoteListItem({
@@ -1106,7 +1106,6 @@ const NoteListItem = memo(function NoteListItem({
   isTrashMode = false,
   variant = 'default',
   chapterParentTitle,
-  chapterParentAssignedId,
 }: NoteListItemProps) {
   const isTreeVariant = variant === 'tree'
   const createdDate = isTreeVariant ? '' : formatCreatedDate(note.createdAtMs)
@@ -1154,14 +1153,27 @@ const NoteListItem = memo(function NoteListItem({
   }, [note.id, onTrashClick])
 
   const isExternal = isExternalNote(note)
-  const displayTitle = isExternal ? note.fileName : (chapterParentTitle ?? note.title)
+  const isChapter = note.chapterOnly
+  // A chapter's own title is never useful on its own out of its parent's
+  // context, so it's always prefixed to read as "a chapter, not a note" --
+  // resolveIdentityLabel is the same rule the chapter bar's own pill uses
+  // (assigned chapterId, or a live-derived snippet from its own content),
+  // so a chapter reads identically here and there. note.title itself is
+  // useless for this: titleFromText (noteLifecycleService.ts) only ever
+  // recognizes a level-1 `# ` heading, while chapters use `## `, so a
+  // chapter's own note.title is always literally "Missing title".
+  const displayTitle = isExternal
+    ? note.fileName
+    : isChapter
+      ? `§ ${resolveIdentityLabel(note.chapterId, note.contentText, 'chapter').text}`
+      : note.title
   const noteListMetaKind = getNoteListMetaKind(note)
-  const chapterMetadataText = note.chapterOnly && note.chapterParentId
-    ? getChapterNoteListMetaLabel({
-      parentAssignedId: chapterParentAssignedId ?? null,
-      chapterAssignedId: note.assignedId ?? null,
-      createdDateText: createdDate,
-    })
+  // The meta-left slot shows which note this chapter belongs to instead of
+  // its created date (see chapterParentTitle's own doc comment for why) --
+  // falls back to the date only in the unexpected case its parent's own
+  // title couldn't be resolved (e.g. the parent itself no longer exists).
+  const chapterMetadataText = isChapter
+    ? `$ ${chapterParentTitle ?? createdDate}`
     : null
 
   const handleMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
@@ -1204,11 +1216,14 @@ const NoteListItem = memo(function NoteListItem({
   const hasActionColumns = !isTreeVariant
   const isArchived = isArchivedNote(note)
   const isDeleted = isDeletedNote(note)
-  // A chapter has no tag life of its own -- archiving/trashing only makes
-  // sense on its parent note, so these are disabled for chapters surfaced
-  // via search (see chapterParentTitle).
-  const isArchiveButtonDisabled = !onArchiveClick || isArchived || (!isTrashMode && isDeleted) || note.chapterOnly
-  const isTrashButtonDisabled = !onTrashClick || (!isTrashMode && isDeleted) || note.chapterOnly
+  // A chapter can now carry its own 'archived'/'deleted' protected tag (see
+  // ChapterBar.tsx's archive/delete split pill -- the actual archive/delete
+  // *mechanics*, not yet wired here), but that's a deliberately different
+  // gesture from these per-row sidebar buttons/hold-gestures, which stay
+  // disabled/blocked for a chapter row regardless of surfacing context
+  // (search, or now trash) until that wiring exists.
+  const isArchiveButtonDisabled = !onArchiveClick || isArchived || (!isTrashMode && isDeleted) || isChapter
+  const isTrashButtonDisabled = !onTrashClick || (!isTrashMode && isDeleted) || isChapter
 
   return (
     <div
@@ -6596,11 +6611,14 @@ ${markdownHtml}
       if (isDeletedNote(note)) return false
       if (isArchivedNote(note)) return false
       // Chapters only ever exist to be shown through their parent's chapter
-      // bar -- excluded from every menu view, unlike external notes (which
-      // still show in 'date'). The one exception is an active search: a
-      // chapter whose own content/title matched is surfaced like any other
-      // note (see NoteListItem's chapterParentTitle override, which shows
-      // the parent's title instead of the chapter's own).
+      // bar -- excluded from 'date', unlike external notes (which still show
+      // there). The one exception is an active search: a chapter whose own
+      // content/title matched is surfaced like any other note (see
+      // NoteListItem's chapterParentTitle, shown alongside -- not in place
+      // of -- the chapter's own title). A deleted chapter is a second,
+      // separate exception, handled entirely by trashEligibleNotes below
+      // (deleted notes are already filtered out above this check, so this
+      // branch never even sees one).
       if (isChapterOnlyNote(note) && !isSidebarSearchActive) return false
       return true
     })
@@ -6616,12 +6634,27 @@ ${markdownHtml}
   }, [dateEligibleNotes, filterNotesBySelectedDate])
 
   const archiveEligibleNotes = useMemo(() => {
+    // Deliberately still excludes chapters, unlike trashEligibleNotes below
+    // (see its own comment) -- archive is a tag-grouped tree view, and a
+    // tagless chapter has no sensible bucket to land in there the way it
+    // does in trash's flat list. An archived chapter stays discoverable
+    // only through its parent's chapter bar (dimmed via the ghost
+    // convention, same as an archived pinned tab).
     const archiveNotes = searchedNotes.filter((note) => isArchivedNote(note) && !isDeletedNote(note) && !isExternalNote(note) && !isChapterOnlyNote(note))
     return filterNotesBySelectedDate(archiveNotes)
   }, [filterNotesBySelectedDate, searchedNotes])
 
   const trashEligibleNotes = useMemo(() => {
-    return searchedNotes.filter((note) => isDeletedNote(note) && !isExternalNote(note) && !isChapterOnlyNote(note))
+    // Unlike every other menu view, a deleted chapter *does* show here --
+    // a chapter can now carry its own 'archived'/'deleted' protected tag
+    // (see ChapterBar.tsx's archive/delete split pill), and a deleted
+    // chapter needs to be discoverable somewhere other than its parent's
+    // chapter bar. Trash is a flat, ungrouped list (unlike archive/
+    // category's tag-tree view, which has no sensible bucket for a
+    // tagless chapter -- deliberately not extended the same way), so a
+    // chapter row fits here naturally. See NoteListItem's chapterParentTitle
+    // for how it's labeled to stay legible out of its normal context.
+    return searchedNotes.filter((note) => isDeletedNote(note) && !isExternalNote(note))
   }, [searchedNotes])
 
   const dateFilteredNotes = useMemo(() => {
@@ -7896,8 +7929,9 @@ ${markdownHtml}
                           // menuIdentityNoteId collapses an active chapter to
                           // its parent (so the chapter bar's owner note
                           // highlights normally) -- but a chapter can now
-                          // appear as its own row via search, so it needs to
-                          // compare against the true active note instead.
+                          // appear as its own row via search or (if deleted)
+                          // trash, so it needs to compare against the true
+                          // active note instead.
                           const isActive = note.chapterOnly
                             ? note.id === activeSection?.activeNoteId
                             : note.id === activeSection?.menuIdentityNoteId
@@ -7912,7 +7946,6 @@ ${markdownHtml}
                               isActive={isActive}
                               isModified={isModified}
                               chapterParentTitle={chapterParentTitle}
-                              chapterParentAssignedId={note.chapterOnly && note.chapterParentId ? notesById.get(note.chapterParentId)?.assignedId ?? null : null}
                               onSelect={handleSelectNote}
                               onPrimedLeftClick={(noteId) => getActiveSection()?.handlePrimedNoteLeftClick(noteId)}
                               onSaveClick={activeSection?.handleSaveButtonClick}

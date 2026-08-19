@@ -192,6 +192,7 @@ type NoteRecordRow = {
   isAutoToc: number;
   isAutoOpenItems: number;
   chapterParentId: string | null;
+  chapterId: string | null;
 };
 
 export type NoteRecord = {
@@ -214,6 +215,8 @@ export type NoteRecord = {
   isAutoOpenItems: boolean;
   /** The single note this note is a chapter of, or null when it isn't (any) chapter. DB-derived (see getChapterParent), not navigation state. */
   chapterParentId: string | null;
+  /** This chapter's own user-assignable id (the `chapters.chapterId` column -- distinct from `assignedId`/`notes.assignedId`, which is a different, note-level `$id` field a chapterOnly note's own tag bar never exposes a way to set). Null when unset (or when this note isn't a chapter at all). See tabLabels.ts's resolveIdentityLabel for how this resolves to a display label alongside a derived-from-content fallback. */
+  chapterId: string | null;
 };
 
 /** One entry pinned to a section's tab bar (quick-access note shortcut). */
@@ -1134,7 +1137,7 @@ export class DatabaseService {
   listNoteRecords(): NoteRecord[] {
     const db = this.requireDb();
     const rows = db.prepare(`
-      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, n.isAutoOpenItems, c.parentNoteId AS chapterParentId
+      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, n.isAutoOpenItems, c.parentNoteId AS chapterParentId, c.chapterId AS chapterId
       FROM notes n
       LEFT JOIN chapters c ON c.chapterNoteId = n.id
       ORDER BY datetime(n.updatedAt) DESC
@@ -1157,13 +1160,14 @@ export class DatabaseService {
       isAutoToc: Boolean(row.isAutoToc),
       isAutoOpenItems: Boolean(row.isAutoOpenItems),
       chapterParentId: row.chapterParentId,
+      chapterId: row.chapterId,
     }));
   }
 
   getNoteRecord(noteId: string): NoteRecord | null {
     const db = this.requireDb();
     const row = db.prepare(`
-      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, n.isAutoOpenItems, c.parentNoteId AS chapterParentId
+      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, n.isAutoOpenItems, c.parentNoteId AS chapterParentId, c.chapterId AS chapterId
       FROM notes n
       LEFT JOIN chapters c ON c.chapterNoteId = n.id
       WHERE n.id = ?
@@ -1191,6 +1195,7 @@ export class DatabaseService {
       isAutoToc: Boolean(row.isAutoToc),
       isAutoOpenItems: Boolean(row.isAutoOpenItems),
       chapterParentId: row.chapterParentId,
+      chapterId: row.chapterId,
     };
   }
 
@@ -3501,36 +3506,45 @@ export class DatabaseService {
   }
 
   /**
-   * Chapters have no tag life of their own -- tags always belong to the
-   * parent note. Merges any tags still sitting on a `chapterOnly` note
-   * (leftover from before chapters stopped exposing their own tag bar) up
-   * onto that chapter's parent, then clears the chapter's own tag rows.
+   * Chapters have no *regular* tag life of their own -- tags always belong
+   * to the parent note. Merges any regular tags still sitting on a
+   * `chapterOnly` note (leftover from before chapters stopped exposing
+   * their own tag bar) up onto that chapter's parent, then clears just
+   * those rows.
+   *
+   * Protected tags ('archived'/'deleted'/the external-file tag) are
+   * deliberately left untouched here -- unlike regular tags, a chapter's
+   * own archived/deleted state is real per-chapter data (see
+   * ChapterBar.tsx's archive/delete split pill), not a stray leftover to
+   * fold into the parent. Getting this filter wrong would silently strip
+   * that state back off the chapter on every single app boot, since this
+   * migration re-runs idempotently on every startup -- exactly the kind of
+   * bug this codebase has shipped more than once (see CLAUDE.md's state-
+   * persistence contract for the general pattern).
    */
   private migrateChapterTagsToParent(): void {
     const db = this.requireDb();
     const orphanTagRows = db.prepare(`
-      SELECT nt.noteId AS chapterNoteId, nt.tagId AS tagId, c.parentNoteId AS parentNoteId
+      SELECT nt.noteId AS chapterNoteId, nt.tagId AS tagId, c.parentNoteId AS parentNoteId, t.name AS tagName
       FROM note_tags nt
       JOIN notes n ON n.id = nt.noteId AND n.chapterOnly = 1
       JOIN chapters c ON c.chapterNoteId = nt.noteId
-    `).all() as Array<{ chapterNoteId: string; tagId: number; parentNoteId: string }>;
+      JOIN tags t ON t.id = nt.tagId
+    `).all() as Array<{ chapterNoteId: string; tagId: number; parentNoteId: string; tagName: string }>;
 
-    if (orphanTagRows.length === 0) return;
+    const regularTagRows = orphanTagRows.filter((row) => !PROTECTED_TAGS.includes(row.tagName as typeof PROTECTED_TAGS[number]));
+    if (regularTagRows.length === 0) return;
 
     const insertOntoParentStmt = db.prepare(`
       INSERT OR IGNORE INTO note_tags (noteId, tagId, position)
       VALUES (?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM note_tags WHERE noteId = ?))
     `);
-    const clearChapterTagsStmt = db.prepare('DELETE FROM note_tags WHERE noteId = ?');
+    const clearChapterTagStmt = db.prepare('DELETE FROM note_tags WHERE noteId = ? AND tagId = ?');
 
     const tx = db.transaction(() => {
-      const chapterIdsToClear = new Set<string>();
-      for (const row of orphanTagRows) {
-        chapterIdsToClear.add(row.chapterNoteId);
+      for (const row of regularTagRows) {
         insertOntoParentStmt.run(row.parentNoteId, row.tagId, row.parentNoteId);
-      }
-      for (const chapterNoteId of chapterIdsToClear) {
-        clearChapterTagsStmt.run(chapterNoteId);
+        clearChapterTagStmt.run(row.chapterNoteId, row.tagId);
       }
     });
     tx();

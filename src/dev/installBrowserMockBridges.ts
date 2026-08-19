@@ -109,6 +109,7 @@ function normalizeDocument(note: NoteDocument): NoteDocument {
     isAutoToc: Boolean(note.isAutoToc),
     isAutoOpenItems: Boolean(note.isAutoOpenItems),
     chapterParentId: note.chapterParentId ?? null,
+    chapterId: note.chapterId ?? null,
   }
 }
 
@@ -126,6 +127,7 @@ function toSummary(note: NoteDocument): NoteSummary {
     isAutoToc: Boolean(note.isAutoToc),
     isAutoOpenItems: Boolean(note.isAutoOpenItems),
     chapterParentId: note.chapterParentId ?? null,
+    chapterId: note.chapterId ?? null,
     // The real app derives this from the on-disk file minus any legacy
     // metadata header (readSummary in noteLifecycleService.ts); the mock has
     // no such header, so the live text itself already is the content text.
@@ -417,6 +419,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
           isAutoToc: false,
           isAutoOpenItems: false,
           chapterParentId: null,
+          chapterId: null,
         })
         store.notes.push(created)
         return clone(created)
@@ -1206,6 +1209,7 @@ function regenerateOpenItemsGroupInStore(store: BrowserMockStore, parentNoteId: 
       isAutoToc: false,
       isAutoOpenItems: true,
       chapterParentId: parentNoteId,
+      chapterId: null,
     })
     store.notes.push(created)
 
@@ -1294,6 +1298,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           isAutoToc: false,
           isAutoOpenItems: false,
           chapterParentId: parentNoteId,
+          chapterId: null,
         })
         store.notes.push(created)
 
@@ -1335,6 +1340,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           isAutoToc: false,
           isAutoOpenItems: false,
           chapterParentId: parentNoteId,
+          chapterId: null,
         })
         store.notes.push(created)
 
@@ -1349,6 +1355,15 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
 
     async setChapterId(parentNoteId: string, chapterNoteId: string, requestedId: string): Promise<string | null> {
       return mutate((store) => {
+        // Kept in sync on the note object itself too (not just store.chapters),
+        // mirroring chapterParentId's own duplicated-cache convention in this
+        // file -- toSummary/normalizeDocument read chapterId straight off the
+        // note, not via a store.chapters lookup (see their own doc comments).
+        const syncNoteChapterId = (value: string | null) => {
+          const note = store.notes.find((entry) => entry.id === chapterNoteId)
+          if (note) note.chapterId = value
+        }
+
         const normalized = normalizeAssignedIdInput(requestedId)
         if (normalized.length === 0) {
           store.chapters = store.chapters.map((chapter) => (
@@ -1356,6 +1371,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
               ? { ...chapter, chapterId: null }
               : chapter
           ))
+          syncNoteChapterId(null)
           return null
         }
 
@@ -1376,6 +1392,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
             ? { ...chapter, chapterId: resolved }
             : chapter
         ))
+        syncNoteChapterId(resolved)
         return resolved
       })
     },
@@ -1410,7 +1427,10 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
                 : chapter
             ))
           const note = store.notes.find((entry) => entry.id === chapterNoteId)
-          if (note) note.chapterParentId = null
+          if (note) {
+            note.chapterParentId = null
+            note.chapterId = null
+          }
         }
         return sorted(store, parentNoteId)
       })
@@ -1440,6 +1460,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           isAutoToc: true,
           isAutoOpenItems: false,
           chapterParentId: parentNoteId,
+          chapterId: null,
         })
         store.notes.push(created)
 

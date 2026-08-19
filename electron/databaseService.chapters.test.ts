@@ -67,6 +67,42 @@ describe('DatabaseService chapters', () => {
     expect(db.getChapterParent('chapter-1')).toBe('parent-b')
   })
 
+  // Regression: migrateChapterTagsToParent (private, re-runs idempotently on
+  // every DatabaseService.initialize() -- i.e. every real app boot) used to
+  // strip ALL of a chapterOnly note's own tags onto its parent, with no
+  // exception for protected ones. A chapter's own 'archived'/'deleted' tag
+  // (see ChapterBar.tsx's archive/delete split pill) is real per-chapter
+  // data, not a leftover to fold into the parent -- getting this migration
+  // wrong would silently strip that state back off the chapter on every
+  // single restart. A regular tag left on a chapter (an actual leftover,
+  // from before chapters stopped exposing their own tag bar) still needs to
+  // migrate up, so both halves are asserted here, not just the new one.
+  it('protects archived/deleted tags on a chapter from the parent-tag migration, but still migrates a regular one', async () => {
+    seedNote(db, 'parent-a')
+    seedNote(db, 'chapter-1')
+    db.addChapter('parent-a', 'chapter-1')
+    // migrateChapterTagsToParent's query is scoped to chapterOnly=1 rows --
+    // addChapter alone (the chapters-table attachment) doesn't set this;
+    // the real create-chapter flow (noteLifecycleService.ts) always does
+    // both together.
+    db.setNoteChapterOnly('chapter-1', true)
+
+    db.addTagToNote('chapter-1', 'archived', 0)
+    db.addTagToNote('chapter-1', 'leftover-tag', 1)
+    db.close()
+
+    // A fresh instance re-running initialize() on the same data root is
+    // what a real app restart does -- migrateChapterTagsToParent fires
+    // again here, exactly like it would on every boot.
+    const restarted = new DatabaseService(dataRoot)
+    await restarted.initialize()
+
+    expect(restarted.getNoteTags('chapter-1')).toEqual(['archived'])
+    expect(restarted.getNoteTags('parent-a')).toEqual(['leftover-tag'])
+
+    restarted.close()
+  })
+
   it('maintains gapless positions per parent independently of the same chapter appearing elsewhere', () => {
     seedNote(db, 'parent-a')
     seedNote(db, 'chapter-1')

@@ -41,7 +41,7 @@ export interface NoteSummary {
   isInSync?: boolean;
   /** User-assignable tab-bar label. Null until first assigned (explicitly via `$id`, or lazily defaulted). */
   assignedId?: string | null;
-  /** True for a note created only to be a chapter (via the chapter bar's "+" button, or cloned from a note dragged onto a chapter bar) -- excluded from every menu view (date/category/archive/trash), only ever shown through its parent's chapter bar. Never true for a note that can also stand on its own. */
+  /** True for a note created only to be a chapter (via the chapter bar's "+" button, or cloned from a note dragged onto a chapter bar) -- excluded from every menu view except a deleted/archived chapter's own row in trash/archive (see isChapterOnlyNote's callers in App.tsx), only otherwise ever shown through its parent's chapter bar. Never true for a note that can also stand on its own. */
   chapterOnly: boolean;
   /** True for the one chapter (if any) that's the auto-generated table of contents for its parent's whole chapter family -- see databaseService.ts's `isAutoToc` column doc comment. Always false for a non-chapter note. */
   isAutoToc: boolean;
@@ -49,6 +49,8 @@ export interface NoteSummary {
   isAutoOpenItems: boolean;
   /** The single note this note is a chapter of, or null when it isn't (any) chapter. A `chapterOnly` note always has a non-null parent; a regular note is always null (regular notes can never become chapters). */
   chapterParentId: string | null;
+  /** This chapter's own user-assignable id (the `chapters.chapterId` column) -- distinct from `assignedId` above, which is a different, note-level `$id` field a chapterOnly note's own tag bar never exposes a way to set. Null when unset, or when this note isn't a chapter. See tabLabels.ts's resolveIdentityLabel for how this resolves to a display label alongside a derived-from-content fallback -- the same rule the chapter bar's own pill uses, reused for a chapter's sidebar-list row (trash/archive) so the two read identically. */
+  chapterId: string | null;
 }
 
 export interface NoteDocument extends NoteSummary {
@@ -222,6 +224,7 @@ export function isSameNoteSummary(a: NoteSummary, b: NoteSummary): boolean {
     a.chapterOnly === b.chapterOnly &&
     a.isAutoToc === b.isAutoToc &&
     a.isAutoOpenItems === b.isAutoOpenItems &&
-    a.chapterParentId === b.chapterParentId
+    a.chapterParentId === b.chapterParentId &&
+    (a.chapterId ?? null) === (b.chapterId ?? null)
   )
 }
