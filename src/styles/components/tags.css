@@ -283,33 +283,9 @@
      rounding. min-height (not height) so it still grows past that floor
      rather than clipping if a future font/scale combo genuinely needs
      more room than --ui-pill-bar-size provides. */
+  height: var(--ui-pill-bar-size);
   min-height: var(--ui-pill-bar-size);
-}
-
-/* A few UI fonts (Options > UI Font) bake unusually tall ascent metrics into
-   their em-box, so even though flexbox correctly centers the box itself,
-   the glyphs render visibly low inside it -- worse at this pill's larger
-   font-size. Measured live per font at 16px * --ui-font-scale (most fonts
-   needed no correction at all, so only the offenders are listed); values
-   are in em so they track font-size/scale instead of going stale at other
-   sizes. document.documentElement's data-ui-font attribute (App.tsx) is
-   what makes the font selectable here. */
-[data-ui-font='alata'] .tag-pill.section-identity-tab .tag-pill-label,
-[data-ui-font='xkcd'] .tag-pill.section-identity-tab .tag-pill-label {
-  transform: translateY(calc(-2px * var(--ui-font-scale)));
-}
-
-[data-ui-font='ibmplexsans'] .tag-pill.section-identity-tab .tag-pill-label,
-[data-ui-font='novamono'] .tag-pill.section-identity-tab .tag-pill-label,
-[data-ui-font='vt323'] .tag-pill.section-identity-tab .tag-pill-label {
-  transform: translateY(calc(-1.5px * var(--ui-font-scale)));
-}
-
-[data-ui-font='cevicheone'] .tag-pill.section-identity-tab .tag-pill-label,
-[data-ui-font='sniglet'] .tag-pill.section-identity-tab .tag-pill-label,
-[data-ui-font='sourgummy'] .tag-pill.section-identity-tab .tag-pill-label,
-[data-ui-font='kellyslab'] .tag-pill.section-identity-tab .tag-pill-label {
-  transform: translateY(calc(-1px * var(--ui-font-scale)));
+  max-height: var(--ui-pill-bar-size);
 }
 
 .tag-pill.section-identity-tab .tag-pill-label {
@@ -335,6 +311,8 @@
   min-width: 120px;
   max-width: 120px;
   height: var(--ui-pill-bar-size);
+  min-height: var(--ui-pill-bar-size);
+  max-height: var(--ui-pill-bar-size);
   /* --ui-pill-bar-size is taller than this text's own single-line content
      needs (it's sized for the flanking icon buttons, not this pill's own
      font). The button neighbor centers its label within that extra room
