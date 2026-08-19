@@ -163,8 +163,7 @@ export interface PersistedMenuState {
   renderScrollMaxDurationMultiplier?: number;
   sidebarViewState?: Partial<Record<SidebarMode, PersistedSidebarViewState>>;
   debuggingEnabled?: boolean;
-  spellCheckEditEnabled?: boolean;
-  spellCheckRenderEnabled?: boolean;
+  spellCheckEnabled?: boolean;
   /** Whether the tab bar shows tag management or pinned quick-access note tabs. */
   tabBarMode?: 'tags' | 'tabs';
   /** Whether the sidebar is visible (not part of layout widths). */

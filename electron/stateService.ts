@@ -53,6 +53,7 @@ const DEFAULT_APP_STATE: AppState = {
       trash: { page: 1, scrollTop: 0 },
       find: { scrollTop: 0 },
     },
+    spellCheckEnabled: false,
   },
 };
 
@@ -505,8 +506,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     scrollMaxDurationMultiplier: sanitizePositive(input?.scrollMaxDurationMultiplier, DEFAULT_APP_STATE.menu!.scrollMaxDurationMultiplier ?? 1),
     sidebarViewState: sanitizeSidebarViewState(input?.sidebarViewState),
     debuggingEnabled: Boolean(input?.debuggingEnabled),
-    spellCheckEditEnabled: Boolean(input?.spellCheckEditEnabled),
-    spellCheckRenderEnabled: Boolean(input?.spellCheckRenderEnabled),
+    spellCheckEnabled: Boolean(input?.spellCheckEnabled ?? false),
     tabBarMode: sanitizeTabBarMode(input?.tabBarMode),
     isSidebarVisible: typeof input?.isSidebarVisible === 'boolean' ? input.isSidebarVisible : true,
     // Was missing entirely until this line -- sanitizeMenu (routed through

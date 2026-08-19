@@ -1704,8 +1704,7 @@ function App() {
   const [isExportingMd, setIsExportingMd] = useState(false)
   const [exportFolder, setExportFolder] = useState<string | null>(null)
   const [debuggingEnabled, setDebuggingEnabled] = useState(false)
-  const [spellCheckEditEnabled, setSpellCheckEditEnabled] = useState(false)
-  const [spellCheckRenderEnabled, setSpellCheckRenderEnabled] = useState(false)
+  const [spellCheckEnabled, setSpellCheckEnabled] = useState(false)
   const [customCursorEnabled, setCustomCursorEnabled] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.enabled)
   const [customCursorDotColor, setCustomCursorDotColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.dotColor)
   const [customCursorCenterColor, setCustomCursorCenterColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.centerColor)
@@ -3718,8 +3717,7 @@ function App() {
         },
       },
       debuggingEnabled,
-      spellCheckEditEnabled,
-      spellCheckRenderEnabled,
+      spellCheckEnabled,
       tabBarMode: tabBarModeRef.current,
       isSidebarVisible: overrides?.isSidebarVisible ?? isSidebarVisible,
       isDoubleSizeMode: overrides?.isDoubleSizeMode ?? isDoubleSizeMode,
@@ -3740,8 +3738,7 @@ function App() {
     categoryCollapsedPrimary,
     categoryCollapsedSecondary,
     debuggingEnabled,
-    spellCheckEditEnabled,
-    spellCheckRenderEnabled,
+    spellCheckEnabled,
     reduceVisualEffects,
     reducedCaretAnimation,
     deferPreviewOnRapidInput,
@@ -5488,8 +5485,7 @@ ${markdownHtml}
             // Global texture enable is intentionally fixed on; per-surface alpha controls visibility.
             setTextureMaterials(cloneTextureMaterials(appState.menu.textureMaterials ?? DEFAULT_TEXTURE_MATERIALS))
             setDebuggingEnabled(appState.menu.debuggingEnabled ?? false)
-            setSpellCheckEditEnabled(appState.menu.spellCheckEditEnabled ?? false)
-            setSpellCheckRenderEnabled(appState.menu.spellCheckRenderEnabled ?? false)
+            setSpellCheckEnabled(appState.menu.spellCheckEnabled ?? false)
             setRestoredTabBarMode(appState.menu.tabBarMode ?? 'tabs')
 
             // Restore persisted sidebar visibility
@@ -8529,10 +8525,8 @@ ${markdownHtml}
               activeNoteId={activeSection?.activeNoteId ?? null}
               toggleRenderViewMode={activeSection?.isForcedPreviewNote ? noopAsync : (activeSection?.toggleRenderViewMode ?? noopAsync)}
               createNote={createNote}
-              spellCheckEditEnabled={spellCheckEditEnabled}
-              spellCheckRenderEnabled={spellCheckRenderEnabled}
-              setSpellCheckRenderEnabled={setSpellCheckRenderEnabled}
-              setSpellCheckEditEnabled={setSpellCheckEditEnabled}
+              spellCheckEnabled={spellCheckEnabled}
+              setSpellCheckEnabled={setSpellCheckEnabled}
               queueAppStateSave={queueAppStateSave}
               handleExportPdf={handleExportPdf}
               chooseExportFolder={chooseExportFolder}
@@ -8645,8 +8639,8 @@ ${markdownHtml}
                   editorStageRef={editorStageRef}
                   editorFontFamily={editorFontFamily}
                   editorFontLoadVersion={editorFontLoadVersion}
-                  spellCheckEditEnabled={spellCheckEditEnabled}
-                  spellCheckRenderEnabled={spellCheckRenderEnabled}
+                  spellCheckEditEnabled={spellCheckEnabled}
+                  spellCheckRenderEnabled={spellCheckEnabled}
                   highlightSearchColor={highlightColors.search}
                   showLineNumbers={reviewGutterVisibleBySection[entry.id] ?? false}
                   showReviewFlags={reviewFlagsVisibleBySection[entry.id] ?? false}

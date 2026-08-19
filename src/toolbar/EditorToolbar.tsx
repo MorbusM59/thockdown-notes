@@ -8,10 +8,8 @@ export interface EditorToolbarProps extends UseMarkdownFormattingToolbarResult {
   activeNoteId: string | null
   toggleRenderViewMode: () => void
   createNote: (initialText?: string) => Promise<void>
-  spellCheckEditEnabled: boolean
-  spellCheckRenderEnabled: boolean
-  setSpellCheckRenderEnabled: (updater: (previous: boolean) => boolean) => void
-  setSpellCheckEditEnabled: (updater: (previous: boolean) => boolean) => void
+  spellCheckEnabled: boolean
+  setSpellCheckEnabled: (updater: (previous: boolean) => boolean) => void
   queueAppStateSave: (selectedNoteId: string | null) => void
   handleExportPdf: () => void | Promise<void>
   chooseExportFolder: () => Promise<string | null>
@@ -35,10 +33,8 @@ export function EditorToolbar({
   activeNoteId,
   toggleRenderViewMode,
   createNote,
-  spellCheckEditEnabled,
-  spellCheckRenderEnabled,
-  setSpellCheckRenderEnabled,
-  setSpellCheckEditEnabled,
+  spellCheckEnabled,
+  setSpellCheckEnabled,
   queueAppStateSave,
   handleExportPdf,
   chooseExportFolder,
@@ -94,25 +90,13 @@ export function EditorToolbar({
           <span className="fa-solid fa-file" aria-hidden="true" />
         </button>
         <button
-          className={`btn-icon ${(isPreviewMode ? spellCheckRenderEnabled : spellCheckEditEnabled) ? 'is-active' : ''}`}
+          className={`btn-icon ${spellCheckEnabled ? 'is-active' : ''}`}
           type="button"
-          data-tooltip={
-            isPreviewMode
-              ? (spellCheckRenderEnabled ? 'Disable spell check' : 'Enable spell check')
-              : (spellCheckEditEnabled ? 'Disable spell check' : 'Enable spell check')
-          }
-          aria-label={
-            isPreviewMode
-              ? (spellCheckRenderEnabled ? 'Disable spell check' : 'Enable spell check')
-              : (spellCheckEditEnabled ? 'Disable spell check' : 'Enable spell check')
-          }
-          aria-pressed={isPreviewMode ? spellCheckRenderEnabled : spellCheckEditEnabled}
+          data-tooltip={spellCheckEnabled ? 'Disable spell check' : 'Enable spell check'}
+          aria-label={spellCheckEnabled ? 'Disable spell check' : 'Enable spell check'}
+          aria-pressed={spellCheckEnabled}
           onClick={() => {
-            if (isPreviewMode) {
-              setSpellCheckRenderEnabled((prev) => !prev)
-            } else {
-              setSpellCheckEditEnabled((prev) => !prev)
-            }
+            setSpellCheckEnabled((prev) => !prev)
             queueAppStateSave(activeNoteId)
           }}
         >

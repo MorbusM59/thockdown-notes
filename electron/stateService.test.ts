@@ -88,4 +88,22 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.reviewGutterVisibleBySection).toEqual({ sectionA: true })
     expect(loaded.menu?.reviewFlagsVisibleBySection).toEqual({ sectionA: false })
   })
+
+  it('persists the unified global spellcheck toggle across a save -> fresh-instance load', async () => {
+    const writer = new StateService(dataRoot)
+    await writer.saveAppState({
+      selectedNoteId: null,
+      menu: {
+        sidebarMode: 'date',
+        selectedMonths: [],
+        selectedYears: [],
+        searchQuery: '',
+        spellCheckEnabled: true,
+      },
+    })
+
+    const reader = new StateService(dataRoot)
+    const loaded = await reader.loadAppState()
+    expect(loaded.menu?.spellCheckEnabled).toBe(true)
+  })
 })
