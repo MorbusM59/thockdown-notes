@@ -1978,6 +1978,9 @@ function App() {
       // Persist app state menu snapshot with updated sidebar visibility
       if (window.thockdownState && persistenceReady) {
         const snapshot = buildMenuStateSnapshot({ isSidebarVisible: next })
+        // Keep persistedMenuStateRef in sync -- see handleToggleDoubleSizeMode
+        // below for why this is load-bearing, not just tidiness.
+        persistedMenuStateRef.current = snapshot
         const section = getActiveSection()
         void window.thockdownState.saveAppState({
           selectedNoteId: section?.activeNoteId ?? null,
@@ -2011,6 +2014,17 @@ function App() {
       // Persist app state menu snapshot with updated double-size mode
       if (window.thockdownState && persistenceReady) {
         const snapshot = buildMenuStateSnapshot({ isDoubleSizeMode: next })
+        // persistedMenuStateRef is the "last known good" snapshot every other
+        // save path (persistMenuStateOnce/OnUnload, chooseExportFolder, the
+        // startup restore) keeps in sync -- queueAppStateSave's own debounced
+        // flush prefers it over building a fresh snapshot. Without this, the
+        // very next debounced save (triggered by anything else -- switching
+        // notes, scrolling) would silently overwrite this correct value with
+        // the stale pre-toggle one still sitting in the ref. Confirmed live:
+        // this was the actual cause of double-size mode not surviving an
+        // AppImage restart on Linux -- see toggleSidebarVisible above, same
+        // bug, same fix.
+        persistedMenuStateRef.current = snapshot
         const section = getActiveSection()
         void window.thockdownState.saveAppState({
           selectedNoteId: section?.activeNoteId ?? null,
