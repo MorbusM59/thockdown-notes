@@ -23,6 +23,7 @@ import { useEditorSectionMount } from './useEditorSectionMount'
 import { useSnapshotFreeze } from './useSnapshotFreeze'
 import { useSectionTabs } from '../tabBar/useSectionTabs'
 import { useNoteChapters } from '../chapters/useNoteChapters'
+import { useChapterPillActions } from '../chapters/useChapterPillActions'
 import { useNoteProtectionActions } from './useNoteProtectionActions'
 import { useNoteSnapshotTimeline } from './useNoteSnapshotTimeline'
 import { useDocumentFind } from '../find/useDocumentFind'
@@ -58,8 +59,10 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'setTimelineTrackLengthPx' | 'handleCreateManualSnapshot' | 'handleReturnToPresent' | 'handleMergeAdjacentSnapshots'
   | 'scrollbarHostEl' | 'setScrollbarHostEl' | 'notes' | 'menuIdentityNoteId' | 'chapters' | 'onParentTabClick' | 'onCreateChapter' | 'onChapterClick'
   | 'onChapterDragStart' | 'onChapterDragEnd' | 'onChapterDrop'
-  | 'editingChapterNoteId' | 'chapterIdDraft' | 'setChapterIdDraft' | 'onStartEditingChapterId' | 'onCommitChapterIdEdit' | 'onCancelChapterIdEdit'
-  | 'onCollapseChapterIntoPrevious' | 'onExtractSelectionToChapter' | 'isViewingAutoTocChapter' | 'isViewingAutoOpenItemsChapter'> {
+  | 'editingChapterNoteId' | 'chapterIdDraft' | 'setChapterIdDraft' | 'onCommitChapterIdEdit' | 'onCancelChapterIdEdit'
+  | 'onCollapseChapterIntoPrevious' | 'onExtractSelectionToChapter' | 'isViewingAutoTocChapter' | 'isViewingAutoOpenItemsChapter'
+  | 'splitArmedChapter' | 'onChapterPillMouseDown' | 'onChapterPillMouseUp' | 'onChapterPillMouseLeave' | 'onChapterPillContextMenu'
+  | 'onArchiveChapterClick' | 'onDeleteChapterClick'> {
   sectionId: string
   markSectionActive: (sectionId: string) => void
   isSidebarVisible: boolean
@@ -896,6 +899,18 @@ export function EditorSection({
     onNotePermanentlyDeleted: evictPermanentlyDeletedNoteCaches,
   })
 
+  const {
+    splitArmedChapter,
+    handleChapterPillMouseDown,
+    handleChapterPillMouseUp,
+    handleChapterPillMouseLeave,
+    handleChapterPillContextMenu,
+    handleArchiveChapterClick,
+    handleDeleteChapterClick,
+  } = useChapterPillActions({
+    chapters,
+    startEditingChapterId,
+  })
 
   useEffect(() => {
     refreshChaptersRef.current = refreshChapters
@@ -1738,11 +1753,17 @@ export function EditorSection({
         editingChapterNoteId={editingChapterNoteId}
         chapterIdDraft={chapterIdDraft}
         setChapterIdDraft={setChapterIdDraft}
-        onStartEditingChapterId={startEditingChapterId}
         onCommitChapterIdEdit={commitChapterIdEdit}
         onCancelChapterIdEdit={cancelChapterIdEdit}
         onCollapseChapterIntoPrevious={handleCollapseChapterIntoPrevious}
         onExtractSelectionToChapter={handleExtractSelectionToChapter}
+        splitArmedChapter={splitArmedChapter}
+        onChapterPillMouseDown={handleChapterPillMouseDown}
+        onChapterPillMouseUp={handleChapterPillMouseUp}
+        onChapterPillMouseLeave={handleChapterPillMouseLeave}
+        onChapterPillContextMenu={handleChapterPillContextMenu}
+        onArchiveChapterClick={handleArchiveChapterClick}
+        onDeleteChapterClick={handleDeleteChapterClick}
       />
     </div>
   )

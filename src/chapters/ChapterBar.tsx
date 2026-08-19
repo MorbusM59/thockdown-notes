@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { DragEvent, WheelEvent as ReactWheelEvent } from 'react'
+import type { DragEvent, MouseEvent, WheelEvent as ReactWheelEvent } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { ChapterEntry } from '../shared/chapters'
 import { splitChapterFamily } from '../shared/chapters'
 import { resolveIdentityLabel } from '../shared/tabLabels'
 import { InlinePillOrInput } from '../shared/InlinePillOrInput'
+import type { ChapterPillSplitArm } from './useChapterPillActions'
 
 export interface ChapterBarProps {
   parentNoteId: string
@@ -22,13 +23,20 @@ export interface ChapterBarProps {
   editingChapterNoteId: string | null
   chapterIdDraft: string
   setChapterIdDraft: (value: string) => void
-  onStartEditingChapterId: (chapterNoteId: string) => void
   onCommitChapterIdEdit: () => void
   onCancelChapterIdEdit: () => void
   /** Mini button flanking the tab strip's right side (left of the extract button): cuts the current chapter's content, appends it to the previous chapter (or the parent, if this is the first chapter), and deletes the now-empty chapter. Disabled while viewing the parent directly -- there's no "current chapter" to collapse. */
   onCollapseChapterIntoPrevious: () => void
   /** Rightmost mini button: cuts the current editor selection out of whatever's active (parent or a chapter) into a brand-new chapter. A no-op (not disabled) when there's nothing selected -- see useNoteChapters.ts. */
   onExtractSelectionToChapter: () => void
+  /** Which chapter pill (if any) is showing the split archive/delete mini pills right now -- see useChapterPillActions.ts. */
+  splitArmedChapter: ChapterPillSplitArm | null
+  onChapterPillMouseDown: (event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => void
+  onChapterPillMouseUp: (event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => void
+  onChapterPillMouseLeave: (chapterNoteId: string) => void
+  onChapterPillContextMenu: (event: MouseEvent<HTMLDivElement>) => void
+  onArchiveChapterClick: (chapterNoteId: string) => void
+  onDeleteChapterClick: (chapterNoteId: string) => void
 }
 
 /**
@@ -64,6 +72,24 @@ export interface ChapterBarProps {
  * useSectionTabs.ts's tab/tag pills, so the user can reorder them within the
  * bar by dropping on another pill or on the bar's own background (past the
  * last one, appends to the end).
+ *
+ * A quick right-click on a chapter pill still starts the in-place chapterId
+ * rename, same as before -- that decision (release before the hold
+ * threshold vs. held long enough to split) now lives entirely in
+ * useChapterPillActions.ts's onChapterPillMouseDown/onChapterPillMouseUp, so
+ * this component no longer calls a rename-starting prop directly itself.
+ * Holding the right mouse button down instead replaces the pill with
+ * `.chapter-pill-split`, a fixed-width wrapper (pinned to the real pill's
+ * own rendered width, so nothing else in the bar reflows) holding two square
+ * `.chapter-pill-mini` buttons
+ * side by side -- archive, then delete, same left-to-right order and same
+ * mask-icon glyphs as the sidebar's own note-card archive/trash buttons, so
+ * the two surfaces read as the same concept. A left click on either mini
+ * pill fires it immediately (no separate confirm step -- picking which one
+ * to click already *is* the confirmation); moving the pointer outside the
+ * whole wrapper (mouseleave, which doesn't fire when crossing between the
+ * wrapper's own children) reverts to the plain pill instead. All of the
+ * timing/state for this lives in useChapterPillActions.ts, not here.
  */
 export function ChapterBar({
   parentNoteId,
@@ -78,11 +104,17 @@ export function ChapterBar({
   editingChapterNoteId,
   chapterIdDraft,
   setChapterIdDraft,
-  onStartEditingChapterId,
   onCommitChapterIdEdit,
   onCancelChapterIdEdit,
   onCollapseChapterIntoPrevious,
   onExtractSelectionToChapter,
+  splitArmedChapter,
+  onChapterPillMouseDown,
+  onChapterPillMouseUp,
+  onChapterPillMouseLeave,
+  onChapterPillContextMenu,
+  onArchiveChapterClick,
+  onDeleteChapterClick,
 }: ChapterBarProps) {
   const parentNote = notes.find((note) => note.id === parentNoteId)
   const isParentActive = activeNoteId === parentNoteId
@@ -180,6 +212,7 @@ export function ChapterBar({
               const isActive = chapter.chapterNoteId === activeNoteId
               const note = notes.find((entry) => entry.id === chapter.chapterNoteId)
               const { text: label, isAssigned } = resolveIdentityLabel(chapter.chapterId, note?.contentText, 'chapter')
+              const isSplitArmed = splitArmedChapter?.chapterNoteId === chapter.chapterNoteId
 
               return (
                 <InlinePillOrInput
@@ -192,27 +225,50 @@ export function ChapterBar({
                   className="tag-pill note-tab-pill chapter-pill chapter-id-input"
                   ariaLabel={`Chapter ${index + 1} id`}
                 >
-                  <div
-                    className={`tag-pill note-tab-pill chapter-pill${isActive ? ' is-active' : ''}`}
-                    data-chapter-note-id={chapter.chapterNoteId}
-                    draggable
-                    onDragStart={(event) => onChapterDragStart(event, index)}
-                    onDragEnd={onChapterDragEnd}
-                    onDragOver={(event) => {
-                      event.preventDefault()
-                      event.stopPropagation()
-                      event.dataTransfer.dropEffect = 'move'
-                    }}
-                    onDrop={(event) => onChapterDrop(event, index)}
-                    onClick={() => onChapterClick(chapter.chapterNoteId)}
-                    onContextMenu={(event) => {
-                      event.preventDefault()
-                      onStartEditingChapterId(chapter.chapterNoteId)
-                    }}
-                    data-tooltip={label}
-                  >
-                    <span className={`tag-pill-label${isAssigned ? '' : ' tag-pill-label-derived'}`}>{label}</span>
-                  </div>
+                  {isSplitArmed ? (
+                    <div
+                      className="chapter-pill-split"
+                      style={{ width: `${splitArmedChapter!.widthPx}px` }}
+                      onMouseLeave={() => onChapterPillMouseLeave(chapter.chapterNoteId)}
+                    >
+                      <button
+                        type="button"
+                        className="chapter-pill-mini chapter-pill-mini-archive"
+                        aria-label="Archive chapter"
+                        data-tooltip="Archive chapter"
+                        onClick={() => onArchiveChapterClick(chapter.chapterNoteId)}
+                      />
+                      <button
+                        type="button"
+                        className="chapter-pill-mini chapter-pill-mini-delete"
+                        aria-label="Delete chapter"
+                        data-tooltip="Delete chapter"
+                        onClick={() => onDeleteChapterClick(chapter.chapterNoteId)}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      className={`tag-pill note-tab-pill chapter-pill${isActive ? ' is-active' : ''}`}
+                      data-chapter-note-id={chapter.chapterNoteId}
+                      draggable
+                      onDragStart={(event) => onChapterDragStart(event, index)}
+                      onDragEnd={onChapterDragEnd}
+                      onDragOver={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        event.dataTransfer.dropEffect = 'move'
+                      }}
+                      onDrop={(event) => onChapterDrop(event, index)}
+                      onClick={() => onChapterClick(chapter.chapterNoteId)}
+                      onMouseDown={(event) => onChapterPillMouseDown(event, chapter.chapterNoteId)}
+                      onMouseUp={(event) => onChapterPillMouseUp(event, chapter.chapterNoteId)}
+                      onMouseLeave={() => onChapterPillMouseLeave(chapter.chapterNoteId)}
+                      onContextMenu={onChapterPillContextMenu}
+                      data-tooltip={label}
+                    >
+                      <span className={`tag-pill-label${isAssigned ? '' : ' tag-pill-label-derived'}`}>{label}</span>
+                    </div>
+                  )}
                 </InlinePillOrInput>
               )
             })}

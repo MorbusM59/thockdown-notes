@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { CSSProperties, DragEvent, MutableRefObject, ReactNode, RefObject } from 'react'
+import type { CSSProperties, DragEvent, MouseEvent, MutableRefObject, ReactNode, RefObject } from 'react'
 import { CM6Editor } from '../components/CM6Editor'
 import { SnapshotTimelineSlider } from '../editor/SnapshotTimelineSlider'
 import { PresentStateCircle } from '../editor/PresentStateCircle'
@@ -11,6 +11,7 @@ import { resolvePreviewEdgePaddingPx } from '../exportStyles'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { ChapterEntry } from '../shared/chapters'
 import { ChapterBar } from '../chapters/ChapterBar'
+import type { ChapterPillSplitArm } from '../chapters/useChapterPillActions'
 
 export interface SectionEditorAreaProps {
   sectionId: string
@@ -74,11 +75,18 @@ export interface SectionEditorAreaProps {
   editingChapterNoteId: string | null
   chapterIdDraft: string
   setChapterIdDraft: (value: string) => void
-  onStartEditingChapterId: (chapterNoteId: string) => void
   onCommitChapterIdEdit: () => void
   onCancelChapterIdEdit: () => void
   onCollapseChapterIntoPrevious: () => void
   onExtractSelectionToChapter: () => void
+  /** Which chapter pill (if any) is currently showing the split archive/delete mini pills -- see useChapterPillActions.ts. */
+  splitArmedChapter: ChapterPillSplitArm | null
+  onChapterPillMouseDown: (event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => void
+  onChapterPillMouseUp: (event: MouseEvent<HTMLDivElement>, chapterNoteId: string) => void
+  onChapterPillMouseLeave: (chapterNoteId: string) => void
+  onChapterPillContextMenu: (event: MouseEvent<HTMLDivElement>) => void
+  onArchiveChapterClick: (chapterNoteId: string) => void
+  onDeleteChapterClick: (chapterNoteId: string) => void
   /**
    * Line-number/review-flag gutter toggles, per editor slot -- see App.tsx's
    * reviewGutterVisibleBySection/reviewFlagsVisibleBySection. Independently
@@ -169,11 +177,17 @@ export function SectionEditorArea({
   editingChapterNoteId,
   chapterIdDraft,
   setChapterIdDraft,
-  onStartEditingChapterId,
   onCommitChapterIdEdit,
   onCancelChapterIdEdit,
   onCollapseChapterIntoPrevious,
   onExtractSelectionToChapter,
+  splitArmedChapter,
+  onChapterPillMouseDown,
+  onChapterPillMouseUp,
+  onChapterPillMouseLeave,
+  onChapterPillContextMenu,
+  onArchiveChapterClick,
+  onDeleteChapterClick,
   showLineNumbers,
   showReviewFlags,
   onToggleReviewGutter,
@@ -331,11 +345,17 @@ export function SectionEditorArea({
             editingChapterNoteId={editingChapterNoteId}
             chapterIdDraft={chapterIdDraft}
             setChapterIdDraft={setChapterIdDraft}
-            onStartEditingChapterId={onStartEditingChapterId}
             onCommitChapterIdEdit={onCommitChapterIdEdit}
             onCancelChapterIdEdit={onCancelChapterIdEdit}
             onCollapseChapterIntoPrevious={onCollapseChapterIntoPrevious}
             onExtractSelectionToChapter={onExtractSelectionToChapter}
+            splitArmedChapter={splitArmedChapter}
+            onChapterPillMouseDown={onChapterPillMouseDown}
+            onChapterPillMouseUp={onChapterPillMouseUp}
+            onChapterPillMouseLeave={onChapterPillMouseLeave}
+            onChapterPillContextMenu={onChapterPillContextMenu}
+            onArchiveChapterClick={onArchiveChapterClick}
+            onDeleteChapterClick={onDeleteChapterClick}
           />
         ) : null}
       </div>
