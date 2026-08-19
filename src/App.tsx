@@ -1975,29 +1975,25 @@ function App() {
         // ignore
       }
 
-      // Persist app state menu snapshot with updated sidebar visibility
-      if (window.thockdownState && persistenceReady) {
-        const snapshot = buildMenuStateSnapshot({ isSidebarVisible: next })
-        // Keep persistedMenuStateRef in sync -- see handleToggleDoubleSizeMode
-        // below for why this is load-bearing, not just tidiness.
-        persistedMenuStateRef.current = snapshot
-        const section = getActiveSection()
-        void window.thockdownState.saveAppState({
-          selectedNoteId: section?.activeNoteId ?? null,
-          viewport: section?.latestViewportRef.current ?? undefined,
-          menu: snapshot,
-        })
-      }
+      // Persist app state menu snapshot with updated sidebar visibility --
+      // always through persistMenuStateNow (via its ref proxy, since this
+      // handler is declared before persistMenuStateNow -- see
+      // persistMenuStateNowRef's own doc comment for why a plain call
+      // wouldn't stay fresh here). Never a hand-rolled build+save: see
+      // persistMenuStateNow's own doc comment for why that's caused this
+      // exact bug multiple times before.
+      persistMenuStateNowRef.current({ isSidebarVisible: next })
 
       return next
     })
-    // buildMenuStateSnapshot and runSidebarMenuTransition are declared later
-    // in this component (both via useCallback further down), so listing them
-    // here would throw a TDZ ReferenceError the moment this dependency array
-    // is evaluated during render -- referencing them inside the callback
-    // *body* is fine (that only runs on click/timeout, well after the
-    // component has finished its render pass and both are initialized), but
-    // the array itself is evaluated eagerly, before those consts exist.
+    // buildMenuStateSnapshot, persistMenuStateNow, and runSidebarMenuTransition
+    // are declared later in this component (all via useCallback further
+    // down), so listing them here would throw a TDZ ReferenceError the
+    // moment this dependency array is evaluated during render --
+    // referencing them inside the callback *body* is fine (that only runs
+    // on click/timeout, well after the component has finished its render
+    // pass and both are initialized), but the array itself is evaluated
+    // eagerly, before those consts exist.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getActiveSection, persistenceReady, sidebarMode, lastSidebarModeBeforeOptions])
 
@@ -2011,37 +2007,24 @@ function App() {
         // ignore
       }
 
-      // Persist app state menu snapshot with updated double-size mode
-      if (window.thockdownState && persistenceReady) {
-        const snapshot = buildMenuStateSnapshot({ isDoubleSizeMode: next })
-        // persistedMenuStateRef is the "last known good" snapshot every other
-        // save path (persistMenuStateOnce/OnUnload, chooseExportFolder, the
-        // startup restore) keeps in sync -- queueAppStateSave's own debounced
-        // flush prefers it over building a fresh snapshot. Without this, the
-        // very next debounced save (triggered by anything else -- switching
-        // notes, scrolling) would silently overwrite this correct value with
-        // the stale pre-toggle one still sitting in the ref. Confirmed live:
-        // this was the actual cause of double-size mode not surviving an
-        // AppImage restart on Linux -- see toggleSidebarVisible above, same
-        // bug, same fix.
-        persistedMenuStateRef.current = snapshot
-        const section = getActiveSection()
-        void window.thockdownState.saveAppState({
-          selectedNoteId: section?.activeNoteId ?? null,
-          viewport: section?.latestViewportRef.current ?? undefined,
-          menu: snapshot,
-        })
-      }
+      // Persist app state menu snapshot with updated double-size mode --
+      // always through persistMenuStateNow, via its ref proxy (see
+      // persistMenuStateNowRef's own doc comment for why -- this handler is
+      // declared before persistMenuStateNow, same TDZ/staleness situation as
+      // toggleSidebarVisible above). An earlier hand-rolled build+save here,
+      // without updating persistedMenuStateRef, was the actual cause of
+      // double-size mode not surviving an AppImage restart on Linux.
+      persistMenuStateNowRef.current({ isDoubleSizeMode: next })
 
       return next
     })
-    // buildMenuStateSnapshot is declared later in this component (via
-    // useCallback further down), so listing it here would throw a TDZ
-    // ReferenceError the moment this dependency array is evaluated during
-    // render -- referencing it inside the callback *body* is fine (see the
-    // identical note on toggleSidebarVisible above).
+    // buildMenuStateSnapshot/persistMenuStateNow are declared later in this
+    // component (via useCallback further down), so listing them here would
+    // throw a TDZ ReferenceError the moment this dependency array is
+    // evaluated during render -- referencing them inside the callback
+    // *body* is fine (see the identical note on toggleSidebarVisible above).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getActiveSection, persistenceReady])
+  }, [])
 
   const [renderScrollDynamic, setRenderScrollDynamic] = useState(() => getRenderScrollDynamic())
   const renderScrollResponsiveness = deriveRenderScrollResponsivenessFromDynamic(renderScrollDynamic)
@@ -3585,6 +3568,25 @@ function App() {
   const revealNoteInMenuRef = useRef<() => void>(() => {})
   const writeDebugEntryRef = useRef<(functionName: string, lines: string[]) => Promise<void>>(async () => {})
   const activeNoteHasDebugTagRef = useRef(false)
+  // Same ref-proxy technique as the four above, for the same TDZ reason --
+  // persistMenuStateNow is declared later than handleToggleDoubleSizeMode/
+  // toggleSidebarVisible, which both need to call it. Unlike those four,
+  // nothing needs a *stable-identity* wrapper around this one (it's only
+  // ever called directly, never handed to a prop or another hook's deps
+  // array), so there's no xStable counterpart -- callers just use
+  // persistMenuStateNowRef.current(...) directly. Critically, a plain ref
+  // reassigned unconditionally every render (see the assignment right after
+  // persistMenuStateNow's own definition) is what keeps this from going
+  // stale -- confirmed live: an earlier version of this fix instead put
+  // persistMenuStateNow itself in a `useCallback` and had the two early
+  // handlers call it directly with an empty deps array, which pinned them
+  // to the *first* render's persistMenuStateNow forever -- captured while
+  // persistenceReady was still false, so the toggle silently stopped
+  // persisting anything at all. A dependency array can't fix this without
+  // also being able to list persistMenuStateNow itself, which is exactly
+  // what TDZ forbids here -- a ref sidesteps the whole problem instead of
+  // fighting it.
+  const persistMenuStateNowRef = useRef<(overrides?: Parameters<typeof buildMenuStateSnapshot>[0]) => Promise<void> | undefined>(() => undefined)
 
   const queueAppStateSaveStable = useCallback((selectedNoteId: string | null) => queueAppStateSaveRef.current(selectedNoteId), [])
   const updateActiveNoteTitlePreviewStable = useCallback((nextText: string) => updateActiveNoteTitlePreviewRef.current(nextText), [])
@@ -3785,6 +3787,46 @@ function App() {
     viewStyle,
   ])
 
+  /**
+   * The one correct way to persist an app-state menu change *right now*
+   * (as opposed to the debounced queueAppStateSave path further down, meant
+   * for high-frequency changes like scrolling). Builds a fresh snapshot via
+   * buildMenuStateSnapshot, updates persistedMenuStateRef, then saves it.
+   *
+   * That ref update is load-bearing, not tidiness: queueAppStateSave's own
+   * debounced flush prefers persistedMenuStateRef.current over building a
+   * fresh snapshot itself, so if some *other* immediate-persist call site
+   * skips updating the ref, its correctly-saved value gets silently
+   * overwritten by the very next debounced flush -- triggered by anything
+   * at all (switching notes, scrolling), or even just idling for about a
+   * second while some unrelated background save was already pending.
+   *
+   * This is not a hypothetical: hand-rolling buildMenuStateSnapshot +
+   * saveAppState without this ref update independently caused the exact
+   * same silent-persistence-loss bug at least four separate times --
+   * double-size mode, sidebar visibility, the options-menu auto-show-
+   * sidebar path, and review-gutter visibility, the last of which even had
+   * its own doc comment describing the hand-rolled pattern as the norm
+   * other toggles should copy. If you're adding a new instant (non-
+   * debounced) menu-state toggle, call this -- do not hand-roll
+   * buildMenuStateSnapshot+saveAppState again.
+   */
+  const persistMenuStateNow = useCallback((overrides?: Parameters<typeof buildMenuStateSnapshot>[0]) => {
+    if (!window.thockdownState || !persistenceReady) return undefined
+    const snapshot = buildMenuStateSnapshot(overrides)
+    persistedMenuStateRef.current = snapshot
+    const section = getActiveSection()
+    return window.thockdownState.saveAppState({
+      selectedNoteId: section?.activeNoteId ?? null,
+      viewport: section?.latestViewportRef.current ?? undefined,
+      menu: snapshot,
+    })
+  }, [buildMenuStateSnapshot, getActiveSection, persistenceReady])
+  // Unconditional plain assignment, every render -- see persistMenuStateNowRef's
+  // own doc comment above for why this (not a dependency array) is what
+  // keeps handleToggleDoubleSizeMode/toggleSidebarVisible's calls fresh.
+  persistMenuStateNowRef.current = persistMenuStateNow
+
   const getSidebarScrollerForMode = useCallback((mode: SidebarMode): HTMLDivElement | null => {
     if (mode === 'category' || mode === 'archive' || mode === 'find') {
       return sidebarTreeScrollerEl
@@ -3857,54 +3899,43 @@ function App() {
     }
   }, [])
 
+  // extraOverrides exists for callers that changed some OTHER menu field
+  // (e.g. isSidebarVisible) in the same synchronous handler just before
+  // triggering this transition -- see toggleSidebarOptionsMenu, the reason
+  // this parameter exists. Passing it through here (merged into the same
+  // snapshot as sidebarMode/sidebarViewStateByMode) is load-bearing, not a
+  // convenience: buildMenuStateSnapshot falls back to reading isSidebarVisible
+  // off live React state for anything not explicitly overridden, and that
+  // state hasn't re-rendered yet this tick -- a caller that persisted its
+  // own change first, via a *separate* persistMenuStateNow call, would just
+  // get it silently clobbered back to the pre-change value by this call
+  // (confirmed live: exactly what toggleSidebarOptionsMenu was doing).
   const persistMenuStateOnce = useCallback(async (
     nextSidebarMode: SidebarMode,
     nextSidebarViewStateByMode: SidebarViewStateByMode,
+    extraOverrides?: Parameters<typeof buildMenuStateSnapshot>[0],
   ) => {
-    if (!window.thockdownState || !persistenceReady) return
-
-    const snapshot = buildMenuStateSnapshot({
+    await persistMenuStateNow({
+      ...extraOverrides,
       sidebarMode: nextSidebarMode,
       sidebarViewStateByMode: nextSidebarViewStateByMode,
     })
-
-    persistedMenuStateRef.current = snapshot
-
-    const section = getActiveSection()
-    await window.thockdownState.saveAppState({
-      selectedNoteId: section?.activeNoteId ?? null,
-      viewport: section?.latestViewportRef.current ?? undefined,
-      menu: snapshot,
-    })
-  }, [buildMenuStateSnapshot, getActiveSection, persistenceReady])
+  }, [persistMenuStateNow])
 
   const persistMenuStateOnUnload = useCallback(() => {
-    if (!window.thockdownState || !persistenceReady) return
-
     const currentModeSnapshot = captureSidebarModeState(sidebarMode)
     const nextSidebarViewStateByMode: SidebarViewStateByMode = {
       ...sidebarViewStateByMode,
       [sidebarMode]: currentModeSnapshot,
     }
 
-    const snapshot = buildMenuStateSnapshot({
+    persistMenuStateNow({
       sidebarMode,
       sidebarViewStateByMode: nextSidebarViewStateByMode,
     })
-
-    persistedMenuStateRef.current = snapshot
-
-    const section = getActiveSection()
-    void window.thockdownState.saveAppState({
-      selectedNoteId: section?.activeNoteId ?? null,
-      viewport: section?.latestViewportRef.current ?? undefined,
-      menu: snapshot,
-    })
   }, [
-    buildMenuStateSnapshot,
     captureSidebarModeState,
-    getActiveSection,
-    persistenceReady,
+    persistMenuStateNow,
     sidebarMode,
     sidebarViewStateByMode,
   ])
@@ -3967,7 +3998,14 @@ function App() {
     return false
   }, [getActiveSection])
 
-  const runSidebarMenuTransition = useCallback((nextMode: SidebarMode) => {
+  const runSidebarMenuTransition = useCallback((
+    nextMode: SidebarMode,
+    // Passed straight through to persistMenuStateOnce -- see its own doc
+    // comment for why a caller that just changed some other menu field
+    // (e.g. isSidebarVisible) needs to hand it over here rather than
+    // persisting it separately beforehand.
+    extraOverrides?: Parameters<typeof buildMenuStateSnapshot>[0],
+  ) => {
     if (nextMode === sidebarMode) {
       return
     }
@@ -3987,7 +4025,7 @@ function App() {
     setSidebarViewStateByMode(nextSidebarViewStateByMode)
     setSidebarMode(nextMode)
     restoreSidebarModeStateFrom(nextMode, nextSidebarViewStateByMode)
-    void persistMenuStateOnce(nextMode, nextSidebarViewStateByMode)
+    void persistMenuStateOnce(nextMode, nextSidebarViewStateByMode, extraOverrides)
     // Defer focus so the new mode's render (with updated filtered notes / tree
     // state) has committed before we attempt to jump page or unfold the tree.
     requestAnimationFrame(() => {
@@ -4017,20 +4055,19 @@ function App() {
       // ignore
     }
 
-    // Persist the menu state with sidebar visible.
-    if (window.thockdownState && persistenceReady) {
-      const snapshot = buildMenuStateSnapshot({ isSidebarVisible: true })
-      const section = getActiveSection()
-      void window.thockdownState.saveAppState({
-        selectedNoteId: section?.activeNoteId ?? null,
-        viewport: section?.latestViewportRef.current ?? undefined,
-        menu: snapshot,
-      })
-    }
-
+    // Persist the sidebar-visible change together with the mode transition
+    // below, in the SAME snapshot -- not as a separate persistMenuStateNow
+    // call first. isSidebarVisible's React state (setIsSidebarVisible just
+    // above) hasn't re-rendered yet this tick, so runSidebarMenuTransition's
+    // own persist would otherwise read the *old* value straight out of
+    // buildMenuStateSnapshot's fallback and silently overwrite a correct
+    // separate write with it a moment later (confirmed live: that's exactly
+    // what happened when this used to persist isSidebarVisible on its own
+    // first). See persistMenuStateOnce's own doc comment for the general
+    // rule this is an instance of.
     setLastSidebarModeBeforeOptions(sidebarMode)
-    runSidebarMenuTransition('options')
-  }, [buildMenuStateSnapshot, getActiveSection, lastSidebarModeBeforeOptions, persistenceReady, runSidebarMenuTransition, sidebarMode])
+    runSidebarMenuTransition('options', { isSidebarVisible: true })
+  }, [lastSidebarModeBeforeOptions, runSidebarMenuTransition, sidebarMode])
 
   const handleWindowMinimize = useCallback(() => {
     window.windowControls?.minimize?.()
@@ -5756,28 +5793,22 @@ ${markdownHtml}
   // (left first, then right); if neither neighbor is flexible it's split
   // equally across all flexible sections; only when everything is fixed does
   // a fixed neighbor absorb it (and its pinned width is updated to match).
-  // Persists a review-gutter-visibility change through the same
-  // buildMenuStateSnapshot/saveAppState round trip every other menu toggle
-  // uses (see setIsSidebarVisible's own save call above for the pattern this
-  // mirrors). Takes both maps explicitly rather than reading state directly,
-  // since every caller below already has the just-computed next value for
-  // (at least) one of the two and the current value of the other in scope.
+  // Persists a review-gutter-visibility change through persistMenuStateNow
+  // (see its own doc comment -- this hand-rolled buildMenuStateSnapshot/
+  // saveAppState call used to be the norm other toggles copied, which is
+  // exactly how this bug spread). Takes both maps explicitly rather than
+  // reading state directly, since every caller below already has the
+  // just-computed next value for (at least) one of the two and the current
+  // value of the other in scope.
   const persistReviewGutterVisibility = useCallback((
     nextLineNumbers: Record<string, boolean>,
     nextReviewFlags: Record<string, boolean>,
   ) => {
-    if (!window.thockdownState || !persistenceReady) return
-    const snapshot = buildMenuStateSnapshot({
+    persistMenuStateNow({
       reviewGutterVisibleBySection: nextLineNumbers,
       reviewFlagsVisibleBySection: nextReviewFlags,
     })
-    const section = getActiveSection()
-    void window.thockdownState.saveAppState({
-      selectedNoteId: section?.activeNoteId ?? null,
-      viewport: section?.latestViewportRef.current ?? undefined,
-      menu: snapshot,
-    })
-  }, [buildMenuStateSnapshot, getActiveSection, persistenceReady])
+  }, [persistMenuStateNow])
 
   // Left click on the toggle button: both columns move together, driven by
   // the line-number column's CURRENT visibility -- not by independently
