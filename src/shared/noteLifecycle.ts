@@ -47,8 +47,10 @@ export interface NoteSummary {
   isAutoToc: boolean;
   /** True for the one chapter (if any) that's the auto-generated Open Items list for its parent's whole chapter family -- see databaseService.ts's `isAutoOpenItems` column doc comment. Always false for a non-chapter note. */
   isAutoOpenItems: boolean;
-  /** The single note this note is a chapter of, or null when it isn't (any) chapter. A `chapterOnly` note always has a non-null parent; a regular note is always null (regular notes can never become chapters). */
+  /** The single note this note is a chapter of, or null when it isn't (any) chapter, OR when it's a chapter currently detached (sitting in Trash) -- see `detachedChapterParentId` below for that case. A regular note is always null (regular notes can never become chapters). */
   chapterParentId: string | null;
+  /** Where a detached chapter (see databaseService.ts's detachChapterForTrash) was detached FROM, while it's sitting in Trash -- `chapterParentId` above goes null the moment a chapter is detached (it has no `chapters` row to derive it from any more), so anything that needs "whose chapter was this" for a detached chapter (the Trash row's `$ ` parent-title meta) must fall back to this field instead. Null except during that detached window; restoreDetachedChapter clears it back to null once it reattaches. */
+  detachedChapterParentId: string | null;
   /** This chapter's own user-assignable id (the `chapters.chapterId` column) -- distinct from `assignedId` above, which is a different, note-level `$id` field a chapterOnly note's own tag bar never exposes a way to set. Null when unset, or when this note isn't a chapter. See tabLabels.ts's resolveIdentityLabel for how this resolves to a display label alongside a derived-from-content fallback -- the same rule the chapter bar's own pill uses, reused for a chapter's sidebar-list row (trash/archive) so the two read identically. */
   chapterId: string | null;
 }
@@ -225,6 +227,7 @@ export function isSameNoteSummary(a: NoteSummary, b: NoteSummary): boolean {
     a.isAutoToc === b.isAutoToc &&
     a.isAutoOpenItems === b.isAutoOpenItems &&
     a.chapterParentId === b.chapterParentId &&
+    (a.detachedChapterParentId ?? null) === (b.detachedChapterParentId ?? null) &&
     (a.chapterId ?? null) === (b.chapterId ?? null)
   )
 }

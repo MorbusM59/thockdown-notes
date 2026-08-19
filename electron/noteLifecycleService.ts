@@ -174,6 +174,7 @@ export class NoteLifecycleService {
         isAutoOpenItems: record.isAutoOpenItems,
         chapterParentId: record.chapterParentId,
         chapterId: record.chapterId,
+        detachedChapterParentId: record.detachedChapterParentId,
       };
     } catch {
       return null;
@@ -288,6 +289,7 @@ export class NoteLifecycleService {
       isAutoOpenItems: record?.isAutoOpenItems ?? false,
       chapterParentId: record?.chapterParentId ?? null,
       chapterId: record?.chapterId ?? null,
+      detachedChapterParentId: record?.detachedChapterParentId ?? null,
     };
   }
 
@@ -900,6 +902,7 @@ export class NoteLifecycleService {
         isAutoOpenItems: record.isAutoOpenItems,
         chapterParentId: record.chapterParentId,
         chapterId: record.chapterId,
+        detachedChapterParentId: record.detachedChapterParentId,
       });
 
       if (!summary) {
@@ -967,6 +970,7 @@ export class NoteLifecycleService {
       isAutoOpenItems: record?.isAutoOpenItems ?? false,
       chapterParentId: record?.chapterParentId ?? null,
       chapterId: record?.chapterId ?? null,
+      detachedChapterParentId: record?.detachedChapterParentId ?? null,
     });
 
     if (!summary) {

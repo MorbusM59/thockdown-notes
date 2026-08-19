@@ -60,7 +60,7 @@ type BrowserMockStore = {
   noteTabs: NoteTabEntry[]
   editorSections: EditorSectionEntry[]
   chapters: ChapterEntry[]
-  /** Mirrors databaseService.ts's notes.detachedChapterParentId/Position columns -- where a chapter was detached from while it's sitting in trash. Keyed by chapterNoteId, since NoteDocument itself carries no such fields. */
+  /** Mirrors databaseService.ts's notes.detachedChapterParentId/Position columns -- where a chapter was detached from while it's sitting in trash. Keyed by chapterNoteId. NoteDocument.detachedChapterParentId itself is kept in sync on the note object too (same duplicated-cache convention as chapterParentId), but `position` has no renderer-facing use, so it lives here only. */
   detachedChapters: Record<string, { parentNoteId: string; position: number }>
   reviewFlags: ReviewFlagEntry[]
   nextReviewFlagId: number
@@ -112,6 +112,7 @@ function normalizeDocument(note: NoteDocument): NoteDocument {
     isAutoOpenItems: Boolean(note.isAutoOpenItems),
     chapterParentId: note.chapterParentId ?? null,
     chapterId: note.chapterId ?? null,
+    detachedChapterParentId: note.detachedChapterParentId ?? null,
   }
 }
 
@@ -130,6 +131,7 @@ function toSummary(note: NoteDocument): NoteSummary {
     isAutoOpenItems: Boolean(note.isAutoOpenItems),
     chapterParentId: note.chapterParentId ?? null,
     chapterId: note.chapterId ?? null,
+    detachedChapterParentId: note.detachedChapterParentId ?? null,
     // The real app derives this from the on-disk file minus any legacy
     // metadata header (readSummary in noteLifecycleService.ts); the mock has
     // no such header, so the live text itself already is the content text.
@@ -431,6 +433,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
           isAutoOpenItems: false,
           chapterParentId: null,
           chapterId: null,
+          detachedChapterParentId: null,
         })
         store.notes.push(created)
         return clone(created)
@@ -1221,6 +1224,7 @@ function regenerateOpenItemsGroupInStore(store: BrowserMockStore, parentNoteId: 
       isAutoOpenItems: true,
       chapterParentId: parentNoteId,
       chapterId: null,
+      detachedChapterParentId: null,
     })
     store.notes.push(created)
 
@@ -1310,6 +1314,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           isAutoOpenItems: false,
           chapterParentId: parentNoteId,
           chapterId: null,
+          detachedChapterParentId: null,
         })
         store.notes.push(created)
 
@@ -1352,6 +1357,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           isAutoOpenItems: false,
           chapterParentId: parentNoteId,
           chapterId: null,
+          detachedChapterParentId: null,
         })
         store.notes.push(created)
 
@@ -1464,6 +1470,17 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
                 : chapter
             ))
           store.detachedChapters[chapterNoteId] = { parentNoteId, position: removed.position }
+
+          // Mirrors the real DB exactly: chapterParentId is derived from a
+          // LEFT JOIN against the `chapters` table, so it goes null the
+          // instant that row is gone -- detachedChapterParentId is the only
+          // place a detached chapter's parent survives while it's in Trash
+          // (see NoteSummary.detachedChapterParentId's own doc comment).
+          const note = store.notes.find((entry) => entry.id === chapterNoteId)
+          if (note) {
+            note.chapterParentId = null
+            note.detachedChapterParentId = parentNoteId
+          }
         }
         return sorted(store, parentNoteId)
       })
@@ -1497,6 +1514,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
         const note = store.notes.find((entry) => entry.id === chapterNoteId)
         if (note) {
           note.chapterParentId = parentNoteId
+          note.detachedChapterParentId = null
         }
 
         const familyOrder = openItemsFamilyOrderInStore(store, parentNoteId)
@@ -1533,6 +1551,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           isAutoOpenItems: false,
           chapterParentId: parentNoteId,
           chapterId: null,
+          detachedChapterParentId: null,
         })
         store.notes.push(created)
 

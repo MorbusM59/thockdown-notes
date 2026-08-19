@@ -7936,8 +7936,18 @@ ${markdownHtml}
                             ? note.id === activeSection?.activeNoteId
                             : note.id === activeSection?.menuIdentityNoteId
                           const isModified = isExternalNote(note) && getCurrentExternalNoteModifiedState(note)
-                          const chapterParentTitle = note.chapterOnly && note.chapterParentId
-                            ? notesById.get(note.chapterParentId)?.title
+                          // chapterParentId goes null the instant a chapter
+                          // is deleted (detachChapterForTrash removes its
+                          // `chapters` row entirely -- see
+                          // detachedChapterParentId's own doc comment), so a
+                          // deleted chapter's row in Trash has to fall back
+                          // to that instead, or it silently drops to the
+                          // plain created-date meta below.
+                          const chapterParentNoteId = note.chapterOnly
+                            ? (note.chapterParentId ?? note.detachedChapterParentId)
+                            : null
+                          const chapterParentTitle = chapterParentNoteId
+                            ? notesById.get(chapterParentNoteId)?.title
                             : undefined
                           return (
                             <NoteListItem

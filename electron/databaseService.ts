@@ -193,6 +193,7 @@ type NoteRecordRow = {
   isAutoOpenItems: number;
   chapterParentId: string | null;
   chapterId: string | null;
+  detachedChapterParentId: string | null;
 };
 
 export type NoteRecord = {
@@ -217,6 +218,8 @@ export type NoteRecord = {
   chapterParentId: string | null;
   /** This chapter's own user-assignable id (the `chapters.chapterId` column -- distinct from `assignedId`/`notes.assignedId`, which is a different, note-level `$id` field a chapterOnly note's own tag bar never exposes a way to set). Null when unset (or when this note isn't a chapter at all). See tabLabels.ts's resolveIdentityLabel for how this resolves to a display label alongside a derived-from-content fallback. */
   chapterId: string | null;
+  /** See detachChapterForTrash's own doc comment: where a detached chapter was detached FROM, while it's sitting in Trash. `chapterParentId` above is null for a detached chapter (it has no `chapters` row any more), so this is the only way to recover its parent while it's there. Null except during that detached window. */
+  detachedChapterParentId: string | null;
 };
 
 /** One entry pinned to a section's tab bar (quick-access note shortcut). */
@@ -1137,7 +1140,7 @@ export class DatabaseService {
   listNoteRecords(): NoteRecord[] {
     const db = this.requireDb();
     const rows = db.prepare(`
-      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, n.isAutoOpenItems, c.parentNoteId AS chapterParentId, c.chapterId AS chapterId
+      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, n.isAutoOpenItems, c.parentNoteId AS chapterParentId, c.chapterId AS chapterId, n.detachedChapterParentId AS detachedChapterParentId
       FROM notes n
       LEFT JOIN chapters c ON c.chapterNoteId = n.id
       ORDER BY datetime(n.updatedAt) DESC
@@ -1161,13 +1164,14 @@ export class DatabaseService {
       isAutoOpenItems: Boolean(row.isAutoOpenItems),
       chapterParentId: row.chapterParentId,
       chapterId: row.chapterId,
+      detachedChapterParentId: row.detachedChapterParentId,
     }));
   }
 
   getNoteRecord(noteId: string): NoteRecord | null {
     const db = this.requireDb();
     const row = db.prepare(`
-      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, n.isAutoOpenItems, c.parentNoteId AS chapterParentId, c.chapterId AS chapterId
+      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, n.isAutoOpenItems, c.parentNoteId AS chapterParentId, c.chapterId AS chapterId, n.detachedChapterParentId AS detachedChapterParentId
       FROM notes n
       LEFT JOIN chapters c ON c.chapterNoteId = n.id
       WHERE n.id = ?
@@ -1196,6 +1200,7 @@ export class DatabaseService {
       isAutoOpenItems: Boolean(row.isAutoOpenItems),
       chapterParentId: row.chapterParentId,
       chapterId: row.chapterId,
+      detachedChapterParentId: row.detachedChapterParentId,
     };
   }
 

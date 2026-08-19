@@ -15,6 +15,7 @@ function baseSummary(overrides: Partial<NoteSummary> = {}): NoteSummary {
     isAutoOpenItems: false,
     chapterParentId: null,
     chapterId: null,
+    detachedChapterParentId: null,
     ...overrides,
   }
 }
@@ -57,6 +58,17 @@ describe('isSameNoteSummary', () => {
   it('detects a chapterId-only change', () => {
     const a = baseSummary({ chapterId: null })
     const b = baseSummary({ chapterId: 'INTRO' })
+    expect(isSameNoteSummary(a, b)).toBe(false)
+  })
+
+  // Regression: a chapter being detached-to-trash (or restored) only
+  // changes detachedChapterParentId -- omitting it from the comparison
+  // would have the same silent-stale-cache failure mode as the assignedId
+  // regression above, this time hiding a chapter's Trash-row parent-title
+  // meta until some unrelated field also happened to change.
+  it('detects a detachedChapterParentId-only change', () => {
+    const a = baseSummary({ detachedChapterParentId: null })
+    const b = baseSummary({ detachedChapterParentId: 'parent-1' })
     expect(isSameNoteSummary(a, b)).toBe(false)
   })
 })
