@@ -233,14 +233,14 @@ export function ChapterBar({
                     >
                       <button
                         type="button"
-                        className="chapter-pill-mini chapter-pill-mini-archive"
+                        className="tag-pill chapter-pill-mini chapter-pill-mini-archive"
                         aria-label="Archive chapter"
                         data-tooltip="Archive chapter"
                         onClick={() => onArchiveChapterClick(chapter.chapterNoteId)}
                       />
                       <button
                         type="button"
-                        className="chapter-pill-mini chapter-pill-mini-delete"
+                        className="tag-pill chapter-pill-mini chapter-pill-mini-delete"
                         aria-label="Delete chapter"
                         data-tooltip="Delete chapter"
                         onClick={() => onDeleteChapterClick(chapter.chapterNoteId)}

@@ -542,51 +542,69 @@
    arm-time) so nothing else in the bar reflows when it splits/un-splits;
    min-width is a defensive floor for the (currently never-hit, chapter
    pills always carry a multi-character label) case of a pill narrower than
-   two square mini pills plus the gap between them. align-items: center
-   matches .chapter-bar-display's own cross-axis alignment, since this
-   wrapper -- like every plain .tag-pill -- has no explicit height of its
-   own, just whatever its mini pills' height computes to. */
+   two square mini pills plus the gap between them -- the same per-pill
+   floor .chapter-pill-mini uses below, doubled plus the gap. align-items:
+   center matches .chapter-bar-display's own cross-axis alignment, since
+   this wrapper -- like every plain .tag-pill -- has no explicit height of
+   its own, just whatever its mini pills' height computes to. */
 .chapter-pill-split {
   display: flex;
   align-items: center;
   gap: var(--spacing-small);
   flex: 0 0 auto;
-  min-width: calc(2 * var(--ui-pill-bar-size) + var(--spacing-small));
+  min-width: calc(2 * (11px * var(--ui-font-scale) * var(--ui-pill-line-height) + 2 * var(--spacing-regular) + 2px) + var(--spacing-small));
 }
 
-/* Square mini pill -- flex: 1 1 0 so the two share whatever width the fixed-
-   width wrapper above gives them beyond their own min-width floor (which
-   only actually binds in that never-hit narrow-pill case). Border/shadow/
-   background match the sidebar's own note-list-action-button (sidebar.css)
-   exactly, deliberately -- same visual language for the same concept. */
-.chapter-pill-mini {
+/* Square mini pill. Deliberately carries the real .tag-pill class itself
+   (see the JSX in ChapterBar.tsx) rather than hand-copying its border/
+   background/border-radius/font-size -- those come from .tag-pill
+   (tags.css) and its own padding/line-height (pillbars.css) unchanged, so
+   this renders with an identical look to every real chapter pill next to
+   it, not just a visual approximation that can drift.
+
+   The .tag-pill prefix on this selector (not just .chapter-pill-mini) is
+   load-bearing, same root cause as .tag-pill.note-tab-id-input further up
+   this file: .tag-pill's own `flex: 0 0 auto` (pillbars.css) is an equal-
+   specificity, later-in-the-bundle rule that otherwise wins the cascade
+   tie -- confirmed live, a bare .chapter-pill-mini selector's `flex: 1 1 0`
+   below was silently losing to it, leaving both mini pills stuck at their
+   own min-width instead of sharing the split wrapper's fixed width.
+
+   Height is explicit for the same reason .tag-pill.note-tab-id-input's is:
+   .tag-pill's own height: auto (pillbars.css) is driven by its content's
+   line-height, but this button's "content" is an absolutely-positioned
+   ::before (below) -- taken out of flow, so it contributes nothing to
+   auto-height at all. Confirmed live: without this, the button collapsed
+   to just its padding + border (~10px) instead of matching a real pill's
+   ~21px. The formula matches .tag-pill.note-tab-id-input's own exactly
+   (that pill's real auto height, spelled out), and min-width reuses the
+   same number so the mini pill is a true square at its floor size instead
+   of accidentally taller/shorter than its neighbors the way a hardcoded
+   icon-button size (--ui-pill-bar-size -- that token is the *well's*
+   height, not a single pill's, see its own doc comment in tokens.css) was.
+
+   flex: 1 1 0 lets the two mini pills share whatever width the fixed-width
+   wrapper above gives them beyond that min-width floor (only actually
+   binds in the never-hit narrow-pill case). No hover/active/cursor rules
+   of its own: this is a plain <button>, so it already gets the exact same
+   hover/active background swap as every other button in the app (base.css)
+   -- deliberately not the pill-specific `.note-tab-pill:hover`/cursor:
+   default treatment, since unlike a display-only pill this genuinely is a
+   clickable control. */
+.tag-pill.chapter-pill-mini {
   position: relative;
   flex: 1 1 0;
-  min-width: var(--ui-pill-bar-size);
-  height: var(--ui-pill-bar-size);
-  padding: 0;
-  border: 1px solid var(--color-border-light-70);
-  border-radius: var(--border-radius-small);
-  background: none;
-  box-shadow: var(--box-shadow-regular);
-  cursor: pointer;
-}
-
-.chapter-pill-mini:hover {
-  background: var(--btn-bg-hover);
-}
-
-.chapter-pill-mini:active {
-  box-shadow: var(--box-shadow-inverted-harsh-active);
+  height: calc(11px * var(--ui-font-scale) * var(--ui-pill-line-height) + 2 * var(--spacing-regular) + 2px);
+  min-width: calc(11px * var(--ui-font-scale) * var(--ui-pill-line-height) + 2 * var(--spacing-regular) + 2px);
 }
 
 /* Same mask-icon technique as the sidebar's note-list-action-button-archive/
    -trash (sidebar.css): a ::before pseudo-element masked to the same PNG
    glyphs, so a user who already knows what these icons mean in the sidebar
    recognizes them here instantly. inset uses --spacing-regular rather than
-   the sidebar's own hardcoded 6px -- this pill is smaller
-   (--ui-pill-bar-size vs. the sidebar's note-list-column sizing), and a
-   fixed 6px inset left too little of the square for the icon at this size. */
+   the sidebar's own hardcoded 6px -- this pill is smaller than the
+   sidebar's own note-list-column sizing, and a fixed 6px inset left too
+   little of the square for the icon at this size. */
 .chapter-pill-mini::before {
   content: '';
   position: absolute;
