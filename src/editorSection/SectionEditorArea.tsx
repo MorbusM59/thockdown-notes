@@ -13,6 +13,7 @@ import type { ChapterEntry } from '../shared/chapters'
 import { resolveSpellCheckSurfaceState } from '../shared/spellCheckPolicy'
 import { ChapterBar } from '../chapters/ChapterBar'
 import type { ChapterPillSplitArm } from '../chapters/useChapterPillActions'
+import { EscapeHoldPanel } from './EscapeHoldPanel'
 
 export interface SectionEditorAreaProps {
   sectionId: string
@@ -35,6 +36,12 @@ export interface SectionEditorAreaProps {
   isCaretSuspended: boolean
   isEscapeHoldPanelOpen: boolean
   onEscapeHoldPanelClose: () => void
+  onEscapeHoldCreateNote: () => void | Promise<void>
+  onEscapeHoldCreateChapter: () => void | Promise<void>
+  onEscapeHoldExportPdf: () => void | Promise<void>
+  onEscapeHoldExportMd: () => void | Promise<void>
+  isExportingPdf: boolean
+  isExportingMd: boolean
   spellCheckEditEnabled: boolean
   previewTextureRef: RefObject<HTMLDivElement>
   previewScrollRef: RefObject<HTMLDivElement>
@@ -142,6 +149,12 @@ export function SectionEditorArea({
   isCaretSuspended,
   isEscapeHoldPanelOpen,
   onEscapeHoldPanelClose,
+  onEscapeHoldCreateNote,
+  onEscapeHoldCreateChapter,
+  onEscapeHoldExportPdf,
+  onEscapeHoldExportMd,
+  isExportingPdf,
+  isExportingMd,
   spellCheckEditEnabled,
   previewTextureRef,
   previewScrollRef,
@@ -282,8 +295,17 @@ export function SectionEditorArea({
                   aria-live="polite"
                 >
                   <div className="editor-escape-hold-panel-inner">
-                    <div className="editor-escape-hold-panel-title">Hold Escape</div>
-                    <div className="editor-escape-hold-panel-hint">Quick note panel</div>
+                    <div className="editor-escape-hold-panel-title">Quick Actions</div>
+                    <EscapeHoldPanel
+                      activeNoteId={activeNoteId}
+                      isExportingPdf={isExportingPdf}
+                      isExportingMd={isExportingMd}
+                      onCreateNote={onEscapeHoldCreateNote}
+                      onCreateChapter={onEscapeHoldCreateChapter}
+                      onExportPdf={onEscapeHoldExportPdf}
+                      onExportMd={onEscapeHoldExportMd}
+                      onClose={onEscapeHoldPanelClose}
+                    />
                   </div>
                 </div>
               </div>

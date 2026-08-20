@@ -8801,6 +8801,12 @@ ${markdownHtml}
                   highlightSearchColor={highlightColors.search}
                   isEscapeHoldPanelOpen={isEscapeHoldPanelOpen}
                   onEscapeHoldPanelClose={handleEscapeHoldPanelClose}
+                  onEscapeHoldCreateNote={createNote}
+                  onEscapeHoldCreateChapter={activeSection?.handleCreateChapter ?? noopAsync}
+                  onEscapeHoldExportPdf={handleExportPdf}
+                  onEscapeHoldExportMd={handleExportMd}
+                  isExportingPdf={isExportingPdf}
+                  isExportingMd={isExportingMd}
                   showLineNumbers={reviewGutterVisibleBySection[entry.id] ?? false}
                   showReviewFlags={reviewFlagsVisibleBySection[entry.id] ?? false}
                   onToggleReviewGutter={() => handleToggleReviewGutter(entry.id)}

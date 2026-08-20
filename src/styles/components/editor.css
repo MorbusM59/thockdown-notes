@@ -411,8 +411,7 @@
 }
 
 .editor-stage .edit-container .editor-empty-state,
-.editor-stage .render-container .editor-empty-state,
-.editor-stage .editor-escape-hold-panel {
+.editor-stage .render-container .editor-empty-state {
   position: absolute;
   inset:    0;
   margin:   auto;
@@ -449,12 +448,16 @@
 
 .editor-stage .editor-escape-hold-panel {
   position: relative;
-  inset: auto;
-  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
+  gap: var(--spacing-regular);
+  text-align: center;
   padding: calc(var(--spacing-large) * 2);
   background: color-mix(in srgb, var(--palette-parchment-lightest) 78%, rgba(255, 255, 255, 0.6));
   border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: calc(var(--border-radius-regular) * 2);
   box-shadow: var(--box-shadow-inverted-filtered), 0 14px 24px rgba(0, 0, 0, 0.12);
 }
 
@@ -463,7 +466,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-small);
+  gap: var(--spacing-large);
 }
 
 .editor-stage .editor-escape-hold-panel-title {
@@ -472,11 +475,66 @@
   text-transform: uppercase;
 }
 
-.editor-stage .editor-escape-hold-panel-hint {
-  font-size: 0.7rem;
-  letter-spacing: 0.16em;
+.editor-stage .editor-escape-hold-panel-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-regular);
+}
+
+.editor-stage .editor-escape-hold-panel-row {
+  display: flex;
+  gap: var(--spacing-regular);
+}
+
+.editor-stage .editor-escape-hold-panel-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-small);
+  width: 76px;
+  height: 68px;
+  font-family: inherit;
+  font-size: 0.65rem;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
-  opacity: 0.7;
+  cursor: pointer;
+}
+
+.editor-stage .editor-escape-hold-panel-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.editor-stage .editor-escape-hold-panel-btn:not(:disabled):hover {
+  background: var(--btn-bg-hover);
+  border-color: var(--btn-border-hover);
+}
+
+/* Roving-tabindex focus ring: the app suppresses the native focus-visible
+   outline everywhere (see .app-shell button:focus-visible in base.css), so
+   the keyboard-focused cell needs its own visible affordance. Reuses the
+   same border-color + box-shadow pairing as button.is-active elsewhere in
+   the app rather than a bare CSS outline, since --btn-border-active alone
+   (a ~30%-opacity border tint) is too faint to read on its own against this
+   panel's light parchment background -- it's designed to be paired with
+   the harsh-active shadow, not used alone. */
+.editor-stage .editor-escape-hold-panel-btn:focus-visible {
+  border-color: var(--btn-border-active);
+  box-shadow: var(--box-shadow-inverted-harsh-active);
+}
+
+.editor-stage .editor-escape-hold-panel-btn .fa-solid {
+  font-size: 1.15rem;
+}
+
+.editor-stage .editor-escape-hold-panel-btn-label {
+  white-space: nowrap;
+}
+
+.editor-stage .editor-escape-hold-panel-btn-placeholder {
+  opacity: 0.3;
+  font-size: 1.15rem;
 }
 
 /* Hide native cursor and caret app-wide when using the custom mouse overlay

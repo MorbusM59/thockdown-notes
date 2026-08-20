@@ -132,6 +132,17 @@ Every feature in the app, described individually: where to find it, what it does
 - Preview renders GitHub-Flavored Markdown: headings, bold/italic/strikethrough, lists (including task checklists with ☐/☑), tables, blockquotes, syntax-highlighted code blocks, horizontal rules, images, and links.
 - \`Esc\` also blurs a focused field (like search) before it starts toggling modes, so it's safe to hit repeatedly.
 
+### [Quick Actions Menu](#quick-actions-menu)
+
+> **Where?**
+> Hold \`Esc\` for about a third of a second while a note is open.
+
+*A small on-editor grid for the note actions you reach for most, without leaving the keyboard.*
+
+- Keeps showing while you hold \`Esc\`; tapping \`Esc\` once more (or clicking outside it) dismisses it without doing anything.
+- Navigate with the arrow keys or \`Tab\`/\`Shift+Tab\`, then \`Enter\`/\`Space\` or a click to run the highlighted action. Running any action closes the menu.
+- Currently wired up: New Note, New Chapter, Export PDF, Export MD. The remaining grid cells are reserved for future actions.
+
 ### [Scrollbar Navigation](#scrollbar-navigation)
 
 > **Where?**
@@ -593,6 +604,7 @@ Every feature in the app, described individually: where to find it, what it does
 | \`Ctrl+N\` | New blank note |
 | \`Ctrl+Shift+N\` | New note titled from clipboard |
 | \`Esc\` | Toggle edit / preview (or blur a focused field) |
+| Hold \`Esc\` | Open the quick actions menu |
 | \`Ctrl+F\` | Find in note |
 | \`Ctrl+H\` | Find & replace in note |
 | \`Ctrl+Enter\` (in find mode) | Replace all matches |

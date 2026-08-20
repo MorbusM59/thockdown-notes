@@ -196,6 +196,12 @@ export function EditorSection({
   onToggleReviewFlags,
   isEscapeHoldPanelOpen,
   onEscapeHoldPanelClose,
+  onEscapeHoldCreateNote,
+  onEscapeHoldCreateChapter,
+  onEscapeHoldExportPdf,
+  onEscapeHoldExportMd,
+  isExportingPdf,
+  isExportingMd,
   isLeftmostSection,
   canCreateSection,
   onCreateSection,
@@ -1734,6 +1740,12 @@ export function EditorSection({
         isCaretSuspended={isCaretSuspended}
         isEscapeHoldPanelOpen={isEscapeHoldPanelOpen}
         onEscapeHoldPanelClose={onEscapeHoldPanelClose}
+        onEscapeHoldCreateNote={onEscapeHoldCreateNote}
+        onEscapeHoldCreateChapter={onEscapeHoldCreateChapter}
+        onEscapeHoldExportPdf={onEscapeHoldExportPdf}
+        onEscapeHoldExportMd={onEscapeHoldExportMd}
+        isExportingPdf={isExportingPdf}
+        isExportingMd={isExportingMd}
         spellCheckEditEnabled={spellCheckEditEnabled}
         previewTextureRef={previewTextureRef}
         previewScrollRef={previewScrollRef}
