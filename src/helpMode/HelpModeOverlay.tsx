@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, WheelEvent as ReactWheelEvent } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import { HELP_GUIDE_AUTO_TOC_ID, HELP_GUIDE_CHAPTER_IDS, HELP_GUIDE_NOTE_IDS, HELP_GUIDE_ROOT_ID } from '../shared/helpGuide'
 import { usePreviewMarkdownRendering, type PreviewScrollToSourceLineFn } from '../editorSection/usePreviewMarkdownRendering'
@@ -96,6 +96,40 @@ export function HelpModeOverlay({ notes, onClose }: HelpModeOverlayProps) {
   const isRootActive = guideActiveNoteId === HELP_GUIDE_ROOT_ID
   const isTocActive = guideActiveNoteId === HELP_GUIDE_AUTO_TOC_ID
 
+  // Same horizontal-scroll wiring as the real ChapterBar.tsx (its own
+  // scrollerRef/updateScrollEdges/handleWheel): `.chapter-bar-display` has
+  // overflow-x: auto, but that alone only responds to a trackpad's native
+  // horizontal gesture or a shift+wheel -- a plain vertical mouse wheel does
+  // nothing without this handler redirecting deltaY into scrollLeft. Kept
+  // as a local, independent copy rather than sharing ChapterBar's own
+  // internal refs/state, same reasoning as the rest of this component's
+  // hand-rolled bar (see the doc comment above).
+  const chapterBarScrollerRef = useRef<HTMLDivElement | null>(null)
+  const [canScrollChaptersLeft, setCanScrollChaptersLeft] = useState(false)
+  const [canScrollChaptersRight, setCanScrollChaptersRight] = useState(false)
+
+  const updateChapterBarScrollEdges = useCallback(() => {
+    const el = chapterBarScrollerRef.current
+    if (!el) return
+    setCanScrollChaptersLeft(el.scrollLeft > 1)
+    setCanScrollChaptersRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1)
+  }, [])
+
+  useEffect(() => {
+    updateChapterBarScrollEdges()
+  }, [updateChapterBarScrollEdges])
+
+  useEffect(() => {
+    window.addEventListener('resize', updateChapterBarScrollEdges)
+    return () => window.removeEventListener('resize', updateChapterBarScrollEdges)
+  }, [updateChapterBarScrollEdges])
+
+  const handleChapterBarWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+    if (event.deltaY === 0) return
+    event.preventDefault()
+    event.currentTarget.scrollLeft += event.deltaY
+  }, [])
+
   return (
     <div className="editor-viewer-frame" style={{ flex: '1 1 0' }} role="region" aria-label="User Guide">
       <main className="editor-shell chapter-panel-is-open">
@@ -147,8 +181,15 @@ export function HelpModeOverlay({ notes, onClose }: HelpModeOverlayProps) {
           </button>
 
           <div className="chapter-tab-mode-shell">
-            <div className="chapter-bar-scroll-shell">
-              <div className="chapter-bar-display" aria-label="User Guide chapters" role="group">
+            <div className={`chapter-bar-scroll-shell${canScrollChaptersLeft ? ' fade-left' : ''}${canScrollChaptersRight ? ' fade-right' : ''}`}>
+              <div
+                className="chapter-bar-display"
+                aria-label="User Guide chapters"
+                role="group"
+                ref={chapterBarScrollerRef}
+                onScroll={updateChapterBarScrollEdges}
+                onWheel={handleChapterBarWheel}
+              >
                 <div
                   className={`tag-pill note-tab-pill chapter-pill${isRootActive ? ' is-active' : ''}`}
                   onClick={() => setGuideActiveNoteId(HELP_GUIDE_ROOT_ID)}
