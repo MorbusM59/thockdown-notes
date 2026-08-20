@@ -1701,7 +1701,7 @@ export function EditorSection({
         activeNoteId={activeNoteId}
         tabIdentityNoteId={menuIdentityNoteId}
         notes={notes}
-        isHelpModeActive={isHelpModeActive}
+        isHelpModeActive={isHelpModeActive && sectionId === activeSectionId}
         isLeftmostSection={isLeftmostSection}
         canCreateSection={canCreateSection}
         onCreateSection={onCreateSection}
@@ -1751,7 +1751,7 @@ export function EditorSection({
         onEscapeHoldOpenHelp={onEscapeHoldOpenHelp}
         isExportingPdf={isExportingPdf}
         isExportingMd={isExportingMd}
-        isHelpModeActive={isHelpModeActive}
+        isHelpModeActive={isHelpModeActive && sectionId === activeSectionId}
         onHelpModeClose={onHelpModeClose}
         spellCheckEditEnabled={spellCheckEditEnabled}
         previewTextureRef={previewTextureRef}

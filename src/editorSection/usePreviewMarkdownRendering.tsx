@@ -468,10 +468,12 @@ export function usePreviewMarkdownRendering({
   // an inert `.note-anchor-marker` span carrying the id verbatim.
   const scrollToAnchorInPreview = useCallback((anchorId: string, sourceLine: number | null, waitForNoteSwitch: boolean) => {
     scrollToRenderedElement(() => {
-      const candidates = Array.from(document.querySelectorAll<HTMLElement>('.note-anchor-marker'))
+      const scoped = previewScrollRef.current
+      if (!scoped) return null
+      const candidates = Array.from(scoped.querySelectorAll<HTMLElement>('.note-anchor-marker'))
       return candidates.find((el) => el.dataset.anchorId === anchorId) ?? null
     }, sourceLine, waitForNoteSwitch)
-  }, [scrollToRenderedElement])
+  }, [scrollToRenderedElement, previewScrollRef])
 
   // Scrolls to an automatic, on-the-fly heading anchor -- there's no literal
   // DOM marker to search for (the heading's own source was never rewritten),
@@ -482,8 +484,8 @@ export function usePreviewMarkdownRendering({
     const selector = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']
       .map((tag) => `${tag}[data-source-line-start="${sourceLine}"]`)
       .join(', ')
-    scrollToRenderedElement(() => document.querySelector<HTMLElement>(selector), sourceLine, waitForNoteSwitch)
-  }, [scrollToRenderedElement])
+    scrollToRenderedElement(() => previewScrollRef.current?.querySelector<HTMLElement>(selector) ?? null, sourceLine, waitForNoteSwitch)
+  }, [scrollToRenderedElement, previewScrollRef])
 
   // Resolves a raw href anchor fragment to whichever of the app's two
   // independent anchor mechanisms it belongs to: an automatic, on-the-fly
