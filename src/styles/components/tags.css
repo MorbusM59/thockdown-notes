@@ -450,6 +450,18 @@
   text-shadow: none;
 }
 
+/* An archived chapter, virtually merged into its archived parent's own
+   chapter bar for display only (see useNoteChapters.ts) — same dimmed
+   treatment as an archived pinned tab above. Still clickable to view its
+   content, but not draggable, no hold-to-split gesture, no chapterId
+   rename: it has no real `chapters`-table row to write any of that back to. */
+.chapter-pill.is-archived-ghost,
+.chapter-pill.is-archived-ghost.is-active {
+  opacity: 50%;
+  letter-spacing: -0.05em;
+  text-shadow: none;
+}
+
 .note-tab-pill.unpin-primed {
   filter: var(--filter-primed-delete);
 }

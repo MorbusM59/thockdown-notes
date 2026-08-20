@@ -561,7 +561,12 @@ export function usePreviewMarkdownRendering({
       if (!contextNote) return
     } else if (activeNoteId) {
       const activeNote = notesRef.current.find((note) => note.id === activeNoteId)
-      const contextNoteId = activeNote?.chapterOnly && activeNote.chapterParentId ? activeNote.chapterParentId : activeNoteId
+      // chapterParentId is null for a chapter currently detached (Trash, or
+      // an Archive fold-out row) -- see NoteSummary.detachedChapterParentId's
+      // own doc comment -- so it isn't enough alone to resolve one opened
+      // directly from one of those rows back to its real parent.
+      const resolvedChapterParentId = activeNote?.chapterParentId ?? activeNote?.detachedChapterParentId
+      const contextNoteId = activeNote?.chapterOnly && resolvedChapterParentId ? resolvedChapterParentId : activeNoteId
       contextNote = notesRef.current.find((note) => note.id === contextNoteId)
     }
 

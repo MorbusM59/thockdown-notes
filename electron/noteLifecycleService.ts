@@ -761,19 +761,20 @@ export class NoteLifecycleService {
     return this.databaseService.removeChapter(parentNoteId, chapterNoteId);
   }
 
-  // Chapter delete's own mechanic (its own 'deleted' protected tag, applied
-  // by the caller alongside this -- see ChapterBar.tsx's split pill):
-  // detaches rather than truly removing (databaseService.detachChapterForTrash
-  // keeps the note and remembers where it was, for restoreDetachedChapter
-  // below to undo). Same Open Items "smart delete" sync as
-  // removeChapterAndSyncOpenItems above and for the same reason: a chapter
-  // sitting in trash shouldn't keep cluttering the live aggregated list.
-  async detachChapterForTrash(parentNoteId: string, chapterNoteId: string): Promise<ChapterEntry[]> {
+  // Chapter delete AND chapter archive's shared mechanic (the caller
+  // applies 'deleted' or 'archived' alongside this -- see ChapterBar.tsx's
+  // split pill): detaches rather than truly removing
+  // (databaseService.detachChapter keeps the note and remembers where it
+  // was, chapterId included, for restoreDetachedChapter below to undo).
+  // Same Open Items "smart delete" sync as removeChapterAndSyncOpenItems
+  // above and for the same reason: a chapter that's left the live family
+  // (trashed OR archived) shouldn't keep cluttering the aggregated list.
+  async detachChapter(parentNoteId: string, chapterNoteId: string): Promise<ChapterEntry[]> {
     const openItemsChapterNoteId = this.databaseService.getAutoOpenItemsChapterNoteId(parentNoteId);
     if (openItemsChapterNoteId && openItemsChapterNoteId !== chapterNoteId) {
       await this.dropOpenItemsGroup(parentNoteId, openItemsChapterNoteId, chapterNoteId);
     }
-    return this.databaseService.detachChapterForTrash(parentNoteId, chapterNoteId);
+    return this.databaseService.detachChapter(parentNoteId, chapterNoteId);
   }
 
   // The restore half: reattaches (databaseService.restoreDetachedChapter),

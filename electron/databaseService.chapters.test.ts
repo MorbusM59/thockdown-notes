@@ -174,7 +174,7 @@ describe('DatabaseService chapters', () => {
     // chapter-1 stays attached; chapter-2 is detached (trashed) but its
     // parent is still alive, so it's mid-flight, restorable state right up
     // until the parent itself is purged.
-    db.detachChapterForTrash('parent-a', 'chapter-2')
+    db.detachChapter('parent-a', 'chapter-2')
     expect(db.getNoteRecord('chapter-2')?.detachedChapterParentId).toBe('parent-a')
 
     db.deleteNote('parent-a')
@@ -195,7 +195,7 @@ describe('DatabaseService chapters', () => {
     expect(db.getNoteRecord('parent-a')).not.toBeNull()
   })
 
-  describe('detachChapterForTrash / restoreDetachedChapter', () => {
+  describe('detachChapter / restoreDetachedChapter', () => {
     it('detaching a middle chapter closes the gap, and restoring puts it back at its original index, shifting later chapters forward again', () => {
       seedNote(db, 'parent-a')
       seedNote(db, 'chapter-1')
@@ -205,7 +205,7 @@ describe('DatabaseService chapters', () => {
       db.addChapter('parent-a', 'chapter-2')
       db.addChapter('parent-a', 'chapter-3')
 
-      const afterDetach = db.detachChapterForTrash('parent-a', 'chapter-2')
+      const afterDetach = db.detachChapter('parent-a', 'chapter-2')
       expect(afterDetach.map((c) => c.chapterNoteId)).toEqual(['chapter-1', 'chapter-3'])
       expect(afterDetach.map((c) => c.position)).toEqual([0, 1])
       expect(db.getChapterParent('chapter-2')).toBeNull()
@@ -217,6 +217,18 @@ describe('DatabaseService chapters', () => {
       expect(db.getChapterParent('chapter-2')).toBe('parent-a')
     })
 
+    it('preserves an assigned chapterId across a detach/restore round trip', () => {
+      seedNote(db, 'parent-a')
+      seedNote(db, 'chapter-1')
+      db.addChapter('parent-a', 'chapter-1')
+      db.setChapterId('parent-a', 'chapter-1', 'INTRO')
+
+      db.detachChapter('parent-a', 'chapter-1')
+      const restored = db.restoreDetachedChapter('chapter-1')
+
+      expect(restored?.chapters.find((c) => c.chapterNoteId === 'chapter-1')?.chapterId).toBe('INTRO')
+    })
+
     it('restoring a chapter detached from the front or back lands it back exactly where it was', () => {
       seedNote(db, 'parent-a')
       seedNote(db, 'chapter-1')
@@ -226,11 +238,11 @@ describe('DatabaseService chapters', () => {
       db.addChapter('parent-a', 'chapter-2')
       db.addChapter('parent-a', 'chapter-3')
 
-      db.detachChapterForTrash('parent-a', 'chapter-1')
+      db.detachChapter('parent-a', 'chapter-1')
       const restoredFront = db.restoreDetachedChapter('chapter-1')
       expect(restoredFront?.chapters.map((c) => c.chapterNoteId)).toEqual(['chapter-1', 'chapter-2', 'chapter-3'])
 
-      db.detachChapterForTrash('parent-a', 'chapter-3')
+      db.detachChapter('parent-a', 'chapter-3')
       const restoredBack = db.restoreDetachedChapter('chapter-3')
       expect(restoredBack?.chapters.map((c) => c.chapterNoteId)).toEqual(['chapter-1', 'chapter-2', 'chapter-3'])
     })
@@ -242,7 +254,7 @@ describe('DatabaseService chapters', () => {
       db.addChapter('parent-a', 'chapter-1')
       db.addChapter('parent-a', 'chapter-2')
 
-      db.detachChapterForTrash('parent-a', 'chapter-2')
+      db.detachChapter('parent-a', 'chapter-2')
 
       // Its remembered position (1) no longer exists once chapter-1 alone
       // remains -- restoring should clamp to the end, not throw or corrupt
@@ -269,7 +281,7 @@ describe('DatabaseService chapters', () => {
       seedNote(db, 'parent-a')
       seedNote(db, 'chapter-1')
       db.addChapter('parent-a', 'chapter-1')
-      db.detachChapterForTrash('parent-a', 'chapter-1')
+      db.detachChapter('parent-a', 'chapter-1')
 
       const rawDb = new BetterSqlite3(path.join(dataRoot, 'thockdown-notes.db'))
       rawDb.prepare('DELETE FROM notes WHERE id = ?').run('parent-a')
@@ -288,8 +300,8 @@ describe('DatabaseService chapters', () => {
       db.addChapter('parent-a', 'chapter-2')
       db.setNoteChapterOnly('chapter-1', true)
       db.setNoteChapterOnly('chapter-2', true)
-      db.detachChapterForTrash('parent-a', 'chapter-1')
-      db.detachChapterForTrash('parent-a', 'chapter-2')
+      db.detachChapter('parent-a', 'chapter-1')
+      db.detachChapter('parent-a', 'chapter-2')
 
       // Construct chapter-2's dangling pointer the same way as the test
       // above -- deleteNote's own cascade is exactly what makes this
@@ -317,7 +329,7 @@ describe('DatabaseService chapters', () => {
       seedNote(db, 'chapter-2')
       db.addChapter('parent-a', 'chapter-1')
 
-      const result = db.detachChapterForTrash('parent-a', 'chapter-2')
+      const result = db.detachChapter('parent-a', 'chapter-2')
       expect(result.map((c) => c.chapterNoteId)).toEqual(['chapter-1'])
     })
 
@@ -327,6 +339,88 @@ describe('DatabaseService chapters', () => {
       db.addChapter('parent-a', 'chapter-1')
 
       expect(db.restoreDetachedChapter('chapter-1')).toBeNull()
+    })
+  })
+
+  describe('listChaptersIncludingArchived', () => {
+    it('is identical to listChaptersForNote when nothing is archived-and-detached', () => {
+      seedNote(db, 'parent-a')
+      seedNote(db, 'chapter-1')
+      seedNote(db, 'chapter-2')
+      db.addChapter('parent-a', 'chapter-1')
+      db.addChapter('parent-a', 'chapter-2')
+
+      expect(db.listChaptersIncludingArchived('parent-a').map((c) => c.chapterNoteId)).toEqual(['chapter-1', 'chapter-2'])
+    })
+
+    it('splices a single archived-detached chapter back at its exact original position', () => {
+      seedNote(db, 'parent-a')
+      seedNote(db, 'chapter-1')
+      seedNote(db, 'chapter-2')
+      seedNote(db, 'chapter-3')
+      db.addChapter('parent-a', 'chapter-1')
+      db.addChapter('parent-a', 'chapter-2')
+      db.addChapter('parent-a', 'chapter-3')
+      db.setNoteChapterOnly('chapter-2', true)
+
+      db.addTagToNote('chapter-2', 'archived', 0)
+      db.detachChapter('parent-a', 'chapter-2')
+
+      // Not a live chapter any more -- excluded from the plain listing.
+      expect(db.listChaptersForNote('parent-a').map((c) => c.chapterNoteId)).toEqual(['chapter-1', 'chapter-3'])
+      // But included, back in its exact original slot, here.
+      const merged = db.listChaptersIncludingArchived('parent-a')
+      expect(merged.map((c) => c.chapterNoteId)).toEqual(['chapter-1', 'chapter-2', 'chapter-3'])
+      expect(merged.map((c) => c.position)).toEqual([0, 1, 2])
+    })
+
+    it('reconstructs the exact original order across multiple chapters archived at different times, by replaying detachments in reverse chronological order', () => {
+      seedNote(db, 'parent-a')
+      seedNote(db, 'chapter-1')
+      seedNote(db, 'chapter-2')
+      seedNote(db, 'chapter-3')
+      seedNote(db, 'chapter-4')
+      db.addChapter('parent-a', 'chapter-1')
+      db.addChapter('parent-a', 'chapter-2')
+      db.addChapter('parent-a', 'chapter-3')
+      db.addChapter('parent-a', 'chapter-4')
+      db.setNoteChapterOnly('chapter-1', true)
+      db.setNoteChapterOnly('chapter-3', true)
+
+      // chapter-1 archived first, out of [1,2,3,4] at position 0 -- live
+      // becomes [2,3,4].
+      db.addTagToNote('chapter-1', 'archived', 0)
+      db.detachChapter('parent-a', 'chapter-1')
+      // chapter-3 archived second, out of [2,3,4] at its own new position 1
+      // -- live becomes [2,4].
+      db.addTagToNote('chapter-3', 'archived', 0)
+      db.detachChapter('parent-a', 'chapter-3')
+
+      expect(db.listChaptersForNote('parent-a').map((c) => c.chapterNoteId)).toEqual(['chapter-2', 'chapter-4'])
+
+      const merged = db.listChaptersIncludingArchived('parent-a')
+      expect(merged.map((c) => c.chapterNoteId)).toEqual(['chapter-1', 'chapter-2', 'chapter-3', 'chapter-4'])
+      expect(merged.map((c) => c.position)).toEqual([0, 1, 2, 3])
+    })
+
+    it('excludes a detached chapter tagged deleted (not archived), and one detached from a different parent', () => {
+      seedNote(db, 'parent-a')
+      seedNote(db, 'parent-b')
+      seedNote(db, 'chapter-1')
+      seedNote(db, 'chapter-2')
+      seedNote(db, 'chapter-3')
+      db.addChapter('parent-a', 'chapter-1')
+      db.addChapter('parent-a', 'chapter-2')
+      db.addChapter('parent-b', 'chapter-3')
+      db.setNoteChapterOnly('chapter-2', true)
+      db.setNoteChapterOnly('chapter-3', true)
+
+      db.addTagToNote('chapter-2', 'deleted', 0)
+      db.detachChapter('parent-a', 'chapter-2')
+      db.addTagToNote('chapter-3', 'archived', 0)
+      db.detachChapter('parent-b', 'chapter-3')
+
+      expect(db.listChaptersIncludingArchived('parent-a').map((c) => c.chapterNoteId)).toEqual(['chapter-1'])
     })
   })
 

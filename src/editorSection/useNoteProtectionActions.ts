@@ -341,18 +341,18 @@ export function useNoteProtectionActions({
     try {
       await flushPendingSaveNow()
 
-      if (action === 'remove-archived') {
-        await window.thockdownNotes.removeTagFromNote({ id: noteId, tagName: 'archived' })
-      } else {
-        await window.thockdownNotes.removeTagFromNote({ id: noteId, tagName: 'deleted' })
+      await window.thockdownNotes.removeTagFromNote({ id: noteId, tagName: action === 'remove-archived' ? 'archived' : 'deleted' })
 
-        const summary = notes.find((note) => note.id === noteId)
-        const isChapterOnly = summary ? isChapterOnlyNote(summary) : false
-        if (isChapterOnly && window.thockdownChapters) {
-          const restored = await window.thockdownChapters.restoreDetachedChapter(noteId)
-          if (restored && restored.parentNoteId === menuIdentityNoteId) {
-            await refreshChapters()
-          }
+      // Whichever protected tag was just cleared, a chapter carrying it was
+      // detached (see detachChapter) -- reattach it at its remembered
+      // position, and refresh the chapter bar if its parent is the family
+      // currently on screen.
+      const summary = notes.find((note) => note.id === noteId)
+      const isChapterOnly = summary ? isChapterOnlyNote(summary) : false
+      if (isChapterOnly && window.thockdownChapters) {
+        const restored = await window.thockdownChapters.restoreDetachedChapter(noteId)
+        if (restored && restored.parentNoteId === menuIdentityNoteId) {
+          await refreshChapters()
         }
       }
 
@@ -398,20 +398,20 @@ export function useNoteProtectionActions({
     const summary = notes.find((note) => note.id === noteId)
     const isExternal = summary ? isExternalNote(summary) : false
     const isNoteDeleted = summary ? isDeletedNote(summary) : false
+    const isNoteArchived = summary ? isArchivedNote(summary) : false
     // Chapters have no tag life of their own -- archiving/deleting only
     // makes sense on their parent note (see the tag-bar identity comment in
-    // useSectionTabs.ts). The one exception is a chapter already sitting in
-    // Trash: it needs the same quick-right-click restore gesture a deleted
-    // note gets, so only block chapters that aren't already deleted. A
-    // non-deleted chapter can still surface here via search results.
+    // useSectionTabs.ts). The exception is a chapter already sitting
+    // detached (Trash, or an Archive-tree fold-out row): it needs the same
+    // quick-right-click restore gesture a deleted/archived note gets, so
+    // only block chapters that aren't currently protected either way. A
+    // plain, unprotected chapter can still surface here via search results.
     const isChapterOnly = summary ? isChapterOnlyNote(summary) : false
-    if (isExternal || (isChapterOnly && !isNoteDeleted)) {
+    if (isExternal || (isChapterOnly && !isNoteDeleted && !isNoteArchived)) {
       return
     }
 
     clearNoteArmTimer()
-
-    const isNoteArchived = summary ? isArchivedNote(summary) : false
     if (isNoteArchived || isNoteDeleted) {
       setPrimedNoteActionState(null)
     } else {

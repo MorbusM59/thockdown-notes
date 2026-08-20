@@ -70,6 +70,7 @@ export interface SectionEditorAreaProps {
   /** The chapter-aware "menu identity" (see EditorSection.tsx's `menuIdentityNoteId`) -- the note the chapter bar shows chapters *of*, and its first tab. Non-null exactly when activeNoteId is. */
   menuIdentityNoteId: string | null
   chapters: ChapterEntry[]
+  archivedMergedChapterIds: ReadonlySet<string>
   onParentTabClick: () => void
   onChapterClick: (chapterNoteId: string) => void
   onChapterDragStart: (event: DragEvent<HTMLDivElement>, index: number) => void
@@ -174,6 +175,7 @@ export function SectionEditorArea({
   notes,
   menuIdentityNoteId,
   chapters,
+  archivedMergedChapterIds,
   onParentTabClick,
   onChapterClick,
   onChapterDragStart,
@@ -372,6 +374,7 @@ export function SectionEditorArea({
           <ChapterBar
             parentNoteId={menuIdentityNoteId}
             chapters={chapters}
+            archivedMergedChapterIds={archivedMergedChapterIds}
             notes={notes}
             activeNoteId={activeNoteId}
             onParentTabClick={onParentTabClick}

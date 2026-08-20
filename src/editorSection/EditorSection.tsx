@@ -57,7 +57,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'isPreviewScrollThumbActive' | 'handlePreviewThumbMouseDown' | 'activeNoteDocumentStats' | 'noteSnapshots'
   | 'handleNavigateSnapshot' | 'handleBranchOpened' | 'handleBranchError' | 'timelineCurveConstant' | 'setTimelineCurveConstant'
   | 'setTimelineTrackLengthPx' | 'handleCreateManualSnapshot' | 'handleReturnToPresent' | 'handleMergeAdjacentSnapshots'
-  | 'scrollbarHostEl' | 'setScrollbarHostEl' | 'notes' | 'menuIdentityNoteId' | 'chapters' | 'onParentTabClick' | 'onCreateChapter' | 'onChapterClick'
+  | 'scrollbarHostEl' | 'setScrollbarHostEl' | 'notes' | 'menuIdentityNoteId' | 'chapters' | 'archivedMergedChapterIds' | 'onParentTabClick' | 'onCreateChapter' | 'onChapterClick'
   | 'onChapterDragStart' | 'onChapterDragEnd' | 'onChapterDrop'
   | 'editingChapterNoteId' | 'chapterIdDraft' | 'setChapterIdDraft' | 'onCommitChapterIdEdit' | 'onCancelChapterIdEdit'
   | 'onCollapseChapterIntoPrevious' | 'onExtractSelectionToChapter' | 'isViewingAutoTocChapter' | 'isViewingAutoOpenItemsChapter'
@@ -681,8 +681,13 @@ export function EditorSection({
     // comment) -- this is the single choke point every activation funnels
     // through, so it's simpler to always call it than to first check whether
     // it's tabbed.
-    const chapterTabNoteId = loaded.chapterOnly && loaded.chapterParentId ? loaded.chapterParentId : loaded.id
-    const chapterNoteIdForTab = loaded.chapterOnly && loaded.chapterParentId ? loaded.id : null
+    // chapterParentId is null for a chapter currently detached (Trash, or
+    // an Archive fold-out) -- see NoteSummary.detachedChapterParentId's own
+    // doc comment -- so it isn't enough on its own to resolve a chapter
+    // opened directly from one of those rows back to its real parent.
+    const resolvedChapterParentId = loaded.chapterParentId ?? loaded.detachedChapterParentId
+    const chapterTabNoteId = loaded.chapterOnly && resolvedChapterParentId ? resolvedChapterParentId : loaded.id
+    const chapterNoteIdForTab = loaded.chapterOnly && resolvedChapterParentId ? loaded.id : null
     void window.thockdownTabs?.setLastActiveChapter(sectionId, chapterTabNoteId, chapterNoteIdForTab).then((updatedTabs) => {
       applyPinnedTabsUpdateRef.current(updatedTabs)
     })
@@ -766,10 +771,16 @@ export function EditorSection({
   // `chapterParentId` when it's a chapter -- a DB fact now (a chapter
   // belongs to exactly one parent, ever), not navigation state -- otherwise
   // falls back to the note's own identity. Chapters never appear in any menu
-  // view themselves regardless.
+  // view themselves regardless. `chapterParentId` is null for a chapter
+  // currently detached (Trash, or an Archive fold-out row) -- opening one
+  // of those directly (their rows are clickable, same as any note) needs
+  // `detachedChapterParentId` instead, or the chapter bar renders as if the
+  // chapter were its own parent (see NoteSummary.detachedChapterParentId's
+  // own doc comment).
   const menuIdentityNoteId = useMemo(() => {
-    if (activeNoteSummary?.chapterOnly && activeNoteSummary.chapterParentId) {
-      return activeNoteSummary.chapterParentId
+    const resolvedChapterParentId = activeNoteSummary?.chapterParentId ?? activeNoteSummary?.detachedChapterParentId
+    if (activeNoteSummary?.chapterOnly && resolvedChapterParentId) {
+      return resolvedChapterParentId
     }
     return activeNoteId
   }, [activeNoteId, activeNoteSummary])
@@ -870,6 +881,7 @@ export function EditorSection({
 
   const {
     chapters,
+    archivedMergedChapterIds,
     refreshChapters,
     handleCreateChapter,
     handleChapterClick,
@@ -1371,6 +1383,7 @@ export function EditorSection({
     pinNoteAsRightmostTab,
     applyTabsUpdate,
     chapters,
+    archivedMergedChapterIds,
     refreshChapters,
     handleCreateChapter,
     handleChapterClick,
@@ -1760,6 +1773,7 @@ export function EditorSection({
         notes={notes}
         menuIdentityNoteId={menuIdentityNoteId}
         chapters={chapters}
+        archivedMergedChapterIds={archivedMergedChapterIds}
         onParentTabClick={handleParentTabClick}
         onChapterClick={handleChapterClick}
         onChapterDragStart={onChapterDragStart}

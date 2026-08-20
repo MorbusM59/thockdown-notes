@@ -60,8 +60,10 @@ type BrowserMockStore = {
   noteTabs: NoteTabEntry[]
   editorSections: EditorSectionEntry[]
   chapters: ChapterEntry[]
-  /** Mirrors databaseService.ts's notes.detachedChapterParentId/Position columns -- where a chapter was detached from while it's sitting in trash. Keyed by chapterNoteId. NoteDocument.detachedChapterParentId itself is kept in sync on the note object too (same duplicated-cache convention as chapterParentId), but `position` has no renderer-facing use, so it lives here only. */
-  detachedChapters: Record<string, { parentNoteId: string; position: number }>
+  /** Mirrors databaseService.ts's notes.detachedChapterParentId/Position/ChapterId/Sequence columns -- where a chapter was detached from while it's sitting outside the chapters table (Trash or an Archive fold-out). Keyed by chapterNoteId. NoteDocument.detachedChapterParentId itself is kept in sync on the note object too (same duplicated-cache convention as chapterParentId), but `position`/`chapterId`/`sequence` have no renderer-facing use, so they live here only. */
+  detachedChapters: Record<string, { parentNoteId: string; position: number; chapterId: string | null; sequence: number }>
+  /** Mirrors the real DB's single global (not per-parent) monotonic detach counter -- see detachChapter's own doc comment. */
+  nextDetachSequence: number
   reviewFlags: ReviewFlagEntry[]
   nextReviewFlagId: number
 }
@@ -251,6 +253,7 @@ function loadStore(): BrowserMockStore {
         editorSections: createDefaultEditorSections(),
         chapters: [],
         detachedChapters: {},
+        nextDetachSequence: 1,
         reviewFlags: [],
         nextReviewFlagId: 1,
       }
@@ -349,11 +352,12 @@ function loadStore(): BrowserMockStore {
         : [],
       detachedChapters: parsed.detachedChapters && typeof parsed.detachedChapters === 'object'
         ? Object.fromEntries(
-            Object.entries(parsed.detachedChapters as Record<string, { parentNoteId?: string; position?: number }>)
+            Object.entries(parsed.detachedChapters as Record<string, { parentNoteId?: string; position?: number; chapterId?: string | null; sequence?: number }>)
               .filter(([, value]) => typeof value?.parentNoteId === 'string' && Number.isFinite(value?.position))
-              .map(([key, value]) => [key, { parentNoteId: value.parentNoteId as string, position: Number(value.position) }]),
+              .map(([key, value]) => [key, { parentNoteId: value.parentNoteId as string, position: Number(value.position), chapterId: typeof value.chapterId === 'string' ? value.chapterId : null, sequence: Number.isFinite(value.sequence) ? Number(value.sequence) : 0 }]),
           )
         : {},
+      nextDetachSequence: Number.isFinite(parsed.nextDetachSequence) ? Number(parsed.nextDetachSequence) : 1,
       reviewFlags: Array.isArray(parsed.reviewFlags)
         ? (parsed.reviewFlags as ReviewFlagEntry[])
             .filter((entry) => typeof entry?.noteId === 'string' && Number.isFinite(entry?.id))
@@ -382,6 +386,7 @@ function loadStore(): BrowserMockStore {
       editorSections: createDefaultEditorSections(),
       chapters: [],
       detachedChapters: {},
+      nextDetachSequence: 1,
       reviewFlags: [],
       nextReviewFlagId: 1,
     }
@@ -1453,7 +1458,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
       })
     },
 
-    async detachChapterForTrash(parentNoteId: string, chapterNoteId: string): Promise<ChapterEntry[]> {
+    async detachChapter(parentNoteId: string, chapterNoteId: string): Promise<ChapterEntry[]> {
       return mutate((store) => {
         const openItemsChapter = findOpenItemsChapterInStore(store, parentNoteId)
         if (openItemsChapter && openItemsChapter.chapterNoteId !== chapterNoteId) {
@@ -1469,7 +1474,8 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
                 ? { ...chapter, position: chapter.position - 1 }
                 : chapter
             ))
-          store.detachedChapters[chapterNoteId] = { parentNoteId, position: removed.position }
+          store.detachedChapters[chapterNoteId] = { parentNoteId, position: removed.position, chapterId: removed.chapterId, sequence: store.nextDetachSequence }
+          store.nextDetachSequence += 1
 
           // Mirrors the real DB exactly: chapterParentId is derived from a
           // LEFT JOIN against the `chapters` table, so it goes null the
@@ -1508,7 +1514,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
             ? { ...chapter, position: chapter.position + 1 }
             : chapter
         ))
-        store.chapters.push({ parentNoteId, chapterNoteId, position: insertPosition, chapterId: null })
+        store.chapters.push({ parentNoteId, chapterNoteId, position: insertPosition, chapterId: detached.chapterId })
         delete store.detachedChapters[chapterNoteId]
 
         const note = store.notes.find((entry) => entry.id === chapterNoteId)
@@ -1524,6 +1530,34 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
 
         return { parentNoteId, chapters: sorted(store, parentNoteId) }
       })
+    },
+
+    // Mirrors databaseService.ts's listChaptersIncludingArchived exactly:
+    // splices the parent's own archived-and-detached chapters back into
+    // its live ones, most-recently-detached first, each at its own
+    // remembered position -- see that method's own doc comment for why
+    // that specific order is what makes the reconstruction exact rather
+    // than a best-effort approximation.
+    async listChaptersIncludingArchived(parentNoteId: string): Promise<ChapterEntry[]> {
+      const store = storeRef.current
+      const live = sorted(store, parentNoteId)
+
+      const archivedEntries = Object.entries(store.detachedChapters)
+        .filter(([, detached]) => detached.parentNoteId === parentNoteId)
+        .filter(([chapterNoteId]) => store.notes.find((note) => note.id === chapterNoteId)?.tags.includes('archived'))
+        .sort(([, a], [, b]) => b.sequence - a.sequence)
+
+      let merged = live
+      for (const [chapterNoteId, detached] of archivedEntries) {
+        const insertAt = Math.min(detached.position, merged.length)
+        merged = [
+          ...merged.slice(0, insertAt),
+          { parentNoteId, position: detached.position, chapterNoteId, chapterId: detached.chapterId },
+          ...merged.slice(insertAt),
+        ]
+      }
+
+      return merged.map((chapter, index) => ({ ...chapter, position: index }))
     },
 
     async createAutoTocChapter(parentNoteId: string): Promise<{ chapters: ChapterEntry[]; created: NoteDocument }> {

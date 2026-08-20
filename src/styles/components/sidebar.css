@@ -755,6 +755,14 @@
   font-weight:      200;
 }
 
+/* An archived chapter nested under its parent's fold-out row in the Archive
+   tree (see App.tsx's CategoryTreeView) -- indented an extra
+   2*var(--spacing-large) beyond the tree card's own base margin so it
+   visibly reads as a child of the row above it. */
+.note-list-item.is-tree-card.is-archive-fold-out-chapter {
+  margin-left: calc(var(--spacing-regular) + 2 * var(--spacing-large));
+}
+
 .note-list-item.is-tree-card .note-list-content {
   padding: 0;
 }

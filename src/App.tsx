@@ -1088,6 +1088,8 @@ type NoteListItemProps = {
   variant?: 'default' | 'tree'
   /** Set for a chapter (surfaced via search, or -- now that a chapter can carry its own 'archived'/'deleted' protected tag -- via trash/archive): the parent's own title, shown in the meta-left slot as "$ <parent title>" in place of the created-date/assignedId a regular note shows there, since a bare date is far less useful than knowing which note this chapter belongs to. */
   chapterParentTitle?: string
+  /** Archive tree only: an archived chapter row nested under its non-self-archived parent's fold-out (see CategoryTreeView) -- indented an extra 2*var(--spacing-large) so it visibly reads as a child of the row above it. */
+  isArchiveFoldOutChapter?: boolean
 }
 
 const NoteListItem = memo(function NoteListItem({
@@ -1107,6 +1109,7 @@ const NoteListItem = memo(function NoteListItem({
   isTrashMode = false,
   variant = 'default',
   chapterParentTitle,
+  isArchiveFoldOutChapter = false,
 }: NoteListItemProps) {
   const isTreeVariant = variant === 'tree'
   const createdDate = isTreeVariant ? '' : formatCreatedDate(note.createdAtMs)
@@ -1228,7 +1231,7 @@ const NoteListItem = memo(function NoteListItem({
 
   return (
     <div
-      className={`note-list-item${isActive ? ' is-active' : ''}${isTreeVariant ? ' is-tree-card' : ''}${isModified ? ' is-modified' : ''}${isExternal ? ' is-external' : ''}${primedAction === 'archive' ? ' is-primed-for-archiving' : ''}${primedAction === 'deletion' ? ' is-primed-for-deletion' : ''}`}
+      className={`note-list-item${isActive ? ' is-active' : ''}${isTreeVariant ? ' is-tree-card' : ''}${isModified ? ' is-modified' : ''}${isExternal ? ' is-external' : ''}${primedAction === 'archive' ? ' is-primed-for-archiving' : ''}${primedAction === 'deletion' ? ' is-primed-for-deletion' : ''}${isArchiveFoldOutChapter ? ' is-archive-fold-out-chapter' : ''}`}
       data-note-id={note.id}
       role="option"
       aria-selected={isActive}
@@ -1350,6 +1353,8 @@ type CategoryTreeViewProps = {
   onNoteRightPressStart: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   onNoteRightPressEnd: (noteId: string, event: MouseEvent<HTMLDivElement>) => void
   onNoteMouseLeave?: (noteId: string) => void
+  /** Archive mode only: a non-self-archived parent's own archived chapters, keyed by parent note id -- see App.tsx's own doc comment on the memo that builds this. Undefined in Category mode, where chapters never appear at all. */
+  archivedChaptersByParentId?: Map<string, NoteSummary[]>
 }
 
 const CategoryTreeView = memo(function CategoryTreeView({
@@ -1365,7 +1370,27 @@ const CategoryTreeView = memo(function CategoryTreeView({
   onNoteRightPressStart,
   onNoteRightPressEnd,
   onNoteMouseLeave,
+  archivedChaptersByParentId,
 }: CategoryTreeViewProps) {
+  // Which non-self-archived parent rows currently have their own archived
+  // chapters folded open -- purely transient UI state (see the "pure
+  // fold-out" rule in the doc comment on the tertiary.notes.map below),
+  // deliberately not persisted app state: it resets to fully collapsed on
+  // every fresh visit to the Archive tree, same as it would if this were
+  // simply never remembered.
+  const [expandedArchiveParentIds, setExpandedArchiveParentIds] = useState<Set<string>>(() => new Set())
+  const toggleArchivedChaptersFold = useCallback((parentNoteId: string) => {
+    setExpandedArchiveParentIds((previous) => {
+      const next = new Set(previous)
+      if (next.has(parentNoteId)) {
+        next.delete(parentNoteId)
+      } else {
+        next.add(parentNoteId)
+      }
+      return next
+    })
+  }, [])
+
   const collapsedPrimary = useMemo(() => new Set(persistedCollapsedPrimary), [persistedCollapsedPrimary])
   const collapsedSecondary = useMemo(() => new Set(persistedCollapsedSecondary), [persistedCollapsedSecondary])
   const lastHandledFocusRequestKeyRef = useRef(focusNoteRequestKey)
@@ -1628,20 +1653,51 @@ const CategoryTreeView = memo(function CategoryTreeView({
               {secondary.tertiary.map((tertiary) => (
                 <div key={`${primary.name}:${secondary.name}:${tertiary.name}`} className="category-tertiary-block">
                   <div className="category-tertiary-heading">{tertiary.name}</div>
-                  {tertiary.notes.map((note) => (
-                    <NoteListItem
-                      key={note.id}
-                      note={note}
-                      isActive={note.id === activeNoteId}
-                      onSelect={onSelect}
-                      onPrimedLeftClick={onPrimedLeftClick}
-                      primedAction={primedNoteActionById.get(note.id) ?? null}
-                      onRightPressStart={onNoteRightPressStart}
-                      onRightPressEnd={onNoteRightPressEnd}
-                      onMouseLeave={onNoteMouseLeave}
-                      variant="tree"
-                    />
-                  ))}
+                  {tertiary.notes.map((note) => {
+                    // A parent that's here purely because of its own
+                    // archived chapters (not itself archived) is a pure
+                    // fold-out toggle -- clicking it never opens the
+                    // editor, only shows/hides its own archived chapters
+                    // indented beneath it. A self-archived parent behaves
+                    // exactly like any other note row: click opens it (its
+                    // chapter bar shows every chapter regardless of
+                    // archived status -- see useNoteChapters.ts's virtual
+                    // merge), and it never gets a fold-out of its own here.
+                    const archivedChapters = archivedChaptersByParentId?.get(note.id)
+                    const isFoldOutParent = Boolean(archivedChapters?.length) && !isArchivedNote(note)
+                    const isExpanded = isFoldOutParent && expandedArchiveParentIds.has(note.id)
+                    return (
+                      <Fragment key={note.id}>
+                        <NoteListItem
+                          note={note}
+                          isActive={note.id === activeNoteId}
+                          onSelect={isFoldOutParent ? () => toggleArchivedChaptersFold(note.id) : onSelect}
+                          onPrimedLeftClick={onPrimedLeftClick}
+                          primedAction={primedNoteActionById.get(note.id) ?? null}
+                          onRightPressStart={onNoteRightPressStart}
+                          onRightPressEnd={onNoteRightPressEnd}
+                          onMouseLeave={onNoteMouseLeave}
+                          variant="tree"
+                        />
+                        {isExpanded ? archivedChapters!.map((chapter) => (
+                          <NoteListItem
+                            key={chapter.id}
+                            note={chapter}
+                            isActive={chapter.id === activeNoteId}
+                            onSelect={onSelect}
+                            onPrimedLeftClick={onPrimedLeftClick}
+                            primedAction={primedNoteActionById.get(chapter.id) ?? null}
+                            onRightPressStart={onNoteRightPressStart}
+                            onRightPressEnd={onNoteRightPressEnd}
+                            onMouseLeave={onNoteMouseLeave}
+                            variant="tree"
+                            chapterParentTitle={note.title}
+                            isArchiveFoldOutChapter
+                          />
+                        )) : null}
+                      </Fragment>
+                    )
+                  })}
                 </div>
               ))}
             </details>
@@ -6646,16 +6702,47 @@ ${markdownHtml}
     return filterNotesBySelectedDate(categoryNotes)
   }, [dateEligibleNotes, filterNotesBySelectedDate])
 
+  // A non-self-archived parent's own archived chapters -- detached (see
+  // detachChapter), so they carry no `chapters`-table row and would
+  // otherwise be unreachable anywhere. Keyed by parentNoteId
+  // (detachedChapterParentId), sorted alphabetically by title; this is the
+  // Archive tree's fold-out contents, not restore-order, so exact DB
+  // position doesn't matter here the way it does for the chapter bar's own
+  // virtual merge (useNoteChapters.ts, which reads position from the real
+  // IPC call instead). Built from searchedNotes, same as every other
+  // view-eligible list, so an active search also filters which archived
+  // chapters a fold-out shows.
+  const archivedChaptersByParentId = useMemo(() => {
+    const map = new Map<string, NoteSummary[]>()
+    for (const note of searchedNotes) {
+      if (!note.chapterOnly || !isArchivedNote(note) || !note.detachedChapterParentId) continue
+      const bucket = map.get(note.detachedChapterParentId)
+      if (bucket) {
+        bucket.push(note)
+      } else {
+        map.set(note.detachedChapterParentId, [note])
+      }
+    }
+    for (const bucket of map.values()) {
+      bucket.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
+    }
+    return map
+  }, [searchedNotes])
+
   const archiveEligibleNotes = useMemo(() => {
-    // Deliberately still excludes chapters, unlike trashEligibleNotes below
-    // (see its own comment) -- archive is a tag-grouped tree view, and a
-    // tagless chapter has no sensible bucket to land in there the way it
-    // does in trash's flat list. An archived chapter stays discoverable
-    // only through its parent's chapter bar (dimmed via the ghost
-    // convention, same as an archived pinned tab).
-    const archiveNotes = searchedNotes.filter((note) => isArchivedNote(note) && !isDeletedNote(note) && !isExternalNote(note) && !isChapterOnlyNote(note))
+    // Unlike categoryEligibleNotes, this also includes a parent that isn't
+    // itself archived but has at least one archived chapter -- its own
+    // fold-out row in the Archive tree (see CategoryTreeView), toggled
+    // open/closed rather than opened in the editor. A tagless chapter
+    // itself still never lands here directly -- same "no sensible bucket"
+    // reasoning as categoryEligibleNotes -- it only ever surfaces as a
+    // fold-out child of its qualifying parent.
+    const archiveNotes = searchedNotes.filter((note) => (
+      (isArchivedNote(note) || archivedChaptersByParentId.has(note.id))
+      && !isDeletedNote(note) && !isExternalNote(note) && !isChapterOnlyNote(note)
+    ))
     return filterNotesBySelectedDate(archiveNotes)
-  }, [filterNotesBySelectedDate, searchedNotes])
+  }, [filterNotesBySelectedDate, searchedNotes, archivedChaptersByParentId])
 
   const trashEligibleNotes = useMemo(() => {
     // Unlike every other menu view, a deleted chapter *does* show here --
@@ -8333,6 +8420,7 @@ ${markdownHtml}
                           onNoteRightPressStart={(noteId, event) => getActiveSection()?.handleNoteRightPressStart(noteId, event)}
                           onNoteRightPressEnd={(noteId, event) => getActiveSection()?.handleNoteRightPressEnd(noteId, event)}
                           onNoteMouseLeave={activeSection?.handleNoteMouseLeave}
+                          archivedChaptersByParentId={sidebarMode === 'archive' ? archivedChaptersByParentId : undefined}
                         />
                       </div>
                     )}

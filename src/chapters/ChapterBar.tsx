@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent, MouseEvent, WheelEvent as ReactWheelEvent } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { ChapterEntry } from '../shared/chapters'
@@ -9,15 +9,20 @@ import type { ChapterPillSplitArm } from './useChapterPillActions'
 
 export interface ChapterBarProps {
   parentNoteId: string
+  /** useNoteChapters.ts's own `chapters` (== `displayChapters` there): merged with the parent's archived-and-detached chapters when the parent itself is archived, otherwise identical to its live list -- see that hook's own doc comment. */
   chapters: ChapterEntry[]
+  /** Which of `chapters` above have no real `chapters`-table row (archived-and-detached, merged in purely for display) -- see useNoteChapters.ts's own doc comment. Undefined/empty whenever the parent isn't archived, since nothing is ever merged in then. */
+  archivedMergedChapterIds?: ReadonlySet<string>
   notes: NoteSummary[]
   /** The note actually loaded in the editor right now -- whichever tab (parent or chapter) matches this is shown active. */
   activeNoteId: string | null
   /** Switches back to the parent note's own content -- the first tab. */
   onParentTabClick: () => void
   onChapterClick: (chapterNoteId: string) => void
+  /** `index` is a position within useNoteChapters.ts's own *live-only* reorderableChapters, not `chapters` above -- an archived-merged chapter is never draggable (see the ghost-row rendering below), so this is only ever called with a real, live index. */
   onChapterDragStart: (event: DragEvent<HTMLDivElement>, index: number) => void
   onChapterDragEnd: () => void
+  /** Same live-only index space as onChapterDragStart -- an archived-merged chapter is never a drop target either. */
   onChapterDrop: (event: DragEvent<HTMLDivElement>, targetIndex: number) => void
   /** Which chapter pill (by chapterNoteId) is mid-inline-edit of its chapterId, if any. */
   editingChapterNoteId: string | null
@@ -108,6 +113,7 @@ export interface ChapterBarProps {
 export function ChapterBar({
   parentNoteId,
   chapters,
+  archivedMergedChapterIds,
   notes,
   activeNoteId,
   onParentTabClick,
@@ -142,8 +148,30 @@ export function ChapterBar({
   // on the main-process side by noteLifecycleService.ts's
   // getRealChapterRows) rather than a locally re-derived filter. Every
   // other chapter renders from `reorderableChapters` so drag-and-drop's
-  // index math (useNoteChapters.ts) never sees either of them.
+  // index math (useNoteChapters.ts) never sees either of them. Neither auto
+  // chapter can ever be archived-and-merged in, so `chapters` including
+  // merged entries doesn't change anything about this split.
   const { autoTocChapter, autoOpenItemsChapter, realChapters: reorderableChapters } = splitChapterFamily(chapters, notes)
+
+  // `reorderableChapters` above can include archived-merged ("ghost")
+  // entries interspersed with live ones when the parent is archived (see
+  // useNoteChapters.ts's own doc comment on `displayChapters`) -- but
+  // useNoteChapters.ts's onChapterDragStart/onChapterDrop handlers index
+  // into their OWN, separately-computed, *live-only* reorderableChapters.
+  // Passing a plain map-index here would silently target the wrong chapter
+  // (or a nonexistent one) the moment a ghost sits anywhere before the
+  // dragged/dropped pill. `liveIndex` instead only increments across real,
+  // live entries -- skipping ghosts entirely -- so it always lines up with
+  // that other, live-only array; a ghost's own `liveIndex` is -1 and is
+  // never passed anywhere (draggable=false, no drop handlers -- see below).
+  const reorderableChaptersWithLiveIndex = useMemo(() => {
+    let liveIndex = -1
+    return reorderableChapters.map((chapter) => {
+      const isGhost = archivedMergedChapterIds?.has(chapter.chapterNoteId) ?? false
+      if (!isGhost) liveIndex += 1
+      return { chapter, liveIndex: isGhost ? -1 : liveIndex }
+    })
+  }, [reorderableChapters, archivedMergedChapterIds])
 
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
@@ -221,12 +249,13 @@ export function ChapterBar({
             >
               <span className="fa-solid fa-book" aria-hidden="true" />
             </div>
-            {reorderableChapters.map((chapter, index) => {
-              const isEditing = editingChapterNoteId === chapter.chapterNoteId
+            {reorderableChaptersWithLiveIndex.map(({ chapter, liveIndex }, displayIndex) => {
+              const isGhost = liveIndex === -1
+              const isEditing = !isGhost && editingChapterNoteId === chapter.chapterNoteId
               const isActive = chapter.chapterNoteId === activeNoteId
               const note = notes.find((entry) => entry.id === chapter.chapterNoteId)
               const { text: label, isAssigned } = resolveIdentityLabel(chapter.chapterId, note?.contentText, 'chapter')
-              const isSplitArmed = splitArmedChapter?.chapterNoteId === chapter.chapterNoteId
+              const isSplitArmed = !isGhost && splitArmedChapter?.chapterNoteId === chapter.chapterNoteId
 
               return (
                 <InlinePillOrInput
@@ -237,7 +266,7 @@ export function ChapterBar({
                   onCommit={onCommitChapterIdEdit}
                   onCancel={onCancelChapterIdEdit}
                   className="tag-pill note-tab-pill chapter-pill chapter-id-input"
-                  ariaLabel={`Chapter ${index + 1} id`}
+                  ariaLabel={`Chapter ${displayIndex + 1} id`}
                 >
                   {isSplitArmed ? (
                     <div
@@ -264,23 +293,23 @@ export function ChapterBar({
                   ) : (
                     <div
                       key="pill"
-                      className={`tag-pill note-tab-pill chapter-pill${isActive ? ' is-active' : ''}`}
+                      className={`tag-pill note-tab-pill chapter-pill${isActive ? ' is-active' : ''}${isGhost ? ' is-archived-ghost' : ''}`}
                       data-chapter-note-id={chapter.chapterNoteId}
-                      draggable
-                      onDragStart={(event) => onChapterDragStart(event, index)}
-                      onDragEnd={onChapterDragEnd}
-                      onDragOver={(event) => {
+                      draggable={!isGhost}
+                      onDragStart={isGhost ? undefined : (event) => onChapterDragStart(event, liveIndex)}
+                      onDragEnd={isGhost ? undefined : onChapterDragEnd}
+                      onDragOver={isGhost ? undefined : (event) => {
                         event.preventDefault()
                         event.stopPropagation()
                         event.dataTransfer.dropEffect = 'move'
                       }}
-                      onDrop={(event) => onChapterDrop(event, index)}
+                      onDrop={isGhost ? undefined : (event) => onChapterDrop(event, liveIndex)}
                       onClick={() => onChapterClick(chapter.chapterNoteId)}
-                      onMouseDown={(event) => onChapterPillMouseDown(event, chapter.chapterNoteId)}
-                      onMouseUp={(event) => onChapterPillMouseUp(event, chapter.chapterNoteId)}
-                      onMouseLeave={() => onChapterPillMouseLeave(chapter.chapterNoteId)}
-                      onContextMenu={onChapterPillContextMenu}
-                      data-tooltip={label}
+                      onMouseDown={isGhost ? undefined : (event) => onChapterPillMouseDown(event, chapter.chapterNoteId)}
+                      onMouseUp={isGhost ? undefined : (event) => onChapterPillMouseUp(event, chapter.chapterNoteId)}
+                      onMouseLeave={isGhost ? undefined : () => onChapterPillMouseLeave(chapter.chapterNoteId)}
+                      onContextMenu={isGhost ? undefined : onChapterPillContextMenu}
+                      data-tooltip={isGhost ? `${label} (archived)` : label}
                     >
                       <span className={`tag-pill-label${isAssigned ? '' : ' tag-pill-label-derived'}`}>{label}</span>
                     </div>

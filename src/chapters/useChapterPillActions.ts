@@ -55,12 +55,12 @@ export interface UseChapterPillActionsResult {
  * A release before the hold completes is a quick right-click, which still
  * starts the existing chapterId rename (startEditingChapterId), unchanged.
  *
- * handleDeleteChapterClick is wired to the real delete-to-trash mutation
- * (tag the chapter 'deleted', detach it from menuIdentityNoteId's chapters
- * table via detachChapterForTrash -- see that method's own doc comment for
- * why detach rather than leave-and-filter); handleArchiveChapterClick is
- * still a stub, just clearing the armed state, pending archiving chapters'
- * own mechanics.
+ * handleDeleteChapterClick and handleArchiveChapterClick share the same
+ * detach mutation (databaseService.detachChapter -- see its own doc
+ * comment for why detach rather than leave-and-filter), each preceded by
+ * tagging the chapter 'deleted' or 'archived' respectively. Both leave the
+ * chapter bar (a detached chapter has no live `chapters` row either way),
+ * landing back on the parent if the detached chapter was the active note.
  */
 export function useChapterPillActions({
   chapters,
@@ -135,10 +135,37 @@ export function useChapterPillActions({
     event.preventDefault()
   }, [])
 
-  // TODO(chapter-archive-delete): wire to the real archive/delete mutations.
-  const handleArchiveChapterClick = useCallback((_chapterNoteId: string) => {
+  const handleArchiveChapterClick = useCallback((chapterNoteId: string) => {
     setSplitArmedChapter(null)
-  }, [])
+    if (!window.thockdownChapters || !persistenceReady || !menuIdentityNoteId) return
+    if (noteTransitionLockRef.current) return
+
+    noteTransitionLockRef.current = true
+    void (async () => {
+      try {
+        await flushPendingSaveNow()
+
+        const summary = notes.find((note) => note.id === chapterNoteId)
+        await applyProtectedTagDestination(chapterNoteId, summary?.tags ?? [], 'archived')
+        await window.thockdownChapters!.detachChapter(menuIdentityNoteId, chapterNoteId)
+
+        await refreshChapters()
+        const wasActive = activeNoteId === chapterNoteId
+        await refreshNotes(wasActive ? menuIdentityNoteId : activeNoteId)
+
+        // Same landing spot as delete: an archived chapter leaves the live
+        // chapter bar too (see detachChapter), so there's nothing left here
+        // to keep showing.
+        if (wasActive) {
+          await activateNote(menuIdentityNoteId)
+        }
+      } catch (error) {
+        console.error('Failed to archive chapter', error)
+      } finally {
+        noteTransitionLockRef.current = false
+      }
+    })()
+  }, [persistenceReady, menuIdentityNoteId, noteTransitionLockRef, flushPendingSaveNow, notes, refreshChapters, refreshNotes, activeNoteId, activateNote])
 
   const handleDeleteChapterClick = useCallback((chapterNoteId: string) => {
     setSplitArmedChapter(null)
@@ -152,7 +179,7 @@ export function useChapterPillActions({
 
         const summary = notes.find((note) => note.id === chapterNoteId)
         await applyProtectedTagDestination(chapterNoteId, summary?.tags ?? [], 'deleted')
-        await window.thockdownChapters!.detachChapterForTrash(menuIdentityNoteId, chapterNoteId)
+        await window.thockdownChapters!.detachChapter(menuIdentityNoteId, chapterNoteId)
 
         await refreshChapters()
         const wasActive = activeNoteId === chapterNoteId

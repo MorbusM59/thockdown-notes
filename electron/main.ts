@@ -1064,12 +1064,16 @@ function registerIpcHandlers() {
     return noteLifecycleService!.removeChapterAndSyncOpenItems(parentNoteId, chapterNoteId);
   });
 
-  ipcMain.handle(CHAPTER_CHANNELS.detachForTrash, async (_event, parentNoteId: string, chapterNoteId: string) => {
-    return noteLifecycleService!.detachChapterForTrash(parentNoteId, chapterNoteId);
+  ipcMain.handle(CHAPTER_CHANNELS.detach, async (_event, parentNoteId: string, chapterNoteId: string) => {
+    return noteLifecycleService!.detachChapter(parentNoteId, chapterNoteId);
   });
 
   ipcMain.handle(CHAPTER_CHANNELS.restoreDetached, async (_event, chapterNoteId: string) => {
     return noteLifecycleService!.restoreDetachedChapter(chapterNoteId);
+  });
+
+  ipcMain.handle(CHAPTER_CHANNELS.listIncludingArchived, async (_event, parentNoteId: string) => {
+    return databaseService!.listChaptersIncludingArchived(parentNoteId);
   });
 
   ipcMain.handle(CHAPTER_CHANNELS.setChapterId, async (_event, parentNoteId: string, chapterNoteId: string, requestedId: string) => {

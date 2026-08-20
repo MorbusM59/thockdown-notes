@@ -218,7 +218,7 @@ export type NoteRecord = {
   chapterParentId: string | null;
   /** This chapter's own user-assignable id (the `chapters.chapterId` column -- distinct from `assignedId`/`notes.assignedId`, which is a different, note-level `$id` field a chapterOnly note's own tag bar never exposes a way to set). Null when unset (or when this note isn't a chapter at all). See tabLabels.ts's resolveIdentityLabel for how this resolves to a display label alongside a derived-from-content fallback. */
   chapterId: string | null;
-  /** See detachChapterForTrash's own doc comment: where a detached chapter was detached FROM, while it's sitting in Trash. `chapterParentId` above is null for a detached chapter (it has no `chapters` row any more), so this is the only way to recover its parent while it's there. Null except during that detached window. */
+  /** See detachChapter's own doc comment: where a detached chapter was detached FROM, while it's sitting outside the `chapters` table (Trash or an Archive fold-out). `chapterParentId` above is null for a detached chapter (it has no `chapters` row any more), so this is the only way to recover its parent while it's there. Null except during that detached window. */
   detachedChapterParentId: string | null;
 };
 
@@ -1598,39 +1598,52 @@ export class DatabaseService {
   /**
    * Detaches a chapter from its parent's chapter list -- closing the gap
    * exactly like removeChapter -- but, unlike removeChapter, doesn't touch
-   * the note itself: records the parent + position being left behind
-   * (detachedChapterParentId/Position, on the note row) so
-   * restoreDetachedChapter can put it back exactly where it was. This is
-   * chapter delete's own mechanic (the note keeps existing, tagged
-   * 'deleted', reachable through trash) -- never used for a genuinely
-   * permanent removal (handleCollapseChapterIntoPrevious and friends still
-   * call plain removeChapter, immediately followed by deleteNote). A no-op,
-   * returning the unchanged chapter list, if `chapterNoteId` isn't
-   * currently attached to `parentNoteId`.
+   * the note itself: records the parent, position, and chapterId being
+   * left behind (detachedChapterParentId/Position/ChapterId, on the note
+   * row) so restoreDetachedChapter can put it back exactly where it was,
+   * assigned id and all. Tag-agnostic and shared by both of chapters' own
+   * protected-tag mechanics: delete (the note keeps existing, tagged
+   * 'deleted', reachable through trash) and archive (tagged 'archived',
+   * reachable through its parent's fold-out row in the Archive tree, or
+   * merged back into the chapter bar view-only when the parent itself is
+   * archived -- see App.tsx's useNoteChapters.ts chapter-list assembly) --
+   * never used for a genuinely permanent removal
+   * (handleCollapseChapterIntoPrevious and friends still call plain
+   * removeChapter, immediately followed by deleteNote). A no-op, returning
+   * the unchanged chapter list, if `chapterNoteId` isn't currently attached
+   * to `parentNoteId`.
    */
-  detachChapterForTrash(parentNoteId: string, chapterNoteId: string): ChapterEntry[] {
+  detachChapter(parentNoteId: string, chapterNoteId: string): ChapterEntry[] {
     const db = this.requireDb();
     const tx = db.transaction(() => {
-      const removed = db.prepare('SELECT position FROM chapters WHERE parentNoteId = ? AND chapterNoteId = ?').get(parentNoteId, chapterNoteId) as { position: number } | undefined;
+      const removed = db.prepare('SELECT position, chapterId FROM chapters WHERE parentNoteId = ? AND chapterNoteId = ?').get(parentNoteId, chapterNoteId) as { position: number; chapterId: string | null } | undefined;
       if (!removed) return;
       db.prepare('DELETE FROM chapters WHERE parentNoteId = ? AND chapterNoteId = ?').run(parentNoteId, chapterNoteId);
       db.prepare('UPDATE chapters SET position = position - 1 WHERE parentNoteId = ? AND position > ?').run(parentNoteId, removed.position);
-      db.prepare('UPDATE notes SET detachedChapterParentId = ?, detachedChapterPosition = ? WHERE id = ?').run(parentNoteId, removed.position, chapterNoteId);
+      // The sequence number is a single global counter (across every
+      // parent, not per-parent) -- all that matters is that it strictly
+      // increases with each detach, so listChaptersIncludingArchived can
+      // sort a parent's own archived chapters back into chronological
+      // (most-recently-detached-first) order for its reverse-replay merge.
+      const { nextSequence } = db.prepare('SELECT COALESCE(MAX(detachedChapterSequence), 0) + 1 AS nextSequence FROM notes').get() as { nextSequence: number };
+      db.prepare('UPDATE notes SET detachedChapterParentId = ?, detachedChapterPosition = ?, detachedChapterChapterId = ?, detachedChapterSequence = ? WHERE id = ?').run(parentNoteId, removed.position, removed.chapterId, nextSequence, chapterNoteId);
     });
     tx();
     return this.listChaptersForNote(parentNoteId);
   }
 
   /**
-   * The other half of detachChapterForTrash: reattaches a chapter at its
-   * remembered position, shifting every chapter at/after that position back
-   * by one to make room (same "insert with shift" shape as
-   * pinChapterToFront/pinChapterAfterAutoToc, just at an arbitrary
-   * position instead of a hardcoded one). The remembered position is
-   * clamped to the parent's *current* chapter count first, in case other
-   * chapters were added or removed while this one sat in trash -- otherwise
-   * a stale position past the current end would leave a gap instead of
-   * cleanly appending.
+   * The other half of detachChapter: reattaches a chapter at its remembered
+   * position (with its remembered chapterId, if it had one), shifting
+   * every chapter at/after that position back by one to make room (same
+   * "insert with shift" shape as pinChapterToFront/pinChapterAfterAutoToc,
+   * just at an arbitrary position instead of a hardcoded one). The
+   * remembered position is clamped to the parent's *current* chapter count
+   * first, in case other chapters were added or removed while this one sat
+   * detached -- otherwise a stale position past the current end would
+   * leave a gap instead of cleanly appending. Tag-agnostic, same as
+   * detachChapter -- the caller decides which protected tag (if any) to
+   * clear alongside calling this.
    *
    * Returns null (a no-op) if this note has no recorded detachment, or if
    * its remembered parent no longer exists -- in the latter case the
@@ -1641,13 +1654,13 @@ export class DatabaseService {
    */
   restoreDetachedChapter(chapterNoteId: string): { parentNoteId: string; chapters: ChapterEntry[] } | null {
     const db = this.requireDb();
-    const note = db.prepare('SELECT detachedChapterParentId, detachedChapterPosition FROM notes WHERE id = ?').get(chapterNoteId) as { detachedChapterParentId: string | null; detachedChapterPosition: number | null } | undefined;
+    const note = db.prepare('SELECT detachedChapterParentId, detachedChapterPosition, detachedChapterChapterId FROM notes WHERE id = ?').get(chapterNoteId) as { detachedChapterParentId: string | null; detachedChapterPosition: number | null; detachedChapterChapterId: string | null } | undefined;
     if (!note?.detachedChapterParentId || note.detachedChapterPosition === null) return null;
 
     const parentNoteId = note.detachedChapterParentId;
     const parentExists = db.prepare('SELECT 1 FROM notes WHERE id = ?').get(parentNoteId);
     if (!parentExists) {
-      db.prepare('UPDATE notes SET detachedChapterParentId = NULL, detachedChapterPosition = NULL WHERE id = ?').run(chapterNoteId);
+      db.prepare('UPDATE notes SET detachedChapterParentId = NULL, detachedChapterPosition = NULL, detachedChapterChapterId = NULL, detachedChapterSequence = NULL WHERE id = ?').run(chapterNoteId);
       return null;
     }
 
@@ -1656,13 +1669,65 @@ export class DatabaseService {
       const insertPosition = Math.min(note.detachedChapterPosition!, (maxPosition ?? -1) + 1);
 
       db.prepare('UPDATE chapters SET position = position + 1 WHERE parentNoteId = ? AND position >= ?').run(parentNoteId, insertPosition);
-      db.prepare('INSERT INTO chapters (parentNoteId, position, chapterNoteId) VALUES (?, ?, ?)').run(parentNoteId, insertPosition, chapterNoteId);
-      db.prepare('UPDATE notes SET detachedChapterParentId = NULL, detachedChapterPosition = NULL WHERE id = ?').run(chapterNoteId);
+      db.prepare('INSERT INTO chapters (parentNoteId, position, chapterNoteId, chapterId) VALUES (?, ?, ?, ?)').run(parentNoteId, insertPosition, chapterNoteId, note.detachedChapterChapterId);
+      db.prepare('UPDATE notes SET detachedChapterParentId = NULL, detachedChapterPosition = NULL, detachedChapterChapterId = NULL, detachedChapterSequence = NULL WHERE id = ?').run(chapterNoteId);
 
       return this.listChaptersForNote(parentNoteId);
     })();
 
     return { parentNoteId, chapters };
+  }
+
+  /**
+   * The read-only "virtual merge" that lets an *archived* parent's own
+   * chapter bar show every chapter, live or archived-and-detached, without
+   * writing anything back to the `chapters` table (see detachChapter's own
+   * doc comment for why a detached chapter has no row there at all). Takes
+   * the parent's live chapters and splices its own archived-and-detached
+   * ones back in, one at a time, at each one's own remembered position --
+   * but processed in DESCENDING detachedChapterSequence order (the most
+   * recently detached one first). That order matters: undoing a sequence
+   * of removals in the exact reverse of the order they happened always
+   * reconstructs the original list exactly, since each step's clamped
+   * insert exactly reverses that step's own removal against the state that
+   * existed at that moment -- unlike sorting by remembered position alone,
+   * which only happens to be correct when there's just one archived
+   * chapter to restore. Purely a rendering-time concern; nothing here
+   * writes anything back, so leaving this view (or archiving/restoring
+   * another chapter elsewhere) never has to undo it. Only meaningfully
+   * different from listChaptersForNote when the parent itself is archived
+   * (a non-archived parent's own archived chapters belong in the Archive
+   * tree's fold-out instead, built client-side from NoteSummary fields --
+   * see App.tsx -- since that ordering is cosmetic, not a reconstruction).
+   */
+  listChaptersIncludingArchived(parentNoteId: string): ChapterEntry[] {
+    const db = this.requireDb();
+    const live = this.listChaptersForNote(parentNoteId).sort((a, b) => a.position - b.position);
+
+    const archivedRows = db.prepare(`
+      SELECT n.id AS chapterNoteId, n.detachedChapterPosition AS position, n.detachedChapterChapterId AS chapterId
+      FROM notes n
+      WHERE n.chapterOnly = 1
+        AND n.detachedChapterParentId = ?
+        AND n.id IN (
+          SELECT nt.noteId FROM note_tags nt
+          JOIN tags t ON nt.tagId = t.id
+          WHERE t.name = 'archived'
+        )
+      ORDER BY n.detachedChapterSequence DESC
+    `).all(parentNoteId) as Array<{ chapterNoteId: string; position: number; chapterId: string | null }>;
+
+    let merged = live;
+    for (const row of archivedRows) {
+      const insertAt = Math.min(row.position, merged.length);
+      merged = [
+        ...merged.slice(0, insertAt),
+        { parentNoteId, position: row.position, chapterNoteId: row.chapterNoteId, chapterId: row.chapterId },
+        ...merged.slice(insertAt),
+      ];
+    }
+
+    return merged.map((chapter, index) => ({ ...chapter, position: index }));
   }
 
   /** Rewrites every chapter's position from an explicit final order -- used for drag-reorder. No UNIQUE(parentNoteId, position) constraint (mirroring reorderNoteTabs) since a straight per-row position rewrite can transiently collide mid-transaction otherwise. */
@@ -1754,12 +1819,11 @@ export class DatabaseService {
    * Permanently deletes a note. If it's a parent, every one of its chapters
    * cascade-deletes with it -- chapters have no life outside their parent
    * (see `chapters` table doc) -- regardless of that chapter's own
-   * archived/deleted status: a chapter currently attached (live, or
-   * carrying its own `archived`/`deleted` tag but not yet detached) is
-   * swept via the `chapters` table; a chapter currently DETACHED (sitting
-   * in Trash via detachChapterForTrash, no `chapters` row any more) is
-   * swept via its own `detachedChapterParentId`, or it would otherwise be
-   * left behind as an orphaned note nothing can ever reach again (no
+   * archived/deleted status: a plain attached (live, untagged) chapter is
+   * swept via the `chapters` table; a chapter currently DETACHED (tagged
+   * 'deleted' or 'archived' via detachChapter, no `chapters` row any more)
+   * is swept via its own `detachedChapterParentId`, or it would otherwise
+   * be left behind as an orphaned note nothing can ever reach again (no
    * `chapters` row to show it in a chapter bar, no live parent to restore
    * it to). `ON DELETE CASCADE` alone isn't enough for either case: it only
    * removes the `chapters` join row, not the chapter's own `notes` row, and
@@ -3488,19 +3552,29 @@ export class DatabaseService {
     // neighbors. Same "dedicated flag, not a reserved chapterId" reasoning
     // as isAutoToc just above.
     this.ensureNotesColumn('isAutoOpenItems', 'INTEGER NOT NULL DEFAULT 0');
-    // Where a chapter was detached FROM, while it's sitting in trash (its own
-    // 'deleted' protected tag applied) -- see detachChapterForTrash's own
-    // doc comment for why this can't just live in the `chapters` table
-    // itself (a detached chapter has no row there at all, by design: it
-    // needs to be invisible to every single one of the many call sites that
-    // already treat "has a chapters row" as "is a live chapter of this
-    // parent" -- getChapterParent, listChaptersForNote, TOC/Open-Items
-    // generation, ... -- rather than requiring every one of them to also
-    // remember to check a tag). Both null except during that detached
+    // Where a chapter was detached FROM, while it's sitting outside the
+    // `chapters` table entirely with its own 'deleted' or 'archived'
+    // protected tag applied -- see detachChapter's own doc comment for why
+    // this can't just live in the `chapters` table itself (a detached
+    // chapter has no row there at all, by design: it needs to be invisible
+    // to every single one of the many call sites that already treat "has a
+    // chapters row" as "is a live chapter of this parent" --
+    // getChapterParent, listChaptersForNote, TOC/Open-Items generation,
+    // ... -- rather than requiring every one of them to also remember to
+    // check a tag). ChapterId is remembered too, so restoring/reattaching
+    // doesn't lose an assigned id along the way. Sequence is a single
+    // global (not per-parent) monotonic counter, stamped fresh on every
+    // detach -- listChaptersIncludingArchived needs it to know which of a
+    // parent's own several archived chapters was detached most recently,
+    // to replay them back in the right order (see that method's own doc
+    // comment for why detach order, not remembered position, is what makes
+    // its reconstruction exact). All four null except during that detached
     // window; restoreDetachedChapter clears them back to null once it
     // reattaches.
     this.ensureNotesColumn('detachedChapterParentId', 'TEXT');
     this.ensureNotesColumn('detachedChapterPosition', 'INTEGER');
+    this.ensureNotesColumn('detachedChapterChapterId', 'TEXT');
+    this.ensureNotesColumn('detachedChapterSequence', 'INTEGER');
     this.ensureChaptersColumn('chapterId', 'TEXT');
     // Deliberately after ensureChaptersColumn, not inside the CREATE TABLE
     // block above: on a database that already had a `chapters` table before
@@ -3661,8 +3735,8 @@ export class DatabaseService {
    * parent can't be reached from anywhere -- it isn't shown in any menu
    * view, it isn't anyone's chapter, and nothing can ever restore it.
    * Cleans up leftovers from prior states/bugs rather than leaving them
-   * permanently invisible. A chapter currently DETACHED (sitting in Trash
-   * via detachChapterForTrash) also has no `chapters` row, by design --
+   * permanently invisible. A chapter currently DETACHED (via detachChapter,
+   * sitting in Trash or an Archive fold-out) also has no `chapters` row, by design --
    * but that's a legitimate, restorable state, not orphan garbage, as long
    * as `detachedChapterParentId` still points at a note that exists
    * (deleteNote purges a parent's detached chapters right alongside its

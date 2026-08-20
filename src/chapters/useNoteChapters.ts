@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import type { ChapterEntry } from '../shared/chapters'
 import { splitChapterFamily } from '../shared/chapters'
-import type { NoteSummary } from '../shared/noteLifecycle'
+import { isArchivedNote, type NoteSummary } from '../shared/noteLifecycle'
 import type { EditorSelectionState } from '../editor/EditorContract'
 import { collapseSurgerySite, trimBlankLines } from './chapterExtraction'
 import { useInlinePillEdit } from '../shared/useInlinePillEdit'
+
+const EMPTY_STRING_SET: ReadonlySet<string> = new Set()
 
 export interface UseNoteChaptersOptions {
   /** The note identity the chapter bar shows chapters *of* -- the chapter-aware "menu identity" (see EditorSection.tsx's `menuIdentityNoteId`), never a chapter's own id (chapters can't have chapters in this UI). */
@@ -30,7 +32,10 @@ export interface UseNoteChaptersOptions {
 }
 
 export interface UseNoteChaptersResult {
+  /** The chapter bar's render source. Merged with the parent's own archived-and-detached chapters when the parent itself is archived (every chapter, regardless of archived status -- see the doc comment on `displayChapters` at the definition site); identical to the live-only list otherwise. Every mutation path in this hook (reorder, create, collapse, chapterId edit, ...) reads and writes its own internal live-only state instead, never this. */
   chapters: ChapterEntry[]
+  /** Which of `chapters` above have no real `chapters`-table row (archived-and-detached, merged in purely for display) -- see ChapterBar.tsx's own doc comment for what it disables on those. Empty whenever the parent isn't archived. */
+  archivedMergedChapterIds: ReadonlySet<string>
   /** Re-fetches `chapters` from the backend -- see its own doc comment at the definition site for why this needs to be called explicitly after saves. */
   refreshChapters: () => Promise<void>
   /** Creates a new empty chapter of `menuIdentityNoteId` and immediately loads it into the editor. */
@@ -179,6 +184,57 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
       cancelled = true
     }
   }, [persistenceReady, menuIdentityNoteId])
+
+  // Whether the chapter bar's own parent is itself archived -- the one
+  // case where its chapter bar needs to show every chapter, live or
+  // archived-and-detached, regardless of that chapter's own status (see
+  // App.tsx's archive-view rules). `chapters` (above) stays live-only,
+  // always -- every reorder/create/collapse/chapterId-edit path in this
+  // hook keeps reading and writing that raw state, unchanged, since an
+  // archived-and-detached chapter has no real `chapters`-table row for any
+  // of those to safely operate against. The merged view assembled below is
+  // purely a display-time overlay on top of it.
+  const menuIdentityNoteSummary = useMemo(() => (
+    menuIdentityNoteId ? (notes.find((note) => note.id === menuIdentityNoteId) ?? null) : null
+  ), [notes, menuIdentityNoteId])
+  const isMenuIdentityArchived = menuIdentityNoteSummary ? isArchivedNote(menuIdentityNoteSummary) : false
+
+  const [archivedMergedChapters, setArchivedMergedChapters] = useState<ChapterEntry[]>([])
+
+  useEffect(() => {
+    if (!persistenceReady || !window.thockdownChapters || !menuIdentityNoteId || !isMenuIdentityArchived) {
+      setArchivedMergedChapters([])
+      return
+    }
+    let cancelled = false
+    void window.thockdownChapters.listChaptersIncludingArchived(menuIdentityNoteId).then((entries) => {
+      if (!cancelled) setArchivedMergedChapters(entries)
+    })
+    return () => {
+      cancelled = true
+    }
+    // Re-fetches whenever `chapters` itself changes for any reason (a new
+    // chapter created, one collapsed/reordered, a save patching the
+    // auto-Open-Items group, ...) -- keeps the merged view in sync without
+    // having to thread an explicit refresh call through every one of this
+    // hook's own mutation paths.
+  }, [persistenceReady, menuIdentityNoteId, isMenuIdentityArchived, chapters])
+
+  // The chapter bar's actual render source -- merged when the parent is
+  // archived, otherwise identical to the live list. `archivedMergedChapterIds`
+  // marks which of `displayChapters` have no real `chapters`-table row, so
+  // ChapterBar.tsx can render them non-interactively (no drag, no split-pill
+  // hold gesture, no chapterId rename -- none of those have anywhere real to
+  // write to). persistReorderedChapters below also uses this set as a
+  // belt-and-suspenders guard against ever sending one of these ids through
+  // reorderChapters, regardless of how it ended up mixed into a dragged
+  // sequence.
+  const displayChapters = isMenuIdentityArchived ? archivedMergedChapters : chapters
+  const archivedMergedChapterIds = useMemo(() => {
+    if (!isMenuIdentityArchived) return EMPTY_STRING_SET
+    const liveIds = new Set(chapters.map((chapter) => chapter.chapterNoteId))
+    return new Set(archivedMergedChapters.filter((chapter) => !liveIds.has(chapter.chapterNoteId)).map((chapter) => chapter.chapterNoteId))
+  }, [isMenuIdentityArchived, chapters, archivedMergedChapters])
 
   // Re-fetches this note's chapters from the backend and syncs local state --
   // called (via EditorSection.tsx's onSaveCompleted, since useNoteSaveQueue is
@@ -656,17 +712,24 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
   // Persists a new order for the reorderable subset, always re-prepending
   // the pinned auto-chapters (if any) first -- reorderChapters rewrites
   // every position from this exact list, so leaving one out (or sending it
-  // anywhere but first) would un-pin it.
+  // anywhere but first) would un-pin it. Also strips out any
+  // archived-merged id (belt-and-suspenders: those are never draggable and
+  // never a drop target to begin with -- see ChapterBar.tsx -- but this is
+  // the one place that would actually corrupt live chapters' positions if
+  // one ever slipped through, by assigning them position numbers that
+  // count a phantom entry with no real `chapters` row).
   const persistReorderedChapters = useCallback(async (reorderedReorderable: ChapterEntry[]) => {
     if (!window.thockdownChapters || !menuIdentityNoteId) return
     const orderedChapterNoteIds = [
       ...(autoTocChapterNoteId !== null ? [autoTocChapterNoteId] : []),
       ...(autoOpenItemsChapterNoteId !== null ? [autoOpenItemsChapterNoteId] : []),
-      ...reorderedReorderable.map((chapter) => chapter.chapterNoteId),
+      ...reorderedReorderable
+        .filter((chapter) => !archivedMergedChapterIds.has(chapter.chapterNoteId))
+        .map((chapter) => chapter.chapterNoteId),
     ]
     const updatedChapters = await window.thockdownChapters.reorderChapters(menuIdentityNoteId, orderedChapterNoteIds)
     setChapters(updatedChapters)
-  }, [menuIdentityNoteId, autoTocChapterNoteId, autoOpenItemsChapterNoteId])
+  }, [menuIdentityNoteId, autoTocChapterNoteId, autoOpenItemsChapterNoteId, archivedMergedChapterIds])
 
   const handleChapterDrop = useCallback(async (event: DragEvent<HTMLDivElement>, targetIndex: number) => {
     if (draggedChapterIndex === null) return
@@ -719,7 +782,8 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
   }, [chapters, startChapterIdEdit])
 
   return {
-    chapters,
+    chapters: displayChapters,
+    archivedMergedChapterIds,
     refreshChapters,
     handleCreateChapter,
     handleChapterClick,
