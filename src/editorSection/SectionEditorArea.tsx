@@ -268,6 +268,20 @@ export function SectionEditorArea({
   // button below, which opens the panel as a side effect of chapters.length
   // becoming positive, not by toggling visibility directly.
   const isChapterPanelOpen = chapters.length > 0
+
+  // Help mode takes over this section's whole editor slot -- it renders its
+  // own copy of the editor-viewer-frame/editor-shell/editor-stage/
+  // editor-scrollbar-slot/chapter-panel skeleton below (HelpModeOverlay.tsx)
+  // so the User Guide's chapter bar lands in the exact same bottom-anchored
+  // spot a real note's chapter bar does, rather than nesting inside
+  // editor-stage as a top-of-column overlay. Early return, not a branch
+  // inside the JSX below, since none of the real editor's own containers
+  // (edit-container, the real ChapterBar, the wordcount/timeline footer)
+  // apply to the read-only guide.
+  if (isHelpModeActive && isSectionActive) {
+    return <HelpModeOverlay notes={notes} onClose={onHelpModeClose} />
+  }
+
   // isViewingAutoTocChapter/isViewingAutoOpenItemsChapter (props -- see
   // their own doc comment) each make the editor read-only below, for
   // different reasons. TOC: it's regenerated (overwritten) the instant it's
@@ -289,9 +303,6 @@ export function SectionEditorArea({
       <main className={`editor-shell${isChapterPanelOpen ? ' chapter-panel-is-open' : ''}`}>
         <div className="editor-background">
           <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}`}>
-            {isHelpModeActive && isSectionActive ? (
-              <HelpModeOverlay notes={notes} onClose={onHelpModeClose} />
-            ) : null}
             {isEscapeHoldPanelOpen && isSectionActive && activeNoteId ? (
               <div
                 className="editor-escape-hold-overlay"
