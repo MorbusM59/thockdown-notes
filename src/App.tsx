@@ -147,7 +147,7 @@ import { normalizeInternalText } from './editor/TextPolicy'
 import { truncateTitle } from './shared/textSanitization'
 import { deriveNoteTitleFromText, deriveNoteTitleIncremental, type NoteTitleCache } from './shared/noteTitle'
 import { isNoteSearchQueryActive, matchesNoteSearchQuery } from './shared/noteSearch'
-import { ESCAPE_HOLD_MS, didEscapeHoldTrigger } from './shared/escapeHold'
+import { ESCAPE_HOLD_MS } from './shared/escapeHold'
 import {
   deriveRenderScrollDynamicFromResponsiveness,
   deriveRenderScrollResponsivenessFromDynamic,
