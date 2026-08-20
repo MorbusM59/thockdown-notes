@@ -537,6 +537,38 @@
   font-size: 1.15rem;
 }
 
+/* Help mode: takes over the whole editor stage (same footprint as the
+   escape-hold overlay, but persistent while open rather than a transient
+   dialog) -- see HelpModeOverlay.tsx. Sits below the escape-hold overlay's
+   own z-index (12) since the two are mutually exclusive in practice: the
+   global Escape handler closes help mode on the very first tap, so the
+   hold-panel never gets a chance to open over it. */
+.editor-stage .editor-help-mode-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  background: var(--background-color-root);
+}
+
+.editor-help-mode-overlay .help-mode-chapter-bar {
+  flex: 0 0 auto;
+  padding-top: var(--spacing-large);
+}
+
+.editor-help-mode-overlay .help-mode-render-container {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.editor-help-mode-overlay .help-mode-close-button {
+  position: absolute;
+  top: var(--spacing-large);
+  right: var(--spacing-large);
+  z-index: 1;
+}
+
 /* Hide native cursor and caret app-wide when using the custom mouse overlay
    (MouseCursorOverlay.tsx). Applied via .app-root's own React-owned
    className in App.tsx, not via imperative classList mutation -- a node

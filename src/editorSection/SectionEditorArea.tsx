@@ -14,6 +14,7 @@ import { resolveSpellCheckSurfaceState } from '../shared/spellCheckPolicy'
 import { ChapterBar } from '../chapters/ChapterBar'
 import type { ChapterPillSplitArm } from '../chapters/useChapterPillActions'
 import { EscapeHoldPanel } from './EscapeHoldPanel'
+import { HelpModeOverlay } from '../helpMode/HelpModeOverlay'
 
 export interface SectionEditorAreaProps {
   sectionId: string
@@ -40,8 +41,11 @@ export interface SectionEditorAreaProps {
   onEscapeHoldCreateChapter: () => void | Promise<void>
   onEscapeHoldExportPdf: () => void | Promise<void>
   onEscapeHoldExportMd: () => void | Promise<void>
+  onEscapeHoldOpenHelp: () => void | Promise<void>
   isExportingPdf: boolean
   isExportingMd: boolean
+  isHelpModeActive: boolean
+  onHelpModeClose: () => void
   spellCheckEditEnabled: boolean
   previewTextureRef: RefObject<HTMLDivElement>
   previewScrollRef: RefObject<HTMLDivElement>
@@ -153,8 +157,11 @@ export function SectionEditorArea({
   onEscapeHoldCreateChapter,
   onEscapeHoldExportPdf,
   onEscapeHoldExportMd,
+  onEscapeHoldOpenHelp,
   isExportingPdf,
   isExportingMd,
+  isHelpModeActive,
+  onHelpModeClose,
   spellCheckEditEnabled,
   previewTextureRef,
   previewScrollRef,
@@ -282,6 +289,9 @@ export function SectionEditorArea({
       <main className={`editor-shell${isChapterPanelOpen ? ' chapter-panel-is-open' : ''}`}>
         <div className="editor-background">
           <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}`}>
+            {isHelpModeActive && isSectionActive ? (
+              <HelpModeOverlay notes={notes} onClose={onHelpModeClose} />
+            ) : null}
             {isEscapeHoldPanelOpen && isSectionActive && activeNoteId ? (
               <div
                 className="editor-escape-hold-overlay"
@@ -304,6 +314,7 @@ export function SectionEditorArea({
                       onCreateChapter={onEscapeHoldCreateChapter}
                       onExportPdf={onEscapeHoldExportPdf}
                       onExportMd={onEscapeHoldExportMd}
+                      onOpenHelp={onEscapeHoldOpenHelp}
                       onClose={onEscapeHoldPanelClose}
                     />
                   </div>

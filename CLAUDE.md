@@ -7,7 +7,7 @@ This project's documentation is kept deliberately small. These are the load-bear
 
 ## Living documents (update these, not README, when things change)
 - [electron/help/helpNoteContent.ts](electron/help/helpNoteContent.ts) — the welcome note seeded into an empty database.
-- [electron/help/helpReferenceContent.ts](electron/help/helpReferenceContent.ts) — the in-app `$HELP` reference note. This is the canonical user-facing documentation. **Update it whenever a user-facing functional change ships.**
+- [electron/help/helpGuideContent.ts](electron/help/helpGuideContent.ts) — prose for the in-app `$HELP` User Guide (a protected parent note + one real chapter per topic, seeded/re-seeded every startup by `electron/help/helpGuideNote.ts`; ids live in `src/shared/helpGuide.ts`; the read-only viewer is `src/helpMode/HelpModeOverlay.tsx`, opened from the escape-hold quick-actions menu's Help button). This is the canonical user-facing documentation. **Update it whenever a user-facing functional change ships.**
 - [docs/document-scale-performance-philosophy.md](docs/document-scale-performance-philosophy.md) + [docs/large-document-performance-handover.md](docs/large-document-performance-handover.md) — the standing contract and session-to-session handover for the large-document performance effort, currently in progress. Read the handover doc before touching editor/performance code; keep it current when handing off between sessions.
 - [docs/cm6-parity-hardening-plan.md](docs/cm6-parity-hardening-plan.md) — plan and session handover for post-CM6-migration work: correctness bugs, an audit of which performance-effort infrastructure actually earned its keep, and further performance exploration. The Lexical fallback (`Editor.tsx` and everything Lexical-only) was fully removed once CM6 was confirmed production-ready — CM6Editor.tsx is now the sole editor implementation, no rollback path exists. Read before touching CM6/editor-parity/caret-selection code; keep it current when handing off.
 - [TODO.md](TODO.md) — small open-items backlog.
@@ -28,7 +28,7 @@ Two tiers, chosen by judgment, not by rote:
 When unsure which tier applies, ask rather than defaulting to the expensive path.
 
 ## README.md
-Keep it barebones: version, install instructions, per-OS build instructions, and release-artifact layout only. Anything else (usage, features) belongs in `helpReferenceContent.ts`, referenced from README, not duplicated into it.
+Keep it barebones: version, install instructions, per-OS build instructions, and release-artifact layout only. Anything else (usage, features) belongs in `helpGuideContent.ts`, referenced from README, not duplicated into it.
 
 ## Docs hygiene
 Point-in-time planning/migration records (phase trackers, decision ledgers, validation matrices) are not kept once their work ships — the shipped code and the docs above are the source of truth. Don't recreate that pattern; if a doc is a snapshot of a finished effort, fold anything non-obvious into the relevant living doc or TODO.md and delete it rather than archiving it.

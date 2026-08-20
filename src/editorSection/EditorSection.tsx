@@ -200,8 +200,11 @@ export function EditorSection({
   onEscapeHoldCreateChapter,
   onEscapeHoldExportPdf,
   onEscapeHoldExportMd,
+  onEscapeHoldOpenHelp,
   isExportingPdf,
   isExportingMd,
+  isHelpModeActive,
+  onHelpModeClose,
   isLeftmostSection,
   canCreateSection,
   onCreateSection,
@@ -1698,6 +1701,7 @@ export function EditorSection({
         activeNoteId={activeNoteId}
         tabIdentityNoteId={menuIdentityNoteId}
         notes={notes}
+        isHelpModeActive={isHelpModeActive}
         isLeftmostSection={isLeftmostSection}
         canCreateSection={canCreateSection}
         onCreateSection={onCreateSection}
@@ -1744,8 +1748,11 @@ export function EditorSection({
         onEscapeHoldCreateChapter={onEscapeHoldCreateChapter}
         onEscapeHoldExportPdf={onEscapeHoldExportPdf}
         onEscapeHoldExportMd={onEscapeHoldExportMd}
+        onEscapeHoldOpenHelp={onEscapeHoldOpenHelp}
         isExportingPdf={isExportingPdf}
         isExportingMd={isExportingMd}
+        isHelpModeActive={isHelpModeActive}
+        onHelpModeClose={onHelpModeClose}
         spellCheckEditEnabled={spellCheckEditEnabled}
         previewTextureRef={previewTextureRef}
         previewScrollRef={previewScrollRef}

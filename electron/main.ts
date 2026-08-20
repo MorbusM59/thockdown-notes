@@ -21,6 +21,7 @@ import { CHAPTER_CHANNELS } from '../src/shared/chapters'
 import { REVIEW_FLAG_CHANNELS } from '../src/shared/reviewFlags'
 import type { ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags'
 import { WINDOW_DRAG_CHANNELS } from '../src/shared/windowDrag'
+import { ensureHelpGuide } from './help/helpGuideNote'
 
 // Defense in depth: if something throws outside of a path we've explicitly
 // wrapped (e.g. during startup, before a window exists to show an in-app
@@ -1412,6 +1413,7 @@ app.whenReady().then(async () => {
     console.warn('[db] startup sanity issues', sanity)
   }
   registerIpcHandlers()
+  await ensureHelpGuide(databaseService, noteLifecycleService!)
 
   // Proxy thockdown-music:// → file system reads so the renderer can load local
   // audio files regardless of origin (http://localhost in dev, file:// in prod).

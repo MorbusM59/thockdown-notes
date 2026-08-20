@@ -18,6 +18,8 @@ export interface SectionTabBarProps {
   /** Which pinned-tab pill to highlight as active -- the chapter-aware identity (see useSectionTabs.ts's `tabIdentityNoteId`), not necessarily `activeNoteId` itself. */
   tabIdentityNoteId: string | null
   notes: NoteSummary[]
+  /** While true, this section's help-mode overlay (HelpModeOverlay.tsx) is showing -- the identity/tab/tag area collapses to a static "User Guide" label instead of the section's own tabs or tags, since none of that applies to the protected guide note. */
+  isHelpModeActive: boolean
   /** The leftmost section keeps the sidebar toggle at the left edge; every other section shows a close button there instead. */
   isLeftmostSection: boolean
   /** Whether there's room for one more 300px-minimum section -- hides the "+" button when there isn't. */
@@ -68,6 +70,7 @@ export function SectionTabBar({
   activeNoteId,
   tabIdentityNoteId,
   notes,
+  isHelpModeActive,
   isLeftmostSection,
   canCreateSection,
   onCreateSection,
@@ -188,6 +191,14 @@ export function SectionTabBar({
         <span className="fa-solid fa-tags" aria-hidden="true" />
       </button>
 
+      {isHelpModeActive ? (
+        <div className="section-identity-tab-shell">
+          <div className="tag-pill section-identity-tab is-help-mode" data-tooltip="Viewing the User Guide">
+            <span className="tag-pill-label">User Guide</span>
+          </div>
+        </div>
+      ) : (
+      <>
       {tabBarMode === 'tabs' ? (
         <div className="section-identity-tab-shell">
           {isEditingSectionName ? (
@@ -491,6 +502,8 @@ export function SectionTabBar({
           </>
         )}
       </div>
+      )}
+      </>
       )}
 
       {canCreateSection ? (

@@ -9,6 +9,7 @@ export interface EscapeHoldPanelProps {
   onCreateChapter: () => void | Promise<void>
   onExportPdf: () => void | Promise<void>
   onExportMd: () => void | Promise<void>
+  onOpenHelp: () => void | Promise<void>
   onClose: () => void
 }
 
@@ -25,7 +26,7 @@ const GRID_SIZE = COLUMNS * ROWS
 
 /**
  * The 3x3 quick-actions grid shown by the escape-hold overlay
- * (SectionEditorArea.tsx). Only the first four cells are wired to real
+ * (SectionEditorArea.tsx). Only the first five cells are wired to real
  * actions today -- the rest are inert placeholders that exist so the grid's
  * full shape is there to design/extend into, and so arrow-key navigation
  * has real corners and edges to be exercised against, not just a 2x2 patch.
@@ -50,6 +51,7 @@ export function EscapeHoldPanel({
   onCreateChapter,
   onExportPdf,
   onExportMd,
+  onOpenHelp,
   onClose,
 }: EscapeHoldPanelProps) {
   const hasActiveNote = Boolean(activeNoteId)
@@ -60,9 +62,10 @@ export function EscapeHoldPanel({
       { label: 'New Chapter', icon: 'fa-solid fa-book-medical', onSelect: onCreateChapter, disabled: !hasActiveNote },
       { label: 'Export PDF', icon: 'fa-solid fa-file-pdf', onSelect: onExportPdf, disabled: !hasActiveNote || isExportingPdf },
       { label: 'Export MD', icon: 'fa-solid fa-file-code', onSelect: onExportMd, disabled: !hasActiveNote || isExportingMd },
+      { label: 'Help', icon: 'fa-solid fa-circle-question', onSelect: onOpenHelp, disabled: false },
     ]
     return [...actions, ...new Array(GRID_SIZE - actions.length).fill(null)]
-  }, [hasActiveNote, isExportingPdf, isExportingMd, onCreateNote, onCreateChapter, onExportPdf, onExportMd])
+  }, [hasActiveNote, isExportingPdf, isExportingMd, onCreateNote, onCreateChapter, onExportPdf, onExportMd, onOpenHelp])
 
   const firstEnabledIndex = useMemo(() => {
     const index = cells.findIndex((cell) => cell && !cell.disabled)

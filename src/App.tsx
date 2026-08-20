@@ -148,6 +148,7 @@ import { truncateTitle } from './shared/textSanitization'
 import { deriveNoteTitleFromText, deriveNoteTitleIncremental, type NoteTitleCache } from './shared/noteTitle'
 import { isNoteSearchQueryActive, matchesNoteSearchQuery } from './shared/noteSearch'
 import { ESCAPE_HOLD_MS } from './shared/escapeHold'
+import { HELP_GUIDE_NOTE_IDS } from './shared/helpGuide'
 import {
   deriveRenderScrollDynamicFromResponsiveness,
   deriveRenderScrollResponsivenessFromDynamic,
@@ -1904,6 +1905,22 @@ function App() {
     escapeHoldTriggeredRef.current = false
     escapeFreshCycleWhilePanelOpenRef.current = false
   }, [clearEscapeHoldTimer])
+  // The User Guide overlay (HelpModeOverlay.tsx) -- entered from the escape-
+  // hold quick-actions panel's Help button, closed by a single Escape tap
+  // (top priority in the global Escape handler below, ahead of every other
+  // branch there, since it should close on the very first press, not a
+  // hold). Deliberately a single boolean scoped to "whichever section is
+  // active," the same pattern isEscapeHoldPanelOpen already uses -- only one
+  // section is ever active at a time in this app, so there's no risk of two
+  // sections racing over one flag.
+  const [isHelpModeActive, setIsHelpModeActive] = useState(false)
+  const handleHelpModeOpen = useCallback(() => {
+    setIsHelpModeActive(true)
+  }, [])
+  const handleHelpModeClose = useCallback(() => {
+    setIsHelpModeActive(false)
+  }, [])
+  const helpModeEscapeSwallowRef = useRef(false)
   // "Double size" mode: 2x page zoom paired with a doubled window minimum --
   // see the window-control:double-size-mode handler in electron/main.ts.
   const [isDoubleSizeMode, setIsDoubleSizeMode] = useState(false)
@@ -4917,7 +4934,19 @@ ${markdownHtml}
       }
     }
 
-    return listed[0].id
+    // The User Guide's own family must never become the fallback "open
+    // this by default" note just because its fixed seed timestamp (or the
+    // auto-TOC chapter's own regenerate-on-seed timestamp) happens to sort
+    // first -- confirmed live: on a genuinely fresh install (no persisted
+    // preferredId yet), it otherwise wins this fallback and opens as a
+    // normal, editable note, defeating the whole "only reachable via the
+    // help button or a $HELP link" design. listNotes() doesn't filter this
+    // family out itself (unlike the sidebar's own dateEligibleNotes etc.,
+    // in App.tsx) since $HELP cross-link resolution elsewhere needs it
+    // present in the full notes array -- only this fallback selection
+    // needs it excluded.
+    const selectable = listed.filter((note) => !HELP_GUIDE_NOTE_IDS.has(note.id))
+    return selectable[0]?.id ?? null
   }, [])
 
   const [, setFileSyncStatus] = useState<string | null>(null)
@@ -6623,16 +6652,27 @@ ${markdownHtml}
   }, [notes])
 
   const searchedNotes = useMemo(() => {
-    return sortedNotes.filter((note) => matchesNoteSearchQuery(
-      {
-        title: note.title,
-        fileName: note.fileName,
-        tags: note.tags,
-        contentText: note.contentText,
-      },
-      searchQuery,
-      isSearchQueryCaseSensitive,
-    ))
+    // The User Guide's whole family (parent + auto-TOC + real chapters) is
+    // excluded here, upstream of every sidebar view (Date/Category/Archive/
+    // Trash/Find all derive from this), rather than at each of their own
+    // filters individually -- unlike a chapterOnly note, this family should
+    // never resurface under any circumstance (not even an active search or
+    // Trash's own blanket chapter inclusion), since it's only ever reachable
+    // through the dedicated help button or a `$HELP` link. It still stays in
+    // the raw `notes`/`notesRef` array those links resolve against -- only
+    // filtered out of the menu-facing lists here.
+    return sortedNotes
+      .filter((note) => !HELP_GUIDE_NOTE_IDS.has(note.id))
+      .filter((note) => matchesNoteSearchQuery(
+        {
+          title: note.title,
+          fileName: note.fileName,
+          tags: note.tags,
+          contentText: note.contentText,
+        },
+        searchQuery,
+        isSearchQueryCaseSensitive,
+      ))
   }, [isSearchQueryCaseSensitive, searchQuery, sortedNotes])
 
   const isFindMode = sidebarMode === 'find'
@@ -7660,6 +7700,22 @@ ${markdownHtml}
       }
 
       if (event.key === 'Escape') {
+        // Top priority, ahead of every other Escape behavior (field-blur,
+        // the quick-actions hold-panel, forced-preview, view-mode toggle):
+        // a single tap always closes help mode immediately, never a hold.
+        // helpModeEscapeSwallowRef tells the matching keyup (below) that
+        // this exact press already did its job, so it doesn't also fall
+        // through to toggleRenderViewMode once isHelpModeActive has already
+        // flipped back to false.
+        if (isHelpModeActive) {
+          event.preventDefault()
+          if (!event.repeat) {
+            handleHelpModeClose()
+            helpModeEscapeSwallowRef.current = true
+          }
+          return
+        }
+
         const activeElement = document.activeElement
         // The main editor's own contentEditable root is deliberately excluded
         // from the generic "blur an editable field" branch below: that branch
@@ -7710,6 +7766,12 @@ ${markdownHtml}
     const onKeyUp = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape') return
 
+      if (helpModeEscapeSwallowRef.current) {
+        helpModeEscapeSwallowRef.current = false
+        event.preventDefault()
+        return
+      }
+
       clearEscapeHoldTimer()
 
       if (escapeHoldTriggeredRef.current) {
@@ -7751,6 +7813,8 @@ ${markdownHtml}
     createNoteFromClipboardTitle,
     editorSections,
     getActiveSection,
+    handleHelpModeClose,
+    isHelpModeActive,
     handleEscapeHoldPanelClose,
     isEscapeHoldPanelOpen,
     isFindMode,
@@ -8805,8 +8869,11 @@ ${markdownHtml}
                   onEscapeHoldCreateChapter={activeSection?.handleCreateChapter ?? noopAsync}
                   onEscapeHoldExportPdf={handleExportPdf}
                   onEscapeHoldExportMd={handleExportMd}
+                  onEscapeHoldOpenHelp={handleHelpModeOpen}
                   isExportingPdf={isExportingPdf}
                   isExportingMd={isExportingMd}
+                  isHelpModeActive={isHelpModeActive}
+                  onHelpModeClose={handleHelpModeClose}
                   showLineNumbers={reviewGutterVisibleBySection[entry.id] ?? false}
                   showReviewFlags={reviewFlagsVisibleBySection[entry.id] ?? false}
                   onToggleReviewGutter={() => handleToggleReviewGutter(entry.id)}
