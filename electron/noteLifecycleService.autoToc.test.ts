@@ -128,7 +128,12 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
 
     const { created } = await lifecycle.createAutoTocChapter(parent.id)
 
-    expect(created.text).toContain(`[Just some](@${ch1.id})`)
+    // resolveIdentityLabel's own fallback for content with no matching
+    // heading is the literal "Missing title" (see tabLabels.ts's own doc
+    // comment and noteListMeta.test.ts's coverage of
+    // resolveIdentityLabel(null, 'plain intro', ...)) -- not a snippet
+    // derived from the content itself.
+    expect(created.text).toContain(`[Missing title](@${ch1.id})`)
   })
 
   it('regenerating twice with nothing changed is a true no-op on the TOC chapter\'s own updatedAtMs', async () => {
@@ -260,10 +265,12 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     const saved = await lifecycle.saveNote({ id: ch1.id, text: '## Chapter One\n\nBody.' })
 
     // titleFromText only recognizes level 1 -- a chapter's own level-2
-    // first line falls through to the raw-first-line fallback, hashes and
-    // all. That's fine: nothing chapter-facing reads `.title`, only the
-    // chapter's own chapterId (if assigned) or a derived content snippet.
-    expect(saved.title).toBe('## Chapter One')
+    // first line doesn't match, so it falls straight to the literal
+    // "Missing title" (see databaseService.ts's own titleFromText). That's
+    // fine: nothing chapter-facing reads `.title`, only the chapter's own
+    // chapterId (if assigned) or a derived content snippet
+    // (resolveIdentityLabel, tabLabels.ts).
+    expect(saved.title).toBe('Missing title')
   })
 
   it('two chapters sharing the same first-heading text still resolve to distinct targets, since links are keyed by real internal note id', async () => {

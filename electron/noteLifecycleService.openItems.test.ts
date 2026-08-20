@@ -32,7 +32,12 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     // No checklist content anywhere yet -- no auto-Open-Items chapter.
     expect(db.getAutoOpenItemsChapterNoteId(parent.id)).toBeNull()
 
-    await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n## Setting\n\n- [x] done already\n- [ ] world-building task' })
+    // H3, not H2: collectUncheckedItemsByHeading always flattens H2
+    // headings into the top-level bucket (a deliberate rule, not specific
+    // to chapters -- see openItemsText.test.ts's own "ignores H2 section
+    // headings" coverage), so a heading needs to be H3+ to get its own
+    // nested bucket here.
+    await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n### Setting\n\n- [x] done already\n- [ ] world-building task' })
 
     const openItemsId = db.getAutoOpenItemsChapterNoteId(parent.id)
     expect(openItemsId).toBeTruthy()
@@ -55,7 +60,7 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     // The chapter's own heading source is untouched -- no literal anchor
     // definition was ever written into it just to build this group.
     const ch1Doc = await lifecycle.loadNote({ id: ch1.id })
-    expect(ch1Doc.text).toBe('# Chapter One\n\n## Setting\n\n- [x] done already\n- [ ] world-building task')
+    expect(ch1Doc.text).toBe('# Chapter One\n\n### Setting\n\n- [x] done already\n- [ ] world-building task')
   })
 
   it('still produces a fully linked group when the note has no assigned id -- internal navigation never needs one', async () => {
