@@ -134,22 +134,22 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Quick Actions Menu](#quick-actions-menu)
 
 > **Where?**
-> Hold \`Esc\` for about a third of a second while a note is open.
+> Hold \`Esc\` for about a third of a second, anywhere in the editor area -- works with a note open, an empty editor, or a read-only auto-generated one (Table of Contents, Open Items, the User Guide, ...).
 
 *A small on-editor grid for the note actions you reach for most, without leaving the keyboard.*
 
 - Keeps showing while you hold \`Esc\`; tapping \`Esc\` once more (or clicking outside it) dismisses it without doing anything.
 - Navigate with the arrow keys or \`Tab\`/\`Shift+Tab\`, then \`Enter\`/\`Space\` or a click to run the highlighted action. Running any action closes the menu.
-- Currently wired up: New Note, New Chapter, Export PDF, Export MD, Help (opens this page -- see [The User Guide]($#the-user-guide)). The remaining grid cells are reserved for future actions.
+- Currently wired up: New Note, New Chapter, Export PDF, Export MD, Help (opens this page -- see [The User Guide]($#the-user-guide)). New Note and Help always work; New Chapter and the two Export actions grey out with no note open (or one that can't take them, like a read-only auto-generated chapter). The remaining grid cells are reserved for future actions.
 
 ### [The User Guide](#the-user-guide)
 
 > **Where?**
 > The Help button in the Quick Actions Menu above.
 
-*This page, in a read-only overlay over whichever editor slot you opened it from.*
+*This page, opened as an ordinary (timeless, read-only) note in whichever section you triggered it from.*
 
-- Doesn't touch that slot's own open note or tabs -- closing the guide (a single \`Esc\` tap, no hold needed) leaves you exactly where you were, tab bar and all.
+- Opens exactly like clicking any note in the sidebar does -- as a temporary tab, replacing whatever that section was showing. Leave it the same way too: pick another note, click a pinned tab, or open a different note from the sidebar. There's no dedicated close gesture any more.
 - Browsable with the same chapter bar every note with chapters uses -- click a chapter pill to jump to it, or the bookmark icon for a full table of contents.
 - Always render-only: nothing here can be edited, renamed, tagged, archived, or deleted.
 

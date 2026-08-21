@@ -291,7 +291,7 @@ export function SectionEditorArea({
       <main className={`editor-shell${isChapterPanelOpen ? ' chapter-panel-is-open' : ''}`}>
         <div className="editor-background">
           <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}`}>
-            {isEscapeHoldPanelOpen && isSectionActive && activeNoteId ? (
+            {isEscapeHoldPanelOpen && isSectionActive ? (
               <div
                 className="editor-escape-hold-overlay"
                 role="dialog"
