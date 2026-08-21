@@ -7604,16 +7604,21 @@ ${markdownHtml}
         return
       }
 
-      if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && !isEditorControlField
-        && (event.key === 'Tab' || event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+      // Alt (not Ctrl/Cmd) so this never collides with the editor's own
+      // word-jump caret navigation -- see CM6Editor.tsx's
+      // CM6_DEFAULT_KEYMAP_WITHOUT_ALT_ARROW doc comment for why plain
+      // Ctrl/Cmd-ArrowLeft/Right had to stay free for that instead. Tab no
+      // longer cycles sections at all (it's an ordinary in-editor
+      // indent/focus key elsewhere in the app, and stealing it globally was
+      // one interference too many); Left/Right are the only way to switch.
+      if (event.altKey && !event.shiftKey && !event.ctrlKey && !event.metaKey && !isEditorControlField
+        && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
         const activeIndex = editorSections.findIndex((entry) => entry.id === activeSectionId)
         if (activeIndex !== -1) {
           const sectionCount = editorSections.length
-          const targetIndex = event.key === 'Tab'
-            ? (activeIndex + 1) % sectionCount
-            : event.key === 'ArrowLeft'
-              ? Math.max(0, activeIndex - 1)
-              : Math.min(sectionCount - 1, activeIndex + 1)
+          const targetIndex = event.key === 'ArrowLeft'
+            ? Math.max(0, activeIndex - 1)
+            : Math.min(sectionCount - 1, activeIndex + 1)
 
           event.preventDefault()
           const targetSectionId = editorSections[targetIndex].id

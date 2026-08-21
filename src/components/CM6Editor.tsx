@@ -385,6 +385,36 @@ const CARET_INSET_PX = 1;
 const EMPTY_LINE_TOP_TOLERANCE_PX = 2;
 const EDITOR_PAGE_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER;
 
+/**
+ * Alt-ArrowLeft/Right is reserved app-wide for switching editor sections
+ * (App.tsx's onKeyDown) -- @codemirror/commands' own defaultKeymap binds
+ * plain Alt-ArrowLeft/Right to cursorSyntaxLeft/cursorSyntaxRight on
+ * Windows/Linux, and separately aliases the *same* keys to cursorGroupLeft/
+ * cursorGroupRight (word-jump) on macOS via Mod-ArrowLeft/Right's own `mac`
+ * override -- either would silently consume the keystroke for caret
+ * movement instead of letting it bubble up to the section switcher, the
+ * exact interference this app-level rebind (from Ctrl/Cmd-Arrow) exists to
+ * get away from. Stripped here rather than shadowed in the Prec.highest
+ * keymap below: CM6's own dispatch always calls preventDefault the moment
+ * *any* binding at *any* precedence tier claims a key, so there's no way to
+ * "claim it to block a lower tier" without also eating the keystroke --
+ * the only way to let it reach `window` untouched is for no CM6 binding to
+ * exist for it at all. `mac: undefined` on the Mod-ArrowLeft/Right entries
+ * is equivalent to omitting the field (CM6 falls back to `b.key` either
+ * way), so Cmd-ArrowLeft/Right still does word-jump on macOS -- only the
+ * Alt-ArrowLeft/Right alias to it is removed. Losing Alt-ArrowLeft/Right's
+ * syntax-jump (and its own `mac: "Ctrl-ArrowLeft/Right"` alias) outright is
+ * an accepted trade: a rarely-reached-for command editor feature, not
+ * something this markdown app leans on.
+ */
+const CM6_DEFAULT_KEYMAP_WITHOUT_ALT_ARROW = defaultKeymap
+  .filter((binding) => binding.key !== 'Alt-ArrowLeft' && binding.key !== 'Alt-ArrowRight')
+  .map((binding) => (
+    binding.mac === 'Alt-ArrowLeft' || binding.mac === 'Alt-ArrowRight'
+      ? { ...binding, mac: undefined }
+      : binding
+  ));
+
 /** Ported verbatim from Editor.tsx -- the custom scrollbar's own geometry constants. */
 const SCROLL_TRACK_MIN_THUMB_HEIGHT_PX = 28;
 const SCROLL_TRACK_EDGE_GAP_PX = 3;
@@ -2389,7 +2419,7 @@ export function CM6Editor({
 
     const extensions: Extension[] = [
       history(),
-      keymap.of([...defaultKeymap, ...historyKeymap]),
+      keymap.of([...CM6_DEFAULT_KEYMAP_WITHOUT_ALT_ARROW, ...historyKeymap]),
       lineTokenPlugin,
       EditorView.lineWrapping,
       readOnlyCompartmentRef.current.of(EditorView.editable.of(!editorReadOnly)),

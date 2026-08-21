@@ -327,7 +327,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *Splits the editor into an additional side-by-side section.*
 
 - Hidden once there's no more room for another 300px-minimum-wide section.
-- \`Ctrl+Tab\` cycles the active section forward; \`Ctrl+Left\` / \`Ctrl+Right\` step between sections directly.
+- \`Alt+Left\` / \`Alt+Right\` step between sections directly -- Alt rather than Ctrl so it never collides with the editor's own word-jump caret navigation.
 
 ### [Naming and Swapping Sections](#naming-and-swapping-sections)
 
@@ -630,8 +630,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 | \`Ctrl+F\` | Find in note |
 | \`Ctrl+H\` | Find & replace in note |
 | \`Ctrl+Enter\` (in find mode) | Replace all matches |
-| \`Ctrl+Tab\` | Next section |
-| \`Ctrl+Left\` / \`Ctrl+Right\` | Previous / next section |
+| \`Alt+Left\` / \`Alt+Right\` | Previous / next section |
 | \`Ctrl+Up\` / \`Ctrl+Down\` | Jump caret to start / end of document |
 | \`Ctrl+B\` | Bold |
 | \`Ctrl+I\` | Italic |
