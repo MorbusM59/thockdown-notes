@@ -2,6 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 
 export interface EscapeHoldPanelProps {
+  /** Whether the panel is the one currently "open" -- this component now stays
+   * permanently mounted (its host toggles `display:none` around it instead of
+   * mounting/unmounting it) so the shared empty-state animation it lives
+   * inside never restarts. Focus management below keys off this transitioning
+   * to true instead of off mount. */
+  isOpen: boolean
   activeNoteId: string | null
   /** True while the active note (or its whole chapter family) is timeless -- disables New Chapter, since a frozen family can't gain a new chapter (databaseService.ts's assertNotTimeless). Export/New Note are unaffected -- they're not mutations of the frozen note itself. */
   isActiveNoteTimeless: boolean
@@ -46,6 +52,7 @@ const GRID_SIZE = COLUMNS * ROWS
  * so no separate key handling is needed for them.
  */
 export function EscapeHoldPanel({
+  isOpen,
   activeNoteId,
   isActiveNoteTimeless,
   isExportingPdf,
@@ -78,15 +85,20 @@ export function EscapeHoldPanel({
   const [focusedIndex, setFocusedIndex] = useState(firstEnabledIndex)
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([])
 
-  // Moves real DOM focus into the grid the instant it mounts -- this
-  // component only exists in the tree while the panel is open (see its
-  // conditional render in SectionEditorArea.tsx), so "on mount" and "on
-  // open" are the same moment. Without this, arrow keys would do nothing
-  // until the user first clicked or tabbed into a cell.
+  // Moves real DOM focus into the grid, and resets the roving-tabindex
+  // cursor back to the first enabled cell, each time the panel transitions
+  // to open. This component stays permanently mounted now (its host toggles
+  // display:none around it, so the shared empty-state animation it lives
+  // inside never restarts -- see SectionEditorArea.tsx), so "on mount" is no
+  // longer the same moment as "on open"; keying off `isOpen` instead is what
+  // makes arrow keys work immediately on every open, not just the first one,
+  // and keeps a stale focused cell from carrying over from the previous time
+  // the panel was open.
   useEffect(() => {
+    if (!isOpen) return
+    setFocusedIndex(firstEnabledIndex)
     buttonRefs.current[firstEnabledIndex]?.focus()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [isOpen, firstEnabledIndex])
 
   const nextEnabledInDirection = (fromIndex: number, rowDelta: number, colDelta: number) => {
     let row = Math.floor(fromIndex / COLUMNS)
@@ -141,7 +153,7 @@ export function EscapeHoldPanel({
 
   return (
     <div
-      className="editor-escape-hold-panel-grid"
+      className={`editor-escape-hold-panel-grid${isOpen ? ' is-visible' : ''}`}
       role="grid"
       aria-label="Quick note actions"
       onKeyDown={handleGridKeyDown}
@@ -166,7 +178,7 @@ export function EscapeHoldPanel({
                   {cell ? (
                     <>
                       <span className={cell.icon} aria-hidden="true" />
-                      <span className="editor-escape-hold-panel-btn-label">{cell.label}</span>
+
                     </>
                   ) : (
                     <span className="editor-escape-hold-panel-btn-placeholder" aria-hidden="true">&middot;</span>

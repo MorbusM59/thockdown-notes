@@ -241,14 +241,19 @@ export function SectionEditorArea({
     [sectionId, sceneRerollNonce],
   )
 
-  const emptyState = (
-    <div
-      className="editor-empty-state"
-      style={{ '--empty-state-scene-mask': emptyStateSceneMaskUrl } as CSSProperties}
-      onClick={() => setSceneRerollNonce((n) => n + 1)}
-    >
-    </div>
-  )
+  // Gates both the escape-hold panel's own visibility and the shared
+  // .editor-empty-state box's visibility below -- see the box's own render
+  // for why it's the same node either way.
+  const isEscapeHoldActive = isEscapeHoldPanelOpen && isSectionActive
+  const isEmptyStateVisible = !activeNoteId || isEscapeHoldActive
+
+  // The reroll easter egg is disabled while the quick-actions panel is up --
+  // otherwise every click on the grid's own padding/gaps (anything that
+  // isn't a button) would reroll the animation out from under the buttons.
+  const handleEmptyStateClick = useCallback(() => {
+    if (isEscapeHoldActive) return
+    setSceneRerollNonce((n) => n + 1)
+  }, [isEscapeHoldActive])
 
   const editorSpellCheckEnabled = resolveSpellCheckSurfaceState({
     globalToggleEnabled: spellCheckEditEnabled,
@@ -291,35 +296,19 @@ export function SectionEditorArea({
       <main className={`editor-shell${isChapterPanelOpen ? ' chapter-panel-is-open' : ''}`}>
         <div className="editor-background">
           <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}`}>
-            {isEscapeHoldPanelOpen && isSectionActive ? (
+            {isEscapeHoldActive ? (
+              // Pure dim+blur backdrop -- catches outside clicks to close, and
+              // its backdrop-filter blurs whatever's behind it (the real note
+              // content in edit/render-container below). It does NOT wrap the
+              // panel: the panel is a sibling that paints in front of this, so
+              // the blur never touches it (backdrop-filter only blurs what's
+              // behind the element it's set on, not its own descendants --
+              // see the empty-state box further down for why that matters).
               <div
-                className="editor-escape-hold-overlay"
-                role="dialog"
-                aria-label="Quick note panel"
+                className="editor-escape-hold-backdrop"
+                aria-hidden="true"
                 onClick={onEscapeHoldPanelClose}
-              >
-                <div
-                  className="editor-escape-hold-panel"
-                  onClick={(event) => event.stopPropagation()}
-                  aria-live="polite"
-                >
-                  <div className="editor-escape-hold-panel-inner">
-                    <div className="editor-escape-hold-panel-title">Quick Actions</div>
-                    <EscapeHoldPanel
-                      activeNoteId={activeNoteId}
-                      isActiveNoteTimeless={isViewingTimelessNote}
-                      isExportingPdf={isExportingPdf}
-                      isExportingMd={isExportingMd}
-                      onCreateNote={onEscapeHoldCreateNote}
-                      onCreateChapter={onEscapeHoldCreateChapter}
-                      onExportPdf={onEscapeHoldExportPdf}
-                      onExportMd={onEscapeHoldExportMd}
-                      onOpenHelp={onEscapeHoldOpenHelp}
-                      onClose={onEscapeHoldPanelClose}
-                    />
-                  </div>
-                </div>
-              </div>
+              />
             ) : null}
             <div className={`edit-container${isPreviewMode ? ' is-pane-hidden' : ''}`}>
               <div className="markdown-editor-texture" />
@@ -343,7 +332,7 @@ export function SectionEditorArea({
                   showLineNumbers={showLineNumbers}
                   showReviewFlags={showReviewFlags}
                 />
-              ) : emptyState}
+              ) : null}
             </div>
             <div className={`render-container${isPreviewMode ? '' : ' is-pane-hidden'}`} aria-hidden={!isPreviewMode}>
               <div ref={previewTextureRef} className="markdown-preview-texture" />
@@ -366,8 +355,41 @@ export function SectionEditorArea({
                 onCut={previewSpellCheckEnabled ? blockPreviewEditMutation : undefined}
                 onDrop={previewSpellCheckEnabled ? blockPreviewEditMutation : undefined}
               >
-                {activeNoteId ? previewMarkdownElement : emptyState}
+                {activeNoteId ? previewMarkdownElement : null}
               </div>
+            </div>
+            {/* The one shared "no note here" visual -- same node whether a
+                note simply isn't open or the quick-actions panel is up over
+                one that is (see isEmptyStateVisible above), so the animation
+                is always the literal same instance, never restarted or
+                duplicated, and always the same fixed --circle-diameter size.
+                Sits above the backdrop (painted after it, higher z-index in
+                editor.css) so backdrop-filter blur never touches it. The
+                grid inside stays permanently mounted too -- it toggles its
+                own display:none internally off the `isOpen` prop -- so
+                EscapeHoldPanel's focus-management (also keyed off `isOpen`,
+                not mount) keeps working across repeated opens. */}
+            <div
+              className={`editor-empty-state${isEmptyStateVisible ? ' is-visible' : ''}`}
+              style={{ '--empty-state-scene-mask': emptyStateSceneMaskUrl } as CSSProperties}
+              onClick={handleEmptyStateClick}
+              role={isEscapeHoldActive ? 'dialog' : undefined}
+              aria-label={isEscapeHoldActive ? 'Quick note panel' : undefined}
+              aria-live={isEscapeHoldActive ? 'polite' : undefined}
+            >
+              <EscapeHoldPanel
+                isOpen={isEscapeHoldActive}
+                activeNoteId={activeNoteId}
+                isActiveNoteTimeless={isViewingTimelessNote}
+                isExportingPdf={isExportingPdf}
+                isExportingMd={isExportingMd}
+                onCreateNote={onEscapeHoldCreateNote}
+                onCreateChapter={onEscapeHoldCreateChapter}
+                onExportPdf={onEscapeHoldExportPdf}
+                onExportMd={onEscapeHoldExportMd}
+                onOpenHelp={onEscapeHoldOpenHelp}
+                onClose={onEscapeHoldPanelClose}
+              />
             </div>
           </div>
         </div>

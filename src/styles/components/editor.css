@@ -410,17 +410,23 @@
   --circle-diameter: 220px;
 }
 
-.editor-stage .edit-container .editor-empty-state,
-.editor-stage .render-container .editor-empty-state {
+/* The single "no note here" visual, shared verbatim between the true empty
+   state and the escape-hold quick-actions panel (see SectionEditorArea.tsx's
+   comment above where it's rendered) -- one instance, one seed, so the
+   tumbling-solid animation is always the literal same node regardless of
+   which reason it's showing for. Hidden by default (.is-visible turns it
+   on) since it's now permanently mounted as a direct child of .editor-stage
+   rather than conditionally rendered inside edit-container/render-container. */
+.editor-stage .editor-empty-state {
   position: absolute;
   inset:    0;
   margin:   auto;
   height: var(--circle-diameter);
   width: var(--circle-diameter);
-  display: flex;
+  display: none;
   flex-direction: column;
   align-items:    center;
-  justify-content: flex-end;
+  justify-content: center;
   gap:            var(--spacing-regular);
   text-align:     center;
   /* Clickable (rerolls the scene -- see SectionEditorArea.tsx) but
@@ -430,95 +436,80 @@
   border-radius: calc(var(--border-radius-regular) *6);
   box-shadow: var(--box-shadow-inverted-filtered);
   filter: var(--filter-primed-archive);
-  padding: calc(var(--spacing-large) * 2);
   font-family: 'Fredericka the Great';
-  z-index: 2;
+  z-index: 11;
 }
 
-.editor-stage .editor-escape-hold-overlay {
+.editor-stage .editor-empty-state.is-visible {
+  display: flex;
+}
+
+/* Dim+blur backdrop behind the empty-state box (see SectionEditorArea.tsx's
+   comment on this element for why it's a sibling, not a wrapper, of the
+   panel). Lower z-index than .editor-empty-state (11) so the blur only
+   reaches the real note content in edit/render-container behind it, never
+   the panel itself. */
+.editor-stage .editor-escape-hold-backdrop {
   position: absolute;
   inset: 0;
-  z-index: 12;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in srgb, var(--background-color-root) 20%, transparent);
+  z-index: 10;
+  background: color-mix(in srgb, var(--background-color-root) 60%, transparent);
   backdrop-filter: blur(2px);
 }
 
-.editor-stage .editor-escape-hold-overlay::before {
-  content:        '';
-  position:       absolute;
-  inset:          0;
-  z-index:        -1;
-  pointer-events: none;
-  background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.05) 0, rgba(0, 0, 0, 0.05) 2px, transparent 3px, transparent 4px);
-  -webkit-mask-image:     linear-gradient(#000, #000), var(--empty-state-scene-mask);
-  -webkit-mask-repeat:    no-repeat;
-  -webkit-mask-position:  center;
-  -webkit-mask-size:      contain;
-  -webkit-mask-composite: xor;
-  mask-image:    linear-gradient(#000, #000), var(--empty-state-scene-mask);
-  mask-repeat:   no-repeat;
-  mask-position: center;
-  mask-size:     contain;
-  mask-composite: exclude;
-  border-radius: calc(var(--border-radius-regular) *6);
-}
-
-.editor-stage .editor-escape-hold-panel {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-regular);
-  text-align: center;
-  padding: calc(var(--spacing-large) * 2);
-  background: color-mix(in srgb, var(--palette-parchment-lightest) 78%, rgba(255, 255, 255, 0.6));
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: calc(var(--border-radius-regular) * 6);
-  box-shadow: var(--box-shadow-inverted-filtered), 0 14px 24px rgba(0, 0, 0, 0.12);
-}
-
-.editor-stage .editor-escape-hold-panel-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-large);
-}
-
-.editor-stage .editor-escape-hold-panel-title {
-  font-size: 1.25rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
+/* Fills the empty-state box's padded content area exactly (no headline --
+   just the 9 cells) and hands equal shares of it down through
+   row -> cell -> button via flex:1 1 0 at each level, so the grid fits the
+   fixed circle cleanly at whatever size that box happens to be rather than
+   assuming fixed button pixel dimensions. */
 .editor-stage .editor-escape-hold-panel-grid {
-  display: flex;
+  display: none;
   flex-direction: column;
-  gap: var(--spacing-regular);
+  gap: var(--spacing-extra-large);
+  margin: var(--spacing-extra-large);
+  /* Button labels stay legible instead of inheriting the empty-state's
+     decorative script font. */
+  font-family: var(--ui-font-family);
+}
+
+.editor-stage .editor-escape-hold-panel-grid.is-visible {
+  display: flex;
 }
 
 .editor-stage .editor-escape-hold-panel-row {
   display: flex;
-  gap: var(--spacing-regular);
+  gap: var(--spacing-extra-large);
+  flex: 1 1 0;
+}
+
+.editor-stage .editor-escape-hold-panel-cell {
+  display: flex;
+  flex: 1 1 0;
 }
 
 .editor-stage .editor-escape-hold-panel-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  width:           var(--btn-square-large-size);
+  height:          var(--btn-square-large-size);
+  min-width:       var(--btn-square-large-size);
+  min-height:      var(--btn-square-large-size);
+  padding:         0;
+  margin:          0;
+  display:         inline-flex;
+  align-items:     center;
   justify-content: center;
-  gap: var(--spacing-small);
-  width: 76px;
-  height: 68px;
-  font-family: inherit;
-  font-size: 0.65rem;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  cursor: pointer;
+  border:          1px solid var(--btn-border-default);
+  border-radius:   var(--border-radius-regular);
+  background:      var(--btn-bg-default);
+  color:           var(--color-text-60);
+  transition:      background 0.2s, border-color 0.2s, color 0.2s;
+  font-size: var(--btn-large-icon-size);
+  box-shadow: var(--box-shadow-regular-filtered);
+}
+
+.editor-stage .editor-escape-hold-panel-btn:active
+{
+  border-color: var(--btn-border-active);
+  box-shadow:   var(--box-shadow-inverted-harsh-active);                                    
 }
 
 .editor-stage .editor-escape-hold-panel-btn:disabled {
@@ -545,10 +536,11 @@
 }
 
 .editor-stage .editor-escape-hold-panel-btn .fa-solid {
-  font-size: 1.15rem;
+  font-size: var(--btn-icon-size);
 }
 
 .editor-stage .editor-escape-hold-panel-btn-label {
+  font-size: 1em;
   white-space: nowrap;
 }
 

@@ -423,6 +423,7 @@
 
   --spacing-regular: 4px;
   --spacing-large:   calc(var(--spacing-regular) * 2);
+  --spacing-extra-large:   calc(var(--spacing-regular) * 4);
   --spacing-small:   calc(var(--spacing-regular) / 2);
 
   /* ---------------------------------------------------------------------------
