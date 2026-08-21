@@ -19,7 +19,7 @@ import type {
   TagSummary,
 } from '../src/shared/noteLifecycle';
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
-import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine, headingsChanged, parseMarkdownHeading, stripMarkdownInlineFormatting } from '../src/shared/tableOfContentsText';
+import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine, formatOutlineRootTitleLine, headingsChanged, parseMarkdownHeading, stripMarkdownInlineFormatting } from '../src/shared/tableOfContentsText';
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, findOpenItemSourceAtLine, parseOpenItemsGroups, toggleChecklistItemByText } from '../src/shared/openItemsText';
 import { resolveIdentityLabel } from '../src/shared/tabLabels';
 import { formatInternalNoteLink } from '../src/shared/internalNoteLinks';
@@ -418,21 +418,28 @@ export class NoteLifecycleService {
   // it's always accurate the moment it's looked at without ever being
   // eagerly kept in sync in the background.
   //
-  // The master index is rebuilt: the parent's own headings under a link to
-  // the parent itself, then each chapter's own headings under a link to
-  // that chapter. Every one of these links is built with
-  // formatInternalNoteLink (internalNoteLinks.ts) -- the `@<noteId>`
-  // scheme, addressed purely by real internal note ids (parentNoteId /
-  // row.chapterNoteId), which every note has the instant it's created. This
-  // is deliberately a *different* linking system from the user-facing
-  // `$NOTE-ID§CHAPTER-ID` scheme (see usePreviewMarkdownRendering.tsx's
-  // navigateToInternalPreviewLink): that one exists for a PERSON to type,
-  // read, and remember, so it's built entirely around assignedId/chapterId
-  // (ids that only exist because the user explicitly set them). Auto-TOC
-  // navigation has no such audience -- it's generated and consumed
-  // entirely by this app's own code -- so it has no business being gated on
-  // whether the user happened to assign an id. The TOC is therefore always
-  // fully linked, with or without any assigned id anywhere in the chain.
+  // The master index is rebuilt: the parent's own title first, as a bold
+  // non-bulleted root line (formatOutlineRootTitleLine) -- deliberately not
+  // just another bullet in the same list, since it's the root of the
+  // outline, not a sibling of what's under it. Every `##` heading after
+  // that is a flat, depth-0 bullet: the parent's own `##` headings and every
+  // chapter's own title all sit at the same level, each with its own
+  // deeper headings nested one level under IT specifically (a chapter's
+  // `###`+ under its own `##` title, the parent's own `###`+ under
+  // whichever of the parent's `##` headings precedes them). Every link is
+  // built with formatInternalNoteLink (internalNoteLinks.ts) -- the
+  // `@<noteId>` scheme, addressed purely by real internal note ids
+  // (parentNoteId / row.chapterNoteId), which every note has the instant
+  // it's created. This is deliberately a *different* linking system from
+  // the user-facing `$NOTE-ID§CHAPTER-ID` scheme (see
+  // usePreviewMarkdownRendering.tsx's navigateToInternalPreviewLink): that
+  // one exists for a PERSON to type, read, and remember, so it's built
+  // entirely around assignedId/chapterId (ids that only exist because the
+  // user explicitly set them). Auto-TOC navigation has no such audience --
+  // it's generated and consumed entirely by this app's own code -- so it
+  // has no business being gated on whether the user happened to assign an
+  // id. The TOC is therefore always fully linked, with or without any
+  // assigned id anywhere in the chain.
   //
   // A chapter's own entry is its own FIRST heading -- not a separate
   // chapter-id-labeled line above it. Opening the chapter from that entry
@@ -468,9 +475,9 @@ export class NoteLifecycleService {
     const parentHeadings = computeHeadingAnchors(parentDoc.text);
     const parentHref = formatInternalNoteLink(parentNoteId);
 
-    const lines = ['# Table of Contents', '', formatOutlineEntryLine(0, parentRecord.title || 'Untitled', parentHref)];
+    const lines = ['# Table of Contents', '', formatOutlineRootTitleLine(parentRecord.title || 'Untitled', parentHref)];
     for (const heading of parentHeadings) {
-      lines.push(formatOutlineEntryLine(1, heading.label, formatInternalNoteLink(parentNoteId, formatHeadingAnchorFragment(heading.anchorId))));
+      lines.push(formatOutlineEntryLine(0, heading.label, formatInternalNoteLink(parentNoteId, formatHeadingAnchorFragment(heading.anchorId))));
     }
 
     const chapterRows = this.getRealChapterRows(parentNoteId);

@@ -4,6 +4,7 @@ import {
   findHeadingAnchorLine,
   formatHeadingAnchorFragment,
   formatOutlineEntryLine,
+  formatOutlineRootTitleLine,
   headingsChanged,
   parseHeadingAnchorFragment,
 } from './tableOfContentsText'
@@ -20,6 +21,20 @@ describe('formatOutlineEntryLine', () => {
 
   it('escapes literal [ and ] in the label so they can\'t break out of the link\'s own bracket span', () => {
     expect(formatOutlineEntryLine(0, 'Fix bug [WIP]', '@ch1')).toBe('- [Fix bug \\[WIP\\]](@ch1)')
+  })
+})
+
+describe('formatOutlineRootTitleLine', () => {
+  it('bolds a [label](href) link with no bullet or indent, unlike formatOutlineEntryLine', () => {
+    expect(formatOutlineRootTitleLine('The Book', '@parent')).toBe('**[The Book](@parent)**')
+  })
+
+  it('falls back to plain bold text when href is null', () => {
+    expect(formatOutlineRootTitleLine('Untitled', null)).toBe('**Untitled**')
+  })
+
+  it('escapes literal [ and ] in the label the same way formatOutlineEntryLine does', () => {
+    expect(formatOutlineRootTitleLine('Fix bug [WIP]', '@parent')).toBe('**[Fix bug \\[WIP\\]](@parent)**')
   })
 })
 

@@ -22,74 +22,21 @@ export interface HelpGuideChapterContent {
 
 export const HELP_GUIDE_INTRO_CONTENT = `# Thockdown Notes — Help & Reference
 
-This is the built-in reference for Thockdown Notes. This page is the essentials for every area of the app, in one pass; the chapters alongside it (open the chapter bar above) cover each area in full depth -- what it does, where to find it, and how to use it well.
+Thockdown Notes is a Markdown note-taking app built around a good typing feel -- quick to write in, quick to find your way back through, with a lot of small things tuned so they just work. This page is your home base: a quick orientation below, then a full chapter for everything else, one topic at a time -- open the chapter bar above to browse them.
 
-Every heading in a chapter is a jump target: \`[Anchor Text](#anchor-id)\` defines one, with the label as the visible text and a short id as the destination. Link to one from the same chapter with \`[Link Text]($#anchor-id)\`, or from anywhere else with \`[Link Text]($HELP§CHAPTER-ID#anchor-id)\`. \`[Link Text]($HELP)\` alone just opens this page. Since both anchors and links are ordinary Markdown links, they're never mistaken for one when shown as an example in backticks -- like the ones in this sentence.
+## Quick Guide
 
----
+1. **Start a note.** \`Ctrl+N\` (or the file icon in the toolbar) makes a new one. Its first line becomes its title; everything else is content, and it saves automatically as you type.
+2. **Switch views.** \`Esc\` toggles between the Markdown editor and its rendered preview, so you can check how your formatting looks.
+3. **Keep things findable.** Tag a note from the tag bar, then browse by date, category, or tag from the sidebar -- or search it directly.
+4. **Grow a note.** Once it needs sub-sections of its own, split it into chapters from the chapter bar under the tab bar -- each chapter is a full note in its own right.
+5. **Make it yours.** The gear icon opens Settings: fonts, colors, sounds, and a lot more to tune to your taste.
 
-### Notes
-
-- \`Ctrl+N\` creates a new note; \`Ctrl+Shift+N\` creates one titled from your clipboard.
-- The first line of a note (starting with \`# \`) is its title. Everything else is content.
-- Notes save automatically as you type. \`Esc\` toggles between the Markdown editor and the rendered preview.
-- Left-click the scrollbar track to jump straight to that spot. Right-click above/below the thumb to page up/down once; hold the right click to keep paging until you release it or the thumb reaches your cursor.
-- The list-number icon next to the word count toggles line numbers and a review-flag column for that editor. Left-click toggles both together; right-click toggles the review-flag column alone. Click a line's flag box to mark it for review (\`?\`), click again for a warning (\`!\`); right-click clears it.
-
-### Organizing
-
-- Tag notes from the tag bar (type + \`Enter\`); the first tag is the primary category, the second the sub-category.
-- The sidebar has five views: Date, Category, Archive, Trash, Find. Search plain text or \`#tag\`.
-- Click a note's Archive/Trash icon for one-click actions, or right-click-and-hold a note row to arm archive/delete, then click to confirm.
-
-### Internal links
-
-- Turn any heading or phrase into a jump target with \`[Anchor Text](#anchor-id)\` — the label is the visible text, the id is just a short internal handle.
-- Link to it from the same note with \`[link text]($#anchor-id)\`. Give a note a short id (e.g. \`$MEETING-2\`) via the tab bar's identity tab, then link to it from anywhere with \`[text]($MEETING-2)\`, or straight to one of its anchors with \`[text]($MEETING-2#anchor-id)\`.
-- Give one of that note's chapters a short id too (right-click its chapter-bar tab), then link straight into it with \`[text]($MEETING-2§AGENDA)\`, or to one of its anchors with \`[text]($MEETING-2§AGENDA#anchor-id)\`.
-
-### Split view & tabs
-
-- The leading \`+\` pill in the tab strip opens a brand-new note and pins it as a permanent tab right there; the flanking \`+\` button at the tab bar's far right edge instead splits the editor into another section, with its own tabs.
-- The identity tab area holds either your open note tabs or the tag editor — toggle with the tag icon.
-- Hold-click a note in the sidebar to pin it as a tab; a plain click opens it as a temporary tab.
-- The chapter bar under the tab bar is always there, for every note — its own trailing \`+\` pill splits the current note into chapters, full notes of their own, browsable from that bar instead of the sidebar.
-
-### Time Machine
-
-- The slider under each note shows its save history. Click a mark to view it (read-only); click the circle to return to the present.
-- The circle also creates a manual save point when your text has changed since the last one.
-- Hold-click a history mark to branch a brand-new note starting from that revision.
-
-### Toolbar & formatting
-
-- \`Ctrl+B\` / \`Ctrl+I\` / \`Ctrl+J\` bold / italic / strikethrough. \`Ctrl+T\` cycles heading level. \`Ctrl+-\` / \`Ctrl+#\` bullet / numbered list.
-- Export the current note with the PDF icon (preview mode) or the \`{}\` icon (edit mode); right-click either to choose an export folder.
-
-### Find & replace
-
-- \`Ctrl+F\` finds within the open note; \`Ctrl+H\` finds and replaces. \`Ctrl+Enter\` replaces all matches.
-
-### Shortcuts
-
-See the full [Keyboard Shortcuts]($HELP§SHORTCUTS#keyboard-shortcuts) table.
-
-### Music & sound
-
-- Typing has optional mechanical-keyboard sounds (three sets, tunable). A built-in 5-slot music player sits in the window-controls bar — right-click a slot to add files, shift+right-click to add a folder.
-
-### Appearance
-
-- The gear icon opens Settings: fonts, color presets, custom "paint bucket" theming, decorative overlays (Glaze), CSS filters, scroll feel, sounds, a custom animated mouse cursor, and performance toggles.
-- Save your whole look as a custom layout and export/import it as a \`.tdl\` layout file.
-
-### Window controls
-
-- Top bar: dark mode, settings, the music player, mini mode, minimize, maximize/double size (split button), close. The window is frameless — there's no OS menu bar.
+That's enough to get going. Everything else -- internal linking, tags, split view, Time Machine, formatting, exporting, and more -- has its own chapter alongside this one.
 `
 
 const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
-  `# Notes & Editing
+  `## Notes & Editing
 
 ### [Creating Notes](#creating-notes)
 
@@ -197,7 +144,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - Edit mode and preview/render mode each have their own independent on/off state.
 `,
-  `# Internal Linking
+  `## Internal Linking
 
 ### [Defining an Anchor](#defining-an-anchor)
 
@@ -236,8 +183,9 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - A bare \`[text](#anchor-id)\` — no \`$\` — always means "define an anchor here," never a link; if you want to link, the \`$\` is required.
 - Opening a link to the note that's already active just scrolls to the anchor, without disrupting your place otherwise.
 - The link button/shortcut prefills the destination with the last anchor you set (button or shortcut, anywhere, this session) — \`$NOTE-ID§CHAPTER-ID#anchor-id\`, with each part left blank if that anchor wasn't set inside a chapter, or if nothing's been set yet this session. Wraps a selection as the link text the same way the other toolbar buttons do; with just a caret, it inserts \`[link](...)\` with "link" selected, ready to type over.
+- This very page works the same way: \`[text]($HELP)\` opens it, \`[text]($HELP§CHAPTER-ID#anchor-id)\` jumps straight into one of its chapters. Every heading in a chapter is already an anchor target, so any one of them can be linked to directly.
 `,
-  `# Tags
+  `## Tags
 
 ### [Adding Tags](#adding-tags)
 
@@ -281,7 +229,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - Set and cleared only through [Archiving and Trash]($HELP§ARCHIVE-TRASH#archiving-and-trash), [Restoring from Archive or Trash]($HELP§ARCHIVE-TRASH#restoring-from-archive-or-trash), [Opening an External File]($HELP§EXTERNAL-FILES#opening-an-external-file), and [Debugging]($HELP§APPEARANCE-SETTINGS#debugging).
 - Can't be typed into the tag field directly, and are excluded from the suggested-tags list.
 `,
-  `# Sidebar & Search
+  `## Sidebar & Search
 
 ### [Sidebar Views](#sidebar-views)
 
@@ -317,7 +265,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - Prefixing the query with \`#\` searches tags only — \`#project\` matches any note tagged \`project\`, or with \`project\` anywhere in a tag name.
 - The \`Aa\` button toggles case-sensitive matching.
 `,
-  `# Split View & Tabs
+  `## Split View & Tabs
 
 ### [Creating a Section](#creating-a-section)
 
@@ -382,7 +330,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - The chapter bar is always showing for whatever note is open, with or without chapters yet -- there's no manual show/hide toggle, and no need to reach for the bottom utility bar just to start a note's first chapter. Either \`+\` (the chapter bar's own trailing pill, or the bottom utility bar's New Chapter action) creates a new empty chapter and switches straight to it. \`Shift+Alt+N\` does exactly the same thing from the keyboard.
 - The chapter bar's first tab is always the parent note itself; every chapter follows in order. Click the parent tab or any chapter pill to switch between them — each keeps and saves its own text independently. Too many chapters to fit scrolls horizontally, fading at whichever edge has more off-screen, same as the tab bar.
 - Drag a chapter pill to reorder it among its siblings — same drag-and-drop as reordering pinned tabs or tags: drop directly on another pill to land in front of it, or on the bar's empty space to send it to the end.
-- The moment a note has its first chapter, an auto-generated **Table of Contents** chapter appears too — no button to press, it just shows up pinned first in the bar (before every real chapter, not draggable) and disappears again the moment the last real chapter does, the same automatic show/hide the chapter panel itself already does. It lists every heading across the parent and all of its chapters, in order, each one a working link — always, whether or not the parent or any chapter has an assigned \`$id\`/\`§id\`, since it navigates internally rather than through the same link syntax you'd hand-type. It's regenerated fresh every time you open it, so it's always accurate without costing anything while you're not looking at it — meaning it's also read-only (anything you tried to type would just be overwritten on your next visit) and opens straight into render view. Since it's a generated view rather than something you write, it has no [Time Machine Timeline]($HELP§TIME-MACHINE#time-machine-timeline) of its own — the present-state circle stays live while viewing it, but re-runs the same regeneration instead of taking a save point (see [Present-State Circle]($HELP§TIME-MACHINE#present-state-circle)).
+- The moment a note has its first chapter, an auto-generated **Table of Contents** chapter appears too — no button to press, it just shows up pinned first in the bar (before every real chapter, not draggable) and disappears again the moment the last real chapter does, the same automatic show/hide the chapter panel itself already does. It lists every heading across the parent and all of its chapters, each one a working link — always, whether or not the parent or any chapter has an assigned \`$id\`/\`§id\`, since it navigates internally rather than through the same link syntax you'd hand-type. The parent's own title sits at the top, bold and unbulleted, apart from the list below it; every \`##\` heading after that — the parent's own, and each chapter's title — is a bullet at the same level, with that heading's own deeper headings nested under it. It's regenerated fresh every time you open it, so it's always accurate without costing anything while you're not looking at it — meaning it's also read-only (anything you tried to type would just be overwritten on your next visit) and opens straight into render view. Since it's a generated view rather than something you write, it has no [Time Machine Timeline]($HELP§TIME-MACHINE#time-machine-timeline) of its own — the present-state circle stays live while viewing it, but re-runs the same regeneration instead of taking a save point (see [Present-State Circle]($HELP§TIME-MACHINE#present-state-circle)).
 - An auto-generated **Open Items** chapter appears right after the Table of Contents (same pinned, non-draggable treatment) the moment any checklist item (\`- [ ]\`) anywhere in the parent or one of its chapters is unchecked, and disappears again once none are left anywhere in the family — including whenever the last real chapter itself disappears. It groups every open item under whichever heading it falls under, linked the same way the Table of Contents is — headings with nothing open under them are skipped entirely, so it's a pruned outline, not a full copy of every heading. Unlike the Table of Contents, it isn't regenerated on every visit: it only updates when a checklist item is actually created or its checked state flips, patching in just that one note's own section — so if you're looking at it in one editor while checking something off in another, it can go briefly stale until the next change anywhere in the family refreshes it, or until you click its present-state circle to force a full refresh on demand (see [Present-State Circle]($HELP§TIME-MACHINE#present-state-circle)). Same as the Table of Contents, it's read-only, has no Time Machine Timeline of its own, and opens straight into render view — but its own checkboxes are the one exception to "read-only": clicking one checks the real item off in its own source chapter without removing it from this list, so you can click it again to undo. The list itself doesn't update as you go — it only catches up (dropping anything actually checked off) the next time something elsewhere refreshes it, or when you force one with the present-state circle.
 - A chapter is a full note in its own right — its own regular tags don't exist; tags always belong to the parent — but it doesn't appear on its own in Date/Category/Find, only through its one parent's chapter bar. The exceptions are Trash, once deleted, and Archive, once archived (see below for both). A chapter belongs to exactly one parent, ever, and a chapter can't have chapters of its own. Dragging a note from the sidebar onto the chapter bar copies its content into a brand-new chapter and switches you to it, same as creating one any other way — the dragged note itself is untouched and stays independent, not linked to the copy. Dropping it on the bar's empty space (or its trailing \`+\` pill) adds it as the last chapter; dropping it directly on an existing chapter pill instead inserts it right in front of that one. Every heading in the copy shifts down one level (\`#\` becomes \`##\`, and so on) so its own title-heading nests under the parent's instead of competing with it — the original note's headings are untouched.
 - While a chapter is open, its parent stays the one shown as active in the sidebar and the tab bar — the chapter bar itself shows which chapter you're in.
@@ -395,7 +343,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
   - With nothing but whitespace after the caret (effectively at the end), it instead pulls the *next* chapter in: appends its text to the end of the current one and deletes it, caret landing exactly where the two texts meet. No jump, no note switch.
   - \`Shift+Alt+Backspace\` is the mirror, working backward from the caret/selection: visible text before it gets cut into a brand-new chapter directly ahead of the current one (caret stays at the very start of what's left); nothing but whitespace before it instead pulls the *previous* chapter in, prepending its text and deleting it, caret again landing exactly at the seam — a no-op on the very first chapter or the parent, since there's nothing before them to pull in. Doing the *cut* half of this while viewing the parent itself works a little differently, since there's no "chapter ahead of the parent" to insert into: the parent keeps the text before the caret/selection as its own new content (nothing about it changes otherwise), everything from there onward is cut into a brand-new chapter — the new first one — and you switch straight into it.
 `,
-  `# Archiving, Trash & Deletion
+  `## Archiving, Trash & Deletion
 
 ### [Archiving and Trash](#archiving-and-trash)
 
@@ -439,7 +387,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - Hold a right-click on the button to arm the purge; a normal left-click while armed confirms it.
 `,
-  `# Time Machine
+  `## Time Machine
 
 ### [Time Machine Timeline](#time-machine-timeline)
 
@@ -495,7 +443,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - While frozen, nothing about the note can be changed: no typing, no tag edits, no chapter reordering/renaming/archiving/deleting, no new snapshots, no archiving or deleting the note itself. The one exception is unfreezing it.
 - Click the same (now lit) snowflake button again to unfreeze — the note goes back to being a normal, editable note. Its history stays gone; freezing doesn't keep a backup.
 `,
-  `# Toolbar & Formatting
+  `## Toolbar & Formatting
 
 ### [Toolbar Overview](#toolbar-overview)
 
@@ -516,10 +464,10 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - Bold, italic, strikethrough; heading levels H1–H3; bulleted, numbered, and checklist lists; blockquote; code block and inline code; horizontal rule; link insertion.
 - Each button reflects whether the current selection or line already has that formatting applied.
-- Most double as the keyboard shortcuts listed in [Keyboard Shortcuts]($HELP§SHORTCUTS#keyboard-shortcuts).
+- Most double as the keyboard shortcuts listed in [Keyboard Shortcuts]($HELP§SHORTCUTS).
 - A checklist item's box (\`- [ ]\`) can be toggled two ways once the caret sits between its brackets: type any character to check it off with that character (type a space to uncheck it again), or click the caret itself — with the caret already there and not moving — to flip \`[ ]\`/\`[X]\` without touching the keyboard.
 `,
-  `# Find & Replace
+  `## Find & Replace
 
 ### [Find and Replace](#find-and-replace)
 
@@ -534,7 +482,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - The \`Aa\` toggle means "case-sensitive" in plain find mode; in replace mode it's repurposed as "keep case," searching case-insensitively but re-casing each replacement to match what it's replacing.
 - For searching across *all* notes rather than one, use [Search]($HELP§SIDEBAR-SEARCH#search) instead.
 `,
-  `# External Files
+  `## External Files
 
 ### [Opening an External File](#opening-an-external-file)
 
@@ -565,7 +513,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - Writes the note's current content into a new internal file; the original external file is left untouched.
 - External notes can't carry your own tags while the \`external\` tag is present, but still keep their own [Time Machine Timeline]($HELP§TIME-MACHINE#time-machine-timeline) like any other note.
 `,
-  `# Sync & Import
+  `## Sync & Import
 
 ### [Sync](#sync)
 
@@ -592,7 +540,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *Opens the app's own notes folder (where your \`.md\` files live on disk) in your system file explorer.*
 `,
-  `# Export
+  `## Export
 
 ### [Export to PDF](#export-to-pdf)
 
@@ -612,9 +560,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - Right-click the export button to force the folder picker, even if a destination is already remembered.
 `,
-  `# Keyboard Shortcuts
-
-### [Keyboard Shortcuts](#keyboard-shortcuts)
+  `## Keyboard Shortcuts
 
 > **Where?**
 > Global — active anywhere the app has focus, except inside search/replace/tag fields (where \`Tab\` / \`Enter\` / \`Esc\` move focus back into the editor instead).
@@ -642,9 +588,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - Shortcuts that touch the editor apply to whichever section is currently active.
 `,
-  `# Window Controls
-
-### [Window Controls](#window-controls)
+  `## Window Controls
 
 > **Where?**
 > The top bar of the window.
@@ -653,13 +597,13 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - **Dark mode toggle** — switches the whole app between light and dark presets.
 - **Settings (gear)** — opens/closes the Settings panel, see [Settings Panel]($HELP§APPEARANCE-SETTINGS#settings-panel).
-- **Music player** — see [Music Player]($HELP§MUSIC-PLAYER#music-player).
+- **Music player** — see [Music Player]($HELP§MUSIC-PLAYER).
 - **Mini mode** — collapses the window into a compact strip; while collapsed, the music player's options button is disabled.
 - **Minimize / Maximize–Restore / Close** — standard window controls.
 - **Double size (2x)** — the lower half of the split maximize button. Doubles the app's page zoom and, to match, the window's minimum size, so 2x content gets 2x room instead of being squeezed into the same space. Toggling off relaxes the minimum again but doesn't shrink a window you've since resized larger. Persists across restarts.
 - **Drag the toolbar or this top bar to move the window; double-click either to maximize/restore.** Dragging a maximized window from these areas restores it, ending up positioned under the cursor as if the drag had been followed the whole way. Dragging elsewhere in the app also moves the window, but won't restore it from maximized.
 `,
-  `# Appearance & Settings
+  `## Appearance & Settings
 
 ### [Settings Panel](#settings-panel)
 
@@ -782,7 +726,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *Volume and reverb controls for the built-in music player.*
 
-- Controls the same player described in [Music Player]($HELP§MUSIC-PLAYER#music-player); this panel just holds its volume and reverb sliders.
+- Controls the same player described in [Music Player]($HELP§MUSIC-PLAYER); this panel just holds its volume and reverb sliders.
 
 ### [Data Synchronization Settings](#data-synchronization-settings)
 
@@ -816,9 +760,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - **Debug logging** routes the app's debug log into a dedicated note tagged \`debug\` — see [Protected Tags]($HELP§TAGS#protected-tags).
 - A button opens a detached DevTools window.
 `,
-  `# Music Player
-
-### [Music Player](#music-player)
+  `## Music Player
 
 > **Where?**
 > The window-controls bar, center.
@@ -833,9 +775,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - **Volume and reverb** — adjustable from [Settings panel → Music]($HELP§APPEARANCE-SETTINGS#music-settings), or directly by scrolling over the player: plain scroll adjusts volume, Shift+scroll adjusts reverb amount, Ctrl+scroll adjusts reverb room size.
 - **Resuming across restarts** — if music was playing when the app was last closed, it resumes on launch (same song and position), fading in over 10 seconds from silence and full reverb up to your usual volume/reverb settings.
 `,
-  `# Data Storage
-
-### [Data Storage](#data-storage)
+  `## Data Storage
 
 > **Where?**
 > Not a UI element — describes where your files live on disk.

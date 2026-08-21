@@ -44,6 +44,14 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     expect(created.text).toContain(`[The Book](@${parent.id})`)
     expect(created.text).toContain(`[Setting](@${parent.id}#heading:setting)`)
 
+    // The parent's own title is a bold root line, not a bulleted entry --
+    // and its own `##` headings (here just "Setting") sit flush with every
+    // chapter title at depth 0, not indented under the root line.
+    expect(created.text).toContain(`**[The Book](@${parent.id})**`)
+    expect(created.text).toContain(`- [Setting](@${parent.id}#heading:setting)`)
+    expect(created.text).not.toContain(`- [The Book](@${parent.id})`)
+    expect(created.text).not.toContain(`  - [Setting](@${parent.id}#heading:setting)`)
+
     // Each chapter's own first heading IS its entry -- no separate,
     // redundant chapter-id-labeled line above it.
     expect(created.text).toContain(`- [Chapter One](@${ch1.id})`)
@@ -83,8 +91,8 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     expect(created.text).toBe([
       '# Table of Contents',
       '',
-      `- [The Book](@${parent.id})`,
-      `  - [Setting](@${parent.id}#heading:setting)`,
+      `**[The Book](@${parent.id})**`,
+      `- [Setting](@${parent.id}#heading:setting)`,
       `- [Chapter One](@${ch1.id})`,
       `  - [Arrival](@${ch1.id}#heading:arrival)`,
     ].join('\n'))

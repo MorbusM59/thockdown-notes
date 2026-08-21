@@ -56,7 +56,7 @@ async function writeNoteFile(db: DatabaseService, id: string, text: string): Pro
 
 function deriveTitle(text: string): string {
   const firstLine = text.split('\n')[0] ?? '';
-  return firstLine.replace(/^#\s*/, '').trim() || 'Untitled';
+  return firstLine.replace(/^#+\s*/, '').trim() || 'Untitled';
 }
 
 /**

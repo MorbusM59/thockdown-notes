@@ -187,6 +187,22 @@ export function formatOutlineEntryLine(depth: number, label: string, href: strin
 }
 
 /**
+ * The auto-generated cross-chapter Table of Contents' own opening line: the
+ * parent note's own title, bold and flush left, deliberately NOT a bulleted
+ * `formatOutlineEntryLine` entry -- it's the root of the outline, not a
+ * sibling of the `##` entries under it (every chapter title, plus any of
+ * the parent's own `##` headings), so it reads visually distinct from them
+ * rather than looking like just the first bullet in the same flat list.
+ * Only the auto-TOC chapter uses this; the auto-Open-Items chapter has no
+ * single "root" the same way -- each family member (parent or chapter) gets
+ * its own independent formatOutlineEntryLine(0, ...) group there, all at the
+ * same depth, so this formatter has no equivalent role to play in that file.
+ */
+export function formatOutlineRootTitleLine(label: string, href: string | null): string {
+  return href ? `**[${escapeMarkdownLinkLabel(label)}](${href})**` : `**${label}**`
+}
+
+/**
  * True if `oldText` and `newText` have a different set of headings (by
  * level + label, in document order) -- used to gate a debounced, best-effort
  * auto-TOC regeneration on save, the same way `checklistStateChanged`

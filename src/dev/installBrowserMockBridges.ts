@@ -40,7 +40,7 @@ import type { ChapterEntry, ChaptersApi } from '../shared/chapters'
 import type { ReviewFlagEntry, ReviewFlagsApi } from '../shared/reviewFlags'
 import { normalizeChapterHeadings } from '../shared/markdownHeadings'
 import { resolveIdentityLabel } from '../shared/tabLabels'
-import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine, parseMarkdownHeading, stripMarkdownInlineFormatting } from '../shared/tableOfContentsText'
+import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine, formatOutlineRootTitleLine, parseMarkdownHeading, stripMarkdownInlineFormatting } from '../shared/tableOfContentsText'
 import { formatInternalNoteLink } from '../shared/internalNoteLinks'
 import { deriveDefaultAssignedIdBase, normalizeAssignedIdInput } from '../shared/assignedIds'
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, findOpenItemSourceAtLine, parseOpenItemsGroups, toggleChecklistItemByText } from '../shared/openItemsText'
@@ -1116,9 +1116,9 @@ function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string)
   const parentHeadings = computeHeadingAnchors(parentNote.text)
   const parentHref = formatInternalNoteLink(parentNoteId)
 
-  const lines = ['# Table of Contents', '', formatOutlineEntryLine(0, parentNote.title || 'Untitled', parentHref)]
+  const lines = ['# Table of Contents', '', formatOutlineRootTitleLine(parentNote.title || 'Untitled', parentHref)]
   for (const heading of parentHeadings) {
-    lines.push(formatOutlineEntryLine(1, heading.label, formatInternalNoteLink(parentNoteId, formatHeadingAnchorFragment(heading.anchorId))))
+    lines.push(formatOutlineEntryLine(0, heading.label, formatInternalNoteLink(parentNoteId, formatHeadingAnchorFragment(heading.anchorId))))
   }
 
   const chapterRows = getRealChapterRowsInStore(store, parentNoteId)
