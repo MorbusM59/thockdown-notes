@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { sanitizeDocumentText } from '../../src/shared/textSanitization';
 import type { DatabaseService } from '../databaseService';
 import type { NoteLifecycleService } from '../noteLifecycleService';
@@ -10,6 +11,32 @@ import {
   HELP_GUIDE_INTRO_CONTENT,
   HELP_GUIDE_CHAPTERS,
 } from './helpGuideContent';
+
+// app_meta key this module's own reseed-skip check reads/writes -- see
+// ensureHelpGuide's own doc comment.
+const HELP_GUIDE_CONTENT_HASH_KEY = 'helpGuideContentHash';
+
+/**
+ * A stable digest of every hand-authored guide string (the root's own intro
+ * plus each chapter's id/chapterId/content) -- anything that would actually
+ * change what ends up on disk/in the DB. Deliberately NOT a function of
+ * anything generated (the auto-TOC chapter's own content, timestamps, ...),
+ * so regenerating those on a future startup never falsely looks like a
+ * content change. JSON.stringify over a plain array keeps id/chapterId
+ * baked into the digest alongside content, so reordering chapters or
+ * changing an id counts as a change too, not just editing prose.
+ */
+function computeHelpGuideContentHash(): string {
+  const payload = JSON.stringify({
+    intro: HELP_GUIDE_INTRO_CONTENT,
+    chapters: HELP_GUIDE_CHAPTERS.map((chapter) => ({
+      noteId: chapter.noteId,
+      chapterId: chapter.chapterId,
+      content: chapter.content,
+    })),
+  });
+  return createHash('sha256').update(payload).digest('hex');
+}
 
 // One minute after the Welcome note's own fixed timestamp -- see
 // helpNote.ts -- purely so the two sort adjacently if anything ever needs a
@@ -33,25 +60,29 @@ function deriveTitle(text: string): string {
 }
 
 /**
- * Seeds (and re-seeds, every startup) the built-in User Guide: a protected
- * parent note (assigned id `$HELP`) plus one real chapter per topic, plus an
- * auto-generated Table of Contents chapter for navigation between them.
- * Content itself lives in helpGuideContent.ts -- this module only wires it
- * into the database.
+ * Seeds (and re-seeds, whenever the content actually changed) the built-in
+ * User Guide: a protected parent note (assigned id `$HELP`) plus one real
+ * chapter per topic, plus an auto-generated Table of Contents chapter for
+ * navigation between them. Content itself lives in helpGuideContent.ts --
+ * this module only wires it into the database.
  *
  * Deliberately NOT gated on "database is empty" the way ensureHelpNote's
  * Welcome note is (see helpNote.ts) -- this content should track app
  * updates (a shipped documentation fix should reach an existing install on
- * its next launch), not just first-run installs. Safe to re-run
- * unconditionally: `upsertNoteContent`'s own INSERT..ON CONFLICT UPDATE
- * overwrites each guide note's own content back to canonical without
- * touching anything else, and every id touched here is one of this
- * module's own fixed constants (HELP_GUIDE_ROOT_ID / HELP_GUIDE_CHAPTERS'
- * own ids / HELP_GUIDE_AUTO_TOC_ID) -- never a user-generated one, so this
- * can never collide with or overwrite a real note. `addChapter` (the one
- * non-idempotent primitive involved -- a plain INSERT) is guarded by
- * checking `listChaptersForNote` first, so re-running this on an install
- * that already has the guide never creates duplicate chapter links.
+ * its next launch), not just first-run installs. It IS gated on
+ * computeHelpGuideContentHash() matching the hash stashed in app_meta from
+ * the last time this actually ran, though: checked (cheap: one SELECT, no
+ * disk writes) on literally every startup, but the real reseed work below
+ * -- and the unfreeze/refreeze bracket around it -- only runs when a
+ * shipped content change (or a first run, with no stored hash yet) means
+ * there's actually something new to write. Safe to re-run at all: every id
+ * touched here is one of this module's own fixed constants
+ * (HELP_GUIDE_ROOT_ID / HELP_GUIDE_CHAPTERS' own ids / HELP_GUIDE_AUTO_TOC_ID)
+ * -- never a user-generated one, so this can never collide with or
+ * overwrite a real note. `addChapter` (the one non-idempotent primitive
+ * involved -- a plain INSERT) is guarded by checking `listChaptersForNote`
+ * first, so re-running this on an install that already has the guide never
+ * creates duplicate chapter links.
  *
  * Must run after `noteLifecycleService` exists (i.e. from
  * `registerIpcHandlers()` in main.ts, not `DatabaseService.initialize()`,
@@ -72,6 +103,11 @@ function deriveTitle(text: string): string {
  * freeze/unfreeze operation a user's own "unfreeze this note" action would.
  */
 export async function ensureHelpGuide(db: DatabaseService, noteLifecycle: NoteLifecycleService): Promise<void> {
+  const contentHash = computeHelpGuideContentHash();
+  if (db.getAppMeta(HELP_GUIDE_CONTENT_HASH_KEY) === contentHash) {
+    return;
+  }
+
   const now = HELP_GUIDE_TIME_MS;
 
   db.unfreezeNoteFamily(HELP_GUIDE_ROOT_ID);
@@ -154,4 +190,10 @@ export async function ensureHelpGuide(db: DatabaseService, noteLifecycle: NoteLi
   // chapter, and clears their (never meaningfully populated) snapshot
   // history. See freezeNoteFamily's own doc comment.
   db.freezeNoteFamily(HELP_GUIDE_ROOT_ID);
+
+  // Recorded last, only once every write above has actually landed -- if
+  // this ran (or the process) died partway through, the stale/missing hash
+  // means the next startup's check above sees a mismatch and redoes the
+  // whole reseed rather than wrongly believing it's already current.
+  db.setAppMeta(HELP_GUIDE_CONTENT_HASH_KEY, contentHash);
 }

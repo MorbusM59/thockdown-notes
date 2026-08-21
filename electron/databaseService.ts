@@ -786,6 +786,19 @@ export class DatabaseService {
     return this.notesDir;
   }
 
+  /** Generic app-level key/value read -- see app_meta's own schema comment. Null when the key has never been set. */
+  getAppMeta(key: string): string | null {
+    const db = this.requireDb();
+    const row = db.prepare('SELECT value FROM app_meta WHERE key = ?').get(key) as { value: string } | undefined;
+    return row?.value ?? null;
+  }
+
+  /** Generic app-level key/value write -- see app_meta's own schema comment. Upsert (INSERT..ON CONFLICT UPDATE), so safe to call whether or not the key already exists. */
+  setAppMeta(key: string, value: string): void {
+    const db = this.requireDb();
+    db.prepare('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value);
+  }
+
   async initialize(): Promise<void> {
     await fs.mkdir(this.dataRoot, { recursive: true });
 
@@ -3481,6 +3494,17 @@ export class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_ui_loadout_entries_signature ON ui_loadout_entries(signature);
 
       CREATE TABLE IF NOT EXISTS ui_loadout_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+
+      -- Generic app-level key/value store -- small, cross-cutting flags that
+      -- don't belong to any one feature's own table (ui_loadout_meta above
+      -- is the loadout system's own, narrowly-typed equivalent; this one is
+      -- for everything else). First user: helpGuideNote.ts's content-hash
+      -- gate, so a startup with an unchanged guide can skip reseeding it
+      -- entirely instead of unconditionally rewriting it every launch.
+      CREATE TABLE IF NOT EXISTS app_meta (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );

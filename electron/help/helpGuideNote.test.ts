@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -59,5 +59,30 @@ describe('ensureHelpGuide', () => {
       createdAtMs: Date.now(),
       updatedAtMs: Date.now(),
     })).toThrow()
+  })
+
+  it('skips the whole reseed (no unfreeze, no writes) on a second call once the content hash already matches', async () => {
+    await ensureHelpGuide(db, lifecycle)
+
+    const upsertSpy = vi.spyOn(db, 'upsertNoteContent')
+    const unfreezeSpy = vi.spyOn(db, 'unfreezeNoteFamily')
+
+    await ensureHelpGuide(db, lifecycle)
+
+    expect(unfreezeSpy).not.toHaveBeenCalled()
+    expect(upsertSpy).not.toHaveBeenCalled()
+    expect(db.getNoteRecord(HELP_GUIDE_ROOT_ID)?.isTimeless).toBe(true)
+  })
+
+  it('reseeds again if the stored hash is missing or stale, even though the guide is already frozen', async () => {
+    await ensureHelpGuide(db, lifecycle)
+    db.setAppMeta('helpGuideContentHash', 'stale-hash-from-an-older-build')
+
+    const upsertSpy = vi.spyOn(db, 'upsertNoteContent')
+
+    await ensureHelpGuide(db, lifecycle)
+
+    expect(upsertSpy).toHaveBeenCalled()
+    expect(db.getNoteRecord(HELP_GUIDE_ROOT_ID)?.isTimeless).toBe(true)
   })
 })
