@@ -18,6 +18,8 @@ export interface ChapterBarProps {
   activeNoteId: string | null
   /** Switches back to the parent note's own content -- the first tab. */
   onParentTabClick: () => void
+  /** The tab strip's own trailing "+" pill: creates a brand-new chapter and switches straight to it (mirrors useNoteChapters.ts's handleCreateChapter -- same call the bottom utility bar's own New Chapter action already uses). Disabled whenever the split is (isLocked below). */
+  onCreateChapter: () => void | Promise<void>
   onChapterClick: (chapterNoteId: string) => void
   /** `index` is a position within useNoteChapters.ts's own *live-only* reorderableChapters, not `chapters` above -- an archived-merged chapter is never draggable (see the ghost-row rendering below), so this is only ever called with a real, live index. */
   onChapterDragStart: (event: DragEvent<HTMLDivElement>, index: number) => void
@@ -63,15 +65,21 @@ export interface ChapterBarProps {
  * via the shared `.is-active` convention when their chapter is the one
  * currently loaded, exactly like a pill's own `.is-active` state. Shown
  * identically in both edit and render view, since it lives outside the
- * editor/preview split in SectionEditorArea.tsx. The panel itself only ever
- * appears when there's at least one chapter -- see SectionEditorArea.tsx's
- * derived `isChapterPanelOpen`; new chapters are created from the bottom
- * utility bar's "+" button instead of from inside this bar.
+ * editor/preview split in SectionEditorArea.tsx. The panel is always shown
+ * whenever there's an active note -- see SectionEditorArea.tsx's derived
+ * `isChapterPanelOpen` -- so the tab strip's own trailing "+" pill (a plain
+ * `.create-pill`, same icon-only pill treatment as the tab bar's own "new
+ * note" pill) is always reachable even before the note has its first
+ * chapter, not just from the bottom utility bar's "New Chapter" quick
+ * action (EscapeHoldPanel.tsx), which still exists and calls the exact same
+ * handler.
  *
  * Dropping a note dragged in from the sidebar onto this bar's background (or
- * the bottom utility bar's "+" button) clones it into a brand-new last
- * chapter; dropping directly on an existing chapter pill (`.chapter-pill`,
- * matched via its `data-chapter-note-id`) clones it in *front* of that one
+ * its trailing "+" pill, which carries no `data-chapter-note-id` and so
+ * doesn't count as an existing-chapter target below) clones it into a
+ * brand-new last chapter; dropping directly on an existing chapter pill
+ * (`.chapter-pill`, matched via its `data-chapter-note-id`) clones it in
+ * *front* of that one
  * instead. That's a *different* drag (payload type `NOTE_DRAG_MIME_TYPE`,
  * claimed in capture phase by EditorSection.tsx's section-wide drop handler
  * before it ever reaches the handlers below) from the one this component
@@ -119,6 +127,7 @@ export function ChapterBar({
   notes,
   activeNoteId,
   onParentTabClick,
+  onCreateChapter,
   onChapterClick,
   onChapterDragStart,
   onChapterDragEnd,
@@ -326,6 +335,17 @@ export function ChapterBar({
                 </InlinePillOrInput>
               )
             })}
+            <div
+              className="tag-pill note-tab-pill chapter-pill create-pill"
+              aria-disabled={isLocked}
+              data-tooltip="Add a new chapter"
+              onClick={() => {
+                if (isLocked) return
+                void onCreateChapter()
+              }}
+            >
+              <span className="fa-solid fa-plus" aria-hidden="true" />
+            </div>
           </div>
         </div>
       </div>

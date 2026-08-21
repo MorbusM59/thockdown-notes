@@ -80,6 +80,8 @@ export interface SectionEditorAreaProps {
   chapters: ChapterEntry[]
   archivedMergedChapterIds: ReadonlySet<string>
   onParentTabClick: () => void
+  /** The chapter bar's own trailing "+" pill -- see ChapterBar.tsx's onCreateChapter doc comment. */
+  onCreateChapter: () => void | Promise<void>
   onChapterClick: (chapterNoteId: string) => void
   onChapterDragStart: (event: DragEvent<HTMLDivElement>, index: number) => void
   onChapterDragEnd: () => void
@@ -196,6 +198,7 @@ export function SectionEditorArea({
   chapters,
   archivedMergedChapterIds,
   onParentTabClick,
+  onCreateChapter,
   onChapterClick,
   onChapterDragStart,
   onChapterDragEnd,
@@ -260,15 +263,12 @@ export function SectionEditorArea({
     isInputField: false,
   })
 
-  // Smart-toggled, not manually: the panel shows itself exactly when the
-  // current note (or its own currently-open chapter) actually has chapters,
-  // and hides itself the moment the last one collapses back into its
-  // parent -- see the chapter-panel-hides-when-empty behavior on the
-  // collapse action in useNoteChapters.ts. No user-facing show/hide control
-  // exists anymore; the old toggle button is now the "+" create-chapter
-  // button below, which opens the panel as a side effect of chapters.length
-  // becoming positive, not by toggling visibility directly.
-  const isChapterPanelOpen = chapters.length > 0
+  // Always shown for any active note, chapters or not -- ChapterBar's own
+  // trailing "+" pill (its onCreateChapter) is how a note gets its first
+  // chapter now, so the bar needs to be reachable before chapters.length
+  // ever goes positive, not just after. No user-facing show/hide control
+  // exists; it simply tracks whether there's a note to show chapters of.
+  const isChapterPanelOpen = Boolean(activeNoteId)
 
   // isViewingAutoTocChapter/isViewingAutoOpenItemsChapter (props -- see
   // their own doc comment) each make the editor read-only below, for
@@ -412,6 +412,7 @@ export function SectionEditorArea({
             activeNoteId={activeNoteId}
             isLocked={isViewingTimelessNote}
             onParentTabClick={onParentTabClick}
+            onCreateChapter={onCreateChapter}
             onChapterClick={onChapterClick}
             onChapterDragStart={onChapterDragStart}
             onChapterDragEnd={onChapterDragEnd}

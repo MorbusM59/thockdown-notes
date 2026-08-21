@@ -80,8 +80,9 @@ export interface UseNoteChaptersResult {
    * destination note with the caret at its end. A
    * no-op while viewing the parent directly -- there's no "current chapter"
    * to collapse. Collapsing a note's last remaining chapter back into the
-   * parent naturally hides the chapter panel again, since its visibility is
-   * purely `chapters.length > 0` (see SectionEditorArea.tsx).
+   * parent leaves the chapter panel itself showing -- its visibility no
+   * longer tracks `chapters.length` (see SectionEditorArea.tsx's
+   * `isChapterPanelOpen`), only whether there's an active note at all.
    */
   handleCollapseChapterIntoPrevious: () => Promise<void>
   /**
@@ -280,14 +281,15 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
 
   // Keeps the auto-TOC chapter's existence a hard invariant of "this note has
   // at least one real chapter" -- no manual toggle. Appears the moment the
-  // first real chapter does (however it was created: the "+" button, a
-  // sidebar note dragged in, the scissors/split shortcuts, ...) and
-  // disappears again the moment the last one does, mirroring
-  // SectionEditorArea.tsx's own "chapter panel shows/hides itself, no manual
-  // control" convention for the chapter bar as a whole. Deliberately doesn't
-  // call activateNote either way -- creation/removal happens in the
-  // background, wherever the user already is/was headed (typically the real
-  // chapter they just created or collapsed) is left alone.
+  // first real chapter does (however it was created: the chapter bar's own
+  // "+" pill, the bottom utility bar's New Chapter action, a sidebar note
+  // dragged in, the scissors/split shortcuts, ...) and disappears again the
+  // moment the last one does -- unlike the chapter panel itself
+  // (SectionEditorArea.tsx's `isChapterPanelOpen`), which stays showing
+  // either way once there's an active note. Deliberately doesn't call
+  // activateNote either way -- creation/removal happens in the background,
+  // wherever the user already is/was headed (typically the real chapter
+  // they just created or collapsed) is left alone.
   const reorderableChapterCount = reorderableChapters.length
 
   // Guards the effect below against firing a second, redundant

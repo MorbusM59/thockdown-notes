@@ -442,6 +442,14 @@
   box-shadow: var(--box-shadow-inverted-harsh-active);
 }
 
+/* Icon-only "+" pill (tab bar: new note in this section; chapter bar: new
+   chapter for this note) -- dimmed the same way as a disabled suggested-tag
+   chip (.tag-pill.suggested[aria-disabled]) while its own creation action
+   isn't currently available. */
+.create-pill[aria-disabled='true'] {
+  opacity: 0.5;
+}
+
 /* Archived/trashed note whose tab is still pinned — dimmed, purely informational. */
 .note-tab-pill.ghost,
 .note-tab-pill.ghost.is-active {

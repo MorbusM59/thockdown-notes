@@ -26,6 +26,8 @@ export interface SectionTabBarProps {
   onCreateSection: () => void
   /** Closes this section's slot (only ever called for non-leftmost sections). */
   onCloseSection: () => void
+  /** The tab strip's own leading "+" pill: creates a brand-new note and pins it as this section's rightmost tab. Always rendered in tabs mode, even with zero tabs currently pinned. */
+  onCreateNote: () => void | Promise<void>
 
   /** This section's own name -- null until the user names it via the identity tab. */
   sectionName: string | null
@@ -72,6 +74,7 @@ export function SectionTabBar({
   canCreateSection,
   onCreateSection,
   onCloseSection,
+  onCreateNote,
   sectionName,
   isEditingSectionName,
   sectionNameDraft,
@@ -271,10 +274,19 @@ export function SectionTabBar({
                     )
                   })}
                 </div>
-              ) : pinnedTabs.length === 0 && !tempTabNoteId ? (
-                <span className="tabbar-tag-hint"></span>
               ) : (
                 <>
+                  <div
+                    className="tag-pill note-tab-pill create-pill"
+                    aria-disabled={!persistenceReady}
+                    data-tooltip="New note in this section"
+                    onClick={() => {
+                      if (!persistenceReady) return
+                      void onCreateNote()
+                    }}
+                  >
+                    <span className="fa-solid fa-plus" aria-hidden="true" />
+                  </div>
                   {tempTabNoteId ? (() => {
                     const note = notes.find((entry) => entry.id === tempTabNoteId)
                     const { text: label, isAssigned } = resolveIdentityLabel(note?.assignedId, note?.contentText)

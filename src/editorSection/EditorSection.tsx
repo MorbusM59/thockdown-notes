@@ -36,6 +36,9 @@ import { restorePreviewBlockSplitCacheFromRanges } from '../editor/PreviewBlockS
 import type { PreviewMarkdownBlock, PreviewBlockSplitCache } from '../editor/PreviewBlockSplit'
 import type { SectionHandle } from './sectionRegistry'
 
+/** Same seed text as App.tsx's own NEW_NOTE_TEMPLATE (createNote) -- kept as its own local copy rather than a shared import to avoid a circular dependency (App.tsx is what mounts EditorSection). */
+const NEW_NOTE_TEMPLATE = '# '
+
 type ViewStyleKey =
   | 'modern'
   | 'narrow'
@@ -889,6 +892,23 @@ export function EditorSection({
     updateNoteAssignedId,
     initialTabBarMode: restoredTabBarMode,
   })
+
+  // The tab bar's own "+" pill (SectionTabBar.tsx): creates a brand-new note
+  // and pins it as this section's own rightmost tab, same "attach a note to
+  // this section" verb pinNoteAsRightmostTab already gives a note dragged in
+  // from the sidebar or a tab dragged in from another section. Deliberately
+  // section-scoped (activateNote/pinNoteAsRightmostTab both close over this
+  // section's own sectionId) rather than App.tsx's createNote, which always
+  // targets whichever section is globally "active" -- this needs to target
+  // the section whose own "+" was actually clicked, active or not.
+  const handleCreateNoteInSection = useCallback(async () => {
+    if (!window.thockdownNotes || !persistenceReady) return
+    const initialText = NEW_NOTE_TEMPLATE
+    const created = await window.thockdownNotes.createNote({ initialText })
+    await refreshNotes(created.id)
+    await pinNoteAsRightmostTab(created.id)
+    await activateNote(created.id, initialText.length)
+  }, [persistenceReady, refreshNotes, pinNoteAsRightmostTab, activateNote])
 
   useEffect(() => {
     applyPinnedTabsUpdateRef.current = applyTabsUpdate
@@ -1753,6 +1773,7 @@ export function EditorSection({
         canCreateSection={canCreateSection}
         onCreateSection={onCreateSection}
         onCloseSection={onCloseSection}
+        onCreateNote={handleCreateNoteInSection}
         sectionName={sectionName}
         isEditingSectionName={isEditingSectionName}
         sectionNameDraft={sectionNameDraft}
@@ -1841,6 +1862,7 @@ export function EditorSection({
         chapters={chapters}
         archivedMergedChapterIds={archivedMergedChapterIds}
         onParentTabClick={handleParentTabClick}
+        onCreateChapter={handleCreateChapter}
         onChapterClick={handleChapterClick}
         onChapterDragStart={onChapterDragStart}
         onChapterDragEnd={onChapterDragEnd}
