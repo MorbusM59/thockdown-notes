@@ -44,7 +44,7 @@ export interface ChapterBarProps {
   onChapterPillContextMenu: (event: MouseEvent<HTMLDivElement>) => void
   onArchiveChapterClick: (chapterNoteId: string) => void
   onDeleteChapterClick: (chapterNoteId: string) => void
-  /** True while the parent note is timeless (SectionEditorArea.tsx's isViewingTimelessNote) -- every chapter pill is treated like an archived-merged ("ghost") pill (no drag, no rename, no archive/delete split), and the collapse/extract mini buttons are disabled, since none of that is possible while the whole family is frozen (databaseService.ts's assertNotTimeless). */
+  /** True while the parent note is timeless (SectionEditorArea.tsx's isViewingTimelessNote) -- every chapter pill is treated like an archived-merged ("ghost") pill (no drag, no rename, no archive/delete split), and the collapse/extract mini buttons are omitted entirely, since none of that is possible while the whole family is frozen (databaseService.ts's assertNotTimeless). */
   isLocked?: boolean
 }
 
@@ -349,27 +349,30 @@ export function ChapterBar({
         </div>
       </div>
 
-      <button
-        type="button"
-        className="btn-icon chapter-collapse-button"
-        data-tooltip="Collapse this chapter into the previous one"
-        aria-label="Collapse this chapter into the previous one"
-        disabled={!hasCurrentChapter || isLocked}
-        onClick={onCollapseChapterIntoPrevious}
-      >
-        <span className="fa-solid fa-code-merge" aria-hidden="true" />
-      </button>
+      {!isLocked ? (
+        <button
+          type="button"
+          className="btn-icon chapter-collapse-button"
+          data-tooltip="Collapse this chapter into the previous one"
+          aria-label="Collapse this chapter into the previous one"
+          disabled={!hasCurrentChapter}
+          onClick={onCollapseChapterIntoPrevious}
+        >
+          <span className="fa-solid fa-code-merge" aria-hidden="true" />
+        </button>
+      ) : null}
 
-      <button
-        type="button"
-        className="btn-icon chapter-extract-button"
-        data-tooltip="Cut the selection (or everything after the caret) into a new chapter right behind this one"
-        aria-label="Cut the selection (or everything after the caret) into a new chapter right behind this one"
-        disabled={isLocked}
-        onClick={onExtractSelectionToChapter}
-      >
-        <span className="fa-solid fa-scissors" aria-hidden="true" />
-      </button>
+      {!isLocked ? (
+        <button
+          type="button"
+          className="btn-icon chapter-extract-button"
+          data-tooltip="Cut the selection (or everything after the caret) into a new chapter right behind this one"
+          aria-label="Cut the selection (or everything after the caret) into a new chapter right behind this one"
+          onClick={onExtractSelectionToChapter}
+        >
+          <span className="fa-solid fa-scissors" aria-hidden="true" />
+        </button>
+      ) : null}
     </div>
   )
 }
