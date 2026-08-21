@@ -2,6 +2,9 @@
 
 This project's documentation is kept deliberately small. These are the load-bearing documents; nothing else in the repo should be treated as authoritative project doctrine.
 
+## Git workflow
+Non-local (remote/cloud) sessions: once a change is committed and pushed to its working branch, merge it straight into `main` yourself (a fast-forward, when the branch is a clean descendant of `main`) rather than opening a pull request and waiting on review. Push `main` directly. Skip this and fall back to a normal branch+PR (or ask first) when the merge isn't a clean fast-forward, or when the user asks for a PR instead. Local sessions are unaffected — this default is for non-local sessions only.
+
 ## Read first
 - [docs/guiding-vision.md](docs/guiding-vision.md) — the product's spiritual guideline: why this app exists and who it's for. Written for the AI agent, not for end users; let it inform judgment calls, don't surface it to users.
 
