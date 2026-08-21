@@ -386,7 +386,7 @@ specific symptom shouldn't reproduce in CM6, unlike the (already-resolved, unrel
   CSS tweak on the assumption it's the same bug shape as before — the evidence above says it
   probably isn't.
 
-### Bug 5 — 1px horizontal shift at a soft-wrap boundary ("wrap-boundary caret assoc") — FIXED (mechanism verified, pixel-level symptom not reproducible in this sandbox)
+### Bug 7 — 1px horizontal shift at a soft-wrap boundary ("wrap-boundary caret assoc") — FIXED (mechanism verified, pixel-level symptom not reproducible in this sandbox; largely superseded by Bug 8 below, which found the real cause of the user-visible symptom)
 
 **User report**: typing a character (specifically a space) that fills a line all the way to its
 last box and causes it to wrap shifts the edit-mode viewport's text one pixel to the left,
@@ -776,7 +776,7 @@ clean, `npm test` 258/258, full `scripts/perf/verifyCM6*.mjs` suite (23/23, one 
 the close-section checkpoint, and an A/B check proving the close-section checkpoint fix is actually
 load-bearing (reverting it reproduces the loss under the same test).
 
-**A later session fixed Bug 5 (1px horizontal shift at a soft-wrap boundary, "wrap-boundary caret
+**A later session fixed Bug 7 (1px horizontal shift at a soft-wrap boundary, "wrap-boundary caret
 assoc")** — see its own section above for the full account. Root cause grounded directly in
 `@codemirror/view`/`@codemirror/state` source: CM6's own `SelectionRange.assoc` mechanism for this
 exact "collapsed cursor at a soft-wrap boundary" ambiguity exists and works (arrow-key navigation
@@ -791,12 +791,103 @@ stated honestly rather than glossed over**: a genuine pixel-level reproduction o
 reported symptom itself — extensive attempts (real word-wrapped typing across dozens of wrap
 points, a `pixelmatch` screenshot diff of an unrelated settled row, a 16-width sweep, direct
 `scroller.scrollLeft` polling across the user's exact arrow-key toggle sequence) never budged a
-single pixel in this sandbox's headless Linux Chromium, fix or no fix — the native selection was
-already resolving to the correct row by default in every attempt here, suggesting this is a
-Chromium-version/platform-specific affinity-heuristic difference rather than something reliably
-forceable from outside this environment. If the user still sees the symptom after this fix ships,
-the next lead is the real packaged Electron app via `xvfb-run` (a different Chromium build/config
-than the `dev:browser` mock), not another pass at the same headless-Chromium angle.
+single pixel in this sandbox's headless Linux Chromium, fix or no fix.
+
+**The user reported back that Bug 7's fix made no noticeable difference, then gave two sharper
+corrections that reopened the investigation**: (1) arrow keys at the wrap boundary don't just fix
+the shift, they can also *cause* it — width-dependent, not reliably reproducible on demand; and (2)
+click-dragging a text selection past the editor container's left or right border is a *consistently*
+reproducible way to trigger the shift, and it behaves asymmetrically (drag past the border that
+caused it does NOT undo it; only dragging past the *opposite* border does). That asymmetric,
+sticks-until-the-opposite-edge behavior was the concrete lead that finally reproduced the bug live
+in this sandbox — see **Bug 8** below, which found and fixed the actual geometry gap. Bug 7's fix
+is not wrong or reverted (its root cause — CM6's own typing path never setting a non-zero
+`SelectionRange.assoc` — is real, grounded directly in `@codemirror/view` source, and stays fixed),
+but it was fixing a real, separate, more obscure gap in the same neighborhood, not the specific
+symptom the user was actually hitting.
+
+### Bug 8 — click-drag selection past the editor's left/right border shifts the text 1px — FIXED (root cause, not a reactive patch)
+
+**Reliably reproducible, unlike Bug 7 above** — confirmed live via a real simulated Playwright
+drag: click into the text, drag past the scroller's right edge, release. `.cm-scroller`'s
+`scrollLeft` measurably moved from `0` to `1` and stayed there (confirmed via direct polling across
+8 samples over ~1.2s and after `mouseup` — it does not self-revert), and `.cm-content`'s own
+bounding rect shifted left by exactly 1px to match. Dragging past the *left* edge afterward moved
+`scrollLeft` back to `0`; dragging past whichever edge you'd already just crossed does nothing
+(matches the user's own asymmetric description exactly).
+
+**Root cause, this time fully reproduced and measured, not inferred**: `.cm-scroller`'s
+`scrollWidth` was a genuine `1` pixel more than its `clientWidth` at rest, on every window width
+tested (confirmed via direct measurement, not assumed) — a real, persistent 1px of scrollable range
+that has no legitimate reason to exist, since this app's own `EditorView.theme` explicitly declares
+`.cm-scroller { overflowX: 'hidden' }` with the comment "this app draws its own scrollbar ... and
+never scrolls horizontally." `overflow-x: hidden` only blocks *user-driven* wheel/scrollbar
+scrolling, though — it does nothing to stop the browser's own native "auto-scroll the drag point
+into view" behavior during a text-selection drag, which reached directly into that real 1px of
+range. Traced the 1px itself to `.editor-text`'s own glyph-centering `transform:
+translateX(calc(((var(--editor-cell-width) - var(--editor-glyph-width)) / 2)))` (`src/index.css`):
+a `transform` shifts an element's rendered/painted position without changing its layout width, and
+Chromium counts that shifted paint position toward `scrollWidth` — so `.cm-content`, transformed
+right by a sub-pixel amount, painted its right edge past `.cm-scroller`'s own right edge by exactly
+that amount, registering as scrollable overflow. Confirmed directly: reading `.cm-content`'s real
+`getBoundingClientRect()` against `.cm-scroller`'s showed the content box's right edge sitting
+~1.18px past the scroller's own right edge.
+
+**First attempt, informative failure**: tried compensating with `paddingRight` on `.cm-content`
+(matching the review-gutter column's own existing padding mechanism) — measured zero effect.
+Padding is *inside* an element's own box; a `transform` moves the *entire* box, padding included,
+so padding can't pull a transformed box's edge back inside its parent. Reverted before landing (see
+`computeReviewGutterRightPx`'s git history around this session if picking this up cold — the
+revert is clean, no trace left in the shipped code).
+
+**Second attempt, also an informative failure**: switched to reducing `.cm-content`'s own `width`
+by the exact transform-shift amount (computed in JS from the same `cellWidthPx`/`glyphWidthPx`
+values that feed the CSS transform, so it's guaranteed to match exactly, not approximate it) —
+`getComputedStyle` showed the width change had **zero effect** on the actual rendered box, despite
+the inline style genuinely being set correctly. Root cause: CM6's own base theme
+(`@codemirror/view`'s bundled styles) makes `.cm-content` a flex item of `.cm-scroller` (a flex
+container) with `flexGrow: 2`. A plain `width` on a flex item is only its flex-basis — flex-grow
+then expands the item to fill available space regardless, silently re-expanding the shrink right
+back to 100%. Confirmed live via `getComputedStyle().width` staying at the un-shrunk value despite
+`element.style.width` showing the correct, smaller `calc()` expression.
+
+**The fix that actually worked**: `max-width` instead of `width`, same `calc(100% -
+<shiftAmount>px)` expression. `max-width` is not a flex-basis input — it's a hard clamp on the
+item's *final*, post-grow size, which flex-grow cannot exceed. Applied in `CM6Editor.tsx`'s
+existing content-padding `useEffect` (right alongside the `paddingLeft`/`paddingRight`/`paddingTop`/
+`paddingBottom` assignments it already makes on `view.contentDOM`), computed once as
+`glyphCenteringShiftPx = (cellWidthPx - glyphWidthPx) / 2` — the exact same formula, same two
+inputs, as the CSS transform itself, so it can't drift out of sync with it. Confirmed via direct
+measurement: `.cm-scroller.scrollWidth === .cm-scroller.clientWidth` exactly, across 14 window
+widths from 700px to 1500px, and with the review-gutter/line-numbers column both on and off.
+
+**A reactive band-aid was tried and deliberately removed once the root cause was found**: before
+finding the geometry fix, a defensive `scroller.scrollLeft = 0` clamp was added to the existing
+`handleScroll` listener (reactively undoing any horizontal drift on every scroll event, matching
+this file's existing "actively correct drift" philosophy for vertical scroll). It worked — measured
+via direct event-timestamped logging, the correction was effectively immediate, no visible flicker
+— but per the user's own explicit steer ("isn't the correct solution to actually make sure the
+content width matches the container width instead of redrawing/moving after the fact?"), it was
+removed once the `max-width` fix confirmed there's no overflow left to react to. Verified this
+removal doesn't regress anything: re-ran the exact same drag-past-both-edges repro with the reactive
+clamp deleted and only the geometry fix in place — `scrollLeft` never moves off `0` at all, not even
+transiently. Recorded here as the record of *why* the simpler geometry-only fix is trusted, not left
+implicit.
+
+**Verified**: `npx tsc --noEmit`/`npm run lint` clean (same pre-existing unrelated `App.tsx` failure
+as Bug 7, confirmed via `git stash`), `npm test` 513/513, a live screenshot sanity check (no visible
+glyph clipping/collision near the right edge from the new `max-width` constraint — grid alignment
+unaffected), a new A/B-verified permanent regression script
+(`scripts/perf/verifyCM6NoHorizontalScrollOverflow.mjs` — checks the geometry directly across 4
+widths and with the gutter on, plus a real simulated drag past both edges, matching the user's own
+exact repro), and the full existing `scripts/perf/verifyCM6*.mjs` suite re-run to confirm no
+incidental regression: 22/28 passed (26 pre-existing scripts + the 2 new ones from this session's
+two fixes); the same 6 pre-existing failures as Bug 7's own suite run above
+(`verifyCM6CaretSurvivesTagMutation`, `verifyCM6ColdBootCaretFocus`, `verifyCM6Phase2Slice11`,
+`verifyCM6Phase2Slice17`, `verifyCM6Phase2Slice20`, `verifyCM6ProductionGating`) recurred
+identically, byte-for-byte the same failure output as before -- not re-A/B'd a second time since
+Bug 7's own A/B pass already established they're pre-existing sandbox flakiness, not something this
+session's changes could plausibly have caused or fixed.
 
 **Next up, in priority order**:
 - Bug 4 (Enter double line break — needs live reproduction attempt first, static analysis argues

@@ -1200,6 +1200,27 @@ export function CM6Editor({
   // half, so rounding costs nothing and keeps every grid line equally crisp.
   const halfCellWidthPx = Math.round(cellWidthPx / 2);
   const halfLineHeightPx = Math.round(lineHeightPx / 2);
+  // .editor-text's own glyph-centering `transform: translateX(...)`
+  // (index.css) shifts the ENTIRE rendered contentDOM box right by exactly
+  // this amount -- same formula, same two inputs, so this always matches
+  // the CSS calc() exactly, not an approximation of it. A transform shifts
+  // an element's post-layout PAINT position, not its layout width, so
+  // padding can't compensate for it (padding is inside the box; the box
+  // itself, padding included, is what's moving) -- confirmed live
+  // (docs/cm6-parity-hardening-plan.md, "Bug 8"): the shifted box's right
+  // edge lands this many px past .cm-scroller's own right edge, which
+  // Chromium counts as real scrollable overflow despite .cm-scroller's own
+  // overflowX:hidden (that CSS property only blocks *user-driven*
+  // wheel/scrollbar scrolling, not programmatic or native-browser
+  // scrolling, e.g. dragging a text selection past the scroller's edge).
+  // Capping contentDOM's own box at this much less than 100% (applied via
+  // maxWidth below -- see that assignment's own comment for why maxWidth,
+  // not width) pulls its un-transformed right edge left by the same
+  // distance the transform then shifts it right, netting to exactly zero
+  // -- the box lands back flush with the scroller's edge instead of past
+  // it, so there's no overflow region left for anything to scroll into in
+  // the first place.
+  const glyphCenteringShiftPx = (cellWidthPx - glyphWidthPx) / 2;
   // Line-number glyphs render smaller than the body text (see the gutter
   // JSX below) but still have to land one-per-box in the same cellWidthPx
   // grid column as everything else -- the same x-box letter-spacing +
@@ -1344,6 +1365,19 @@ export function CM6Editor({
     view.contentDOM.style.paddingRight = `${reviewGutterRightPx}px`;
     view.contentDOM.style.paddingTop = `${topBoundaryVisualPx}px`;
     view.contentDOM.style.paddingBottom = `${bottomBoundaryPxDisplay + alignmentPaddingBottomPx}px`;
+    // See glyphCenteringShiftPx's own doc comment above -- closes the real
+    // 1px-of-scrollable-overflow gap the glyph-centering transform leaves
+    // at the right edge, at its actual source rather than reacting to
+    // wherever it happens to let scrollLeft drift. maxWidth, not width:
+    // CM6's own base theme makes .cm-content a flex item of .cm-scroller
+    // (a flex row) with flexGrow: 2 -- a plain `width` is only that item's
+    // flex-basis, which flex-grow then re-expands right back to fill 100%
+    // of the container, silently undoing the shrink (confirmed live: width
+    // was applying as inline style exactly as expected, but
+    // getComputedStyle still reported the full, un-shrunk value). maxWidth
+    // isn't a flex-basis input -- it's a hard clamp the grown size can't
+    // exceed, so it actually holds.
+    view.contentDOM.style.maxWidth = `calc(100% - ${glyphCenteringShiftPx}px)`;
     // Same reasoning as the lineHeightPx/cellWidthPx metrics-change effect
     // further down: an external padding mutation grows/shrinks scrollHeight
     // outside CM6's own dispatch/transaction system, so its scrollTop
@@ -1356,7 +1390,7 @@ export function CM6Editor({
     // comment for the class of bug this closes (a fresh contentDOM with no
     // inline styles yet, paired with unchanged geometry numbers that would
     // otherwise make React skip re-running this effect).
-  }, [topBoundaryVisualPx, bottomBoundaryPxDisplay, alignmentPaddingBottomPx, halfCellWidthPx, reviewGutterLeftPx, reviewGutterRightPx, viewMountGeneration]);
+  }, [topBoundaryVisualPx, bottomBoundaryPxDisplay, alignmentPaddingBottomPx, halfCellWidthPx, reviewGutterLeftPx, reviewGutterRightPx, glyphCenteringShiftPx, viewMountGeneration]);
 
   // Custom scrollbar sync -- ported from Editor.tsx's own three sync
   // effects. Runs after the portal target (scrollbarHost) or any layout
