@@ -103,17 +103,24 @@
   height: auto;
 }
 
-/* Icon-only pill content (e.g. the chapter bar's "parent note" pill, which
-   is a bare fa-solid icon instead of a .tag-pill-label). FontAwesome's own
-   icon classes set line-height: 1, shorter than the pill's own line-height
-   -- confirmed live: this collapsed that one pill to 17px against every
-   text-bearing sibling's 21.4px. Restoring the inherited line-height here
-   keeps every pill, icon-only or not, exactly the same height. */
+/* Icon-only pill content (e.g. the chapter bar's "parent note" pill, or
+   either bar's own "+" create-pill, which are a bare fa-solid icon instead
+   of a .tag-pill-label). FontAwesome's own icon classes set line-height: 1,
+   shorter than the pill's own line-height -- confirmed live: this collapsed
+   that one pill to 17px against every text-bearing sibling's 21.4px.
+   Restoring the inherited line-height here keeps every pill, icon-only or
+   not, exactly the same height. Scaled by --ui-font-scale (and
+   --ui-pill-line-height), the same formula --ui-pill-bar-size uses
+   (tokens.css) for the same 11px base -- a flat 11px/13px here matched a
+   text-bearing sibling's own (scaled) line-height only by coincidence at
+   the default scale of 1: confirmed live, away from that default the "+"
+   create-pills sat visibly taller than their siblings and grew the whole
+   bar's height with them. */
 .tag-pill > .fa-solid,
 .tag-pill > .fa-regular,
 .tag-pill > .fa-brands {
-  line-height: 11px;
-  font-size: 13px;
+  line-height: calc(11px * var(--ui-font-scale) * var(--ui-pill-line-height));
+  font-size: calc(13px * var(--ui-font-scale));
 }
 
 /* Flanking icon buttons -- square, matching the well's real content height
