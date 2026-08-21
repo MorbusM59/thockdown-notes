@@ -1967,7 +1967,20 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       }
       const fallbackViewport = latestEditViewportRef.current ?? latestViewportRef.current
       const topBoundaryLines = fallbackViewport?.topBoundaryLines ?? 0
-      const collapsedSelection = ZERO_EDITOR_SELECTION
+      // No character-level cursor is derivable from a preview scroll
+      // position (only a block/line), so this collapses to a fallback
+      // rather than a real restored position -- the end of the note, not
+      // its start (0), so e.g. switching a freshly-created note from
+      // preview to edit lands the caret behind its just-typed content
+      // instead of in front of it.
+      const collapsedTextEndOffset = text.length
+      const collapsedSelection: EditorSelectionState = {
+        anchor: collapsedTextEndOffset,
+        focus: collapsedTextEndOffset,
+        start: collapsedTextEndOffset,
+        end: collapsedTextEndOffset,
+        isCollapsed: true,
+      }
       const restoreSnapshot: EditRestoreSnapshot = {
         noteId: activeNoteId,
         collapsedSelection,

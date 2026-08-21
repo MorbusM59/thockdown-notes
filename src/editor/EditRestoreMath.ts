@@ -179,12 +179,17 @@ export function buildEditRestoreSnapshotFromUiState(params: {
   const fallbackTopBoundaryLines = fallbackViewport?.topBoundaryLines ?? 0
   const fallbackBottomBoundaryLines = fallbackViewport?.bottomBoundaryLines ?? 0
   const selectionTextLength = Math.max(0, text.length)
+  // No persisted cursor at all (e.g. a note that's never been in edit mode
+  // this session, such as one just created while in preview mode) falls back
+  // to the end of the note rather than its start -- landing at 0 put the
+  // caret in front of a just-created chapter's leading #/## instead of
+  // behind it.
   const persistedCursor =
     typeof overrideCursorPos === 'number' && Number.isFinite(overrideCursorPos)
       ? Math.max(0, Math.min(Math.round(overrideCursorPos), selectionTextLength))
       : typeof uiState?.cursorPos === 'number' && Number.isFinite(uiState.cursorPos)
         ? Math.max(0, Math.min(Math.round(uiState.cursorPos), selectionTextLength))
-        : 0
+        : selectionTextLength
   const anchorLine = resolveEditSourceAnchorLineFromUiState(text, uiState, previewBlocks)
   const storedScrollTopLines =
     anchorLine !== null
