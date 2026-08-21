@@ -57,6 +57,7 @@ export interface UseSectionTabsResult {
   cancelTagRename: () => void
   isTagMutationPending: boolean
   activeNoteIsExternal: boolean
+  activeNoteIsTimeless: boolean
   handleTagInputKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void
   handleAddSuggestedTag: (tagName: string) => void
   handleTagChipClick: (tagName: string) => void
@@ -164,6 +165,11 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
 
   const orderedActiveTags = useMemo(() => tagIdentityNoteSummary?.tags ?? [], [tagIdentityNoteSummary])
   const activeNoteIsExternal = orderedActiveTags.some((tag) => isExternalTagName(tag))
+  // A timeless note is frozen at the database layer (databaseService.ts's
+  // assertNotTimeless) -- every tag mutation below would just reject
+  // anyway, so this blocks the affordance the same way activeNoteIsExternal
+  // already does for an external note's tag bar.
+  const activeNoteIsTimeless = Boolean(tagIdentityNoteSummary?.isTimeless)
 
   // Switching notes (or the tag-owning note's own tags changing) both
   // invalidate any in-progress "click again to delete" arm.
@@ -216,7 +222,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   }, [activeNoteId, tabIdentityNoteId, activateNote, flushPendingSaveNow, noteTransitionLockRef, persistenceReady, refreshNotes])
 
   const handleAddSuggestedTag = useCallback((tagName: string) => {
-    if (activeNoteIsExternal) return
+    if (activeNoteIsExternal || activeNoteIsTimeless) return
     if (orderedActiveTags.includes(tagName)) return
 
     void runActiveNoteTagMutation(async (noteId) => {
@@ -226,11 +232,11 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
         position: orderedActiveTags.length,
       })
     })
-  }, [activeNoteIsExternal, orderedActiveTags, runActiveNoteTagMutation])
+  }, [activeNoteIsExternal, activeNoteIsTimeless, orderedActiveTags, runActiveNoteTagMutation])
 
   const handleTagInputEnter = useCallback(() => {
     if (!activeNoteId || !persistenceReady) return
-    if (activeNoteIsExternal) return
+    if (activeNoteIsExternal || activeNoteIsTimeless) return
 
     const rawInput = tagInputValue.trim()
     if (rawInput.startsWith('$')) {
@@ -280,6 +286,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     runActiveNoteTagMutation,
     tagInputValue,
     activeNoteIsExternal,
+    activeNoteIsTimeless,
     updateNoteAssignedId,
   ])
 
@@ -302,6 +309,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   }, [handleTagInputEnter, scheduleFocusEditorInEditMode])
 
   const handleTagChipClick = useCallback((tagName: string) => {
+    if (activeNoteIsTimeless) return
     if (deletePrimedTagName === tagName) {
       setDeletePrimedTagName(null)
       void runActiveNoteTagMutation(async (noteId) => {
@@ -311,7 +319,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     }
 
     setDeletePrimedTagName(tagName)
-  }, [deletePrimedTagName, runActiveNoteTagMutation])
+  }, [activeNoteIsTimeless, deletePrimedTagName, runActiveNoteTagMutation])
 
   const handleTagChipMouseLeave = useCallback((tagName: string) => {
     if (deletePrimedTagName === tagName) {
@@ -321,12 +329,12 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
 
   const handleTagDragStart = useCallback((event: DragEvent<HTMLDivElement>, index: number) => {
     const tagName = orderedActiveTags[index] ?? ''
-    if (isProtectedTagName(tagName)) return
+    if (isProtectedTagName(tagName) || activeNoteIsTimeless) return
 
     event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData('text/plain', tagName)
     setDraggedTagIndex(index)
-  }, [orderedActiveTags])
+  }, [activeNoteIsTimeless, orderedActiveTags])
 
   const handleTagDragEnd = useCallback(() => {
     setDraggedTagIndex(null)
@@ -403,6 +411,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     const toName = normalizeTagName(draft)
     if (!toName || normalizedFrom === toName) return
     if (isProtectedTagName(normalizedFrom)) return
+    if (activeNoteIsTimeless) return
     if (!window.thockdownNotes) return
     if (noteTransitionLockRef.current) return
 
@@ -419,7 +428,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
       setIsTagMutationPending(false)
       noteTransitionLockRef.current = false
     }
-  }, [activeNoteId, activateNote, flushPendingSaveNow, noteTransitionLockRef, refreshNotes])
+  }, [activeNoteId, activeNoteIsTimeless, activateNote, flushPendingSaveNow, noteTransitionLockRef, refreshNotes])
 
   const tagRenameKeyExists = useCallback((tagName: string) => (
     orderedActiveTags.includes(tagName)
@@ -436,9 +445,9 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
 
   const handleTagContextMenu = useCallback((event: MouseEvent<HTMLDivElement>, tagName: string) => {
     event.preventDefault()
-    if (isProtectedTagName(tagName)) return
+    if (isProtectedTagName(tagName) || activeNoteIsTimeless) return
     startRenamingTag(tagName, tagName)
-  }, [startRenamingTag])
+  }, [activeNoteIsTimeless, startRenamingTag])
 
   // ── Tab bar state ──────────────────────────────────────────────────────
 
@@ -684,6 +693,9 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     const trimmed = draft.trim()
     const note = notes.find((entry) => entry.id === noteId)
     if (trimmed === (note?.assignedId ?? '')) return
+    // Per-tab, not activeNoteIsTimeless -- a pinned tab being renamed isn't
+    // necessarily the active note.
+    if (note?.isTimeless) return
 
     try {
       const updated = await window.thockdownNotes.setNoteAssignedId({ id: noteId, requestedId: trimmed })
@@ -922,6 +934,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     cancelTagRename,
     isTagMutationPending,
     activeNoteIsExternal,
+    activeNoteIsTimeless,
     handleTagInputKeyDown,
     handleAddSuggestedTag,
     handleTagChipClick,

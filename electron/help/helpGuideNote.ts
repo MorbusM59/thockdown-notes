@@ -59,9 +59,22 @@ function deriveTitle(text: string): string {
  * the auto-TOC chapter needs `NoteLifecycleService.regenerateAutoTocChapter`,
  * the exact same heading-walking code path a real note's own TOC chapter
  * uses, not a second, hand-rolled copy of it.
+ *
+ * The whole family is timeless (databaseService.ts's `isTimeless` column --
+ * see HelpModeOverlay's removal in favor of loading this family through the
+ * real editor) so it's permanently protected from a user's own edits, but
+ * that same protection would otherwise block this very reseed: every write
+ * below (`upsertNoteContent`, `setNoteAssignedId`, `addChapter`,
+ * `setChapterId`) goes through the identical `DatabaseService` primitives a
+ * real edit would, guarded by `assertNotTimeless`. So this brackets its own
+ * writes with an explicit unfreeze-before/refreeze-after, rather than a
+ * special bypass path -- seeding uses the exact same public
+ * freeze/unfreeze operation a user's own "unfreeze this note" action would.
  */
 export async function ensureHelpGuide(db: DatabaseService, noteLifecycle: NoteLifecycleService): Promise<void> {
   const now = HELP_GUIDE_TIME_MS;
+
+  db.unfreezeNoteFamily(HELP_GUIDE_ROOT_ID);
 
   const root = await writeNoteFile(db, HELP_GUIDE_ROOT_ID, HELP_GUIDE_INTRO_CONTENT);
   db.upsertNoteContent({
@@ -135,4 +148,10 @@ export async function ensureHelpGuide(db: DatabaseService, noteLifecycle: NoteLi
     createdAtMs: now,
     updatedAtMs: now,
   });
+
+  // Freeze the whole family back up now that this run's reseed is done --
+  // stamps isTimeless on the root + every real chapter + the auto-TOC
+  // chapter, and clears their (never meaningfully populated) snapshot
+  // history. See freezeNoteFamily's own doc comment.
+  db.freezeNoteFamily(HELP_GUIDE_ROOT_ID);
 }

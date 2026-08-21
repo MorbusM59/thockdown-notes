@@ -24,6 +24,7 @@ export const NOTE_LIFECYCLE_CHANNELS = {
   getSnapshotAnchor: 'notes:get-snapshot-anchor',
   branchNoteFromSnapshot: 'notes:branch-from-snapshot',
   setAssignedId: 'notes:set-internal-id',
+  setTimeless: 'notes:set-timeless',
 } as const;
 
 export interface NoteSummary {
@@ -47,6 +48,8 @@ export interface NoteSummary {
   isAutoToc: boolean;
   /** True for the one chapter (if any) that's the auto-generated Open Items list for its parent's whole chapter family -- see databaseService.ts's `isAutoOpenItems` column doc comment. Always false for a non-chapter note. */
   isAutoOpenItems: boolean;
+  /** True once this note has been frozen in time -- see databaseService.ts's `freezeNoteFamily`/`isTimeless` column doc comment. Stamped on every member of a chapter family together (root, every real chapter, the auto-TOC chapter), not cascade-derived from a parent lookup -- a chapterOnly note's own isTimeless is always in sync with its parent's. */
+  isTimeless: boolean;
   /** The single note this note is a chapter of, or null when it isn't (any) chapter, OR when it's a chapter currently detached (sitting in Trash) -- see `detachedChapterParentId` below for that case. A regular note is always null (regular notes can never become chapters). */
   chapterParentId: string | null;
   /** Where a detached chapter (see databaseService.ts's detachChapterForTrash) was detached FROM, while it's sitting in Trash -- `chapterParentId` above goes null the moment a chapter is detached (it has no `chapters` row to derive it from any more), so anything that needs "whose chapter was this" for a detached chapter (the Trash row's `$ ` parent-title meta) must fall back to this field instead. Null except during that detached window; restoreDetachedChapter clears it back to null once it reattaches. */
@@ -193,6 +196,8 @@ export interface NoteLifecycleApi {
   branchNoteFromSnapshot(input: BranchNoteFromSnapshotInput): Promise<NoteDocument>;
   /** Explicit `$id` assignment. Overwrites any existing ID; resolves collisions with a "-2", "-3", ... suffix. The only way a note's assignedId is ever written -- never auto-assigned as a side effect of anything else (pinning a tab, the auto-generated TOC needing one to link through, ...). */
   setNoteAssignedId(input: { id: string; requestedId: string }): Promise<NoteSummary | null>;
+  /** Freezes/unfreezes the whole chapter family `id` belongs to -- see databaseService.ts's freezeNoteFamily/unfreezeNoteFamily. */
+  setNoteTimeless(input: { id: string; value: boolean }): Promise<NoteSummary | null>;
 }
 
 export function isArchivedNote(note: NoteSummary): boolean {
@@ -211,6 +216,10 @@ export function isChapterOnlyNote(note: NoteSummary): boolean {
   return note.chapterOnly
 }
 
+export function isTimelessNote(note: NoteSummary): boolean {
+  return note.isTimeless
+}
+
 export function isSameNoteSummary(a: NoteSummary, b: NoteSummary): boolean {
   return (
     a.id === b.id &&
@@ -226,6 +235,7 @@ export function isSameNoteSummary(a: NoteSummary, b: NoteSummary): boolean {
     a.chapterOnly === b.chapterOnly &&
     a.isAutoToc === b.isAutoToc &&
     a.isAutoOpenItems === b.isAutoOpenItems &&
+    a.isTimeless === b.isTimeless &&
     a.chapterParentId === b.chapterParentId &&
     (a.detachedChapterParentId ?? null) === (b.detachedChapterParentId ?? null) &&
     (a.chapterId ?? null) === (b.chapterId ?? null)

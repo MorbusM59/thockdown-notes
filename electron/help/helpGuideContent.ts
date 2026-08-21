@@ -482,6 +482,17 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *Starts a brand-new note as a copy of a past revision, leaving the original untouched.*
 
 - The original note and its full history are unaffected — branching only ever creates something new.
+
+### [Freezing a Note in Time](#freezing-a-note-in-time)
+
+> **Where?**
+> Switch the note to preview mode, then click the snowflake button beneath the editor (in the same spot the line-numbers button sits in edit mode).
+
+*Locks a note down so it can't be changed by accident — on purpose, permanently, until you unfreeze it.*
+
+- Freezing clears the note's entire Time Machine history (and that of its chapters) and switches it to always show in preview — edit mode is unreachable while frozen.
+- While frozen, nothing about the note can be changed: no typing, no tag edits, no chapter reordering/renaming/archiving/deleting, no new snapshots, no archiving or deleting the note itself. The one exception is unfreezing it.
+- Click the same (now lit) snowflake button again to unfreeze — the note goes back to being a normal, editable note. Its history stays gone; freezing doesn't keep a backup.
 `,
   `# Toolbar & Formatting
 

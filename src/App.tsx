@@ -148,7 +148,7 @@ import { truncateTitle } from './shared/textSanitization'
 import { deriveNoteTitleFromText, deriveNoteTitleIncremental, type NoteTitleCache } from './shared/noteTitle'
 import { isNoteSearchQueryActive, matchesNoteSearchQuery } from './shared/noteSearch'
 import { ESCAPE_HOLD_MS } from './shared/escapeHold'
-import { HELP_GUIDE_NOTE_IDS } from './shared/helpGuide'
+import { HELP_GUIDE_NOTE_IDS, HELP_GUIDE_ROOT_ID } from './shared/helpGuide'
 import {
   deriveRenderScrollDynamicFromResponsiveness,
   deriveRenderScrollResponsivenessFromDynamic,
@@ -1905,21 +1905,13 @@ function App() {
     escapeHoldTriggeredRef.current = false
     escapeFreshCycleWhilePanelOpenRef.current = false
   }, [clearEscapeHoldTimer])
-  // The User Guide overlay (HelpModeOverlay.tsx) -- entered from the escape-
-  // hold quick-actions panel's Help button, closed by a single Escape tap
-  // (top priority in the global Escape handler below, ahead of every other
-  // branch there, since it should close on the very first press, not a
-  // hold). Deliberately a single boolean scoped to "whichever section is
-  // active," the same pattern isEscapeHoldPanelOpen already uses -- only one
-  // section is ever active at a time in this app, so there's no risk of two
-  // sections racing over one flag.
-  const [isHelpModeActive, setIsHelpModeActive] = useState(false)
-  const handleHelpModeOpen = useCallback(() => {
-    setIsHelpModeActive(true)
-  }, [])
-  const handleHelpModeClose = useCallback(() => {
-    setIsHelpModeActive(false)
-  }, [])
+  // The User Guide's own "which note was active before I opened it" memory
+  // -- see handleHelpModeOpen/handleHelpModeClose (declared below, next to
+  // selectNote, which they call directly: the guide is now an ordinary
+  // note loaded through the exact same path a sidebar click uses, not a
+  // dedicated overlay). A ref, not state -- purely a "leave editor"
+  // checkpoint, never itself something a render needs to react to.
+  const previousNoteIdBeforeHelpRef = useRef<string | null>(null)
   const helpModeEscapeSwallowRef = useRef(false)
   // "Double size" mode: 2x page zoom paired with a doubled window minimum --
   // see the window-control:double-size-mode handler in electron/main.ts.
@@ -5019,6 +5011,28 @@ ${markdownHtml}
     void selectNote(noteId, { forceReload: true })
   }, [selectNote])
 
+  // The User Guide -- entered from the escape-hold quick-actions panel's
+  // Help button, per HelpModeOverlay.tsx's removal now just an ordinary
+  // (timeless) note loaded through the exact same selectNote path a
+  // sidebar click uses, not a dedicated overlay component. Remembers
+  // whichever note was active before opening so a plain Escape tap (top
+  // priority in the global Escape handler, see helpModeEscapeSwallowRef)
+  // can return to it -- if none was open, closing just leaves the guide on
+  // screen; the user can navigate away normally, exactly like any other
+  // note.
+  const handleHelpModeOpen = useCallback(() => {
+    const section = getActiveSection()
+    previousNoteIdBeforeHelpRef.current = section?.activeNoteId ?? null
+    void selectNote(HELP_GUIDE_ROOT_ID, { forceReload: true })
+  }, [getActiveSection, selectNote])
+  const handleHelpModeClose = useCallback(() => {
+    const previousNoteId = previousNoteIdBeforeHelpRef.current
+    previousNoteIdBeforeHelpRef.current = null
+    if (previousNoteId) {
+      void selectNote(previousNoteId, { forceReload: true })
+    }
+  }, [selectNote])
+
   const isAllowedNonEditorFocusTarget = useCallback((target: EventTarget | null): boolean => {
     if (!(target instanceof HTMLElement)) return false
 
@@ -7702,12 +7716,17 @@ ${markdownHtml}
       if (event.key === 'Escape') {
         // Top priority, ahead of every other Escape behavior (field-blur,
         // the quick-actions hold-panel, forced-preview, view-mode toggle):
-        // a single tap always closes help mode immediately, never a hold.
+        // a single tap always leaves the User Guide immediately, never a
+        // hold. The guide is now an ordinary (timeless) note, so this is
+        // keyed off "is the active note part of the guide family" rather
+        // than a dedicated boolean -- without this branch, Escape would
+        // just fall through to the generic isForcedPreviewNote no-op below
+        // (every timeless/auto-chapter note's own Escape behavior).
         // helpModeEscapeSwallowRef tells the matching keyup (below) that
         // this exact press already did its job, so it doesn't also fall
-        // through to toggleRenderViewMode once isHelpModeActive has already
-        // flipped back to false.
-        if (isHelpModeActive) {
+        // through to toggleRenderViewMode once the guide has already closed.
+        const escapeActiveNoteId = activeSection?.activeNoteId ?? null
+        if (escapeActiveNoteId && HELP_GUIDE_NOTE_IDS.has(escapeActiveNoteId)) {
           event.preventDefault()
           if (!event.repeat) {
             handleHelpModeClose()
@@ -7814,7 +7833,6 @@ ${markdownHtml}
     editorSections,
     getActiveSection,
     handleHelpModeClose,
-    isHelpModeActive,
     handleEscapeHoldPanelClose,
     isEscapeHoldPanelOpen,
     isFindMode,
@@ -8872,8 +8890,6 @@ ${markdownHtml}
                   onEscapeHoldOpenHelp={handleHelpModeOpen}
                   isExportingPdf={isExportingPdf}
                   isExportingMd={isExportingMd}
-                  isHelpModeActive={isHelpModeActive}
-                  onHelpModeClose={handleHelpModeClose}
                   showLineNumbers={reviewGutterVisibleBySection[entry.id] ?? false}
                   showReviewFlags={reviewFlagsVisibleBySection[entry.id] ?? false}
                   onToggleReviewGutter={() => handleToggleReviewGutter(entry.id)}

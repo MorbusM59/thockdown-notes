@@ -442,8 +442,28 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--background-color-root) 60%, transparent);
+  background: color-mix(in srgb, var(--background-color-root) 20%, transparent);
   backdrop-filter: blur(2px);
+}
+
+.editor-stage .editor-escape-hold-overlay::before {
+  content:        '';
+  position:       absolute;
+  inset:          0;
+  z-index:        -1;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.05) 0, rgba(0, 0, 0, 0.05) 2px, transparent 3px, transparent 4px);
+  -webkit-mask-image:     linear-gradient(#000, #000), var(--empty-state-scene-mask);
+  -webkit-mask-repeat:    no-repeat;
+  -webkit-mask-position:  center;
+  -webkit-mask-size:      contain;
+  -webkit-mask-composite: xor;
+  mask-image:    linear-gradient(#000, #000), var(--empty-state-scene-mask);
+  mask-repeat:   no-repeat;
+  mask-position: center;
+  mask-size:     contain;
+  mask-composite: exclude;
+  border-radius: calc(var(--border-radius-regular) *6);
 }
 
 .editor-stage .editor-escape-hold-panel {
@@ -457,7 +477,7 @@
   padding: calc(var(--spacing-large) * 2);
   background: color-mix(in srgb, var(--palette-parchment-lightest) 78%, rgba(255, 255, 255, 0.6));
   border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: calc(var(--border-radius-regular) * 2);
+  border-radius: calc(var(--border-radius-regular) * 6);
   box-shadow: var(--box-shadow-inverted-filtered), 0 14px 24px rgba(0, 0, 0, 0.12);
 }
 
@@ -535,20 +555,6 @@
 .editor-stage .editor-escape-hold-panel-btn-placeholder {
   opacity: 0.3;
   font-size: 1.15rem;
-}
-
-/* Help mode: HelpModeOverlay.tsx renders its own copy of the regular
-   editor's editor-viewer-frame/editor-shell/editor-stage/chapter-panel
-   skeleton (see that component's own doc comment), so it needs no overlay
-   positioning of its own beyond this close button -- pinned to the
-   editor-stage's own top-right corner, the one thing that surface doesn't
-   already have a real-editor equivalent for. Ordered after
-   .render-container in the JSX so it paints above it despite sharing the
-   same `.editor-stage > *` z-index. */
-.editor-stage .help-mode-close-button {
-  position: absolute;
-  top: var(--spacing-large);
-  right: var(--spacing-large);
 }
 
 /* Hide native cursor and caret app-wide when using the custom mouse overlay

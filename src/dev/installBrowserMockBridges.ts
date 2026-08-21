@@ -112,6 +112,7 @@ function normalizeDocument(note: NoteDocument): NoteDocument {
     chapterOnly: Boolean(note.chapterOnly),
     isAutoToc: Boolean(note.isAutoToc),
     isAutoOpenItems: Boolean(note.isAutoOpenItems),
+    isTimeless: Boolean(note.isTimeless),
     chapterParentId: note.chapterParentId ?? null,
     chapterId: note.chapterId ?? null,
     detachedChapterParentId: note.detachedChapterParentId ?? null,
@@ -131,6 +132,7 @@ function toSummary(note: NoteDocument): NoteSummary {
     chapterOnly: Boolean(note.chapterOnly),
     isAutoToc: Boolean(note.isAutoToc),
     isAutoOpenItems: Boolean(note.isAutoOpenItems),
+    isTimeless: Boolean(note.isTimeless),
     chapterParentId: note.chapterParentId ?? null,
     chapterId: note.chapterId ?? null,
     detachedChapterParentId: note.detachedChapterParentId ?? null,
@@ -436,6 +438,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
           chapterOnly: false,
           isAutoToc: false,
           isAutoOpenItems: false,
+          isTimeless: false,
           chapterParentId: null,
           chapterId: null,
           detachedChapterParentId: null,
@@ -578,6 +581,29 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
         if (!note) return null
         const base = normalizeAssignedIdInput(input.requestedId) || deriveDefaultAssignedIdBase(note.title)
         note.assignedId = resolveUniqueAssignedId(store.notes, base, note.id)
+        return clone(toSummary(note))
+      })
+    },
+
+    // Mirrors databaseService.ts's freezeNoteFamily/unfreezeNoteFamily --
+    // stamps isTimeless on the family root + its live chapters. Clearing
+    // snapshot history has nothing to do here: the browser mock never
+    // persists real snapshot history to begin with (see getNoteSnapshots).
+    async setNoteTimeless(input: { id: string; value: boolean }): Promise<NoteSummary | null> {
+      return mutate((store) => {
+        const note = store.notes.find((entry) => entry.id === input.id)
+        if (!note) return null
+        const rootNoteId = note.chapterParentId ?? note.id
+        const memberIds = [
+          rootNoteId,
+          ...store.chapters
+            .filter((chapter) => chapter.parentNoteId === rootNoteId)
+            .map((chapter) => chapter.chapterNoteId),
+        ]
+        for (const memberId of memberIds) {
+          const member = store.notes.find((entry) => entry.id === memberId)
+          if (member) member.isTimeless = input.value
+        }
         return clone(toSummary(note))
       })
     },
@@ -1227,6 +1253,7 @@ function regenerateOpenItemsGroupInStore(store: BrowserMockStore, parentNoteId: 
       chapterOnly: true,
       isAutoToc: false,
       isAutoOpenItems: true,
+      isTimeless: false,
       chapterParentId: parentNoteId,
       chapterId: null,
       detachedChapterParentId: null,
@@ -1317,6 +1344,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           chapterOnly: true,
           isAutoToc: false,
           isAutoOpenItems: false,
+          isTimeless: false,
           chapterParentId: parentNoteId,
           chapterId: null,
           detachedChapterParentId: null,
@@ -1360,6 +1388,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           chapterOnly: true,
           isAutoToc: false,
           isAutoOpenItems: false,
+          isTimeless: false,
           chapterParentId: parentNoteId,
           chapterId: null,
           detachedChapterParentId: null,
@@ -1583,6 +1612,7 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
           chapterOnly: true,
           isAutoToc: true,
           isAutoOpenItems: false,
+          isTimeless: false,
           chapterParentId: parentNoteId,
           chapterId: null,
           detachedChapterParentId: null,

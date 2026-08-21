@@ -172,6 +172,7 @@ export class NoteLifecycleService {
         chapterOnly: record.chapterOnly,
         isAutoToc: record.isAutoToc,
         isAutoOpenItems: record.isAutoOpenItems,
+        isTimeless: record.isTimeless,
         chapterParentId: record.chapterParentId,
         chapterId: record.chapterId,
         detachedChapterParentId: record.detachedChapterParentId,
@@ -237,7 +238,13 @@ export class NoteLifecycleService {
           sanitizedText !== rawText ||
           sanitizedTitle !== record.title;
 
-        if (shouldUpdateTempNote) {
+        // A timeless note is protected against every database alteration
+        // (see databaseService.ts's assertNotTimeless) except clearing the
+        // flag itself -- this self-healing resave would otherwise throw and
+        // break loading the note at all. `text` below still reflects the
+        // freshly sanitized content for display; it's only the persistence
+        // that's skipped.
+        if (shouldUpdateTempNote && !record.isTimeless) {
           this.databaseService.upsertNoteContent({
             id: input.id,
             title: sanitizedTitle,
@@ -250,7 +257,7 @@ export class NoteLifecycleService {
             syncMode: record.syncMode,
           });
         }
-      } else {
+      } else if (!record?.isTimeless) {
         if (sanitizedText !== rawText) {
           await fs.writeFile(filePath, sanitizedText, 'utf8');
         }
@@ -287,6 +294,7 @@ export class NoteLifecycleService {
       chapterOnly: record?.chapterOnly ?? false,
       isAutoToc: record?.isAutoToc ?? false,
       isAutoOpenItems: record?.isAutoOpenItems ?? false,
+      isTimeless: record?.isTimeless ?? false,
       chapterParentId: record?.chapterParentId ?? null,
       chapterId: record?.chapterId ?? null,
       detachedChapterParentId: record?.detachedChapterParentId ?? null,
@@ -901,6 +909,7 @@ export class NoteLifecycleService {
         chapterOnly: record.chapterOnly,
         isAutoToc: record.isAutoToc,
         isAutoOpenItems: record.isAutoOpenItems,
+        isTimeless: record.isTimeless,
         chapterParentId: record.chapterParentId,
         chapterId: record.chapterId,
         detachedChapterParentId: record.detachedChapterParentId,
@@ -969,6 +978,7 @@ export class NoteLifecycleService {
       chapterOnly: record?.chapterOnly ?? false,
       isAutoToc: record?.isAutoToc ?? false,
       isAutoOpenItems: record?.isAutoOpenItems ?? false,
+      isTimeless: record?.isTimeless ?? false,
       chapterParentId: record?.chapterParentId ?? null,
       chapterId: record?.chapterId ?? null,
       detachedChapterParentId: record?.detachedChapterParentId ?? null,
@@ -1164,6 +1174,25 @@ export class NoteLifecycleService {
    */
   async setNoteAssignedId(input: { id: string; requestedId: string }): Promise<NoteSummary | null> {
     this.databaseService.setNoteAssignedId(input.id, input.requestedId);
+    const record = this.databaseService.getNoteRecord(input.id);
+    if (!record) return null;
+    return this.readSummary(record);
+  }
+
+  /**
+   * Freezes/unfreezes the *whole family* `noteId` belongs to, not just
+   * `noteId` itself -- resolves up to the chapter family's root first (a
+   * chapter has no independent timeless state of its own), so toggling
+   * while viewing any chapter affects the same root+chapters set
+   * freezeNoteFamily/unfreezeNoteFamily themselves already operate on.
+   */
+  async setNoteTimeless(input: { id: string; value: boolean }): Promise<NoteSummary | null> {
+    const rootNoteId = this.databaseService.getChapterParent(input.id) ?? input.id;
+    if (input.value) {
+      this.databaseService.freezeNoteFamily(rootNoteId);
+    } else {
+      this.databaseService.unfreezeNoteFamily(rootNoteId);
+    }
     const record = this.databaseService.getNoteRecord(input.id);
     if (!record) return null;
     return this.readSummary(record);

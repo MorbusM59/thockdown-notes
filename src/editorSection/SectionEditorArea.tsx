@@ -14,7 +14,6 @@ import { resolveSpellCheckSurfaceState } from '../shared/spellCheckPolicy'
 import { ChapterBar } from '../chapters/ChapterBar'
 import type { ChapterPillSplitArm } from '../chapters/useChapterPillActions'
 import { EscapeHoldPanel } from './EscapeHoldPanel'
-import { HelpModeOverlay } from '../helpMode/HelpModeOverlay'
 
 export interface SectionEditorAreaProps {
   sectionId: string
@@ -44,8 +43,6 @@ export interface SectionEditorAreaProps {
   onEscapeHoldOpenHelp: () => void | Promise<void>
   isExportingPdf: boolean
   isExportingMd: boolean
-  isHelpModeActive: boolean
-  onHelpModeClose: () => void
   spellCheckEditEnabled: boolean
   previewTextureRef: RefObject<HTMLDivElement>
   previewScrollRef: RefObject<HTMLDivElement>
@@ -113,6 +110,10 @@ export interface SectionEditorAreaProps {
   showReviewFlags: boolean
   onToggleReviewGutter: () => void
   onToggleReviewFlags: () => void
+  /** Whether the active note (or its whole chapter family) is frozen in time -- see databaseService.ts's freezeNoteFamily. Forces the editor read-only, hides the Time Machine timeline, and disables chapter/tag mutation affordances, same shape as isViewingAutoTocChapter/isViewingAutoOpenItemsChapter below. */
+  isViewingTimelessNote: boolean
+  /** The repurposed line-numbers/review-flags button's preview-mode action -- freezes/unfreezes the active note. See EditorSection.tsx's onToggleTimeless. */
+  onToggleTimeless: () => void | Promise<void>
   /**
    * Computed once in EditorSection.tsx off the same activeNoteSummary every
    * other per-render fact about the active note goes through, rather than
@@ -160,8 +161,6 @@ export function SectionEditorArea({
   onEscapeHoldOpenHelp,
   isExportingPdf,
   isExportingMd,
-  isHelpModeActive,
-  onHelpModeClose,
   spellCheckEditEnabled,
   previewTextureRef,
   previewScrollRef,
@@ -219,6 +218,8 @@ export function SectionEditorArea({
   showReviewFlags,
   onToggleReviewGutter,
   onToggleReviewFlags,
+  isViewingTimelessNote,
+  onToggleTimeless,
   isViewingAutoTocChapter,
   isViewingAutoOpenItemsChapter,
 }: SectionEditorAreaProps) {
@@ -269,19 +270,6 @@ export function SectionEditorArea({
   // becoming positive, not by toggling visibility directly.
   const isChapterPanelOpen = chapters.length > 0
 
-  // Help mode takes over this section's whole editor slot -- it renders its
-  // own copy of the editor-viewer-frame/editor-shell/editor-stage/
-  // editor-scrollbar-slot/chapter-panel skeleton below (HelpModeOverlay.tsx)
-  // so the User Guide's chapter bar lands in the exact same bottom-anchored
-  // spot a real note's chapter bar does, rather than nesting inside
-  // editor-stage as a top-of-column overlay. Early return, not a branch
-  // inside the JSX below, since none of the real editor's own containers
-  // (edit-container, the real ChapterBar, the wordcount/timeline footer)
-  // apply to the read-only guide.
-  if (isHelpModeActive && isSectionActive) {
-    return <HelpModeOverlay notes={notes} onClose={onHelpModeClose} />
-  }
-
   // isViewingAutoTocChapter/isViewingAutoOpenItemsChapter (props -- see
   // their own doc comment) each make the editor read-only below, for
   // different reasons. TOC: it's regenerated (overwritten) the instant it's
@@ -319,6 +307,7 @@ export function SectionEditorArea({
                     <div className="editor-escape-hold-panel-title">Quick Actions</div>
                     <EscapeHoldPanel
                       activeNoteId={activeNoteId}
+                      isActiveNoteTimeless={isViewingTimelessNote}
                       isExportingPdf={isExportingPdf}
                       isExportingMd={isExportingMd}
                       onCreateNote={onEscapeHoldCreateNote}
@@ -347,7 +336,7 @@ export function SectionEditorArea({
                   lineHeightPx={editorRuntimeMetrics.lineHeightPx}
                   glyphWidthPx={editorRuntimeMetrics.glyphWidthPx}
                   cellWidthPx={editorRuntimeMetrics.cellWidthPx}
-                  editorReadOnly={activeNoteHasDebugTag || isPreviewingSnapshot || isViewingAutoTocChapter || isViewingAutoOpenItemsChapter}
+                  editorReadOnly={activeNoteHasDebugTag || isPreviewingSnapshot || isViewingAutoTocChapter || isViewingAutoOpenItemsChapter || isViewingTimelessNote}
                   spellCheckEnabled={editorSpellCheckEnabled}
                   fontReady={editorFontLoadVersion > 0}
                   caretSuspended={isCaretSuspended}
@@ -421,6 +410,7 @@ export function SectionEditorArea({
             archivedMergedChapterIds={archivedMergedChapterIds}
             notes={notes}
             activeNoteId={activeNoteId}
+            isLocked={isViewingTimelessNote}
             onParentTabClick={onParentTabClick}
             onChapterClick={onChapterClick}
             onChapterDragStart={onChapterDragStart}
@@ -445,20 +435,43 @@ export function SectionEditorArea({
       </div>
       <div className="editor-document-stats" aria-live="polite">
         <div className="chapter-toggle-panel">
-          <button
-            type="button"
-            className={`chapter-toggle-button btn-icon${(showLineNumbers || showReviewFlags) ? ' is-active' : ''}`}
-            aria-label="Toggle line numbers and review flags (right-click to toggle review flags only)"
-            aria-pressed={showLineNumbers || showReviewFlags}
-            data-tooltip="Left-click: toggle line numbers + review flags. Right-click: toggle review flags only."
-            onClick={onToggleReviewGutter}
-            onContextMenu={(event) => {
-              event.preventDefault()
-              onToggleReviewFlags()
-            }}
-          >
-            <span className="fa-solid fa-hashtag" aria-hidden="true" />
-          </button>
+          {/*
+            Mode-aware: in edit mode this is the line-numbers/review-flags
+            toggle (unchanged). In preview mode -- where line numbers have
+            nothing to show, so this button did nothing before -- it becomes
+            the timeless toggle instead: a snowflake, lit up when the active
+            note is currently frozen. Since a timeless note is always forced
+            into preview (EditorSection.tsx's activateNote), this is also the
+            only place the button is ever reachable for an already-frozen
+            note -- exactly the "clearing the flag" escape hatch.
+          */}
+          {isPreviewMode ? (
+            <button
+              type="button"
+              className={`chapter-toggle-button btn-icon${isViewingTimelessNote ? ' is-active' : ''}`}
+              aria-label={isViewingTimelessNote ? 'Unfreeze this note' : 'Freeze this note in time'}
+              aria-pressed={isViewingTimelessNote}
+              data-tooltip={isViewingTimelessNote ? 'Unfreeze this note' : 'Freeze this note in time (read-only, no history)'}
+              onClick={() => { void onToggleTimeless() }}
+            >
+              <span className="fa-solid fa-snowflake" aria-hidden="true" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={`chapter-toggle-button btn-icon${(showLineNumbers || showReviewFlags) ? ' is-active' : ''}`}
+              aria-label="Toggle line numbers and review flags (right-click to toggle review flags only)"
+              aria-pressed={showLineNumbers || showReviewFlags}
+              data-tooltip="Left-click: toggle line numbers + review flags. Right-click: toggle review flags only."
+              onClick={onToggleReviewGutter}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                onToggleReviewFlags()
+              }}
+            >
+              <span className="fa-solid fa-hashtag" aria-hidden="true" />
+            </button>
+          )}
         </div>
         <div className="wordcount-panel" aria-live="polite">
           {activeNoteId && (
@@ -466,7 +479,7 @@ export function SectionEditorArea({
           )}
         </div>
         <div className="timeline-panel">
-        {activeNoteId && !isViewingAutoTocChapter && !isViewingAutoOpenItemsChapter ? (
+        {activeNoteId && !isViewingAutoTocChapter && !isViewingAutoOpenItemsChapter && !isViewingTimelessNote ? (
           <SnapshotTimelineSlider
             sourceNoteId={activeNoteId}
             placements={noteSnapshots.placements}
@@ -488,12 +501,12 @@ export function SectionEditorArea({
         </div>
         <div className="manual-snapshot-panel">
           <PresentStateCircle
-            hasPendingManualChanges={activeNoteId ? ((isViewingAutoTocChapter || isViewingAutoOpenItemsChapter) ? true : noteSnapshots.hasPendingManualChanges) : false}
+            hasPendingManualChanges={activeNoteId && !isViewingTimelessNote ? ((isViewingAutoTocChapter || isViewingAutoOpenItemsChapter) ? true : noteSnapshots.hasPendingManualChanges) : false}
             onCreateManualSnapshot={() => { void handleCreateManualSnapshot() }}
             onGoToPresent={activeNoteId ? handleReturnToPresent : undefined}
-            onMergeAdjacentSnapshots={activeNoteId && !isViewingAutoTocChapter && !isViewingAutoOpenItemsChapter ? handleMergeAdjacentSnapshots : undefined}
+            onMergeAdjacentSnapshots={activeNoteId && !isViewingAutoTocChapter && !isViewingAutoOpenItemsChapter && !isViewingTimelessNote ? handleMergeAdjacentSnapshots : undefined}
             isPresent={previewedSnapshotId === null}
-            disabled={!activeNoteId}
+            disabled={!activeNoteId || isViewingTimelessNote}
             pendingActionLabel={
               isViewingAutoTocChapter
                 ? 'Refresh table of contents from live state'

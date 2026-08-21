@@ -61,6 +61,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'onChapterDragStart' | 'onChapterDragEnd' | 'onChapterDrop'
   | 'editingChapterNoteId' | 'chapterIdDraft' | 'setChapterIdDraft' | 'onCommitChapterIdEdit' | 'onCancelChapterIdEdit'
   | 'onCollapseChapterIntoPrevious' | 'onExtractSelectionToChapter' | 'isViewingAutoTocChapter' | 'isViewingAutoOpenItemsChapter'
+  | 'isViewingTimelessNote' | 'onToggleTimeless'
   | 'splitArmedChapter' | 'onChapterPillMouseDown' | 'onChapterPillMouseUp' | 'onChapterPillMouseLeave' | 'onChapterPillContextMenu'
   | 'onArchiveChapterClick' | 'onDeleteChapterClick'> {
   sectionId: string
@@ -203,8 +204,6 @@ export function EditorSection({
   onEscapeHoldOpenHelp,
   isExportingPdf,
   isExportingMd,
-  isHelpModeActive,
-  onHelpModeClose,
   isLeftmostSection,
   canCreateSection,
   onCreateSection,
@@ -574,6 +573,12 @@ export function EditorSection({
       await window.thockdownChapters.regenerateAllOpenItems(loaded.chapterParentId)
       loaded = await window.thockdownNotes.loadNote({ id: noteId })
       setIsForcedPreviewNote(true)
+    } else if (loaded.isTimeless) {
+      // A timeless note is permanently frozen (databaseService.ts's
+      // assertNotTimeless) -- edit mode has nothing to offer it, so it's
+      // always shown in render/preview, exactly like the two auto-chapter
+      // kinds above. Not restored on the way out, same as those.
+      setIsForcedPreviewNote(true)
     } else {
       setIsForcedPreviewNote(false)
     }
@@ -814,6 +819,7 @@ export function EditorSection({
     cancelTagRename,
     isTagMutationPending,
     activeNoteIsExternal,
+    activeNoteIsTimeless,
     handleTagInputKeyDown,
     handleAddSuggestedTag,
     handleTagChipClick,
@@ -1059,6 +1065,14 @@ export function EditorSection({
   const isViewingAutoTocChapter = Boolean(activeNoteSummary?.isAutoToc)
   const isViewingAutoOpenItemsChapter = Boolean(activeNoteSummary?.isAutoOpenItems)
   const isViewingEphemeralAutoChapter = isViewingAutoTocChapter || isViewingAutoOpenItemsChapter
+  // Same "single source of truth, computed once off activeNoteSummary"
+  // pattern as the two booleans above -- a timeless note is frozen at the
+  // database layer (databaseService.ts's assertNotTimeless), so every one
+  // of its own structural/content-mutation affordances is disabled the
+  // same way an auto-chapter's are, plus the Time Machine timeline (its
+  // entire history was cleared the moment it was frozen -- see
+  // freezeNoteFamily).
+  const isViewingTimelessNote = Boolean(activeNoteSummary?.isTimeless)
 
   const {
     noteSnapshots,
@@ -1136,6 +1150,34 @@ export function EditorSection({
     latestEditorTextRef.current = hydratedText
     setActiveNoteText(hydratedText)
   }, [activeNoteSummary, activeNoteId, isViewingAutoTocChapter, isViewingAutoOpenItemsChapter, handleCreateManualSnapshot, latestEditorTextRef, setActiveNoteText])
+
+  // The repurposed line-numbers/review-flags button's preview-mode
+  // behavior (SectionEditorArea.tsx) -- freezes/unfreezes the active
+  // note's whole chapter family (databaseService.ts's freezeNoteFamily/
+  // unfreezeNoteFamily, via the notes:setTimeless IPC call). Mirrors
+  // useSectionTabs.ts's runActiveNoteTagMutation: flush any pending save
+  // first (nothing should be in flight against a note about to become
+  // read-only), mutate, then refreshNotes + re-activateNote the same note
+  // so its freshly-flipped isTimeless (and the forced-preview branch in
+  // activateNote above) take effect immediately.
+  const onToggleTimeless = useCallback(async () => {
+    if (!window.thockdownNotes) return
+    if (!persistenceReady) return
+    if (!activeNoteId) return
+    if (noteTransitionLockRef.current) return
+
+    noteTransitionLockRef.current = true
+    try {
+      await flushPendingSaveNow()
+      await window.thockdownNotes.setNoteTimeless({ id: activeNoteId, value: !isViewingTimelessNote })
+      await refreshNotes(activeNoteId)
+      await activateNote(activeNoteId)
+    } catch (error) {
+      console.error('Failed to toggle timeless state', error)
+    } finally {
+      noteTransitionLockRef.current = false
+    }
+  }, [activeNoteId, isViewingTimelessNote, activateNote, flushPendingSaveNow, noteTransitionLockRef, persistenceReady, refreshNotes])
 
   // See useEditorSectionMount's UseEditorSectionMountOptions doc comment --
   // a plain render-time ref mutation (not an effect) so this hook's own
@@ -1338,6 +1380,7 @@ export function EditorSection({
     cancelTagRename,
     isTagMutationPending,
     activeNoteIsExternal,
+    activeNoteIsTimeless,
     handleTagInputKeyDown,
     handleAddSuggestedTag,
     handleTagChipClick,
@@ -1540,6 +1583,10 @@ export function EditorSection({
     if (dropTarget instanceof Element && dropTarget.closest('.chapter-bar-display')) {
       event.preventDefault()
       event.stopPropagation()
+      // A timeless family can't gain a new chapter (databaseService.ts's
+      // assertNotTimeless would reject it anyway) -- claim and swallow the
+      // drop rather than letting it fall through to a failed IPC call.
+      if (isViewingTimelessNote) return
       const targetPill = dropTarget.closest<HTMLElement>('.chapter-pill[data-chapter-note-id]')
       void handleCloneNoteAsChapter(payload.noteId, targetPill?.dataset.chapterNoteId)
       return
@@ -1566,7 +1613,7 @@ export function EditorSection({
 
     void pinNoteAsRightmostTab(payload.noteId)
     unpinNoteFromSection(payload.sourceSectionId, payload.noteId)
-  }, [activateNote, pinNoteAsRightmostTab, pinnedTabs, sectionId, unpinNoteFromSection, handleCloneNoteAsChapter])
+  }, [activateNote, pinNoteAsRightmostTab, pinnedTabs, sectionId, unpinNoteFromSection, handleCloneNoteAsChapter, isViewingTimelessNote])
 
   // Plain assignment (not an effect) -- safe, it's just a ref mutation. Powers
   // imperative, non-reactive registry lookups (getActiveSectionHandle()).
@@ -1641,6 +1688,7 @@ export function EditorSection({
           cancelTagRename,
           isTagMutationPending,
           activeNoteIsExternal,
+          activeNoteIsTimeless,
           handleTagInputKeyDown,
           handleAddSuggestedTag,
           handleTagChipClick,
@@ -1701,7 +1749,6 @@ export function EditorSection({
         activeNoteId={activeNoteId}
         tabIdentityNoteId={menuIdentityNoteId}
         notes={notes}
-        isHelpModeActive={isHelpModeActive && sectionId === activeSectionId}
         isLeftmostSection={isLeftmostSection}
         canCreateSection={canCreateSection}
         onCreateSection={onCreateSection}
@@ -1751,8 +1798,6 @@ export function EditorSection({
         onEscapeHoldOpenHelp={onEscapeHoldOpenHelp}
         isExportingPdf={isExportingPdf}
         isExportingMd={isExportingMd}
-        isHelpModeActive={isHelpModeActive && sectionId === activeSectionId}
-        onHelpModeClose={onHelpModeClose}
         spellCheckEditEnabled={spellCheckEditEnabled}
         previewTextureRef={previewTextureRef}
         previewScrollRef={previewScrollRef}
@@ -1768,6 +1813,8 @@ export function EditorSection({
         onToggleReviewFlags={onToggleReviewFlags}
         isViewingAutoTocChapter={isViewingAutoTocChapter}
         isViewingAutoOpenItemsChapter={isViewingAutoOpenItemsChapter}
+        isViewingTimelessNote={isViewingTimelessNote}
+        onToggleTimeless={onToggleTimeless}
         spellCheckRenderEnabled={spellCheckRenderEnabled}
         blockPreviewEditMutation={blockPreviewEditMutation}
         previewMarkdownElement={previewMarkdownElement}

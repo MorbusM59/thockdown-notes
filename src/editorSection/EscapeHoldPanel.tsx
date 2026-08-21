@@ -3,6 +3,8 @@ import type { KeyboardEvent } from 'react'
 
 export interface EscapeHoldPanelProps {
   activeNoteId: string | null
+  /** True while the active note (or its whole chapter family) is timeless -- disables New Chapter, since a frozen family can't gain a new chapter (databaseService.ts's assertNotTimeless). Export/New Note are unaffected -- they're not mutations of the frozen note itself. */
+  isActiveNoteTimeless: boolean
   isExportingPdf: boolean
   isExportingMd: boolean
   onCreateNote: () => void | Promise<void>
@@ -45,6 +47,7 @@ const GRID_SIZE = COLUMNS * ROWS
  */
 export function EscapeHoldPanel({
   activeNoteId,
+  isActiveNoteTimeless,
   isExportingPdf,
   isExportingMd,
   onCreateNote,
@@ -59,13 +62,13 @@ export function EscapeHoldPanel({
   const cells = useMemo<(PanelCell | null)[]>(() => {
     const actions: PanelCell[] = [
       { label: 'New Note', icon: 'fa-solid fa-file', onSelect: onCreateNote, disabled: false },
-      { label: 'New Chapter', icon: 'fa-solid fa-book-medical', onSelect: onCreateChapter, disabled: !hasActiveNote },
+      { label: 'New Chapter', icon: 'fa-solid fa-book-medical', onSelect: onCreateChapter, disabled: !hasActiveNote || isActiveNoteTimeless },
       { label: 'Export PDF', icon: 'fa-solid fa-file-pdf', onSelect: onExportPdf, disabled: !hasActiveNote || isExportingPdf },
       { label: 'Export MD', icon: 'fa-solid fa-file-code', onSelect: onExportMd, disabled: !hasActiveNote || isExportingMd },
       { label: 'Help', icon: 'fa-solid fa-circle-question', onSelect: onOpenHelp, disabled: false },
     ]
     return [...actions, ...new Array(GRID_SIZE - actions.length).fill(null)]
-  }, [hasActiveNote, isExportingPdf, isExportingMd, onCreateNote, onCreateChapter, onExportPdf, onExportMd, onOpenHelp])
+  }, [hasActiveNote, isActiveNoteTimeless, isExportingPdf, isExportingMd, onCreateNote, onCreateChapter, onExportPdf, onExportMd, onOpenHelp])
 
   const firstEnabledIndex = useMemo(() => {
     const index = cells.findIndex((cell) => cell && !cell.disabled)

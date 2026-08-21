@@ -42,6 +42,8 @@ export interface ChapterBarProps {
   onChapterPillContextMenu: (event: MouseEvent<HTMLDivElement>) => void
   onArchiveChapterClick: (chapterNoteId: string) => void
   onDeleteChapterClick: (chapterNoteId: string) => void
+  /** True while the parent note is timeless (SectionEditorArea.tsx's isViewingTimelessNote) -- every chapter pill is treated like an archived-merged ("ghost") pill (no drag, no rename, no archive/delete split), and the collapse/extract mini buttons are disabled, since none of that is possible while the whole family is frozen (databaseService.ts's assertNotTimeless). */
+  isLocked?: boolean
 }
 
 /**
@@ -135,6 +137,7 @@ export function ChapterBar({
   onChapterPillContextMenu,
   onArchiveChapterClick,
   onDeleteChapterClick,
+  isLocked = false,
 }: ChapterBarProps) {
   const parentNote = notes.find((note) => note.id === parentNoteId)
   const isParentActive = activeNoteId === parentNoteId
@@ -251,11 +254,17 @@ export function ChapterBar({
             </div>
             {reorderableChaptersWithLiveIndex.map(({ chapter, liveIndex }, displayIndex) => {
               const isGhost = liveIndex === -1
-              const isEditing = !isGhost && editingChapterNoteId === chapter.chapterNoteId
+              // Locked pills are disabled the same way a ghost (archived-
+              // merged) pill already is -- no drag, no rename, no
+              // archive/delete split -- but stay visually distinct (no
+              // "(archived)" label/styling) since nothing about the chapter
+              // itself changed, only its family's timeless state.
+              const isInteractionDisabled = isGhost || isLocked
+              const isEditing = !isInteractionDisabled && editingChapterNoteId === chapter.chapterNoteId
               const isActive = chapter.chapterNoteId === activeNoteId
               const note = notes.find((entry) => entry.id === chapter.chapterNoteId)
               const { text: label, isAssigned } = resolveIdentityLabel(chapter.chapterId, note?.contentText, 'chapter')
-              const isSplitArmed = !isGhost && splitArmedChapter?.chapterNoteId === chapter.chapterNoteId
+              const isSplitArmed = !isInteractionDisabled && splitArmedChapter?.chapterNoteId === chapter.chapterNoteId
 
               return (
                 <InlinePillOrInput
@@ -295,20 +304,20 @@ export function ChapterBar({
                       key="pill"
                       className={`tag-pill note-tab-pill chapter-pill${isActive ? ' is-active' : ''}${isGhost ? ' is-archived-ghost' : ''}`}
                       data-chapter-note-id={chapter.chapterNoteId}
-                      draggable={!isGhost}
-                      onDragStart={isGhost ? undefined : (event) => onChapterDragStart(event, liveIndex)}
-                      onDragEnd={isGhost ? undefined : onChapterDragEnd}
-                      onDragOver={isGhost ? undefined : (event) => {
+                      draggable={!isInteractionDisabled}
+                      onDragStart={isInteractionDisabled ? undefined : (event) => onChapterDragStart(event, liveIndex)}
+                      onDragEnd={isInteractionDisabled ? undefined : onChapterDragEnd}
+                      onDragOver={isInteractionDisabled ? undefined : (event) => {
                         event.preventDefault()
                         event.stopPropagation()
                         event.dataTransfer.dropEffect = 'move'
                       }}
-                      onDrop={isGhost ? undefined : (event) => onChapterDrop(event, liveIndex)}
+                      onDrop={isInteractionDisabled ? undefined : (event) => onChapterDrop(event, liveIndex)}
                       onClick={() => onChapterClick(chapter.chapterNoteId)}
-                      onMouseDown={isGhost ? undefined : (event) => onChapterPillMouseDown(event, chapter.chapterNoteId)}
-                      onMouseUp={isGhost ? undefined : (event) => onChapterPillMouseUp(event, chapter.chapterNoteId)}
-                      onMouseLeave={isGhost ? undefined : () => onChapterPillMouseLeave(chapter.chapterNoteId)}
-                      onContextMenu={isGhost ? undefined : onChapterPillContextMenu}
+                      onMouseDown={isInteractionDisabled ? undefined : (event) => onChapterPillMouseDown(event, chapter.chapterNoteId)}
+                      onMouseUp={isInteractionDisabled ? undefined : (event) => onChapterPillMouseUp(event, chapter.chapterNoteId)}
+                      onMouseLeave={isInteractionDisabled ? undefined : () => onChapterPillMouseLeave(chapter.chapterNoteId)}
+                      onContextMenu={isInteractionDisabled ? undefined : onChapterPillContextMenu}
                       data-tooltip={isGhost ? `${label} (archived)` : label}
                     >
                       <span className={`tag-pill-label${isAssigned ? '' : ' tag-pill-label-derived'}`}>{label}</span>
@@ -326,7 +335,7 @@ export function ChapterBar({
         className="btn-icon chapter-collapse-button"
         data-tooltip="Collapse this chapter into the previous one"
         aria-label="Collapse this chapter into the previous one"
-        disabled={!hasCurrentChapter}
+        disabled={!hasCurrentChapter || isLocked}
         onClick={onCollapseChapterIntoPrevious}
       >
         <span className="fa-solid fa-code-merge" aria-hidden="true" />
@@ -337,6 +346,7 @@ export function ChapterBar({
         className="btn-icon chapter-extract-button"
         data-tooltip="Cut the selection (or everything after the caret) into a new chapter right behind this one"
         aria-label="Cut the selection (or everything after the caret) into a new chapter right behind this one"
+        disabled={isLocked}
         onClick={onExtractSelectionToChapter}
       >
         <span className="fa-solid fa-scissors" aria-hidden="true" />

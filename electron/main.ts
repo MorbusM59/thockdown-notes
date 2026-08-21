@@ -423,6 +423,7 @@ function registerIpcHandlers() {
   ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.syncExternalNoteToFile, async (_event, input) => noteLifecycleService!.syncExternalNoteToFile(input));
   ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.getNoteIdByExternalPath, async (_event, input) => noteLifecycleService!.getNoteIdByExternalPath(input));
   ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.setAssignedId, async (_event, input) => noteLifecycleService!.setNoteAssignedId(input));
+  ipcMain.handle(NOTE_LIFECYCLE_CHANNELS.setTimeless, async (_event, input) => noteLifecycleService!.setNoteTimeless(input));
 
   ipcMain.handle(APP_STATE_CHANNELS.loadAppState, async () => stateService!.loadAppState());
   ipcMain.handle(APP_STATE_CHANNELS.saveAppState, async (_event, payload) => stateService!.saveAppState(payload));

@@ -191,6 +191,7 @@ type NoteRecordRow = {
   chapterOnly: number;
   isAutoToc: number;
   isAutoOpenItems: number;
+  isTimeless: number;
   chapterParentId: string | null;
   chapterId: string | null;
   detachedChapterParentId: string | null;
@@ -214,6 +215,8 @@ export type NoteRecord = {
   isAutoToc: boolean;
   /** True for the one chapter (if any) that's the auto-generated Open Items chapter for its parent's whole chapter family -- see the `isAutoOpenItems` column doc comment in ensureSchema(). */
   isAutoOpenItems: boolean;
+  /** True once this note has been frozen in time -- see freezeNoteFamily/the `isTimeless` column doc comment in ensureSchema(). Stamped on every member of a chapter family together (root, every real chapter, the auto-TOC chapter), not cascade-derived from a parent lookup. */
+  isTimeless: boolean;
   /** The single note this note is a chapter of, or null when it isn't (any) chapter. DB-derived (see getChapterParent), not navigation state. */
   chapterParentId: string | null;
   /** This chapter's own user-assignable id (the `chapters.chapterId` column -- distinct from `assignedId`/`notes.assignedId`, which is a different, note-level `$id` field a chapterOnly note's own tag bar never exposes a way to set). Null when unset (or when this note isn't a chapter at all). See tabLabels.ts's resolveIdentityLabel for how this resolves to a display label alongside a derived-from-content fallback. */
@@ -1047,6 +1050,23 @@ export class DatabaseService {
     };
   }
 
+  /**
+   * Throws if `noteId` is currently timeless -- the single guard called at
+   * the top of every method that alters an existing note's content, tags,
+   * chapters, id, or snapshots (see the `isTimeless` column doc comment
+   * above). `freezeNoteFamily`/`unfreezeNoteFamily` themselves are the one
+   * exempt path; clearing the flag is the only permitted alteration while
+   * timeless. Real database-layer protection, not just a renderer-side
+   * disabled affordance -- a bypassed or forgotten UI guard still can't get
+   * a mutation through.
+   */
+  private assertNotTimeless(noteId: string): void {
+    const record = this.getNoteRecord(noteId);
+    if (record?.isTimeless) {
+      throw new Error(`Note ${noteId} is timeless and cannot be altered until it's unfrozen`);
+    }
+  }
+
   upsertNoteContent(input: {
     id: string;
     title: string;
@@ -1076,6 +1096,7 @@ export class DatabaseService {
     // renderer validates the checksum/hash before trusting the cache.
     previewBlockCache?: string | null;
   }): void {
+    this.assertNotTimeless(input.id);
     const db = this.requireDb();
     const createdAtIso = new Date(input.createdAtMs).toISOString();
     const updatedAtIso = new Date(input.updatedAtMs).toISOString();
@@ -1140,7 +1161,7 @@ export class DatabaseService {
   listNoteRecords(): NoteRecord[] {
     const db = this.requireDb();
     const rows = db.prepare(`
-      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, n.isAutoOpenItems, c.parentNoteId AS chapterParentId, c.chapterId AS chapterId, n.detachedChapterParentId AS detachedChapterParentId
+      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, n.isAutoOpenItems, n.isTimeless, c.parentNoteId AS chapterParentId, c.chapterId AS chapterId, n.detachedChapterParentId AS detachedChapterParentId
       FROM notes n
       LEFT JOIN chapters c ON c.chapterNoteId = n.id
       ORDER BY datetime(n.updatedAt) DESC
@@ -1162,6 +1183,7 @@ export class DatabaseService {
       chapterOnly: Boolean(row.chapterOnly),
       isAutoToc: Boolean(row.isAutoToc),
       isAutoOpenItems: Boolean(row.isAutoOpenItems),
+      isTimeless: Boolean(row.isTimeless),
       chapterParentId: row.chapterParentId,
       chapterId: row.chapterId,
       detachedChapterParentId: row.detachedChapterParentId,
@@ -1171,7 +1193,7 @@ export class DatabaseService {
   getNoteRecord(noteId: string): NoteRecord | null {
     const db = this.requireDb();
     const row = db.prepare(`
-      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, n.isAutoOpenItems, c.parentNoteId AS chapterParentId, c.chapterId AS chapterId, n.detachedChapterParentId AS detachedChapterParentId
+      SELECT n.id, n.title, n.filePath, n.createdAt, n.updatedAt, n.contentChecksum, n.isTemp, n.externalPath, n.hasUnsavedChanges, n.syncMode, n.assignedId, n.previewBlockCache, n.chapterOnly, n.isAutoToc, n.isAutoOpenItems, n.isTimeless, c.parentNoteId AS chapterParentId, c.chapterId AS chapterId, n.detachedChapterParentId AS detachedChapterParentId
       FROM notes n
       LEFT JOIN chapters c ON c.chapterNoteId = n.id
       WHERE n.id = ?
@@ -1198,6 +1220,7 @@ export class DatabaseService {
       chapterOnly: Boolean(row.chapterOnly),
       isAutoToc: Boolean(row.isAutoToc),
       isAutoOpenItems: Boolean(row.isAutoOpenItems),
+      isTimeless: Boolean(row.isTimeless),
       chapterParentId: row.chapterParentId,
       chapterId: row.chapterId,
       detachedChapterParentId: row.detachedChapterParentId,
@@ -1248,6 +1271,45 @@ export class DatabaseService {
     return row?.chapterNoteId ?? null;
   }
 
+  /**
+   * Freezes `rootNoteId` and its whole chapter family (every row
+   * `listChaptersForNote` currently returns, which already includes the
+   * auto-TOC/auto-Open-Items chapters if present -- they're ordinary
+   * `chapters` rows like any other) in one transaction: stamps `isTimeless`
+   * on each member and permanently clears each member's own snapshot
+   * history. Deliberately re-reads membership fresh each call rather than
+   * caching it anywhere -- a chapter detached before freezing was never a
+   * live chapter at freeze time, so it's correctly left out (and left
+   * mutable) by this same "current state" read.
+   */
+  freezeNoteFamily(rootNoteId: string): void {
+    const db = this.requireDb();
+    const memberIds = [rootNoteId, ...this.listChaptersForNote(rootNoteId).map((chapter) => chapter.chapterNoteId)];
+    const tx = db.transaction(() => {
+      for (const memberId of memberIds) {
+        db.prepare('UPDATE notes SET isTimeless = 1 WHERE id = ?').run(memberId);
+        db.prepare('DELETE FROM note_snapshots WHERE noteId = ?').run(memberId);
+      }
+    });
+    tx();
+  }
+
+  /**
+   * The other half of freezeNoteFamily: clears `isTimeless` on `rootNoteId`
+   * and every one of its current chapters. History stays gone -- freezing
+   * already deleted it, and there's nothing to restore.
+   */
+  unfreezeNoteFamily(rootNoteId: string): void {
+    const db = this.requireDb();
+    const memberIds = [rootNoteId, ...this.listChaptersForNote(rootNoteId).map((chapter) => chapter.chapterNoteId)];
+    const tx = db.transaction(() => {
+      for (const memberId of memberIds) {
+        db.prepare('UPDATE notes SET isTimeless = 0 WHERE id = ?').run(memberId);
+      }
+    });
+    tx();
+  }
+
   // ── Note internal IDs (tab-bar labels) ──────────────────────────────────
 
   /**
@@ -1284,6 +1346,7 @@ export class DatabaseService {
    * resolved ID that was actually stored.
    */
   setNoteAssignedId(noteId: string, requestedRaw: string): string {
+    this.assertNotTimeless(noteId);
     const db = this.requireDb();
     const normalized = normalizeAssignedIdInput(requestedRaw);
     const base = normalized.length > 0 ? normalized : deriveDefaultAssignedIdBase(this.getNoteRecord(noteId)?.title ?? 'NOTE');
@@ -1529,6 +1592,7 @@ export class DatabaseService {
 
   /** Appends `chapterNoteId` as the new last chapter of `parentNoteId`. Used both for a brand-new empty chapter note (createChapterNote) and for a note cloned from a dragged-in note (cloneNoteAsChapter) -- either way this is the sole place a `chapters` row is inserted. Throws if `chapterNoteId` already belongs to a (any) parent -- see idx_chapters_chapterNoteId_unique. */
   addChapter(parentNoteId: string, chapterNoteId: string): ChapterEntry[] {
+    this.assertNotTimeless(parentNoteId);
     const db = this.requireDb();
     const { maxPosition } = db.prepare('SELECT MAX(position) AS maxPosition FROM chapters WHERE parentNoteId = ?').get(parentNoteId) as { maxPosition: number | null };
     const nextPosition = maxPosition === null ? 0 : maxPosition + 1;
@@ -1575,6 +1639,7 @@ export class DatabaseService {
    * collision-resolved id that was actually stored, or null if cleared.
    */
   setChapterId(parentNoteId: string, chapterNoteId: string, requestedRaw: string): string | null {
+    this.assertNotTimeless(parentNoteId);
     const db = this.requireDb();
     const normalized = normalizeAssignedIdInput(requestedRaw);
     const resolved = normalized.length > 0 ? this.resolveUniqueChapterId(parentNoteId, normalized, chapterNoteId) : null;
@@ -1584,6 +1649,7 @@ export class DatabaseService {
 
   /** Removes a chapter and closes the gap so every later chapter's position shifts forward by one. */
   removeChapter(parentNoteId: string, chapterNoteId: string): ChapterEntry[] {
+    this.assertNotTimeless(parentNoteId);
     const db = this.requireDb();
     const tx = db.transaction(() => {
       const removed = db.prepare('SELECT position FROM chapters WHERE parentNoteId = ? AND chapterNoteId = ?').get(parentNoteId, chapterNoteId) as { position: number } | undefined;
@@ -1614,6 +1680,7 @@ export class DatabaseService {
    * to `parentNoteId`.
    */
   detachChapter(parentNoteId: string, chapterNoteId: string): ChapterEntry[] {
+    this.assertNotTimeless(parentNoteId);
     const db = this.requireDb();
     const tx = db.transaction(() => {
       const removed = db.prepare('SELECT position, chapterId FROM chapters WHERE parentNoteId = ? AND chapterNoteId = ?').get(parentNoteId, chapterNoteId) as { position: number; chapterId: string | null } | undefined;
@@ -1658,6 +1725,7 @@ export class DatabaseService {
     if (!note?.detachedChapterParentId || note.detachedChapterPosition === null) return null;
 
     const parentNoteId = note.detachedChapterParentId;
+    this.assertNotTimeless(parentNoteId);
     const parentExists = db.prepare('SELECT 1 FROM notes WHERE id = ?').get(parentNoteId);
     if (!parentExists) {
       db.prepare('UPDATE notes SET detachedChapterParentId = NULL, detachedChapterPosition = NULL, detachedChapterChapterId = NULL, detachedChapterSequence = NULL WHERE id = ?').run(chapterNoteId);
@@ -1732,6 +1800,7 @@ export class DatabaseService {
 
   /** Rewrites every chapter's position from an explicit final order -- used for drag-reorder. No UNIQUE(parentNoteId, position) constraint (mirroring reorderNoteTabs) since a straight per-row position rewrite can transiently collide mid-transaction otherwise. */
   reorderChapters(parentNoteId: string, orderedChapterNoteIds: string[]): ChapterEntry[] {
+    this.assertNotTimeless(parentNoteId);
     const db = this.requireDb();
     const tx = db.transaction(() => {
       orderedChapterNoteIds.forEach((chapterNoteId, index) => {
@@ -1831,6 +1900,7 @@ export class DatabaseService {
    * a foreign key). One level only -- chapters can't have sub-chapters.
    */
   deleteNote(id: string): void {
+    this.assertNotTimeless(id);
     const db = this.requireDb();
     const attachedChapterNoteIds = (db.prepare('SELECT chapterNoteId FROM chapters WHERE parentNoteId = ?').all(id) as Array<{ chapterNoteId: string }>)
       .map((row) => row.chapterNoteId);
@@ -2103,6 +2173,7 @@ export class DatabaseService {
   //    with the same content.
   /** Returns the resulting snapshot's ID -- either newly inserted, or the existing latest one if content is unchanged (see dedup below). */
   saveNoteSnapshot(noteId: string, content: string, isManual = false): number {
+    this.assertNotTimeless(noteId);
     const db = this.requireDb();
     const timestamp = new Date().toISOString();
 
@@ -2407,6 +2478,7 @@ export class DatabaseService {
   }
 
   deleteTempNote(noteId: string): void {
+    this.assertNotTimeless(noteId);
     const db = this.requireDb();
     const tx = db.transaction(() => {
       db.prepare('DELETE FROM note_snapshots WHERE noteId = ?').run(noteId);
@@ -3552,6 +3624,15 @@ export class DatabaseService {
     // neighbors. Same "dedicated flag, not a reserved chapterId" reasoning
     // as isAutoToc just above.
     this.ensureNotesColumn('isAutoOpenItems', 'INTEGER NOT NULL DEFAULT 0');
+    // Marks a note as frozen in time -- see freezeNoteFamily/unfreezeNoteFamily
+    // and assertNotTimeless. Stamped on every member of a chapter family
+    // together (the root note, every real chapter, the auto-TOC chapter),
+    // not cascade-derived from a parent lookup, since freezing already has
+    // to enumerate every chapter (to clear its snapshot history) at the
+    // moment it's set. assertNotTimeless rejects every other note-mutating
+    // method in this class once this is true -- the only way to alter a
+    // timeless note again is to unfreeze it first.
+    this.ensureNotesColumn('isTimeless', 'INTEGER NOT NULL DEFAULT 0');
     // Where a chapter was detached FROM, while it's sitting outside the
     // `chapters` table entirely with its own 'deleted' or 'archived'
     // protected tag applied -- see detachChapter's own doc comment for why
@@ -3798,6 +3879,7 @@ export class DatabaseService {
   }
 
   private writeNoteTags(noteId: string, orderedTags: string[]): void {
+    this.assertNotTimeless(noteId);
     const db = this.requireDb();
     const findTagStmt = db.prepare('SELECT id FROM tags WHERE name = ?');
     const insertTagStmt = db.prepare('INSERT INTO tags (name) VALUES (?)');
