@@ -369,6 +369,7 @@ export function SectionEditorArea({
                 own display:none internally off the `isOpen` prop -- so
                 EscapeHoldPanel's focus-management (also keyed off `isOpen`,
                 not mount) keeps working across repeated opens. */}
+            <div className={`editor-empty-state-backdrop${isEmptyStateVisible ? ' is-visible' : ''}`}/>
             <div
               className={`editor-empty-state${isEmptyStateVisible ? ' is-visible' : ''}`}
               style={{ '--empty-state-scene-mask': emptyStateSceneMaskUrl } as CSSProperties}

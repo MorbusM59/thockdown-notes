@@ -444,6 +444,23 @@
   display: flex;
 }
 
+.editor-empty-state-backdrop {
+  display: none;
+  position: absolute;
+  inset:    0;
+  margin:   auto;
+  height: var(--circle-diameter);
+  width: var(--circle-diameter);
+  border-radius: calc(var(--border-radius-regular) *6);
+  z-index: 10;
+  opacity: 100%;
+  background: linear-gradient(var(--color-input-backdrop), var(--color-input-backdrop)), var(--palette-parchment-lightest);
+}
+
+.editor-empty-state-backdrop.is-visible {
+  display: block;
+}
+
 /* Dim+blur backdrop behind the empty-state box (see SectionEditorArea.tsx's
    comment on this element for why it's a sibling, not a wrapper, of the
    panel). Lower z-index than .editor-empty-state (11) so the blur only
@@ -453,38 +470,36 @@
   position: absolute;
   inset: 0;
   z-index: 10;
-  background: color-mix(in srgb, var(--background-color-root) 60%, transparent);
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(4px);
 }
 
-/* Fills the empty-state box's padded content area exactly (no headline --
-   just the 9 cells) and hands equal shares of it down through
-   row -> cell -> button via flex:1 1 0 at each level, so the grid fits the
-   fixed circle cleanly at whatever size that box happens to be rather than
-   assuming fixed button pixel dimensions. */
+/* A real 3x3 CSS grid, evenly spaced by equal 1fr tracks + gap rather than
+   fixed button pixel math. .editor-escape-hold-panel-row/-cell (still real
+   DOM nodes for ARIA row/gridcell semantics -- see EscapeHoldPanel.tsx)
+   contribute no layout of their own: display:contents drops their boxes
+   from rendering while promoting their children (ultimately the 9 buttons)
+   to be the grid's direct items, in DOM order, so the existing row-major
+   markup auto-places into the grid exactly as written with no explicit
+   grid-column/-row bookkeeping needed. */
 .editor-stage .editor-escape-hold-panel-grid {
   display: none;
-  flex-direction: column;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
   gap: var(--spacing-extra-large);
   margin: var(--spacing-extra-large);
+  place-items: center;
   /* Button labels stay legible instead of inheriting the empty-state's
      decorative script font. */
   font-family: var(--ui-font-family);
 }
 
 .editor-stage .editor-escape-hold-panel-grid.is-visible {
-  display: flex;
+  display: grid;
 }
 
-.editor-stage .editor-escape-hold-panel-row {
-  display: flex;
-  gap: var(--spacing-extra-large);
-  flex: 1 1 0;
-}
-
+.editor-stage .editor-escape-hold-panel-row,
 .editor-stage .editor-escape-hold-panel-cell {
-  display: flex;
-  flex: 1 1 0;
+  display: contents;
 }
 
 .editor-stage .editor-escape-hold-panel-btn {
@@ -503,7 +518,6 @@
   color:           var(--color-text-60);
   transition:      background 0.2s, border-color 0.2s, color 0.2s;
   font-size: var(--btn-large-icon-size);
-  box-shadow: var(--box-shadow-regular-filtered);
 }
 
 .editor-stage .editor-escape-hold-panel-btn:active
