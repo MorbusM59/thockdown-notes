@@ -792,6 +792,18 @@ export function CM6Editor({
     retrySameScope: boolean;
   } | null>(null);
   const lastHydratedNoteIdRef = useRef<string | null>(null);
+  // Debug-only counter for the wrap-boundary caret-assoc fix (see
+  // wrapBoundaryAssocFixGeneration's own doc comment further down): counts
+  // how many times the fix's follow-up dispatch actually ran. The dispatch
+  // itself sets assoc briefly, but CM6's own enforceCursorAssoc() only
+  // touches the native DOM Selection -- it never writes back to
+  // view.state, and a native `selectionchange` it triggers gets observed
+  // and re-synced into a fresh CM6 selection (assoc reset to 0, since raw
+  // DOM has no assoc concept) almost immediately after. That makes the
+  // assoc value itself too fleeting for an external live-browser check to
+  // reliably observe, so this counter exists as the one thing outside
+  // observers (debug hook, tests) actually can assert on.
+  const wrapBoundaryAssocFixDispatchCountRef = useRef(0);
   const lineHeightPxRef = useRef(lineHeightPx);
   const cellWidthPxRef = useRef(cellWidthPx);
   // Mirrors showReviewFlags for the resize-observer callback below, which
@@ -2367,6 +2379,26 @@ export function CM6Editor({
     // onUpdate-callback indirection, just a same-tick handoff.
     let pendingPasteViewportOffsetPx: number | null = null;
 
+    // Wrap-boundary caret-assoc fix (docs/cm6-parity-hardening-plan.md,
+    // "wrap-boundary caret assoc" bug). CM6's own default text-insertion
+    // path (EditorState.replaceSelection, what handles every ordinary
+    // keystroke) always produces a collapsed cursor via
+    // `EditorSelection.cursor(pos)` -- no assoc argument, so it defaults to
+    // 0 ("no preference"). CM6's own correction for a cursor that lands
+    // exactly on a soft-wrap boundary (view.docView.enforceCursorAssoc(),
+    // gated in @codemirror/view's ViewState.update on the selection's assoc
+    // being truthy) therefore never engages for typing -- only for
+    // navigation, since moveByChar/moveVisually (what arrow keys use)
+    // always sets a real, nonzero assoc. Left unenforced, the *native*
+    // browser selection is free to land on whichever side of the boundary
+    // Chromium's own internal (unqueryable) affinity picks, including the
+    // old, now-wrapped-away row -- which can render partially/fully
+    // off-screen and drag the scroller's own scrollLeft along with it, even
+    // though this app never intentionally scrolls the editor horizontally
+    // (line-wrapping is always on; see this file's own EditorView theme
+    // comment on .cm-scroller's overflowX:hidden).
+    let wrapBoundaryAssocFixGeneration = 0;
+
     const reconcilePasteScroll = (view: EditorView, viewportOffsetPx: number) => {
       const scroller = view.scrollDOM;
       const domSelection = window.getSelection();
@@ -3076,6 +3108,37 @@ export function CM6Editor({
           pendingCageIntent = false;
           reconcileCagedScroll(update.view);
         }
+        // Wrap-boundary caret-assoc fix -- see wrapBoundaryAssocFixGeneration's
+        // own doc comment above for the full "why." Deferred a microtask
+        // (not dispatched synchronously here) since re-dispatching from
+        // inside the updateListener that produced this very update is a
+        // known CM6 footgun -- same reason reconcileCagedScroll/
+        // reconcilePasteScroll above are triggered via a flag-and-reconcile
+        // pattern rather than dispatching in place. A microtask (not
+        // requestAnimationFrame, unlike those two) is enough here: this
+        // fix doesn't need to wait for a real layout settle, only to be
+        // outside the current sync callstack, and firing before paint
+        // avoids a visible one-frame flash of the wrong side.
+        // Generation-guarded so a second keystroke (or navigation) that
+        // lands before the microtask runs supersedes it rather than
+        // stomping on wherever the selection ended up next.
+        if (update.docChanged) {
+          const producedSelection = update.state.selection.main;
+          if (producedSelection.empty && producedSelection.assoc === 0) {
+            const targetPos = producedSelection.head;
+            wrapBoundaryAssocFixGeneration += 1;
+            const myGeneration = wrapBoundaryAssocFixGeneration;
+            queueMicrotask(() => {
+              if (wrapBoundaryAssocFixGeneration !== myGeneration) return;
+              const currentView = viewRef.current;
+              if (!currentView) return;
+              const currentSelection = currentView.state.selection.main;
+              if (!currentSelection.empty || currentSelection.head !== targetPos || currentSelection.assoc !== 0) return;
+              currentView.dispatch({ selection: EditorSelection.cursor(targetPos, 1) });
+              wrapBoundaryAssocFixDispatchCountRef.current += 1;
+            });
+          }
+        }
         debugCheckpoint('updateListener end (synchronous work done)');
       }),
     ];
@@ -3120,6 +3183,17 @@ export function CM6Editor({
           docLines: view.state.doc.lines,
           selectionHead: head,
           selectionEmpty: view.state.selection.main.empty,
+          // Added for the wrap-boundary caret-assoc bug
+          // (docs/cm6-parity-hardening-plan.md) -- assoc has no public DOM
+          // equivalent to read from outside CM6, so this debug hook is the
+          // only way a live-browser check (or a human) can directly confirm
+          // whether wrapBoundaryAssocFixGeneration's follow-up actually ran,
+          // as opposed to inferring it indirectly from rendered geometry.
+          // The raw assoc value itself is too fleeting to observe reliably
+          // (see wrapBoundaryAssocFixDispatchCountRef's own doc comment) --
+          // the dispatch counter is the reliable signal.
+          selectionAssoc: view.state.selection.main.assoc,
+          wrapBoundaryAssocFixDispatchCount: wrapBoundaryAssocFixDispatchCountRef.current,
         };
       };
     }

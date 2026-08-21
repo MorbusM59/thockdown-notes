@@ -386,6 +386,118 @@ specific symptom shouldn't reproduce in CM6, unlike the (already-resolved, unrel
   CSS tweak on the assumption it's the same bug shape as before — the evidence above says it
   probably isn't.
 
+### Bug 5 — 1px horizontal shift at a soft-wrap boundary ("wrap-boundary caret assoc") — FIXED (mechanism verified, pixel-level symptom not reproducible in this sandbox)
+
+**User report**: typing a character (specifically a space) that fills a line all the way to its
+last box and causes it to wrap shifts the edit-mode viewport's text one pixel to the left,
+"looks like horizontal scrolling." The shift reverts if you break into the new line, arrow-left to
+its first box, then arrow-left once more. A live follow-up narrowed it further: switching
+Left/Right at the exact wrap point while the caret is at the boundary toggles the 1px shift
+directly — the caret sits "behind the last box, off screen or partially cut off by the border" in
+the wrong state, and the user's own diagnosis was that an ambiguous, partially-cut-off caret
+position should "automatically break the ambiguity in favor of showing the caret on the new line."
+
+**Root cause, grounded in `@codemirror/view`/`@codemirror/state` source, not guessed**: a collapsed
+cursor sitting exactly at a soft-wrap boundary is simultaneously "end of the old visual row" and
+"start of the new one" — the same document offset, two different rows. CM6 has a real, built-in
+mechanism for this exact ambiguity: `SelectionRange.assoc` (`-1`/`0`/`1` — "associated with the
+character before," "no preference," "associated with the character after," i.e. downstream/new-line
+— see `@codemirror/state`'s own doc comment on `SelectionRange.assoc`). `ViewState.update`
+(`@codemirror/view/dist/index.js`) sets `mustEnforceCursorAssoc = true` whenever a selection update
+leaves a collapsed cursor with a **non-zero** assoc under line-wrapping; the next measure pass then
+calls `DocView.enforceCursorAssoc()`, which reads the current DOM Selection and moves it (via
+`Selection.modify()`) to the correct visual side.
+
+The gap: CM6's own default text-insertion path — `EditorState.replaceSelection(text)`
+(`@codemirror/state`), which is what handles literally every ordinary keystroke, including the
+space that triggers the wrap — always produces the resulting cursor via
+`EditorSelection.cursor(range.from + text.length)`, **no `assoc` argument**, defaulting to `0`. So
+`mustEnforceCursorAssoc` never engages for typing. Arrow-key navigation across the same boundary
+doesn't have this problem: `moveByChar`/`moveVisually` (what `cursorCharLeft`/`cursorCharRight`
+use) **always** returns a cursor with a real, nonzero assoc — confirmed by reading
+`moveVisually`'s own return statements in `@codemirror/view/dist/index.js` — which is exactly why
+the user's arrow-key round trip "fixes" it and typing doesn't: arrow keys already correctly trigger
+CM6's own correction; typing never did.
+
+This also independently confirms the user's own proposed fix direction: `assoc: 1` in CM6's own
+vocabulary literally *means* "associated with the character after" (downstream/new-line) — the same
+"always downstream at a wrap boundary" policy `CaretRect.ts`'s `resolveCollapsedCaretRect` already
+applies to this app's own caret-overlay rendering (see its doc comment, `resolveCollapsedCaretRect`
+in `src/editor/CaretRect.ts`), just not previously applied to CM6's *real* native selection, which
+is what native browser auto-scroll-into-view behavior actually reacts to. Confirmed this app never
+intentionally needs horizontal scroll at all (`CM6Editor.tsx`'s own `EditorView.theme` comment on
+`.cm-scroller { scrollbarWidth: 'none', overflowX: 'hidden' }`: "this app draws its own scrollbar
+... and never scrolls horizontally (line-wrapping is always on)"), which is consistent with any
+observed horizontal drift being a native-browser artifact of exactly this ambiguity, not legitimate
+app state.
+
+**Fix** (`CM6Editor.tsx`, in the existing `updateListener`, next to `reconcileCagedScroll`/
+`reconcilePasteScroll`'s own flag-and-reconcile pattern): after any `docChanged` transaction that
+leaves a collapsed cursor with `assoc === 0`, queue a microtask (not a synchronous re-dispatch from
+inside the listener that produced the update — a known CM6 footgun, the same reason the two
+existing reconciles above defer rather than dispatch in place; a microtask rather than
+`requestAnimationFrame` since this doesn't need a real layout settle, only to be outside the
+current callstack, and firing before paint avoids a one-frame flash) that re-dispatches
+`EditorSelection.cursor(pos, 1)` at the same position, generation-guarded so a second keystroke or
+navigation landing before the microtask runs supersedes it instead of stomping on wherever the
+selection ended up next. A debug-only dispatch counter
+(`wrapBoundaryAssocFixDispatchCountRef`, exposed through the existing
+`thockdown:debug-cage-state` debug hook alongside a `selectionAssoc` read) exists purely so this
+fix's own mechanism is externally observable — the necessity of the counter is itself a finding,
+see below.
+
+**What verification could and couldn't prove — recorded honestly, not glossed over**:
+
+- `npx tsc --noEmit`, `npm run lint` (one pre-existing, unrelated failure in `App.tsx` confirmed via
+  `git stash` to exist identically without this change), `npm test` (513/513, no regressions) all
+  clean.
+- A live-browser regression script
+  (`scripts/perf/verifyCM6WrapBoundaryAssoc.mjs`) types real word-wrapped text up to the exact last
+  box of a wrapped row (mirroring the user's own repro), types the wrap-triggering character, and
+  asserts the fix's dispatch counter incremented exactly once for that keystroke. A/B-verified
+  (`git stash` on just `CM6Editor.tsx`): without the fix, the debug fields this test reads don't
+  exist at all and the assertion fails outright — confirming the test actually exercises the fix,
+  not passing by coincidence.
+- Per-keystroke performance A/B (`npm run perf:input-lag -- --chars=1500000 --keystrokes=30
+  --position=end`, 3 runs each side): with-fix means ~32.8/39.5/40.1ms, baseline means
+  ~44.5/33.7/38.7ms — indistinguishable within this environment's run-to-run noise, no measurable
+  regression from the extra per-keystroke selection-only dispatch (cheap: no doc/height-map/
+  decoration recompute, unlike the text-changing transaction that already just happened).
+- **Honestly unresolved**: a genuine pixel-level before/after of the originally reported symptom
+  (the actual 1px scrollLeft/text shift) was attempted extensively and never reproduced in this
+  sandbox's headless Linux Chromium (`dev:browser`), fix or no fix. Multiple angles were tried and
+  all came back negative: real word-wrapped typing across dozens of wrap points, an exact
+  screenshot pixel-diff (`pixelmatch`) of an unrelated, already-settled row before/after the
+  wrap-triggering keystroke (0 pixels different, both with and without the review-gutter/
+  line-numbers column enabled), a sweep across 16 window widths, and direct polling of
+  `scroller.scrollLeft`/`.cm-content`'s bounding rect/computed `transform` across the exact
+  Left/Right arrow toggle sequence the user described (never moved, even by a sub-pixel, across
+  any of these). The native `Selection` Range's own `getBoundingClientRect()` was *already* on the
+  correct (downstream) row in every attempt, fix or no fix — meaning Chromium's own default
+  wrap-boundary-affinity heuristic apparently already resolves correctly by default in this
+  specific environment (headless Linux Chromium, whatever font/DPI/GPU-compositor path that
+  implies), so the ambiguous branch this fix targets was never actually forced open here to prove
+  the *symptom* went away. This reads as a Chromium-version/platform-specific heuristic difference,
+  not a flaw in the root-cause analysis (which is grounded directly in `@codemirror/view`/
+  `@codemirror/state` source, not inference from a failed repro) — but it's a real gap: the fix is
+  shipped on the strength of (a) a documented CM6 mechanism used exactly as CM6 itself uses it for
+  the already-correct arrow-key case, (b) confirmed-firing mechanism-level verification, and (c) an
+  A/B-verified regression test — not a live pixel-for-pixel confirmation of the user's own
+  screen. If this symptom recurs, the next lead is trying the real packaged Electron app (a
+  different Chromium build/config than the `dev:browser` mock) via `xvfb-run`, per this doc's own
+  `docs/large-document-performance-handover.md`-established pattern
+  (`scripts/perf/measureInputLagElectron.mjs`), rather than re-attempting the same headless-Chromium
+  angle.
+- The full existing `scripts/perf/verifyCM6*.mjs` suite (25 scripts) was also re-run to confirm no
+  incidental regression elsewhere in the shared `updateListener` this fix touches: 19/25 passed;
+  the 6 that didn't (`verifyCM6CaretSurvivesTagMutation`, `verifyCM6ColdBootCaretFocus`,
+  `verifyCM6Phase2Slice11`, `verifyCM6Phase2Slice17`, `verifyCM6Phase2Slice20`,
+  `verifyCM6ProductionGating`) were each individually A/B-verified via `git stash` on just
+  `CM6Editor.tsx` — every one fails identically with the fix stashed out, confirming pre-existing
+  sandbox flakiness (a drag-handle locator, a tag-pill locator, a y-box slider test-setup gap two
+  of the failures' own error messages already flag as "test setup is wrong, not a product bug," and
+  a cold-boot caret-focus race unrelated to this fix's scope), not a regression from this change.
+
 ---
 
 ## Phase 2 — restore full parity with pre-refactor (Lexical) functionality
@@ -663,6 +775,28 @@ clean, `npm test` 258/258, full `scripts/perf/verifyCM6*.mjs` suite (23/23, one 
 `verifyCM6CursorPersistenceCheckpoints.mjs`), live-browser checks of both the piggyback path and
 the close-section checkpoint, and an A/B check proving the close-section checkpoint fix is actually
 load-bearing (reverting it reproduces the loss under the same test).
+
+**A later session fixed Bug 5 (1px horizontal shift at a soft-wrap boundary, "wrap-boundary caret
+assoc")** — see its own section above for the full account. Root cause grounded directly in
+`@codemirror/view`/`@codemirror/state` source: CM6's own `SelectionRange.assoc` mechanism for this
+exact "collapsed cursor at a soft-wrap boundary" ambiguity exists and works (arrow-key navigation
+already relies on it correctly), but CM6's default text-insertion path never sets a non-zero assoc,
+so its own correction (`enforceCursorAssoc()`) never engaged for typing. Fixed with a
+generation-guarded, microtask-deferred follow-up dispatch in `CM6Editor.tsx`'s existing
+`updateListener`. Verified: `npx tsc --noEmit`/`npm run lint` clean (one pre-existing unrelated lint
+failure confirmed via `git stash`), `npm test` 513/513, a new A/B-verified live-browser regression
+script (`scripts/perf/verifyCM6WrapBoundaryAssoc.mjs`) confirming the fix's own dispatch mechanism
+fires, and a 3-run-each per-keystroke perf A/B showing no regression. **Explicitly not achieved,
+stated honestly rather than glossed over**: a genuine pixel-level reproduction of the originally
+reported symptom itself — extensive attempts (real word-wrapped typing across dozens of wrap
+points, a `pixelmatch` screenshot diff of an unrelated settled row, a 16-width sweep, direct
+`scroller.scrollLeft` polling across the user's exact arrow-key toggle sequence) never budged a
+single pixel in this sandbox's headless Linux Chromium, fix or no fix — the native selection was
+already resolving to the correct row by default in every attempt here, suggesting this is a
+Chromium-version/platform-specific affinity-heuristic difference rather than something reliably
+forceable from outside this environment. If the user still sees the symptom after this fix ships,
+the next lead is the real packaged Electron app via `xvfb-run` (a different Chromium build/config
+than the `dev:browser` mock), not another pass at the same headless-Chromium angle.
 
 **Next up, in priority order**:
 - Bug 4 (Enter double line break — needs live reproduction attempt first, static analysis argues
