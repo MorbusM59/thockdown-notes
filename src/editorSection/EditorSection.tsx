@@ -1269,6 +1269,12 @@ export function EditorSection({
     documentFindCaseSensitiveRef.current = isDocumentFindCaseSensitive
   }, [isDocumentFindCaseSensitive, documentFindCaseSensitiveRef])
 
+  // Mirrors SectionEditorArea.tsx's own editorReadOnly expression (its
+  // negation) -- see usePreviewMarkdownRendering's isActiveNoteEditable doc
+  // comment for why the preview pane's own checkbox-click mechanism needs
+  // the same gate the real editor's read-only state already uses.
+  const isActiveNoteEditable = !activeNoteHasDebugTag && !isPreviewingSnapshot && !isViewingEphemeralAutoChapter && !isViewingTimelessNote
+
   const { previewMarkdownElement } = usePreviewMarkdownRendering({
     notes,
     activeNoteId,
@@ -1282,6 +1288,8 @@ export function EditorSection({
     previewScrollToSourceLineRef: editorSectionMountRest.previewScrollToSourceLineRef,
     previewBlockSplitCacheRef,
     isViewingAutoOpenItemsChapter,
+    isActiveNoteEditable,
+    applyProgrammaticEditorText,
   })
 
   const {

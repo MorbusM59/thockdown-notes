@@ -19,6 +19,8 @@ import {
   createPreviewSourceAnchorRehypePlugin,
   PREVIEW_MARKDOWN_REMARK_PLUGINS,
 } from '../editor/PreviewMarkdown'
+import { resolveMarkdownChecklistLineToggleTransform } from '../editor/ChecklistCaretClickTogglePolicy'
+import { normalizeInternalText } from '../editor/TextPolicy'
 import { findHeadingAnchorLine, parseHeadingAnchorFragment } from '../shared/tableOfContentsText'
 import type { ParsedInternalNoteLink } from '../shared/internalNoteLinks'
 import { splitMarkdownIntoPreviewBlocksIncremental, type PreviewBlockSplitCache } from '../editor/PreviewBlockSplit'
@@ -139,6 +141,28 @@ export interface UsePreviewMarkdownRenderingOptions {
    * PreviewMarkdown.tsx's OpenItemCheckbox.
    */
   isViewingAutoOpenItemsChapter: boolean
+  /**
+   * Whether the note currently being rendered is directly editable --
+   * mirrors SectionEditorArea.tsx's own `editorReadOnly` expression
+   * (excludes a debug-tagged note, a Time Machine snapshot preview, the
+   * auto-TOC/auto-Open-Items chapters, and a timeless/frozen note). Gates
+   * the regular-preview checkbox-click mechanism below: a checkbox stays a
+   * plain, non-interactive glyph everywhere the real editor would also
+   * refuse to let you type.
+   */
+  isActiveNoteEditable: boolean
+  /**
+   * Pushes a text change into the editor programmatically, keeping edit
+   * mode's own live text in sync -- see useEditorSectionMount.ts's own doc
+   * comment on this callback (Time Machine restore, find & replace are its
+   * other callers). Used here so clicking a checkbox in regular preview
+   * writes straight to the one real note, identically to toggling it in
+   * edit mode -- unlike the auto-Open-Items chapter's own toggle (which
+   * intentionally writes to a *different* note and never touches what's on
+   * screen), a regular note's preview has no such indirection: this is the
+   * note itself.
+   */
+  applyProgrammaticEditorText: (nextText: string, selectionStart?: number, selectionEnd?: number) => void
 }
 
 export interface UsePreviewMarkdownRenderingResult {
@@ -206,6 +230,8 @@ export function usePreviewMarkdownRendering({
   previewScrollToSourceLineRef,
   previewBlockSplitCacheRef,
   isViewingAutoOpenItemsChapter,
+  isActiveNoteEditable,
+  applyProgrammaticEditorText,
 }: UsePreviewMarkdownRenderingOptions): UsePreviewMarkdownRenderingResult {
   // Mirrors `notes`/`activeNoteText` for navigateToInternalPreviewLink's
   // call-time-only reads below, so that callback's identity -- and in turn
@@ -288,6 +314,23 @@ export function usePreviewMarkdownRendering({
   useEffect(() => {
     activeNoteTextRef.current = activeNoteText
   }, [activeNoteText])
+
+  // The regular-preview counterpart of handleToggleOpenItem above: writes
+  // straight to the active note's own live text via applyProgrammaticEditorText
+  // (the same mechanism the formatting toolbar and find & replace already
+  // use to push a transform into the editor programmatically), so the edit
+  // pane picks up the flip too -- single source of truth, unlike Open
+  // Items' own out-of-band write to a different note. Reuses
+  // resolveMarkdownChecklistLineToggleTransform, the exact same toggle
+  // primitive edit mode's own caret-click-on-a-checkbox shortcut is built
+  // on (ChecklistCaretClickTogglePolicy.ts), so a click means the same
+  // thing in both modes.
+  const handleToggleChecklistAtLine = useCallback((sourceLine: number) => {
+    const currentText = normalizeInternalText(latestEditorTextRef.current || activeNoteTextRef.current)
+    const next = resolveMarkdownChecklistLineToggleTransform(currentText, sourceLine)
+    if (!next) return
+    applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
+  }, [applyProgrammaticEditorText, latestEditorTextRef])
 
   // Scrolls the preview pane to the top of the document. Used for cross-note
   // links with no `#anchor-id` — deferred a couple of frames past the note
@@ -649,15 +692,29 @@ export function usePreviewMarkdownRendering({
     navigateToInternalNoteLinkRef.current = navigateToInternalNoteLink
   }, [navigateToInternalNoteLink])
 
-  // Recomputes only when isViewingAutoOpenItemsChapter flips or the active
-  // note switches (handleToggleOpenItem's own identity only changes with
-  // activeNoteId) -- never on an individual checkbox toggle, since the
-  // toggle store's own reference never changes and its per-line
-  // subscriptions (see OpenItemCheckbox) are what actually propagate a
-  // toggle to the screen. No ref-forwarding needed for handleToggleOpenItem
-  // the way the navigation callbacks above need it: that pattern exists
+  // Same ref-forwarding reason as the two navigation callbacks above:
+  // applyProgrammaticEditorText (and so handleToggleChecklistAtLine, which
+  // closes over it) isn't keystroke-stable, so forwarding through a ref
+  // keeps previewMarkdownComponents' own memo -- and every currently-
+  // mounted PreviewMarkdownBlock -- from treating it as "changed" on every
+  // keystroke.
+  const handleToggleChecklistAtLineRef = useRef(handleToggleChecklistAtLine)
+  useEffect(() => {
+    handleToggleChecklistAtLineRef.current = handleToggleChecklistAtLine
+  }, [handleToggleChecklistAtLine])
+
+  // Recomputes only when isViewingAutoOpenItemsChapter/isActiveNoteEditable
+  // flip or the active note switches (handleToggleOpenItem's own identity
+  // only changes with activeNoteId) -- never on an individual checkbox
+  // toggle, since the toggle store's own reference never changes and its
+  // per-line subscriptions (see OpenItemCheckbox) are what actually
+  // propagate an Open-Items toggle to the screen; a regular-preview toggle
+  // instead changes the block's own `text` (see handleToggleChecklistAtLine),
+  // which is what re-renders that one block. No ref-forwarding needed for
+  // handleToggleOpenItem the way the navigation callbacks (and
+  // handleToggleChecklistAtLine) above need it: that pattern exists
   // specifically to keep a memo stable across per-keystroke churn, and
-  // nothing here changes on a keystroke.
+  // handleToggleOpenItem doesn't change on a keystroke.
   const previewMarkdownComponents = useMemo(
     () => createPreviewMarkdownComponents(
       (target) => navigateToInternalPreviewLinkRef.current(target),
@@ -667,8 +724,11 @@ export function usePreviewMarkdownRendering({
         subscribe: openItemsToggleStoreRef.current!.subscribeToLine,
         onToggle: handleToggleOpenItem,
       } : undefined,
+      (!isViewingAutoOpenItemsChapter && isActiveNoteEditable)
+        ? (sourceLine) => handleToggleChecklistAtLineRef.current(sourceLine)
+        : undefined,
     ),
-    [isViewingAutoOpenItemsChapter, handleToggleOpenItem],
+    [isViewingAutoOpenItemsChapter, handleToggleOpenItem, isActiveNoteEditable],
   )
 
   const previewSearchHighlightPlugin = useMemo(

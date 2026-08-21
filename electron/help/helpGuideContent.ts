@@ -76,6 +76,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *Toggles between the raw Markdown you type and the rendered, formatted view.*
 
 - Preview renders GitHub-Flavored Markdown: headings, bold/italic/strikethrough, lists (including task checklists with ☐/☑), tables, blockquotes, syntax-highlighted code blocks, horizontal rules, images, and links.
+- A task checklist's box is clickable right there in preview, same as [clicking its caret in edit mode]($HELP§TOOLBAR-FORMATTING#formatting-group) — it's the same checkbox either way, so the note's own text (and edit mode's view of it) updates immediately.
 - \`Esc\` also blurs a focused field (like search) before it starts toggling modes, so it's safe to hit repeatedly.
 
 ### [Quick Actions Menu](#quick-actions-menu)

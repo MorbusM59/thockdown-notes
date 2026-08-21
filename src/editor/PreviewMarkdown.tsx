@@ -194,18 +194,32 @@ export interface OpenItemsToggleHandlers {
   onToggle: (sourceLine: number) => void
 }
 
-// The checkbox glyph for one Open Items entry, interactive only while
-// `toggle` is provided. Open Items' own generated markdown only ever
-// contains UNCHECKED items to begin with (collectUncheckedItemsByHeading
-// drops checked ones entirely), so the parsed-markdown `checked` prop is
-// always false here -- toggle.isChecked(sourceLine) is the only thing that
-// can ever make the glyph look checked, and it's deliberately never synced
-// back into the Open Items chapter's own text: the actual toggle write
-// (toggle.onToggle) goes straight to the real source note with
-// skipAutoChapterHooks, so the Open Items chapter stays exactly as it was
-// while this view is open, letting the click be undone by clicking again.
-// Only a real refresh (the manual-save button's regenerateAllOpenItems)
-// drops a checked-off item from the list for real.
+// The checkbox glyph for one checklist item, interactive while either
+// `toggle` (the auto-Open-Items chapter's own overlay-store mechanism) or
+// `onToggleAtLine` (the direct, regular-preview mechanism -- see
+// usePreviewMarkdownRendering.tsx's handleToggleChecklistAtLine) is
+// provided; the two are mutually exclusive at the call site
+// (createPreviewMarkdownComponents below only ever wires one or the other
+// for a given note).
+//
+// Open Items' own generated markdown only ever contains UNCHECKED items to
+// begin with (collectUncheckedItemsByHeading drops checked ones entirely),
+// so the parsed-markdown `checked` prop is always false there --
+// toggle.isChecked(sourceLine) is the only thing that can ever make the
+// glyph look checked, and it's deliberately never synced back into the Open
+// Items chapter's own text: the actual toggle write (toggle.onToggle) goes
+// straight to the real source note with skipAutoChapterHooks, so the Open
+// Items chapter stays exactly as it was while this view is open, letting
+// the click be undone by clicking again. Only a real refresh (the
+// manual-save button's regenerateAllOpenItems) drops a checked-off item
+// from the list for real.
+//
+// A regular note's own preview has no such indirection: `onToggleAtLine`
+// writes straight to this same note's live text (via
+// applyProgrammaticEditorText), so the parsed-markdown `checked` prop is
+// already correct and stays the single source of truth -- no overlay store
+// needed, the glyph just re-parses along with the rest of the block the
+// instant the underlying text changes, identically in edit mode too.
 //
 // Resolves its own `sourceLine` from the DOM (the nearest ancestor `<li
 // data-source-line="N">`, tagged by createPreviewSourceAnchorRehypePlugin)
@@ -220,10 +234,12 @@ function OpenItemCheckbox({
   checked,
   className,
   toggle,
+  onToggleAtLine,
 }: {
   checked?: boolean
   className?: string
   toggle?: OpenItemsToggleHandlers
+  onToggleAtLine?: (sourceLine: number) => void
 }) {
   const [sourceLine, setSourceLine] = useState<number | null>(null)
 
@@ -239,37 +255,48 @@ function OpenItemCheckbox({
     setSourceLine(Number.isNaN(parsed) ? null : parsed)
   }, [])
 
-  const canToggle = toggle !== undefined && sourceLine !== null
+  // Whether this checkbox is toggleable AT ALL -- independent of sourceLine,
+  // which only resolves via the ref attached in the interactive branch
+  // below. Branching on sourceLine here instead (as `canToggle` briefly did)
+  // is a deadlock: the non-interactive branch never attaches that ref, so
+  // sourceLine would never resolve, so it could never become toggleable --
+  // confirmed live. `toggle`/`onToggleAtLine` presence, decided by the
+  // caller up front, is what has to gate the branch; sourceLine only gates
+  // whether a click actually does anything yet.
+  const hasToggleCapability = toggle !== undefined || onToggleAtLine !== undefined
+  const canToggleViaStore = toggle !== undefined && sourceLine !== null
 
   // Subscribed rather than read directly: toggle.isChecked(sourceLine)'s own
   // underlying store never triggers a React re-render on its own (see
   // usePreviewMarkdownRendering.tsx's OpenItemsToggleStore) -- this is what
   // makes THIS ONE checkbox re-render on its own toggle without forcing
-  // every other mounted block to. Always called (never behind `canToggle`,
-  // which depends on state resolved after mount) to keep this component's
-  // hook order unconditional; subscribe/getSnapshot are no-ops until
-  // sourceLine resolves.
+  // every other mounted block to. Always called (never behind
+  // `canToggleViaStore`, which depends on state resolved after mount) to
+  // keep this component's hook order unconditional; subscribe/getSnapshot
+  // are no-ops until sourceLine resolves or when toggling directly instead.
   const storeChecked = useSyncExternalStore(
     useCallback((listener) => (
-      canToggle ? toggle.subscribe(sourceLine, listener) : () => {}
-    ), [canToggle, toggle, sourceLine]),
+      canToggleViaStore ? toggle.subscribe(sourceLine, listener) : () => {}
+    ), [canToggleViaStore, toggle, sourceLine]),
     useCallback(() => (
-      canToggle ? toggle.isChecked(sourceLine) : false
-    ), [canToggle, toggle, sourceLine]),
+      canToggleViaStore ? toggle.isChecked(sourceLine) : false
+    ), [canToggleViaStore, toggle, sourceLine]),
   )
 
-  const isChecked = canToggle ? storeChecked : Boolean(checked)
+  // Direct mode has no overlay to consult -- `checked` is already the real,
+  // current state, parsed straight from this note's own text.
+  const isChecked = canToggleViaStore ? storeChecked : Boolean(checked)
 
   const mergedClassName = [
     className,
     'markdown-task-checkbox-icon',
     isChecked ? 'markdown-task-checkbox-checked' : 'markdown-task-checkbox-unchecked',
-    canToggle ? 'markdown-task-checkbox-interactive' : '',
+    hasToggleCapability ? 'markdown-task-checkbox-interactive' : '',
   ]
     .filter((value) => typeof value === 'string' && value.length > 0)
     .join(' ')
 
-  if (!toggle) {
+  if (!hasToggleCapability) {
     return (
       <span className={mergedClassName} aria-hidden="true">
         {isChecked ? '☑' : '☐'}
@@ -279,7 +306,11 @@ function OpenItemCheckbox({
 
   const activate = () => {
     if (sourceLine === null) return
-    toggle.onToggle(sourceLine)
+    if (toggle) {
+      toggle.onToggle(sourceLine)
+    } else {
+      onToggleAtLine?.(sourceLine)
+    }
   }
 
   return (
@@ -306,6 +337,8 @@ export function createPreviewMarkdownComponents(
   navigateToInternalNoteLink: (target: ParsedInternalNoteLink) => void,
   /** Only ever passed while the note being rendered is the auto-Open-Items chapter -- see OpenItemCheckbox's own doc comment for what clicking one does. */
   openItemsToggle?: OpenItemsToggleHandlers,
+  /** The regular-preview checkbox-click mechanism -- writes straight to the note currently on screen (usePreviewMarkdownRendering.tsx's handleToggleChecklistAtLine), never passed alongside `openItemsToggle` for the same note. Undefined while the active note isn't directly editable (a Time Machine snapshot preview, the timeless/auto-TOC/auto-Open-Items cases, a debug-tagged note), same as the real editor being read-only there. */
+  onToggleChecklistAtLine?: (sourceLine: number) => void,
 ) {
   return {
     p: ({ children }: { children?: ReactNode }) => {
@@ -409,6 +442,7 @@ export function createPreviewMarkdownComponents(
           checked={checked}
           className={className}
           toggle={openItemsToggle}
+          onToggleAtLine={openItemsToggle ? undefined : onToggleChecklistAtLine}
         />
       )
     },

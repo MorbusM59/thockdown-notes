@@ -65,3 +65,48 @@ export function resolveMarkdownChecklistCaretClickToggleTransform(
     },
   }
 }
+
+/**
+ * Same toggle, addressed by source line rather than an exact caret offset --
+ * for callers (the render/preview pane's own checkbox click) that only know
+ * which line was clicked, not a character offset. Finds that line's leading
+ * checklist checkbox (same eligibility shape as the caret-click transform
+ * above: an unordered/blockquote-prefixed bullet immediately followed by
+ * `[ ]`/`[x]`/`[X]`) and delegates the actual flip to
+ * resolveMarkdownChecklistCaretClickToggleTransform, so both entry points
+ * share one single toggle implementation. Returns null when the line has no
+ * such checkbox, or is out of range.
+ */
+export function resolveMarkdownChecklistLineToggleTransform(
+  text: string,
+  sourceLine: number,
+): { text: string; selection: EditorSelectionState } | null {
+  const sourceText = text ?? ''
+  const lines = sourceText.split('\n')
+  if (sourceLine < 0 || sourceLine >= lines.length) {
+    return null
+  }
+
+  let lineStart = 0
+  for (let index = 0; index < sourceLine; index += 1) {
+    lineStart += lines[index].length + 1
+  }
+
+  const checkboxMatch = /^(\s*(?:> ?)*\s*[-*+]\s+\[)[ xX]\]/.exec(lines[sourceLine])
+  if (!checkboxMatch) {
+    return null
+  }
+
+  const caretOffset = lineStart + checkboxMatch[1].length
+
+  return resolveMarkdownChecklistCaretClickToggleTransform({
+    text: sourceText,
+    selection: {
+      anchor: caretOffset,
+      focus: caretOffset,
+      start: caretOffset,
+      end: caretOffset,
+      isCollapsed: true,
+    },
+  })
+}
