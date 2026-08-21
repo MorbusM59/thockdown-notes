@@ -450,6 +450,19 @@
   opacity: 0.5;
 }
 
+/* Narrows .tag-pill's own `transition: all 0.2s` down to just the two
+   cosmetic transitions this pill actually wants (hover background, the
+   aria-disabled opacity fade above). User-reported: "all" was also catching
+   this pill's own size whenever it (re)appears on a bar, growing in from a
+   smaller size instead of showing at its real one from the first frame --
+   not reproduced directly here, but there's no legitimate reason for a
+   static icon-only pill's geometry to ever animate, unlike e.g. the
+   rename-input pill swap, which still wants `all` for its own height
+   transition -- so excluding it is correct regardless of the exact trigger. */
+.create-pill {
+  transition: background-color 0.2s, opacity 0.2s;
+}
+
 /* Archived/trashed note whose tab is still pinned — dimmed, purely informational. */
 .note-tab-pill.ghost,
 .note-tab-pill.ghost.is-active {
