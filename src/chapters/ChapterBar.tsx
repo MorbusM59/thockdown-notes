@@ -18,7 +18,7 @@ export interface ChapterBarProps {
   activeNoteId: string | null
   /** Switches back to the parent note's own content -- the first tab. */
   onParentTabClick: () => void
-  /** The tab strip's own trailing "+" pill: creates a brand-new chapter and switches straight to it (mirrors useNoteChapters.ts's handleCreateChapter -- same call the bottom utility bar's own New Chapter action already uses). Disabled whenever the split is (isLocked below). */
+  /** The tab strip's own trailing "+" pill: creates a brand-new chapter and switches straight to it (mirrors useNoteChapters.ts's handleCreateChapter -- same call the bottom utility bar's own New Chapter action already uses). Not rendered at all while the family is locked (isLocked below) -- a timeless family can't gain a new chapter (databaseService.ts's assertNotTimeless), so there's nothing for it to do. */
   onCreateChapter: () => void | Promise<void>
   onChapterClick: (chapterNoteId: string) => void
   /** `index` is a position within useNoteChapters.ts's own *live-only* reorderableChapters, not `chapters` above -- an archived-merged chapter is never draggable (see the ghost-row rendering below), so this is only ever called with a real, live index. */
@@ -69,10 +69,11 @@ export interface ChapterBarProps {
  * whenever there's an active note -- see SectionEditorArea.tsx's derived
  * `isChapterPanelOpen` -- so the tab strip's own trailing "+" pill (a plain
  * `.create-pill`, same icon-only pill treatment as the tab bar's own "new
- * note" pill) is always reachable even before the note has its first
- * chapter, not just from the bottom utility bar's "New Chapter" quick
- * action (EscapeHoldPanel.tsx), which still exists and calls the exact same
- * handler.
+ * note" pill) is reachable even before the note has its first chapter, not
+ * just from the bottom utility bar's "New Chapter" quick action
+ * (EscapeHoldPanel.tsx), which still exists and calls the exact same
+ * handler. Omitted entirely (not just disabled) while the family is locked
+ * -- see onCreateChapter's own doc comment above.
  *
  * Dropping a note dragged in from the sidebar onto this bar's background (or
  * its trailing "+" pill, which carries no `data-chapter-note-id` and so
@@ -335,17 +336,15 @@ export function ChapterBar({
                 </InlinePillOrInput>
               )
             })}
-            <div
-              className="tag-pill note-tab-pill chapter-pill create-pill"
-              aria-disabled={isLocked}
-              data-tooltip="Add a new chapter"
-              onClick={() => {
-                if (isLocked) return
-                void onCreateChapter()
-              }}
-            >
-              <span className="fa-solid fa-plus" aria-hidden="true" />
-            </div>
+            {!isLocked ? (
+              <div
+                className="tag-pill note-tab-pill chapter-pill create-pill"
+                data-tooltip="Add a new chapter"
+                onClick={() => void onCreateChapter()}
+              >
+                <span className="fa-solid fa-plus" aria-hidden="true" />
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
