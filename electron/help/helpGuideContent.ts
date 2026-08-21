@@ -81,7 +81,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Quick Actions Menu](#quick-actions-menu)
 
 > **Where?**
-> Hold \`Esc\` for about a third of a second, anywhere in the editor area -- works with a note open, an empty editor, or a read-only auto-generated one (Table of Contents, Open Items, the User Guide, ...).
+> Hold \`Esc\` for about a quarter of a second, anywhere in the editor area -- works with a note open, an empty editor, or a read-only auto-generated one (Table of Contents, Open Items, the User Guide, ...).
 
 *A small on-editor grid for the note actions you reach for most, without leaving the keyboard.*
 
