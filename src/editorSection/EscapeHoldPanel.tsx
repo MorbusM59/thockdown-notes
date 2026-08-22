@@ -97,15 +97,28 @@ interface PanelCell {
  *
  * CURRENT SCOPE (deliberately, temporarily minimal -- the hold/rapid-tap
  * path is closed for now while the keydown-only baseline gets nailed down
- * first): every keydown that lands while nothing is animating plays exactly
- * one discrete bell-curve step of exactly 1 slot (`playDiscretePlan`) using
- * the live curve parameters, and always lands precisely at `start +
- * direction` by construction -- no overshoot, no undershoot. A keydown that
- * lands while an animation is still in flight is simply discarded (no
- * queueing, no merging, no interruption) -- `discreteRafIdRef` is the only
- * thing that decides this. Keyup is not handled at all yet. None of the
- * previous continuous/hold/rapid-tap-run machinery exists right now; it'll
- * be rebuilt deliberately, case by case, on top of this baseline once it's
+ * first, case by case): only a genuine, distinct key-press
+ * (`event.repeat === false`) is acted on at all -- native OS keyboard
+ * auto-repeat is hard-overridden, not merged, queued, or escalated into
+ * anything else, so holding a key produces exactly one accepted keydown
+ * and nothing further until it's physically released and pressed again.
+ * That one accepted keydown drives two deliberately independent things
+ * (`handleRingKeyDown`):
+ *   - Focus always advances by exactly one position, unconditionally,
+ *     regardless of whether an animation is currently in flight.
+ *   - The animation only starts a fresh discrete bell-curve step of
+ *     exactly 1 slot (`playDiscretePlan`, using the live curve parameters,
+ *     landing precisely at `start + direction` by construction -- no
+ *     overshoot, no undershoot) if nothing is currently animating
+ *     (`discreteRafIdRef`); a keydown landing mid-animation still advances
+ *     focus but does not trigger a second animation.
+ * This means focus can legitimately end up ahead of wherever the ring is
+ * still animating to -- expected and correct at this stage, not a bug (see
+ * `focusedIndex`'s own note above for why focus and the animation's own
+ * reference position, `topIndex`, are already separate state for exactly
+ * this reason). Keyup is not handled at all yet. None of the previous
+ * continuous/hold/rapid-tap-run machinery exists right now; it'll be
+ * rebuilt deliberately, case by case, on top of this baseline once it's
  * solid.
  *
  * All of the above only runs when `reduceVisualEffects` is false (the
@@ -438,21 +451,34 @@ export function EscapeHoldPanel({
       return
     }
 
-    // Baseline behavior only, for now -- see the component doc comment's
-    // CURRENT SCOPE paragraph: an animation already in flight means this
-    // keydown (whether a fresh tap or OS repeat) is simply discarded, not
-    // queued or merged.
-    if (discreteRafIdRef.current !== null) return
+    // Hard override of native OS keyboard auto-repeat -- see the component
+    // doc comment's CURRENT SCOPE paragraph. Only a genuine, distinct
+    // key-press (event.repeat === false) registers here at all; a held key's
+    // own repeat keydowns are ignored outright, not merged, queued, or
+    // escalated into anything else. Holding a key therefore produces exactly
+    // one accepted keydown (this branch) and nothing further until it's
+    // physically released and pressed again.
+    if (event.repeat) return
 
-    // Move focus to the target cell right now, not once the animation
-    // finishes -- see focusedIndex's own note above. Nothing is animating
-    // (checked above), so rotationOffsetRef.current already equals topIndex
-    // exactly, making this the same target playDiscretePlan/finalizeTopIndex
-    // will land on.
     const count = cellsRef.current.length
     if (count === 0) return
-    setFocusedIndex(((topIndex + direction) % count + count) % count)
 
+    // Focus branch: advances by exactly one position on every genuine
+    // keydown, unconditionally -- independent of whether an animation is
+    // currently in flight. The functional updater reads the true current
+    // focusedIndex rather than the value closed over at render time, which
+    // matters here specifically because a second keydown landing mid-
+    // animation (see the animation branch below) needs to advance from
+    // wherever focus already is, not from topIndex/rotationOffsetRef (the
+    // animation's own reference, which lags behind on purpose).
+    setFocusedIndex((current) => ((current + direction) % count + count) % count)
+
+    // Animation branch: starts a new step only if nothing is currently
+    // animating. A keydown landing mid-animation still advances focus
+    // (above) but does not trigger a second animation -- so focus can end
+    // up ahead of wherever the ring is currently animating to, which is
+    // expected at this stage (see the component doc comment).
+    if (discreteRafIdRef.current !== null) return
     playDiscretePlan(direction, finalizeTopIndex)
   }
 
