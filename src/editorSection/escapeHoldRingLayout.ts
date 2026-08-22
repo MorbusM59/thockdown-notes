@@ -126,14 +126,29 @@ export interface EscapeHoldRingParams {
   spacingRegularPx: number
 }
 
-/** The escape-hold panel's own ring, at its actual on-screen dimensions. */
-export function computeEscapeHoldRingPoints(count: number, params: EscapeHoldRingParams): RingPoint[] {
+/**
+ * Point at a single, possibly-fractional slot position around the
+ * escape-hold ring (0 = top-center, increasing clockwise, period = `count`
+ * -- same convention as computeEscapeHoldRingPoints, of which this is the
+ * per-point building block). Exposed directly so animation code can sample
+ * intermediate slot values along the ring's actual curve -- e.g. the
+ * "telephone dial" rotation in EscapeHoldPanel.tsx, which needs points
+ * between a button's old and new integer slot, not just the two endpoints.
+ * `slot` isn't wrapped into [0, count) here; the underlying angle is
+ * naturally periodic, so passing e.g. -0.3 or count + 0.3 works exactly the
+ * same as their wrapped equivalents.
+ */
+export function computeEscapeHoldPointAtSlot(slot: number, count: number, params: EscapeHoldRingParams): RingPoint {
   const cornerRadius = params.borderRadiusRegularPx * 6
   const spacingExtraLarge = params.spacingRegularPx * 4
   const inset = spacingExtraLarge + BUTTON_SIZE_PX / 2
-  return computeRoundedSquareRingPoints(count, {
-    size: PANEL_SIZE_PX,
-    inset,
-    cornerRadius,
-  })
+  const halfSize = PANEL_SIZE_PX / 2 - inset
+  const theta = -Math.PI / 2 + (slot / count) * 2 * Math.PI
+  return rayToRoundedSquareBoundary(theta, halfSize, cornerRadius)
+}
+
+/** The escape-hold panel's own ring, at its actual on-screen dimensions. */
+export function computeEscapeHoldRingPoints(count: number, params: EscapeHoldRingParams): RingPoint[] {
+  if (count <= 0) return []
+  return Array.from({ length: count }, (_, index) => computeEscapeHoldPointAtSlot(index, count, params))
 }

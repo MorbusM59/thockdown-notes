@@ -7603,7 +7603,16 @@ ${markdownHtml}
           event.preventDefault()
           const targetSectionId = editorSections[targetIndex].id
           markSectionActive(targetSectionId)
-          sectionRegistryRef.current.get(targetSectionId)?.scheduleFocusEditorInEditMode()
+          // Not when the quick-actions panel is open: it moves itself into
+          // the newly active section and refocuses its own top cell (see
+          // EscapeHoldPanel.tsx), and this scheduled focus call -- deferred
+          // via setTimeout+rAF, so it lands a moment later -- would
+          // otherwise steal focus back into the editor out from under it,
+          // which reads to the panel as a genuine loss of focus and closes
+          // it entirely (see EscapeHoldPanel.tsx's handleRingBlur).
+          if (!isEscapeHoldPanelOpen) {
+            sectionRegistryRef.current.get(targetSectionId)?.scheduleFocusEditorInEditMode()
+          }
           return
         }
       }
@@ -7848,13 +7857,22 @@ ${markdownHtml}
 
       if (targetSection?.isPreviewMode || !targetSection?.activeNoteId) return
 
+      // Not when the quick-actions panel is open: same reasoning as the
+      // Alt+Arrow section-switch handler above -- the panel moves itself
+      // into whichever section a click just activated and refocuses its
+      // own top cell (EscapeHoldPanel.tsx), and this scheduled call would
+      // otherwise steal focus back into that section's editor out from
+      // under it a moment later, reading to the panel as a genuine loss of
+      // focus and closing it.
+      if (isEscapeHoldPanelOpen) return
+
       event.preventDefault()
       targetSection.scheduleFocusEditorInEditMode()
     }
 
     window.addEventListener('mousedown', onMouseDownCapture, true)
     return () => window.removeEventListener('mousedown', onMouseDownCapture, true)
-  }, [getActiveSection, isAllowedNonEditorFocusTarget])
+  }, [getActiveSection, isAllowedNonEditorFocusTarget, isEscapeHoldPanelOpen])
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -8855,6 +8873,7 @@ ${markdownHtml}
                   isExportingMd={isExportingMd}
                   borderRadiusRegularPx={borderRadiusRegularPx}
                   spacingRegularPx={spacingRegularPx}
+                  reduceVisualEffects={reduceVisualEffects}
                   showLineNumbers={reviewGutterVisibleBySection[entry.id] ?? false}
                   showReviewFlags={reviewFlagsVisibleBySection[entry.id] ?? false}
                   onToggleReviewGutter={() => handleToggleReviewGutter(entry.id)}

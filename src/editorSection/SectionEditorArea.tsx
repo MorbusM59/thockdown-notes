@@ -46,6 +46,8 @@ export interface SectionEditorAreaProps {
   /** Live user-configurable corner-radius/spacing base units (options menu sliders) -- threaded through so the escape-hold ring (escapeHoldRingLayout.ts) recomputes to match .editor-empty-state's actual on-screen shape instead of drifting from a stale hardcoded mirror. */
   borderRadiusRegularPx: number
   spacingRegularPx: number
+  /** The Performance section's "Reduce visual effects" toggle (App.tsx) -- also picked up by the escape-hold ring to fall back from its curve-sampled dial rotation to a plain CSS transform transition. */
+  reduceVisualEffects: boolean
   spellCheckEditEnabled: boolean
   previewTextureRef: RefObject<HTMLDivElement>
   previewScrollRef: RefObject<HTMLDivElement>
@@ -168,6 +170,7 @@ export function SectionEditorArea({
   isExportingMd,
   borderRadiusRegularPx,
   spacingRegularPx,
+  reduceVisualEffects,
   spellCheckEditEnabled,
   previewTextureRef,
   previewScrollRef,
@@ -394,6 +397,7 @@ export function SectionEditorArea({
                 isExportingMd={isExportingMd}
                 borderRadiusRegularPx={borderRadiusRegularPx}
                 spacingRegularPx={spacingRegularPx}
+                reduceVisualEffects={reduceVisualEffects}
                 onCreateNote={onEscapeHoldCreateNote}
                 onCreateChapter={onEscapeHoldCreateChapter}
                 onExportPdf={onEscapeHoldExportPdf}

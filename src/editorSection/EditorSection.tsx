@@ -209,6 +209,7 @@ export function EditorSection({
   isExportingMd,
   borderRadiusRegularPx,
   spacingRegularPx,
+  reduceVisualEffects,
   isLeftmostSection,
   canCreateSection,
   onCreateSection,
@@ -1831,6 +1832,7 @@ export function EditorSection({
         isExportingMd={isExportingMd}
         borderRadiusRegularPx={borderRadiusRegularPx}
         spacingRegularPx={spacingRegularPx}
+        reduceVisualEffects={reduceVisualEffects}
         spellCheckEditEnabled={spellCheckEditEnabled}
         previewTextureRef={previewTextureRef}
         previewScrollRef={previewScrollRef}
