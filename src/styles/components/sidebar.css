@@ -179,25 +179,30 @@
 }
 
 /* View toggle & icon buttons */
-/* The 5 buttons keep their own fixed size (--sidebar-view-button-size,
- * untouched by the spacing setting); the space between them is purely
- * what justify-content: space-between leaves over, not a fixed gap -- so
- * it grows and shrinks with the sidebar's own (spacing-driven) width
- * instead of the row overflowing. */
+/* The 6 buttons (5 view modes + View options, moved in from the window
+ * controls row) are now the flexible dimension, not the gap: a fixed
+ * spacing-small gap sits between them, and each button grows/shrinks
+ * (flex: 1 1 0, staying square via aspect-ratio since width is the only
+ * dimension flex actually controls) to fill whatever width the row has --
+ * which is still entirely a function of the sidebar's own (spacing-driven)
+ * width, untouched by this. An earlier version kept the buttons at a fixed
+ * size instead and let justify-content: space-between absorb the leftover
+ * space as an elastic gap. --sidebar-min-width (tokens.css) is still
+ * derived entirely from the options panel's own content width, not from
+ * this row, so this row growing/shrinking has no effect on it either way. */
 .view-toggle {
   display:         flex;
-  justify-content: space-between;
   align-items:     start;
+  gap:             var(--spacing-small);
   padding: var(--spacing-regular) 0 var(--spacing-regular) var(--sidebar-view-padding-left);
   margin:  0;
 }
 
 .notes-sidebar .view-toggle .icon-btn {
-  width:      var(--sidebar-view-button-size);
-  height:     var(--sidebar-view-button-size);
-  min-width:  var(--sidebar-view-button-size);
-  min-height: var(--sidebar-view-button-size);
-  flex:       0 0 var(--sidebar-view-button-size);
+  flex:         1 1 0;
+  width:        auto;
+  min-width:    0;
+  aspect-ratio: 1 / 1;
   padding:    var(--spacing-regular);
   margin:     0;
   display:         inline-flex;
@@ -269,9 +274,24 @@
   mask-image: url('/assets/buttons/find.png');
 }
 
+/* Unlike the other 5 (fixed-size ::before mask icons, inset a flat 6px from
+   the button edge -- fine since that inset was tuned for one fixed button
+   size), .btn-options's glyph is a live font-size, and the button itself is
+   now dynamically sized (flex: 1 1 0, see the .view-toggle comment above) --
+   a flat px/em font-size wouldn't track that. container-type: inline-size
+   turns the button into a query container so the glyph can be sized in cqw
+   (% of the button's own current inline size) instead, keeping it
+   proportional to the button at any size the row's available width produces. */
 .notes-sidebar .view-toggle .icon-btn.btn-options {
   background-image: none;
   color:  var(--color-text-80);
+  container-type: inline-size;
+}
+
+.notes-sidebar .view-toggle .icon-btn.btn-options .view-toggle-options-glyph {
+  /* Roughly matches the other 5 icons' own fill ratio (a 6px inset on a
+     ~40px button leaves a 28px icon, ~70% of the button's width). */
+  font-size: 100cqw;
 }
 
 

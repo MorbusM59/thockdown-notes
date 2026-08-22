@@ -502,7 +502,6 @@
      1i. Sidebar Layout Tokens
   --------------------------------------------------------------------------- */
 
-  --sidebar-view-button-size:  var(--btn-square-larger-size);
   --sidebar-view-padding-left: var(--spacing-large);
   --sidebar-padding-right:     var(--spacing-large);
 

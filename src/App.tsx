@@ -362,6 +362,7 @@ const SIDEBAR_MODES: Array<{ mode: SidebarMode; label: string }> = [
   { mode: 'archive', label: 'Archive' },
   { mode: 'trash', label: 'Trash' },
   { mode: 'find', label: 'Find' },
+  { mode: 'options', label: 'View options' },
 ]
 
 function sanitizeCollapsedList(input: unknown): string[] {
@@ -8114,7 +8115,7 @@ ${markdownHtml}
                       aria-selected={isActive}
                       data-tooltip={label}
                       aria-label={label}
-                      onClick={() => handleViewModeButtonClick(mode)}
+                      onClick={mode === 'options' ? toggleSidebarOptionsMenu : () => handleViewModeButtonClick(mode)}
                       onContextMenu={
                         mode === 'trash'
                           ? activeSection?.handleTrashViewButtonContextMenu
@@ -8129,6 +8130,11 @@ ${markdownHtml}
                         activeSection?.setIsTrashViewDeletePrimed(false)
                       } : undefined}
                     >
+                      {/* Unlike the other 5 modes, .btn-options has no
+                          /assets/buttons/*.png mask asset (see sidebar.css) --
+                          it was already styled for an inline glyph instead
+                          (color, not background-color), matching this. */}
+                      {mode === 'options' ? <span className="view-toggle-options-glyph fa-solid fa-gear" aria-hidden="true" /> : null}
                       <span className="sr-only-mode-label">{label}</span>
                     </button>
                   )
@@ -8646,16 +8652,6 @@ ${markdownHtml}
                     className="window-control-glyph fa-solid fa-moon"
                     aria-hidden="true"
                   />
-                </button>
-
-                <button
-                  type="button"
-                  className={`toggle-btn icon-btn window-control-btn options-btn${sidebarMode === 'options' ? ' is-active' : ''}`}
-                  data-tooltip="View options"
-                  aria-label="View options"
-                  onClick={toggleSidebarOptionsMenu}
-                >
-                  <span className="window-control-glyph fa-solid fa-gear" aria-hidden="true" />
                 </button>
               </div>
 

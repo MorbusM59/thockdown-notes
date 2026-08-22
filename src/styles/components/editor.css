@@ -545,10 +545,19 @@
   box-shadow: var(--box-shadow-regular-filtered);
   color: var(--color-text-70);
   background: linear-gradient(var(--texture-editor-edit-tint), var(--texture-editor-edit-tint)), var(--palette-parchment-lightest);
+  padding: var(--spacing-large);
 }
 
 .editor-stage.is-preview-mode .editor-escape-hold-label {
   background: linear-gradient(var(--texture-editor-render-tint), var(--texture-editor-render-tint)), var(--palette-parchment-lightest);
+}
+
+.editor-escape-hold-label-box {
+  background-color: #fff;
+  border-radius: var(--border-radius-small);
+  padding: var(--spacing-small) var(--spacing-large);
+  border: 1px solid var(--btn-border-default);
+  box-shadow: var(--box-shadow-inverted-light);
 }
 
 .editor-stage .editor-escape-hold-panel-btn {

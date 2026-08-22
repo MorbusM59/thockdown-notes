@@ -253,7 +253,7 @@ export function EscapeHoldPanel({
       { label: 'New Chapter', icon: 'fa-solid fa-book-medical', onSelect: onCreateChapter, disabled: !hasActiveNote || isActiveNoteTimeless },
       { label: 'Export PDF', icon: 'fa-solid fa-file-pdf', onSelect: onExportPdf, disabled: !hasActiveNote || isExportingPdf },
       { label: 'Export MD', icon: 'fa-solid fa-file-code', onSelect: onExportMd, disabled: !hasActiveNote || isExportingMd },
-      { label: 'Help', icon: 'fa-solid fa-circle-question', onSelect: onOpenHelp, disabled: false },
+      { label: 'User Guide', icon: 'fa-solid fa-map', onSelect: onOpenHelp, disabled: false },
     ]
     return candidates.filter((candidate) => !candidate.disabled)
   }, [hasActiveNote, isActiveNoteTimeless, isExportingPdf, isExportingMd, onCreateNote, onCreateChapter, onExportPdf, onExportMd, onOpenHelp])
@@ -738,7 +738,7 @@ export function EscapeHoldPanel({
           --circle-diameter/--spacing-large/--btn-square-larger-size tokens
           the ring geometry itself is built from, so it never needs to be
           kept in sync by hand). */}
-      <div className="editor-escape-hold-label">{displayedLabel}</div>
+      <div className="editor-escape-hold-label"><div className="editor-escape-hold-label-box">{displayedLabel}</div></div>
       {cells.map((cell, index) => {
         // This cell's position around the ring relative to the current top
         // ("slot 0"), not its fixed array index -- rotating the dial is
