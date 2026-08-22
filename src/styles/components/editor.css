@@ -536,7 +536,7 @@
   margin: auto;
   width:  calc(var(--circle-diameter) - 4 * var(--spacing-large) - 2 * var(--btn-square-larger-size));
   height: calc(var(--circle-diameter) - 4 * var(--spacing-large) - 2 * var(--btn-square-larger-size));
-  border-radius: calc(var(--border-radius-regular) * 6);
+  border-radius: calc(var(--border-radius-regular) * 4);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -545,7 +545,7 @@
   box-shadow: var(--box-shadow-regular-filtered);
   color: var(--color-text-70);
   background: linear-gradient(var(--texture-editor-edit-tint), var(--texture-editor-edit-tint)), var(--palette-parchment-lightest);
-  padding: var(--spacing-large);
+  padding: var(--spacing-regular);
 }
 
 .editor-stage.is-preview-mode .editor-escape-hold-label {
@@ -553,11 +553,18 @@
 }
 
 .editor-escape-hold-label-box {
-  background-color: #fff;
-  border-radius: var(--border-radius-small);
-  padding: var(--spacing-small) var(--spacing-large);
+  position: absolute;
+  inset: 4px;
+  background-color: var(--btn-bg-default);
+  border-radius: 999px;
   border: 1px solid var(--btn-border-default);
-  box-shadow: var(--box-shadow-inverted-light);
+  box-shadow: var(--box-shadow-inverted-harsh);
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  padding: 2px;
+  height: calc(100% - 8px);
+  width: calc(100% - 8px);
 }
 
 .editor-stage .editor-escape-hold-panel-btn {
