@@ -135,24 +135,27 @@ interface PanelCell {
  *     own note above for why focus and the animation's own reference
  *     position, `topIndex`, are already separate state for exactly this
  *     reason).
- *   - The animation always plays exactly one slot of motion toward the new
- *     target, but HOW depends on whether one was already in flight
- *     (`discreteRafIdRef`): from rest, it's a fresh discrete bell-curve
- *     step (`playDiscretePlan`) that starts from implicit zero velocity;
- *     mid-flight, it's a velocity/acceleration-continuous continuation
- *     (`playContinuationLeg`) spliced onto whatever was already playing,
- *     using the ORIGINAL direction's own running target (not wherever the
- *     ring's raw position happens to be) so a run of same-direction taps
- *     always keeps extending further rather than folding back on itself --
- *     see playContinuationLeg's and handleRingKeyDown's own doc comments,
- *     and ScrollCurvePlan.ts's buildContinuationPlan for the underlying
- *     quintic Hermite math. Either way it always lands exactly on the
- *     target slot, no overshoot, no undershoot -- see finalizeTopIndex.
- *     The one deliberately unhandled edge case: tapping fast enough that
- *     the running target would need to lap the currently-playing leg
- *     itself (more than a full circle of slots still ahead of it) just
- *     lets that leg finish on its own instead of splicing an
- *     ever-more-elaborate multi-lap curve.
+ *   - The animation always plays toward `pendingTargetSlotRef` -- the true
+ *     destination, advanced by exactly `direction` on every accepted
+ *     keydown in lockstep with focusedIndex (see its own doc comment for
+ *     why it's a plain continuous accumulator, not derived from any
+ *     animation state, and why that matters). HOW it gets there depends on
+ *     whether one was already in flight (`discreteRafIdRef`): from rest,
+ *     it's a fresh discrete bell-curve step (`playDiscretePlan`) that
+ *     starts from implicit zero velocity; mid-flight, it's a
+ *     velocity/acceleration-continuous continuation (`playContinuationLeg`)
+ *     spliced onto whatever was already playing, targeting the fresh
+ *     `pendingTargetSlotRef - rotationOffsetRef.current` distance -- see
+ *     playContinuationLeg's and handleRingKeyDown's own doc comments, and
+ *     ScrollCurvePlan.ts's buildContinuationPlan for the underlying quintic
+ *     Hermite math. Either way it always lands exactly on the target slot,
+ *     no overshoot, no undershoot -- see finalizeTopIndex. The one
+ *     deliberately unhandled edge case: tapping fast enough that the true
+ *     destination has raced more than a full circle ahead of the
+ *     currently-playing leg just lets that leg finish on its own instead of
+ *     splicing an ever-more-elaborate multi-lap curve -- safe to skip
+ *     precisely because pendingTargetSlotRef is untouched by the skip, so
+ *     the ring always catches up on a later tap or completion.
  * Keyup is not handled at all yet. None of the previous continuous/hold
  * machinery exists right now; it'll be rebuilt deliberately, case by case,
  * on top of this baseline once it's solid.
@@ -283,17 +286,42 @@ export function EscapeHoldPanel({
   // Bookkeeping for whichever "leg" (a discrete bell-curve step, or a
   // velocity/acceleration-continuous continuation spliced from one) is
   // currently in flight -- see playLeg. legSamplerRef + legStartTimeMsRef
-  // together let a NEW leg snapshot the CURRENT leg's exact instantaneous
+  // let a NEW leg snapshot the CURRENT leg's exact instantaneous
   // velocity/acceleration at the moment it's interrupted
-  // (estimateVelocityAndAcceleration); legStartSlotRef + legDistanceRef
-  // give the current leg's own absolute target (startSlot + distance),
-  // which a splice extends by exactly one more slot in the new key's
-  // direction rather than retargeting from wherever the ring's raw
-  // (possibly fractional) position happens to be -- see handleRingKeyDown.
+  // (estimateVelocityAndAcceleration).
   const legStartTimeMsRef = useRef<number | null>(null)
-  const legStartSlotRef = useRef(0)
-  const legDistanceRef = useRef(0)
   const legSamplerRef = useRef<((elapsedSec: number) => number) | null>(null)
+
+  // The authoritative destination, in the SAME continuous (unwrapped,
+  // fractional-during-flight) frame as rotationOffsetRef -- i.e. the exact
+  // point the ring must ultimately reach for the top slot to show
+  // `focusedIndex`. Incremented by exactly `direction` on every single
+  // accepted keydown, unconditionally, in lockstep with focusedIndex's own
+  // (wrapped) advance -- see handleRingKeyDown -- and adjusted by the same
+  // amount rotationOffsetRef is whenever it wraps (finalizeTopIndex), so
+  // the two stay in the same frame indefinitely.
+  //
+  // This is the fix for a real desync bug: an earlier version derived each
+  // splice's distance incrementally from whatever the PREVIOUS leg's own
+  // start+distance happened to be, which skipped updating that bookkeeping
+  // entirely whenever a splice hit the full-circle safety cap below (that
+  // tap's effect on the running target was silently dropped even though
+  // focusedIndex had already advanced for it) -- a real desync that
+  // compounded with every subsequent cap hit and never recovered on its
+  // own, found live after holding a key for a prolonged stretch,
+  // especially at higher configured max speeds (a shorter
+  // heldKeyRepeatThrottleMs() means more accepted taps land inside any
+  // given animation's duration, which is what makes hitting the cap
+  // markedly more likely). Deriving each splice's distance directly from
+  // this ref instead -- the TRUE distance from wherever the ring actually
+  // is right now to the actual focused destination, direction-aware by
+  // construction since it's a plain continuous accumulator rather than a
+  // modular index -- means a skipped splice can never desync anything: the
+  // ref itself was never touched by leg bookkeeping to begin with, so the
+  // very next accepted tap (or the current leg's own eventual completion)
+  // recomputes distance fresh from ground truth and the ring simply
+  // catches up, however far that turns out to be.
+  const pendingTargetSlotRef = useRef(0)
 
   // performance.now() of the most recently ACCEPTED keydown (tap or
   // throttled-through repeat) -- the baseline heldKeyRepeatThrottleMs()
@@ -334,7 +362,15 @@ export function EscapeHoldPanel({
   const finalizeTopIndex = () => {
     const count = cellsRef.current.length
     if (count === 0) return
-    const wrapped = ((Math.round(rotationOffsetRef.current) % count) + count) % count
+    const rounded = Math.round(rotationOffsetRef.current)
+    const wrapped = ((rounded % count) + count) % count
+    // pendingTargetSlotRef lives in the same continuous frame as
+    // rotationOffsetRef -- shift it by the exact same amount being wrapped
+    // off here so it keeps meaning "true remaining distance to
+    // focusedIndex" relative to the ring's new (wrapped) position, instead
+    // of silently drifting count-sized multiples away from it every time
+    // the ring completes a lap. See pendingTargetSlotRef's own doc comment.
+    pendingTargetSlotRef.current -= (rounded - wrapped)
     rotationOffsetRef.current = wrapped
     applyRotationOffsetToDom(wrapped)
     setTopIndex(wrapped)
@@ -346,9 +382,11 @@ export function EscapeHoldPanel({
   // `totalDurationSec` (both playDiscretePlan's bell curve and
   // playContinuationLeg's quintic curve already guarantee this by
   // construction -- see sampleScrollPlan/sampleContinuationPlan). Records
-  // the leg's own start time/slot/distance/sampler as it goes so a LATER
-  // leg can snapshot this one's exact instantaneous velocity/acceleration
-  // if it gets interrupted -- see the refs' own doc comment above.
+  // the leg's own start time/sampler as it goes so a LATER leg can snapshot
+  // this one's exact instantaneous velocity/acceleration if it gets
+  // interrupted -- see legSamplerRef's own doc comment above. (Distance
+  // targeting itself is owned entirely by pendingTargetSlotRef, not by
+  // anything recorded here -- see its own doc comment for why.)
   const playLeg = (
     sampler: (elapsedSec: number) => number,
     totalDurationSec: number,
@@ -357,8 +395,6 @@ export function EscapeHoldPanel({
   ) => {
     cancelDiscreteAnimation()
     const startSlot = rotationOffsetRef.current
-    legStartSlotRef.current = startSlot
-    legDistanceRef.current = distance
     legSamplerRef.current = sampler
     const totalDurationMs = totalDurationSec * 1000
     let startTimeMs: number | null = null
@@ -463,6 +499,7 @@ export function EscapeHoldPanel({
     lastAcceptedKeyTimeMsRef.current = null
     if (!isOpen) return
     rotationOffsetRef.current = 0
+    pendingTargetSlotRef.current = 0
     applyRotationOffsetToDom(0)
     setTopIndex(0)
     setFocusedIndex(0)
@@ -486,6 +523,7 @@ export function EscapeHoldPanel({
     const maxIndex = Math.max(0, cells.length - 1)
     if (topIndex > maxIndex) {
       rotationOffsetRef.current = maxIndex
+      pendingTargetSlotRef.current = maxIndex
       setTopIndex(maxIndex)
     }
     if (focusedIndex > maxIndex) {
@@ -591,6 +629,11 @@ export function EscapeHoldPanel({
     // wherever focus already is, not from topIndex/rotationOffsetRef (the
     // animation's own reference, which lags behind on purpose).
     setFocusedIndex((current) => ((current + direction) % count + count) % count)
+    // pendingTargetSlotRef is focusedIndex's own unwrapped counterpart --
+    // advanced unconditionally, in lockstep, on every accepted keydown, so
+    // it's always exactly the true destination regardless of anything the
+    // animation engine does or skips -- see its own doc comment.
+    pendingTargetSlotRef.current += direction
 
     // Animation branch. Nothing in flight: play a fresh single-slot bell
     // step exactly as before.
@@ -601,23 +644,21 @@ export function EscapeHoldPanel({
 
     // Something IS in flight: splice a smooth continuation instead of
     // discarding this keydown outright (see playContinuationLeg and the
-    // component doc comment). Always extends by exactly one more slot in
-    // `direction` from the CURRENTLY PLAYING leg's own absolute target
-    // (legStartSlotRef + legDistanceRef) -- not from wherever the ring's
-    // raw, possibly-fractional position happens to be right now, and not
-    // from focusedIndex's wrapped array index (which can't represent "more
-    // than one full lap" the way this continuous, unwrapped running target
-    // can) -- so a run of same-direction taps always keeps travelling
-    // further in the one original direction rather than the distance
-    // calculation folding back on itself.
-    const currentLegTarget = legStartSlotRef.current + legDistanceRef.current
-    const newLegTarget = currentLegTarget + direction
-    const distance = newLegTarget - rotationOffsetRef.current
+    // component doc comment). The distance is always computed fresh from
+    // pendingTargetSlotRef against wherever the ring's raw, possibly-
+    // fractional position actually is right now -- not incrementally
+    // derived from whatever the currently-playing leg's own bookkeeping
+    // happens to say -- so this can never drift out of sync with the true
+    // destination; see pendingTargetSlotRef's own doc comment for the bug
+    // this fixes.
+    const distance = pendingTargetSlotRef.current - rotationOffsetRef.current
     if (Math.abs(distance) > count) {
-      // Tapped fast enough to lap the currently-playing leg itself before
-      // it could finish -- rather than splice an ever-more-elaborate
-      // multi-lap curve, just let it finish on its own; see the component
-      // doc comment.
+      // Tapped fast enough that the true destination has raced more than a
+      // full circle ahead of the currently-playing leg -- rather than
+      // splice an ever-more-elaborate multi-lap curve, just let it finish
+      // on its own; pendingTargetSlotRef is untouched by this skip, so the
+      // very next accepted tap (or this leg's own completion) will
+      // recompute the correct distance fresh and catch up regardless.
       return
     }
     playContinuationLeg(distance, finalizeTopIndex)
