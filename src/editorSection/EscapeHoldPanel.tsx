@@ -3,6 +3,7 @@ import type { CSSProperties, FocusEvent, KeyboardEvent } from 'react'
 import {
   buildContinuationPlan,
   estimateVelocityAndAcceleration,
+  getRenderScrollMaxSpeedPxPerSec,
   getRenderScrollTotalTimeSec,
   sampleContinuationPlan,
   sampleScrollPlan,
@@ -24,6 +25,20 @@ const BLUR_CLOSE_CHECK_DELAY_MS = 50
 // doc comment for why that mode skips the curve engine below entirely
 // instead of trying to feed it a "reduced" version of the same math.
 const SIMPLE_ROTATION_TRANSITION_MS = 200
+
+// While a key is held, native OS auto-repeat keydowns are throttled to at
+// most one accepted every N ms -- see handleRingKeyDown. Decoupled from the
+// OS's own (usually much faster) repeat rate on purpose: an accepted repeat
+// is treated exactly like a genuine tap (advances focus by one position,
+// splices a recalculated curve), so this IS the held-key advance rate,
+// independent of whatever the OS/keyboard settings would otherwise
+// produce. Scales inversely with the user's own live max-speed setting
+// (the same "Scrolling Behavior" parameter every other curve in this file
+// reads through ScrollCurvePlan.ts, getRenderScrollMaxSpeedPxPerSec) so a
+// faster configured max speed also means faster-feeling held-key
+// advancement: 250ms at the 50000px/s reference point, scaling
+// proportionally as 250 * 50000 / maxSpeed from there.
+const heldKeyRepeatThrottleMs = () => (250 * 50000) / Math.max(1, getRenderScrollMaxSpeedPxPerSec())
 
 export interface EscapeHoldPanelProps {
   /** Whether the panel is the one currently "open" -- this component now stays
@@ -101,14 +116,18 @@ interface PanelCell {
  * "page" of scroll <-> one "slot" of rotation) and CursorClickCurve.ts for
  * the precedent of adapting that same toolkit to a different interaction.
  *
- * CURRENT SCOPE (deliberately, temporarily minimal -- the hold path is
- * closed for now while the keydown-only baseline gets nailed down first,
- * case by case): only a genuine, distinct key-press (`event.repeat ===
- * false`) is acted on at all -- native OS keyboard auto-repeat is
- * hard-overridden, not merged, queued, or escalated into anything else, so
- * holding a key produces exactly one accepted keydown and nothing further
- * until it's physically released and pressed again. That one accepted
- * keydown drives two deliberately independent things (`handleRingKeyDown`):
+ * CURRENT SCOPE (deliberately, temporarily minimal -- the free-running
+ * continuous hold path is closed for now while the keydown-only baseline
+ * gets nailed down first, case by case): a genuine, distinct key-press
+ * (`event.repeat === false`) is always accepted. A held key's own native OS
+ * auto-repeat keydowns are throttled rather than acted on at whatever rate
+ * the OS/keyboard settings produce: only one is accepted every
+ * `heldKeyRepeatThrottleMs()` (itself scaling with the user's live max-speed
+ * setting), measured from the most recently accepted keydown of either kind
+ * (`lastAcceptedKeyTimeMsRef`), and every repeat
+ * landing sooner is dropped outright. An accepted keydown -- tap or
+ * throttled-through repeat alike, no distinction from this point on --
+ * drives two deliberately independent things (`handleRingKeyDown`):
  *   - Focus always advances by exactly one position, unconditionally,
  *     regardless of whether an animation is currently in flight -- so focus
  *     can legitimately end up ahead of wherever the ring is still
@@ -276,6 +295,11 @@ export function EscapeHoldPanel({
   const legDistanceRef = useRef(0)
   const legSamplerRef = useRef<((elapsedSec: number) => number) | null>(null)
 
+  // performance.now() of the most recently ACCEPTED keydown (tap or
+  // throttled-through repeat) -- the baseline heldKeyRepeatThrottleMs()
+  // measures from. See handleRingKeyDown.
+  const lastAcceptedKeyTimeMsRef = useRef<number | null>(null)
+
   const cancelDiscreteAnimation = () => {
     if (discreteRafIdRef.current !== null) {
       cancelAnimationFrame(discreteRafIdRef.current)
@@ -436,6 +460,7 @@ export function EscapeHoldPanel({
   // whether topIndex's own state value happens to change.
   useLayoutEffect(() => {
     cancelDiscreteAnimation()
+    lastAcceptedKeyTimeMsRef.current = null
     if (!isOpen) return
     rotationOffsetRef.current = 0
     applyRotationOffsetToDom(0)
@@ -535,17 +560,27 @@ export function EscapeHoldPanel({
       return
     }
 
-    // Hard override of native OS keyboard auto-repeat -- see the component
-    // doc comment's CURRENT SCOPE paragraph. Only a genuine, distinct
-    // key-press (event.repeat === false) registers here at all; a held key's
-    // own repeat keydowns are ignored outright, not merged, queued, or
-    // escalated into anything else. Holding a key therefore produces exactly
-    // one accepted keydown (this branch) and nothing further until it's
-    // physically released and pressed again.
-    if (event.repeat) return
-
+    // Native OS keyboard auto-repeat is throttled, not ignored outright --
+    // see the component doc comment's CURRENT SCOPE paragraph and
+    // heldKeyRepeatThrottleMs(). A held key's own repeat keydowns arrive at
+    // whatever rate the OS/keyboard settings produce (usually much faster
+    // than we want); only one is accepted every heldKeyRepeatThrottleMs()
+    // (which itself scales with the user's live max-speed setting),
+    // measured from the most recently accepted keydown of either kind, and
+    // the rest are dropped outright. An accepted repeat is otherwise
+    // treated exactly like a genuine tap below -- same focus advance, same
+    // recalculated/spliced curve -- so holding a key reads as the ring
+    // advancing one position at that rate, not free-running continuous
+    // rotation (that's the still-closed hold path -- see the doc comment).
     const count = cellsRef.current.length
     if (count === 0) return
+
+    const nowMs = performance.now()
+    if (event.repeat) {
+      const last = lastAcceptedKeyTimeMsRef.current
+      if (last !== null && nowMs - last < heldKeyRepeatThrottleMs()) return
+    }
+    lastAcceptedKeyTimeMsRef.current = nowMs
 
     // Focus branch: advances by exactly one position on every genuine
     // keydown, unconditionally -- independent of whether an animation is
