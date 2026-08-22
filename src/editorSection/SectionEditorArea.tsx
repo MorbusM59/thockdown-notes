@@ -363,13 +363,16 @@ export function SectionEditorArea({
                 one that is (see isEmptyStateVisible above), so the animation
                 is always the literal same instance, never restarted or
                 duplicated, and always the same fixed --circle-diameter size.
-                Sits above the backdrop (painted after it, higher z-index in
-                editor.css) so backdrop-filter blur never touches it. The
-                grid inside stays permanently mounted too -- it toggles its
-                own display:none internally off the `isOpen` prop -- so
-                EscapeHoldPanel's focus-management (also keyed off `isOpen`,
-                not mount) keeps working across repeated opens. */}
-            <div className={`editor-empty-state-backdrop${isEmptyStateVisible ? ' is-visible' : ''}`}/>
+                The plate right below is its opaque backing (see editor.css
+                for why they're two elements sharing one geometry rule), so
+                the circle looks identical here and in the plain empty state
+                regardless of whether the escape-hold blur is showing behind
+                both of them. The grid inside stays permanently mounted too
+                -- it toggles its own display:none internally off the
+                `isOpen` prop -- so EscapeHoldPanel's focus-management (also
+                keyed off `isOpen`, not mount) keeps working across repeated
+                opens. */}
+            <div className={`editor-empty-state-plate${isEmptyStateVisible ? ' is-visible' : ''}`}/>
             <div
               className={`editor-empty-state${isEmptyStateVisible ? ' is-visible' : ''}`}
               style={{ '--empty-state-scene-mask': emptyStateSceneMaskUrl } as CSSProperties}

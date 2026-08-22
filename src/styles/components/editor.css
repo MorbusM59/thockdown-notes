@@ -416,13 +416,22 @@
    tumbling-solid animation is always the literal same node regardless of
    which reason it's showing for. Hidden by default (.is-visible turns it
    on) since it's now permanently mounted as a direct child of .editor-stage
-   rather than conditionally rendered inside edit-container/render-container. */
-.editor-stage .editor-empty-state {
+   rather than conditionally rendered inside edit-container/render-container.
+
+   Shares its exact circle geometry (position/inset/margin/size/radius) with
+   .editor-empty-state-plate below via one combined selector, so the two
+   can never drift out of sync the way separately-copied geometry would. */
+.editor-stage .editor-empty-state,
+.editor-stage .editor-empty-state-plate {
   position: absolute;
   inset:    0;
   margin:   auto;
   height: var(--circle-diameter);
   width: var(--circle-diameter);
+  border-radius: calc(var(--border-radius-regular) *6);
+}
+
+.editor-stage .editor-empty-state {
   display: none;
   flex-direction: column;
   align-items:    center;
@@ -433,7 +442,6 @@
      intentionally styled like inert decoration: no cursor/hover change,
      since it's an undiscoverable-on-purpose easter egg, not a button. */
   pointer-events: auto;
-  border-radius: calc(var(--border-radius-regular) *6);
   box-shadow: var(--box-shadow-inverted-filtered);
   filter: var(--filter-primed-archive);
   font-family: 'Fredericka the Great';
@@ -444,32 +452,36 @@
   display: flex;
 }
 
-.editor-empty-state-backdrop {
+/* Opaque plate sitting directly behind .editor-empty-state, insulating the
+   circle's own texture/shadow from whatever's further back (the blurred
+   note content via .editor-escape-hold-backdrop below, when that's showing)
+   so the circle reads identically whether it's the plain empty state or the
+   escape-hold panel -- see isEmptyStateVisible in SectionEditorArea.tsx,
+   which shows this for the same reasons/at the same times as the circle
+   itself. Explicit z-index (10, one below the circle's 11, one above the
+   blur's 9) rather than a same-value tie with the blur layer -- the two
+   used to share z-index 10 and depend on DOM order to stack correctly,
+   which isn't obvious from the CSS alone. */
+.editor-stage .editor-empty-state-plate {
   display: none;
-  position: absolute;
-  inset:    0;
-  margin:   auto;
-  height: var(--circle-diameter);
-  width: var(--circle-diameter);
-  border-radius: calc(var(--border-radius-regular) *6);
   z-index: 10;
-  opacity: 100%;
-  background: linear-gradient(var(--color-input-backdrop), var(--color-input-backdrop)), var(--palette-parchment-lightest);
+  background: var(--color-input-backdrop);
 }
 
-.editor-empty-state-backdrop.is-visible {
+.editor-stage .editor-empty-state-plate.is-visible {
   display: block;
 }
 
-/* Dim+blur backdrop behind the empty-state box (see SectionEditorArea.tsx's
-   comment on this element for why it's a sibling, not a wrapper, of the
-   panel). Lower z-index than .editor-empty-state (11) so the blur only
-   reaches the real note content in edit/render-container behind it, never
-   the panel itself. */
+/* Blur-only backdrop behind everything (see SectionEditorArea.tsx's comment
+   on this element for why it's a sibling, not a wrapper, of the panel). Its
+   backdrop-filter blurs whatever's behind IT -- the real note content in
+   edit/render-container -- while the plate + circle in front (z-index 10
+   and 11) stay crisp since backdrop-filter never touches an element's own
+   ancestors, only what's actually painted behind it in the stack. */
 .editor-stage .editor-escape-hold-backdrop {
   position: absolute;
   inset: 0;
-  z-index: 10;
+  z-index: 9;
   backdrop-filter: blur(4px);
 }
 
@@ -560,7 +572,7 @@
 
 .editor-stage .editor-escape-hold-panel-btn-placeholder {
   opacity: 0.3;
-  font-size: 1.15rem;
+  font-size: var(--btn-icon-size);
 }
 
 /* Hide native cursor and caret app-wide when using the custom mouse overlay
@@ -609,9 +621,9 @@
    silhouette instead of covering the whole card. `--empty-state-scene-mask`
    is set inline per section (stable per section id, so the animation's
    shape/axis/speed don't reshuffle on every re-render). Negative z-index
-   keeps it behind the title/hint text, which are z-index:auto in-flow
-   children of the same (position:absolute, so stacking-context-
-   establishing) .editor-empty-state box.
+   keeps it behind the quick-actions grid, a z-index:auto in-flow child of
+   the same (position:absolute, so stacking-context-establishing)
+   .editor-empty-state box.
 
    Mask is inverted: a second, fully-opaque layer (the solid gradient) is
    XORed against the shape layer, flipping which side is "ink" -- so the
