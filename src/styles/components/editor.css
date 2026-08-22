@@ -562,9 +562,12 @@
   align-items: center;
   justify-content: center;
   display: flex;
-  padding: 2px;
+  padding: 4px;
   height: calc(100% - 8px);
   width: calc(100% - 8px);
+  font-size:      calc(12px * var(--ui-font-scale));
+  line-height: 0.8;
+  letter-spacing: -0.1em;
 }
 
 .editor-stage .editor-escape-hold-panel-btn {
