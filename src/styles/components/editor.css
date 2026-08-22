@@ -543,7 +543,12 @@
   text-align: center;
   pointer-events: none;
   box-shadow: var(--box-shadow-regular-filtered);
-  background: linear-gradient(var(--color-input-backdrop), var(--color-input-backdrop)), var(--background-color-root);
+  color: var(--color-text-70);
+  background: linear-gradient(var(--texture-editor-edit-tint), var(--texture-editor-edit-tint)), var(--palette-parchment-lightest);
+}
+
+.editor-stage.is-preview-mode .editor-escape-hold-label {
+  background: linear-gradient(var(--texture-editor-render-tint), var(--texture-editor-render-tint)), var(--palette-parchment-lightest);
 }
 
 .editor-stage .editor-escape-hold-panel-btn {
