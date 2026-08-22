@@ -6,8 +6,8 @@
 // The ring line is a rounded rect (same corner radius as the panel itself,
 // per SectionEditorArea's usage -- NOT a shrunk/offset radius, which would
 // degenerate at these token sizes) inset from the panel edge by
-// spacing-extra-large + half the button size, so a button's near edge sits
-// spacing-extra-large away from the panel border with its center exactly on
+// spacing-large + half the button size, so a button's near edge sits
+// spacing-large away from the panel border with its center exactly on
 // the line.
 //
 // Points are placed by ANGLE, not arc length: take `count` directions evenly
@@ -122,7 +122,7 @@ const BUTTON_SIZE_PX = 44
 export interface EscapeHoldRingParams {
   /** Mirrors --border-radius-regular; the panel's own corner radius is calc(var(--border-radius-regular) * 6) in editor.css. */
   borderRadiusRegularPx: number
-  /** Mirrors --spacing-regular; the ring's inset from the panel edge uses --spacing-extra-large, which is calc(var(--spacing-regular) * 4) in tokens.css. */
+  /** Mirrors --spacing-regular; the ring's inset from the panel edge uses --spacing-large, which is calc(var(--spacing-regular) * 2) in tokens.css. */
   spacingRegularPx: number
 }
 
@@ -140,8 +140,8 @@ export interface EscapeHoldRingParams {
  */
 export function computeEscapeHoldPointAtSlot(slot: number, count: number, params: EscapeHoldRingParams): RingPoint {
   const cornerRadius = params.borderRadiusRegularPx * 6
-  const spacingExtraLarge = params.spacingRegularPx * 4
-  const inset = spacingExtraLarge + BUTTON_SIZE_PX / 2
+  const spacingLarge = params.spacingRegularPx * 2
+  const inset = spacingLarge + BUTTON_SIZE_PX / 2
   const halfSize = PANEL_SIZE_PX / 2 - inset
   const theta = -Math.PI / 2 + (slot / count) * 2 * Math.PI
   return rayToRoundedSquareBoundary(theta, halfSize, cornerRadius)

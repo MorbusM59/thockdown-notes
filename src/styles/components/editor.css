@@ -541,14 +541,15 @@
   position: absolute;
   inset: 0;
   margin: auto;
-  width:  calc(var(--circle-diameter) - 4 * var(--spacing-large) - var(--btn-square-larger-size));
-  height: calc(var(--circle-diameter) - 4 * var(--spacing-large) - var(--btn-square-larger-size));
+  width:  calc(var(--circle-diameter) - 4 * var(--spacing-large) - 2 * var(--btn-square-larger-size));
+  height: calc(var(--circle-diameter) - 4 * var(--spacing-large) - 2 * var(--btn-square-larger-size));
   border-radius: calc(var(--border-radius-regular) * 6);
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
   pointer-events: none;
+  box-shadow: var(--box-shadow-regular-filtered);
 }
 
 .editor-stage .editor-escape-hold-panel-btn {
