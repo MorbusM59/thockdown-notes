@@ -32,7 +32,9 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     const ch2Text = '## Second Chapter\n\n### Climax\n\nBody.'
     await lifecycle.saveNote({ id: ch2.id, text: ch2Text })
 
-    const { chapters, created } = await lifecycle.createAutoTocChapter(parent.id)
+    // createNote already gave the parent an auto-TOC chapter at birth --
+    // regenerate to pick up the chapters/headings added since.
+    const { chapters, created } = await lifecycle.regenerateAutoTocChapter(parent.id)
 
     // Pinned first, real chapters keep their relative order after it.
     expect(chapters.map((c) => c.chapterNoteId)).toEqual([created.id, ch1.id, ch2.id])
@@ -80,7 +82,7 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     const ch1 = await lifecycle.createChapterNote(parent.id)
     await lifecycle.saveNote({ id: ch1.id, text: '## Chapter One\n\n### Arrival\n\nBody.' })
 
-    const { created, chapters } = await lifecycle.createAutoTocChapter(parent.id)
+    const { created, chapters } = await lifecycle.regenerateAutoTocChapter(parent.id)
 
     // Nothing got auto-assigned -- not the parent's assignedId, not the
     // chapter's chapterId. That's the whole point: an id only ever exists
@@ -103,7 +105,7 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     const ch1 = await lifecycle.createChapterNote(parent.id)
     await lifecycle.saveNote({ id: ch1.id, text: '## Chapter One\n\n### Arrival\n\nBody.' })
 
-    const { created } = await lifecycle.createAutoTocChapter(parent.id)
+    const { created } = await lifecycle.regenerateAutoTocChapter(parent.id)
 
     expect(created.text).toContain(`[Chapter One](@${ch1.id})`)
     expect(created.text).toContain(`[Arrival](@${ch1.id}#heading:arrival)`)
@@ -114,7 +116,7 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     const ch1 = await lifecycle.createChapterNote(parent.id)
     await lifecycle.saveNote({ id: ch1.id, text: '## Chapter One\n\n### Arrival\n\nBody.' })
 
-    const { created, chapters } = await lifecycle.createAutoTocChapter(parent.id)
+    const { created, chapters } = await lifecycle.regenerateAutoTocChapter(parent.id)
 
     // Still never assigned -- the link works without one.
     expect(chapters.find((c) => c.chapterNoteId === ch1.id)!.chapterId).toBeNull()
@@ -134,7 +136,7 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     const ch1 = await lifecycle.createChapterNote(parent.id)
     await lifecycle.saveNote({ id: ch1.id, text: 'Just some plain text, no heading yet.' })
 
-    const { created } = await lifecycle.createAutoTocChapter(parent.id)
+    const { created } = await lifecycle.regenerateAutoTocChapter(parent.id)
 
     // resolveIdentityLabel's own fallback for content with no matching
     // heading is the literal "Missing title" (see tabLabels.ts's own doc
@@ -146,7 +148,8 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
 
   it('regenerating twice with nothing changed is a true no-op on the TOC chapter\'s own updatedAtMs', async () => {
     const parent = await lifecycle.createNote({ initialText: '# Solo\n\n## Only Heading\n\nBody.' })
-    const { created: first } = await lifecycle.createAutoTocChapter(parent.id)
+    // createNote already gave the parent an auto-TOC chapter at birth.
+    const { created: first } = await lifecycle.regenerateAutoTocChapter(parent.id)
 
     await new Promise((resolve) => setTimeout(resolve, 5))
     const { created: second } = await lifecycle.regenerateAutoTocChapter(parent.id)
@@ -159,7 +162,6 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     const parent = await lifecycle.createNote({ initialText: '# Book' })
     const ch1 = await lifecycle.createChapterNote(parent.id)
     await lifecycle.saveNote({ id: ch1.id, text: '## Chapter One\n\n### First\n\nBody.' })
-    await lifecycle.createAutoTocChapter(parent.id)
 
     await lifecycle.saveNote({ id: ch1.id, text: '## Chapter One\n\n### First\n\nBody.\n\n### Second\n\nMore.' })
     const { created } = await lifecycle.regenerateAutoTocChapter(parent.id)
@@ -168,13 +170,15 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
   })
 
   it('throws creating a second auto-TOC chapter for the same parent', async () => {
+    // createNote already gave the parent an auto-TOC chapter at birth.
     const parent = await lifecycle.createNote({ initialText: '# Book' })
-    await lifecycle.createAutoTocChapter(parent.id)
     await expect(lifecycle.createAutoTocChapter(parent.id)).rejects.toThrow()
   })
 
   it('throws regenerating a parent with no auto-TOC chapter', async () => {
-    const parent = await lifecycle.createNote({ initialText: '# Book' })
+    // skipAutoToc: true is an internal-only escape hatch (see createNote's
+    // own doc comment) -- the only way to get a parent without one at all.
+    const parent = await lifecycle.createNote({ initialText: '# Book' }, { skipAutoToc: true })
     await expect(lifecycle.regenerateAutoTocChapter(parent.id)).rejects.toThrow()
   })
 
@@ -182,9 +186,9 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     const parent = await lifecycle.createNote({ initialText: '# Book' })
     const bugs = await lifecycle.createChapterNote(parent.id)
     const features = await lifecycle.createChapterNote(parent.id)
-    // The auto-Open-Items chapter only ever gets created once an auto-TOC
+    // createNote already gave the parent an auto-TOC chapter at birth --
+    // the auto-Open-Items chapter only ever gets created once an auto-TOC
     // chapter already exists (regenerateOpenItemsGroup's own precondition).
-    await lifecycle.createAutoTocChapter(parent.id)
 
     await lifecycle.saveNote({ id: bugs.id, text: '## Bugs\n\n- [ ] Fix the thing' })
     await lifecycle.saveNote({ id: features.id, text: '## Features\n\n- [ ] Ship the thing' })
@@ -215,7 +219,6 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     const parent = await lifecycle.createNote({ initialText: '# Book' })
     const ch1 = await lifecycle.createChapterNote(parent.id)
     await lifecycle.saveNote({ id: ch1.id, text: '## Chapter One\n\n### First\n\nBody.' })
-    await lifecycle.createAutoTocChapter(parent.id)
 
     // No explicit regenerateAutoTocChapter call -- saveNote itself should
     // pick up the new heading and refresh the TOC chapter on this save.
@@ -235,7 +238,6 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     const parent = await lifecycle.createNote({ initialText: '# Book' })
     const ch1 = await lifecycle.createChapterNote(parent.id)
     await lifecycle.saveNote({ id: ch1.id, text: '## Chapter One\n\n### First\n\nBody.' })
-    await lifecycle.createAutoTocChapter(parent.id)
 
     const tocChapterNoteId = db.getAutoTocChapterNoteId(parent.id)!
     const before = await lifecycle.loadNote({ id: tocChapterNoteId })
@@ -251,7 +253,6 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     const parent = await lifecycle.createNote({ initialText: '# Book' })
     const ch1 = await lifecycle.createChapterNote(parent.id)
     await lifecycle.saveNote({ id: ch1.id, text: '## Chapter One\n\n### First\n\nBody.' })
-    await lifecycle.createAutoTocChapter(parent.id)
 
     // A new heading triggers headingsChanged's save-time gate, which saves
     // the TOC chapter's own (skipAutoChapterHooks-guarded) text -- exactly
@@ -288,7 +289,7 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     const ch2 = await lifecycle.createChapterNote(parent.id)
     await lifecycle.saveNote({ id: ch2.id, text: '## Chapter One\n\n### Elsewhere\n\nBody.' })
 
-    const { created } = await lifecycle.createAutoTocChapter(parent.id)
+    const { created } = await lifecycle.regenerateAutoTocChapter(parent.id)
 
     const hrefMatch = /\[Elsewhere\]\((@[^)]+)\)/.exec(created.text)
     expect(hrefMatch).toBeTruthy()

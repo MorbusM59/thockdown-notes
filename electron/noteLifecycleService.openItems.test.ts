@@ -27,7 +27,8 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     db.setNoteAssignedId(parent.id, 'BOOK')
     const ch1 = await lifecycle.createChapterNote(parent.id)
     db.setChapterId(parent.id, ch1.id, 'CH1')
-    const { created: toc } = await lifecycle.createAutoTocChapter(parent.id)
+    // createNote already gave the parent an auto-TOC chapter at birth.
+    const tocId = db.getAutoTocChapterNoteId(parent.id)!
 
     // No checklist content anywhere yet -- no auto-Open-Items chapter.
     expect(db.getAutoOpenItemsChapterNoteId(parent.id)).toBeNull()
@@ -43,7 +44,7 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     expect(openItemsId).toBeTruthy()
 
     const chapters = db.listChaptersForNote(parent.id)
-    expect(chapters[0].chapterNoteId).toBe(toc.id)
+    expect(chapters[0].chapterNoteId).toBe(tocId)
     expect(chapters[1].chapterNoteId).toBe(openItemsId)
 
     const openItemsDoc = await lifecycle.loadNote({ id: openItemsId! })
@@ -66,7 +67,6 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
   it('still produces a fully linked group when the note has no assigned id -- internal navigation never needs one', async () => {
     const parent = await lifecycle.createNote({ initialText: '# The Book' })
     const ch1 = await lifecycle.createChapterNote(parent.id)
-    await lifecycle.createAutoTocChapter(parent.id)
 
     await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n- [ ] world-building task' })
 
@@ -87,7 +87,6 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
   it('falls back to the derived-snippet label for a chapter with no heading at all yet', async () => {
     const parent = await lifecycle.createNote({ initialText: '# The Book' })
     const ch1 = await lifecycle.createChapterNote(parent.id)
-    await lifecycle.createAutoTocChapter(parent.id)
 
     // No heading anywhere in the chapter's own text -- same plain-text
     // first line as the equivalent auto-TOC fallback test.
@@ -107,7 +106,6 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
   it('groups the parent\'s own headless items directly under its title link', async () => {
     const parent = await lifecycle.createNote({ initialText: '# The Book' })
     const ch1 = await lifecycle.createChapterNote(parent.id)
-    await lifecycle.createAutoTocChapter(parent.id)
     await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One' })
 
     await lifecycle.saveNote({ id: parent.id, text: '# The Book\n\n- [ ] pick a title' })
@@ -129,7 +127,6 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
   it('disappears once the only unchecked item is checked off', async () => {
     const parent = await lifecycle.createNote({ initialText: '# The Book' })
     const ch1 = await lifecycle.createChapterNote(parent.id)
-    await lifecycle.createAutoTocChapter(parent.id)
     await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n- [ ] only task' })
     expect(db.getAutoOpenItemsChapterNoteId(parent.id)).toBeTruthy()
 
@@ -140,7 +137,6 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
   it('does not regenerate on a pure text edit to an existing unchecked item\'s own wording', async () => {
     const parent = await lifecycle.createNote({ initialText: '# The Book' })
     const ch1 = await lifecycle.createChapterNote(parent.id)
-    await lifecycle.createAutoTocChapter(parent.id)
     await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n- [ ] buy milk' })
 
     const openItemsId = db.getAutoOpenItemsChapterNoteId(parent.id)!
@@ -159,7 +155,8 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     const parent = await lifecycle.createNote({ initialText: '# The Book' })
     const ch1 = await lifecycle.createChapterNote(parent.id)
     const ch2 = await lifecycle.createChapterNote(parent.id)
-    const { created: toc } = await lifecycle.createAutoTocChapter(parent.id)
+    // createNote already gave the parent an auto-TOC chapter at birth.
+    const tocId = db.getAutoTocChapterNoteId(parent.id)!
     await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n- [ ] task one' })
     await lifecycle.saveNote({ id: ch2.id, text: '# Chapter Two\n\n- [ ] task two' })
 
@@ -167,7 +164,7 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     const initialDoc = await lifecycle.loadNote({ id: openItemsId })
     expect(initialDoc.text.indexOf('task one')).toBeLessThan(initialDoc.text.indexOf('task two'))
 
-    await lifecycle.reorderChaptersAndSyncOpenItems(parent.id, [toc.id, openItemsId, ch2.id, ch1.id])
+    await lifecycle.reorderChaptersAndSyncOpenItems(parent.id, [tocId, openItemsId, ch2.id, ch1.id])
 
     const reorderedDoc = await lifecycle.loadNote({ id: openItemsId })
     expect(reorderedDoc.text.indexOf('task two')).toBeLessThan(reorderedDoc.text.indexOf('task one'))
@@ -177,7 +174,6 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     const parent = await lifecycle.createNote({ initialText: '# The Book' })
     const ch1 = await lifecycle.createChapterNote(parent.id)
     const ch2 = await lifecycle.createChapterNote(parent.id)
-    await lifecycle.createAutoTocChapter(parent.id)
     await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n- [ ] task one' })
     await lifecycle.saveNote({ id: ch2.id, text: '# Chapter Two\n\n- [ ] task two' })
 
@@ -197,8 +193,7 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     it("checks the real item off in its own source chapter, without changing the Open Items chapter's own text at all", async () => {
       const parent = await lifecycle.createNote({ initialText: '# The Book' })
       const ch1 = await lifecycle.createChapterNote(parent.id)
-      await lifecycle.createAutoTocChapter(parent.id)
-      await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n- [ ] world-building task' })
+        await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n- [ ] world-building task' })
 
       const openItemsId = db.getAutoOpenItemsChapterNoteId(parent.id)!
       const before = await lifecycle.loadNote({ id: openItemsId })
@@ -221,8 +216,7 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     it('un-checks it again on a second click at the same line, still without touching the Open Items chapter', async () => {
       const parent = await lifecycle.createNote({ initialText: '# The Book' })
       const ch1 = await lifecycle.createChapterNote(parent.id)
-      await lifecycle.createAutoTocChapter(parent.id)
-      await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n- [ ] world-building task' })
+        await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n- [ ] world-building task' })
 
       const openItemsId = db.getAutoOpenItemsChapterNoteId(parent.id)!
       const openItemsDoc = await lifecycle.loadNote({ id: openItemsId })
@@ -239,8 +233,7 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     it('serializes two concurrent toggles on the same line so a rapid double-click does not lose the second click', async () => {
       const parent = await lifecycle.createNote({ initialText: '# The Book' })
       const ch1 = await lifecycle.createChapterNote(parent.id)
-      await lifecycle.createAutoTocChapter(parent.id)
-      await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n- [ ] world-building task' })
+        await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n- [ ] world-building task' })
 
       const openItemsId = db.getAutoOpenItemsChapterNoteId(parent.id)!
       const openItemsDoc = await lifecycle.loadNote({ id: openItemsId })
@@ -263,8 +256,7 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
     it('returns false and changes nothing for a line that is not a real checklist item', async () => {
       const parent = await lifecycle.createNote({ initialText: '# The Book' })
       const ch1 = await lifecycle.createChapterNote(parent.id)
-      await lifecycle.createAutoTocChapter(parent.id)
-      await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n- [ ] world-building task' })
+        await lifecycle.saveNote({ id: ch1.id, text: '# Chapter One\n\n- [ ] world-building task' })
 
       const openItemsId = db.getAutoOpenItemsChapterNoteId(parent.id)!
       const before = await lifecycle.loadNote({ id: openItemsId })

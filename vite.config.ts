@@ -1,4 +1,9 @@
-import { defineConfig } from 'vite'
+// `defineConfig` from 'vitest/config' instead of 'vite' -- it's a drop-in
+// superset that additionally type-checks a `test` field, so vitest picks up
+// this same file (no separate vitest.config.ts) without losing the plugins
+// below (tailwind/react/electron) that a second config file would otherwise
+// shadow instead of merging with.
+import { defineConfig } from 'vitest/config'
 import path from 'node:path'
 import electron from 'vite-plugin-electron/simple'
 import react from '@vitejs/plugin-react'
@@ -28,6 +33,13 @@ export default defineConfig(({ mode }) => {
           '**/docs/**',
         ],
       },
+    },
+    test: {
+      // Runs before any test file loads, no matter how vitest was invoked
+      // (`npm test`, a bare `npx vitest run <file>`, an IDE runner, ...) --
+      // unlike package.json's `pretest` hook, which npm only fires for `npm
+      // test` itself. See the script's own doc comment for the full story.
+      globalSetup: './scripts/ensureBetterSqlite3ForNode.mjs',
     },
     plugins: [
       tailwindcss(),
