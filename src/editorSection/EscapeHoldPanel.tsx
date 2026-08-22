@@ -1,6 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FocusEvent, KeyboardEvent } from 'react'
-import { sampleScrollPlan } from '../editor/ScrollCurvePlan'
+import {
+  buildContinuationPlan,
+  estimateVelocityAndAcceleration,
+  getRenderScrollTotalTimeSec,
+  sampleContinuationPlan,
+  sampleScrollPlan,
+} from '../editor/ScrollCurvePlan'
 import { buildEscapeHoldRotationPlan, pixelsPerSlotAt } from './escapeHoldRotationCurve'
 import { computeEscapeHoldPointAtSlot } from './escapeHoldRingLayout'
 import type { EscapeHoldRingParams } from './escapeHoldRingLayout'
@@ -95,31 +101,42 @@ interface PanelCell {
  * "page" of scroll <-> one "slot" of rotation) and CursorClickCurve.ts for
  * the precedent of adapting that same toolkit to a different interaction.
  *
- * CURRENT SCOPE (deliberately, temporarily minimal -- the hold/rapid-tap
- * path is closed for now while the keydown-only baseline gets nailed down
- * first, case by case): only a genuine, distinct key-press
- * (`event.repeat === false`) is acted on at all -- native OS keyboard
- * auto-repeat is hard-overridden, not merged, queued, or escalated into
- * anything else, so holding a key produces exactly one accepted keydown
- * and nothing further until it's physically released and pressed again.
- * That one accepted keydown drives two deliberately independent things
- * (`handleRingKeyDown`):
+ * CURRENT SCOPE (deliberately, temporarily minimal -- the hold path is
+ * closed for now while the keydown-only baseline gets nailed down first,
+ * case by case): only a genuine, distinct key-press (`event.repeat ===
+ * false`) is acted on at all -- native OS keyboard auto-repeat is
+ * hard-overridden, not merged, queued, or escalated into anything else, so
+ * holding a key produces exactly one accepted keydown and nothing further
+ * until it's physically released and pressed again. That one accepted
+ * keydown drives two deliberately independent things (`handleRingKeyDown`):
  *   - Focus always advances by exactly one position, unconditionally,
- *     regardless of whether an animation is currently in flight.
- *   - The animation only starts a fresh discrete bell-curve step of
- *     exactly 1 slot (`playDiscretePlan`, using the live curve parameters,
- *     landing precisely at `start + direction` by construction -- no
- *     overshoot, no undershoot) if nothing is currently animating
- *     (`discreteRafIdRef`); a keydown landing mid-animation still advances
- *     focus but does not trigger a second animation.
- * This means focus can legitimately end up ahead of wherever the ring is
- * still animating to -- expected and correct at this stage, not a bug (see
- * `focusedIndex`'s own note above for why focus and the animation's own
- * reference position, `topIndex`, are already separate state for exactly
- * this reason). Keyup is not handled at all yet. None of the previous
- * continuous/hold/rapid-tap-run machinery exists right now; it'll be
- * rebuilt deliberately, case by case, on top of this baseline once it's
- * solid.
+ *     regardless of whether an animation is currently in flight -- so focus
+ *     can legitimately end up ahead of wherever the ring is still
+ *     animating to. Expected and correct, not a bug (see `focusedIndex`'s
+ *     own note above for why focus and the animation's own reference
+ *     position, `topIndex`, are already separate state for exactly this
+ *     reason).
+ *   - The animation always plays exactly one slot of motion toward the new
+ *     target, but HOW depends on whether one was already in flight
+ *     (`discreteRafIdRef`): from rest, it's a fresh discrete bell-curve
+ *     step (`playDiscretePlan`) that starts from implicit zero velocity;
+ *     mid-flight, it's a velocity/acceleration-continuous continuation
+ *     (`playContinuationLeg`) spliced onto whatever was already playing,
+ *     using the ORIGINAL direction's own running target (not wherever the
+ *     ring's raw position happens to be) so a run of same-direction taps
+ *     always keeps extending further rather than folding back on itself --
+ *     see playContinuationLeg's and handleRingKeyDown's own doc comments,
+ *     and ScrollCurvePlan.ts's buildContinuationPlan for the underlying
+ *     quintic Hermite math. Either way it always lands exactly on the
+ *     target slot, no overshoot, no undershoot -- see finalizeTopIndex.
+ *     The one deliberately unhandled edge case: tapping fast enough that
+ *     the running target would need to lap the currently-playing leg
+ *     itself (more than a full circle of slots still ahead of it) just
+ *     lets that leg finish on its own instead of splicing an
+ *     ever-more-elaborate multi-lap curve.
+ * Keyup is not handled at all yet. None of the previous continuous/hold
+ * machinery exists right now; it'll be rebuilt deliberately, case by case,
+ * on top of this baseline once it's solid.
  *
  * All of the above only runs when `reduceVisualEffects` is false (the
  * Performance section's "Reduce visual effects" toggle). When true, the
@@ -240,15 +257,31 @@ export function EscapeHoldPanel({
   const rotationOffsetRef = useRef(0)
 
   // The single in-flight discrete-step animation, if any. Also doubles as
-  // the "is something animating" check that decides whether a keydown gets
-  // played or discarded -- see handleRingKeyDown.
+  // the "is something animating" check that decides whether a keydown
+  // starts a fresh step or splices a continuation -- see handleRingKeyDown.
   const discreteRafIdRef = useRef<number | null>(null)
+
+  // Bookkeeping for whichever "leg" (a discrete bell-curve step, or a
+  // velocity/acceleration-continuous continuation spliced from one) is
+  // currently in flight -- see playLeg. legSamplerRef + legStartTimeMsRef
+  // together let a NEW leg snapshot the CURRENT leg's exact instantaneous
+  // velocity/acceleration at the moment it's interrupted
+  // (estimateVelocityAndAcceleration); legStartSlotRef + legDistanceRef
+  // give the current leg's own absolute target (startSlot + distance),
+  // which a splice extends by exactly one more slot in the new key's
+  // direction rather than retargeting from wherever the ring's raw
+  // (possibly fractional) position happens to be -- see handleRingKeyDown.
+  const legStartTimeMsRef = useRef<number | null>(null)
+  const legStartSlotRef = useRef(0)
+  const legDistanceRef = useRef(0)
+  const legSamplerRef = useRef<((elapsedSec: number) => number) | null>(null)
 
   const cancelDiscreteAnimation = () => {
     if (discreteRafIdRef.current !== null) {
       cancelAnimationFrame(discreteRafIdRef.current)
       discreteRafIdRef.current = null
     }
+    legSamplerRef.current = null
   }
 
   // Writes every cell's current position directly to the DOM from the given
@@ -283,39 +316,90 @@ export function EscapeHoldPanel({
     setTopIndex(wrapped)
   }
 
-  // Plays a single bell-curve step of `signedDistanceSlots` from the
-  // current rotationOffsetRef, calling `onComplete` once it lands exactly
-  // there.
-  const playDiscretePlan = (signedDistanceSlots: number, onComplete: () => void) => {
-    const count = cellsRef.current.length
-    if (count === 0) return
+  // Runs one leg of animation: `sampler(elapsedSec)` gives the displacement
+  // from `rotationOffsetRef.current` at the moment this leg started, and
+  // `distance` is where that sampler is guaranteed to land at
+  // `totalDurationSec` (both playDiscretePlan's bell curve and
+  // playContinuationLeg's quintic curve already guarantee this by
+  // construction -- see sampleScrollPlan/sampleContinuationPlan). Records
+  // the leg's own start time/slot/distance/sampler as it goes so a LATER
+  // leg can snapshot this one's exact instantaneous velocity/acceleration
+  // if it gets interrupted -- see the refs' own doc comment above.
+  const playLeg = (
+    sampler: (elapsedSec: number) => number,
+    totalDurationSec: number,
+    distance: number,
+    onComplete: () => void,
+  ) => {
     cancelDiscreteAnimation()
     const startSlot = rotationOffsetRef.current
-    const direction: 1 | -1 = signedDistanceSlots >= 0 ? 1 : -1
-    const pixelsPerSlot = pixelsPerSlotAt(startSlot, direction, count, ringGeometryParamsRef.current)
-    const plan = buildEscapeHoldRotationPlan(signedDistanceSlots, pixelsPerSlot)
-    const totalDurationMs = plan.totalDurationSec * 1000
+    legStartSlotRef.current = startSlot
+    legDistanceRef.current = distance
+    legSamplerRef.current = sampler
+    const totalDurationMs = totalDurationSec * 1000
     let startTimeMs: number | null = null
 
     const animateFrame = (nowMs: number) => {
-      if (startTimeMs === null) startTimeMs = nowMs
+      if (startTimeMs === null) {
+        startTimeMs = nowMs
+        legStartTimeMsRef.current = nowMs
+      }
       const elapsedMs = nowMs - startTimeMs
 
       if (elapsedMs >= totalDurationMs) {
-        rotationOffsetRef.current = startSlot + signedDistanceSlots
+        rotationOffsetRef.current = startSlot + distance
         applyRotationOffsetToDom(rotationOffsetRef.current)
         discreteRafIdRef.current = null
+        legSamplerRef.current = null
         onComplete()
         return
       }
 
-      const displacement = sampleScrollPlan(plan, elapsedMs / 1000)
-      rotationOffsetRef.current = startSlot + displacement
+      rotationOffsetRef.current = startSlot + sampler(elapsedMs / 1000)
       applyRotationOffsetToDom(rotationOffsetRef.current)
       discreteRafIdRef.current = requestAnimationFrame(animateFrame)
     }
 
     discreteRafIdRef.current = requestAnimationFrame(animateFrame)
+  }
+
+  // Plays a single bell-curve step of `signedDistanceSlots` from the
+  // current rotationOffsetRef, calling `onComplete` once it lands exactly
+  // there. Only ever called from rest (rotationOffsetRef already settled),
+  // so it always starts from implicit zero velocity/acceleration -- see
+  // playContinuationLeg for the mid-flight case.
+  const playDiscretePlan = (signedDistanceSlots: number, onComplete: () => void) => {
+    const count = cellsRef.current.length
+    if (count === 0) return
+    const startSlot = rotationOffsetRef.current
+    const direction: 1 | -1 = signedDistanceSlots >= 0 ? 1 : -1
+    const pixelsPerSlot = pixelsPerSlotAt(startSlot, direction, count, ringGeometryParamsRef.current)
+    const plan = buildEscapeHoldRotationPlan(signedDistanceSlots, pixelsPerSlot)
+    playLeg((elapsedSec) => sampleScrollPlan(plan, elapsedSec), plan.totalDurationSec, signedDistanceSlots, onComplete)
+  }
+
+  // Splices a smooth continuation onto whichever leg is currently in
+  // flight: snapshots its exact instantaneous velocity and acceleration at
+  // this exact moment (estimateVelocityAndAcceleration, sampling the
+  // in-flight leg's own sampler -- works whether that leg was itself a
+  // bell-curve step or an earlier continuation, so repeated taps keep
+  // composing smoothly), then builds a quintic curve from that
+  // velocity/acceleration to `distance` over the FULL configured total
+  // animation time (reset, not whatever time was left on the interrupted
+  // leg -- see ScrollCurvePlan.ts's buildContinuationPlan doc comment for
+  // the math). See handleRingKeyDown for how `distance` itself is computed.
+  const playContinuationLeg = (distance: number, onComplete: () => void) => {
+    const totalDurationSec = getRenderScrollTotalTimeSec()
+    let initialVelocity = 0
+    let initialAcceleration = 0
+    if (legSamplerRef.current !== null && legStartTimeMsRef.current !== null) {
+      const elapsedSec = (performance.now() - legStartTimeMsRef.current) / 1000
+      const snapshot = estimateVelocityAndAcceleration(legSamplerRef.current, elapsedSec)
+      initialVelocity = snapshot.velocity
+      initialAcceleration = snapshot.acceleration
+    }
+    const plan = buildContinuationPlan(distance, initialVelocity, initialAcceleration, totalDurationSec)
+    playLeg((elapsedSec) => sampleContinuationPlan(plan, elapsedSec), totalDurationSec, distance, onComplete)
   }
 
   // Resets the whole rotation engine (and topIndex) back to slot 0 each
@@ -473,13 +557,35 @@ export function EscapeHoldPanel({
     // animation's own reference, which lags behind on purpose).
     setFocusedIndex((current) => ((current + direction) % count + count) % count)
 
-    // Animation branch: starts a new step only if nothing is currently
-    // animating. A keydown landing mid-animation still advances focus
-    // (above) but does not trigger a second animation -- so focus can end
-    // up ahead of wherever the ring is currently animating to, which is
-    // expected at this stage (see the component doc comment).
-    if (discreteRafIdRef.current !== null) return
-    playDiscretePlan(direction, finalizeTopIndex)
+    // Animation branch. Nothing in flight: play a fresh single-slot bell
+    // step exactly as before.
+    if (discreteRafIdRef.current === null) {
+      playDiscretePlan(direction, finalizeTopIndex)
+      return
+    }
+
+    // Something IS in flight: splice a smooth continuation instead of
+    // discarding this keydown outright (see playContinuationLeg and the
+    // component doc comment). Always extends by exactly one more slot in
+    // `direction` from the CURRENTLY PLAYING leg's own absolute target
+    // (legStartSlotRef + legDistanceRef) -- not from wherever the ring's
+    // raw, possibly-fractional position happens to be right now, and not
+    // from focusedIndex's wrapped array index (which can't represent "more
+    // than one full lap" the way this continuous, unwrapped running target
+    // can) -- so a run of same-direction taps always keeps travelling
+    // further in the one original direction rather than the distance
+    // calculation folding back on itself.
+    const currentLegTarget = legStartSlotRef.current + legDistanceRef.current
+    const newLegTarget = currentLegTarget + direction
+    const distance = newLegTarget - rotationOffsetRef.current
+    if (Math.abs(distance) > count) {
+      // Tapped fast enough to lap the currently-playing leg itself before
+      // it could finish -- rather than splice an ever-more-elaborate
+      // multi-lap curve, just let it finish on its own; see the component
+      // doc comment.
+      return
+    }
+    playContinuationLeg(distance, finalizeTopIndex)
   }
 
   const runCell = (cell: PanelCell) => {

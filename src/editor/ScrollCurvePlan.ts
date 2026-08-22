@@ -458,3 +458,94 @@ export const sampleReleaseRampDownPlan = (
   const progress = sampleCdf(plan.cdf, xNorm) - plan.apexProgress;
   return plan.signedDistanceForFullCurve * progress;
 };
+
+// Velocity/acceleration-continuous continuation curve.
+//
+// buildScrollPlan above always starts from rest (implicitly, by the bell
+// shape) and is built for a single point-to-point hop. When a fresh target
+// arrives mid-animation, restarting a fresh bell curve from rest discards
+// whatever velocity (and acceleration) the interrupted motion already had,
+// which reads as a stutter. A quintic Hermite polynomial instead lets a NEW
+// curve start from an arbitrary snapshotted velocity/acceleration and still
+// land exactly at a new target, at rest (velocity AND acceleration both
+// zero) again, after a fixed duration -- the standard "minimum-jerk" style
+// point-to-point blend used for exactly this kind of mid-flight retargeting.
+//
+// Boundary conditions (t in [0, T], s = t/T in [0,1]):
+//   p(0)=0, p(T)=signedDistance, p'(0)=initialVelocity, p'(T)=0,
+//   p''(0)=initialAcceleration, p''(T)=0
+// solved via the standard quintic Hermite basis functions H0..H5(s), each
+// of which is 1 for exactly one of (value, velocity, acceleration) at
+// exactly one endpoint and 0 for the other five conditions:
+//   H0 = 1-10s^3+15s^4-6s^5   (value @ s=0)
+//   H1 = s-6s^3+8s^4-3s^5     (velocity @ s=0)
+//   H2 = 0.5s^2-1.5s^3+1.5s^4-0.5s^5   (acceleration @ s=0)
+//   H3 = 10s^3-15s^4+6s^5     (value @ s=1)
+//   H4 = -4s^3+7s^4-3s^5      (velocity @ s=1)
+//   H5 = 0.5s^3-s^4+0.5s^5    (acceleration @ s=1)
+// Our boundary values are P0=0, m1=0, c1=0 (value @0, velocity @1,
+// acceleration @1 all zero), so only H1, H2, H3 survive: p(t) =
+// H1(s)*T*v0 + H2(s)*T^2*a0 + H3(s)*d (the T/T^2 factors convert the
+// Hermite tangents, which are derivatives with respect to s, back to real
+// derivatives with respect to t).
+export interface ContinuationPlan {
+  totalDurationSec: number;
+  signedDistance: number;
+  initialVelocity: number;
+  initialAcceleration: number;
+}
+
+export const buildContinuationPlan = (
+  signedDistance: number,
+  initialVelocity: number,
+  initialAcceleration: number,
+  totalDurationSec: number,
+): ContinuationPlan => ({
+  totalDurationSec: Math.max(0.0001, totalDurationSec),
+  signedDistance,
+  initialVelocity,
+  initialAcceleration,
+});
+
+export const sampleContinuationPlan = (plan: ContinuationPlan, elapsedSec: number): number => {
+  const T = plan.totalDurationSec;
+  if (elapsedSec <= 0) return 0;
+  if (elapsedSec >= T) return plan.signedDistance;
+
+  const s = elapsedSec / T;
+  const s2 = s * s;
+  const s3 = s2 * s;
+  const s4 = s3 * s;
+  const s5 = s4 * s;
+
+  const h1 = s - (6 * s3) + (8 * s4) - (3 * s5);
+  const h2 = (0.5 * s2) - (1.5 * s3) + (1.5 * s4) - (0.5 * s5);
+  const h3 = (10 * s3) - (15 * s4) + (6 * s5);
+
+  return (h1 * T * plan.initialVelocity)
+    + (h2 * T * T * plan.initialAcceleration)
+    + (h3 * plan.signedDistance);
+};
+
+// Central finite-difference estimate of a smooth position sampler's
+// instantaneous velocity and acceleration at a point in time -- used to
+// snapshot an in-flight animation's motion the instant it's interrupted, so
+// buildContinuationPlan above can pick up from it smoothly. Generic over
+// any `(elapsedSec) => position` sampler, so it works the same whether the
+// interrupted leg was itself a bell-curve step (sampleScrollPlan) or an
+// earlier continuation (sampleContinuationPlan) -- splicing composes.
+const VELOCITY_ESTIMATE_EPSILON_SEC = 0.001;
+
+export const estimateVelocityAndAcceleration = (
+  sample: (elapsedSec: number) => number,
+  atElapsedSec: number,
+): { velocity: number; acceleration: number } => {
+  const h = VELOCITY_ESTIMATE_EPSILON_SEC;
+  const pPrev = sample(atElapsedSec - h);
+  const pCurr = sample(atElapsedSec);
+  const pNext = sample(atElapsedSec + h);
+  return {
+    velocity: (pNext - pPrev) / (2 * h),
+    acceleration: (pNext - (2 * pCurr) + pPrev) / (h * h),
+  };
+};
