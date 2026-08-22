@@ -1,4 +1,3 @@
-import type { MouseEvent } from 'react'
 import type { UseMarkdownFormattingToolbarResult } from '../editorSection/useMarkdownFormattingToolbar'
 
 export interface EditorToolbarProps extends UseMarkdownFormattingToolbarResult {
@@ -11,11 +10,6 @@ export interface EditorToolbarProps extends UseMarkdownFormattingToolbarResult {
   spellCheckEnabled: boolean
   setSpellCheckEnabled: (updater: (previous: boolean) => boolean) => void
   queueAppStateSave: (selectedNoteId: string | null) => void
-  handleExportPdf: () => void | Promise<void>
-  chooseExportFolder: () => Promise<string | null>
-  isExportingPdf: boolean
-  handleExportMd: (forceChooseFolder?: boolean) => Promise<void>
-  isExportingMd: boolean
   handleCreateChapter: () => void | Promise<void>
 }
 
@@ -36,11 +30,6 @@ export function EditorToolbar({
   spellCheckEnabled,
   setSpellCheckEnabled,
   queueAppStateSave,
-  handleExportPdf,
-  chooseExportFolder,
-  isExportingPdf,
-  handleExportMd,
-  isExportingMd,
   handleCreateChapter,
   activeDecorationFormats,
   activeHeadingLevel,
@@ -102,40 +91,6 @@ export function EditorToolbar({
         >
           <span className="fa-solid fa-spell-check" aria-hidden="true" />
         </button>
-
-        {isPreviewMode ? (
-          <button
-            type="button"
-            className="btn-icon"
-            data-tooltip="Export PDF"
-            aria-label="Export current note to PDF"
-            onClick={handleExportPdf}
-            onContextMenu={(event: MouseEvent<HTMLButtonElement>) => {
-              event.preventDefault()
-              void chooseExportFolder()
-            }}
-            disabled={!activeNoteId || isExportingPdf}
-          >
-            <span className="fa-solid fa-file-pdf" aria-hidden="true" />
-          </button>
-        ) : null}
-
-        {!isPreviewMode ? (
-          <button
-            type="button"
-            className="btn-icon"
-            data-tooltip="Export Markdown"
-            aria-label="Export current note to Markdown"
-            onClick={() => void handleExportMd()}
-            onContextMenu={(event: MouseEvent<HTMLButtonElement>) => {
-              event.preventDefault()
-              void handleExportMd(true)
-            }}
-            disabled={!activeNoteId || isExportingMd}
-          >
-            <span className="fa-solid fa-file-code" aria-hidden="true" />
-          </button>
-        ) : null}
       </div>
       <div className="toolbar-container">
         {!isPreviewMode ? (

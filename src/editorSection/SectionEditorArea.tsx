@@ -393,6 +393,7 @@ export function SectionEditorArea({
                 isOpen={isEscapeHoldActive}
                 activeNoteId={activeNoteId}
                 isActiveNoteTimeless={isViewingTimelessNote}
+                isPreviewMode={isPreviewMode}
                 isExportingPdf={isExportingPdf}
                 isExportingMd={isExportingMd}
                 borderRadiusRegularPx={borderRadiusRegularPx}

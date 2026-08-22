@@ -8744,11 +8744,6 @@ ${markdownHtml}
               spellCheckEnabled={spellCheckEnabled}
               setSpellCheckEnabled={setSpellCheckEnabled}
               queueAppStateSave={queueAppStateSave}
-              handleExportPdf={handleExportPdf}
-              chooseExportFolder={chooseExportFolder}
-              isExportingPdf={isExportingPdf}
-              handleExportMd={handleExportMd}
-              isExportingMd={isExportingMd}
               handleCreateChapter={activeSection?.handleCreateChapter ?? noopAsync}
               activeDecorationFormats={activeSection?.activeDecorationFormats ?? EMPTY_DECORATION_FORMATS}
               activeHeadingLevel={activeSection?.activeHeadingLevel ?? 0}

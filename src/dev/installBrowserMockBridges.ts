@@ -444,7 +444,19 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
           detachedChapterParentId: null,
         })
         store.notes.push(created)
-        return clone(created)
+        // Mirrors noteLifecycleService.ts's createNote: every genuine new
+        // standalone note gets its own auto-TOC chapter from birth. No
+        // skip-flag needed here the way the real backend needs one -- none
+        // of this file's other note-creation paths (createChapterNote,
+        // createAutoTocChapter itself, the auto-Open-Items chapter, cloneNoteAsChapter)
+        // route through this bridge method at all, so there's no
+        // ToC-for-a-ToC recursion risk to guard against.
+        try {
+          createAutoTocChapterInStore(store, id)
+        } catch (error) {
+          console.error(`Failed to create auto-TOC chapter for new note ${id}`, error)
+        }
+        return clone(store.notes.find((note) => note.id === id) ?? created)
       })
     },
 
@@ -1106,6 +1118,59 @@ function getRealChapterRowsInStore(store: BrowserMockStore, parentNoteId: string
  * in-place update is both sufficient and faithful to what those calls would
  * produce.
  */
+/**
+ * Dev-mode mirror of NoteLifecycleService.createAutoTocChapter -- see that
+ * method's own doc comment for the real backend's shape and callers (every
+ * genuine new standalone note, by default, from createNote below; plus
+ * useNoteChapters.ts's own reactive backfill for notes that predate that).
+ * Extracted as a standalone helper (rather than inlined separately in both
+ * `createNote` and the `createAutoTocChapter` bridge method below) so the
+ * two can't drift apart -- unlike the real backend, this can call it
+ * directly on an already-open `store` from within createNote's own
+ * `mutate()` callback instead of a second round-trip. Throws if one already
+ * exists for this parent, same as the real backend.
+ */
+function createAutoTocChapterInStore(store: BrowserMockStore, parentNoteId: string): NoteDocument {
+  const alreadyExists = store.chapters.some((chapter) => (
+    chapter.parentNoteId === parentNoteId && store.notes.find((note) => note.id === chapter.chapterNoteId)?.isAutoToc
+  ))
+  if (alreadyExists) {
+    throw new Error(`Parent ${parentNoteId} already has an auto-TOC chapter`)
+  }
+
+  const now = Date.now()
+  const id = createId()
+  const created: NoteDocument = normalizeDocument({
+    id,
+    fileName: `${id}.md`,
+    title: '',
+    tags: [],
+    createdAtMs: now,
+    updatedAtMs: now,
+    sizeBytes: 0,
+    text: '',
+    chapterOnly: true,
+    isAutoToc: true,
+    isAutoOpenItems: false,
+    isTimeless: false,
+    chapterParentId: parentNoteId,
+    chapterId: null,
+    detachedChapterParentId: null,
+  })
+  store.notes.push(created)
+
+  store.chapters = store.chapters.map((chapter) => (
+    chapter.parentNoteId === parentNoteId
+      ? { ...chapter, position: chapter.position + 1 }
+      : chapter
+  ))
+  store.chapters.push({ parentNoteId, chapterNoteId: id, position: 0, chapterId: null })
+
+  regenerateAutoTocInStore(store, parentNoteId)
+
+  return store.notes.find((note) => note.id === id) ?? created
+}
+
 function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string): void {
   const parentNote = store.notes.find((note) => note.id === parentNoteId)
   const tocChapter = store.chapters.find((chapter) => (
@@ -1591,45 +1656,8 @@ function buildChaptersBridge(storeRef: { current: BrowserMockStore }): ChaptersA
 
     async createAutoTocChapter(parentNoteId: string): Promise<{ chapters: ChapterEntry[]; created: NoteDocument }> {
       return mutate((store) => {
-        const alreadyExists = store.chapters.some((chapter) => (
-          chapter.parentNoteId === parentNoteId && store.notes.find((note) => note.id === chapter.chapterNoteId)?.isAutoToc
-        ))
-        if (alreadyExists) {
-          throw new Error(`Parent ${parentNoteId} already has an auto-TOC chapter`)
-        }
-
-        const now = Date.now()
-        const id = createId()
-        const created: NoteDocument = normalizeDocument({
-          id,
-          fileName: `${id}.md`,
-          title: '',
-          tags: [],
-          createdAtMs: now,
-          updatedAtMs: now,
-          sizeBytes: 0,
-          text: '',
-          chapterOnly: true,
-          isAutoToc: true,
-          isAutoOpenItems: false,
-          isTimeless: false,
-          chapterParentId: parentNoteId,
-          chapterId: null,
-          detachedChapterParentId: null,
-        })
-        store.notes.push(created)
-
-        store.chapters = store.chapters.map((chapter) => (
-          chapter.parentNoteId === parentNoteId
-            ? { ...chapter, position: chapter.position + 1 }
-            : chapter
-        ))
-        store.chapters.push({ parentNoteId, chapterNoteId: id, position: 0, chapterId: null })
-
-        regenerateAutoTocInStore(store, parentNoteId)
-
-        const refreshed = store.notes.find((note) => note.id === id)
-        return { chapters: sorted(store, parentNoteId), created: clone(refreshed ?? created) }
+        const created = createAutoTocChapterInStore(store, parentNoteId)
+        return { chapters: sorted(store, parentNoteId), created: clone(created) }
       })
     },
 

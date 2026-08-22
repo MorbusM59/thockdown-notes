@@ -52,7 +52,15 @@ export interface ChapterBarProps {
  * The chapter-display bar inside the chapter-panel placeholder. Order,
  * left to right: the Open Items mini icon button, then the Table of
  * Contents mini icon button (each only rendered when that auto-generated
- * chapter exists -- see splitChapterFamily), then the tab strip itself --
+ * chapter exists -- see splitChapterFamily. The TOC one now exists for
+ * essentially every note from the moment it's created --
+ * NoteLifecycleService.createNote's own default, see its doc comment --
+ * so in practice this condition is almost always true; it only still
+ * matters for a note created before that became the default and that
+ * hasn't gained a real chapter yet to trigger the reactive backfill in
+ * useNoteChapters.ts. Open Items is unchanged: it still only exists
+ * while there's at least one real chapter to aggregate across), then the
+ * tab strip itself --
  * boxed the same way the tab mode tab-display bar is (.tab-mode-shell), the
  * parent note's own tab first (click to return to its own content) then
  * every real chapter in order -- then the collapse-into-previous mini icon

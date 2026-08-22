@@ -50,6 +50,8 @@ export interface EscapeHoldPanelProps {
   activeNoteId: string | null
   /** True while the active note (or its whole chapter family) is timeless -- disables New Chapter, since a frozen family can't gain a new chapter (databaseService.ts's assertNotTimeless). Export/New Note are unaffected -- they're not mutations of the frozen note itself. */
   isActiveNoteTimeless: boolean
+  /** Mirrors EditorToolbar.tsx's own isPreviewMode gate on its (now-removed) Export PDF/MD buttons: PDF export only makes sense against the rendered view, MD export only against the raw edit-mode text, so each cell only ever appears in its own mode rather than showing both and letting the wrong one fail or confuse. */
+  isPreviewMode: boolean
   isExportingPdf: boolean
   isExportingMd: boolean
   /** Live user-configurable corner-radius/spacing base units (options menu sliders) -- fed straight into escapeHoldRingLayout.ts so the ring's shape tracks .editor-empty-state's actual on-screen corner radius/inset instead of a stale hardcoded value. */
@@ -233,6 +235,7 @@ export function EscapeHoldPanel({
   isOpen,
   activeNoteId,
   isActiveNoteTimeless,
+  isPreviewMode,
   isExportingPdf,
   isExportingMd,
   borderRadiusRegularPx,
@@ -251,12 +254,16 @@ export function EscapeHoldPanel({
     const candidates = [
       { label: 'New Note', icon: 'fa-solid fa-file', onSelect: onCreateNote, disabled: false },
       { label: 'New Chapter', icon: 'fa-solid fa-book-medical', onSelect: onCreateChapter, disabled: !hasActiveNote || isActiveNoteTimeless },
-      { label: 'Export PDF', icon: 'fa-solid fa-file-pdf', onSelect: onExportPdf, disabled: !hasActiveNote || isExportingPdf },
-      { label: 'Export MD', icon: 'fa-solid fa-file-code', onSelect: onExportMd, disabled: !hasActiveNote || isExportingMd },
+      // Mirrors EditorToolbar.tsx's own (now-removed) isPreviewMode gate:
+      // PDF export only in render view, MD export only in edit view -- each
+      // one only makes sense against the mode it actually reflects, so the
+      // other simply drops out (see isPreviewMode's own doc comment above).
+      { label: 'Export PDF', icon: 'fa-solid fa-file-pdf', onSelect: onExportPdf, disabled: !hasActiveNote || isExportingPdf || !isPreviewMode },
+      { label: 'Export MD', icon: 'fa-solid fa-file-code', onSelect: onExportMd, disabled: !hasActiveNote || isExportingMd || isPreviewMode },
       { label: 'User Guide', icon: 'fa-solid fa-map', onSelect: onOpenHelp, disabled: false },
     ]
     return candidates.filter((candidate) => !candidate.disabled)
-  }, [hasActiveNote, isActiveNoteTimeless, isExportingPdf, isExportingMd, onCreateNote, onCreateChapter, onExportPdf, onExportMd, onOpenHelp])
+  }, [hasActiveNote, isActiveNoteTimeless, isPreviewMode, isExportingPdf, isExportingMd, onCreateNote, onCreateChapter, onExportPdf, onExportMd, onOpenHelp])
 
   const [topIndex, setTopIndex] = useState(0)
   // Which cell is focused/tabbable -- deliberately separate state from

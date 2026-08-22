@@ -279,41 +279,53 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
   const autoTocChapterNoteId = autoTocChapter?.chapterNoteId ?? null
   const autoOpenItemsChapterNoteId = autoOpenItemsChapter?.chapterNoteId ?? null
 
-  // Keeps the auto-TOC chapter's existence a hard invariant of "this note has
-  // at least one real chapter" -- no manual toggle. Appears the moment the
-  // first real chapter does (however it was created: the chapter bar's own
-  // "+" pill, the bottom utility bar's New Chapter action, a sidebar note
-  // dragged in, the scissors/split shortcuts, ...) and disappears again the
-  // moment the last one does -- unlike the chapter panel itself
-  // (SectionEditorArea.tsx's `isChapterPanelOpen`), which stays showing
-  // either way once there's an active note. Deliberately doesn't call
-  // activateNote either way -- creation/removal happens in the background,
-  // wherever the user already is/was headed (typically the real chapter
-  // they just created or collapsed) is left alone.
+  // The auto-TOC chapter's own existence is no longer tied to chapter count
+  // at all -- every new note gets one from the moment it's created
+  // (NoteLifecycleService.createNote's own default, see its doc comment),
+  // and it's only ever removed by deleting the note itself (ordinary
+  // cascade-delete). The effect below still exists purely as a *backfill*:
+  // any note created before that became the default (or one whose ToC
+  // creation failed and got silently swallowed at birth -- see createNote's
+  // own doc comment) picks one up reactively the moment it becomes this
+  // section's `menuIdentityNoteId` -- i.e. the moment it's actually opened,
+  // regardless of whether it has any real chapters. (An earlier version of
+  // this gated backfill on `reorderableChapterCount > 0`, matching the
+  // original "only chapter-bearing notes get one" design this whole effect
+  // used to enforce as a hard invariant -- that's exactly what left a
+  // pre-existing chapterless note permanently without a ToC until it
+  // happened to gain a chapter, which is the gap this now closes.) The
+  // auto-Open-Items chapter is different and unchanged: it has no reason to
+  // exist without a chapter bar to aggregate across (see
+  // regenerateOpenItemsGroup's own doc comment), so it still appears with
+  // the first real chapter and is torn down with the last one, below.
+  // Neither branch calls activateNote either way -- creation/removal
+  // happens in the background, wherever the user already is/was headed
+  // (typically the real chapter they just created or collapsed) is left
+  // alone.
   const reorderableChapterCount = reorderableChapters.length
 
   // Guards the effect below against firing a second, redundant
   // createAutoTocChapter call for the same parent while the first one is
-  // still in flight. `reorderableChapterCount > 0 && autoTocChapterNoteId
-  // === null` stays true for the effect's ENTIRE duration -- `chapters`
-  // state (and so `autoTocChapterNoteId`) only updates once the call
-  // resolves and setChapters runs -- so anything else that makes this
-  // effect re-run in the meantime (activeNoteId changing, e.g. because
-  // handleCreateChapter itself activates the freshly created chapter right
-  // after creating it; or a callback prop like refreshNotes/activateNote
-  // getting a new identity) would otherwise fire a second real IPC call
-  // before the first one has had a chance to update `chapters`. The
-  // cleanup's own `cancelled` flag only suppresses a stale call's effect on
-  // React state -- it was never enough on its own, since the underlying
-  // call had already gone out. Keyed by note id (not a bare boolean) so a
-  // call still pending for a DIFFERENT parent (e.g. the user switched away
-  // and back) doesn't block this one.
+  // still in flight. `autoTocChapterNoteId === null` stays true for the
+  // effect's ENTIRE duration -- `chapters` state (and so
+  // `autoTocChapterNoteId`) only updates once the call resolves and
+  // setChapters runs -- so anything else that makes this effect re-run in
+  // the meantime (activeNoteId changing, e.g. because handleCreateChapter
+  // itself activates the freshly created chapter right after creating it;
+  // or a callback prop like refreshNotes/activateNote getting a new
+  // identity) would otherwise fire a second real IPC call before the first
+  // one has had a chance to update `chapters`. The cleanup's own
+  // `cancelled` flag only suppresses a stale call's effect on React state --
+  // it was never enough on its own, since the underlying call had already
+  // gone out. Keyed by note id (not a bare boolean) so a call still pending
+  // for a DIFFERENT parent (e.g. the user switched away and back) doesn't
+  // block this one.
   const pendingAutoTocCreateForNoteIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!persistenceReady || !window.thockdownChapters || !window.thockdownNotes || !menuIdentityNoteId) return
 
-    if (reorderableChapterCount > 0 && autoTocChapterNoteId === null) {
+    if (autoTocChapterNoteId === null) {
       if (pendingAutoTocCreateForNoteIdRef.current === menuIdentityNoteId) return
       pendingAutoTocCreateForNoteIdRef.current = menuIdentityNoteId
 
@@ -349,33 +361,29 @@ export function useNoteChapters(options: UseNoteChaptersOptions): UseNoteChapter
       }
     }
 
-    if (reorderableChapterCount === 0 && (autoTocChapterNoteId !== null || autoOpenItemsChapterNoteId !== null)) {
-      // Both auto-chapters are torn down together the moment the last real
-      // chapter disappears -- the auto-Open-Items chapter has no reason to
-      // exist without a chapter bar to aggregate across, even if the
-      // parent's own group would otherwise still have content (see
-      // regenerateOpenItemsGroup's own doc comment).
-      const removedIds = [autoTocChapterNoteId, autoOpenItemsChapterNoteId].filter((id): id is string => id !== null)
+    if (reorderableChapterCount === 0 && autoOpenItemsChapterNoteId !== null) {
+      // Only the auto-Open-Items chapter is torn down here now -- the
+      // auto-TOC chapter's own lifecycle is no longer tied to chapter count
+      // at all, see reorderableChapterCount's own doc comment above.
+      const removedId = autoOpenItemsChapterNoteId
       let cancelled = false
       void (async () => {
         // The note being deleted can't be left as the active one -- switch
         // to the parent first if that's what's currently shown (this last
         // real chapter's own removal already switches the active note away
         // from *itself* through its own handler; this only ever matters if
-        // the user was specifically browsing one of these auto-chapters at
+        // the user was specifically browsing the auto-Open-Items chapter at
         // the exact moment the last real chapter disappeared elsewhere).
-        if (activeNoteId && removedIds.includes(activeNoteId) && menuIdentityNoteId) {
+        if (activeNoteId === removedId && menuIdentityNoteId) {
           await activateNote(menuIdentityNoteId)
         }
-        for (const removedId of removedIds) {
-          try {
-            await window.thockdownChapters!.removeChapter(menuIdentityNoteId!, removedId)
-            await window.thockdownNotes!.deleteNote({ id: removedId })
-            onNotePermanentlyDeleted?.(removedId)
-          } catch {
-            // Same cross-section race as above, mirrored: another instance
-            // may have already removed it first.
-          }
+        try {
+          await window.thockdownChapters!.removeChapter(menuIdentityNoteId!, removedId)
+          await window.thockdownNotes!.deleteNote({ id: removedId })
+          onNotePermanentlyDeleted?.(removedId)
+        } catch {
+          // Same cross-section race as above, mirrored: another instance
+          // may have already removed it first.
         }
         if (cancelled || !menuIdentityNoteId || !window.thockdownChapters) return
         const updatedChapters = await window.thockdownChapters.listChapters(menuIdentityNoteId)
