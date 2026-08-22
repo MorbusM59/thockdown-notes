@@ -462,10 +462,20 @@ export function EditorSection({
   // Local, not activeNoteSummary (computed further below, after this hook
   // call): the auto-TOC/auto-Open-Items chapter has no Time Machine history
   // of its own, so hibernating a section showing one must never snapshot it
-  // -- see useSnapshotFreeze's own skipFreeze doc comment.
+  // -- see useSnapshotFreeze's own skipFreeze doc comment. A frozen
+  // (isTimeless) note is the same story for a different reason: its history
+  // was already permanently deleted the moment it was frozen
+  // (databaseService.ts's freezeNoteFamily), and the save would be rejected
+  // at the database layer anyway (assertNotTimeless) -- found live as a
+  // steady stream of uncaught "is timeless and cannot be altered" errors
+  // from a frozen note's section losing focus.
   const isHibernatingNoteEphemeralAutoChapter = useMemo(() => {
     const note = notes.find((candidate) => candidate.id === activeNoteId)
     return Boolean(note?.isAutoToc || note?.isAutoOpenItems)
+  }, [notes, activeNoteId])
+  const isHibernatingNoteTimeless = useMemo(() => {
+    const note = notes.find((candidate) => candidate.id === activeNoteId)
+    return Boolean(note?.isTimeless)
   }, [notes, activeNoteId])
 
   useSnapshotFreeze({
@@ -479,7 +489,7 @@ export function EditorSection({
     isNoteOpenInOtherSection,
     captureEditModeSnapshotFromEditor: (id) => { captureEditModeSnapshotFromEditor(id) },
     isFrozenSectionPreviewRef,
-    skipFreeze: isHibernatingNoteEphemeralAutoChapter,
+    skipFreeze: isHibernatingNoteEphemeralAutoChapter || isHibernatingNoteTimeless,
   })
 
   const activateNote = useCallback(async (noteId: string, overrideCursorPos?: number) => {
@@ -1127,6 +1137,7 @@ export function EditorSection({
     activateNote,
     isFrozenSectionPreviewRef,
     isViewingEphemeralAutoChapter,
+    isViewingTimelessNote,
   })
 
   // Plain render-time mutation, not an effect (same idiom as

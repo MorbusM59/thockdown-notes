@@ -95,6 +95,8 @@ export interface UseNoteSnapshotTimelineOptions {
   isFrozenSectionPreviewRef: MutableRefObject<boolean>
   /** True while viewing the auto-TOC or auto-Open-Items chapter -- their content is a materialized view regenerated from live state (EditorSection.tsx's handleManualSaveOrRefresh), not something a person edits, so a snapshot history for it is meaningless. Suppresses the periodic automatic-snapshot capture and both auto-compaction passes below; the manual-save button stays live but is rewired by the caller to trigger a regeneration instead of a snapshot. */
   isViewingEphemeralAutoChapter: boolean
+  /** True while viewing a frozen (isTimeless) note -- its entire snapshot history was already permanently deleted the moment it was frozen (databaseService.ts's freezeNoteFamily), and every write to `note_snapshots` for it is rejected at the database layer (assertNotTimeless) until it's unfrozen. Suppresses the periodic automatic-snapshot capture below the same way isViewingEphemeralAutoChapter does, so the interval doesn't keep retrying a write that can only ever fail -- found live as a steady stream of uncaught "is timeless and cannot be altered" errors from notes left open and frozen. */
+  isViewingTimelessNote: boolean
 }
 
 /**
@@ -117,6 +119,7 @@ export function useNoteSnapshotTimeline({
   activateNote,
   isFrozenSectionPreviewRef,
   isViewingEphemeralAutoChapter,
+  isViewingTimelessNote,
 }: UseNoteSnapshotTimelineOptions) {
   const [timelineCurveConstant, setTimelineCurveConstant] = useState(10)
   const [timelineTrackLengthPx, setTimelineTrackLengthPx] = useState(0)
@@ -216,12 +219,12 @@ export function useNoteSnapshotTimeline({
   }, [activeNoteId, noteSnapshots, previewedSnapshotId, timelineTrackLengthPx, setPreviewedSnapshotId])
 
   useEffect(() => {
-    if (!activeNoteId || isPreviewingSnapshot || isViewingEphemeralAutoChapter) return
+    if (!activeNoteId || isPreviewingSnapshot || isViewingEphemeralAutoChapter || isViewingTimelessNote) return
     const notesApi = window.thockdownNotes
     if (!notesApi) return
 
     const intervalId = window.setInterval(async () => {
-      if (!activeNoteId || !notesApi || isPreviewingSnapshot || isViewingEphemeralAutoChapter) return
+      if (!activeNoteId || !notesApi || isPreviewingSnapshot || isViewingEphemeralAutoChapter || isViewingTimelessNote) return
 
       const currentText = normalizeInternalText(latestEditorTextRef.current || activeNoteText)
       const normalizedLatestSnapshot = latestSnapshotContent ? normalizeForComparison(latestSnapshotContent) : null
@@ -246,7 +249,7 @@ export function useNoteSnapshotTimeline({
     return () => {
       window.clearInterval(intervalId)
     }
-  }, [activeNoteId, activeNoteText, latestSnapshotContent, noteSnapshots.placements, refreshSnapshots, isPreviewingSnapshot, timelineTrackLengthPx, latestEditorTextRef, isViewingEphemeralAutoChapter])
+  }, [activeNoteId, activeNoteText, latestSnapshotContent, noteSnapshots.placements, refreshSnapshots, isPreviewingSnapshot, timelineTrackLengthPx, latestEditorTextRef, isViewingEphemeralAutoChapter, isViewingTimelessNote])
 
   const handleReturnToPresent = useCallback(() => {
     if (previewedSnapshotId !== null) {

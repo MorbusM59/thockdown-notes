@@ -29,15 +29,19 @@ export interface UseSnapshotFreezeOptions {
    */
   isFrozenSectionPreviewRef: MutableRefObject<boolean>
   /**
-   * True while `noteId` is the auto-TOC/auto-Open-Items chapter -- a
+   * True while `noteId` has no Time Machine snapshot history of its own to
+   * hibernate into -- either it's the auto-TOC/auto-Open-Items chapter (a
    * materialized view regenerated from live state, not something a person
-   * edits, so it has no Time Machine snapshot history of its own (see
-   * useNoteSnapshotTimeline.ts's isViewingEphemeralAutoChapter, which
-   * suppresses this same automatic-snapshot behavior for the section that's
-   * actually showing it). Without this, hibernating one of two sections
-   * that both have the same ephemeral chapter open would still snapshot and
-   * freeze the inactive one, silently reintroducing the very snapshot
-   * history this note type is meant to never have.
+   * edits; see useNoteSnapshotTimeline.ts's isViewingEphemeralAutoChapter,
+   * which suppresses this same automatic-snapshot behavior for the section
+   * that's actually showing it) or it's frozen (isTimeless), whose entire
+   * history was already permanently deleted the moment it was frozen
+   * (databaseService.ts's freezeNoteFamily) and whose every write is
+   * rejected at the database layer until it's unfrozen (assertNotTimeless).
+   * Without this, hibernating one of two sections showing the same
+   * ephemeral chapter would still snapshot and freeze the inactive one,
+   * silently reintroducing history that note type is meant to never have;
+   * for a frozen note, the attempt would just fail outright instead.
    */
   skipFreeze: boolean
 }

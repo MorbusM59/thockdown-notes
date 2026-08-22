@@ -433,18 +433,11 @@
 
 .editor-stage .editor-empty-state {
   display: none;
-  flex-direction: column;
-  align-items:    center;
-  justify-content: center;
-  gap:            var(--spacing-regular);
-  text-align:     center;
   /* Clickable (rerolls the scene -- see SectionEditorArea.tsx) but
      intentionally styled like inert decoration: no cursor/hover change,
      since it's an undiscoverable-on-purpose easter egg, not a button. */
   pointer-events: auto;
   box-shadow: var(--box-shadow-inverted-filtered);
-  filter: var(--filter-primed-archive);
-  font-family: 'Fredericka the Great';
   z-index: 11;
   /* Keeps this element on its own stable GPU compositing layer instead of
      one that gets torn down/rebuilt as --border-radius-regular changes
@@ -474,7 +467,7 @@
 .editor-stage .editor-empty-state-plate {
   display: none;
   z-index: 10;
-  background: var(--color-input-backdrop);
+  background: linear-gradient(var(--color-input-backdrop), var(--color-input-backdrop)), var(--background-color-root);
 }
 
 .editor-stage .editor-empty-state-plate.is-visible {
@@ -550,6 +543,7 @@
   text-align: center;
   pointer-events: none;
   box-shadow: var(--box-shadow-regular-filtered);
+  background: linear-gradient(var(--color-input-backdrop), var(--color-input-backdrop)), var(--background-color-root);
 }
 
 .editor-stage .editor-escape-hold-panel-btn {
