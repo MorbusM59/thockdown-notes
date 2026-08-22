@@ -183,6 +183,16 @@ interface PanelCell {
  * the panel (`runCell`); rotation is a keyboard-only way to browse without
  * committing, not a prerequisite for activating by mouse.
  *
+ * A small label sits centered inside the ring showing whichever cell's name
+ * is currently relevant: `hoveredIndex` (mouse-only, set/cleared by each
+ * button's own onMouseEnter/onMouseLeave, independent of focus) takes
+ * priority while the mouse is over a cell, falling back to `focusedIndex`
+ * the rest of the time -- see `displayedLabel`. Sized and shaped in
+ * editor.css's `.editor-escape-hold-label` to match the ring's own circle
+ * exactly (same border-radius formula, width/height derived from the same
+ * tokens the ring geometry itself is built from), not a hand-tuned number.
+ *
+
  * Closes itself if it ever ends up open with focus genuinely outside it
  * (`handleRingBlur`) -- the panel is meant to hold focus the entire time
  * it's shown, so losing it to something else in the app is treated as an
@@ -258,6 +268,11 @@ export function EscapeHoldPanel({
   // hadn't finished painting yet. See handleRingKeyDown and the focus-follow
   // effect below.
   const [focusedIndex, setFocusedIndex] = useState(0)
+  // Which cell the mouse is currently over, if any -- drives the label
+  // container (below) taking priority over focusedIndex while hovering, so
+  // hovering previews what a click would activate. Independent of
+  // focus/tabIndex entirely; mouse hover never moves keyboard focus here.
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   // Mirrors of render-scope values the imperative rAF chain below needs to
@@ -503,6 +518,7 @@ export function EscapeHoldPanel({
     applyRotationOffsetToDom(0)
     setTopIndex(0)
     setFocusedIndex(0)
+    setHoveredIndex(null)
   }, [isOpen])
 
   // Invalidates any pending rotation frame if this instance is ever
@@ -529,6 +545,7 @@ export function EscapeHoldPanel({
     if (focusedIndex > maxIndex) {
       setFocusedIndex(maxIndex)
     }
+    setHoveredIndex((current) => (current !== null && current > maxIndex ? null : current))
   }, [cells.length, topIndex, focusedIndex])
 
   // Follows `focusedIndex` with real DOM focus whenever it changes -- see
@@ -698,6 +715,14 @@ export function EscapeHoldPanel({
     }, BLUR_CLOSE_CHECK_DELAY_MS)
   }
 
+  // Hover takes priority over focus -- while the mouse is over a cell, the
+  // label previews what a click would activate; focusedIndex is the
+  // fallback the rest of the time. Either can legitimately point past the
+  // end of `cells` for a stale render in the same tick a shrink hasn't been
+  // clamped yet (the clamp effect above runs after render, not during it),
+  // so this reads defensively rather than asserting the index is valid.
+  const displayedLabel = (hoveredIndex !== null ? cells[hoveredIndex] : cells[focusedIndex])?.label ?? ''
+
   return (
     <div
       className={`editor-escape-hold-ring${isOpen ? ' is-visible' : ''}`}
@@ -706,6 +731,14 @@ export function EscapeHoldPanel({
       onKeyDown={handleRingKeyDown}
       onBlur={handleRingBlur}
     >
+      {/* Centered label of whichever cell is focused, or hovered while the
+          mouse is over one -- see displayedLabel above. Sized/shaped in
+          editor.css to match the panel's own circle exactly (same
+          border-radius formula; width/height computed from the same
+          --circle-diameter/--spacing-large/--btn-square-larger-size tokens
+          the ring geometry itself is built from, so it never needs to be
+          kept in sync by hand). */}
+      <div className="editor-escape-hold-label">{displayedLabel}</div>
       {cells.map((cell, index) => {
         // This cell's position around the ring relative to the current top
         // ("slot 0"), not its fixed array index -- rotating the dial is
@@ -728,6 +761,8 @@ export function EscapeHoldPanel({
             tabIndex={index === focusedIndex ? 0 : -1}
             aria-label={cell.label}
             onClick={() => runCell(cell)}
+            onMouseEnter={() => setHoveredIndex(index)}
+            onMouseLeave={() => setHoveredIndex((current) => (current === index ? null : current))}
           >
             <span className={cell.icon} aria-hidden="true" />
           </button>

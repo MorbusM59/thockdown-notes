@@ -519,6 +519,38 @@
   display: block;
 }
 
+/* Centered label of whichever cell is focused/hovered (EscapeHoldPanel.tsx's
+   displayedLabel). Geometry only here -- size/shape are a functional
+   requirement (must match the ring's own circle exactly, not a look), so
+   they're derived from the SAME tokens escapeHoldRingLayout.ts's geometry is
+   built from rather than a hand-picked number that could drift out of sync
+   with it: width/height = --circle-diameter minus 4 * --spacing-large minus
+   one --btn-square-larger-size (the button width, leaving equal breathing
+   room on all sides between the label and the ring of buttons around it),
+   and border-radius is the exact same calc(...*6) formula
+   .editor-empty-state/.editor-escape-hold-ring's own buttons sit inside.
+   Centered the same way .editor-empty-state centers itself
+   (position:absolute + inset:0 + margin:auto) so it lands on the same point
+   regardless of viewport size. At the live spacing-regular slider's full
+   2px-8px range this works out to roughly 160px down to 112px square --
+   comfortably fits every current cell label at a normal reading size without
+   needing to shrink the multiplier from spacing-large to spacing-regular.
+   Flex-centers its own text as a structural minimum; colors/typography/etc.
+   are intentionally left unstyled here. */
+.editor-stage .editor-escape-hold-label {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width:  calc(var(--circle-diameter) - 4 * var(--spacing-large) - var(--btn-square-larger-size));
+  height: calc(var(--circle-diameter) - 4 * var(--spacing-large) - var(--btn-square-larger-size));
+  border-radius: calc(var(--border-radius-regular) * 6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
 .editor-stage .editor-escape-hold-panel-btn {
   position:        absolute;
   top:             50%;
