@@ -1,12 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FocusEvent, KeyboardEvent } from 'react'
-import {
-  CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER,
-  buildReleaseRampDownPlanFromCurrentParams,
-  resolveApexSpeedPxPerSecFromCurrentParams,
-  sampleReleaseRampDownPlan,
-  sampleScrollPlan,
-} from '../editor/ScrollCurvePlan'
+import { sampleScrollPlan } from '../editor/ScrollCurvePlan'
 import { buildEscapeHoldRotationPlan, pixelsPerSlotAt } from './escapeHoldRotationCurve'
 import { computeEscapeHoldPointAtSlot } from './escapeHoldRingLayout'
 import type { EscapeHoldRingParams } from './escapeHoldRingLayout'
@@ -24,35 +18,6 @@ const BLUR_CLOSE_CHECK_DELAY_MS = 50
 // doc comment for why that mode skips the curve engine below entirely
 // instead of trying to feed it a "reduced" version of the same math.
 const SIMPLE_ROTATION_TRANSITION_MS = 200
-
-// Once a rapid-tap run's remaining distance to its authoritative target
-// (pendingTargetSlotRef) drops to this many slots or fewer, cruise hands off
-// to one exact discrete step straight to the target instead of continuing to
-// coast -- see handleRingKeyDown's tap-merge branch and
-// runContinuousRotation. Deliberately distance-bounded, not time-debounced:
-// a timer can only ever guess when "no more taps are coming," which is what
-// let a run land on the wrong slot before (see the component doc comment's
-// tap-run paragraph); the discrete step's own landing is exact by
-// construction regardless of exactly when it's triggered, so nothing here
-// needs to guess correctly, only to trigger it before more than this many
-// slots would otherwise be crossed by continuing to coast.
-const SETTLE_TRIGGER_SLOTS = 1
-
-// A key that's still down this long after a run's first tap is deliberately
-// NOT yet trusted as a genuine hold, no matter how fast the curve is -- see
-// armHoldCheck. Fixed and independent of curve shape, unlike the
-// crossing-time-based check this replaced (see the component doc comment's
-// tap-run paragraph): that one asked "has the bell curve's velocity reached
-// cruise speed yet," which for an aggressive shape/dynamic setting could be
-// under 30ms -- far faster than a human can physically release a key after
-// tapping it, so an ordinary tap routinely still looked "held" at that
-// check and got wrongly escalated into unbounded continuous rotation,
-// overshooting well past the one slot a tap should ever move.
-const HOLD_CHECK_INTERVAL_MS = 100
-// Total elapsed time since a run's first tap, with the key still down the
-// whole way, before continued key-down is trusted as a genuine hold rather
-// than a slower deliberate multi-tap -- see armHoldCheck.
-const HOLD_CONFIRM_DELAY_MS = 200
 
 export interface EscapeHoldPanelProps {
   /** Whether the panel is the one currently "open" -- this component now stays
@@ -105,14 +70,23 @@ interface PanelCell {
  * rotation, and the newly-active one simply happens to be the one that ends
  * up at the top.
  *
- * `topIndex` only updates once a rotation gesture *fully* settles (a single
- * tap's animation finishing, or a held key's continuous spin decelerating
- * and clicking into place after release) -- not continuously while a long
- * hold is spinning through many cells. Keeping focus/tabIndex/aria pinned to
- * the pre-gesture cell throughout the animation, rather than jumping cell to
- * cell many times a second, is deliberate: nothing about *which* action is
- * "selected" is meaningful again until the ring stops moving, the same way
- * you can't read a spinning reel.
+ * `topIndex` (the animation's own "at rest" reference position, used only
+ * for the JSX render below) only updates once a rotation gesture *fully*
+ * settles -- not continuously while it's in flight; during flight,
+ * applyRotationOffsetToDom overrides the DOM imperatively every frame from
+ * rotationOffsetRef instead, so topIndex lagging doesn't cause any visible
+ * stutter. Focus/tabIndex/aria are deliberately NOT tied to topIndex,
+ * though, and don't wait for the animation: `focusedIndex` is a separate
+ * piece of state that updates the instant a keydown is accepted (before its
+ * animation even starts -- see handleRingKeyDown), so DOM focus always
+ * matches the arrow key's actual target immediately. An earlier version
+ * tied focus to topIndex directly and deferred it to animation completion,
+ * on the theory that "which action is selected" isn't meaningful until the
+ * ring stops moving -- but that meant a fast Left-then-Space could still
+ * activate whatever the *previous* target was, since Space would fire on
+ * the still-focused old button before the animation (and topIndex) caught
+ * up. Left+Space now always produces the same outcome regardless of how
+ * long the animation takes.
  *
  * Rotation animation reuses the editor's own smooth-scroll toolkit
  * (ScrollCurvePlan.ts, already shared today between render-view and
@@ -120,93 +94,28 @@ interface PanelCell {
  * escapeHoldRotationCurve.ts's module comment for the full mapping (one
  * "page" of scroll <-> one "slot" of rotation) and CursorClickCurve.ts for
  * the precedent of adapting that same toolkit to a different interaction.
- * The state machine below mirrors CM6Editor.tsx's PageUp/PageDown handling
- * closely enough to read side by side with it, with one deliberate
- * departure -- see the tap-run paragraph below for why a distinct tap
- * (KeyboardEvent.repeat === false) doesn't splice into continuous mode
- * anywhere near as eagerly as `scrollToQuantizedSmooth`'s crossing-time
- * handoff does:
- *   - Tap: one discrete bell-curve step of exactly 1 slot (`advanceRun` ->
- *     `finishToTarget` -> `playDiscretePlan`), with a 100ms-cadence poll
- *     (`armHoldCheck`) deciding, independently of the curve's own shape,
- *     whether continued key-down eventually earns real continuous rotation.
- *   - Continuous (armHoldCheck confirming a hold, 200ms in): constant
- *     angular velocity, advanced by simple delta-time accumulation each
- *     frame (`runContinuousRotation`) -- no bell sampling needed for
- *     constant velocity, exactly like `runPageContinuousScroll`.
- *   - Release (keyup): decelerates from the current continuous velocity
- *     back toward zero along the bell's own natural tail
- *     (`buildReleaseRampDownPlanFromCurrentParams`/
- *     `sampleReleaseRampDownPlan`, reused unmodified) -- exactly like
- *     `startPageReleaseRampDown`.
- *   - Settle: the one genuinely new phase scroll never needed, since any
- *     resting scrollTop is valid but the ring MUST end up on a whole slot.
- *     Once the release ramp-down's tail duration elapses, whatever
- *     fractional slot it left the ring at gets rounded to the nearest whole
- *     one and played as one more short discrete step (reusing the exact
- *     same bell-curve machinery as a tap) -- a quick, natural "click into
- *     place" rather than an abrupt snap, since the remaining distance is
- *     always <= 0.5 slot.
- * A "run" -- either several taps landing faster than one step's own bell
- * curve takes to finish, or a single key-press whose eventual hold status
- * is still unconfirmed -- is neither queued nor replayed as independent
- * bell curves from scratch (earlier versions of this file did each of
- * those, and each broke a different way -- see below): N taps (and every
- * step played before a hold is confirmed) must always add up to exactly N
- * slots, no overshoot, no undershoot, no bounce-back. `pendingTargetSlotRef`
- * is the run's authoritative destination -- an exact integer, extended by
- * +/-1 on every step (`advanceRun`, `tapRunActiveRef` marks a run as in
- * progress) -- and every phase of the run ultimately lands precisely on it:
- * `playDiscretePlan` always finishes exactly at `start + signedDistanceSlots`
- * by construction, and `finishToTarget` always calls it with the exact live
- * remaining distance to `pendingTargetSlotRef`, however far off-target the
- * animation is at the moment it's triggered. `advanceRun` cruises at a
- * steady velocity via the same `startContinuousRotation` a confirmed hold
- * uses only when still far from the target (avoiding the stutter of
- * restarting a fresh 0-velocity curve on every step, which is what one
- * earlier version did for taps); `runContinuousRotation` checks the
- * remaining distance every frame and, once it drops to
- * `SETTLE_TRIGGER_SLOTS` or fewer, hands off to `finishToTarget` for the
- * final exact leg instead of continuing to coast (a still-earlier version
- * used a time debounce here instead of tracking distance to a fixed target
- * -- guessing "no more taps are coming" from elapsed time rather than
- * bounding by an exact target is exactly what let a run overshoot the tap
- * count).
  *
- * Whether an unbroken run of steps ever becomes a genuine, unbounded hold
- * is decided by `armHoldCheck`, not by whether the bell curve's own
- * velocity happens to reach cruise speed (a still-earlier version keyed
- * this off `resolveRampCrossingTimeSecFromCurrentParams` -- how long the
- * curve takes to cross the target speed -- which for an aggressive
- * shape/dynamic setting could be well under the time a human physically
- * takes to release a key after tapping it, so a single ordinary tap
- * routinely still read as "held" at that check and got escalated into
- * unbounded continuous rotation, overshooting past the one slot a tap
- * should ever move). `armHoldCheck` instead polls, at a flat
- * `HOLD_CHECK_INTERVAL_MS` cadence independent of curve shape, whether the
- * key that started the run is still down; each tick before
- * `HOLD_CONFIRM_DELAY_MS` has elapsed just chains one more exact
- * `advanceRun` step (armed again from `handleRingKeyDown`'s repeat:false
- * branch too, for every distinct tap -- see that branch for why it, not
- * `advanceRun`, owns resetting the run's start-time clock), so what's on
- * screen while a hold's status is still uncertain is literally the same
- * "one exact step after another" a rapid-tap run produces; only once a
- * still-held key crosses `HOLD_CONFIRM_DELAY_MS` does it hand off to real
- * continuous rotation. `tapRunActiveRef` distinguishes the whole
- * run/poll path (bounded by `pendingTargetSlotRef`) from a confirmed hold
- * (which has no fixed target and instead free-runs until its own keyup --
- * see handleRingKeyUp) so a run's own near-immediate keyup (each tap is a
- * real press+release, unlike a held key which sends no keyup until
- * actually released) doesn't trigger a premature release.
+ * CURRENT SCOPE (deliberately, temporarily minimal -- the hold/rapid-tap
+ * path is closed for now while the keydown-only baseline gets nailed down
+ * first): every keydown that lands while nothing is animating plays exactly
+ * one discrete bell-curve step of exactly 1 slot (`playDiscretePlan`) using
+ * the live curve parameters, and always lands precisely at `start +
+ * direction` by construction -- no overshoot, no undershoot. A keydown that
+ * lands while an animation is still in flight is simply discarded (no
+ * queueing, no merging, no interruption) -- `discreteRafIdRef` is the only
+ * thing that decides this. Keyup is not handled at all yet. None of the
+ * previous continuous/hold/rapid-tap-run machinery exists right now; it'll
+ * be rebuilt deliberately, case by case, on top of this baseline once it's
+ * solid.
  *
  * All of the above only runs when `reduceVisualEffects` is false (the
  * Performance section's "Reduce visual effects" toggle). When true, the
- * whole curve engine is skipped -- every tap or hold-repeat just steps
- * `topIndex` by 1 immediately, and `.editor-escape-hold-panel-btn`'s own
- * plain CSS transition (added via the `is-simple-rotation` class only in
- * this mode -- see editor.css) eases the position change instead. Cheaper,
- * and there's no dial-specific settings to keep in sync with a "reduced"
- * mode since this mode doesn't touch the curve engine at all.
+ * whole curve engine is skipped -- every keydown just steps `topIndex` by 1
+ * immediately, and `.editor-escape-hold-panel-btn`'s own plain CSS
+ * transition (added via the `is-simple-rotation` class only in this mode --
+ * see editor.css) eases the position change instead. Cheaper, and there's
+ * no dial-specific settings to keep in sync with a "reduced" mode since
+ * this mode doesn't touch the curve engine at all.
  *
  * The animation itself is driven imperatively, not through React state per
  * frame: a rAF loop writes each button's `style.transform` directly from a
@@ -288,13 +197,22 @@ export function EscapeHoldPanel({
   }, [hasActiveNote, isActiveNoteTimeless, isExportingPdf, isExportingMd, onCreateNote, onCreateChapter, onExportPdf, onExportMd, onOpenHelp])
 
   const [topIndex, setTopIndex] = useState(0)
+  // Which cell is focused/tabbable -- deliberately separate state from
+  // topIndex (which only updates once a step's animation visually
+  // completes, see finalizeTopIndex): this one updates immediately in
+  // handleRingKeyDown, the instant a keydown is accepted, so a fast
+  // Left-then-Space always activates the cell the arrow key actually
+  // targeted rather than whatever was still focused because the animation
+  // hadn't finished painting yet. See handleRingKeyDown and the focus-follow
+  // effect below.
+  const [focusedIndex, setFocusedIndex] = useState(0)
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([])
 
-  // Mirrors of render-scope values the imperative rAF/timer chains below
-  // need to read, since a callback may have been scheduled by an earlier
-  // render's closure -- see cellsRef's own note. Reading through a ref
-  // (a stable object mutated in place) always gets the current value
-  // regardless of which render's function is the one actually running.
+  // Mirrors of render-scope values the imperative rAF chain below needs to
+  // read, since a callback may have been scheduled by an earlier render's
+  // closure -- see cellsRef's own note. Reading through a ref (a stable
+  // object mutated in place) always gets the current value regardless of
+  // which render's function is the one actually running.
   const cellsRef = useRef(cells)
   useEffect(() => { cellsRef.current = cells }, [cells])
   const ringGeometryParamsRef = useRef<EscapeHoldRingParams>({ borderRadiusRegularPx, spacingRegularPx })
@@ -303,81 +221,21 @@ export function EscapeHoldPanel({
   }, [borderRadiusRegularPx, spacingRegularPx])
 
   // The live, possibly-fractional rotation position (in slots), driven by
-  // the rAF loops below. Always equals `topIndex` exactly whenever nothing
+  // the rAF loop below. Always equals `topIndex` exactly whenever nothing
   // is animating -- see the component doc comment on why the animation is
   // imperative rather than per-frame React state.
   const rotationOffsetRef = useRef(0)
 
-  // Rotation-engine state, mirroring CM6Editor.tsx's PageUp/PageDown
-  // handler almost variable-for-variable -- see the component doc comment.
-  const heldKeysRef = useRef<Set<string>>(new Set())
-  const continuousDirectionRef = useRef<-1 | 0 | 1>(0)
-  const continuousLastTsRef = useRef<number | null>(null)
-  const continuousRafIdRef = useRef<number | null>(null)
-  const releaseRafIdRef = useRef<number | null>(null)
-  const handoffTimeoutIdRef = useRef<number | null>(null)
-  // Whichever discrete (tap or settle) bell-curve animation is currently
-  // playing, if any -- separate from the continuous/release rAF ids above
-  // since exactly one of "discrete" or "continuous-or-release" is ever
-  // active at a time, but they're conceptually distinct loops.
+  // The single in-flight discrete-step animation, if any. Also doubles as
+  // the "is something animating" check that decides whether a keydown gets
+  // played or discarded -- see handleRingKeyDown.
   const discreteRafIdRef = useRef<number | null>(null)
-
-  // The authoritative destination (in whole slots) for the rapid-tap run
-  // currently in progress, if any -- only meaningful while tapRunActiveRef
-  // is true. Set from the first tap of a run (current rest position + 1)
-  // and extended by +/-1 on every subsequent tap that arrives before the
-  // ring has settled, so N taps always add up to exactly N slots no matter
-  // how the animation in between gets interrupted and replanned.
-  const pendingTargetSlotRef = useRef(0)
-  // performance.now() timestamp of the current run's first tap -- the basis
-  // for HOLD_CONFIRM_DELAY_MS in armHoldCheck. Only meaningful while
-  // tapRunActiveRef is true.
-  const runStartTimeMsRef = useRef(0)
-  // True from the first tap of a rapid-tap run until it fully settles
-  // (finalizeTopIndex) or a genuine OS-repeat hold takes over -- see the
-  // component doc comment's tap-run paragraph. Distinguishes "the ring is
-  // moving because of tap-run merging, bounded by pendingTargetSlotRef"
-  // from "the ring is moving because of a genuine held key, which has no
-  // fixed target and releases on its own keyup instead" -- both
-  // handleRingKeyUp and runContinuousRotation need to tell those apart.
-  const tapRunActiveRef = useRef(false)
-
-  const clearHandoffTimeout = () => {
-    if (handoffTimeoutIdRef.current !== null) {
-      window.clearTimeout(handoffTimeoutIdRef.current)
-      handoffTimeoutIdRef.current = null
-    }
-  }
 
   const cancelDiscreteAnimation = () => {
     if (discreteRafIdRef.current !== null) {
       cancelAnimationFrame(discreteRafIdRef.current)
       discreteRafIdRef.current = null
     }
-  }
-
-  const stopContinuousRotation = () => {
-    continuousDirectionRef.current = 0
-    continuousLastTsRef.current = null
-    if (continuousRafIdRef.current !== null) {
-      cancelAnimationFrame(continuousRafIdRef.current)
-      continuousRafIdRef.current = null
-    }
-    if (releaseRafIdRef.current !== null) {
-      cancelAnimationFrame(releaseRafIdRef.current)
-      releaseRafIdRef.current = null
-    }
-  }
-
-  // Cancels every in-flight animation/timer -- used when the panel closes
-  // or reopens, so nothing from a previous session can keep running into a
-  // new one.
-  const stopAllRotation = () => {
-    clearHandoffTimeout()
-    cancelDiscreteAnimation()
-    stopContinuousRotation()
-    heldKeysRef.current.clear()
-    tapRunActiveRef.current = false
   }
 
   // Writes every cell's current position directly to the DOM from the given
@@ -409,16 +267,12 @@ export function EscapeHoldPanel({
     const wrapped = ((Math.round(rotationOffsetRef.current) % count) + count) % count
     rotationOffsetRef.current = wrapped
     applyRotationOffsetToDom(wrapped)
-    tapRunActiveRef.current = false
     setTopIndex(wrapped)
   }
 
   // Plays a single bell-curve step of `signedDistanceSlots` from the
   // current rotationOffsetRef, calling `onComplete` once it lands exactly
-  // there. Shared by both the discrete tap step and the post-release
-  // settle hop -- see the component doc comment -- since both are just "one
-  // bell-curve position animation from here to there," differing only in
-  // distance and in whether a handoff timer gets armed alongside them.
+  // there.
   const playDiscretePlan = (signedDistanceSlots: number, onComplete: () => void) => {
     const count = cellsRef.current.length
     if (count === 0) return
@@ -451,184 +305,6 @@ export function EscapeHoldPanel({
     discreteRafIdRef.current = requestAnimationFrame(animateFrame)
   }
 
-  // Plays the exact remaining distance to a target as one discrete step --
-  // `playDiscretePlan` always lands precisely at `start + signedDistanceSlots`
-  // regardless of how far off the ideal moment this was triggered, which is
-  // what makes a rapid-tap run's landing exact no matter when cruise (or a
-  // later tap) hands off to it. Guards the near-zero case the same way
-  // startSettle does, so a step that's already essentially at its target
-  // doesn't sit through a full animation duration doing nothing.
-  const finishToTarget = (remaining: number) => {
-    stopContinuousRotation()
-    if (Math.abs(remaining) < 0.001) {
-      finalizeTopIndex()
-      return
-    }
-    playDiscretePlan(remaining, finalizeTopIndex)
-  }
-
-  // Rounds wherever rotationOffsetRef currently sits to the nearest whole
-  // slot and plays that (always <= 0.5 slot) as one more quick discrete
-  // step -- see the component doc comment for why this phase exists at all
-  // (scroll never needed it; the ring can't rest on a fractional slot).
-  const startSettle = () => {
-    const current = rotationOffsetRef.current
-    const target = Math.round(current)
-    const distance = target - current
-    if (Math.abs(distance) < 0.001) {
-      finalizeTopIndex()
-      return
-    }
-    playDiscretePlan(distance, finalizeTopIndex)
-  }
-
-  const continuousSpeedSlotsPerSec = () => Math.max(
-    0.001,
-    resolveApexSpeedPxPerSecFromCurrentParams(1) * CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER,
-  )
-
-  const runContinuousRotation = (nowMs: number) => {
-    if (continuousDirectionRef.current === 0) {
-      continuousRafIdRef.current = null
-      continuousLastTsRef.current = null
-      return
-    }
-    const previousTs = continuousLastTsRef.current
-    continuousLastTsRef.current = nowMs
-    if (previousTs !== null) {
-      const deltaSec = Math.max(0, (nowMs - previousTs) / 1000)
-      rotationOffsetRef.current += continuousDirectionRef.current * continuousSpeedSlotsPerSec() * deltaSec
-      applyRotationOffsetToDom(rotationOffsetRef.current)
-    }
-
-    // A rapid-tap run (as opposed to a genuine held key, which has no fixed
-    // target and free-runs until its own keyup) is bounded by
-    // pendingTargetSlotRef -- once cruising has closed the distance to it
-    // down to SETTLE_TRIGGER_SLOTS or fewer, hand off to one exact discrete
-    // step the rest of the way instead of continuing to coast, so the run
-    // always lands exactly on the slot the taps actually committed to, not
-    // wherever a few more frames of constant-velocity coasting happened to
-    // land.
-    if (tapRunActiveRef.current) {
-      const remaining = pendingTargetSlotRef.current - rotationOffsetRef.current
-      if (Math.abs(remaining) <= SETTLE_TRIGGER_SLOTS) {
-        finishToTarget(remaining)
-        return
-      }
-    }
-
-    continuousRafIdRef.current = requestAnimationFrame(runContinuousRotation)
-  }
-
-  const startContinuousRotation = (direction: 1 | -1) => {
-    cancelDiscreteAnimation()
-    const previousDirection = continuousDirectionRef.current
-    continuousDirectionRef.current = direction
-    if (continuousRafIdRef.current === null || previousDirection !== direction) {
-      continuousLastTsRef.current = null
-    }
-    if (continuousRafIdRef.current === null) {
-      continuousRafIdRef.current = requestAnimationFrame(runContinuousRotation)
-    }
-  }
-
-  // Decelerates from the current continuous velocity back toward zero along
-  // the bell's own natural tail (reused from ScrollCurvePlan.ts unmodified),
-  // then hands off to startSettle once the tail finishes -- see the
-  // component doc comment.
-  const startReleaseRampDown = (direction: 1 | -1) => {
-    const speedSlotsPerSec = continuousSpeedSlotsPerSec()
-    const rampDownPlan = buildReleaseRampDownPlanFromCurrentParams(direction, speedSlotsPerSec)
-    stopContinuousRotation()
-    if (!rampDownPlan) {
-      startSettle()
-      return
-    }
-
-    const startSlot = rotationOffsetRef.current
-    let startTimeMs: number | null = null
-
-    const animateRampDown = (nowMs: number) => {
-      if (startTimeMs === null) startTimeMs = nowMs
-      const elapsedSec = Math.max(0, (nowMs - startTimeMs) / 1000)
-      const displacement = sampleReleaseRampDownPlan(rampDownPlan, elapsedSec)
-      rotationOffsetRef.current = startSlot + displacement
-      applyRotationOffsetToDom(rotationOffsetRef.current)
-
-      if (elapsedSec >= rampDownPlan.tailDurationSec) {
-        releaseRafIdRef.current = null
-        startSettle()
-        return
-      }
-      releaseRafIdRef.current = requestAnimationFrame(animateRampDown)
-    }
-
-    releaseRafIdRef.current = requestAnimationFrame(animateRampDown)
-  }
-
-  // Extends (or starts) the current run's authoritative target by one slot
-  // in `direction` and moves toward it -- shared by every tap and every
-  // armHoldCheck poll tick while a run is still unconfirmed, so a distinct
-  // tap and a "maybe this is a hold" poll tick both advance the ring the
-  // exact same way. See the component doc comment's tap-run paragraph and
-  // finishToTarget for why this always lands exactly on the target
-  // regardless of what was already in flight.
-  const advanceRun = (direction: 1 | -1) => {
-    if (tapRunActiveRef.current) {
-      pendingTargetSlotRef.current += direction
-    } else {
-      // Not runStartTimeMsRef -- that's owned entirely by handleRingKeyDown's
-      // repeat:false branch (the only moment a *physical* key-press begins),
-      // not by whether an animation happens to be mid-flight right now. This
-      // branch can also be reached from armHoldCheck's own poll tick, when
-      // an earlier discrete step in the same still-held press has already
-      // finished and cleared tapRunActiveRef (finalizeTopIndex) between
-      // ticks -- resetting the clock here would keep pushing hold
-      // confirmation out for as long as each individual step keeps
-      // finishing before the next 100ms poll, which for a fast curve shape
-      // could mean never.
-      pendingTargetSlotRef.current = Math.round(rotationOffsetRef.current) + direction
-      tapRunActiveRef.current = true
-    }
-
-    const remaining = pendingTargetSlotRef.current - rotationOffsetRef.current
-    if (Math.abs(remaining) <= SETTLE_TRIGGER_SLOTS) {
-      finishToTarget(remaining)
-    } else {
-      startContinuousRotation(remaining > 0 ? 1 : -1)
-    }
-  }
-
-  // Polls, at a fixed HOLD_CHECK_INTERVAL_MS cadence independent of curve
-  // shape, whether `key` is still down and whether the run it started has
-  // now run long enough (HOLD_CONFIRM_DELAY_MS) to trust as a genuine hold
-  // rather than a tap or a slower deliberate multi-tap -- see the component
-  // doc comment's tap-run paragraph for why this replaced the old
-  // crossing-time-based single-shot handoff. While unconfirmed, each tick
-  // chains one more exact advanceRun step in the same direction (matching
-  // "play regular one after another single animations" rather than jumping
-  // straight to free-running continuous rotation) and reschedules itself;
-  // once confirmed, it hands off to the real continuous hold cycle and
-  // stops polling (the key's own keyup takes over release timing from
-  // there -- see handleRingKeyUp).
-  const armHoldCheck = (direction: 1 | -1, key: string) => {
-    clearHandoffTimeout()
-    handoffTimeoutIdRef.current = window.setTimeout(() => {
-      handoffTimeoutIdRef.current = null
-      if (!heldKeysRef.current.has(key)) return
-      if (performance.now() - runStartTimeMsRef.current >= HOLD_CONFIRM_DELAY_MS) {
-        // A hold has no fixed target and releases on its own keyup instead,
-        // so it must not stay bounded by whatever target the run so far
-        // set up.
-        tapRunActiveRef.current = false
-        startContinuousRotation(direction)
-        return
-      }
-      advanceRun(direction)
-      armHoldCheck(direction, key)
-    }, HOLD_CHECK_INTERVAL_MS)
-  }
-
   // Resets the whole rotation engine (and topIndex) back to slot 0 each
   // time the panel transitions open OR closed -- open, so a stale position
   // from a previous time this section's panel was open never gets a chance
@@ -646,36 +322,63 @@ export function EscapeHoldPanel({
   // no longer the same moment as "on open"; keying off `isOpen` instead is
   // what makes arrow keys work immediately on every open, not just the
   // first one.
+  //
+  // applyRotationOffsetToDom(0) is called explicitly here, not left to
+  // React's own re-render from setTopIndex(0): if the panel had been
+  // closed mid-animation, topIndex was never advanced (finalizeTopIndex
+  // never got to run -- cancelDiscreteAnimation above just stops the rAF
+  // loop, it doesn't rewind anything it already painted), so it's commonly
+  // already 0 -- and setTopIndex(0) when the state is already 0 is a no-op
+  // that React bails out of without re-rendering. With nothing else to
+  // write the DOM back to the rest position, every button was left exactly
+  // where the cancelled animation's last frame had imperatively placed it,
+  // so reopening the panel showed it mid-spin instead of at rest -- found
+  // live as icons stuck off-position after closing and reopening
+  // mid-animation. Calling this directly guarantees the DOM is correct
+  // before the browser paints the newly-visible panel, regardless of
+  // whether topIndex's own state value happens to change.
   useLayoutEffect(() => {
-    stopAllRotation()
+    cancelDiscreteAnimation()
     if (!isOpen) return
     rotationOffsetRef.current = 0
+    applyRotationOffsetToDom(0)
     setTopIndex(0)
+    setFocusedIndex(0)
   }, [isOpen])
 
-  // Invalidates any pending rotation timers/frames if this instance is ever
+  // Invalidates any pending rotation frame if this instance is ever
   // actually unmounted (rare -- see the component doc comment on why it's
   // normally just hidden, not unmounted -- but cheap insurance).
   useEffect(() => {
     return () => {
-      stopAllRotation()
+      cancelDiscreteAnimation()
     }
   }, [])
 
   // Clamps a stale index if the cell count shrinks (e.g. a note closes and
-  // New Chapter/Export drop out) while a later cell was the top one.
+  // New Chapter/Export drop out) while a later cell was the top one --
+  // topIndex and focusedIndex are checked/clamped independently since they
+  // can differ while a step is still animating (see focusedIndex's own
+  // note above).
   useEffect(() => {
-    if (topIndex > cells.length - 1) {
-      const clamped = Math.max(0, cells.length - 1)
-      rotationOffsetRef.current = clamped
-      setTopIndex(clamped)
+    const maxIndex = Math.max(0, cells.length - 1)
+    if (topIndex > maxIndex) {
+      rotationOffsetRef.current = maxIndex
+      setTopIndex(maxIndex)
     }
-  }, [cells.length, topIndex])
+    if (focusedIndex > maxIndex) {
+      setFocusedIndex(maxIndex)
+    }
+  }, [cells.length, topIndex, focusedIndex])
 
-  // Follows `topIndex` with real DOM focus whenever it changes -- see the
-  // component doc comment for why this, not a single unmoving DOM node, is
-  // what keeps a focused/interactive slot pinned at the top, and why this
-  // now only fires once per fully-settled gesture rather than continuously.
+  // Follows `focusedIndex` with real DOM focus whenever it changes -- see
+  // the component doc comment for why this, not a single unmoving DOM node,
+  // is what keeps a focused/interactive slot pinned at the top. Keyed off
+  // focusedIndex rather than topIndex specifically so this fires the
+  // instant a keydown is accepted (handleRingKeyDown sets focusedIndex
+  // immediately, before the step's animation even starts), not once the
+  // animation visually finishes -- see focusedIndex's own note above for
+  // why that lag mattered.
   //
   // Deferred via setTimeout, deliberately NOT synchronous/useLayoutEffect:
   // when this section just became active because of a real mouse click
@@ -695,10 +398,10 @@ export function EscapeHoldPanel({
   useEffect(() => {
     if (!isOpen) return
     const timeoutId = window.setTimeout(() => {
-      buttonRefs.current[topIndex]?.focus()
+      buttonRefs.current[focusedIndex]?.focus()
     }, FOCUS_GRAB_DELAY_MS)
     return () => window.clearTimeout(timeoutId)
-  }, [isOpen, topIndex])
+  }, [isOpen, focusedIndex])
 
   const directionFromKey = (event: KeyboardEvent<HTMLDivElement>): 1 | -1 | null => {
     if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') return -1
@@ -708,15 +411,16 @@ export function EscapeHoldPanel({
   }
 
   // Cheap fallback path for reduceVisualEffects: true -- see the component
-  // doc comment. No curve engine at all: every key press (tap or OS repeat
-  // alike) steps by exactly one slot immediately, and the CSS transition
-  // added by `is-simple-rotation` (editor.css) eases the position change.
+  // doc comment. No curve engine at all: every keydown steps by exactly one
+  // slot immediately, and the CSS transition added by `is-simple-rotation`
+  // (editor.css) eases the position change.
   const stepSimple = (direction: 1 | -1) => {
     const count = cells.length
     if (count === 0) return
     const next = ((topIndex + direction) % count + count) % count
     rotationOffsetRef.current = next
     setTopIndex(next)
+    setFocusedIndex(next)
   }
 
   const handleRingKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -734,59 +438,22 @@ export function EscapeHoldPanel({
       return
     }
 
-    const key = event.key
-    heldKeysRef.current.add(key)
+    // Baseline behavior only, for now -- see the component doc comment's
+    // CURRENT SCOPE paragraph: an animation already in flight means this
+    // keydown (whether a fresh tap or OS repeat) is simply discarded, not
+    // queued or merged.
+    if (discreteRafIdRef.current !== null) return
 
-    if (event.repeat) {
-      // OS auto-repeat only ever fires for a key that already went through
-      // its own initial (repeat: false) keydown below -- which by then has
-      // already armed armHoldCheck's poll loop, and that loop is what's
-      // deciding, on its own fixed cadence, whether/when this becomes a
-      // confirmed hold (see the component doc comment's tap-run paragraph).
-      // Nothing more to do with the repeat event itself.
-      return
-    }
+    // Move focus to the target cell right now, not once the animation
+    // finishes -- see focusedIndex's own note above. Nothing is animating
+    // (checked above), so rotationOffsetRef.current already equals topIndex
+    // exactly, making this the same target playDiscretePlan/finalizeTopIndex
+    // will land on.
+    const count = cellsRef.current.length
+    if (count === 0) return
+    setFocusedIndex(((topIndex + direction) % count + count) % count)
 
-    // A distinct tap -- KeyboardEvent.repeat is only ever false for the
-    // first keydown of a physical press, so this is exactly the moment a
-    // new key-press begins. Anchor the hold-confirmation clock here
-    // (unconditionally, even for a tap landing mid-run -- see armHoldCheck
-    // and advanceRun's own doc comment for why it deliberately does NOT
-    // touch this), advance the run by exactly one slot, and arm the poll
-    // loop that decides whether continued key-down eventually earns
-    // unbounded continuous rotation.
-    clearHandoffTimeout()
-    runStartTimeMsRef.current = performance.now()
-    advanceRun(direction)
-    if (tapRunActiveRef.current) {
-      armHoldCheck(direction, key)
-    }
-  }
-
-  const handleRingKeyUp = (event: KeyboardEvent<HTMLDivElement>) => {
-    const direction = directionFromKey(event)
-    if (direction === null) return
-    if (reduceVisualEffects) return
-    heldKeysRef.current.delete(event.key)
-    clearHandoffTimeout()
-    // A rapid-tap run's own keyup fires almost immediately after its
-    // keydown (it's a real press+release, not a held key) -- if that were
-    // allowed to reach the empty-set check below, every tap in a run would
-    // immediately decelerate the continuous rotation it just started,
-    // undoing the whole point of merging taps into one motion. Release
-    // timing for a run is distance-driven instead (see
-    // runContinuousRotation/handleRingKeyDown); a genuine held key never
-    // sets tapRunActiveRef, so its own keyup still falls through to the
-    // normal release below.
-    if (tapRunActiveRef.current) return
-    if (heldKeysRef.current.size === 0) {
-      const activeDirection = continuousDirectionRef.current
-      if (activeDirection !== 0) {
-        startReleaseRampDown(activeDirection)
-      } else {
-        stopContinuousRotation()
-      }
-    }
+    playDiscretePlan(direction, finalizeTopIndex)
   }
 
   const runCell = (cell: PanelCell) => {
@@ -829,7 +496,6 @@ export function EscapeHoldPanel({
       role="toolbar"
       aria-label="Quick note actions"
       onKeyDown={handleRingKeyDown}
-      onKeyUp={handleRingKeyUp}
       onBlur={handleRingBlur}
     >
       {cells.map((cell, index) => {
@@ -851,7 +517,7 @@ export function EscapeHoldPanel({
               transform: `translate(-50%, -50%) translate(${point.x}px, ${point.y}px)`,
               '--rotation-duration': `${SIMPLE_ROTATION_TRANSITION_MS}ms`,
             } as CSSProperties}
-            tabIndex={index === topIndex ? 0 : -1}
+            tabIndex={index === focusedIndex ? 0 : -1}
             aria-label={cell.label}
             onClick={() => runCell(cell)}
           >
