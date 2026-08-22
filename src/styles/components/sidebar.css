@@ -202,6 +202,7 @@
   flex:         1 1 0;
   width:        auto;
   min-width:    0;
+  min-height:   0;
   aspect-ratio: 1 / 1;
   padding:    var(--spacing-regular);
   margin:     0;
@@ -289,9 +290,7 @@
 }
 
 .notes-sidebar .view-toggle .icon-btn.btn-options .view-toggle-options-glyph {
-  /* Roughly matches the other 5 icons' own fill ratio (a 6px inset on a
-     ~40px button leaves a 28px icon, ~70% of the button's width). */
-  font-size: 100cqw;
+  font-size: calc(55cqw + 3*var(--spacing-small));
 }
 
 
