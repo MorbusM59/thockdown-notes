@@ -525,16 +525,20 @@
   left:            50%;
   /* Ring placement (translate(-50%,-50%) centers the button on its point;
      the second translate(...) is the actual ring offset) comes from each
-     button's own inline `transform` -- see EscapeHoldPanel.tsx. Transitioning
-     transform is what animates the "telephone dial" rotation: every cell's
-     slot (and so its transform) shifts by one step at once, and since
-     adjacent slots -- including the slot-0/slot-(count-1) wrap pair -- are
-     always geometrically adjacent points on the ring, a plain linear
-     transition between old and new transform values already traces a short
-     step around the ring rather than a straight line across the middle, with
-     no separate animation/timing code needed. Also covers cell count changing
-     (a note opening/closing drops/adds ring cells) reflowing smoothly instead
-     of jumping. */
+     button's own inline `transform` -- see EscapeHoldPanel.tsx. No
+     `transform` transition here by default: the default (reduceVisualEffects:
+     false) rotation is driven by a requestAnimationFrame loop that writes
+     `style.transform` directly, every frame, from the shared smooth-scroll
+     curve toolkit reused for this rotation (escapeHoldRotationCurve.ts) -- a
+     CSS transition running at the same time would fight those per-frame
+     writes, trying to re-ease between each one and turning the precise curve
+     into a laggy, over-smoothed blur. `.is-simple-rotation` (added only when
+     reduceVisualEffects is true, which skips that whole engine and just
+     jumps `topIndex` by one slot per key press) is the one place this
+     transition is actually wanted, timed by `--rotation-duration` (set
+     inline alongside `transform`) rather than a fixed number so it stays in
+     step with EscapeHoldPanel.tsx's own constant instead of two numbers
+     that can drift apart. */
   width:           var(--btn-square-larger-size);
   height:          var(--btn-square-larger-size);
   min-width:       var(--btn-square-larger-size);
@@ -548,8 +552,12 @@
   border-radius:   var(--border-radius-regular);
   background:      var(--btn-bg-default);
   color:           var(--color-text-60);
-  transition:      background 0.2s, border-color 0.2s, color 0.2s, transform 0.2s ease;
+  transition:      background 0.2s, border-color 0.2s, color 0.2s;
   font-size: var(--btn-large-icon-size);
+}
+
+.editor-stage .editor-escape-hold-panel-btn.is-simple-rotation {
+  transition: background 0.2s, border-color 0.2s, color 0.2s, transform var(--rotation-duration, 200ms) ease;
 }
 
 .editor-stage .editor-escape-hold-panel-btn:active
