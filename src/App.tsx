@@ -8853,6 +8853,8 @@ ${markdownHtml}
                   onEscapeHoldOpenHelp={handleHelpModeOpen}
                   isExportingPdf={isExportingPdf}
                   isExportingMd={isExportingMd}
+                  borderRadiusRegularPx={borderRadiusRegularPx}
+                  spacingRegularPx={spacingRegularPx}
                   showLineNumbers={reviewGutterVisibleBySection[entry.id] ?? false}
                   showReviewFlags={reviewFlagsVisibleBySection[entry.id] ?? false}
                   onToggleReviewGutter={() => handleToggleReviewGutter(entry.id)}

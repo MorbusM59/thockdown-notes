@@ -43,6 +43,9 @@ export interface SectionEditorAreaProps {
   onEscapeHoldOpenHelp: () => void | Promise<void>
   isExportingPdf: boolean
   isExportingMd: boolean
+  /** Live user-configurable corner-radius/spacing base units (options menu sliders) -- threaded through so the escape-hold ring (escapeHoldRingLayout.ts) recomputes to match .editor-empty-state's actual on-screen shape instead of drifting from a stale hardcoded mirror. */
+  borderRadiusRegularPx: number
+  spacingRegularPx: number
   spellCheckEditEnabled: boolean
   previewTextureRef: RefObject<HTMLDivElement>
   previewScrollRef: RefObject<HTMLDivElement>
@@ -163,6 +166,8 @@ export function SectionEditorArea({
   onEscapeHoldOpenHelp,
   isExportingPdf,
   isExportingMd,
+  borderRadiusRegularPx,
+  spacingRegularPx,
   spellCheckEditEnabled,
   previewTextureRef,
   previewScrollRef,
@@ -387,6 +392,8 @@ export function SectionEditorArea({
                 isActiveNoteTimeless={isViewingTimelessNote}
                 isExportingPdf={isExportingPdf}
                 isExportingMd={isExportingMd}
+                borderRadiusRegularPx={borderRadiusRegularPx}
+                spacingRegularPx={spacingRegularPx}
                 onCreateNote={onEscapeHoldCreateNote}
                 onCreateChapter={onEscapeHoldCreateChapter}
                 onExportPdf={onEscapeHoldExportPdf}

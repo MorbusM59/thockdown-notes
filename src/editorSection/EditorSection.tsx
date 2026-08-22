@@ -207,6 +207,8 @@ export function EditorSection({
   onEscapeHoldOpenHelp,
   isExportingPdf,
   isExportingMd,
+  borderRadiusRegularPx,
+  spacingRegularPx,
   isLeftmostSection,
   canCreateSection,
   onCreateSection,
@@ -1827,6 +1829,8 @@ export function EditorSection({
         onEscapeHoldOpenHelp={onEscapeHoldOpenHelp}
         isExportingPdf={isExportingPdf}
         isExportingMd={isExportingMd}
+        borderRadiusRegularPx={borderRadiusRegularPx}
+        spacingRegularPx={spacingRegularPx}
         spellCheckEditEnabled={spellCheckEditEnabled}
         previewTextureRef={previewTextureRef}
         previewScrollRef={previewScrollRef}
