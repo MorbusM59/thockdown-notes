@@ -292,9 +292,7 @@
   transform: rotate(45deg);
 }
 
-.double-size-glyph {
-  font-size: calc(var(--btn-icon-size) - 3px);
-}
+
 
 .window-control-btn {
   width:           var(--btn-square-large-size);

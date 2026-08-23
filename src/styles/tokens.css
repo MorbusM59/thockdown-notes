@@ -474,6 +474,7 @@
     inset 0 0 6px rgba(0, 0, 0, 0.2),
     0 0 2px var(--color-shadow-white);
 
+  --btn-split-icon-size: 13px;
   --btn-icon-size: 18px;
   --btn-large-icon-size: 24px;
 

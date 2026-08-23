@@ -71,7 +71,7 @@
   color: var(--color-text-60);
   transition: background 0.2s, border-color 0.2s, color 0.2s;
   border-radius: var(--border-radius-small);
-  font-size: var(--btn-icon-size);
+  font-size: var(--btn-split-icon-size);
 }
 
 .display-modes-split-btn.dark-mode {
