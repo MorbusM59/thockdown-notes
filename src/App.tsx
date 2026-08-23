@@ -199,6 +199,13 @@ const SIDEBAR_CONTENT_BORDER_PX = 1
 // (toolbar.css) -- part of the toolbar column's content floor below.
 const TOOLBAR_CONTAINER_BORDER_PX = 2
 const DISPLAY_MODES_BORDER_PX = 2
+// Mirrors --note-list-row-content-height and --btn-square-mini-size
+// (tokens.css), plus how many Date-view cards the window's minimum height is
+// meant to leave room for -- see appShellMinHeightPx. The mini control height
+// covers both the date-filter chips and the pagination bar's buttons.
+const NOTE_LIST_ROW_CONTENT_HEIGHT_PX = BTN_SQUARE_REGULAR_SIZE_PX
+const SIDEBAR_MINI_CONTROL_HEIGHT_PX = 20
+const SIDEBAR_MIN_VISIBLE_NOTE_CARDS = 4
 // Soft minimum, enforced only at section-creation time -- the "+" button
 // disappearing when there isn't room for one more is the enforcement (see
 // the handover doc's split-view design). Matches the same 300px figure the
@@ -1901,6 +1908,61 @@ function App() {
     () => sidebarWidthPx + GRID_DIVIDER_PX + toolbarMinWidthPx + windowControlsWidthPx,
     [sidebarWidthPx, toolbarMinWidthPx, windowControlsWidthPx],
   )
+
+  // The shortest the window may get: exactly enough for the Date-view sidebar
+  // to show four note cards. Mirrors sidebar.css top to bottom -- the sidebar's
+  // own vertical padding and the three gaps between its four children, the
+  // search box (its padding-top plus the input's fixed height), the view-toggle
+  // row (its padding plus the mode buttons, which are square and so take their
+  // height from how wide six of them plus their gaps come out in the sidebar's
+  // width), the two-line date-filter rail, the pagination bar, and inside the
+  // scroll frame the note list's own padding, four cards and the three
+  // spacing-large gaps between them. Everything below the sidebar's floor --
+  // tab bar, chapter bar, stats row -- adds up to less than this, so the
+  // sidebar is what sets it.
+  const appShellMinHeightPx = useMemo(() => {
+    const smallGapPx = spacingRegularPx / 2 // mirrors --spacing-small
+    const largeGapPx = spacingRegularPx * 2 // mirrors --spacing-large
+
+    const searchBoxPx = spacingRegularPx + (BTN_SQUARE_REGULAR_SIZE_PX + 2 * spacingRegularPx)
+    // .view-toggle's buttons are `flex: 1 1 0` with `aspect-ratio: 1 / 1`, so
+    // their height is however wide a sixth of the row turns out to be.
+    const viewToggleRowWidthPx = sidebarWidthPx - largeGapPx /* --sidebar-padding-right */ - largeGapPx /* --sidebar-view-padding-left */
+    const modeButtonPx = (viewToggleRowWidthPx - 5 * smallGapPx) / 6
+    const viewTogglePx = 2 * spacingRegularPx + modeButtonPx
+    // Two rows of chips (months, years), the first with a spacing-regular
+    // margin under it, and the rail's own padding-bottom.
+    const dateFilterRailPx = 2 * SIDEBAR_MINI_CONTROL_HEIGHT_PX + 2 * spacingRegularPx
+    // Always reserved, even though the pagination bar only appears once the
+    // list runs to more than one page: at this height it always does (that's
+    // the whole point of the floor), and the bar showing up is exactly when
+    // its row would otherwise be taken out of the four cards. The bar itself
+    // has no padding -- it's as tall as its 20px buttons -- and being a fifth
+    // child of the sidebar it also adds one more gap.
+    const paginationPx = SIDEBAR_MINI_CONTROL_HEIGHT_PX + spacingRegularPx
+
+    const sidebarChromePx = 2 * spacingRegularPx // .notes-sidebar padding
+      + 3 * spacingRegularPx // gaps between its four always-present children
+      + searchBoxPx
+      + viewTogglePx
+      + dateFilterRailPx
+      + paginationPx
+
+    const noteCardPx = NOTE_LIST_ROW_CONTENT_HEIGHT_PX + 2 * largeGapPx
+    const fourCardsPx = 2 * largeGapPx /* .notes-list padding */
+      + SIDEBAR_MIN_VISIBLE_NOTE_CARDS * noteCardPx
+      + (SIDEBAR_MIN_VISIBLE_NOTE_CARDS - 1) * largeGapPx
+
+    // Rounded up past a sub-pixel step, not just up: the mode button's
+    // 1/6-of-a-row height is rarely a whole pixel, and Chrome quantizes it to
+    // 1/64px -- sometimes upward, so the layout can want a hair more than the
+    // arithmetic here says. Plain Math.ceil is one short whenever the exact
+    // total lands on an integer and quantization then pushes the real
+    // requirement above it, which is a fourth card that only appears one pixel
+    // past the minimum. The extra pixel is invisible; being one short isn't.
+    const SUB_PIXEL_QUANTUM_PX = 1 / 64
+    return Math.ceil(sidebarChromePx + fourCardsPx + SUB_PIXEL_QUANTUM_PX)
+  }, [sidebarWidthPx, spacingRegularPx])
   const [editorFontLoadVersion, setEditorFontLoadVersion] = useState(0)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('date')
   const [lastSidebarModeBeforeOptions, setLastSidebarModeBeforeOptions] = useState<Exclude<SidebarMode, 'options'>>('date')
@@ -2079,6 +2141,18 @@ function App() {
   useEffect(() => {
     window.windowControls?.setSectionCount?.(editorSections.length)
   }, [editorSections.length])
+
+  // Hand the main process the chrome minimum we just derived, so the native
+  // window minimum tracks the spacing setting instead of being pinned to the
+  // default-spacing constants mirrored over there. Both width variants go
+  // across because main picks between them on sidebar visibility.
+  useEffect(() => {
+    window.windowControls?.setChromeMinSize?.({
+      width: appShellMinWidthPx,
+      widthWithoutSidebar: appShellMinWidthPx - (sidebarWidthPx + GRID_DIVIDER_PX),
+      height: appShellMinHeightPx,
+    })
+  }, [appShellMinWidthPx, appShellMinHeightPx, sidebarWidthPx])
 
   const toggleSidebarVisible = useCallback(() => {
     setIsSidebarVisible((previous) => {

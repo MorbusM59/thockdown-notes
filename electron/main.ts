@@ -131,14 +131,30 @@ const UTILITY_COLLAPSE_MIN_HEIGHT_PX = 40;
 // round number, so this is a good deal lower than the 873 it used to be.
 const TOOLBAR_MIN_WIDTH_PX = 283;
 const WINDOW_CONTROLS_WIDTH_PX = 239;
-const APP_WINDOW_MIN_HEIGHT_PX = 525;
+// Mirrors the renderer's appShellMinHeightPx at the default spacing setting:
+// enough for the Date-view sidebar to show four note cards with the pagination
+// bar showing (see src/App.tsx). Note it's a rounded-up fraction, not a round
+// number -- the view-toggle's buttons are square and sized to a sixth of the
+// row, so the sidebar's chrome lands on 184.17px and the honest floor is
+// 416.17. Enforcing 416 leaves the fourth card one fifth of a pixel short.
+const APP_WINDOW_MIN_HEIGHT_PX = 417;
 // Fallback "restored" size used when launching into a saved maximized state
 // -- see the createWindow() comment on why the saved x/y/width/height can't
 // be trusted for the initial (pre-maximize) bounds in that case.
 const APP_WINDOW_DEFAULT_WIDTH_PX = 1200;
 const APP_WINDOW_DEFAULT_HEIGHT_PX = 900;
-// Mirror renderer constants for sidebar sizing so main can compute effective minima
-const SIDEBAR_WIDTH_PX = 288;
+// Mirror renderer constants for sidebar sizing so main can compute effective
+// minima. This is the renderer's own derived sidebarWidthPx at the default
+// spacing setting (src/App.tsx): a 6-column grid of --btn-square-regular-size
+// buttons (6*32 + 7*4 + 2), the content gutters (4*4), .sidebar-content's
+// border, the scrollbar slot (4 + 16), and the sidebar's right padding (8).
+// It read 288 for a long time, which was 21px more than the renderer actually
+// uses -- invisible while the toolbar column had slack to absorb it, but once
+// that column was given an exact content floor the difference showed up as a
+// permanent gap beside the formatting buttons at minimum width, and only with
+// the sidebar visible (hidden, both sides subtract the same figure and it
+// cancels out).
+const SIDEBAR_WIDTH_PX = 267;
 const GRID_DIVIDER_PX = 8;
 // Mirrors the renderer's per-section minimum width (src/App.tsx) -- the
 // window's minimum width grows just enough that every open section can sit
@@ -146,6 +162,15 @@ const GRID_DIVIDER_PX = 8;
 // forced narrower than it's allowed to be just by resizing the window.
 const EDITOR_SECTION_MIN_WIDTH_PX = 300;
 const APP_WINDOW_MIN_WIDTH_PX = SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX + TOOLBAR_MIN_WIDTH_PX + WINDOW_CONTROLS_WIDTH_PX;
+
+// Both figures above (and APP_WINDOW_MIN_HEIGHT_PX) are the renderer's own
+// derivation at the *default* spacing setting -- but every term in them scales
+// with that setting, which only the renderer knows. So they're just the floor
+// used until the renderer reports its actual computed minimum
+// ('window-control:chrome-min-size', sent whenever it changes); from then on
+// that reported size is what the window minimum is built from, and dragging the
+// spacing slider moves the window's real minimum with it.
+let reportedChromeMinSize: { width: number; widthWithoutSidebar: number; height: number } | null = null;
 
 // Tracked here (not just derived per-call) because the sidebar-visibility and
 // section-count constraints compose -- each handler needs to know the other's
@@ -171,11 +196,12 @@ function computeAppWindowMinWidthPx(sidebarVisible: boolean, sectionCount: numbe
   // Naively adding (min + divider) per extra section on top of the base would
   // carry that slack forever, leaving a constant buffer that stops the user
   // from ever shrinking all sections down to their minimum.
-  const chromeMinWidth = sidebarVisible
-    ? APP_WINDOW_MIN_WIDTH_PX
-    : Math.max(200, APP_WINDOW_MIN_WIDTH_PX - (SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX));
+  const withSidebarPx = reportedChromeMinSize?.width ?? APP_WINDOW_MIN_WIDTH_PX;
+  const withoutSidebarPx = reportedChromeMinSize?.widthWithoutSidebar
+    ?? (APP_WINDOW_MIN_WIDTH_PX - (SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX));
+  const chromeMinWidth = sidebarVisible ? withSidebarPx : Math.max(200, withoutSidebarPx);
   const sections = Math.max(1, sectionCount);
-  const sidebarColumnsPx = sidebarVisible ? SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX : 0;
+  const sidebarColumnsPx = sidebarVisible ? withSidebarPx - withoutSidebarPx : 0;
   const sectionsRowMinWidthPx = sections * EDITOR_SECTION_MIN_WIDTH_PX + (sections - 1) * GRID_DIVIDER_PX;
   return Math.max(chromeMinWidth, sidebarColumnsPx + sectionsRowMinWidthPx);
 }
@@ -190,7 +216,7 @@ function computeEffectiveMinSize(): { width: number; height: number } {
   const multiplier = currentDoubleSizeMode ? 2 : 1;
   return {
     width: computeAppWindowMinWidthPx(currentSidebarVisible, currentSectionCount) * multiplier,
-    height: APP_WINDOW_MIN_HEIGHT_PX * multiplier,
+    height: (reportedChromeMinSize?.height ?? APP_WINDOW_MIN_HEIGHT_PX) * multiplier,
   };
 }
 
@@ -675,6 +701,36 @@ function registerIpcHandlers() {
       growWindowToMinimumSizeIfNeeded(win, minWidth, minHeight)
     } catch (error) {
       console.warn('Failed to apply section-count window constraints', error)
+    }
+  })
+
+  // The renderer's own computed chrome minimum, sent whenever it changes --
+  // which in practice means whenever the user moves the spacing slider, since
+  // every term in it scales with that setting (see src/App.tsx's
+  // appShellMinWidthPx / appShellMinHeightPx). Until the first of these
+  // arrives, the constants above stand in at default spacing.
+  //
+  // Deliberately never grows the window: unlike enabling the sidebar or double
+  // size, nudging the spacing slider isn't a request to resize anything, and a
+  // window that crept larger on every tick of the slider would be obnoxious.
+  // The new minimum still applies from the next manual resize on.
+  ipcMain.on('window-control:chrome-min-size', (_event, size: unknown) => {
+    try {
+      if (!win || win.isDestroyed()) return
+      const candidate = size as { width?: unknown; widthWithoutSidebar?: unknown; height?: unknown } | null
+      const width = Number(candidate?.width)
+      const widthWithoutSidebar = Number(candidate?.widthWithoutSidebar)
+      const height = Number(candidate?.height)
+      if (![width, widthWithoutSidebar, height].every((value) => Number.isFinite(value) && value > 0)) return
+      reportedChromeMinSize = {
+        width: Math.ceil(width),
+        widthWithoutSidebar: Math.ceil(widthWithoutSidebar),
+        height: Math.ceil(height),
+      }
+      const { width: minWidth, height: minHeight } = computeEffectiveMinSize()
+      win.setMinimumSize(minWidth, minHeight)
+    } catch (error) {
+      console.warn('Failed to apply reported chrome minimum size', error)
     }
   })
 
