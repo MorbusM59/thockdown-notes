@@ -9,7 +9,7 @@ import {
   type DocumentFindDirective,
   type DocumentFindHit,
 } from '../editor/FindReplaceEngine'
-import { scrollToNonQuantizedSmooth } from '../editor/NonQuantizedSmoothScroll'
+import { isNonQuantizedSmoothScrollActive, scrollToNonQuantizedSmooth } from '../editor/NonQuantizedSmoothScroll'
 import { resolvePreviewHitRange, resolveSourceLineForOffset } from './PreviewFindHitLocator'
 import type { PreviewScrollToSourceLineFn } from './usePreviewMarkdownRendering'
 
@@ -165,6 +165,15 @@ export function useDocumentFindNavigation({
     // correction is already a correct-enough result, which is what happens
     // when every attempt is used up.
     const refine = (attemptsLeft: number) => {
+      // Never correct while the block-scroll animation is still travelling:
+      // it recomputes scrollTop from its own captured start/target every
+      // frame, so a correction landing mid-flight is erased on the next one
+      // (see isNonQuantizedSmoothScrollActive). Waiting isn't a failed
+      // attempt, so it doesn't consume the budget.
+      if (isNonQuantizedSmoothScrollActive(scroller)) {
+        requestAnimationFrame(() => refine(attemptsLeft))
+        return
+      }
       if (scrollToMatch()) return
       if (attemptsLeft <= 0) {
         syncPreviewCustomScrollbar()
@@ -172,7 +181,7 @@ export function useDocumentFindNavigation({
       }
       requestAnimationFrame(() => refine(attemptsLeft - 1))
     }
-    requestAnimationFrame(() => refine(5))
+    requestAnimationFrame(() => refine(30))
   }, [
     currentEditorText,
     documentFindDirective.findText,

@@ -25,7 +25,7 @@ import { findHeadingAnchorLine, parseHeadingAnchorFragment } from '../shared/tab
 import type { ParsedInternalNoteLink } from '../shared/internalNoteLinks'
 import { splitMarkdownIntoPreviewBlocksIncremental, type PreviewBlockSplitCache } from '../editor/PreviewBlockSplit'
 import { resolvePreviewBlockIndexForSourceLine } from '../editor/PreviewBlockIndex'
-import { scrollToNonQuantizedSmooth } from '../editor/NonQuantizedSmoothScroll'
+import { isNonQuantizedSmoothScrollActive, scrollToNonQuantizedSmooth } from '../editor/NonQuantizedSmoothScroll'
 
 // Initial guess only -- corrected as soon as each block actually mounts and
 // reports its real height (react-virtual's estimate-then-correct model, via
@@ -494,7 +494,22 @@ export function usePreviewMarkdownRendering({
 
       const target = findTargetElement()
 
-      if (target) {
+      // The correction below is a plain scroll write, and the travel above
+      // is a curve animation that recomputes scrollTop from its own captured
+      // start/target on every frame -- so correcting while it's still in
+      // flight is erased on the animation's next frame, and it lands on the
+      // *estimated* block offset it planned for instead of on the element.
+      // That estimate is `estimateSize` x block count for anything the
+      // virtualizer hasn't measured yet, i.e. arbitrarily wrong on a large
+      // document, which is exactly what made anchor and TOC links land in
+      // the wrong place -- worst of all *when the element was found*, since
+      // that is the case whose correction got thrown away. Waiting for the
+      // travel to settle is not a failed attempt, so it doesn't consume the
+      // retry budget either; only a genuinely missing element does.
+      const scroller = previewScrollRef.current
+      const isTravelling = scroller !== null && isNonQuantizedSmoothScrollActive(scroller)
+
+      if (target && !isTravelling) {
         // Instant, not smooth -- the virtualizer scroll above already did
         // the (smooth) traveling; this is just a small, exact centering
         // correction within the target's own block, not a second hop.
@@ -504,16 +519,26 @@ export function usePreviewMarkdownRendering({
         return
       }
 
+      if (isTravelling) {
+        window.requestAnimationFrame(() => attemptScroll(attemptsLeft))
+        return
+      }
+
       if (attemptsLeft <= 0) return
       window.requestAnimationFrame(() => attemptScroll(attemptsLeft - 1))
     }
 
+    // Same budget either way. The two cases used to differ (30 vs. 5)
+    // because only a note switch was expected to need time -- but the
+    // retried work is a DOM query plus a binary search, and an
+    // already-active note still has to wait for a virtualized-out block to
+    // mount and measure, which a five-frame budget routinely lost.
     if (waitForNoteSwitch) {
       window.requestAnimationFrame(() => window.requestAnimationFrame(() => attemptScroll(30)))
     } else {
-      attemptScroll(5)
+      attemptScroll(30)
     }
-  }, [virtualizer])
+  }, [virtualizer, previewScrollRef])
 
   // Scrolls to a manual `[Anchor Text](#anchor-id)` definition, rendered as
   // an inert `.note-anchor-marker` span carrying the id verbatim.

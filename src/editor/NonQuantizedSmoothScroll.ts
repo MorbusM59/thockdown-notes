@@ -67,6 +67,23 @@ export function cancelNonQuantizedSmoothScroll(scroller: HTMLElement): void {
   cancelExistingAnimation(scroller);
 }
 
+/**
+ * Whether a curve-driven scroll is currently in flight for `scroller`.
+ *
+ * Every frame of an in-flight animation recomputes `scrollTop` from the
+ * start position and target captured when it was planned, so ANY scroll
+ * write from elsewhere is silently discarded on the very next frame and the
+ * animation still lands on its own original target. Anything that scrolls
+ * this element for its own reasons while a travel animation may be running
+ * -- the preview pane's anchor/find landings, which scroll the virtualizer
+ * to a block and then correct onto the exact element inside it -- has to
+ * wait for this to go false, or its correction is a no-op precisely when it
+ * succeeds.
+ */
+export function isNonQuantizedSmoothScrollActive(scroller: HTMLElement): boolean {
+  return activeAnimations.has(scroller);
+}
+
 export function scrollToNonQuantizedSmooth(
   scroller: HTMLElement,
   targetScrollTopPx: number,
