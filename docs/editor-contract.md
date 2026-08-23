@@ -56,6 +56,27 @@ This contract isolates app features from editor engine internals. Features that 
   (`sectionRequiresScrollUpdateRef` in `useEditorSectionMount.ts`). No
   other code path should call a scroll restore.
 
+#### The BLOCK is the persistence unit, the LINE is the live unit
+- A mode switch carries the **exact source line** the reader is on, not the
+  block containing it. Both directions of `toggleRenderViewMode` pass the
+  line straight through: within one toggle the document is byte-identical on
+  both sides, so there is nothing for a coarser representation to protect
+  against, and quantizing to the block start is pure loss -- leaving a note
+  from the tenth bullet of a list returned the reader to its first bullet.
+  (A `+ 1 block` fudge used to sit on the edit&#8594;render leg to offset part
+  of that loss; carrying the line removes the cause and the fudge with it.)
+- The BLOCK remains the unit for **persistence** (`anchorBlockIndex`), where
+  line numbers genuinely can shift between save and restore. Reopening a note
+  therefore still lands on a block boundary; a live mode switch does not.
+- **One reference point, four operations.** `RESTORE_OFFSET_LINES`
+  (`EditRestoreMath.ts`) is not only where a restore *lands* -- it is also
+  where each mode *reads* its current position. Edit resolves the line at
+  `scrollTop + topBoundary + RESTORE_OFFSET_LINES`
+  (`resolveSourceAnchorFromEditState`); render resolves the element the same
+  line cuts through (`selectPreviewAnchorCandidate`'s `referenceOffsetPx`).
+  If reading and landing ever use different offsets, every switch shifts the
+  position by the difference and repeated switches walk the document.
+
 ### Lifecycle Model
 - `mounted`: component mounted.
 - `ready`: editor surface is ready to receive integration calls.

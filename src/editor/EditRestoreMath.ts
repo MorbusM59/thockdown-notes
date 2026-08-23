@@ -33,6 +33,28 @@ export type EditViewportTelemetry = {
 export const ZERO_EDITOR_SELECTION: EditorSelectionState = { anchor: 0, focus: 0, start: 0, end: 0, isCollapsed: true }
 export const ZERO_PERSISTED_VIEWPORT: PersistedViewportState = { topBoundaryLines: 0, bottomBoundaryLines: 0, scrollTopLines: 0 }
 
+/**
+ * The single reference point both panes use to answer "where am I?" and to
+ * act on "put me here" -- expressed in line-heights below the top of the
+ * pane's own content area (below the top boundary, in edit mode's case).
+ *
+ * One constant, four operations: each mode *reads* its current position by
+ * asking which source line sits at this offset, and *lands* a restore by
+ * putting the target line at this same offset. That symmetry is the whole
+ * point. When reading and landing disagree -- as they did while edit read at
+ * the boundary top but landed one line-height below it, and preview read at
+ * the container top but landed one line-height below that -- every mode
+ * switch shifts the position by the difference, and a round trip walks. The
+ * `+ 1 block` fudge that used to sit in toggleRenderViewMode existed to
+ * cancel that walk one block at a time; with the reference point shared,
+ * there is nothing left to cancel.
+ *
+ * The value itself (one line-height, rather than flush at 0) is the
+ * user-confirmed convention for every restore -- see docs/editor-contract.md's
+ * Viewport Model section.
+ */
+export const RESTORE_OFFSET_LINES = 1
+
 export function resolveSourceAnchorFromEditState(params: {
   text: string
   lineHeightPx: number
@@ -57,7 +79,9 @@ export function resolveSourceAnchorFromEditState(params: {
   if (resolveSourceLineAtHeight && viewport) {
     const topBoundaryPx = Math.max(0, Math.round(viewport.topBoundaryLines * safeLineHeight))
     const scrollTopPx = Math.max(0, Math.round(viewport.scrollTopLines * safeLineHeight))
-    const resolvedLine = resolveSourceLineAtHeight(scrollTopPx + topBoundaryPx)
+    // Read at the same offset a restore lands on -- see RESTORE_OFFSET_LINES.
+    const referenceOffsetPx = RESTORE_OFFSET_LINES * safeLineHeight
+    const resolvedLine = resolveSourceLineAtHeight(scrollTopPx + topBoundaryPx + referenceOffsetPx)
     if (resolvedLine !== null) {
       const clampedLine = Math.min(Math.max(0, resolvedLine), Math.max(0, lines.length - 1))
       return { sourceAnchorLine: clampedLine }
@@ -65,7 +89,7 @@ export function resolveSourceAnchorFromEditState(params: {
   }
 
   const anchorLine = viewport
-    ? Math.max(0, Math.round(viewport.scrollTopLines) + Math.round(viewport.topBoundaryLines))
+    ? Math.max(0, Math.round(viewport.scrollTopLines) + Math.round(viewport.topBoundaryLines) + RESTORE_OFFSET_LINES)
     :
     (telemetry ? Math.max(0, Math.floor(telemetry.scrollTopPx / safeLineHeight)) : 0)
   const clampedLine = Math.min(Math.max(0, anchorLine), Math.max(0, lines.length - 1))
@@ -156,14 +180,6 @@ export function scrollTopLinesToPx(scrollTopLines: number, lineHeightPx: number)
   const safeLineHeight = Math.max(1, lineHeightPx)
   return Math.max(0, Math.round(scrollTopLines)) * safeLineHeight
 }
-
-// A first-load/note-switch/snapshot-entry restore, and a mode switch's
-// entered mode, all land one line-height below the top border rather than
-// flush against it (offset 0) -- the single, user-confirmed convention for
-// every "restore from a persisted BLOCK" case (see docs/editor-contract.md's
-// Viewport Model section). Exported so useEditorSectionMount.ts's mode-switch
-// code applies the identical offset, not a second hardcoded copy of it.
-export const RESTORE_OFFSET_LINES = 1
 
 export function buildEditRestoreSnapshotFromUiState(params: {
   noteId: string

@@ -630,10 +630,12 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       return null
     }
 
-    // See selectPreviewAnchorCandidate for the rule and why it is not just
-    // "the last block starting at or above the edge".
+    // Measured at the same line a restore lands on, not at the container's
+    // own top edge -- see selectPreviewAnchorCandidate and
+    // EditRestoreMath's RESTORE_OFFSET_LINES.
     const selected = selectPreviewAnchorCandidate(
       anchors.map((entry) => ({ entry, top: entry.top, bottom: entry.bottom })),
+      RESTORE_OFFSET_LINES * Math.max(1, lineHeightPx),
     )
     if (!selected) return null
 
@@ -641,7 +643,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       sourceAnchorLine: selected.entry.line,
       sourceAnchorText: selected.entry.element.textContent?.trim() ?? null,
     }
-  }, [])
+  }, [lineHeightPx])
 
   // Resolves the current source line for whichever mode is active, with no
   // markdown parsing at all -- edit's own analytical/DOM primitives only.
@@ -666,7 +668,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
 
     const cachedSnapshot = activeNoteId ? editModeSnapshotByNoteIdRef.current.get(activeNoteId) : null
     if (!cachedSnapshot) return null
-    return Math.max(0, cachedSnapshot.viewport.scrollTopLines + cachedSnapshot.viewport.topBoundaryLines)
+    // Same reference line the adapter-backed path above reads at.
+    return Math.max(0, cachedSnapshot.viewport.scrollTopLines + cachedSnapshot.viewport.topBoundaryLines + RESTORE_OFFSET_LINES)
   }, [activeNoteId, isPreviewMode, readCurrentEditUiPayload, resolvePreviewSourceAnchorFromContainer])
 
   const captureCurrentAnchorBlockIndex = useCallback((): number | null => {
@@ -1996,19 +1999,26 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       `toggleRenderViewMode rawSourceAnchorLine=${rawSourceAnchorLine ?? 'null'} mode=${isPreviewMode ? 'preview' : 'edit'} note=${activeNoteId}`,
     )
 
-    // Resolve the current source line from whichever mode is being left,
-    // then round-trip it through the mode-agnostic BLOCK representation so
-    // both directions of the toggle speak the same language. Edit's own
-    // anchor resolver reports the raw logical line at the top of the
-    // viewport, while Preview's resolver reports a block's start line
-    // (real block boundary). Passing those raw values across directly
-    // causes a systematic mismatch: edit hands preview a non-boundary line,
-    // preview resolves to a different block, and the next trip back lands
-    // edit at that block's start instead of the original viewport line.
-    // Converting both sides to/from anchorBlockIndex forces convergence on
-    // the same canonical block boundary (docs/editor-contract.md's Viewport
-    // Model). The blocks are cached, so this parse is only paid once per
-    // text change, not twice per toggle.
+    // The line resolved from the mode being left IS what the mode being
+    // entered lands on -- no round trip through the block index.
+    //
+    // That round trip used to be necessary, because the two sides disagreed
+    // about where "here" is measured: edit reported the line at the top of
+    // its boundary, preview reported a block's start line, and restores
+    // landed a line-height below either. Quantizing both to a block start
+    // hid the disagreement by throwing away everything finer than a block --
+    // which is also why leaving a long list or table returned you to its
+    // first line, however far in you had scrolled. Both resolvers now read
+    // at the same reference line every restore lands on
+    // (RESTORE_OFFSET_LINES), so the exact line survives the trip and comes
+    // back unchanged on the way home.
+    //
+    // Blocks stay the canonical unit for *persistence* (anchorBlockIndex,
+    // captureCurrentAnchorBlockIndex) where line numbers can shift between
+    // save and restore; within one toggle the document is identical on both
+    // sides, so there is nothing for the coarser representation to protect
+    // against -- and skipping it also drops a full-document parse from the
+    // toggle path.
 
     if (rawSourceAnchorLine === null || rawSourceAnchorLine < 0) {
       sectionRequiresScrollUpdateRef.current = false
@@ -2020,26 +2030,9 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       return
     }
 
-    const blockResolveStart = performance.now()
-    const blocks = getPreviewBlocksForText(text)
-    const blockResolveMs = performance.now() - blockResolveStart
-    debugLogPreviewBlockCache('toggleRenderViewMode block resolve', {
-      noteId: activeNoteId,
-      textLength: text.length,
-      blockCount: blocks.length,
-      blockResolveMs: Number(blockResolveMs.toFixed(2)),
-    })
-    const containingBlockIndex = resolvePreviewBlockIndexForSourceLine(blocks, rawSourceAnchorLine)
-    // The edit -> render transition consistently lands one block higher than
-    // the edit viewport's visible top block. Rather than fight the underlying
-    // architectural offset, target the following block when we are actually
-    // updating preview's scroll position from a changed/scrolled edit state.
-    const anchorBlockIndex = enteringPreview
-      ? Math.min(blocks.length - 1, Math.max(0, containingBlockIndex + 1))
-      : Math.max(0, containingBlockIndex)
-    const sourceAnchorLine = resolveSourceLineForAnchorBlockIndex(blocks, anchorBlockIndex)
+    const sourceAnchorLine = rawSourceAnchorLine
     debugLogScrollSync(
-      `toggleRenderViewMode blocks: rawLine=${rawSourceAnchorLine} containingIndex=${containingBlockIndex} anchorIndex=${anchorBlockIndex} anchorStartLine=${sourceAnchorLine} note=${activeNoteId}`,
+      `toggleRenderViewMode carrying exact line=${sourceAnchorLine} enteringPreview=${enteringPreview} note=${activeNoteId}`,
     )
 
     if (enteringPreview) {
@@ -2111,7 +2104,6 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     activeNoteText,
     applyEditRestoreSnapshot,
     resolveCurrentSourceAnchorLine,
-    getPreviewBlocksForText,
     isPreviewMode,
     latestEditViewportRef,
     latestEditorTextRef,

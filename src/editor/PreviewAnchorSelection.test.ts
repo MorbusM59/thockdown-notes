@@ -60,4 +60,32 @@ describe('selectPreviewAnchorCandidate', () => {
   it('handles a single block covering the whole viewport', () => {
     expect(selectPreviewAnchorCandidate([block(0, -50, 2000)])?.entry).toBe(0)
   })
+
+  describe('reference offset', () => {
+    // Restores land the target one line-height below the top edge, so the
+    // reading has to be taken there too -- otherwise every switch shifts by
+    // that difference and a round trip walks.
+    const LINE = 24
+
+    it('reads at the reference line, not the container top', () => {
+      // Block 12 owns the container's top edge, but block 14 is what sits on
+      // the reference line one line-height down -- and 14 is where a restore
+      // would have put the reader.
+      const candidates = [block(10, -300, 150), block(12, -150, 160), block(14, 10, 170)]
+      expect(selectPreviewAnchorCandidate(candidates, 0)?.entry).toBe(12)
+      expect(selectPreviewAnchorCandidate(candidates, LINE)?.entry).toBe(14)
+    })
+
+    it('round-trips a landing back to the same element', () => {
+      // What a restore produces: the target's top sits exactly on the
+      // reference line. Reading that state must name the target again.
+      const landedTarget = block(20, LINE, 200)
+      const previous = block(18, LINE - 180, 180) // ends exactly on the line
+      expect(selectPreviewAnchorCandidate([previous, landedTarget], LINE)?.entry).toBe(20)
+    })
+
+    it('still falls back below the reference line when nothing straddles it', () => {
+      expect(selectPreviewAnchorCandidate([block(10, -300, 100), block(12, LINE + 30, 100)], LINE)?.entry).toBe(12)
+    })
+  })
 })
