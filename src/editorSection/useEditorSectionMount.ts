@@ -34,6 +34,7 @@ import {
   type PreviewBlockSplitCache,
 } from '../editor/PreviewBlockSplit'
 import { resolvePreviewBlockIndexForSourceLine, resolveSourceLineForAnchorBlockIndex } from '../editor/PreviewBlockIndex'
+import { selectPreviewAnchorCandidate } from '../editor/PreviewAnchorSelection'
 import {
   indentSelectionByStep,
   resolveMarkdownSelectionContext,
@@ -348,6 +349,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   const applyEditRestoreSnapshotCallCounterRef = useRef(0)
   const restoreInProgressRef = useRef(false)
   const restoreActiveCallerRef = useRef<string | null>(null)
+  /** Cancels whatever restore is currently in flight -- see applyEditRestoreSnapshot's supersede rule. */
+  const cancelActiveRestoreRef = useRef<(() => void) | null>(null)
   const expectedViewportRestoreTransitionIdRef = useRef<number | null>(null)
   const nextViewportRestoreTransitionIdRef = useRef(1)
   const latestViewportRef = useRef<PersistedViewportState | null>(null)
@@ -627,15 +630,16 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       return null
     }
 
-    anchors.sort((a, b) => a.top - b.top)
-    const visibleAtOrAboveTop = anchors.filter((entry) => entry.top <= 0)
-    const selected = visibleAtOrAboveTop.length > 0
-      ? visibleAtOrAboveTop.reduce((best, candidate) => (candidate.top > best.top ? candidate : best))
-      : anchors.reduce((best, candidate) => (candidate.top < best.top ? candidate : best))
+    // See selectPreviewAnchorCandidate for the rule and why it is not just
+    // "the last block starting at or above the edge".
+    const selected = selectPreviewAnchorCandidate(
+      anchors.map((entry) => ({ entry, top: entry.top, bottom: entry.bottom })),
+    )
+    if (!selected) return null
 
     return {
-      sourceAnchorLine: selected.line,
-      sourceAnchorText: selected.element.textContent?.trim() ?? null,
+      sourceAnchorLine: selected.entry.line,
+      sourceAnchorText: selected.entry.element.textContent?.trim() ?? null,
     }
   }, [])
 
@@ -898,11 +902,23 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     const onComplete = options?.onComplete
     let cancelled = false
 
+    // A restore already running does NOT win. It used to: the newcomer was
+    // dropped on the floor and the older one kept the pane. That is backwards
+    // -- a restore is a decision about where the reader should be, and the
+    // later call is the one computed from the newer state. Dropping it meant
+    // a render->edit hand-off (freshly derived from where the reader actually
+    // is) could lose to a restore already in flight from a stale cache, and
+    // land them wherever edit happened to be before, which reads as "edit
+    // came back a few paragraphs above where I was".
+    //
+    // Worse, the old guard had no way out if a restore never completed --
+    // applyWhenReady waits for an adapter that may never arrive -- and one
+    // stuck restore then silently disabled *every* later one for the rest of
+    // the session. Superseding removes both failure modes: there is no state
+    // a stuck restore can hold that the next one cannot take from it.
     if (restoreInProgressRef.current) {
-      debugLogScrollSync(`applyEditRestoreSnapshot skipped: another restore already in progress from ${restoreActiveCallerRef.current ?? 'unknown'}`)
-      return () => {
-        cancelled = true
-      }
+      debugLogScrollSync(`applyEditRestoreSnapshot superseding in-flight restore from ${restoreActiveCallerRef.current ?? 'unknown'}`)
+      cancelActiveRestoreRef.current?.()
     }
     restoreInProgressRef.current = true
     // Diagnostic: which call site invoked this -- the second line of a
@@ -914,6 +930,11 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     // Diagnostic: which call site invoked this, and how many times total
     // this render cycle -- pinpoints whether two independent effects are
     // both applying a restore for the same transition.
+    const cancelSelf = () => {
+      cancelled = true
+    }
+    cancelActiveRestoreRef.current = cancelSelf
+
     applyEditRestoreSnapshotCallCounterRef.current += 1
     // Also doubles as a staleness token for the post-settle re-correction
     // pass below (see correctWrappingOnceReady's own comment): if a newer
@@ -935,8 +956,13 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     // drift risk the pre-rewrite sync/spoof caching existed to paper over
     // (docs/cm6-parity-hardening-plan.md's Bug 5 follow-up).
     const clearRestoreInProgress = () => {
+      // Only release the guard if it is still ours: a restore that has
+      // already been superseded must not clear the guard its successor now
+      // holds (its own cancelled callbacks can still fire a frame later).
+      if (cancelActiveRestoreRef.current !== cancelSelf) return
       restoreInProgressRef.current = false
       restoreActiveCallerRef.current = null
+      cancelActiveRestoreRef.current = null
     }
 
     const applyWhenReady = () => {
@@ -1000,6 +1026,30 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       })
     }
 
+    /**
+     * Where the anchor line says the viewport belongs, derived fresh from
+     * the editor's *current* height map. Null when the adapter can't answer
+     * yet (not mounted, line out of range).
+     *
+     * Pure on purpose: the settle loop below needs to ask "would correcting
+     * again move us?" without actually moving anything. That question is the
+     * loop's real exit condition -- see its own comment for why "CM6 stopped
+     * moving" isn't.
+     */
+    const resolveCorrectedScrollTopLines = (
+      sourceAnchorLine: number,
+      viewport: PersistedViewportState,
+    ): number | null => {
+      const adapter = adapterRef.current
+      if (!adapter) return null
+
+      const lineTopPx = adapter.resolveHeightForSourceLine(sourceAnchorLine)
+      if (lineTopPx === null) return null
+
+      const topBoundaryPx = Math.max(0, Math.round(viewport.topBoundaryLines * lineHeightPx))
+      return Math.max(0, Math.round((lineTopPx - topBoundaryPx) / lineHeightPx) + RESTORE_OFFSET_LINES)
+    }
+
     const applyCorrectedViewport = (
       sourceAnchorLine: number,
       viewport: PersistedViewportState,
@@ -1009,14 +1059,9 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       const adapter = adapterRef.current
       if (!adapter) return null
 
-      const lineTopPx = adapter.resolveHeightForSourceLine(sourceAnchorLine)
-      if (lineTopPx === null) return null
+      const correctedScrollTopLines = resolveCorrectedScrollTopLines(sourceAnchorLine, viewport)
+      if (correctedScrollTopLines === null) return null
 
-      const topBoundaryPx = Math.max(0, Math.round(viewport.topBoundaryLines * lineHeightPx))
-      const correctedScrollTopLines = Math.max(
-        0,
-        Math.round((lineTopPx - topBoundaryPx) / lineHeightPx) + RESTORE_OFFSET_LINES,
-      )
       const correctedViewport: PersistedViewportState = { ...viewport, scrollTopLines: correctedScrollTopLines }
 
       // Same reasoning as applyWhenReady's own applySnapshot call above.
@@ -1055,8 +1100,13 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     // stops moving on its own: this converges on whichever value CM6
     // itself considers final, rather than guessing a fixed number of
     // frames to wait out its settle.
-    const MAX_SETTLE_RECHECK_FRAMES = 20
+    // Long enough to outlast CM6's own measure passes on a large document
+    // (each pass renders and measures only what it just scrolled into, so a
+    // far jump converges over several of them). Cheap to hold open: each
+    // frame is two adapter reads, and any genuine user scroll aborts it.
+    const MAX_SETTLE_RECHECK_FRAMES = 60
     const STABLE_FRAMES_REQUIRED = 3
+
 
     const settleCorrectionLoop = (
       sourceAnchorLine: number,
@@ -1082,14 +1132,59 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         const driftedAwayFromOurs = observedScrollTopPx !== null
           && Math.abs(observedScrollTopPx - lastAppliedScrollTopLines * lineHeightPx) > 0.5
 
-        if (!driftedAwayFromOurs) {
-          if (stableFrameCount + 1 >= STABLE_FRAMES_REQUIRED) return
+        // "CM6 stopped moving" is not the same as "we landed where the
+        // anchor line says we should", and treating it as such is what let
+        // render->edit settle above where it belonged. The correction is
+        // computed from resolveHeightForSourceLine, which for a line CM6
+        // hasn't rendered yet is an *estimate* off its heightmap's default
+        // line height -- no wrapping accounted for, so a target below a
+        // stretch of wrapped paragraphs resolves too high in the document.
+        // Landing on that estimate is perfectly stable (CM6 has no reason to
+        // move a viewport it is already happy with), so a stability-only exit
+        // declared success on the wrong position and stopped looking.
+        //
+        // The invariant that actually matters is whether re-deriving the
+        // target from the CURRENT height map would move us: while CM6 is
+        // still replacing estimates with measured heights that answer keeps
+        // changing, and once it stops changing the position is final by the
+        // same definition the correction itself uses -- no separate
+        // reference-point convention to get out of step with.
+        const desiredScrollTopLines = resolveCorrectedScrollTopLines(sourceAnchorLine, viewport)
+        const hasArrived = desiredScrollTopLines === null
+          || observedScrollTopPx === null
+          || Math.abs((desiredScrollTopLines * lineHeightPx) - observedScrollTopPx) <= 0.5
+
+        if (!driftedAwayFromOurs && hasArrived) {
+          if (stableFrameCount + 1 >= STABLE_FRAMES_REQUIRED) {
+            debugLogScrollSync(`settleCorrectionLoop settled: anchorLine=${sourceAnchorLine} scrollTopLines=${desiredScrollTopLines ?? 'unknown'} framesUsed=${MAX_SETTLE_RECHECK_FRAMES - framesRemaining}`)
+            return
+          }
           settleCorrectionLoop(
             sourceAnchorLine,
             viewport,
             transitionId,
             lastAppliedScrollTopLines,
             stableFrameCount + 1,
+            framesRemaining - 1,
+            userScrollTokenAtStart,
+          )
+          return
+        }
+
+        // Off-target while CM6 itself is holding still -- the height map
+        // has been revised under us (a measure pass), so re-apply against
+        // the value it reports now.
+        if (!driftedAwayFromOurs) {
+          if (framesRemaining - 1 <= 0) {
+            debugLogScrollSync(`settleCorrectionLoop gave up: anchorLine=${sourceAnchorLine} wanted=${desiredScrollTopLines ?? 'unknown'} at=${observedScrollTopPx === null ? 'unknown' : Math.round(observedScrollTopPx / lineHeightPx)}`)
+          }
+          const correctedLines = applyCorrectedViewport(sourceAnchorLine, viewport, transitionId, true)
+          settleCorrectionLoop(
+            sourceAnchorLine,
+            viewport,
+            transitionId,
+            correctedLines ?? lastAppliedScrollTopLines,
+            0,
             framesRemaining - 1,
             userScrollTokenAtStart,
           )
@@ -1126,7 +1221,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
 
     applyWhenReady()
     return () => {
-      cancelled = true
+      cancelSelf()
       expectedViewportRestoreTransitionIdRef.current = null
       clearRestoreInProgress()
     }
