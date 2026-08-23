@@ -904,6 +904,26 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     const focusAfterApply = options?.focusAfterApply ?? false
     const onComplete = options?.onComplete
     let cancelled = false
+    let completed = false
+
+    /**
+     * Ends this restore exactly once, however it ends -- landed, superseded,
+     * or disposed.
+     *
+     * `onComplete` is not "the restore succeeded", it is "this restore is
+     * over and nothing further is coming from it". Callers hang teardown off
+     * it that must run regardless: every note-switch restore clears the
+     * caret suspension here (setIsCaretSuspended(false), armed by
+     * activateNote), so a restore that ended without running it leaves the
+     * caret invisible for the rest of the session -- there is no other path
+     * that turns it back on. That is exactly what a superseded restore used
+     * to do, since only the landing path ran the callback.
+     */
+    const finishRestore = () => {
+      if (completed) return
+      completed = true
+      onComplete?.()
+    }
 
     // A restore already running does NOT win. It used to: the newcomer was
     // dropped on the floor and the older one kept the pane. That is backwards
@@ -935,6 +955,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     // both applying a restore for the same transition.
     const cancelSelf = () => {
       cancelled = true
+      finishRestore()
     }
     cancelActiveRestoreRef.current = cancelSelf
 
@@ -1001,9 +1022,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
 
       const needsPostApplySettle = typeof snapshot.sourceAnchorLine === 'number' || focusAfterApply
       if (!needsPostApplySettle) {
-        if (onComplete) {
-          onComplete()
-        }
+        finishRestore()
         if (expectedViewportRestoreTransitionIdRef.current === viewportRestoreTransitionId) {
           expectedViewportRestoreTransitionIdRef.current = null
         }
@@ -1019,9 +1038,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         if (focusAfterApply) {
           focusEditorInEditMode({ restoreSelection: false })
         }
-        if (onComplete) {
-          onComplete()
-        }
+        finishRestore()
         if (expectedViewportRestoreTransitionIdRef.current === viewportRestoreTransitionId) {
           expectedViewportRestoreTransitionIdRef.current = null
         }
