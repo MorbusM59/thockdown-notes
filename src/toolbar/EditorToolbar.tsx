@@ -1,4 +1,70 @@
+import { useLayoutEffect, useRef, useState } from 'react'
+import type { RefObject } from 'react'
 import type { UseMarkdownFormattingToolbarResult } from '../editorSection/useMarkdownFormattingToolbar'
+
+/**
+ * Picks the formatting group's layout from the room it actually has: full-size
+ * square buttons (the size of a window control) on one row while they fit,
+ * mini squares wrapping onto two rows when they don't.
+ *
+ * Both layouts are the audio player's grid: a full-size button is one large
+ * button box (a window control), a compact one is half of that box, two of
+ * them stacked in the same footprint -- spacing-small between buttons and
+ * rows, spacing-large between the groups of three.
+ *
+ * The threshold is measured, not a hardcoded breakpoint, because every term in
+ * it -- button size, gaps, group padding -- scales with the user's spacing
+ * setting, and the button count changes whenever this file's JSX does. The one
+ * value that can't be read back as a resolved length is the full button size
+ * (it's a custom property, whose computed value is an unresolved token list),
+ * so it's derived from the toolbar's own content-box height instead: both
+ * layouts share one row height, and a full-size button is exactly that box.
+ */
+function useFormattingToolbarCompact(toolbarRef: RefObject<HTMLDivElement | null>) {
+  const [isCompact, setIsCompact] = useState(false)
+
+  // Deliberately no dependency array: this re-measures after every render as
+  // well as on every resize. The ResizeObserver alone would be enough in a
+  // steady state, but at mount the toolbar hasn't been given its final grid
+  // width yet, so the first measurement is against a width that's about to
+  // change -- and anything that changes the spacing tokens re-renders without
+  // necessarily resizing this element.
+  useLayoutEffect(() => {
+    const el = toolbarRef.current
+    if (!el) return
+
+    const measure = () => {
+      const availableWidthPx = el.clientWidth
+      if (!availableWidthPx) return
+      const styles = getComputedStyle(el)
+      const paddingXPx = parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight)
+      const buttonSizePx = el.clientHeight - parseFloat(styles.paddingTop) - parseFloat(styles.paddingBottom)
+      const groups = Array.from(el.querySelectorAll<HTMLElement>('.toolbar-group'))
+      if (!groups.length || buttonSizePx <= 0) return
+
+      let requiredWidthPx = paddingXPx + (parseFloat(styles.columnGap) || 0) * (groups.length - 1)
+      for (const group of groups) {
+        const groupStyles = getComputedStyle(group)
+        const buttonCount = group.querySelectorAll('button').length
+        requiredWidthPx += parseFloat(groupStyles.paddingLeft)
+          + parseFloat(groupStyles.paddingRight)
+          + buttonCount * buttonSizePx
+          + Math.max(0, buttonCount - 1) * (parseFloat(groupStyles.columnGap) || 0)
+      }
+      // Switching layouts changes neither the row height nor the toolbar's own
+      // width, so this can't feed back into the observer (or the render) that
+      // triggered it -- setIsCompact with an unchanged value is a no-op.
+      setIsCompact(requiredWidthPx > availableWidthPx)
+    }
+
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  })
+
+  return isCompact
+}
 
 export interface EditorToolbarProps extends UseMarkdownFormattingToolbarResult {
   isPreviewMode: boolean
@@ -12,7 +78,6 @@ export interface EditorToolbarProps extends UseMarkdownFormattingToolbarResult {
   toggleUiMode: () => void
   isDoubleSizeMode: boolean
   handleToggleDoubleSizeMode: () => void
-  handleCreateChapter: () => void | Promise<void>
 }
 
 /**
@@ -38,7 +103,6 @@ export function EditorToolbar({
   toggleUiMode,
   isDoubleSizeMode,
   handleToggleDoubleSizeMode,
-  handleCreateChapter,
   activeDecorationFormats,
   activeHeadingLevel,
   isChecklistActive,
@@ -62,6 +126,9 @@ export function EditorToolbar({
   insertTableOfContents,
   toggleTableOfContents,
 }: EditorToolbarProps) {
+  const formattingToolbarRef = useRef<HTMLDivElement | null>(null)
+  const isFormattingToolbarCompact = useFormattingToolbarCompact(formattingToolbarRef)
+
   /**
    * Wraps a formatting action so it only ever runs in edit mode. While the
    * active section is in preview mode the click leaves the document alone and
@@ -108,7 +175,11 @@ export function EditorToolbar({
         </div>
       </div>
       <div className="toolbar-container">
-        <div className="markdown-toolbar" aria-label="Markdown toolbar">
+        <div
+          className={`markdown-toolbar${isFormattingToolbarCompact ? ' is-compact' : ''}`}
+          aria-label="Markdown toolbar"
+          ref={formattingToolbarRef}
+        >
           <div className="toolbar-group">
             <button
               type="button"
@@ -162,7 +233,7 @@ export function EditorToolbar({
               <span className="fa-solid fa-list-ol" aria-hidden="true" />
             </button>
             <button type="button" className={`btn-icon ${isChecklistActive ? 'is-active' : ''}`} data-tooltip="Checklist" aria-label="Checklist" onClick={inEditMode(toggleChecklistList)} disabled={formattingDisabled}>
-              <span className="fa-solid fa-square-check" aria-hidden="true" />
+              <span className="fa-regular fa-square-check" aria-hidden="true" />
             </button>
           </div>
 
@@ -200,19 +271,7 @@ export function EditorToolbar({
                 }
               })}
             >
-              <span className="fa-solid fa-list-ol" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="btn-icon"
-              data-tooltip="Add a chapter"
-              aria-label="Add a chapter"
-              disabled={formattingDisabled}
-              onClick={inEditMode(() => {
-                void handleCreateChapter()
-              })}
-            >
-              <span className="fa-solid fa-book-medical" aria-hidden="true" />
+              <span className="fa-regular fa-bookmark" aria-hidden="true" />
             </button>
           </div>
         </div>

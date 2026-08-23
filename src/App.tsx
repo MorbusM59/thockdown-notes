@@ -8759,7 +8759,6 @@ ${markdownHtml}
               toggleUiMode={toggleUiMode}
               isDoubleSizeMode={isDoubleSizeMode}
               handleToggleDoubleSizeMode={handleToggleDoubleSizeMode}
-              handleCreateChapter={activeSection?.handleCreateChapter ?? noopAsync}
               activeDecorationFormats={activeSection?.activeDecorationFormats ?? EMPTY_DECORATION_FORMATS}
               activeHeadingLevel={activeSection?.activeHeadingLevel ?? 0}
               isChecklistActive={activeSection?.isChecklistActive ?? false}

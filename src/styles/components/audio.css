@@ -7,8 +7,10 @@
   /* Two rows of buttons stacked inside one large-square button box -- this is
      both their height and, since every regular control is square, their width.
      The play/stop button spans two columns and so widens proportionally
-     (2 * size + the gap it swallows) rather than being sized separately. */
-  --audio-btn-size: calc((var(--btn-square-large-size) - var(--audio-control-gap)) / 2);
+     (2 * size + the gap it swallows) rather than being sized separately.
+     The shared token (tokens.css) is the same measurement the markdown
+     toolbar's compact layout uses. */
+  --audio-btn-size: var(--btn-square-half-size);
 }
 
 .audio-controls {
