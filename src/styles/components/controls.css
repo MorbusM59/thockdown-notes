@@ -5,7 +5,7 @@
 .window-controls-grid {
   display:         grid;
   /* Two children now: the audio controls and the right-hand window buttons.
-     (The left-hand dark-mode button moved into the note-tools split button.) */
+     (The left-hand dark-mode button moved into the display-modes split button.) */
   grid-template-columns: auto auto;
   grid-template-rows: auto;
   width:           100%;
@@ -269,7 +269,7 @@
 }
 
 /* Top slot: inert fa-bolt placeholder left behind when double size moved to
-   the note-tools split button. Keeps the split button's two-arm silhouette. */
+   the display-modes split button. Keeps the split button's two-arm silhouette. */
 .window-maximize-split-btn.placeholder {
   border-radius: var(--border-radius-regular) var(--border-radius-regular) var(--border-radius-small) var(--border-radius-small);
   padding: 0;

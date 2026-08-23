@@ -3,7 +3,7 @@
    ============================================================================= */
 /* Hugs its contents -- a single split button since the create-note,
    spell-check and edit/render toggles moved out. */
-.note-tools {
+.display-modes {
   flex: 0 0 auto;
   display: flex;
   flex-direction: row;
@@ -19,7 +19,7 @@
   gap: var(--spacing-regular);
 }
 
-.note-tools > .btn-icon  {
+.display-modes > .btn-icon  {
   width:           var(--btn-square-large-size);
   height:          var(--btn-square-large-size);
   min-width:       var(--btn-square-large-size);
@@ -37,15 +37,15 @@
   font-size: var(--btn-large-icon-size);
 }
 
-.note-tools > .btn-icon.is-active
+.display-modes > .btn-icon.is-active
 {
   border-color: var(--btn-border-active);
   box-shadow:   var(--box-shadow-inverted-harsh-active);
 }
 
 /* Dark mode + double size, stacked as one split button -- same two-arm shape
-   as the window controls' maximize split, but sized to the note-tools row. */
-.note-tools-split {
+   as the window controls' maximize split, but sized to the display-modes row. */
+.display-modes-split {
   width: var(--btn-square-large-size);
   height: var(--btn-square-large-size);
   min-width: var(--btn-square-large-size);
@@ -55,7 +55,7 @@
   gap: var(--spacing-small);
 }
 
-.note-tools-split > .btn-icon.note-tools-split-btn {
+.display-modes-split > .btn-icon.display-modes-split-btn {
   width: 100%;
   min-width: 0;
   height: calc((var(--btn-square-large-size) - 2px) / 2);
@@ -74,15 +74,15 @@
   font-size: var(--btn-icon-size);
 }
 
-.note-tools-split-btn.dark-mode {
+.display-modes-split-btn.dark-mode {
   border-radius: var(--border-radius-regular) var(--border-radius-regular) var(--border-radius-small) var(--border-radius-small);
 }
 
-.note-tools-split-btn.double-size {
+.display-modes-split-btn.double-size {
   border-radius: var(--border-radius-small) var(--border-radius-small) var(--border-radius-regular) var(--border-radius-regular);
 }
 
-.note-tools-split > .btn-icon.note-tools-split-btn.is-active {
+.display-modes-split > .btn-icon.display-modes-split-btn.is-active {
   border-color: var(--btn-border-active);
   box-shadow: var(--box-shadow-inverted-harsh-active);
 }

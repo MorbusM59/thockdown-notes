@@ -8690,7 +8690,7 @@ ${markdownHtml}
                 </div>
                 <div className="window-maximize-split" role="group" aria-label="Maximize controls">
                   {/* Top slot is an inert placeholder for now -- double size moved to the
-                      note-tools split button, and the maximize/restore arm moved down into
+                      display-modes split button, and the maximize/restore arm moved down into
                       the slot it vacated so the split button keeps its two-arm shape. */}
                   <button
                     type="button"

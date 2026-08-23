@@ -3,7 +3,7 @@ import type { UseMarkdownFormattingToolbarResult } from '../editorSection/useMar
 export interface EditorToolbarProps extends UseMarkdownFormattingToolbarResult {
   isPreviewMode: boolean
   activeNoteId: string | null
-  /** 'dark' while the app is in dark UI mode -- drives the top arm of the note-tools split button. */
+  /** 'dark' while the app is in dark UI mode -- drives the top arm of the display-modes split button. */
   uiMode: string
   toggleUiMode: () => void
   isDoubleSizeMode: boolean
@@ -52,11 +52,11 @@ export function EditorToolbar({
 }: EditorToolbarProps) {
   return (
     <section className="toolbar-grid" style={{ gridArea: 'toolbar' }} aria-label="Editor toolbar">
-      <div className="note-tools">
-        <div className="note-tools-split" role="group" aria-label="Dark mode and double size controls">
+      <div className="display-modes">
+        <div className="display-modes-split" role="group" aria-label="Dark mode and double size controls">
           <button
             type="button"
-            className={`btn-icon note-tools-split-btn dark-mode${uiMode === 'dark' ? ' is-active' : ''}`}
+            className={`btn-icon display-modes-split-btn dark-mode${uiMode === 'dark' ? ' is-active' : ''}`}
             data-tooltip="Toggle dark mode"
             aria-label="Toggle dark mode"
             aria-pressed={uiMode === 'dark'}
@@ -66,7 +66,7 @@ export function EditorToolbar({
           </button>
           <button
             type="button"
-            className={`btn-icon note-tools-split-btn double-size${isDoubleSizeMode ? ' is-active' : ''}`}
+            className={`btn-icon display-modes-split-btn double-size${isDoubleSizeMode ? ' is-active' : ''}`}
             data-tooltip={isDoubleSizeMode ? 'Exit double size' : 'Double size'}
             aria-label={isDoubleSizeMode ? 'Exit double size mode' : 'Enable double size mode'}
             aria-pressed={isDoubleSizeMode}
