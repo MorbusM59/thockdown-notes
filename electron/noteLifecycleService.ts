@@ -511,8 +511,16 @@ export class NoteLifecycleService {
     const parentHref = formatInternalNoteLink(parentNoteId);
 
     const lines = ['# Table of Contents', '', formatOutlineRootTitleLine(parentRecord.title || 'Untitled', parentHref)];
+    // Nested by level relative to the shallowest heading present, same
+    // formula buildTableOfContentsInsertion (useMarkdownFormattingToolbar.ts)
+    // already uses for its own single-note TOC -- a flat depth-0 list here
+    // regardless of a heading's own level (### under ##, #### under ###, ...)
+    // was the bug: every heading rendered flush no matter how deeply nested
+    // its source actually was.
+    const parentRootLevel = parentHeadings.length > 0 ? Math.min(...parentHeadings.map((heading) => heading.level)) : 2;
     for (const heading of parentHeadings) {
-      lines.push(formatOutlineEntryLine(0, heading.label, formatInternalNoteLink(parentNoteId, formatHeadingAnchorFragment(heading.anchorId))));
+      const depth = Math.max(0, heading.level - parentRootLevel);
+      lines.push(formatOutlineEntryLine(depth, heading.label, formatInternalNoteLink(parentNoteId, formatHeadingAnchorFragment(heading.anchorId))));
     }
 
     const chapterRows = this.getRealChapterRows(parentNoteId);
@@ -523,8 +531,12 @@ export class NoteLifecycleService {
       const rootHref = formatInternalNoteLink(row.chapterNoteId);
       const rootLabel = rootHeading ? rootHeading.label : resolveIdentityLabel(row.chapterId, chapterDoc.text).text;
       lines.push(formatOutlineEntryLine(0, rootLabel, rootHref));
+      // Same relative-depth formula, scoped to this chapter: nested against
+      // its own root heading's level, not a hardcoded depth-1 for every
+      // subheading regardless of how deep it actually sits.
       for (const heading of restHeadings) {
-        lines.push(formatOutlineEntryLine(1, heading.label, formatInternalNoteLink(row.chapterNoteId, formatHeadingAnchorFragment(heading.anchorId))));
+        const depth = rootHeading ? Math.max(1, heading.level - rootHeading.level) : 1;
+        lines.push(formatOutlineEntryLine(depth, heading.label, formatInternalNoteLink(row.chapterNoteId, formatHeadingAnchorFragment(heading.anchorId))));
       }
     }
 

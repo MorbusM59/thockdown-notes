@@ -473,11 +473,29 @@ export function usePreviewMarkdownRendering({
   // via `data-source-line-start`) -- see scrollToAnchorInPreview/
   // scrollToHeadingAnchorInPreview below.
   const scrollToRenderedElement = useCallback((findTargetElement: () => HTMLElement | null, sourceLine: number | null, waitForNoteSwitch: boolean) => {
+    // On a note switch, previewBlocksRef.current can still hold the
+    // *previous* note's (much shorter) block list for a few frames after
+    // activateNote's promise resolves -- its own effect only commits once
+    // React has actually re-rendered with the new note's text. The old code
+    // resolved the block index exactly once, before the retry loop below,
+    // so a resolution against a still-stale ref was never retried -- only
+    // the DOM-element lookup was. Recomputing the index on every attempt
+    // (cheap -- a binary search) closes that race: once the ref catches up,
+    // the index changes and scrollToIndex finally targets the right block.
+    let lastScrolledIndex = -1
     const attemptScroll = (attemptsLeft: number) => {
+      if (sourceLine !== null) {
+        const index = resolvePreviewBlockIndexForSourceLine(previewBlocksRef.current, sourceLine)
+        if (index >= 0 && index !== lastScrolledIndex) {
+          lastScrolledIndex = index
+          virtualizer.scrollToIndex(index, { align: 'center', behavior: 'smooth' })
+        }
+      }
+
       const target = findTargetElement()
 
       if (target) {
-        // Instant, not smooth -- the virtualizer scroll below already did
+        // Instant, not smooth -- the virtualizer scroll above already did
         // the (smooth) traveling; this is just a small, exact centering
         // correction within the target's own block, not a second hop.
         target.scrollIntoView({ block: 'center', inline: 'nearest' })
@@ -490,20 +508,10 @@ export function usePreviewMarkdownRendering({
       window.requestAnimationFrame(() => attemptScroll(attemptsLeft - 1))
     }
 
-    const beginScroll = (attempts: number) => {
-      if (sourceLine !== null) {
-        const index = resolvePreviewBlockIndexForSourceLine(previewBlocksRef.current, sourceLine)
-        if (index >= 0) {
-          virtualizer.scrollToIndex(index, { align: 'center', behavior: 'smooth' })
-        }
-      }
-      attemptScroll(attempts)
-    }
-
     if (waitForNoteSwitch) {
-      window.requestAnimationFrame(() => window.requestAnimationFrame(() => beginScroll(30)))
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => attemptScroll(30)))
     } else {
-      beginScroll(5)
+      attemptScroll(5)
     }
   }, [virtualizer])
 

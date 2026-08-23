@@ -190,9 +190,12 @@ export function formatOutlineEntryLine(depth: number, label: string, href: strin
  * The auto-generated cross-chapter Table of Contents' own opening line: the
  * parent note's own title, bold and flush left, deliberately NOT a bulleted
  * `formatOutlineEntryLine` entry -- it's the root of the outline, not a
- * sibling of the `##` entries under it (every chapter title, plus any of
- * the parent's own `##` headings), so it reads visually distinct from them
- * rather than looking like just the first bullet in the same flat list.
+ * sibling of the shallowest entries under it (every chapter title, plus the
+ * parent's own shallowest headings, sit flush at depth 0; a deeper heading
+ * nests further, relative to its own family's root level -- see
+ * regenerateAutoTocChapter's own depth calculation), so it reads visually
+ * distinct from them rather than looking like just the first bullet in the
+ * same flat list.
  * Only the auto-TOC chapter uses this; the auto-Open-Items chapter has no
  * single "root" the same way -- each family member (parent or chapter) gets
  * its own independent formatOutlineEntryLine(0, ...) group there, all at the

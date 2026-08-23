@@ -77,6 +77,24 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
     expect(ch2Doc.text).toBe(ch2Text)
   })
 
+  it('nests entries by heading level relative to their own family\'s root, not a hardcoded flat depth', async () => {
+    // Parent: ## is the shallowest heading present, so it's the family's
+    // own root level (depth 0) -- #### two levels under it lands at depth 2,
+    // not flush with everything else.
+    const parent = await lifecycle.createNote({ initialText: '# The Book\n\n## Setting\n\n#### Climate\n\nBody.' })
+    const ch1 = await lifecycle.createChapterNote(parent.id)
+    // Chapter root is its own first heading (##) -- ### one level under it
+    // is depth 1 (unchanged from before), #### two levels under it is depth 2.
+    await lifecycle.saveNote({ id: ch1.id, text: '## Chapter One\n\n### Arrival\n\n#### Docks\n\nBody.' })
+
+    const { created } = await lifecycle.regenerateAutoTocChapter(parent.id)
+
+    expect(created.text).toContain(`- [Setting](@${parent.id}#heading:setting)`)
+    expect(created.text).toContain(`    - [Climate](@${parent.id}#heading:climate)`)
+    expect(created.text).toContain(`  - [Arrival](@${ch1.id}#heading:arrival)`)
+    expect(created.text).toContain(`    - [Docks](@${ch1.id}#heading:docks)`)
+  })
+
   it('never assigns any id itself, and the TOC is fully linked regardless -- internal navigation has no dependency on assigned ids at all', async () => {
     const parent = await lifecycle.createNote({ initialText: '# The Book\n\n## Setting\n\nWorld-building.' })
     const ch1 = await lifecycle.createChapterNote(parent.id)

@@ -1182,8 +1182,13 @@ function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string)
   const parentHref = formatInternalNoteLink(parentNoteId)
 
   const lines = ['# Table of Contents', '', formatOutlineRootTitleLine(parentNote.title || 'Untitled', parentHref)]
+  // Nested by level relative to the shallowest heading present -- mirrors
+  // noteLifecycleService.ts's regenerateAutoTocChapter exactly, see its own
+  // comment for why a hardcoded flat depth was the bug.
+  const parentRootLevel = parentHeadings.length > 0 ? Math.min(...parentHeadings.map((heading) => heading.level)) : 2
   for (const heading of parentHeadings) {
-    lines.push(formatOutlineEntryLine(0, heading.label, formatInternalNoteLink(parentNoteId, formatHeadingAnchorFragment(heading.anchorId))))
+    const depth = Math.max(0, heading.level - parentRootLevel)
+    lines.push(formatOutlineEntryLine(depth, heading.label, formatInternalNoteLink(parentNoteId, formatHeadingAnchorFragment(heading.anchorId))))
   }
 
   const chapterRows = getRealChapterRowsInStore(store, parentNoteId)
@@ -1197,7 +1202,8 @@ function regenerateAutoTocInStore(store: BrowserMockStore, parentNoteId: string)
     const rootLabel = rootHeading ? rootHeading.label : resolveIdentityLabel(row.chapterId, chapterNote.text).text
     lines.push(formatOutlineEntryLine(0, rootLabel, rootHref))
     for (const heading of restHeadings) {
-      lines.push(formatOutlineEntryLine(1, heading.label, formatInternalNoteLink(row.chapterNoteId, formatHeadingAnchorFragment(heading.anchorId))))
+      const depth = rootHeading ? Math.max(1, heading.level - rootHeading.level) : 1
+      lines.push(formatOutlineEntryLine(depth, heading.label, formatInternalNoteLink(row.chapterNoteId, formatHeadingAnchorFragment(heading.anchorId))))
     }
   }
 
