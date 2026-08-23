@@ -571,7 +571,6 @@
     + 4px
   );
   --note-list-row-content-height: var(--btn-square-regular-size);
-  --wordcount-panel-width: 110px;
 }
 
 /* ---------------------------------------------------------------------------
