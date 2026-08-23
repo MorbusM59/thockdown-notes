@@ -393,6 +393,7 @@ export function EditorSection({
     previewScrollRef,
     editModeSnapshotByNoteIdRef,
     pendingEditRestoreSnapshotRef,
+    pendingRenderViewSourceAnchorRef,
     latestViewportRef,
     latestEditViewportRef,
     readCurrentEditUiPayload,
@@ -492,7 +493,15 @@ export function EditorSection({
     skipFreeze: isHibernatingNoteEphemeralAutoChapter || isHibernatingNoteTimeless,
   })
 
-  const activateNote = useCallback(async (noteId: string, overrideCursorPos?: number) => {
+  /**
+   * `overrideSourceAnchorLine` opens the note *at* that line instead of
+   * resuming it where it was last left -- used when an anchor/TOC link is
+   * what opened it. It feeds both panes' restore paths (the edit snapshot
+   * built below, and the render pane's own pendingRenderViewSourceAnchorRef),
+   * so the note's first painted frame is already the target: no restoring
+   * to the old position and then travelling from it, in either mode.
+   */
+  const activateNote = useCallback(async (noteId: string, overrideCursorPos?: number, overrideSourceAnchorLine?: number) => {
     if (!window.thockdownNotes) return
 
     const debugTiming = window.localStorage.getItem('thockdown:debug-input-lag') === '1'
@@ -651,10 +660,21 @@ export function EditorSection({
       uiState: nextUiState,
       fallbackViewport,
       overrideCursorPos,
+      overrideSourceAnchorLine,
       previewBlocks: cachedBlocks,
     })
     logStep('build edit restore snapshot', restoreSnapshotStart)
     updateEditModeSnapshotCache(preloadedSnapshot)
+
+    // The render pane restores through its own channel, not the edit
+    // snapshot -- so an anchored activation has to hand it the same landing
+    // line, or preview would still restore to the stored position and have
+    // to be scrolled off it afterwards.
+    if (typeof overrideSourceAnchorLine === 'number' && Number.isFinite(overrideSourceAnchorLine)) {
+      pendingRenderViewSourceAnchorRef.current = {
+        sourceAnchorLine: Math.max(0, Math.round(overrideSourceAnchorLine)),
+      }
+    }
 
     const externalStart = performance.now()
     let originalText: string | null = null
@@ -737,6 +757,7 @@ export function EditorSection({
     latestEditorTextRef,
     latestViewportRef,
     pendingEditRestoreSnapshotRef,
+    pendingRenderViewSourceAnchorRef,
     pendingViewportRestoreRef,
     readCurrentEditUiPayload,
     setActiveNoteId,
@@ -1410,6 +1431,9 @@ export function EditorSection({
 
   const currentSectionHandle: SectionHandle = {
     ...editorSectionMountRest,
+    // Destructured out of editorSectionMountRest above (activateNote writes
+    // it), so the spread no longer carries it -- put it back by hand.
+    pendingRenderViewSourceAnchorRef,
     queueSave,
     flushPendingSaveNow,
     cancelPendingSave,

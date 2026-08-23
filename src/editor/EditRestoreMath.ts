@@ -171,9 +171,18 @@ export function buildEditRestoreSnapshotFromUiState(params: {
   uiState: { cursorPos?: unknown; anchorBlockIndex?: unknown } | null | undefined
   fallbackViewport: PersistedViewportState | null
   overrideCursorPos?: number
+  /**
+   * Where to land instead of the note's own persisted position -- set when
+   * the note is being opened *at* a specific place rather than resumed
+   * where it was left (following an anchor/TOC link into it). Without this
+   * the note restores to its stored position first and only then gets
+   * scrolled to the target, so the reader sees a place they didn't ask for
+   * before arriving at the one they did.
+   */
+  overrideSourceAnchorLine?: number
   previewBlocks?: Pick<PreviewMarkdownBlock, 'startLine'>[] | null
 }): EditRestoreSnapshot {
-  const { noteId, text, uiState, fallbackViewport, overrideCursorPos, previewBlocks } = params
+  const { noteId, text, uiState, fallbackViewport, overrideCursorPos, overrideSourceAnchorLine, previewBlocks } = params
   // Default to 0 lines for both boundaries when nothing is stored (per spec:
   // a fresh/never-dragged note has no reserved top/bottom zones).
   const fallbackTopBoundaryLines = fallbackViewport?.topBoundaryLines ?? 0
@@ -190,7 +199,10 @@ export function buildEditRestoreSnapshotFromUiState(params: {
       : typeof uiState?.cursorPos === 'number' && Number.isFinite(uiState.cursorPos)
         ? Math.max(0, Math.min(Math.round(uiState.cursorPos), selectionTextLength))
         : selectionTextLength
-  const anchorLine = resolveEditSourceAnchorLineFromUiState(text, uiState, previewBlocks)
+  const hasOverrideAnchorLine = typeof overrideSourceAnchorLine === 'number' && Number.isFinite(overrideSourceAnchorLine)
+  const anchorLine = hasOverrideAnchorLine
+    ? Math.max(0, Math.round(overrideSourceAnchorLine as number))
+    : resolveEditSourceAnchorLineFromUiState(text, uiState, previewBlocks)
   const storedScrollTopLines =
     anchorLine !== null
       ? Math.max(0, anchorLine - fallbackTopBoundaryLines + RESTORE_OFFSET_LINES)

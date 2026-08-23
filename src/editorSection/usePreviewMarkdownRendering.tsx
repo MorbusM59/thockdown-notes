@@ -111,7 +111,7 @@ export interface UsePreviewMarkdownRenderingOptions {
   activeNoteId: string | null
   activeNoteText: string
   latestEditorTextRef: MutableRefObject<string>
-  activateNote: (noteId: string, overrideCursorPos?: number) => Promise<void>
+  activateNote: (noteId: string, overrideCursorPos?: number, overrideSourceAnchorLine?: number) => Promise<void>
   previewScrollRef: MutableRefObject<HTMLDivElement | null>
   /**
    * Whether the section is currently showing the rendered pane. Anchor
@@ -406,6 +406,7 @@ export function usePreviewMarkdownRendering({
   const scrollEditorToAnchor = useCallback((
     resolveLine: (text: string) => number | null,
     expectedNoteId: string | null,
+    instant: boolean,
   ) => {
     const attempt = (attemptsLeft: number) => {
       const adapter = adapterRef.current
@@ -417,7 +418,12 @@ export function usePreviewMarkdownRendering({
           const offset = resolveOffsetForSourceLine(text, sourceLine)
           adapter.applySnapshot({
             selection: { anchor: offset, focus: offset, start: offset, end: offset, isCollapsed: true },
-            selectionScrollBehavior: 'center-caged',
+            // Animated only within the note the reader is already in -- see
+            // EditorSelectionScrollBehavior. Arriving from another note is
+            // instant, and normally lands on a position the note was already
+            // opened at (activateNote's overrideSourceAnchorLine), leaving
+            // this as a no-op correction rather than a visible second hop.
+            selectionScrollBehavior: instant ? 'center-caged-instant' : 'center-caged',
           })
           return
         }
@@ -436,6 +442,9 @@ export function usePreviewMarkdownRendering({
   // render-view restore might otherwise land on.
   const scrollPreviewToTop = useCallback((waitForNoteSwitch: boolean, expectedNoteId: string | null = null) => {
     const reset = () => {
+      // Instant whenever this is a note switch (which it always is today):
+      // there is no position worth travelling from -- the reader never chose
+      // where the note being opened was last left, and mostly never saw it.
       // Same pane-awareness the anchor branch needs: in edit mode there is
       // no preview pane to scroll, and "go to this note" should still land
       // at its start rather than silently leaving the editor wherever the
@@ -444,10 +453,21 @@ export function usePreviewMarkdownRendering({
         // Waits for the switch the same way the anchor branch does --
         // landing on offset 0 before it completes would put the caret at the
         // top of the note being *left*, not the one being opened.
-        scrollEditorToAnchor(() => 0, expectedNoteId)
+        scrollEditorToAnchor(() => 0, expectedNoteId, waitForNoteSwitch)
         return
       }
-      previewScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+      const scroller = previewScrollRef.current
+      if (!scroller) return
+      if (!waitForNoteSwitch) {
+        scroller.scrollTo({ top: 0, behavior: 'smooth' })
+        return
+      }
+      // `.markdown-preview` carries `scroll-behavior: smooth` in CSS, so an
+      // instant write has to force `auto` itself or the browser animates it.
+      const previousScrollBehavior = scroller.style.scrollBehavior
+      scroller.style.scrollBehavior = 'auto'
+      scroller.scrollTop = 0
+      scroller.style.scrollBehavior = previousScrollBehavior
     }
 
     if (waitForNoteSwitch) {
@@ -581,7 +601,7 @@ export function usePreviewMarkdownRendering({
   // and an automatic, on-the-fly heading anchor (the heading element itself,
   // via `data-source-line-start`) -- see scrollToAnchorInPreview/
   // scrollToHeadingAnchorInPreview below.
-  const scrollToRenderedElement = useCallback((findTargetElement: () => HTMLElement | null, sourceLine: number | null, waitForNoteSwitch: boolean) => {
+  const scrollToRenderedElement = useCallback((findTargetElement: () => HTMLElement | null, sourceLine: number | null, waitForNoteSwitch: boolean, instant: boolean) => {
     // On a note switch, previewBlocksRef.current can still hold the
     // *previous* note's (much shorter) block list for a few frames after
     // activateNote's promise resolves -- its own effect only commits once
@@ -597,7 +617,12 @@ export function usePreviewMarkdownRendering({
         const index = resolvePreviewBlockIndexForSourceLine(previewBlocksRef.current, sourceLine)
         if (index >= 0 && index !== lastScrolledIndex) {
           lastScrolledIndex = index
-          virtualizer.scrollToIndex(index, { align: 'center', behavior: 'smooth' })
+          // Animated only within the note the reader is already in. Coming
+          // from another note there is nothing to orient -- and the pane has
+          // normally already been restored straight onto this block anyway
+          // (activateNote's overrideSourceAnchorLine), so this resolves to no
+          // movement at all rather than a travel across the document.
+          virtualizer.scrollToIndex(index, { align: 'center', behavior: instant ? 'auto' : 'smooth' })
         }
       }
 
@@ -651,13 +676,13 @@ export function usePreviewMarkdownRendering({
 
   // Scrolls to a manual `[Anchor Text](#anchor-id)` definition, rendered as
   // an inert `.note-anchor-marker` span carrying the id verbatim.
-  const scrollToAnchorInPreview = useCallback((anchorId: string, sourceLine: number | null, waitForNoteSwitch: boolean) => {
+  const scrollToAnchorInPreview = useCallback((anchorId: string, sourceLine: number | null, waitForNoteSwitch: boolean, instant: boolean) => {
     scrollToRenderedElement(() => {
       const scoped = previewScrollRef.current
       if (!scoped) return null
       const candidates = Array.from(scoped.querySelectorAll<HTMLElement>('.note-anchor-marker'))
       return candidates.find((el) => el.dataset.anchorId === anchorId) ?? null
-    }, sourceLine, waitForNoteSwitch)
+    }, sourceLine, waitForNoteSwitch, instant)
   }, [scrollToRenderedElement, previewScrollRef])
 
   // Scrolls to an automatic, on-the-fly heading anchor -- there's no literal
@@ -665,11 +690,11 @@ export function usePreviewMarkdownRendering({
   // so the target is the heading element itself, found via the
   // `data-source-line-start` attribute createPreviewSourceAnchorRehypePlugin
   // already stamps on every heading.
-  const scrollToHeadingAnchorInPreview = useCallback((sourceLine: number, waitForNoteSwitch: boolean) => {
+  const scrollToHeadingAnchorInPreview = useCallback((sourceLine: number, waitForNoteSwitch: boolean, instant: boolean) => {
     const selector = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']
       .map((tag) => `${tag}[data-source-line-start="${sourceLine}"]`)
       .join(', ')
-    scrollToRenderedElement(() => previewScrollRef.current?.querySelector<HTMLElement>(selector) ?? null, sourceLine, waitForNoteSwitch)
+    scrollToRenderedElement(() => previewScrollRef.current?.querySelector<HTMLElement>(selector) ?? null, sourceLine, waitForNoteSwitch, instant)
   }, [scrollToRenderedElement, previewScrollRef])
 
   // Resolves a raw href anchor fragment to whichever of the app's two
@@ -695,17 +720,24 @@ export function usePreviewMarkdownRendering({
     // "preview" no matter what mode the target note will actually open in,
     // and the flip back to the reader's own mode has to have committed
     // before the branch is taken.
+    // A note switch is exactly the case with nothing to orient, so it is
+    // also exactly the case that must not animate: smooth scrolling is what
+    // shows a reader how the place they were relates to the place they asked
+    // for, which only means anything inside one document. `waitForNoteSwitch`
+    // already is "this activated a different note", so it doubles as the
+    // instant flag.
     const scrollTo = (sourceLine: number, waitForNoteSwitch: boolean, expectedNoteId: string | null = null) => {
+      const instant = waitForNoteSwitch
       const dispatch = () => {
         if (!isPreviewModeRef.current) {
-          scrollEditorToAnchor(resolveLine, expectedNoteId)
+          scrollEditorToAnchor(resolveLine, expectedNoteId, instant)
           return
         }
         if (headingSlug !== null) {
-          scrollToHeadingAnchorInPreview(sourceLine, waitForNoteSwitch)
+          scrollToHeadingAnchorInPreview(sourceLine, waitForNoteSwitch, instant)
           return
         }
-        scrollToAnchorInPreview(anchorId, sourceLine, waitForNoteSwitch)
+        scrollToAnchorInPreview(anchorId, sourceLine, waitForNoteSwitch, instant)
       }
 
       if (waitForNoteSwitch) {
@@ -725,6 +757,17 @@ export function usePreviewMarkdownRendering({
   const activateAndScroll = useCallback((targetNoteId: string, contentTextForExistenceCheck: string, anchorId: string | null) => {
     const isAlreadyActive = targetNoteId === activeNoteId
     const anchorTarget = anchorId !== null ? resolveAnchorTarget(anchorId) : null
+
+    // Resolved *before* activation, not after, so the note can be opened
+    // already sitting on it -- see activateNote's overrideSourceAnchorLine.
+    // Resolving after (which is all the follow-up below can do) means the
+    // note first restores wherever it was last left, and only then moves.
+    const preResolvedLandingLine = !isAlreadyActive && anchorTarget !== null
+      ? anchorTarget.resolveLine(contentTextForExistenceCheck)
+      : null
+    const preResolvedLandingOffset = preResolvedLandingLine !== null
+      ? resolveOffsetForSourceLine(normalizeInternalText(contentTextForExistenceCheck), preResolvedLandingLine)
+      : undefined
     const followUp = () => {
       if (anchorTarget !== null) {
         // Once the target note is active, its own live text is what
@@ -745,7 +788,11 @@ export function usePreviewMarkdownRendering({
     if (isAlreadyActive) {
       followUp()
     } else {
-      void activateNote(targetNoteId, undefined).then(followUp)
+      void activateNote(
+        targetNoteId,
+        preResolvedLandingOffset,
+        preResolvedLandingLine ?? undefined,
+      ).then(followUp)
     }
   }, [activeNoteId, activateNote, resolveAnchorTarget, scrollPreviewToTop, latestEditorTextRef])
 

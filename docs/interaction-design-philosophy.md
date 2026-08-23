@@ -90,6 +90,9 @@ The goal is deterministic behavior with one source of truth per interaction phas
 - Note creation and activation must be atomic from the user perspective.
 - Active note identity must drive editor instance ownership.
 - Selecting a note card must be capable of forced reload recovery when state is stale.
+- **Smooth scrolling is an orientation device, and orientation only exists within one document.** A jump that stays in the note the reader is already in (a find hit, a link to another part of the same note) animates: watching the travel is what tells them how where they were relates to where they asked to go. A jump that *changes* the active note never animates -- the position it would travel from is one the reader did not choose and mostly never saw, so the motion conveys nothing and only delays arrival.
+- A note opened *at* a position (an anchor/TOC link into it) must be restored directly onto that position, not restored to its own stored position and then moved. The stored position must never be painted first: arriving somewhere the reader did not ask for, however briefly, is the same defect as landing there. Both panes have a channel for this -- `buildEditRestoreSnapshotFromUiState`'s `overrideSourceAnchorLine` for edit, `pendingRenderViewSourceAnchorRef` for render -- and both are fed from `activateNote`'s own override parameters.
+- Programmatic jump geometry must not depend on the editor being focused. An unfocused editor has no DOM selection to measure, and following a link is exactly the case where focus is on the thing that was clicked -- resolve the target from the editor's own layout instead (CM6Editor's `resolveSelectionBlockInScroll`), or the jump silently does nothing in the one case it exists for.
 
 ## Review Checklist
 Before shipping an interaction change, verify:

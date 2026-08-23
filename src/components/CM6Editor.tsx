@@ -740,7 +740,7 @@ export function CM6Editor({
   // applySnapshot, which needs to center a newly-applied selection (search
   // hits, go-to-start/end) in the viewport -- see its use in applySnapshot's
   // `snapshot.selection` handling.
-  const reconcileSelectionJumpScrollRef = useRef<((view: EditorView) => void) | null>(null);
+  const reconcileSelectionJumpScrollRef = useRef<((view: EditorView, instant?: boolean) => void) | null>(null);
   // Read by the Ctrl+ArrowUp/Down keymap handler below (registered once at
   // view-construction time), same "stable ref to a closure that's recreated
   // every render" pattern as bindingsRef -- see navigateToFlaggedLine's own
@@ -2354,24 +2354,64 @@ export function CM6Editor({
     // costs nothing once the position has settled.
     let selectionJumpReconcileGeneration = 0;
 
-    const reconcileSelectionJumpScroll = (view: EditorView) => {
+    /**
+     * Where the current selection sits in document coordinates, taken from
+     * CM6's own line layout rather than from the DOM selection.
+     *
+     * The DOM-selection path this backs up only exists while the editor is
+     * focused -- an unfocused editor has no selection range at all, and
+     * `readSelectionRect` correctly returns null for it. That is not an edge
+     * case for programmatic jumps: following an anchor/TOC link puts focus
+     * on the link that was clicked, so the jump that lands right after it
+     * measured nothing and silently declined to scroll, leaving the note
+     * sitting whereverit already was. CM6 knows a position's geometry
+     * whether or not anything is focused, and knows it for lines it hasn't
+     * rendered, so this answers in exactly the cases the DOM cannot.
+     */
+    const resolveSelectionBlockInScroll = (view: EditorView): { topInScroll: number; heightPx: number } | null => {
+      const head = view.state.selection.main.head;
+      if (head < 0 || head > view.state.doc.length) return null;
+      const block = view.lineBlockAt(head);
+      if (!block) return null;
+      // `block.top` is relative to the document's own start; the scroll
+      // coordinate space this function's callers use starts at the
+      // scroller's content origin, which the content element's own offset
+      // (padding, any decorations above the doc) sits inside.
+      const contentOffsetInScroll =
+        view.contentDOM.getBoundingClientRect().top
+        - view.scrollDOM.getBoundingClientRect().top
+        + view.scrollDOM.scrollTop;
+      return { topInScroll: block.top + contentOffsetInScroll, heightPx: block.height };
+    };
+
+    const reconcileSelectionJumpScroll = (view: EditorView, instant = false) => {
       selectionJumpReconcileGeneration += 1;
       const myGeneration = selectionJumpReconcileGeneration;
       const scroller = view.scrollDOM;
-      const domSelection = window.getSelection();
-      if (!domSelection || domSelection.rangeCount === 0) return;
-
       const lineHeightPxNow = lineHeightPxRef.current;
       const scrollerRect = scroller.getBoundingClientRect();
-      const selectionRect = readSelectionRect(domSelection, lineHeightPxNow, view.contentDOM);
-      if (!selectionRect) return;
 
-      const selectionTopInScroll = resolveCM6CaretTopInScroll(
-        selectionRect,
-        scrollerRect.top,
-        scroller.scrollTop,
-      );
-      const selectionHeightPx = Math.max(lineHeightPxNow, selectionRect.bottom - selectionRect.top);
+      const domSelection = window.getSelection();
+      const selectionRect = domSelection && domSelection.rangeCount > 0
+        ? readSelectionRect(domSelection, lineHeightPxNow, view.contentDOM)
+        : null;
+
+      let selectionTopInScroll: number;
+      let selectionHeightPx: number;
+
+      if (selectionRect) {
+        selectionTopInScroll = resolveCM6CaretTopInScroll(
+          selectionRect,
+          scrollerRect.top,
+          scroller.scrollTop,
+        );
+        selectionHeightPx = Math.max(lineHeightPxNow, selectionRect.bottom - selectionRect.top);
+      } else {
+        const block = resolveSelectionBlockInScroll(view);
+        if (!block) return;
+        selectionTopInScroll = block.topInScroll;
+        selectionHeightPx = Math.max(lineHeightPxNow, block.heightPx);
+      }
       const selectionCenterInScroll = selectionTopInScroll + (selectionHeightPx / 2);
 
       const middleTopPx = topBoundaryPxRef.current;
@@ -2386,14 +2426,26 @@ export function CM6Editor({
       );
 
       if (Math.abs(targetScrollTopPx - scroller.scrollTop) > 0.01) {
-        scrollToQuantizedSmooth(scroller, targetScrollTopPx, { lineHeightPx: lineHeightPxNow });
+        if (instant) {
+          // Land with no animation -- and cancel any in-flight one first: a
+          // curve scroll recomputes scrollTop from its own captured start and
+          // target on every frame, so a write landing mid-flight is erased on
+          // the next one.
+          cancelQuantizedSmoothScroll(scroller);
+          const previousScrollBehavior = scroller.style.scrollBehavior;
+          scroller.style.scrollBehavior = 'auto';
+          scroller.scrollTop = targetScrollTopPx;
+          scroller.style.scrollBehavior = previousScrollBehavior;
+        } else {
+          scrollToQuantizedSmooth(scroller, targetScrollTopPx, { lineHeightPx: lineHeightPxNow });
+        }
       }
 
       const scrollTopAfterWrite = scroller.scrollTop;
       requestAnimationFrame(() => {
         if (selectionJumpReconcileGeneration !== myGeneration) return;
         if (Math.abs(scroller.scrollTop - scrollTopAfterWrite) > 0.01) {
-          reconcileSelectionJumpScroll(view);
+          reconcileSelectionJumpScroll(view, instant);
         }
       });
     };
@@ -4130,7 +4182,7 @@ export function CM6Editor({
           // viewport/viewportLines above. CM6 applies transaction DOM changes
           // synchronously, so window.getSelection() is already current here.
           if (snapshot.selectionScrollBehavior !== 'preserve-scroll' && !snapshot.viewport && !snapshot.viewportLines) {
-            reconcileSelectionJumpScrollRef.current?.(view);
+            reconcileSelectionJumpScrollRef.current?.(view, snapshot.selectionScrollBehavior === 'center-caged-instant');
           }
         }
 
