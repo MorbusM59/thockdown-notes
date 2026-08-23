@@ -4,21 +4,22 @@ import type { UseMarkdownFormattingToolbarResult } from '../editorSection/useMar
 
 /**
  * Picks the formatting group's layout from the room it actually has: full-size
- * square buttons (the size of a window control) on one row while they fit,
- * mini squares wrapping onto two rows when they don't.
- *
- * Both layouts are the audio player's grid: a full-size button is one large
- * button box (a window control), a compact one is half of that box, two of
- * them stacked in the same footprint -- spacing-small between buttons and
- * rows, spacing-large between the groups of three.
+ * buttons (a tab/chapter-bar icon button) on one row while they fit, mini
+ * squares wrapping onto two rows when they don't. Both keep the same row
+ * height, so the toolbar never changes shape as it switches.
  *
  * The threshold is measured, not a hardcoded breakpoint, because every term in
- * it -- button size, gaps, group padding -- scales with the user's spacing
- * setting, and the button count changes whenever this file's JSX does. The one
- * value that can't be read back as a resolved length is the full button size
- * (it's a custom property, whose computed value is an unresolved token list),
- * so it's derived from the toolbar's own content-box height instead: both
- * layouts share one row height, and a full-size button is exactly that box.
+ * it -- button size, gaps, padding -- scales with the user's spacing setting,
+ * and the button count changes whenever this file's JSX does.
+ *
+ * Those terms have to be the *full-size* layout's even while the compact one is
+ * showing, or the question being asked ("would the full-size row fit?") would
+ * be answered with the compact row's numbers, and the toolbar could never
+ * decide to switch back. Reading them off the live toolbar can't do that, and
+ * custom properties don't help either -- their computed value is an unresolved
+ * token list, not a length. Hence the size probe: a hidden element (see
+ * toolbar.css) carrying the full-size layout's button size, padding and button
+ * gap as ordinary properties, which do resolve to pixels.
  */
 function useFormattingToolbarCompact(toolbarRef: RefObject<HTMLDivElement | null>) {
   const [isCompact, setIsCompact] = useState(false)
@@ -34,22 +35,28 @@ function useFormattingToolbarCompact(toolbarRef: RefObject<HTMLDivElement | null
     if (!el) return
 
     const measure = () => {
+      // clientWidth is the padding box -- it already includes the toolbar's own
+      // left/right padding, which is why requiredWidthPx below adds the padding
+      // too and the two stay comparable. (Adding it to both sides instead let
+      // the row overflow by a whole inset before this flipped, which looked
+      // like the rightmost button being sliced off.)
       const availableWidthPx = el.clientWidth
-      if (!availableWidthPx) return
-      const styles = getComputedStyle(el)
-      const paddingXPx = parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight)
-      const buttonSizePx = el.clientHeight - parseFloat(styles.paddingTop) - parseFloat(styles.paddingBottom)
+      const probeEl = el.querySelector<HTMLElement>('.markdown-toolbar-size-probe')
       const groups = Array.from(el.querySelectorAll<HTMLElement>('.toolbar-group'))
-      if (!groups.length || buttonSizePx <= 0) return
+      if (!availableWidthPx || !probeEl || !groups.length) return
 
-      let requiredWidthPx = paddingXPx + (parseFloat(styles.columnGap) || 0) * (groups.length - 1)
+      const probeStyles = getComputedStyle(probeEl)
+      const buttonSizePx = parseFloat(probeStyles.width)
+      const paddingXPx = 2 * parseFloat(probeStyles.paddingLeft)
+      const buttonGapPx = parseFloat(probeStyles.columnGap) || 0
+      const groupGapPx = parseFloat(getComputedStyle(el).columnGap) || 0
+      if (!(buttonSizePx > 0)) return
+
+      let requiredWidthPx = paddingXPx + groupGapPx * (groups.length - 1)
       for (const group of groups) {
-        const groupStyles = getComputedStyle(group)
         const buttonCount = group.querySelectorAll('button').length
-        requiredWidthPx += parseFloat(groupStyles.paddingLeft)
-          + parseFloat(groupStyles.paddingRight)
-          + buttonCount * buttonSizePx
-          + Math.max(0, buttonCount - 1) * (parseFloat(groupStyles.columnGap) || 0)
+        requiredWidthPx += buttonCount * buttonSizePx
+          + Math.max(0, buttonCount - 1) * buttonGapPx
       }
       // Switching layouts changes neither the row height nor the toolbar's own
       // width, so this can't feed back into the observer (or the render) that
@@ -180,6 +187,9 @@ export function EditorToolbar({
           aria-label="Markdown toolbar"
           ref={formattingToolbarRef}
         >
+          {/* Never painted -- carries the full-size layout's metrics for the fit
+              measurement above. See toolbar.css. */}
+          <span className="markdown-toolbar-size-probe" aria-hidden="true" />
           <div className="toolbar-group">
             <button
               type="button"

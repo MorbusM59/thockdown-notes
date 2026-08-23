@@ -125,11 +125,21 @@
   /* The compact layout is the audio player's grid: two rows of half-size
      buttons occupying exactly one large button's box. */
   --markdown-toolbar-button-height: var(--btn-square-half-size);
-  /* ...which makes that box the full-size button, identical to a window
-     control, and makes one row box fit both layouts -- so switching between
+  /* ...which is what fixes the row box for both layouts, so switching between
      them never changes the toolbar's height. */
-  --markdown-toolbar-full-button-size: var(--btn-square-large-size);
   --markdown-toolbar-row-height: calc(var(--btn-square-large-size) + 2 * var(--markdown-toolbar-padding));
+
+  /* The full-size layout: a spacing-large inset on every side, buttons taking
+     whatever vertical room that leaves (which also centers them, the inset
+     being equal top and bottom), spacing-regular between buttons and
+     spacing-large between the groups of three. The button size falls out of
+     the row box rather than being its own number, so it stays centered however
+     the spacing setting moves. (It lands near, but not exactly on, the
+     tab/chapter bars' --ui-pill-bar-size buttons -- those derive from a pill's
+     line box, this from the toolbar's row.) */
+  --markdown-toolbar-full-padding: var(--spacing-large);
+  --markdown-toolbar-full-button-gap: var(--spacing-regular);
+  --markdown-toolbar-full-button-size: calc(var(--markdown-toolbar-row-height) - 2 * var(--markdown-toolbar-full-padding));
 }
 
 .toolbar-container {
@@ -160,13 +170,35 @@
   padding: var(--markdown-toolbar-padding);
   /* Row gap (compact layout's second row) then column gap (between groups). */
   gap: var(--markdown-toolbar-gap) var(--markdown-toolbar-group-gap);
-  transition: ease-in opacity 150ms;
+}
+
+.markdown-toolbar:not(.is-compact) {
+  padding: var(--markdown-toolbar-full-padding);
+}
+
+.markdown-toolbar:not(.is-compact) > .toolbar-group {
+  gap: var(--markdown-toolbar-full-button-gap);
 }
 
 /* Not enough room for one full-size row: mini squares, wrapping onto a second
    row, same as this toolbar has always behaved when it ran out of width. */
 .markdown-toolbar.is-compact {
   flex-wrap: wrap-reverse;
+}
+
+/* Sized to a full-size button and carrying the full-size layout's own padding
+   and button gap, so EditorToolbar.tsx can measure what that layout would need
+   even while the compact one is showing. Absolutely positioned, so it's outside
+   the flex flow, and never painted. Without it the fit test would read the
+   compact layout's metrics and could never decide to switch back. */
+.markdown-toolbar-size-probe {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  width: var(--markdown-toolbar-full-button-size);
+  height: var(--markdown-toolbar-full-button-size);
+  padding-left: var(--markdown-toolbar-full-padding);
+  column-gap: var(--markdown-toolbar-full-button-gap);
 }
 
 .toolbar-group {
@@ -193,6 +225,19 @@
   padding: 0;
   border-radius: var(--border-radius-small);
   font-size: 13px; /* icon glyph, fixed box -- see --ui-font-scale's scope note in tokens.css */
+  /* Narrower than base.css's `transition: all` on purpose: every one of this
+     button's geometry properties differs between the two layouts, and `all`
+     animated the switch between them over 200ms instead of just happening.
+     Hover feedback still transitions. */
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+/* Glyph size matches the tab/chapter bars' icon buttons
+   (.chapter-auto-button); the corner radius is the regular one, the compact
+   layout's smaller squares keeping --border-radius-small. */
+.markdown-toolbar:not(.is-compact) > .toolbar-group > .btn-icon {
+  border-radius: var(--border-radius-regular);
+  font-size: calc(var(--btn-icon-size) - 4px);
 }
 
 .markdown-toolbar.is-compact > .toolbar-group > .btn-icon {
