@@ -206,6 +206,11 @@ const DISPLAY_MODES_BORDER_PX = 2
 const NOTE_LIST_ROW_CONTENT_HEIGHT_PX = BTN_SQUARE_REGULAR_SIZE_PX
 const SIDEBAR_MINI_CONTROL_HEIGHT_PX = 20
 const SIDEBAR_MIN_VISIBLE_NOTE_CARDS = 4
+// Chrome lays out in 1/64px units and rounds to them, so a requirement derived
+// to the exact pixel can still land a hair under what the layout wants. Every
+// minimum built from measurements gets nudged past one such step before it's
+// rounded up. The extra pixel is invisible; being one short isn't.
+const SUB_PIXEL_QUANTUM_PX = 1 / 64
 // Soft minimum, enforced only at section-creation time -- the "+" button
 // disappearing when there isn't room for one more is the enforcement (see
 // the handover doc's split-view design). Matches the same 300px figure the
@@ -1909,18 +1914,32 @@ function App() {
     [sidebarWidthPx, toolbarMinWidthPx, windowControlsWidthPx],
   )
 
-  // The shortest the window may get: exactly enough for the Date-view sidebar
-  // to show four note cards. Mirrors sidebar.css top to bottom -- the sidebar's
-  // own vertical padding and the three gaps between its four children, the
-  // search box (its padding-top plus the input's fixed height), the view-toggle
-  // row (its padding plus the mode buttons, which are square and so take their
-  // height from how wide six of them plus their gaps come out in the sidebar's
-  // width), the two-line date-filter rail, the pagination bar, and inside the
-  // scroll frame the note list's own padding, four cards and the three
-  // spacing-large gaps between them. Everything below the sidebar's floor --
-  // tab bar, chapter bar, stats row -- adds up to less than this, so the
+  // The window height the Date-view sidebar needs to actually show four note
+  // cards, measured off the rendered sidebar (see the effect that sets this,
+  // near the itemsPerPage computation it inverts). Null until the first
+  // measurement lands, and while the sidebar is hidden or in a view this floor
+  // isn't about -- the arithmetic below stands in for those.
+  const [measuredMinHeightPx, setMeasuredMinHeightPx] = useState<number | null>(null)
+
+  // The shortest the window may get. The measurement above is the authority;
+  // what follows is the stand-in until it arrives, mirroring sidebar.css top to
+  // bottom -- the sidebar's own vertical padding and the gaps between its
+  // children, the search box (its padding-top plus the input's fixed height),
+  // the view-toggle row (its padding plus the mode buttons, which are square
+  // and so take their height from how wide six of them plus their gaps come out
+  // in the sidebar's width), the two-line date-filter rail, the pagination bar,
+  // and inside the scroll frame the note list's own padding, four cards and the
+  // three spacing-large gaps between them. Everything below the sidebar's floor
+  // -- tab bar, chapter bar, stats row -- adds up to less than this, so the
   // sidebar is what sets it.
+  //
+  // It is deliberately NOT the value used once a measurement exists: this is a
+  // model of the stylesheet, and a model of a layout is exactly what kept being
+  // a pixel short (it can't see .sidebar-content's borders, or that the card
+  // count comes from a rounded clientHeight rather than from what fits).
   const appShellMinHeightPx = useMemo(() => {
+    if (measuredMinHeightPx !== null) return Math.ceil(measuredMinHeightPx)
+
     const smallGapPx = spacingRegularPx / 2 // mirrors --spacing-small
     const largeGapPx = spacingRegularPx * 2 // mirrors --spacing-large
 
@@ -1941,7 +1960,7 @@ function App() {
     // child of the sidebar it also adds one more gap.
     const paginationPx = SIDEBAR_MINI_CONTROL_HEIGHT_PX + spacingRegularPx
 
-    const sidebarChromePx = 2 * spacingRegularPx // .notes-sidebar padding
+    const computedChromePx = 2 * spacingRegularPx // .notes-sidebar padding
       + 3 * spacingRegularPx // gaps between its four always-present children
       + searchBoxPx
       + viewTogglePx
@@ -1953,16 +1972,8 @@ function App() {
       + SIDEBAR_MIN_VISIBLE_NOTE_CARDS * noteCardPx
       + (SIDEBAR_MIN_VISIBLE_NOTE_CARDS - 1) * largeGapPx
 
-    // Rounded up past a sub-pixel step, not just up: the mode button's
-    // 1/6-of-a-row height is rarely a whole pixel, and Chrome quantizes it to
-    // 1/64px -- sometimes upward, so the layout can want a hair more than the
-    // arithmetic here says. Plain Math.ceil is one short whenever the exact
-    // total lands on an integer and quantization then pushes the real
-    // requirement above it, which is a fourth card that only appears one pixel
-    // past the minimum. The extra pixel is invisible; being one short isn't.
-    const SUB_PIXEL_QUANTUM_PX = 1 / 64
-    return Math.ceil(sidebarChromePx + fourCardsPx + SUB_PIXEL_QUANTUM_PX)
-  }, [sidebarWidthPx, spacingRegularPx])
+    return Math.ceil(computedChromePx + fourCardsPx + SUB_PIXEL_QUANTUM_PX)
+  }, [measuredMinHeightPx, sidebarWidthPx, spacingRegularPx])
   const [editorFontLoadVersion, setEditorFontLoadVersion] = useState(0)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('date')
   const [lastSidebarModeBeforeOptions, setLastSidebarModeBeforeOptions] = useState<Exclude<SidebarMode, 'options'>>('date')
@@ -7263,6 +7274,87 @@ ${markdownHtml}
     setCurrentPage(1)
   }, [isSearchQueryCaseSensitive, selectedMonths, selectedYears, searchQuery])
 
+
+  useLayoutEffect(() => {
+    // Only the paged views lay the sidebar out the way this floor is about --
+    // in Options or Find, `.sidebar-content` is holding something else
+    // entirely and would measure nonsense. Elsewhere the last good
+    // measurement stands (or the arithmetic, if there hasn't been one yet).
+    if (sidebarMode !== 'date' && sidebarMode !== 'trash') return
+    const contentEl = sidebarContentRef.current
+    const sidebarEl = contentEl?.closest('.notes-sidebar') as HTMLElement | null
+    if (!contentEl || !sidebarEl) return
+
+    const measure = () => {
+      const contentRectPx = contentEl.getBoundingClientRect().height
+      const windowHeightPx = window.innerHeight
+      const listEl = sidebarEl.querySelector('.notes-list')
+      const cardEl = listEl?.querySelector('.note-list-item')
+      if (!contentRectPx || !windowHeightPx || !listEl || !cardEl) return
+
+      // How tall the card area has to be for the sidebar to actually show
+      // SIDEBAR_MIN_VISIBLE_NOTE_CARDS of them -- derived by inverting the very
+      // formula that decides it (the itemsPerPage effect below), down to the
+      // same Math.round of each term. Fitting four cards' worth of pixels is
+      // NOT the same question: that formula reads `clientHeight`, which is an
+      // integer and excludes .sidebar-content's 1px top/bottom borders, so it
+      // can conclude "three" while nearly a whole extra card's worth of space
+      // sits there. Two independent calculations of one number is what kept
+      // this floor a pixel short; now there is only one.
+      const listStyles = window.getComputedStyle(listEl)
+      const rowHeightPx = Math.round(cardEl.getBoundingClientRect().height)
+      const rowGapPx = Math.round(parseFloat(listStyles.rowGap))
+      const listPaddingPx = Math.round(parseFloat(listStyles.paddingTop))
+        + Math.round(parseFloat(listStyles.paddingBottom))
+      if (!rowHeightPx || !Number.isFinite(rowGapPx) || !Number.isFinite(listPaddingPx)) return
+
+      // itemsPerPage = floor((clientHeight - listPadding + rowGap) / (rowHeight + rowGap))
+      const minClientHeightPx = SIDEBAR_MIN_VISIBLE_NOTE_CARDS * (rowHeightPx + rowGapPx)
+        - rowGapPx
+        + listPaddingPx
+
+      // clientHeight is a rounded integer of the *padding* box, so the border
+      // box has to carry the borders on top -- and only needs to reach half a
+      // pixel below the target for the rounding to land on it.
+      const contentStyles = window.getComputedStyle(contentEl)
+      const contentBordersPx = parseFloat(contentStyles.borderTopWidth) + parseFloat(contentStyles.borderBottomWidth)
+      const minContentRectPx = minClientHeightPx - 0.5 + SUB_PIXEL_QUANTUM_PX
+        + (Number.isFinite(contentBordersPx) ? contentBordersPx : 0)
+
+      // Everything the window pays for that isn't the card area, measured as a
+      // difference so there's nothing left to model: the sidebar's chrome above
+      // and below the list, plus anything between window and sidebar.
+      let outsideContentPx = windowHeightPx - contentRectPx
+      // The pagination bar is only in the DOM once the list runs to more than
+      // one page -- which it always does at this height, so reserve its row
+      // (and the gap it brings as another sidebar child) when it isn't.
+      if (!sidebarEl.querySelector('.sidebar-pagination')) {
+        outsideContentPx += SIDEBAR_MINI_CONTROL_HEIGHT_PX + spacingRegularPx
+      }
+      // Likewise the date-filter rail, which collapses to a zero-height
+      // placeholder outside the Date/Trash views this floor is measured for.
+      const railEl = sidebarEl.querySelector('.date-filter-rail')
+      if (!railEl || railEl.classList.contains('date-filter-rail-placeholder')) {
+        outsideContentPx += 2 * SIDEBAR_MINI_CONTROL_HEIGHT_PX + 2 * spacingRegularPx
+      }
+
+      const requiredPx = outsideContentPx + minContentRectPx
+      setMeasuredMinHeightPx((previous) => (
+        previous !== null && Math.abs(previous - requiredPx) < 0.01 ? previous : requiredPx
+      ))
+    }
+
+    measure()
+    // Both boxes: the sidebar's own height follows the window, while the
+    // content box also changes when the pagination bar or the rail appears.
+    const observer = new ResizeObserver(measure)
+    observer.observe(sidebarEl)
+    observer.observe(contentEl)
+    return () => observer.disconnect()
+    // totalPagedNotes/itemsPerPage are in here so the card measurement re-runs
+    // once notes actually populate the list -- the observers above only fire on
+    // box changes, and filling an already-sized list isn't one.
+  }, [isSidebarVisible, sidebarMode, spacingRegularPx, totalPagedNotes, itemsPerPage])
 
   useLayoutEffect(() => {
     const compute = () => {

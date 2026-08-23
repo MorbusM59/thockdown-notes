@@ -32,3 +32,6 @@ data/**
 dist-electron/main.js
 dist-electron/preload.mjs
 data-backups/
+
+# TypeScript incremental build cache (composite: true in tsconfig.node.json)
+*.tsbuildinfo

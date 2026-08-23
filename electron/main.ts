@@ -133,11 +133,12 @@ const TOOLBAR_MIN_WIDTH_PX = 283;
 const WINDOW_CONTROLS_WIDTH_PX = 239;
 // Mirrors the renderer's appShellMinHeightPx at the default spacing setting:
 // enough for the Date-view sidebar to show four note cards with the pagination
-// bar showing (see src/App.tsx). Note it's a rounded-up fraction, not a round
-// number -- the view-toggle's buttons are square and sized to a sixth of the
-// row, so the sidebar's chrome lands on 184.17px and the honest floor is
-// 416.17. Enforcing 416 leaves the fourth card one fifth of a pixel short.
-const APP_WINDOW_MIN_HEIGHT_PX = 417;
+// bar showing (see src/App.tsx). Only a stand-in until the renderer reports its
+// own measured figure a moment after startup -- which is the authority, because
+// this one can't see the spacing setting, the display's sub-pixel rounding, or
+// the pixel the packaged window keeps for itself between its frame and the
+// sidebar. Not a round number for exactly those reasons.
+const APP_WINDOW_MIN_HEIGHT_PX = 418;
 // Fallback "restored" size used when launching into a saved maximized state
 // -- see the createWindow() comment on why the saved x/y/width/height can't
 // be trusted for the initial (pre-maximize) bounds in that case.
