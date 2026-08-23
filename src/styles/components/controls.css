@@ -5,8 +5,11 @@
 .window-controls-grid {
   display:         grid;
   /* Two children now: the audio controls and the right-hand window buttons.
-     (The left-hand dark-mode button moved into the display-modes split button.) */
-  grid-template-columns: auto auto;
+     (The left-hand dark-mode button moved into the display-modes split button.)
+     The whole panel sizes to those two -- see the app grid's `window_control`
+     track -- so this gap is the real separation between them. */
+  grid-template-columns: max-content max-content;
+  gap:             var(--spacing-regular);
   grid-template-rows: auto;
   width:           100%;
   height:          100%;
@@ -212,10 +215,17 @@
 .window-controls {
   display:          flex;
   padding:          var(--spacing-regular);
-  gap:              var(--spacing-regular);
+  gap:              var(--spacing-small);
   align-items:      center;
   margin-bottom:    auto;
   margin-left:      auto;
+}
+
+/* The panel hugs its two children (see the grid's `auto` track), so the only
+   thing separating the audio player from the window buttons is the grid gap --
+   these two paddings would double it up on that inner edge. */
+.window-controls-right {
+  padding-left: 0;
 }
 
 .window-minimize-split {

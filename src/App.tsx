@@ -193,6 +193,7 @@ const APP_WINDOW_MIN_WIDTH_PX = 840
 // --sidebar-scrollbar-slot-width, and .sidebar-content's own border) so the
 // two stay in sync.
 const BTN_SQUARE_REGULAR_SIZE_PX = 32
+const BTN_SQUARE_LARGE_SIZE_PX = 40
 const CANONICAL_SCROLL_THICKNESS_PX = 16
 const SIDEBAR_CONTENT_BORDER_PX = 1
 // Soft minimum, enforced only at section-creation time -- the "+" button
@@ -1820,15 +1821,37 @@ function App() {
   const [boxShadowAlphaPercent, setBoxShadowAlphaPercent] = useState<number>(DEFAULT_BOX_SHADOW_ALPHA_PERCENT)
   const borderShadowAlphaBaseValuesRef = useRef<Map<string, string>>(new Map())
 
-  const windowControlsWidthPx = useMemo(
-    () => 7 * spacingRegularPx + 320,
-    [spacingRegularPx],
-  )
+  // The window-controls column is sized to exactly what's in it -- the audio
+  // player on the left, the window buttons on the right, one spacing-regular
+  // between them -- rather than to a round number with slack left over. Mirrors
+  // audio.css and controls.css: the audio grid is 5 square buttons whose side
+  // is half a large button box (--audio-btn-size), the window cluster is 3
+  // large buttons with spacing-small between them, and only the panel's two
+  // outer edges carry padding (the inner ones are 0 so the gap below is the
+  // whole separation). Ceil'd because a fractional spacing setting makes these
+  // sub-pixel and the column must never be narrower than its content.
+  const windowControlsMetrics = useMemo(() => {
+    const smallGapPx = spacingRegularPx / 2 // mirrors --spacing-small
+    const audioBtnSizePx = (BTN_SQUARE_LARGE_SIZE_PX - smallGapPx) / 2 // mirrors --audio-btn-size
+    const audioWidthPx = spacingRegularPx + 5 * audioBtnSizePx + 4 * smallGapPx
+    const windowButtonWidthPx = BTN_SQUARE_LARGE_SIZE_PX + smallGapPx
+    return { audioWidthPx, windowButtonWidthPx, smallGapPx }
+  }, [spacingRegularPx])
 
-  const windowControlsCollapsedWidthPx = useMemo(
-    () => 4 * spacingRegularPx + 160,
-    [spacingRegularPx],
-  )
+  const windowControlsWidthPx = useMemo(() => {
+    const { audioWidthPx, windowButtonWidthPx, smallGapPx } = windowControlsMetrics
+    // minimize split + maximize split + close, then the panel's right padding
+    const buttonsWidthPx = 3 * windowButtonWidthPx - smallGapPx + spacingRegularPx
+    return Math.ceil(audioWidthPx + spacingRegularPx + buttonsWidthPx)
+  }, [spacingRegularPx, windowControlsMetrics])
+
+  // Mini mode hides the maximize split and the close button (controls.css), so
+  // only the minimize split is left beside the audio player.
+  const windowControlsCollapsedWidthPx = useMemo(() => {
+    const { audioWidthPx, windowButtonWidthPx, smallGapPx } = windowControlsMetrics
+    const buttonsWidthPx = windowButtonWidthPx - smallGapPx + spacingRegularPx
+    return Math.ceil(audioWidthPx + spacingRegularPx + buttonsWidthPx)
+  }, [spacingRegularPx, windowControlsMetrics])
 
   // Mirrors --sidebar-min-width in tokens.css: the sidebar has to be wide
   // enough for the options panel's always-visible top section (font
@@ -8728,7 +8751,9 @@ ${markdownHtml}
 
             <EditorToolbar
               isPreviewMode={activeSection?.isPreviewMode ?? false}
+              isForcedPreview={activeSection?.isForcedPreviewNote ?? false}
               activeNoteId={activeSection?.activeNoteId ?? null}
+              toggleRenderViewMode={activeSection?.isForcedPreviewNote ? noopAsync : (activeSection?.toggleRenderViewMode ?? noopAsync)}
               uiMode={uiMode}
               toggleUiMode={toggleUiMode}
               isDoubleSizeMode={isDoubleSizeMode}

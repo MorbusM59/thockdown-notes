@@ -4,15 +4,21 @@
 
 :root {
   --audio-control-gap: var(--spacing-small);
+  /* Two rows of buttons stacked inside one large-square button box -- this is
+     both their height and, since every regular control is square, their width.
+     The play/stop button spans two columns and so widens proportionally
+     (2 * size + the gap it swallows) rather than being sized separately. */
+  --audio-btn-size: calc((var(--btn-square-large-size) - var(--audio-control-gap)) / 2);
 }
 
 .audio-controls {
   padding:          var(--spacing-regular);
+  padding-right:    0;
 }
 
 .audio-micro-grid {
   display:               grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, var(--audio-btn-size));
   grid-template-rows:    auto auto;
   gap:                   var(--audio-control-gap);
 }
@@ -22,9 +28,10 @@
   align-items:        center;
   justify-content:    center;
   gap:                var(--spacing-regular);
-  padding:            0 var(--spacing-regular);
-  height:             calc((var(--btn-square-large-size) - var(--audio-control-gap))/2);
-  min-height:         calc((var(--btn-square-large-size) - var(--audio-control-gap))/2);
+  padding:            0;
+  min-width:          0;
+  height:             var(--audio-btn-size);
+  min-height:         var(--audio-btn-size);
   border:             1px solid var(--btn-border-default);
   border-radius:      var(--border-radius-small);
   background:         var(--btn-bg-default);

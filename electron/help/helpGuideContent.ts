@@ -454,16 +454,17 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *One global toolbar that always acts on whichever section is currently active.*
 
 - Left cluster: a split button pairing the dark-mode toggle (top) with double size (bottom), plus an export button that switches between PDF (preview mode) and Markdown (edit mode). Switching between edit and render view is done with Esc; creating a note with Ctrl+N.
-- The rest of the bar holds the formatting group, visible only in edit mode.
+- The rest of the bar holds the formatting group, always visible in both edit and render view.
 
 ### [Formatting Group](#formatting-group)
 
 > **Where?**
-> The toolbar, edit mode only.
+> The toolbar.
 
 *One-click Markdown formatting for the current selection or line.*
 
 - Bold, italic, strikethrough; heading levels H1–H3; bulleted, numbered, and checklist lists; blockquote; code block and inline code; horizontal rule; link insertion.
+- The group stays on screen in render view too, so the toolbar doesn't change shape when you flip modes. While a section is in render view, clicking any of these buttons switches that section to edit mode instead of formatting — it deliberately doesn't also apply the formatting, so a stray click on a rendered note can't quietly edit it. Click again once you're in edit mode to actually apply it. (On a chapter that's always rendered — an auto table of contents or Open Items — the buttons are disabled, since there's no edit mode to switch to.)
 - Each button reflects whether the current selection or line already has that formatting applied.
 - Most double as the keyboard shortcuts listed in [Keyboard Shortcuts]($HELP§SHORTCUTS).
 - A checklist item's box (\`- [ ]\`) can be toggled two ways once the caret sits between its brackets: type any character to check it off with that character (type a space to uncheck it again), or click the caret itself — with the caret already there and not moving — to flip \`[ ]\`/\`[X]\` without touching the keyboard.

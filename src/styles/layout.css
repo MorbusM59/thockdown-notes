@@ -8,7 +8,10 @@
   background-repeat:    no-repeat;
   background-size:      100% 100%;
   background-position:  0 0;
-  grid-template-columns: var(--sidebar-min-width) 8px minmax(415px, 1fr) 129px;
+  /* `window_control` is an `auto` track, not a fixed width: the panel sizes to
+     the audio player plus the window buttons, so the spacing between those two
+     is the only thing padding out its width (see controls.css). */
+  grid-template-columns: var(--sidebar-min-width) 8px minmax(415px, 1fr) max-content;
   grid-template-rows:   auto minmax(0, 1fr);
   grid-template-areas:
     'sidebar d-sidebar toolbar  window_control'
