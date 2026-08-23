@@ -278,13 +278,12 @@
   font-size: var(--btn-icon-size);
 }
 
-/* Top slot: inert fa-bolt placeholder left behind when double size moved to
-   the display-modes split button. Keeps the split button's two-arm silhouette. */
-.window-maximize-split-btn.placeholder {
+/* Top slot: opens the User Guide -- took over the slot double size vacated
+   when it moved to the display-modes split button. */
+.window-maximize-split-btn.help-guide {
   border-radius: var(--border-radius-regular) var(--border-radius-regular) var(--border-radius-small) var(--border-radius-small);
   padding: 0;
-  opacity: 0.45;
-  pointer-events: none;
+  font-size: 14px;
 }
 
 .window-maximize-split-btn.maximize {

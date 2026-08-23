@@ -95,8 +95,6 @@
   margin-left: var(--spacing-large);
   flex-wrap:   nowrap;
   overflow:    hidden;
-  container-name: toolbarGrid;
-  container-type: size;
 }
 
 .toolbar-grid button,
@@ -132,12 +130,6 @@
   border-top: none;
   box-shadow:       var(--box-shadow-inverted);
   background:       var(--color-input-backdrop);
-}
-
-@container toolbarGrid (width < 319px) {
-  .toolbar-grid > .toolbar-container {
-    display: none;
-  }
 }
 
 .markdown-toolbar {

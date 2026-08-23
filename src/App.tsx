@@ -8711,18 +8711,19 @@ ${markdownHtml}
                     <span className="fa-solid fa-caret-down" aria-hidden="true" />
                   </button>
                 </div>
-                <div className="window-maximize-split" role="group" aria-label="Maximize controls">
-                  {/* Top slot is an inert placeholder for now -- double size moved to the
-                      display-modes split button, and the maximize/restore arm moved down into
-                      the slot it vacated so the split button keeps its two-arm shape. */}
+                <div className="window-maximize-split" role="group" aria-label="User guide and maximize controls">
+                  {/* Top slot: the User Guide, the same handleHelpModeOpen the
+                      escape-hold panel's own User Guide cell calls. Took over the
+                      slot double size vacated when it moved to the display-modes
+                      split button; maximize/restore moved down to the bottom arm. */}
                   <button
                     type="button"
-                    className="window-control-btn btn-icon window-maximize-split-btn placeholder"
-                    aria-hidden="true"
-                    tabIndex={-1}
-                    disabled
+                    className="window-control-btn btn-icon window-maximize-split-btn help-guide"
+                    data-tooltip="User Guide"
+                    aria-label="Open the User Guide"
+                    onClick={handleHelpModeOpen}
                   >
-                    <span className="fa-solid fa-bolt" aria-hidden="true" />
+                    <span className="fa-solid fa-lightbulb" aria-hidden="true" />
                   </button>
                   <button
                     type="button"

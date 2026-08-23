@@ -93,7 +93,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [The User Guide](#the-user-guide)
 
 > **Where?**
-> The Help button in the Quick Actions Menu above.
+> The lightbulb button in the window controls (top right, above Maximize), or the Help button in the Quick Actions Menu above — both do the same thing.
 
 *This page, opened as an ordinary (timeless, read-only) note in whichever section you triggered it from.*
 
@@ -602,6 +602,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - **Music player** — see [Music Player]($HELP§MUSIC-PLAYER).
 - **Mini mode** — collapses the window into a compact strip; while collapsed, the music player's options button is disabled.
 - **Minimize / Maximize–Restore / Close** — standard window controls.
+- **User Guide (lightbulb)** — the upper half of the split maximize button. Opens this guide, exactly like the Quick Actions Menu's own Help cell, see [The User Guide]($HELP§NOTES-EDITING#the-user-guide).
 - **Dark mode / Double size** — a split button in the toolbar's left cluster (not in this bar): the top half switches the whole app between light and dark presets, the bottom half is double size (2x). Double size doubles the app's page zoom and, to match, the window's minimum size, so 2x content gets 2x room instead of being squeezed into the same space. Toggling off relaxes the minimum again but doesn't shrink a window you've since resized larger. Persists across restarts.
 - **Drag the toolbar or this top bar to move the window; double-click either to maximize/restore.** Dragging a maximized window from these areas restores it, ending up positioned under the cursor as if the drag had been followed the whole way. Dragging elsewhere in the app also moves the window, but won't restore it from maximized.
 `,
