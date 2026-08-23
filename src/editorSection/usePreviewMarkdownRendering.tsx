@@ -8,6 +8,7 @@ import type { MutableRefObject, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useVirtualizer, type VirtualizerOptions } from '@tanstack/react-virtual'
 import type { NoteSummary } from '../shared/noteLifecycle'
+import type { EditorAdapter } from '../editor/EditorContract'
 import type { DocumentFindDirective } from '../editor/FindReplaceEngine'
 import {
   type ParsedInternalPreviewLink,
@@ -112,6 +113,17 @@ export interface UsePreviewMarkdownRenderingOptions {
   latestEditorTextRef: MutableRefObject<string>
   activateNote: (noteId: string, overrideCursorPos?: number) => Promise<void>
   previewScrollRef: MutableRefObject<HTMLDivElement | null>
+  /**
+   * Whether the section is currently showing the rendered pane. Anchor
+   * navigation (`$#anchor`, and every auto-TOC entry) has to land in
+   * whichever pane the reader is actually looking at -- see
+   * scrollEditorToAnchor for why targeting only the preview pane meant a
+   * TOC link opened the note and then left the editor wherever its own
+   * restore had put it.
+   */
+  isPreviewMode: boolean
+  /** The section's editor, for the edit-mode half of anchor navigation. */
+  adapterRef: MutableRefObject<EditorAdapter | null>
   documentFindDirective: DocumentFindDirective
   isDocumentFindCaseSensitive: boolean
   renderedDisplayText: string
@@ -224,6 +236,8 @@ export function usePreviewMarkdownRendering({
   latestEditorTextRef,
   activateNote,
   previewScrollRef,
+  isPreviewMode,
+  adapterRef,
   documentFindDirective,
   isDocumentFindCaseSensitive,
   renderedDisplayText,
@@ -332,12 +346,107 @@ export function usePreviewMarkdownRendering({
     applyProgrammaticEditorText(next.text, next.selection.anchor, next.selection.focus)
   }, [applyProgrammaticEditorText, latestEditorTextRef])
 
+  // Mirrors `isPreviewMode` for the navigation callbacks below, which are
+  // deliberately identity-stable across renders but have to read the
+  // *current* mode at click time -- and, on a note switch, a couple of
+  // frames later still: leaving the auto-TOC chapter (always forced into
+  // preview) for a note the reader keeps in edit mode flips this after the
+  // click that started the navigation. See scrollToAnchorTarget.
+  const isPreviewModeRef = useRef(isPreviewMode)
+  useEffect(() => {
+    isPreviewModeRef.current = isPreviewMode
+  }, [isPreviewMode])
+
+  // Mirrors `activeNoteId` for the same reason, and for one more: the
+  // edit-mode anchor jump has to know when the note switch it was queued
+  // behind has actually landed in this section. See scrollEditorToAnchor.
+  const activeNoteIdRef = useRef(activeNoteId)
+  useEffect(() => {
+    activeNoteIdRef.current = activeNoteId
+  }, [activeNoteId])
+
+  /** Character offset of a 0-indexed source line's first character, clamped into `text`. */
+  const resolveOffsetForSourceLine = (text: string, sourceLine: number): number => {
+    if (sourceLine <= 0) return 0
+    let line = 0
+    for (let index = 0; index < text.length; index += 1) {
+      if (text.charCodeAt(index) === 10) {
+        line += 1
+        if (line === sourceLine) return index + 1
+      }
+    }
+    return text.length
+  }
+
+  /**
+   * The edit-mode half of anchor navigation: puts the caret on the anchor's
+   * own line and lets the editor scroll it into view.
+   *
+   * Everything else in this hook scrolls the *preview* pane, which is the
+   * only pane an anchor could ever land in -- so following an auto-TOC entry
+   * while the section is in edit mode used to activate the target note and
+   * then do nothing at all to the editor, leaving it whereverits own restore
+   * had put it (the top of the note, give or take a line). The link looked
+   * like it did nothing but switch notes.
+   *
+   * `resolveLine` is re-run against the editor's own current text on every
+   * attempt rather than being given a line resolved up front: on a note
+   * switch the adapter still holds the *previous* note's document for a few
+   * frames, and a line number resolved against the target note's text means
+   * nothing in that one. Re-resolving makes the answer and the document it
+   * addresses always come from the same text.
+   *
+   * `expectedNoteId` is what says the switch has actually landed. It is
+   * deliberately not "the editor's text changed": the auto-TOC chapter is
+   * forced-preview and never loads into the editor at all, so following one
+   * of its links leaves the adapter holding the *target* note's text the
+   * whole way through -- a text-change gate waits forever on exactly the
+   * navigation this exists to serve.
+   */
+  const scrollEditorToAnchor = useCallback((
+    resolveLine: (text: string) => number | null,
+    expectedNoteId: string | null,
+  ) => {
+    const attempt = (attemptsLeft: number) => {
+      const adapter = adapterRef.current
+      const text = adapter?.getSnapshot()?.text
+      const isTargetActive = expectedNoteId === null || activeNoteIdRef.current === expectedNoteId
+      if (adapter && typeof text === 'string' && isTargetActive) {
+        const sourceLine = resolveLine(text)
+        if (sourceLine !== null) {
+          const offset = resolveOffsetForSourceLine(text, sourceLine)
+          adapter.applySnapshot({
+            selection: { anchor: offset, focus: offset, start: offset, end: offset, isCollapsed: true },
+            selectionScrollBehavior: 'center-caged',
+          })
+          return
+        }
+      }
+
+      if (attemptsLeft <= 0) return
+      window.requestAnimationFrame(() => attempt(attemptsLeft - 1))
+    }
+
+    attempt(30)
+  }, [adapterRef])
+
   // Scrolls the preview pane to the top of the document. Used for cross-note
   // links with no `#anchor-id` — deferred a couple of frames past the note
   // switch so it wins over whatever scroll position the new note's own
   // render-view restore might otherwise land on.
-  const scrollPreviewToTop = useCallback((waitForNoteSwitch: boolean) => {
+  const scrollPreviewToTop = useCallback((waitForNoteSwitch: boolean, expectedNoteId: string | null = null) => {
     const reset = () => {
+      // Same pane-awareness the anchor branch needs: in edit mode there is
+      // no preview pane to scroll, and "go to this note" should still land
+      // at its start rather than silently leaving the editor wherever the
+      // note's own restore put it.
+      if (!isPreviewModeRef.current) {
+        // Waits for the switch the same way the anchor branch does --
+        // landing on offset 0 before it completes would put the caret at the
+        // top of the note being *left*, not the one being opened.
+        scrollEditorToAnchor(() => 0, expectedNoteId)
+        return
+      }
       previewScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
     }
 
@@ -346,7 +455,7 @@ export function usePreviewMarkdownRendering({
     } else {
       reset()
     }
-  }, [previewScrollRef])
+  }, [previewScrollRef, scrollEditorToAnchor])
 
   // Recomputed on every renderedDisplayText change to learn the current
   // block boundaries. The actual, expensive ReactMarkdown parse+render per
@@ -575,17 +684,39 @@ export function usePreviewMarkdownRendering({
   // anchor-mechanism-agnostic.
   const resolveAnchorTarget = useCallback((anchorId: string) => {
     const headingSlug = parseHeadingAnchorFragment(anchorId)
-    if (headingSlug !== null) {
-      return {
-        resolveLine: (text: string) => findHeadingAnchorLine(text, headingSlug),
-        scrollTo: (sourceLine: number, waitForNoteSwitch: boolean) => scrollToHeadingAnchorInPreview(sourceLine, waitForNoteSwitch),
+    const resolveLine = headingSlug !== null
+      ? (text: string) => findHeadingAnchorLine(text, headingSlug)
+      : (text: string) => (noteContainsAnchorDefinition(text, anchorId) ? findAnchorDefinitionLine(text, anchorId) : null)
+
+    // Which pane to land in is decided at scroll time, not at click time --
+    // and, on a note switch, two frames later still. Following a link out of
+    // the auto-TOC chapter is exactly the case that needs this: that chapter
+    // is always forced into preview, so the mode this hook rendered with is
+    // "preview" no matter what mode the target note will actually open in,
+    // and the flip back to the reader's own mode has to have committed
+    // before the branch is taken.
+    const scrollTo = (sourceLine: number, waitForNoteSwitch: boolean, expectedNoteId: string | null = null) => {
+      const dispatch = () => {
+        if (!isPreviewModeRef.current) {
+          scrollEditorToAnchor(resolveLine, expectedNoteId)
+          return
+        }
+        if (headingSlug !== null) {
+          scrollToHeadingAnchorInPreview(sourceLine, waitForNoteSwitch)
+          return
+        }
+        scrollToAnchorInPreview(anchorId, sourceLine, waitForNoteSwitch)
+      }
+
+      if (waitForNoteSwitch) {
+        window.requestAnimationFrame(() => window.requestAnimationFrame(dispatch))
+      } else {
+        dispatch()
       }
     }
-    return {
-      resolveLine: (text: string) => (noteContainsAnchorDefinition(text, anchorId) ? findAnchorDefinitionLine(text, anchorId) : null),
-      scrollTo: (sourceLine: number, waitForNoteSwitch: boolean) => scrollToAnchorInPreview(anchorId, sourceLine, waitForNoteSwitch),
-    }
-  }, [scrollToHeadingAnchorInPreview, scrollToAnchorInPreview])
+
+    return { resolveLine, scrollTo }
+  }, [scrollToHeadingAnchorInPreview, scrollToAnchorInPreview, scrollEditorToAnchor])
 
   // Shared by both the direct-note and chapter branches of
   // navigateToInternalPreviewLink below: activates `targetNoteId` (unless
@@ -603,11 +734,11 @@ export function usePreviewMarkdownRendering({
           ? (latestEditorTextRef.current || activeNoteTextRef.current)
           : contentTextForExistenceCheck
         const sourceLine = anchorTarget.resolveLine(anchorSourceText)
-        if (sourceLine !== null) anchorTarget.scrollTo(sourceLine, !isAlreadyActive)
+        if (sourceLine !== null) anchorTarget.scrollTo(sourceLine, !isAlreadyActive, targetNoteId)
       } else if (!isAlreadyActive) {
         // Already-active notes stay wherever the reader currently is —
         // only a genuine note switch resets to the top.
-        scrollPreviewToTop(true)
+        scrollPreviewToTop(true, targetNoteId)
       }
     }
 

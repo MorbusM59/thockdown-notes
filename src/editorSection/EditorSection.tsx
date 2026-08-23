@@ -1297,6 +1297,8 @@ export function EditorSection({
     latestEditorTextRef,
     activateNote,
     previewScrollRef,
+    isPreviewMode,
+    adapterRef,
     documentFindDirective,
     isDocumentFindCaseSensitive: effectiveCaseSensitive,
     renderedDisplayText,
