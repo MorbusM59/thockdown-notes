@@ -123,7 +123,14 @@ let windowDragState: { startCursorX: number; startCursorY: number; startWinX: nu
 
 const UTILITY_COLLAPSE_MIN_WIDTH_PX = 96;
 const UTILITY_COLLAPSE_MIN_HEIGHT_PX = 40;
-const APP_WINDOW_MIN_WIDTH_PX = 873;
+// The chrome floor, mirroring the renderer's appShellMinWidthPx at the default
+// spacing setting (src/App.tsx): sidebar + divider + the toolbar column's own
+// content floor + the window-controls panel. The toolbar column now only has to
+// fit three groups of three compact formatting buttons beside the display-modes
+// panel, and the window-controls panel is sized to its contents rather than a
+// round number, so this is a good deal lower than the 873 it used to be.
+const TOOLBAR_MIN_WIDTH_PX = 283;
+const WINDOW_CONTROLS_WIDTH_PX = 239;
 const APP_WINDOW_MIN_HEIGHT_PX = 525;
 // Fallback "restored" size used when launching into a saved maximized state
 // -- see the createWindow() comment on why the saved x/y/width/height can't
@@ -138,6 +145,7 @@ const GRID_DIVIDER_PX = 8;
 // at this width (see computeAppWindowMinWidthPx), so a section can never be
 // forced narrower than it's allowed to be just by resizing the window.
 const EDITOR_SECTION_MIN_WIDTH_PX = 300;
+const APP_WINDOW_MIN_WIDTH_PX = SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX + TOOLBAR_MIN_WIDTH_PX + WINDOW_CONTROLS_WIDTH_PX;
 
 // Tracked here (not just derived per-call) because the sidebar-visibility and
 // section-count constraints compose -- each handler needs to know the other's

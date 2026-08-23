@@ -183,7 +183,6 @@ import { TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE, useTextureSurface 
 const NEW_NOTE_TEMPLATE = '# '
 const FALLBACK_NEW_NOTE_TITLE = 'Untitled'
 const GRID_DIVIDER_PX = 8
-const APP_WINDOW_MIN_WIDTH_PX = 840
 // Sidebar width is derived (see sidebarWidthPx below), not a flat constant --
 // it has to fit the options panel's always-visible top section (font
 // settings + preset buttons), which is a 6-column grid of
@@ -196,6 +195,10 @@ const BTN_SQUARE_REGULAR_SIZE_PX = 32
 const BTN_SQUARE_LARGE_SIZE_PX = 40
 const CANONICAL_SCROLL_THICKNESS_PX = 16
 const SIDEBAR_CONTENT_BORDER_PX = 1
+// .toolbar-container / .display-modes each carry a 1px border on both sides
+// (toolbar.css) -- part of the toolbar column's content floor below.
+const TOOLBAR_CONTAINER_BORDER_PX = 2
+const DISPLAY_MODES_BORDER_PX = 2
 // Soft minimum, enforced only at section-creation time -- the "+" button
 // disappearing when there isn't room for one more is the enforcement (see
 // the handover doc's split-view design). Matches the same 300px figure the
@@ -1874,10 +1877,25 @@ function App() {
     )
   }, [spacingRegularPx])
 
-  const toolbarMinWidthPx = useMemo(
-    () => APP_WINDOW_MIN_WIDTH_PX - sidebarWidthPx - GRID_DIVIDER_PX - windowControlsWidthPx,
-    [sidebarWidthPx, windowControlsWidthPx],
-  )
+  // The narrowest the toolbar column is allowed to get: exactly enough for the
+  // formatting toolbar's compact layout to show three groups of three side by
+  // side (two rows of them, so all six groups still fit), plus the display-modes
+  // panel beside it. Mirrors toolbar.css -- .toolbar-grid's own left margin, the
+  // display-modes panel, .toolbar-container's margins and border, and inside it
+  // the markdown toolbar's padding, three groups of three --btn-square-half-size
+  // buttons with spacing-small between them, and spacing-large between groups.
+  // Was a flat number derived from a hardcoded window minimum; it's the other
+  // way round now, since this is the thing with an actual content floor.
+  const toolbarMinWidthPx = useMemo(() => {
+    const smallGapPx = spacingRegularPx / 2 // mirrors --spacing-small
+    const largeGapPx = spacingRegularPx * 2 // mirrors --spacing-large
+    const compactButtonPx = (BTN_SQUARE_LARGE_SIZE_PX - smallGapPx) / 2 // mirrors --btn-square-half-size
+    const groupWidthPx = 3 * compactButtonPx + 2 * smallGapPx
+    const formattingWidthPx = 2 * spacingRegularPx + 3 * groupWidthPx + 2 * largeGapPx
+    const toolbarContainerWidthPx = formattingWidthPx + TOOLBAR_CONTAINER_BORDER_PX + 2 * largeGapPx
+    const displayModesWidthPx = 2 * spacingRegularPx + BTN_SQUARE_LARGE_SIZE_PX + DISPLAY_MODES_BORDER_PX
+    return Math.ceil(largeGapPx + displayModesWidthPx + toolbarContainerWidthPx)
+  }, [spacingRegularPx])
 
   const appShellMinWidthPx = useMemo(
     () => sidebarWidthPx + GRID_DIVIDER_PX + toolbarMinWidthPx + windowControlsWidthPx,
@@ -1911,7 +1929,9 @@ function App() {
   const [currentExternalNoteHash, setCurrentExternalNoteHash] = useState<string | null>(null)
   const externalNoteHashDebounceRef = useRef<number | null>(null)
   const [persistenceReady, setPersistenceReady] = useState(false)
-  const [appShellWidthPx, setAppShellWidthPx] = useState(APP_WINDOW_MIN_WIDTH_PX)
+  // Seeded at the shell's own minimum; the real width lands on the first
+  // ResizeObserver callback (see appShellMinWidthPx).
+  const [appShellWidthPx, setAppShellWidthPx] = useState(appShellMinWidthPx)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
   const [isEscapeHoldPanelOpen, setIsEscapeHoldPanelOpen] = useState(false)
   const escapeHoldTimerRef = useRef<number | null>(null)
