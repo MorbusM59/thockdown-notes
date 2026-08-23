@@ -139,7 +139,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Spell Check](#spell-check)
 
 > **Where?**
-> The spell-check icon in the toolbar's left cluster.
+> Settings panel → Tools.
 
 *Underlines misspelled words using your OS's native spell checker.*
 
@@ -453,7 +453,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *One global toolbar that always acts on whichever section is currently active.*
 
-- Left cluster: edit/preview toggle, new note, spell-check toggle, and an export button that switches between PDF (preview mode) and Markdown (edit mode).
+- Left cluster: a split button pairing the dark-mode toggle (top) with double size (bottom), plus an export button that switches between PDF (preview mode) and Markdown (edit mode). Switching between edit and render view is done with Esc; creating a note with Ctrl+N.
 - The rest of the bar holds the formatting group, visible only in edit mode.
 
 ### [Formatting Group](#formatting-group)
@@ -597,12 +597,11 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *Thockdown runs frameless, with no OS menu bar — every window action lives here.*
 
-- **Dark mode toggle** — switches the whole app between light and dark presets.
 - **Settings (gear)** — opens/closes the Settings panel, see [Settings Panel]($HELP§APPEARANCE-SETTINGS#settings-panel).
 - **Music player** — see [Music Player]($HELP§MUSIC-PLAYER).
 - **Mini mode** — collapses the window into a compact strip; while collapsed, the music player's options button is disabled.
 - **Minimize / Maximize–Restore / Close** — standard window controls.
-- **Double size (2x)** — the lower half of the split maximize button. Doubles the app's page zoom and, to match, the window's minimum size, so 2x content gets 2x room instead of being squeezed into the same space. Toggling off relaxes the minimum again but doesn't shrink a window you've since resized larger. Persists across restarts.
+- **Dark mode / Double size** — a split button in the toolbar's left cluster (not in this bar): the top half switches the whole app between light and dark presets, the bottom half is double size (2x). Double size doubles the app's page zoom and, to match, the window's minimum size, so 2x content gets 2x room instead of being squeezed into the same space. Toggling off relaxes the minimum again but doesn't shrink a window you've since resized larger. Persists across restarts.
 - **Drag the toolbar or this top bar to move the window; double-click either to maximize/restore.** Dragging a maximized window from these areas restores it, ending up positioned under the cursor as if the drag had been followed the whole way. Dragging elsewhere in the app also moves the window, but won't restore it from maximized.
 `,
   `## Appearance & Settings
@@ -690,10 +689,10 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - Invert, sepia, hue-rotate, brightness, contrast, saturate, and a colorize overlay.
 
-### [Scrolling Behavior](#scrolling-behavior)
+### [Animations](#animations)
 
 > **Where?**
-> Settings panel → Scrolling Behavior.
+> Settings panel → Animations.
 
 *Tunes the custom easing curve used for preview-mode scroll animations.*
 
@@ -709,7 +708,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - Top-left button is a halo color swatch. The 4 buttons beside it (H, S, V, A) stage a color by dragging up/down or scrolling on each — left-click a swatch (halo, circling dots, center dot, trail) to paint it onto that element; hold right-click on a swatch to load its current color back into H/S/V/A.
 - Sliders: number of circling dots, orbit radius, spin speed (-4Hz to 4Hz, negative reverses direction, 0 freezes it), trail fade duration (how long a trail particle takes to decay after the head passes it — e.g. 1000ms at 1Hz spin sweeps exactly one full revolution), trail thickness (0–12px, 0 hides it), dot size (0–12px, 0 hides it), center dot size (0–12px, 0 hides it), halo radius (0 hides it, capped at the same max as orbit radius), fall-off (0–100 — how far out the halo's glow stays near-opaque before fading to nothing at its edge; low values fade fast near the center, high values stay bright almost all the way to the rim), and a pulse effect that breathes the orbit's radius outward — magnitude 0 keeps it locked at its base size, magnitude 1 breathes up to 200% of it — at a given speed. The halo is rendered centered behind the center dot. Colors and these sliders are saved per layout, same as the rest of your theming.
-- Click response: left-click tightens the orbit (smaller radius, faster spin) and right-click widens it (larger radius, slower spin), up to 200% and down to 50% of your base radius/spin. Every click is handled the same way regardless of how long you hold it — a plain click is too fast to tell "tap" from "hold" apart — it rises to full strength, stays there while held, then eases back down to baseline on release instead of snapping. Six more sliders tune the feel, using the same bell-curve model as Scrolling Behavior's ramp/shape/speed/max-speed: click ramp (linear → bouncy), click shape (apex bias), click speed (how long the rise/fall takes -- weighted so the high-speed end of the slider gives much finer control than the low-speed end), click max speed (how strong the effect gets), min impact (floors how long a click is treated as held internally, 0–200ms, so even a quick real click still registers instead of flickering), and click balance (center = radius and spin both affected equally; left = radius only; right = spin only).
+- Click response: left-click tightens the orbit (smaller radius, faster spin) and right-click widens it (larger radius, slower spin), up to 200% and down to 50% of your base radius/spin. Every click is handled the same way regardless of how long you hold it — a plain click is too fast to tell "tap" from "hold" apart — it rises to full strength, stays there while held, then eases back down to baseline on release instead of snapping. Six more sliders tune the feel, using the same bell-curve model as Animations' ramp/shape/speed/max-speed: click ramp (linear → bouncy), click shape (apex bias), click speed (how long the rise/fall takes -- weighted so the high-speed end of the slider gives much finer control than the low-speed end), click max speed (how strong the effect gets), min impact (floors how long a click is treated as held internally, 0–200ms, so even a quick real click still registers instead of flickering), and click balance (center = radius and spin both affected equally; left = radius only; right = spin only).
 
 ### [Keystroke Sounds](#keystroke-sounds)
 

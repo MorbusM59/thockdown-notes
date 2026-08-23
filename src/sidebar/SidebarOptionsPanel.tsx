@@ -475,6 +475,8 @@ export interface SidebarOptionsPanelProps {
   setAudioSpatial: (value: number) => void
   reduceVisualEffects: boolean
   setReduceVisualEffects: (value: boolean) => void
+  spellCheckEnabled: boolean
+  setSpellCheckEnabled: (updater: (previous: boolean) => boolean) => void
   reducedCaretAnimation: boolean
   setReducedCaretAnimation: (value: boolean) => void
   deferPreviewOnRapidInput: boolean
@@ -715,6 +717,8 @@ export function SidebarOptionsPanel({
   setAudioSpatial,
   reduceVisualEffects,
   setReduceVisualEffects,
+  spellCheckEnabled,
+  setSpellCheckEnabled,
   reducedCaretAnimation,
   setReducedCaretAnimation,
   deferPreviewOnRapidInput,
@@ -2573,9 +2577,30 @@ export function SidebarOptionsPanel({
       </AccordionSection>
 
       <AccordionSection
+        className="sidebar-options-section-tools"
+        ariaLabel="Tools"
+        heading="Tools"
+      >
+<div className="utility-setting-button-row" role="group" aria-label="Tool controls">
+          <button
+            type="button"
+            className={`btn-icon${spellCheckEnabled ? ' is-active' : ''}`}
+            onClick={() => {
+              setSpellCheckEnabled((prev) => !prev)
+              queueAppStateSave(activeNoteId)
+            }}
+            aria-pressed={spellCheckEnabled}
+            data-tooltip={spellCheckEnabled ? 'Disable spell check' : 'Enable spell check'}
+          >
+            <span className="fa-solid fa-spell-check" aria-hidden="true" />
+          </button>
+        </div>
+      </AccordionSection>
+
+      <AccordionSection
         className="sidebar-options-section-scrolling"
-        ariaLabel="Scrolling Behavior"
-        heading="Scrolling Behavior"
+        ariaLabel="Animations"
+        heading="Animations"
       >
 <div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
           <CompactScrollbarSlider

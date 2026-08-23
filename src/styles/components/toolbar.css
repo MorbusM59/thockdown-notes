@@ -1,11 +1,13 @@
 /* =============================================================================
    Toolbar
    ============================================================================= */
+/* Hugs its contents -- a single split button since the create-note,
+   spell-check and edit/render toggles moved out. */
 .note-tools {
-  flex: 0 0 120px;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: row;
-  width:           100%;
+  width:           auto;
   height:          100%;
   border-radius:    0 0 var(--border-radius-regular) var(--border-radius-regular);
   border-top: none;
@@ -39,6 +41,50 @@
 {
   border-color: var(--btn-border-active);
   box-shadow:   var(--box-shadow-inverted-harsh-active);
+}
+
+/* Dark mode + double size, stacked as one split button -- same two-arm shape
+   as the window controls' maximize split, but sized to the note-tools row. */
+.note-tools-split {
+  width: var(--btn-square-large-size);
+  height: var(--btn-square-large-size);
+  min-width: var(--btn-square-large-size);
+  min-height: var(--btn-square-large-size);
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--spacing-small);
+}
+
+.note-tools-split > .btn-icon.note-tools-split-btn {
+  width: 100%;
+  min-width: 0;
+  height: calc((var(--btn-square-large-size) - 2px) / 2);
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: auto;
+  border: 1px solid var(--btn-border-default);
+  background: var(--btn-bg-default);
+  color: var(--color-text-60);
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  border-radius: var(--border-radius-small);
+  font-size: var(--btn-icon-size);
+}
+
+.note-tools-split-btn.dark-mode {
+  border-radius: var(--border-radius-regular) var(--border-radius-regular) var(--border-radius-small) var(--border-radius-small);
+}
+
+.note-tools-split-btn.double-size {
+  border-radius: var(--border-radius-small) var(--border-radius-small) var(--border-radius-regular) var(--border-radius-regular);
+}
+
+.note-tools-split > .btn-icon.note-tools-split-btn.is-active {
+  border-color: var(--btn-border-active);
+  box-shadow: var(--box-shadow-inverted-harsh-active);
 }
 
 .toolbar-grid {

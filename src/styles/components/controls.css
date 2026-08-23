@@ -4,7 +4,9 @@
 
 .window-controls-grid {
   display:         grid;
-  grid-template-columns: auto auto auto;
+  /* Two children now: the audio controls and the right-hand window buttons.
+     (The left-hand dark-mode button moved into the note-tools split button.) */
+  grid-template-columns: auto auto;
   grid-template-rows: auto;
   width:           100%;
   height:          100%;
@@ -18,10 +20,6 @@
 .window-controls-grid.is-collapsed .window-maximize-split,
 .window-controls-grid.is-collapsed .close-btn {
   display:         none;
-}
-
-.window-controls-grid.is-collapsed .window-controls-left {
-  display: none;
 }
 
 .window-controls-grid.is-collapsed .window-controls-right {
@@ -270,8 +268,17 @@
   font-size: var(--btn-icon-size);
 }
 
-.window-maximize-split-btn.maximize {
+/* Top slot: inert fa-bolt placeholder left behind when double size moved to
+   the note-tools split button. Keeps the split button's two-arm silhouette. */
+.window-maximize-split-btn.placeholder {
   border-radius: var(--border-radius-regular) var(--border-radius-regular) var(--border-radius-small) var(--border-radius-small);
+  padding: 0;
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.window-maximize-split-btn.maximize {
+  border-radius: var(--border-radius-small) var(--border-radius-small) var(--border-radius-regular) var(--border-radius-regular);
   padding: 0;
 }
 
@@ -283,11 +290,6 @@
 .diagonal-arrow-glyph {
   display: inline-block;
   transform: rotate(45deg);
-}
-
-.window-maximize-split-btn.double-size {
-  border-radius: var(--border-radius-small) var(--border-radius-small) var(--border-radius-regular) var(--border-radius-regular);
-  padding: 0;
 }
 
 .double-size-glyph {

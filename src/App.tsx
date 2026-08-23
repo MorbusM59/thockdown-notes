@@ -8389,6 +8389,8 @@ ${markdownHtml}
                         setAudioSpatial={setAudioSpatial}
                         reduceVisualEffects={reduceVisualEffects}
                         setReduceVisualEffects={setReduceVisualEffects}
+                        spellCheckEnabled={spellCheckEnabled}
+                        setSpellCheckEnabled={setSpellCheckEnabled}
                         reducedCaretAnimation={reducedCaretAnimation}
                         setReducedCaretAnimation={setReducedCaretAnimation}
                         deferPreviewOnRapidInput={deferPreviewOnRapidInput}
@@ -8640,20 +8642,6 @@ ${markdownHtml}
               style={{ gridArea: 'window_control' }}
               aria-label="Window controls grid"
             >
-              <div className="window-controls window-controls-left" aria-label="Window controls left">
-                <button
-                  type="button"
-                  className={`toggle-btn icon-btn window-control-btn dark-mode-btn${uiMode === 'dark' ? ' is-active' : ''}`}
-                  data-tooltip="Toggle dark mode"
-                  aria-label="Toggle dark mode"
-                  onClick={toggleUiMode}
-                >
-                  <span
-                    className="window-control-glyph fa-solid fa-moon"
-                    aria-hidden="true"
-                  />
-                </button>
-              </div>
 
               <AudioControls
                 volume={musicVolume}
@@ -8700,7 +8688,19 @@ ${markdownHtml}
                     <span className="fa-solid fa-caret-down" aria-hidden="true" />
                   </button>
                 </div>
-                <div className="window-maximize-split" role="group" aria-label="Maximize and double size controls">
+                <div className="window-maximize-split" role="group" aria-label="Maximize controls">
+                  {/* Top slot is an inert placeholder for now -- double size moved to the
+                      note-tools split button, and the maximize/restore arm moved down into
+                      the slot it vacated so the split button keeps its two-arm shape. */}
+                  <button
+                    type="button"
+                    className="window-control-btn btn-icon window-maximize-split-btn placeholder"
+                    aria-hidden="true"
+                    tabIndex={-1}
+                    disabled
+                  >
+                    <span className="fa-solid fa-bolt" aria-hidden="true" />
+                  </button>
                   <button
                     type="button"
                     className="window-control-btn btn-icon window-maximize-split-btn maximize"
@@ -8712,15 +8712,6 @@ ${markdownHtml}
                       className={`diagonal-arrow-glyph fa-solid ${windowIsMaximized ? 'fa-down-left-and-up-right-to-center' : 'fa-up-right-and-down-left-from-center'}`}
                       aria-hidden="true"
                     />
-                  </button>
-                  <button
-                    type="button"
-                    className={`window-control-btn btn-icon window-maximize-split-btn double-size${isDoubleSizeMode ? ' is-active' : ''}`}
-                    data-tooltip={isDoubleSizeMode ? 'Exit double size' : 'Double size'}
-                    aria-label={isDoubleSizeMode ? 'Exit double size mode' : 'Enable double size mode'}
-                    onClick={handleToggleDoubleSizeMode}
-                  >
-                    <span className="double-size-glyph fa-solid fa-eye" aria-hidden="true" />
                   </button>
                 </div>
                 <button
@@ -8737,13 +8728,11 @@ ${markdownHtml}
 
             <EditorToolbar
               isPreviewMode={activeSection?.isPreviewMode ?? false}
-              isForcedPreview={activeSection?.isForcedPreviewNote ?? false}
               activeNoteId={activeSection?.activeNoteId ?? null}
-              toggleRenderViewMode={activeSection?.isForcedPreviewNote ? noopAsync : (activeSection?.toggleRenderViewMode ?? noopAsync)}
-              createNote={createNote}
-              spellCheckEnabled={spellCheckEnabled}
-              setSpellCheckEnabled={setSpellCheckEnabled}
-              queueAppStateSave={queueAppStateSave}
+              uiMode={uiMode}
+              toggleUiMode={toggleUiMode}
+              isDoubleSizeMode={isDoubleSizeMode}
+              handleToggleDoubleSizeMode={handleToggleDoubleSizeMode}
               handleCreateChapter={activeSection?.handleCreateChapter ?? noopAsync}
               activeDecorationFormats={activeSection?.activeDecorationFormats ?? EMPTY_DECORATION_FORMATS}
               activeHeadingLevel={activeSection?.activeHeadingLevel ?? 0}

@@ -2,14 +2,12 @@ import type { UseMarkdownFormattingToolbarResult } from '../editorSection/useMar
 
 export interface EditorToolbarProps extends UseMarkdownFormattingToolbarResult {
   isPreviewMode: boolean
-  /** True while the active note is an auto-TOC/auto-Open-Items chapter, which is always shown in render view and can't be switched to edit mode. Disables and relabels the edit/preview toggle instead of leaving it clickable-but-inert. */
-  isForcedPreview: boolean
   activeNoteId: string | null
-  toggleRenderViewMode: () => void
-  createNote: (initialText?: string) => Promise<void>
-  spellCheckEnabled: boolean
-  setSpellCheckEnabled: (updater: (previous: boolean) => boolean) => void
-  queueAppStateSave: (selectedNoteId: string | null) => void
+  /** 'dark' while the app is in dark UI mode -- drives the top arm of the note-tools split button. */
+  uiMode: string
+  toggleUiMode: () => void
+  isDoubleSizeMode: boolean
+  handleToggleDoubleSizeMode: () => void
   handleCreateChapter: () => void | Promise<void>
 }
 
@@ -23,13 +21,11 @@ export interface EditorToolbarProps extends UseMarkdownFormattingToolbarResult {
  */
 export function EditorToolbar({
   isPreviewMode,
-  isForcedPreview,
   activeNoteId,
-  toggleRenderViewMode,
-  createNote,
-  spellCheckEnabled,
-  setSpellCheckEnabled,
-  queueAppStateSave,
+  uiMode,
+  toggleUiMode,
+  isDoubleSizeMode,
+  handleToggleDoubleSizeMode,
   handleCreateChapter,
   activeDecorationFormats,
   activeHeadingLevel,
@@ -57,40 +53,28 @@ export function EditorToolbar({
   return (
     <section className="toolbar-grid" style={{ gridArea: 'toolbar' }} aria-label="Editor toolbar">
       <div className="note-tools">
-        <button
-          className={`btn-icon ${!isPreviewMode ? 'is-active' : ''}`}
-          type="button"
-          data-tooltip={isForcedPreview ? 'This chapter is always shown in render view' : (isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)')}
-          aria-label={isForcedPreview ? 'This chapter is always shown in render view' : (isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)')}
-          onClick={toggleRenderViewMode}
-          disabled={isForcedPreview}
-        >
-          <span className="fa-solid fa-pen-to-square" aria-hidden="true" />
-        </button>
-        <button
-          className="btn-icon"
-          type="button"
-          data-tooltip="Create note (Ctrl+N)"
-          aria-label="Create note"
-          onClick={() => {
-            void createNote()
-          }}
-        >
-          <span className="fa-solid fa-file" aria-hidden="true" />
-        </button>
-        <button
-          className={`btn-icon ${spellCheckEnabled ? 'is-active' : ''}`}
-          type="button"
-          data-tooltip={spellCheckEnabled ? 'Disable spell check' : 'Enable spell check'}
-          aria-label={spellCheckEnabled ? 'Disable spell check' : 'Enable spell check'}
-          aria-pressed={spellCheckEnabled}
-          onClick={() => {
-            setSpellCheckEnabled((prev) => !prev)
-            queueAppStateSave(activeNoteId)
-          }}
-        >
-          <span className="fa-solid fa-spell-check" aria-hidden="true" />
-        </button>
+        <div className="note-tools-split" role="group" aria-label="Dark mode and double size controls">
+          <button
+            type="button"
+            className={`btn-icon note-tools-split-btn dark-mode${uiMode === 'dark' ? ' is-active' : ''}`}
+            data-tooltip="Toggle dark mode"
+            aria-label="Toggle dark mode"
+            aria-pressed={uiMode === 'dark'}
+            onClick={toggleUiMode}
+          >
+            <span className="fa-solid fa-moon" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={`btn-icon note-tools-split-btn double-size${isDoubleSizeMode ? ' is-active' : ''}`}
+            data-tooltip={isDoubleSizeMode ? 'Exit double size' : 'Double size'}
+            aria-label={isDoubleSizeMode ? 'Exit double size mode' : 'Enable double size mode'}
+            aria-pressed={isDoubleSizeMode}
+            onClick={handleToggleDoubleSizeMode}
+          >
+            <span className="double-size-glyph fa-solid fa-eye" aria-hidden="true" />
+          </button>
+        </div>
       </div>
       <div className="toolbar-container">
         {!isPreviewMode ? (
