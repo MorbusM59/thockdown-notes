@@ -64,7 +64,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'onChapterDragStart' | 'onChapterDragEnd' | 'onChapterDrop'
   | 'editingChapterNoteId' | 'chapterIdDraft' | 'setChapterIdDraft' | 'onCommitChapterIdEdit' | 'onCancelChapterIdEdit'
   | 'onCollapseChapterIntoPrevious' | 'onExtractSelectionToChapter' | 'isViewingAutoTocChapter' | 'isViewingAutoOpenItemsChapter'
-  | 'isViewingTimelessNote' | 'onToggleTimeless'
+  | 'isViewingTimelessNote' | 'onToggleTimeless' | 'isForcedPreviewNote' | 'onToggleRenderViewMode'
   | 'splitArmedChapter' | 'onChapterPillMouseDown' | 'onChapterPillMouseUp' | 'onChapterPillMouseLeave' | 'onChapterPillContextMenu'
   | 'onArchiveChapterClick' | 'onDeleteChapterClick'> {
   sectionId: string
@@ -1888,6 +1888,8 @@ export function EditorSection({
         isViewingAutoTocChapter={isViewingAutoTocChapter}
         isViewingAutoOpenItemsChapter={isViewingAutoOpenItemsChapter}
         isViewingTimelessNote={isViewingTimelessNote}
+        isForcedPreviewNote={isForcedPreviewNote}
+        onToggleRenderViewMode={toggleRenderViewMode}
         onToggleTimeless={onToggleTimeless}
         spellCheckRenderEnabled={spellCheckRenderEnabled}
         blockPreviewEditMutation={blockPreviewEditMutation}
