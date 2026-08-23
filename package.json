@@ -1,7 +1,7 @@
 {
   "name": "thockdownnotes",
   "private": true,
-  "version": "0.5.6",
+  "version": "0.5.7",
   "type": "module",
   "scripts": {
     "predev": "node scripts/killStrayElectronDev.mjs && electron-rebuild -f -w better-sqlite3",

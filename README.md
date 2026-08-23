@@ -1,8 +1,8 @@
 # Thockdown Notes
 
-Desktop notes app built with Electron, React, and Lexical.
+Desktop notes app built with Electron, React, and CodeMirror 6.
 
-Current version: **0.5.3**
+Current version: **0.5.7**
 
 Full usage documentation is built into the app itself — open the in-app Help note ($HELP). This file intentionally does not duplicate it.
 
