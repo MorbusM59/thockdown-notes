@@ -1,4 +1,5 @@
 import { normalizeInternalText } from './TextPolicy';
+import { getPreviewVisibleTextProjection, mapVisibleRangeToSourceRange } from './PreviewVisibleText';
 
 const DEFAULT_SNIPPET_RADIUS = 50;
 
@@ -20,6 +21,15 @@ export type DocumentFindHit = {
   id: string;
   index: number;
   matchLength: number;
+  /**
+   * Offset of this match within the *rendered-visible* text projection, set
+   * only for preview-mode hits (see buildPreviewVisibleDocumentFindHits).
+   * `index` stays a real source offset in both modes -- replace and the
+   * edit-mode jump address the document, not the screen -- so this is the
+   * extra coordinate the preview jump needs to tell two hits apart when the
+   * markdown between them renders to nothing.
+   */
+  visibleIndex?: number;
   snippetBefore: string;
   snippetMatch: string;
   snippetAfter: string;
@@ -106,6 +116,61 @@ export function buildDocumentFindHits(
       id: `${foundIndex}-${hits.length}`,
       index: foundIndex,
       matchLength: normalizedQuery.length,
+      ...snippet,
+    });
+
+    searchStart = foundIndex + Math.max(1, normalizedQuery.length);
+  }
+
+  return hits;
+}
+
+/**
+ * Preview-mode counterpart to buildDocumentFindHits: searches only what the
+ * rendered pane actually shows, so `[anchor](#anchor)` contributes the one
+ * match the reader can see rather than two. Hits still carry real source
+ * offsets in `index`/`matchLength` (so replace and the edit-mode jump keep
+ * working unchanged) plus `visibleIndex` for preview-side positioning, and
+ * their snippets are built from the visible text -- the card shows the
+ * sentence as rendered, not with its markdown syntax in the way.
+ */
+export function buildPreviewVisibleDocumentFindHits(
+  text: string,
+  query: string,
+  caseSensitive: boolean,
+  snippetRadius = DEFAULT_SNIPPET_RADIUS,
+): DocumentFindHit[] {
+  // Same query-first ordering as buildDocumentFindHits, and for a stronger
+  // reason here: with no query there is nothing to search, and the
+  // projection is a full remark parse of the document.
+  const normalizedQuery = normalizeInternalText(query).trim();
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  const normalizedText = normalizeInternalText(text);
+  const projection = getPreviewVisibleTextProjection(normalizedText);
+  const visibleText = projection.visibleText;
+
+  const haystack = caseSensitive ? visibleText : visibleText.toLocaleLowerCase();
+  const needle = caseSensitive ? normalizedQuery : normalizedQuery.toLocaleLowerCase();
+
+  const hits: DocumentFindHit[] = [];
+  let searchStart = 0;
+
+  while (searchStart <= haystack.length - needle.length) {
+    const foundIndex = haystack.indexOf(needle, searchStart);
+    if (foundIndex < 0) {
+      break;
+    }
+
+    const sourceRange = mapVisibleRangeToSourceRange(projection, foundIndex, foundIndex + normalizedQuery.length);
+    const snippet = buildSnippet(visibleText, foundIndex, normalizedQuery.length, snippetRadius);
+    hits.push({
+      id: `${sourceRange.start}-${hits.length}`,
+      index: sourceRange.start,
+      matchLength: Math.max(1, sourceRange.end - sourceRange.start),
+      visibleIndex: foundIndex,
       ...snippet,
     });
 

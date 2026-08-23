@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import type { DocumentFindDirective, DocumentFindHit } from '../editor/FindReplaceEngine'
-import { resolveDocumentFindDirective, buildDocumentFindHits } from '../editor/FindReplaceEngine'
+import {
+  resolveDocumentFindDirective,
+  buildDocumentFindHits,
+  buildPreviewVisibleDocumentFindHits,
+} from '../editor/FindReplaceEngine'
 
 export interface UseDocumentFindOptions {
   /**
@@ -23,6 +27,16 @@ export interface UseDocumentFindOptions {
   sourceText: string
   /** Applied once (e.g. after the persisted app-state round-trip resolves); null/omitted leaves the default (case-insensitive). */
   initialCaseSensitive?: boolean | null
+  /**
+   * Whether the section is currently showing the rendered pane. Switches the
+   * search from the markdown source to what that pane actually displays --
+   * a match hiding inside syntax the reader can't see (`[anchor](#anchor)`'s
+   * second "anchor", an image URL, a link definition) is not a hit anyone
+   * looking at rendered output can be shown or scrolled to, and counting it
+   * anyway also misaligned every later hit's position. See
+   * buildPreviewVisibleDocumentFindHits.
+   */
+  isPreviewMode: boolean
 }
 
 export interface UseDocumentFindResult {
@@ -53,7 +67,7 @@ export interface UseDocumentFindResult {
  * `documentFindDirective` back out to drive them.
  */
 export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFindResult {
-  const { sectionId, sourceText, initialCaseSensitive } = options
+  const { sectionId, sourceText, initialCaseSensitive, isPreviewMode } = options
   void sectionId
 
   const [documentFindQuery, setDocumentFindQuery] = useState('')
@@ -114,8 +128,11 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
   }, [debouncedFindQuery, documentReplaceQuery, isDocumentReplaceMode])
 
   const documentFindHits = useMemo<DocumentFindHit[]>(() => {
+    if (isPreviewMode) {
+      return buildPreviewVisibleDocumentFindHits(sourceText, documentFindDirective.findText, effectiveCaseSensitive)
+    }
     return buildDocumentFindHits(sourceText, documentFindDirective.findText, effectiveCaseSensitive)
-  }, [sourceText, documentFindDirective.findText, effectiveCaseSensitive])
+  }, [sourceText, documentFindDirective.findText, effectiveCaseSensitive, isPreviewMode])
 
   return {
     documentFindQuery,

@@ -481,6 +481,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - \`Tab\` moves between the find and replace fields.
 - \`Ctrl+Enter\` replaces every match at once.
 - The \`Aa\` toggle means "case-sensitive" in plain find mode; in replace mode it's repurposed as "keep case," searching case-insensitively but re-casing each replacement to match what it's replacing.
+- What gets searched follows the mode you're in: in edit mode, the note's Markdown exactly as you typed it; in rendered mode, only the text the page actually shows. A link's target, an image's URL, a heading's \`#\` marks are invisible there, so they never produce a match you can't see — searching \`anchor\` against a rendered \`[anchor](#anchor)\` finds the one word on screen, not two.
 - For searching across *all* notes rather than one, use [Search]($HELP§SIDEBAR-SEARCH#search) instead.
 `,
   `## External Files

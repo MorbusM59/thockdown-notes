@@ -10,6 +10,8 @@ import {
   type DocumentFindHit,
 } from '../editor/FindReplaceEngine'
 import { scrollToNonQuantizedSmooth } from '../editor/NonQuantizedSmoothScroll'
+import { resolvePreviewHitRange, resolveSourceLineForOffset } from './PreviewFindHitLocator'
+import type { PreviewScrollToSourceLineFn } from './usePreviewMarkdownRendering'
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
@@ -17,6 +19,14 @@ function clamp(value: number, min: number, max: number): number {
 
 export interface UseDocumentFindNavigationOptions {
   previewScrollRef: MutableRefObject<HTMLDivElement | null>
+  /**
+   * Forces the preview pane's virtualizer to mount the block covering a
+   * given source line. Needed for jumping, not just for anchors: the
+   * rendered pane only keeps the visible window (plus a small overscan) in
+   * the DOM, so a hit further down the document has no element to measure
+   * until its own block is scrolled into range.
+   */
+  previewScrollToSourceLineRef: MutableRefObject<PreviewScrollToSourceLineFn | null>
   documentFindDirective: DocumentFindDirective
   documentFindHits: DocumentFindHit[]
   effectiveCaseSensitive: boolean
@@ -41,11 +51,11 @@ export interface UseDocumentFindNavigationResult {
 
 /**
  * Jump-to-hit scrolling (preview pane vs. edit-mode selection) and single/
- * all replace actions for the document-find bar -- extracted verbatim from
- * App.tsx with zero behavior change.
+ * all replace actions for the document-find bar.
  */
 export function useDocumentFindNavigation({
   previewScrollRef,
+  previewScrollToSourceLineRef,
   documentFindDirective,
   documentFindHits,
   effectiveCaseSensitive,
@@ -61,6 +71,30 @@ export function useDocumentFindNavigation({
   isDocumentReplaceMode,
   applyProgrammaticEditorText,
 }: UseDocumentFindNavigationOptions): UseDocumentFindNavigationResult {
+  /**
+   * Scrolls the rendered pane to a hit.
+   *
+   * Anchored on the hit's own *source line*, not on "the Nth occurrence of
+   * the needle in the pane's text" -- which is what this used to do, and
+   * why clicking a card could land on a different match. That ordinal was
+   * wrong twice over: the hit list was built from the markdown source,
+   * where invisible syntax (`[anchor](#anchor)`) contributes matches the
+   * rendered text doesn't have, so every later hit's ordinal was shifted;
+   * and the pane is virtualized, so a DOM walk only ever sees the mounted
+   * window, making "the Nth match in the DOM" a different match from "the
+   * Nth match in the document" for anything below the fold. Hits now come
+   * from the visible-text projection (fixing the first half), and this
+   * resolves position through the block owning the hit's source line
+   * (fixing the second), using an occurrence ordinal that is local to that
+   * one block.
+   */
+  /**
+   * Scrolls the rendered pane to a hit: travel to the owning block through
+   * the virtualizer, then correct onto the exact match inside it. See
+   * PreviewFindHitLocator.resolvePreviewHitRange for why the match is
+   * resolved through the hit's source line rather than through its ordinal
+   * among the needle's occurrences in the pane.
+   */
   const jumpToPreviewDocumentFindHit = useCallback((hit: DocumentFindHit) => {
     const scroller = previewScrollRef.current
     if (!scroller) return
@@ -68,104 +102,85 @@ export function useDocumentFindNavigation({
     const normalizedNeedle = normalizeInternalText(documentFindDirective.findText)
     if (!normalizedNeedle) return
 
-    const hitOrdinal = documentFindHits.findIndex((candidate) => candidate.id === hit.id)
-    const compareNeedle = effectiveCaseSensitive ? normalizedNeedle : normalizedNeedle.toLocaleLowerCase()
+    const sourceText = normalizeInternalText(currentEditorText)
+    const sourceLine = resolveSourceLineForOffset(sourceText, hit.index)
 
-    type TextSegment = {
-      node: Text
-      start: number
-      end: number
-    }
-
-    const segments: TextSegment[] = []
-    let aggregateText = ''
-    const walker = document.createTreeWalker(scroller, NodeFilter.SHOW_TEXT)
-    let node = walker.nextNode()
-    while (node) {
-      if (node instanceof Text && node.nodeValue && node.nodeValue.length > 0) {
-        const value = node.nodeValue
-        const start = aggregateText.length
-        aggregateText += value
-        segments.push({
-          node,
-          start,
-          end: aggregateText.length,
-        })
-      }
-      node = walker.nextNode()
-    }
-
-    const haystack = effectiveCaseSensitive ? aggregateText : aggregateText.toLocaleLowerCase()
-    const resolvedOrdinal = hitOrdinal >= 0 ? hitOrdinal : 0
-
-    let occurrence = -1
-    let cursor = 0
-    for (let index = 0; index <= resolvedOrdinal; index += 1) {
-      const foundIndex = haystack.indexOf(compareNeedle, cursor)
-      if (foundIndex < 0) {
-        occurrence = -1
-        break
-      }
-      occurrence = foundIndex
-      cursor = foundIndex + Math.max(1, compareNeedle.length)
-    }
-
-    const fallbackTarget = (() => {
+    const scrollToFallback = () => {
       const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
-      if (maxScrollTop <= 0) return 0
-      const ratio = clamp(hit.index / Math.max(1, currentEditorText.length), 0, 1)
-      return ratio * maxScrollTop
-    })()
-
-    if (occurrence < 0 || segments.length === 0) {
-      scrollToNonQuantizedSmooth(scroller, fallbackTarget, {
+      const target = maxScrollTop <= 0
+        ? 0
+        : clamp(hit.index / Math.max(1, sourceText.length), 0, 1) * maxScrollTop
+      scrollToNonQuantizedSmooth(scroller, target, {
         onStep: () => syncPreviewCustomScrollbar(),
       })
+    }
+
+    // Instant, not animated: the virtualizer-driven block scroll below has
+    // already done the traveling, and this is only the small correction
+    // that centers the match within its own block -- the same split
+    // usePreviewMarkdownRendering's scrollToRenderedElement uses for anchor
+    // navigation. Animating it would race the block scroll still in flight.
+    const scrollToMatch = (): boolean => {
+      const range = resolvePreviewHitRange({
+        scroller,
+        sourceText,
+        hit,
+        hits: documentFindHits,
+        needle: normalizedNeedle,
+        caseSensitive: effectiveCaseSensitive,
+      })
+      if (!range) return false
+
+      const rect = range.getBoundingClientRect()
+      if (rect.height <= 0 && rect.width <= 0) return false
+
+      const scrollerRect = scroller.getBoundingClientRect()
+      const absoluteTop = scroller.scrollTop + (rect.top - scrollerRect.top)
+      const previousScrollBehavior = scroller.style.scrollBehavior
+      scroller.style.scrollBehavior = 'auto'
+      scroller.scrollTop = absoluteTop - (scroller.clientHeight * 0.35)
+      scroller.style.scrollBehavior = previousScrollBehavior
+      syncPreviewCustomScrollbar()
+      return true
+    }
+
+    // Travel through the virtualizer first, always -- even when the hit's
+    // block happens to be mounted already. Writing `scrollTop` directly
+    // moves the pane without the virtualizer's own offset bookkeeping
+    // following, so the mounted window stays where it was and the landing
+    // spot is whatever blank space that stale window leaves behind; only
+    // scrollToIndex both mounts the target block and keeps the two in step.
+    // This mirrors what usePreviewMarkdownRendering's anchor navigation
+    // (scrollToRenderedElement) already does, for the same reason.
+    const didScroll = previewScrollToSourceLineRef.current?.(sourceLine, { align: 'center', behavior: 'smooth' }) ?? false
+    if (!didScroll) {
+      scrollToFallback()
       return
     }
 
-    const startSegment = segments.find((segment) => occurrence >= segment.start && occurrence < segment.end)
-    if (!startSegment) {
-      scrollToNonQuantizedSmooth(scroller, fallbackTarget, {
-        onStep: () => syncPreviewCustomScrollbar(),
-      })
-      return
+    // The target block mounts (and measures) asynchronously, so the exact
+    // in-block correction is retried across a few frames rather than given
+    // up on after one -- same retry shape, and same attempt budget, as
+    // scrollToRenderedElement's own. Landing on the block without the
+    // correction is already a correct-enough result, which is what happens
+    // when every attempt is used up.
+    const refine = (attemptsLeft: number) => {
+      if (scrollToMatch()) return
+      if (attemptsLeft <= 0) {
+        syncPreviewCustomScrollbar()
+        return
+      }
+      requestAnimationFrame(() => refine(attemptsLeft - 1))
     }
-
-    const endOffsetGlobal = occurrence + Math.max(1, hit.matchLength)
-    const endSegment = segments.find((segment) => endOffsetGlobal > segment.start && endOffsetGlobal <= segment.end) ?? startSegment
-
-    const startOffsetInNode = Math.max(0, Math.min(startSegment.node.nodeValue?.length ?? 0, occurrence - startSegment.start))
-    const endOffsetInNode = Math.max(
-      startOffsetInNode,
-      Math.min(endSegment.node.nodeValue?.length ?? 0, endOffsetGlobal - endSegment.start),
-    )
-
-    const range = document.createRange()
-    range.setStart(startSegment.node, startOffsetInNode)
-    range.setEnd(endSegment.node, endOffsetInNode)
-
-    const rect = range.getBoundingClientRect()
-    if (rect.height <= 0 && rect.width <= 0) {
-      scrollToNonQuantizedSmooth(scroller, fallbackTarget, {
-        onStep: () => syncPreviewCustomScrollbar(),
-      })
-      return
-    }
-
-    const scrollerRect = scroller.getBoundingClientRect()
-    const absoluteTop = scroller.scrollTop + (rect.top - scrollerRect.top)
-    const targetScrollTop = absoluteTop - (scroller.clientHeight * 0.35)
-    scrollToNonQuantizedSmooth(scroller, targetScrollTop, {
-      onStep: () => syncPreviewCustomScrollbar(),
-    })
+    requestAnimationFrame(() => refine(5))
   }, [
-    currentEditorText.length,
+    currentEditorText,
     documentFindDirective.findText,
     documentFindHits,
     effectiveCaseSensitive,
     syncPreviewCustomScrollbar,
     previewScrollRef,
+    previewScrollToSourceLineRef,
   ])
 
   const handleJumpToDocumentFindHit = useCallback((hit: DocumentFindHit) => {

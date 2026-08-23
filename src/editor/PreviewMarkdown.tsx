@@ -185,6 +185,28 @@ function isOpenItemsGroupMarkerText(text: string): boolean {
   return trimmed.startsWith(GROUP_MARKER_PREFIX) && trimmed.endsWith(GROUP_MARKER_SUFFIX)
 }
 
+/**
+ * Pulls just the source-line data attributes back out of a component
+ * override's props. An override that renders its own element (rather than
+ * spreading what react-markdown handed it) silently drops every attribute
+ * the rehype plugins added -- which is how `<p>` ended up as the one
+ * createPreviewSourceAnchorRehypePlugin tag that never actually carried its
+ * own line numbers in the DOM, even though the plugin has always listed it.
+ * Everything that resolves a rendered element back to a source line
+ * (preview scroll restore, edit-mode restore, find-hit jumping) goes blind
+ * on paragraphs without these -- and paragraphs are most of a document.
+ * Only these attributes are forwarded: the rest of the props (react-markdown's
+ * `node`, hast leftovers) have no business on a DOM element.
+ */
+function extractSourceLineProps(props: Record<string, unknown>): Record<string, string> {
+  const forwarded: Record<string, string> = {}
+  for (const key of ['data-source-line', 'data-source-line-start', 'data-source-line-end']) {
+    const value = props[key]
+    if (typeof value === 'string') forwarded[key] = value
+  }
+  return forwarded
+}
+
 /** Only ever passed while the note being rendered is the auto-Open-Items chapter -- see OpenItemCheckbox's own doc comment for what clicking one does. */
 export interface OpenItemsToggleHandlers {
   /** Whether `sourceLine`'s own checkbox has been toggled this viewing session -- state the CALLER owns (usePreviewMarkdownRendering.tsx's OpenItemsToggleStore), not this component: react-virtual unmounts/remounts blocks that scroll out of and back into view, so any state kept here in a per-checkbox useState would silently reset on scroll even though the real source-note edit had already gone through. */
@@ -341,11 +363,11 @@ export function createPreviewMarkdownComponents(
   onToggleChecklistAtLine?: (sourceLine: number) => void,
 ) {
   return {
-    p: ({ children }: { children?: ReactNode }) => {
+    p: ({ children, ...props }: { children?: ReactNode }) => {
       if (isOpenItemsGroupMarkerText(extractPlainText(children))) {
         return null
       }
-      return <p>{children}</p>
+      return <p {...extractSourceLineProps(props as Record<string, unknown>)}>{children}</p>
     },
     a: ({ children, href }: { children?: ReactNode; href?: string }) => {
       const normalizedHref = typeof href === 'string' ? href : undefined

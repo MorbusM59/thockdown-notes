@@ -1277,6 +1277,7 @@ export function EditorSection({
     sectionId,
     sourceText: currentEditorText,
     initialCaseSensitive: restoredDocumentFindCaseSensitive,
+    isPreviewMode,
   })
 
   useEffect(() => {
@@ -1336,6 +1337,7 @@ export function EditorSection({
     replaceAllDocumentFindHits,
   } = useDocumentFindNavigation({
     previewScrollRef,
+    previewScrollToSourceLineRef: editorSectionMountRest.previewScrollToSourceLineRef,
     documentFindDirective,
     documentFindHits,
     effectiveCaseSensitive,
