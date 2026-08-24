@@ -22,6 +22,12 @@ export interface SectionTabBarProps {
   isLeftmostSection: boolean
   /** Whether there's room for one more 300px-minimum section -- hides the "+" button when there isn't. */
   canCreateSection: boolean
+  /** This slot's current view -- drives the edit/render toggle left of the add-slot "+" (active == edit mode). */
+  isPreviewMode: boolean
+  /** True while what's loaded is hard-locked to render view (auto-TOC, Open Items, or a timeless note -- EditorSection.tsx's isForcedPreviewNote). The toggle shows inactive and disabled then, rather than claiming a mode the note can't leave. */
+  isForcedPreviewNote: boolean
+  /** Flips this slot between edit and render view. */
+  onToggleRenderViewMode: () => void
   /** Creates a new section immediately to the right of this one. */
   onCreateSection: () => void
   /** Closes this section's slot (only ever called for non-leftmost sections). */
@@ -72,6 +78,9 @@ export function SectionTabBar({
   notes,
   isLeftmostSection,
   canCreateSection,
+  isPreviewMode,
+  isForcedPreviewNote,
+  onToggleRenderViewMode,
   onCreateSection,
   onCloseSection,
   onCreateNote,
@@ -252,9 +261,10 @@ export function SectionTabBar({
                       type="button"
                       className="tag-pill section-picker-item section-picker-create"
                       onClick={onSectionPickerClearClick}
-                      data-tooltip="Clear this section (no note, no tabs, no name)"
+                      data-tooltip="New section in this slot (no note, no tabs, no name)"
+                      aria-label="New section in this slot"
                     >
-                      <span className="tag-pill-label">···</span>
+                      <span className="fa-solid fa-book" aria-hidden="true" />
                     </button>
                   ) : null}
                   {swapCandidates.map((candidate) => {
@@ -506,15 +516,39 @@ export function SectionTabBar({
       </div>
       )}
 
+      {/* Edit/render toggle -- a per-slot control, so it lives here at the
+          slot's own edge rather than in the chapter bar (which speaks for one
+          note's internals). Active means edit mode, so a note that can't leave
+          render view (auto-TOC, Open Items, timeless) reads as plain inactive
+          and takes no clicks, rather than showing a state the user can't act
+          on. Sitting immediately left of the add-slot "+" also lets the two
+          read together as slot-level actions: this is the writing window, and
+          that makes another one. */}
+      <button
+        type="button"
+        className={`btn-icon section-render-mode-toggle${!isForcedPreviewNote && !isPreviewMode ? ' is-active' : ''}`}
+        data-tooltip={isForcedPreviewNote
+          ? 'This note is always shown in render view'
+          : (isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)')}
+        aria-label={isForcedPreviewNote
+          ? 'This note is always shown in render view'
+          : (isPreviewMode ? 'Switch to Edit Mode' : 'Switch to Render View')}
+        aria-pressed={!isForcedPreviewNote && !isPreviewMode}
+        disabled={isForcedPreviewNote}
+        onClick={onToggleRenderViewMode}
+      >
+        <span className="fa-solid fa-pen-to-square" aria-hidden="true" />
+      </button>
+
       {canCreateSection ? (
         <button
           type="button"
           className="btn-icon section-create-toggle"
-          data-tooltip="Add a section"
-          aria-label="Add a section"
+          data-tooltip="Add a slot"
+          aria-label="Add a slot"
           onClick={onCreateSection}
         >
-          <span className="fa-solid fa-book" aria-hidden="true" />
+          <span className="fa-solid fa-plus" aria-hidden="true" />
         </button>
       ) : null}
     </section>

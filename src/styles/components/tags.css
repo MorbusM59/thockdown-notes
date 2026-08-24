@@ -228,7 +228,8 @@
 .sidebar-toggle,
 .section-close-toggle,
 .tagbar-toggle,
-.section-create-toggle
+.section-create-toggle,
+.section-render-mode-toggle
  {
   display: block;
 }
@@ -236,7 +237,8 @@
 .sidebar-toggle .fa-solid,
 .section-close-toggle .fa-solid,
 .tagbar-toggle .fa-solid,
-.section-create-toggle .fa-solid
+.section-create-toggle .fa-solid,
+.section-render-mode-toggle .fa-solid
  {
   display: block;
   margin: auto;
@@ -248,7 +250,8 @@
   margin-right: var(--spacing-regular);
 }
 
-.section-create-toggle {
+.section-create-toggle,
+.section-render-mode-toggle {
   margin-left: var(--spacing-regular);
 }
 

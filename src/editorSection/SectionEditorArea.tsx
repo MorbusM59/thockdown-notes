@@ -131,10 +131,6 @@ export interface SectionEditorAreaProps {
    */
   isViewingAutoTocChapter: boolean
   isViewingAutoOpenItemsChapter: boolean
-  /** True while what's loaded is hard-locked to render view -- see EditorSection.tsx's isForcedPreviewNote. Passed through to the chapter bar's edit/render toggle, which disables itself in that state. */
-  isForcedPreviewNote: boolean
-  /** Flips this section between edit and render view -- the chapter bar's own edit/render toggle button. */
-  onToggleRenderViewMode: () => void
 }
 
 /**
@@ -237,8 +233,6 @@ export function SectionEditorArea({
   onToggleTimeless,
   isViewingAutoTocChapter,
   isViewingAutoOpenItemsChapter,
-  isForcedPreviewNote,
-  onToggleRenderViewMode,
 }: SectionEditorAreaProps) {
   const setStageEl = useCallback((el: HTMLDivElement | null) => {
     (editorStageRef as MutableRefObject<HTMLDivElement | null>).current = el
@@ -475,9 +469,6 @@ export function SectionEditorArea({
             onChapterPillContextMenu={onChapterPillContextMenu}
             onArchiveChapterClick={onArchiveChapterClick}
             onDeleteChapterClick={onDeleteChapterClick}
-            isPreviewMode={isPreviewMode}
-            isForcedPreviewNote={isForcedPreviewNote}
-            onToggleRenderViewMode={onToggleRenderViewMode}
           />
         ) : null}
       </div>

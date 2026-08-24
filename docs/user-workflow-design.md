@@ -78,6 +78,8 @@ A slot is *where*; a section is *what*. A section is not "a pane". A slot is not
 
 Each step is *by extension* of the one before. The user never targets a section directly — they target a slot, and the slot funnels input into whatever section it currently holds. This is why "the active note" is a derived fact two levels down, not a global. It also explains the parked-section case cleanly: a named section that occupies no slot still exists, still has its tabs and its last-active note, and is simply unreachable by input until it's loaded into a slot again.
 
+**Placement follows scope.** A control belongs to the bar of the thing it acts on: per-slot controls sit at the slot's own edge in the tab bar, per-note-internals controls in the chapter bar. The edit/render toggle is the worked example — it's a property of the slot, not of one note's structure, so it moved out of the chapter bar to the tab bar's right edge, beside the add-slot `+`. The two then read together as slot-level actions: *this is the writing window; that makes another one.* Placement is doing the teaching that a tooltip otherwise has to.
+
 **Naming rule going forward.** New identifiers, comments, tooltips, and docs use "slot" for the container and "section" for the tab collection, never as loose synonyms. When touching code in this area, fix the vocabulary in what you're already editing — this is a running cleanup, not a migration project.
 
 **Known muddles in current code** (verified; fix opportunistically):
@@ -98,6 +100,8 @@ One icon per layer, used *only* for that layer. This is how the layer model beco
 | **Chapter** | `fa-bookmark` |
 
 **Creation always uses the layer's own icon, never a generic `+`.** A "new X" affordance — menu item or button — shows X's glyph: new section = `fa-book`, new note = `fa-file`, new chapter = `fa-bookmark`. This holds everywhere, including the create pills that used to be `+` in the chapter bar and the tab bar. A `+` says only "another one of whatever this row is" and makes the user infer the layer from context; the layer glyph says *what* you're about to make, so the same three symbols keep teaching the model at the exact moment the user acts on it.
+
+**The corollary, straight out of §1.4: a slot is not a layer, so adding a slot keeps the generic `+`.** The tab bar's rightmost button opens a new slot — furniture, not content — and using `fa-book` there would say "new section" for an action that is nothing of the kind. The real "new section" action is the section picker's leftmost button (`section-picker-create`), which empties the current slot to a fresh unnamed, tabless, noteless section; *that* is the one that carries `fa-book`. This pair is the sharpest live test of whether the slot/section distinction is being respected in UI work — the two buttons sit in the same bar, and it is easy to give the wrong one the section glyph (already done once).
 
 One position-marker exception: the chapter bar's **base-note pill** uses `fa-house`. It isn't identifying a note among notes — every pill in that bar belongs to the same note — it's marking *where the top is*, the thing you return to from any chapter. "Home" says that; `fa-file` would only repeat what the whole bar already is.
 

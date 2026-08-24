@@ -46,11 +46,6 @@ export interface ChapterBarProps {
   onDeleteChapterClick: (chapterNoteId: string) => void
   /** True while the parent note is timeless (SectionEditorArea.tsx's isViewingTimelessNote) -- every chapter pill is treated like an archived-merged ("ghost") pill (no drag, no rename, no archive/delete split), and the collapse/extract mini buttons are omitted entirely, since none of that is possible while the whole family is frozen (databaseService.ts's assertNotTimeless). */
   isLocked?: boolean
-  /** This section's current view -- drives the edit/render toggle button left of the TOC button (active == edit mode). */
-  isPreviewMode: boolean
-  /** True while what's loaded is hard-locked to render view (auto-TOC, Open Items, or a timeless note -- EditorSection.tsx's isForcedPreviewNote). The toggle shows inactive and disabled then, rather than claiming a mode the note can't leave. */
-  isForcedPreviewNote: boolean
-  onToggleRenderViewMode: () => void
 }
 
 /**
@@ -161,9 +156,6 @@ export function ChapterBar({
   onArchiveChapterClick,
   onDeleteChapterClick,
   isLocked = false,
-  isPreviewMode,
-  isForcedPreviewNote,
-  onToggleRenderViewMode,
 }: ChapterBarProps) {
   const parentNote = notes.find((note) => note.id === parentNoteId)
   const isParentActive = activeNoteId === parentNoteId
@@ -230,25 +222,6 @@ export function ChapterBar({
 
   return (
     <div className="chapter-bar-row">
-      {/* Edit/render toggle for this section. Active means edit mode, so a
-          note that can't leave render view (auto-TOC, Open Items, timeless)
-          reads as plain inactive and takes no clicks, rather than showing a
-          state the user can't act on. */}
-      <button
-        type="button"
-        className={`btn-icon chapter-auto-button${!isForcedPreviewNote && !isPreviewMode ? ' is-active' : ''}`}
-        data-tooltip={isForcedPreviewNote
-          ? 'This note is always shown in render view'
-          : (isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)')}
-        aria-label={isForcedPreviewNote
-          ? 'This note is always shown in render view'
-          : (isPreviewMode ? 'Switch to Edit Mode' : 'Switch to Render View')}
-        aria-pressed={!isForcedPreviewNote && !isPreviewMode}
-        disabled={isForcedPreviewNote}
-        onClick={onToggleRenderViewMode}
-      >
-        <span className="fa-solid fa-pen-to-square" aria-hidden="true" />
-      </button>
       {autoOpenItemsChapter ? (() => {
         const isActive = autoOpenItemsChapter.chapterNoteId === activeNoteId
         const note = notes.find((entry) => entry.id === autoOpenItemsChapter.chapterNoteId)

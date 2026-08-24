@@ -1829,6 +1829,9 @@ export function EditorSection({
         notes={notes}
         isLeftmostSection={isLeftmostSection}
         canCreateSection={canCreateSection}
+        isPreviewMode={isPreviewMode}
+        isForcedPreviewNote={isForcedPreviewNote}
+        onToggleRenderViewMode={toggleRenderViewMode}
         onCreateSection={onCreateSection}
         onCloseSection={onCloseSection}
         onCreateNote={handleCreateNoteInSection}
@@ -1896,8 +1899,6 @@ export function EditorSection({
         isViewingAutoTocChapter={isViewingAutoTocChapter}
         isViewingAutoOpenItemsChapter={isViewingAutoOpenItemsChapter}
         isViewingTimelessNote={isViewingTimelessNote}
-        isForcedPreviewNote={isForcedPreviewNote}
-        onToggleRenderViewMode={toggleRenderViewMode}
         onToggleTimeless={onToggleTimeless}
         spellCheckRenderEnabled={spellCheckRenderEnabled}
         blockPreviewEditMutation={blockPreviewEditMutation}
