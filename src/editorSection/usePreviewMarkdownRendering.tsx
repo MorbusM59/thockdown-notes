@@ -175,6 +175,8 @@ export interface UsePreviewMarkdownRenderingOptions {
    * note itself.
    */
   applyProgrammaticEditorText: (nextText: string, selectionStart?: number, selectionEnd?: number) => void
+  /** Called in the layout phase after every commit of the preview block subtree, before paint. The settle gate uses it as its "the DOM may have moved" signal -- both to re-evaluate its own geometry fixed point and to let the scroll restore re-attempt its anchor lookup at exactly the moments the element could have appeared, instead of polling animation frames. */
+  onPreviewCommitted?: () => void
 }
 
 export interface UsePreviewMarkdownRenderingResult {
@@ -246,6 +248,7 @@ export function usePreviewMarkdownRendering({
   isViewingAutoOpenItemsChapter,
   isActiveNoteEditable,
   applyProgrammaticEditorText,
+  onPreviewCommitted,
 }: UsePreviewMarkdownRenderingOptions): UsePreviewMarkdownRenderingResult {
   // Mirrors `notes`/`activeNoteText` for navigateToInternalPreviewLink's
   // call-time-only reads below, so that callback's identity -- and in turn
@@ -985,6 +988,16 @@ export function usePreviewMarkdownRendering({
       })}
     </div>
   ), [virtualizer, virtualItems, previewBlocks, previewSearchHighlightPlugin, previewMarkdownComponents])
+
+  // Deliberately dependency-free: this must fire after EVERY commit of this
+  // hook's output, not only when some tracked value changed -- react-virtual
+  // corrects block offsets through its own state updates, and those commits
+  // are exactly the ones the settle gate needs to hear about. useLayoutEffect
+  // (not useEffect) so the notification lands before paint, keeping the gate's
+  // reveal decision in the same frame as the geometry it just observed.
+  useLayoutEffect(() => {
+    onPreviewCommitted?.()
+  })
 
   return { previewMarkdownElement }
 }

@@ -1311,6 +1311,13 @@ export function EditorSection({
   // the same gate the real editor's read-only state already uses.
   const isActiveNoteEditable = !activeNoteHasDebugTag && !isPreviewingSnapshot && !isViewingEphemeralAutoChapter && !isViewingTimelessNote
 
+  // Stable identity (reads the gate through its ref at call time), so
+  // handing it to the preview hook can never itself be the reason that hook
+  // re-runs -- see previewSettleGate.ts.
+  const notifyPreviewSettleGateOfCommit = useCallback(() => {
+    editorSectionMountRest.previewSettleGateRef.current?.notifyCommit()
+  }, [editorSectionMountRest.previewSettleGateRef])
+
   const { previewMarkdownElement } = usePreviewMarkdownRendering({
     notes,
     activeNoteId,
@@ -1328,6 +1335,7 @@ export function EditorSection({
     isViewingAutoOpenItemsChapter,
     isActiveNoteEditable,
     applyProgrammaticEditorText,
+    onPreviewCommitted: notifyPreviewSettleGateOfCommit,
   })
 
   const {

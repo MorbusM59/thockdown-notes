@@ -49,6 +49,7 @@ import {
 } from '../sound/TypingSoundManager'
 import { ScrollTransitionController } from '../editor/ScrollTransitionController'
 import type { PreviewScrollToSourceLineFn } from './usePreviewMarkdownRendering'
+import { createPreviewSettleGate, type PreviewSettleGate } from './previewSettleGate'
 
 /**
  * Throwaway checkpoint logger for the commit-to-paint input-lag
@@ -173,6 +174,13 @@ export interface UseEditorSectionMountOptions {
 export interface UseEditorSectionMountResult {
   adapterRef: MutableRefObject<EditorAdapter | null>
   previewScrollRef: MutableRefObject<HTMLDivElement | null>
+  /**
+   * The render view's settle gate -- exposed so the component can forward
+   * usePreviewMarkdownRendering's per-commit notification into it (that
+   * hook is mounted later in the same component, since it needs
+   * previewScrollRef from here). See previewSettleGate.ts.
+   */
+  previewSettleGateRef: MutableRefObject<PreviewSettleGate | null>
   /**
    * Set by usePreviewMarkdownRendering (mounted later in the same
    * component, since it needs previewScrollRef from here) to the current
@@ -302,6 +310,17 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
 
   const adapterRef = useRef<EditorAdapter | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
+  // Holds the render view unpainted from the moment a note switch starts
+  // until its restored scroll position has landed and its geometry has
+  // stopped moving -- see previewSettleGate.ts for why this watches a
+  // geometry fixed point instead of waiting a fixed number of frames.
+  const previewSettleGateRef = useRef<PreviewSettleGate | null>(null)
+  if (previewSettleGateRef.current === null) {
+    previewSettleGateRef.current = createPreviewSettleGate({
+      getContainer: () => previewScrollRef.current,
+    })
+  }
+  useEffect(() => () => previewSettleGateRef.current?.dispose(), [])
   const previewScrollToSourceLineRef = useRef<PreviewScrollToSourceLineFn | null>(null)
   const editModeSnapshotByNoteIdRef = useRef<Map<string, EditRestoreSnapshot>>(new Map())
   const pendingEditRestoreSnapshotRef = useRef<EditRestoreSnapshot | null>(null)
@@ -2364,11 +2383,57 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     setIsCaretSuspended,
   ])
 
+  // Opens a settle generation the instant the render view's target changes,
+  // and (critically) BEFORE the restore effect below runs -- effects fire in
+  // declaration order, so the gate is already hiding by the time the restore
+  // starts its async getNoteUiState round-trip. Keyed on the target's own
+  // identity, never on `activeNoteText`: a keystroke isn't a note switch and
+  // must not blank the preview.
+  const previewSettleGenerationRef = useRef<number | null>(null)
+  useLayoutEffect(() => {
+    const gate = previewSettleGateRef.current
+    if (!gate) return
+
+    if (!isPreviewMode || !activeNoteId) {
+      previewSettleGenerationRef.current = null
+      gate.forceReveal()
+      return
+    }
+
+    previewSettleGenerationRef.current = gate.beginSettle()
+  }, [isPreviewMode, activeNoteId, previewedSnapshotId])
+
   useLayoutEffect(() => {
     if (!isPreviewMode) return
     if (!activeNoteId) return
 
     let cancelled = false
+
+    // The settle generation this run belongs to (opened by the effect
+    // above, in this same commit). Captured once, so a restore that
+    // resolves late can only ever report back against its OWN generation --
+    // a newer note switch has already moved the gate on, and
+    // markRestoreApplied ignores the stale id rather than revealing the
+    // wrong note early.
+    const settleGeneration = previewSettleGenerationRef.current
+
+    // Teardown for anything the restore subscribes to; the restore path is
+    // async, so it can still be mid-flight when this effect is torn down.
+    const restoreCleanups: Array<() => void> = []
+    const registerRestoreCleanup = (cleanup: () => void) => {
+      restoreCleanups.push(cleanup)
+    }
+    const runRestoreCleanups = () => {
+      for (const cleanup of restoreCleanups.splice(0)) cleanup()
+    }
+
+    // Whichever way this effect ends -- superseded, unmounted, mode flip --
+    // the gate must not be left holding a preview hidden for a restore that
+    // will now never report in.
+    const releaseSettleGate = () => {
+      if (settleGeneration === null) return
+      previewSettleGateRef.current?.markRestoreApplied(settleGeneration)
+    }
 
     const setPreviewScrollBehavior = (behavior: '' | 'auto') => {
       const container = previewScrollRef.current
@@ -2422,28 +2487,62 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       lastKnownPreviewAnchorLineRef.current = clampedSourceLine
       previewScrollToSourceLineRef.current?.(clampedSourceLine, { align: 'start' })
 
-      const attemptFindAndScroll = (attemptsLeft: number) => {
+      // The anchor element only exists once the block covering it has
+      // actually mounted, which the scrollToSourceLine call above may not
+      // have achieved yet. Rather than burn down a countdown of animation
+      // frames hoping it turned up (the old shape here, and exactly the
+      // "wait N frames and hope" pattern the settle gate exists to remove),
+      // this re-attempts on the preview's own commit notifications: the DOM
+      // can only have gained the element as a result of a commit, so those
+      // are precisely the moments worth re-checking, and no others. The
+      // attempt bound is a safety valve against a line that resolves to no
+      // block at all, not the mechanism.
+      const finishRestore = () => {
+        container.style.scrollBehavior = previousScrollBehavior
+        previewScrollTransitionControllerRef.current.forceComplete(previewTransitionId)
+        // Tell the gate the restore is done EITHER way -- landed or given
+        // up. A restore that can't find its target must still let the
+        // preview become visible; the gate's whole contract is that it
+        // never outlives the operation it's waiting on.
+        if (settleGeneration !== null) {
+          previewSettleGateRef.current?.markRestoreApplied(settleGeneration)
+        }
+      }
+
+      let attemptsLeft = 10
+      let unsubscribeFromCommits: (() => void) | null = null
+
+      const attemptFindAndScroll = () => {
         if (cancelled || !container) {
-          previewScrollTransitionControllerRef.current.forceComplete(previewTransitionId)
+          unsubscribeFromCommits?.()
+          unsubscribeFromCommits = null
+          finishRestore()
           return
         }
 
         const target = findPreviewSourceAnchorElement(container, clampedSourceLine)
         if (!target) {
           if (attemptsLeft <= 0) {
-            container.style.scrollBehavior = previousScrollBehavior
-            previewScrollTransitionControllerRef.current.forceComplete(previewTransitionId)
-            return
+            unsubscribeFromCommits?.()
+            unsubscribeFromCommits = null
+            finishRestore()
           }
-          requestAnimationFrame(() => attemptFindAndScroll(attemptsLeft - 1))
+          attemptsLeft -= 1
           return
         }
 
+        unsubscribeFromCommits?.()
+        unsubscribeFromCommits = null
         target.scrollIntoView({ block: 'start', inline: 'nearest' })
-        container.style.scrollBehavior = previousScrollBehavior
+        finishRestore()
       }
 
-      requestAnimationFrame(() => attemptFindAndScroll(10))
+      unsubscribeFromCommits = previewSettleGateRef.current?.subscribeToCommit(attemptFindAndScroll) ?? null
+      registerRestoreCleanup(() => {
+        unsubscribeFromCommits?.()
+        unsubscribeFromCommits = null
+      })
+      attemptFindAndScroll()
     }
 
     const previewRestoreKey = `${activeNoteId}:${previewedSnapshotId ?? 'live'}`
@@ -2456,6 +2555,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
       return () => {
         cancelled = true
+        runRestoreCleanups()
+        releaseSettleGate()
         setPreviewScrollBehavior('')
       }
     }
@@ -2469,6 +2570,10 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
     if (previewRestoreCompletedForNoteIdRef.current.has(previewRestoreKey)) {
       // Preview for this target has already been restored; toggling back
       // and forth without scrolling should be a pure CSS visibility flip.
+      // Nothing here is going to scroll, so the gate has nothing to wait
+      // for -- release it now, or this path would hold the preview hidden
+      // until the safety bound fired.
+      releaseSettleGate()
       return () => {
         cancelled = true
         setPreviewScrollBehavior('')
@@ -2502,9 +2607,15 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
         if (cancelled) return
         if (typeof sourceAnchorLine === 'number' && Number.isFinite(sourceAnchorLine)) {
           applyPreviewSourceAnchor(sourceAnchorLine)
+        } else {
+          // No persisted anchor for this target -- it opens at the top,
+          // which is already where it is. There's no scroll to wait for, so
+          // the gate is released here rather than being left to time out.
+          releaseSettleGate()
         }
       } catch (error) {
         console.warn('Failed to restore preview scroll state', error)
+        releaseSettleGate()
       }
     }
 
@@ -2512,6 +2623,8 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
 
     return () => {
       cancelled = true
+      runRestoreCleanups()
+      releaseSettleGate()
       setPreviewScrollBehavior('')
     }
   }, [activeNoteId, isPreviewMode, activeNoteText, lineHeightPx, latestEditorTextRef, previewedSnapshotId, previewedSnapshotContentRef, getPreviewBlocksForText, beginPreviewRestoreTransition])
@@ -2760,6 +2873,7 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
   return {
     adapterRef,
     previewScrollRef,
+    previewSettleGateRef,
     previewScrollToSourceLineRef,
     editModeSnapshotByNoteIdRef,
     pendingEditRestoreSnapshotRef,

@@ -2584,3 +2584,52 @@ then a sanity pass confirming a regular (non-chapter) note still gets the origin
 (button never flips to "Remove table of contents") when run against the pre-fix file. This
 change doesn't touch caret/selection/scroll arithmetic, so the doc's own full CM6
 `verifyCM6*.mjs` suite was judged out of scope and not run.
+
+---
+
+## Render-view settle gate (note switching no longer paints unsettled geometry)
+
+**The bug**: switching notes in render mode painted the incoming note *before* its restored scroll
+position landed, so the text visibly arrived and then shuffled. Measured in the real render view
+(`.render-container` without `is-pane-hidden` -- note that the preview subtree is dual-mounted and
+keeps rendering while the section is in edit mode, so any instrumentation of `.markdown-preview`
+must check the pane is actually the visible one first, or it measures nothing the user can see):
+the new note's blocks mount while `scrollTop` is still the *outgoing* note's, and only the next
+commit snaps it into place. The restore can't do better on its own -- it doesn't know where to
+scroll until an async `getNoteUiState` round-trip resolves, several frames after the content is
+already on screen -- and react-virtual then adds its own corrections as each block's real measured
+height replaces the 56px estimate.
+
+**The fix**: `src/editorSection/previewSettleGate.ts`, a framework-free controller that holds the
+preview `visibility: hidden` (still laid out, so measurement and `scrollIntoView` behave normally)
+from the moment a note switch opens a *settle generation* until two conditions both hold: the
+restore has reported its scroll write applied for that same generation, and the container's
+geometry signature (`scrollTop` + `scrollHeight` + the virtualizer's sizer height) has come out
+identical on two consecutive samples. That fixed point is the reveal signal -- explicitly *not* a
+frame count or a fixed duration, which is the pattern this replaces. rAF is the sampling point only
+because that's when a frame's layout is complete; the loop reschedules for exactly as long as the
+geometry keeps moving.
+
+**Two things worth not re-discovering the hard way**:
+- The safety bound is a `setTimeout`, not another rAF. A non-compositing window throttles rAF to
+  zero frames, and an rAF-only bound left the preview hidden indefinitely there (found live).
+- Every path out of the preview-restore effect must release the gate -- the no-persisted-anchor
+  path, the already-restored early return, the error path, and effect teardown. A gate that
+  outlives the operation it waits on is a blank pane.
+
+Also replaced, in the same pass: `applyPreviewSourceAnchor`'s 10-frame rAF countdown hunting for
+the anchor element. It now re-attempts on the preview's own per-commit notifications
+(`usePreviewMarkdownRendering`'s new dependency-free `onPreviewCommitted` layout effect, forwarded
+into the gate) -- the DOM can only have gained the element via a commit, so those are the only
+moments worth re-checking. The attempt count survives purely as a safety valve. The "no follow-up
+nudge, no competing scrollTop write" constraint recorded on that function is unchanged: this
+changes *when* it retries, never what it writes.
+
+**Verification**: 8 new unit tests (`previewSettleGate.test.ts`) drive the gate against an injected
+clock and hand-driven geometry, covering the fixed point, the stays-hidden-until-restore-reports
+rule, superseded generations, and the frames-never-arrive case. Live end-to-end in the render view:
+pre-fix, the new text paints at the old note's offset; post-fix, the same switch goes visible ->
+hidden at ~18ms -> revealed at ~52ms already at final geometry, with no safety-bound warning fired
+(i.e. it revealed on the fixed point, not the timeout). Full `npm test` 558/558, `tsc --noEmit`
+clean, `npm run lint` clean apart from one pre-existing `App.tsx:2260` unused-disable error present
+on `main` before this change.
