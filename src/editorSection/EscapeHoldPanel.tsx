@@ -253,7 +253,7 @@ export function EscapeHoldPanel({
   const cells = useMemo<PanelCell[]>(() => {
     const candidates = [
       { label: 'New Note', icon: 'fa-solid fa-file', onSelect: onCreateNote, disabled: false },
-      { label: 'New Chapter', icon: 'fa-solid fa-book-medical', onSelect: onCreateChapter, disabled: !hasActiveNote || isActiveNoteTimeless },
+      { label: 'New Chapter', icon: 'fa-solid fa-bookmark', onSelect: onCreateChapter, disabled: !hasActiveNote || isActiveNoteTimeless },
       // Mirrors EditorToolbar.tsx's own (now-removed) isPreviewMode gate:
       // PDF export only in render view, MD export only in edit view -- each
       // one only makes sense against the mode it actually reflects, so the

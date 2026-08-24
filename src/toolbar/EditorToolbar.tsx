@@ -281,7 +281,7 @@ export function EditorToolbar({
                 }
               })}
             >
-              <span className="fa-regular fa-bookmark" aria-hidden="true" />
+              <span className="fa-solid fa-bars-staggered" aria-hidden="true" />
             </button>
           </div>
         </div>

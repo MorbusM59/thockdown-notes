@@ -285,7 +285,7 @@ export function SectionTabBar({
                       void onCreateNote()
                     }}
                   >
-                    <span className="fa-solid fa-plus" aria-hidden="true" />
+                    <span className="fa-solid fa-file" aria-hidden="true" />
                   </div>
                   {tempTabNoteId ? (() => {
                     const note = notes.find((entry) => entry.id === tempTabNoteId)
@@ -514,7 +514,7 @@ export function SectionTabBar({
           aria-label="Add a section"
           onClick={onCreateSection}
         >
-          <span className="fa-solid fa-plus" aria-hidden="true" />
+          <span className="fa-solid fa-book" aria-hidden="true" />
         </button>
       ) : null}
     </section>

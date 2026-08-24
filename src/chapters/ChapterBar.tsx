@@ -230,21 +230,6 @@ export function ChapterBar({
 
   return (
     <div className="chapter-bar-row">
-      {autoOpenItemsChapter ? (() => {
-        const isActive = autoOpenItemsChapter.chapterNoteId === activeNoteId
-        const note = notes.find((entry) => entry.id === autoOpenItemsChapter.chapterNoteId)
-        return (
-          <button
-            type="button"
-            className={`btn-icon chapter-auto-button${isActive ? ' is-active' : ''}`}
-            data-tooltip={note?.title ?? 'Open Items'}
-            aria-label={note?.title ?? 'Open Items'}
-            onClick={() => onChapterClick(autoOpenItemsChapter.chapterNoteId)}
-          >
-            <span className="fa-solid fa-list" aria-hidden="true" />
-          </button>
-        )
-      })() : null}
       {/* Edit/render toggle for this section. Active means edit mode, so a
           note that can't leave render view (auto-TOC, Open Items, timeless)
           reads as plain inactive and takes no clicks, rather than showing a
@@ -264,6 +249,21 @@ export function ChapterBar({
       >
         <span className="fa-solid fa-pen-to-square" aria-hidden="true" />
       </button>
+      {autoOpenItemsChapter ? (() => {
+        const isActive = autoOpenItemsChapter.chapterNoteId === activeNoteId
+        const note = notes.find((entry) => entry.id === autoOpenItemsChapter.chapterNoteId)
+        return (
+          <button
+            type="button"
+            className={`btn-icon chapter-auto-button${isActive ? ' is-active' : ''}`}
+            data-tooltip={note?.title ?? 'Open Items'}
+            aria-label={note?.title ?? 'Open Items'}
+            onClick={() => onChapterClick(autoOpenItemsChapter.chapterNoteId)}
+          >
+            <span className="fa-solid fa-clipboard-list" aria-hidden="true" />
+          </button>
+        )
+      })() : null}
       {autoTocChapter ? (() => {
         const isActive = autoTocChapter.chapterNoteId === activeNoteId
         const note = notes.find((entry) => entry.id === autoTocChapter.chapterNoteId)
@@ -275,7 +275,7 @@ export function ChapterBar({
             aria-label={note?.title ?? 'Table of Contents'}
             onClick={() => onChapterClick(autoTocChapter.chapterNoteId)}
           >
-            <span className="fa-solid fa-bookmark" aria-hidden="true" />
+            <span className="fa-solid fa-bars-staggered" aria-hidden="true" />
           </button>
         )
       })() : null}
@@ -295,7 +295,7 @@ export function ChapterBar({
               onClick={onParentTabClick}
               data-tooltip={parentNote?.title ?? 'INTRO'}
             >
-              <span className="fa-solid fa-book" aria-hidden="true" />
+              <span className="fa-solid fa-house" aria-hidden="true" />
             </div>
             {reorderableChaptersWithLiveIndex.map(({ chapter, liveIndex }, displayIndex) => {
               const isGhost = liveIndex === -1
@@ -377,7 +377,7 @@ export function ChapterBar({
                 data-tooltip="Add a new chapter"
                 onClick={() => void onCreateChapter()}
               >
-                <span className="fa-solid fa-plus" aria-hidden="true" />
+                <span className="fa-solid fa-bookmark" aria-hidden="true" />
               </div>
             ) : null}
           </div>
