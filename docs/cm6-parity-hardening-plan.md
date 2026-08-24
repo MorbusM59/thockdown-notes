@@ -2666,3 +2666,37 @@ twice). Post-fix, the same switch produces zero hidden events and zero gate warn
 note switch still gates -- and now only in the slot whose note actually changed. Full `npm test`
 564/564, `tsc --noEmit` clean. Note that in a non-compositing browser pane rAF never fires, so every
 gated switch reveals on the safety timer there; that's the environment, not the gate.
+
+
+### Follow-up: a duplicate restore must not supersede the one in flight
+
+**The bug**: TOC/anchor links landed at the top of the document in edit mode. Reproducible by state,
+not by target: reload while the TOC chapter is showing and the first jump works; reload while the
+note itself is showing and every jump fails.
+
+**Why the obvious suspects were all wrong**: the link resolved correctly
+(`overrideSourceAnchorLine: 38`), the snapshot carried it (`scrollTopLines: 39`), and the wrapping
+correction ran against the right document and computed the right answer (`correctedTo=125`,
+`adapterDocLen=5949`) -- the same value the working path lands on. A runtime read then showed
+`scrollTop: 0` with `maxScrollTop: 3250` against a target of exactly 3250px: not miscomputed, not
+clamped, and the scroller could hold it. The correct value was being *discarded*.
+
+**The cause**: every restore was applied twice -- two effects reacting to one activation -- and the
+second supersedes the first. Superseding cancels the in-flight settle loop, and that loop is the
+entire mechanism that replaces the naive line-count placement with the wrap-corrected one. Cancel it
+and the naive placement stands, which in a wrapped document reads as "landed at the top". The
+cold/warm asymmetry was only the ordering of that duplicate differing between the two paths.
+
+**The fix**: `applyEditRestoreSnapshot` compares an incoming snapshot's signature (note, viewport
+lines, boundary lines, anchor line, selection end, restoreFullSelection) against the in-flight one.
+An identical repeat is ignored -- it is the same decision arriving twice, not a newer decision -- so
+the running loop finishes. A genuinely different snapshot still supersedes, exactly as before.
+
+**Generalize this**: supersede semantics anywhere must distinguish "a newer decision" from "the same
+decision arriving twice". The first must win; the second must not cancel work already underway on
+its behalf.
+
+**Also worth keeping**: every silent `return` in a correction path cost real diagnostic time here.
+`correctWrappingOnceReady` bailing on a null, and `settleCorrectionLoop`'s three unlogged exits plus
+its unlogged exhaustion, were each capable of producing this exact symptom and none of them said so.
+A correction that can decline to run should be able to say why under the existing debug flag.

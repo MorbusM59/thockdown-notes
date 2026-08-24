@@ -740,7 +740,7 @@ export function CM6Editor({
   // applySnapshot, which needs to center a newly-applied selection (search
   // hits, go-to-start/end) in the viewport -- see its use in applySnapshot's
   // `snapshot.selection` handling.
-  const reconcileSelectionJumpScrollRef = useRef<((view: EditorView, instant?: boolean) => void) | null>(null);
+  const reconcileSelectionJumpScrollRef = useRef<((view: EditorView, instant?: boolean, align?: 'center' | 'top') => void) | null>(null);
   // Read by the Ctrl+ArrowUp/Down keymap handler below (registered once at
   // view-construction time), same "stable ref to a closure that's recreated
   // every render" pattern as bindingsRef -- see navigateToFlaggedLine's own
@@ -2384,7 +2384,12 @@ export function CM6Editor({
       return { topInScroll: block.top + contentOffsetInScroll, heightPx: block.height };
     };
 
-    const reconcileSelectionJumpScroll = (view: EditorView, instant = false) => {
+    /**
+     * Places the selection in the caged middle ('center') or at the top of the
+     * caged area ('top'), one line below the boundary. 'top' is for jumps whose
+     * target is a heading -- see EditorSelectionScrollBehavior.
+     */
+    const reconcileSelectionJumpScroll = (view: EditorView, instant = false, align: 'center' | 'top' = 'center') => {
       selectionJumpReconcileGeneration += 1;
       const myGeneration = selectionJumpReconcileGeneration;
       const scroller = view.scrollDOM;
@@ -2437,7 +2442,9 @@ export function CM6Editor({
       const middleCenterPx = (middleTopPx + middleBottomPx) / 2;
 
       const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-      const rawTargetScrollTopPx = selectionCenterInScroll - middleCenterPx;
+      const rawTargetScrollTopPx = align === 'top'
+        ? selectionTopInScroll - middleTopPx - lineHeightPxNow
+        : selectionCenterInScroll - middleCenterPx;
       const targetScrollTopPx = Math.max(
         0,
         Math.min(maxScrollTopPx, Math.round(rawTargetScrollTopPx / lineHeightPxNow) * lineHeightPxNow),
@@ -2463,7 +2470,7 @@ export function CM6Editor({
       requestAnimationFrame(() => {
         if (selectionJumpReconcileGeneration !== myGeneration) return;
         if (Math.abs(scroller.scrollTop - scrollTopAfterWrite) > 0.01) {
-          reconcileSelectionJumpScroll(view, instant);
+          reconcileSelectionJumpScroll(view, instant, align);
         }
       });
     };
@@ -4200,7 +4207,11 @@ export function CM6Editor({
           // viewport/viewportLines above. CM6 applies transaction DOM changes
           // synchronously, so window.getSelection() is already current here.
           if (snapshot.selectionScrollBehavior !== 'preserve-scroll' && !snapshot.viewport && !snapshot.viewportLines) {
-            reconcileSelectionJumpScrollRef.current?.(view, snapshot.selectionScrollBehavior === 'center-caged-instant');
+            reconcileSelectionJumpScrollRef.current?.(
+              view,
+              snapshot.selectionScrollBehavior === 'center-caged-instant' || snapshot.selectionScrollBehavior === 'top-caged-instant',
+              snapshot.selectionScrollBehavior === 'top-caged-instant' ? 'top' : 'center',
+            );
           }
         }
 

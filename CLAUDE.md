@@ -31,6 +31,18 @@ Two tiers, chosen by judgment, not by rote:
 - **Small, well-understood fixes and extensions** (isolated bug fixes, cosmetic tweaks, small additions with an obvious blast radius): light pipeline. Reproduce the issue, apply the minimal fix, verify the fix actually resolves it (a targeted live check beats guessing from code), done. Don't run the full regression suite or unit test suite out of habit — that cost is disproportionate to a small, isolated change and burns session budget for no added confidence.
 When unsure which tier applies, ask rather than defaulting to the expensive path.
 
+### Diagnosing a live defect (learned the hard way, repeatedly)
+Order of operations, cheapest and most decisive first:
+1. **Get the state difference, not the theory.** When the same code path works sometimes, the fastest question to the user is "what is the minimal difference between a run that works and one that doesn't". "Works if I reload on X, fails if I reload on Y" localizes a bug faster than any amount of code reading, and only the user can produce it.
+2. **Diff the two runs.** With a working path and a failing path in hand, log both and compare. If the logs are identical through the suspect code (they were here), the fault is in runtime state or ordering, not in the branch you were about to rewrite.
+3. **Take one runtime measurement that splits the hypothesis space.** Here, three numbers -- the computed target, what the scroller could hold, and where it actually ended -- killed "miscomputed" and "clamped" in a single read and left only "discarded". That is worth more than another speculative patch.
+4. **Instrument decision points, including the silent ones.** Log what was computed, which branch ran, and what each early return declined to do. Every unlogged `return` in a correction path is a place the bug can hide.
+5. **Only then change code.**
+
+**Know what your instrument cannot do.** `dev:browser` in the Claude Code Browser pane does not composite, so `requestAnimationFrame` never fires there: anything rAF-scheduled (the settle gate, the anchor-jump correction, every retry loop in the editor) simply does not run, and measurements of it are meaningless rather than merely imprecise. Establish whether the path under test can even execute in the instrument *before* trusting a result from it -- and never ship a speculative fix to timing-sensitive code that the instrument cannot exercise. Shipping unverified guesses to the user's running app burns their time and can break working behavior; it did both here.
+
+**Smoke-load after touching hook-level code.** `tsc` does not catch temporal-dead-zone ordering (a `const` ref declared after the callback that closes over it), and the symptom is a blank app, not a type error. Load the app once before handing it back.
+
 ## README.md
 Keep it barebones: version, install instructions, per-OS build instructions, and release-artifact layout only. Anything else (usage, features) belongs in `helpGuideContent.ts`, referenced from README, not duplicated into it.
 

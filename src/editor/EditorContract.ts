@@ -92,8 +92,16 @@ export interface EditorSnapshot {
  * lands on the same position with no animation, for the case where there is
  * nothing to orient: arriving from a *different* note, where the position
  * being travelled from is one the reader never chose and mostly never saw.
+ *
+ * 'top-caged-instant' lands the selection's line at the TOP of the caged
+ * area (one line below the boundary, the same RESTORE_OFFSET_LINES convention
+ * every restore uses) instead of centring it, with no animation. That is for
+ * a jump whose target is a structural boundary rather than a point inside
+ * prose: a heading opens the section under it, so the section is what should
+ * be on screen. Centring a heading spends the upper half of the viewport on
+ * the section being left.
  */
-export type EditorSelectionScrollBehavior = 'center-caged' | 'center-caged-instant' | 'preserve-scroll';
+export type EditorSelectionScrollBehavior = 'center-caged' | 'center-caged-instant' | 'top-caged-instant' | 'preserve-scroll';
 
 export interface EditorSnapshotApplyRequest extends Partial<EditorSnapshot> {
   selectionScrollBehavior?: EditorSelectionScrollBehavior;

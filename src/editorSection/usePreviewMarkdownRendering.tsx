@@ -410,6 +410,7 @@ export function usePreviewMarkdownRendering({
     resolveLine: (text: string) => number | null,
     expectedNoteId: string | null,
     instant: boolean,
+    align: 'center' | 'top' = 'center',
   ) => {
     const attempt = (attemptsLeft: number) => {
       const adapter = adapterRef.current
@@ -426,7 +427,9 @@ export function usePreviewMarkdownRendering({
             // instant, and normally lands on a position the note was already
             // opened at (activateNote's overrideSourceAnchorLine), leaving
             // this as a no-op correction rather than a visible second hop.
-            selectionScrollBehavior: instant ? 'center-caged-instant' : 'center-caged',
+            selectionScrollBehavior: align === 'top'
+              ? 'top-caged-instant'
+              : (instant ? 'center-caged-instant' : 'center-caged'),
           })
           return
         }
@@ -604,7 +607,7 @@ export function usePreviewMarkdownRendering({
   // and an automatic, on-the-fly heading anchor (the heading element itself,
   // via `data-source-line-start`) -- see scrollToAnchorInPreview/
   // scrollToHeadingAnchorInPreview below.
-  const scrollToRenderedElement = useCallback((findTargetElement: () => HTMLElement | null, sourceLine: number | null, waitForNoteSwitch: boolean, instant: boolean) => {
+  const scrollToRenderedElement = useCallback((findTargetElement: () => HTMLElement | null, sourceLine: number | null, waitForNoteSwitch: boolean, instant: boolean, align: 'center' | 'start' = 'center') => {
     // On a note switch, previewBlocksRef.current can still hold the
     // *previous* note's (much shorter) block list for a few frames after
     // activateNote's promise resolves -- its own effect only commits once
@@ -625,7 +628,7 @@ export function usePreviewMarkdownRendering({
           // normally already been restored straight onto this block anyway
           // (activateNote's overrideSourceAnchorLine), so this resolves to no
           // movement at all rather than a travel across the document.
-          virtualizer.scrollToIndex(index, { align: 'center', behavior: instant ? 'auto' : 'smooth' })
+          virtualizer.scrollToIndex(index, { align, behavior: instant ? 'auto' : 'smooth' })
         }
       }
 
@@ -650,9 +653,16 @@ export function usePreviewMarkdownRendering({
         // Instant, not smooth -- the virtualizer scroll above already did
         // the (smooth) traveling; this is just a small, exact centering
         // correction within the target's own block, not a second hop.
-        target.scrollIntoView({ block: 'center', inline: 'nearest' })
-        target.classList.add('note-anchor-marker-flash')
-        window.setTimeout(() => target.classList.remove('note-anchor-marker-flash'), 1200)
+        target.scrollIntoView({ block: align, inline: 'nearest' })
+        // The flash is a find-hit device: it marks one match inside prose the
+        // reader is scanning. A heading landing at the top of the viewport
+        // already says where you are, so flashing it only adds motion to an
+        // arrival that should feel settled. Manual anchors into mid-prose keep
+        // it -- there the target really is one point among others.
+        if (align !== 'start') {
+          target.classList.add('note-anchor-marker-flash')
+          window.setTimeout(() => target.classList.remove('note-anchor-marker-flash'), 1200)
+        }
         return
       }
 
@@ -697,7 +707,10 @@ export function usePreviewMarkdownRendering({
     const selector = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']
       .map((tag) => `${tag}[data-source-line-start="${sourceLine}"]`)
       .join(', ')
-    scrollToRenderedElement(() => previewScrollRef.current?.querySelector<HTMLElement>(selector) ?? null, sourceLine, waitForNoteSwitch, instant)
+    // Top-aligned, never centred: the heading is the start of what the reader
+    // asked for, so centring spends the upper half of the viewport on the
+    // section they were leaving.
+    scrollToRenderedElement(() => previewScrollRef.current?.querySelector<HTMLElement>(selector) ?? null, sourceLine, waitForNoteSwitch, instant, 'start')
   }, [scrollToRenderedElement, previewScrollRef])
 
   // Resolves a raw href anchor fragment to whichever of the app's two
@@ -730,10 +743,16 @@ export function usePreviewMarkdownRendering({
     // already is "this activated a different note", so it doubles as the
     // instant flag.
     const scrollTo = (sourceLine: number, waitForNoteSwitch: boolean, expectedNoteId: string | null = null) => {
-      const instant = waitForNoteSwitch
+      // A heading jump never animates, even inside the note the reader is
+      // already in. The orientation argument for animating a same-note jump is
+      // about landing on a point in prose -- watching the travel relates where
+      // you were to where you asked to go. A heading is not a point in prose:
+      // it is a labelled destination, and a table of contents is a menu of
+      // them, so the useful thing is simply to arrive.
+      const instant = waitForNoteSwitch || headingSlug !== null
       const dispatch = () => {
         if (!isPreviewModeRef.current) {
-          scrollEditorToAnchor(resolveLine, expectedNoteId, instant)
+          scrollEditorToAnchor(resolveLine, expectedNoteId, instant, headingSlug !== null ? 'top' : 'center')
           return
         }
         if (headingSlug !== null) {
