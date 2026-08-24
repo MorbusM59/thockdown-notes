@@ -368,6 +368,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   const applyEditRestoreSnapshotCallCounterRef = useRef(0)
   const restoreInProgressRef = useRef(false)
   const restoreActiveCallerRef = useRef<string | null>(null)
+  /** Identity of the restore currently in flight, so an identical repeat can be ignored rather than cancelling it -- see applyEditRestoreSnapshot. */
+  const inFlightRestoreSignatureRef = useRef<string | null>(null)
   /** Cancels whatever restore is currently in flight -- see applyEditRestoreSnapshot's supersede rule. */
   const cancelActiveRestoreRef = useRef<(() => void) | null>(null)
   const expectedViewportRestoreTransitionIdRef = useRef<number | null>(null)
@@ -958,10 +960,30 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     // stuck restore then silently disabled *every* later one for the rest of
     // the session. Superseding removes both failure modes: there is no state
     // a stuck restore can hold that the next one cannot take from it.
+    // A restore identical to the one already in flight is not a new decision
+    // about where the reader should be -- it is the same decision arriving
+    // twice (two effects reacting to one activation). Superseding it cancels
+    // the in-flight settle loop, and that loop is the whole mechanism that
+    // re-asserts the position across CM6's measure passes: the naive
+    // line-count placement applied first is only correct when nothing wraps,
+    // and the loop is what replaces it with the analytically exact value.
+    // Cancelling it right after it started left an anchored jump sitting at
+    // the top of the document with the correct target already computed --
+    // found live via TOC links (the anchored restore resolved scrollTopLines
+    // 125, the scroller could hold it, and scrollTop stayed 0).
+    const inFlight = inFlightRestoreSignatureRef.current
+    const incomingSignature = `${snapshot.noteId}|${snapshot.viewport?.scrollTopLines ?? 'none'}|${snapshot.viewport?.topBoundaryLines ?? 'none'}|${snapshot.sourceAnchorLine ?? 'none'}|${snapshot.fullSelection?.end ?? 'none'}|${restoreFullSelection}`
+    if (restoreInProgressRef.current && inFlight === incomingSignature) {
+      debugLogScrollSync(`applyEditRestoreSnapshot ignoring duplicate of in-flight restore (${incomingSignature})`)
+      finishRestore()
+      return () => {}
+    }
+
     if (restoreInProgressRef.current) {
       debugLogScrollSync(`applyEditRestoreSnapshot superseding in-flight restore from ${restoreActiveCallerRef.current ?? 'unknown'}`)
       cancelActiveRestoreRef.current?.()
     }
+    inFlightRestoreSignatureRef.current = incomingSignature
     restoreInProgressRef.current = true
     // Diagnostic: which call site invoked this -- the second line of a
     // captured stack trace is the caller's own frame. Lets a future
@@ -1006,6 +1028,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       restoreInProgressRef.current = false
       restoreActiveCallerRef.current = null
       cancelActiveRestoreRef.current = null
+      inFlightRestoreSignatureRef.current = null
     }
 
     const applyWhenReady = () => {

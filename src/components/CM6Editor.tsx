@@ -2391,9 +2391,27 @@ export function CM6Editor({
       const lineHeightPxNow = lineHeightPxRef.current;
       const scrollerRect = scroller.getBoundingClientRect();
 
+      // Only this editor's OWN selection may be measured. window.getSelection()
+      // is a document-wide singleton, and readSelectionRect measures whatever
+      // range it is handed -- so following a link measures the range the click
+      // left behind in the preview pane's own DOM, producing a rect from an
+      // unrelated element that resolves to a target at or below zero. The jump
+      // then lands at the top of the document instead of on its target.
+      //
+      // This hid behind the "no selection at all" fallback below: the first
+      // jump of a session works, because an editor that has never been focused
+      // has no range and correctly falls through to the layout path. Every
+      // jump after it measures the stale foreign range instead. The layout
+      // path is wrap-aware, focus-independent, and answers for lines CM6 has
+      // not rendered yet, so it is simply the right answer whenever the DOM's
+      // selection is not ours.
       const domSelection = window.getSelection();
-      const selectionRect = domSelection && domSelection.rangeCount > 0
-        ? readSelectionRect(domSelection, lineHeightPxNow, view.contentDOM)
+      const isOwnSelection = domSelection !== null
+        && domSelection.rangeCount > 0
+        && domSelection.anchorNode !== null
+        && view.contentDOM.contains(domSelection.anchorNode);
+      const selectionRect = isOwnSelection
+        ? readSelectionRect(domSelection as Selection, lineHeightPxNow, view.contentDOM)
         : null;
 
       let selectionTopInScroll: number;
