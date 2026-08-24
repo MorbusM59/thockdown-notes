@@ -5829,12 +5829,13 @@ ${markdownHtml}
           // pinned) is what arms the persist-on-change effect below.
           const restoredFixedWidths = new Map<string, number>()
           for (const entry of resolvedSections) {
+            if (entry.position === null) continue
             if (typeof entry.fixedWidthPx === 'number' && entry.fixedWidthPx > 0) {
               restoredFixedWidths.set(entry.id, entry.fixedWidthPx)
             }
           }
           if (restoredFixedWidths.size > 0) {
-            setFixedWidthPxBySectionId(restoredFixedWidths)
+            setFixedWidthPxForSections(restoredFixedWidths)
           }
           fixedWidthsHydratedRef.current = true
 
@@ -5930,29 +5931,77 @@ ${markdownHtml}
   // pinned width (computeSlotWidthsPx handles that), so re-growing the
   // window restores the pins exactly. Hydrated from the sections table
   // during bootstrap and re-persisted whenever it changes (effect below).
-  const [fixedWidthPxBySectionId, setFixedWidthPxBySectionId] = useState<ReadonlyMap<string, number>>(new Map())
+  const [fixedWidthPxBySectionId, setFixedWidthPxForSections] = useState<ReadonlyMap<string, number>>(new Map())
+
+  /**
+   * Re-reads every pin from what the store just reported, keying it to
+   * whichever section now occupies each slot.
+   *
+   * Pins are *slot* geometry (docs/user-workflow-design.md §1.4) but this map
+   * is keyed by section id, because that's what the width algorithms and the
+   * DOM work in. That mismatch is only ever visible when a section changes
+   * slots -- a swap, or the reorder that follows one -- and the fix is to let
+   * the store, which stores pins per slot and already reports each section
+   * its slot's pin, be the one to say who is pinned now. The alternative,
+   * hand-carrying pins from the outgoing section to the incoming one at every
+   * such site, is exactly what used to be here, and missing it made the slot
+   * silently flexible: it visibly resized the moment another section was
+   * loaded into it.
+   */
+  const syncFixedWidthsFromEntries = useCallback((entries: EditorSectionEntry[]) => {
+    setFixedWidthPxForSections((previous) => {
+      const next = new Map<string, number>()
+      for (const entry of entries) {
+        if (entry.position === null) continue
+        if (typeof entry.fixedWidthPx === 'number' && entry.fixedWidthPx > 0) {
+          next.set(entry.id, entry.fixedWidthPx)
+        }
+      }
+      const unchanged = next.size === previous.size
+        && [...next].every(([id, pinnedPx]) => previous.get(id) === pinnedPx)
+      return unchanged ? previous : next
+    })
+  }, [])
   // Blocks the persist effect from writing (and clobbering the stored pins
   // with the empty pre-bootstrap map) before hydration has happened.
   const fixedWidthsHydratedRef = useRef(false)
 
+  // Section id -> the slot position it currently occupies. Geometry persists
+  // per slot (docs/user-workflow-design.md §1.4), while the renderer's own
+  // width bookkeeping is keyed by section id because that's what it renders
+  // and measures by -- this is the translation between the two, kept in a ref
+  // so the persist callbacks below don't take a new identity on every
+  // sections change.
+  const slotPositionBySectionIdRef = useRef<ReadonlyMap<string, number>>(new Map())
+  useEffect(() => {
+    slotPositionBySectionIdRef.current = new Map(
+      editorSections
+        .filter((entry) => entry.position !== null)
+        .map((entry) => [entry.id, entry.position as number]),
+    )
+  }, [editorSections])
+
   useEffect(() => {
     if (!fixedWidthsHydratedRef.current) return
     const sectionsApi = window.thockdownSections
-    if (!sectionsApi?.updateSectionFixedWidths) return
-    // Explicit nulls for unpinned sections so clearing a pin (growing the
-    // section back via a divider drag) also clears it in the store.
-    void sectionsApi.updateSectionFixedWidths(editorSections.map((entry) => ({
-      id: entry.id,
-      fixedWidthPx: fixedWidthPxBySectionId.get(entry.id) ?? null,
-    }))).catch((error) => {
-      console.error('Failed to persist section fixed widths', error)
+    if (!sectionsApi?.updateSlotFixedWidths) return
+    // Explicit nulls for unpinned slots so clearing a pin (growing the pane
+    // back via a divider drag) also clears it in the store. Parked sections
+    // occupy no slot and so contribute no geometry at all.
+    void sectionsApi.updateSlotFixedWidths(editorSections
+      .filter((entry) => entry.position !== null)
+      .map((entry) => ({
+        position: entry.position as number,
+        fixedWidthPx: fixedWidthPxBySectionId.get(entry.id) ?? null,
+      }))).catch((error) => {
+      console.error('Failed to persist slot fixed widths', error)
     })
   }, [fixedWidthPxBySectionId, editorSections])
 
   // After a structural change (create/close), any fixed section whose width
   // the recomputation moved keeps its fixed status at the new width.
   const syncFixedWidthsToComputed = useCallback((widths: SectionWidthPx[], removedIds: string[] = []) => {
-    setFixedWidthPxBySectionId((previous) => {
+    setFixedWidthPxForSections((previous) => {
       let changed = false
       const next = new Map(previous)
       for (const id of removedIds) {
@@ -5976,15 +6025,31 @@ ${markdownHtml}
     })
   ), [editorSections])
 
+  // Translates the renderer's section-keyed width list into the slot-keyed
+  // updates the store takes. Parked sections drop out: they occupy no slot,
+  // so they contribute no geometry.
+  const toSlotWidthUpdates = useCallback((widths: Array<{ id: string; widthFraction: number | null }>) => {
+    const positionById = slotPositionBySectionIdRef.current
+    return widths.flatMap(({ id, widthFraction }) => {
+      const position = positionById.get(id)
+      return position === undefined ? [] : [{ position, widthFraction }]
+    })
+  }, [])
+
   const persistSectionWidthsPx = useCallback(async (widthsPx: SectionWidthPx[]) => {
     const sectionsApi = window.thockdownSections
     if (!sectionsApi) return null
     const totalWidthPx = widthsPx.reduce((sum, entry) => sum + entry.widthPx, 0)
-    const widths = widthsPx.map((entry) => ({
-      id: entry.id,
-      widthFraction: totalWidthPx > 0 ? entry.widthPx / totalWidthPx : null,
-    }))
-    return sectionsApi.updateSectionWidths(widths)
+    const positionById = slotPositionBySectionIdRef.current
+    const widths = widthsPx.flatMap((entry) => {
+      const position = positionById.get(entry.id)
+      if (position === undefined) return []
+      return [{
+        position,
+        widthFraction: totalWidthPx > 0 ? entry.widthPx / totalWidthPx : null,
+      }]
+    })
+    return sectionsApi.updateSlotWidths(widths)
   }, [])
 
   // Always creates a new section immediately to the right of the one the
@@ -6102,6 +6167,37 @@ ${markdownHtml}
   // toggle independently, so a slot can have an entry in one but not the
   // other (e.g. review flags were right-clicked on before line numbers were
   // ever toggled).
+  /**
+   * Exchanges two sections' gutter toggles. Used when two occupied slots
+   * trade occupants: the toggles belong to the slots, so each one's settings
+   * have to move onto whichever section id now sits there -- pruning would
+   * throw away toggles for two slots that both still exist.
+   */
+  const exchangeReviewGutterVisibility = useCallback((aSectionId: string, bSectionId: string) => {
+    const swapKeys = <T,>(previous: Record<string, T>): Record<string, T> => {
+      const hasA = aSectionId in previous
+      const hasB = bSectionId in previous
+      if (!hasA && !hasB) return previous
+      const next = { ...previous }
+      delete next[aSectionId]
+      delete next[bSectionId]
+      if (hasA) next[bSectionId] = previous[aSectionId]
+      if (hasB) next[aSectionId] = previous[bSectionId]
+      return next
+    }
+    setReviewGutterVisibleBySection((previousLineNumbers) => {
+      const nextLineNumbers = swapKeys(previousLineNumbers)
+      setReviewFlagsVisibleBySection((previousFlags) => {
+        const nextFlags = swapKeys(previousFlags)
+        if (nextLineNumbers !== previousLineNumbers || nextFlags !== previousFlags) {
+          persistReviewGutterVisibility(nextLineNumbers, nextFlags)
+        }
+        return nextFlags
+      })
+      return nextLineNumbers
+    })
+  }, [persistReviewGutterVisibility])
+
   const pruneReviewGutterVisibility = useCallback((sectionId: string) => {
     setReviewGutterVisibleBySection((previousLineNumbers) => {
       const hasLineNumbers = sectionId in previousLineNumbers
@@ -6235,22 +6331,50 @@ ${markdownHtml}
     const sectionsApi = window.thockdownSections
     if (!sectionsApi) return
 
-    // If the incoming section was already occupying a different slot, that
-    // slot is about to be silently vacated -- swapIntoSlot only fills the
-    // *destination* (outgoing's) slot, it has no notion of "what incoming
-    // left behind." Capture both slots' identities and widths beforehand so
-    // the vacated one can be backfilled with a fresh section afterward
-    // (inheriting its width), rather than the pane count quietly shrinking.
     const incomingEntryBefore = editorSections.find((entry) => entry.id === incomingSectionId)
     const outgoingEntryBefore = editorSections.find((entry) => entry.id === outgoingSectionId)
     const incomingPreviousPosition = incomingEntryBefore?.position ?? null
-    const incomingPreviousWidthFraction = incomingEntryBefore?.widthFraction ?? null
-    const outgoingWidthFraction = outgoingEntryBefore?.widthFraction ?? null
 
     // outgoingSectionId's editor is about to unload its note -- persist its
     // cursor/scroll position first, same checkpoint as handleCloseSection.
     sectionRegistryRef.current.get(outgoingSectionId)?.persistActiveNoteEditModeStateNow()
 
+    // Both sections are on screen: this is a real, two-way exchange. They
+    // trade slots, so nothing is closed, parked, deleted, or backfilled with
+    // a blank -- the section that was displaced goes where the incoming one
+    // came from, instead of the user losing it and finding an empty pane
+    // there. Expressed as a plain reorder, which moves sections between slots
+    // and leaves both slots' geometry exactly where it is (§1.4).
+    if (incomingPreviousPosition !== null && incomingPreviousPosition !== outgoingEntryBefore?.position) {
+      sectionRegistryRef.current.get(incomingSectionId)?.persistActiveNoteEditModeStateNow()
+
+      const visibleOrderedIds = editorSections
+        .filter((entry) => entry.position !== null)
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+        .map((entry) => entry.id)
+      const exchangedOrder = visibleOrderedIds.map((id) => {
+        if (id === outgoingSectionId) return incomingSectionId
+        if (id === incomingSectionId) return outgoingSectionId
+        return id
+      })
+      const exchanged = await sectionsApi.reorderSections(exchangedOrder)
+
+      // Gutter toggles belong to the slots, so they trade places too.
+      exchangeReviewGutterVisibility(outgoingSectionId, incomingSectionId)
+      // Both panes were already showing their tab bars; keep them that way
+      // rather than letting either remount back to 'tags'.
+      pendingTabBarModeBySectionIdRef.current.set(incomingSectionId, 'tabs')
+      pendingTabBarModeBySectionIdRef.current.set(outgoingSectionId, 'tabs')
+
+      applyResolvedSections(exchanged)
+      syncFixedWidthsFromEntries(exchanged)
+      setActiveSectionId((previous) => (previous === outgoingSectionId ? incomingSectionId : previous))
+      return
+    }
+
+    // Otherwise the incoming section is parked (occupying no slot), so there
+    // is nothing to trade with: the outgoing section is closed exactly as
+    // closeSlot would, and the incoming one takes over its slot.
     let updated = await sectionsApi.swapIntoSlot(outgoingSectionId, incomingSectionId)
     sectionRegistryRef.current.delete(outgoingSectionId)
     // outgoingSectionId's slot is closed the same way handleCloseSection's
@@ -6259,54 +6383,15 @@ ${markdownHtml}
     // correctly has no entry yet either (default off, per spec).
     pruneReviewGutterVisibility(outgoingSectionId)
 
-    const widthFixups: { id: string; widthFraction: number | null }[] = [
-      { id: incomingSectionId, widthFraction: outgoingWidthFraction },
-    ]
-
-    let backfilledSectionId: string | null = null
-    if (incomingPreviousPosition !== null && incomingPreviousPosition !== outgoingEntryBefore?.position) {
-      updated = await sectionsApi.createSection(null, incomingPreviousPosition - 1)
-      const backfilled = updated.find((entry) => entry.position === incomingPreviousPosition)
-      if (backfilled) {
-        backfilledSectionId = backfilled.id
-        widthFixups.push({ id: backfilled.id, widthFraction: incomingPreviousWidthFraction })
-      }
-    }
-
-    // Fixed pins belong to the *slot* just like widthFraction does: the
-    // destination slot's pin carries over to whichever section now occupies
-    // it, and the vacated slot's pin transfers to its backfilled section.
-    setFixedWidthPxBySectionId((previous) => {
-      if (previous.size === 0) return previous
-      const outgoingPinPx = previous.get(outgoingSectionId)
-      const incomingPinPx = previous.get(incomingSectionId)
-      if (outgoingPinPx === undefined && incomingPinPx === undefined) return previous
-
-      const next = new Map(previous)
-      next.delete(outgoingSectionId)
-      next.delete(incomingSectionId)
-      if (outgoingPinPx !== undefined) {
-        next.set(incomingSectionId, outgoingPinPx)
-      }
-      if (incomingPinPx !== undefined && backfilledSectionId !== null) {
-        next.set(backfilledSectionId, incomingPinPx)
-      }
-      return next
-    })
-
-    updated = await sectionsApi.updateSectionWidths(widthFixups)
-
-    // swapIntoSlot only ever reassigns the *destination* slot's position to
-    // incomingSectionId -- it never renumbers incoming's own old position,
-    // so when incoming was already placed elsewhere, that old slot is left
-    // as a gap (e.g. positions land on 0, 1, 3 instead of 0, 1, 2). The
-    // createSection backfill above expects contiguous positions to shift
-    // into place correctly, so a pre-existing gap makes it shift the wrong
-    // rows too far, corrupting positions further down the row. Re-deriving
-    // the visible order from the (still correctly *ordered*, just not
-    // necessarily *contiguous*) positions and renumbering through
-    // reorderSections cleans that up without changing what's visually
-    // where.
+    // No width bookkeeping here: geometry lives on the slots, which this
+    // leaves untouched, so the destination pane keeps its exact shape while
+    // its occupant changes. (This used to be ~30 lines hand-copying
+    // widthFraction and pins from section to section -- the cost of storing a
+    // slot's geometry on whatever happened to be sitting in it.)
+    //
+    // Renumber defensively: positions should already be contiguous on this
+    // path, since a parked section leaves no gap behind, but re-deriving the
+    // visible order costs nothing and keeps one guarantee in one place.
     const visibleOrderedIds = updated
       .filter((entry) => entry.position !== null)
       .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
@@ -6322,8 +6407,11 @@ ${markdownHtml}
     // own fresh EditorSection instance defaulting back to 'tags'.
     pendingTabBarModeBySectionIdRef.current.set(incomingSectionId, 'tabs')
     applyResolvedSections(updated)
+    // Sections just changed slots, so re-key the pins off what the store
+    // reports rather than leaving them on the sections that moved away.
+    syncFixedWidthsFromEntries(updated)
     setActiveSectionId((previous) => (previous === outgoingSectionId ? incomingSectionId : previous))
-  }, [applyResolvedSections, editorSections, pruneReviewGutterVisibility])
+  }, [applyResolvedSections, editorSections, exchangeReviewGutterVisibility, pruneReviewGutterVisibility, syncFixedWidthsFromEntries])
 
   // "Clear this section" from the section picker's leading pill. This must
   // NOT touch the section's own data (name, pinned tabs, last-active note) --
@@ -6343,6 +6431,7 @@ ${markdownHtml}
     const outgoingEntryBefore = editorSections.find((entry) => entry.id === sectionId)
     const outgoingPosition = outgoingEntryBefore?.position ?? null
     const outgoingWidthFraction = outgoingEntryBefore?.widthFraction ?? null
+    const outgoingFixedWidthPx = outgoingEntryBefore?.fixedWidthPx ?? null
 
     // Same checkpoint as handleCloseSection: this slot's editor is unloading
     // its note before the fresh blank section backfills it.
@@ -6355,22 +6444,22 @@ ${markdownHtml}
     updated = await sectionsApi.createSection(null, (outgoingPosition ?? 1) - 1)
     const created = updated.find((entry) => entry.position === outgoingPosition)
 
-    if (created) {
-      updated = await sectionsApi.updateSectionWidths([
-        { id: created.id, widthFraction: outgoingWidthFraction },
+    // Unlike a swap (where the slot survives untouched and geometry needs no
+    // help), clearing genuinely closes the slot and reopens one at the same
+    // position, so the fresh slot starts width-less. Restoring the captured
+    // fraction onto that position is what keeps the pane from visibly
+    // resizing -- a slot-to-slot handoff at one position, not a width copied
+    // between sections.
+    if (created && outgoingPosition !== null) {
+      updated = await sectionsApi.updateSlotWidths([
+        { position: outgoingPosition, widthFraction: outgoingWidthFraction },
       ])
-    }
-
-    setFixedWidthPxBySectionId((previous) => {
-      const outgoingPinPx = previous.get(sectionId)
-      if (outgoingPinPx === undefined) return previous
-      const next = new Map(previous)
-      next.delete(sectionId)
-      if (created) {
-        next.set(created.id, outgoingPinPx)
+      if (outgoingFixedWidthPx !== null) {
+        updated = await sectionsApi.updateSlotFixedWidths([
+          { position: outgoingPosition, fixedWidthPx: outgoingFixedWidthPx },
+        ])
       }
-      return next
-    })
+    }
 
     // Clearing is only reachable via the tab-bar-mode section picker, so the
     // backfilled section should keep showing the tab bar too, rather than
@@ -6380,10 +6469,12 @@ ${markdownHtml}
     }
 
     applyResolvedSections(updated)
+    // A brand-new section now occupies the slot; take its pin from the store.
+    syncFixedWidthsFromEntries(updated)
     if (created) {
       setActiveSectionId((previous) => (previous === sectionId ? created.id : previous))
     }
-  }, [applyResolvedSections, editorSections, pruneReviewGutterVisibility])
+  }, [applyResolvedSections, editorSections, pruneReviewGutterVisibility, syncFixedWidthsFromEntries])
 
   const editorSectionsRowRef = useRef<HTMLDivElement | null>(null)
   const sectionSlotElByIdRef = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -6493,7 +6584,7 @@ ${markdownHtml}
       // alone), the one that grew becomes flexible again. An unchanged drag
       // (released where it started) alters neither.
       const finalWidthById = new Map(finalWidthsPx.map(({ id, widthPx }) => [id, widthPx]))
-      setFixedWidthPxBySectionId((previous) => {
+      setFixedWidthPxForSections((previous) => {
         const next = new Map(previous)
         const classify = (id: string, startPx: number) => {
           const finalPx = finalWidthById.get(id)
@@ -6519,14 +6610,14 @@ ${markdownHtml}
           : entry
       )))
 
-      void window.thockdownSections?.updateSectionWidths(widths).then((updated) => {
+      void window.thockdownSections?.updateSlotWidths(toSlotWidthUpdates(widths)).then((updated) => {
         applyResolvedSections(updated)
       })
     }
 
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('mouseup', handleMouseUp)
-  }, [applyResolvedSections, editorSections])
+  }, [applyResolvedSections, editorSections, toSlotWidthUpdates])
 
   // Right-click a divider to instantly equalize its two flanking sections'
   // widths, rather than dragging to eyeball it. Shares its commit shape with
@@ -6559,7 +6650,7 @@ ${markdownHtml}
     const widths = finalWidthsPx.map(({ id, widthPx }) => ({ id, widthFraction: widthPx / totalWidthPx }))
 
     const finalWidthById = new Map(finalWidthsPx.map(({ id, widthPx }) => [id, widthPx]))
-    setFixedWidthPxBySectionId((previous) => {
+    setFixedWidthPxForSections((previous) => {
       const next = new Map(previous)
       const classify = (id: string, startPx: number) => {
         const finalPx = finalWidthById.get(id)
@@ -6587,10 +6678,10 @@ ${markdownHtml}
       return entry
     }))
 
-    void window.thockdownSections?.updateSectionWidths(widths).then((updated) => {
+    void window.thockdownSections?.updateSlotWidths(toSlotWidthUpdates(widths)).then((updated) => {
       applyResolvedSections(updated)
     })
-  }, [applyResolvedSections, editorSections])
+  }, [applyResolvedSections, editorSections, toSlotWidthUpdates])
 
   useEffect(() => {
     // Prime immediately once assets are loaded, not just on a later user

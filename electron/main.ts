@@ -1089,12 +1089,12 @@ function registerIpcHandlers() {
     return databaseService!.reorderEditorSections(orderedSectionIds);
   });
 
-  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.updateFixedWidths, async (_event, entries: Array<{ id: string; fixedWidthPx: number | null }>) => {
-    return databaseService!.updateEditorSectionFixedWidths(entries);
+  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.updateSlotFixedWidths, async (_event, entries: Array<{ position: number; fixedWidthPx: number | null }>) => {
+    return databaseService!.updateEditorSlotFixedWidths(entries);
   });
 
-  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.updateWidths, async (_event, widths: Array<{ id: string; widthFraction: number | null }>) => {
-    return databaseService!.updateEditorSectionWidths(widths);
+  ipcMain.handle(EDITOR_SECTIONS_CHANNELS.updateSlotWidths, async (_event, widths: Array<{ position: number; widthFraction: number | null }>) => {
+    return databaseService!.updateEditorSlotWidths(widths);
   });
 
   ipcMain.handle(EDITOR_SECTIONS_CHANNELS.setActiveNote, async (_event, sectionId: string, noteId: string | null) => {

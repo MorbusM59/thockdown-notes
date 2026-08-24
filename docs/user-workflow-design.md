@@ -72,6 +72,8 @@ These are two different things and have been muddled repeatedly, in conversation
 
 A slot is *where*; a section is *what*. A section is not "a pane". A slot is not "a group of notes".
 
+**Loading a section into a slot is an exchange, not an eviction.** When both sections are on screen, they trade slots: the displaced one moves to where the incoming one came from, rather than being parked while its old pane is backfilled with a blank. Nothing the user had in view disappears, and the pane count never changes. Only when the incoming section is *parked* (occupying no slot) is there nothing to trade with — then the displaced section is closed the way its own close button would close it. Implemented as a plain reorder, so both slots keep their geometry (App.tsx's `handleSwapSection`).
+
 **The activation chain.** Everything the user does resolves through this, in exactly this order:
 
 > user input → **active slot** → the section currently loaded there → **active section** → the note selected in it → **active note**
@@ -84,7 +86,9 @@ Each step is *by extension* of the one before. The user never targets a section 
 
 **Known muddles in current code** (verified; fix opportunistically):
 - `EditorSectionEntry`'s JSDoc opens with "One side-by-side editor pane" — that's a slot's description written on the section type. It should describe a tab collection.
-- `widthFraction` and `fixedWidthPx` live on `EditorSectionEntry` but are *slot* properties. This is real structural coupling, not just naming: a parked section still carries the width of a slot it no longer occupies.
+- ~~`widthFraction` and `fixedWidthPx` live on `EditorSectionEntry` but are *slot* properties.~~ **Fixed.** Geometry now lives in its own `editor_slots` table keyed by position; `EditorSectionEntry`'s two width fields are a read-only mirror joined in from the slot the section occupies, so a parked section reads null instead of carrying the width of a slot it left. Writes go through `updateSlotWidths`/`updateSlotFixedWidths`, keyed by position. **Decided behavior:** width stays with the slot — reordering or swapping occupants leaves the divider layout alone, panes keep their shape and only their contents change.
+
+  One renderer-side wrinkle worth knowing about, because it shipped a regression once: App.tsx's pin map (`fixedWidthPxBySectionId`) is keyed by *section id*, since that's what the width algorithms and the DOM work in, while pins are really slot geometry. That mismatch is invisible until a section changes slots, at which point the pin has to be re-derived from what the store reports (`syncFixedWidthsFromEntries`) — the store is the one that knows pins per slot. Hand-carrying pins from the outgoing section to the incoming one is the wrong fix and was the original bug; forgetting to re-derive at all makes the slot silently flexible, so it visibly resizes the moment another section is loaded into it.
 - `noteSlotInitialized` uses "slot" for a **third** thing entirely — whether the section's active-note memory has ever been set. Worst offender; nothing about a slot is involved.
 - `createSection(afterPosition)` creates a section *and* opens a slot in one call; `removeSection` destroys a section while `closeSlot` merely vacates one. The names don't reveal which does which.
 - Reads correctly today and shouldn't be "fixed": `computeSlotWidthsPx` (`src/shared/sectionWidths.ts`), the `.editor-section-slot` DOM class, and App.tsx's per-slot gutter-toggle comments, which explicitly reason about a property belonging to "this occupied slot" rather than to any section identity that outlives it.
@@ -145,7 +149,7 @@ Live backlog, ordered roughly by how much confusion each resolves. Add findings 
 - [ ] **The "close the sidebar" moment isn't rewarded or suggested.** Nothing hints that this is the intended destination of the retrieval flow. The loop's payoff is unmarked.
 - [ ] **Sections vs. Category groups can read as redundant** to a new user, since both are "a group of notes". Nothing yet distinguishes *now* from *filed* at a glance.
 - [ ] **`fa-bars-staggered` for Table of Contents is on trial.** Picked over `fa-list`, replacing the older `fa-bookmark`; to be used for a while before it's considered settled. Revisit.
-- [ ] **Slot/section vocabulary cleanup** — the misnomers listed in §1.4, fixed opportunistically as their files are touched. `noteSlotInitialized` and the `EditorSectionEntry` JSDoc are pure renames; the `widthFraction`/`fixedWidthPx`-on-the-section coupling is a real structural question and needs a deliberate decision, not a drive-by rename.
+- [ ] **Slot/section vocabulary cleanup** — the misnomers still listed in §1.4, fixed opportunistically as their files are touched. `noteSlotInitialized` (a column rename) and `createSection`/`removeSection` vs `closeSlot` are what's left; the `EditorSectionEntry` JSDoc and the width coupling are done.
 - [ ] **One §1.5 exception left standing, deliberately:** `SidebarOptionsPanel.tsx`'s light-preset icon list uses `fa-regular fa-file` as pure decoration for a theme preset. Judged harmless — it doesn't stand for a note — and left alone.
 - [ ] **The User Guide doesn't yet teach the loop.** It documents features; it should teach §1.1 first and features second.
 

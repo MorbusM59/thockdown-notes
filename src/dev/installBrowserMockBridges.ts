@@ -34,7 +34,7 @@ import type {
   TagSummary,
 } from '../shared/noteLifecycle'
 import type { NoteTabEntry, NoteTabsApi } from '../shared/tabs'
-import type { EditorSectionEntry, EditorSectionsApi } from '../shared/sections'
+import type { EditorSectionEntry, EditorSectionsApi, EditorSlotEntry } from '../shared/sections'
 import { DEFAULT_EDITOR_SECTION_ID } from '../shared/sections'
 import type { ChapterEntry, ChaptersApi } from '../shared/chapters'
 import type { ReviewFlagEntry, ReviewFlagsApi } from '../shared/reviewFlags'
@@ -59,6 +59,8 @@ type BrowserMockStore = {
   textureCache: Record<string, { mimeType: string; dataBase64: string; createdAt: number }>
   noteTabs: NoteTabEntry[]
   editorSections: EditorSectionEntry[]
+  /** Slot geometry, keyed by position -- the mock mirror of the editor_slots table. */
+  editorSlots: EditorSlotEntry[]
   chapters: ChapterEntry[]
   /** Mirrors databaseService.ts's notes.detachedChapterParentId/Position/ChapterId/Sequence columns -- where a chapter was detached from while it's sitting outside the chapters table (Trash or an Archive fold-out). Keyed by chapterNoteId. NoteDocument.detachedChapterParentId itself is kept in sync on the note object too (same duplicated-cache convention as chapterParentId), but `position`/`chapterId`/`sequence` have no renderer-facing use, so they live here only. */
   detachedChapters: Record<string, { parentNoteId: string; position: number; chapterId: string | null; sequence: number }>
@@ -145,6 +147,11 @@ function toSummary(note: NoteDocument): NoteSummary {
     // anchor actually exists.
     contentText: note.text,
   }
+}
+
+/** A fresh install always starts with exactly one slot, holding no geometry of its own yet. */
+function createDefaultEditorSlots(): EditorSlotEntry[] {
+  return [{ position: 0, widthFraction: null, fixedWidthPx: null }]
 }
 
 /** A fresh install always starts with exactly one (default, unnamed) section. */
@@ -253,6 +260,7 @@ function loadStore(): BrowserMockStore {
         textureCache: {},
         noteTabs: [],
         editorSections: createDefaultEditorSections(),
+        editorSlots: createDefaultEditorSlots(),
         chapters: [],
         detachedChapters: {},
         nextDetachSequence: 1,
@@ -342,6 +350,24 @@ function loadStore(): BrowserMockStore {
               noteSlotInitialized: entry.noteSlotInitialized === true,
             }))
         : createDefaultEditorSections(),
+      // Stores written before slots existed carry no editorSlots array; the
+      // geometry they kept on their sections is migrated across here, exactly
+      // as ensureEditorSlotRows does for a real database.
+      editorSlots: Array.isArray(parsed.editorSlots)
+        ? (parsed.editorSlots as EditorSlotEntry[])
+            .filter((entry) => Number.isFinite(entry?.position))
+            .map((entry) => ({
+              position: entry.position,
+              widthFraction: Number.isFinite(entry.widthFraction) ? entry.widthFraction : null,
+              fixedWidthPx: Number.isFinite(entry.fixedWidthPx) ? entry.fixedWidthPx : null,
+            }))
+        : (Array.isArray(parsed.editorSections) ? (parsed.editorSections as EditorSectionEntry[]) : [])
+            .filter((entry) => Number.isFinite(entry?.position))
+            .map((entry) => ({
+              position: entry.position as number,
+              widthFraction: Number.isFinite(entry.widthFraction) ? entry.widthFraction : null,
+              fixedWidthPx: Number.isFinite(entry.fixedWidthPx) ? entry.fixedWidthPx : null,
+            })),
       chapters: Array.isArray(parsed.chapters)
         ? (parsed.chapters as ChapterEntry[])
             .filter((entry) => typeof entry?.parentNoteId === 'string' && typeof entry?.chapterNoteId === 'string')
@@ -386,6 +412,7 @@ function loadStore(): BrowserMockStore {
       textureCache: {},
       noteTabs: [],
       editorSections: createDefaultEditorSections(),
+      editorSlots: createDefaultEditorSlots(),
       chapters: [],
       detachedChapters: {},
       nextDetachSequence: 1,
@@ -1791,13 +1818,36 @@ function buildSectionsBridge(storeRef: { current: BrowserMockStore }): EditorSec
 
   // Parked (position === null) sections sort after every visible one, same
   // as the real DB's `ORDER BY position IS NULL, position ASC`.
+  /** Mirrors databaseService's LEFT JOIN of editor_slots onto editor_sections: geometry is read off the *slot* a section occupies, so a parked section always reads null. */
+  const withSlotGeometry = (store: BrowserMockStore, section: EditorSectionEntry): EditorSectionEntry => {
+    const slot = section.position === null
+      ? undefined
+      : store.editorSlots.find((entry) => entry.position === section.position)
+    return { ...section, widthFraction: slot?.widthFraction ?? null, fixedWidthPx: slot?.fixedWidthPx ?? null }
+  }
+
+  const slotAt = (store: BrowserMockStore, position: number): EditorSlotEntry => {
+    const existing = store.editorSlots.find((entry) => entry.position === position)
+    if (existing) return existing
+    const created: EditorSlotEntry = { position, widthFraction: null, fixedWidthPx: null }
+    store.editorSlots.push(created)
+    return created
+  }
+
+  /** Slides slot rows at or past `fromPosition` by `delta`, so slot geometry stays aligned with the section positions it keys against. */
+  const shiftSlotsFrom = (store: BrowserMockStore, fromPosition: number, delta: number): void => {
+    store.editorSlots = store.editorSlots.map((entry) => (
+      entry.position >= fromPosition ? { ...entry, position: entry.position + delta } : entry
+    )).filter((entry) => entry.position >= 0)
+  }
+
   const sorted = (store: BrowserMockStore): EditorSectionEntry[] =>
     store.editorSections.slice().sort((a, b) => {
       if (a.position === null && b.position === null) return 0
       if (a.position === null) return 1
       if (b.position === null) return -1
       return a.position - b.position
-    })
+    }).map((section) => withSlotGeometry(store, section))
 
   const renumberVisible = (store: BrowserMockStore): void => {
     const visible = store.editorSections
@@ -1821,9 +1871,17 @@ function buildSectionsBridge(storeRef: { current: BrowserMockStore }): EditorSec
           section.position === null ? max : Math.max(max, section.position)
         ), -1)
         const insertAt = afterPosition !== undefined ? afterPosition + 1 : maxPosition + 1
-        store.editorSections = store.editorSections.map((section) => (
-          section.position !== null && section.position >= insertAt ? { ...section, position: section.position + 1 } : section
-        ))
+        // Only shift when insertAt is actually occupied -- otherwise this is
+        // filling an existing empty slot (append, or a backfill after a swap
+        // vacated one), which must reuse that slot's geometry rather than
+        // open a new one. Mirrors createEditorSection in databaseService.ts.
+        if (store.editorSections.some((section) => section.position === insertAt)) {
+          store.editorSections = store.editorSections.map((section) => (
+            section.position !== null && section.position >= insertAt ? { ...section, position: section.position + 1 } : section
+          ))
+          shiftSlotsFrom(store, insertAt, 1)
+        }
+        slotAt(store, insertAt)
         store.editorSections.push({ id, name: name ?? null, position: insertAt, widthFraction: null, fixedWidthPx: null, lastActiveNoteId: null, noteSlotInitialized: false })
         return sorted(store)
       })
@@ -1858,22 +1916,20 @@ function buildSectionsBridge(storeRef: { current: BrowserMockStore }): EditorSec
       })
     },
 
-    async updateSectionWidths(widths): Promise<EditorSectionEntry[]> {
+    async updateSlotWidths(widths): Promise<EditorSectionEntry[]> {
       return mutate((store) => {
-        const widthById = new Map(widths.map((entry) => [entry.id, entry.widthFraction]))
-        store.editorSections = store.editorSections.map((section) => (
-          widthById.has(section.id) ? { ...section, widthFraction: widthById.get(section.id) ?? null } : section
-        ))
+        for (const { position, widthFraction } of widths) {
+          slotAt(store, position).widthFraction = widthFraction
+        }
         return sorted(store)
       })
     },
 
-    async updateSectionFixedWidths(entries): Promise<EditorSectionEntry[]> {
+    async updateSlotFixedWidths(entries): Promise<EditorSectionEntry[]> {
       return mutate((store) => {
-        const fixedById = new Map(entries.map((entry) => [entry.id, entry.fixedWidthPx]))
-        store.editorSections = store.editorSections.map((section) => (
-          fixedById.has(section.id) ? { ...section, fixedWidthPx: fixedById.get(section.id) ?? null } : section
-        ))
+        for (const { position, fixedWidthPx } of entries) {
+          slotAt(store, position).fixedWidthPx = fixedWidthPx
+        }
         return sorted(store)
       })
     },
@@ -1901,6 +1957,12 @@ function buildSectionsBridge(storeRef: { current: BrowserMockStore }): EditorSec
           ))
         }
         renumberVisible(store)
+        // The slot is gone, not just vacated -- drop it and slide the ones to
+        // its right down, in lockstep with the renumbering above.
+        if (section.position !== null) {
+          store.editorSlots = store.editorSlots.filter((entry) => entry.position !== section.position)
+          shiftSlotsFrom(store, section.position + 1, -1)
+        }
         return sorted(store)
       })
     },

@@ -1374,7 +1374,19 @@ export class DatabaseService {
     const db = this.requireDb();
     // Parked (position IS NULL) sections sort after every visible one, rather
     // than SQLite's NULLS-first default scrambling the visible layout's order.
-    const rows = db.prepare('SELECT id, name, position, widthFraction, fixedWidthPx, lastActiveNoteId, noteSlotInitialized FROM editor_sections ORDER BY position IS NULL, position ASC')
+    // widthFraction/fixedWidthPx are joined in from the *slot* the section
+    // occupies, never read off the section's own (legacy, no longer written)
+    // columns -- so a parked section reads null geometry for free instead of
+    // carrying the width of a slot it left.
+    const rows = db.prepare(`
+      SELECT s.id, s.name, s.position,
+             slot.widthFraction AS widthFraction,
+             slot.fixedWidthPx  AS fixedWidthPx,
+             s.lastActiveNoteId, s.noteSlotInitialized
+        FROM editor_sections s
+        LEFT JOIN editor_slots slot ON slot.position = s.position
+       ORDER BY s.position IS NULL, s.position ASC
+    `)
       .all() as Array<Omit<EditorSectionEntry, 'noteSlotInitialized'> & { noteSlotInitialized: number }>;
     return rows.map((row) => ({ ...row, noteSlotInitialized: row.noteSlotInitialized === 1 }));
   }
@@ -1385,9 +1397,23 @@ export class DatabaseService {
     const tx = db.transaction(() => {
       const { maxPosition } = db.prepare('SELECT MAX(position) AS maxPosition FROM editor_sections').get() as { maxPosition: number | null };
       const insertAt = afterPosition !== undefined ? afterPosition + 1 : (maxPosition ?? -1) + 1;
-      // Make room if inserting mid-row rather than appending at the end.
-      db.prepare('UPDATE editor_sections SET position = position + 1 WHERE position >= ?').run(insertAt);
+      // Two different situations share this call. If a section already sits
+      // at insertAt, this is genuinely opening a *new* slot: sections and
+      // slot rows both shift right in lockstep (so every existing pane keeps
+      // its own geometry) and the new slot starts width-less. If insertAt is
+      // vacant -- appending at the end, or backfilling the slot a section
+      // just vacated by being swapped elsewhere -- no slot is being created,
+      // so nothing shifts and the existing slot's geometry is reused as-is
+      // by its new occupant.
+      const { occupantCount } = db
+        .prepare('SELECT COUNT(*) AS occupantCount FROM editor_sections WHERE position = ?')
+        .get(insertAt) as { occupantCount: number };
+      if (occupantCount > 0) {
+        db.prepare('UPDATE editor_sections SET position = position + 1 WHERE position >= ?').run(insertAt);
+        this.shiftEditorSlotsFrom(insertAt, 1);
+      }
       db.prepare('INSERT INTO editor_sections (id, name, position, widthFraction) VALUES (?, ?, ?, NULL)').run(id, name, insertAt);
+      db.prepare('INSERT OR IGNORE INTO editor_slots (position, widthFraction, fixedWidthPx) VALUES (?, NULL, NULL)').run(insertAt);
     });
     tx();
     return this.listEditorSections();
@@ -1421,28 +1447,56 @@ export class DatabaseService {
     return this.listEditorSections();
   }
 
-  /** Persists the divider layout (each section's share of the split-view width) after a drag settles. */
-  updateEditorSectionWidths(widths: Array<{ id: string; widthFraction: number | null }>): EditorSectionEntry[] {
+  /** Persists the divider layout (each *slot's* share of the split-view width) after a drag settles. */
+  updateEditorSlotWidths(widths: Array<{ position: number; widthFraction: number | null }>): EditorSectionEntry[] {
     const db = this.requireDb();
     const tx = db.transaction(() => {
-      widths.forEach(({ id, widthFraction }) => {
-        db.prepare('UPDATE editor_sections SET widthFraction = ? WHERE id = ?').run(widthFraction, id);
+      widths.forEach(({ position, widthFraction }) => {
+        db.prepare(`
+          INSERT INTO editor_slots (position, widthFraction, fixedWidthPx) VALUES (?, ?, NULL)
+          ON CONFLICT(position) DO UPDATE SET widthFraction = excluded.widthFraction
+        `).run(position, widthFraction);
       });
     });
     tx();
     return this.listEditorSections();
   }
 
-  /** Persists the fixed/flexible pin state (fixedWidthPx; null = flexible) whenever the renderer's pin map changes. */
-  updateEditorSectionFixedWidths(entries: Array<{ id: string; fixedWidthPx: number | null }>): EditorSectionEntry[] {
+  /** Persists the fixed/flexible pin state (fixedWidthPx; null = flexible) whenever the renderer's pin map changes. Keyed by slot, like every other piece of geometry. */
+  updateEditorSlotFixedWidths(entries: Array<{ position: number; fixedWidthPx: number | null }>): EditorSectionEntry[] {
     const db = this.requireDb();
     const tx = db.transaction(() => {
-      entries.forEach(({ id, fixedWidthPx }) => {
-        db.prepare('UPDATE editor_sections SET fixedWidthPx = ? WHERE id = ?').run(fixedWidthPx, id);
+      entries.forEach(({ position, fixedWidthPx }) => {
+        db.prepare(`
+          INSERT INTO editor_slots (position, widthFraction, fixedWidthPx) VALUES (?, NULL, ?)
+          ON CONFLICT(position) DO UPDATE SET fixedWidthPx = excluded.fixedWidthPx
+        `).run(position, fixedWidthPx);
       });
     });
     tx();
     return this.listEditorSections();
+  }
+
+  /**
+   * Slides slot rows at or past `fromPosition` by `delta`, so slot geometry
+   * stays aligned with the section positions it keys against whenever a slot
+   * is opened or closed. Moved in the order that avoids colliding with the
+   * PRIMARY KEY mid-update.
+   */
+  private shiftEditorSlotsFrom(fromPosition: number, delta: number): void {
+    const db = this.requireDb();
+    const rows = db
+      .prepare('SELECT position, widthFraction, fixedWidthPx FROM editor_slots WHERE position >= ? ORDER BY position ASC')
+      .all(fromPosition) as Array<{ position: number; widthFraction: number | null; fixedWidthPx: number | null }>;
+    if (rows.length === 0) return;
+
+    db.prepare('DELETE FROM editor_slots WHERE position >= ?').run(fromPosition);
+    for (const row of rows) {
+      const next = row.position + delta;
+      if (next < 0) continue;
+      db.prepare('INSERT INTO editor_slots (position, widthFraction, fixedWidthPx) VALUES (?, ?, ?)')
+        .run(next, row.widthFraction, row.fixedWidthPx);
+    }
   }
 
   /** Records which note a section last showed -- independent of whether that note is pinned to its tab bar. */
@@ -1471,7 +1525,7 @@ export class DatabaseService {
   closeSectionSlot(sectionId: string): EditorSectionEntry[] {
     const db = this.requireDb();
     const tx = db.transaction(() => {
-      const section = db.prepare('SELECT name FROM editor_sections WHERE id = ?').get(sectionId) as { name: string | null } | undefined;
+      const section = db.prepare('SELECT name, position FROM editor_sections WHERE id = ?').get(sectionId) as { name: string | null; position: number | null } | undefined;
       if (!section) return;
 
       if (section.name === null) {
@@ -1480,6 +1534,14 @@ export class DatabaseService {
         db.prepare('UPDATE editor_sections SET position = NULL WHERE id = ?').run(sectionId);
       }
       this.renumberVisibleEditorSectionPositions();
+      // The slot itself is gone, not just vacated: drop its row and slide the
+      // ones to its right down in lockstep with the renumbering above, so
+      // each surviving pane keeps its own geometry rather than inheriting its
+      // neighbour's.
+      if (section.position !== null) {
+        db.prepare('DELETE FROM editor_slots WHERE position = ?').run(section.position);
+        this.shiftEditorSlotsFrom(section.position + 1, -1);
+      }
     });
     tx();
     return this.listEditorSections();
@@ -1493,6 +1555,13 @@ export class DatabaseService {
    * renumbering of other rows is needed. Runs as one transaction: a crash
    * mid-swap must never leave two sections at the same position or a
    * position with nothing in it.
+   *
+   * Deliberately touches no `editor_slots` row: the pane keeps its exact
+   * geometry while its occupant changes, which is the whole point of slots
+   * owning width. (This used to require the caller to hand-copy widths from
+   * the outgoing section to the incoming one, and again to any backfilled
+   * section -- see the width-fixup block deleted from App.tsx's
+   * handleSwapSection.)
    */
   swapSectionIntoSlot(outgoingSectionId: string, incomingSectionId: string): EditorSectionEntry[] {
     const db = this.requireDb();
@@ -3535,6 +3604,19 @@ export class DatabaseService {
 
       CREATE INDEX IF NOT EXISTS idx_editor_sections_position ON editor_sections(position);
 
+      -- One row per open slot (the side-by-side containers themselves).
+      -- Geometry lives here rather than on editor_sections because a slot is
+      -- furniture and a section is what's loaded into it: panes keep their
+      -- shape when their occupants are reordered or swapped, and a parked
+      -- section carries no width at all. editor_sections.widthFraction /
+      -- .fixedWidthPx are the legacy home of this data -- still present so
+      -- older builds can read a downgraded database, but no longer written.
+      CREATE TABLE IF NOT EXISTS editor_slots (
+        position      INTEGER PRIMARY KEY,
+        widthFraction REAL,
+        fixedWidthPx  REAL
+      );
+
       CREATE TABLE IF NOT EXISTS note_tabs (
         id        INTEGER PRIMARY KEY AUTOINCREMENT,
         sectionId TEXT    NOT NULL,
@@ -3605,6 +3687,8 @@ export class DatabaseService {
         .prepare('INSERT INTO editor_sections (id, name, position, widthFraction, lastActiveNoteId) VALUES (?, NULL, 0, NULL, NULL)')
         .run(DEFAULT_EDITOR_SECTION_ID);
     }
+
+    this.ensureEditorSlotRows();
 
     // sourceAnchorLine/sourceAnchorText retained as dead columns (superseded
     // by anchorBlockIndex below, per the scroll-sync rewrite -- see
@@ -3730,6 +3814,43 @@ export class DatabaseService {
     }
 
     db.exec(`ALTER TABLE notes ADD COLUMN ${columnName} ${columnDefinition}`);
+  }
+
+  /**
+   * Guarantees exactly one `editor_slots` row per occupied position, and
+   * none beyond them. Run once at startup: it both seeds the table on a
+   * fresh install and performs the one-time migration off the old
+   * `editor_sections.widthFraction`/`.fixedWidthPx` columns, where geometry
+   * used to live on whichever section happened to occupy the slot.
+   *
+   * The migration reads each *occupying* section's legacy width into its
+   * slot; a parked section's stale width is deliberately dropped, since
+   * under the current model it never owned one. Idempotent -- once slot rows
+   * exist, this only adds rows for positions that lack one and deletes rows
+   * past the last occupied position (both of which the create/close paths
+   * already maintain; this is the safety net for a database edited by an
+   * older build).
+   */
+  private ensureEditorSlotRows(): void {
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      const occupied = db
+        .prepare('SELECT position, widthFraction, fixedWidthPx FROM editor_sections WHERE position IS NOT NULL ORDER BY position ASC')
+        .all() as Array<{ position: number; widthFraction: number | null; fixedWidthPx: number | null }>;
+      const existing = new Set(
+        (db.prepare('SELECT position FROM editor_slots').all() as Array<{ position: number }>)
+          .map((row) => row.position),
+      );
+
+      for (const { position, widthFraction, fixedWidthPx } of occupied) {
+        if (existing.has(position)) continue;
+        db.prepare('INSERT INTO editor_slots (position, widthFraction, fixedWidthPx) VALUES (?, ?, ?)')
+          .run(position, widthFraction, fixedWidthPx);
+      }
+
+      db.prepare('DELETE FROM editor_slots WHERE position >= ?').run(occupied.length);
+    });
+    tx();
   }
 
   private ensureEditorSectionsColumn(columnName: string, columnDefinition: string): void {

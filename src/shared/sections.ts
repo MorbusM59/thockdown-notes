@@ -4,8 +4,8 @@ export const EDITOR_SECTIONS_CHANNELS = {
   rename: 'sections:rename',
   remove: 'sections:remove',
   reorder: 'sections:reorder',
-  updateWidths: 'sections:update-widths',
-  updateFixedWidths: 'sections:update-fixed-widths',
+  updateSlotWidths: 'sections:update-slot-widths',
+  updateSlotFixedWidths: 'sections:update-slot-fixed-widths',
   setActiveNote: 'sections:set-active-note',
   closeSlot: 'sections:close-slot',
   swapIntoSlot: 'sections:swap-into-slot',
@@ -15,42 +15,67 @@ export const EDITOR_SECTIONS_CHANNELS = {
 export const DEFAULT_EDITOR_SECTION_ID = 'default';
 
 /**
- * One side-by-side editor pane. `widthFraction` is the pane's share of the
- * split-view width (null = "distribute evenly with its siblings", the
- * everyday case while there's only one section). `name` is null until the
- * user names it -- a named section is kept forever and can be recalled into
- * any slot later (see `swapIntoSlot`); an unnamed one is disposable and is
- * deleted outright when its slot is closed or replaced.
+ * One collection of tabs -- a working set of notes that gets *loaded into* a
+ * slot, not the slot itself (see `docs/user-workflow-design.md` §1.4: a slot
+ * is the side-by-side container, a section is what's shown in it).
  *
- * `position` is null when the section isn't currently occupying a slot --
- * true for every named section the user has put away, never true for an
- * unnamed one (which simply ceases to exist instead). `lastActiveNoteId` is
- * this section's own "which note was I last showing" memory, independent of
- * whether that note is pinned to the tab bar.
+ * `name` is null until the user names it -- a named section is kept forever
+ * and can be recalled into any slot later (see `swapIntoSlot`); an unnamed
+ * one is disposable and is deleted outright when its slot is closed or
+ * replaced.
+ *
+ * `position` is which slot this section currently occupies, or null when it
+ * occupies none -- true for every named section the user has put away, never
+ * true for an unnamed one (which simply ceases to exist instead).
+ * `lastActiveNoteId` is this section's own "which note was I last showing"
+ * memory, independent of whether that note is pinned to the tab bar.
  */
 export interface EditorSectionEntry {
   id: string;
   name: string | null;
   position: number | null;
-  widthFraction: number | null;
   /**
-   * Set when the user has pinned this section by shrinking it via a divider
-   * drag: the pane holds exactly this pixel width while flexible siblings
-   * absorb window resizes (see computeSlotWidthsPx). Null = flexible.
+   * READ-ONLY MIRROR of the occupied slot's width -- geometry belongs to the
+   * slot (`EditorSlotEntry`), never to the section, so a parked section
+   * (`position: null`) always reads null here rather than carrying the width
+   * of a slot it no longer occupies. Written via `updateSlotWidths`, keyed by
+   * position; writing to a section is not possible by design.
    */
+  widthFraction: number | null;
+  /** READ-ONLY MIRROR of the occupied slot's pin -- see `widthFraction` and `EditorSlotEntry.fixedWidthPx`. */
   fixedWidthPx: number | null;
   lastActiveNoteId: string | null;
   /** Whether `setActiveNote` has ever been called for this section -- distinguishes "never had a note assigned" (bootstrap falls back to some note) from "user explicitly cleared it" (bootstrap respects the empty state), since both otherwise look like `lastActiveNoteId: null`. */
   noteSlotInitialized: boolean;
 }
 
-export interface EditorSectionWidthUpdate {
-  id: string;
+/**
+ * One side-by-side container an editor environment can be loaded into --
+ * furniture, identified purely by where it is. Slots own the divider layout;
+ * sections own tabs and note memory. Reordering or swapping which section
+ * occupies a slot never moves geometry: the panes keep their shape and only
+ * their contents change (`docs/user-workflow-design.md` §1.4).
+ *
+ * `widthFraction` is this slot's share of the split-view width (null =
+ * "distribute evenly with the others", the everyday case while there's only
+ * one slot). `fixedWidthPx` is set when the user has pinned the slot by
+ * shrinking it via a divider drag: it then holds exactly this pixel width
+ * while flexible siblings absorb window resizes (see computeSlotWidthsPx).
+ * Null = flexible.
+ */
+export interface EditorSlotEntry {
+  position: number;
+  widthFraction: number | null;
+  fixedWidthPx: number | null;
+}
+
+export interface EditorSlotWidthUpdate {
+  position: number;
   widthFraction: number | null;
 }
 
-export interface EditorSectionFixedWidthUpdate {
-  id: string;
+export interface EditorSlotFixedWidthUpdate {
+  position: number;
   fixedWidthPx: number | null;
 }
 
@@ -62,10 +87,10 @@ export interface EditorSectionsApi {
   /** No-op on the default section -- it's never closable. */
   removeSection(id: string): Promise<EditorSectionEntry[]>;
   reorderSections(orderedSectionIds: string[]): Promise<EditorSectionEntry[]>;
-  /** Persists the divider layout once a drag settles. */
-  updateSectionWidths(widths: EditorSectionWidthUpdate[]): Promise<EditorSectionEntry[]>;
-  /** Persists the fixed/flexible pin state (see EditorSectionEntry.fixedWidthPx). */
-  updateSectionFixedWidths(entries: EditorSectionFixedWidthUpdate[]): Promise<EditorSectionEntry[]>;
+  /** Persists the divider layout once a drag settles -- keyed by *slot* position, since geometry is the slot's, not its occupant's. */
+  updateSlotWidths(widths: EditorSlotWidthUpdate[]): Promise<EditorSectionEntry[]>;
+  /** Persists the fixed/flexible pin state (see EditorSlotEntry.fixedWidthPx), likewise keyed by slot position. */
+  updateSlotFixedWidths(entries: EditorSlotFixedWidthUpdate[]): Promise<EditorSectionEntry[]>;
   /** Records which note this section last showed -- independent of pinning. */
   setActiveNote(sectionId: string, noteId: string | null): Promise<EditorSectionEntry[]>;
   /**
