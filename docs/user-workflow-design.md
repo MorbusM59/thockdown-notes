@@ -103,9 +103,13 @@ One icon per layer, used *only* for that layer. This is how the layer model beco
 | **Note** | `fa-file` |
 | **Chapter** | `fa-bookmark` |
 
+**A bar's leading create button doubles as its label.** The tab bar opens with "new note", the chapter bar with "new chapter" -- so the first thing in each strip names what the strip contains, before any content is read. That is why the chapter bar's create pill sits at the very head, left of the base-note pill. Creation order is the one place this mirroring breaks on purpose: a new chapter appends at the END of the strip, because chapters are the document's own sequence and making one must never reorder the document.
+
 **Creation always uses the layer's own icon, never a generic `+`.** A "new X" affordance — menu item or button — shows X's glyph: new section = `fa-book`, new note = `fa-file`, new chapter = `fa-bookmark`. This holds everywhere, including the create pills that used to be `+` in the chapter bar and the tab bar. A `+` says only "another one of whatever this row is" and makes the user infer the layer from context; the layer glyph says *what* you're about to make, so the same three symbols keep teaching the model at the exact moment the user acts on it.
 
 **The corollary, straight out of §1.4: a slot is not a layer, so adding a slot keeps the generic `+`.** The tab bar's rightmost button opens a new slot — furniture, not content — and using `fa-book` there would say "new section" for an action that is nothing of the kind. The real "new section" action is the section picker's leftmost button (`section-picker-create`), which empties the current slot to a fresh unnamed, tabless, noteless section; *that* is the one that carries `fa-book`. This pair is the sharpest live test of whether the slot/section distinction is being respected in UI work — the two buttons sit in the same bar, and it is easy to give the wrong one the section glyph (already done once).
+
+**To the user, the parent note and its chapters are simply "the note".** The parent happens to carry the note's metadata and to represent the whole in the data model, but none of that is the reader's concern: hierarchically they experience it as the note's introduction chapter, sitting among the others. UI here must not leak the distinction -- the base note gets the same pill treatment as every chapter, in the same strip, and nothing is labelled "parent".
 
 One position-marker exception: the chapter bar's **base-note pill** uses `fa-house`. It isn't identifying a note among notes — every pill in that bar belongs to the same note — it's marking *where the top is*, the thing you return to from any chapter. "Home" says that; `fa-file` would only repeat what the whole bar already is.
 

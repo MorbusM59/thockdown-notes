@@ -75,9 +75,10 @@ export interface ChapterBarProps {
  * identically in both edit and render view, since it lives outside the
  * editor/preview split in SectionEditorArea.tsx. The panel is always shown
  * whenever there's an active note -- see SectionEditorArea.tsx's derived
- * `isChapterPanelOpen` -- so the tab strip's own trailing "+" pill (a plain
+ * `isChapterPanelOpen` -- so the tab strip's own LEADING create pill (a plain
  * `.create-pill`, same icon-only pill treatment as the tab bar's own "new
- * note" pill) is reachable even before the note has its first chapter, not
+ * note" pill, which it deliberately mirrors the position of) is reachable
+ * even before the note has its first chapter, not
  * just from the bottom utility bar's "New Chapter" quick action
  * (EscapeHoldPanel.tsx), which still exists and calls the exact same
  * handler. Omitted entirely (not just disabled) while the family is locked
@@ -263,6 +264,23 @@ export function ChapterBar({
             onScroll={updateScrollEdges}
             onWheel={handleWheel}
           >
+            {/* Leading, not trailing -- it mirrors the tab bar's own "new note"
+                pill, which sits at the head of the tab strip. Sitting first
+                also lets the pair read as a label for what the strip contains:
+                "new chapter" then the chapters, exactly as "new note" then the
+                notes. A new chapter is still appended at the END of the strip,
+                which is the one place this mirroring deliberately breaks --
+                chapters are a document's own order, and creating one must
+                never reorder the document. */}
+            {!isLocked ? (
+              <div
+                className="tag-pill note-tab-pill chapter-pill create-pill"
+                data-tooltip="Add a new chapter"
+                onClick={() => void onCreateChapter()}
+              >
+                <span className="fa-solid fa-bookmark" aria-hidden="true" />
+              </div>
+            ) : null}
             <div
               className={`tag-pill note-tab-pill chapter-pill${isParentActive ? ' is-active' : ''}`}
               onClick={onParentTabClick}
@@ -344,15 +362,6 @@ export function ChapterBar({
                 </InlinePillOrInput>
               )
             })}
-            {!isLocked ? (
-              <div
-                className="tag-pill note-tab-pill chapter-pill create-pill"
-                data-tooltip="Add a new chapter"
-                onClick={() => void onCreateChapter()}
-              >
-                <span className="fa-solid fa-bookmark" aria-hidden="true" />
-              </div>
-            ) : null}
           </div>
         </div>
       </div>
