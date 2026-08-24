@@ -2400,8 +2400,21 @@ applyEditRestoreSnapshot(fallbackSnapshot, { restoreFullSelection: false, focusA
       return
     }
 
+    // Section hibernation (useSnapshotFreeze) moves previewedSnapshotId
+    // without changing what the reader is looking at: the same note, at the
+    // same position, swapped between its live text and a snapshot of that
+    // same text taken moments earlier. There is no incoming content to
+    // land, so gating it hides a settled preview for no reason -- and since
+    // merely switching which slot is active freezes one section and thaws
+    // the other, that fired on BOTH panes on every activation change,
+    // reading as a flicker across the whole window.
+    if (isFrozenSectionPreviewRef.current) {
+      previewSettleGenerationRef.current = null
+      return
+    }
+
     previewSettleGenerationRef.current = gate.beginSettle()
-  }, [isPreviewMode, activeNoteId, previewedSnapshotId])
+  }, [isPreviewMode, activeNoteId, previewedSnapshotId, isFrozenSectionPreviewRef])
 
   useLayoutEffect(() => {
     if (!isPreviewMode) return

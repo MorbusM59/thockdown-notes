@@ -2633,3 +2633,36 @@ hidden at ~18ms -> revealed at ~52ms already at final geometry, with no safety-b
 (i.e. it revealed on the fixed point, not the timeout). Full `npm test` 558/558, `tsc --noEmit`
 clean, `npm run lint` clean apart from one pre-existing `App.tsx:2260` unused-disable error present
 on `main` before this change.
+
+### Follow-up: the settle gate must not fire on section hibernation
+
+**The regression** (introduced by the gate above, found by the user): switching which slot is active
+made *both* panes blank briefly. Section hibernation (`useSnapshotFreeze`) freezes the section
+losing active status onto an automatic snapshot and thaws the one gaining it back to live -- so a
+plain activation change writes `previewedSnapshotId` in two sections at once. That's a dependency of
+the gate-opening layout effect, so both sections opened a settle generation and hid their previews.
+
+**Why it's wrong, not just slow**: hibernation doesn't change what the reader is looking at. It's
+the same note at the same position, swapped between its live text and a snapshot of that same text
+taken moments earlier. There is no incoming content to land, so there is nothing for the gate to
+wait on -- and nothing ever reported a restore, so both panes sat hidden until the 600ms safety
+timer, twice per activation change.
+
+**The fix**: the gate-opening effect skips `beginSettle()` when `isFrozenSectionPreviewRef.current`
+is set, which is exactly the "this preview is a hibernated live section, not the user browsing
+history" flag `useSnapshotFreeze` already maintains (and `useNoteSnapshotTimeline` already clears
+when the user genuinely navigates the Timeline). Genuine note switches and genuine snapshot
+navigation gate exactly as before.
+
+**The general rule this is an instance of**: the gate belongs on transitions that bring *new content*
+into the preview. A transition that only re-labels what is already on screen must not open a
+generation -- if nothing is going to scroll, there is nothing to settle, and the gate can only
+subtract.
+
+**Verification**: reproduced live first (the same note open in two slots, both in render view:
+activation switch -> `visibility: hidden` on both `.markdown-preview` nodes at ~11ms, revealed at
+~611ms on the safety timer, with the gate's own "revealing on the safety timer" warning logged
+twice). Post-fix, the same switch produces zero hidden events and zero gate warnings, while a real
+note switch still gates -- and now only in the slot whose note actually changed. Full `npm test`
+564/564, `tsc --noEmit` clean. Note that in a non-compositing browser pane rAF never fires, so every
+gated switch reveals on the safety timer there; that's the environment, not the gate.
