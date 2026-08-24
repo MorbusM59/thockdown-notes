@@ -104,7 +104,28 @@ export function useNoteProtectionActions({
   const applyProtectedNoteDestination = useCallback(async (noteId: string, destination: 'archived' | 'deleted') => {
     const summary = notes.find((note) => note.id === noteId)
     await applyProtectedTagDestination(noteId, summary?.tags ?? [], destination)
-  }, [notes])
+
+    // Trashing a parent un-archives any of its own archived chapters: an
+    // archived chapter is only ever reachable through its parent's Archive
+    // fold-out row (App.tsx's archivedChaptersByParentId), and a trashed
+    // parent has no such row, so leaving them archived would strand them
+    // out of sight until the parent came back. Reattaching them instead
+    // (clear the tag, restoreDetachedChapter to their remembered position)
+    // folds them back into the parent's own chapter family, so they travel
+    // with it -- into Trash now, and back out again if it's restored.
+    if (destination === 'deleted' && summary && !isChapterOnlyNote(summary) && window.thockdownNotes && window.thockdownChapters) {
+      const archivedChapters = notes.filter((note) => (
+        note.chapterOnly && note.detachedChapterParentId === noteId && isArchivedNote(note)
+      ))
+      for (const chapter of archivedChapters) {
+        await window.thockdownNotes.removeTagFromNote({ id: chapter.id, tagName: 'archived' })
+        await window.thockdownChapters.restoreDetachedChapter(chapter.id)
+      }
+      if (archivedChapters.length > 0 && noteId === menuIdentityNoteId) {
+        await refreshChapters()
+      }
+    }
+  }, [notes, menuIdentityNoteId, refreshChapters])
 
   const saveExternalNoteToFile = useCallback(async (noteId: string) => {
     if (!window.thockdownNotes || !window.thockdownExternalFiles) return

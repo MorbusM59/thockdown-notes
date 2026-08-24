@@ -1108,6 +1108,8 @@ type NoteListItemProps = {
   chapterParentTitle?: string
   /** Archive tree only: an archived chapter row nested under its non-self-archived parent's fold-out (see CategoryTreeView) -- indented an extra 2*var(--spacing-large) so it visibly reads as a child of the row above it. */
   isArchiveFoldOutChapter?: boolean
+  /** Set only for a chapter row: true when this chapter's parent is itself gone or in Trash, so archiving the chapter would file it under a parent the Archive tree can't show (archivedChaptersByParentId only ever renders under an archive-eligible parent). Disables the archive button for that row -- see isArchiveButtonDisabled. */
+  isChapterParentUnavailable?: boolean
 }
 
 const NoteListItem = memo(function NoteListItem({
@@ -1128,6 +1130,7 @@ const NoteListItem = memo(function NoteListItem({
   variant = 'default',
   chapterParentTitle,
   isArchiveFoldOutChapter = false,
+  isChapterParentUnavailable = false,
 }: NoteListItemProps) {
   const isTreeVariant = variant === 'tree'
   const createdDate = isTreeVariant ? '' : formatCreatedDate(note.createdAtMs)
@@ -1242,10 +1245,24 @@ const NoteListItem = memo(function NoteListItem({
   // ChapterBar.tsx's archive/delete split pill -- the actual archive/delete
   // *mechanics*, not yet wired here), but that's a deliberately different
   // gesture from these per-row sidebar buttons/hold-gestures, which stay
-  // disabled/blocked for a chapter row regardless of surfacing context
-  // (search, or now trash) until that wiring exists.
-  const isArchiveButtonDisabled = !onArchiveClick || isArchived || (!isTrashMode && isDeleted) || isChapter
-  const isTrashButtonDisabled = !onTrashClick || (!isTrashMode && isDeleted) || isChapter
+  // disabled/blocked for a chapter row wherever it's merely surfaced
+  // (search, archive) until that wiring exists. Trash mode is the one
+  // exception, so both chapter clauses below are scoped to !isTrashMode: a
+  // detached chapter sitting in Trash otherwise had no way out of its own
+  // row at all. There these two buttons mean 'permanently delete' and
+  // 'move to Archive' respectively, and both underlying paths already handle a
+  // detached chapter -- deleteNote sweeps it via detachedChapterParentId (see
+  // databaseService.ts), and applyProtectedTagDestination is explicitly shared
+  // with chapters, which keep detachedChapterParentId across the tag swap and
+  // so surface in the parent's Archive fold-out (archivedChaptersByParentId).
+  // The extra archive-side clause: a chapter can only be archived into its
+  // parent's Archive fold-out, so a chapter whose parent is gone or itself in
+  // Trash has nowhere to land and would vanish from every view until the
+  // parent came back. Purging it (the trash button) stays available.
+  const isArchiveButtonDisabled = !onArchiveClick || isArchived
+    || (!isTrashMode && (isDeleted || isChapter))
+    || (isChapter && isChapterParentUnavailable)
+  const isTrashButtonDisabled = !onTrashClick || (!isTrashMode && (isDeleted || isChapter))
 
   return (
     <div
@@ -8385,9 +8402,15 @@ ${markdownHtml}
                           const chapterParentNoteId = note.chapterOnly
                             ? (note.chapterParentId ?? note.detachedChapterParentId)
                             : null
-                          const chapterParentTitle = chapterParentNoteId
-                            ? notesById.get(chapterParentNoteId)?.title
+                          const chapterParentNote = chapterParentNoteId
+                            ? notesById.get(chapterParentNoteId)
                             : undefined
+                          const chapterParentTitle = chapterParentNote?.title
+                          // A missing parent (purged) or one itself sitting in
+                          // Trash can't host an Archive fold-out, so this
+                          // chapter has nowhere to be archived to.
+                          const isChapterParentUnavailable = Boolean(chapterParentNoteId)
+                            && (!chapterParentNote || isDeletedNote(chapterParentNote))
                           return (
                             <NoteListItem
                               key={note.id}
@@ -8395,6 +8418,7 @@ ${markdownHtml}
                               isActive={isActive}
                               isModified={isModified}
                               chapterParentTitle={chapterParentTitle}
+                              isChapterParentUnavailable={isChapterParentUnavailable}
                               onSelect={handleSelectNote}
                               onPrimedLeftClick={(noteId) => getActiveSection()?.handlePrimedNoteLeftClick(noteId)}
                               onSaveClick={activeSection?.handleSaveButtonClick}
