@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { DatabaseService } from './databaseService'
-import { isAutoAssignedId } from '../src/shared/assignedIds'
+import { isAutoAssignedChapterId, isAutoAssignedId } from '../src/shared/assignedIds'
 import { NoteLifecycleService } from './noteLifecycleService'
 
 describe('NoteLifecycleService auto-Open-Items chapter', () => {
@@ -73,7 +73,7 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
 
     // Provisional id only (NOTE-#n) -- never a user-chosen one; linking works regardless.
     expect(isAutoAssignedId(db.getNoteRecord(parent.id)!.assignedId)).toBe(true)
-    expect(db.listChaptersForNote(parent.id).find((c) => c.chapterNoteId === ch1.id)!.chapterId).toBeNull()
+    expect(isAutoAssignedChapterId(db.listChaptersForNote(parent.id).find((c) => c.chapterNoteId === ch1.id)!.chapterId)).toBe(true)
 
     const openItemsId = db.getAutoOpenItemsChapterNoteId(parent.id)!
     const openItemsDoc = await lifecycle.loadNote({ id: openItemsId })
@@ -96,12 +96,12 @@ describe('NoteLifecycleService auto-Open-Items chapter', () => {
 
     const openItemsId = db.getAutoOpenItemsChapterNoteId(parent.id)!
     const openItemsDoc = await lifecycle.loadNote({ id: openItemsId })
-    // Same fallback the chapter's own pill would show (resolveIdentityLabel):
-    // no assigned chapterId and no heading-prefixed first line, so its own
-    // "Missing title" fallback -- resolveIdentityLabel only derives a
-    // content snippet from a line that actually starts with the expected
-    // heading marker, never from arbitrary body text.
-    expect(openItemsDoc.text).toContain(`[Missing title](@${ch1.id})`)
+    // Same label the chapter's own pill would show: no `##` heading on its
+    // first line, so it falls back to its id -- provisional, since the user
+    // never named it.
+    const chapterId = db.listChaptersForNote(parent.id).find((c) => c.chapterNoteId === ch1.id)!.chapterId
+    expect(isAutoAssignedChapterId(chapterId)).toBe(true)
+    expect(openItemsDoc.text).toContain(`[${chapterId}](@${ch1.id})`)
     expect(openItemsDoc.text).toContain('- [ ] a stray task')
   })
 

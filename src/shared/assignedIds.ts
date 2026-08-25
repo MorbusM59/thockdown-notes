@@ -72,3 +72,30 @@ export function buildNextAutoAssignedId(existingIds: Iterable<string | null | un
   while (taken.has(`NOTE-#${candidate}`)) candidate += 1
   return `NOTE-#${candidate}`
 }
+
+/**
+ * A chapter's provisional id is `§n` -- the same idea as a note's `NOTE-#n`,
+ * derived the same way (from the value's shape, not a stored flag; see
+ * isAutoAssignedId for the full reasoning).
+ *
+ * Numbering is per parent, not global: chapter ids only have to be unique
+ * within one note's chapter list, so every note's chapters start again at §1.
+ */
+const AUTO_CHAPTER_ID_PATTERN = /^§(\d+)$/
+
+/** True when `chapterId` is a provisional, generator-made chapter id -- or absent entirely, which has equally not been committed to. */
+export function isAutoAssignedChapterId(chapterId: string | null | undefined): boolean {
+  if (!chapterId) return true
+  return AUTO_CHAPTER_ID_PATTERN.test(chapterId.trim())
+}
+
+/** Lowest free `§n` (n starting at 1) among one parent's chapter ids. */
+export function buildNextAutoChapterId(existingIds: Iterable<string | null | undefined>): string {
+  const taken = new Set<string>()
+  for (const id of existingIds) {
+    if (typeof id === 'string' && id.trim().length > 0) taken.add(id.trim().toUpperCase())
+  }
+  let candidate = 1
+  while (taken.has(`§${candidate}`)) candidate += 1
+  return `§${candidate}`
+}

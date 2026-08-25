@@ -5,6 +5,8 @@ import type { DatabaseService } from '../databaseService';
 import { HELP_NOTE_CONTENT } from './helpNoteContent';
 
 const HELP_NOTE_ID = '26-07-04_00-00_WELCOME00';
+/** The welcome note's user-facing id, mirroring the User Guide's own 'HELP' (src/shared/helpGuide.ts). */
+const WELCOME_NOTE_ASSIGNED_ID = 'WELCOME';
 const HELP_NOTE_TITLE = 'Welcome to Thockdown Notes';
 const HELP_NOTE_FILE_NAME = `${HELP_NOTE_ID}.md`;
 
@@ -56,6 +58,12 @@ export async function ensureHelpNote(db: DatabaseService): Promise<void> {
     hasUnsavedChanges: false,
     syncMode: false,
   });
+
+  // A real, user-facing id from birth -- the same treatment the User Guide
+  // gets ('HELP'). Without it the welcome note would be handed a provisional
+  // NOTE-#n by the startup backfill, i.e. the very first note a new user sees
+  // would be asking them to name it.
+  db.setNoteAssignedId(HELP_NOTE_ID, WELCOME_NOTE_ASSIGNED_ID);
 
   console.log(`[ensureHelpNote] Help note created successfully`);
 }

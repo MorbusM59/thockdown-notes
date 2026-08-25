@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import BetterSqlite3 from 'better-sqlite3'
 import { DatabaseService } from './databaseService'
+import { isAutoAssignedChapterId } from '../src/shared/assignedIds'
 
 function seedNote(db: DatabaseService, id: string): void {
   const now = Date.now()
@@ -425,27 +426,30 @@ describe('DatabaseService chapters', () => {
   })
 
   describe('setChapterId', () => {
-    it('assigns and normalizes a chapterId, defaulting to unassigned (null)', () => {
+    it('assigns and normalizes a chapterId, defaulting to a provisional one', () => {
       seedNote(db, 'parent-a')
       seedNote(db, 'chapter-1')
       db.addChapter('parent-a', 'chapter-1')
 
-      expect(db.listChaptersForNote('parent-a')[0].chapterId).toBeNull()
+      // Born with a provisional id rather than id-less -- see addChapter.
+      expect(isAutoAssignedChapterId(db.listChaptersForNote('parent-a')[0].chapterId)).toBe(true)
 
       const resolved = db.setChapterId('parent-a', 'chapter-1', 'intro chapter')
       expect(resolved).toBe('INTRO-CHAPTER')
       expect(db.listChaptersForNote('parent-a')[0].chapterId).toBe('INTRO-CHAPTER')
     })
 
-    it('clears a chapterId back to unassigned given an empty string', () => {
+    it('clears a chapterId back to a provisional one given an empty string', () => {
       seedNote(db, 'parent-a')
       seedNote(db, 'chapter-1')
       db.addChapter('parent-a', 'chapter-1')
       db.setChapterId('parent-a', 'chapter-1', 'INTRO')
 
       const resolved = db.setChapterId('parent-a', 'chapter-1', '   ')
-      expect(resolved).toBeNull()
-      expect(db.listChaptersForNote('parent-a')[0].chapterId).toBeNull()
+      // Handed back, not removed: a chapter is never left without an id, the
+      // same rule notes follow.
+      expect(isAutoAssignedChapterId(resolved)).toBe(true)
+      expect(isAutoAssignedChapterId(db.listChaptersForNote('parent-a')[0].chapterId)).toBe(true)
     })
 
     it('dedupes chapterId collisions within the same parent with a "-2" suffix', () => {
@@ -675,7 +679,7 @@ describe('DatabaseService startup on a pre-chapterId database', () => {
     upgradedDb.addChapter('parent-a', 'chapter-1')
 
     const chapters = upgradedDb.listChaptersForNote('parent-a')
-    expect(chapters).toEqual([{ parentNoteId: 'parent-a', position: 0, chapterNoteId: 'chapter-1', chapterId: null }])
+    expect(chapters).toEqual([{ parentNoteId: 'parent-a', position: 0, chapterNoteId: 'chapter-1', chapterId: expect.stringMatching(/^§\d+$/) }])
 
     const resolved = upgradedDb.setChapterId('parent-a', 'chapter-1', 'INTRO')
     expect(resolved).toBe('INTRO')

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { DatabaseService } from './databaseService'
-import { isAutoAssignedId } from '../src/shared/assignedIds'
+import { isAutoAssignedChapterId, isAutoAssignedId } from '../src/shared/assignedIds'
 import { NoteLifecycleService } from './noteLifecycleService'
 import { parseInternalNoteLink } from '../src/shared/internalNoteLinks'
 
@@ -105,11 +105,12 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
 
     // The parent's id is still the PROVISIONAL one it was born with (every
     // real note gets a NOTE-#n; see shared/assignedIds.ts) -- nothing here
-    // invented a user-chosen id -- and the chapter, which carries no tab
-    // identity, has no chapterId at all. That's the whole point: the TOC
-    // never needs either.
+    // invented a user-chosen id -- and neither did the chapter, which still
+    // carries only the provisional one it was born with. That's the whole
+    // point: the TOC needs neither, and a chapter WITH a heading shows that
+    // heading regardless of what its id happens to be.
     expect(isAutoAssignedId(db.getNoteRecord(parent.id)!.assignedId)).toBe(true)
-    expect(chapters.find((c) => c.chapterNoteId === ch1.id)!.chapterId).toBeNull()
+    expect(isAutoAssignedChapterId(chapters.find((c) => c.chapterNoteId === ch1.id)!.chapterId)).toBe(true)
 
     expect(created.text).toBe([
       '# Table of Contents',
@@ -139,8 +140,9 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
 
     const { created, chapters } = await lifecycle.regenerateAutoTocChapter(parent.id)
 
-    // Still never assigned -- the link works without one.
-    expect(chapters.find((c) => c.chapterNoteId === ch1.id)!.chapterId).toBeNull()
+    // Still only the provisional id it was born with -- nothing here invented
+    // a user-chosen one, and the link works without either.
+    expect(isAutoAssignedChapterId(chapters.find((c) => c.chapterNoteId === ch1.id)!.chapterId)).toBe(true)
 
     const hrefMatch = /\[Chapter One\]\((@[^)]+)\)/.exec(created.text)
     expect(hrefMatch).toBeTruthy()
@@ -159,12 +161,12 @@ describe('NoteLifecycleService auto-TOC chapter', () => {
 
     const { created } = await lifecycle.regenerateAutoTocChapter(parent.id)
 
-    // resolveIdentityLabel's own fallback for content with no matching
-    // heading is the literal "Missing title" (see tabLabels.ts's own doc
-    // comment and noteListMeta.test.ts's coverage of
-    // resolveIdentityLabel(null, 'plain intro', ...)) -- not a snippet
-    // derived from the content itself.
-    expect(created.text).toContain(`[Missing title](@${ch1.id})`)
+    // A chapter with no `##` heading on its first line falls back to its ID --
+    // provisional here, since the user never named it. The heading always wins
+    // when there is one; this is the only case where the id is displayed.
+    const chapterId = db.listChaptersForNote(parent.id).find((c) => c.chapterNoteId === ch1.id)!.chapterId
+    expect(isAutoAssignedChapterId(chapterId)).toBe(true)
+    expect(created.text).toContain(`[${chapterId}](@${ch1.id})`)
   })
 
   it('regenerating twice with nothing changed is a true no-op on the TOC chapter\'s own updatedAtMs', async () => {

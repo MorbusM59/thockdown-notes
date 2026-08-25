@@ -3,7 +3,7 @@ import { existsSync, promises as fs } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
-import { buildNextAutoAssignedId, deriveDefaultAssignedIdBase, normalizeAssignedIdInput } from '../src/shared/assignedIds';
+import { buildNextAutoAssignedId, buildNextAutoChapterId, normalizeAssignedIdInput } from '../src/shared/assignedIds';
 import { ensureHelpNote } from './help/helpNote';
 import { shouldVacuumForBloat } from './databaseSanitationPolicy';
 import type { TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../src/shared/textures';
@@ -999,8 +999,10 @@ export class DatabaseService {
    *    VACUUM doesn't touch any row's content -- it only repacks how the
    *    existing, already-correct rows are laid out on disk.
    */
-  sanitizeDatabase(): { dedupedFtsRows: number; vacuumed: boolean; reclaimedBytes: number } {
+  sanitizeDatabase(): { dedupedFtsRows: number; backfilledNoteIds: number; vacuumed: boolean; reclaimedBytes: number } {
     const db = this.requireDb();
+
+    const backfilledNoteIds = this.backfillMissingNoteAssignedIds();
 
     const dedupedFtsRows = db.prepare(`
       DELETE FROM notes_fts
@@ -1021,7 +1023,51 @@ export class DatabaseService {
       vacuumed = true;
     }
 
-    return { dedupedFtsRows, vacuumed, reclaimedBytes };
+    return { dedupedFtsRows, backfilledNoteIds, vacuumed, reclaimedBytes };
+  }
+
+  /**
+   * Gives every real note that still has no id a provisional `NOTE-#n`.
+   *
+   * Notes created before ids were assigned at birth have `assignedId: NULL`,
+   * and the UI used to paper over that by displaying a live-derived snippet of
+   * the note's first line in italics. That fallback now collides visually with
+   * the provisional-id styling (both italic, for different reasons), and more
+   * importantly it means the invariant "no note is without some form of id"
+   * would only hold for notes created after the feature shipped.
+   *
+   * Lives in sanitizeDatabase rather than a one-shot migration so it also
+   * repairs databases that arrive from anywhere else (a restore, a copy from
+   * an older install, a file synced in) instead of only the local upgrade
+   * path. Idempotent: once every note has an id it selects nothing.
+   *
+   * Chapter-only notes are excluded -- a chapter has no tab identity of its
+   * own and must not consume NOTE-#n numbers (see NoteLifecycleService's
+   * skipProvisionalId).
+   */
+  private backfillMissingNoteAssignedIds(): number {
+    const db = this.requireDb();
+    const rows = db.prepare(`
+      SELECT id FROM notes
+      WHERE assignedId IS NULL
+        AND COALESCE(chapterOnly, 0) = 0
+      ORDER BY createdAt ASC
+    `).all() as Array<{ id: string }>;
+    if (rows.length === 0) return 0;
+
+    const taken = this.listUsedAssignedIds();
+    const update = db.prepare('UPDATE notes SET assignedId = ? WHERE id = ?');
+    const tx = db.transaction(() => {
+      for (const row of rows) {
+        const provisional = buildNextAutoAssignedId(taken);
+        update.run(provisional, row.id);
+        // Feed each new id straight back in, so the next iteration sees it --
+        // listUsedAssignedIds was read once, before any of these writes.
+        taken.add(provisional);
+      }
+    });
+    tx();
+    return rows.length;
   }
 
   runSanityChecks(): {
@@ -1376,7 +1422,13 @@ export class DatabaseService {
     this.assertNotTimeless(noteId);
     const db = this.requireDb();
     const normalized = normalizeAssignedIdInput(requestedRaw);
-    const base = normalized.length > 0 ? normalized : deriveDefaultAssignedIdBase(this.getNoteRecord(noteId)?.title ?? 'NOTE');
+    // An empty request used to fall back to an id derived from the note's
+    // TITLE -- the last living piece of the pre-provisional-id system, and a
+    // silent third source of ids nobody asked for (a note cleared its id and
+    // got named after its own first line). Every caller now sends either a
+    // real id or a provisional one; an empty request means "hand it back", so
+    // it resolves to the next free NOTE-#n instead.
+    const base = normalized.length > 0 ? normalized : buildNextAutoAssignedId(this.listUsedAssignedIds(noteId));
     const resolved = this.resolveUniqueAssignedId(base, noteId);
     db.prepare('UPDATE notes SET assignedId = ? WHERE id = ?').run(resolved, noteId);
     return resolved;
@@ -1692,7 +1744,18 @@ export class DatabaseService {
     const db = this.requireDb();
     const { maxPosition } = db.prepare('SELECT MAX(position) AS maxPosition FROM chapters WHERE parentNoteId = ?').get(parentNoteId) as { maxPosition: number | null };
     const nextPosition = maxPosition === null ? 0 : maxPosition + 1;
-    db.prepare('INSERT INTO chapters (parentNoteId, position, chapterNoteId) VALUES (?, ?, ?)').run(parentNoteId, nextPosition, chapterNoteId);
+    // Chapters get a provisional id at birth for the same reason notes do:
+    // every pill shows something concrete, and "has the user named this?"
+    // stays a question about the id's SHAPE rather than about its presence.
+    // Numbered per parent, so each note's chapters start again at §1.
+    //
+    // This does NOT change what the auto-TOC prints for a chapter that has a
+    // `##` heading on its first line: that heading always wins there, and the
+    // id is only the fallback for a chapter without one (see
+    // buildAutoTocText's rootLabel).
+    const provisionalChapterId = buildNextAutoChapterId(this.listUsedChapterIds(parentNoteId));
+    db.prepare('INSERT INTO chapters (parentNoteId, position, chapterNoteId, chapterId) VALUES (?, ?, ?, ?)')
+      .run(parentNoteId, nextPosition, chapterNoteId, provisionalChapterId);
     return this.listChaptersForNote(parentNoteId);
   }
 
@@ -1738,7 +1801,12 @@ export class DatabaseService {
     this.assertNotTimeless(parentNoteId);
     const db = this.requireDb();
     const normalized = normalizeAssignedIdInput(requestedRaw);
-    const resolved = normalized.length > 0 ? this.resolveUniqueChapterId(parentNoteId, normalized, chapterNoteId) : null;
+    // Clearing hands the chapter back a provisional §n rather than leaving it
+    // id-less -- the same rule notes follow (setNoteAssignedId). A chapter
+    // always has some id; whether the USER chose it is read from its shape.
+    const resolved = normalized.length > 0
+      ? this.resolveUniqueChapterId(parentNoteId, normalized, chapterNoteId)
+      : buildNextAutoChapterId(this.listUsedChapterIds(parentNoteId, chapterNoteId));
     db.prepare('UPDATE chapters SET chapterId = ? WHERE parentNoteId = ? AND chapterNoteId = ?').run(resolved, parentNoteId, chapterNoteId);
     return resolved;
   }

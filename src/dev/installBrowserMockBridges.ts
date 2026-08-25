@@ -42,7 +42,7 @@ import { normalizeChapterHeadings } from '../shared/markdownHeadings'
 import { resolveIdentityLabel } from '../shared/tabLabels'
 import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine, formatOutlineRootTitleLine, parseMarkdownHeading, stripMarkdownInlineFormatting } from '../shared/tableOfContentsText'
 import { formatInternalNoteLink } from '../shared/internalNoteLinks'
-import { buildNextAutoAssignedId, deriveDefaultAssignedIdBase, normalizeAssignedIdInput } from '../shared/assignedIds'
+import { buildNextAutoAssignedId, normalizeAssignedIdInput } from '../shared/assignedIds'
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, findOpenItemSourceAtLine, parseOpenItemsGroups, toggleChecklistItemByText } from '../shared/openItemsText'
 
 const MOCK_STORAGE_KEY = 'thockdown-notes:browser-mock:v1'
@@ -621,7 +621,10 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
       return mutate((store) => {
         const note = store.notes.find((entry) => entry.id === input.id)
         if (!note) return null
-        const base = normalizeAssignedIdInput(input.requestedId) || deriveDefaultAssignedIdBase(note.title)
+        // Mirrors databaseService.setNoteAssignedId: an emptied id hands the
+        // note back a provisional NOTE-#n, never a title-derived one.
+        const base = normalizeAssignedIdInput(input.requestedId)
+          || buildNextAutoAssignedId(store.notes.filter((entry) => entry.id !== note.id).map((entry) => entry.assignedId))
         note.assignedId = resolveUniqueAssignedId(store.notes, base, note.id)
         return clone(toSummary(note))
       })

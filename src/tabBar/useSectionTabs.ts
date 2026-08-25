@@ -243,6 +243,9 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
 
     const rawInput = tagInputValue.trim()
     if (rawInput.startsWith('$')) {
+      // A bare "$" clears the id, which hands the note back a provisional
+      // NOTE-#n (databaseService resolves the empty request) -- the same rule
+      // the note-id pill follows. No note is ever left without an id.
       const requestedId = rawInput.slice(1)
       setTagInputValue('')
       if (!window.thockdownNotes) return
