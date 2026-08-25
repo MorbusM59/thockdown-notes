@@ -20,19 +20,65 @@ export interface HelpGuideChapterContent {
   content: string
 }
 
-export const HELP_GUIDE_INTRO_CONTENT = `# Thockdown Notes — Help & Reference
+export const HELP_GUIDE_INTRO_CONTENT = `# Thockdown User Guide
 
-Thockdown Notes is a Markdown note-taking app built around a good typing feel -- quick to write in, quick to find your way back through, with a lot of small things tuned so they just work. This page is your home base: a quick orientation below, then a full chapter for everything else, one topic at a time -- open the chapter bar above to browse them.
 
-## Quick Guide
+Hey there! Love the learning mindset!
 
-1. **Start a note.** \`Ctrl+N\` (or the file icon in the toolbar) makes a new one. Its first line becomes its title; everything else is content, and it saves automatically as you type.
-2. **Switch views.** \`Esc\` toggles between the Markdown editor and its rendered preview, so you can check how your formatting looks.
-3. **Keep things findable.** Tag a note from the tag bar, then browse by date, category, or tag from the sidebar -- or search it directly.
-4. **Grow a note.** Once it needs sub-sections of its own, split it into chapters from the chapter bar under the tab bar -- each chapter is a full note in its own right.
-5. **Make it yours.** The gear icon opens Settings: fonts, colors, sounds, and a lot more to tune to your taste.
+## The Basics
+Let's get you started: At its most basic, Thockdown is about
+- **writing notes** in the **markdown editor** and
+- **reading notes** in the **markdown renderer**.
 
-That's enough to get going. Everything else -- internal linking, tags, split view, Time Machine, formatting, exporting, and more -- has its own chapter alongside this one.
+You can 
+- hit **Ctrl+N** to create a **new note**,
+- **toggle** between editor and renderer using the **Escape**-key,
+- **hold Escape** to bring up the quick access note menu,
+- use the **side bar** to find the notes you created again later and (**menu** button to the left of the bar above)
+- create additional editor **slots** for side by side work (**plus** button to the right of the bar above).
+
+*If you want to, you can leave it at that and explore on your own. If you are a structural learner, however, it might be a good idea to spend a moment to familiarize yourself with a few core concepts.*
+
+## Core Concepts and Basic Editor Layout
+
+The **notes** you create can be...
+- kept together by pinning them to **collections**,
+- structured by splitting them into **chapters**,
+- categorized by using **tags** and
+- referenced easily by assigning a unique **ID**.
+
+These systems are literally **surrounding your editor** and figuratively (or, possibly, also *literally* if you happen to be working on a touch-capable device) right at your fingertips.
+
+- You can find the **collection bar** right **above your editor**.
+   - ***Collections work like browser tabs.***
+      - Each tab represents one note.
+      - The tabs show that note's ID.
+   - Each collection has a name that is displayed to the left of the note tab bar.
+      - Left click that button to pick a different collection to show.
+      - Right click that button to rename the collection.
+- You can find the dual mode **chapter** and **tag** bar **below the editor**.
+   - *You can toggle between both modes using the **tag toggle button** on the very left.*
+      - *New notes shows the **tag bar** by default until they have an ID.*
+      - *Notes with IDs show the **chapter bar** by default.*
+   - ***Tags determine how your notes are categorized in the sidebar category view.***
+      - You can assign an ID to your note with the button to the left.
+      - You can assign tags by interacting with the tag bar itself.
+   - ***Chapters are nested notes within a note.***
+      - When you create a chapter, think of the original note as the parent note that may contain a preface or introduction.
+      - The parent note can be accessed via the house button.
+      - You can create chapters by hitting the new chapter button that sits to its left.
+
+## Go Explore!
+
+Seriously. This app has plenty of tooltips. You don't have to learn every system right away. You can have a lot of fun and success with this app without going full power user. Have fun and enjoy the trip.
+
+But if you've committed to the guide this far, you deserve to be pointed towards the most satisfying discoveries waiting for you to be made:
+
+- The **double size** and **dark modes**.
+- The immserive low distraction **music player**.
+- The endless **customization options** in the sidebar options menu.
+- Particularly the **layout presets**.
+- The app's namesake feature: **Thocky typing sounds**!
 `
 
 const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
