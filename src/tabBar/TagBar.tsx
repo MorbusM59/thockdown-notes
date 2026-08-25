@@ -1,8 +1,9 @@
+import { useState } from 'react'
 import type { MouseEvent } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import { normalizeTagName, isProtectedTagName } from '../shared/tags'
 import { resolveIdentityLabel } from '../shared/tabLabels'
-import { isAutoAssignedId } from '../shared/assignedIds'
+import { buildNextAutoAssignedId, isAutoAssignedId } from '../shared/assignedIds'
 import { InlinePillOrInput } from '../shared/InlinePillOrInput'
 import type { UseSectionTabsResult } from './useSectionTabs'
 
@@ -13,6 +14,8 @@ export interface TagBarProps {
   /** The chapter-aware identity (SectionEditorArea's `menuIdentityNoteId`): tags and the note id belong to the NOTE, so a chapter shows its parent's. */
   identityNoteId: string | null
   notes: NoteSummary[]
+  /** Mirrors the note list's own assignedId locally once the write lands -- same callback useSectionTabs takes. */
+  updateNoteAssignedId: (noteId: string, assignedId: string) => void
 }
 
 /**
@@ -25,7 +28,13 @@ export interface TagBarProps {
  * note-id pill is deliberately the same treatment as the section-identity
  * pill one bar up: same gesture (right-click to assign), one layer down.
  */
-export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, notes }: TagBarProps) {
+export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, notes, updateNoteAssignedId }: TagBarProps) {
+  // Copied from the section-identity tab's own shape (SectionTabBar), not
+  // routed through useInlinePillEdit: that hook's `keyExists` guard requires
+  // the note to be pinned as a tab, so an unpinned note's edit was cancelled
+  // the instant it opened -- the gesture appeared to do nothing at all.
+  const [isEditingNoteId, setIsEditingNoteId] = useState(false)
+  const [noteIdDraft, setNoteIdDraft] = useState('')
   const {
     tagInputRef,
     tagInputValue,
@@ -58,13 +67,36 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
     suggestedTagsCanScrollRight,
     updateSuggestedTagsScrollEdges,
     handleSuggestedTagsWheel,
-    editingTabNoteId,
-    tabIdDraft,
-    setTabIdDraft,
-    commitTabIdEdit,
-    cancelTabIdEdit,
-    startEditingTabId,
   } = tabs
+
+  /** Same write and same guards as useSectionTabs' own commitTabIdEditValue. */
+  const commitNoteId = async (noteId: string, draft: string) => {
+    if (!window.thockdownNotes) return
+    const trimmed = draft.trim()
+    const note = notes.find((entry) => entry.id === noteId)
+    // Clearing the field is how a user gives an id BACK rather than how they
+    // ask for no id: no note is ever without one. An emptied field falls back
+    // to a fresh provisional NOTE-#n, computed here rather than handed to
+    // setNoteAssignedId as a blank -- a blank makes it derive an id from the
+    // note's title, which is a third id the user never asked for.
+    //
+    // An id that is already provisional stays exactly as it is: re-rolling
+    // NOTE-#1 into NOTE-#7 would be pure churn, since neither is a name the
+    // user chose.
+    const requested = trimmed.length === 0
+      ? (isAutoAssignedId(note?.assignedId)
+          ? (note?.assignedId ?? buildNextAutoAssignedId(notes.filter((entry) => entry.id !== noteId).map((entry) => entry.assignedId)))
+          : buildNextAutoAssignedId(notes.filter((entry) => entry.id !== noteId).map((entry) => entry.assignedId)))
+      : trimmed
+    if (requested === (note?.assignedId ?? '')) return
+    if (note?.isTimeless) return
+    try {
+      const updated = await window.thockdownNotes.setNoteAssignedId({ id: noteId, requestedId: requested })
+      if (updated?.assignedId) updateNoteAssignedId(noteId, updated.assignedId)
+    } catch (error) {
+      console.error('Failed to set note internal ID', error)
+    }
+  }
 
   const identityNote = identityNoteId ? notes.find((entry) => entry.id === identityNoteId) : undefined
   const { text: identityLabel, isAssigned } = resolveIdentityLabel(identityNote?.assignedId, identityNote?.contentText)
@@ -79,15 +111,45 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
           fills the bar with suggested tags, which is what makes "commit to an
           id, then file it" a single fluent motion. */}
       <div className="section-identity-tab-shell">
-        <InlinePillOrInput
-          isEditing={identityNoteId !== null && editingTabNoteId === identityNoteId}
-          value={tabIdDraft}
-          onChange={setTabIdDraft}
-          onCommit={commitTabIdEdit}
-          onCancel={cancelTabIdEdit}
-          className="tag-pill note-identity-input"
-          ariaLabel="Note id"
-        >
+        {isEditingNoteId ? (
+          <input
+            className="tag-pill note-identity-input"
+            value={noteIdDraft}
+            autoFocus
+            // Caret lands at the END of an existing id (renaming is usually a
+            // tweak), and an empty field simply centres it -- the field is
+            // centre-aligned, so an empty value puts the caret mid-field with
+            // no extra work. Explicit rather than relying on autoFocus's own
+            // placement, which varies by browser.
+            ref={(element) => {
+              if (!element) return
+              const end = element.value.length
+              element.setSelectionRange(end, end)
+            }}
+            spellCheck={false}
+            autoCorrect="off"
+            autoCapitalize="off"
+            onChange={(event) => setNoteIdDraft(event.target.value)}
+            // Blur is an implicit exit, so an empty field there means "I
+            // changed my mind", not "give this note a new provisional id".
+            // Only Enter -- an explicit commit -- clears an id back to auto.
+            onBlur={() => {
+              setIsEditingNoteId(false)
+              if (identityNoteId && noteIdDraft.trim().length > 0) void commitNoteId(identityNoteId, noteIdDraft)
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                setIsEditingNoteId(false)
+                if (identityNoteId) void commitNoteId(identityNoteId, noteIdDraft)
+              } else if (event.key === 'Escape') {
+                event.preventDefault()
+                setIsEditingNoteId(false)
+              }
+            }}
+            aria-label="Note id"
+          />
+        ) : (
           <button
             type="button"
             className={`tag-pill note-identity-tab${isProvisionalId ? ' is-auto-assigned' : ''}`}
@@ -96,7 +158,10 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
             onContextMenu={(event: MouseEvent<HTMLButtonElement>) => {
               event.preventDefault()
               if (!identityNoteId) return
-              startEditingTabId(identityNoteId)
+              // A provisional id was never chosen by the user, so start empty
+              // rather than making them clear it first.
+              setNoteIdDraft(isProvisionalId ? '' : (identityNote?.assignedId ?? ''))
+              setIsEditingNoteId(true)
             }}
             data-tooltip={identityNoteId
               ? (isProvisionalId
@@ -106,7 +171,7 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
           >
             <span className={`tag-pill-label${isAssigned ? '' : ' tag-pill-label-derived'}`}>{identityLabel}</span>
           </button>
-        </InlinePillOrInput>
+        )}
       </div>
 
       <div className="tab-mode-shell" role="group" aria-label="Tag manager">

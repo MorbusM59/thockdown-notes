@@ -1938,6 +1938,7 @@ export function EditorSection({
             activeNoteId={activeNoteId}
             identityNoteId={menuIdentityNoteId}
             notes={notes}
+            updateNoteAssignedId={updateNoteAssignedId}
           />
         )}
         isViewingTimelessNote={isViewingTimelessNote}

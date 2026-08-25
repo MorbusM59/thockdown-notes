@@ -312,7 +312,8 @@
    browser's own native single-line-field height regardless of min-height,
    since that's already taller than --ui-pill-bar-size at this font-size --
    only an explicit height (not min-height) actually overrides it. */
-.tag-pill.section-identity-input {
+.tag-pill.section-identity-input,
+.tag-pill.note-identity-input {
   min-width: 120px;
   max-width: 120px;
   height: var(--ui-pill-bar-size);

@@ -3,6 +3,7 @@ import type { Dispatch, DragEvent, KeyboardEvent, MouseEvent, MutableRefObject, 
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { NoteTabEntry } from '../shared/tabs'
 import { PROTECTED_TAGS, normalizeTagName, isProtectedTagName, isExternalTagName } from '../shared/tags'
+import { isAutoAssignedId } from '../shared/assignedIds'
 import { NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload } from '../shared/noteDrag'
 import { useInlinePillEdit } from '../shared/useInlinePillEdit'
 
@@ -720,7 +721,10 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
 
   const startEditingTabId = useCallback((noteId: string) => {
     const note = notes.find((entry) => entry.id === noteId)
-    startTabIdEdit(noteId, note?.assignedId ?? '')
+    // A provisional id (NOTE-#n) is not something the user chose, so editing
+    // starts from empty rather than making them clear it first. A real id is
+    // prefilled, since editing one is usually a tweak, not a replacement.
+    startTabIdEdit(noteId, isAutoAssignedId(note?.assignedId) ? '' : (note?.assignedId ?? ''))
     // Defensive: a tab already primed for unpin (from a previous hold)
     // shouldn't resurface that styling/confirm-click right after a rename.
     setUnpinPrimedTabNoteId((previous) => (previous === noteId ? null : previous))
