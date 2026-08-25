@@ -676,7 +676,10 @@
   transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: 1;
-  opacity: 0.6;
+  /* Full strength, matching the "new note"/"new chapter" create pills: they
+     share this exact colour already, and fading this one made the same token
+     read as a different, weaker one right next to them. */
+  opacity: 1;
   font-size: calc(var(--btn-icon-size) - 5px);
   color: var(--color-text-80);
 }
