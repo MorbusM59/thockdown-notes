@@ -86,6 +86,12 @@ The goal is deterministic behavior with one source of truth per interaction phas
 - Boundary detection must use authoritative caret geometry for arming decisions.
 - Ambiguous geometry must never promote a boundary state.
 
+## Rules for User-Facing Text
+- **A tooltip is user information, never code commentary.** It says what the control does or why it is unavailable, in the reader's terms, and stops. Mechanism, architecture, rationale, and the design reasoning behind a restriction belong in the code comment next to the implementation -- where the person who needs them is actually looking -- not in the one line a user reads mid-task.
+- Concretely: "The User Guide cannot be modified." is complete. "The User Guide is read-only -- it ships with the app and updates itself" is a note to a developer wearing a tooltip's clothes, and it costs the reader time to work out that none of it changes what they can do.
+- The test: would this sentence still make sense to someone who does not know the app has a database, a main process, or a seeding step? If not, it is commentary. Move it into the code and write the user a shorter sentence.
+- This applies equally to `aria-label`, placeholder text, empty-state copy, and confirmation prompts. Being thorough in the wrong register reads as noise, not care.
+
 ## Rules for Note Activation and Switching
 - Note creation and activation must be atomic from the user perspective.
 - Active note identity must drive editor instance ownership.

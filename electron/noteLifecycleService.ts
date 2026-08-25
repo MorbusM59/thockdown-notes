@@ -22,6 +22,7 @@ import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitizat
 import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine, formatOutlineRootTitleLine, headingsChanged, parseMarkdownHeading, stripMarkdownInlineFormatting } from '../src/shared/tableOfContentsText';
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, findOpenItemSourceAtLine, parseOpenItemsGroups, toggleChecklistItemByText } from '../src/shared/openItemsText';
 import { resolveIdentityLabel } from '../src/shared/tabLabels';
+import { isSealedNoteId } from '../src/shared/helpGuide';
 import { formatInternalNoteLink } from '../src/shared/internalNoteLinks';
 import type { ChapterEntry, DatabaseService, NoteRecord } from './databaseService';
 
@@ -1250,6 +1251,16 @@ export class NoteLifecycleService {
    */
   async setNoteTimeless(input: { id: string; value: boolean }): Promise<NoteSummary | null> {
     const rootNoteId = this.databaseService.getChapterParent(input.id) ?? input.id;
+    // A sealed family (the built-in User Guide) can never be unfrozen from
+    // here. This is the whole hard-protection mechanism: writes are already
+    // rejected while frozen, so refusing the unfreeze is what makes the
+    // document permanently read-only rather than merely frozen-by-default.
+    // Enforced in the main process, not just by a disabled button, so it holds
+    // regardless of what the renderer sends.
+    if (!input.value && (isSealedNoteId(rootNoteId) || isSealedNoteId(input.id))) {
+      const sealedRecord = this.databaseService.getNoteRecord(input.id);
+      return sealedRecord ? this.readSummary(sealedRecord) : null;
+    }
     if (input.value) {
       this.databaseService.freezeNoteFamily(rootNoteId);
     } else {

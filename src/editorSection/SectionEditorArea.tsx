@@ -12,6 +12,7 @@ import type { NoteSummary } from '../shared/noteLifecycle'
 import type { ChapterEntry } from '../shared/chapters'
 import { resolveSpellCheckSurfaceState } from '../shared/spellCheckPolicy'
 import { ChapterBar } from '../chapters/ChapterBar'
+import { isSealedNoteId } from '../shared/helpGuide'
 import type { ChapterPillSplitArm } from '../chapters/useChapterPillActions'
 import { EscapeHoldPanel } from './EscapeHoldPanel'
 
@@ -241,6 +242,11 @@ export function SectionEditorArea({
   toggleTagBarMode,
   tagBar,
 }: SectionEditorAreaProps) {
+  // Sealed: shipped documentation the user reads but never edits -- see
+  // isSealedNoteId. Checked against the note's family identity, so every
+  // chapter of the guide is sealed too, not just its root.
+  const isSealedNote = isSealedNoteId(menuIdentityNoteId) || isSealedNoteId(activeNoteId)
+
   const setStageEl = useCallback((el: HTMLDivElement | null) => {
     (editorStageRef as MutableRefObject<HTMLDivElement | null>).current = el
     sectionContainerRef.current = el
@@ -498,9 +504,18 @@ export function SectionEditorArea({
             <button
               type="button"
               className={`chapter-toggle-button btn-icon${isViewingTimelessNote ? ' is-active' : ''}`}
-              aria-label={isViewingTimelessNote ? 'Unfreeze this note' : 'Freeze this note in time'}
+              aria-label={isSealedNote
+                ? 'This document is read-only'
+                : (isViewingTimelessNote ? 'Unfreeze this note' : 'Freeze this note in time')}
               aria-pressed={isViewingTimelessNote}
-              data-tooltip={isViewingTimelessNote ? 'Unfreeze this note' : 'Freeze this note in time (read-only, no history)'}
+              // A sealed document (the built-in User Guide) can never be
+              // unfrozen -- the main process refuses it too, so this is the
+              // honest presentation of a rule that holds either way rather
+              // than the rule itself.
+              disabled={isSealedNote}
+              data-tooltip={isSealedNote
+                ? 'The User Guide cannot be modified'
+                : (isViewingTimelessNote ? 'Unfreeze this note' : 'Freeze this note in time (read-only, no history)')}
               onClick={() => { void onToggleTimeless() }}
             >
               <span className="fa-solid fa-snowflake" aria-hidden="true" />

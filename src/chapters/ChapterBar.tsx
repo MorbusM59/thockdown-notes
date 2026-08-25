@@ -243,7 +243,14 @@ export function ChapterBar({
           is showing -- the same "leading button names the bar" convention the
           tab bar and the chapter strip already use. Tags live HERE, not on the
           tab bar, because a tag is strictly per note: it has no meaning at the
-          level of a collection of notes. */}
+          level of a collection of notes.
+
+          Omitted entirely while the family is frozen, alongside the
+          collapse/extract buttons below: every control this bar offers exists
+          to CHANGE something, and a frozen note's tags, id, and structure are
+          all immutable (databaseService's assertNotTimeless). Showing them
+          dead would be offering an action that cannot happen. */}
+      {!isLocked ? (
       <button
         type="button"
         className={`btn-icon chapter-auto-button${isTagBarMode ? ' is-active' : ''}`}
@@ -254,8 +261,11 @@ export function ChapterBar({
       >
         <span className="fa-solid fa-tags" aria-hidden="true" />
       </button>
+      ) : null}
 
-      {isTagBarMode ? tagBar : (<>
+      {/* A frozen family always shows its chapters: with the toggle gone there
+          would be no way back out of the tag bar otherwise. */}
+      {isTagBarMode && !isLocked ? tagBar : (<>
       {autoOpenItemsChapter ? (() => {
         const isActive = autoOpenItemsChapter.chapterNoteId === activeNoteId
         const note = notes.find((entry) => entry.id === autoOpenItemsChapter.chapterNoteId)

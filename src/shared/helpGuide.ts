@@ -49,3 +49,23 @@ export const HELP_GUIDE_NOTE_IDS: ReadonlySet<string> = new Set([
   HELP_GUIDE_AUTO_TOC_ID,
   ...HELP_GUIDE_CHAPTER_IDS.map((entry) => entry.noteId),
 ])
+
+/**
+ * A SEALED note: shipped documentation the app owns and the user reads, never
+ * edits. Distinct from the ordinary frozen/timeless state, which is a user
+ * choice they can undo at will -- sealing cannot be lifted from the UI at all.
+ *
+ * The protection is one rule, enforced where the user can actually reach:
+ * `setNoteTimeless` refuses to unfreeze a sealed family. Writes are already
+ * impossible while a family is frozen (databaseService's assertNotTimeless),
+ * so making the unfreeze unreachable is what turns "frozen" into "read-only,
+ * permanently". The seeding path in electron/help/helpGuideNote.ts calls the
+ * database's own freeze/unfreeze primitives directly and is deliberately NOT
+ * subject to this -- shipping a corrected guide has to keep working.
+ */
+export const SEALED_ROOT_NOTE_IDS: readonly string[] = [HELP_GUIDE_ROOT_ID]
+
+export function isSealedNoteId(noteId: string | null | undefined): boolean {
+  if (!noteId) return false
+  return HELP_GUIDE_NOTE_IDS.has(noteId)
+}

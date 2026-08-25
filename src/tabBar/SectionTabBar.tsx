@@ -343,7 +343,7 @@ export function SectionTabBar({
             </div>
           </div>
         </div>
-      ) : (
+
       {/* Edit/render toggle -- a per-slot control, so it lives here at the
           slot's own edge rather than in the chapter bar (which speaks for one
           note's internals). Active means edit mode, so a note that can't leave

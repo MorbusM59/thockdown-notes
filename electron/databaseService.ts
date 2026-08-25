@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
 import { buildNextAutoAssignedId, buildNextAutoChapterId, normalizeAssignedIdInput } from '../src/shared/assignedIds';
+import { SEALED_ROOT_NOTE_IDS } from '../src/shared/helpGuide';
 import { ensureHelpNote } from './help/helpNote';
 import { shouldVacuumForBloat } from './databaseSanitationPolicy';
 import type { TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../src/shared/textures';
@@ -999,9 +1000,10 @@ export class DatabaseService {
    *    VACUUM doesn't touch any row's content -- it only repacks how the
    *    existing, already-correct rows are laid out on disk.
    */
-  sanitizeDatabase(): { dedupedFtsRows: number; backfilledNoteIds: number; vacuumed: boolean; reclaimedBytes: number } {
+  sanitizeDatabase(): { dedupedFtsRows: number; backfilledNoteIds: number; resealedFamilies: number; vacuumed: boolean; reclaimedBytes: number } {
     const db = this.requireDb();
 
+    const resealedFamilies = this.resealSealedFamilies();
     const backfilledNoteIds = this.backfillMissingNoteAssignedIds();
 
     const dedupedFtsRows = db.prepare(`
@@ -1023,7 +1025,32 @@ export class DatabaseService {
       vacuumed = true;
     }
 
-    return { dedupedFtsRows, backfilledNoteIds, vacuumed, reclaimedBytes };
+    return { dedupedFtsRows, backfilledNoteIds, resealedFamilies, vacuumed, reclaimedBytes };
+  }
+
+  /**
+   * Re-freezes any sealed family (the built-in User Guide) that isn't frozen.
+   *
+   * The seal makes unfreezing unreachable, but that only holds a document
+   * that is already frozen. A database where the guide was unfrozen *before*
+   * the seal existed would otherwise stay editable forever -- the guard
+   * refuses to unfreeze it, and nothing ever puts it back. Found exactly that
+   * way: a guide unfrozen during testing was permanently stuck open.
+   *
+   * Runs on every startup rather than as a migration, so it also repairs a
+   * database that reaches this state any other way (a restore from an older
+   * backup, a copy from another install, direct SQL).
+   */
+  private resealSealedFamilies(): number {
+    let resealed = 0;
+    for (const rootNoteId of SEALED_ROOT_NOTE_IDS) {
+      const record = this.getNoteRecord(rootNoteId);
+      if (!record || record.isTimeless) continue;
+      this.freezeNoteFamily(rootNoteId);
+      resealed += 1;
+      console.warn('[db] re-sealed a document that was left unfrozen', { rootNoteId });
+    }
+    return resealed;
   }
 
   /**
