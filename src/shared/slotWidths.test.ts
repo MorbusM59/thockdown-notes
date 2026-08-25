@@ -1,48 +1,48 @@
 import { describe, expect, it } from 'vitest'
 import {
   computeSectionWidthsForClose,
-  computeSectionWidthsForCloseFlexAware,
+  computeSlotWidthsForCloseFlexAware,
   computeSectionWidthsForNewSection,
-  computeSectionWidthsForNewSectionFlexAware,
+  computeSlotWidthsForNewSlotFlexAware,
   computeSlotWidthsPx,
-} from './sectionWidths'
+} from './slotWidths'
 
 describe('computeSectionWidthsForNewSection', () => {
   it('splits the source section in half when it is larger than twice the minimum', () => {
-    const { updatedWidths, newSectionWidthPx } = computeSectionWidthsForNewSection(
+    const { updatedWidths, newSlotWidthPx } = computeSectionWidthsForNewSection(
       [{ id: 'a', widthPx: 700 }, { id: 'b', widthPx: 500 }],
       'a',
       300,
       8,
     )
     expect(updatedWidths).toEqual([{ id: 'a', widthPx: 346 }, { id: 'b', widthPx: 500 }])
-    expect(newSectionWidthPx).toBe(346)
+    expect(newSlotWidthPx).toBe(346)
   })
 
   it('gives the source section the odd px when an uneven split cannot be exact', () => {
-    const { updatedWidths, newSectionWidthPx } = computeSectionWidthsForNewSection(
+    const { updatedWidths, newSlotWidthPx } = computeSectionWidthsForNewSection(
       [{ id: 'a', widthPx: 701 }, { id: 'b', widthPx: 500 }],
       'a',
       300,
       8,
     )
     expect(updatedWidths).toEqual([{ id: 'a', widthPx: 347 }, { id: 'b', widthPx: 500 }])
-    expect(newSectionWidthPx).toBe(346)
+    expect(newSlotWidthPx).toBe(346)
   })
 
   it('falls back to minimal funding when the source is not large enough to split in half', () => {
-    const { updatedWidths, newSectionWidthPx } = computeSectionWidthsForNewSection(
+    const { updatedWidths, newSlotWidthPx } = computeSectionWidthsForNewSection(
       [{ id: 'a', widthPx: 607 }, { id: 'b', widthPx: 500 }],
       'a',
       300,
       8,
     )
     expect(updatedWidths).toEqual([{ id: 'a', widthPx: 300 }, { id: 'b', widthPx: 499 }])
-    expect(newSectionWidthPx).toBe(300)
+    expect(newSlotWidthPx).toBe(300)
   })
 
   it('cascades to other sections, capping any that would drop below minimum, per the worked example', () => {
-    const { updatedWidths, newSectionWidthPx } = computeSectionWidthsForNewSection(
+    const { updatedWidths, newSlotWidthPx } = computeSectionWidthsForNewSection(
       [
         { id: 'source', widthPx: 500 },
         { id: 'a', widthPx: 310 },
@@ -61,9 +61,9 @@ describe('computeSectionWidthsForNewSection', () => {
     // Total width conserved: whatever was taken from existing sections plus
     // the new divider equals exactly what the new section ends up with.
     const totalBefore = 500 + 310 + 400 + 600
-    const totalAfter = byId.source + byId.a + byId.b + byId.c + newSectionWidthPx + 8
+    const totalAfter = byId.source + byId.a + byId.b + byId.c + newSlotWidthPx + 8
     expect(totalAfter).toBe(totalBefore)
-    expect(newSectionWidthPx).toBeGreaterThanOrEqual(300)
+    expect(newSlotWidthPx).toBeGreaterThanOrEqual(300)
   })
 
   it('never drops any existing section below the minimum width', () => {
@@ -255,9 +255,9 @@ describe('computeSlotWidthsPx', () => {
   })
 })
 
-describe('computeSectionWidthsForNewSectionFlexAware', () => {
+describe('computeSlotWidthsForNewSlotFlexAware', () => {
   it('halves a flexible source section exactly like the legacy split', () => {
-    const { updatedWidths, newSectionWidthPx } = computeSectionWidthsForNewSectionFlexAware(
+    const { updatedWidths, newSlotWidthPx } = computeSlotWidthsForNewSlotFlexAware(
       [{ id: 'a', widthPx: 700 }, { id: 'b', widthPx: 500 }],
       'a',
       new Set(),
@@ -265,11 +265,11 @@ describe('computeSectionWidthsForNewSectionFlexAware', () => {
       8,
     )
     expect(updatedWidths).toEqual([{ id: 'a', widthPx: 346 }, { id: 'b', widthPx: 500 }])
-    expect(newSectionWidthPx).toBe(346)
+    expect(newSlotWidthPx).toBe(346)
   })
 
   it('halves the right neighbor when the source is fixed but the right neighbor is flexible', () => {
-    const { updatedWidths, newSectionWidthPx } = computeSectionWidthsForNewSectionFlexAware(
+    const { updatedWidths, newSlotWidthPx } = computeSlotWidthsForNewSlotFlexAware(
       [{ id: 'a', widthPx: 700 }, { id: 'b', widthPx: 700 }],
       'a',
       new Set(['a']),
@@ -277,11 +277,11 @@ describe('computeSectionWidthsForNewSectionFlexAware', () => {
       8,
     )
     expect(updatedWidths).toEqual([{ id: 'a', widthPx: 700 }, { id: 'b', widthPx: 346 }])
-    expect(newSectionWidthPx).toBe(346)
+    expect(newSlotWidthPx).toBe(346)
   })
 
   it('consumes equal parts from all flexible sections when no adjacent section is flexible', () => {
-    const { updatedWidths, newSectionWidthPx } = computeSectionWidthsForNewSectionFlexAware(
+    const { updatedWidths, newSlotWidthPx } = computeSlotWidthsForNewSlotFlexAware(
       [
         { id: 'flexLeft', widthPx: 700 },
         { id: 'fixedSource', widthPx: 400 },
@@ -299,21 +299,21 @@ describe('computeSectionWidthsForNewSectionFlexAware', () => {
     expect(byId.fixedRight).toBe(400)
     expect(byId.flexLeft).toBeCloseTo(byId.flexRight)
     // New section joins the flexible pool as an equal member: 1400 / 3.
-    expect(newSectionWidthPx).toBeCloseTo(466, 0)
+    expect(newSlotWidthPx).toBeCloseTo(466, 0)
     const totalBefore = 700 + 400 + 400 + 700
-    expect(byId.flexLeft + byId.fixedSource + byId.fixedRight + byId.flexRight + newSectionWidthPx + 8)
+    expect(byId.flexLeft + byId.fixedSource + byId.fixedRight + byId.flexRight + newSlotWidthPx + 8)
       .toBeCloseTo(totalBefore)
   })
 
   it('falls back to the legacy proportional split when everything is fixed', () => {
     const widthsPx = [{ id: 'a', widthPx: 700 }, { id: 'b', widthPx: 500 }]
-    const flexAware = computeSectionWidthsForNewSectionFlexAware(widthsPx, 'a', new Set(['a', 'b']), 300, 8)
+    const flexAware = computeSlotWidthsForNewSlotFlexAware(widthsPx, 'a', new Set(['a', 'b']), 300, 8)
     const legacy = computeSectionWidthsForNewSection(widthsPx, 'a', 300, 8)
     expect(flexAware).toEqual(legacy)
   })
 
   it('never drops a flexible donor below the minimum width', () => {
-    const { updatedWidths } = computeSectionWidthsForNewSectionFlexAware(
+    const { updatedWidths } = computeSlotWidthsForNewSlotFlexAware(
       [
         { id: 'small', widthPx: 320 },
         { id: 'fixedSource', widthPx: 400 },
@@ -331,7 +331,7 @@ describe('computeSectionWidthsForNewSectionFlexAware', () => {
   })
 })
 
-describe('computeSectionWidthsForCloseFlexAware', () => {
+describe('computeSlotWidthsForCloseFlexAware', () => {
   const widthsPx = [
     { id: 'a', widthPx: 400 },
     { id: 'b', widthPx: 300 },
@@ -339,17 +339,17 @@ describe('computeSectionWidthsForCloseFlexAware', () => {
   ]
 
   it('gives the freed width to a flexible left neighbor', () => {
-    const result = computeSectionWidthsForCloseFlexAware(widthsPx, 'b', new Set())
+    const result = computeSlotWidthsForCloseFlexAware(widthsPx, 'b', new Set())
     expect(result).toEqual([{ id: 'a', widthPx: 700 }, { id: 'c', widthPx: 500 }])
   })
 
   it('gives the freed width to the right neighbor when the left one is fixed', () => {
-    const result = computeSectionWidthsForCloseFlexAware(widthsPx, 'b', new Set(['a']))
+    const result = computeSlotWidthsForCloseFlexAware(widthsPx, 'b', new Set(['a']))
     expect(result).toEqual([{ id: 'a', widthPx: 400 }, { id: 'c', widthPx: 800 }])
   })
 
   it('splits the freed width equally across all flexible sections when both neighbors are fixed', () => {
-    const result = computeSectionWidthsForCloseFlexAware(
+    const result = computeSlotWidthsForCloseFlexAware(
       [
         { id: 'flex1', widthPx: 400 },
         { id: 'fixedLeft', widthPx: 400 },
@@ -368,7 +368,7 @@ describe('computeSectionWidthsForCloseFlexAware', () => {
   })
 
   it('falls back to the left neighbor when every remaining section is fixed', () => {
-    const result = computeSectionWidthsForCloseFlexAware(widthsPx, 'b', new Set(['a', 'c']))
+    const result = computeSlotWidthsForCloseFlexAware(widthsPx, 'b', new Set(['a', 'c']))
     expect(result).toEqual([{ id: 'a', widthPx: 700 }, { id: 'c', widthPx: 500 }])
   })
 })

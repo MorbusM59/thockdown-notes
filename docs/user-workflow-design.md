@@ -82,7 +82,11 @@ Each step is *by extension* of the one before. The user never targets a section 
 
 **Placement follows scope.** A control belongs to the bar of the thing it acts on: per-slot controls sit at the slot's own edge in the tab bar, per-note-internals controls in the chapter bar. The edit/render toggle is the worked example — it's a property of the slot, not of one note's structure, so it moved out of the chapter bar to the tab bar's right edge, beside the add-slot `+`. The two then read together as slot-level actions: *this is the writing window; that makes another one.* Placement is doing the teaching that a tooltip otherwise has to.
 
-**Naming rule going forward.** New identifiers, comments, tooltips, and docs use "slot" for the container and "section" for the tab collection, never as loose synonyms. When touching code in this area, fix the vocabulary in what you're already editing — this is a running cleanup, not a migration project.
+**Naming rule.** Anything meaning the CONTAINER says `slot` — identifiers, comments, tooltips, docs. That pass is done: `isLeftmostSlot`, `canCreateSlot`, `onCreateSlot`, `onCloseSlot`, `handleCreateSlot`, `handleCloseSlot`, `SLOT_MIN_WIDTH_PX`, `slotsRowWidthPx`, and all of `shared/slotWidths.ts` — formerly `sectionWidths.ts`, which was pure slot geometry living under a collection's name.
+
+**What `section` still means in code, and why.** The tab collection. The user-facing word for that is **collection**: "section" told a reader nothing, naming neither what it holds nor where it goes. The code keeps `section` for it because the name is welded into the schema (`editor_sections`), the IPC channels (`sections:list`), and the stylesheet (`.section-identity-tab`, `.section-picker-item`) — renaming that is a migration, not a rename, and worth doing only deliberately.
+
+So: **slot** wherever the container is meant, **section** in code and **collection** in anything a user reads. A UI string that says "section" is a bug.
 
 **Known muddles in current code** (verified; fix opportunistically):
 - `EditorSectionEntry`'s JSDoc opens with "One side-by-side editor pane" — that's a slot's description written on the section type. It should describe a tab collection.

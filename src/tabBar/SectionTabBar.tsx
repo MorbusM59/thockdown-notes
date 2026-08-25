@@ -7,9 +7,9 @@ import { TEMP_TAB_PIN_HOLD_MS, type UseSectionTabsResult } from './useSectionTab
 
 export interface SectionTabBarProps {
   tabs: UseSectionTabsResult
-  /** This section's own tab-bar strip element -- scopes the "click outside drops the tag bar back to the tab bar" listener to this section only. */
+  /** This slot's own tab-bar strip element -- scopes the "click outside drops the tag bar back to the tab bar" listener to this slot only. */
   tabbarGridRef: RefObject<HTMLElement>
-  /** Only the leftmost section shows this button at all; every other section shows a close button here instead. */
+  /** Only the leftmost slot shows this button at all; every other slot shows a close button here instead. */
   isSidebarVisible: boolean
   toggleSidebarVisible: () => void
   persistenceReady: boolean
@@ -17,20 +17,20 @@ export interface SectionTabBarProps {
   /** Which pinned-tab pill to highlight as active -- the chapter-aware identity (see useSectionTabs.ts's `tabIdentityNoteId`), not necessarily `activeNoteId` itself. */
   tabIdentityNoteId: string | null
   notes: NoteSummary[]
-  /** The leftmost section keeps the sidebar toggle at the left edge; every other section shows a close button there instead. */
-  isLeftmostSection: boolean
-  /** Whether there's room for one more 300px-minimum section -- hides the "+" button when there isn't. */
-  canCreateSection: boolean
+  /** The leftmost slot keeps the sidebar toggle at the left edge; every other slot shows a close button there instead. */
+  isLeftmostSlot: boolean
+  /** Whether there's room for one more 300px-minimum slot -- hides the "+" button when there isn't. */
+  canCreateSlot: boolean
   /** This slot's current view -- drives the edit/render toggle left of the add-slot "+" (active == edit mode). */
   isPreviewMode: boolean
   /** True while what's loaded is hard-locked to render view (auto-TOC, Open Items, or a timeless note -- EditorSection.tsx's isForcedPreviewNote). The toggle shows inactive and disabled then, rather than claiming a mode the note can't leave. */
   isForcedPreviewNote: boolean
   /** Flips this slot between edit and render view. */
   onToggleRenderViewMode: () => void
-  /** Creates a new section immediately to the right of this one. */
-  onCreateSection: () => void
-  /** Closes this section's slot (only ever called for non-leftmost sections). */
-  onCloseSection: () => void
+  /** Opens a new slot immediately to the right of this one. */
+  onCreateSlot: () => void
+  /** Closes this slot (only ever called for non-leftmost slots). */
+  onCloseSlot: () => void
   /** The tab strip's own leading "+" pill: creates a brand-new note and pins it as this section's rightmost tab. Always rendered in tabs mode, even with zero tabs currently pinned. */
   onCreateNote: () => void | Promise<void>
 
@@ -87,13 +87,13 @@ export function SectionTabBar({
   activeNoteId,
   tabIdentityNoteId,
   notes,
-  isLeftmostSection,
-  canCreateSection,
+  isLeftmostSlot,
+  canCreateSlot,
   isPreviewMode,
   isForcedPreviewNote,
   onToggleRenderViewMode,
-  onCreateSection,
-  onCloseSection,
+  onCreateSlot,
+  onCloseSlot,
   onCreateNote,
   sectionName,
   isEditingSectionName,
@@ -149,7 +149,7 @@ export function SectionTabBar({
       className="tabbar-grid"
       aria-label="Tab bar"
     >
-      {isLeftmostSection ? (
+      {isLeftmostSlot ? (
         <button
           type="button"
           className={`btn-icon sidebar-toggle${isSidebarVisible ? ' is-active' : ''}`}
@@ -163,9 +163,9 @@ export function SectionTabBar({
         <button
           type="button"
           className="btn-icon section-close-toggle"
-          data-tooltip="Close this section"
-          aria-label="Close this section"
-          onClick={onCloseSection}
+          data-tooltip="Close this slot"
+          aria-label="Close this slot"
+          onClick={onCloseSlot}
         >
           <span className="fa-solid fa-chevron-right" aria-hidden="true" />
         </button>
@@ -191,7 +191,7 @@ export function SectionTabBar({
                   onCancelSectionRename()
                 }
               }}
-              aria-label="Section name"
+              aria-label="Collection name"
             />
           ) : (
             <button
@@ -200,9 +200,9 @@ export function SectionTabBar({
               onClick={onIdentityClick}
               onContextMenu={onIdentityContextMenu}
               data-tooltip={
-                sectionName
-                  ? `Section: ${sectionName} -- click to swap in another named section, right-click to rename`
-                  : 'Unnamed section -- click to swap in a named section, right-click to name this section'
+                isShowingUndockedNote
+                  ? `Left click: Pick a collection to pin this note to.\nRight click: Close note and return to the collection ${sectionName ?? '···'}.`
+                  : 'Left click: Pick a collection of notes to load into this slot.\nRight click: Rename this collection of notes.'
               }
             >
               <span className="tag-pill-label">{isShowingUndockedNote ? '' : (sectionName ?? '···')}</span>
@@ -231,8 +231,8 @@ export function SectionTabBar({
                       type="button"
                       className="tag-pill section-picker-item section-picker-create"
                       onClick={onSectionPickerClearClick}
-                      data-tooltip="New section in this slot (no note, no tabs, no name)"
-                      aria-label="New section in this slot"
+                      data-tooltip="New collection in this slot (no note, no tabs, no name)"
+                      aria-label="New collection in this slot"
                     >
                       <span className="fa-solid fa-book" aria-hidden="true" />
                     </button>
@@ -247,7 +247,7 @@ export function SectionTabBar({
                       type="button"
                       className="tag-pill section-picker-item"
                       onClick={onDockUndockedNoteHere}
-                      data-tooltip={sectionName ? `Put this note in ${sectionName}` : 'Put this note in this section'}
+                      data-tooltip={sectionName ? `Put this note in ${sectionName}` : 'Put this note in this collection'}
                     >
                       <span className="tag-pill-label">{sectionName ?? '···'}</span>
                     </button>
@@ -274,7 +274,7 @@ export function SectionTabBar({
                   <div
                     className="tag-pill note-tab-pill create-pill"
                     aria-disabled={!persistenceReady}
-                    data-tooltip="New note in this section"
+                    data-tooltip="New note in this collection"
                     onClick={() => {
                       if (!persistenceReady) return
                       void onCreateNote()
@@ -400,13 +400,13 @@ export function SectionTabBar({
         <span className="fa-solid fa-pen-to-square" aria-hidden="true" />
       </button>
 
-      {canCreateSection ? (
+      {canCreateSlot ? (
         <button
           type="button"
           className="btn-icon section-create-toggle"
           data-tooltip="Add a slot"
           aria-label="Add a slot"
-          onClick={onCreateSection}
+          onClick={onCreateSlot}
         >
           <span className="fa-solid fa-plus" aria-hidden="true" />
         </button>

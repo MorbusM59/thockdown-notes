@@ -95,9 +95,9 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 > **Where?**
 > The lightbulb button in the window controls (top right, above Maximize), or the Help button in the Quick Actions Menu above — both do the same thing.
 
-*This page, opened as an ordinary (timeless, read-only) note in whichever section you triggered it from.*
+*This page, opened as an ordinary (timeless, read-only) note in whichever slot you triggered it from.*
 
-- Opens exactly like clicking any note in the sidebar does -- as a temporary tab, replacing whatever that section was showing. Leave it the same way too: pick another note, click a pinned tab, or open a different note from the sidebar. There's no dedicated close gesture any more.
+- Opens exactly like clicking any note in the sidebar does -- as a temporary tab, replacing whatever that slot was showing. Leave it the same way too: pick another note, click a pinned tab, or open a different note from the sidebar. There's no dedicated close gesture any more.
 - Browsable with the same chapter bar every note with chapters uses -- click a chapter pill to jump to it, or the bookmark icon for a full table of contents.
 - Always render-only: nothing here can be edited, renamed, tagged, archived, or deleted.
 
@@ -128,7 +128,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *A toggleable gutter: true (unwrapped) line numbers on the left, a review/warning flag column on the right, both fit into the editor's existing grid.*
 
-- Toggling is per open editor (split-view section) — each section remembers its own on/off state independently, and a freshly opened section always starts with it off. It's not tied to which note or chapter happens to be showing in that section.
+- Toggling is per open editor (split-view slot) — each slot remembers its own on/off state independently, and a freshly opened slot always starts with it off. It's not tied to which note or chapter happens to be showing in that slot.
 - Left-click toggles both columns together, based on whether line numbers are currently shown: off shows both, on hides both. Right-click toggles the review-flag column alone, leaving line numbers as they are.
 - Line numbers count actual Markdown source lines, not wrapped visual rows: a long wrapped line gets one number, shown beside its first row, with the rest of its rows left blank.
 - Click a line's box in the flag column to mark it for review (\`?\`); click again to escalate it to a warning (\`!\`); click again to go back to \`?\`. Either state tints the whole line (all of its wrapped rows) in the review or warning color. Right-click the box to clear the flag entirely — the only way to remove one.
@@ -191,7 +191,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Adding Tags](#adding-tags)
 
 > **Where?**
-> The tag input field in a section's tab bar, in tag-mode (toggle with the tag icon).
+> The tag input field in the chapter bar's tag view (toggle it with the tag icon at the bar's left edge).
 
 *Types and commits a tag onto the active note.*
 
@@ -268,58 +268,58 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 `,
   `## Split View & Tabs
 
-### [Creating a Section](#creating-a-section)
+### [Opening a Slot](#opening-a-slot)
 
 > **Where?**
 > The \`+\` button at the very right edge of any tab bar (not the leading \`+\` pill inside the tab strip itself — that one creates a note instead, see [Pinned and Temporary Tabs](#pinned-and-temporary-tabs)).
 
-*Splits the editor into an additional side-by-side section.*
+*Splits the editor into an additional side-by-side slot.*
 
-- Hidden once there's no more room for another 300px-minimum-wide section.
-- \`Alt+Left\` / \`Alt+Right\` step between sections directly -- Alt rather than Ctrl so it never collides with the editor's own word-jump caret navigation.
+- Hidden once there's no more room for another 300px-minimum-wide slot.
+- \`Alt+Left\` / \`Alt+Right\` step between slots directly -- Alt rather than Ctrl so it never collides with the editor's own word-jump caret navigation.
 
-### [Naming and Swapping Sections](#naming-and-swapping-sections)
+### [Naming and Swapping Collections](#naming-and-swapping-collections)
 
 > **Where?**
-> A section's identity tab, in tab-bar mode.
+> A collection's identity tab.
 
-*Gives a section a name so you can swap it in and out of any slot instead of recreating it.*
+*Gives a collection a name so you can swap it in and out of any slot instead of rebuilding it.*
 
-- Right-click the identity tab to name the current section.
-- Left-click a named section's identity tab to open a picker of every other named section — click one to swap it into this slot.
+- Right-click the identity tab to name the current collection.
+- Left-click the identity tab to open a picker of your other named collections — click one to swap it into this slot.
 - Right-click a candidate in that picker to delete it permanently; the leading \`···\` pill clears the current slot back to empty (no note, no tabs, no name).
 
-### [Closing a Section](#closing-a-section)
+### [Closing a Slot](#closing-a-slot)
 
 > **Where?**
-> The chevron button on the left edge of any non-leftmost section.
+> The chevron button on the left edge of any non-leftmost slot.
 
-*Removes a split-view section entirely.*
+*Closes a split-view slot entirely.*
 
-- The leftmost section shows the sidebar toggle in this spot instead, since it can't be closed.
+- The leftmost slot shows the sidebar toggle in this spot instead, since it can't be closed.
 
 ### [Tabs and Tags Mode](#tabs-and-tags-mode)
 
 > **Where?**
-> The tag icon next to the sidebar toggle, at the left of each section's tab bar.
+> The tag icon at the left edge of the chapter bar.
 
-*Switches a section's identity strip between showing its open-note tabs and its tag editor.*
+*Switches the chapter bar between a note's content structure (its chapters) and its metadata (its id and tags).*
 
-- The identity tab (section name / picker) only shows in tabs mode — tag mode uses that space for the tag input and assigned tags instead. To give the active note an id while in tag mode, switch back to tabs mode and right-click its tab (see [Assigning a Note Id]($HELP§INTERNAL-LINKING#assigning-a-note-id)).
+- Tags belong to a note, never to a collection or a chapter, which is why they live on this bar rather than the tab bar above it. The tag view also carries the note's own id button: right-click it to give the note an id of your own (see [Assigning a Note Id]($HELP§INTERNAL-LINKING#assigning-a-note-id)), or left-click it to fill the bar with suggested tags.
 
 ### [Pinned and Temporary Tabs](#pinned-and-temporary-tabs)
 
 > **Where?**
-> A section's tab bar, in tabs-mode.
+> A collection's tab bar.
 
-*Keeps one note open temporarily, or several open permanently, per section.*
+*Keeps one note open temporarily, or several open permanently, per collection.*
 
-- The leading \`+\` pill in the tab strip creates a brand-new note and pins it as this section's own rightmost tab in one step — the quickest way to attach a fresh note to whichever section you're looking at, active or not.
+- The leading \`+\` pill in the tab strip creates a brand-new note and pins it as this collection's own rightmost tab in one step — the quickest way to attach a fresh note to whichever collection you're looking at, active or not.
 - Clicking a note in the sidebar opens it as a single temporary tab (replacing any previous one). Its label is the note's own \`$id\` if you've assigned one (shown upright), or otherwise a short preview pulled live from the note's own first line (shown in italics, so the two never look alike) — never a placeholder minted on your behalf.
 - Holding the click past a short threshold pins it as a permanent tab instead, which stays open alongside others — pinning doesn't assign an id either, it's still whichever of the two labels above already applied.
 - A quick right-click on any tab (pinned or temporary) turns it into an editable field for that note's \`$id\` — same as [Assigning a Note Id]($HELP§INTERNAL-LINKING#assigning-a-note-id). Holding the right-click past a short threshold arms it for unpin/close instead; release early and it's a rename, hold it and a follow-up left-click confirms the close (move the pointer away to cancel either way).
 - Drag tabs to reorder them; drag a note from the sidebar directly into a tab bar to open it there.
-- Each tab remembers which chapter of its note you last had open, per section — switching away and clicking back returns you to that chapter, not always the parent's own base content. This is remembered per tab, not per note, so the same note pinned as a tab in two different sections can be resting on two different chapters at once.
+- Each tab remembers which chapter of its note you last had open, per collection — switching away and clicking back returns you to that chapter, not always the parent's own base content. This is remembered per tab, not per note, so the same note pinned as a tab in two different collections can be resting on two different chapters at once.
 
 ### [Chapters](#chapters)
 
@@ -329,11 +329,11 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *Splits a note into sub-notes, browsable from a bar of their own.*
 
 - The chapter bar is always showing for whatever note is open, with or without chapters yet -- there's no manual show/hide toggle, and no need to reach for the bottom utility bar just to start a note's first chapter. Either \`+\` (the chapter bar's own trailing pill, or the bottom utility bar's New Chapter action) creates a new empty chapter and switches straight to it. \`Shift+Alt+N\` does exactly the same thing from the keyboard.
-- The bar's leading icon buttons, before the tab strip, act on the section as a whole rather than on one chapter: an **edit/render toggle** (the pen icon, lit while you're in edit mode — the same switch \`Esc\` makes), then the auto-generated Table of Contents and Open Items chapters when they exist. On a note that's always rendered — an auto chapter, or a note frozen in time — the pen toggle sits unlit and unclickable, since there's no edit mode to switch to.
+- The bar's leading icon buttons, before the tab strip, act on the slot as a whole rather than on one chapter: an **edit/render toggle** (the pen icon, lit while you're in edit mode — the same switch \`Esc\` makes), then the auto-generated Table of Contents and Open Items chapters when they exist. On a note that's always rendered — an auto chapter, or a note frozen in time — the pen toggle sits unlit and unclickable, since there's no edit mode to switch to.
 - The chapter bar's first tab is always the parent note itself; every chapter follows in order. Click the parent tab or any chapter pill to switch between them — each keeps and saves its own text independently. Too many chapters to fit scrolls horizontally, fading at whichever edge has more off-screen, same as the tab bar.
 - Drag a chapter pill to reorder it among its siblings — same drag-and-drop as reordering pinned tabs or tags: drop directly on another pill to land in front of it, or on the bar's empty space to send it to the end.
 - The moment a note has its first chapter, an auto-generated **Table of Contents** chapter appears too — no button to press, it just shows up pinned first in the bar (before every real chapter, not draggable) and disappears again the moment the last real chapter does, the same automatic show/hide the chapter panel itself already does. It lists every heading across the parent and all of its chapters, each one a working link — always, whether or not the parent or any chapter has an assigned \`$id\`/\`§id\`, since it navigates internally rather than through the same link syntax you'd hand-type. Following one lands you in whichever mode you were already in: render view scrolls to the heading, edit mode puts the caret on it, ready to type. The parent's own title sits at the top, bold and unbulleted, apart from the list below it; every \`##\` heading after that — the parent's own, and each chapter's title — is a bullet at the same level, with that heading's own deeper headings nested under it. It's regenerated fresh every time you open it, so it's always accurate without costing anything while you're not looking at it — meaning it's also read-only (anything you tried to type would just be overwritten on your next visit) and opens straight into render view. Since it's a generated view rather than something you write, it has no [Time Machine Timeline]($HELP§TIME-MACHINE#time-machine-timeline) of its own — the present-state circle stays live while viewing it, but re-runs the same regeneration instead of taking a save point (see [Present-State Circle]($HELP§TIME-MACHINE#present-state-circle)).
-- An auto-generated **Open Items** chapter appears right after the Table of Contents (same pinned, non-draggable treatment) the moment any checklist item (\`- [ ]\`) anywhere in the parent or one of its chapters is unchecked, and disappears again once none are left anywhere in the family — including whenever the last real chapter itself disappears. It groups every open item under whichever heading it falls under, linked the same way the Table of Contents is — headings with nothing open under them are skipped entirely, so it's a pruned outline, not a full copy of every heading. Unlike the Table of Contents, it isn't regenerated on every visit: it only updates when a checklist item is actually created or its checked state flips, patching in just that one note's own section — so if you're looking at it in one editor while checking something off in another, it can go briefly stale until the next change anywhere in the family refreshes it, or until you click its present-state circle to force a full refresh on demand (see [Present-State Circle]($HELP§TIME-MACHINE#present-state-circle)). Same as the Table of Contents, it's read-only, has no Time Machine Timeline of its own, and opens straight into render view — but its own checkboxes are the one exception to "read-only": clicking one checks the real item off in its own source chapter without removing it from this list, so you can click it again to undo. The list itself doesn't update as you go — it only catches up (dropping anything actually checked off) the next time something elsewhere refreshes it, or when you force one with the present-state circle.
+- An auto-generated **Open Items** chapter appears right after the Table of Contents (same pinned, non-draggable treatment) the moment any checklist item (\`- [ ]\`) anywhere in the parent or one of its chapters is unchecked, and disappears again once none are left anywhere in the family — including whenever the last real chapter itself disappears. It groups every open item under whichever heading it falls under, linked the same way the Table of Contents is — headings with nothing open under them are skipped entirely, so it's a pruned outline, not a full copy of every heading. Unlike the Table of Contents, it isn't regenerated on every visit: it only updates when a checklist item is actually created or its checked state flips, patching in just that one note's own part — so if you're looking at it in one editor while checking something off in another, it can go briefly stale until the next change anywhere in the family refreshes it, or until you click its present-state circle to force a full refresh on demand (see [Present-State Circle]($HELP§TIME-MACHINE#present-state-circle)). Same as the Table of Contents, it's read-only, has no Time Machine Timeline of its own, and opens straight into render view — but its own checkboxes are the one exception to "read-only": clicking one checks the real item off in its own source chapter without removing it from this list, so you can click it again to undo. The list itself doesn't update as you go — it only catches up (dropping anything actually checked off) the next time something elsewhere refreshes it, or when you force one with the present-state circle.
 - A chapter is a full note in its own right — its own regular tags don't exist; tags always belong to the parent — but it doesn't appear on its own in Date/Category/Find, only through its one parent's chapter bar. The exceptions are Trash, once deleted, and Archive, once archived (see below for both). A chapter belongs to exactly one parent, ever, and a chapter can't have chapters of its own. Dragging a note from the sidebar onto the chapter bar copies its content into a brand-new chapter and switches you to it, same as creating one any other way — the dragged note itself is untouched and stays independent, not linked to the copy. Dropping it on the bar's empty space (or its trailing \`+\` pill) adds it as the last chapter; dropping it directly on an existing chapter pill instead inserts it right in front of that one. Every heading in the copy shifts down one level (\`#\` becomes \`##\`, and so on) so its own title-heading nests under the parent's instead of competing with it — the original note's headings are untouched.
 - While a chapter is open, its parent stays the one shown as active in the sidebar and the tab bar — the chapter bar itself shows which chapter you're in.
 - A chapter's fate is tied to its parent's: permanently deleting a parent note permanently deletes all of its chapters with it.
@@ -452,7 +452,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 > **Where?**
 > The bar directly above the editor, shared by the whole window.
 
-*One global toolbar that always acts on whichever section is currently active.*
+*One global toolbar that always acts on whichever slot is currently active.*
 
 - Left cluster: a split button pairing the dark-mode toggle (top) with double size (bottom), plus an export button that switches between PDF (preview mode) and Markdown (edit mode). Switching between edit and render view is done with Esc or the chapter bar's pen toggle (see [Chapters]($HELP§SPLIT-VIEW-TABS#chapters)); creating a note with Ctrl+N.
 - The rest of the bar holds the formatting group, always visible in both edit and render view.
@@ -466,7 +466,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - Bold, italic, strikethrough; heading levels H1–H3; bulleted, numbered, and checklist lists; blockquote; code block and inline code; horizontal rule; link insertion; table of contents.
 - The buttons resize themselves to the room the toolbar has: full-size squares on a single row whenever they all fit, and mini squares — wrapping onto a second row if they still don't fit — when they don't. Full-size, they carry the same glyph size and rounding as the chapter bar's own icon buttons, inset evenly from every edge of the toolbar. Nothing is ever dropped, and the toolbar keeps the same height either way, so widening or narrowing the window never shifts anything below it.
-- The group stays on screen in render view too, so the toolbar doesn't change shape when you flip modes. While a section is in render view, clicking any of these buttons switches that section to edit mode instead of formatting — it deliberately doesn't also apply the formatting, so a stray click on a rendered note can't quietly edit it. Click again once you're in edit mode to actually apply it. (On a chapter that's always rendered — an auto table of contents or Open Items — the buttons are disabled, since there's no edit mode to switch to.)
+- The group stays on screen in render view too, so the toolbar doesn't change shape when you flip modes. While a slot is in render view, clicking any of these buttons switches that slot to edit mode instead of formatting — it deliberately doesn't also apply the formatting, so a stray click on a rendered note can't quietly edit it. Click again once you're in edit mode to actually apply it. (On a chapter that's always rendered — an auto table of contents or Open Items — the buttons are disabled, since there's no edit mode to switch to.)
 - Each button reflects whether the current selection or line already has that formatting applied.
 - Most double as the keyboard shortcuts listed in [Keyboard Shortcuts]($HELP§SHORTCUTS).
 - A checklist item's box (\`- [ ]\`) can be toggled two ways once the caret sits between its brackets: type any character to check it off with that character (type a space to uncheck it again), or click the caret itself — with the caret already there and not moving — to flip \`[ ]\`/\`[X]\` without touching the keyboard.
@@ -581,7 +581,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 | \`Ctrl+F\` | Find in note |
 | \`Ctrl+H\` | Find & replace in note |
 | \`Ctrl+Enter\` (in find mode) | Replace all matches |
-| \`Alt+Left\` / \`Alt+Right\` | Previous / next section |
+| \`Alt+Left\` / \`Alt+Right\` | Previous / next slot |
 | \`Ctrl+Up\` / \`Ctrl+Down\` | Jump caret to start / end of document |
 | \`Ctrl+B\` | Bold |
 | \`Ctrl+I\` | Italic |
@@ -591,7 +591,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 | \`Ctrl+#\` (or \`Ctrl+Shift+3\`) | Toggle numbered list |
 | \`Ctrl+Z\` / \`Ctrl+Y\` | Undo / redo |
 
-- Shortcuts that touch the editor apply to whichever section is currently active.
+- Shortcuts that touch the editor apply to whichever slot is currently active.
 `,
   `## Window Controls
 
@@ -606,7 +606,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - **Minimize / Maximize–Restore / Close** — standard window controls.
 - **User Guide (lightbulb)** — the upper half of the split maximize button. Opens this guide, exactly like the Quick Actions Menu's own Help cell, see [The User Guide]($HELP§NOTES-EDITING#the-user-guide).
 - **Dark mode / Double size** — a split button in the toolbar's left cluster (not in this bar): the top half switches the whole app between light and dark presets, the bottom half is double size (2x). Double size doubles the app's page zoom and, to match, the window's minimum size, so 2x content gets 2x room instead of being squeezed into the same space. Toggling off relaxes the minimum again but doesn't shrink a window you've since resized larger. Persists across restarts.
-- **How small the window goes** is worked out from what actually has to fit rather than being a fixed number: across, the sidebar, the toolbar's formatting buttons at three groups of three per row, and this bar; down, enough of the Date view to show four note cards. Both scale with the spacing setting, so a roomier spacing raises the floor and a tighter one lowers it. Hiding the sidebar drops the width floor by the sidebar's own width, and each extra split-view section raises it once the sections need more room than the chrome does.
+- **How small the window goes** is worked out from what actually has to fit rather than being a fixed number: across, the sidebar, the toolbar's formatting buttons at three groups of three per row, and this bar; down, enough of the Date view to show four note cards. Both scale with the spacing setting, so a roomier spacing raises the floor and a tighter one lowers it. Hiding the sidebar drops the width floor by the sidebar's own width, and each extra split-view slot raises it once the slots need more room than the chrome does.
 - **Drag the toolbar or this top bar to move the window; double-click either to maximize/restore.** Dragging a maximized window from these areas restores it, ending up positioned under the cursor as if the drag had been followed the whole way. Dragging elsewhere in the app also moves the window, but won't restore it from maximized.
 `,
   `## Appearance & Settings

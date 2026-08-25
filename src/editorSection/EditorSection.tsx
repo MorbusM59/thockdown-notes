@@ -131,10 +131,10 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   viewSpacing: number
   viewLetterSpacingEm: number
 
-  isLeftmostSection: boolean
-  canCreateSection: boolean
-  onCreateSection: () => void
-  onCloseSection: () => void
+  isLeftmostSlot: boolean
+  canCreateSlot: boolean
+  onCreateSlot: () => void
+  onCloseSlot: () => void
   /** "Clear this section" from the section picker's leading pill: vacates this slot (parking/deleting the section per the usual close rules) and backfills it with a fresh blank section, without touching this section's own name/tabs/note. */
   onClearSection: () => void
 
@@ -229,10 +229,10 @@ export function EditorSection({
   borderRadiusRegularPx,
   spacingRegularPx,
   reduceVisualEffects,
-  isLeftmostSection,
-  canCreateSection,
-  onCreateSection,
-  onCloseSection,
+  isLeftmostSlot,
+  canCreateSlot,
+  onCreateSlot,
+  onCloseSlot,
   onClearSection,
   sectionName,
   onRenameSection,
@@ -1927,13 +1927,13 @@ export function EditorSection({
         activeNoteId={activeNoteId}
         tabIdentityNoteId={menuIdentityNoteId}
         notes={notes}
-        isLeftmostSection={isLeftmostSection}
-        canCreateSection={canCreateSection}
+        isLeftmostSlot={isLeftmostSlot}
+        canCreateSlot={canCreateSlot}
         isPreviewMode={isPreviewMode}
         isForcedPreviewNote={isForcedPreviewNote}
         onToggleRenderViewMode={toggleRenderViewMode}
-        onCreateSection={onCreateSection}
-        onCloseSection={onCloseSection}
+        onCreateSlot={onCreateSlot}
+        onCloseSlot={onCloseSlot}
         onCreateNote={handleCreateNoteInSection}
         sectionName={sectionName}
         isEditingSectionName={isEditingSectionName}

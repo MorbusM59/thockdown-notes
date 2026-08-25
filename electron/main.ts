@@ -161,7 +161,7 @@ const GRID_DIVIDER_PX = 8;
 // window's minimum width grows just enough that every open section can sit
 // at this width (see computeAppWindowMinWidthPx), so a section can never be
 // forced narrower than it's allowed to be just by resizing the window.
-const EDITOR_SECTION_MIN_WIDTH_PX = 300;
+const EDITOR_SLOT_MIN_WIDTH_PX = 300;
 const APP_WINDOW_MIN_WIDTH_PX = SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX + TOOLBAR_MIN_WIDTH_PX + WINDOW_CONTROLS_WIDTH_PX;
 
 // Both figures above (and APP_WINDOW_MIN_HEIGHT_PX) are the renderer's own
@@ -203,7 +203,7 @@ function computeAppWindowMinWidthPx(sidebarVisible: boolean, sectionCount: numbe
   const chromeMinWidth = sidebarVisible ? withSidebarPx : Math.max(200, withoutSidebarPx);
   const sections = Math.max(1, sectionCount);
   const sidebarColumnsPx = sidebarVisible ? withSidebarPx - withoutSidebarPx : 0;
-  const sectionsRowMinWidthPx = sections * EDITOR_SECTION_MIN_WIDTH_PX + (sections - 1) * GRID_DIVIDER_PX;
+  const sectionsRowMinWidthPx = sections * EDITOR_SLOT_MIN_WIDTH_PX + (sections - 1) * GRID_DIVIDER_PX;
   return Math.max(chromeMinWidth, sidebarColumnsPx + sectionsRowMinWidthPx);
 }
 

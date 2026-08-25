@@ -1,12 +1,12 @@
-export interface SectionWidthPx {
+export interface SlotWidthPx {
   id: string
   widthPx: number
 }
 
 /**
- * Distributes `neededPx` across `pool` (each section's own, fixed, original
+ * Distributes `neededPx` across `pool` (each slot's own, fixed, original
  * width -- never mutated across passes), proportionally by width, respecting
- * `minWidthPx` per section. A section that can't cover its proportional ask
+ * `minWidthPx` per slot. A slot that can't cover its proportional ask
  * without dropping below the minimum gives everything it has left instead
  * and drops out of the pool; whatever it couldn't cover (its own specific
  * shortfall, not the pool's overall remaining need) becomes the next pass's
@@ -14,7 +14,7 @@ export interface SectionWidthPx {
  * is met or the pool is exhausted (not enough total space -- callers are
  * expected to have already checked there's room before calling this).
  */
-function distributeAcrossPool(neededPx: number, pool: SectionWidthPx[], minWidthPx: number): Map<string, number> {
+function distributeAcrossPool(neededPx: number, pool: SlotWidthPx[], minWidthPx: number): Map<string, number> {
   const giveById = new Map<string, number>()
   let passTargetPx = neededPx
   let activeIds = new Set(pool.map((entry) => entry.id))
@@ -51,44 +51,44 @@ function distributeAcrossPool(neededPx: number, pool: SectionWidthPx[], minWidth
 }
 
 /**
- * Computes new widths for creating a section immediately to the right of
- * `sourceSectionId`. When the source section is larger than twice
+ * Computes new widths for creating a slot immediately to the right of
+ * `sourceSectionId`. When the source slot is larger than twice
  * `minWidthPx`, it's split evenly in half (minus the new divider) between
- * itself and the new section -- visually "splitting the pane." Otherwise,
- * falls back to funding the new section (plus the one new divider it
- * introduces) entirely from the source section first; only spills over to
- * the other sections, proportionally, if the source alone can't cover it
+ * itself and the new slot -- visually "splitting the pane." Otherwise,
+ * falls back to funding the new slot (plus the one new divider it
+ * introduces) entirely from the source slot first; only spills over to
+ * the other slots, proportionally, if the source alone can't cover it
  * without dropping below `minWidthPx`. If rounding overshoots the exact
- * amount needed, the new section simply ends up a few px larger rather than
- * shorting any existing section below its measured give -- total width is
+ * amount needed, the new slot simply ends up a few px larger rather than
+ * shorting any existing slot below its measured give -- total width is
  * always conserved exactly.
  */
 export function computeSectionWidthsForNewSection(
-  currentWidthsPx: SectionWidthPx[],
+  currentWidthsPx: SlotWidthPx[],
   sourceSectionId: string,
   minWidthPx: number,
   dividerWidthPx: number,
-): { updatedWidths: SectionWidthPx[]; newSectionWidthPx: number } {
+): { updatedWidths: SlotWidthPx[]; newSlotWidthPx: number } {
   const source = currentWidthsPx.find((entry) => entry.id === sourceSectionId)
   if (!source) {
-    return { updatedWidths: currentWidthsPx, newSectionWidthPx: minWidthPx }
+    return { updatedWidths: currentWidthsPx, newSlotWidthPx: minWidthPx }
   }
 
   if (source.widthPx >= 2 * minWidthPx + dividerWidthPx) {
     const splittableInnerPx = source.widthPx - dividerWidthPx
-    const newSectionWidthPx = Math.floor(splittableInnerPx / 2)
-    const sourceNewWidthPx = splittableInnerPx - newSectionWidthPx
+    const newSlotWidthPx = Math.floor(splittableInnerPx / 2)
+    const sourceNewWidthPx = splittableInnerPx - newSlotWidthPx
 
     const updatedWidths = currentWidthsPx.map((entry) => (
       entry.id === sourceSectionId ? { id: entry.id, widthPx: sourceNewWidthPx } : entry
     ))
 
-    return { updatedWidths, newSectionWidthPx }
+    return { updatedWidths, newSlotWidthPx }
   }
 
   // The new divider's fixed 8px comes out of the same pool as the new
-  // section's own minimum content width -- both are space the existing
-  // sections need to give up.
+  // slot's own minimum content width -- both are space the existing
+  // slots need to give up.
   const totalNeededPx = minWidthPx + dividerWidthPx
 
   const sourceGivePx = Math.max(0, Math.min(source.widthPx - minWidthPx, totalNeededPx))
@@ -106,18 +106,18 @@ export function computeSectionWidthsForNewSection(
   })
 
   const totalGivenPx = sourceGivePx + [...giveById.values()].reduce((sum, value) => sum + value, 0)
-  const newSectionWidthPx = Math.max(minWidthPx, totalGivenPx - dividerWidthPx)
+  const newSlotWidthPx = Math.max(minWidthPx, totalGivenPx - dividerWidthPx)
 
-  return { updatedWidths, newSectionWidthPx }
+  return { updatedWidths, newSlotWidthPx }
 }
 
 export interface SectionWidthWeight {
   id: string
   widthFraction: number | null
   /**
-   * Set when the user has "pinned" this section by shrinking it via a divider
-   * drag: the section holds exactly this width while the row can afford it,
-   * and window resizes are absorbed by the flexible (non-fixed) sections.
+   * Set when the user has "pinned" this slot by shrinking it via a divider
+   * drag: the slot holds exactly this width while the row can afford it,
+   * and window resizes are absorbed by the flexible (non-fixed) slots.
    */
   fixedWidthPx?: number | null
 }
@@ -185,7 +185,7 @@ function distributeProportionallyWithMinimum(
   return result
 }
 
-/** Normalized proportional weights for a set of sections, from their persisted fractions. */
+/** Normalized proportional weights for a set of slots, from their persisted fractions. */
 function resolveFractionWeights(entries: SectionWidthWeight[]): { id: string; weight: number }[] {
   const known = entries.filter((entry) => entry.widthFraction !== null && entry.widthFraction! > 0)
   const fallbackWeight = known.length > 0
@@ -198,25 +198,25 @@ function resolveFractionWeights(entries: SectionWidthWeight[]): { id: string; we
 }
 
 /**
- * Deterministically resolves each section slot's exact pixel width for the
+ * Deterministically resolves each slot slot's exact pixel width for the
  * current row width. This is the single sizing authority: slots render with
  * `flex: 0 0 <px>` from this result instead of letting the flex container
  * improvise, so structural changes (create/close/drag) and window resizes
  * all reduce to "recompute this pure function."
  *
  * Policy, in priority order:
- * - Once the row cannot fit `count * minWidthPx`, all sections share the row
+ * - Once the row cannot fit `count * minWidthPx`, all slots share the row
  *   equally (below minimum) rather than ever overflowing/clipping the row.
- * - Fixed sections (`fixedWidthPx` set) hold exactly their fixed width while
- *   the flexible sections can still cover the rest of the row at or above
+ * - Fixed slots (`fixedWidthPx` set) hold exactly their fixed width while
+ *   the flexible slots can still cover the rest of the row at or above
  *   `minWidthPx`. Window resizes are therefore absorbed by the flexible
- *   sections only.
- * - Flexible sections share the leftover proportionally by `widthFraction`
+ *   slots only.
+ * - Flexible slots share the leftover proportionally by `widthFraction`
  *   (weights need not sum to 1; they're normalized, and missing weights get
- *   the average of the known ones). Any flexible section whose share would
+ *   the average of the known ones). Any flexible slot whose share would
  *   fall below `minWidthPx` pins there while the rest keep absorbing.
- * - When every flexible section has bottomed out at the minimum, the fixed
- *   sections give up their pins and shrink proportionally to their fixed
+ * - When every flexible slot has bottomed out at the minimum, the fixed
+ *   slots give up their pins and shrink proportionally to their fixed
  *   widths (still respecting `minWidthPx`). Their `fixedWidthPx` is state
  *   owned by the caller and is deliberately not mutated here, so growing the
  *   row again restores them to exactly their fixed widths.
@@ -276,8 +276,8 @@ export function computeSlotWidthsPx(
     return result
   }
 
-  // Flexible sections have all bottomed out: they sit at the minimum and the
-  // fixed sections absorb the remaining shrink relative to their fixed
+  // Flexible slots have all bottomed out: they sit at the minimum and the
+  // fixed slots absorb the remaining shrink relative to their fixed
   // widths. (availablePx > count * minWidthPx guarantees the fixed pool still
   // has more than minWidthPx per member here.)
   const result = distributeProportionallyWithMinimum(
@@ -298,7 +298,7 @@ export function computeSlotWidthsPx(
  * are expected to have checked the pool's total capacity covers the amount.
  */
 function extractEqualPartsWithMinimum(
-  pool: SectionWidthPx[],
+  pool: SlotWidthPx[],
   amountPx: number,
   minWidthPx: number,
 ): Map<string, number> {
@@ -333,37 +333,37 @@ function extractEqualPartsWithMinimum(
 
 /**
  * Flex-aware variant of `computeSectionWidthsForNewSection`: funding for the
- * new slot deliberately spares fixed (user-pinned) sections.
+ * new slot deliberately spares fixed (user-pinned) slots.
  *
  * Policy, in priority order:
- * 1. Halve the flexible section adjacent to the new slot -- the source
- *    section (immediately left) first, then the source's old right neighbor
+ * 1. Halve the flexible slot adjacent to the new slot -- the source
+ *    slot (immediately left) first, then the source's old right neighbor
  *    -- when it's large enough to split and stay above `minWidthPx`.
- * 2. Otherwise consume space in equal parts from all flexible sections,
- *    wherever they sit: the new section targets `flexibleTotal / (k + 1)`
+ * 2. Otherwise consume space in equal parts from all flexible slots,
+ *    wherever they sit: the new slot targets `flexibleTotal / (k + 1)`
  *    (joining the flexible pool as an equal member -- with a single flexible
- *    section this degenerates to halving it), capped by what the pool can
+ *    slot this degenerates to halving it), capped by what the pool can
  *    give without any member dropping below `minWidthPx`.
- * 3. If there are no flexible sections at all, or the pool can't fund even a
- *    minimum-width section, fall back to the legacy proportional split
- *    across ALL sections -- fixed ones included; the caller is responsible
+ * 3. If there are no flexible slots at all, or the pool can't fund even a
+ *    minimum-width slot, fall back to the legacy proportional split
+ *    across ALL slots -- fixed ones included; the caller is responsible
  *    for updating any fixed widths it finds changed in the result.
  *
  * `currentWidthsPx` must be in visual left-to-right order.
  */
-export function computeSectionWidthsForNewSectionFlexAware(
-  currentWidthsPx: SectionWidthPx[],
+export function computeSlotWidthsForNewSlotFlexAware(
+  currentWidthsPx: SlotWidthPx[],
   sourceSectionId: string,
   fixedSectionIds: ReadonlySet<string>,
   minWidthPx: number,
   dividerWidthPx: number,
-): { updatedWidths: SectionWidthPx[]; newSectionWidthPx: number } {
+): { updatedWidths: SlotWidthPx[]; newSlotWidthPx: number } {
   const sourceIndex = currentWidthsPx.findIndex((entry) => entry.id === sourceSectionId)
   if (sourceIndex < 0) {
-    return { updatedWidths: currentWidthsPx, newSectionWidthPx: minWidthPx }
+    return { updatedWidths: currentWidthsPx, newSlotWidthPx: minWidthPx }
   }
 
-  const canHalve = (entry: SectionWidthPx) => entry.widthPx >= 2 * minWidthPx + dividerWidthPx
+  const canHalve = (entry: SlotWidthPx) => entry.widthPx >= 2 * minWidthPx + dividerWidthPx
   const source = currentWidthsPx[sourceIndex]
   const rightNeighbor = currentWidthsPx[sourceIndex + 1] ?? null
 
@@ -374,13 +374,13 @@ export function computeSectionWidthsForNewSectionFlexAware(
 
   if (halveTarget !== null) {
     const splittableInnerPx = halveTarget.widthPx - dividerWidthPx
-    const newSectionWidthPx = Math.floor(splittableInnerPx / 2)
-    const targetNewWidthPx = splittableInnerPx - newSectionWidthPx
+    const newSlotWidthPx = Math.floor(splittableInnerPx / 2)
+    const targetNewWidthPx = splittableInnerPx - newSlotWidthPx
 
     const updatedWidths = currentWidthsPx.map((entry) => (
       entry.id === halveTarget.id ? { id: entry.id, widthPx: targetNewWidthPx } : entry
     ))
-    return { updatedWidths, newSectionWidthPx }
+    return { updatedWidths, newSlotWidthPx }
   }
 
   const flexible = currentWidthsPx.filter((entry) => !fixedSectionIds.has(entry.id))
@@ -398,7 +398,7 @@ export function computeSectionWidthsForNewSectionFlexAware(
         const givenPx = giveById.get(entry.id) ?? 0
         return givenPx > 0 ? { id: entry.id, widthPx: entry.widthPx - givenPx } : entry
       })
-      return { updatedWidths, newSectionWidthPx: totalGivenPx - dividerWidthPx }
+      return { updatedWidths, newSlotWidthPx: totalGivenPx - dividerWidthPx }
     }
   }
 
@@ -407,19 +407,19 @@ export function computeSectionWidthsForNewSectionFlexAware(
 
 /**
  * Flex-aware variant of `computeSectionWidthsForClose`: the freed width goes
- * to an adjacent flexible section (left neighbor first, then right); when
+ * to an adjacent flexible slot (left neighbor first, then right); when
  * neither neighbor is flexible it's split equally across all flexible
- * sections; when everything is fixed it falls back to the immediate left
+ * slots; when everything is fixed it falls back to the immediate left
  * (or right, for the leftmost slot) neighbor -- the caller is responsible
  * for updating that fixed neighbor's remembered width.
  *
  * `currentWidthsPx` must be in visual left-to-right order.
  */
-export function computeSectionWidthsForCloseFlexAware(
-  currentWidthsPx: SectionWidthPx[],
+export function computeSlotWidthsForCloseFlexAware(
+  currentWidthsPx: SlotWidthPx[],
   closingSectionId: string,
   fixedSectionIds: ReadonlySet<string>,
-): SectionWidthPx[] {
+): SlotWidthPx[] {
   const index = currentWidthsPx.findIndex((entry) => entry.id === closingSectionId)
   if (index < 0) return currentWidthsPx
 
@@ -458,13 +458,13 @@ export function computeSectionWidthsForCloseFlexAware(
 /**
  * Computes new widths for closing `closingSectionId`'s slot: its entire
  * width is handed to its immediate left neighbor, unchanged for everyone
- * else. The leftmost section is never closable via the UI, so a missing
- * left neighbor is defensive-only and just drops the closed section.
+ * else. The leftmost slot is never closable via the UI, so a missing
+ * left neighbor is defensive-only and just drops the closed slot.
  */
 export function computeSectionWidthsForClose(
-  currentWidthsPx: SectionWidthPx[],
+  currentWidthsPx: SlotWidthPx[],
   closingSectionId: string,
-): SectionWidthPx[] {
+): SlotWidthPx[] {
   const index = currentWidthsPx.findIndex((entry) => entry.id === closingSectionId)
   if (index < 0) return currentWidthsPx
   if (index === 0) return currentWidthsPx.filter((entry) => entry.id !== closingSectionId)

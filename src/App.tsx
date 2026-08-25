@@ -104,7 +104,7 @@ import { EditorSection } from './editorSection/EditorSection'
 import { SAVE_DEBOUNCE_MS } from './editorSection/useNoteSaveQueue'
 import { EditorToolbar } from './toolbar/EditorToolbar'
 import { DEFAULT_EDITOR_SECTION_ID, type EditorSectionEntry } from './shared/sections'
-import { computeSectionWidthsForCloseFlexAware, computeSectionWidthsForNewSectionFlexAware, computeSlotWidthsPx, type SectionWidthPx } from './shared/sectionWidths'
+import { computeSlotWidthsForCloseFlexAware, computeSlotWidthsForNewSlotFlexAware, computeSlotWidthsPx, type SlotWidthPx } from './shared/slotWidths'
 import type { TextureCacheRequest } from './shared/textures'
 import {
   DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
@@ -216,7 +216,7 @@ const SUB_PIXEL_QUANTUM_PX = 1 / 64
 // disappearing when there isn't room for one more is the enforcement (see
 // the handover doc's split-view design). Matches the same 300px figure the
 // main-process window-minimum-size IPC (Phase 1) uses per extra section.
-const SECTION_MIN_WIDTH_PX = 300
+const SLOT_MIN_WIDTH_PX = 300
 // Stable fallback for when no section has registered yet (e.g. the very first
 // render, before <EditorSection> has mounted) -- a fresh Map() each render
 // would break memo'd children comparing this prop by identity.
@@ -2046,7 +2046,7 @@ function App() {
   // Line-number gutter visibility, keyed per editor slot (sectionId) -- not
   // per note/chapter, so switching which note a slot shows leaves the toggle
   // alone. Absent key = off (a freshly created slot starts with the gutter
-  // off). Entries are pruned whenever a slot closes (handleCloseSection/the
+  // off). Entries are pruned whenever a slot closes (handleCloseSlot/the
   // swap-close path below) -- the toggle is a property of "this occupied
   // slot," not of any section identity that might outlive it, so there is
   // nothing to restore once the slot is gone, even for a named section later
@@ -4478,8 +4478,8 @@ function App() {
   // columns the old 'toolbar'/'window_control' areas did -- its actual
   // pixel width is toolbarWidthPx's column plus the window-controls column.
   const editorSectionsRowWidthPx = Math.round(layout.toolbarWidthPx) + windowControlsWidthPx
-  const canCreateSection = editorSectionsRowWidthPx >= (
-    (editorSections.length + 1) * SECTION_MIN_WIDTH_PX + editorSections.length * GRID_DIVIDER_PX
+  const canCreateSlot = editorSectionsRowWidthPx >= (
+    (editorSections.length + 1) * SLOT_MIN_WIDTH_PX + editorSections.length * GRID_DIVIDER_PX
   )
 
   const appShellStyle = useMemo(() => {
@@ -6102,7 +6102,7 @@ ${markdownHtml}
 
   // After a structural change (create/close), any fixed section whose width
   // the recomputation moved keeps its fixed status at the new width.
-  const syncFixedWidthsToComputed = useCallback((widths: SectionWidthPx[], removedIds: string[] = []) => {
+  const syncFixedWidthsToComputed = useCallback((widths: SlotWidthPx[], removedIds: string[] = []) => {
     setFixedWidthPxForSections((previous) => {
       let changed = false
       const next = new Map(previous)
@@ -6120,7 +6120,7 @@ ${markdownHtml}
     })
   }, [])
 
-  const measureSectionWidthsPx = useCallback((): SectionWidthPx[] => (
+  const measureSlotWidthsPx = useCallback((): SlotWidthPx[] => (
     editorSections.map((entry) => {
       const el = sectionSlotElByIdRef.current.get(entry.id)
       return { id: entry.id, widthPx: el ? el.getBoundingClientRect().width : 0 }
@@ -6138,7 +6138,7 @@ ${markdownHtml}
     })
   }, [])
 
-  const persistSectionWidthsPx = useCallback(async (widthsPx: SectionWidthPx[]) => {
+  const persistSlotWidthsPx = useCallback(async (widthsPx: SlotWidthPx[]) => {
     const sectionsApi = window.thockdownSections
     if (!sectionsApi) return null
     const totalWidthPx = widthsPx.reduce((sum, entry) => sum + entry.widthPx, 0)
@@ -6161,17 +6161,17 @@ ${markdownHtml}
   // adjacent section is flexible, fund the new slot in equal parts from all
   // flexible sections wherever they sit; only when nothing flexible can fund
   // it do fixed sections get raided (legacy proportional split, and their
-  // pinned widths are updated to match). See sectionWidths.ts.
-  const handleCreateSection = useCallback(async (afterPosition: number, sourceSectionId: string) => {
+  // pinned widths are updated to match). See slotWidths.ts.
+  const handleCreateSlot = useCallback(async (afterPosition: number, sourceSectionId: string) => {
     const sectionsApi = window.thockdownSections
     if (!sectionsApi) return
 
-    const currentWidthsPx = measureSectionWidthsPx()
-    const { updatedWidths, newSectionWidthPx } = computeSectionWidthsForNewSectionFlexAware(
+    const currentWidthsPx = measureSlotWidthsPx()
+    const { updatedWidths, newSlotWidthPx } = computeSlotWidthsForNewSlotFlexAware(
       currentWidthsPx,
       sourceSectionId,
       new Set(fixedWidthPxBySectionId.keys()),
-      SECTION_MIN_WIDTH_PX,
+      SLOT_MIN_WIDTH_PX,
       GRID_DIVIDER_PX,
     )
     syncFixedWidthsToComputed(updatedWidths)
@@ -6179,7 +6179,7 @@ ${markdownHtml}
     const updated = await sectionsApi.createSection(null, afterPosition)
     const createdEntry = updated.find((entry) => entry.position === afterPosition + 1)
     const widthsWithNew = createdEntry
-      ? [...updatedWidths, { id: createdEntry.id, widthPx: newSectionWidthPx }]
+      ? [...updatedWidths, { id: createdEntry.id, widthPx: newSlotWidthPx }]
       : updatedWidths
 
     // Overlay the computed fractions synchronously so the very first render
@@ -6200,11 +6200,11 @@ ${markdownHtml}
       markSectionActive(created.id)
     }
 
-    const finalized = await persistSectionWidthsPx(widthsWithNew)
+    const finalized = await persistSlotWidthsPx(widthsWithNew)
     if (finalized) {
       applyResolvedSections(finalized)
     }
-  }, [applyResolvedSections, fixedWidthPxBySectionId, markSectionActive, measureSectionWidthsPx, persistSectionWidthsPx, syncFixedWidthsToComputed])
+  }, [applyResolvedSections, fixedWidthPxBySectionId, markSectionActive, measureSlotWidthsPx, persistSlotWidthsPx, syncFixedWidthsToComputed])
 
   // Closes a section's slot -- deletes it outright if unnamed (the only
   // kind the "+" button creates today), parks it if named. Reassigns
@@ -6316,7 +6316,7 @@ ${markdownHtml}
     })
   }, [persistReviewGutterVisibility])
 
-  const handleCloseSection = useCallback(async (sectionId: string) => {
+  const handleCloseSlot = useCallback(async (sectionId: string) => {
     const sectionsApi = window.thockdownSections
     if (!sectionsApi) return
 
@@ -6325,8 +6325,8 @@ ${markdownHtml}
     // as beforeunload, so it survives being swapped back in later.
     sectionRegistryRef.current.get(sectionId)?.persistActiveNoteEditModeStateNow()
 
-    const currentWidthsPx = measureSectionWidthsPx()
-    const updatedWidths = computeSectionWidthsForCloseFlexAware(
+    const currentWidthsPx = measureSlotWidthsPx()
+    const updatedWidths = computeSlotWidthsForCloseFlexAware(
       currentWidthsPx,
       sectionId,
       new Set(fixedWidthPxBySectionId.keys()),
@@ -6351,11 +6351,11 @@ ${markdownHtml}
     )))
     setActiveSectionId((previous) => (previous === sectionId ? nextSections[0].id : previous))
 
-    const finalized = await persistSectionWidthsPx(updatedWidths)
+    const finalized = await persistSlotWidthsPx(updatedWidths)
     if (finalized) {
       applyResolvedSections(finalized)
     }
-  }, [applyResolvedSections, fixedWidthPxBySectionId, measureSectionWidthsPx, persistSectionWidthsPx, pruneReviewGutterVisibility, syncFixedWidthsToComputed])
+  }, [applyResolvedSections, fixedWidthPxBySectionId, measureSlotWidthsPx, persistSlotWidthsPx, pruneReviewGutterVisibility, syncFixedWidthsToComputed])
 
   const handleRenameSection = useCallback(async (sectionId: string, name: string | null) => {
     const sectionsApi = window.thockdownSections
@@ -6368,22 +6368,22 @@ ${markdownHtml}
   // triggered by the section picker's right-click-then-left-click confirm
   // gesture. Unlike closeSlot (which only parks a named section so it can be
   // swapped back in later), this actually removes it for good. Reuses the
-  // same close-time width redistribution as handleCloseSection for the
+  // same close-time width redistribution as handleCloseSlot for the
   // uncommon case where the deleted section happens to be occupying a
-  // visible slot right now; computeSectionWidthsForCloseFlexAware is a
+  // visible slot right now; computeSlotWidthsForCloseFlexAware is a
   // no-op when the id isn't currently placed, which covers the common case
   // (deleting a parked section straight out of the picker).
   const handleDeleteSection = useCallback(async (sectionId: string) => {
     const sectionsApi = window.thockdownSections
     if (!sectionsApi) return
 
-    // Same checkpoint as handleCloseSection: the note itself may live on
+    // Same checkpoint as handleCloseSlot: the note itself may live on
     // (only this section slot is being removed), so its cursor/scroll
     // position is still worth persisting before the editor unloads.
     sectionRegistryRef.current.get(sectionId)?.persistActiveNoteEditModeStateNow()
 
-    const currentWidthsPx = measureSectionWidthsPx()
-    const updatedWidths = computeSectionWidthsForCloseFlexAware(
+    const currentWidthsPx = measureSlotWidthsPx()
+    const updatedWidths = computeSlotWidthsForCloseFlexAware(
       currentWidthsPx,
       sectionId,
       new Set(fixedWidthPxBySectionId.keys()),
@@ -6405,11 +6405,11 @@ ${markdownHtml}
     )))
     setActiveSectionId((previous) => (previous === sectionId ? nextSections[0].id : previous))
 
-    const finalized = await persistSectionWidthsPx(updatedWidths)
+    const finalized = await persistSlotWidthsPx(updatedWidths)
     if (finalized) {
       applyResolvedSections(finalized)
     }
-  }, [applyResolvedSections, fixedWidthPxBySectionId, measureSectionWidthsPx, persistSectionWidthsPx, syncFixedWidthsToComputed])
+  }, [applyResolvedSections, fixedWidthPxBySectionId, measureSlotWidthsPx, persistSlotWidthsPx, syncFixedWidthsToComputed])
 
   // Fetched fresh each time the identity tab's right-click menu opens,
   // rather than kept as ongoing state -- named-but-parked sections (not in
@@ -6438,7 +6438,7 @@ ${markdownHtml}
     const incomingPreviousPosition = incomingEntryBefore?.position ?? null
 
     // outgoingSectionId's editor is about to unload its note -- persist its
-    // cursor/scroll position first, same checkpoint as handleCloseSection.
+    // cursor/scroll position first, same checkpoint as handleCloseSlot.
     sectionRegistryRef.current.get(outgoingSectionId)?.persistActiveNoteEditModeStateNow()
 
     // Both sections are on screen: this is a real, two-way exchange. They
@@ -6479,7 +6479,7 @@ ${markdownHtml}
     // closeSlot would, and the incoming one takes over its slot.
     let updated = await sectionsApi.swapIntoSlot(outgoingSectionId, incomingSectionId)
     sectionRegistryRef.current.delete(outgoingSectionId)
-    // outgoingSectionId's slot is closed the same way handleCloseSection's
+    // outgoingSectionId's slot is closed the same way handleCloseSlot's
     // is (see swapIntoSlot's own doc comment) -- same prune. incomingSectionId
     // is a fresh occupant of a slot it wasn't showing in before, so it
     // correctly has no entry yet either (default off, per spec).
@@ -6523,7 +6523,7 @@ ${markdownHtml}
   // NOT touch the section's own data (name, pinned tabs, last-active note) --
   // those belong to the section, not the slot, and clearing is meant to be
   // reversible via the picker later. So instead of resetting the section's
-  // content, this closes its slot exactly like handleCloseSection (parks it
+  // content, this closes its slot exactly like handleCloseSlot (parks it
   // if named, deletes it if unnamed) and immediately backfills the vacated
   // slot with a brand-new blank section, inheriting the outgoing section's
   // widthFraction/pin so the slot's size never visibly changes -- same
@@ -6539,7 +6539,7 @@ ${markdownHtml}
     const outgoingWidthFraction = outgoingEntryBefore?.widthFraction ?? null
     const outgoingFixedWidthPx = outgoingEntryBefore?.fixedWidthPx ?? null
 
-    // Same checkpoint as handleCloseSection: this slot's editor is unloading
+    // Same checkpoint as handleCloseSlot: this slot's editor is unloading
     // its note before the fresh blank section backfills it.
     sectionRegistryRef.current.get(sectionId)?.persistActiveNoteEditModeStateNow()
 
@@ -6604,7 +6604,7 @@ ${markdownHtml}
   // rather than letting flex-grow weights improvise. This is what makes
   // window shrinks reflow sections (down to their minimum, never clipping)
   // and makes create/close/drag arithmetic land exactly as computed.
-  const [sectionsRowWidthPx, setSectionsRowWidthPx] = useState<number | null>(null)
+  const [slotsRowWidthPx, setSectionsRowWidthPx] = useState<number | null>(null)
 
   useLayoutEffect(() => {
     const rowEl = editorSectionsRowRef.current
@@ -6628,18 +6628,18 @@ ${markdownHtml}
   }, [])
 
   const sectionSlotWidthsPx = useMemo(() => {
-    if (sectionsRowWidthPx === null || sectionsRowWidthPx <= 0) return null
+    if (slotsRowWidthPx === null || slotsRowWidthPx <= 0) return null
     return computeSlotWidthsPx(
       editorSections.map((entry) => ({
         id: entry.id,
         widthFraction: entry.widthFraction,
         fixedWidthPx: fixedWidthPxBySectionId.get(entry.id) ?? null,
       })),
-      sectionsRowWidthPx,
+      slotsRowWidthPx,
       GRID_DIVIDER_PX,
-      SECTION_MIN_WIDTH_PX,
+      SLOT_MIN_WIDTH_PX,
     )
-  }, [editorSections, sectionsRowWidthPx, fixedWidthPxBySectionId])
+  }, [editorSections, slotsRowWidthPx, fixedWidthPxBySectionId])
 
   // Drag-resizes exactly the two sections on either side of the divider that
   // was grabbed. Slots render with an exact pixel flex-basis (grow/shrink 0,
@@ -6679,7 +6679,7 @@ ${markdownHtml}
 
     const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
       const deltaX = moveEvent.clientX - startClientX
-      const nextLeftWidthPx = clamp(startLeftWidthPx + deltaX, SECTION_MIN_WIDTH_PX, combinedWidthPx - SECTION_MIN_WIDTH_PX)
+      const nextLeftWidthPx = clamp(startLeftWidthPx + deltaX, SLOT_MIN_WIDTH_PX, combinedWidthPx - SLOT_MIN_WIDTH_PX)
       const nextRightWidthPx = combinedWidthPx - nextLeftWidthPx
       leftEl.style.flexBasis = `${nextLeftWidthPx}px`
       rightEl.style.flexBasis = `${nextRightWidthPx}px`
@@ -6758,7 +6758,7 @@ ${markdownHtml}
     const combinedWidthPx = startLeftWidthPx + startRightWidthPx
     if (combinedWidthPx <= 0) return
 
-    const nextLeftWidthPx = clamp(combinedWidthPx / 2, SECTION_MIN_WIDTH_PX, combinedWidthPx - SECTION_MIN_WIDTH_PX)
+    const nextLeftWidthPx = clamp(combinedWidthPx / 2, SLOT_MIN_WIDTH_PX, combinedWidthPx - SLOT_MIN_WIDTH_PX)
     const nextRightWidthPx = combinedWidthPx - nextLeftWidthPx
 
     const finalWidthsPx = widthsPx.map((entry) => {
@@ -9232,10 +9232,10 @@ ${markdownHtml}
                 >
                 <EditorSection
                   sectionId={entry.id}
-                  isLeftmostSection={index === 0}
-                  canCreateSection={canCreateSection}
-                  onCreateSection={() => void handleCreateSection(entry.position ?? index, entry.id)}
-                  onCloseSection={() => void handleCloseSection(entry.id)}
+                  isLeftmostSlot={index === 0}
+                  canCreateSlot={canCreateSlot}
+                  onCreateSlot={() => void handleCreateSlot(entry.position ?? index, entry.id)}
+                  onCloseSlot={() => void handleCloseSlot(entry.id)}
                   onClearSection={() => void handleClearSection(entry.id)}
                   sectionName={entry.name}
                   onRenameSection={(name) => void handleRenameSection(entry.id, name)}
