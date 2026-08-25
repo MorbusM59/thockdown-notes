@@ -9144,7 +9144,7 @@ ${markdownHtml}
                     aria-label="Open the User Guide"
                     onClick={handleHelpModeOpen}
                   >
-                    <span className="fa-solid fa-lightbulb" aria-hidden="true" />
+                    <span className="fa-solid fa-graduation-cap" aria-hidden="true" />
                   </button>
                   <button
                     type="button"
