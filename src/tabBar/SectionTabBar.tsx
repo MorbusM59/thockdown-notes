@@ -211,8 +211,8 @@ export function SectionTabBar({
                 isShowingGuide
                   ? 'Right click: Close the User Guide.'
                   : isShowingUndockedNote
-                  ? `Left click: Pick a collection to pin this note to.\nRight click: Close note and return to the collection ${sectionName ?? '···'}.`
-                  : 'Left click: Pick a collection of notes to load into this slot.\nRight click: Rename this collection of notes.'
+                  ? `Left click: Pick a collection for this note.\nRight click: Return to ${sectionName ?? '···'}.`
+                  : 'Left click: Pick a collection for this slot.\nRight click: Rename this collection.'
               }
             >
               <span className="tag-pill-label">{isShowingGuide ? 'User Guide' : (isShowingUndockedNote ? '' : (sectionName ?? '···'))}</span>
