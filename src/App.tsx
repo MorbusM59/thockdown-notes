@@ -5376,8 +5376,14 @@ ${markdownHtml}
     if (noteTransitionLockRef.current) return
 
     const section = getActiveSection()
-    if (section?.isPreviewMode && !section.isForcedPreviewNote) {
-      section.toggleRenderViewMode()
+    if (section?.isPreviewMode) {
+      // A brand-new note always lands in edit mode. On a forced-preview note
+      // (a timeless note) `isPreviewMode` is true regardless of the section's
+      // own persisted mode, so toggling is not available -- drive the
+      // underlying flag to edit directly instead of skipping, which used to
+      // leave the new note sitting in preview.
+      if (section.isForcedPreviewNote) section.setIsPreviewMode(false)
+      else section.toggleRenderViewMode()
     }
 
     noteTransitionLockRef.current = true
