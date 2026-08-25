@@ -260,7 +260,7 @@ export function EscapeHoldPanel({
       // other simply drops out (see isPreviewMode's own doc comment above).
       { label: 'Export PDF', icon: 'fa-solid fa-file-pdf', onSelect: onExportPdf, disabled: !hasActiveNote || isExportingPdf || !isPreviewMode },
       { label: 'Export MD', icon: 'fa-solid fa-file-code', onSelect: onExportMd, disabled: !hasActiveNote || isExportingMd || isPreviewMode },
-      { label: 'User Guide', icon: 'fa-solid fa-map', onSelect: onOpenHelp, disabled: false },
+      { label: 'User Guide', icon: 'fa-solid fa-graduation-cap', onSelect: onOpenHelp, disabled: false },
     ]
     return candidates.filter((candidate) => !candidate.disabled)
   }, [hasActiveNote, isActiveNoteTimeless, isPreviewMode, isExportingPdf, isExportingMd, onCreateNote, onCreateChapter, onExportPdf, onExportMd, onOpenHelp])
