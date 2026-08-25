@@ -1040,45 +1040,56 @@ export function EditorSection({
     chapterBarModeRef.current = chapterBarMode
   }, [chapterBarMode, chapterBarModeRef])
 
-  // The tag bar is transient chrome, not a sticky preference -- but it must
-  // survive clicks that pick a different note to tag (sidebar, a *different*
-  // section's tab bar) so bulk-assigning a tag across several notes doesn't
-  // require re-opening tag mode after every click. Only clicking into an
-  // editor's own text -- i.e. actually going back to writing -- should drop
-  // it back to the tab bar.
+  /**
+   * Which layer this bar falls back to when the user goes back to writing.
+   *
+   * Normally the chapters: the tag bar is transient chrome, not a sticky
+   * preference. But while the note's id is still provisional the polarity
+   * flips -- metadata becomes the resting state and the chapters are the
+   * temporary excursion. That is the entire "commit to an id" nudge: nothing
+   * is blocked, the chapters stay one click away and stay put for as long as
+   * the user is actually there, but clicking back into the text returns to
+   * the layer still asking for something. Giving the note an id ends it
+   * permanently, with no further prompting anywhere.
+   */
+  const restingChapterBarMode: 'tags' | 'tabs' = useMemo(() => {
+    const note = menuIdentityNoteId ? notes.find((entry) => entry.id === menuIdentityNoteId) : undefined
+    return isAutoAssignedId(note?.assignedId) ? 'tags' : 'tabs'
+  }, [menuIdentityNoteId, notes])
+
+  // The resting mode must survive clicks that pick a different note to tag
+  // (sidebar, a *different* section's tab bar) so bulk-assigning a tag across
+  // several notes doesn't require re-opening tag mode after every click. Only
+  // clicking into an editor's own text -- i.e. actually going back to
+  // writing -- returns the bar to rest.
   useEffect(() => {
-    if (chapterBarMode !== 'tags') return
+    if (chapterBarMode === restingChapterBarMode) return
     const handleWindowMouseDown = (event: globalThis.MouseEvent) => {
       const target = event.target
       if (!(target instanceof Node)) return
       if (target instanceof HTMLElement && target.closest('.editor-stage')) {
-        setChapterBarMode('tabs')
+        setChapterBarMode(restingChapterBarMode)
       }
     }
     window.addEventListener('mousedown', handleWindowMouseDown)
     return () => window.removeEventListener('mousedown', handleWindowMouseDown)
-  }, [chapterBarMode, setChapterBarMode])
+  }, [chapterBarMode, restingChapterBarMode, setChapterBarMode])
 
   /**
-   * A note whose id is still provisional (generator-assigned, see
-   * isAutoAssignedId) opens on its metadata layer rather than its chapters.
+   * Opening a note lands on that note's resting layer -- metadata while its id
+   * is still provisional, chapters once it has one of its own.
    *
-   * This is the whole enforcement of "commit to an id before the note grows
-   * structure", and it is deliberately a nudge rather than a gate: the bar is
-   * one click from the chapters, nothing is blocked, and the moment the user
-   * gives the note an id of their own it stops happening. Keyed on the note's
-   * identity, not on the id value, so committing an id does NOT immediately
-   * flip the bar out from under the user mid-edit.
+   * Keyed on the note's identity, never on the id VALUE, so committing an id
+   * does not flip the bar out from under the user mid-edit: it simply changes
+   * where the bar comes to rest from then on.
    */
-  const provisionalNudgedNoteIdRef = useRef<string | null>(null)
+  const restingModeAppliedForNoteIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (!menuIdentityNoteId) return
-    if (provisionalNudgedNoteIdRef.current === menuIdentityNoteId) return
-    provisionalNudgedNoteIdRef.current = menuIdentityNoteId
-    const note = notesRef.current.find((entry) => entry.id === menuIdentityNoteId)
-    if (!isAutoAssignedId(note?.assignedId)) return
-    setChapterBarMode('tags')
-  }, [menuIdentityNoteId, notesRef, setChapterBarMode])
+    if (restingModeAppliedForNoteIdRef.current === menuIdentityNoteId) return
+    restingModeAppliedForNoteIdRef.current = menuIdentityNoteId
+    setChapterBarMode(restingChapterBarMode)
+  }, [menuIdentityNoteId, restingChapterBarMode, setChapterBarMode])
 
   const {
     primedNoteActionById,
