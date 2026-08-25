@@ -5156,9 +5156,51 @@ ${markdownHtml}
   // sidebar click uses, not a dedicated overlay component. No dedicated
   // close action any more either -- leaving it works exactly like leaving
   // any other note (pick another one from the sidebar, switch tabs, ...).
-  const handleHelpModeOpen = useCallback(() => {
-    void selectNote(HELP_GUIDE_ROOT_ID, { forceReload: true })
-  }, [selectNote])
+  /**
+   * Which slot is currently showing the User Guide, and what that slot was
+   * showing before.
+   *
+   * The guide opens as an UNDOCKED note (docs/user-workflow-design.md): it
+   * belongs to no collection, is never pinned, and leaves the slot's own
+   * collection untouched underneath, so closing it is a restore rather than a
+   * reload. Only one is ever open -- opening it somewhere else closes the
+   * first, since two copies of a read-only manual help nobody.
+   *
+   * Transient, never persisted: after a restart the guide is simply not open.
+   */
+  const [guideView, setGuideView] = useState<{ sectionId: string; previousNoteId: string | null } | null>(null)
+
+  const closeGuideView = useCallback(async () => {
+    const pending = guideView
+    if (!pending) return
+    setGuideView(null)
+    if (!pending.previousNoteId) return
+    const handle = sectionRegistryRef.current.get(pending.sectionId)
+    await handle?.activateNote(pending.previousNoteId).catch(() => undefined)
+  }, [guideView])
+
+  /**
+   * One rule covers both ways in and both expectations of them: asking for the
+   * guide where it already is closes it (so the window-control button is a
+   * toggle), and asking for it anywhere else MOVES it there (so opening it
+   * from another slot's quick-actions menu never leaves a second copy behind).
+   */
+  const handleHelpModeOpen = useCallback(async () => {
+    const targetSectionId = activeSectionId
+    if (!targetSectionId) return
+
+    if (guideView?.sectionId === targetSectionId) {
+      await closeGuideView()
+      return
+    }
+
+    // Open somewhere else: put that slot back before borrowing this one.
+    if (guideView) await closeGuideView()
+
+    const previousNoteId = getActiveSection()?.activeNoteId ?? null
+    setGuideView({ sectionId: targetSectionId, previousNoteId })
+    await selectNote(HELP_GUIDE_ROOT_ID, { forceReload: true })
+  }, [guideView, closeGuideView, activeSectionId, getActiveSection, selectNote])
 
   const isAllowedNonEditorFocusTarget = useCallback((target: EventTarget | null): boolean => {
     if (!(target instanceof HTMLElement)) return false
@@ -9139,10 +9181,11 @@ ${markdownHtml}
                       split button; maximize/restore moved down to the bottom arm. */}
                   <button
                     type="button"
-                    className="window-control-btn btn-icon window-maximize-split-btn help-guide"
-                    data-tooltip="User Guide"
-                    aria-label="Open the User Guide"
-                    onClick={handleHelpModeOpen}
+                    className={`window-control-btn btn-icon window-maximize-split-btn help-guide${guideView ? ' is-active' : ''}`}
+                    data-tooltip={guideView ? 'Close the User Guide' : 'User Guide'}
+                    aria-label={guideView ? 'Close the User Guide' : 'Open the User Guide'}
+                    aria-pressed={guideView !== null}
+                    onClick={() => void handleHelpModeOpen()}
                   >
                     <span className="fa-solid fa-graduation-cap" aria-hidden="true" />
                   </button>
@@ -9253,6 +9296,9 @@ ${markdownHtml}
                   notesRef={notesRef}
                   activeSectionId={activeSectionId}
                   undockedNoteId={undockedNote?.sectionId === entry.id ? undockedNote.noteId : null}
+                  isShowingGuideSlot={guideView?.sectionId === entry.id}
+                  onCloseGuideView={() => void closeGuideView()}
+                  onGuideNoLongerShown={() => setGuideView(null)}
                   onDockUndockedNote={() => setUndockedNote(null)}
                   onDockUndockedNoteIntoSection={(candidateId) => void handleDockUndockedNoteIntoSection(candidateId)}
                   onSetAsideUndockedNote={() => void handleSetAsideUndockedNote()}
@@ -9298,7 +9344,7 @@ ${markdownHtml}
                   onEscapeHoldCreateChapter={activeSection?.handleCreateChapter ?? noopAsync}
                   onEscapeHoldExportPdf={handleExportPdf}
                   onEscapeHoldExportMd={handleExportMd}
-                  onEscapeHoldOpenHelp={handleHelpModeOpen}
+                  onEscapeHoldOpenHelp={() => void handleHelpModeOpen()}
                   isExportingPdf={isExportingPdf}
                   isExportingMd={isExportingMd}
                   borderRadiusRegularPx={borderRadiusRegularPx}

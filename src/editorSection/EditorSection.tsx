@@ -12,6 +12,7 @@ import type { EditorRuntimeMetrics } from '../editor/EditorTypography'
 import type { UseSectionTabsResult } from '../tabBar/useSectionTabs'
 import type { NoteTabEntry } from '../shared/tabs'
 import { isAutoAssignedId } from '../shared/assignedIds'
+import { HELP_GUIDE_NOTE_IDS } from '../shared/helpGuide'
 import { SectionTabBar } from '../tabBar/SectionTabBar'
 import { TagBar } from '../tabBar/TagBar'
 import { SectionEditorArea, type SectionEditorAreaProps } from './SectionEditorArea'
@@ -83,6 +84,12 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   onDockUndockedNote: () => void
   /** Dismisses the undocked note and brings this slot's own section back. */
   onSetAsideUndockedNote: () => void
+  /** True while THIS slot is the one showing the User Guide (App.tsx's `guideView`). */
+  isShowingGuideSlot: boolean
+  /** Closes the guide and restores what this slot was showing before it opened. */
+  onCloseGuideView: () => void
+  /** Reports that this slot has moved on to something else, so the guide is no longer open anywhere -- distinct from closing it, which also restores. */
+  onGuideNoLongerShown: () => void
   markSectionActive: (sectionId: string) => void
   isSidebarVisible: boolean
   toggleSidebarVisible: () => void
@@ -166,6 +173,9 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
 export function EditorSection({
   sectionId,
   undockedNoteId,
+  isShowingGuideSlot,
+  onCloseGuideView,
+  onGuideNoLongerShown,
   onDockUndockedNote,
   onDockUndockedNoteIntoSection,
   onSetAsideUndockedNote,
@@ -1773,6 +1783,16 @@ export function EditorSection({
    */
   const isShowingUndockedNote = undockedNoteId !== null && undockedNoteId === activeNoteId
 
+  /**
+   * The User Guide, open in this slot as an undocked note.
+   *
+   * Matched against the guide's whole FAMILY rather than one note id, so
+   * clicking through its chapters keeps the guide open -- a chapter of the
+   * guide is still the guide, and the bar must not flip back to the
+   * collection underneath halfway through reading.
+   */
+  const isShowingGuide = isShowingGuideSlot && activeNoteId !== null && HELP_GUIDE_NOTE_IDS.has(activeNoteId)
+
   /** Files the undocked note into the section this slot already holds. */
   const handleDockUndockedNoteHere = useCallback(async () => {
     if (!activeNoteId) return
@@ -1781,25 +1801,65 @@ export function EditorSection({
     await pinNoteAsRightmostTab(activeNoteId)
   }, [activeNoteId, closeSectionPicker, onDockUndockedNote, pinNoteAsRightmostTab])
 
+  /**
+   * Leaving the guide by any other route -- a sidebar click, a tab, a link out
+   * of it -- ends it just as much as closing it does. Without this the window
+   * control would keep claiming the guide is open, and pressing it would drag
+   * the reader back to whatever the slot held before, which they have already
+   * moved on from.
+   *
+   * Gated on having actually SEEN the guide in this slot first. Opening it is
+   * two steps -- the slot is marked, then the note is activated -- and in the
+   * gap between them the slot still shows the previous note. Without the gate
+   * this fires in that gap and cancels the open before it lands, leaving the
+   * guide to arrive as an ordinary temporary tab in the collection.
+   */
+  const hasShownGuideRef = useRef(false)
+  useEffect(() => {
+    if (!isShowingGuideSlot) {
+      hasShownGuideRef.current = false
+      return
+    }
+    if (isShowingGuide) {
+      hasShownGuideRef.current = true
+      return
+    }
+    if (!hasShownGuideRef.current) return
+    if (!activeNoteId) return
+    hasShownGuideRef.current = false
+    onGuideNoLongerShown()
+  }, [isShowingGuideSlot, isShowingGuide, activeNoteId, onGuideNoLongerShown])
+
   const handleIdentityClick = useCallback(() => {
+    // The guide belongs to no collection and cannot be filed into one, so
+    // there is nothing for the picker to offer: the button is a label here,
+    // not a control.
+    if (isShowingGuide) return
     if (isSectionPickerOpen) {
       closeSectionPicker()
     } else {
       void openSectionPicker()
     }
-  }, [isSectionPickerOpen, closeSectionPicker, openSectionPicker])
+  }, [isShowingGuide, isSectionPickerOpen, closeSectionPicker, openSectionPicker])
 
   const handleIdentityContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
     // Same gesture, two verbs, decided by state: an undocked note is set
     // aside (the note is not this slot's to rename), otherwise the section
     // itself is renamed.
+    // Closing the guide is the same gesture as setting an undocked note
+    // aside, because it is the same thing: an unpinned note leaving the slot
+    // it borrowed.
+    if (isShowingGuide) {
+      onCloseGuideView()
+      return
+    }
     if (isShowingUndockedNote) {
       onSetAsideUndockedNote()
       return
     }
     startRenamingSection()
-  }, [isShowingUndockedNote, onSetAsideUndockedNote, startRenamingSection])
+  }, [isShowingGuide, onCloseGuideView, isShowingUndockedNote, onSetAsideUndockedNote, startRenamingSection])
 
   const handleSectionPickerCandidateClick = useCallback((candidateId: string) => {
     if (deletionPrimedSectionId === candidateId) {
@@ -1920,6 +1980,7 @@ export function EditorSection({
         tabbarGridRef={tabbarGridRef}
         tabs={sectionTabsBundle}
         isShowingUndockedNote={isShowingUndockedNote}
+        isShowingGuide={isShowingGuide}
         onDockUndockedNoteHere={() => void handleDockUndockedNoteHere()}
         isSidebarVisible={isSidebarVisible}
         toggleSidebarVisible={toggleSidebarVisible}

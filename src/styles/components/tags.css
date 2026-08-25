@@ -704,3 +704,13 @@
   font-style: italic;
   opacity: 0.55;
 }
+
+/* The User Guide's close hint, in the strip where a collection's tabs would
+   be. Italic because it is an instruction rather than content -- the same
+   signal a derived, un-named label carries elsewhere in the bar. Inherits the
+   rest of its treatment from .tabbar-tag-hint, so it sits at the same size,
+   colour, and inset as every other hint in this row. */
+.tabbar-guide-hint {
+  font-style: italic;
+  align-self: center;
+}

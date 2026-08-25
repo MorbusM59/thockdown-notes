@@ -52,6 +52,13 @@ export interface SectionTabBarProps {
    * file it; right-clicking sets it aside. See docs/user-workflow-design.md.
    */
   isShowingUndockedNote: boolean
+  /**
+   * True while this slot is showing the User Guide, which is undocked too but
+   * presents differently: it says its own name rather than going blank, and
+   * the strip carries the one instruction a reader needs (how to leave), since
+   * a manual with no way out is the wrong kind of surprise.
+   */
+  isShowingGuide: boolean
   /** Files the undocked note into the section this slot already holds — offered as the picker's first candidate, since "where I just was" is the likeliest home for it. */
   onDockUndockedNoteHere: () => void
   /** Left-click: opens (or closes) the section picker. Right-click: rename this section. Tab-bar mode only -- the identity tab doesn't render in tag-bar mode (note renaming happens by right-clicking the note's own tab now, and the suggested-tags-expand toggle moved to the tag input). */
@@ -102,6 +109,7 @@ export function SectionTabBar({
   onCommitSectionRename,
   onCancelSectionRename,
   isShowingUndockedNote,
+  isShowingGuide,
   onDockUndockedNoteHere,
   onIdentityClick,
   onIdentityContextMenu,
@@ -200,12 +208,14 @@ export function SectionTabBar({
               onClick={onIdentityClick}
               onContextMenu={onIdentityContextMenu}
               data-tooltip={
-                isShowingUndockedNote
+                isShowingGuide
+                  ? 'Right click: Close the User Guide.'
+                  : isShowingUndockedNote
                   ? `Left click: Pick a collection to pin this note to.\nRight click: Close note and return to the collection ${sectionName ?? '···'}.`
                   : 'Left click: Pick a collection of notes to load into this slot.\nRight click: Rename this collection of notes.'
               }
             >
-              <span className="tag-pill-label">{isShowingUndockedNote ? '' : (sectionName ?? '···')}</span>
+              <span className="tag-pill-label">{isShowingGuide ? 'User Guide' : (isShowingUndockedNote ? '' : (sectionName ?? '···'))}</span>
             </button>
           )}
       </div>
@@ -221,10 +231,14 @@ export function SectionTabBar({
               onDragOver={handleTabsContainerDragOver}
               onDrop={handleTabsContainerDrop}
             >
-              {/* An undocked note shows an empty strip: it is in no section,
+              {/* An undocked note shows an empty strip: it is in no collection,
                   so there are no tabs to show it among. The picker still opens
-                  over it normally, which is how the note gets filed. */}
-              {isShowingUndockedNote && !isSectionPickerOpen ? null : isSectionPickerOpen ? (
+                  over it normally, which is how the note gets filed. The guide
+                  spends that same empty space on the one thing its reader
+                  needs to know, since it can never be filed anywhere. */}
+              {isShowingGuide ? (
+                <span className="tabbar-tag-hint tabbar-guide-hint">Right click the button to the left to close this guide.</span>
+              ) : isShowingUndockedNote && !isSectionPickerOpen ? null : isSectionPickerOpen ? (
                 <div className="tabbar-section-picker" aria-live="polite">
                   {activeNoteId || sectionName !== null || pinnedTabs.length > 0 ? (
                     <button
