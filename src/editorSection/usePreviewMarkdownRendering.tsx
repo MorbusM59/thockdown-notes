@@ -8,6 +8,7 @@ import type { MutableRefObject, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useVirtualizer, type VirtualizerOptions } from '@tanstack/react-virtual'
 import type { NoteSummary } from '../shared/noteLifecycle'
+import { resolveLinkedChapterId, resolveLinkedNoteId } from '../shared/assignedIds'
 import type { EditorAdapter } from '../editor/EditorContract'
 import type { DocumentFindDirective } from '../editor/FindReplaceEngine'
 import {
@@ -834,7 +835,10 @@ export function usePreviewMarkdownRendering({
     // list. Matches menuIdentityNoteId's own derivation in EditorSection.tsx.
     let contextNote: NoteSummary | undefined
     if (target.noteIdRaw !== null) {
-      const normalizedTarget = normalizeInternalIdForLookup(target.noteIdRaw)
+      // `$12` means the auto id `$12`: the link's own sigil doubles as the
+      // id's first character, so the raw text after it has to be resolved back
+      // to the stored form before lookup (shared/assignedIds.ts).
+      const normalizedTarget = normalizeInternalIdForLookup(resolveLinkedNoteId(target.noteIdRaw))
       contextNote = notesRef.current.find((note) => note.assignedId && normalizeInternalIdForLookup(note.assignedId) === normalizedTarget)
       if (!contextNote) return
     } else if (activeNoteId) {
@@ -851,7 +855,7 @@ export function usePreviewMarkdownRendering({
     if (target.chapterIdRaw !== null) {
       if (!contextNote || !window.thockdownChapters) return
       const parentNoteId = contextNote.id
-      const normalizedChapterTarget = normalizeInternalIdForLookup(target.chapterIdRaw)
+      const normalizedChapterTarget = normalizeInternalIdForLookup(resolveLinkedChapterId(target.chapterIdRaw))
       void window.thockdownChapters.listChapters(parentNoteId).then((chapters) => {
         // This `$NOTE-ID§CHAPTER-ID` scheme is purely for hand-typed,
         // user-facing links -- matches only an explicitly user-assigned

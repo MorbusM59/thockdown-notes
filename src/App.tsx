@@ -36,6 +36,7 @@ import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
 import { getNoteListMetaKind } from './shared/noteListMeta'
 import { resolveIdentityLabel } from './shared/tabLabels'
+import { formatIdWithSigil } from './shared/assignedIds'
 import { NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload } from './shared/noteDrag'
 import {
   type RgbaColor,
@@ -1190,7 +1191,7 @@ const NoteListItem = memo(function NoteListItem({
   const displayTitle = isExternal
     ? note.fileName
     : isChapter
-      ? `§ ${resolveIdentityLabel(note.chapterId, note.contentText, 'chapter').text}`
+      ? formatIdWithSigil(resolveIdentityLabel(note.chapterId, note.contentText, 'chapter').text, '§')
       : note.title
   const noteListMetaKind = getNoteListMetaKind(note)
   // The meta-left slot shows which note this chapter belongs to instead of
@@ -1287,7 +1288,7 @@ const NoteListItem = memo(function NoteListItem({
               <div className="note-list-title">{displayTitle || 'Untitled'}</div>
               <div className="note-list-meta-row">
                 <span className="note-list-meta-left">
-                  {chapterMetadataText ?? (noteListMetaKind === 'id' ? `$${note.assignedId}` : createdDate)}
+                  {chapterMetadataText ?? (noteListMetaKind === 'id' ? formatIdWithSigil(note.assignedId, '$') : createdDate)}
                 </span>
                 <span className="note-list-meta-right"><ModifiedDateLabel timestampMs={note.updatedAtMs} /></span>
               </div>
@@ -1364,7 +1365,7 @@ const NoteListItem = memo(function NoteListItem({
           {isTreeVariant ? null : (
             <div className="note-list-meta-row">
               <span className="note-list-meta-left">
-                {chapterMetadataText ?? (noteListMetaKind === 'id' ? `$${note.assignedId}` : createdDate)}
+                {chapterMetadataText ?? (noteListMetaKind === 'id' ? formatIdWithSigil(note.assignedId, '$') : createdDate)}
               </span>
               <span className="note-list-meta-right"><ModifiedDateLabel timestampMs={note.updatedAtMs} /></span>
             </div>

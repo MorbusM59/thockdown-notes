@@ -471,7 +471,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
           detachedChapterParentId: null,
         })
         // Mirrors noteLifecycleService.ts's createNote: a genuine standalone
-        // note is born with a provisional NOTE-#n id (shared/assignedIds.ts).
+        // note is born with a provisional $n id (shared/assignedIds.ts).
         created.assignedId = buildNextAutoAssignedId(store.notes.map((note) => note.assignedId))
         store.notes.push(created)
         // Mirrors noteLifecycleService.ts's createNote: every genuine new
@@ -622,7 +622,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
         const note = store.notes.find((entry) => entry.id === input.id)
         if (!note) return null
         // Mirrors databaseService.setNoteAssignedId: an emptied id hands the
-        // note back a provisional NOTE-#n, never a title-derived one.
+        // note back a provisional $n, never a title-derived one.
         const base = normalizeAssignedIdInput(input.requestedId)
           || buildNextAutoAssignedId(store.notes.filter((entry) => entry.id !== note.id).map((entry) => entry.assignedId))
         note.assignedId = resolveUniqueAssignedId(store.notes, base, note.id)

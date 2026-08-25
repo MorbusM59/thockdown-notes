@@ -3,7 +3,7 @@ import { existsSync, promises as fs } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { sanitizeDocumentText, truncateTitle } from '../src/shared/textSanitization';
-import { buildNextAutoAssignedId, buildNextAutoChapterId, normalizeAssignedIdInput } from '../src/shared/assignedIds';
+import { buildNextAutoAssignedId, buildNextAutoChapterId, isAutoAssignedChapterId, isAutoAssignedId, isValidUserAssignedId, normalizeAssignedIdInput } from '../src/shared/assignedIds';
 import { SEALED_ROOT_NOTE_IDS } from '../src/shared/helpGuide';
 import { ensureHelpNote } from './help/helpNote';
 import { shouldVacuumForBloat } from './databaseSanitationPolicy';
@@ -1000,10 +1000,11 @@ export class DatabaseService {
    *    VACUUM doesn't touch any row's content -- it only repacks how the
    *    existing, already-correct rows are laid out on disk.
    */
-  sanitizeDatabase(): { dedupedFtsRows: number; backfilledNoteIds: number; backfilledChapterIds: number; resealedFamilies: number; vacuumed: boolean; reclaimedBytes: number } {
+  sanitizeDatabase(): { dedupedFtsRows: number; backfilledNoteIds: number; backfilledChapterIds: number; repairedNoteIds: number; resealedFamilies: number; vacuumed: boolean; reclaimedBytes: number } {
     const db = this.requireDb();
 
     const resealedFamilies = this.resealSealedFamilies();
+    const repairedNoteIds = this.repairUnlinkableNoteAssignedIds();
     const backfilledNoteIds = this.backfillMissingNoteAssignedIds();
     const backfilledChapterIds = this.backfillMissingChapterIds();
 
@@ -1026,7 +1027,48 @@ export class DatabaseService {
       vacuumed = true;
     }
 
-    return { dedupedFtsRows, backfilledNoteIds, backfilledChapterIds, resealedFamilies, vacuumed, reclaimedBytes };
+    return { dedupedFtsRows, backfilledNoteIds, backfilledChapterIds, repairedNoteIds, resealedFamilies, vacuumed, reclaimedBytes };
+  }
+
+  /**
+   * Replaces note ids that the link grammar cannot express with provisional
+   * ones.
+   *
+   * Two kinds exist in older databases: ids beginning with a digit (the old
+   * title-derivation could produce them from a title like "2024 Budget"), and
+   * the previous auto format. Both are unreachable now -- a link starting
+   * `$2024...` reads as an auto id and finds nothing -- so leaving them alone
+   * means silently broken links rather than a tidy migration.
+   *
+   * The name is lost in the digit-leading case, which is why this is limited
+   * to ids that genuinely cannot be linked to: anything the grammar can still
+   * express is left exactly as the user left it.
+   */
+  private repairUnlinkableNoteAssignedIds(): number {
+    const db = this.requireDb();
+    const rows = db.prepare('SELECT id, assignedId FROM notes WHERE assignedId IS NOT NULL')
+      .all() as Array<{ id: string; assignedId: string }>;
+    const broken = rows.filter((row) => {
+      const value = row.assignedId.trim();
+      if (value.length === 0) return true;
+      if (isAutoAssignedId(value)) return false;
+      return !isValidUserAssignedId(value);
+    });
+    if (broken.length === 0) return 0;
+
+    const taken = this.listUsedAssignedIds();
+    for (const row of broken) taken.delete(row.assignedId.trim());
+    const update = db.prepare('UPDATE notes SET assignedId = ? WHERE id = ?');
+    const tx = db.transaction(() => {
+      for (const row of broken) {
+        const replacement = buildNextAutoAssignedId(taken);
+        update.run(replacement, row.id);
+        taken.add(replacement);
+        console.warn('[db] replaced a note id the link grammar cannot express', { noteId: row.id, was: row.assignedId, now: replacement });
+      }
+    });
+    tx();
+    return broken.length;
   }
 
   /**
@@ -1049,8 +1091,14 @@ export class DatabaseService {
       'SELECT c.parentNoteId AS parentNoteId, c.chapterNoteId AS chapterNoteId',
       '  FROM chapters c',
       '  JOIN notes n ON n.id = c.parentNoteId',
+      '  JOIN notes cn ON cn.id = c.chapterNoteId',
       ' WHERE c.chapterId IS NULL',
       '   AND COALESCE(n.isTimeless, 0) = 0',
+      // The auto-TOC and Open Items chapters never get a number -- see
+      // addChapter. Backfilling them would take §1 from the first real chapter
+      // on every existing note, which is the same bug one launch later.
+      '   AND COALESCE(cn.isAutoToc, 0) = 0',
+      '   AND COALESCE(cn.isAutoOpenItems, 0) = 0',
       ' ORDER BY c.parentNoteId ASC, c.position ASC',
     ].join('\n')).all() as Array<{ parentNoteId: string; chapterNoteId: string }>;
     if (rows.length === 0) return 0;
@@ -1496,6 +1544,14 @@ export class DatabaseService {
     this.assertNotTimeless(noteId);
     const db = this.requireDb();
     const normalized = normalizeAssignedIdInput(requestedRaw);
+    // A user-chosen id may not begin with a digit or either sigil -- that is
+    // what keeps `$12` from having two readings (see isValidUserAssignedId).
+    // An auto-shaped request is allowed through deliberately: typing it is how
+    // a user hands a note back to provisional state, and it still goes through
+    // the collision resolution below like anything else.
+    if (normalized.length > 0 && !isValidUserAssignedId(normalized) && !isAutoAssignedId(normalized)) {
+      return this.getNoteRecord(noteId)?.assignedId ?? this.assignProvisionalNoteId(noteId);
+    }
     // An empty request used to fall back to an id derived from the note's
     // TITLE -- the last living piece of the pre-provisional-id system, and a
     // silent third source of ids nobody asked for (a note cleared its id and
@@ -1818,6 +1874,17 @@ export class DatabaseService {
     const db = this.requireDb();
     const { maxPosition } = db.prepare('SELECT MAX(position) AS maxPosition FROM chapters WHERE parentNoteId = ?').get(parentNoteId) as { maxPosition: number | null };
     const nextPosition = maxPosition === null ? 0 : maxPosition + 1;
+    // The auto-generated Table of Contents and Open Items chapters are not
+    // chapters the reader wrote -- they have their own buttons rather than
+    // pills in the strip, and they must not consume a number. Without this
+    // the auto-TOC silently took §1 and the first REAL chapter came out as
+    // §2, which is what the user sees.
+    const chapterRecord = this.getNoteRecord(chapterNoteId);
+    if (chapterRecord?.isAutoToc || chapterRecord?.isAutoOpenItems) {
+      db.prepare('INSERT INTO chapters (parentNoteId, position, chapterNoteId) VALUES (?, ?, ?)').run(parentNoteId, nextPosition, chapterNoteId);
+      return this.listChaptersForNote(parentNoteId);
+    }
+
     // Chapters get a provisional id at birth for the same reason notes do:
     // every pill shows something concrete, and "has the user named this?"
     // stays a question about the id's SHAPE rather than about its presence.
@@ -1875,6 +1942,14 @@ export class DatabaseService {
     this.assertNotTimeless(parentNoteId);
     const db = this.requireDb();
     const normalized = normalizeAssignedIdInput(requestedRaw);
+    // Same rule as notes -- see setNoteAssignedId.
+    if (normalized.length > 0 && !isValidUserAssignedId(normalized) && !isAutoAssignedChapterId(normalized)) {
+      return db.prepare('SELECT chapterId FROM chapters WHERE parentNoteId = ? AND chapterNoteId = ?')
+        .get(parentNoteId, chapterNoteId) as { chapterId: string | null } | undefined
+        ? (db.prepare('SELECT chapterId FROM chapters WHERE parentNoteId = ? AND chapterNoteId = ?')
+            .get(parentNoteId, chapterNoteId) as { chapterId: string | null }).chapterId
+        : null;
+    }
     // Clearing hands the chapter back a provisional §n rather than leaving it
     // id-less -- the same rule notes follow (setNoteAssignedId). A chapter
     // always has some id; whether the USER chose it is read from its shape.

@@ -154,7 +154,11 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
             type="button"
             className={`tag-pill note-identity-tab${isProvisionalId ? ' is-auto-assigned' : ''}`}
             disabled={!identityNoteId}
-            onClick={() => { if (!isSuggestedTagsExpanded) toggleSuggestedTagsExpanded() }}
+            // A plain toggle in both directions: the same click that fills the
+            // bar with suggestions puts the tag input back, so the button is a
+            // switch rather than a one-way door the reader has to find another
+            // way out of.
+            onClick={toggleSuggestedTagsExpanded}
             onContextMenu={(event: MouseEvent<HTMLButtonElement>) => {
               event.preventDefault()
               if (!identityNoteId) return
