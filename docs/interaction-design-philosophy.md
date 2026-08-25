@@ -86,6 +86,8 @@ The goal is deterministic behavior with one source of truth per interaction phas
 - Boundary detection must use authoritative caret geometry for arming decisions.
 - Ambiguous geometry must never promote a boundary state.
 
+- **A destructive decision is made from the source of truth, never from a renderer cache.** "Is this note empty?" answered from the editor's in-memory buffer or the notes list can be wrong in ways the two caches AGREE on -- the buffer misses text that arrived by another route, the list misses anything not yet refreshed -- and when they agree wrongly, the note is deleted with the user's writing in it. Read the record (and flush pending writes first). One IPC call at a rare gesture costs nothing; deleting someone's note is unrecoverable. Found exactly this way while building set-aside for undocked notes: a note reading "Call from Rita" was discarded because both caches still said it was the empty template.
+
 ## Rules for User-Facing Text
 - **A tooltip is user information, never code commentary.** It says what the control does or why it is unavailable, in the reader's terms, and stops. Mechanism, architecture, rationale, and the design reasoning behind a restriction belong in the code comment next to the implementation -- where the person who needs them is actually looking -- not in the one line a user reads mid-task.
 - Concretely: "The User Guide cannot be modified." is complete. "The User Guide is read-only -- it ships with the app and updates itself" is a note to a developer wearing a tooltip's clothes, and it costs the reader time to work out that none of it changes what they can do.

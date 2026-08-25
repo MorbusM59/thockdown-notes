@@ -71,6 +71,18 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   | 'onArchiveChapterClick' | 'onDeleteChapterClick'
   | 'isTagBarMode' | 'toggleTagBarMode' | 'tagBar'> {
   sectionId: string
+  /**
+   * Set when THIS slot is showing a note created undocked -- born from the
+   * shortcut or quick-actions menu, belonging to no section yet. See App.tsx's
+   * `undockedNote` and docs/user-workflow-design.md.
+   */
+  undockedNoteId: string | null
+  /** Files the undocked note into an existing section picked from the section picker. */
+  onDockUndockedNoteIntoSection: (candidateSectionId: string) => void
+  /** Ends the undocked state -- called the moment a commit gesture is taken, not after its async work lands. */
+  onDockUndockedNote: () => void
+  /** Dismisses the undocked note and brings this slot's own section back. */
+  onSetAsideUndockedNote: () => void
   markSectionActive: (sectionId: string) => void
   isSidebarVisible: boolean
   toggleSidebarVisible: () => void
@@ -153,6 +165,10 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
  */
 export function EditorSection({
   sectionId,
+  undockedNoteId,
+  onDockUndockedNote,
+  onDockUndockedNoteIntoSection,
+  onSetAsideUndockedNote,
   markSectionActive,
   isSidebarVisible,
   toggleSidebarVisible,
@@ -1750,6 +1766,21 @@ export function EditorSection({
   // hides it there) -- editing a note's own id moved to right-clicking its
   // tab pill directly, and the suggested-tags-expand toggle moved to
   // right-clicking the tag input.
+  /**
+   * True while this slot is showing a note that belongs to no section yet.
+   * The bar goes blank for it -- no identity, no tabs, no prompt -- and the
+   * ordinary section picker becomes the way to file it.
+   */
+  const isShowingUndockedNote = undockedNoteId !== null && undockedNoteId === activeNoteId
+
+  /** Files the undocked note into the section this slot already holds. */
+  const handleDockUndockedNoteHere = useCallback(async () => {
+    if (!activeNoteId) return
+    closeSectionPicker()
+    onDockUndockedNote()
+    await pinNoteAsRightmostTab(activeNoteId)
+  }, [activeNoteId, closeSectionPicker, onDockUndockedNote, pinNoteAsRightmostTab])
+
   const handleIdentityClick = useCallback(() => {
     if (isSectionPickerOpen) {
       closeSectionPicker()
@@ -1760,8 +1791,15 @@ export function EditorSection({
 
   const handleIdentityContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
+    // Same gesture, two verbs, decided by state: an undocked note is set
+    // aside (the note is not this slot's to rename), otherwise the section
+    // itself is renamed.
+    if (isShowingUndockedNote) {
+      onSetAsideUndockedNote()
+      return
+    }
     startRenamingSection()
-  }, [startRenamingSection])
+  }, [isShowingUndockedNote, onSetAsideUndockedNote, startRenamingSection])
 
   const handleSectionPickerCandidateClick = useCallback((candidateId: string) => {
     if (deletionPrimedSectionId === candidateId) {
@@ -1770,13 +1808,31 @@ export function EditorSection({
       return
     }
     closeSectionPicker()
+    // Picking a section for an undocked note FILES it there, rather than
+    // swapping that section in over the top of it and losing what the reader
+    // was writing.
+    if (isShowingUndockedNote) {
+      onDockUndockedNoteIntoSection(candidateId)
+      return
+    }
     onSwapSection(candidateId)
-  }, [deletionPrimedSectionId, closeSectionPicker, onDeleteSection, onSwapSection])
+  }, [deletionPrimedSectionId, closeSectionPicker, onDeleteSection, onSwapSection, isShowingUndockedNote, onDockUndockedNoteIntoSection])
 
   const handleSectionPickerClearClick = useCallback(() => {
     closeSectionPicker()
+    // For an undocked note the picker's create button means "make a section
+    // for this note": clearing the slot produces a fresh blank section, and
+    // pinning lands the note in it.
+    // For an undocked note this means "make a section for it": App's clear
+    // path produces the fresh section and pins the note into it (the pinning
+    // has to happen there, since only that path knows the new section's id).
+    // The undocked FLAG is dropped here, at the gesture, rather than inside
+    // that async path -- the slot is torn down and rebuilt around a new
+    // section id partway through, and a state update landing across that
+    // boundary left the rebuilt bar still rendering as undocked.
+    if (isShowingUndockedNote) onDockUndockedNote()
     onClearSection()
-  }, [closeSectionPicker, onClearSection])
+  }, [closeSectionPicker, onClearSection, isShowingUndockedNote, onDockUndockedNote])
 
   // One bundle, two consumers: the tab bar and the tag bar (which now lives
   // on the chapter bar -- see ChapterBar's `tagBar` prop).
@@ -1863,6 +1919,8 @@ export function EditorSection({
       <SectionTabBar
         tabbarGridRef={tabbarGridRef}
         tabs={sectionTabsBundle}
+        isShowingUndockedNote={isShowingUndockedNote}
+        onDockUndockedNoteHere={() => void handleDockUndockedNoteHere()}
         isSidebarVisible={isSidebarVisible}
         toggleSidebarVisible={toggleSidebarVisible}
         persistenceReady={persistenceReady}

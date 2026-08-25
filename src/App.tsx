@@ -5232,6 +5232,101 @@ ${markdownHtml}
   }, [getActiveSection])
   updateActiveNoteTitlePreviewRef.current = updateActiveNoteTitlePreview
 
+  /**
+   * The note created "undocked" -- from the shortcut or the quick-actions
+   * menu rather than a section's own create pill -- plus the slot it opened
+   * in and what that slot was showing before.
+   *
+   * Two kinds of new note (docs/user-workflow-design.md): one where the user
+   * has already decided where it belongs, and one where they were interrupted
+   * and have no attention to spare for that question. This is the second, and
+   * the whole point is that it asks for NOTHING. It is not a pending decision
+   * the UI chases; it is permission to defer one, possibly forever.
+   *
+   * Transient by design -- never persisted. After a restart an uncommitted
+   * note is simply an unpinned note, which is exactly what it is.
+   */
+  const [undockedNote, setUndockedNote] = useState<{
+    noteId: string
+    sectionId: string
+    /** What the slot was showing before, so "set aside" can put it back. */
+    previousNoteId: string | null
+  } | null>(null)
+
+  /**
+   * "Set aside": stop showing the undocked note and bring the slot's own
+   * section straight back. Cheap because the section never left -- undocked is
+   * presentation only, so this is clearing a marker, not reloading anything.
+   *
+   * Deletes the note ONLY when it is still exactly the template the shortcut
+   * created (the interrupted-before-typing case, where nothing is lost and
+   * keeping it would leave a blank note in the sidebar forever). Anything the
+   * user actually wrote is kept and stays reachable from the sidebar --
+   * setting aside is never a way to discard writing.
+   */
+  const handleSetAsideUndockedNote = useCallback(async () => {
+    const pending = undockedNote
+    if (!pending) return
+    setUndockedNote(null)
+
+    const handle = sectionRegistryRef.current.get(pending.sectionId)
+    // Discard only when the note is genuinely still the untouched template,
+    // and decide that from the DATABASE rather than any renderer cache.
+    // Both in-memory sources can be stale in ways that agree with each other
+    // -- the editor buffer misses text that arrived by another route, and the
+    // notes list misses anything not yet refreshed -- and when they agree
+    // wrongly the note gets deleted with the user's writing in it. Caught
+    // exactly that way in testing. One IPC read at a rare gesture is nothing;
+    // deleting someone's note is not.
+    const template = NEW_NOTE_TEMPLATE.trim()
+    await handle?.flushPendingSaveNow?.().catch(() => undefined)
+    const persisted = await window.thockdownNotes?.loadNote({ id: pending.noteId }).catch(() => null)
+    const liveText = handle?.activeNoteText ?? null
+    const isUntouched = persisted !== null
+      && persisted !== undefined
+      && (persisted.text ?? '').trim() === template
+      && (liveText === null || liveText.trim() === template)
+
+    await handle?.activateNote(pending.previousNoteId ?? '')
+      .catch(() => undefined)
+
+    if (isUntouched) {
+      await window.thockdownNotes?.deleteNote({ id: pending.noteId }).catch((error) => {
+        console.error('Failed to discard an untouched undocked note', error)
+      })
+      await refreshNotes()
+    }
+  }, [undockedNote, refreshNotes])
+
+  /**
+   * handleSwapSection is declared much further down this file, so depending on
+   * it directly here is a temporal-dead-zone trap -- and a plain dependency
+   * array would silently pin the call to a stale closure instead (the same
+   * hazard persistMenuStateNowRef exists for; see CLAUDE.md).
+   */
+  const handleSwapSectionRef = useRef<((outgoingSectionId: string, incomingSectionId: string) => Promise<void>) | null>(null)
+
+  /**
+   * Files the undocked note into an existing section chosen from the picker.
+   *
+   * Order matters and is not arbitrary: the note is pinned into the TARGET
+   * section and recorded as its active note BEFORE the swap, because
+   * handleSwapSection opens whatever the incoming section last showed. Doing
+   * it the other way round swaps first and lands the reader on that section's
+   * previous note, silently dropping the thing they were just writing.
+   */
+  const handleDockUndockedNoteIntoSection = useCallback(async (candidateSectionId: string) => {
+    const pending = undockedNote
+    if (!pending) return
+
+    await window.thockdownTabs?.addTab(candidateSectionId, pending.noteId).catch((error) => {
+      console.error('Failed to pin an undocked note into its chosen section', error)
+    })
+    await window.thockdownSections?.setActiveNote(candidateSectionId, pending.noteId).catch(() => undefined)
+    setUndockedNote(null)
+    await handleSwapSectionRef.current?.(pending.sectionId, candidateSectionId)
+  }, [undockedNote])
+
   const createNote = useCallback(async (initialText = NEW_NOTE_TEMPLATE) => {
     if (!window.thockdownNotes) return
     if (!persistenceReady) return
@@ -5247,14 +5342,20 @@ ${markdownHtml}
       await section?.flushPendingSaveNow()
       const created = await window.thockdownNotes.createNote({ initialText })
       await refreshNotes(created.id)
+      const previousNoteId = section?.activeNoteId ?? null
       await getActiveSection()?.activateNote(created.id, initialText.length)
+      // Born undocked: this path never pins, so the note is genuinely absent
+      // from every section's tab list rather than hidden from one.
+      if (activeSectionId) {
+        setUndockedNote({ noteId: created.id, sectionId: activeSectionId, previousNoteId })
+      }
       setSidebarMode('date')
     } catch (error) {
       console.error('Failed to create note', error)
     } finally {
       noteTransitionLockRef.current = false
     }
-  }, [getActiveSection, persistenceReady, refreshNotes])
+  }, [activeSectionId, getActiveSection, persistenceReady, refreshNotes])
 
   const createNoteFromClipboardTitle = useCallback(async () => {
     let title = FALLBACK_NEW_NOTE_TITLE
@@ -6413,6 +6514,10 @@ ${markdownHtml}
     setActiveSectionId((previous) => (previous === outgoingSectionId ? incomingSectionId : previous))
   }, [applyResolvedSections, editorSections, exchangeReviewGutterVisibility, pruneReviewGutterVisibility, syncFixedWidthsFromEntries])
 
+  useEffect(() => {
+    handleSwapSectionRef.current = handleSwapSection
+  }, [handleSwapSection])
+
   // "Clear this section" from the section picker's leading pill. This must
   // NOT touch the section's own data (name, pinned tabs, last-active note) --
   // those belong to the section, not the slot, and clearing is meant to be
@@ -6468,13 +6573,27 @@ ${markdownHtml}
       pendingChapterBarModeBySectionIdRef.current.set(created.id, 'tabs')
     }
 
+    // Reached from an undocked note, the picker's create button means "make a
+    // section for THIS note": the fresh section this just produced is where it
+    // goes, so pin it there and open it, rather than leaving the reader in an
+    // empty new section with their note nowhere.
+    if (created && undockedNote?.sectionId === sectionId) {
+      const undockedNoteId = undockedNote.noteId
+      await window.thockdownTabs?.addTab(created.id, undockedNoteId).catch((error) => {
+        console.error('Failed to pin an undocked note into its new section', error)
+      })
+      await window.thockdownSections?.setActiveNote(created.id, undockedNoteId).catch(() => undefined)
+      initialNoteIdBySectionIdRef.current.set(created.id, undockedNoteId)
+      setUndockedNote(null)
+    }
+
     applyResolvedSections(updated)
     // A brand-new section now occupies the slot; take its pin from the store.
     syncFixedWidthsFromEntries(updated)
     if (created) {
       setActiveSectionId((previous) => (previous === sectionId ? created.id : previous))
     }
-  }, [applyResolvedSections, editorSections, pruneReviewGutterVisibility, syncFixedWidthsFromEntries])
+  }, [applyResolvedSections, editorSections, pruneReviewGutterVisibility, syncFixedWidthsFromEntries, undockedNote])
 
   const editorSectionsRowRef = useRef<HTMLDivElement | null>(null)
   const sectionSlotElByIdRef = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -9132,6 +9251,10 @@ ${markdownHtml}
                   setNotes={setNotes}
                   notesRef={notesRef}
                   activeSectionId={activeSectionId}
+                  undockedNoteId={undockedNote?.sectionId === entry.id ? undockedNote.noteId : null}
+                  onDockUndockedNote={() => setUndockedNote(null)}
+                  onDockUndockedNoteIntoSection={(candidateId) => void handleDockUndockedNoteIntoSection(candidateId)}
+                  onSetAsideUndockedNote={() => void handleSetAsideUndockedNote()}
                   registerSectionHandle={registerSectionHandle}
                   reportSectionHandle={reportSectionHandle}
                   isApplyingInitialViewportRef={isApplyingInitialViewportRef}

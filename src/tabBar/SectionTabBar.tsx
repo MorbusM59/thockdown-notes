@@ -42,6 +42,18 @@ export interface SectionTabBarProps {
   onCommitSectionRename: () => void
   onCancelSectionRename: () => void
 
+  /**
+   * True while this slot shows a note that belongs to no section yet (created
+   * from the shortcut or the quick-actions menu). The bar goes blank for it --
+   * no section identity, no tabs -- because the note really is attached to
+   * nothing, and it deliberately prompts for NOTHING: the whole point of a
+   * note born that way is that the user had no attention to spare for where it
+   * belongs. Left-clicking the blank identity tab opens the ordinary picker to
+   * file it; right-clicking sets it aside. See docs/user-workflow-design.md.
+   */
+  isShowingUndockedNote: boolean
+  /** Files the undocked note into the section this slot already holds — offered as the picker's first candidate, since "where I just was" is the likeliest home for it. */
+  onDockUndockedNoteHere: () => void
   /** Left-click: opens (or closes) the section picker. Right-click: rename this section. Tab-bar mode only -- the identity tab doesn't render in tag-bar mode (note renaming happens by right-clicking the note's own tab now, and the suggested-tags-expand toggle moved to the tag input). */
   onIdentityClick: () => void
   onIdentityContextMenu: (event: MouseEvent<HTMLButtonElement>) => void
@@ -89,6 +101,8 @@ export function SectionTabBar({
   setSectionNameDraft,
   onCommitSectionRename,
   onCancelSectionRename,
+  isShowingUndockedNote,
+  onDockUndockedNoteHere,
   onIdentityClick,
   onIdentityContextMenu,
   isSectionPickerOpen,
@@ -191,7 +205,7 @@ export function SectionTabBar({
                   : 'Unnamed section -- click to swap in a named section, right-click to name this section'
               }
             >
-              <span className="tag-pill-label">{sectionName ?? '···'}</span>
+              <span className="tag-pill-label">{isShowingUndockedNote ? '' : (sectionName ?? '···')}</span>
             </button>
           )}
       </div>
@@ -207,7 +221,10 @@ export function SectionTabBar({
               onDragOver={handleTabsContainerDragOver}
               onDrop={handleTabsContainerDrop}
             >
-              {isSectionPickerOpen ? (
+              {/* An undocked note shows an empty strip: it is in no section,
+                  so there are no tabs to show it among. The picker still opens
+                  over it normally, which is how the note gets filed. */}
+              {isShowingUndockedNote && !isSectionPickerOpen ? null : isSectionPickerOpen ? (
                 <div className="tabbar-section-picker" aria-live="polite">
                   {activeNoteId || sectionName !== null || pinnedTabs.length > 0 ? (
                     <button
@@ -218,6 +235,21 @@ export function SectionTabBar({
                       aria-label="New section in this slot"
                     >
                       <span className="fa-solid fa-book" aria-hidden="true" />
+                    </button>
+                  ) : null}
+                  {/* The slot's own section, offered first. The picker
+                      otherwise lists only PARKED sections, so without this the
+                      one place a note most obviously belongs -- the workspace
+                      the reader was in a moment ago -- would be the one place
+                      they could not put it. */}
+                  {isShowingUndockedNote ? (
+                    <button
+                      type="button"
+                      className="tag-pill section-picker-item"
+                      onClick={onDockUndockedNoteHere}
+                      data-tooltip={sectionName ? `Put this note in ${sectionName}` : 'Put this note in this section'}
+                    >
+                      <span className="tag-pill-label">{sectionName ?? '···'}</span>
                     </button>
                   ) : null}
                   {swapCandidates.map((candidate) => {
