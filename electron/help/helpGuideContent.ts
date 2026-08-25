@@ -27,58 +27,65 @@ Hey there! Love the learning mindset!
 
 ## The Basics
 Let's get you started: At its most basic, Thockdown is about
-- **writing notes** in the **markdown editor** and
-- **reading notes** in the **markdown renderer**.
+- **writing notes** in the **[Markdown Editor]($HELP§NOTES-EDITING#edit-and-preview-modes)** and
+- **reading notes** in the **[Markdown Renderer]($HELP§NOTES-EDITING#edit-and-preview-modes)**.
 
 You can 
-- hit **Ctrl+N** to create a **new note**,
-- **toggle** between editor and renderer using the **Escape**-key,
-- **hold Escape** to bring up the quick access note menu,
-- use the **side bar** to find the notes you created again later and (**menu** button to the left of the bar above)
-- create additional editor **slots** for side by side work (**plus** button to the right of the bar above).
+- hit **Ctrl+N** to create a [**new note**]($HELP§NOTES-EDITING#creating-notes),
+- [**toggle**]($HELP§NOTES-EDITING#edit-and-preview-modes) between editor and renderer using the **Escape**-key,
+- **hold Escape** to bring up the [quick access note menu]($HELP§NOTES-EDITING#quick-actions-menu),
+- use the [**side bar**]($HELP§SIDEBAR-SEARCH#sidebar-views) to find the notes you created again later and (**menu** button to the left of the bar above)
+- create additional editor [**slots**]($HELP§SPLIT-VIEW-TABS#opening-a-slot) for side by side work (**plus** button to the right of the bar above).
 
 *If you want to, you can leave it at that and explore on your own. If you are a structural learner, however, it might be a good idea to spend a moment to familiarize yourself with a few core concepts.*
 
 ## Core Concepts and Basic Editor Layout
 
 The **notes** you create can be...
-- kept together by pinning them to **collections**,
-- structured by splitting them into **chapters**,
-- categorized by using **tags** and
-- referenced easily by assigning a unique **ID**.
+- kept together by pinning them to [**collections**]($HELP§SPLIT-VIEW-TABS#naming-and-swapping-collections),
+- structured by splitting them into [**chapters**]($HELP§SPLIT-VIEW-TABS#chapters),
+- categorized by using [**tags**]($HELP§TAGS#adding-tags) and
+- referenced easily by assigning a unique [**ID**]($HELP§INTERNAL-LINKING#assigning-a-note-id).
 
 These systems are literally **surrounding your editor** and figuratively (or, possibly, also *literally* if you happen to be working on a touch-capable device) right at your fingertips.
 
-- You can find the **collection bar** right **above your editor**.
-   - ***Collections work like browser tabs.***
-      - Each tab represents one note.
-      - The tabs show that note's ID.
-   - Each collection has a name that is displayed to the left of the note tab bar.
-      - Left click that button to pick a different collection to show.
-      - Right click that button to rename the collection.
-- You can find the dual mode **chapter** and **tag** bar **below the editor**.
-   - *You can toggle between both modes using the **tag toggle button** on the very left.*
-      - *New notes shows the **tag bar** by default until they have an ID.*
-      - *Notes with IDs show the **chapter bar** by default.*
-   - ***Tags determine how your notes are categorized in the sidebar category view.***
-      - You can assign an ID to your note with the button to the left.
-      - You can assign tags by interacting with the tag bar itself.
-   - ***Chapters are nested notes within a note.***
-      - When you create a chapter, think of the original note as the parent note that may contain a preface or introduction.
-      - The parent note can be accessed via the house button.
-      - You can create chapters by hitting the new chapter button that sits to its left.
+### Collections
+***Collections work like browser tabs.***
+- You can find the **collection bar** right **above your editor**. ([Pinned and Temporary Tabs]($HELP§SPLIT-VIEW-TABS#pinned-and-temporary-tabs))
+  - Each tab represents one note.
+  - The tabs show that note's ID.
+- Each collection has a name that is displayed to the left of the note tab bar.
+  - Left click that button to pick a different collection to show.
+  - Right click that button to rename the collection.
 
-## Go Explore!
+### The Dual Tag and Chapter Bar
+- You can find the dual mode **chapter** and **tag** bar **below the editor**.
+- You can toggle between both modes using the **tag toggle button** on the very left. ([Tabs and Tags Mode]($HELP§SPLIT-VIEW-TABS#tabs-and-tags-mode))
+  - New notes shows the **tag bar** by default until they have an ID.
+  - Notes with IDs show the **chapter bar** by default.
+
+### Tags
+***Tags determine how your notes are categorized in the [sidebar category view]($HELP§SIDEBAR-SEARCH#sidebar-views).***
+- You can assign an ID to your note with the button to the left.
+- You can assign tags by interacting with the tag bar itself. ([Adding Tags]($HELP§TAGS#adding-tags), [Managing Tags]($HELP§TAGS#managing-tags))
+
+### Chapters
+***Chapters are nested notes within a note.***
+- When you create a chapter, think of the original note as the parent note that may contain a preface or introduction.
+- The parent note can be accessed via the house button.
+- You can create chapters by hitting the new chapter button that sits to its left.
+
+### Go Explore!
 
 Seriously. This app has plenty of tooltips. You don't have to learn every system right away. You can have a lot of fun and success with this app without going full power user. Have fun and enjoy the trip.
 
 But if you've committed to the guide this far, you deserve to be pointed towards the most satisfying discoveries waiting for you to be made:
 
-- The **double size** and **dark modes**.
-- The immserive low distraction **music player**.
-- The endless **customization options** in the sidebar options menu.
-- Particularly the **layout presets**.
-- The app's namesake feature: **Thocky typing sounds**!
+- The [**double size** and **dark modes**]($HELP§TOOLBAR-FORMATTING#toolbar-overview).
+- The immserive low distraction [**music player**]($HELP§MUSIC-PLAYER).
+- The endless [**customization options**]($HELP§APPEARANCE-SETTINGS#settings-panel) in the sidebar options menu.
+- Particularly the [**layout presets**]($HELP§APPEARANCE-SETTINGS#presets).
+- The app's namesake feature: [**Thocky typing sounds**]($HELP§APPEARANCE-SETTINGS#keystroke-sounds)!
 `
 
 const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
