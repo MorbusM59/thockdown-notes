@@ -1000,11 +1000,12 @@ export class DatabaseService {
    *    VACUUM doesn't touch any row's content -- it only repacks how the
    *    existing, already-correct rows are laid out on disk.
    */
-  sanitizeDatabase(): { dedupedFtsRows: number; backfilledNoteIds: number; resealedFamilies: number; vacuumed: boolean; reclaimedBytes: number } {
+  sanitizeDatabase(): { dedupedFtsRows: number; backfilledNoteIds: number; backfilledChapterIds: number; resealedFamilies: number; vacuumed: boolean; reclaimedBytes: number } {
     const db = this.requireDb();
 
     const resealedFamilies = this.resealSealedFamilies();
     const backfilledNoteIds = this.backfillMissingNoteAssignedIds();
+    const backfilledChapterIds = this.backfillMissingChapterIds();
 
     const dedupedFtsRows = db.prepare(`
       DELETE FROM notes_fts
@@ -1025,7 +1026,53 @@ export class DatabaseService {
       vacuumed = true;
     }
 
-    return { dedupedFtsRows, backfilledNoteIds, resealedFamilies, vacuumed, reclaimedBytes };
+    return { dedupedFtsRows, backfilledNoteIds, backfilledChapterIds, resealedFamilies, vacuumed, reclaimedBytes };
+  }
+
+  /**
+   * Gives every chapter that still has no id a provisional one, numbered per
+   * parent.
+   *
+   * Same reason as the note-side counterpart: ids are assigned at birth now,
+   * so only chapters created BEFORE that shipped are id-less. Until they are
+   * backfilled, chapter pills and the auto-TOC still fall back to a
+   * content-derived snippet for them -- the last path that renders an unnamed
+   * thing in italics for a reason unrelated to being provisional.
+   *
+   * A frozen (timeless) family is skipped rather than repaired: writing to one
+   * is rejected outright (assertNotTimeless), and the sealed User Guide sets
+   * its own chapter ids explicitly anyway.
+   */
+  private backfillMissingChapterIds(): number {
+    const db = this.requireDb();
+    const rows = db.prepare([
+      'SELECT c.parentNoteId AS parentNoteId, c.chapterNoteId AS chapterNoteId',
+      '  FROM chapters c',
+      '  JOIN notes n ON n.id = c.parentNoteId',
+      ' WHERE c.chapterId IS NULL',
+      '   AND COALESCE(n.isTimeless, 0) = 0',
+      ' ORDER BY c.parentNoteId ASC, c.position ASC',
+    ].join('\n')).all() as Array<{ parentNoteId: string; chapterNoteId: string }>;
+    if (rows.length === 0) return 0;
+
+    const takenByParent = new Map<string, Set<string>>();
+    const update = db.prepare('UPDATE chapters SET chapterId = ? WHERE parentNoteId = ? AND chapterNoteId = ?');
+    const tx = db.transaction(() => {
+      for (const row of rows) {
+        let taken = takenByParent.get(row.parentNoteId);
+        if (!taken) {
+          // Read once per parent, then fed forward: the ids written in this
+          // loop are not in the snapshot the query above returned.
+          taken = this.listUsedChapterIds(row.parentNoteId);
+          takenByParent.set(row.parentNoteId, taken);
+        }
+        const provisional = buildNextAutoChapterId(taken);
+        update.run(provisional, row.parentNoteId, row.chapterNoteId);
+        taken.add(provisional);
+      }
+    });
+    tx();
+    return rows.length;
   }
 
   /**

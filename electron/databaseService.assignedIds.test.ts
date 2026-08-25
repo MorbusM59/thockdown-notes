@@ -11,6 +11,13 @@ import { isAutoAssignedId } from '../src/shared/assignedIds'
  * id, provisional ids are recognised by their shape alone, and no path invents
  * a title-derived one any more.
  */
+/** Puts every chapter back into the pre-chapter-id state legacy data is in. */
+function clearChapterIds(db: DatabaseService): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const raw = (db as any).requireDb() as { prepare: (sql: string) => { run: (...args: unknown[]) => unknown } }
+  raw.prepare('UPDATE chapters SET chapterId = NULL').run()
+}
+
 /** Puts a note back into the pre-provisional-id state the legacy data has. */
 function clearAssignedId(db: DatabaseService, noteId: string): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -80,6 +87,35 @@ describe('DatabaseService assigned ids', () => {
     // The legacy behaviour derived "MY-IMPOR" from the title here.
     expect(isAutoAssignedId(cleared)).toBe(true)
     expect(cleared).not.toContain('MY')
+  })
+
+  it('backfills legacy chapters that predate chapter ids, numbering them per parent', async () => {
+    const parentA = await lifecycle.createNote({ initialText: '# Parent A' })
+    const parentB = await lifecycle.createNote({ initialText: '# Parent B' })
+    const a1 = await lifecycle.createChapterNote(parentA.id)
+    const a2 = await lifecycle.createChapterNote(parentA.id)
+    const b1 = await lifecycle.createChapterNote(parentB.id)
+    clearChapterIds(db)
+
+    const { backfilledChapterIds } = db.sanitizeDatabase()
+
+    expect(backfilledChapterIds).toBeGreaterThanOrEqual(3)
+    const idOf = (parentId: string, chapterNoteId: string) =>
+      db.listChaptersForNote(parentId).find((c) => c.chapterNoteId === chapterNoteId)!.chapterId
+    // Distinct within a parent...
+    expect(idOf(parentA.id, a1.id)).not.toBe(idOf(parentA.id, a2.id))
+    // ...but numbered per parent, so another note's chapters start over rather
+    // than continuing one global sequence.
+    expect(idOf(parentB.id, b1.id)).toBe(idOf(parentA.id, a1.id))
+  })
+
+  it('makes the chapter backfill idempotent', async () => {
+    const parent = await lifecycle.createNote({ initialText: '# Parent' })
+    await lifecycle.createChapterNote(parent.id)
+    clearChapterIds(db)
+
+    expect(db.sanitizeDatabase().backfilledChapterIds).toBeGreaterThanOrEqual(1)
+    expect(db.sanitizeDatabase().backfilledChapterIds).toBe(0)
   })
 
   it('backfills each id-less note with a distinct number', async () => {
